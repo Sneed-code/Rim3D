@@ -54,8 +54,22 @@ Map::Map(const MapSettings& settings)
       height_(settings.height),
       seed_(settings.seed),
       groundHeight_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), 0.0f),
-      terrain_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), Terrain::Soil) {
-    generate();
+      terrain_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), Terrain::Soil),
+      building_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), kNoEntity),
+      blocked_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), 0) {
+    if (!settings.flat) {
+        generate();
+    }
+}
+
+void Map::setBuilding(CellPos c, Entity building, bool blocksMovement) {
+    const size_t i = static_cast<size_t>(index(c));
+    building_[i] = building;
+    blocked_[i] = blocksMovement ? 1 : 0;
+}
+
+void Map::clearBuilding(CellPos c) {
+    setBuilding(c, kNoEntity, false);
 }
 
 void Map::generate() {
@@ -73,7 +87,7 @@ void Map::generate() {
                 cell *= 0.5f;
             }
             const float h = sum / total;
-            const size_t i = static_cast<size_t>(index(x, y));
+            const size_t i = static_cast<size_t>(index(CellPos{x, y, 0}));
             groundHeight_[i] = h * kMapGenMaxHeight;
             if (h < kWaterBelow) {
                 terrain_[i] = Terrain::Water;
@@ -89,7 +103,7 @@ void Map::generate() {
 }
 
 uint64_t Map::contentHash() const {
-    // FNV-1a over heights (to the centimetre) and terrain.
+    // FNV-1a over heights (to the centimetre), terrain and the building layer.
     uint64_t hash = 0xCBF29CE484222325ULL;
     const auto mix = [&hash](uint64_t value) {
         hash ^= value;
@@ -100,6 +114,8 @@ uint64_t Map::contentHash() const {
     for (size_t i = 0; i < groundHeight_.size(); ++i) {
         mix(static_cast<uint64_t>(static_cast<int64_t>(std::lround(groundHeight_[i] * 100.0f))));
         mix(static_cast<uint64_t>(terrain_[i]));
+        mix(static_cast<uint64_t>(entt::to_integral(building_[i])));
+        mix(static_cast<uint64_t>(blocked_[i]));
     }
     return hash;
 }

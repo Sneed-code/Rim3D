@@ -2,7 +2,11 @@
 // top-down PNG of the map.
 //   simrun --seed 42 --size 512 --days 1 --png map.png
 //   simrun --seed 42 --size 1024 --days 1 --pawns 20 --items 300   (Stage 0 sim speed test)
+// Defs load from --data (default: the repo's data folder). The hauling test needs the Things defs
+// Human and Steel, which the RimWorld import provides.
+#include "ColonySim/Defs.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -14,6 +18,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -26,6 +32,11 @@ struct Options {
     int pawns = 0;
     int items = 0;
     std::string png;
+#ifdef COLONY_DATA_DIR
+    std::string data = COLONY_DATA_DIR;
+#else
+    std::string data = "data";
+#endif
 };
 
 bool parseOptions(int argc, char** argv, Options& out) {
@@ -44,8 +55,10 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.items = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--png") == 0 && hasValue) {
             out.png = argv[++i];
+        } else if (std::strcmp(arg, "--data") == 0 && hasValue) {
+            out.data = argv[++i];
         } else {
-            std::fprintf(stderr, "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] [--png FILE]\n");
+            std::fprintf(stderr, "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] [--png FILE] [--data DIR]\n");
             return false;
         }
     }
@@ -75,20 +88,37 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
             pixels[i + 2] = static_cast<unsigned char>(b * shade);
         }
     }
-    // Items left on the ground in yellow, pawns in red.
-    const auto mark = [&pixels](int cell, unsigned char r, unsigned char g, unsigned char b) {
-        const size_t i = static_cast<size_t>(cell) * 3;
+    // Buildings dark grey, items yellow, pawns red (drawn last, on top). Ground level only.
+    const auto mark = [&](const colony::Position& pos, unsigned char r, unsigned char g, unsigned char b) {
+        const colony::CellPos c = colony::cellOf(pos);
+        if (!map.inBounds(c)) {
+            return;
+        }
+        const size_t i = static_cast<size_t>(map.index(c)) * 3;
         pixels[i] = r;
         pixels[i + 1] = g;
         pixels[i + 2] = b;
     };
-    for (const colony::Item& item : sim.items()) {
-        if (!item.stored) {
-            mark(item.cell, 255, 220, 0);
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            if (map.buildingAt(colony::CellPos{x, y, 0}) != colony::kNoEntity) {
+                mark(colony::Position{static_cast<float>(x), static_cast<float>(y), 0}, 60, 60, 60);
+            }
         }
     }
-    for (const colony::Pawn& pawn : sim.pawns()) {
-        mark(static_cast<int>(pawn.y) * w + static_cast<int>(pawn.x), 230, 20, 20);
+    const entt::registry& reg = sim.things().registry();
+    for (const colony::ThingCategory category : {colony::ThingCategory::Item, colony::ThingCategory::Pawn}) {
+        reg.view<const colony::Thing, const colony::Position>().each(
+            [&](const colony::Thing& thing, const colony::Position& pos) {
+                if (thing.category != category || sim.stockpileCell() == colony::cellOf(pos)) {
+                    return;  // stored items pile up on the stockpile; leave it showing the ground
+                }
+                if (category == colony::ThingCategory::Item) {
+                    mark(pos, 255, 220, 0);
+                } else {
+                    mark(pos, 230, 20, 20);
+                }
+            });
     }
     return stbi_write_png(path.c_str(), w, h, 3, pixels.data(), w * 3) != 0;
 }
@@ -104,9 +134,31 @@ int main(int argc, char** argv) {
     using Clock = std::chrono::steady_clock;
     const auto ms = [](auto from, auto to) { return std::chrono::duration<double, std::milli>(to - from).count(); };
 
+    // Defs: a broken data folder is an error; a missing one is fine for map-only runs.
+    std::shared_ptr<const colony::DefDatabase> defs;
+    std::error_code ec;
+    if (std::filesystem::exists(std::filesystem::path(options.data) / "defs", ec)) {
+        auto loaded = std::make_shared<colony::DefDatabase>();
+        std::vector<std::string> errors;
+        if (!colony::DefDatabase::loadDirectory(options.data, *loaded, errors)) {
+            for (const std::string& e : errors) {
+                std::fprintf(stderr, "%s\n", e.c_str());
+            }
+            return 1;
+        }
+        defs = std::move(loaded);
+    }
+
     const auto start = Clock::now();
-    colony::Sim sim(colony::SimSettings{options.seed, options.size, options.pawns, options.items});
+    colony::SimSettings settings{options.seed, options.size, options.pawns, options.items};
+    colony::Sim sim(settings, defs);
     const auto generated = Clock::now();
+    if (!sim.setupErrors().empty()) {
+        for (const std::string& e : sim.setupErrors()) {
+            std::fprintf(stderr, "%s\n", e.c_str());
+        }
+        return 1;
+    }
 
     // Time every step so spikes (long path searches) show up, not just the average.
     const int64_t steps = static_cast<int64_t>(options.days * static_cast<double>(colony::kSecondsPerDay));
@@ -134,7 +186,7 @@ int main(int argc, char** argv) {
     std::printf("{\"version\":\"%s\",\"seed\":%llu,\"size\":%d,\"day\":%lld,\"mapHash\":\"%016llx\","
                 "\"mapGenMs\":%.1f,\"stepMs\":%.1f,\"pawns\":%d,\"items\":%d,\"hauls\":%llu,\"itemsLeft\":%d,"
                 "\"failedJobs\":%llu,\"pathSearches\":%llu,\"cellsExpanded\":%llu,\"avgStepMs\":%.4f,"
-                "\"p99StepMs\":%.3f,\"maxStepMs\":%.3f,\"msPerFrameAt3x\":%.3f}\n",
+                "\"p99StepMs\":%.3f,\"maxStepMs\":%.3f,\"msPerFrameAt3x\":%.3f,\"defs\":%zu,\"things\":%zu}\n",
                 colony::kSimVersion, static_cast<unsigned long long>(options.seed), options.size,
                 static_cast<long long>(sim.time().day()), static_cast<unsigned long long>(sim.map().contentHash()),
                 ms(start, generated), ms(generated, finished), options.pawns, options.items,
@@ -142,7 +194,7 @@ int main(int argc, char** argv) {
                 static_cast<unsigned long long>(sim.stats().failedJobs),
                 static_cast<unsigned long long>(sim.pathfinder().searches()),
                 static_cast<unsigned long long>(sim.pathfinder().cellsExpanded()), avgMs, percentile(0.99),
-                percentile(1.0), msPerFrameAt3x);
+                percentile(1.0), msPerFrameAt3x, defs ? defs->size() : static_cast<size_t>(0), sim.things().count());
 
     if (!options.png.empty() && !writeMapPng(sim, options.png)) {
         std::fprintf(stderr, "could not write %s\n", options.png.c_str());

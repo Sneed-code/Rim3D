@@ -38,6 +38,6 @@ kind, no cycles), but reports every problem in `errors` and builds nothing if th
 ## Not done here
 
 - Hot reload (needs the database to be swappable while the sim runs; later).
-- The sim does not own a `DefDatabase` yet. S1 passes one in when it makes things from defs.
+- The sim holds the `DefDatabase` by `shared_ptr` and makes things from it (S1, `design/things.md`).
 - Checking field names and cross-references between kinds stays in `check_defs.py` until the
   importer (D2/D3) fixes the field list.

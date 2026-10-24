@@ -40,18 +40,21 @@ Pathfinder::Pathfinder(const Map& map) : map_(map) {
     closed_.assign(cells, 0);
 }
 
-bool Pathfinder::findPath(int start, int goal, std::vector<int>& out) {
+bool Pathfinder::findPath(CellPos startCell, CellPos goalCell, std::vector<CellPos>& out) {
     ++searches_;
     out.clear();
-    const int w = map_.width();
-    const int gx = goal % w;
-    const int gy = goal / w;
-    if (start == goal) {
+    if (startCell == goalCell) {
         return true;
     }
-    if (!map_.walkable(gx, gy)) {
+    if (startCell.level != goalCell.level || !map_.inBounds(startCell) || !map_.walkable(goalCell)) {
         return false;
     }
+    const int level = goalCell.level;
+    const int w = map_.width();
+    const int gx = goalCell.x;
+    const int gy = goalCell.y;
+    const int start = map_.index(startCell);
+    const int goal = map_.index(goalCell);
 
     if (++generation_ == 0) {
         std::fill(seen_.begin(), seen_.end(), 0u);
@@ -83,7 +86,7 @@ bool Pathfinder::findPath(int start, int goal, std::vector<int>& out) {
 
         if (c == goal) {
             for (int i = goal; i != start; i = at(parent_, i)) {
-                out.push_back(i);
+                out.push_back(map_.cellAt(i, level));
             }
             std::reverse(out.begin(), out.end());
             return true;
@@ -94,14 +97,15 @@ bool Pathfinder::findPath(int start, int goal, std::vector<int>& out) {
         for (int d = 0; d < 8; ++d) {
             const int nx = cx + kDx[d];
             const int ny = cy + kDy[d];
-            if (!map_.inBounds(nx, ny) || !map_.walkable(nx, ny)) {
+            const CellPos next{nx, ny, level};
+            if (!map_.walkable(next)) {
                 continue;
             }
             const bool diagonal = d >= 4;
-            if (diagonal && (!map_.walkable(nx, cy) || !map_.walkable(cx, ny))) {
+            if (diagonal && (!map_.walkable(CellPos{nx, cy, level}) || !map_.walkable(CellPos{cx, ny, level}))) {
                 continue;
             }
-            const int n = map_.index(nx, ny);
+            const int n = map_.index(next);
             if (at(closed_, n) == gen) {
                 continue;
             }

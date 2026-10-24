@@ -14,7 +14,9 @@ public class ColonySim : ModuleRules
 
 		PrivateDependencyModuleNames.Add("Core");
 
-		// Vendored nlohmann/json, used only by Private/Defs.cpp.
-		PrivateIncludePaths.Add(Path.Combine(ModuleDirectory, "..", "..", "ThirdParty"));
+		// Vendored libraries: EnTT (public sim headers include it, so modules that use the sim
+		// need the path too) and nlohmann/json (Private/Defs.cpp only). System paths, so their
+		// warnings stay out of our build.
+		PublicSystemIncludePaths.Add(Path.Combine(ModuleDirectory, "..", "..", "ThirdParty"));
 	}
 }
