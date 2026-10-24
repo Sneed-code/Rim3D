@@ -1,3 +1,13 @@
 {
-  "assets": []
+  "assets": [
+    {
+      "name": "Game Animation Sample",
+      "source": "Epic Games Launcher: Unreal Engine > Samples > Game Animation Sample > Create Project",
+      "licence": "Epic sample content, usable in Unreal Engine projects",
+      "version": "5.8",
+      "installedTo": "game/Content/ (Audio, Blueprints, Characters, Input, IsolatedExamples, Levels, MetaHumans, Misc, Movies, Widgets), with game/Config/*.ini and its plugins in Rim3D.uproject",
+      "usedFor": "character locomotion (motion matching) and the Stage 0 character test",
+      "reinstall": "Create the sample at C:\\Dev\\GameAnimationSample, then copy its Content folder over game/Content"
+    }
+  ]
 }

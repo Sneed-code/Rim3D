@@ -26,6 +26,11 @@ public:
     int height() const { return height_; }
     bool inBounds(int x, int y) const { return x >= 0 && y >= 0 && x < width_ && y < height_; }
     int index(int x, int y) const { return y * width_ + x; }
+    // Placeholder until terrain defs: water and rock block walking.
+    bool walkable(int x, int y) const {
+        const Terrain t = terrain(x, y);
+        return t != Terrain::Water && t != Terrain::Rock;
+    }
 
     // Ground height in metres.
     float groundHeight(int x, int y) const { return groundHeight_[static_cast<size_t>(index(x, y))]; }
