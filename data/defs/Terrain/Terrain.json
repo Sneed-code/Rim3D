@@ -1,0 +1,7 @@
+[
+  { "defName": "TerrainBase", "abstract": true, "label": "terrain" },
+  { "defName": "Soil", "parent": "TerrainBase", "label": "soil" },
+  { "defName": "Sand", "parent": "TerrainBase", "label": "sand" },
+  { "defName": "Gravel", "parent": "TerrainBase", "label": "gravel" },
+  { "defName": "WaterShallow", "parent": "TerrainBase", "label": "shallow water" }
+]

@@ -1,0 +1,25 @@
+# Unreal build output and caches
+game/Binaries/
+game/Intermediate/
+game/Saved/
+game/DerivedDataCache/
+game/Plugins/*/Binaries/
+game/Plugins/*/Intermediate/
+*.sln
+*.code-workspace
+.vs/
+.idea/
+
+# Third-party asset packs stay out of Git (see assets/README.md)
+game/Content/Megascans/
+game/Content/MetaHumans/
+game/Content/Fab/
+game/Content/ThirdParty/
+
+# Standalone sim builds
+build/
+out/
+
+# Python
+__pycache__/
+*.pyc

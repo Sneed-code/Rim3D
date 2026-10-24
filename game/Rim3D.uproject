@@ -1,0 +1,22 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "",
+	"Category": "",
+	"Description": "Rim3D: a 3D colony game based on RimWorld.",
+	"Modules": [
+		{
+			"Name": "Rim3D",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [
+				"Engine"
+			]
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "ColonySim",
+			"Enabled": true
+		}
+	]
+}
