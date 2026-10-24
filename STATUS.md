@@ -4,7 +4,7 @@ Updated 2026-10-24.
 
 ## Where we are
 
-Stage 0 (foundation): steps 1 and 2 of 4 are done.
+Stage 0 (foundation): steps 1 to 3 of 4 are done.
 
 Done:
 - Step 1: game design and architecture docs (`docs/`).
@@ -14,14 +14,22 @@ Done:
 - Step 2, PC part: sneed's PC has Unreal 5.8.3, Visual Studio 2026 with C++ game tools, git and
   git-lfs. Project cloned to `C:\Dev\Rim3D`, Defender skips `C:\Dev` and the UE 5.8 folder,
   Unreal builds limited to 6 parallel actions, and the editor target compiles cleanly.
+- Step 3: Game Animation Sample copied into `game/Content/` (not in Git, see
+  `assets/manifest.json`), its config and plugins in the project. The three Stage 0 tests ran:
+  - Sim speed: `docs/decisions/0001-stage0-sim-speed.md`. 1 km map stays; region pathfinding and
+    a per-step path budget are required.
+  - Characters and terrain: `docs/decisions/0002-stage0-characters-and-terrain.md`. MetaHumans
+    stay with animation LOD; body variety needs real body types and our own skin material;
+    runtime terrain mesh is cheap.
+  - Placeholder hauling pawns and cell A* are in the sim (`Pathfinder`, `Pawn.h`); they are
+    replaced by the real job system and region pathfinding in Stage 1.
 
 ## Next
 
-- Step 3: bring in Epic's Game Animation Sample (sneed creates it from the launcher first), then
-  the three Stage 0 tests (pawns, 1 km map, sim speed). See `docs/architecture.md`.
-- Step 4: lock decisions and plan Stage 1 as one-sitting tasks.
+- Step 4: lock decisions (update `architecture.md` from 0001 and 0002) and plan Stage 1 as
+  one-sitting tasks.
 
 ## Waiting on sneed
 
-- Create the Game Animation Sample project from the Epic launcher (step 6 of
-  `docs/setup/pc-setup.md`, Unreal 5.8, saved to `C:\Dev\GameAnimationSample`).
+- Megascans: download terrain material packs from Fab for the terrain look comparison
+  (can wait until Stage 1).
