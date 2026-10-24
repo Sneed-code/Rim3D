@@ -1,3 +1,4 @@
+using System.IO;
 using UnrealBuildTool;
 
 // The sim is plain C++. Only ColonySimModule.cpp touches Unreal; everything else
@@ -12,5 +13,8 @@ public class ColonySim : ModuleRules
 		bUseRTTI = false;
 
 		PrivateDependencyModuleNames.Add("Core");
+
+		// Vendored nlohmann/json, used only by Private/Defs.cpp.
+		PrivateIncludePaths.Add(Path.Combine(ModuleDirectory, "..", "..", "ThirdParty"));
 	}
 }
