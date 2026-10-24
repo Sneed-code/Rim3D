@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+  <ThingDef ParentName="BuildingBase">
+    <defName>Wall</defName>
+    <label>wall</label>
+    <size>(1,1)</size>
+    <statBases>
+      <MaxHitPoints>200</MaxHitPoints>
+      <WorkToBuild>50</WorkToBuild>
+    </statBases>
+    <stuffCategories><li>Metallic</li><li>Stony</li></stuffCategories>
+    <costStuffCount>5</costStuffCount>
+  </ThingDef>
+  <ThingDef ParentName="BenchBase">
+    <defName>FueledStove</defName>
+    <label>fueled stove</label>
+    <size>(3,1)</size>
+    <statBases>
+      <WorkToBuild>2000</WorkToBuild>
+    </statBases>
+    <costList Inherit="False"><Steel>80</Steel><WoodLog>5</WoodLog></costList>
+    <comps>
+      <li Class="CompProperties_Refuelable">
+        <fuelConsumptionRate>2.5</fuelConsumptionRate>
+        <fuelCapacity>25</fuelCapacity>
+      </li>
+      <li Class="CompProperties_Flickable" />
+    </comps>
+  </ThingDef>
+  <ThingDef ParentName="ResourceBase">
+    <defName>Steel</defName>
+    <label>steel</label>
+    <statBases>
+      <MarketValue>2</MarketValue>
+      <Mass>0.5</Mass>
+    </statBases>
+    <stuffProps>
+      <categories><li>Metallic</li></categories>
+      <statOffsets><Beauty>0.5</Beauty></statOffsets>
+      <statFactors><MaxHitPoints>1.2</MaxHitPoints><WorkToMake>2.5</WorkToMake></statFactors>
+    </stuffProps>
+  </ThingDef>
+  <ThingDef ParentName="ResourceBase">
+    <defName>WoodLog</defName>
+    <label>wood log</label>
+    <statBases><MarketValue>1</MarketValue></statBases>
+  </ThingDef>
+  <ThingDef ParentName="ResourceBase">
+    <defName>RawBerries</defName>
+    <label>berries</label>
+    <statBases><Nutrition>0.05</Nutrition><MarketValue>1.5</MarketValue></statBases>
+    <ingestible>
+      <foodType>VegetarianRoughAnimal, Fungus</foodType>
+      <preferability>RawBad</preferability>
+      <baseIngestTicks>250</baseIngestTicks>
+      <ingestSound>Meal_Eat</ingestSound>
+    </ingestible>
+  </ThingDef>
+  <ThingDef>
+    <defName>Plant_Berry</defName>
+    <label>berry bush</label>
+    <category>Plant</category>
+    <plant>
+      <growDays>6</growDays>
+      <harvestedThingDef>RawBerries</harvestedThingDef>
+      <harvestYield>4</harvestYield>
+      <sowWork>100</sowWork>
+      <harvestWork>60</harvestWork>
+      <visualSizeRange>0.3~1.2</visualSizeRange>
+    </plant>
+  </ThingDef>
+  <ThingDef>
+    <defName>Plant_TreeOak</defName>
+    <label>oak tree</label>
+    <category>Plant</category>
+    <plant>
+      <growDays>20</growDays>
+      <harvestedThingDef>WoodLog</harvestedThingDef>
+      <harvestYield>40</harvestYield>
+    </plant>
+  </ThingDef>
+  <ThingDef>
+    <defName>Plant_TreePine</defName>
+    <label>pine tree</label>
+    <category>Plant</category>
+    <plant><growDays>25</growDays><harvestedThingDef>WoodLog</harvestedThingDef></plant>
+  </ThingDef>
+  <ThingDef>
+    <defName>Gun_Revolver</defName>
+    <label>revolver</label>
+    <category>Item</category>
+    <statBases><RangedWeapon_Cooldown>1.6</RangedWeapon_Cooldown></statBases>
+    <verbs>
+      <li>
+        <verbClass>Verb_Shoot</verbClass>
+        <defaultProjectile>Bullet_Revolver</defaultProjectile>
+        <warmupTime>0.3</warmupTime>
+        <range>25.9</range>
+        <burstShotCount>1</burstShotCount>
+        <ticksBetweenBurstShots>12</ticksBetweenBurstShots>
+        <soundCast>Shot_Revolver</soundCast>
+      </li>
+    </verbs>
+    <tools>
+      <li>
+        <label>grip</label>
+        <power>9</power>
+        <cooldownTime>2</cooldownTime>
+      </li>
+    </tools>
+  </ThingDef>
+  <ThingDef>
+    <defName>Bullet_Revolver</defName>
+    <label>bullet</label>
+    <category>Projectile</category>
+    <projectile>
+      <damageDef>Bullet</damageDef>
+      <damageAmountBase>12</damageAmountBase>
+      <speed>90</speed>
+      <armorPenetrationBase>0.15</armorPenetrationBase>
+    </projectile>
+  </ThingDef>
+  <ThingDef>
+    <defName>Human</defName>
+    <label>human</label>
+    <statBases><MoveSpeed>4.6</MoveSpeed><MarketValue>1750</MarketValue></statBases>
+    <race>
+      <body>Human</body>
+      <baseBodySize>1</baseBodySize>
+      <lifeExpectancy>80</lifeExpectancy>
+    </race>
+  </ThingDef>
+  <ThingDef>
+    <defName>NotWanted</defName>
+    <label>not wanted</label>
+  </ThingDef>
+</Defs>

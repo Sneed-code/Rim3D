@@ -4,13 +4,14 @@
 Each file is a JSON array of defs. The folder a file sits in is its def kind
 (Terrain, Things, ...). Checks: valid JSON, every def has a unique defName
 within its kind, and every parent exists in the same kind with no cycles.
-Exits 1 and lists every problem if anything is wrong.
+Exits 1 and lists every problem if anything is wrong. An optional argument checks another
+folder instead of data/defs (the importer's tests use this).
 """
 import json
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent / "data" / "defs"
+ROOT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent / "data" / "defs"
 
 
 def main() -> int:

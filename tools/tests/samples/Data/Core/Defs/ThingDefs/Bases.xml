@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+  <ThingDef Name="BuildingBase" Abstract="True">
+    <category>Building</category>
+    <description>Flavour text that must never reach the output.</description>
+    <graphicData><texPath>Things/Building/Foo</texPath></graphicData>
+    <statBases>
+      <MaxHitPoints>100</MaxHitPoints>
+      <Flammability>1</Flammability>
+    </statBases>
+    <inspectorTabs><li>ITab_Foo</li></inspectorTabs>
+  </ThingDef>
+  <ThingDef Name="ResourceBase" Abstract="True">
+    <category>Item</category>
+    <thingCategories><li>Resources</li></thingCategories>
+    <stackLimit>75</stackLimit>
+  </ThingDef>
+  <ThingDef Name="BenchBase" ParentName="BuildingBase" Abstract="True">
+    <statBases>
+      <WorkToBuild>1000</WorkToBuild>
+    </statBases>
+    <costList><Steel>10</Steel></costList>
+    <comps>
+      <li Class="CompProperties_Flickable" />
+    </comps>
+  </ThingDef>
+</Defs>
