@@ -23,14 +23,16 @@ list(FILTER SIM_SOURCES EXCLUDE REGEX ".*ColonySimModule\\.cpp$")
 add_library(colonysim STATIC ${SIM_SOURCES})
 target_include_directories(colonysim PUBLIC Source/ColonySim/Public)
 target_link_libraries(colonysim PUBLIC colonysim_flags)
-# nlohmann/json is used inside Defs.cpp only; vendored, so treat as a system header.
-target_include_directories(colonysim SYSTEM PRIVATE ThirdParty)
+# Vendored libraries are system headers (no warnings). EnTT appears in public sim headers;
+# nlohmann/json is used inside Defs.cpp only.
+target_include_directories(colonysim SYSTEM PUBLIC ThirdParty)
 
 add_library(colonysim_thirdparty INTERFACE)
 target_include_directories(colonysim_thirdparty SYSTEM INTERFACE ThirdParty)
 
 add_executable(simrun Tools/simrun/main.cpp)
 target_link_libraries(simrun PRIVATE colonysim colonysim_thirdparty)
+target_compile_definitions(simrun PRIVATE COLONY_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../data")
 
 enable_testing()
 file(GLOB TEST_SOURCES CONFIGURE_DEPENDS Tests/*.cpp)

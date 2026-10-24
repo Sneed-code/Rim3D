@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ColonySim/Api.h"
+#include "ColonySim/Grid.h"
 
 #include <cstdint>
 #include <vector>
@@ -9,9 +10,10 @@ namespace colony {
 
 class Map;
 
-// A* over the 8-connected cell grid, with no corner cutting. Buffers are sized
-// to the map once and reused between searches. Region-level search, terrain
-// and slope costs come later; for now every walkable cell costs the same.
+// A* over the 8-connected cell grid of one level, with no corner cutting. Buffers
+// are sized to the map once and reused between searches. Region-level search,
+// stairs, terrain and slope costs come later; for now every walkable cell costs
+// the same, and cells with a blocking building are not walkable.
 class COLONY_API Pathfinder {
 public:
     struct OpenNode {
@@ -22,9 +24,10 @@ public:
 
     explicit Pathfinder(const Map& map);
 
-    // Fills `out` with cell indices from just after `start` up to and including
-    // `goal`. Returns false if `goal` can't be reached.
-    bool findPath(int start, int goal, std::vector<int>& out);
+    // Fills `out` with the cells from just after `start` up to and including
+    // `goal`. Returns false if `goal` can't be reached (for now that includes a
+    // goal on another level).
+    bool findPath(CellPos start, CellPos goal, std::vector<CellPos>& out);
 
     uint64_t searches() const { return searches_; }
     uint64_t cellsExpanded() const { return cellsExpanded_; }
