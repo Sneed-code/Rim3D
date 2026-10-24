@@ -25,16 +25,17 @@ tasks S1 and S3 replace them.
 
 ## Stage 1 progress
 
-1 of 43 tasks done (U1). Tick tasks in `docs/plans/stage-1.md` as they merge.
+3 of 43 tasks done (D1, D2, U1). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
 Wave 1:
-- **D1** def database (Cloud, Sonnet medium).
-- **D2** RimWorld importer (Cloud, Sonnet high).
-- ~~U1~~ smoke test harness: done (`tools/smoke.ps1`, `docs/design/smoke-tests.md`).
+- ~~**D1** def database~~ done: `docs/design/defs.md`.
+- ~~**D2** RimWorld importer~~ done: `docs/design/rimworld-import.md`. It has only run on test
+  fixtures; nothing is imported yet.
+- ~~**U1** smoke test harness~~ done: `tools/smoke.ps1`, `docs/design/smoke-tests.md`.
 
-Then S1 (Opus high) once D1 is merged, and D3 (PC light) once D2 is merged.
+Then S1 (Opus high, D1 is merged), and **D3** (PC light, Sonnet medium) is now ready: it runs the importer on sneed's PC.
 
 ## Waiting on sneed
 
