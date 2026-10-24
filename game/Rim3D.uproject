@@ -1,6 +1,6 @@
 {
 	"FileVersion": 3,
-	"EngineAssociation": "",
+	"EngineAssociation": "5.8",
 	"Category": "",
 	"Description": "Rim3D: a 3D colony game based on RimWorld.",
 	"Modules": [
