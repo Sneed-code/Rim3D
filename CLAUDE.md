@@ -7,6 +7,7 @@ expansions. The owner, sneed, does not program: Claude does all the work, sneed 
 
 - `STATUS.md`: where we are and what's next. Read it at the start of every task.
 - `docs/game-design.md`: what the game is. `docs/architecture.md`: how it is built.
+- `docs/plans/stage-<N>.md`: the current stage's task list. Read your task's row and its rules.
 - `docs/design/<system>.md`: read only the one your task needs.
 - `docs/decisions/`: decisions made after the two main docs; newer ones win.
 

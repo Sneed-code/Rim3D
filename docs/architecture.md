@@ -1,6 +1,6 @@
 # Colony game: architecture
 
-_Drafted 2026-10-24 with sneed. This file is the source of truth; the original Claude Doc is [here](https://claude.ai/artifact/923qq6ggVEzUfidvsjU2LX)._
+_Drafted 2026-10-24 with sneed. This file is the source of truth; the original Claude Doc is [here](https://claude.ai/artifact/923qq6ggVEzUfidvsjU2LX). Stage 0 results ([0001](decisions/0001-stage0-sim-speed.md), [0002](decisions/0002-stage0-characters-and-terrain.md)) and the calls Stage 1 builds on were locked in on 2026-10-24; the plan is [`docs/plans/stage-1.md`](plans/stage-1.md)._
 
 The game is two programs in one. A plain C++ **simulation core** owns every rule and every piece of game state, on a 1 m grid like RimWorld's. **Unreal Engine 5** draws that state in 3D, plays the animations and effects, and turns your input into commands for the simulation. Content lives in **JSON data files**, and big third-party art stays out of Git. This split lets most of the game be built and tested in the cloud while your PC is off. It implements the [game design doc](game-design.md). The parts you might want to weigh in on are the risks at the end; the rest is mostly for future Claude threads.
 
@@ -34,11 +34,11 @@ Everything on the left of the bridge runs without Unreal, so it can be built and
 
 The sim is a RimWorld-style tick simulation on a 1 m grid, written in plain C++20. It knows nothing about graphics.
 
-**The grid.** A map is up to 1,024 by 1,024 cells, stored as one flat array per layer: terrain, ground height, rock, roof, fertility, snow, filth, fire, gas, light and the building in each cell. Plants are a grid layer too (type and growth per cell), not separate objects, because a 1 km map holds hundreds of thousands of them. The grid is split into 32 m chunks so fire, gas and temperature only update where something is happening. Cells stack in levels about 3 m tall for multi-storey buildings, stored sparsely so empty sky costs nothing. Stairs and ladders link levels for pathfinding.
+**The grid.** A map is up to 1,024 by 1,024 cells, stored as one flat array per layer: terrain, ground height, rock, roof, fertility, snow, filth, fire, gas, light and the building in each cell. Plants are a grid layer too (type and growth per cell), not separate objects, because a 1 km map holds hundreds of thousands of them. The grid is split into 32 m chunks so fire, gas and temperature only update where something is happening. Cells stack in levels about 3 m tall for multi-storey buildings, stored sparsely so empty sky costs nothing. Stairs and ladders link levels for pathfinding. From Stage 1 every grid, region and path function takes a cell position with a level (`CellPos{x, y, level}`), even though the prototype only builds on the ground level; upper levels and stairs come in the vanilla core without changing those interfaces.
 
 **Movement is continuous.** Pawn and projectile positions are real 3D coordinates, not cells. The grid is used to plan routes, which are smoothed into natural paths, and pawns steer around each other locally. The grid is for structures and planning only.
 
-**Regions and rooms.** As in RimWorld, connected open cells group into regions, and enclosed regions form rooms. Rooms hold temperature, beauty, cleanliness and role. Regions also answer "can this pawn reach that?" quickly.
+**Regions and rooms.** As in RimWorld, connected open cells group into regions, and enclosed regions form rooms. Rooms hold temperature, beauty, cleanliness and role. A region never crosses a 16 m block boundary (four blocks per 32 m chunk), so changing a cell rebuilds only its block's regions. A door is a region of its own. Regions that connect to each other share a reachability group, which answers "can this pawn reach that?" in constant time, so work scanners never pick a target nobody can walk to.
 
 **Things.** Pawns, items, buildings, corpses and projectiles are entities in an [EnTT](https://github.com/skypjack/entt) registry. Each has a def (its data file entry) plus components, much like RimWorld's comps: hit points, stack count, apparel, refuelable, power, and so on.
 
@@ -46,7 +46,9 @@ The sim is a RimWorld-style tick simulation on a 1 m grid, written in plain C++2
 
 **Determinism and replays.** All randomness comes from seeded random streams, one per system. Commands are applied only at tick boundaries and logged. A replay file (seed plus command log) reproduces any session exactly, so when something goes wrong you press one key and I can replay the bug in the cloud.
 
-**Threading.** Inside Unreal, the sim steps on its own worker thread. After each step it publishes a read-only snapshot and a list of events for Unreal to draw. The first version may run on the game thread through the same interface.
+**Threading.** After each step the sim publishes a read-only snapshot and a list of events for Unreal to draw. Through Stage 1 it steps on Unreal's game thread behind that interface, since Stage 0 measured it far under budget; it moves to its own worker thread when a profile shows it is worth it, without changing the interface.
+
+**Fixed budgets, never clock time.** Anything the sim spreads over several steps (path searches, region rebuilds, big scans) uses a budget counted in work done, such as cells expanded, never in milliseconds. A clock-based budget would make the result depend on how fast the computer is and break determinism.
 
 **Saves.** A save is a versioned binary snapshot of sim state. Data is referenced by `defName`, so labels can be renamed freely. A JSON dump of any save is available for debugging.
 
@@ -107,11 +109,11 @@ Unreal builds the 3D world from the sim's snapshot and events. We use the latest
 
 | Part | How it's drawn |
 | --- | --- |
-| Terrain and mountains | Chunk meshes (32 m) built at runtime from the sim's height and rock layers, with Megascans materials. Mining a rock cell rebuilds one chunk. Not Unreal's Landscape, which can't be generated or dug into at runtime. |
+| Terrain and mountains | Chunk meshes (32 m) built at runtime from the sim's height and rock layers, with Megascans materials. Mining a rock cell rebuilds one chunk. Not Unreal's Landscape, which can't be generated or dug into at runtime. Stage 0 built a 1 km map in 155 ms and drew it in about 4 ms of GPU time; how it looks with Megascans materials is still to be judged. |
 | Buildings, walls, furniture | Instanced static meshes per mesh type per chunk, Nanite where possible. Damage swaps to a worn variant at hit-point thresholds. |
 | Destruction | When the sim destroys a building, Unreal spawns a pre-fractured Chaos version that collapses into debris. Debris is cosmetic; the sim places rubble. |
 | Plants | Instanced meshes from the sim's plant layer. Felled trees topple with physics. Grass, pebbles and other clutter that don't matter to the game come from Unreal's PCG tools. |
-| Pawns and animals | One actor each. Humans use MetaHuman parts assembled by seed through Mutable; animals and mechs use shared skeletons. Motion matching for movement, short montages for actions (chop, mine, eat), and Unreal's animation budget system for crowds. Distant herds of hundreds of animals switch to cheap instanced meshes with baked animation. |
+| Pawns and animals | One actor each; see "Pawn animation and looks" below. Animals and mechs use shared skeletons. Distant herds of hundreds of animals switch to cheap instanced meshes with baked animation. |
 | Gore | Wound decals and blood on the skin material, hidden bones plus a physics severed limb for lost body parts, Chaos ragdolls for the downed and dead, and gib meshes with blood effects for explosions. |
 | Fire, gas, weather | Niagara effects placed from the sim's fire and gas layers; volumetric clouds, fog and particles for weather. |
 | Lighting | Lumen, virtual shadow maps and DLSS. The sim keeps its own simple light grid for gameplay (work speed, mood). |
@@ -120,13 +122,20 @@ Unreal builds the 3D world from the sim's snapshot and events. We use the latest
 
 Sound plays from sim events (gunshots, footsteps, construction) and from Unreal-side ambience.
 
+**Pawn animation and looks.** Stage 0 showed the graphics card copes with 100 MetaHumans (about 4 ms) but the CPU does not: animation and movement cost about 0.35 ms per MetaHuman per frame. So:
+
+- **The sim moves pawns; Unreal only animates them.** Pawn actors have no CharacterMovement. They blend between the last two snapshots and feed the sim's velocity and planned path to motion matching as its trajectory. Only the pawn under your direct control keeps CharacterMovement.
+- **Animation detail by distance.** About the 20 pawns nearest the camera get full motion matching. The rest get a cheaper animation graph, update less often the farther they are (Unreal's animation budget allocator and update rate settings), and switch to lower-detail bodies with card hair instead of strand hair. Short montages play actions (chop, mine, eat) at every distance.
+- **Seeded looks** come from MetaHuman body types and morph targets, never from stretching the mesh (Stage 0 showed that pushes body through clothes), plus our own skin material with tint, xenotype colour and wound settings. Horns and other gene parts are attached meshes sized to read from the overseer camera. The look system sits behind one interface, so the body source can change (for example to MPFB2) without touching the rest of the game.
+- The target stays 100 animated pawns at 60 fps, measured in a packaged build, not the editor.
+
 ## AI
 
 All AI runs inside the sim, so it is tested headless. It copies RimWorld's proven structure for daily life and adds a real tactical layer for combat.
 
-1. **Pathfinding.** A\* on the grid, sped up by searching across regions first and then cells. Path costs include terrain, slope, doors and known danger. Many raiders heading to the same place share one flow field.
+1. **Pathfinding.** Hierarchical, and required before anything else is built on top of it (Stage 0 measured single cell A\* searches across 1 km at 10 to 100 ms). A path is found in two passes: A\* over the region graph, then cell A\* restricted to the regions on that route. Reachability groups rule out impossible requests before any search. Requests go into a queue with a fixed per-step budget of cells expanded (tuned to cost about 1 ms on sneed's PC), so a burst of long searches spreads over a few steps and a pawn waits a step or two for its path. Cell paths are smoothed into natural lines, and pawns steer around each other locally. Path costs include terrain, slope, doors and known danger. Many raiders heading to the same place share one flow field.
 2. **Deciding what to do.** Each pawn walks a priority list like RimWorld's think tree: emergencies (on fire, downed, mental break), direct orders, the defense plan, urgent needs, the current schedule block, then work.
-3. **Choosing work.** Work types are checked in the pawn's priority order. Each work type's scanners look through ready-made lists (things to haul, blueprints to build, plants to cut) and pick the best target, weighing distance. Reservations stop two pawns taking the same job.
+3. **Choosing work.** Work types are checked in the pawn's priority order. Each work type's scanners look through ready-made lists (things to haul, blueprints to build, plants to cut) and pick the best target, weighing distance. On a 1 km map distance matters a lot: a round trip to the edge takes over 4 real minutes, so within a priority the nearest reachable job wins, and haul jobs prefer the nearest stockpile that accepts the item. Reservations stop two pawns taking the same job.
 4. **Doing a job.** A job is a short list of steps (go to, pick up, carry, work at, place), each with fail checks, like RimWorld's toils.
 5. **Combat.** Each fighter re-plans its position about twice a second and aims every step. Aim works like a player's: reaction time, spread, recoil and leading moving targets, all set by Shooting skill. Fighters strafe, crouch, lean out from cover and dodge grenades and slow projectiles. It scores nearby cells for cover from known enemies, line of sight to a target, weapon range, distance and crowding, then moves, shoots or reloads. A cover map (cover strength per cell in eight directions, from walls, sandbags, rocks and trees) updates only when something is built or destroyed. A shared threat map per faction marks dangerous ground.
 6. **Morale and squads.** Each side's squad compares strength (numbers, health, armor, weapons) and moves between advance, hold, fall back and rout. Raider squads use RimWorld's raid plans (assault, siege, sappers, kidnappers, fleeing). Your colony's squad runs the defense plan from the game design doc.
@@ -179,7 +188,7 @@ Most work happens in the cloud. Your PC is needed only for things that touch Unr
 
 ## Performance targets
 
-These are the numbers the game must hold on your RTX 5080, checked at the end of each stage. They are starting targets and may move after the Stage 0 tests.
+These are the numbers the game must hold on your RTX 5080, checked at the end of each stage in a packaged build. Stage 0 kept all of them.
 
 | Target | Value |
 | --- | --- |
@@ -190,18 +199,16 @@ These are the numbers the game must hold on your RTX 5080, checked at the end of
 | Save and load | Under 10 seconds for a mature colony |
 | Overnight soak | At least 500 simulated raids per night on a cloud machine |
 
-## Risks and Stage 0 tests
+## Risks and Stage 0 results
 
-Five things could force a change of plan. The first three are what the Stage 0 tests are for, so we find out in week one or two, not month three.
+Five things could have forced a change of plan. Stage 0 tested the first three on sneed's PC on 2026-10-24; none did.
 
-| Risk | Stage 0 check | Fallback if it fails |
+| Risk | What Stage 0 found | What we do |
 | --- | --- | --- |
-| MetaHumans are too heavy for 100 characters, or too rigid for seeded variety and xenotypes | 10 seeded pawns (heavy, thin, an Impid with horns and red skin), then 100 on screen, measuring frame rate | Lower detail at distance, fewer face variants, or MPFB2 bodies |
-| Runtime terrain looks worse than Unreal's Landscape | A 1 km map built from a sim heightmap with Megascans materials, compared on screen | A voxel terrain plugin, or a hand-made Landscape for the home map only |
-| The sim is too slow at 1 km | 20 pawns pathing and hauling on a 512 m map in `simrun`, then scaled to 1 km | Smaller home map (768 m) or coarser updates far from the colony |
-| A C++-only UI is slow to build | Not tested in Stage 0 | The prototype uses quick ImGui panels; the proper styled UI comes in the vanilla core |
-| Editor work stalls while your PC is off | Not tested in Stage 0 | Batch all Unreal work into PC sessions and keep cloud threads busy with sim work meanwhile |
+| MetaHumans are too heavy for 100 characters, or too rigid for seeded variety and xenotypes | 100 MetaHumans: GPU fine (4 ms), CPU animation too slow (28 fps in the editor). Stretching bodies doesn't make body types; the sample skin can't be tinted. | Keep MetaHumans with animation detail by distance and real body types plus our own skin material (see "Pawn animation and looks"). Re-measure in a packaged build in Stage 1. MPFB2 stays the fallback. |
+| Runtime terrain looks worse than Unreal's Landscape | Cheap: 155 ms to build 1 km, about 4 ms to draw. | Keep runtime terrain. The look check with Megascans waits until sneed downloads the packs. |
+| The sim is too slow at 1 km | Average cost tiny (0.14 ms per frame at 3x with 100 pawns), but single long path searches hitch for 10 to 100 ms. | Keep the 1 km map. Hierarchical pathfinding with a per-step budget comes first in Stage 1. |
+| A C++-only UI is slow to build | Not tested | The prototype uses quick ImGui panels; the proper styled UI comes in the vanilla core |
+| Editor work stalls while your PC is off | Not tested | Batch all Unreal work into PC sessions and keep cloud threads busy with sim work meanwhile |
 
-Two more risks come from the shooter-style combat and multi-storey decisions. Sim hitboxes may not line up with the body you see, which makes hits feel wrong; the prototype's raid test checks this, and the fix is finer hitboxes fitted to each body type. Multi-storey building adds work to pathing, rooms, roof collapse and the overseer camera; building levels into the sim from day one keeps that cost small.
-
-The Stage 0 results go into `docs/decisions/` and update this doc before Stage 1 starts.
+Two more risks come from the shooter-style combat and multi-storey decisions. Sim hitboxes may not line up with the body you see, which makes hits feel wrong; the prototype's raid test checks this, and the fix is finer hitboxes fitted to each body type. Multi-storey building adds work to pathing, rooms, roof collapse and the overseer camera; giving every grid interface a level from Stage 1 keeps that cost small.
