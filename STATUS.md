@@ -4,7 +4,7 @@ Updated 2026-10-24.
 
 ## Where we are
 
-Stage 0 (foundation), step 2 of 4.
+Stage 0 (foundation): steps 1 and 2 of 4 are done.
 
 Done:
 - Step 1: game design and architecture docs (`docs/`).
