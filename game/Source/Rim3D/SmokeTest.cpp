@@ -1,4 +1,4 @@
-#include "Stage0Test.h"
+#include "SmokeTest.h"
 
 #include "AIController.h"
 #include "Camera/CameraActor.h"
@@ -26,20 +26,22 @@
 #include "Serialization/JsonWriter.h"
 #include "UnrealClient.h"
 
+#include "SimSubsystem.h"
+
 #include "ColonySim/Map.h"
 #include "ColonySim/Random.h"
 
-DEFINE_LOG_CATEGORY_STATIC(LogStage0, Log, All);
+DEFINE_LOG_CATEGORY_STATIC(LogSmoke, Log, All);
 
 namespace
 {
 	// Far from the sample level's own geometry, so the tests start on empty ground.
-	const FVector Stage0Origin(300000.0, 0.0, 0.0);
+	const FVector SmokeOrigin(300000.0, 0.0, 0.0);
 
 	const TCHAR* const RunnerClassPath = TEXT("/Game/Blueprints/SandboxCharacter_CMC.SandboxCharacter_CMC_C");
 	const TCHAR* const MetaHumanClassPath = TEXT("/Game/MetaHumans/Kellan/BP_Kellan.BP_Kellan_C");
 
-	double Stage0Percentile(TArray<float> Values, double P)
+	double SmokePercentile(TArray<float> Values, double P)
 	{
 		if (Values.IsEmpty())
 		{
@@ -50,31 +52,37 @@ namespace
 	}
 }
 
-bool UStage0TestSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) const
+bool USmokeTestSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) const
 {
 	return WorldType == EWorldType::Game;
 }
 
-TStatId UStage0TestSubsystem::GetStatId() const
+TStatId USmokeTestSubsystem::GetStatId() const
 {
-	RETURN_QUICK_DECLARE_CYCLE_STAT(UStage0TestSubsystem, STATGROUP_Tickables);
+	RETURN_QUICK_DECLARE_CYCLE_STAT(USmokeTestSubsystem, STATGROUP_Tickables);
 }
 
-void UStage0TestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
+void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 {
 	Super::OnWorldBeginPlay(InWorld);
-	if (!FParse::Value(FCommandLine::Get(), TEXT("Stage0Test="), TestName))
+	if (!FParse::Value(FCommandLine::Get(), TEXT("SmokeTest="), TestName))
 	{
 		return;
 	}
-	UE_LOG(LogStage0, Display, TEXT("Stage 0 test '%s' starting"), *TestName);
+	UE_LOG(LogSmoke, Display, TEXT("Smoke test '%s' starting"), *TestName);
+	StartSeconds = FPlatformTime::Seconds();
+	FParse::Value(FCommandLine::Get(), TEXT("SmokeTimeout="), TimeoutSeconds);
 
 	FActorSpawnParameters Params;
-	Camera = InWorld.SpawnActor<ACameraActor>(Stage0Origin, FRotator::ZeroRotator, Params);
+	Camera = InWorld.SpawnActor<ACameraActor>(SmokeOrigin, FRotator::ZeroRotator, Params);
 	Camera->GetCameraComponent()->SetFieldOfView(70.0f);
 	Camera->GetCameraComponent()->bConstrainAspectRatio = false;
 
-	if (TestName == TEXT("crowd"))
+	if (TestName == TEXT("load"))
+	{
+		BuildLoadPhases();
+	}
+	else if (TestName == TEXT("crowd"))
 	{
 		BuildCrowdPhases();
 	}
@@ -84,14 +92,14 @@ void UStage0TestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	}
 	else
 	{
-		UE_LOG(LogStage0, Error, TEXT("Unknown Stage 0 test '%s'"), *TestName);
-		TestName.Reset();
+		Fail(FString::Printf(TEXT("Unknown smoke test '%s'"), *TestName));
+		WriteResultsAndQuit();
 		return;
 	}
 	StartPhase(0);
 }
 
-void UStage0TestSubsystem::ViewFrom(const FVector& Location, const FRotator& Rotation)
+void USmokeTestSubsystem::ViewFrom(const FVector& Location, const FRotator& Rotation)
 {
 	Camera->SetActorLocationAndRotation(Location, Rotation);
 	if (APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0))
@@ -104,7 +112,7 @@ void UStage0TestSubsystem::ViewFrom(const FVector& Location, const FRotator& Rot
 	}
 }
 
-void UStage0TestSubsystem::ClearSpawned()
+void USmokeTestSubsystem::ClearSpawned()
 {
 	for (AActor* Actor : Spawned)
 	{
@@ -118,16 +126,32 @@ void UStage0TestSubsystem::ClearSpawned()
 }
 
 // ---------------------------------------------------------------------------
+// Load: the level opens, the sim subsystem is running and frames are produced.
+
+void USmokeTestSubsystem::BuildLoadPhases()
+{
+	Phases.Add({TEXT("load_default_level"), [this]()
+	{
+		Notes.Add(FString::Printf(TEXT("Level: %s"), *GetWorld()->GetMapName()));
+		if (!GetWorld()->GetSubsystem<USimSubsystem>())
+		{
+			Fail(TEXT("USimSubsystem did not start"));
+		}
+		// No ViewFrom: the screenshot shows the level as a player sees it.
+	}, 3.0f, 3.0f});
+}
+
+// ---------------------------------------------------------------------------
 // Crowd: seeded MetaHuman variety, then 100 animated characters.
 
-void UStage0TestSubsystem::BuildCrowdPhases()
+void USmokeTestSubsystem::BuildCrowdPhases()
 {
-	CrowdCentre = Stage0Origin;
+	CrowdCentre = SmokeOrigin;
 
 	// Ground: a 400 m slab with collision so characters can run on it.
 	if (UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube")))
 	{
-		AStaticMeshActor* Ground = GetWorld()->SpawnActor<AStaticMeshActor>(Stage0Origin - FVector(0, 0, 5), FRotator::ZeroRotator);
+		AStaticMeshActor* Ground = GetWorld()->SpawnActor<AStaticMeshActor>(SmokeOrigin - FVector(0, 0, 5), FRotator::ZeroRotator);
 		Ground->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);
 		Ground->GetStaticMeshComponent()->SetStaticMesh(Cube);
 		Ground->SetActorScale3D(FVector(400.0, 400.0, 0.1));
@@ -175,12 +199,12 @@ void UStage0TestSubsystem::BuildCrowdPhases()
 	Phases.Add({TEXT("crowd_200_mannequins"), [=, this]() { SpawnCrowd(false, 200); ViewFrom(OverseerCam, OverseerRot); }, 8.0f, 15.0f});
 }
 
-ACharacter* UStage0TestSubsystem::SpawnRunner(const FVector& Location, bool bMetaHuman, int32 Seed)
+ACharacter* USmokeTestSubsystem::SpawnRunner(const FVector& Location, bool bMetaHuman, int32 Seed)
 {
 	UClass* RunnerClass = LoadClass<ACharacter>(nullptr, RunnerClassPath);
 	if (!RunnerClass)
 	{
-		Notes.AddUnique(FString::Printf(TEXT("Could not load %s"), RunnerClassPath));
+		Fail(FString::Printf(TEXT("Could not load %s"), RunnerClassPath));
 		return nullptr;
 	}
 	FActorSpawnParameters Params;
@@ -200,7 +224,7 @@ ACharacter* UStage0TestSubsystem::SpawnRunner(const FVector& Location, bool bMet
 		AActor* MetaHuman = MetaHumanClass ? GetWorld()->SpawnActor<AActor>(MetaHumanClass, Location, FRotator::ZeroRotator, Params) : nullptr;
 		if (!MetaHuman)
 		{
-			Notes.AddUnique(FString::Printf(TEXT("Could not load %s"), MetaHumanClassPath));
+			Fail(FString::Printf(TEXT("Could not load %s"), MetaHumanClassPath));
 			return Runner;
 		}
 		Spawned.Add(MetaHuman);
@@ -229,7 +253,7 @@ ACharacter* UStage0TestSubsystem::SpawnRunner(const FVector& Location, bool bMet
 	return Runner;
 }
 
-void UStage0TestSubsystem::ApplySeededLook(AActor* MetaHuman, int32 Seed, FString& OutDescription)
+void USmokeTestSubsystem::ApplySeededLook(AActor* MetaHuman, int32 Seed, FString& OutDescription)
 {
 	// The lineup shows fixed examples first (heavy, thin, Impid), then seeded ones.
 	colony::Rng Rng(static_cast<uint64_t>(Seed));
@@ -324,26 +348,26 @@ void UStage0TestSubsystem::ApplySeededLook(AActor* MetaHuman, int32 Seed, FStrin
 // ---------------------------------------------------------------------------
 // Terrain: the sim's 1 km height map as a runtime mesh.
 
-void UStage0TestSubsystem::BuildTerrainPhases()
+void USmokeTestSubsystem::BuildTerrainPhases()
 {
-	const FVector Middle = Stage0Origin + FVector(51200.0, 51200.0, 0.0);
+	const FVector Middle = SmokeOrigin + FVector(51200.0, 51200.0, 0.0);
 	Phases.Add({TEXT("terrain_overseer_view"), [=, this]() { BuildTerrain(); ViewFrom(Middle + FVector(-6000.0, 0.0, 6000.0), FRotator(-40.0, 0.0, 0.0)); }, 8.0f, 10.0f});
 	Phases.Add({TEXT("terrain_low_view"), [=, this]() { ViewFrom(Middle + FVector(-20000.0, -8000.0, 4500.0), FRotator(-8.0, 20.0, 0.0)); }, 5.0f, 10.0f});
 	Phases.Add({TEXT("terrain_whole_map"), [=, this]() { ViewFrom(Middle + FVector(-75000.0, 0.0, 70000.0), FRotator(-42.0, 0.0, 0.0)); }, 5.0f, 10.0f});
 }
 
-void UStage0TestSubsystem::BuildTerrain()
+void USmokeTestSubsystem::BuildTerrain()
 {
-	const double StartSeconds = FPlatformTime::Seconds();
+	const double BuildStart = FPlatformTime::Seconds();
 	constexpr int32 MapSize = 1024;
 	constexpr int32 Chunk = 32;
 	const colony::Map Map(colony::MapSettings{MapSize, MapSize, colony::splitMix64(42 ^ 0x6D6170ULL)});
 
-	AActor* Terrain = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), Stage0Origin, FRotator::ZeroRotator);
+	AActor* Terrain = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), SmokeOrigin, FRotator::ZeroRotator);
 	UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(Terrain, TEXT("Terrain"));
 	Mesh->bUseAsyncCooking = true;
 	Terrain->SetRootComponent(Mesh);
-	Mesh->SetWorldLocation(Stage0Origin);
+	Mesh->SetWorldLocation(SmokeOrigin);
 	Mesh->RegisterComponent();
 	Spawned.Add(Terrain);
 
@@ -406,7 +430,7 @@ void UStage0TestSubsystem::BuildTerrain()
 			++Section;
 		}
 	}
-	const double BuildMs = (FPlatformTime::Seconds() - StartSeconds) * 1000.0;
+	const double BuildMs = (FPlatformTime::Seconds() - BuildStart) * 1000.0;
 	Notes.Add(FString::Printf(TEXT("Terrain: %d chunks, %lld vertices, built in %.0f ms (sim map generation included)"), Section, Vertices, BuildMs));
 	Notes.AddUnique(TEXT("Terrain uses flat vertex colours; Megascans materials need the packs downloaded from Fab first"));
 }
@@ -414,7 +438,7 @@ void UStage0TestSubsystem::BuildTerrain()
 // ---------------------------------------------------------------------------
 // Phases and measurement.
 
-void UStage0TestSubsystem::StartPhase(int32 Index)
+void USmokeTestSubsystem::StartPhase(int32 Index)
 {
 	PhaseIndex = Index;
 	PhaseTime = 0.0f;
@@ -424,13 +448,23 @@ void UStage0TestSubsystem::StartPhase(int32 Index)
 	{
 		ClearSpawned();
 	}
-	UE_LOG(LogStage0, Display, TEXT("Phase %s"), *Phases[Index].Name);
+	UE_LOG(LogSmoke, Display, TEXT("Phase %s"), *Phases[Index].Name);
 	Phases[Index].Setup();
 }
 
-void UStage0TestSubsystem::Tick(float DeltaTime)
+void USmokeTestSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	if (bFinished)
+	{
+		return;
+	}
+	if (FPlatformTime::Seconds() - StartSeconds > TimeoutSeconds)
+	{
+		Fail(FString::Printf(TEXT("Timed out after %.0f s in phase %d"), TimeoutSeconds, PhaseIndex));
+		WriteResultsAndQuit();
+		return;
+	}
 	if (PhaseIndex < 0 || PhaseIndex >= Phases.Num())
 	{
 		return;
@@ -467,7 +501,7 @@ void UStage0TestSubsystem::Tick(float DeltaTime)
 	if (!bScreenshotTaken && PhaseTime >= Phase.WarmupSeconds + 1.0f)
 	{
 		bScreenshotTaken = true;
-		const FString Path = FPaths::ProjectSavedDir() / TEXT("Stage0") / (Phase.Name + TEXT(".png"));
+		const FString Path = FPaths::ProjectSavedDir() / TEXT("Smoke") / TestName / (Phase.Name + TEXT(".png"));
 		FScreenshotRequest::RequestScreenshot(Path, false, false);
 	}
 	if (PhaseTime >= Phase.WarmupSeconds + Phase.MeasureSeconds)
@@ -476,7 +510,7 @@ void UStage0TestSubsystem::Tick(float DeltaTime)
 	}
 }
 
-void UStage0TestSubsystem::FinishPhase()
+void USmokeTestSubsystem::FinishPhase()
 {
 	TArray<float> Frame, Game, Render, Gpu;
 	for (const FFrameSample& S : Samples)
@@ -492,14 +526,19 @@ void UStage0TestSubsystem::FinishPhase()
 	Result->SetStringField(TEXT("phase"), Phases[PhaseIndex].Name);
 	Result->SetNumberField(TEXT("frames"), Frame.Num());
 	Result->SetNumberField(TEXT("avgFps"), AvgFrame > 0.0 ? 1000.0 / AvgFrame : 0.0);
-	Result->SetNumberField(TEXT("p95FrameMs"), Stage0Percentile(Frame, 0.95));
-	Result->SetNumberField(TEXT("medianGameThreadMs"), Stage0Percentile(Game, 0.5));
-	Result->SetNumberField(TEXT("medianRenderThreadMs"), Stage0Percentile(Render, 0.5));
-	Result->SetNumberField(TEXT("medianGpuMs"), Stage0Percentile(Gpu, 0.5));
+	Result->SetNumberField(TEXT("p95FrameMs"), SmokePercentile(Frame, 0.95));
+	Result->SetNumberField(TEXT("medianGameThreadMs"), SmokePercentile(Game, 0.5));
+	Result->SetNumberField(TEXT("medianRenderThreadMs"), SmokePercentile(Render, 0.5));
+	Result->SetNumberField(TEXT("medianGpuMs"), SmokePercentile(Gpu, 0.5));
 	Result->SetNumberField(TEXT("actors"), Spawned.Num());
+	Result->SetStringField(TEXT("screenshot"), TestName / (Phases[PhaseIndex].Name + TEXT(".png")));
+	if (Frame.IsEmpty())
+	{
+		Fail(FString::Printf(TEXT("Phase %s produced no frames"), *Phases[PhaseIndex].Name));
+	}
 	Results.Add(MakeShared<FJsonValueObject>(Result));
-	UE_LOG(LogStage0, Display, TEXT("Phase %s: %.1f fps, GPU %.1f ms, game %.1f ms"), *Phases[PhaseIndex].Name,
-		AvgFrame > 0.0 ? 1000.0 / AvgFrame : 0.0, Stage0Percentile(Gpu, 0.5), Stage0Percentile(Game, 0.5));
+	UE_LOG(LogSmoke, Display, TEXT("Phase %s: %.1f fps, GPU %.1f ms, game %.1f ms"), *Phases[PhaseIndex].Name,
+		AvgFrame > 0.0 ? 1000.0 / AvgFrame : 0.0, SmokePercentile(Gpu, 0.5), SmokePercentile(Game, 0.5));
 
 	if (PhaseIndex + 1 < Phases.Num())
 	{
@@ -511,11 +550,20 @@ void UStage0TestSubsystem::FinishPhase()
 	}
 }
 
-void UStage0TestSubsystem::WriteResultsAndQuit()
+void USmokeTestSubsystem::WriteResultsAndQuit()
 {
+	bFinished = true;
 	PhaseIndex = Phases.Num();
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("test"), TestName);
+	Root->SetStringField(TEXT("status"), Errors.IsEmpty() ? TEXT("pass") : TEXT("fail"));
+	Root->SetNumberField(TEXT("durationSeconds"), FPlatformTime::Seconds() - StartSeconds);
+	TArray<TSharedPtr<FJsonValue>> ErrorValues;
+	for (const FString& Error : Errors)
+	{
+		ErrorValues.Add(MakeShared<FJsonValueString>(Error));
+	}
+	Root->SetArrayField(TEXT("errors"), ErrorValues);
 	Root->SetStringField(TEXT("gpu"), GRHIAdapterName);
 	if (GEngine && GEngine->GameViewport && GEngine->GameViewport->Viewport)
 	{
@@ -533,12 +581,15 @@ void UStage0TestSubsystem::WriteResultsAndQuit()
 	FString Json;
 	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Json);
 	FJsonSerializer::Serialize(Root.ToSharedRef(), Writer);
-	const FString Path = FPaths::ProjectSavedDir() / TEXT("Stage0") / (TestName + TEXT(".json"));
+	const FString Path = FPaths::ProjectSavedDir() / TEXT("Smoke") / (TestName + TEXT(".json"));
 	FFileHelper::SaveStringToFile(Json, *Path);
-	UE_LOG(LogStage0, Display, TEXT("Stage 0 results written to %s"), *Path);
+	UE_LOG(LogSmoke, Display, TEXT("Smoke test %s: %s, results written to %s"), *TestName, Errors.IsEmpty() ? TEXT("pass") : TEXT("FAIL"), *Path);
 
-	if (APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0))
-	{
-		PC->ConsoleCommand(TEXT("quit"));
-	}
+	FPlatformMisc::RequestExitWithStatus(false, Errors.IsEmpty() ? 0 : 1);
+}
+
+void USmokeTestSubsystem::Fail(const FString& Message)
+{
+	UE_LOG(LogSmoke, Error, TEXT("%s"), *Message);
+	Errors.AddUnique(Message);
 }

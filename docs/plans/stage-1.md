@@ -103,7 +103,7 @@ Times are one sitting of thread work. "Needs" lists tasks that must be merged fi
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | U1 | **Smoke test harness.** Turn `Stage0Test` into `-SmokeTest=<name>` runs (load, run, screenshots and timings to `Saved/Smoke/`, quit) and a PowerShell script that builds at low priority, runs a smoke test and reports. Every later U task uses it. | PC Unreal | Sonnet, high | 60 min | none |
+| ✓ | U1 | **Smoke test harness.** Turn `Stage0Test` into `-SmokeTest=<name>` runs (load, run, screenshots and timings to `Saved/Smoke/`, quit) and a PowerShell script that builds at low priority, runs a smoke test and reports. Every later U task uses it. | PC Unreal | Sonnet, high | 60 min | none |
 | | U2 | **Bridge v2.** `USimSubsystem` on commands, events and snapshots; loads `data/defs`; blends between snapshots; pause and 1x/2x/3x keys; on-screen sim timings. | PC Unreal | Sonnet, high | 60 min | S5, U1 |
 | | U3 | **Terrain and plants.** Terrain chunk component (from the Stage 0 code), one chunk rebuilt when a cell is mined; plants as instanced meshes from the plant layer. | PC Unreal | Sonnet, high | 90 min | U2, C2 |
 | | U4 | **Buildings and items.** Instanced meshes per type per chunk from each def's `visual`; blueprints as see-through ghosts, frames part-built; items on the ground and in stockpiles. | PC Unreal | Sonnet, high | 90 min | U3, C4 |

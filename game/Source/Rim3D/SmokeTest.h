@@ -3,20 +3,25 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 
-#include "Stage0Test.generated.h"
+#include "SmokeTest.generated.h"
 
 class ACameraActor;
 class ACharacter;
 class FJsonValue;
 
 /**
- * Stage 0 tests that need the graphics card. Does nothing unless the game is
- * started with -Stage0Test=crowd or -Stage0Test=terrain. Each test places its
- * own camera, measures frame times, takes screenshots, writes
- * Saved/Stage0/<test>.json and quits.
+ * Smoke tests that need the graphics card. Does nothing unless the game is
+ * started with -SmokeTest=<name>. Each test places its own camera, measures
+ * frame times, takes screenshots into Saved/Smoke/<name>/, writes
+ * Saved/Smoke/<name>.json and quits with exit code 0 (pass) or 1 (fail).
+ *
+ * Tests: load (the level opens and the sim runs), crowd, terrain.
+ * Optional: -SmokeTimeout=<seconds> (default 300) fails a run that hangs.
+ * To add a test: write a Build<Name>Phases() and add a branch in OnWorldBeginPlay.
+ * Run it with tools/smoke.ps1.
  */
 UCLASS()
-class RIM3D_API UStage0TestSubsystem : public UTickableWorldSubsystem
+class RIM3D_API USmokeTestSubsystem : public UTickableWorldSubsystem
 {
 	GENERATED_BODY()
 
@@ -46,11 +51,13 @@ private:
 		float GpuMs;
 	};
 
+	void BuildLoadPhases();
 	void BuildCrowdPhases();
 	void BuildTerrainPhases();
 	void StartPhase(int32 Index);
 	void FinishPhase();
 	void WriteResultsAndQuit();
+	void Fail(const FString& Message);
 
 	void ViewFrom(const FVector& Location, const FRotator& Rotation);
 	void ClearSpawned();
@@ -66,6 +73,10 @@ private:
 	TArray<FFrameSample> Samples;
 	TArray<TSharedPtr<FJsonValue>> Results;
 	TArray<FString> Notes;
+	TArray<FString> Errors;
+	double StartSeconds = 0.0;
+	double TimeoutSeconds = 300.0;
+	bool bFinished = false;
 
 	UPROPERTY()
 	TObjectPtr<ACameraActor> Camera;
