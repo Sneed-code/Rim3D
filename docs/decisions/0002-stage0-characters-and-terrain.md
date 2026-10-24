@@ -4,7 +4,7 @@ Date: 2026-10-24. Answers the MetaHuman and runtime terrain risks in `architectu
 
 ## How it was run
 
-`game/Source/Rim3D/Stage0Test.cpp`, started on sneed's PC (RTX 5080, Ryzen 7 9800X3D) with:
+`game/Source/Rim3D/Stage0Test.cpp` (since renamed `SmokeTest.cpp`, see `docs/design/smoke-tests.md`), started on sneed's PC (RTX 5080, Ryzen 7 9800X3D) with:
 
 ```
 UnrealEditor.exe C:\Dev\Rim3D\game\Rim3D.uproject /Game/Levels/DefaultLevel -game -fullscreen

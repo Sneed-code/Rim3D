@@ -25,15 +25,15 @@ tasks S1 and S3 replace them.
 
 ## Stage 1 progress
 
-2 of 43 tasks done (D1, D2). Tick tasks in `docs/plans/stage-1.md` as they merge.
+3 of 43 tasks done (D1, D2, U1). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
-Wave 1, all three can run at once:
+Wave 1:
 - ~~**D1** def database~~ done: `docs/design/defs.md`.
 - ~~**D2** RimWorld importer~~ done: `docs/design/rimworld-import.md`. It has only run on test
   fixtures; nothing is imported yet.
-- **U1** smoke test harness (PC Unreal, Sonnet high; needs the PC free for about 45 minutes).
+- ~~**U1** smoke test harness~~ done: `tools/smoke.ps1`, `docs/design/smoke-tests.md`.
 
 Then S1 (Opus high, D1 is merged), and **D3** (PC light, Sonnet medium) is now ready: it runs the importer on sneed's PC.
 
