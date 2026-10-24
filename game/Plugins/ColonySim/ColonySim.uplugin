@@ -1,0 +1,16 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1",
+	"FriendlyName": "Colony Sim",
+	"Description": "The colony simulation core: plain C++ with no Unreal code, also built standalone with CMake.",
+	"Category": "Rim3D",
+	"CanContainContent": false,
+	"Modules": [
+		{
+			"Name": "ColonySim",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	]
+}
