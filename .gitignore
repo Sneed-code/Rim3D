@@ -15,6 +15,16 @@ game/Content/Megascans/
 game/Content/MetaHumans/
 game/Content/Fab/
 game/Content/ThirdParty/
+# Epic's Game Animation Sample, copied in with its /Game paths unchanged (see assets/manifest.json)
+game/Content/Audio/
+game/Content/Blueprints/
+game/Content/Characters/
+game/Content/Input/
+game/Content/IsolatedExamples/
+game/Content/Levels/
+game/Content/Misc/
+game/Content/Movies/
+game/Content/Widgets/
 
 # Standalone sim builds
 build/
