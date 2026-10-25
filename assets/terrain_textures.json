@@ -1,0 +1,13 @@
+{
+  "source": "Poly Haven (https://polyhaven.com) and ambientCG (https://ambientcg.com), both CC0, 1k JPG, colour and DirectX normal maps",
+  "swap": "To use other textures (Megascans, say) set a layer's \"source\" to \"local\" and put <layer>_color.jpg|png and <layer>_normal.jpg|png (DirectX normals) in game/Content/ThirdParty/TerrainTextures/, then run the TerrainMaterials commandlet again. Nothing else changes.",
+  "fields": "source: polyhaven, ambientcg or local. id: the texture's name on that site. tileMetres: metres one repeat of the texture covers. roughness: 0 shiny to 1 matt.",
+  "layers": {
+    "grass":  {"source": "polyhaven", "id": "forrest_ground_01",         "tileMetres": 4.0, "roughness": 0.92},
+    "sand":   {"source": "polyhaven", "id": "coast_sand_01",             "tileMetres": 3.0, "roughness": 0.95},
+    "gravel": {"source": "polyhaven", "id": "gravel_embedded_concrete",  "tileMetres": 2.5, "roughness": 0.9},
+    "rock":   {"source": "polyhaven", "id": "rock_face_03",              "tileMetres": 4.0, "roughness": 0.85}
+  },
+  "slope": {"rockFrom": 0.84, "rockFull": 0.62, "note": "the ground's up-facing normal (1 flat) below rockFrom starts to turn into rock and is all rock at rockFull"},
+  "water": {"color": [0.03, 0.12, 0.26], "roughness": 0.12}
+}

@@ -122,7 +122,7 @@ Times are one sitting of thread work. "Needs" lists tasks that must be merged fi
 | â | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | A1 | **Placeholder art.** Free meshes for wall, door, bed, table, stove, logs, steel, meals, berries, trees and bushes; set in the defs' `visual` fields by an editor script; logged in `assets/manifest.json`. | PC Unreal | Sonnet, medium | 60 min | U4 |
-| | A2 | **Terrain materials.** Megascans ground, rock and sand on the runtime terrain by terrain type and slope; side-by-side screenshots against a Landscape so sneed can judge. | PC Unreal | Sonnet, high | 90 min | U3, sneed's Megascans download |
+| ✓ | A2 | **Terrain materials.** Ground, rock and sand textures on the runtime terrain by terrain type and slope; before and after screenshots so sneed can judge. Done with free CC0 Poly Haven textures (no Megascans, no Landscape comparison); Megascans can replace them through `assets/terrain_textures.json`. | PC Unreal | Sonnet, high | 90 min | U3 |
 | â | A3 | **Seeded pawn looks.** Our own skin material (tint, lineage colour), MetaHuman body types and morph targets mixed by seed; Emberkin test with red skin and horns readable from the overseer camera. May take two sittings. | PC Unreal | Opus, high | 90 min | U5 |
 
 ### Wrap-up (G)
@@ -165,6 +165,4 @@ The prototype still plays without them.
 - **Say when the PC is free** when a thread asks. Unreal tasks need up to about 45 minutes with no
   game or local AI running. (No PC light tasks are left: D3 became a cloud task.)
 - **Approve Remote Control** when the prompt appears.
-- **Download the Megascans packs** for A2 when that thread sends the click-by-click steps. It isn't
-  needed before wave 10.
 - **Look at screenshots** along the way, and **play the prototype** at G2.
