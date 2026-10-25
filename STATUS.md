@@ -229,7 +229,7 @@ medicine, animals, melee and grenades, two-storey buildings, the narrator and ev
 traders, protagonist talents and loadout). Its extra rules keep parallel threads from colliding.
 **Wave 1 is open now in the cloud, alongside the rest of Stage 1:** S7 (saves and commands that
 merge in parallel; every sim task that saves state waits for it), E3 light, and the data tasks D4,
-D5, D6, D7, D8, D9, D11. 0 of 74 done. Tick tasks in `docs/plans/stage-2.md` as they merge.
+D5, D6, D7, D8, D9, D11. D4 done (crops, three climates, weather kinds: `docs/design/starting-data.md`). Count in the plan. Tick tasks in `docs/plans/stage-2.md` as they merge.
 
 ## Next
 
