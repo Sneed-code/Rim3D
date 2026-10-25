@@ -3,6 +3,7 @@
 #include "ColonySim/Animals.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
+#include "ColonySim/Defense.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Explosives.h"
 #include "ColonySim/Genes.h"
@@ -714,6 +715,9 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
             if (!map_.walkable(c) || map_.obstacleDm(c) > 0 || map_.isDoor(c)) {
                 continue;
             }
+            if (defense_ != nullptr && defense_->avoidsCell(self.faction, c)) {
+                continue;  // a trap it knows of
+            }
             const float cx = fightCentre(c.x);
             const float cy = fightCentre(c.y);
             if (leashed && fightDist(cx, cy, fightCentre(f.anchor.x), fightCentre(f.anchor.y)) > f.leash) {
@@ -861,7 +865,8 @@ void FighterSystem::planGoal(Entity pawn, Fighter& f, const PawnInfo& self) {
                 }
                 const CellPos c{goal.x + dx, goal.y + dy, goal.level};
                 if (!map_.walkable(c) || map_.obstacleDm(c) > 0 || map_.isDoor(c) ||
-                    std::find(friendSpots_.begin(), friendSpots_.end(), c) != friendSpots_.end() || !regions.canReach(at, c)) {
+                    std::find(friendSpots_.begin(), friendSpots_.end(), c) != friendSpots_.end() || !regions.canReach(at, c) ||
+                    (defense_ != nullptr && defense_->avoidsCell(self.faction, c))) {
                     continue;
                 }
                 best = c;
@@ -917,6 +922,9 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
             return;
         }
         smoothPath(map_, pos.x, pos.y, route);
+        if (defense_ != nullptr) {
+            defense_->detour(factionOf(pawn), pos.x, pos.y, route);
+        }
         mover.walkTo(pos.x, pos.y, std::move(route));
         f.walk = 2;
         combat_.setStance(pawn, Stance::Standing);

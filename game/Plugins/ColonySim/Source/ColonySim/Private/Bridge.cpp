@@ -131,6 +131,8 @@ const char* commandName(const Command& command) {
                 return "SetWeather";
             } else if constexpr (std::is_same_v<Type, SpendTalentPointCommand>) {
                 return "SpendTalentPoint";
+            } else if constexpr (std::is_same_v<Type, RearmTrapCommand>) {
+                return "RearmTrap";
             } else {
                 static_assert(std::is_same_v<Type, AddTalentXpCommand>, "name every command type");
                 return "AddTalentXp";
@@ -212,6 +214,8 @@ const char* eventTypeName(EventType type) {
         case EventType::WeatherChanged: return "WeatherChanged";
         case EventType::SeasonChanged: return "SeasonChanged";
         case EventType::TalentPoint: return "TalentPoint";
+        case EventType::TrapSprung: return "TrapSprung";
+        case EventType::TrapRearmed: return "TrapRearmed";
     }
     return "?";
 }

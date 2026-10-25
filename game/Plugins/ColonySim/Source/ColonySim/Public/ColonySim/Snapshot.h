@@ -171,6 +171,11 @@ struct ThingView {
     int meleeStepsLeft = 0;
     Entity meleeTarget = kNoEntity;
     bool blocking = false;
+    // Turrets and traps (docs/design/defense.md). A turret: what it is doing (a TurretPhase number) and the pawn it
+    // is aiming at. A trap: 0 not a trap, 1 armed, 2 sprung (waiting to be rearmed).
+    uint8_t turretPhase = 0;
+    Entity turretTarget = kNoEntity;
+    uint8_t trapState = 0;
     // Clothes (docs/design/apparel.md). Pawns: the outfit they follow (0 for other things), whether a strip
     // order is on them, and what they wear: `apparelCount` pieces from Snapshot::apparel[firstApparel], in the
     // order put on. Apparel items on the map: their `stuff` (as for buildings), `quality` (a place in

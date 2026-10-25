@@ -79,6 +79,7 @@ rest (place blueprint, designate, draft, actions) come with the tasks that build
 | `SetDefenseRoleCommand{pawn, role, hasSpot, spot}` | a colonist's defense role: 0 Defender (with a spot to hold, or none), 1 Shelter, 2 Keep working | not the colony's colonist; a spot for another role; can't stand on the spot |
 | `MarkShelterCommand{cell, clear}` | the room at `cell` is the shelter, or with `clear` none is | not a roofed room; nothing to clear |
 | `MeleeCommand{pawn, target, mode}` | `Attack`: a melee swing at `target` (the controlled colonist may swing at none, straight ahead); `Block`: raises the melee weapon ([melee.md](melee.md)) | downed or dead; mid-shot; still swinging or recovering; nothing to fight with; the target isn't a living pawn in reach; no melee weapon to block with |
+| `RearmTrapCommand{trap}` | sets a sprung spike trap again ([defense.md](defense.md)) | not a trap; armed already; an IED, which is gone once it goes off |
 
 In replay files a `rot` is `"North"`, `"East"`, `"South"` or `"West"` (`"North"` if left out) and an `area` is `[minX, minY, sizeX, sizeY, level]` and a storage priority its name
 (`"Preferred"`; `"Normal"` if left out).
@@ -139,6 +140,8 @@ starts, so read it after every step. Before the first step it holds what setting
 | `GrenadeLanded` | `thing` (grenade entity), `def` (Projectiles def), `x, y, z`, `amount` (fuse steps) | it came to rest |
 | `Explosion` | `thing` (grenade entity or none), `target` (who threw it), `def` (damage type), `amount` (radius), `x, y, z`, `cell` | a blast; the hurt pawns and broken buildings follow as their own events |
 | `PawnKnockedDown` | `thing`, `amount` (steps down), `x, y, z` | a blast threw a pawn to the ground |
+| `TrapSprung` | `thing` (the trap, gone for an IED), `def`, `target` (the pawn), `cell`, `x, y, z` | a pawn set off a trap (F11, [defense.md](defense.md)) |
+| `TrapRearmed` | `thing`, `def`, `cell` | a sprung trap was set again |
 | `ProjectileHit` | `thing` (projectile), `def` (Projectiles def), `hit`, `target`, `part`, `amount`, `x, y, z`, `cell` | a projectile stopped: ground, rock, building, pawn, armor, or gone |
 | `MeleeSwing` | `thing` (attacker), `target`, `def` (melee weapon, or the pawn's def for fists), `message` (the tool), `amount` (steps to the hit), `cell` | a melee swing began (F8, [melee.md](melee.md)) |
 | `MeleeHit` | `thing`, `def`, `target`, `hit`, `part`, `amount`, `x, y, z`, `cell`, `message` ("hit", "deflected", "blocked", "dodged", "missed") | the hit moment of a swing |

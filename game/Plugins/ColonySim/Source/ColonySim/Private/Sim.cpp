@@ -9,6 +9,7 @@
 #include "ColonySim/Designations.h"
 #include "ColonySim/Doors.h"
 #include "ColonySim/Explosives.h"
+#include "ColonySim/Defense.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Floors.h"
@@ -201,6 +202,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     combat_->setBeforeDestroy([this](Entity thing) {
         jobs_->forget(thing);
         raids_->forget(thing);
+        defense_->onDestroy(thing);
     });
     fighters_->setWeather(weather_.get());
     melee_ = std::make_unique<MeleeSystem>(*things_, map_, *combat_, *health_, *defs_, time_,
@@ -208,6 +210,14 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     melee_->setEventLog(&events_);
     fighters_->setMelee(melee_.get());
     animals_->setMelee(melee_.get());
+    defense_ = std::make_unique<DefenseSystem>(*things_, map_, *combat_, *health_, *power_, *defs_, time_);
+    defense_->setEventLog(&events_);
+    defense_->setBeforeDestroy([this](Entity thing) {
+        jobs_->forget(thing);
+        raids_->forget(thing);
+    });
+    defense_->setOnLearn([this](Entity pawn) { fighters_->replan(pawn); });
+    fighters_->setDefense(defense_.get());
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -604,6 +614,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!talents_->spend(spendTalent->pawn, spendTalent->talent, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* rearm = std::get_if<RearmTrapCommand>(&command)) {
+        if (!defense_->rearm(rearm->trap, &error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* talentXp = std::get_if<AddTalentXpCommand>(&command)) {
         if (!talents_->addXp(talentXp->pawn, talentXp->amount, events_, error)) {
             commandFailed(id, error);
@@ -918,6 +932,7 @@ void Sim::step() {
     combat_->step(rng_);
     explosives_->step(rng_);
     animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
+    defense_->step(rng_);
     apparel_->step(time_.seconds, rng_, events_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     rooms_->update();
@@ -1232,6 +1247,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.meleeStepsLeft = melee->stepsLeft;
             view.meleeTarget = melee->phase == MeleePhase::Windup ? melee->target : kNoEntity;
             view.blocking = melee_->blocking(entity);
+        }
+        if (const Turret* turret = reg.try_get<Turret>(entity)) {
+            view.turretPhase = static_cast<uint8_t>(turret->phase);
+            view.turretTarget = turret->target;
+        }
+        if (const Trap* trap = reg.try_get<Trap>(entity)) {
+            view.trapState = trap->sprung ? 2 : 1;
         }
         out.things.push_back(view);
     }
@@ -1630,6 +1652,7 @@ uint64_t Sim::stateHash() const {
         raids_->hashThing(e, h);
         husbandry_->hashThing(e, h);
         melee_->hashThing(e, h);
+        defense_->hashThing(e, h);
         apparel_->hashThing(e, h);
     }
     apparel_->hashState(h);

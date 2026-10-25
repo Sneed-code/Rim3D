@@ -517,6 +517,12 @@ struct AddTalentXpCommand {
     int64_t amount = 0;
 };
 
+// Traps (task F11, docs/design/defense.md): sets a sprung spike trap again. Fails for a thing that is not a trap,
+// a trap that is armed already, or one that can't be used twice (an IED). No colonist job rearms traps yet.
+struct RearmTrapCommand {
+    Entity trap = kNoEntity;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -534,7 +540,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SetOutfitCommand, EditOutfitCommand, AddOutfitCommand, RemoveOutfitCommand,
                              StripCommand, SetWeatherCommand, MarkAnimalCommand, SetTrainingCommand,
                              CreateAnimalZoneCommand, RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand,
-                             SpendTalentPointCommand, AddTalentXpCommand>;
+                             SpendTalentPointCommand, AddTalentXpCommand, RearmTrapCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

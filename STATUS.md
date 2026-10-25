@@ -2,6 +2,7 @@
 
 Updated 2026-10-25.
 
+Stage 2 F11 done: turrets and traps (`docs/design/defense.md`).
 Stage 2 C24 done: carrying is by mass (capacity over item mass), a hauler takes neighbouring stacks of the same def in one trip, a load slows walking up to 25% (`docs/design/jobs.md`).
 
 ## Where we are
@@ -309,6 +310,16 @@ winds up (none for the player), throws it in a flat or steep arc planned against
 `ExplodeCommand` is the dev/player blast. Events `GrenadeThrown`, `GrenadeLanded`, `Explosion`, `PawnKnockedDown`,
 `PawnAction` `Throw` and `Dive`; save section `explosives` 1. **Molotovs wait for E4 (fire); F11's IED trap, F12's
 sappers and U21's effects call `CombatSystem::explode`.**
+
+**F11** turrets and traps are in (`docs/design/defense.md`, tests `DefenseTests`): `Turret_Mini` is a powered building (100 W, research
+`GunTurrets`) that picks the nearest seen, able, non-animal enemy in its gun's range, winds up, fires bursts of real bullets
+(`CombatSystem::fireFrom`, a shot from a gun no pawn holds) and blows up when combat destroys it (any building with `explosion` and
+`explodeWhenDestroyed` does; deconstructing never does). `TrapSpike` (5 stabs, 100 total) and `TrapIEDExplosive` (a 3.9 m blast through
+`CombatSystem::explode`) spring under any pawn that does not know them: the colony's side always does, an enemy side learns a trap when one
+of its pawns springs it or one of its fighters notices it within 4 m, and then its fighters keep their spots off it and bend their walks round it
+(`DefenseSystem::avoidsCell` and `detour`). `RearmTrapCommand` sets a sprung spike trap again; **no colonist job rearms traps yet and raiders do not
+shoot at turrets (both in `docs/design/defense.md` "Not done yet")**. New events `TrapSprung`, `TrapRearmed`; snapshot `turretPhase`, `turretTarget`,
+`trapState`; save section `defense` 1. Research now has 23 projects.
 
 D9 (thoughts, recreation, mental break and social data) is in: `docs/design/thoughts-data.md`. Data only; C15, C17, C18, C19, C20, E2 and E3 read it.
 **C15** apparel (`docs/design/apparel.md`): clothes worn in layers with armor and insulation per piece (stuff times quality), wear and tear (absorbed damage and 0.4 HP a day), tattered, naked, nudist and dead man's clothes thoughts, outfit policies (`SetOutfit`, `EditOutfit`, `AddOutfit`, `RemoveOutfit`), a change-clothes think node and a strip job for the downed and dead (`Strip`). Colonists start dressed. Insulation widens the comfortable temperature range (see E2). The starting T-shirt and pants hold a colonist to about 4 degrees outdoors; parkas (C14 tailoring) are what winter needs. Save section `apparel` 1.

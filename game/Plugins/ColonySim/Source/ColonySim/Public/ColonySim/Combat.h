@@ -193,6 +193,16 @@ struct PawnHitResult {
     std::vector<std::pair<Entity, int>> wear;
 };
 
+// What a gun's def says, for fixed guns that fire without a pawn's hands (turrets, F11): range in
+// metres, steps of warm-up, of cooldown after a burst and between the shots of a burst, shots in a burst.
+struct GunStats {
+    float range = 0.0f;
+    int warmup = 0;
+    int cooldown = 0;
+    int burst = 1;
+    int burstGap = 0;
+};
+
 struct CombatModel;
 
 class COLONY_API CombatSystem {
@@ -284,6 +294,17 @@ public:
     Entity fire(Entity pawn, float x, float y, float z, float spreadSlope, Rng& rng, float kickUp = 0.0f,
                 float kickSide = 0.0f);
 
+    // A shot from a gun that no pawn holds (a turret, F11): from (ox, oy, oz) at `level` toward (x, y, z)
+    // with this spread slope, as `fire` does. `launcher` (the turret) is never hit by it, nor is a building
+    // in `startCell`. Returns the projectile, or kNoEntity if `weapon` is not a gun. ShotFired comes with it.
+    Entity fireFrom(Entity launcher, DefId weapon, float ox, float oy, float oz, int level, CellPos startCell, float x,
+                    float y, float z, float spreadSlope, Rng& rng);
+    // `leadPoint` for a gun at (fromX, fromY) that no pawn holds.
+    bool leadPointFrom(float fromX, float fromY, DefId weapon, Entity target, float lead, float& x, float& y,
+                       float& z) const;
+    // The numbers of a gun def; false if it is not a gun.
+    bool gunStats(DefId weapon, GunStats& out) const;
+
     // Gun kick (P2): where the player's shots are going above and to the right of the aim now, in
     // degrees. Zero for a pawn that has not fired a gun with a kick list.
     void kickOf(Entity pawn, float& up, float& side) const;
@@ -364,6 +385,8 @@ private:
     // wear on the pieces. Uses `rng`.
     PawnHitResult armorPass(Entity pawn, int part, DefId damageType, float damage, float penetration, Rng& rng) const;
     int pickOutsidePart(Entity pawn, Rng& rng) const;
+    Entity launch(Entity launcher, DefId weaponDef, float ox, float oy, float oz, int level, CellPos startCell, float x,
+                  float y, float z, float spreadSlope, Rng& rng, float kickUp, float kickSide, Posture* posture);
     void stepRolls();
     void stepKicks();
 };
