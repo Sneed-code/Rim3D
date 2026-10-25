@@ -59,6 +59,12 @@ names in lowerCamel (`workSpeedGlobal`), keys that are def names keep their case
 
 ## Rules worth knowing
 
+**Mining and plant work (C3).** `WorkRules` has the speeds (`mining.speedBase` 0.04 +
+`speedPerLevel` 0.12; `plants` 0.08 + 0.115), the pick (`hitDamage` 80, `hitSeconds` 144 =
+RimWorld's 100 ticks), XP a second, the Mining/Plants yield curve by level (`yieldByLevel`) and
+`growthYieldFloor`. Rock and ore hit points and drops are on the `Mineable` things in
+`Things/Rocks.json`, chunks in `Items.json`. The ones the wiki doesn't give are in `unverified`.
+
 **Plants (C2).** Plants grow only from 06:00 to 19:00 (`PlantRules.growHours`; the wiki's "with
 rest" grow times are `growDays` x 24 / 13). Growth also needs light 0.51 or more. A plant's
 lifespan is `growDays` x `lifespanDaysPerGrowDays` (9 for trees, 8 otherwise). Fertility

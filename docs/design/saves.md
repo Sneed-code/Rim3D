@@ -170,6 +170,13 @@ sneed's whole job for a bug is: press F8, then send the folder (zip it, or drop 
   (`DirectMove`) in the command log. Older files load with nobody controlled. A file with two
   controlled pawns, or a controlled pawn that isn't a colonist on the map, is refused.
 - **9** (C2): the plant layer after the zones (`docs/design/plants.md`). Older files load with a bare map.
+- **10** (C4): building plans, frames and deconstruct marks, a job's site and progress
+  (`construction.md`).
+- **11** (C9): mood and thoughts (`mood.md`).
+- **12** (C3): the rock layer and the designations after the plants, job types `Mine`, `CutPlant`
+  and `HarvestPlant`, commands 17 (`Designate`) and 18 (`CancelDesignations`)
+  (`docs/design/mining.md`). Cells of rock in the generated ground with no record in the file were
+  mined and load as rough stone. Older files load with the generated rock layer and no marks.
 
 ## Why the state hash changed in S6
 

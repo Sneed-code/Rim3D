@@ -181,6 +181,15 @@ its Things defs; the test fixture defs (`Tests/data/defs`, `TestDefs.h`) have on
 `idleSeconds` 60 (two real seconds at 1x), `avoidFailedTargetSeconds` 600, `maxRepaths` 5. The code
 falls back to the same values when the def is missing.
 
+## Gathering jobs (C3)
+
+`Mine`, `CutPlant` and `HarvestPlant` target a cell (a rock or a plant) instead of a thing. They
+reserve the cell like a thing, a scanner skips cells nobody can reach, and a failed gather job makes
+the pawn skip that cell for the avoid time. `Job::cell` is the rock or plant, not where the pawn
+stands; `touchCell` finds the walkable neighbour it works from (`WorkCandidate::hasReach` is for
+the construction jobs, whose standing cell the scanner works out). `Job::progress` is the work
+towards the next pick hit or on the plant. Details and numbers: [mining.md](mining.md).
+
 ## Not yet
 
 - Interrupting a job for something more urgent (C6 needs, F6 alarm) and the emergency nodes.

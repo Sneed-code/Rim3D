@@ -46,6 +46,8 @@ the tasks that build those systems.
 | `CancelBuildCommand{thing}` | takes back a blueprint or frame (what was delivered is put back on the ground), or unmarks a building | `thing` is none of those |
 | `DeconstructCommand{thing}` | marks a finished building to be taken down | not a building; marked already |
 | `SetScheduleCommand{pawn, hour, kind}` | the pawn's schedule for one hour (0 to 23): Anything, Work, Joy or Sleep ([needs.md](needs.md)) | the pawn has no schedule; bad hour |
+| `DesignateCommand{area, kind}` | marks rock (`Mine`), plants (`CutPlant`) or ripe plants (`HarvestPlant`) in the rectangle for work ([mining.md](mining.md)) | `kind` is None; nothing in `area` suits |
+| `CancelDesignationsCommand{area, kind}` | takes marks off, `None` for every kind, and ends the jobs on them | nothing marked in `area` |
 | `AssignBedCommand{bed, pawn}` | the pawn owns the bed (and gives up its old one); `pawn` none empties the bed | not a bed; not a pawn with needs; the bed is full |
 
 In replay files a `rot` is `"North"`, `"East"`, `"South"` or `"West"` (`"North"` if left out) and an `area` is `[minX, minY, sizeX, sizeY, level]` and a storage priority its name
@@ -83,6 +85,10 @@ starts, so read it after every step. Before the first step it holds what setting
 | `JobEnded` | the same, and `message`: "done", "failed: why" or "interrupted: why" | a pawn's job ended |
 | `PawnAte` | `thing`, `def` (the food), `amount`, `cell`, `message` ("table" or "ground") | a pawn finished eating (C6, [needs.md](needs.md)) |
 | `PawnWokeUp` | `thing`, `target` (the bed or none), `amount` (its rest), `message` ("bed" or "ground") | a pawn got up from sleeping |
+| `CellMined` | `cell`, `def` (the rock), `amount` (its full hit points) | a rock or ore cell was dug out and is now rough stone (C3, [mining.md](mining.md)) |
+| `PlantRemoved` | `cell`, `def`, `amount` (items left), `message` ("felled" or "cut") | a plant was taken away |
+| `PlantHarvested` | `cell`, `def`, `amount` (items left), `message` ("picked") | a bush was picked and goes on growing |
+| `DesignationsChanged` | none | the marks changed; read `snapshot.designations` again |
 | `PawnMoodBand` | `thing`, `amount` (its mood), `message` ("stable", "minor", "major" or "extreme") | a pawn's mood crossed a mental break threshold (C9, [mood.md](mood.md)) |
 
 `Things` reports its own spawns and despawns once the sim points it at the event list
@@ -102,7 +108,8 @@ not in it. Since S4 it also has the ground height under the thing (`z`), a pawn'
 `Snapshot::waypoints[firstWaypoint]`), see [movement.md](movement.md). Since C4 a `ThingView` also has a
 `stage` (`Built`, `Blueprint` or `Frame`), `stuff`, `buildProgress`, `materialsHave`, `materialsNeeded` and
 `markedForDeconstruct`; blueprints and frames are in the snapshot like buildings, with the size and
-rotation of what they will be ([construction.md](construction.md)). Later tasks add what they draw
+rotation of what they will be ([construction.md](construction.md)). Since C3 the snapshot lists the
+`designations` (cell and kind of every mine, cut and harvest mark; [mining.md](mining.md)). Later tasks add what they draw
 and show: pawn info, the work tab, room stats.
 
 Unreal reads only snapshots and events, never the registry or `Things.h`. That lets the sim move to
