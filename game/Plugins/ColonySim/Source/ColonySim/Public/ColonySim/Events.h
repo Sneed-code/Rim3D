@@ -42,6 +42,8 @@ enum class EventType : uint8_t {
     ItemSpoiled,     // food rotted away or an item wore out in the open (docs/design/spoilage.md)
     PawnPoisoned,    // a pawn ate a poisoned meal and got food poisoning
     ResearchDone,    // a research project was finished (docs/design/research.md)
+    MeleeSwing,      // a pawn began a melee swing: the hit comes `amount` steps later (docs/design/melee.md)
+    MeleeHit,        // the hit moment of a swing: `message` says "hit", "deflected", "blocked", "dodged" or "missed"
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -73,6 +75,7 @@ enum class PawnAction : uint8_t {
     Cook,         // started work on a bill at `target`, a work building (once per run of the bill)
     Research,     // started research at `target`, a research bench (once per job)
     Clean,        // started cleaning the filth in `cell`; a layer comes off every few seconds until its JobEnded
+    Block,        // raised its melee weapon against the swing of `target` (none: the player's own block)
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
@@ -121,6 +124,12 @@ struct Event {
     float y = 0.0f;
     float z = 0.0f;
     ProjectileHitKind hit = ProjectileHitKind::None;
+    // MeleeSwing: `thing` the attacker, `target` whom it swings at (none: straight ahead), `def` its
+    // melee weapon's Things def (or its own def for fists, teeth...), `message` the tool ("blade",
+    // "left fist"), `amount` steps to the hit moment, `cell` where it stands. MeleeHit: the same
+    // `thing` and `def`; `target` the pawn struck (or the one aimed at if none was), `hit` Pawn, Armor
+    // (deflected), Building or None, `part` and `amount` as for ProjectileHit, (x, y, z) where the
+    // strike ended. Health events follow a hit.
 };
 
 COLONY_API const char* eventTypeName(EventType type);
