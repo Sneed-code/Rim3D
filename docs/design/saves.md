@@ -31,6 +31,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Hauling placeholder | stockpile cell, hauler list, counters, setup errors |
 | Pawn movement (format 3) | each pawn's velocity, line start, held-up counters (`Mover`), and the repath count |
 | Colonists (format 4) | each colonist's name, age, backstories, traits, skills and the scenario name in the settings ([colonists.md](colonists.md)) |
+| Direct control (format 5) | which colonist the player controls (a flag on the pawn); the `ControlPawn` and `DirectMove` commands in the log ([protagonist.md](protagonist.md)) |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
@@ -148,6 +149,10 @@ sneed's whole job for a bug is: press F8, then send the folder (zip it, or drop 
 
 - **4** (C8): `scenario` in the settings and a `Colonist` component on a pawn. Older files load
   with no scenario and no colonists.
+
+- **5** (U9): a `playerControlled` flag on a thing, and command types 2 (`ControlPawn`) and 3
+  (`DirectMove`) in the command log. Older files load with nobody controlled. A file with two
+  controlled pawns, or a controlled pawn that isn't a colonist on the map, is refused.
 
 ## Why the state hash changed in S6
 

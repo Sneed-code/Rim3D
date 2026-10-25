@@ -23,14 +23,16 @@ runs, every queued command is applied in submit order and appended to `commandLo
 A command that can't be applied changes nothing, sends a `CommandFailed` event with its id and a
 reason, and is still logged.
 
-So far there are only two dev commands, like RimWorld's dev mode. The real ones (place blueprint,
-designate, work priorities, draft, protagonist moved and actions) come with the tasks that build
-those systems.
+So far there are two dev commands, like RimWorld's dev mode, and the two for direct control (U9,
+[protagonist.md](protagonist.md)). The rest (place blueprint, designate, work priorities, draft,
+actions) come with the tasks that build those systems.
 
 | Command | Does | Fails when |
 | --- | --- | --- |
 | `SpawnThingCommand{def, cell, count, rot}` | `Things::spawn` of a Things def | unknown def; the thing can't go there |
 | `DestroyThingCommand{thing}` | `Things::destroy` | the thing doesn't exist; the hauling placeholder is using it |
+| `ControlPawnCommand{pawn}` | the player takes over one colonist (the previous one is let go); `kNoEntity` lets go | not a colonist on the map; the hauling placeholder is using it |
+| `DirectMoveCommand{pawn, x, y}` | moves the controlled pawn toward (x, y) metres, at most 0.5 m a step, out of walls | not the controlled pawn; x or y is not a number |
 
 **Speed and pause are not commands.** They decide how often Unreal calls `step()`, not what a step
 does, so they stay in `USimSubsystem`. A replay counts steps, so it doesn't need them.

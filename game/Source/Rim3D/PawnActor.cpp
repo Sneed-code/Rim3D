@@ -179,6 +179,15 @@ void ASimPawnActor::PlayAction(colony::PawnAction Action)
 	}
 }
 
+void ASimPawnActor::SetBodyHidden(bool bHide)
+{
+	SetActorHiddenInGame(bHide);
+	if (MetaHuman)
+	{
+		MetaHuman->SetActorHiddenInGame(bHide);
+	}
+}
+
 bool ASimPawnActor::IsActionPlaying() const
 {
 	const USimPawnAnimInstance* Anim = GetAnim();

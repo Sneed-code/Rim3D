@@ -148,6 +148,17 @@ void Sim::placeStockpileAndThings() {
     }
 }
 
+Entity Sim::controlledPawn() const {
+    for (const Entity pawn : things_->registry().view<const PlayerControl>()) {
+        return pawn;
+    }
+    return kNoEntity;
+}
+
+const Colonist* Sim::colonistOf(Entity pawn) const {
+    return things_->exists(pawn) ? things_->registry().try_get<Colonist>(pawn) : nullptr;
+}
+
 int Sim::itemsLeft() const {
     int left = 0;
     things_->registry().view<const Thing>(entt::exclude<HaulStored>).each([&left](const Thing& thing) {

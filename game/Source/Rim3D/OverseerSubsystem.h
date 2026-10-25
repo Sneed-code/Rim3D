@@ -30,7 +30,12 @@ public:
 	/** Spawns the camera pawn over the middle of the map and makes the first player control it. */
 	AOverseerPawn* EnterOverseerMode();
 	AOverseerPawn* GetOverseerPawn() const;
+	/** True while the overseer view is the one in use (not while the player walks a colonist). */
 	bool IsOverseerActive() const;
+	/** Hides the overseer's panels while another view has the player controller (direct mode,
+	 *  U9). The camera pawn stays, with its focus, distance and the selection. EnterOverseerMode
+	 *  brings it back. */
+	void LeaveOverseerMode() { bActive = false; }
 
 	const FSimPick& GetSelection() const { return Selection; }
 	/** Selects what was picked. An empty pick clears the selection. */
@@ -54,4 +59,5 @@ private:
 
 	FSimPick Selection;
 	int32 PanelFramesDrawn = 0;
+	bool bActive = false;
 };

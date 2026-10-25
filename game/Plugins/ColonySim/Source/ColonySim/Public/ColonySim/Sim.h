@@ -23,6 +23,7 @@
 namespace colony {
 
 class DefDatabase;
+struct Colonist;
 class MovementSystem;
 class Regions;
 class Things;
@@ -107,6 +108,11 @@ public:
     // Every pawn, item and building (docs/design/things.md).
     Things& things() { return *things_; }
     const Things& things() const { return *things_; }
+
+    // The colonist the player controls directly (ControlPawnCommand), or kNoEntity.
+    Entity controlledPawn() const;
+    // A pawn's colonist record (name, skills...), or null if it is not a colonist.
+    const Colonist* colonistOf(Entity pawn) const;
 
     // Problems setting up the start (e.g. a def the settings name is missing). Empty when fine.
     const std::vector<std::string>& setupErrors() const { return setupErrors_; }

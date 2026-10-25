@@ -15,9 +15,11 @@ panels for the speed and for what is selected.
   **selection**, draws the highlight and the ImGui panels.
 - `SimPicking`: what a ray hits. It uses the sim, not Unreal collision.
 
-Start it with `-Overseer` on the command line or `Overseer.Enter` in the console. U9 (protagonist)
-will switch between this and direct play with one key; it only has to call `EnterOverseerMode` and
-possess the protagonist again.
+Start it with `-Overseer` on the command line or `Overseer.Enter` in the console. Since U9
+([protagonist.md](protagonist.md)) Tab switches between this and walking a colonist yourself:
+`UProtagonistSubsystem` calls `LeaveOverseerMode` (hides the panels, keeps the camera and the
+selection) and later `EnterOverseerMode` again, centred on the colonist that was controlled.
+`IsOverseerActive` is true only while the overseer view is the one in use.
 
 ## Keys
 
@@ -31,6 +33,7 @@ possess the protagonist again.
 | F | centre on the selection |
 | Home | reset distance, tilt and turn |
 | Esc | clear the selection |
+| Tab | take control of the selected colonist (else the protagonist): direct mode, see [protagonist.md](protagonist.md). The inspect panel has the same as a button |
 | Space, 1, 2, 3, `.`, F5, F7, F8, F9 | the bridge's keys (`USimSubsystem`), unchanged; F5 and F9 quicksave and quickload, F8 writes a bug report (`saves.md`) |
 
 The camera methods behind the keys (`Pan`, `Rotate`, `Zoom`, `FocusOn`, `ResetView`) are public,

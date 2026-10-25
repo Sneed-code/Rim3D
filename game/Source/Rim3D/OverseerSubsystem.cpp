@@ -11,6 +11,7 @@
 #include <imgui.h>
 
 #include "OverseerPawn.h"
+#include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
 
 #include "ColonySim/Clock.h"
@@ -117,7 +118,8 @@ TStatId UOverseerSubsystem::GetStatId() const
 void UOverseerSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 {
 	Super::OnWorldBeginPlay(InWorld);
-	if (FParse::Param(FCommandLine::Get(), TEXT("Overseer")))
+	// -Direct (the protagonist subsystem) takes the player controller itself.
+	if (FParse::Param(FCommandLine::Get(), TEXT("Overseer")) && !FParse::Param(FCommandLine::Get(), TEXT("Direct")))
 	{
 		EnterOverseerMode();
 	}
@@ -130,7 +132,7 @@ AOverseerPawn* UOverseerSubsystem::GetOverseerPawn() const
 
 bool UOverseerSubsystem::IsOverseerActive() const
 {
-	return IsValid(Pawn.Get());
+	return bActive && IsValid(Pawn.Get());
 }
 
 AOverseerPawn* UOverseerSubsystem::EnterOverseerMode()
@@ -158,6 +160,7 @@ AOverseerPawn* UOverseerSubsystem::EnterOverseerMode()
 		}
 		Pawn->SnapCamera();
 	}
+	bActive = true;
 	PC->Possess(Pawn);
 	PC->SetViewTarget(Pawn);
 	PC->bShowMouseCursor = true;
@@ -344,6 +347,16 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 								const colony::PathPointView& End = Snapshot.waypoints[View->firstWaypoint + View->waypointCount - 1];
 								OverseerText(FString::Printf(TEXT("Heading to cell %d, %d"), FMath::FloorToInt32(End.x), FMath::FloorToInt32(End.y)));
 							}
+							if (Sim.colonistOf(View->id))
+							{
+								if (ImGui::Button("Take control (Tab)"))
+								{
+									if (UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>())
+									{
+										Protagonist->RequestControl(View->id);
+									}
+								}
+							}
 							break;
 						}
 						case colony::ThingCategory::Item:
@@ -388,6 +401,7 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 		ImGui::TextUnformatted("WASD pan   Q/E turn   wheel zoom");
 		ImGui::TextUnformatted("middle-drag orbit   click select");
 		ImGui::TextUnformatted("F centre   Home reset   Esc deselect");
+		ImGui::TextUnformatted("Tab take control of the selected colonist");
 	}
 	ImGui::End();
 
