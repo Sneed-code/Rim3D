@@ -120,6 +120,11 @@ struct ThingView {
     float batteryFill = -1.0f;
     // Pawns with needs: the beauty need (docs/design/room-stats.md), 0 to 1 with 35% to 65% neutral; else -1.
     float beautyNeed = -1.0f;
+    // Animals (docs/design/animal-life.md): life stage (0 baby, 1 juvenile, 2 adult) and body size in
+    // RimWorld's units (a human is 1); -1 and 0 for other things. `food` (a share of their capacity),
+    // `asleep` and `faction` (100 for wild) are filled for them too.
+    int lifeStage = -1;
+    float bodySize = 0.0f;
 };
 
 // A bullet in flight (docs/design/combat.md). Unreal draws a tracer along its velocity; it

@@ -1,5 +1,6 @@
 #include "ColonySim/Save.h"
 
+#include "ColonySim/Animals.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
@@ -226,6 +227,7 @@ struct SaveEntity {
     std::optional<SaveBillList> bills;      // format 18 on
     std::optional<PowerPart> power;         // section "power"
     std::optional<SaveJoy> joy;             // section "recreation"
+    std::optional<Animal> animal;           // section "animals"
 };
 
 // A stockpile zone, with its filter by defName.
@@ -305,6 +307,8 @@ struct SaveData {
     std::vector<SaveFloor> floors;
     FilthState filth;
     RoomStatsState roomStats;
+    int wildAnimals = 0;               // section "animals": SimSettings::wildAnimals
+    AnimalSaved animals;               // section "animals": the system's own state
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -1284,6 +1288,26 @@ void savePosturePart(Ar& ar, Posture& p) {
 }
 
 template <typename Ar>
+void saveAnimalPart(Ar& ar, Animal& a) {
+    ar.value("started", a.started);
+    ar.value("wild", a.wild);
+    ar.value("feeding", a.feeding);
+    ar.value("sleepShift", a.sleepShift);
+    ar.value("herd", a.herd);
+    ar.value("bornAt", a.bornAt);
+    ar.value("diedAt", a.diedAt);
+    ar.value("food", a.food);
+    ar.value("foodAt", a.foodAt);
+    ar.value("mode", a.mode);
+    ar.value("until", a.until);
+    ar.value("nextThink", a.nextThink);
+    ar.value("staysUntil", a.staysUntil);
+    ar.group("goal", [&] { saveCell(ar, a.goal); });
+    ar.require(static_cast<int>(a.mode) <= static_cast<int>(AnimalMode::Leave), "the save file has a bad animal mode");
+    ar.require(a.sleepShift < 24, "the save file has a bad animal sleep shift");
+}
+
+template <typename Ar>
 void saveGearPart(Ar& ar, Gear& g) {
     ar.value("weapon", g.weapon);
     ar.list("apparel", g.apparel, [&](Entity& a) { ar.value(nullptr, a); });
@@ -1803,6 +1827,21 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "joy", e, &SaveEntity::joy, [&](SaveJoy& j) { saveJoyPart(ar, j); });
     });
     ar.section("roomstats", 1, [&] { saveRoomStatsSection(ar, d); });
+    ar.section("animals", 1, [&] {
+        ar.value("wildAnimals", d.wildAnimals);
+        ar.value("populated", d.animals.populated);
+        ar.value("percent", d.animals.percent);
+        ar.value("rngState", d.animals.rngState);
+        ar.value("rngIncrement", d.animals.rngIncrement);
+        ar.value("nextHerd", d.animals.nextHerd);
+        ar.value("over", d.animals.over);
+        ar.value("arrived", d.animals.stats.arrived);
+        ar.value("left", d.animals.stats.left);
+        ar.value("grazed", d.animals.stats.grazed);
+        ar.value("cleared", d.animals.stats.cleared);
+        ar.require(d.wildAnimals >= 0 && d.animals.percent >= 0, "the save file has a bad wild animal density");
+        saveParts(ar, "animal", e, &SaveEntity::animal, [&](Animal& a) { saveAnimalPart(ar, a); });
+    });
     // New sections go here, at the end.
 }
 
@@ -1895,7 +1934,9 @@ public:
 
 std::unique_ptr<Sim> SimSaveAccess::makeEmpty(const SaveData& data, std::shared_ptr<const DefDatabase> defs,
                                               std::string& error) {
-    auto sim = std::unique_ptr<Sim>(new Sim(data.settings, std::move(defs), Sim::EmptyStart{}));
+    SimSettings settings = data.settings;
+    settings.wildAnimals = data.wildAnimals;  // saved in the animals section, not the sim section
+    auto sim = std::unique_ptr<Sim>(new Sim(settings, std::move(defs), Sim::EmptyStart{}));
     if (sim->groundHash_ != data.groundHash) {
         error = "the map generator gives a different map for this seed than when the save was made";
         return nullptr;
@@ -1908,6 +1949,8 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.simVersion = kSimVersion;
     d.defsHash = sim.defs_->contentHash();
     d.settings = sim.settings_;
+    d.wildAnimals = sim.settings_.wildAnimals;
+    d.animals = sim.animals_->saved();
     d.seconds = sim.time_.seconds;
     d.rngState = sim.rng_.state();
     d.rngIncrement = sim.rng_.increment();
@@ -2077,6 +2120,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const Magazine* magazine = reg.try_get<Magazine>(e)) {
             out.magazine = *magazine;
+        }
+        if (const Animal* animal = reg.try_get<Animal>(e)) {
+            out.animal = *animal;
         }
         if (const Projectile* p = reg.try_get<Projectile>(e)) {
             out.projectile = SaveProjectile{sim.defs_->get(p->def).defName(), sim.defs_->get(p->weapon).defName(), *p};
@@ -2413,7 +2459,11 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                 }
             }
         }
+        if (e.animal) {
+            reg.emplace<Animal>(entity, *e.animal);
+        }
     }
+    sim.animals_->restore(d.animals);
     sim.health_->refreshAll();
     for (const SaveEntity& e : d.entities) {
         if (e.position && !things.relink(static_cast<Entity>(e.id))) {

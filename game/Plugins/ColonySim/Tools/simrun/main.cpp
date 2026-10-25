@@ -15,6 +15,8 @@
 //   simrun --scenario colony [--seed 42] [--size 512] [--days 5] [--verbose]   (the colony test, C10;
 //                                     exit 1 if a check fails, docs/design/colony-scenario.md)
 //   simrun --power [--days 3] [--verbose]   (the power check, E5: solar, batteries, lamps and a switch; docs/design/power.md)
+//   simrun --seed 42 --size 1024 --days 3 --animals [--animal-percent 300] --check   (wild animals, N1:
+//                                     herds by biome, a report of them, checks they stay on walkable ground)
 // --replay takes the settings and commands from the file and runs to its endStep (--days
 // overrides). --record writes what this run did as a replay, with its state hashes.
 // --check makes it exit with 1 if any job or path search failed.
@@ -23,7 +25,9 @@
 // scattered over the map to a stockpile zone in the middle through the job system (C1).
 #include "ColonyScenario.h"
 #include "PowerScenario.h"
+#include "ColonySim/Animals.h"
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Lights.h"
 #include "ColonySim/Mood.h"
@@ -56,7 +60,9 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -76,6 +82,7 @@ struct Options {
     bool power = false;    // --power: the power check (E5)
     bool check = false;  // exit 1 if a job or a path search failed
     int gather = 0;      // mark rock to mine and plants to harvest this many cells round the middle
+    int animals = 0;     // wild animals as a percent of the biome's density (0: none; --animals alone means 100)
     std::string png;
     std::string regionsPng;
     std::string replay;
@@ -120,6 +127,10 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.verbose = true;
         } else if (std::strcmp(arg, "--gather") == 0 && hasValue) {
             out.gather = std::atoi(argv[++i]);
+        } else if (std::strcmp(arg, "--animals") == 0) {
+            out.animals = std::max(out.animals, 100);
+        } else if (std::strcmp(arg, "--animal-percent") == 0 && hasValue) {
+            out.animals = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--check") == 0) {
             out.check = true;
         } else if (std::strcmp(arg, "--png") == 0 && hasValue) {
@@ -147,12 +158,12 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--scenario colony [--verbose]] [--power] [--check] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--scenario colony [--verbose]] [--power] [--check] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE]\n");
             return false;
         }
     }
-    return out.size > 0 && out.size <= 4096 && out.days >= 0.0 && out.pawns >= 0 && out.items >= 0 && out.pathBudget > 0;
+    return out.size > 0 && out.size <= 4096 && out.days >= 0.0 && out.pawns >= 0 && out.items >= 0 && out.pathBudget > 0 && out.animals >= 0;
 }
 
 bool writeMapPng(const colony::Sim& sim, const std::string& path) {
@@ -251,12 +262,31 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
     const entt::registry& reg = sim.things().registry();
     for (const colony::ThingCategory category : {colony::ThingCategory::Item, colony::ThingCategory::Pawn}) {
         reg.view<const colony::Thing, const colony::Position>().each(
-            [&](const colony::Thing& thing, const colony::Position& pos) {
+            [&](entt::entity e, const colony::Thing& thing, const colony::Position& pos) {
                 if (thing.category != category) {
                     return;
                 }
                 if (category == colony::ThingCategory::Item) {
                     mark(pos, 255, 220, 0);
+                } else if (reg.all_of<colony::Animal>(e)) {
+                    // Animals: a 3 by 3 block (a single pixel looks like a dandelion), white,
+                    // predators magenta, the dead dark grey, with a black middle.
+                    const colony::Health* health = reg.try_get<colony::Health>(e);
+                    unsigned char r = 250;
+                    unsigned char g = 250;
+                    unsigned char b = 250;
+                    if (health != nullptr && health->dead) {
+                        r = g = b = 90;
+                    } else if (sim.defs().get(thing.def).flag("race.predator")) {
+                        r = 230; g = 40; b = 230;
+                    }
+                    for (int dy = -1; dy <= 1; ++dy) {
+                        for (int dx = -1; dx <= 1; ++dx) {
+                            const bool middle = dx == 0 && dy == 0;
+                            mark(colony::Position{pos.x + static_cast<float>(dx), pos.y + static_cast<float>(dy), pos.level},
+                                 middle ? 0 : r, middle ? 0 : g, middle ? 0 : b);
+                        }
+                    }
                 } else {
                     mark(pos, 230, 20, 20);
                 }
@@ -559,6 +589,7 @@ int main(int argc, char** argv) {
     colony::SimSettings settings{options.seed, options.size, options.pawns, options.items};
     settings.pathBudget = options.pathBudget;
     settings.scenario = options.start;
+    settings.wildAnimals = options.animals;
     int64_t steps = static_cast<int64_t>(options.days * static_cast<double>(colony::kSecondsPerDay));
     if (!options.replay.empty()) {
         std::string error;
@@ -818,6 +849,61 @@ int main(int argc, char** argv) {
         if (options.check && gatherMarked > 0 && mined + felled + picked == 0) {
             std::fprintf(stderr, "check failed: %zu cells marked and nothing was mined, felled or picked\n", gatherMarked);
             return 1;
+        }
+    }
+
+    // Wild animals (docs/design/animal-life.md): only when the run has some.
+    if (sim.animals().populated() || sim.animals().livingCount() > 0) {
+        const colony::AnimalSystem& animals = sim.animals();
+        const auto& reg = sim.things().registry();
+        std::map<std::string, int> bySpecies;
+        int asleep = 0;
+        int offGround = 0;
+        int herdsSeen = 0;
+        std::set<uint32_t> herds;
+        float minFood = 1.0f;
+        for (const auto [e, a, pos, thing] : reg.view<const colony::Animal, const colony::Position, const colony::Thing>().each()) {
+            const colony::Health* h = reg.try_get<colony::Health>(e);
+            if (h != nullptr && h->dead) {
+                continue;
+            }
+            ++bySpecies[sim.defs().get(thing.def).defName()];
+            asleep += animals.asleep(e) ? 1 : 0;
+            minFood = std::min(minFood, animals.foodShare(e));
+            if (a.herd != 0 && herds.insert(a.herd).second) {
+                ++herdsSeen;
+            }
+            const colony::CellPos cell = colony::cellOf(pos);
+            if (!sim.map().inBounds(cell) || !sim.map().groundWalkable(cell)) {
+                ++offGround;
+            }
+        }
+        std::string species;
+        for (const auto& [name, count] : bySpecies) {
+            species += (species.empty() ? "\"" : ",\"") + name + "\":" + std::to_string(count);
+        }
+        std::printf("{\"animals\":{\"living\":%zu,\"wild\":%zu,\"herds\":%d,\"weight\":%.1f,\"targetWeight\":%.1f,"
+                    "\"asleepNow\":%d,\"minFood\":%.2f,\"offGround\":%d,\"arrived\":%llu,\"left\":%llu,\"grazed\":%llu,"
+                    "\"cleared\":%llu,\"species\":{%s}}}\n",
+                    animals.livingCount(), animals.wildCount(), herdsSeen, static_cast<double>(animals.wildWeight()),
+                    static_cast<double>(animals.targetWeight()), asleep, static_cast<double>(minFood), offGround,
+                    static_cast<unsigned long long>(animals.stats().arrived), static_cast<unsigned long long>(animals.stats().left),
+                    static_cast<unsigned long long>(animals.stats().grazed), static_cast<unsigned long long>(animals.stats().cleared),
+                    species.c_str());
+        if (options.check && settings.wildAnimals > 0) {
+            if (animals.livingCount() == 0) {
+                std::fprintf(stderr, "check failed: no wild animals were placed\n");
+                return 1;
+            }
+            if (offGround > 0) {
+                std::fprintf(stderr, "check failed: %d animal(s) stand on ground they can't walk\n", offGround);
+                return 1;
+            }
+            if (animals.wildWeight() < 0.5f * animals.targetWeight()) {
+                std::fprintf(stderr, "check failed: the wild herd is at %.1f of %.1f body sizes\n",
+                             static_cast<double>(animals.wildWeight()), static_cast<double>(animals.targetWeight()));
+                return 1;
+            }
         }
     }
 

@@ -1,5 +1,6 @@
 #include "ColonySim/Things.h"
 
+#include "ColonySim/Animals.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Cover.h"
@@ -121,6 +122,9 @@ Entity Things::make(DefId defId, int stackCount) {
             registry_.emplace<Posture>(thing);
             if (def.has("race.body")) {
                 registry_.emplace<Health>(thing);
+            }
+            if (def.text("race.intelligence") == "Animal") {
+                registry_.emplace<Animal>(thing, makeAnimalFor(def));  // Animals.h
             }
             break;
         }
