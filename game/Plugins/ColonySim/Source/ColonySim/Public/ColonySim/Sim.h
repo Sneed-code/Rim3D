@@ -28,6 +28,7 @@ struct Colonist;
 class JobSystem;
 class MovementSystem;
 class NeedsSystem;
+class Plants;
 class Regions;
 class Things;
 class Zones;
@@ -128,6 +129,10 @@ public:
     // A pawn's colonist record (name, skills...), or null if it is not a colonist.
     const Colonist* colonistOf(Entity pawn) const;
 
+    // The plant layer: wild plants from map generation, growing hourly (docs/design/plants.md).
+    Plants& plants() { return *plants_; }
+    const Plants& plants() const { return *plants_; }
+
     // Problems setting up the start (e.g. a def the settings name is missing). Empty when fine.
     const std::vector<std::string>& setupErrors() const { return setupErrors_; }
 
@@ -166,6 +171,7 @@ private:
     Pathfinder pathfinder_;
     std::unique_ptr<Zones> zones_;
     std::unique_ptr<Things> things_;
+    std::unique_ptr<Plants> plants_;
     std::unique_ptr<MovementSystem> movement_;
     std::unique_ptr<HealthSystem> health_;
     std::unique_ptr<NeedsSystem> needs_;

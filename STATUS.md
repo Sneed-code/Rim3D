@@ -41,7 +41,7 @@ time, passes events to `OnSimEvent`, keeps the last two snapshots and blends pos
 (`GetBlendedLocation`, the one place sim metres become Unreal centimetres), loads `data/defs`, shows
 sim timings on screen, and has keys: Space pause, 1/2/3 speed, `.` step, F7 saves a replay to
 `Saved/Replays/` (the bug-replay key U12 planned). Since U6 there is an overseer camera (`-Overseer` or console `Overseer.Enter`): WASD pan, Q/E turn, wheel zoom, middle-drag orbit, click to select a pawn, thing or ground cell (picked against the sim, not Unreal collision), with an ImGui speed bar and inspect panel; ImGui is the free VesCodes plugin in `game/Plugins/ImGui/` (not in Git, `assets/manifest.json` says how to get it back) (`docs/design/overseer.md`). Since U5 every sim pawn is drawn as an actor without a movement component that follows the snapshot: the 20 nearest the camera are motion matched (Epic's motion matching run from our own C++, no Animation Blueprint; trajectory from the sim's route), the rest play walk, run and idle loops updated 20 or 8 times a second; the sim's `PawnAction` events (pick up, put down) play a short action animation; `Pawns.MetaHumans 1` draws them as MetaHumans with strand hair only up close (`docs/design/pawns.md`). Since U12 the game saves and loads: F5 quicksave, F9 quickload, an autosave every game day (three files in turn) and F8 writes a bug report folder (replay, save, readable dump, notes) to hand to the cloud (`docs/design/saves.md`, smoke test `saves`). **Every task that adds sim state must add it to the
-save** (the doc has the steps) and to the save round-trip test. Since U9 you can walk a colonist yourself: Tab switches between the
+save** (the doc has the steps) and to the save round-trip test. Since C2 the map has plants: a grid layer (kind, growth, age per cell, `sim.plants()`) filled at map generation from fertility and the temperate forest biome (about 119,000 on a 512 m map) and grown hourly in the growing hours 06:00 to 19:00, dying at their lifespan; `simrun --png` draws them; save format 9 (`docs/design/plants.md`). Since U9 you can walk a colonist yourself: Tab switches between the
 overseer view and direct mode on the protagonist (or the selected colonist), in first or third person (V), T takes over the colonist
 under the crosshair. In the sim that is two commands, `ControlPawn` and `DirectMove` (a position every step, kept out of walls); while a colonist
 is controlled its job ends and the job system and movement system leave it alone until control is let go (**a new think-list node or system
@@ -132,7 +132,7 @@ the entity-registry hash order changed, so replays recorded before S6 have diffe
 FILE` draws what a pawn sees; sandbags and barricades were added to the importer list, and
 trees and rocks get their height from `fillPercent` when C2 adds plants) and ~~**U2** bridge v2~~
 done (PC Unreal; `docs/design/bridge.md`, smoke test `sim`; the first Unreal compile of EnTT and the
-S5 bridge, so S1's include path is confirmed). **C2** plants (cloud, Sonnet medium), ~~**C8** colonists
+S5 bridge, so S1's include path is confirmed). ~~**C2** plants~~ done (`docs/design/plants.md`; save format 9), ~~**C8** colonists
 from a seed~~ done (`docs/design/colonists.md`; `simrun --start Crashlanded` lists the six; save format 4) and
 ~~**F1** health basics~~ done (`docs/design/health.md`; save format 5; **F2** guns can now hit pawns);
 their defs are in `data/defs/`. Numbers marked `unverified` in a def were recalled, not read from the
@@ -146,7 +146,7 @@ sand, the doc says why). ~~**C1** job system~~ done (`docs/design/jobs.md`; save
 actions too). ~~**U6** overseer camera and selection~~ done (PC Unreal;
 smoke test `overseer`; `docs/design/overseer.md`). ~~**U9** protagonist~~ done (PC Unreal; smoke test
 `protagonist`; `docs/design/protagonist.md`; save format 7). **U3** terrain and plants (PC Unreal, Sonnet high)
-needs C2 as well.
+has C2 now, so it is open.
 
 Wave 6, open now that C1 is in: **C4** building (cloud, Sonnet high), ~~**C6** food, rest and
 schedules~~ done (`docs/design/needs.md`; save format 8), **F2** guns and hitboxes (cloud, Opus high); **C3** mining, chopping
