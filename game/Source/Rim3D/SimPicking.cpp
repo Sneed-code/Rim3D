@@ -1,5 +1,7 @@
 #include "SimPicking.h"
 
+#include "BuildingSubsystem.h"
+#include "Engine/World.h"
 #include "SimSubsystem.h"
 #include "TerrainDraw.h"
 
@@ -8,7 +10,7 @@
 
 namespace
 {
-	// Heights in cm of the click boxes. Buildings use one height until their visuals say otherwise.
+	// Heights in cm of the click boxes. A building is as tall as it is drawn; this is for one that has no look.
 	constexpr double SimPickPawnHeight = 190.0;
 	constexpr double SimPickPawnHalfWidth = 45.0;
 	constexpr double SimPickItemHeight = 40.0;
@@ -85,7 +87,16 @@ namespace SimPicking
 			case colony::ThingCategory::Building:
 				HalfX = View.sizeX * 50.0;
 				HalfY = View.sizeY * 50.0;
+				// As tall as it is drawn (BuildingSubsystem), else a default.
 				Height = SimPickBuildingHeight;
+				if (const UWorld* World = Bridge.GetWorld())
+				{
+					if (const UBuildingSubsystem* Drawn = World->GetSubsystem<UBuildingSubsystem>())
+					{
+						const float DrawnHeight = Drawn->GetDrawnHeightCm(View.def);
+						Height = DrawnHeight > 0.0f ? DrawnHeight : Height;
+					}
+				}
 				break;
 			case colony::ThingCategory::Item:
 				break;

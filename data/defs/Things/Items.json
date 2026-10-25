@@ -4,7 +4,7 @@
     "category": "Item", "stackLimit": 75
   },
   {
-    "defName": "Steel", "parent": "ItemBase", "label": "steel", "unverified": ["stats.maxHitPoints"],
+    "defName": "Steel", "visual": {"color": [0.42, 0.46, 0.53], "pieces": 6, "layer": 0.1, "parts": [{"shape": "box", "size": [0.34, 0.17, 0.1], "color": [0.5, 0.54, 0.6]}]}, "parent": "ItemBase", "label": "steel", "unverified": ["stats.maxHitPoints"],
     "stats": { "maxHitPoints": 100, "marketValue": 1.9, "mass": 0.5, "beauty": -4 },
     "stuffProps": {
       "categories": ["Metallic"],
@@ -15,7 +15,7 @@
     }
   },
   {
-    "defName": "WoodLog", "parent": "ItemBase", "label": "wood",
+    "defName": "WoodLog", "visual": {"color": [0.6, 0.42, 0.26], "pieces": 6, "layer": 0.14, "parts": [{"shape": "cylinder", "radius": 0.07, "height": 0.55, "at": [0, 0, -0.205], "color": [0.55, 0.38, 0.22], "rot": [90, 0, 0]}]}, "parent": "ItemBase", "label": "wood",
     "stats": { "maxHitPoints": 150, "marketValue": 1.2, "mass": 0.4, "beauty": -4, "deteriorationRate": 0.5 },
     "stuffProps": {
       "categories": ["Woody"],
@@ -26,25 +26,25 @@
     }
   },
   {
-    "defName": "Silver", "parent": "ItemBase", "label": "silver", "stackLimit": 500,
+    "defName": "Silver", "visual": {"pieces": 5, "layer": 0.04, "parts": [{"shape": "box", "size": [0.2, 0.12, 0.04], "color": [0.85, 0.87, 0.92]}]}, "parent": "ItemBase", "label": "silver", "stackLimit": 500,
     "stats": { "marketValue": 1.0, "mass": 0.008 }
   },
   {
-    "defName": "ComponentIndustrial", "parent": "ItemBase", "label": "component", "stackLimit": 50,
+    "defName": "ComponentIndustrial", "visual": {"pieces": 4, "layer": 0.05, "parts": [{"shape": "box", "size": [0.14, 0.14, 0.04], "color": [0.14, 0.45, 0.3]}, {"shape": "box", "size": [0.06, 0.06, 0.03], "at": [0, 0, 0.04], "color": [0.1, 0.1, 0.12]}]}, "parent": "ItemBase", "label": "component", "stackLimit": 50,
     "stats": {
       "maxHitPoints": 70, "marketValue": 32, "mass": 0.6, "flammability": 0.6, "deteriorationRate": 2,
       "workToMake": 7200
     }
   },
   {
-    "defName": "MedicineIndustrial", "parent": "ItemBase", "label": "medicine", "stackLimit": 25,
+    "defName": "MedicineIndustrial", "visual": {"pieces": 4, "layer": 0.08, "parts": [{"shape": "box", "size": [0.2, 0.14, 0.07], "color": [0.93, 0.92, 0.9]}, {"shape": "box", "size": [0.08, 0.03, 0.005], "at": [0, 0, 0.07], "color": [0.8, 0.1, 0.1]}]}, "parent": "ItemBase", "label": "medicine", "stackLimit": 25,
     "stats": {
       "maxHitPoints": 60, "marketValue": 18, "mass": 0.5, "flammability": 0.7, "deteriorationRate": 2,
       "medicalPotency": 1.0, "medicalQualityMax": 1.0
     }
   },
   {
-    "defName": "RawBerries", "parent": "ItemBase", "label": "berries",
+    "defName": "RawBerries", "visual": {"pieces": 5, "layer": 0.1, "parts": [{"shape": "sphere", "radius": 0.06, "height": 0.11, "at": [-0.06, 0, 0], "color": [0.78, 0.12, 0.18]}, {"shape": "sphere", "radius": 0.06, "height": 0.11, "at": [0.06, 0.03, 0], "color": [0.7, 0.1, 0.2]}, {"shape": "sphere", "radius": 0.06, "height": 0.11, "at": [0, -0.06, 0], "color": [0.82, 0.16, 0.14]}]}, "parent": "ItemBase", "label": "berries",
     "stats": {
       "maxHitPoints": 100, "marketValue": 1.2, "mass": 0.027, "flammability": 1.0, "deteriorationRate": 6,
       "nutrition": 0.05
@@ -53,7 +53,7 @@
     "comps": [{ "type": "Rottable", "daysToRotStart": 14 }]
   },
   {
-    "defName": "MealSurvivalPack", "parent": "ItemBase", "label": "packaged survival meal", "stackLimit": 10,
+    "defName": "MealSurvivalPack", "visual": {"pieces": 4, "layer": 0.05, "parts": [{"shape": "box", "size": [0.24, 0.17, 0.05], "color": [0.3, 0.43, 0.28]}, {"shape": "box", "size": [0.16, 0.05, 0.005], "at": [0, 0, 0.05], "color": [0.9, 0.9, 0.85]}]}, "parent": "ItemBase", "label": "packaged survival meal", "stackLimit": 10,
     "stats": {
       "maxHitPoints": 50, "marketValue": 24, "mass": 0.3, "flammability": 1.0, "deteriorationRate": 0.25,
       "nutrition": 0.9, "workToMake": 648
@@ -61,13 +61,13 @@
     "ingestible": { "foodType": "Meal", "preferability": "MealSimple", "maxNumToIngestAtOnce": 1 }
   },
   {
-    "defName": "ChunkBase", "parent": "ItemBase", "abstract": true, "stackLimit": 1,
+    "defName": "ChunkBase", "visual": {"parts": [{"shape": "sphere", "radius": 0.28, "height": 0.3, "at": [0, 0, 0], "color": [0.55, 0.53, 0.5]}]}, "parent": "ItemBase", "abstract": true, "stackLimit": 1,
     "unverified": ["stats.marketValue", "stats.flammability"],
     "stats": { "maxHitPoints": 300, "marketValue": 0, "mass": 20, "flammability": 0 }
   },
-  { "defName": "ChunkGranite", "parent": "ChunkBase", "label": "granite chunk", "stats": { "mass": 25 } },
-  { "defName": "ChunkLimestone", "parent": "ChunkBase", "label": "limestone chunk", "stats": { "mass": 22 } },
-  { "defName": "ChunkSandstone", "parent": "ChunkBase", "label": "sandstone chunk", "stats": { "mass": 20 } },
-  { "defName": "ChunkSlate", "parent": "ChunkBase", "label": "slate chunk", "stats": { "mass": 18 } },
-  { "defName": "ChunkMarble", "parent": "ChunkBase", "label": "marble chunk", "stats": { "mass": 25 } }
+  { "defName": "ChunkGranite", "visual": {"tint": [0.9, 0.85, 0.85]}, "parent": "ChunkBase", "label": "granite chunk", "stats": { "mass": 25 } },
+  { "defName": "ChunkLimestone", "visual": {"tint": [1, 1, 0.9]}, "parent": "ChunkBase", "label": "limestone chunk", "stats": { "mass": 22 } },
+  { "defName": "ChunkSandstone", "visual": {"tint": [1, 0.9, 0.7]}, "parent": "ChunkBase", "label": "sandstone chunk", "stats": { "mass": 20 } },
+  { "defName": "ChunkSlate", "visual": {"tint": [0.6, 0.65, 0.72]}, "parent": "ChunkBase", "label": "slate chunk", "stats": { "mass": 18 } },
+  { "defName": "ChunkMarble", "visual": {"tint": [1, 1, 1]}, "parent": "ChunkBase", "label": "marble chunk", "stats": { "mass": 25 } }
 ]

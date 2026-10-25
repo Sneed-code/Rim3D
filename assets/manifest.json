@@ -26,6 +26,15 @@
       "installedTo": "game/Content/Rim3D/Generated/PawnLooks/ (not in Git)",
       "usedFor": "body shape morphs on Kellan's body and clothes, our skin material, horns (docs/design/looks.md)",
       "reinstall": "\"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" game\\Rim3D.uproject -run=PawnLooks -unattended -nosplash -nullrhi"
+    },
+    {
+      "name": "Building ghost material (generated)",
+      "source": "Made by the BuildingMaterials commandlet: our own unlit translucent material with a Color and an Opacity, marked for instanced static meshes",
+      "licence": "Our own",
+      "version": "UE 5.8",
+      "installedTo": "game/Content/Rim3D/Generated/Buildings/M_BuildingGhost.uasset (not in Git)",
+      "usedFor": "blueprints and the whole-building ghost behind frames (docs/design/building-draw.md)",
+      "reinstall": "\"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" game\\Rim3D.uproject -run=BuildingMaterials -unattended -nosplash -nullrhi"
     }
   ]
 }

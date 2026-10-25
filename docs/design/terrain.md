@@ -99,7 +99,7 @@ grass is the one dither in use, and it is ordinary).
 ## Console and numbers
 
 - `Terrain.Enable` 1 or 0, `Terrain.Roofs` -1, 0 or 1, `Terrain.PlantScan` chunks a frame.
-- `TerrainDraw.h`: `RockHeightM` 4, `RoofHeightM` 3 (walls will be drawn that tall by U4), `ChunkCells` 32.
+- `TerrainDraw.h`: `RockHeightM` 4, `RoofHeightM` 3 (walls are drawn that tall, [building-draw.md](building-draw.md)), `ChunkCells` 32.
 - `UTerrainSubsystem::GetStats()` says what is drawn and what rebuilds cost; the smoke test writes
   them to its notes.
 

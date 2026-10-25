@@ -14,6 +14,7 @@
 #include "OverseerSubsystem.h"
 #include "SimSubsystem.h"
 #include "TerrainDraw.h"
+#include "VisualMesh.h"
 
 #include "ColonySim/Defs.h"
 #include "ColonySim/Map.h"
@@ -285,202 +286,6 @@ namespace
 			}
 		}
 	}
-
-	// ----- Plant meshes made from a def's `visual` -----
-
-	struct FTerrPart
-	{
-		bool bValid = false;
-		int32 Shape = 1;  // 0 cylinder, 1 cone, 2 sphere
-		float Radius = 0.3f;
-		float Height = 0.5f;
-		float Lift = 0.0f;
-		FLinearColor Color = FLinearColor(0.25f, 0.45f, 0.15f);
-	};
-
-	FTerrPart TerrReadPart(const colony::Def& Def, const std::string& Path)
-	{
-		FTerrPart Part;
-		if (!Def.has(Path.c_str()))
-		{
-			return Part;
-		}
-		Part.bValid = true;
-		const std::string Shape = Def.text((Path + ".shape").c_str(), "cone");
-		Part.Shape = Shape == "cylinder" ? 0 : (Shape == "sphere" ? 2 : 1);
-		Part.Radius = static_cast<float>(Def.number((Path + ".radius").c_str(), 0.3));
-		Part.Height = static_cast<float>(Def.number((Path + ".height").c_str(), 0.5));
-		Part.Lift = static_cast<float>(Def.number((Path + ".lift").c_str(), 0.0));
-		const std::string ColorPath = Path + ".color";
-		if (Def.count(ColorPath.c_str()) >= 3)
-		{
-			// Written as the sRGB colour you'd pick in a paint program; the vertex colour is linear.
-			const auto Linear = [&Def, &ColorPath](size_t I, double Fallback) { return FMath::Pow(static_cast<float>(Def.numberAt(ColorPath.c_str(), I, Fallback)), 2.2f); };
-			Part.Color = FLinearColor(Linear(0, 0.3), Linear(1, 0.5), Linear(2, 0.2));
-		}
-		return Part;
-	}
-
-	struct FTerrTriangle
-	{
-		FVector3f A, B, C;
-		FLinearColor Color;
-	};
-
-	void TerrAddTriangle(TArray<FTerrTriangle>& Out, const FVector3f& A, FVector3f B, FVector3f C, const FVector3f& Outward, const FLinearColor& Color)
-	{
-		if (FVector3f::DotProduct(FVector3f::CrossProduct(C - A, B - A), Outward) < 0.0f)
-		{
-			Swap(B, C);
-		}
-		Out.Add({A, B, C, Color});
-	}
-
-	/** A solid of revolution about the Z axis from rings of (height, radius) in cm, bottom to top; a ring of radius 0 is a point. */
-	void TerrLathe(TArray<FTerrTriangle>& Out, const TArray<FVector2f>& Rings, int32 Sides, const FLinearColor& Color, bool bBottomCap, bool bTopCap)
-	{
-		const auto Ring = [&Rings, Sides](int32 Index, int32 Side)
-		{
-			const float Angle = 2.0f * PI * static_cast<float>(Side % Sides) / static_cast<float>(Sides);
-			return FVector3f(FMath::Cos(Angle) * Rings[Index].Y, FMath::Sin(Angle) * Rings[Index].Y, Rings[Index].X);
-		};
-		for (int32 R = 0; R + 1 < Rings.Num(); ++R)
-		{
-			for (int32 S = 0; S < Sides; ++S)
-			{
-				const FVector3f P00 = Ring(R, S);
-				const FVector3f P01 = Ring(R, S + 1);
-				const FVector3f P10 = Ring(R + 1, S);
-				const FVector3f P11 = Ring(R + 1, S + 1);
-				const auto Radial = [](const FVector3f& A, const FVector3f& B, const FVector3f& C)
-				{
-					const FVector3f Middle = (A + B + C) / 3.0f;
-					return FVector3f(Middle.X, Middle.Y, 0.0f);
-				};
-				if (Rings[R].Y > 0.0f && Rings[R + 1].Y > 0.0f)
-				{
-					TerrAddTriangle(Out, P00, P01, P11, Radial(P00, P01, P11), Color);
-					TerrAddTriangle(Out, P00, P11, P10, Radial(P00, P11, P10), Color);
-				}
-				else if (Rings[R].Y <= 0.0f)
-				{
-					TerrAddTriangle(Out, P00, P10, P11, Radial(P00, P10, P11), Color);
-				}
-				else
-				{
-					TerrAddTriangle(Out, P00, P01, P10, Radial(P00, P01, P10), Color);
-				}
-			}
-		}
-		const auto Cap = [&](int32 Index, float Direction)
-		{
-			if (Rings[Index].Y <= 0.0f)
-			{
-				return;
-			}
-			const FVector3f Centre(0.0f, 0.0f, Rings[Index].X);
-			for (int32 S = 0; S < Sides; ++S)
-			{
-				TerrAddTriangle(Out, Centre, Ring(Index, S), Ring(Index, S + 1), FVector3f(0.0f, 0.0f, Direction), Color);
-			}
-		};
-		if (bBottomCap)
-		{
-			Cap(0, -1.0f);
-		}
-		if (bTopCap)
-		{
-			Cap(Rings.Num() - 1, 1.0f);
-		}
-	}
-
-	void TerrAddPart(TArray<FTerrTriangle>& Out, const FTerrPart& Part)
-	{
-		if (!Part.bValid)
-		{
-			return;
-		}
-		const float Radius = Part.Radius * 100.0f;
-		const float Height = Part.Height * 100.0f;
-		const float Bottom = Part.Lift * 100.0f;
-		TArray<FVector2f> Rings;
-		const FLinearColor Color = Part.Color;
-		const bool bFloating = Part.Lift > 0.02f;
-		switch (Part.Shape)
-		{
-			case 0:
-				Rings = {FVector2f(Bottom, Radius), FVector2f(Bottom + Height, Radius)};
-				TerrLathe(Out, Rings, 6, Color, bFloating, true);
-				break;
-			case 1:
-				Rings = {FVector2f(Bottom, Radius), FVector2f(Bottom + Height, 0.0f)};
-				TerrLathe(Out, Rings, 5, Color, true, false);
-				break;
-			default:
-				for (int32 K = 0; K <= 4; ++K)
-				{
-					const float Theta = PI * static_cast<float>(K) / 4.0f;
-					Rings.Add(FVector2f(Bottom + Height * 0.5f * (1.0f - FMath::Cos(Theta)), K == 0 || K == 4 ? 0.0f : Radius * FMath::Sin(Theta)));
-				}
-				TerrLathe(Out, Rings, 7, Color, false, false);
-				break;
-		}
-	}
-
-	/** A plant mesh with its colours baked into the vertices, flat shaded, standing on Z = 0 with its middle at X = Y = 0. */
-	UStaticMesh* TerrMakePlantMesh(UObject* Outer, UMaterialInterface* Material, const FTerrPart& Stem, const FTerrPart& Crown)
-	{
-		TArray<FTerrTriangle> Triangles;
-		TerrAddPart(Triangles, Stem);
-		TerrAddPart(Triangles, Crown);
-		if (Triangles.IsEmpty())
-		{
-			return nullptr;
-		}
-		float Top = 1.0f;
-		for (const FTerrTriangle& T : Triangles)
-		{
-			Top = FMath::Max(Top, FMath::Max3(T.A.Z, T.B.Z, T.C.Z));
-		}
-
-		FMeshDescription Description;
-		FStaticMeshAttributes Attributes(Description);
-		Attributes.Register();
-		const FPolygonGroupID Group = Description.CreatePolygonGroup();
-		Attributes.GetPolygonGroupMaterialSlotNames()[Group] = TEXT("Plant");
-		for (const FTerrTriangle& T : Triangles)
-		{
-			const FVector3f Normal = FVector3f::CrossProduct(T.C - T.A, T.B - T.A).GetSafeNormal();
-			const FVector3f Tangent = (T.B - T.A).GetSafeNormal();
-			// A little baked light: brighter facing up and higher up, so a plant doesn't read as flat colour.
-			const float Light = 0.62f + 0.38f * (Normal.Z * 0.5f + 0.5f);
-			TArray<FVertexInstanceID> Corners;
-			for (const FVector3f* P : {&T.A, &T.B, &T.C})
-			{
-				const FVertexID Vertex = Description.CreateVertex();
-				Attributes.GetVertexPositions()[Vertex] = *P;
-				const FVertexInstanceID Instance = Description.CreateVertexInstance(Vertex);
-				const float Shade = Light * (0.9f + 0.2f * (P->Z / Top));
-				Attributes.GetVertexInstanceNormals()[Instance] = Normal;
-				Attributes.GetVertexInstanceTangents()[Instance] = Tangent;
-				Attributes.GetVertexInstanceBinormalSigns()[Instance] = 1.0f;
-				Attributes.GetVertexInstanceColors()[Instance] = FVector4f(T.Color.R * Shade, T.Color.G * Shade, T.Color.B * Shade, 1.0f);
-				Attributes.GetVertexInstanceUVs().Set(Instance, 0, FVector2f(0.0f, 0.0f));
-				Corners.Add(Instance);
-			}
-			Description.CreateTriangle(Group, Corners);
-		}
-
-		UStaticMesh* Mesh = NewObject<UStaticMesh>(Outer, NAME_None, RF_Transient);
-		Mesh->GetStaticMaterials().Add(FStaticMaterial(Material, TEXT("Plant"), TEXT("Plant")));
-		UStaticMesh::FBuildMeshDescriptionsParams Params;
-		Params.bBuildSimpleCollision = false;
-		Params.bFastBuild = true;
-		Params.bMarkPackageDirty = false;
-		Params.bCommitMeshDescription = false;
-		Mesh->BuildFromMeshDescriptions({&Description}, Params);
-		return Mesh;
-	}
 }
 
 bool UTerrainSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) const
@@ -637,16 +442,27 @@ void UTerrainSubsystem::LoadPlantVisuals(const colony::Sim& Sim)
 		}
 		if (!Visual.Mesh)
 		{
-			FTerrPart Stem = TerrReadPart(Def, "visual.stem");
-			FTerrPart Crown = TerrReadPart(Def, "visual.crown");
-			if (!Stem.bValid && !Crown.bValid)
+			TArray<VisualMesh::FPart> Parts;
+			VisualMesh::FPart Stem;
+			VisualMesh::FPart Crown;
+			if (VisualMesh::ReadPlantPart(Def, "visual.stem", Stem))
+			{
+				Parts.Add(Stem);
+			}
+			if (VisualMesh::ReadPlantPart(Def, "visual.crown", Crown))
+			{
+				Parts.Add(Crown);
+			}
+			if (Parts.IsEmpty())
 			{
 				// A plant with no look yet: a small green cone, so it still shows.
-				Crown.bValid = true;
-				Crown.Radius = 0.3f;
-				Crown.Height = 0.5f;
+				VisualMesh::FPart Cone;
+				Cone.Shape = VisualMesh::EShape::Cone;
+				Cone.Size = FVector3f(30.0f, 30.0f, 50.0f);
+				Cone.Color = FLinearColor(0.25f, 0.45f, 0.15f);
+				Parts.Add(Cone);
 			}
-			Visual.Mesh = TerrMakePlantMesh(this, PlantMaterial, Stem, Crown);
+			Visual.Mesh = VisualMesh::MakeMesh(this, PlantMaterial, Parts, VisualMesh::EPartSet::All, nullptr, true);
 		}
 		if (!Visual.Mesh)
 		{

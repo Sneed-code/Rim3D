@@ -58,6 +58,8 @@ and horns. The shapes and materials are made by the `PawnLooks` commandlet (new 
 `Rim3DEditor`) into `game/Content/Rim3D/Generated/` (not in Git; `assets/manifest.json` says how to
 make them again). Everyone still has Kellan's face and outfit.
 
+Since U4 the game draws buildings and items (`docs/design/building-draw.md`, smoke test `buildings`): `UBuildingSubsystem` reads the snapshot and keeps one instanced mesh component per kind of thing per 32 m chunk, rebuilding only chunks whose things changed. Walls, doors, beds, stools, tables and the stove are boxes and cylinders from each def's `visual.parts`, coloured by their stuff; blueprints are blue see-through ghosts, frames rise inside their ghosts as materials arrive and work is done; a door's leaf slides into the wall as the sim's door opens and shuts; items are little piles that grow with the stack. Pieces of this are shared with the terrain's plants (`VisualMesh.*`). Ghosts use a material the `BuildingMaterials` commandlet makes (`assets/manifest.json`; the engine's own translucent materials draw black on instanced meshes). Picking uses the drawn height of a building. Everything stays on the ordinary static-mesh path, so DLSS stays possible.
+
 Since U3 the game draws the ground and plants (`docs/design/terrain.md`, smoke test `world`): `UTerrainSubsystem` starts
 by itself with any sim and builds one mesh per 32 m chunk (a 1 km map is 32 x 32 chunks, about 220 ms
 to build). The ground has a vertex per cell corner at the sim's height, coloured by terrain type and soil fertility; **rock stands on it as a
@@ -189,7 +191,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-30 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3). Tick tasks in `docs/plans/stage-1.md` as they merge.
+31 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -237,7 +239,7 @@ sand, the doc says why). ~~**C1** job system~~ done (`docs/design/jobs.md`; save
 actions too). ~~**U6** overseer camera and selection~~ done (PC Unreal;
 smoke test `overseer`; `docs/design/overseer.md`). ~~**U9** protagonist~~ done (PC Unreal; smoke test
 `protagonist`; `docs/design/protagonist.md`; save format 7). ~~**U3** terrain and plants~~ done (PC Unreal; smoke test `world`;
-`docs/design/terrain.md`); **U4** buildings and items and **A2** terrain materials (needs sneed's Megascans) are open now.
+`docs/design/terrain.md`); ~~**U4** buildings and items~~ done (PC Unreal; smoke test `buildings`; `docs/design/building-draw.md`); **A2** terrain materials (needs sneed's Megascans) is open now.
 
 Wave 6, open now that C1 is in: ~~**C4** building~~ done (`docs/design/construction.md`; save format 10; ~~**C5** doors,
 roofs and rooms~~ done (`docs/design/rooms.md`; save format 13), C7 bills and cooking can start now), ~~**C6** food, rest and
