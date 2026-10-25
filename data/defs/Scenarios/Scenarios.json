@@ -6,7 +6,12 @@
       { "thing": "Silver", "count": 800 },
       { "thing": "MealSurvivalPack", "count": 50 },
       { "thing": "ComponentIndustrial", "count": 30 },
-      { "thing": "MedicineIndustrial", "count": 30 }
+      { "thing": "MedicineIndustrial", "count": 30 },
+      { "thing": "Gun_BoltActionRifle", "count": 1 },
+      { "thing": "Gun_Revolver", "count": 1 },
+      { "thing": "Apparel_SimpleHelmet", "count": 1 },
+      { "thing": "Apparel_FlakVest", "count": 1 },
+      { "thing": "Apparel_FlakPants", "count": 1 }
     ],
     "nearbyThings": [
       { "thing": "Steel", "count": 450 },
@@ -16,7 +21,7 @@
       { "thing": "Steel", "count": 720 },
       { "thing": "MealSurvivalPack", "count": 7 }
     ],
-    "gearAddedByF2": ["Gun_BoltActionRifle", "Gun_Revolver", "MeleeWeapon_Knife (plasteel)", "Apparel_SimpleHelmet (flak)", "Apparel_FlakPants", "Apparel_FlakVest"],
+    "gearLater": ["MeleeWeapon_Knife (plasteel) when melee comes", "the helmet is plasteel in RimWorld; steel until materials exist"],
     "ours": ["colonists", "protagonist"]
   }
 ]

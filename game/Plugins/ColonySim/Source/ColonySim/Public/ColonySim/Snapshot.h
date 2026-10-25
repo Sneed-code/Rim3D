@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ColonySim/Api.h"
+#include "ColonySim/Cover.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
@@ -53,6 +54,28 @@ struct ThingView {
     Entity jobTarget = kNoEntity;
     DefId carriedDef;
     int carriedCount = 0;
+    // Pawns: how they hold their body and which way they face (a unit vector; +x east), the gun
+    // in their hands (invalid if none) and steps until it can start a new shot (0: ready).
+    // Downed pawns lie prone (docs/design/combat.md).
+    Stance stance = Stance::Standing;
+    float facingX = 1.0f;
+    float facingY = 0.0f;
+    DefId weapon;
+    int shotReadyIn = 0;
+};
+
+// A bullet in flight (docs/design/combat.md). Unreal draws a tracer along its velocity; it
+// appears with a ShotFired event and disappears with a ProjectileHit event.
+struct ProjectileView {
+    Entity id = kNoEntity;
+    DefId def;  // Projectiles def
+    float x = 0.0f;  // metres; z above sea level
+    float y = 0.0f;
+    float z = 0.0f;
+    float vx = 0.0f;  // metres per step
+    float vy = 0.0f;
+    float vz = 0.0f;
+    int level = 0;
 };
 
 // One stockpile zone: `cellCount` cells from Snapshot::zoneCells[firstCell].
@@ -71,6 +94,7 @@ struct Snapshot {
     std::vector<PathPointView> waypoints;  // the pawns' routes, see ThingView
     std::vector<ZoneView> zones;           // by id
     std::vector<CellPos> zoneCells;        // the zones' cells, see ZoneView
+    std::vector<ProjectileView> projectiles;  // sorted by id
 
     // The thing with this id, or null if it is not on the map. Binary search.
     COLONY_API const ThingView* find(Entity id) const;

@@ -52,6 +52,7 @@ public:
     struct Part {
         std::string def;
         std::string label;
+        std::vector<std::string> groups;  // BodyPartGroups defs, which apparel covers
         int parent = -1;
         int end = 0;  // parts are in depth-first order: this part's children and theirs are (index, end)
         float coverage = 1.0f;     // share of the parent
@@ -193,6 +194,10 @@ int HealthModel::buildPart(const Def& bodyDef, const std::string& path, int pare
             p.solid = partDef->flag("solid");
             p.destroyable = partDef->flag("destroyableByDamage", true);
             p.lethal = partDef->flag("lethalIfDestroyed");
+        }
+        const std::string groupsPath = healthPath(path, "groups");
+        for (size_t g = 0; g < bodyDef.count(groupsPath.c_str()); ++g) {
+            p.groups.push_back(bodyDef.textAt(groupsPath.c_str(), g));
         }
         out.byDef[p.def].push_back(index);
     }
@@ -804,12 +809,63 @@ bool HealthSystem::applyDamage(Entity pawn, DefId damageType, float amount, int 
         }
     }
 
+    return hitPart(pawn, damageType, amount, target, part < 0);
+}
+
+bool HealthSystem::applyHit(Entity pawn, DefId damageType, float amount, int part) {
+    entt::registry& reg = things_.registry();
+    const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);
+    if (kind == nullptr || reg.get<Health>(pawn).dead || !(amount > 0.0f) || !damageType.valid() ||
+        damageType.value >= model_->damageTypes.size() || !model_->damageTypes[damageType.value].valid || part < 0) {
+        return false;
+    }
+    const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+    const Health& health = reg.get<Health>(pawn);
+    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
+    if (static_cast<size_t>(part) >= body.parts.size() || eval.gone[static_cast<size_t>(part)] != 0) {
+        return false;
+    }
+    return hitPart(pawn, damageType, amount, part, true);
+}
+
+int HealthSystem::goInside(Entity pawn, DefId damageType, int part, Rng& rng) const {
+    const entt::registry& reg = things_.registry();
+    const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);
+    if (kind == nullptr || part < 0 || !damageType.valid() || damageType.value >= model_->damageTypes.size() ||
+        !model_->damageTypes[damageType.value].reachesInside) {
+        return part;
+    }
+    const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+    const Health& health = reg.get<Health>(pawn);
+    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
+    if (static_cast<size_t>(part) >= body.parts.size() || eval.gone[static_cast<size_t>(part)] != 0) {
+        return part;
+    }
+    return healthGoInside(body, eval.gone, part, rng);
+}
+
+std::vector<BodyPartInfo> HealthSystem::bodyParts(DefId pawnDef) const {
+    std::vector<BodyPartInfo> out;
+    if (const HealthModel::Kind* kind = model_->kindOf(pawnDef)) {
+        for (const HealthModel::Part& p : model_->bodies[static_cast<size_t>(kind->body)].parts) {
+            out.push_back(BodyPartInfo{p.label, p.parent, p.inside, p.ownOutside, p.groups});
+        }
+    }
+    return out;
+}
+
+bool HealthSystem::hitPart(Entity pawn, DefId damageType, float amount, int target, bool hurtOuter) {
+    entt::registry& reg = things_.registry();
+    const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);
+    const HealthModel::DamageType& type = model_->damageTypes[damageType.value];
+    Health& health = reg.get<Health>(pawn);
+    const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
     const auto hediffFor = [&](int p) {
         const DefId solid = type.hediffSolid;
         return body.parts[static_cast<size_t>(p)].solid && solid.valid() ? solid : type.hediff;
     };
     bool hurt = damagePart(pawn, health, target, hediffFor(target), amount);
-    if (hurt && part < 0 && model_->innerHurtsOuter && body.parts[static_cast<size_t>(target)].inside) {
+    if (hurt && hurtOuter && model_->innerHurtsOuter && body.parts[static_cast<size_t>(target)].inside) {
         int outer = body.parts[static_cast<size_t>(target)].parent;
         while (outer > 0 && body.parts[static_cast<size_t>(outer)].inside) {
             outer = body.parts[static_cast<size_t>(outer)].parent;

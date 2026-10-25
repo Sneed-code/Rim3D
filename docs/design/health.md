@@ -24,8 +24,11 @@ hit points lost) and a list of **lost parts** (a destroyed part; its children go
 hit points are its maximum (doubled for the protagonist, `Health::protagonist`, set before the pawn
 is hurt) minus the severity of the injuries on it; efficiency is that over the maximum, 0 if lost.
 
-**`HealthSystem::applyDamage(pawn, damageType, amount, part, rng)`** is the one way in. Combat (F2) will
-call it; until then the dev command `DamagePawnCommand` does.
+**`HealthSystem::applyDamage(pawn, damageType, amount, part, rng)`** is the way in for the dev command
+`DamagePawnCommand`. Combat (F2, [combat.md](combat.md)) picks the outside part from the hitbox a
+bullet hit, goes in with `goInside`, applies armor and then calls **`applyHit(pawn, type, amount,
+part)`**, which hurts exactly that part with the same rules as a random hit (an inside part also
+hurts the outside part over it).
 
 - **Which part.** An explicit `part` is hit exactly. With `part = -1` (what a bullet or a bite does),
   the part is picked by how much of the body each *outside* part covers (its area minus its outside

@@ -35,6 +35,7 @@ constexpr StoragePriority kReplayPriorities[] = {StoragePriority::Low, StoragePr
 ReplayOrderedJson replayRectJson(const CellRect& r) {
     return ReplayOrderedJson::array({r.minX, r.minY, r.sizeX, r.sizeY, r.level});
 }
+const char* const kReplayStanceNames[] = {"Standing", "Crouching", "Prone"};
 
 std::string replayHex(uint64_t value) {
     char text[17];
@@ -93,10 +94,21 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["zone"] = c.zone;
                 j["def"] = c.def;
                 j["allowed"] = c.allowed;
-            } else {
-                static_assert(std::is_same_v<Type, OrderHaulCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, OrderHaulCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["thing"] = entt::to_integral(c.thing);
+            } else if constexpr (std::is_same_v<Type, EquipCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["item"] = entt::to_integral(c.item);
+            } else if constexpr (std::is_same_v<Type, ShootCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["target"] = entt::to_integral(c.target);
+                j["point"] = {c.x, c.y, c.z};
+                j["player"] = c.player;
+            } else {
+                static_assert(std::is_same_v<Type, SetStanceCommand>, "write every command type");
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["stance"] = kReplayStanceNames[static_cast<int>(c.stance)];
             }
         },
         logged.command);
@@ -321,6 +333,53 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = OrderHaulCommand{static_cast<Entity>(pawn), static_cast<Entity>(thing)};
+    } else if (type == "Equip") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        uint32_t item = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "item", item, where)) {
+            return false;
+        }
+        out.command = EquipCommand{static_cast<Entity>(pawn), static_cast<Entity>(item)};
+    } else if (type == "Shoot") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        uint32_t target = entt::to_integral(kNoEntity);
+        ShootCommand c;
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "target", target, where) ||
+            !r.flag(j, "player", c.player, where)) {
+            return false;
+        }
+        const auto point = j.find("point");
+        if (point != j.end()) {
+            if (!point->is_array() || point->size() != 3 || !(*point)[0].is_number() || !(*point)[1].is_number() ||
+                !(*point)[2].is_number()) {
+                return r.fail(where + ".point must be [x, y, z]");
+            }
+            c.x = (*point)[0].get<float>();
+            c.y = (*point)[1].get<float>();
+            c.z = (*point)[2].get<float>();
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        c.target = static_cast<Entity>(target);
+        out.command = c;
+    } else if (type == "SetStance") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        std::string stance = kReplayStanceNames[0];
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "stance", stance, where)) {
+            return false;
+        }
+        SetStanceCommand c;
+        c.pawn = static_cast<Entity>(pawn);
+        bool found = false;
+        for (int i = 0; i < 3; ++i) {
+            if (stance == kReplayStanceNames[i]) {
+                c.stance = static_cast<Stance>(i);
+                found = true;
+            }
+        }
+        if (!found) {
+            return r.fail(where + ".stance must be Standing, Crouching or Prone");
+        }
+        out.command = c;
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");
     }

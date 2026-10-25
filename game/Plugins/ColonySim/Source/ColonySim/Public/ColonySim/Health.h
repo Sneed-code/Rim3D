@@ -100,6 +100,15 @@ struct HealthReport {
     std::vector<CapacityLine> capacities;
 };
 
+// What combat needs to know about one body part (HealthSystem::bodyParts).
+struct BodyPartInfo {
+    std::string label;  // "left arm"
+    int parent = -1;
+    bool inside = false;     // an organ or bone under another part
+    float ownOutside = 0.0f;  // its share of hits from outside (its area minus its outside children's)
+    std::vector<std::string> groups;  // BodyPartGroups defs, which apparel covers
+};
+
 // The rules. Owned by the sim, which calls `step` once per game second; damage comes in through
 // `applyDamage` (from commands now, from projectiles and melee later).
 class COLONY_API HealthSystem {
@@ -127,6 +136,16 @@ public:
     // is dead, the type is unknown, or the part is missing or doesn't exist.
     bool applyDamage(Entity pawn, DefId damageType, float amount, int part, Rng& rng);
     DefId damageTypeId(const std::string& name) const;
+
+    // Damage to exactly this part, after the hit has been aimed (combat picks the part from a
+    // hitbox and goInside): as a random hit there would be, an inside part also hurts the outside
+    // part over it. Same failures as applyDamage.
+    bool applyHit(Entity pawn, DefId damageType, float amount, int part);
+    // Where a hit on `part` ends up if the damage type reaches inside: an organ or bone under it,
+    // by coverage, as applyDamage's random hits do. `part` itself if not.
+    int goInside(Entity pawn, DefId damageType, int part, Rng& rng) const;
+    // The parts of a pawn def's body, in index order; empty if it has none.
+    std::vector<BodyPartInfo> bodyParts(DefId pawnDef) const;
 
     // Tends every untended injury and lost part with this quality (0 is a rag, 1 is good
     // medicine), so they stop bleeding and heal faster. Returns how many it tended.
@@ -163,6 +182,7 @@ private:
               const char* message = nullptr);
     void stopWalking(Entity pawn);
     void die(Entity pawn, Health& health, DeathCause cause, bool announce);
+    bool hitPart(Entity pawn, DefId damageType, float amount, int target, bool hurtOuter);
     bool damagePart(Entity pawn, Health& health, int part, DefId hediff, float amount);
     void destroyPart(Entity pawn, Health& health, int part, float amount);
 };

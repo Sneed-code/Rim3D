@@ -64,14 +64,25 @@ items stack up to their stack limit. A downed pawn drops its job and what it car
 `JobStarted`/`JobEnded`, and the snapshot shows each pawn's job, load and the zones. Save format 6:
 **saves from before C1 (U12's quicksaves too) no longer load** (`docs/decisions/0005`).
 
+Since F2 pawns can shoot (`docs/design/combat.md`): five guns from the wiki, real bullets that fly
+with speed (RimWorld's x3, `tuning.json`) and drop, a spread cone instead of a hit roll (sized so a
+standing man in the open is hit as often as RimWorld's hit chance; Shooting skill tightens it),
+recoil, warm-up, bursts and cooldown. Bullets stop at the ground, rock, walls and sandbags (which
+lose hit points and break) and pawn hitboxes for standing, crouching and prone (downed pawns lie
+prone); armor (flak vest, flak pants, helmet) deflects or softens hits by RimWorld's rule, then the
+part hit is injured. Commands `Equip`, `Shoot` (aimed, or the player's trigger) and `SetStance`;
+events `ShotFired` and `ProjectileHit`; snapshot projectiles, stance, facing and gun; save format 7.
+No fighter AI yet (F4, F5): pawns shoot only when told to.
+
 Since D3 the game has real starting data in `data/defs/`, written by hand with RimWorld's numbers
 from the RimWorld wiki (there is no RimWorld install to import from; `docs/decisions/0003`):
 terrain fertility, wild plants and the temperate forest, basic items, the Human, skills, work
 types, traits, our own backstories and names, the Crashlanded start, the Human body, capacities,
 injuries and blood loss (`docs/design/starting-data.md`). `check_defs.py` now also checks that
 defs name defs that exist. `simrun --pawns/--items` runs on the real data.
-Not written yet: buildings (wall, door, bed, table, stove, sandbags), needs, thoughts, recipes,
-guns and raiders; the tasks that use them (C4, C6, C7, C9, F2, F6) add them the same way.
+Not written yet: buildings (wall, door, bed, table, stove, sandbags), needs, thoughts, recipes
+and raiders; the tasks that use them (C4, C6, C7, C9, F6) add them the same way. Guns, bullets,
+flak gear and hitboxes came with F2.
 
 Since 0004 the game has its own setting (`docs/design/lore.md`: the year 6650, slow star travel,
 the fallen Lattice, magic called resonance) and our own names for RimWorld's proper names
@@ -81,7 +92,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-18 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1). Tick tasks in `docs/plans/stage-1.md` as they merge.
+19 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, F2). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -116,7 +127,8 @@ trees and rocks get their height from `fillPercent` when C2 adds plants) and ~~*
 done (PC Unreal; `docs/design/bridge.md`, smoke test `sim`; the first Unreal compile of EnTT and the
 S5 bridge, so S1's include path is confirmed). **C2** plants (cloud, Sonnet medium), ~~**C8** colonists
 from a seed~~ done (`docs/design/colonists.md`; `simrun --start Crashlanded` lists the six; save format 4) and
-~~**F1** health basics~~ done (`docs/design/health.md`; save format 5; **F2** guns can now hit pawns);
+~~**F1** health basics~~ done (`docs/design/health.md`; save format 5) and ~~**F2** guns, projectiles
+and hitboxes~~ done (`docs/design/combat.md`; save format 7; U11 can now draw tracers and hits);
 their defs are in `data/defs/`. Numbers marked `unverified` in a def were recalled, not read from the
 wiki; check them when a task leans on them.
 
@@ -130,9 +142,11 @@ smoke test `overseer`; `docs/design/overseer.md`). **U3** terrain and plants (PC
 needs C2 as well.
 
 Wave 6, open now that C1 is in: **C4** building (cloud, Sonnet high), **C6** food, rest and
-schedules (cloud, Sonnet high), **F2** guns and hitboxes (cloud, Opus high); **C3** mining, chopping
+schedules (cloud, Sonnet high), ~~**F2** guns and hitboxes~~ done; **C3** mining, chopping
 and harvesting (cloud, Sonnet high) once C2 is in. On the PC, **U9** and **A3** need only done tasks.
 U6's work tab and U9's colonist panel can now read `sim.jobs()` (work types, priorities).
+With F2, F3 and C1 in, **F4** fighter AI: where to stand (cloud, Opus high) is open; **U11** fights on
+screen needs U9 as well.
 
 ## Waiting on sneed
 

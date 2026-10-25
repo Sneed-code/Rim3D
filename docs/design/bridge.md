@@ -24,13 +24,14 @@ A command that can't be applied changes nothing, sends a `CommandFailed` event w
 reason, and is still logged.
 
 There are four dev commands, like RimWorld's dev mode, and since C1 the work and stockpile
-commands (below the table, and in [jobs.md](jobs.md)). The rest (place blueprint, designate,
+commands (below the table, and in [jobs.md](jobs.md)), and since F2 the combat commands
+([combat.md](combat.md)). The rest (place blueprint, designate,
 draft, protagonist moved and actions) come with the tasks that build those systems.
 
 | Command | Does | Fails when |
 | --- | --- | --- |
 | `SpawnThingCommand{def, cell, count, rot}` | `Things::spawn` of a Things def | unknown def; the thing can't go there |
-| `DestroyThingCommand{thing}` | `Things::destroy`; jobs using it end first (`JobSystem::forget`) | the thing doesn't exist |
+| `DestroyThingCommand{thing}` | `Things::destroy`; jobs using it end first (`JobSystem::forget`), a pawn's gear is dropped | the thing doesn't exist; a pawn holds or wears it |
 | `DamagePawnCommand{pawn, damageType, amount, part}` | `HealthSystem::applyDamage`; `part` -1 picks like a hit would ([health.md](health.md)) | the thing has no body; unknown damage type; no damage; the pawn is dead or the part is missing or doesn't exist |
 | `TendPawnCommand{pawn, quality}` | `HealthSystem::tendAll` | the thing has no body; nothing to tend |
 | `SetWorkPriorityCommand{pawn, workType, priority}` | a pawn's Work tab: 0 off, 1 to 4 | not a working pawn; unknown work type; priority outside 0 to 4; work it can never do |
@@ -39,6 +40,9 @@ draft, protagonist moved and actions) come with the tasks that build those syste
 | `SetStockpilePriorityCommand{zone, priority}` | | unknown zone; Unstored |
 | `SetStockpileAllowedCommand{zone, def, allowed}` | the zone's filter | unknown zone or def |
 | `OrderHaulCommand{pawn, thing}` | "prioritize hauling": ends the pawn's job, hauls the item | not a working pawn; not an item; held by another pawn; unreachable; no room |
+| `EquipCommand{pawn, item}` | `CombatSystem::equip`: a gun in the hands or apparel on the body ([combat.md](combat.md)) | no body or dead; not a gun or apparel; someone else's; a job holds it |
+| `ShootCommand{pawn, target, x, y, z, player}` | `CombatSystem::shoot`: aimed (warm-up, skill spread) or the player's trigger (at once, gun spread) | no gun; downed; mid-burst or cooling down; target not a pawn on the map |
+| `SetStanceCommand{pawn, stance}` | standing, crouching or prone | not a pawn |
 
 In replay files an `area` is `[minX, minY, sizeX, sizeY, level]` and a storage priority its name
 (`"Preferred"`; `"Normal"` if left out).
@@ -72,6 +76,8 @@ starts, so read it after every step. Before the first step it holds what setting
 | `PawnDied` | `thing`, `message` (the cause), `cell` | a pawn died; it stays on the map with `dead` set |
 | `JobStarted` | `thing` (the pawn), `def`, `job`, `target`, `cell` | a pawn took a job ([jobs.md](jobs.md)) |
 | `JobEnded` | the same, and `message`: "done", "failed: why" or "interrupted: why" | a pawn's job ended |
+| `ShotFired` | `thing` (shooter), `def` (gun), `target` (projectile), `x, y, z` (muzzle) | a pawn fired (F2, [combat.md](combat.md)) |
+| `ProjectileHit` | `thing` (projectile), `def` (Projectiles def), `hit`, `target`, `part`, `amount`, `x, y, z`, `cell` | a projectile stopped: ground, rock, building, pawn, armor, or gone |
 
 `Things` reports its own spawns and despawns once the sim points it at the event list
 (`Things::setEventLog`). Later systems add their events (shot fired, wound added, job started,
@@ -86,7 +92,10 @@ size for buildings, stack count for items, and hit points. Pawns with a body als
 `dead` (F1); the rest of a pawn's health is read with `Sim::healthReport`. Things off the map (a carried item) are
 not in it. Since S4 it also has the ground height under the thing (`z`), a pawn's velocity (`vx`,
 `vy`, metres per step) and the route still ahead (`waypointCount` points from
-`Snapshot::waypoints[firstWaypoint]`), see [movement.md](movement.md). Later tasks add what they draw
+`Snapshot::waypoints[firstWaypoint]`), see [movement.md](movement.md). Since F2 pawns also have
+`stance` (prone when downed or dead), `facingX`/`facingY`, the `weapon` in their hands and
+`shotReadyIn`, and `Snapshot::projectiles` lists every bullet in flight ([combat.md](combat.md)).
+Later tasks add what they draw
 and show: pawn info, the work tab, room stats.
 
 Unreal reads only snapshots and events, never the registry or `Things.h`. That lets the sim move to

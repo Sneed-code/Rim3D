@@ -26,6 +26,19 @@ enum class EventType : uint8_t {
     PawnAction,      // a pawn did something with its hands that Unreal animates (picked up, put down)
     JobStarted,      // a pawn took a job (docs/design/jobs.md)
     JobEnded,        // a pawn's job ended: `message` says "done", "failed: why" or "interrupted: why"
+    ShotFired,       // a pawn fired a projectile (docs/design/combat.md)
+    ProjectileHit,   // a projectile stopped: it hit something, or flew off the map or too long
+};
+
+// What stopped a projectile (ProjectileHit).
+enum class ProjectileHitKind : uint8_t {
+    None,      // (trace only) nothing in the way
+    Ground,    // the ground
+    Rock,      // a rock cell (mountain)
+    Building,  // a building (`target`); it lost `amount` hit points
+    Pawn,      // a pawn (`target`) in the body part `part`; health events follow
+    Armor,     // a pawn's armor stopped it (`target`, `part`)
+    Gone,      // flew off the map or for too long, hitting nothing
 };
 
 // What a PawnAction event's pawn did. Later jobs add theirs (chop, mine, build, eat); Unreal plays
@@ -51,9 +64,18 @@ struct Event {
     // def (depth-first, torso 0), `amount` the hit points of damage dealt to it.
     int part = -1;
     float amount = 0.0f;
+    // ShotFired: `thing` the shooter, `def` its gun's Things def, `target` the projectile, (x, y, z)
+    // the muzzle. ProjectileHit: `thing` the projectile (forget its id), `def` its Projectiles def,
+    // `hit` what stopped it, `target` the pawn or building hit, `part` the body part hit (index as
+    // above), `amount` the damage dealt after armor, (x, y, z) where. Metres, z above sea level.
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    ProjectileHitKind hit = ProjectileHitKind::None;
 };
 
 COLONY_API const char* eventTypeName(EventType type);
 COLONY_API const char* pawnActionName(PawnAction action);
+COLONY_API const char* projectileHitKindName(ProjectileHitKind kind);
 
 }  // namespace colony

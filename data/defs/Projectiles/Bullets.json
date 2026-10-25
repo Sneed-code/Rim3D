@@ -1,0 +1,26 @@
+[
+  {
+    "defName": "BulletBase", "abstract": true, "source": "RimWorld wiki",
+    "projectile": { "damageDef": "Bullet" }
+  },
+  {
+    "defName": "Bullet_Revolver", "parent": "BulletBase", "label": "revolver bullet",
+    "projectile": { "damageAmountBase": 12, "armorPenetrationBase": 0.18, "stoppingPower": 1, "speed": 1.833333 }
+  },
+  {
+    "defName": "Bullet_Autopistol", "parent": "BulletBase", "label": "autopistol bullet",
+    "projectile": { "damageAmountBase": 10, "armorPenetrationBase": 0.15, "stoppingPower": 0.5, "speed": 1.833333 }
+  },
+  {
+    "defName": "Bullet_BoltActionRifle", "parent": "BulletBase", "label": "bolt-action rifle bullet",
+    "projectile": { "damageAmountBase": 18, "armorPenetrationBase": 0.27, "stoppingPower": 1.5, "speed": 2.333333 }
+  },
+  {
+    "defName": "Bullet_Shotgun", "parent": "BulletBase", "label": "shotgun blast",
+    "projectile": { "damageAmountBase": 18, "armorPenetrationBase": 0.14, "stoppingPower": 3, "speed": 1.833333 }
+  },
+  {
+    "defName": "Bullet_AssaultRifle", "parent": "BulletBase", "label": "assault rifle bullet",
+    "projectile": { "damageAmountBase": 11, "armorPenetrationBase": 0.16, "stoppingPower": 0.5, "speed": 2.333333 }
+  }
+]

@@ -2,6 +2,7 @@
 
 #include "ColonySim/Api.h"
 #include "ColonySim/Clock.h"
+#include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Cover.h"
 #include "ColonySim/Entity.h"
@@ -115,6 +116,9 @@ public:
     // through `health().applyDamage` from other sim systems, or the DamagePawnCommand.
     HealthSystem& health() { return *health_; }
     const HealthSystem& health() const { return *health_; }
+    // Guns, projectiles, hitboxes and armor (docs/design/combat.md).
+    CombatSystem& combat() { return *combat_; }
+    const CombatSystem& combat() const { return *combat_; }
     // What a health panel shows for a pawn; false if it has no body.
     bool healthReport(Entity pawn, HealthReport& out) const { return health_->report(pawn, out); }
 
@@ -158,6 +162,7 @@ private:
     std::unique_ptr<Things> things_;
     std::unique_ptr<MovementSystem> movement_;
     std::unique_ptr<HealthSystem> health_;
+    std::unique_ptr<CombatSystem> combat_;
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
     Rng rng_;

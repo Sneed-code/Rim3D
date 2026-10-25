@@ -1,5 +1,23 @@
 [
   {
+    "defName": "CombatRules", "source": "RimWorld wiki",
+    "shootingAccuracyBySkill": [0.89, 0.91, 0.93, 0.935, 0.94, 0.945, 0.95, 0.955, 0.96, 0.965, 0.97,
+                                0.9725, 0.975, 0.9775, 0.98, 0.98167, 0.98333, 0.985, 0.98666, 0.98833, 0.99],
+    "accuracyDistances": { "touch": 3, "short": 12, "medium": 25, "long": 40 },
+    "minHitChance": 0.0201,
+    "defaultShootingSkill": 4,
+    "standardTarget": "Human",
+    "playerSpreadDistance": 25,
+    "gravity": 0.0109,
+    "recoilRecoveryPerSecond": 0.002,
+    "recoilSkillReduction": 0.025,
+    "maxFlightSeconds": 120,
+    "apparelLayersOuterFirst": ["Overhead", "Shell", "Middle", "OnSkin"],
+    "unverified": ["accuracyDistances", "minHitChance"],
+    "ours": ["defaultShootingSkill", "standardTarget", "playerSpreadDistance", "gravity", "recoilRecoveryPerSecond",
+             "recoilSkillReduction", "maxFlightSeconds"]
+  },
+  {
     "defName": "PlantRules", "source": "RimWorld wiki",
     "growHours": [6, 19],
     "growthNeedsLight": 0.51
