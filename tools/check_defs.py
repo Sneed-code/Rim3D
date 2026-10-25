@@ -35,6 +35,7 @@ REFERENCES = [
     ("Recipes", "products{}", "Things"),
     ("Recipes", "workSkill", "Skills"),
     ("Biomes", "wildPlants{}", "Things"),
+    ("Biomes", "weather{}", "Weathers"),
     ("Bodies", "corePart.**.def", "BodyParts"),
     ("Bodies", "corePart.**.groups[]", "BodyPartGroups"),
     ("WorkTypes", "relevantSkills[]", "Skills"),
