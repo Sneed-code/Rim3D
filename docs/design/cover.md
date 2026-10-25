@@ -115,7 +115,9 @@ for hidden ground. It also prints the cover build time and the 40-source threat 
 
 ## Not done here
 
-- Per-part hitboxes and bullet-versus-wall hits (F2); choosing where to stand (F4).
+- Per-part hitboxes and bullet-versus-wall hits are F2's ([combat.md](combat.md)); choosing where to stand
+  is F4's ([fighters.md](fighters.md)), which scores cells with `coverAgainst` and `lineOfSight` and
+  doesn't use the threat map (fighters.md says why).
 - Lean, peek and prone transitions as movement; this only prices them.
 - Plants and loose items as cover (C2). Open and closed doors are done (C5).
 - Upper levels (stairs, floors).

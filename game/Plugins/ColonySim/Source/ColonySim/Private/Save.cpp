@@ -6,6 +6,7 @@
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Doors.h"
+#include "ColonySim/Fighters.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Plants.h"
@@ -45,7 +46,7 @@ constexpr char kSaveMagic[8] = {'R', 'I', 'M', '3', 'D', 'S', 'A', 'V'};
 constexpr size_t kSaveMagicSize = sizeof kSaveMagic;
 // Bump when the layout below changes, and keep reading the old versions (the archive's
 // version() says which one a file is). Changing it needs a line in docs/design/saves.md.
-constexpr uint32_t kSaveFormatVersion = 15;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
+constexpr uint32_t kSaveFormatVersion = 16;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
                                             // 4: C8's scenario and colonists; 5: F1's pawn health; 6: C1's jobs,
                                             // work priorities and zones; 7: U9's direct control; 8: C6's needs,
                                             // schedules, bed owners, the eating job's chair; 9: C2's plants;
@@ -53,7 +54,7 @@ constexpr uint32_t kSaveFormatVersion = 15;  // 2: S3's path queue, pathBudget, 
                                             // site and progress; 11: C9's mood; 12: F2's posture, gear, triggers
                                             // and projectiles;
                                             // 13: C5's door states; 14: C3's rock layer, designations;
-                                            // 15: A3's pawn looks
+                                            // 15: F4's factions and fighters; 16: A3's pawn looks
 // Saves from before the job system (formats 1 to 5) can't be read: their hauling placeholder has
 // no counterpart in the job system (docs/design/saves.md).
 constexpr uint32_t kSaveOldestFormat = 6;
@@ -179,7 +180,9 @@ struct SaveEntity {
     std::optional<Shooter> shooter;
     std::optional<SaveProjectile> projectile;
     std::optional<Door> door;          // format 13 on
-    std::optional<PawnLooks> looks;  // format 15 on
+    std::optional<Faction> faction;  // format 15 on
+    std::optional<Fighter> fighter;  // format 15 on
+    std::optional<PawnLooks> looks;  // format 16 on
 };
 
 // A stockpile zone, with its filter by defName.
@@ -504,7 +507,7 @@ void saveRect(Ar& ar, CellRect& r) {
 
 template <typename Ar>
 void saveCommand(Ar& ar, Command& command) {
-    static_assert(std::variant_size_v<Command> == 23, "save every command type here");
+    static_assert(std::variant_size_v<Command> == 27, "save every command type here");
     uint8_t type = static_cast<uint8_t>(command.index());
     ar.value("type", type);
     if constexpr (Ar::kReading) {
@@ -531,13 +534,17 @@ void saveCommand(Ar& ar, Command& command) {
             case 19: command = SetStanceCommand{}; break;
             case 20: command = DesignateCommand{}; break;
             case 21: command = CancelDesignationsCommand{}; break;
-            case 22: command = SetLineageCommand{}; break;
+            case 22: command = DraftCommand{}; break;
+            case 23: command = MoveOrderCommand{}; break;
+            case 24: command = AttackOrderCommand{}; break;
+            case 25: command = SetFactionCommand{}; break;
+            case 26: command = SetLineageCommand{}; break;
             default: ar.require(false, "the save file names a command this build doesn't know"); return;
         }
         // A format older than the command that was added in it can't contain it.
         ar.require((type < 10 || ar.version() >= 7) && (type < 12 || ar.version() >= 8) &&
-                       (type < 14 || ar.version() >= 10) && (type < 17 || ar.version() >= 12) &&
-                       (type < 20 || ar.version() >= 14) && (type < 22 || ar.version() >= 15),
+                       (type < 14 || ar.version() >= 10) && (type < 17 || ar.version() >= 12) && (type < 20 || ar.version() >= 14) &&
+                       (type < 22 || ar.version() >= 15) && (type < 26 || ar.version() >= 16),
                    "the save file names a command this build doesn't know");
     }
     ar.note("name", commandName(command));
@@ -625,6 +632,18 @@ void saveCommand(Ar& ar, Command& command) {
         ar.group("area", [&] { saveRect(ar, cancelMarks->area); });
         ar.value("kind", cancelMarks->kind);
         ar.require(cancelMarks->kind <= DesignationKind::HarvestPlant, "the save file has a bad designation kind");
+    } else if (auto* draft = std::get_if<DraftCommand>(&command)) {
+        ar.value("pawn", draft->pawn);
+        ar.value("drafted", draft->drafted);
+    } else if (auto* moveOrder = std::get_if<MoveOrderCommand>(&command)) {
+        ar.value("pawn", moveOrder->pawn);
+        ar.group("cell", [&] { saveCell(ar, moveOrder->cell); });
+    } else if (auto* attack = std::get_if<AttackOrderCommand>(&command)) {
+        ar.value("pawn", attack->pawn);
+        ar.value("target", attack->target);
+    } else if (auto* faction = std::get_if<SetFactionCommand>(&command)) {
+        ar.value("pawn", faction->pawn);
+        ar.value("faction", faction->faction);
     } else if (auto* lineage = std::get_if<SetLineageCommand>(&command)) {
         ar.value("pawn", lineage->pawn);
         ar.text("lineage", lineage->lineage);
@@ -939,6 +958,40 @@ void saveEntity(Ar& ar, SaveEntity& e) {
         });
     }
     if (ar.version() >= 15) {
+        ar.optional("faction", e.faction, [&](Faction& f) {
+            ar.value("id", f.id);
+            ar.require(f.id != 0, "the save file has faction 0");
+        });
+        ar.optional("fighter", e.fighter, [&](Fighter& f) {
+            ar.value("drafted", f.drafted);
+            ar.value("advances", f.advances);
+            ar.group("anchor", [&] { saveCell(ar, f.anchor); });
+            ar.value("leash", f.leash);
+            ar.value("moveOrdered", f.moveOrdered);
+            ar.value("forcedTarget", f.forcedTarget);
+            ar.value("target", f.target);
+            ar.value("hasSpot", f.hasSpot);
+            ar.group("spot", [&] { saveCell(ar, f.spot); });
+            ar.group("fireCell", [&] { saveCell(ar, f.fireCell); });
+            ar.value("fireStance", f.fireStance);
+            ar.require(static_cast<int>(f.fireStance) <= static_cast<int>(Stance::Prone), "the save file has a bad stance");
+            ar.value("canFire", f.canFire);
+            ar.value("fallingBack", f.fallingBack);
+            ar.value("nextPlan", f.nextPlan);
+            ar.value("walk", f.walk);
+            ar.value("repaths", f.repaths);
+            ar.value("pathSlot", f.path.slot);
+            ar.value("pathSerial", f.path.serial);
+            ar.list("known", f.known, [&](KnownEnemy& k) {
+                ar.value("pawn", k.pawn);
+                ar.value("x", k.x);
+                ar.value("y", k.y);
+                ar.value("level", k.level);
+                ar.value("seenAt", k.seenAt);
+            });
+        });
+    }
+    if (ar.version() >= 16) {
         ar.optional("looks", e.looks, [&](PawnLooks& l) { saveLooks(ar, l); });
     }
 }
@@ -1273,6 +1326,12 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const Shooter* shooter = reg.try_get<Shooter>(e)) {
             out.shooter = *shooter;
         }
+        if (const Faction* faction = reg.try_get<Faction>(e)) {
+            out.faction = *faction;
+        }
+        if (const Fighter* fighter = reg.try_get<Fighter>(e)) {
+            out.fighter = *fighter;
+        }
         if (const Projectile* p = reg.try_get<Projectile>(e)) {
             out.projectile = SaveProjectile{sim.defs_->get(p->def).defName(), sim.defs_->get(p->weapon).defName(), *p};
         }
@@ -1557,6 +1616,12 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             }
             reg.emplace<Projectile>(entity, p);
         }
+        if (e.faction) {
+            reg.emplace<Faction>(entity, *e.faction);
+        }
+        if (e.fighter) {
+            reg.emplace<Fighter>(entity, *e.fighter);
+        }
     }
     sim.health_->refreshAll();
     for (const SaveEntity& e : d.entities) {
@@ -1641,6 +1706,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         return false;
     }
     if (!sim.jobs_->afterLoad(error)) {
+        return false;
+    }
+    if (!sim.fighters_->afterLoad(error)) {
         return false;
     }
     if (d.stockpile && !sim.map_.inBounds(*d.stockpile)) {

@@ -56,6 +56,14 @@ const char* commandName(const Command& command) {
                 return "Designate";
             } else if constexpr (std::is_same_v<Type, CancelDesignationsCommand>) {
                 return "CancelDesignations";
+            } else if constexpr (std::is_same_v<Type, DraftCommand>) {
+                return "Draft";
+            } else if constexpr (std::is_same_v<Type, MoveOrderCommand>) {
+                return "MoveOrder";
+            } else if constexpr (std::is_same_v<Type, AttackOrderCommand>) {
+                return "AttackOrder";
+            } else if constexpr (std::is_same_v<Type, SetFactionCommand>) {
+                return "SetFaction";
             } else {
                 static_assert(std::is_same_v<Type, SetLineageCommand>, "name every command type");
                 return "SetLineage";

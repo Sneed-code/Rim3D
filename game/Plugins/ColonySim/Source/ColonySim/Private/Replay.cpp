@@ -137,6 +137,18 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, CancelDesignationsCommand>) {
                 j["area"] = replayRectJson(c.area);
                 j["kind"] = designationKindName(c.kind);
+            } else if constexpr (std::is_same_v<Type, DraftCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["drafted"] = c.drafted;
+            } else if constexpr (std::is_same_v<Type, MoveOrderCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
+            } else if constexpr (std::is_same_v<Type, AttackOrderCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["target"] = entt::to_integral(c.target);
+            } else if constexpr (std::is_same_v<Type, SetFactionCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["faction"] = c.faction;
             } else {
                 static_assert(std::is_same_v<Type, SetLineageCommand>, "write every command type");
                 j["pawn"] = entt::to_integral(c.pawn);
@@ -533,6 +545,41 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         if (!replayReadRect(r, j, where, c.area) || !replayReadDesignation(r, j, where, c.kind)) {
             return false;
         }
+        out.command = c;
+    } else if (type == "Draft") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        DraftCommand c;
+        if (!r.integer(j, "pawn", pawn, where) || !r.flag(j, "drafted", c.drafted, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = c;
+    } else if (type == "MoveOrder") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where)) {
+            return false;
+        }
+        const auto cell = j.find("cell");
+        if (cell == j.end() || !cell->is_array() || cell->size() != 3 || !(*cell)[0].is_number_integer() ||
+            !(*cell)[1].is_number_integer() || !(*cell)[2].is_number_integer()) {
+            return r.fail(where + ".cell must be [x, y, level]");
+        }
+        out.command = MoveOrderCommand{static_cast<Entity>(pawn),
+                                       CellPos{(*cell)[0].get<int>(), (*cell)[1].get<int>(), (*cell)[2].get<int>()}};
+    } else if (type == "AttackOrder") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        uint32_t target = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "target", target, where)) {
+            return false;
+        }
+        out.command = AttackOrderCommand{static_cast<Entity>(pawn), static_cast<Entity>(target)};
+    } else if (type == "SetFaction") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        SetFactionCommand c;
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "faction", c.faction, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
         out.command = c;
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");

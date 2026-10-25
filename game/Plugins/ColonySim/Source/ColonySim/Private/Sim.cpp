@@ -5,6 +5,7 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Doors.h"
+#include "ColonySim/Fighters.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Jobs.h"
@@ -101,6 +102,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     mood_->setRooms(rooms_.get());
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
+    fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
     combat_->setBeforeDestroy([this](Entity thing) { jobs_->forget(thing); });
     map_.regions().update();  // build every region now, not in the first step
@@ -277,6 +279,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         } else {
             combat_->dropGear(destroy->thing);
             jobs_->forget(destroy->thing);
+            fighters_->forget(destroy->thing);
             things_->destroy(destroy->thing);
         }
     } else if (const auto* damage = std::get_if<DamagePawnCommand>(&command)) {
@@ -491,6 +494,22 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             changed.type = EventType::DesignationsChanged;
             events_.push_back(std::move(changed));
         }
+    } else if (const auto* draft = std::get_if<DraftCommand>(&command)) {
+        if (!fighters_->draft(draft->pawn, draft->drafted, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* moveOrder = std::get_if<MoveOrderCommand>(&command)) {
+        if (!fighters_->orderMove(moveOrder->pawn, moveOrder->cell, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* attack = std::get_if<AttackOrderCommand>(&command)) {
+        if (!fighters_->orderAttack(attack->pawn, attack->target, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* faction = std::get_if<SetFactionCommand>(&command)) {
+        if (!fighters_->setFaction(faction->pawn, faction->faction, error)) {
+            commandFailed(id, error);
+        }
     }
 }
 
@@ -524,6 +543,7 @@ void Sim::step() {
         }
     }
     jobs_->step();
+    fighters_->step();
     mood_->step(time_.seconds, events_);
     movement_->step(things_->registry(), map_);
     combat_->step(rng_);
@@ -669,6 +689,16 @@ void Sim::writeSnapshot(Snapshot& out) const {
         }
         if (const Gear* gear = reg.try_get<Gear>(entity); gear != nullptr && gear->weapon != kNoEntity) {
             view.weapon = reg.get<Thing>(gear->weapon).def;
+        }
+        if (view.category == ThingCategory::Pawn) {
+            view.faction = fighters_->factionOf(entity);
+        }
+        if (const Fighter* fighter = reg.try_get<Fighter>(entity)) {
+            view.drafted = fighter->drafted;
+            view.fighting = true;
+            view.fightTarget = fighter->target;
+            view.fightSpot = fighter->hasSpot ? fighter->spot : cellOf(pos);
+            view.fallingBack = fighter->fallingBack;
         }
         out.things.push_back(view);
     }
@@ -941,6 +971,7 @@ uint64_t Sim::stateHash() const {
             h.add(static_cast<int>(health->cause));
         }
         combat_->hashThing(e, h);
+        fighters_->hashThing(e, h);
     }
     return h.value();
 }

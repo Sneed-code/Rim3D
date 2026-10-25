@@ -38,8 +38,9 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Pawn health (format 5) | per pawn: protagonist flag, rest, injuries (part, hediff **by `defName`**, severity, tend quality), lost parts, blood loss, dead and cause. Pain, bleeding, capacities and downed are worked out again on loading ([health.md](health.md)) |
 | Direct control (format 7) | which colonist the player controls (a flag on the pawn); the `ControlPawn` and `DirectMove` commands in the log ([protagonist.md](protagonist.md)) |
 | Plants (format 9) | every plant as parallel lists: cell index, def, growth, age; fertility is rebuilt from the seed |
+| Fighters (format 15) | per pawn its side if not the player's; for fighters the orders (drafted, anchor, leash, forced target), the plan (target, spot, fire cell and stance, falling back, next plan), the walk and its path ticket, and the enemies it knows (pawn, where and when last seen) ([fighters.md](fighters.md)) |
 | Combat (format 12) | per pawn its posture (stance, facing), gear (gun and apparel ids) and trigger (phase, steps, burst, aim, recoil); `EquippedBy` on gear; every projectile in flight with its defs **by `defName`** ([combat.md](combat.md)) |
-| Pawn looks (format 15) | each humanlike pawn's lineage (by `defName`), gender, body type, weight, height, melanin and colours; `SetLineage` commands in the log ([looks.md](looks.md)). Older files load with pawns that have no looks |
+| Pawn looks (format 16) | each humanlike pawn's lineage (by `defName`), gender, body type, weight, height, melanin and colours; `SetLineage` commands in the log ([looks.md](looks.md)). Older files load with pawns that have no looks |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
@@ -105,7 +106,7 @@ three is a bug the tests are built to catch:
    write the change here. Old saves keep loading until a decision says otherwise (decision 0005
    dropped formats 1 to 5 for the job system). Format 8 (C6) added needs, schedules, bed owners and
    a job's chair; format 9 (C2) added the plant layer; format 10 (C4) added building plans, built-of and deconstruct marks and a job's site and
-   progress. Format 11 (C9) added mood, format 12 (F2) combat, format 13 (C5) door states. Format 6 to 12 saves still load, their pawns without needs, mood or posture, or their buildings without plans, their doors closed.
+   progress. Format 11 (C9) added mood, format 12 (F2) combat, format 13 (C5) door states, format 14 (C3) rock and designations, format 15 (F4) factions and fighters. Format 6 to 14 saves still load, their pawns without needs, mood or posture, or their buildings without plans, their doors closed.
 
 Never store a `DefId` (or any number that depends on load order) in a save: use the `defName`.
 The same goes for region ids, which a loaded map numbers afresh: keep a cell, and never let a
@@ -185,7 +186,10 @@ sneed's whole job for a bug is: press F8, then send the folder (zip it, or drop 
   and `HarvestPlant`, commands 20 (`Designate`) and 21 (`CancelDesignations`)
   (`docs/design/mining.md`). Cells of rock in the generated ground with no record in the file were
   mined and load as rough stone. Older files load with the generated rock layer and no marks.
-- **15** (A3): each humanlike pawn's looks (`docs/design/looks.md`), command 22 (`SetLineage`). Older files load with pawns that have no looks.
+- **15** (F4): `Faction` and `Fighter` components (orders, spot, plan, path ticket, the enemies it
+  knows) ([fighters.md](fighters.md)). Commands 22 to 25 (`Draft`, `MoveOrder`, `AttackOrder`,
+  `SetFaction`). Older files load with everyone on the player's side and nobody drafted.
+- **16** (A3): each humanlike pawn's looks (`docs/design/looks.md`), command 26 (`SetLineage`). Older files load with pawns that have no looks.
 
 ## Why the state hash changed in S6
 

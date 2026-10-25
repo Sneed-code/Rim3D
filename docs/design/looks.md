@@ -34,7 +34,7 @@ albedos for the MetaHuman textures, not RimWorld's sprite tints.
 
 `SetLineageCommand{pawn, lineage}` (dev command, later a lineage graft) recolours a pawn; its body
 stays. Looks are in the snapshot (`ThingView::looks` indexes `Snapshot::looks`), in `stateHash`
-and in saves (format 15). Pawns from older saves have none and keep Kellan's look.
+and in saves (format 16). Pawns from older saves have none and keep Kellan's look.
 
 Lineage defs carry what Unreal draws under `visual`. Emberkin: red skin, dark hair, horns
 (`length`, base `radius`, `spread` from the middle of the forehead, all metres; `color`).

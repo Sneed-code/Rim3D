@@ -202,6 +202,37 @@ struct CancelDesignationsCommand {
     DesignationKind kind = DesignationKind::None;  // None: every kind
 };
 
+// Fighter AI (F4, docs/design/fighters.md). Drafts one of the player's pawns (its job ends and it
+// fights: takes cover, shoots the nearest threat, falls back when outnumbered), or with `drafted`
+// false sends it back to work. Fails if it isn't the player's pawn on the map, is downed, or is
+// drafted (undrafted) already.
+struct DraftCommand {
+    Entity pawn = kNoEntity;
+    bool drafted = true;
+};
+
+// A drafted pawn goes to `cell` and holds there, taking the best cover within a couple of metres.
+// Fails if the pawn isn't drafted or can't get there.
+struct MoveOrderCommand {
+    Entity pawn = kNoEntity;
+    CellPos cell;
+};
+
+// A drafted pawn shoots `target` whenever it can; kNoEntity lets it pick its own targets again.
+// Fails if the pawn isn't drafted or the target isn't a living pawn on the map.
+struct AttackOrderCommand {
+    Entity pawn = kNoEntity;
+    Entity target = kNoEntity;
+};
+
+// Dev command until raids (F6) bring real factions: puts a pawn on a side. Every faction other
+// than the player's (1) is hostile to all others; its pawns fight at once and advance on their
+// enemies. Back on side 1 the pawn works again. Fails for faction 0 or a thing that isn't a pawn.
+struct SetFactionCommand {
+    Entity pawn = kNoEntity;
+    uint32_t faction = 1;
+};
+
 // Dev command: makes a humanlike pawn one of another lineage (a Lineages defName), as a lineage
 // graft will once there are grafts. Only its looks change (docs/design/looks.md). Fails for a
 // pawn without looks or an unknown lineage.
@@ -217,7 +248,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ControlPawnCommand, DirectMoveCommand, SetScheduleCommand, AssignBedCommand,
                              PlaceBlueprintCommand, CancelBuildCommand, DeconstructCommand, EquipCommand,
                              ShootCommand, SetStanceCommand, DesignateCommand, CancelDesignationsCommand,
-                             SetLineageCommand>;
+                             DraftCommand, MoveOrderCommand, AttackOrderCommand, SetFactionCommand, SetLineageCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

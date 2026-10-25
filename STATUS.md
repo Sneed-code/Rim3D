@@ -114,7 +114,21 @@ lose hit points and break) and pawn hitboxes for standing, crouching and prone (
 prone); armor (flak vest, flak pants, helmet) deflects or softens hits by RimWorld's rule, then the
 part hit is injured. Commands `Equip`, `Shoot` (aimed, or the player's trigger) and `SetStance`;
 events `ShotFired` and `ProjectileHit`; snapshot projectiles, stance, facing and gun; save format 12.
-No fighter AI yet (F4, F5): pawns shoot only when told to.
+The fighter AI that uses them is F4's (next paragraph).
+
+Since F4 pawns fight sensibly (`docs/design/fighters.md`): `DraftCommand` takes a colonist off work and
+the fighter AI on; `MoveOrderCommand` (go there and hold, in the best cover within 2 m) and
+`AttackOrderCommand` (shoot this one) are RimWorld's move and attack. Pawns have sides (`Faction`;
+none means the player's) and every other side's pawn fights by itself and advances; until raids (F6)
+the dev command `SetFactionCommand` makes enemies. Twice a second a fighter looks for enemies (its side
+shares what it sees), picks the closest able one, scores the cells within 10 m for cover against the 4
+nearest threats, being seen, having a shot, range, walking and crowding, then walks there, crouches,
+and pops up over sandbags or steps out past a wall's end to shoot, then ducks back. Outnumbered two to
+one or badly hurt it falls back. The F3 threat map isn't used (too slow to rebuild; fighters.md says
+why); 30 against 40 costs about 0.35 ms a step in the cloud. Snapshot `faction`, `drafted`,
+`fighting`, `fightTarget`, `fightSpot`, `fallingBack`; save format 15. **A new system that acts on
+pawns must skip pawns with `Fighter`** as the job system does. Not yet: aiming like a player (F5),
+squads, morale, raids and the alarm (F6); undrafted colonists ignore enemies.
 
 Since D3 the game has real starting data in `data/defs/`, written by hand with RimWorld's numbers
 from the RimWorld wiki (there is no RimWorld install to import from; `docs/decisions/0003`):
@@ -155,7 +169,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-27 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, A3). Tick tasks in `docs/plans/stage-1.md` as they merge.
+28 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -208,9 +222,10 @@ has C2 now, so it is open.
 Wave 6, open now that C1 is in: ~~**C4** building~~ done (`docs/design/construction.md`; save format 10; ~~**C5** doors,
 roofs and rooms~~ done (`docs/design/rooms.md`; save format 13), C7 bills and cooking can start now), ~~**C6** food, rest and
 schedules~~ done (`docs/design/needs.md`; save format 8), ~~**F2** guns and hitboxes~~ done; ~~**C3** mining, chopping
-and harvesting~~ done (`docs/design/mining.md`; save format 14). On the PC, ~~**U9**~~ and ~~**A3** seeded looks~~ are done (smoke test `looks`; save format 15).
+and harvesting~~ done (`docs/design/mining.md`; save format 14). On the PC, ~~**U9**~~ and ~~**A3** seeded looks~~ are done (smoke test `looks`; save format 16).
 U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priorities).
-With F2, F3 and C1 in, **F4** fighter AI: where to stand (cloud, Opus high) is open, and with U9 and
+~~**F4** fighter AI: where to stand~~ done (`docs/design/fighters.md`; save format 15), so **F5** fighter
+AI: aiming (cloud, Opus high) is open; with U9 and
 F2 in, **U11** fights on screen (PC) is too.
 
 ## Waiting on sneed
