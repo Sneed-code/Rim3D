@@ -29,7 +29,7 @@ point), so paths are not always the shortest:
 | Long paths: work per search | 34,000 cells, 11 ms | 1,500 regions and cells, 0.5 ms |
 | Long paths: length vs the best | 1.00 | 1.02 on average, worst 1.12 |
 | Paths under 100 m: length vs the best | 1.00 | 1.05 on average, worst 1.36 |
-| After straightening (as S4 will do) | | 1.005 on average, worst 1.10 |
+| After straightening (S4's `smoothPath`) | | 1.005 on average, worst 1.10 |
 
 The extra length is mostly zig-zag in open ground, which smoothing (S4) removes. A blend of the
 guide with the straight-line distance gave slightly shorter cell paths for six times the work, so
@@ -93,10 +93,11 @@ wait in steps.
 
 ## Not done here
 
-- **Costs.** Every walkable cell costs the same. Terrain speed, slope, doors and known danger go
-  into the cell cost and the region hop cost later (S4 for terrain and slope, the raid tasks for
-  danger).
-- **Smoothing and local avoidance** are S4.
+- **Costs.** Every walkable cell costs the same. Doors and known danger go into the cell cost and
+  the region hop cost later (the raid tasks for danger). Terrain speed and slope slow the walk
+  (S4) but do not shape the route yet; [movement.md](movement.md) says why.
+- **Smoothing and local avoidance** are S4: [movement.md](movement.md). The pawn takes a path
+  with `takePath`, then `smoothPath` and `Mover::walkTo` (`Sim.cpp` does it for the hauling test).
 - **Stairs**: other levels have no regions yet; stairs will be region links between levels.
 - **Shared flow fields** for many raiders heading to one place come with the raid (F6).
 - **Per-faction doors**: everyone walks through every door (see regions.md).

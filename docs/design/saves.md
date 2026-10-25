@@ -29,6 +29,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Queued commands | submitted but not yet applied; they apply at the first step after loading |
 | Checkpoints | the state hashes recorded so far |
 | Hauling placeholder | stockpile cell, hauler list, counters, setup errors |
+| Pawn movement (format 3) | each pawn's velocity, line start, held-up counters (`Mover`), and the repath count |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
@@ -101,6 +102,10 @@ region id decide anything (the pathfinder breaks ties by a region's anchor cell 
 - **1** (S6): first version.
 - **2** (S3): `pathBudget` in the settings, a hauler's path ticket in its hauling job, and the path
   queue after the entities. Version 1 files load with the default budget and an empty queue.
+
+- **3** (S4): a pawn's `Mover` also has its velocity, where its current line started, the held-up
+  counters and `gaveUp`; the hauling job's `WaitPathCarrying` stage; `SimStats::repaths`. Older
+  files load with pawns at rest.
 
 ## Why the state hash changed in S6
 

@@ -10,7 +10,15 @@ namespace colony {
 // Stage 0 hauling placeholder: a pawn that only hauls items to one stockpile cell. The job
 // system (task C1) replaces these components and the code that uses them.
 // The waits for a path come last so saves from before S3 keep their stage numbers.
-enum class HaulStage : uint8_t { Idle, GoToItem, CarryToStockpile, WaitPathToItem, WaitPathToStockpile };
+// WaitPathCarrying (S4): a new path to the stockpile after a pawn gave up on the first.
+enum class HaulStage : uint8_t {
+    Idle,
+    GoToItem,
+    CarryToStockpile,
+    WaitPathToItem,
+    WaitPathToStockpile,
+    WaitPathCarrying
+};
 
 struct HaulJob {
     HaulStage stage = HaulStage::Idle;

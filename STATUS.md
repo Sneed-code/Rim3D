@@ -34,7 +34,10 @@ sim can say how hidden a pawn is from each of eight sides (`Map::cover()`), whet
 another (`lineOfSight`, with standing, crouching and prone) and which ground a faction's enemies
 can shoot at (`Sim::threatMap`); `docs/design/cover.md`. Since S6 the whole game state saves to
 one binary file and loads back to exactly the same game (`saveSim` / `loadSim`, `simrun --save`,
-`--load`, `--save-json`; `docs/design/saves.md`). Since U2 `USimSubsystem` steps the sim one second at a
+`--load`, `--save-json`; `docs/design/saves.md`). Since S4 pawns walk instead of hopping from cell to
+cell: the cell path is straightened where a pawn fits, speed follows the ground (soil 87%, sand 76%, as
+RimWorld) and the slope, and pawns steer around each other deterministically; the snapshot has each
+pawn's velocity, ground height and route ahead (`docs/design/movement.md`). Since U2 `USimSubsystem` steps the sim one second at a
 time, passes events to `OnSimEvent`, keeps the last two snapshots and blends positions between them
 (`GetBlendedLocation`, the one place sim metres become Unreal centimetres), loads `data/defs`, shows
 sim timings on screen, and has keys: Space pause, 1/2/3 speed, `.` step, F7 saves a replay to
@@ -43,7 +46,7 @@ save** (the doc has the steps) and to the save round-trip test.
 
 ## Stage 1 progress
 
-10 of 43 tasks done (D1, D2, U1, S1, S2, S5, S6, F3, S3, U2). Tick tasks in `docs/plans/stage-1.md` as they merge.
+11 of 43 tasks done (D1, D2, U1, S1, S2, S5, S6, F3, S3, U2, S4). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -79,8 +82,11 @@ done (PC Unreal; `docs/design/bridge.md`, smoke test `sim`; the first Unreal com
 S5 bridge, so S1's include path is confirmed). C2, C8 and F1 in wave 4 also wait for **D3** (the
 RimWorld import on sneed's PC).
 
-Wave 5: **S4** smooth movement (cloud, Sonnet high) is open now that S3 is in. **C1** job system
-(cloud, Opus high) waits for D3.
+Wave 5: ~~**S4** smooth movement~~ done (`docs/design/movement.md`; save format 3; the hauling
+placeholder asks for a new path when a pawn gives up a walk; path *choice* still ignores slopes and
+sand, the doc says why). **C1** job system (cloud, Opus high) waits for D3. **U5** pawns with
+animation by distance (PC Unreal, Opus high) has both its needs (U2, S4) and is open; it needs the
+PC free.
 
 ## Waiting on sneed
 
