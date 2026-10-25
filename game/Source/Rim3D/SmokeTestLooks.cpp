@@ -70,9 +70,10 @@ namespace
 		}
 	}
 
+	/** How much of a colour is red, whatever its brightness. */
 	float LooksSmokeRedness(const FLinearColor& C)
 	{
-		return C.R - (C.G + C.B) * 0.5f;
+		return C.R / FMath::Max(C.R + C.G + C.B, 1.0e-4f);
 	}
 
 	/** Pixels between two world points on screen, or -1 if either is off screen. */

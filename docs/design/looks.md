@@ -95,9 +95,10 @@ or more body types, heights and weights spread, the Emberkin reddest), the overs
 default distance and three notches closer (horn and head sizes on screen in the notes), lineages
 changed back and forth, and 100 walking pawns for the cost.
 
-Measured (editor build, offscreen 888x500): 100 shaped MetaHumans 20.9 ms game thread, 2.5 ms GPU,
-against 18.3 ms and 2.6 ms for 100 unshaped ones in the `pawns` test (part of the difference is
-this test's own checks). At the default overseer distance horns are about 2 px long and heads
+Measured (editor build, offscreen 888x500): 100 shaped MetaHumans 18.2 ms game thread, 2.4 ms GPU,
+against 17.1 ms and 2.5 ms for 100 unshaped ones in the `pawns` test on the same build (a different
+scene, and this test also runs its own checks every frame). The morphs cost the graphics card
+next to nothing. At the default overseer distance horns are about 2 px long and heads
 2.6 px tall at 888 px wide (about 6 and 7.5 px at 1440p); three notches closer, 3.6 and 4.4 px.
 
 ## Not done here
