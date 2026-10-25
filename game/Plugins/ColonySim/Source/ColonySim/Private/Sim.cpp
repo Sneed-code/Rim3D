@@ -18,6 +18,7 @@
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Recreation.h"
+#include "ColonySim/Medicine.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Looks.h"
@@ -129,6 +130,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     recreation_ = std::make_unique<RecreationSystem>(*things_, *defs_);
     recreation_->setRooms(rooms_.get());
     research_ = std::make_unique<ResearchSystem>(*things_, *defs_);
+    medicine_ = std::make_unique<MedicineSystem>(*things_, *defs_);
     temperature_ = std::make_unique<TemperatureSystem>(map_, *things_, *rooms_, *health_, *defs_,
                                                        splitMix64(settings.seed ^ 0x74656D70ULL));
     temperature_->setOutdoor(outdoorTemperature());
@@ -142,6 +144,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setPower(power_.get());
     jobs_->setRooms(rooms_.get());
     jobs_->setResearch(research_.get());
+    jobs_->setMedicine(medicine_.get());
     jobs_->setFilth(filth_.get());
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
@@ -437,6 +440,15 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             jobs_->forget(circuit->thing);
             fighters_->forget(circuit->thing);
             things_->destroy(circuit->thing);
+        }
+    } else if (const auto* medical = std::get_if<SetMedicalCareCommand>(&command)) {
+        MedicalCare care = MedicalCare::Best;
+        if (!things_->exists(medical->pawn) || !health_->tracks(medical->pawn)) {
+            commandFailed(id, "that thing has no body to care for");
+        } else if (!medicalCareFromName(medical->care, care)) {
+            commandFailed(id, "no medical care '" + medical->care + "' (NoCare, NoMedicine, Herbal, Normal or Best)");
+        } else {
+            things_->registry().emplace_or_replace<MedicalSettings>(medical->pawn, MedicalSettings{care});
         }
     } else if (const auto* setResearch = std::get_if<SetResearchCommand>(&command)) {
         if (!research_->setCurrent(setResearch->project, error)) {
@@ -1292,6 +1304,7 @@ uint64_t Sim::stateHash() const {
                 h.add(injury.hediff.value);
                 h.add(injury.severity);
                 h.add(injury.tendQuality);
+                h.add(injury.peak);
             }
             h.add(static_cast<uint64_t>(health->missing.size()));
             for (const MissingPart& missing : health->missing) {
@@ -1302,6 +1315,7 @@ uint64_t Sim::stateHash() const {
             h.add(health->dead);
             h.add(static_cast<int>(health->cause));
         }
+        medicine_->hashPawn(e, h);
         combat_->hashThing(e, h);
         fighters_->hashThing(e, h);
         animals_->hashThing(e, h);

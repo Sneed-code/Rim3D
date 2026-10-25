@@ -4,8 +4,12 @@
 #include "ColonySim/Bills.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Designations.h"
+#include "ColonySim/Fighters.h"
 #include "ColonySim/Filth.h"
+#include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Medicine.h"
+#include "ColonySim/Needs.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Regions.h"
@@ -446,6 +450,148 @@ public:
     }
 };
 
+// Medicine (task H1, docs/design/medicine.md). RimWorld's doctor tasks: tend whoever needs it (the bleeding first),
+// carry the downed to a bed; and the patient's own: go to a medical bed, rest in any bed.
+
+// A pawn of the player's side with a body that thinks (a colonist): who doctors work on.
+bool medicalColonist(const entt::registry& reg, Entity pawn) {
+    if (!reg.all_of<Health, Position, Worker>(pawn) || reg.get<Health>(pawn).dead) {
+        return false;
+    }
+    const Faction* faction = reg.try_get<Faction>(pawn);
+    return faction == nullptr || faction->id == kPlayerFaction;
+}
+
+// TendPatients (WorkGiver_Tend): a patient with an injury or lost part nobody has tended, the pawn itself too, as
+// long as it isn't down. If anyone is bleeding, only those are offered.
+class TendPatientsGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "TendPatients"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        if (jobs.medicine() == nullptr || !jobs.canUseHands(pawn)) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        const size_t first = out.size();
+        bool urgent = false;
+        for (const auto [patient, health, pos] : reg.view<const Health, const Position>().each()) {
+            if (pos.level != at.level || !medicalColonist(reg, patient) || !jobs.health().needsTending(patient) ||
+                jobs.medicine()->careOf(patient) == MedicalCare::NoCare) {
+                continue;
+            }
+            const bool bleeds = jobs.health().urgentlyNeedsTending(patient);
+            if (urgent && !bleeds) {
+                continue;
+            }
+            if (bleeds && !urgent) {
+                urgent = true;
+                out.resize(first);  // the ones found so far are not urgent
+            }
+            out.push_back(WorkCandidate{JobTarget{patient, CellPos{}}, workGiverDistSq(at, pos), 0, 0, false, CellPos{}});
+        }
+    }
+
+    bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
+        const Entity patient = candidate.target.thing;
+        if (!jobs.health().needsTending(patient)) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::TendPatient;
+        out.thing = patient;
+        out.site = jobs.findMedicine(pawn, patient);
+        return true;
+    }
+};
+
+// Rescue (WorkGiver_RescueDowned): a downed colonist that no bed holds goes to the best free bed.
+class RescueGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "Rescue"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        if (jobs.medicine() == nullptr) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        for (const auto [patient, health, pos] : reg.view<const Health, const Position>().each()) {
+            if (patient == pawn || pos.level != at.level || !jobs.needsRescue(patient)) {
+                continue;
+            }
+            out.push_back(WorkCandidate{JobTarget{patient, CellPos{}}, workGiverDistSq(at, pos), 0, 0, false, CellPos{}});
+        }
+    }
+
+    bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
+        const Entity patient = candidate.target.thing;
+        Entity bed = kNoEntity;
+        CellPos cell;
+        if (!jobs.needsRescue(patient) || !jobs.findPatientBed(patient, pawn, false, bed, cell)) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::Rescue;
+        out.thing = patient;
+        out.chair = bed;
+        out.cell = cell;
+        return true;
+    }
+};
+
+// A patient that isn't down goes to bed to heal: GoToMedicalBed only to a medical bed, RestToHeal to any bed.
+class BedRestGiver : public WorkGiver {
+public:
+    explicit BedRestGiver(bool medicalOnly) : medicalOnly_(medicalOnly) {}
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        const entt::registry& reg = jobs.things().registry();
+        if (!reg.all_of<Health, Worker>(pawn) || reg.get<Health>(pawn).downed || !jobs.health().needsRest(pawn)) {
+            return;
+        }
+        const Entity under = jobs.bedUnder(pawn);
+        if (under != kNoEntity && (!medicalOnly_ || jobs.isMedicalBed(under))) {
+            // Already on a bed that will do: rest there.
+            out.push_back(WorkCandidate{JobTarget{under, CellPos{}}, 0.0f, 0, 0, true, cellOf(reg.get<Position>(pawn))});
+            return;
+        }
+        Entity bed = kNoEntity;
+        CellPos cell;
+        if (jobs.findPatientBed(pawn, pawn, medicalOnly_, bed, cell)) {
+            out.push_back(WorkCandidate{JobTarget{bed, CellPos{}}, workGiverDistSq(reg.get<Position>(pawn), reg.get<Position>(bed)),
+                                        0, 0, true, cell});
+        }
+    }
+
+    bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
+        if (!jobs.health().needsRest(pawn)) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::BedRest;
+        out.thing = candidate.target.thing;
+        out.cell = candidate.reach;
+        return true;
+    }
+
+private:
+    bool medicalOnly_;
+};
+
+class GoToMedicalBedGiver final : public BedRestGiver {
+public:
+    GoToMedicalBedGiver() : BedRestGiver(true) {}
+    const char* task() const override { return "GoToMedicalBed"; }
+};
+
+class RestToHealGiver final : public BedRestGiver {
+public:
+    RestToHealGiver() : BedRestGiver(false) {}
+    const char* task() const override { return "RestToHeal"; }
+};
+
 // Cleaning filth (RimWorld's WorkGiver_CleanFilth, in the Cleaning work type): any cell indoors with
 // filth in it. Outdoor filth waits for the home area, which RimWorld's cleaners are limited to.
 class CleanFilthGiver final : public WorkGiver {
@@ -511,6 +657,10 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<DoBillsCookStoveGiver>());
     givers.push_back(std::make_unique<ResearchGiver>());
     givers.push_back(std::make_unique<CleanFilthGiver>());
+    givers.push_back(std::make_unique<TendPatientsGiver>());
+    givers.push_back(std::make_unique<RescueGiver>());
+    givers.push_back(std::make_unique<GoToMedicalBedGiver>());
+    givers.push_back(std::make_unique<RestToHealGiver>());
     return givers;
 }
 

@@ -105,7 +105,8 @@ void JobSystem::interruptForNeeds(Entity pawn) {
         return;
     }
     if (current.forced || (current.type != JobType::Wait && current.type != JobType::HaulToCell &&
-                           current.type != JobType::Recreate && !jobIsGather(current.type))) {
+                           current.type != JobType::Recreate && current.type != JobType::BedRest &&
+                           !jobIsGather(current.type))) {
         return;
     }
     const Needs* needs = reg.try_get<Needs>(pawn);
@@ -113,7 +114,8 @@ void JobSystem::interruptForNeeds(Entity pawn) {
         return;
     }
     const bool hungry = needs->food < rules_.foodSeekBelow && now() >= needs->foodSearchAfter;
-    const bool sleepy = needs->rest < sleepBelow(scheduleNow(pawn));
+    // A patient resting in bed gets up to eat but not to sleep: it is in bed already.
+    const bool sleepy = current.type != JobType::BedRest && needs->rest < sleepBelow(scheduleNow(pawn));
     if (!hungry && !sleepy) {
         return;
     }
@@ -326,7 +328,8 @@ bool JobSystem::findBed(Entity pawn, Entity& bed, CellPos& cell) {
     float bestDist = 0.0f;
     for (const auto [candidate, thing, owners, footprint] : reg.view<const Thing, const Bed, const Footprint>().each()) {
         const int slots = std::max(1, static_cast<int>(defs_.get(thing.def).integer("building.sleepingSlots", 1)));
-        if (static_cast<int>(owners.owners.size()) >= slots || !things_.spawned(candidate)) {
+        // A medical bed is for patients: nobody claims one to sleep in (RimWorld's rule).
+        if (static_cast<int>(owners.owners.size()) >= slots || !things_.spawned(candidate) || isMedical_[thing.def.value] != 0) {
             continue;
         }
         const CellRect rect = footprint.rect();

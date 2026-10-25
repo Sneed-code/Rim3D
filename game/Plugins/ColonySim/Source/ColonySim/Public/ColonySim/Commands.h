@@ -337,6 +337,14 @@ struct UnlockResearchCommand {
     std::string project;
 };
 
+// Medicine (task H1, docs/design/medicine.md): how far a colonist's medicine may go. `care` is a name from
+// medicalCareName: NoCare, NoMedicine, Herbal, Normal or Best. Fails for a pawn without a body or a name that
+// isn't one.
+struct SetMedicalCareCommand {
+    Entity pawn = kNoEntity;
+    std::string care;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -348,7 +356,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ReloadCommand, AddBillCommand,
                              RemoveBillCommand, SetBillCommand, HandsOnCommand, FlickCommand, ShortCircuitCommand,
                              PlaceFloorCommand, AddFilthCommand,
-                             SetResearchCommand, UnlockResearchCommand>;
+                             SetResearchCommand, UnlockResearchCommand, SetMedicalCareCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

@@ -40,6 +40,8 @@ enum class EventType : uint8_t {
     PowerChanged,    // a building gained or lost power (docs/design/power.md)
     ShortCircuit,    // a short circuit emptied a net's batteries (docs/design/power.md)
     ResearchDone,    // a research project was finished (docs/design/research.md)
+    PawnTended,      // a doctor finished tending a patient (docs/design/medicine.md)
+    PawnScarred,     // a healed injury left a scar or an old wound (docs/design/medicine.md)
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -71,6 +73,9 @@ enum class PawnAction : uint8_t {
     Cook,         // started work on a bill at `target`, a work building (once per run of the bill)
     Research,     // started research at `target`, a research bench (once per job)
     Clean,        // started cleaning the filth in `cell`; a layer comes off every few seconds until its JobEnded
+    Tend,         // started tending `target`, a patient (once per job; the work takes game seconds)
+    LiftPawn,     // lifted `target`, a downed pawn, to carry it (its position follows this pawn's until LayPawn)
+    LayPawn,      // laid the carried `target` down in a bed (or where it stood, if the bed was lost)
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
@@ -105,6 +110,9 @@ struct Event {
     // def, `cell` its origin, `message` "on" (in a net that works and switched on) or "off".
     // ResearchDone: `thing` the pawn who finished it (none if a dev command did), `message` the Research
     // def's defName, `amount` its cost in points.
+    // PawnTended: `thing` the doctor, `target` the patient, `def` the medicine used (none if there was none),
+    // `amount` the tend quality (0 to 1.3), `message` "medicine" or "no medicine", "self" if the doctor tended itself.
+    // PawnScarred: `thing` the pawn, `def` the Scar or OldWound hediff, `part` the body part, `amount` its severity.
     // ShortCircuit: `thing` the building it happened at, `cell` its origin, `amount` the energy
     // released from the net's batteries, Wd.
     float amount = 0.0f;

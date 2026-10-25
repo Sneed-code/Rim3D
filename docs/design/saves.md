@@ -96,7 +96,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `movement` | 1 | `mover` |
 | `jobs` | 1 | `worker` (the job, its bill picks and ingredients, avoid memory), `work` (Work tab), `carrying` |
 | `colonists` | 1 | `colonist` |
-| `health` | 2 | `health` (version 2: environment hediffs such as hypothermia, E2) |
+| `health` | 3 | `health` (version 2: environment hediffs such as hypothermia, E2; version 3: each injury's `peak`, for scars, H1) |
 | `control` | 1 | `playerControlled`: the ids of controlled pawns |
 | `needs` | 1 | `needs`, `schedule`, `bed` |
 | `bills` | 1 | `bills` on work buildings |
@@ -115,6 +115,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `research` | 1 | current project, neolithic start flag, finished projects, progress of unfinished ones ([research.md](research.md)) |
 | `animals` | 1 | `SimSettings::wildAnimals`, the animal system's state (populated, percent, random stream, next herd id, over-density flag, counters) and the `animal` part of every animal ([animal-life.md](animal-life.md)) |
 | `temperature` | 1 | each enclosed room's temperature, by its anchor cell (E2) |
+| `medicine` | 1 | `medical`: the medical care setting of each pawn that has one (H1, [medicine.md](medicine.md)) |
 
 **Commands are saved by name (S7).** The `commands` section starts with the names of the command
 types it uses (`commandNames`); each command then gives its type as a place in that list, and its
