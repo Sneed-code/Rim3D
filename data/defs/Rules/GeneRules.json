@@ -1,0 +1,8 @@
+[
+  {
+    "defName": "GeneRules", "source": "RimWorld wiki",
+    "hungerRateByMetabolicEfficiency": [[-1, 1.25], [0, 1.0], [2, 0.8]],
+    "note": "x is a lineage's metabolic efficiency, y the pawn's hunger rate (wiki: Frostkin -1 is x125%, Warbred +2 is x80%, baseline x100%). Between and beyond the points the curve is straight lines, flat at the ends.",
+    "unverified": ["hungerRateByMetabolicEfficiency"]
+  }
+]

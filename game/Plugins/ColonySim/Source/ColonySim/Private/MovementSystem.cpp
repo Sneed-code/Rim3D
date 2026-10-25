@@ -1,6 +1,8 @@
 #include "MovementSystem.h"
 
+#include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
+#include "ColonySim/Genes.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Lights.h"
 #include "ColonySim/Map.h"
@@ -180,7 +182,9 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
         // Injuries slow a pawn down (its Moving capacity); a downed or dead one doesn't walk.
         const Health* health = reg.try_get<Health>(a.entity);
         const float lightFactor = lights_ != nullptr ? lights_->moveSpeedAt(here) : 1.0f;
-        const float base = mover.metresPerStep * (health != nullptr ? health->movingFactor : 1.0f) * lightFactor;
+        const PawnGenes* genes = reg.try_get<PawnGenes>(a.entity);
+        const float geneSpeed = genes != nullptr ? genes->effects.moveSpeed / static_cast<float>(kStepsPerRealSecondAt1x) : 0.0f;
+        const float base = std::max(0.0f, mover.metresPerStep + geneSpeed) * (health != nullptr ? health->movingFactor : 1.0f) * lightFactor;
         if (base <= 0.0f || mover.hold || reg.all_of<KnockedDown>(a.entity)) {
             // Downed or dead, knocked down by a blast, or working standing still: it stays where it is. Others still steer around it.
             a.newVx = 0.0f;

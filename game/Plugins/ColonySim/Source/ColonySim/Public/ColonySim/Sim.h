@@ -33,6 +33,7 @@ class Floors;
 class RoomStats;
 struct Colonist;
 struct PawnLooks;
+struct PawnGenes;
 class Designations;
 class ExplosiveSystem;
 class FighterSystem;
@@ -168,6 +169,8 @@ public:
     const Colonist* colonistOf(Entity pawn) const;
     // How a humanlike pawn looks (docs/design/looks.md), or null for other things.
     const PawnLooks* looksOf(Entity pawn) const;
+    // A humanlike pawn's genes, made from its lineage (docs/design/genes.md), or null for other things.
+    const PawnGenes* genesOf(Entity pawn) const;
 
     // The plant layer: wild plants from map generation, growing hourly (docs/design/plants.md).
     Plants& plants() { return *plants_; }
@@ -263,6 +266,8 @@ private:
     void startScenario();
     // Gives a new pawn its looks if it is humanlike (its def names no other intelligence).
     void giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& lineage);
+    // Makes (again) the genes of a pawn that has looks, from its lineage.
+    void giveGenes(Entity pawn);
 
     SimSettings settings_;
     std::shared_ptr<const DefDatabase> defs_;

@@ -5,6 +5,7 @@
 #include "ColonySim/Combat.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Explosives.h"
+#include "ColonySim/Genes.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
@@ -967,7 +968,9 @@ bool FighterSystem::dodge(Entity pawn, Fighter& f) {
     const Position pos = reg.get<Position>(pawn);
     Mover& mover = reg.get<Mover>(pawn);
     const Health* health = reg.try_get<Health>(pawn);
-    const float speed = mover.metresPerStep * (health != nullptr ? health->movingFactor : 1.0f);
+    const PawnGenes* genes = reg.try_get<PawnGenes>(pawn);
+    const float geneSpeed = genes != nullptr ? genes->effects.moveSpeed / static_cast<float>(kStepsPerRealSecondAt1x) : 0.0f;
+    const float speed = std::max(0.0f, mover.metresPerStep + geneSpeed) * (health != nullptr ? health->movingFactor : 1.0f);
     if (speed <= 0.0f) {
         return false;
     }

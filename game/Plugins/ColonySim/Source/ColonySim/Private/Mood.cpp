@@ -4,6 +4,7 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Temperature.h"
+#include "ColonySim/Genes.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Needs.h"
@@ -176,6 +177,9 @@ bool MoodSystem::conditionValue(Entity pawn, const std::string& condition, float
 float MoodSystem::traitMoodOffset(Entity pawn) const {
     const Colonist* colonist = things_.registry().try_get<Colonist>(pawn);
     float total = 0.0f;
+    if (const PawnGenes* genes = things_.registry().try_get<PawnGenes>(pawn)) {
+        total += genes->effects.moodOffset;
+    }
     if (colonist == nullptr) {
         return total;
     }

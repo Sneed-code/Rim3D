@@ -298,6 +298,8 @@ the edges to keep the biome's density, and rot away 15 days after dying. About 3
 `wildAnimals` on until U15 draws animals** (the pawn drawing would show them as people); **code that counts pawns of another faction as raiders
 must skip `Animal`**.
 
+**X1** genes and lineages (`docs/design/genes.md`, tests `GenesTests`): 55 genes as defs (`data/defs/Genes`) with stat offsets and factors, skill aptitudes and looks; Emberkin, Frostkin, Warbred, Ashborn and Delver as gene sets (wiki totals for metabolism and complexity; most single-gene numbers are recalled and marked `unverified`). `PawnGenes` on every humanlike pawn is made from its lineage (not saved; rebuilt on creation, `SetLineage` and load). Read today: walking speed, comfortable temperature range, hunger rate, mood, damage taken, wound healing, mining and plant speed, skill levels; every other stat is summed and available through `geneStat`. Looks take skin, hair and horns from genes (the lineage's own `visual` block is gone). Scenario `lineageWeights` rolls colonists' lineages (never the protagonist's); `CrashlandedMixed` does, `Crashlanded` is unchanged. **A new rule that a gene should change reads `geneStat(*sim.genesOf(pawn), "stat", base)`**; Unreal's horn lookup changed in `PawnSubsystem.cpp` (uncompiled until the PC builds).
+
 ## Next
 
 Wave 1:
