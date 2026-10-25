@@ -20,6 +20,7 @@ enum class JobType : uint8_t {
     Mine,          // walk next to a designated rock or ore cell and dig it out (docs/design/mining.md)
     CutPlant,      // walk to a designated plant and cut it down (a tree gives wood)
     HarvestPlant,  // walk to a designated plant and pick what it gives
+    DoBill,            // fetch ingredients to a work building, work, make the product (bills.md)
 };
 
 COLONY_API const char* jobTypeName(JobType type);

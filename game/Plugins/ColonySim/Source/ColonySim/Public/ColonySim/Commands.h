@@ -3,6 +3,7 @@
 #include "ColonySim/Api.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Cover.h"
+#include "ColonySim/BillMode.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/Needs.h"
@@ -248,6 +249,33 @@ struct ReloadCommand {
     Entity pawn = kNoEntity;
 };
 
+// Puts a bill on a work building (the stove): make `recipe` (a Recipes defName) `count` times
+// (`Count`), until `count` of the product lie on the map (`UntilHave`), or forever. `count` is
+// ignored for Forever. Pawns with the recipe's work type do bills in the order listed
+// (docs/design/bills.md). Fails if the building is not a finished building that can make the
+// recipe, the recipe or count is wrong, or the building already has the most bills it can hold.
+struct AddBillCommand {
+    Entity building = kNoEntity;
+    std::string recipe;
+    BillMode mode = BillMode::Count;
+    int count = 1;
+};
+
+// Takes a bill off a building by the id the snapshot shows. Fails if there is no such bill.
+struct RemoveBillCommand {
+    Entity building = kNoEntity;
+    uint32_t bill = 0;
+};
+
+// Changes a bill's mode and count and whether it is suspended (paused). Fails like AddBill.
+struct SetBillCommand {
+    Entity building = kNoEntity;
+    uint32_t bill = 0;
+    BillMode mode = BillMode::Count;
+    int count = 1;
+    bool suspended = false;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -256,7 +284,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              PlaceBlueprintCommand, CancelBuildCommand, DeconstructCommand, EquipCommand,
                              ShootCommand, SetStanceCommand, DesignateCommand, CancelDesignationsCommand,
                              DraftCommand, MoveOrderCommand, AttackOrderCommand, SetFactionCommand, SetLineageCommand,
-                             ReloadCommand>;
+                             ReloadCommand, AddBillCommand,
+                             RemoveBillCommand, SetBillCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

@@ -152,9 +152,23 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, SetLineageCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["lineage"] = c.lineage;
-            } else {
-                static_assert(std::is_same_v<Type, ReloadCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, ReloadCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
+            } else if constexpr (std::is_same_v<Type, AddBillCommand>) {
+                j["building"] = entt::to_integral(c.building);
+                j["recipe"] = c.recipe;
+                j["mode"] = billModeName(c.mode);
+                j["count"] = c.count;
+            } else if constexpr (std::is_same_v<Type, RemoveBillCommand>) {
+                j["building"] = entt::to_integral(c.building);
+                j["bill"] = c.bill;
+            } else {
+                static_assert(std::is_same_v<Type, SetBillCommand>, "write every command type");
+                j["building"] = entt::to_integral(c.building);
+                j["bill"] = c.bill;
+                j["mode"] = billModeName(c.mode);
+                j["count"] = c.count;
+                j["suspended"] = c.suspended;
             }
         },
         logged.command);
@@ -291,6 +305,21 @@ bool replayReadDesignation(ReplayReader& r, const ReplayJson& j, const std::stri
         }
     }
     return r.fail(where + ".kind must be None, Mine, CutPlant or HarvestPlant");
+}
+
+// "mode": "Count" (the default), "UntilHave" or "Forever"
+bool replayReadBillMode(ReplayReader& r, const ReplayJson& j, const std::string& where, BillMode& out) {
+    std::string name = billModeName(BillMode::Count);
+    if (!r.text(j, "mode", name, where)) {
+        return false;
+    }
+    for (const BillMode m : {BillMode::Count, BillMode::UntilHave, BillMode::Forever}) {
+        if (name == billModeName(m)) {
+            out = m;
+            return true;
+        }
+    }
+    return r.fail(where + ".mode must be Count, UntilHave or Forever");
 }
 
 bool replayReadCellAndRot(ReplayReader& r, const ReplayJson& j, const std::string& where, CellPos& cellOut, Rot4& rotOut) {
@@ -589,6 +618,33 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = ReloadCommand{static_cast<Entity>(pawn)};
+    } else if (type == "AddBill") {
+        AddBillCommand c;
+        uint32_t building = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "building", building, where) || !r.text(j, "recipe", c.recipe, where) ||
+            !replayReadBillMode(r, j, where, c.mode) || !r.integer(j, "count", c.count, where)) {
+            return false;
+        }
+        c.building = static_cast<Entity>(building);
+        out.command = std::move(c);
+    } else if (type == "RemoveBill") {
+        RemoveBillCommand c;
+        uint32_t building = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "building", building, where) || !r.integer(j, "bill", c.bill, where)) {
+            return false;
+        }
+        c.building = static_cast<Entity>(building);
+        out.command = c;
+    } else if (type == "SetBill") {
+        SetBillCommand c;
+        uint32_t building = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "building", building, where) || !r.integer(j, "bill", c.bill, where) ||
+            !replayReadBillMode(r, j, where, c.mode) || !r.integer(j, "count", c.count, where) ||
+            !r.flag(j, "suspended", c.suspended, where)) {
+            return false;
+        }
+        c.building = static_cast<Entity>(building);
+        out.command = c;
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");
     }

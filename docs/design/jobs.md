@@ -64,8 +64,9 @@ gives no work; the tasks with scanners so far:
 | `ConstructDeliverResources` | Construction | blueprints and frames that need materials ([construction.md](construction.md)) |
 | `ConstructFinishFrames` | Construction | frames with all their materials |
 | `Deconstruct` | Construction | buildings marked for deconstruction |
+| `DoBillsCookStove` | Cooking | work buildings with a bill to do ([bills.md](bills.md)) |
 
-C3 adds `Mine` and `CutOrHarvestDesignatedPlants`, C6 `DoBillsCookStove`
+C3 adds `Mine` and `CutOrHarvestDesignatedPlants`
 and so on: a class deriving from `WorkGiver` in `WorkGivers.cpp`, added in `makeWorkGivers`.
 
 A pawn's priority per work type is 0 (doesn't do it) or 1 to 4 (1 first), as RimWorld's manual
@@ -100,6 +101,7 @@ state inside a go-to step. Each job type has a fixed list of steps (RimWorld's t
 | `DeliverResources` | go to the materials, pick them up, carry them next to the site, hand them over |
 | `BuildFrame` | walk next to the frame, build until the work is done |
 | `Deconstruct` | walk next to the building, take it down |
+| `DoBill` | go to an ingredient, pick it up, carry it beside the stove, hand it over (and again for the next ingredient), work, make the product ([bills.md](bills.md)) |
 
 A step that ends at once (picking up, putting down) lets the next start in the same game second. A
 go-to step asks the pathfinder for a path (an answer the next step at the earliest), walks it, and if

@@ -192,5 +192,16 @@
     ],
     "ours": ["bodyTypeWeights", "weightRange", "heightMale", "heightFemale", "hulkHeightBonus", "melaninRange",
              "skinColors", "hairColors"]
+  },
+  {
+    "defName": "BillRules", "source": "RimWorld wiki",
+    "maxBillsPerBuilding": 15,
+    "maxBillCount": 9999,
+    "skillSpeedBase": 0.6,
+    "skillSpeedPerLevel": 0.05,
+    "defaultSkillLevel": 8,
+    "maxIngredientStacks": 8,
+    "unverified": ["maxBillsPerBuilding", "skillSpeedBase", "skillSpeedPerLevel"],
+    "ours": ["maxBillCount", "defaultSkillLevel", "maxIngredientStacks"]
   }
 ]

@@ -160,8 +160,8 @@ terrain fertility, wild plants and the temperate forest, basic items, the Human,
 types, traits, our own backstories and names, the Crashlanded start, the Human body, capacities,
 injuries and blood loss (`docs/design/starting-data.md`). `check_defs.py` now also checks that
 defs name defs that exist. `simrun --pawns/--items` runs on the real data.
-Not written yet: sandbags, thoughts, recipes and raiders; the tasks that use them
-(C7, C9, F6) add them the same way. Guns, bullets, flak gear and hitboxes came with F2. C4 wrote the buildings (wall, door, bed, stool, three tables,
+Not written yet: sandbags, thoughts and raiders; the tasks that use them
+(C9, F6) add them the same way. C7 wrote the recipes (simple meal, four simple meals, fine meal) and `BillRules`. Guns, bullets, flak gear and hitboxes came with F2. C4 wrote the buildings (wall, door, bed, stool, three tables,
 fueled stove).
 
 Since C4 colonists build (`docs/design/construction.md`): `PlaceBlueprintCommand{def, stuff, cell, rot}`
@@ -185,6 +185,16 @@ in it (2 beds Barracks, 1 Bedroom, a stove Kitchen, a table DiningRoom). `sim.ro
 roofs are rebuilt from the walls, not saved; save format 13 adds door states. Not built yet: roof collapse, room
 temperature, cleanliness and beauty, locked and per-faction doors, owner-assigned bedrooms.
 
+Since C7 the stove cooks (`docs/design/bills.md`): `AddBillCommand{building, recipe, mode, count}` puts a bill
+on a work building (modes: do X times, do until you have X, do forever; `RemoveBillCommand`, `SetBillCommand` change
+or pause it), and colonists with Cooking work fetch the ingredients (the nearest raw food to the stove, up to 8 stacks,
+all reserved), work at a speed from their Cooking skill and Manipulation, and drop the meals by the stove, where
+haulers and hungry pawns find them. Recipes are a new def kind (`data/defs/Recipes/`): simple meal (10 berries, 300
+ticks), four simple meals at once, fine meal (needs Cooking 6 and meat, which no item is yet). Simple and fine meals
+are in `Items.json`. A job that ends early gives the ingredients back. New job `DoBill`, event `RecipeDone`, action
+`Cook`; save format 18 (formats 6 to 17 still load). **Not built: stove fuel (it cooks for free; in BACKLOG), skill
+learning, bill reordering.**
+
 Since 0004 the game has its own setting (`docs/design/lore.md`: the year 6650, slow star travel,
 the fallen Lattice, magic called resonance) and our own names for RimWorld's proper names
 (`docs/design/naming.md`: Impids are Emberkin, mechanoids the Remnant, insectoids chitinids,
@@ -193,7 +203,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-32 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7). Tick tasks in `docs/plans/stage-1.md` as they merge.
+33 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -244,7 +254,8 @@ smoke test `overseer`; `docs/design/overseer.md`). ~~**U9** protagonist~~ done (
 `docs/design/terrain.md`); ~~**U4** buildings and items~~ done (PC Unreal; smoke test `buildings`; `docs/design/building-draw.md`); ~~**U7** orders~~ done (PC Unreal; smoke test `orders`; `docs/design/orders.md`); **A2** terrain materials (needs sneed's Megascans) is open now.
 
 Wave 6, open now that C1 is in: ~~**C4** building~~ done (`docs/design/construction.md`; save format 10; ~~**C5** doors,
-roofs and rooms~~ done (`docs/design/rooms.md`; save format 13), C7 bills and cooking can start now), ~~**C6** food, rest and
+roofs and rooms~~ done (`docs/design/rooms.md`; save format 13), ~~**C7** bills and cooking~~ done (`docs/design/bills.md`; save format 18; **U8** colony panels
+(work tab, schedule, stove bills, colonist panel) now has everything it needs), ~~**C6** food, rest and
 schedules~~ done (`docs/design/needs.md`; save format 8), ~~**F2** guns and hitboxes~~ done; ~~**C3** mining, chopping
 and harvesting~~ done (`docs/design/mining.md`; save format 14). On the PC, ~~**U9**~~ and ~~**A3** seeded looks~~ are done (smoke test `looks`; save format 16).
 U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priorities).

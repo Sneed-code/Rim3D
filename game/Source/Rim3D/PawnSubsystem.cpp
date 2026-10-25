@@ -271,6 +271,7 @@ UAnimSequence* USimPawnSubsystem::GetActionAnimation(colony::PawnAction Action) 
 		case colony::PawnAction::GetUp:
 		case colony::PawnAction::Build:
 		case colony::PawnAction::Deconstruct:
+		case colony::PawnAction::Cook:
 			return CrouchPose;
 	}
 	return CrouchPose;

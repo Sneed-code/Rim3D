@@ -1,5 +1,6 @@
 #include "ColonySim/Save.h"
 
+#include "ColonySim/Bills.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Looks.h"
@@ -46,7 +47,7 @@ constexpr char kSaveMagic[8] = {'R', 'I', 'M', '3', 'D', 'S', 'A', 'V'};
 constexpr size_t kSaveMagicSize = sizeof kSaveMagic;
 // Bump when the layout below changes, and keep reading the old versions (the archive's
 // version() says which one a file is). Changing it needs a line in docs/design/saves.md.
-constexpr uint32_t kSaveFormatVersion = 17;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
+constexpr uint32_t kSaveFormatVersion = 18;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
                                             // 4: C8's scenario and colonists; 5: F1's pawn health; 6: C1's jobs,
                                             // work priorities and zones; 7: U9's direct control; 8: C6's needs,
                                             // schedules, bed owners, the eating job's chair; 9: C2's plants;
@@ -55,7 +56,8 @@ constexpr uint32_t kSaveFormatVersion = 17;  // 2: S3's path queue, pathBudget, 
                                             // and projectiles;
                                             // 13: C5's door states; 14: C3's rock layer, designations;
                                             // 15: F4's factions and fighters; 16: A3's pawn looks; 17: F5's magazines,
-                                            // reloading, a fighter's reaction and dodge times
+                                            // reloading, a fighter's reaction and dodge times;
+                                            // 18: C7's bills and the bill job
 // Saves from before the job system (formats 1 to 5) can't be read: their hauling placeholder has
 // no counterpart in the job system (docs/design/saves.md).
 constexpr uint32_t kSaveOldestFormat = 6;
@@ -109,11 +111,32 @@ struct SaveHealth {
     DeathCause cause = DeathCause::None;
 };
 
+// A bill job's delivered ingredients, by defName.
+struct SaveBillUsed {
+    std::string def;  // Things defName
+    int count = 0;
+};
+
 // A worker's job and memory, with the work type by defName (empty for none).
 struct SaveWorker {
     Job job;
     std::string workType;
+    std::vector<SaveBillUsed> used;  // the job's `used`, by name (format 18 on)
     std::vector<AvoidTarget> avoid;
+};
+
+// A work building's bills, with the recipes by defName (format 18 on).
+struct SaveBill {
+    uint32_t id = 0;
+    std::string recipe;  // Recipes defName
+    BillMode mode = BillMode::Count;
+    int count = 0;
+    bool suspended = false;
+};
+
+struct SaveBillList {
+    uint32_t nextId = 1;
+    std::vector<SaveBill> bills;
 };
 
 struct SaveWorkPriority {
@@ -185,6 +208,7 @@ struct SaveEntity {
     std::optional<Fighter> fighter;  // format 15 on
     std::optional<PawnLooks> looks;  // format 16 on
     std::optional<Magazine> magazine;  // format 17 on
+    std::optional<SaveBillList> bills;      // format 18 on
 };
 
 // A stockpile zone, with its filter by defName.
@@ -509,7 +533,7 @@ void saveRect(Ar& ar, CellRect& r) {
 
 template <typename Ar>
 void saveCommand(Ar& ar, Command& command) {
-    static_assert(std::variant_size_v<Command> == 28, "save every command type here");
+    static_assert(std::variant_size_v<Command> == 31, "save every command type here");
     uint8_t type = static_cast<uint8_t>(command.index());
     ar.value("type", type);
     if constexpr (Ar::kReading) {
@@ -542,13 +566,16 @@ void saveCommand(Ar& ar, Command& command) {
             case 25: command = SetFactionCommand{}; break;
             case 26: command = SetLineageCommand{}; break;
             case 27: command = ReloadCommand{}; break;
+            case 28: command = AddBillCommand{}; break;
+            case 29: command = RemoveBillCommand{}; break;
+            case 30: command = SetBillCommand{}; break;
             default: ar.require(false, "the save file names a command this build doesn't know"); return;
         }
         // A format older than the command that was added in it can't contain it.
         ar.require((type < 10 || ar.version() >= 7) && (type < 12 || ar.version() >= 8) &&
                        (type < 14 || ar.version() >= 10) && (type < 17 || ar.version() >= 12) && (type < 20 || ar.version() >= 14) &&
                        (type < 22 || ar.version() >= 15) && (type < 26 || ar.version() >= 16) &&
-                       (type < 27 || ar.version() >= 17),
+                       (type < 27 || ar.version() >= 17) && (type < 28 || ar.version() >= 18),
                    "the save file names a command this build doesn't know");
     }
     ar.note("name", commandName(command));
@@ -653,6 +680,22 @@ void saveCommand(Ar& ar, Command& command) {
         ar.text("lineage", lineage->lineage);
     } else if (auto* reload = std::get_if<ReloadCommand>(&command)) {
         ar.value("pawn", reload->pawn);
+    } else if (auto* addBill = std::get_if<AddBillCommand>(&command)) {
+        ar.value("building", addBill->building);
+        ar.text("recipe", addBill->recipe);
+        ar.value("mode", addBill->mode);
+        ar.require(addBill->mode <= BillMode::Forever, "the save file has a bad bill mode");
+        ar.value("count", addBill->count);
+    } else if (auto* removeBill = std::get_if<RemoveBillCommand>(&command)) {
+        ar.value("building", removeBill->building);
+        ar.value("bill", removeBill->bill);
+    } else if (auto* setBill = std::get_if<SetBillCommand>(&command)) {
+        ar.value("building", setBill->building);
+        ar.value("bill", setBill->bill);
+        ar.value("mode", setBill->mode);
+        ar.require(setBill->mode <= BillMode::Forever, "the save file has a bad bill mode");
+        ar.value("count", setBill->count);
+        ar.value("suspended", setBill->suspended);
     }
 }
 
@@ -779,7 +822,8 @@ void saveEntity(Ar& ar, SaveEntity& e) {
     ar.optional("worker", e.worker, [&](SaveWorker& w) {
         Job& job = w.job;
         ar.value("job", job.type);
-        ar.require(job.type <= JobType::HarvestPlant, "the save file has a bad job");
+        ar.require(job.type <= JobType::DoBill, "the save file has a bad job");
+        ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
         ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
         ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
         ar.value("thing", job.thing);
@@ -792,6 +836,20 @@ void saveEntity(Ar& ar, SaveEntity& e) {
             ar.value("site", job.site);
             ar.value("progress", job.progress);
             ar.require(job.progress >= 0.0f && job.progress < 1.0e9f, "the save file has an impossible job progress");
+        }
+        if (ar.version() >= 18) {
+            ar.value("bill", job.bill);
+            ar.list("picks", job.picks, [&](BillPick& pick) {
+                ar.value("item", pick.item);
+                ar.value("count", pick.count);
+                ar.require(pick.count > 0 && pick.count <= 100000, "the save file has an impossible ingredient count");
+            });
+            ar.list("used", w.used, [&](SaveBillUsed& used) {
+                ar.text("def", used.def);
+                ar.value("count", used.count);
+                ar.require(used.count > 0 && used.count <= 100000, "the save file has an impossible ingredient count");
+            });
+            ar.require(job.picks.size() < 12, "the save file has a bill job with too many ingredients");
         }
         ar.text("workType", w.workType);
         ar.value("forced", job.forced);
@@ -874,6 +932,21 @@ void saveEntity(Ar& ar, SaveEntity& e) {
         });
         ar.optional("bed", e.bed, [&](Bed& b) {
             ar.list("owners", b.owners, [&](Entity& owner) { ar.value(nullptr, owner); });
+        });
+    }
+    if (ar.version() >= 18) {
+        ar.optional("bills", e.bills, [&](SaveBillList& list) {
+            ar.value("nextId", list.nextId);
+            ar.list("bills", list.bills, [&](SaveBill& bill) {
+                ar.value("id", bill.id);
+                ar.text("recipe", bill.recipe);
+                ar.value("mode", bill.mode);
+                ar.require(bill.mode <= BillMode::Forever, "the save file has a bad bill mode");
+                ar.value("count", bill.count);
+                ar.require(bill.count >= 0 && bill.count <= 1000000, "the save file has an impossible bill count");
+                ar.value("suspended", bill.suspended);
+                ar.require(bill.id != 0 && bill.id < list.nextId, "the save file has a bill with a bad id");
+            });
         });
     }
     if (ar.version() >= 10) {
@@ -1261,6 +1334,10 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             SaveWorker w;
             w.job = worker->job;
             w.workType = worker->job.workType.valid() ? sim.defs_->get(worker->job.workType).defName() : std::string();
+            for (const BillUsed& used : worker->job.used) {
+                w.used.push_back(SaveBillUsed{sim.defs_->get(used.def).defName(), used.count});
+            }
+            w.job.used.clear();
             w.avoid = worker->avoid;
             out.worker = std::move(w);
         }
@@ -1316,6 +1393,14 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (reg.all_of<MarkedForDeconstruct>(e)) {
             out.marked = SaveMark{};
+        }
+        if (const BillList* list = reg.try_get<BillList>(e)) {
+            SaveBillList saved;
+            saved.nextId = list->nextId;
+            for (const Bill& bill : list->bills) {
+                saved.bills.push_back(SaveBill{bill.id, sim.defs_->get(bill.recipe).defName(), bill.mode, bill.count, bill.suspended});
+            }
+            out.bills = std::move(saved);
         }
         if (const Health* health = reg.try_get<Health>(e)) {
             SaveHealth saved;
@@ -1493,6 +1578,14 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                 // A work type the data files dropped leaves the job without one; it runs on.
                 worker.job.workType = sim.defs_->idOf(kSaveWorkTypesKind, e.worker->workType);
             }
+            for (const SaveBillUsed& used : e.worker->used) {
+                const DefId def = sim.defs_->idOf(kSaveThingsKind, used.def);
+                if (!def.valid()) {
+                    error = "the save has a bill job with '" + used.def + "', which the data files no longer have";
+                    return false;
+                }
+                worker.job.used.push_back(BillUsed{def, used.count});
+            }
             worker.avoid = std::move(e.worker->avoid);
             reg.emplace<Worker>(entity, std::move(worker));
         }
@@ -1574,6 +1667,19 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.looks) {
             reg.emplace<PawnLooks>(entity, std::move(*e.looks));
+        }
+        if (e.bills) {
+            BillList list;
+            list.nextId = e.bills->nextId;
+            for (const SaveBill& saved : e.bills->bills) {
+                const Def* recipe = sim.defs_->find("Recipes", saved.recipe);
+                if (recipe == nullptr) {
+                    error = "the save has a bill for '" + saved.recipe + "', which the data files no longer have";
+                    return false;
+                }
+                list.bills.push_back(Bill{saved.id, recipe->id(), saved.mode, saved.count, saved.suspended});
+            }
+            reg.emplace<BillList>(entity, std::move(list));
         }
         if (e.health) {
             Health health;
