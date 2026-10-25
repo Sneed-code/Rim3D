@@ -235,6 +235,7 @@ D5, D6, D7, D8, D9, D11. D4 done (crops, three climates, weather kinds: `docs/de
 
 Stage 2 done so far: **D7** medicine and disease data (`docs/design/medicine-data.md`), **D11** building data 2 (power, climate, light, floors, furniture;
 `docs/design/starting-data.md`).
+**D5** animal data (15 animals, bodies, meat, leather, milk, eggs, wool: `docs/design/animals.md`).
 
 ## Next
 
