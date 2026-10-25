@@ -15,6 +15,9 @@ public class Rim3D : ModuleRules
 		// The overseer's panels (OverseerSubsystem.cpp): Dear ImGui, plugin in game/Plugins/ImGui (assets/manifest.json).
 		PrivateDependencyModuleNames.Add("ImGui");
 
+		// Pawn animation (PawnAnimInstance.cpp): motion matching and the blend stack, all native.
+		PrivateDependencyModuleNames.AddRange(new string[] { "AnimGraphRuntime", "BlendStack", "Chooser", "PoseSearch" });
+
 		// Smoke tests (SmokeTest.cpp).
 		PrivateDependencyModuleNames.AddRange(new string[] { "AIModule", "ProceduralMeshComponent", "Json", "RenderCore", "RHI" });
 	}

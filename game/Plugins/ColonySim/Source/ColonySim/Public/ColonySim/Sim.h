@@ -132,6 +132,7 @@ private:
 
     void applyCommand(const Command& command, uint64_t id);
     void commandFailed(uint64_t id, std::string message);
+    void pawnDid(Entity pawn, PawnAction action, Entity target);
     void placeStockpileAndThings();
     void updateHauler(Entity pawn);
     void startNextHaul(Entity pawn);

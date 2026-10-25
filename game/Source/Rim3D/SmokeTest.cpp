@@ -11,7 +11,9 @@
 #include "Engine/StaticMeshActor.h"
 #include "Framework/Application/SlateApplication.h"
 #include "GameFramework/Character.h"
+#include "Camera/PlayerCameraManager.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/MovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/FileManager.h"
 #include "HAL/IConsoleManager.h"
@@ -31,9 +33,12 @@
 
 #include "OverseerPawn.h"
 #include "OverseerSubsystem.h"
+#include "PawnActor.h"
+#include "PawnSubsystem.h"
 #include "SimPicking.h"
 #include "SimSubsystem.h"
 
+#include "ColonySim/Clock.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Replay.h"
@@ -105,6 +110,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	else if (TestName == TEXT("overseer"))
 	{
 		BuildOverseerPhases();
+	}
+	else if (TestName == TEXT("pawns"))
+	{
+		BuildPawnsPhases();
 	}
 	else
 	{
@@ -1322,4 +1331,382 @@ void USmokeTestSubsystem::BuildOverseerPhases()
 			Fail(TEXT("Clicking empty ground did not select that cell"));
 		}
 	}});
+}
+
+// ---------------------------------------------------------------------------
+// Pawns (U5): an actor per sim pawn that follows the sim, animation detail by distance, motion
+// matching up close, loops far away, action animations from sim events, then the same as MetaHumans.
+
+namespace
+{
+	struct FPawnsSmokeState
+	{
+		int64 Frames = 0;
+		int32 MostMissing = 0;
+		int32 MovementComponents = 0;
+		double WorstFollowCm = 0.0;
+		double Travelled = 0.0;
+		int32 DetailCountErrors = 0;
+		int32 DetailOrderErrors = 0;
+		int32 TickIntervalErrors = 0;
+		int64 FullSamples = 0;
+		int64 FullMatched = 0;
+		int64 MovingFullSamples = 0;
+		int64 MovingFullOnLocomotion = 0;
+		int64 SimpleSamples = 0;
+		int64 SimpleOnLoops = 0;
+		int64 NearSamples = 0;
+		int64 FarSamples = 0;
+		int32 JumpsAtStart = 0;
+		TSet<FName> AssetsSeen;
+		int32 ActionEventsAtStart = 0;
+		int32 ActionsStartedAtStart = 0;
+		int64 GroomFullSamples = 0;
+		int64 GroomFullVisible = 0;
+		int64 GroomOtherVisible = 0;
+		int32 MetaHumanMissing = 0;
+		TMap<uint32, FVector> LastLocation;
+
+		void Reset() { *this = FPawnsSmokeState(); }
+	};
+
+	void PawnsSmokeSetMetaHumans(bool bOn)
+	{
+		if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("Pawns.MetaHumans")))
+		{
+			Var->Set(bOn ? 1 : 0);
+		}
+	}
+
+	bool PawnsSmokeMetaHumansOn()
+	{
+		const IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("Pawns.MetaHumans"));
+		return Var && Var->GetInt() != 0;
+	}
+
+	int32 PawnsSmokeTotalJumps(const USimPawnSubsystem& Pawns)
+	{
+		int32 Jumps = 0;
+		for (const TPair<uint32, TObjectPtr<ASimPawnActor>>& Pair : Pawns.GetPawns())
+		{
+			if (const USimPawnAnimInstance* Anim = Pair.Value ? Pair.Value->GetAnim() : nullptr)
+			{
+				Jumps += Anim->GetStats().Jumps;
+			}
+		}
+		return Jumps;
+	}
+}
+
+void USmokeTestSubsystem::BuildPawnsPhases()
+{
+	const TSharedRef<FPawnsSmokeState> State = MakeShared<FPawnsSmokeState>();
+	constexpr float Warmup = 5.0f;
+
+	// The camera high up, looking north over the stockpile, where most pawns come and go.
+	const auto OverseerView = [this]()
+	{
+		const USimSubsystem* Bridge = GetWorld()->GetSubsystem<USimSubsystem>();
+		const colony::CellPos Cell = Bridge->GetSim()->stockpileCell().value_or(colony::CellPos{0, 0, 0});
+		const FVector Stockpile = Bridge->SimToWorld(Cell.x + 0.5f, Cell.y + 0.5f, 0);
+		ViewFrom(Stockpile + FVector(0.0, -2500.0, 3000.0), FRotator(-50.0, 90.0, 0.0));
+	};
+	// Close to the stockpile, where pawns put things down and turn back.
+	const auto StockpileView = [this]()
+	{
+		const USimSubsystem* Bridge = GetWorld()->GetSubsystem<USimSubsystem>();
+		const colony::CellPos Cell = Bridge->GetSim()->stockpileCell().value_or(colony::CellPos{0, 0, 0});
+		const FVector Target = Bridge->SimToWorld(Cell.x + 0.5f, Cell.y + 0.5f, 0) + FVector(0.0, 0.0, 90.0);
+		const FVector From = Target + FVector(-650.0, -450.0, 250.0);
+		ViewFrom(From, (Target - From).Rotation());
+	};
+
+	// Every frame after the warm-up: actors match the snapshot, detail goes by distance, and each
+	// pawn plays what its detail should play.
+	const auto CheckFrame = [this, State, Warmup]()
+	{
+		if (PhaseTime < Warmup)
+		{
+			return;
+		}
+		const USimSubsystem* Bridge = GetWorld()->GetSubsystem<USimSubsystem>();
+		const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>();
+		const APlayerCameraManager* CameraManager = UGameplayStatics::GetPlayerCameraManager(GetWorld(), 0);
+		if (!Bridge || !Bridge->GetSim() || !Pawns || !CameraManager || !Pawns->AreAssetsLoaded())
+		{
+			return;
+		}
+		if (State->Frames++ == 0)
+		{
+			// Counted from the first frame checked: the MetaHuman phases start with new actors.
+			State->JumpsAtStart = PawnsSmokeTotalJumps(*Pawns);
+		}
+		const FVector Camera = CameraManager->GetCameraLocation();
+		const bool bMetaHumans = PawnsSmokeMetaHumansOn();
+		int32 Missing = 0;
+		int32 PawnCount = 0;
+		double FarthestFull = 0.0;
+		double NearestOther = TNumericLimits<double>::Max();
+		for (const colony::ThingView& View : Bridge->GetCurrentSnapshot().things)
+		{
+			if (View.category != colony::ThingCategory::Pawn)
+			{
+				continue;
+			}
+			++PawnCount;
+			const ASimPawnActor* Pawn = Pawns->FindPawn(View.id);
+			if (!Pawn)
+			{
+				++Missing;
+				continue;
+			}
+			const FVector Location = Pawn->GetActorLocation();
+			const FVector SimLocation = Bridge->SimToWorld(View.x, View.y, View.level);
+			State->WorstFollowCm = FMath::Max(State->WorstFollowCm, FVector::Dist2D(Location, SimLocation));
+			const uint32 Key = static_cast<uint32>(entt::to_integral(View.id));
+			if (const FVector* Last = State->LastLocation.Find(Key))
+			{
+				State->Travelled += FVector::Dist2D(*Last, Location);
+			}
+			State->LastLocation.Add(Key, Location);
+
+			const double Distance = FVector::Dist(Location, Camera);
+			const bool bFull = Pawn->GetDetail() == ESimPawnDetail::Full;
+			const float Interval = Pawn->GetBody()->GetComponentTickInterval();
+			if (bFull)
+			{
+				FarthestFull = FMath::Max(FarthestFull, Distance);
+				State->TickIntervalErrors += Interval > 0.0f ? 1 : 0;
+			}
+			else
+			{
+				NearestOther = FMath::Min(NearestOther, Distance);
+				const bool bFar = Interval > 0.1f;
+				State->FarSamples += bFar ? 1 : 0;
+				State->NearSamples += bFar ? 0 : 1;
+				State->TickIntervalErrors += Interval <= 0.0f ? 1 : 0;
+			}
+			// The stats are from the last update; a pawn whose detail just changed is skipped.
+			const USimPawnAnimInstance* Anim = Pawn->GetAnim();
+			if (Anim && Anim->GetStats().Detail == Pawn->GetDetail())
+			{
+				const FSimPawnAnimStats& Stats = Anim->GetStats();
+				State->AssetsSeen.Add(Stats.PlayingAsset);
+				const float Speed = FVector2D(View.vx, View.vy).Size() * colony::kStepsPerRealSecondAt1x * 100.0f;
+				if (bFull)
+				{
+					++State->FullSamples;
+					State->FullMatched += Stats.Database.IsNone() ? 0 : 1;
+					if (Speed > 150.0f)
+					{
+						++State->MovingFullSamples;
+						State->MovingFullOnLocomotion += Stats.PlayingAsset.ToString().Contains(TEXT("Idle")) ? 0 : 1;
+					}
+				}
+				else
+				{
+					++State->SimpleSamples;
+					const FName Asset = Stats.PlayingAsset;
+					State->SimpleOnLoops += (Asset == Pawns->GetIdleLoop()->GetFName() || Asset == Pawns->GetWalkLoop()->GetFName()
+						|| Asset == Pawns->GetRunLoop()->GetFName()) ? 1 : 0;
+				}
+			}
+			if (Pawn->GetMetaHuman())
+			{
+				const int32 Visible = Pawn->CountVisibleGrooms();
+				if (bFull)
+				{
+					++State->GroomFullSamples;
+					State->GroomFullVisible += Visible > 0 ? 1 : 0;
+				}
+				else
+				{
+					State->GroomOtherVisible += Visible;
+				}
+			}
+			else if (bMetaHumans)
+			{
+				++State->MetaHumanMissing;
+			}
+		}
+		State->MostMissing = FMath::Max(State->MostMissing, Missing + FMath::Max(0, Pawns->GetPawns().Num() - PawnCount));
+		const FSimPawnDetailCounts& Counts = Pawns->GetDetailCounts();
+		State->DetailCountErrors += Counts.Full == FMath::Min(20, PawnCount) ? 0 : 1;
+		State->DetailOrderErrors += FarthestFull <= NearestOther + 1.0 ? 0 : 1;
+	};
+
+	const auto StartPhaseCounters = [this, State]()
+	{
+		State->Reset();
+		if (const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>())
+		{
+			State->ActionEventsAtStart = Pawns->GetActionEvents();
+			State->ActionsStartedAtStart = Pawns->GetActionsStarted();
+		}
+	};
+
+	// What every phase checks when it ends, and its notes.
+	const auto VerifyCommon = [this, State](const TCHAR* Phase, bool bMetaHumans)
+	{
+		const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>();
+		if (!Pawns)
+		{
+			return;
+		}
+		if (!Pawns->AreAssetsLoaded())
+		{
+			Fail(TEXT("Pawn meshes, loops or motion matching databases did not load"));
+			return;
+		}
+		for (const TPair<uint32, TObjectPtr<ASimPawnActor>>& Pair : Pawns->GetPawns())
+		{
+			if (Pair.Value && Pair.Value->FindComponentByClass<UMovementComponent>())
+			{
+				++State->MovementComponents;
+			}
+		}
+		const int32 Jumps = PawnsSmokeTotalJumps(*Pawns) - State->JumpsAtStart;
+		const int32 Actions = Pawns->GetActionEvents() - State->ActionEventsAtStart;
+		const int32 ActionsStarted = Pawns->GetActionsStarted() - State->ActionsStartedAtStart;
+		Notes.Add(FString::Printf(TEXT("%s: %d pawn actors over %lld frames; worst distance from the sim %.0f cm; walked %.0f m in all"),
+			Phase, Pawns->GetPawns().Num(), State->Frames, State->WorstFollowCm, State->Travelled / 100.0));
+		Notes.Add(FString::Printf(TEXT("%s: full detail %lld samples (%.0f%% motion matched, moving ones %.0f%% on walk or run animations), %d new animations chosen; simple %lld samples (%.0f%% on the loops; %lld near, %lld far); %d animations seen"),
+			Phase, State->FullSamples, State->FullSamples ? 100.0 * State->FullMatched / State->FullSamples : 0.0,
+			State->MovingFullSamples ? 100.0 * State->MovingFullOnLocomotion / State->MovingFullSamples : 0.0, Jumps,
+			State->SimpleSamples, State->SimpleSamples ? 100.0 * State->SimpleOnLoops / State->SimpleSamples : 0.0,
+			State->NearSamples, State->FarSamples, State->AssetsSeen.Num()));
+		Notes.Add(FString::Printf(TEXT("%s: %d pick-up and put-down events, %d action animations started"), Phase, Actions, ActionsStarted));
+
+		if (State->Frames < 10)
+		{
+			Fail(FString::Printf(TEXT("%s: too few frames checked (%lld)"), Phase, State->Frames));
+			return;
+		}
+		if (State->MostMissing > 0)
+		{
+			Fail(FString::Printf(TEXT("%s: up to %d pawns had no actor (or an actor had no pawn) in a frame"), Phase, State->MostMissing));
+		}
+		if (State->MovementComponents > 0)
+		{
+			Fail(FString::Printf(TEXT("%s: %d pawn actors have a movement component"), Phase, State->MovementComponents));
+		}
+		// One step at 1x is 15 cm of walking, plus a frame of blending.
+		if (State->WorstFollowCm > 50.0)
+		{
+			Fail(FString::Printf(TEXT("%s: a pawn actor was %.0f cm from its sim position"), Phase, State->WorstFollowCm));
+		}
+		if (State->Travelled < 100.0 * 100.0)
+		{
+			Fail(FString::Printf(TEXT("%s: pawn actors hardly moved (%.0f m in all)"), Phase, State->Travelled / 100.0));
+		}
+		if (State->DetailCountErrors > 0 || State->DetailOrderErrors > 0 || State->TickIntervalErrors > 0)
+		{
+			Fail(FString::Printf(TEXT("%s: detail by distance wrong in %d frames (count), %d frames (a full-detail pawn farther than a simple one), %d pawn-frames (update rate)"),
+				Phase, State->DetailCountErrors, State->DetailOrderErrors, State->TickIntervalErrors));
+		}
+		if (State->FullSamples == 0 || State->FullMatched * 10 < State->FullSamples * 9)
+		{
+			Fail(FString::Printf(TEXT("%s: motion matching found a pose in %lld of %lld full-detail samples"), Phase, State->FullMatched, State->FullSamples));
+		}
+		if (State->MovingFullSamples == 0 || State->MovingFullOnLocomotion * 10 < State->MovingFullSamples * 7)
+		{
+			Fail(FString::Printf(TEXT("%s: walking full-detail pawns played walk or run animations in %lld of %lld samples"), Phase, State->MovingFullOnLocomotion, State->MovingFullSamples));
+		}
+		if (Jumps < 20)
+		{
+			Fail(FString::Printf(TEXT("%s: motion matching chose only %d new animations"), Phase, Jumps));
+		}
+		if (State->SimpleSamples == 0 || State->SimpleOnLoops * 20 < State->SimpleSamples * 19)
+		{
+			Fail(FString::Printf(TEXT("%s: simple-detail pawns played the loops in %lld of %lld samples"), Phase, State->SimpleOnLoops, State->SimpleSamples));
+		}
+		if (Actions < 3 || ActionsStarted * 10 < Actions * 9)
+		{
+			Fail(FString::Printf(TEXT("%s: %d action events, %d action animations started"), Phase, Actions, ActionsStarted));
+		}
+		if (bMetaHumans)
+		{
+			Notes.Add(FString::Printf(TEXT("%s: strand hair visible in %lld of %lld full-detail samples, %lld groom-frames visible on other pawns"),
+				Phase, State->GroomFullVisible, State->GroomFullSamples, State->GroomOtherVisible));
+			if (State->MetaHumanMissing > 0)
+			{
+				Fail(FString::Printf(TEXT("%s: %d pawn-frames had no MetaHuman"), Phase, State->MetaHumanMissing));
+			}
+			if (State->GroomOtherVisible > 0)
+			{
+				Fail(FString::Printf(TEXT("%s: strand hair showed on pawns below full detail"), Phase));
+			}
+			if (State->GroomFullSamples == 0 || State->GroomFullVisible < State->GroomFullSamples)
+			{
+				Fail(FString::Printf(TEXT("%s: strand hair missing on full-detail MetaHumans"), Phase));
+			}
+		}
+	};
+
+	// Phase 1: 100 hauling pawns as mannequins, seen from high up.
+	Phases.Add({TEXT("pawns_overseer_100"), [=, this]()
+	{
+		USimSubsystem* Bridge = GetWorld()->GetSubsystem<USimSubsystem>();
+		if (!Bridge || !GetWorld()->GetSubsystem<USimPawnSubsystem>())
+		{
+			Fail(TEXT("USimSubsystem or USimPawnSubsystem did not start"));
+			return;
+		}
+		PawnsSmokeSetMetaHumans(false);
+		FSimStartOptions Options;
+		Options.DataRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("Plugins/ColonySim/Tests/data"));
+		Options.Seed = 7;
+		Options.MapSize = 128;
+		Options.Pawns = 100;
+		Options.Items = 600;
+		Bridge->SetWorldOrigin(SmokeOrigin);
+		if (!Bridge->StartSim(Options))
+		{
+			Fail(TEXT("The test defs did not load"));
+			return;
+		}
+		Bridge->SetSpeed(1);
+		BuildTerrainMesh(Bridge->GetSim()->map(), FPlatformTime::Seconds());
+		OverseerView();
+		StartPhaseCounters();
+	}, Warmup, 10.0f, [=, this]()
+	{
+		VerifyCommon(TEXT("Mannequins, overseer view"), false);
+		if (State->FarSamples == 0 || State->NearSamples == 0)
+		{
+			Fail(TEXT("The overseer view should have pawns at all three detail levels"));
+		}
+	}, CheckFrame});
+
+	// Phase 2: close up at the stockpile.
+	Phases.Add({TEXT("pawns_close_up"), [=, this]()
+	{
+		StockpileView();
+		StartPhaseCounters();
+	}, Warmup, 8.0f, [=, this]()
+	{
+		VerifyCommon(TEXT("Mannequins, close up"), false);
+	}, CheckFrame});
+
+	// Phase 3: the same pawns as MetaHumans, strand hair only at full detail.
+	Phases.Add({TEXT("pawns_metahumans_overseer_100"), [=, this]()
+	{
+		PawnsSmokeSetMetaHumans(true);
+		OverseerView();
+		StartPhaseCounters();
+	}, Warmup, 10.0f, [=, this]()
+	{
+		VerifyCommon(TEXT("MetaHumans, overseer view"), true);
+	}, CheckFrame});
+
+	// Phase 4: MetaHumans close up.
+	Phases.Add({TEXT("pawns_metahumans_close_up"), [=, this]()
+	{
+		StockpileView();
+		StartPhaseCounters();
+	}, Warmup, 8.0f, [=, this]()
+	{
+		VerifyCommon(TEXT("MetaHumans, close up"), true);
+		PawnsSmokeSetMetaHumans(false);
+	}, CheckFrame});
 }

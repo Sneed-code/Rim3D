@@ -10,6 +10,7 @@
 #include <doctest.h>
 
 #include <algorithm>
+#include <string>
 #include <vector>
 
 using namespace colony;
@@ -113,20 +114,37 @@ TEST_CASE("Events: spawn, despawn and destroy are reported, and cleared each ste
     }
 
     // Hauling: the item is picked up (despawned) and put down (spawned) at the stockpile.
+    // The hauler's hands are reported too (PawnAction), in the same step as the despawn and spawn.
     int pickedUp = 0;
     int putDown = 0;
+    int pickUpActions = 0;
+    int putDownActions = 0;
     for (int i = 0; i < 3600 && sim.itemsLeft() > 0; ++i) {
         sim.step();
         pickedUp += countEvents(sim, EventType::ThingDespawned);
+        Entity moved = kNoEntity;
         for (const Event& e : sim.events()) {
+            if (e.type == EventType::ThingSpawned || e.type == EventType::ThingDespawned) {
+                moved = e.thing;
+            }
             if (e.type == EventType::ThingSpawned) {
                 ++putDown;
                 CHECK(e.cell == *sim.stockpileCell());
+            }
+            if (e.type == EventType::PawnAction) {
+                CHECK(e.thing == sim.haulers()[0]);
+                CHECK(e.def.valid());
+                CHECK(e.target == moved);
+                ++(e.action == PawnAction::PickUp ? pickUpActions : putDownActions);
             }
         }
     }
     CHECK(pickedUp == 1);
     CHECK(putDown == 1);
+    CHECK(pickUpActions == 1);
+    CHECK(putDownActions == 1);
+    CHECK(std::string(pawnActionName(PawnAction::PutDown)) == "PutDown");
+    CHECK(std::string(eventTypeName(EventType::PawnAction)) == "PawnAction");
     sim.step();
     CHECK(sim.events().empty());
 
