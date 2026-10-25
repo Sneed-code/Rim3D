@@ -246,6 +246,28 @@ TEST_CASE("defs: the real data folder loads") {
     CHECK_FALSE(errors.empty());
 }
 
+TEST_CASE("defs: D8 production data (work tables, blocks, melee weapons)") {
+    DefDatabase db;
+    std::vector<std::string> errors;
+    if (!DefDatabase::loadDirectory(COLONY_DATA_DIR, db, errors)) { CHECK(false); return; }
+    for (const char* bench : {"CraftingSpot", "ButcherTable", "StonecutterTable", "FueledSmithy", "ElectricSmithy",
+                              "MachiningTable", "ElectricStove"})
+        CHECK(db.find("Things", bench) != nullptr);
+    const Def* spear = db.find("Things", "Melee_Spear");
+    if (spear == nullptr) { CHECK(false); return; }
+    CHECK(spear->text("equipmentType") == "Primary");  // from MeleeWeaponBase
+    CHECK(spear->number("stats.marketValue") == doctest::Approx(186));
+    CHECK(spear->number("tools.0.cooldownTime") == doctest::Approx(2.6 * 30));  // RimWorld seconds x 30
+    for (const char* w : {"Knife", "Club", "Gladius", "Spear", "Mace", "Longsword", "BreachAxe"}) {
+        CHECK(db.find("Things", std::string("Melee_") + w) != nullptr);
+        CHECK(db.find("Recipes", std::string("Make") + w) != nullptr);
+    }
+    const Def* blocks = db.find("Recipes", "MakeBlocksGranite");
+    if (blocks == nullptr) { CHECK(false); return; }
+    CHECK(blocks->number("products.BlocksGranite") == doctest::Approx(20));
+    CHECK(db.find("Things", "BlocksMarble") != nullptr);
+}
+
 TEST_CASE("defs: medicine and disease data (D7)") {
     DefDatabase db;
     std::vector<std::string> errors;

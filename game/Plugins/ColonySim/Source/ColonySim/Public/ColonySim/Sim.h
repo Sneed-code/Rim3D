@@ -32,6 +32,7 @@ struct PawnLooks;
 class Designations;
 class FighterSystem;
 class JobSystem;
+class Lights;
 class Mineables;
 class MovementSystem;
 class MoodSystem;
@@ -164,6 +165,10 @@ public:
     Rooms& rooms() { return *rooms_; }
     const Rooms& rooms() const { return *rooms_; }
 
+    // Light and darkness (docs/design/light.md). Brought up to date at the end of every step.
+    Lights& lights() { return *lights_; }
+    const Lights& lights() const { return *lights_; }
+
     // Stockpile zones (docs/design/jobs.md).
     const Zones& zones() const { return *zones_; }
     // Work types, the think list, jobs and reservations (docs/design/jobs.md).
@@ -215,6 +220,7 @@ private:
     std::unique_ptr<Designations> designations_;
     std::unique_ptr<MovementSystem> movement_;
     std::unique_ptr<Rooms> rooms_;
+    std::unique_ptr<Lights> lights_;
     DoorNumbers doorNumbers_;  // for the snapshot's door animation
     std::unique_ptr<HealthSystem> health_;
     std::unique_ptr<NeedsSystem> needs_;

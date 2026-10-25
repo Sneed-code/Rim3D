@@ -920,7 +920,7 @@ JobSystem::StepResult JobSystem::place(Entity pawn, Job& job, std::string& why) 
 // pawn's first second of work, which sends the PawnAction.
 
 float JobSystem::constructionSpeed(Entity pawn) const {
-    return construction_.skillSpeed(pawn) * health_.capacityValue(pawn, "Manipulation");
+    return construction_.skillSpeed(pawn) * health_.capacityValue(pawn, "Manipulation") * lightWorkFactor(pawn);
 }
 
 JobSystem::StepResult JobSystem::deliver(Entity pawn, Job& job, std::string& why) {

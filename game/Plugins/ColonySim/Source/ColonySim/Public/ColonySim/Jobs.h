@@ -145,6 +145,7 @@ class BillSystem;
 class Construction;
 class DefDatabase;
 class HealthSystem;
+class Lights;
 class Map;
 class Mineables;
 class Pathfinder;
@@ -265,6 +266,10 @@ public:
     bool reservedByOther(const JobTarget& target, Entity pawn) const;
     // A blueprint or frame that another pawn is bringing materials to: one deliverer at a time.
     bool deliveryReservedByOther(Entity site, Entity pawn) const;
+    // Work slows in the dark (docs/design/light.md). Null: it doesn't.
+    void setLights(const Lights* lights) { lights_ = lights; }
+    // The factor on a pawn's work speed from the light where it stands (1 in daylight).
+    float lightWorkFactor(Entity pawn) const;
     // How fast a pawn builds and takes down: its Construction skill's speed times its Manipulation.
     float constructionSpeed(Entity pawn) const;
     bool avoiding(Entity pawn, const JobTarget& target) const;
@@ -414,6 +419,7 @@ private:
     const NeedsSystem& needs_;
     const NeedRules& rules_;
     const GameTime& time_;
+    const Lights* lights_ = nullptr;
     SimStats& stats_;
     std::vector<Event>& events_;
 

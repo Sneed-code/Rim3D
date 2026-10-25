@@ -1,0 +1,8 @@
+[
+  {"defName": "Friend", "label": "friend", "source": "RimWorld", "opinionOffset": 0, "opinionAtLeast": 20, "deathThought": "FriendDied", "note": "Not stored: a pawn is a friend while their opinion of the other is 20 or more (and the other's too, for mutual).", "unverified": ["opinionOffset"]},
+  {"defName": "Rival", "label": "rival", "source": "RimWorld", "opinionOffset": 0, "opinionAtMost": -20, "deathThought": "RivalDied", "note": "Same, at -20 or less.", "unverified": ["opinionOffset"]},
+  {"defName": "Lover", "label": "lover", "source": "RimWorld", "opinionOffset": 40, "deathThought": "LoverDied", "stored": true, "note": "Romance only; at most one at a time.", "unverified": ["opinionOffset"]},
+  {"defName": "Spouse", "label": "spouse", "source": "RimWorld", "opinionOffset": 60, "deathThought": "SpouseDied", "stored": true, "note": "Marriage; at most one.", "unverified": ["opinionOffset"]},
+  {"defName": "ExLover", "label": "ex-lover", "source": "RimWorld", "opinionOffset": -25, "stored": true, "note": "After a breakup; opinion penalty stays.", "unverified": ["opinionOffset"]},
+  {"defName": "ExSpouse", "label": "ex-spouse", "source": "RimWorld", "opinionOffset": -25, "stored": true, "note": "Not reachable in the first version (spouses don't break up); kept for the later rule.", "unverified": ["opinionOffset"]}
+]

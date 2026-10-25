@@ -19,10 +19,47 @@ chunk and not the whole map.
 ## The ground
 
 A vertex per cell corner at the sim's ground height (`Map::groundHeight`), so pawns, items and
-plants standing at `Map::heightAt` stand on the mesh. Colours are flat vertex colours from the
-terrain type until the Megascans materials (A2): water, sand, soil, rough stone. Soil is tinted by
-the fertility the plants use (gravel, soil, rich soil). The shared engine material
-`VertexColorMaterial` draws them (it shows both sides of a face, so roofs and rock sides need no winding care).
+plants standing at `Map::heightAt` stand on the mesh.
+
+**The terrain material (A2).** `M_Terrain` blends four PBR texture layers (grass, sand, gravel, rock) and water. The
+mesh carries the mix in each vertex: the vertex colour is a tint (0.5 is neutral, so up to 2x), UV 1 is the
+sand and rock weights and UV 2 the gravel and water weights (the rest is grass). A vertex's weights are the
+average of the up to four non-rock cells around it, so the ground blends over about a metre where the type
+changes. Soil's tint follows the fertility the plants use (dry, soil, rich) and its low-fertility end mixes in
+some gravel; rough stone (mined floor) is gravel; rock blocks are the rock layer, a little lighter or darker
+block by block, with their sides in shade. The material itself:
+
+- textures are placed by **world position**, not by the mesh's UVs, so chunks line up and a block's sides are not
+  stretched. Ground layers are seen from above; the rock layer is triplanar (three views blended by the normal);
+- **steep ground turns into rock** (`slope.rockFrom` 0.84 and `rockFull` 0.62 in `assets/terrain_textures.json`:
+  the up-facing part of the vertex normal), so hillsides are bare;
+- big soft patches of lighter and darker break up the textures' repeat; each texture's normal map bumps the
+  surface's own normal (made in world space, the material has "tangent space normal" off);
+- solid colours (the built, thin roof) use the same material, with the vertex colour's alpha set to 1.
+
+The textures are free CC0 ones from Poly Haven and ambientCG, listed in `assets/terrain_textures.json`
+(`forrest_ground_01`, `coast_sand_01`, `gravel_embedded_concrete`, `rock_face_03`, 1k, with how many metres one
+repeat covers and a roughness). Neither the textures nor the generated material are in Git
+(`assets/manifest.json` has the same lines); to make them:
+
+```
+python tools/terrain_textures.py
+"C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" game\Rim3D.uproject -run=TerrainMaterials -unattended -nosplash -AllowCommandletRendering
+```
+
+**To swap in other textures (Megascans, say):** set the layer's `"source"` to `"local"` in the JSON, put
+`<layer>_color.jpg` (or `.png`) and `<layer>_normal.jpg` (DirectX style normals) in
+`game/Content/ThirdParty/TerrainTextures/`, change `tileMetres` and `roughness` to suit, and run the commandlet
+again. Nothing in the game changes. Without the generated material (a fresh checkout, CI) the terrain is drawn as
+before, flat vertex colours with the engine's `VertexColorMaterial`; `Terrain.Textured 0` does the same on purpose
+(read when the terrain is built, so set it at start:
+`tools/smoke.ps1 -Test world -ExtraArgs '-ini:Engine:[SystemSettings]:Terrain.Textured=0'`).
+
+Cost (RTX 5080, 888 x 500): about 15 texture reads a pixel; the `world` smoke test's GPU time is 1.5 to 5 ms
+with it and without it; the mesh got two more UV sets (8 bytes a vertex each).
+
+Not done: a side-by-side with an Unreal Landscape. A fair one needs a Landscape layer blend and Megascans; the
+screenshots handed to sneed with A2 are before (flat) and after (textured) on our own terrain.
 
 **Rock stands on the ground as a solid block**, `TerrainDraw::RockHeightM` (4 m) tall, a flat top
 that follows the ground height and sides wherever the neighbour is not rock. The sim keeps no rock
