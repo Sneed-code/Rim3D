@@ -139,7 +139,6 @@ TEST_CASE("Talents: ranks change the stats the systems ask for") {
     Sim sim = talSim();
     const Entity hero = talPawn(sim, CellPos{10, 10, 0}, true);
     const Entity other = talPawn(sim, CellPos{12, 10, 0}, false);
-    const float build = sim.jobs().constructionSpeed(hero);
     const DefId steel = sim.defs().idOf("Things", "Silver");
     TAL_REQUIRE(steel.valid());
     const int carry = sim.jobs().carryLimit(hero, steel);
@@ -156,7 +155,7 @@ TEST_CASE("Talents: ranks change the stats the systems ask for") {
     CHECK(sim.talents().statFactor(hero, "aimSpread") == doctest::Approx(0.94));
     CHECK(sim.talents().statFactor(hero, "carryCapacity") == doctest::Approx(1.2));
     CHECK(sim.talents().statFactor(hero, "tradePrice") == doctest::Approx(0.96));
-    CHECK(sim.jobs().constructionSpeed(hero) == doctest::Approx(build * 1.2f));
+    CHECK(sim.jobs().constructionSpeed(hero) == doctest::Approx(sim.jobs().constructionSpeed(other) * 1.2f));
     CHECK(sim.jobs().carryLimit(hero, steel) > carry);
     CHECK(sim.jobs().carryCapacity(hero) == doctest::Approx(sim.jobs().carryCapacity(other) * 1.2));
     // Everyone else is unchanged.

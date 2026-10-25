@@ -95,6 +95,16 @@ const char* commandName(const Command& command) {
                 return "Melee";
             } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
                 return "DodgeRoll";
+            } else if constexpr (std::is_same_v<Type, SetOutfitCommand>) {
+                return "SetOutfit";
+            } else if constexpr (std::is_same_v<Type, EditOutfitCommand>) {
+                return "EditOutfit";
+            } else if constexpr (std::is_same_v<Type, AddOutfitCommand>) {
+                return "AddOutfit";
+            } else if constexpr (std::is_same_v<Type, RemoveOutfitCommand>) {
+                return "RemoveOutfit";
+            } else if constexpr (std::is_same_v<Type, StripCommand>) {
+                return "Strip";
             } else if constexpr (std::is_same_v<Type, SpendTalentPointCommand>) {
                 return "SpendTalentPoint";
             } else {
@@ -160,6 +170,7 @@ const char* eventTypeName(EventType type) {
         case EventType::ResearchDone: return "ResearchDone";
         case EventType::MeleeSwing: return "MeleeSwing";
         case EventType::MeleeHit: return "MeleeHit";
+        case EventType::ApparelDestroyed: return "ApparelDestroyed";
         case EventType::TalentPoint: return "TalentPoint";
     }
     return "?";

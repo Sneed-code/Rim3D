@@ -1,5 +1,6 @@
 #include "ColonySim/Combat.h"
 
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
@@ -38,7 +39,6 @@ struct CombatModel {
     };
     struct Apparel {
         bool valid = false;
-        float armor[4] = {0.0f, 0.0f, 0.0f, 0.0f};  // by ArmorKind
         std::vector<std::string> groups;
         std::vector<std::string> layers;
         int outerness = 0;  // its outermost layer's position in apparelLayersOuterFirst
@@ -101,6 +101,7 @@ struct CombatModel {
     float lead[2] = {0.4f, 1.0f};
     float leadError[2] = {0.4f, 0.05f};
     float reloadFactor[2] = {1.3f, 0.7f};
+    float absorbDivisor = 4.0f;  // ApparelRules: apparel loses 1 hit point per this much damage it absorbs
     // P2's gun kick: it holds for kickHold steps after a shot, then wears off by kickRecovery degrees
     // a step; a spray restarts after kickReset steps without a shot; the kick never passes kickMax.
     int kickHold = 5;
@@ -240,6 +241,10 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
         }
     }
 
+    if (const Def* rules = defs.find("Rules", "ApparelRules")) {
+        absorbDivisor = std::max(0.01f, combatNum(*rules, "absorbDamageDivisor", absorbDivisor));
+    }
+
     for (const DefId id : defs.idsOfKind("DamageTypes")) {
         const std::string category = defs.get(id).text("armorCategory");
         armorKind[id.value] = category == "Sharp"   ? ArmorKind::Sharp
@@ -287,9 +292,6 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
         }
         if (def.has("apparel")) {
             Apparel& a = apparel[id.value];
-            a.armor[static_cast<int>(ArmorKind::Sharp)] = combatNum(def, "stats.armorRatingSharp", 0.0);
-            a.armor[static_cast<int>(ArmorKind::Blunt)] = combatNum(def, "stats.armorRatingBlunt", 0.0);
-            a.armor[static_cast<int>(ArmorKind::Heat)] = combatNum(def, "stats.armorRatingHeat", 0.0);
             for (size_t i = 0; i < def.count("apparel.bodyPartGroups"); ++i) {
                 a.groups.push_back(def.textAt("apparel.bodyPartGroups", i));
             }
@@ -527,7 +529,11 @@ float CombatModel::radiusFor(float chance) const {
 }
 
 CombatSystem::CombatSystem(Things& things, Map& map, HealthSystem& health)
-    : things_(things), map_(map), health_(health), model_(std::make_unique<CombatModel>(things.defs(), health)) {}
+    : things_(things),
+      map_(map),
+      health_(health),
+      model_(std::make_unique<CombatModel>(things.defs(), health)),
+      apparelStats_(std::make_unique<ApparelStats>(things.defs())) {}
 
 CombatSystem::~CombatSystem() = default;
 
@@ -1256,10 +1262,12 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
             if (result.deflected) {
                 h.kind = ProjectileHitKind::Armor;
                 emitHit(projectile, p, h, 0.0f);
+                wearApparel(hit.thing, result);
                 return;
             }
             emitHit(projectile, p, h, result.amount);
             health_.applyHit(hit.thing, result.damageType, result.amount, result.part);
+            wearApparel(hit.thing, result);
             break;
         }
         default:
@@ -1326,17 +1334,31 @@ PawnHitResult CombatSystem::hitPawn(Entity pawn, int hitboxPart, DefId damageTyp
         }
     }
     std::stable_sort(layers.begin(), layers.end(), [](const auto& l, const auto& r) { return l.first < r.first; });
+    const ArmorType armorType = armorKind == CombatModel::ArmorKind::Sharp   ? ArmorType::Sharp
+                                : armorKind == CombatModel::ArmorKind::Blunt ? ArmorType::Blunt
+                                                                             : ArmorType::Heat;
+    // A piece that stops or softens a hit takes 1 hit point of damage for every 4 points of the damage
+    // that reached it (C15, RimWorld wiki "Apparel"), rounded at random.
+    const auto wearOut = [&](Entity worn, float reaching) {
+        const float lost = reaching / model_->absorbDivisor;
+        int points = static_cast<int>(lost);
+        if (rng.unit() < lost - static_cast<float>(points)) {
+            ++points;
+        }
+        result.wear.emplace_back(worn, points);
+    };
     for (const auto& [outerness, worn] : layers) {
         (void)outerness;
-        const CombatModel::Apparel& a = *model_->wear(reg.get<Thing>(worn).def);
-        const float armor = std::max(0.0f, a.armor[static_cast<int>(armorKind)] - penetration);
+        const float armor = std::max(0.0f, apparelStats_->armor(reg, worn, armorType) - penetration);
         const float roll = rng.unit();
         if (roll < armor * 0.5f) {
             result.deflected = true;
+            wearOut(worn, result.amount);
             result.amount = 0.0f;
             return result;
         }
         if (roll < armor) {
+            wearOut(worn, result.amount);
             result.amount *= 0.5f;
             if (armorKind == CombatModel::ArmorKind::Sharp && model_->bluntDamage.valid()) {
                 result.damageType = model_->bluntDamage;
@@ -1464,6 +1486,51 @@ void CombatSystem::drop(Entity pawn, Entity item) {
             beforeDestroy_(item);
         }
         things_.destroy(item);
+    }
+}
+
+bool CombatSystem::unequip(Entity pawn, Entity item) {
+    entt::registry& reg = things_.registry();
+    const Gear* gear = reg.valid(pawn) ? reg.try_get<Gear>(pawn) : nullptr;
+    if (gear == nullptr || !reg.valid(item) ||
+        (gear->weapon != item && std::find(gear->apparel.begin(), gear->apparel.end(), item) == gear->apparel.end())) {
+        return false;
+    }
+    drop(pawn, item);
+    return true;
+}
+
+void CombatSystem::wearApparel(Entity pawn, const PawnHitResult& result) {
+    for (const auto& [item, points] : result.wear) {
+        damageApparel(pawn, item, points);
+    }
+}
+
+void CombatSystem::damageApparel(Entity pawn, Entity item, int hitPoints) {
+    entt::registry& reg = things_.registry();
+    HitPoints* hp = reg.valid(item) ? reg.try_get<HitPoints>(item) : nullptr;
+    if (hp == nullptr || hitPoints <= 0) {
+        return;
+    }
+    hp->current = std::max(0, hp->current - hitPoints);
+    if (hp->current > 0) {
+        return;
+    }
+    // Worn out: gone, and the pawn is no longer wearing it.
+    const DefId def = reg.get<Thing>(item).def;
+    if (Gear* gear = reg.try_get<Gear>(pawn)) {
+        gear->apparel.erase(std::remove(gear->apparel.begin(), gear->apparel.end(), item), gear->apparel.end());
+    }
+    if (beforeDestroy_) {
+        beforeDestroy_(item);
+    }
+    things_.destroy(item);
+    if (events_ != nullptr) {
+        Event event;
+        event.type = EventType::ApparelDestroyed;
+        event.thing = pawn;
+        event.def = def;
+        events_->push_back(std::move(event));
     }
 }
 

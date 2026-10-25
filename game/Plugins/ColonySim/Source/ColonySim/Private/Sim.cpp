@@ -1,6 +1,7 @@
 #include "ColonySim/Sim.h"
 
 #include "ColonySim/Animals.h"
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
@@ -113,6 +114,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     construction_ = std::make_unique<Construction>(map_, *things_, *plants_, *defs_, rng_, events_);
     needs_ = std::make_unique<NeedsSystem>(*things_, *health_, *defs_);
     mood_ = std::make_unique<MoodSystem>(*things_, *needs_, *defs_);
+    apparel_ = std::make_unique<ApparelSystem>(*things_, *combat_, *health_, *defs_);
+    apparel_->registerSituations(*mood_);
     doorNumbers_ = DoorNumbers::read(*defs_);
     movement_->setDoors(doorNumbers_);
     pathfinder_.setDoorCost(doorNumbers_.pathCost);
@@ -139,6 +142,14 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     temperature_->setOutdoor(outdoorTemperature());
     temperature_->setGround(groundTemperature());
     mood_->setTemperature(temperature_.get());
+    // What a pawn wears widens its comfortable range (C15): cold insulation lowers the minimum, heat raises the maximum.
+    temperature_->setComfortModifier([this](Entity pawn, float& min, float& max) {
+        float cold = 0.0f;
+        float heat = 0.0f;
+        apparel_->insulation(pawn, cold, heat);
+        min -= cold;
+        max += heat;
+    });
     // A heater or cooler that draws power pushes heat only while it has it (E5); a campfire has no power part.
     temperature_->setSourceRunning([this](Entity building) { return power_->running(building); });
     spoilage_ = std::make_unique<SpoilageSystem>(map_, *things_, *temperature_, *roomStats_, *defs_,
@@ -153,6 +164,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setResearch(research_.get());
     jobs_->setTalents(talents_.get());
     jobs_->setFilth(filth_.get());
+    jobs_->setApparel(apparel_.get());
     jobs_->setSpoilage(spoilage_.get());
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
@@ -710,6 +722,27 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!filth_->add(addFilth->cell, addFilth->kind, addFilth->layers)) {
             commandFailed(id, "no filth could be added there");
         }
+    } else if (const auto* setOutfit = std::get_if<SetOutfitCommand>(&command)) {
+        if (!apparel_->setOutfit(setOutfit->pawn, setOutfit->outfit, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* editOutfit = std::get_if<EditOutfitCommand>(&command)) {
+        if (!apparel_->editOutfit(editOutfit->outfit, editOutfit->disallowed, editOutfit->hitPointsMin,
+                                  editOutfit->hitPointsMax, editOutfit->qualityMin, editOutfit->qualityMax, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* addOutfit = std::get_if<AddOutfitCommand>(&command)) {
+        if (apparel_->addOutfit(addOutfit->name, error) == 0) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* removeOutfit = std::get_if<RemoveOutfitCommand>(&command)) {
+        if (!apparel_->removeOutfit(removeOutfit->outfit, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* strip = std::get_if<StripCommand>(&command)) {
+        if (!apparel_->markStrip(strip->thing, strip->strip, error)) {
+            commandFailed(id, error);
+        }
     }
 }
 
@@ -757,6 +790,7 @@ void Sim::step() {
     movement_->step(things_->registry(), map_);
     melee_->step();
     combat_->step(rng_);
+    apparel_->step(time_.seconds, rng_, events_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     rooms_->update();
     power_->step(time_);
@@ -893,6 +927,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
         view.available = research_->available(project);
         view.current = research_->current() == project.defName;
         out.research.push_back(view);
+    }
+    out.apparel.clear();
+    out.outfits.clear();
+    for (const OutfitPolicy& outfit : apparel_->outfits()) {
+        out.outfits.push_back(OutfitView{outfit.id, outfit.name});
     }
     out.designations.clear();
     for (const auto& [index, kind] : designations_->all()) {
@@ -1032,6 +1071,32 @@ void Sim::writeSnapshot(Snapshot& out) const {
         }
         if (const Gear* gear = reg.try_get<Gear>(entity); gear != nullptr && gear->weapon != kNoEntity) {
             view.weapon = reg.get<Thing>(gear->weapon).def;
+        }
+        if (const Gear* gear = reg.try_get<Gear>(entity)) {
+            view.firstApparel = static_cast<uint32_t>(out.apparel.size());
+            for (const Entity piece : gear->apparel) {
+                ApparelView worn;
+                worn.item = piece;
+                worn.def = reg.get<Thing>(piece).def;
+                if (const MadeOf* made = reg.try_get<MadeOf>(piece)) {
+                    worn.stuff = made->stuff;
+                }
+                worn.quality = apparel_->stats().qualityOf(reg, piece);
+                worn.hitPointShare = ApparelStats::hitPointShare(reg, piece);
+                worn.tainted = reg.all_of<Tainted>(piece);
+                out.apparel.push_back(worn);
+            }
+            view.apparelCount = static_cast<uint32_t>(out.apparel.size()) - view.firstApparel;
+        }
+        if (view.category == ThingCategory::Pawn) {
+            view.outfit = apparel_->outfitOf(entity);
+            view.markedForStrip = apparel_->stripMarked(entity);
+        } else if (view.category == ThingCategory::Item && apparel_->stats().isApparel(thing.def)) {
+            if (const MadeOf* made = reg.try_get<MadeOf>(entity)) {
+                view.stuff = made->stuff;
+            }
+            view.quality = apparel_->stats().qualityOf(reg, entity);
+            view.tainted = reg.all_of<Tainted>(entity);
         }
         if (view.category == ThingCategory::Pawn) {
             view.faction = fighters_->factionOf(entity);
@@ -1417,7 +1482,9 @@ uint64_t Sim::stateHash() const {
         fighters_->hashThing(e, h);
         animals_->hashThing(e, h);
         melee_->hashThing(e, h);
+        apparel_->hashThing(e, h);
     }
+    apparel_->hashState(h);
     return h.value();
 }
 

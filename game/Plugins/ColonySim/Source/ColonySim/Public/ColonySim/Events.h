@@ -44,6 +44,7 @@ enum class EventType : uint8_t {
     ResearchDone,    // a research project was finished (docs/design/research.md)
     MeleeSwing,      // a pawn began a melee swing: the hit comes `amount` steps later (docs/design/melee.md)
     MeleeHit,        // the hit moment of a swing: `message` says "hit", "deflected", "blocked", "dodged" or "missed"
+    ApparelDestroyed,  // a worn piece wore out or was shot to pieces: `thing` the wearer, `def` the piece's def (docs/design/apparel.md)
     TalentPoint,     // the protagonist earned a talent point (docs/design/talents.md)
 };
 
