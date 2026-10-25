@@ -93,7 +93,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
 | | E1 | **Seasons, weather and outdoor temperature.** RimWorld's 60-day year in four seasons, outdoor temperature from the biome's curve and the time of day, weather chosen by the seeded random stream with lengths and transitions, snow cover on the ground, rain and fog effects on speed, sight and aim. Events and snapshot. | Cloud | Sonnet, high | 90 min | S7, D4 |
-| | E2 | **Room temperature.** Each room's temperature moves toward outdoors through walls, doors, vents and open roof, by RimWorld's rule; heaters, coolers and campfires push it. Pawns' comfortable range (apparel adds to it after C15), hypothermia, heatstroke and frostbite, temperature thoughts. | Cloud | Sonnet, high | 90 min | E1, D7, D9, D11 |
+| ✓ | E2 | **Room temperature.** Each room's temperature moves toward outdoors through walls, doors, vents and open roof, by RimWorld's rule; heaters, coolers and campfires push it. Pawns' comfortable range (apparel adds to it after C15), hypothermia, heatstroke and frostbite, temperature thoughts. | Cloud | Sonnet, high | 90 min | E1, D7, D9, D11 |
 | ✓ | E3 | **Light and darkness.** A light grid from the sun (time of day, roofs) and from buildings that glow; darkness slows work and movement as in RimWorld; `lightAt` for others to use; `simrun` picture. Rebuilt, not saved, so it can start before S7. The darkness thought arrives with D9. | Cloud | Sonnet, medium | 60 min | none |
 | | E4 | **Fire.** Fire per cell in active chunks: starts from heat sources and flammable stuff, spreads to plants, buildings, items and pawns, burns them, leaves ash and burnt ground; rain and snow put it out; pawns on fire beat it out; a home area and the Firefighter work type's job. | Cloud | Sonnet, high | 90 min | E1 |
 | ✓ | E5 | **Power.** Power nets from conduits and buildings; wood-fired (fuel from C11), solar (from E3's sun) and wind generators; batteries; switches; buildings without power stop (lamps, heaters, electric stove, benches). A short-circuit hook for T3. | Cloud | Sonnet, high | 90 min | C11, D11, E3 |
@@ -200,7 +200,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | A4 | **Animal art.** Free animal packs (Fab) for the D5 animals, retargeted onto a few shared skeletons; logged in `assets/manifest.json`. The thread sends sneed the download steps. | PC Unreal | Sonnet, medium | 90 min | U5, sneed's Fab download |
-| | A5 | **Clothes art.** Free clothing that fits MetaHuman bodies (MetaHuman's own outfits first) for the D6 apparel, per layer; logged in the manifest. | PC Unreal | Sonnet, high | 90 min | A3, sneed's download if needed |
+| ✓ | A5 | **Clothes art.** Free clothing that fits MetaHuman bodies (MetaHuman's own outfits first) for the D6 apparel, per layer; logged in the manifest. | PC Unreal | Sonnet, high | 90 min | A3, sneed's download if needed |
 | ✓ | A6 | **Placeholder art 2.** Crops, work tables, power and climate buildings, furniture and floors, set in the defs' `visual` fields by an editor script. | PC Unreal | Sonnet, medium | 60 min | A1, D8, D11 |
 
 ### Wrap-up (G)

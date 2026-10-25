@@ -20,6 +20,7 @@
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Mineables.h"
+#include "ColonySim/Temperature.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Things.h"
@@ -110,12 +111,18 @@ struct SaveInjury {
     float tendQuality = -1.0f;
 };
 
+struct SaveEnvironmentHediff {
+    std::string hediff;  // defName of a Hediffs def of class Environment
+    float severity = 0.0f;
+};
+
 struct SaveHealth {
     bool protagonist = false;
     RestKind rest = RestKind::Ground;
     std::vector<SaveInjury> injuries;
     std::vector<MissingPart> missing;
     float bloodLoss = 0.0f;
+    std::vector<SaveEnvironmentHediff> environment;  // health section 2 on
     bool dead = false;
     DeathCause cause = DeathCause::None;
 };
@@ -309,6 +316,7 @@ struct SaveData {
     RoomStatsState roomStats;
     int wildAnimals = 0;               // section "animals": SimSettings::wildAnimals
     AnimalSaved animals;               // section "animals": the system's own state
+    std::vector<RoomTemperature> roomTemperatures;  // section "temperature" (E2)
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -1152,9 +1160,16 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
     });
     ar.value("bloodLoss", h.bloodLoss);
     ar.require(h.bloodLoss >= 0.0f && h.bloodLoss <= 1000.0f, "the save file has impossible blood loss");
+    if (ar.sectionVersion() >= 2) {
+        ar.list("environment", h.environment, [&](SaveEnvironmentHediff& env) {
+            ar.text("hediff", env.hediff);
+            ar.value("severity", env.severity);
+            ar.require(env.severity > 0.0f && env.severity < 1.0e3f, "the save file has an impossible environment hediff");
+        });
+    }
     ar.value("dead", h.dead);
     ar.value("cause", h.cause);
-    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Starvation), "the save file has a bad cause of death");
+    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Environment), "the save file has a bad cause of death");
 
 }
 
@@ -1754,7 +1769,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("colonists", 1, [&] {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
-    ar.section("health", 1, [&] {
+    ar.section("health", 2, [&] {
         saveParts(ar, "health", e, &SaveEntity::health, [&](SaveHealth& h) { saveHealthPart(ar, h); });
     });
     ar.section("control", 1, [&] {
@@ -1841,6 +1856,13 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("cleared", d.animals.stats.cleared);
         ar.require(d.wildAnimals >= 0 && d.animals.percent >= 0, "the save file has a bad wild animal density");
         saveParts(ar, "animal", e, &SaveEntity::animal, [&](Animal& a) { saveAnimalPart(ar, a); });
+    });
+    ar.section("temperature", 1, [&] {
+        ar.list("roomTemperatures", d.roomTemperatures, [&](RoomTemperature& t) {
+            ar.group("anchor", [&] { saveCell(ar, t.anchor); });
+            ar.value("celsius", t.celsius);
+            ar.require(t.celsius > -500.0f && t.celsius < 1000.0f, "the save file has an impossible room temperature");
+        });
     });
     // New sections go here, at the end.
 }
@@ -2096,6 +2118,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             }
             saved.missing = health->missing;
             saved.bloodLoss = health->bloodLoss;
+            for (const EnvironmentHediff& env : health->environment) {
+                saved.environment.push_back(SaveEnvironmentHediff{sim.defs_->get(env.def).defName(), env.severity});
+            }
             saved.dead = health->dead;
             saved.cause = health->cause;
             out.health = std::move(saved);
@@ -2172,6 +2197,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     }
     d.filth = sim.filth_->state();
     d.roomStats = sim.roomStats_->state();
+    d.roomTemperatures = sim.temperature_->roomTemperatures();
     return d;
 }
 
@@ -2394,6 +2420,16 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             }
             health.missing = e.health->missing;
             health.bloodLoss = e.health->bloodLoss;
+            for (const SaveEnvironmentHediff& env : e.health->environment) {
+                const Def* hediff = sim.defs_->find("Hediffs", env.hediff);
+                if (hediff == nullptr) {
+                    error = "the save has the illness '" + env.hediff + "', which the data files no longer have";
+                    return false;
+                }
+                health.environment.push_back(EnvironmentHediff{hediff->id(), env.severity});
+            }
+            std::sort(health.environment.begin(), health.environment.end(),
+                      [](const EnvironmentHediff& a, const EnvironmentHediff& b) { return a.def.value < b.def.value; });
             health.dead = e.health->dead;
             health.cause = e.health->cause;
             const int parts = e.thing ? sim.health_->partCount(reg.get<Thing>(entity).def) : 0;
@@ -2643,6 +2679,8 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     sim.power_->markDirty();
     sim.power_->update();
     sim.roomStats_->refresh();
+    sim.temperature_->setOutdoor(sim.outdoorTemperature());
+    sim.temperature_->restore(d.roomTemperatures);
     sim.events_.clear();
     return true;
 }

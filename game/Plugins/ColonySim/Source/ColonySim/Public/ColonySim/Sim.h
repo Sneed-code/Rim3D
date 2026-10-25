@@ -46,6 +46,7 @@ class Plants;
 class PowerGrid;
 class Regions;
 class Rooms;
+class TemperatureSystem;
 class Things;
 class Zones;
 struct Snapshot;
@@ -188,6 +189,20 @@ public:
     RoomStats& roomStats() { return *roomStats_; }
     const RoomStats& roomStats() const { return *roomStats_; }
 
+    // Room temperature, comfort and exposure (docs/design/temperature.md).
+    TemperatureSystem& temperature() { return *temperature_; }
+    const TemperatureSystem& temperature() const { return *temperature_; }
+    // The temperature in the open right now, in degrees Celsius: the biome's season and the hour of
+    // the day. E1 replaces this with its seasons and weather.
+    float outdoorTemperature() const;
+    // The biome's temperature at any game second, ignoring the override (for tests and previews).
+    float outdoorTemperatureAt(int64_t gameSeconds) const;
+    // The temperature under rock: the biome's mean over the year.
+    float groundTemperature() const;
+    // Fixes the outdoor temperature (and so the ground's) for tests and `simrun --outdoor`. Not saved:
+    // a loaded game goes back to the biome's own. Pass nullopt to let the biome decide again.
+    void setOutdoorOverride(std::optional<float> celsius);
+
     // Stockpile zones (docs/design/jobs.md).
     const Zones& zones() const { return *zones_; }
     // Work types, the think list, jobs and reservations (docs/design/jobs.md).
@@ -250,6 +265,8 @@ private:
     std::unique_ptr<Rooms> rooms_;
     std::unique_ptr<PowerGrid> power_;
     std::unique_ptr<Lights> lights_;
+    std::unique_ptr<TemperatureSystem> temperature_;  // after rooms_ and health_
+    std::optional<float> outdoorOverride_;
     DoorNumbers doorNumbers_;  // for the snapshot's door animation
     std::unique_ptr<HealthSystem> health_;
     std::unique_ptr<NeedsSystem> needs_;
