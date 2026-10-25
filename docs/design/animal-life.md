@@ -64,8 +64,8 @@ nothing. Animals are visited in entity id order anyway, because two may want the
    has no `plant.harvestedThingDef` (bushes and crops are the colony's) and is at least 10% grown is
    walked to (straight line only, so never across water or rock) and eaten in 8 s: the plant is
    removed (`PlantRemoved` event with message `grazed`), the animal gains nutrition x growth.
-   Hungry animals with no plant near wander further. **Meat eaters never get hungry yet** (N5 makes
-   them hunt); wild animals don't starve either, because plants don't spread yet, so grass would run
+   Hungry animals with no plant near wander further. Wild predators get hungry and hunt since N5
+   ([animal-fights.md](animal-fights.md)); other meat eaters never do; wild animals don't starve either, because plants don't spread yet, so grass would run
    out in 20 days and the herd with it. N3 starves tamed animals that aren't fed.
 5. **Follow.** A herd member further than 4.5 m from the leader (or from where the leader is going),
    or 9 m from the leader at all, walks back to its side; near it, it shuffles a little.
@@ -79,15 +79,16 @@ nothing. Animals are visited in entity id order anyway, because two may want the
 ## Not here
 
 Hunting and the corpse as an item (N2), taming, training, pens (N3), breeding, young growing up,
-milk, wool, eggs (N4), bites, predators hunting, fleeing, manhunters (N5), animals drawn on screen
+milk, wool, eggs (N4), animals drawn on screen
 (U15; until then Unreal does not turn `wildAnimals` on, because the pawn drawing would show every
 animal as a person). Animal temperature comfort, the weather and seasons (E tasks) and old age.
 
 ## Fighters and animals
 
-Fighters never take an animal for an enemy on their own (`PawnInfo::animal`; an attack order on one
-still works). The side number 100 is "wild"; N5 decides who is hostile to whom. Code that counts
-"pawns of another faction" as raiders must skip `Animal` (check `registry.all_of<Animal>`).
+Fighters never take a **calm** animal for an enemy on their own (`PawnInfo::animal`; an attack order on
+one still works). One that hunts a pawn, fights back or is a manhunter (`Animal::temper`) is an enemy:
+[animal-fights.md](animal-fights.md) (N5). The side number 100 is "wild". Code that counts "pawns of
+another faction" as raiders must skip a calm `Animal` (check `registry.all_of<Animal>` and `temper`).
 
 ## Save and hash
 

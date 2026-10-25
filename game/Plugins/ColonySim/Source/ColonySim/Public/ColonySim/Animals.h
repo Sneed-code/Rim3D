@@ -20,6 +20,7 @@ struct AnimalCare;
 class HealthSystem;
 class Husbandry;
 class Map;
+class MeleeSystem;
 class Pathfinder;
 class Plants;
 class StateHasher;
@@ -49,7 +50,22 @@ enum class AnimalMode : uint8_t {
     // Tame animals (task N3, docs/design/husbandry.md):
     WaitPath,  // waiting for the path to its zone or its food that AnimalCare::path asked for
     GoToItem,  // walking to the food item (hay, kibble, meat) lying in `goal`
-    EatItem    // eating the item in `goal` until `until`
+    EatItem,   // eating the item in `goal` until `until`
+    // Fights (task N5, docs/design/animal-fights.md):
+    Flee,      // running from a fight, a shot or a predator to `goal` until `until`
+    Chase,     // running at `enemy`
+    Fight,     // in reach of `enemy`, swinging (stands still)
+    Feast,     // a predator walking to the corpse of its kill
+    Gorge,     // a predator eating the corpse of `enemy` until `until`
+    Seized     // prey caught by a predator: frozen with fear until `until` (the predator renews it while it fights)
+};
+
+// What an animal has against the colony. Anything but Calm is an enemy to the fighter AI.
+enum class AnimalTemper : uint8_t {
+    Calm,
+    Hunting,    // a predator after a pawn
+    Revenge,    // fighting back at whoever hurt it, for a short time
+    Manhunter   // after every colonist it can see, for hours
 };
 
 // On every animal. Every field is saved and hashed.
@@ -67,7 +83,12 @@ struct Animal {
     int64_t until = 0;         // game second the mode ends (Idle, Eat, Sleep)
     int64_t nextThink = 0;     // game second of its next decision
     int64_t staysUntil = 0;    // a newcomer from the edge won't leave again before this game second
-    CellPos goal;              // Wander, GoToFood, Eat, Leave
+    CellPos goal;              // Wander, GoToFood, Eat, Leave, Flee, Feast
+    // N5 (docs/design/animal-fights.md).
+    AnimalTemper temper = AnimalTemper::Calm;
+    Entity enemy = kNoEntity;  // whom it chases, fights or has killed and eats (Chase, Fight, Feast, Gorge)
+    int64_t temperUntil = 0;   // game second a Revenge or Manhunter temper ends
+    int64_t huntAfter = 0;     // a predator looks for prey again from this game second
 };
 
 // The numbers (AnimalRules in data/defs/Rules/AnimalRules.json, all ours: RimWorld's animals have
@@ -101,6 +122,29 @@ struct AnimalRules {
     float startClearRadius = 25;   // no animal is placed this close to a colonist when the map is made
     int corpseDays = 15;           // game days a corpse lies there
     float startAgeMax = 0.5f;      // placed animals are as old as this share of their life expectancy at most
+    // N5 (animal-fights.md, all ours except meatNutrition).
+    float scareRadius = 22.0f;     // calm animals this close to a shot or a blow in a fight run from it
+    float fleeDistance = 20.0f;    // how far they run
+    int fleeSteps = 240;           // and for how long, at most
+    float herdAlert = 20.0f;       // herd mates this close to a hurt animal run too
+    float manhunterChanceFlagged = 0.5f;   // chance a hurt animal that `race.manhunterOnDamage` turns manhunter
+    float manhunterChancePredator = 0.2f;  // a hurt predator
+    float manhunterChanceOther = 0.02f;    // any other
+    int manhunterSteps = 7200;     // a manhunter stays one for this long (two game hours)
+    int revengeSteps = 300;        // a hurt predator or tusker that fights back stays at it this long
+    float manhunterSight = 45.0f;  // metres a manhunter spots a colonist at
+    float chaseGiveUp = 60.0f;     // a chase is dropped when the enemy gets this far away
+    int huntChaseSteps = 1200;     // a hunt that has not caught its prey by then is given up
+    float preyFleeSpeed = 0.8f;    // share of its top speed prey runs at from a predator (the predator runs flat out)
+    int huntCooldown = 900;        // and the predator does not look for prey again for this long
+    int huntLook = 300;            // nor when it found none
+    float predatorHungryBelow = 0.4f;  // share of its food capacity under which a predator hunts
+    float huntRadius = 35.0f;      // metres a predator looks for prey
+    float preyMaxRatio = 1.5f;     // prey up to this times the predator's body size
+    float loneRadius = 10.0f;      // a pawn with no other colonist this close is alone
+    int gorgeSteps = 240;          // eating a kill
+    int seizedSteps = 90;          // prey in a predator's jaws stands frozen this long, renewed while the predator keeps at it
+    float meatNutrition = 0.05f;   // nutrition per unit of meat (RimWorld's raw meat)
 };
 
 struct AnimalStats {
@@ -108,6 +152,12 @@ struct AnimalStats {
     uint64_t left = 0;      // animals that walked off the edge
     uint64_t grazed = 0;    // plants eaten
     uint64_t cleared = 0;   // corpses that rotted away
+    uint64_t manhunters = 0;  // animals that turned manhunter
+    uint64_t revenges = 0;    // animals that fought back at whoever hurt them
+    uint64_t hunts = 0;       // hunts begun
+    uint64_t kills = 0;       // hunted prey that died
+    uint64_t meals = 0;       // kills eaten
+    uint64_t scares = 0;      // animals that ran from a fight
 };
 
 // What the save keeps of the system itself; the animals are components.
@@ -151,6 +201,20 @@ public:
     void wake(Entity animal);
     // Keeps an animal where it is until the game second: a handler is with it (Husbandry::hold).
     void hold(Entity animal, int64_t until);
+
+    // ---- Fights (AnimalFights.cpp, docs/design/animal-fights.md)
+    // Melee is how animals bite and claw. Without it they only run.
+    void setMelee(MeleeSystem* melee) { melee_ = melee; }
+    // Something hurt `victim`: a hurt animal runs, fights back or turns manhunter; its herd runs.
+    // Called by the combat code the moment the hit lands.
+    void hurt(Entity victim, Entity attacker);
+    // Calm animals near the shots and blows among `events[from..]` run from them.
+    void scare(const std::vector<Event>& events, size_t from);
+    // Makes the animal an enemy of `target` (and of every colonist if `temper` is Manhunter) at once;
+    // the incident tasks use it. False if it is no living animal that could.
+    bool enrage(Entity animal, AnimalTemper temper, Entity target);
+    // Whether the fighter AI takes the animal for an enemy.
+    bool hostile(Entity animal) const;
 
     // ---- Tame animals (AnimalCare.cpp, docs/design/husbandry.md)
     // Husbandry says where a tame animal may be and what it eats; the pathfinder lets it walk round walls
@@ -212,6 +276,8 @@ private:
         double commonality = 0.0;  // weight in this biome's wild animals, 0 if it has none
         int64_t adultAgeSeconds = 0;
         double lifeExpectancyDays = 0.0;
+        bool predator = false;       // N5: hunts when hungry
+        bool tusker = false;         // `race.manhunterOnDamage`
         std::vector<Stage> stages;
     };
 
@@ -221,6 +287,16 @@ private:
     float foodFallPerSecond(const Kind& kind, int64_t ageSeconds) const;
 
     void think(Entity e);
+    // Fights (AnimalFights.cpp).
+    bool thinkFight(Entity e, Animal& a, const Kind& kind, int64_t now);
+    bool startHunt(Entity e, Animal& a, const Kind& kind, Rng& rng);
+    void startFlee(Entity e, Animal& a, const Kind& kind, float fromX, float fromY, Rng& rng, float speedShare = 1.0f);
+    void beginChase(Entity e, Animal& a, const Kind& kind, Entity enemy, AnimalTemper temper, int64_t chaseUntil);
+    bool chaseStep(Entity e, Animal& a, const Kind& kind, int64_t now);
+    bool feastStep(Entity e, Animal& a, const Kind& kind, int64_t now);
+    Entity nearestColonist(Entity e, float range) const;
+    bool walkAt(Entity e, Animal& a, const Kind& kind, float x, float y, float speedShare, AnimalMode mode);
+    float meatNutritionOf(Entity corpse) const;
     // Tame animals (AnimalCare.cpp).
     void decideTamed(Entity e, Animal& a, const Kind& kind, Rng& rng);
     bool tamedMayStand(const AnimalCare* care, CellPos cell) const;
@@ -267,6 +343,7 @@ private:
     std::vector<Event>* events_ = nullptr;
     Husbandry* husbandry_ = nullptr;
     Pathfinder* pathfinder_ = nullptr;
+    MeleeSystem* melee_ = nullptr;
     std::vector<Entity> due_;       // scratch: animals to decide this step, in id order
     std::unordered_map<uint32_t, Entity> leaders_;  // scratch: herd id to its leader, rebuilt when needed
 };

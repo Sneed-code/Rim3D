@@ -331,6 +331,8 @@ must skip `Animal`**.
 Training (Obedience, Release, Rescue, Haul: 10/5/20/30 steps, one try per 6 h, fades over 6 days) is by `SetTraining`; **Haul makes the animal a Hauling-only worker**. Animal zones and pens (`isPen`: no walkable way out except doors), `AssignAnimalZone`, `Release`, slaughter (corpse only; butchering is N2).
 Save section `husbandry` 1, five new commands (`MarkAnimal`, `SetTraining`, `CreateAnimalZone`, `RemoveAnimalZoneCells`, `AssignAnimalZone`). **Obedience, Release and Rescue only count steps; their effects wait for later tasks.** Animals walk through doors (only the pen test treats them as barriers). Not done: names for tamed animals, manhunters on a failed try (N5), a taming line in the colony scenario (C25 can add it).
 
+**N5** animal fights and predators (`docs/design/animal-fights.md`, tests `AnimalFightTests`, `simrun --animals` prints the counters): animals have hitboxes now (shots hit them) and reach with teeth and claws. `Animal::temper` (Calm, Hunting, Revenge, Manhunter); anything but Calm is an enemy to the fighter AI and the colony alarm. A hurt wild animal turns manhunter by chance (0.5 tusker, 0.2 predator, 0.02 other), else predators and tuskers take revenge for a while and the rest run; shots, blows and blasts frighten calm animals within 22 m. Hungry wild predators hunt prey up to 1.5 x their size and lone colonists, the prey freezes when caught, the kill is eaten (corpse gone). **`AnimalSystem::enrage` is the hook T3 (manhunter pack) and a failed taming use.** Save section `animals` 2. Not done: packs, pathing round walls for chasers, manhunters from failed taming.
+
 ## Next
 
 Wave 1:

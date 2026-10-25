@@ -89,6 +89,8 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
         }
     }
     num("bodyReach", r.bodyReach);
+    num("animalReachBase", r.animalReachBase);
+    num("animalReachPerRoot", r.animalReachPerRoot);
     num("defaultWeaponReach", r.defaultWeaponReach);
     num("shoulderBelowEye", r.shoulderBelowEye);
     num("strikeDepth", r.strikeDepth);
@@ -154,6 +156,10 @@ MeleeSystem::MeleeSystem(Things& things, Map& map, CombatSystem& combat, HealthS
             }
         }
         set.reach = rules_.bodyReach;
+        if (!weapon && def.text("race.intelligence") == "Animal") {
+            set.reach = rules_.animalReachBase +
+                        rules_.animalReachPerRoot * std::sqrt(static_cast<float>(std::max(0.1, def.number("race.baseBodySize", 1.0))));
+        }
         if (weapon) {
             set.reach = rules_.defaultWeaponReach;
             if (rulesDef != nullptr) {
@@ -742,6 +748,7 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
             e.message = "hit";
             e.amount = tool->power;
             ++hits_;
+            combat_.noteHurt(victim, pawn);
         } else {
             const PawnHitResult result =
                 combat_.hitPawn(victim, hit.part, tool->damageType, tool->power, tool->penetration, splitMix64(m.seed ^ 0x417ULL));
@@ -761,6 +768,9 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
                 health_.applyHit(victim, result.damageType, result.amount, result.part);
             }
             combat_.wearApparel(victim, result);
+            if (!result.deflected) {
+                combat_.noteHurt(victim, pawn);
+            }
             return;
         }
     } else if (m.target != kNoEntity && reg.valid(m.target)) {

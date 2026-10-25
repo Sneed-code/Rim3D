@@ -191,6 +191,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     husbandry_->setEventLog(&events_);
     animals_->setHusbandry(husbandry_.get());
     animals_->setPathfinder(&pathfinder_);
+    combat_->setHurtHook([this](Entity victim, Entity attacker) { animals_->hurt(victim, attacker); });
     jobs_->setHusbandry(husbandry_.get());
     husbandry_->setHaulerHook([this](Entity animal, bool on) { jobs_->setAnimalHauler(animal, on); });
     jobs_->setAnimalWorkGate([this](Entity animal) { return animals_->mayWork(animal); });
@@ -206,6 +207,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
                                            splitMix64(settings.seed ^ 0x6D656C6565ULL));
     melee_->setEventLog(&events_);
     fighters_->setMelee(melee_.get());
+    animals_->setMelee(melee_.get());
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -915,6 +917,7 @@ void Sim::step() {
     melee_->step();
     combat_->step(rng_);
     explosives_->step(rng_);
+    animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
     apparel_->step(time_.seconds, rng_, events_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     rooms_->update();
@@ -1198,6 +1201,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.bodySize = animals_->bodySize(entity);
             view.food = animals_->foodShare(entity);
             view.asleep = animals_->asleep(entity);
+            view.animalTemper = static_cast<int>(reg.get<Animal>(entity).temper);
+            view.animalMode = static_cast<int>(reg.get<Animal>(entity).mode);
             if (const AnimalCare* care = husbandry_->care(entity)) {
                 view.markTame = care->markTame;
                 view.markSlaughter = care->markSlaughter;

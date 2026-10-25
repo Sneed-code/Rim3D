@@ -143,7 +143,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | | N2 | **Hunting and butchering.** A hunt mark and the Hunting job (shoot, carry the corpse home); butchering at the butcher table for meat and leather (so the fine meal can be cooked); hunted animals may turn on the hunter. | Cloud | Sonnet, high | 90 min | N1, C14 |
 | ✓ | N3 | **Taming, training and pens.** Tame mark and Handling job (wildness, food), tamed animals join the colony, training (obedience, release, rescue, haul), animal zones and pens, feeding hay and kibble, slaughter. | Cloud | Sonnet, high | 90 min | N1 |
 | | N4 | **Breeding and products.** Animal mating, gestation and eggs, young animals growing up, milking and shearing jobs, egg laying; a 500-chicken farm stays cheap. | Cloud | Sonnet, high | 90 min | N3 |
-| | N5 | **Animal fights and predators.** Bites and scratches through F8's melee; predators hunt prey and lone pawns; revenge; the manhunter state; animals flee from fights. | Cloud | Sonnet, high | 90 min | N1, F8 |
+| ✓ | N5 | **Animal fights and predators.** Bites and scratches through F8's melee; predators hunt prey and lone pawns; revenge; the manhunter state; animals flee from fights. | Cloud | Sonnet, high | 90 min | N1, F8 |
 
 ### Fighting (F)
 

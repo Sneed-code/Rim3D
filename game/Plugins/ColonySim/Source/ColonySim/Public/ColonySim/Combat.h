@@ -209,6 +209,13 @@ public:
     void setTalents(const TalentSystem* talents) { talents_ = talents; }
     // Called before combat destroys a thing (a building shot to pieces), so jobs can let go of it.
     void setBeforeDestroy(std::function<void(Entity)> hook) { beforeDestroy_ = std::move(hook); }
+    // Called when a bullet or a melee blow hurt a pawn (`victim`, `attacker`): animals react (N5, docs/design/animal-fights.md).
+    void setHurtHook(std::function<void(Entity, Entity)> hook) { hurtHook_ = std::move(hook); }
+    void noteHurt(Entity victim, Entity attacker) const {
+        if (hurtHook_) {
+            hurtHook_(victim, attacker);
+        }
+    }
 
     // Puts a weapon (a gun, or a melee weapon since F8) in the pawn's hands (the one held before is dropped where the pawn stands) or
     // apparel on its body (one piece per layer and body part group: what it replaces is dropped).
@@ -344,6 +351,7 @@ private:
     const Weather* weather_ = nullptr;
     const TalentSystem* talents_ = nullptr;
     std::function<void(Entity)> beforeDestroy_;
+    std::function<void(Entity, Entity)> hurtHook_;
     std::vector<Entity> scratch_;
 
     void emitHit(Entity projectile, const Projectile& p, const TraceHit& hit, float amount);
