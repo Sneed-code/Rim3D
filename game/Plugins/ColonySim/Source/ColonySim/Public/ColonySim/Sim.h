@@ -51,6 +51,7 @@ class PowerGrid;
 class Regions;
 class Rooms;
 class TemperatureSystem;
+class SpoilageSystem;
 class Things;
 class Zones;
 struct Snapshot;
@@ -201,6 +202,8 @@ public:
     // Room temperature, comfort and exposure (docs/design/temperature.md).
     TemperatureSystem& temperature() { return *temperature_; }
     const TemperatureSystem& temperature() const { return *temperature_; }
+    SpoilageSystem& spoilage() { return *spoilage_; }
+    const SpoilageSystem& spoilage() const { return *spoilage_; }
     // The temperature in the open right now, in degrees Celsius: the biome's season and the hour of
     // the day. E1 replaces this with its seasons and weather.
     float outdoorTemperature() const;
@@ -284,6 +287,7 @@ private:
     std::unique_ptr<PowerGrid> power_;
     std::unique_ptr<Lights> lights_;
     std::unique_ptr<TemperatureSystem> temperature_;  // after rooms_ and health_
+    std::unique_ptr<SpoilageSystem> spoilage_;        // after temperature_ and roomStats_
     std::optional<float> outdoorOverride_;
     DoorNumbers doorNumbers_;  // for the snapshot's door animation
     std::unique_ptr<HealthSystem> health_;
