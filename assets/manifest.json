@@ -62,6 +62,15 @@
       "installedTo": "files in game/Content/ThirdParty/TerrainTextures/ and the made textures and material (M_Terrain, MI_Terrain) in game/Content/Rim3D/Generated/Terrain/ (neither in Git)",
       "usedFor": "the ground, sand, gravel and rock of the runtime terrain (docs/design/terrain.md); Megascans can replace them by setting a layer to \"local\" in the list",
       "reinstall": "python tools/terrain_textures.py, then \"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" C:\\Dev\\Rim3D\\game\\Rim3D.uproject -run=TerrainMaterials -unattended -nosplash -AllowCommandletRendering"
+    },
+    {
+      "name": "Clothes art (Poly Haven hat + garments made from Kellan's clothes)",
+      "source": "Poly Haven Fishermans Hat (https://polyhaven.com/a/fishermans_hat), 1k glTF downloaded by tools/clothes_art.py; garments are copies of the PawnLooks hoodie and cargo trousers; tuque and helmet made in code. Listed in assets/clothes_art.json",
+      "licence": "CC0 (hat); the rest derived from Epic sample content, usable in Unreal Engine projects, or our own",
+      "version": "as downloaded 2026-10-25, UE 5.8",
+      "installedTo": "game/Content/ThirdParty/ClothesArt/ and game/Content/Rim3D/Generated/Clothes/ (neither in Git)",
+      "usedFor": "worn meshes (visual.worn) of the D6 and F2 apparel defs, per layer (docs/design/looks.md)",
+      "reinstall": "python tools/clothes_art.py, run the PawnLooks commandlet, then \"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" C:\\Dev\\Rim3D\\game\\Rim3D.uproject -run=ClothesArt -unattended -nosplash -nullrhi"
     }
   ]
 }
