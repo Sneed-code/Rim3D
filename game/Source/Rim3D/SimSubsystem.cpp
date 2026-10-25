@@ -299,6 +299,7 @@ bool USimSubsystem::StartSim(const FSimStartOptions& Options)
 
 void USimSubsystem::ResetAfterSimChange()
 {
+	++SimGeneration;
 	// Both snapshots start as the current state, so nothing blends from an empty map.
 	Sim->writeSnapshot(Current);
 	Previous = Current;

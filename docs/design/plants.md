@@ -78,6 +78,7 @@ layer through `setGrowth` and `remove`, which keep the running hash right.
 
 ## For Unreal (U3)
 
-Read the layer through `sim.plants()` (`records()` lists every plant in cell order). It is not in the
-snapshot yet: U3 decides whether to add a per-chunk list there, since a full copy of 119,000 plants
-each step would be wasteful. Plants change only on the hour and when a job changes one.
+Unreal reads the layer through `sim.plants()` directly, not from the snapshot (a copy of 119,000
+plants each step would be wasteful): `UTerrainSubsystem` draws one instance per plant in
+32 m chunks and finds changes by the `PlantRemoved` and `PlantHarvested` events plus a rotating scan
+of each chunk's plant sizes. Each plant def's `visual` says how it looks (`docs/design/terrain.md`).

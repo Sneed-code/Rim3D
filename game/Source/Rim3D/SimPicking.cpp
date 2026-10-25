@@ -1,6 +1,7 @@
 #include "SimPicking.h"
 
 #include "SimSubsystem.h"
+#include "TerrainDraw.h"
 
 #include "ColonySim/Map.h"
 #include "ColonySim/Sim.h"
@@ -57,7 +58,8 @@ namespace
 		{
 			return false;
 		}
-		OutAbove = Point.Z - Bridge.SimToWorld(static_cast<float>(Local.X), static_cast<float>(Local.Y), 0).Z;
+		// The surface is the ground, plus the rock block where the cell is rock (TerrainDraw.h).
+		OutAbove = Point.Z - Bridge.SimToWorld(static_cast<float>(Local.X), static_cast<float>(Local.Y), 0).Z - TerrainDraw::SurfaceBonusCm(Map, Local.X, Local.Y);
 		return true;
 	}
 }

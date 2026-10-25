@@ -9,6 +9,7 @@
 #include "OverseerSubsystem.h"
 #include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
+#include "TerrainDraw.h"
 
 #include "ColonySim/Map.h"
 #include "ColonySim/Sim.h"
@@ -176,7 +177,10 @@ void AOverseerPawn::PlaceBody()
 		if (Local.X >= 0.0 && Local.Y >= 0.0 && Local.X < Map.width() && Local.Y < Map.height())
 		{
 			const double GroundZ = Bridge->SimToWorld(static_cast<float>(Local.X), static_cast<float>(Local.Y), 0).Z;
-			Location.Z = FMath::Max(Location.Z, GroundZ + 150.0);
+			// Rock stands as a block on the ground, and a mined-out tunnel keeps the mountain's roof over it.
+			const colony::CellPos Cell{FMath::FloorToInt32(Local.X), FMath::FloorToInt32(Local.Y), 0};
+			const double Block = Map.roof(Cell) == colony::Roof::Thick ? TerrainDraw::RockHeightM * 100.0 : 0.0;
+			Location.Z = FMath::Max(Location.Z, GroundZ + Block + 150.0);
 		}
 	}
 	SetActorLocationAndRotation(Location, Look);
