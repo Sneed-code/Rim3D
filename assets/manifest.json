@@ -64,6 +64,15 @@
       "reinstall": "python tools/terrain_textures.py, then \"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" C:\\Dev\\Rim3D\\game\\Rim3D.uproject -run=TerrainMaterials -unattended -nosplash -AllowCommandletRendering"
     },
     {
+      "name": "Animal art (Quaternius Ultimate Animated Animals)",
+      "source": "https://quaternius.com/packs/ultimateanimatedanimals.html (public Google Drive folder), FBX downloaded by tools/animal_art.py; models and def mapping in assets/animal_art.json",
+      "licence": "CC0 (public domain)",
+      "version": "as downloaded 2026-10-25",
+      "installedTo": "FBX files in game/Content/ThirdParty/Animals/ and the imported skeletal meshes, skeletons and animations in game/Content/Rim3D/Generated/Animals/ (neither in Git)",
+      "usedFor": "animal actors for the D5 animals (docs/design/animals.md), drawn by U15",
+      "reinstall": "python tools/animal_art.py, then \"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" C:\\Dev\\Rim3D\\game\\Rim3D.uproject -run=AnimalArt -unattended -nosplash -nullrhi"
+    },
+    {
       "name": "Clothes art (Poly Haven hat + garments made from Kellan's clothes)",
       "source": "Poly Haven Fishermans Hat (https://polyhaven.com/a/fishermans_hat), 1k glTF downloaded by tools/clothes_art.py; garments are copies of the PawnLooks hoodie and cargo trousers; tuque and helmet made in code. Listed in assets/clothes_art.json",
       "licence": "CC0 (hat); the rest derived from Epic sample content, usable in Unreal Engine projects, or our own",
