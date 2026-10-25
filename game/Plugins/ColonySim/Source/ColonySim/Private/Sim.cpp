@@ -1,6 +1,7 @@
 #include "ColonySim/Sim.h"
 
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Construction.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
@@ -81,8 +82,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       groundHash_(map_.contentHash()) {
     things_->setEventLog(&events_);
     health_->setEventLog(&events_);
+    construction_ = std::make_unique<Construction>(map_, *things_, *plants_, *defs_, rng_, events_);
     needs_ = std::make_unique<NeedsSystem>(*things_, *health_, *defs_);
-    jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *defs_, *health_, *needs_, time_, stats_, events_);
+    jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *defs_, *health_, *needs_,
+                                        time_, stats_, events_);
     combat_->setEventLog(&events_);
     combat_->setBeforeDestroy([this](Entity thing) { jobs_->forget(thing); });
     map_.regions().update();  // build every region now, not in the first step
@@ -357,6 +360,24 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!jobs_->assignBed(assign->bed, assign->pawn, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* place = std::get_if<PlaceBlueprintCommand>(&command)) {
+        const DefId def = defs_->idOf("Things", place->def);
+        const DefId stuff = place->stuff.empty() ? DefId{} : defs_->idOf("Things", place->stuff);
+        if (!def.valid()) {
+            commandFailed(id, "no Things def '" + place->def + "'");
+        } else if (!place->stuff.empty() && !stuff.valid()) {
+            commandFailed(id, "no Things def '" + place->stuff + "'");
+        } else if (construction_->placeBlueprint(def, stuff, place->cell, place->rot, error) == kNoEntity) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* cancel = std::get_if<CancelBuildCommand>(&command)) {
+        if (!construction_->cancel(cancel->thing, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* deconstruct = std::get_if<DeconstructCommand>(&command)) {
+        if (!construction_->markDeconstruct(deconstruct->thing, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* equip = std::get_if<EquipCommand>(&command)) {
         if (simJobUses(*jobs_, things_->registry(), equip->item)) {
             commandFailed(id, "a job is using that thing");
@@ -455,6 +476,20 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.rotation = footprint->rotation;
             view.sizeX = rect.sizeX;
             view.sizeY = rect.sizeY;
+            view.markedForDeconstruct = reg.all_of<MarkedForDeconstruct>(entity);
+        }
+        if (const ConstructionSite* site = reg.try_get<ConstructionSite>(entity)) {
+            const CellRect rect = site->rect();
+            view.rotation = site->rotation;
+            view.sizeX = rect.sizeX;
+            view.sizeY = rect.sizeY;
+            view.stage = site->stage;
+            view.stuff = site->stuff;
+            view.buildProgress = site->workTotal > 0.0f ? std::min(1.0f, site->workDone / site->workTotal) : 0.0f;
+            view.materialsHave = site->materialsHave();
+            view.materialsNeeded = site->materialsNeeded();
+        } else if (const BuiltOf* made = reg.try_get<BuiltOf>(entity)) {
+            view.stuff = made->stuff;
         }
         if (const StackCount* stack = reg.try_get<StackCount>(entity)) {
             view.stackCount = stack->count;
@@ -547,7 +582,9 @@ uint64_t Sim::stateHash() const {
                             reg.all_of<StackCount>(e),   reg.all_of<HitPoints>(e),    reg.all_of<Mover>(e),
                             reg.all_of<Worker>(e),       reg.all_of<WorkSettings>(e), reg.all_of<Carrying>(e),
                             reg.all_of<Colonist>(e),     reg.all_of<Health>(e),       reg.all_of<PlayerControl>(e),
-                            reg.all_of<Needs>(e),        reg.all_of<Schedule>(e),     reg.all_of<Bed>(e)};
+                            reg.all_of<Needs>(e),        reg.all_of<Schedule>(e),     reg.all_of<Bed>(e),
+                            reg.all_of<ConstructionSite>(e), reg.all_of<BuiltOf>(e),
+                            reg.all_of<MarkedForDeconstruct>(e)};
         uint64_t mask = 0;
         for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
             mask |= has[bit] ? (uint64_t{1} << bit) : 0;
@@ -616,6 +653,25 @@ uint64_t Sim::stateHash() const {
                 h.add(tag.data(), tag.size());
             }
         }
+        if (const ConstructionSite* site = reg.try_get<ConstructionSite>(e)) {
+            h.add(static_cast<int>(site->stage));
+            h.add(site->stuff.value);
+            simHashCell(h, site->origin);
+            h.add(static_cast<int>(site->rotation));
+            h.add(site->sizeX);
+            h.add(site->sizeY);
+            h.add(static_cast<uint64_t>(site->materials.size()));
+            for (const MaterialCount& m : site->materials) {
+                h.add(m.item.value);
+                h.add(m.needed);
+                h.add(m.have);
+            }
+            h.add(site->workTotal);
+            h.add(site->workDone);
+        }
+        if (const BuiltOf* made = reg.try_get<BuiltOf>(e)) {
+            h.add(made->stuff.value);
+        }
         if (const Worker* worker = reg.try_get<Worker>(e)) {
             const Job& job = worker->job;
             h.add(static_cast<int>(job.type));
@@ -623,6 +679,8 @@ uint64_t Sim::stateHash() const {
             simHashCell(h, job.cell);
             h.add(job.count);
             h.add(entt::to_integral(job.chair));
+            h.add(entt::to_integral(job.site));
+            h.add(job.progress);
             h.add(job.workType.value);
             h.add(job.forced);
             h.add(static_cast<int>(job.step));

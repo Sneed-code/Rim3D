@@ -24,6 +24,7 @@ ROOT = Path(ARGS[0]) if ARGS else Path(__file__).resolve().parent.parent / "data
 REFERENCES = [
     ("Things", "plant.harvestedThingDef", "Things"),
     ("Things", "race.body", "Bodies"),
+    ("Things", "costs{}", "Things"),
     ("Things", "race.hitboxes", "Hitboxes"),
     ("Things", "verbs[].defaultProjectile", "Projectiles"),
     ("Things", "apparel.bodyPartGroups[]", "BodyPartGroups"),

@@ -96,5 +96,19 @@
     "majorPassionChance": 0.33,
     "unverified": ["ageGenerationCurve", "skillLevelRandomCurve"],
     "ours": ["adultAgeMin", "passionCount", "majorPassionChance"]
+  },
+  {
+    "defName": "ConstructionRules", "source": "RimWorld wiki",
+    "buildWorkPerSecond": 1.7,
+    "deconstructWorkPerSecond": 1.0,
+    "deconstructWorkMin": 28.8,
+    "deconstructWorkMax": 4320,
+    "deconstructRefundFactor": 0.5,
+    "skillSpeedBase": 0.3,
+    "skillSpeedPerLevel": 0.0875,
+    "defaultSkillLevel": 8,
+    "unverified": ["buildWorkPerSecond", "deconstructWorkPerSecond", "deconstructWorkMin", "deconstructWorkMax",
+                   "deconstructRefundFactor", "skillSpeedBase", "skillSpeedPerLevel"],
+    "ours": ["defaultSkillLevel"]
   }
 ]

@@ -1071,6 +1071,20 @@ float HealthSystem::partHitPoints(Entity pawn, int part) const {
     return eval.efficiency(part) * eval.maxHp(part);
 }
 
+float HealthSystem::capacityValue(Entity pawn, const std::string& capacity) const {
+    const entt::registry& reg = things_.registry();
+    const Health* health = reg.valid(pawn) ? reg.try_get<Health>(pawn) : nullptr;
+    if (health == nullptr || health->dead) {
+        return health == nullptr ? 1.0f : 0.0f;
+    }
+    for (size_t i = 0; i < model_->capacities.size() && i < health->capacities.size(); ++i) {
+        if (model_->capacities[i].name == capacity) {
+            return std::max(0.0f, health->capacities[i]);
+        }
+    }
+    return 1.0f;
+}
+
 bool HealthSystem::report(Entity pawn, HealthReport& out) const {
     const entt::registry& reg = things_.registry();
     const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);

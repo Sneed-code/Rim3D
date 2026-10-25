@@ -33,12 +33,16 @@ struct JobTarget {
 // One job in progress. Which fields a job type uses is in its comment above.
 struct Job {
     JobType type = JobType::None;
-    Entity thing = kNoEntity;  // HaulToCell, Ingest: the item (the part in the pawn's hands once picked up);
-                               // LayDown: the bed, or none for the ground
+    Entity thing = kNoEntity;  // HaulToCell, Ingest, DeliverResources: the item (the part in the pawn's hands
+                               // once picked up); LayDown: the bed, or none for the ground; BuildFrame: the
+                               // frame; Deconstruct: the building
     CellPos cell;              // HaulToCell: the storage cell; Ingest: where it eats (a chair, else where
-                               // the food lay); LayDown: the bed's cell for this pawn, or where it lies
-    int count = 0;             // HaulToCell, Ingest: how many to carry
+                               // the food lay); LayDown: the bed's cell for this pawn, or where it lies;
+                               // the construction jobs: where the pawn stands to work
+    int count = 0;             // HaulToCell, Ingest, DeliverResources: how many to carry
     Entity chair = kNoEntity;  // Ingest: the chair at a table it eats in, or none (it eats where the food lay)
+    Entity site = kNoEntity;   // DeliverResources: the blueprint or frame it brings materials to
+    float progress = 0.0f;     // Deconstruct: work done so far
     DefId workType;            // the work type whose scanner gave it; none for orders and idling
     bool forced = false;       // a player order (OrderHaulCommand)
     uint8_t step = 0;          // which of the job type's steps is running
@@ -92,6 +96,7 @@ inline bool jobIsLyingDown(const Job& job) {
     return job.type == JobType::LayDown && job.step >= kLayDownLieStep;
 }
 
+class Construction;
 class DefDatabase;
 class HealthSystem;
 class Map;
@@ -107,6 +112,10 @@ struct WorkCandidate {
     float distSq = 0.0f;
     uint16_t workType = 0;  // index in JobSystem::workTypes()
     uint16_t giver = 0;     // index in that work type's givers
+    // For a target the pawn works on from a cell beside it (a building, a frame): that cell. The
+    // job system checks the pawn can reach it instead of the target's own cell.
+    bool hasReach = false;
+    CellPos reach;
 };
 
 // Runs every Worker once per step: thinks for the ones without a job, runs the jobs of the rest.
@@ -127,8 +136,9 @@ public:
         std::vector<WorkGiver*> givers;  // in `tasks` order; owned by the job system
     };
 
-    JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zones, const DefDatabase& defs,
-              const HealthSystem& health, const NeedsSystem& needs, const GameTime& time, SimStats& stats,
+    JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zones, Construction& construction,
+              const DefDatabase& defs, const HealthSystem& health, const NeedsSystem& needs, const GameTime& time,
+              SimStats& stats,
               std::vector<Event>& events);
     ~JobSystem();
     JobSystem(const JobSystem&) = delete;
@@ -177,12 +187,17 @@ public:
     Things& things() { return things_; }
     Map& map() { return map_; }
     Zones& zones() { return zones_; }
+    Construction& construction() { return construction_; }
     const DefDatabase& defs() const { return defs_; }
     int64_t now() const;
 
     // The pawn holding a target, or kNoEntity.
     Entity reservedBy(const JobTarget& target) const;
     bool reservedByOther(const JobTarget& target, Entity pawn) const;
+    // A blueprint or frame that another pawn is bringing materials to: one deliverer at a time.
+    bool deliveryReservedByOther(Entity site, Entity pawn) const;
+    // How fast a pawn builds and takes down: its Construction skill's speed times its Manipulation.
+    float constructionSpeed(Entity pawn) const;
     bool avoiding(Entity pawn, const JobTarget& target) const;
     bool canReach(CellPos from, CellPos to) const;
 
@@ -206,19 +221,26 @@ private:
     enum class StepResult : uint8_t { Running, Next, Failed };
     enum class JobEnd : uint8_t { Done, Failed, Interrupted };
 
+    // `purpose` 1 is a delivery to a site; 0 is everything else.
     struct TargetKey {
         uint32_t thing = 0xFFFFFFFFu;
         int x = 0;
         int y = 0;
         int level = 0;
+        uint8_t purpose = 0;
         friend bool operator<(const TargetKey& a, const TargetKey& b) {
             if (a.thing != b.thing) return a.thing < b.thing;
             if (a.level != b.level) return a.level < b.level;
             if (a.y != b.y) return a.y < b.y;
-            return a.x < b.x;
+            if (a.x != b.x) return a.x < b.x;
+            return a.purpose < b.purpose;
         }
     };
-    static TargetKey keyOf(const JobTarget& target);
+    static TargetKey keyOf(const JobTarget& target, uint8_t purpose = 0);
+    // What a job holds while it runs, which no other pawn's scanner takes; up to two. Hauling: its
+    // item and cell. Eating: the food and the chair's cell. Sleeping: the bed's cell. A delivery:
+    // its item and site. Building and taking down: the frame or the building.
+    static int reservationsOf(const Job& job, TargetKey out[2]);
 
     // The think list: each node may give a job; the first that does wins (docs/design/jobs.md).
     using ThinkNode = bool (JobSystem::*)(Entity pawn, Job& out);
@@ -244,8 +266,6 @@ private:
     bool failCheckIngest(Entity pawn, Job& job, std::string& why);
     bool failCheckLayDown(Entity pawn, Job& job, std::string& why);
     void wakeUp(Entity pawn, const Job& job);
-    // The targets a job holds, which no other pawn's scanner takes; up to two.
-    int heldTargets(const Job& job, JobTarget out[2]) const;
 
     void startJob(Entity pawn, Job job);
     void tickJob(Entity pawn);
@@ -255,6 +275,9 @@ private:
     StepResult walkTo(Entity pawn, Job& job, CellPos goal, std::string& why);
     StepResult pickUp(Entity pawn, Job& job, std::string& why);
     StepResult place(Entity pawn, Job& job, std::string& why);
+    StepResult deliver(Entity pawn, Job& job, std::string& why);
+    StepResult buildWork(Entity pawn, Job& job, std::string& why);
+    StepResult deconstructWork(Entity pawn, Job& job, std::string& why);
     bool retargetStorage(Entity pawn, Job& job);
     void dropCarried(Entity pawn);
     void reserve(Entity pawn, const Job& job);
@@ -266,6 +289,7 @@ private:
     Things& things_;
     Pathfinder& pathfinder_;
     Zones& zones_;
+    Construction& construction_;
     const DefDatabase& defs_;
     const HealthSystem& health_;
     const NeedsSystem& needs_;
