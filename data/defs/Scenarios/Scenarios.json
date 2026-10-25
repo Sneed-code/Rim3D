@@ -1,0 +1,22 @@
+[
+  {
+    "defName": "Crashlanded", "source": "RimWorld wiki", "label": "crashlanded",
+    "colonists": 5, "protagonist": true, "colonistKind": "Human", "biome": "TemperateForest",
+    "startingThings": [
+      { "thing": "Silver", "count": 800 },
+      { "thing": "MealSurvivalPack", "count": 50 },
+      { "thing": "ComponentIndustrial", "count": 30 },
+      { "thing": "MedicineIndustrial", "count": 30 }
+    ],
+    "nearbyThings": [
+      { "thing": "Steel", "count": 450 },
+      { "thing": "WoodLog", "count": 300 }
+    ],
+    "scatteredThings": [
+      { "thing": "Steel", "count": 720 },
+      { "thing": "MealSurvivalPack", "count": 7 }
+    ],
+    "gearAddedByF2": ["Gun_BoltActionRifle", "Gun_Revolver", "MeleeWeapon_Knife (plasteel)", "Apparel_SimpleHelmet (flak)", "Apparel_FlakPants", "Apparel_FlakVest"],
+    "ours": ["colonists", "protagonist"]
+  }
+]

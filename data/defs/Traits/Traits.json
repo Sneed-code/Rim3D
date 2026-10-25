@@ -1,0 +1,145 @@
+[
+  { "defName": "TraitBase", "abstract": true, "source": "RimWorld wiki", "commonality": 1, "conflictingTraits": [] },
+  {
+    "defName": "Industriousness", "parent": "TraitBase",
+    "degreeDatas": [
+      { "degree": -2, "label": "slothful", "statOffsets": { "workSpeedGlobal": -0.35 } },
+      { "degree": -1, "label": "lazy", "statOffsets": { "workSpeedGlobal": -0.2 } },
+      { "degree": 1, "label": "hard worker", "statOffsets": { "workSpeedGlobal": 0.2 } },
+      { "degree": 2, "label": "industrious", "statOffsets": { "workSpeedGlobal": 0.35 } }
+    ]
+  },
+  {
+    "defName": "Nerves", "parent": "TraitBase", "conflictingTraits": ["TooSmart"],
+    "degreeDatas": [
+      { "degree": -2, "label": "volatile", "statOffsets": { "mentalBreakThreshold": 0.15 } },
+      { "degree": -1, "label": "nervous", "statOffsets": { "mentalBreakThreshold": 0.08 } },
+      { "degree": 1, "label": "steadfast", "statOffsets": { "mentalBreakThreshold": -0.09 } },
+      { "degree": 2, "label": "iron-willed", "statOffsets": { "mentalBreakThreshold": -0.18 } }
+    ]
+  },
+  {
+    "defName": "NaturalMood", "parent": "TraitBase",
+    "degreeDatas": [
+      { "degree": -2, "label": "depressive", "moodOffset": -12 },
+      { "degree": -1, "label": "pessimist", "moodOffset": -6 },
+      { "degree": 1, "label": "optimist", "moodOffset": 6 },
+      { "degree": 2, "label": "sanguine", "moodOffset": 12 }
+    ]
+  },
+  {
+    "defName": "Neurotic", "parent": "TraitBase",
+    "degreeDatas": [
+      { "degree": 1, "label": "neurotic", "statOffsets": { "workSpeedGlobal": 0.2, "mentalBreakThreshold": 0.08 } },
+      { "degree": 2, "label": "very neurotic", "statOffsets": { "workSpeedGlobal": 0.4, "mentalBreakThreshold": 0.14 } }
+    ]
+  },
+  {
+    "defName": "SpeedOffset", "parent": "TraitBase",
+    "degreeDatas": [
+      { "degree": -1, "label": "slowpoke", "statOffsets": { "moveSpeed": -0.006667 } },
+      { "degree": 1, "label": "fast walker", "statOffsets": { "moveSpeed": 0.006667 } },
+      { "degree": 2, "label": "jogger", "statOffsets": { "moveSpeed": 0.013333 } }
+    ]
+  },
+  {
+    "defName": "ShootingAccuracy", "parent": "TraitBase", "conflictingTraits": ["Brawler"],
+    "degreeDatas": [
+      { "degree": -1, "label": "trigger-happy", "statOffsets": { "shootingAccuracyPawn": -5 }, "statFactors": { "aimingDelayFactor": 0.5 } },
+      { "degree": 1, "label": "careful shooter", "statOffsets": { "shootingAccuracyPawn": 5 }, "statFactors": { "aimingDelayFactor": 1.25 } }
+    ]
+  },
+  {
+    "defName": "Beauty", "parent": "TraitBase",
+    "degreeDatas": [
+      { "degree": -2, "label": "staggeringly ugly", "statOffsets": { "pawnBeauty": -2 } },
+      { "degree": -1, "label": "ugly", "statOffsets": { "pawnBeauty": -1 } },
+      { "degree": 1, "label": "pretty", "statOffsets": { "pawnBeauty": 1 } },
+      { "degree": 2, "label": "beautiful", "statOffsets": { "pawnBeauty": 2 } }
+    ]
+  },
+  {
+    "defName": "Tough", "parent": "TraitBase", "commonality": 1.1,
+    "degreeDatas": [{ "degree": 0, "label": "tough", "statFactors": { "incomingDamageFactor": 0.5 } }]
+  },
+  {
+    "defName": "Nimble", "parent": "TraitBase",
+    "degreeDatas": [{ "degree": 0, "label": "nimble", "statOffsets": { "meleeDodgeChance": 15 } }]
+  },
+  {
+    "defName": "Brawler", "parent": "TraitBase", "conflictingTraits": ["ShootingAccuracy", "Wimp"],
+    "disallowedPassions": ["Shooting"],
+    "degreeDatas": [{
+      "degree": 0, "label": "brawler", "skillGains": { "Melee": 4, "Shooting": -10 },
+      "statOffsets": { "meleeHitChance": 4 }, "moodWithRangedWeapon": -10
+    }]
+  },
+  {
+    "defName": "Wimp", "parent": "TraitBase", "conflictingTraits": ["Brawler"],
+    "degreeDatas": [{ "degree": 0, "label": "wimp", "statOffsets": { "painShockThreshold": -0.5, "marketValue": -0.15 } }]
+  },
+  {
+    "defName": "Kind", "parent": "TraitBase", "commonality": 2, "conflictingTraits": ["Abrasive", "Psychopath"],
+    "degreeDatas": [{ "degree": 0, "label": "kind" }]
+  },
+  {
+    "defName": "Abrasive", "parent": "TraitBase", "conflictingTraits": ["Kind"],
+    "degreeDatas": [{ "degree": 0, "label": "abrasive", "statOffsets": { "marketValue": -0.15 } }]
+  },
+  {
+    "defName": "Psychopath", "parent": "TraitBase", "conflictingTraits": ["Kind"],
+    "degreeDatas": [{ "degree": 0, "label": "psychopath" }]
+  },
+  {
+    "defName": "Bloodlust", "parent": "TraitBase", "commonality": 0.8, "requiredWorkTags": ["Violent"],
+    "degreeDatas": [{ "degree": 0, "label": "bloodlust", "moodPerKill": 12, "moodPerKillMax": 37 }]
+  },
+  {
+    "defName": "Cannibal", "parent": "TraitBase", "commonality": 0.6,
+    "degreeDatas": [{ "degree": 0, "label": "cannibal" }]
+  },
+  {
+    "defName": "Gourmand", "parent": "TraitBase", "conflictingTraits": ["Ascetic"],
+    "degreeDatas": [{ "degree": 0, "label": "gourmand", "skillGains": { "Cooking": 4 }, "statFactors": { "hungerRateMultiplier": 1.5 } }]
+  },
+  {
+    "defName": "Ascetic", "parent": "TraitBase", "commonality": 0.7, "conflictingTraits": ["Greedy", "Gourmand"],
+    "degreeDatas": [{ "degree": 0, "label": "ascetic" }]
+  },
+  {
+    "defName": "Greedy", "parent": "TraitBase", "conflictingTraits": ["Ascetic"],
+    "degreeDatas": [{ "degree": 0, "label": "greedy", "moodWithoutBedroom": -8 }]
+  },
+  {
+    "defName": "Pyromaniac", "parent": "TraitBase", "commonality": 0.8, "disabledWorkTags": ["Firefighting"],
+    "degreeDatas": [{ "degree": 0, "label": "pyromaniac", "statOffsets": { "marketValue": -0.2 } }]
+  },
+  {
+    "defName": "FastLearner", "parent": "TraitBase", "conflictingTraits": ["SlowLearner"],
+    "degreeDatas": [{ "degree": 0, "label": "fast learner", "statOffsets": { "globalLearningFactor": 0.75 } }]
+  },
+  {
+    "defName": "SlowLearner", "parent": "TraitBase", "conflictingTraits": ["FastLearner"],
+    "degreeDatas": [{ "degree": 0, "label": "slow learner", "statOffsets": { "globalLearningFactor": -0.75 } }]
+  },
+  {
+    "defName": "TooSmart", "parent": "TraitBase", "conflictingTraits": ["Nerves"],
+    "degreeDatas": [{ "degree": 0, "label": "too smart", "statOffsets": { "globalLearningFactor": 0.75, "mentalBreakThreshold": 0.12 } }]
+  },
+  {
+    "defName": "GreatMemory", "parent": "TraitBase", "commonality": 1.1,
+    "degreeDatas": [{ "degree": 0, "label": "great memory", "skillLossFactor": 0.5 }]
+  },
+  {
+    "defName": "QuickSleeper", "parent": "TraitBase", "commonality": 1.1,
+    "degreeDatas": [{ "degree": 0, "label": "quick sleeper", "statOffsets": { "restRateMultiplier": 0.5 } }]
+  },
+  {
+    "defName": "NightOwl", "parent": "TraitBase", "commonality": 1.3,
+    "degreeDatas": [{ "degree": 0, "label": "night owl", "moodAwakeAtNight": 16, "moodAwakeInDay": -10 }]
+  },
+  {
+    "defName": "Nudist", "parent": "TraitBase", "commonality": 0.7,
+    "degreeDatas": [{ "degree": 0, "label": "nudist", "moodNaked": 20, "moodClothed": -3 }]
+  }
+]

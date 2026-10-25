@@ -1,0 +1,38 @@
+[
+  { "defName": "NameBankBase", "abstract": true, "source": "Rim3D" },
+  {
+    "defName": "FirstNamesMale", "parent": "NameBankBase", "names": [
+      "Aaron", "Abel", "Adrian", "Ahmed", "Alan", "Aleksei", "Andre", "Arjun", "Ben", "Boris", "Bruno",
+      "Caleb", "Carlos", "Cedric", "Colin", "Dario", "Dmitri", "Eli", "Emil", "Erik", "Felix", "Finn",
+      "Gabriel", "Hamid", "Hugo", "Ivan", "Jakob", "Jonas", "Kai", "Kenji", "Lars", "Leon", "Luca",
+      "Malik", "Marco", "Mateo", "Nikolai", "Omar", "Oscar", "Pavel", "Quentin", "Rafael", "Ravi",
+      "Samir", "Silas", "Tariq", "Theo", "Tomas", "Victor", "Wade", "Yusuf", "Zane"
+    ]
+  },
+  {
+    "defName": "FirstNamesFemale", "parent": "NameBankBase", "names": [
+      "Ada", "Aiko", "Alina", "Amara", "Anya", "Bea", "Bianca", "Carmen", "Clara", "Dalia", "Daria",
+      "Elena", "Elif", "Emma", "Freya", "Greta", "Hana", "Ines", "Ingrid", "Isla", "Jana", "Juno",
+      "Kara", "Katya", "Lena", "Leila", "Lucia", "Maya", "Mei", "Mira", "Nadia", "Nia", "Nora",
+      "Olga", "Paula", "Priya", "Rosa", "Ruth", "Sana", "Sofia", "Tamar", "Tess", "Una", "Vera",
+      "Wren", "Yara", "Yuki", "Zara", "Zoe"
+    ]
+  },
+  {
+    "defName": "LastNames", "parent": "NameBankBase", "names": [
+      "Abara", "Albrecht", "Andersen", "Arslan", "Baker", "Banerjee", "Becker", "Bishop", "Brandt", "Castillo",
+      "Chen", "Costa", "Dahl", "Delgado", "Dubois", "Ekstrom", "Falk", "Ferreira", "Fischer", "Garcia",
+      "Grant", "Haddad", "Hale", "Hansen", "Ibarra", "Ito", "Jansen", "Kaur", "Keller", "Kovac", "Kowalski",
+      "Larsen", "Lindqvist", "Lopez", "Mbeki", "Meyer", "Morales", "Nakamura", "Novak", "Okafor", "Olsen",
+      "Park", "Petrov", "Quinn", "Ramos", "Reyes", "Rossi", "Sato", "Schmidt", "Silva", "Sokolov", "Stone",
+      "Tanaka", "Torres", "Ueda", "Varga", "Vogel", "Walsh", "Weber", "Yilmaz", "Zielinski"
+    ]
+  },
+  {
+    "defName": "Nicknames", "parent": "NameBankBase", "names": [
+      "Ace", "Badger", "Bolt", "Brick", "Buzz", "Chip", "Cricket", "Dash", "Doc", "Echo", "Fang",
+      "Flint", "Ghost", "Grit", "Hawk", "Jinx", "Lucky", "Moss", "Nails", "Patch", "Pepper", "Rook",
+      "Rusty", "Scout", "Sparks", "Sprocket", "Tank", "Torch", "Tinker", "Wick"
+    ]
+  }
+]

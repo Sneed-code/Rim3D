@@ -288,7 +288,8 @@ class OutputTests(unittest.TestCase):
             self.assertTrue((out / "defs/Things/Things.rimworld.json").is_file())
             self.assertTrue((out / "ref/Things.md").is_file())
             self.assertTrue((out / "ref/import-report.md").is_file())
-            check = subprocess.run([sys.executable, str(TOOLS / "check_defs.py"), str(out / "defs")],
+            check = subprocess.run([sys.executable, str(TOOLS / "check_defs.py"), str(out / "defs"),
+                                    "--no-references"],
                                    capture_output=True, text=True)
             self.assertEqual(check.returncode, 0, check.stdout)
 

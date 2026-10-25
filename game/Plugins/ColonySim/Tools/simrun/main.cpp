@@ -9,7 +9,7 @@
 // --replay takes the settings and commands from the file and runs to its endStep (--days
 // overrides). --record writes what this run did as a replay, with its state hashes.
 // Defs load from --data (default: the repo's data folder). The hauling test needs the Things defs
-// Human and Steel, which the RimWorld import provides.
+// Human and Steel, which data/defs/Things provides.
 #include "ColonySim/Cover.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Random.h"

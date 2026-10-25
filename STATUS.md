@@ -31,9 +31,18 @@ sim can say how hidden a pawn is from each of eight sides (`Map::cover()`), whet
 another (`lineOfSight`, with standing, crouching and prone) and which ground a faction's enemies
 can shoot at (`Sim::threatMap`); `docs/design/cover.md`.
 
+Since D3 the game has real starting data in `data/defs/`, written by hand with RimWorld's numbers
+from the RimWorld wiki (there is no RimWorld install to import from; `docs/decisions/0003`):
+terrain fertility, wild plants and the temperate forest, basic items, the Human, skills, work
+types, traits, our own backstories and names, the Crashlanded start, the Human body, capacities,
+injuries and blood loss (`docs/design/starting-data.md`). `check_defs.py` now also checks that
+defs name defs that exist. `simrun --pawns/--items` runs on the real data.
+Not written yet: buildings (wall, door, bed, table, stove, sandbags), needs, thoughts, recipes,
+guns and raiders; the tasks that use them (C4, C6, C7, C9, F2, F6) add them the same way.
+
 ## Stage 1 progress
 
-7 of 43 tasks done (D1, D2, U1, S1, S2, S5, F3). Tick tasks in `docs/plans/stage-1.md` as they merge.
+8 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, F3). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -47,8 +56,8 @@ Wave 2:
 - ~~**S1** things and the world layout~~ done: `docs/design/things.md`. `ColonySim.Build.cs` now
   exposes `ThirdParty/` (EnTT) as a public system include path; the next PC Unreal task is the
   first to compile it in Unreal.
-- **D3** (PC light, Sonnet medium): runs the importer on sneed's PC. `simrun --pawns/--items`
-  needs its `Human` and `Steel` Things defs.
+- ~~**D3**~~ replaced: hand-written starting data instead of importing RimWorld's files
+  (`docs/design/starting-data.md`). The importer stays in `tools/` unused.
 
 Wave 3, both cloud:
 - ~~**S2** regions and reachability~~ done: `docs/design/regions.md`. A door is a Things def with
@@ -62,8 +71,10 @@ Sonnet high), ~~**F3** cover, sight and threat maps~~ done (`docs/design/cover.m
 FILE` draws what a pawn sees; sandbags and barricades were added to the importer list, and
 trees and rocks get their height from `fillPercent` when C2 adds plants) and **U2** bridge v2 (PC
 Unreal, Sonnet high; the first Unreal compile of EnTT and the S5 bridge, plus a dev key that saves
-a replay to `Saved/Replays/`). C2, C8 and F1 in wave 4 also wait for **D3** (the RimWorld import
-on sneed's PC).
+a replay to `Saved/Replays/`). **C2** plants (cloud, Sonnet medium), **C8** colonists from a seed
+(cloud, Sonnet medium) and **F1** health basics (cloud, Sonnet high) are now unblocked; their defs
+are in `data/defs/`. Numbers marked `unverified` in a def were recalled, not read from the wiki;
+check them when a task leans on them.
 
 ## Waiting on sneed
 

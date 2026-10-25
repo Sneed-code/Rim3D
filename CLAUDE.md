@@ -33,7 +33,7 @@ game/Rim3D.uproject            Unreal project
 game/Source/Rim3D/             Unreal-side C++ (USimSubsystem bridge, rendering, UI, input)
 game/Plugins/ColonySim/        the sim: Source/ (plugin module), Tests/, Tools/simrun/, ThirdParty/
 data/defs/<Kind>/*.json        content defs, one folder per def kind
-tools/                         Python: check_defs.py, later RimWorld import and editor scripts
+tools/                         Python: check_defs.py, the unused RimWorld importer, later editor scripts
 assets/manifest.json           every third-party asset pack (packs themselves are not in Git)
 ```
 

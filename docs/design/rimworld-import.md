@@ -2,7 +2,12 @@
 
 Code: `tools/rimworld_import.py` (the engine) and `tools/rimworld_import_spec.py` (what to import and
 how to convert). Tests: `tools/tests/test_rimworld_import.py` with small XML fixtures in
-`tools/tests/samples/`. Task D2; D3 runs it on sneed's PC against the real install.
+`tools/tests/samples/`. Task D2.
+
+**Not used.** D3 (running it against a RimWorld install) was dropped; the starting data is written by
+hand instead (`docs/decisions/0003-hand-written-starting-data.md`, `docs/design/starting-data.md`). The
+importer and its tests are kept in case a licensed install is ever available; its unit rules are the
+ones the hand-written data follows.
 
 ## What it does
 
@@ -29,8 +34,8 @@ Other options: `--dry-run` (report only), `--strict` (exit 1 if a listed name ma
 `--out-defs`, `--out-ref`.
 
 If a hand-written def in the same kind folder has the same `defName` as an imported one, the import
-stops with an error and writes nothing. Delete the hand-written one (the Stage 0
-`data/defs/Terrain/Terrain.json` placeholder is the only case so far; D3 removes it).
+stops with an error and writes nothing. The hand-written starting data now uses most of the same
+names, so an import would have to replace it file by file.
 
 ## Units
 
