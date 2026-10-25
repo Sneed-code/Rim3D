@@ -6,7 +6,7 @@
       "comfyTemperatureMin": 16, "comfyTemperatureMax": 26, "filthRate": 1
     },
     "race": {
-      "intelligence": "Humanlike", "body": "Human", "baseBodySize": 1.0, "baseHealthScale": 1.0,
+      "intelligence": "Humanlike", "body": "Human", "hitboxes": "HumanHitboxes", "baseBodySize": 1.0, "baseHealthScale": 1.0,
       "lifeExpectancy": 80, "foodPerDay": 1.6, "meatAmount": 140, "leatherAmount": 75
     },
     "tools": [

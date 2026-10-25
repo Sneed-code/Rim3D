@@ -2,6 +2,7 @@
 
 #include "ColonySim/Api.h"
 #include "ColonySim/Clock.h"
+#include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Cover.h"
 #include "ColonySim/Doors.h"
@@ -128,6 +129,9 @@ public:
     // Mood and thoughts (docs/design/mood.md).
     MoodSystem& mood() { return *mood_; }
     const MoodSystem& mood() const { return *mood_; }
+    // Guns, projectiles, hitboxes and armor (docs/design/combat.md).
+    CombatSystem& combat() { return *combat_; }
+    const CombatSystem& combat() const { return *combat_; }
     // What a health panel shows for a pawn; false if it has no body.
     bool healthReport(Entity pawn, HealthReport& out) const { return health_->report(pawn, out); }
 
@@ -193,6 +197,7 @@ private:
     std::unique_ptr<HealthSystem> health_;
     std::unique_ptr<NeedsSystem> needs_;
     std::unique_ptr<MoodSystem> mood_;
+    std::unique_ptr<CombatSystem> combat_;
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
     Rng rng_;

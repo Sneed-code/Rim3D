@@ -103,7 +103,7 @@ the roof mesh is rebuilt only then. The thick roof is `Map::roof` over rock. `Th
 
 ## Saves and hashes
 
-Save format 12: each door has `progress`, `hold`, `open`. Roofs and rooms are not saved; they are
+Save format 13: each door has `progress`, `hold`, `open`. Roofs and rooms are not saved; they are
 rebuilt from the walls when a game loads (the thick roof from the seed's map). Door state is in
 `Sim::stateHash`; rooms and thin roofs are not, because they are a function of what is.
 

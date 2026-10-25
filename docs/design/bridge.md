@@ -24,14 +24,14 @@ A command that can't be applied changes nothing, sends a `CommandFailed` event w
 reason, and is still logged.
 
 There are four dev commands, like RimWorld's dev mode, since C1 the work and stockpile
-commands (below the table, and in [jobs.md](jobs.md)), and since U9 the two for direct control
-([protagonist.md](protagonist.md)). The rest (place blueprint, designate, draft, actions) come with
-the tasks that build those systems.
+commands (below the table, and in [jobs.md](jobs.md)), since U9 the two for direct control
+([protagonist.md](protagonist.md)) and since F2 the combat commands ([combat.md](combat.md)). The
+rest (place blueprint, designate, draft, actions) come with the tasks that build those systems.
 
 | Command | Does | Fails when |
 | --- | --- | --- |
 | `SpawnThingCommand{def, cell, count, rot}` | `Things::spawn` of a Things def | unknown def; the thing can't go there |
-| `DestroyThingCommand{thing}` | `Things::destroy`; jobs using it end first (`JobSystem::forget`) | the thing doesn't exist |
+| `DestroyThingCommand{thing}` | `Things::destroy`; jobs using it end first (`JobSystem::forget`), a pawn's gear is dropped | the thing doesn't exist; a pawn holds or wears it |
 | `DamagePawnCommand{pawn, damageType, amount, part}` | `HealthSystem::applyDamage`; `part` -1 picks like a hit would ([health.md](health.md)) | the thing has no body; unknown damage type; no damage; the pawn is dead or the part is missing or doesn't exist |
 | `TendPawnCommand{pawn, quality}` | `HealthSystem::tendAll` | the thing has no body; nothing to tend |
 | `SetWorkPriorityCommand{pawn, workType, priority}` | a pawn's Work tab: 0 off, 1 to 4 | not a working pawn; unknown work type; priority outside 0 to 4; work it can never do |
@@ -47,6 +47,9 @@ the tasks that build those systems.
 | `DeconstructCommand{thing}` | marks a finished building to be taken down | not a building; marked already |
 | `SetScheduleCommand{pawn, hour, kind}` | the pawn's schedule for one hour (0 to 23): Anything, Work, Joy or Sleep ([needs.md](needs.md)) | the pawn has no schedule; bad hour |
 | `AssignBedCommand{bed, pawn}` | the pawn owns the bed (and gives up its old one); `pawn` none empties the bed | not a bed; not a pawn with needs; the bed is full |
+| `EquipCommand{pawn, item}` | `CombatSystem::equip`: a gun in the hands or apparel on the body ([combat.md](combat.md)) | no body or dead; not a gun or apparel; someone else's; a job holds it |
+| `ShootCommand{pawn, target, x, y, z, player}` | `CombatSystem::shoot`: aimed (warm-up, skill spread) or the player's trigger (at once, gun spread) | no gun; downed; mid-burst or cooling down; target not a pawn on the map |
+| `SetStanceCommand{pawn, stance}` | standing, crouching or prone | not a pawn |
 
 In replay files a `rot` is `"North"`, `"East"`, `"South"` or `"West"` (`"North"` if left out) and an `area` is `[minX, minY, sizeX, sizeY, level]` and a storage priority its name
 (`"Preferred"`; `"Normal"` if left out).
@@ -84,6 +87,8 @@ starts, so read it after every step. Before the first step it holds what setting
 | `PawnAte` | `thing`, `def` (the food), `amount`, `cell`, `message` ("table" or "ground") | a pawn finished eating (C6, [needs.md](needs.md)) |
 | `PawnWokeUp` | `thing`, `target` (the bed or none), `amount` (its rest), `message` ("bed" or "ground") | a pawn got up from sleeping |
 | `PawnMoodBand` | `thing`, `amount` (its mood), `message` ("stable", "minor", "major" or "extreme") | a pawn's mood crossed a mental break threshold (C9, [mood.md](mood.md)) |
+| `ShotFired` | `thing` (shooter), `def` (gun), `target` (projectile), `x, y, z` (muzzle) | a pawn fired (F2, [combat.md](combat.md)) |
+| `ProjectileHit` | `thing` (projectile), `def` (Projectiles def), `hit`, `target`, `part`, `amount`, `x, y, z`, `cell` | a projectile stopped: ground, rock, building, pawn, armor, or gone |
 
 `Things` reports its own spawns and despawns once the sim points it at the event list
 (`Things::setEventLog`). Later systems add their events (shot fired, wound added, job started,
@@ -102,9 +107,13 @@ not in it. Since S4 it also has the ground height under the thing (`z`), a pawn'
 `Snapshot::waypoints[firstWaypoint]`), see [movement.md](movement.md). Since C4 a `ThingView` also has a
 `stage` (`Built`, `Blueprint` or `Frame`), `stuff`, `buildProgress`, `materialsHave`, `materialsNeeded` and
 `markedForDeconstruct`; blueprints and frames are in the snapshot like buildings, with the size and
-rotation of what they will be ([construction.md](construction.md)). Since C5 a door's `ThingView` has `doorOpen`
-(0 to 1) and the snapshot has `rooms` (the enclosed rooms with role and size), `roofCells` (the thin roof) and
-`roofChanges` ([rooms.md](rooms.md)). Later tasks add what they draw and show: pawn info, the work tab.
+rotation of what they will be ([construction.md](construction.md)).
+Since F2 pawns also have
+`stance` (prone when downed or dead), `facingX`/`facingY`, the `weapon` in their hands and
+`shotReadyIn`, and `Snapshot::projectiles` lists every bullet in flight ([combat.md](combat.md)).
+Since C5 a door's `ThingView` has `doorOpen` (0 to 1) and the snapshot has `rooms` (the enclosed rooms with role and
+size), `roofCells` (the thin roof) and `roofChanges` ([rooms.md](rooms.md)).
+Later tasks add what they draw and show: pawn info, the work tab.
 
 Unreal reads only snapshots and events, never the registry or `Things.h`. That lets the sim move to
 its own thread later: it will write snapshots into a buffer that Unreal swaps, with no change to
