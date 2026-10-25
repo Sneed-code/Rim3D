@@ -163,7 +163,9 @@ steps as cover.md says.
 ## Not done yet
 
 - Squads, morale, rout and fleeing, raid plans, the colony alarm and defense roles: F6, [raids.md](raids.md).
-- Strafing while shooting, prone, diving away from grenades, melee, rescuing the downed.
+- Strafing while shooting, prone, diving away from grenades, rescuing the downed.
+- Melee is F8's ([melee.md](melee.md)): fighters armed for it charge, the others strike back at
+  enemies in reach, and a fighter with no gun no longer walks toward its target to get in range.
 - Danger in path costs: a fighter walks to its spot by the shortest path, even across open ground.
 - Leaning is a one-cell step: the body is in the open cell while it shoots. Finer lean (part of the
   body out) waits for hitboxes that can lean.

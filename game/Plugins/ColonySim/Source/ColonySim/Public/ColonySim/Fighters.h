@@ -19,6 +19,7 @@ class DefDatabase;
 class HealthSystem;
 class JobSystem;
 class Map;
+class MeleeSystem;
 class StateHasher;
 class Things;
 struct GameTime;
@@ -133,6 +134,9 @@ public:
 
     const FighterRules& rules() const { return rules_; }
     void setEventLog(std::vector<Event>* events) { events_ = events; }
+    // Melee (F8, docs/design/melee.md): fighters armed for it charge, the others strike back at
+    // enemies in reach. Without it nobody fights in melee.
+    void setMelee(MeleeSystem* melee) { melee_ = melee; }
 
     // A pawn's side (kPlayerFaction without a Faction component). Different factions are enemies.
     FactionId factionOf(Entity pawn) const;
@@ -215,6 +219,8 @@ private:
     float weaponRange(Entity pawn) const;
     bool badlyHurt(Entity pawn) const;
     int64_t now() const;
+    void planCharge(Entity pawn, Fighter& f, CellPos goal);
+    bool meleeAct(Entity pawn, Fighter& f);
 
     Things& things_;
     Map& map_;
@@ -233,6 +239,7 @@ private:
     std::vector<Entity> order_;
     std::vector<Incoming> incoming_;     // scratch: projectiles in flight this step, by id
     std::vector<Event>* events_ = nullptr;
+    MeleeSystem* melee_ = nullptr;
     uint64_t plans_ = 0;
     uint64_t sightChecks_ = 0;
 };
