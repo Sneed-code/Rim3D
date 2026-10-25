@@ -11,6 +11,7 @@
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
+#include "FuelTestHelper.h"
 
 #include <doctest.h>
 
@@ -46,7 +47,7 @@ std::shared_ptr<const DefDatabase> powerDefs() {
 Sim powerSim() { return Sim(SimSettings{5, 64, 0, 0, true}, powerDefs()); }
 
 Entity powerPut(Sim& sim, const char* def, int x, int y, Rot4 rot = Rot4::North) {
-    return sim.things().spawn(def, CellPos{x, y, 0}, 1, rot);
+    return testFueled(sim, sim.things().spawn(def, CellPos{x, y, 0}, 1, rot));
 }
 
 // A row of conduits from x0 to x1 on row y.
@@ -528,7 +529,7 @@ TEST_CASE("Power: net numbers are the same however the buildings were put down")
             std::reverse(list.begin(), list.end());
         }
         for (const auto& [def, cell] : list) {
-            sim.things().spawn(def, cell);
+            testFueled(sim, sim.things().spawn(def, cell));
         }
         sim.step();
         return std::make_pair(sim.power().nets().size(), sim.power().netOf(sim.map().buildingAt(CellPos{14, 10, 0})));

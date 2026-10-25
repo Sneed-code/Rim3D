@@ -84,13 +84,14 @@ none after 19:00; ours) for a grid with no sun source set; wind is a constant 1.
 
 **Hooks** (set on the grid by `Sim` or by the system that owns the source):
 `setSun(f(time) -> 0..1)`, wired to E3's `lights().skyGlow()`; `setWind(f(time) -> factor)` for E1
-(a constant 1.0 until then); `setFuel(f(generator) -> bool)` for C11. **Until C11 sets it, a wood-fired
-generator runs without fuel.** Whoever merges second wires it: C11's refuelable part should answer
-the fuel check, and a generator burns `fuel.perDay` of its item while it makes power.
+(a constant 1.0 until then); `setFuel(f(generator) -> bool)`, **wired by C11 to `fuel().lit`**: a
+wood-fired generator makes nothing while its `Fuel` part is empty, and burns `fuel.perDay` of its item
+only while it is switched on (`FuelSystem::setBurning`; [fuel.md](fuel.md)). A new generator starts
+empty, so a colonist has to bring wood before it runs.
 `setOnChange(f())` is called after a step in which any building gained or lost power; `Sim` uses it
 to make the lamp layer again, and `Lights::setActive` makes a lamp that draws power shine only while
-`running` (a flicked-off or unpowered lamp is dark). Lamps with no power part (torch lamp, campfire)
-always shine.
+`running` (a flicked-off or unpowered lamp is dark). Lamps with no power part (torch lamp,
+campfire) shine while they have fuel ([fuel.md](fuel.md)).
 
 ## Commands, events, snapshot, save
 

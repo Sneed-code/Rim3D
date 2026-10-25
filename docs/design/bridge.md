@@ -65,6 +65,7 @@ rest (place blueprint, designate, draft, actions) come with the tasks that build
 | `AttackOrderCommand{pawn, target}` | a drafted pawn shoots this one whenever it can; `kNoEntity` lets it choose | not drafted; target not a living pawn on the map |
 | `SetFactionCommand{pawn, faction}` | dev until raids (F6): puts a pawn on a side (1 is the player's); any other side fights at once | faction 0; not a pawn |
 | `SetLineageCommand{pawn, lineage}` | dev command: the pawn's looks become another lineage's (skin, hair, horns), the body stays ([looks.md](looks.md)) | the thing has no looks; unknown lineage |
+| `SetRefuelCommand{building, autoRefuel, fillNow}` | allow auto refuel on or off, and `fillNow` orders a fill to the top ([fuel.md](fuel.md)) | not a finished building with a fuel part |
 | `ReloadCommand{pawn}` | `CombatSystem::reload`: a new magazine now (the protagonist's reload key, [aiming.md](aiming.md)) | no gun with a magazine; full; downed, mid-shot or reloading |
 
 In replay files a `rot` is `"North"`, `"East"`, `"South"` or `"West"` (`"North"` if left out) and an `area` is `[minX, minY, sizeX, sizeY, level]` and a storage priority its name
@@ -101,6 +102,8 @@ starts, so read it after every step. Before the first step it holds what setting
 | `CommandFailed` | `command`, `message` | a command couldn't be applied |
 | `PawnAction` | `thing` (the pawn), `def`, `action`, `target` | a pawn did something Unreal animates: `PickUp`, `PutDown` (U5, [pawns.md](pawns.md)), `Eat`, `LieDown`, `GetUp` (C6); `Build` and `Deconstruct` (C4) when work on `target` begins; `Cook` (C7) when a run of a bill begins at the stove `target`; `Clean` (C17) when a layer of filth at `target`'s cell starts to be cleaned; `Reload` (`target` the gun) and `Dodge` (`target` the projectile, `cell` where it steps) (F5) |
 | `FrameStarted` | `thing` (the plan), `def` (the building), `cell` | a blueprint got its first materials and is a frame now; the plan itself came with a `ThingSpawned` |
+| `OutOfFuel` | `thing` (the building), `def`, `cell` | a building's fuel reached 0 ([fuel.md](fuel.md)) |
+| `Refueled` | `thing`, `def`, `cell`, `amount` (items in) | a colonist put fuel in a building |
 | `RecipeDone` | `thing` (the cook), `def` (the Recipes def), `target` (the stove), `cell`, `amount` (products made), `message` | one run of a bill is done; `message` is "bill finished" when a "do X times" bill reached 0 and went ([bills.md](bills.md)) |
 | `PawnInjured` | `thing`, `def` (the injury), `part`, `amount`, `cell` | a pawn got an injury (F1) |
 | `PawnPartLost` | `thing`, `def` (MissingBodyPart), `part`, `amount`, `cell` | a pawn lost a body part |

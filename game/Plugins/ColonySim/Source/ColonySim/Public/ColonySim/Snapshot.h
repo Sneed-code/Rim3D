@@ -76,6 +76,12 @@ struct ThingView {
     // Work buildings with bills (docs/design/bills.md): `billCount` bills from Snapshot::bills[firstBill].
     uint32_t firstBill = 0;
     uint32_t billCount = 0;
+    // Buildings that burn fuel (docs/design/fuel.md): items of fuel in it of `fuelCapacity` (0 for a
+    // building with none), whether colonists refuel it by themselves, and a fill order from the player.
+    float fuel = 0.0f;
+    float fuelCapacity = 0.0f;
+    bool autoRefuel = false;
+    bool fillOrdered = false;
     // Pawns with needs (docs/design/needs.md): food and rest, 1 full to 0 empty, else -1; asleep
     // while lying down in a bed or on the ground.
     float food = -1.0f;

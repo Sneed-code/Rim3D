@@ -1,6 +1,8 @@
 #include "ColonySim/Save.h"
 
 #include "ColonySim/Bills.h"
+#include "ColonySim/Fuel.h"
+#include "ColonySim/Lights.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Looks.h"
@@ -226,6 +228,7 @@ struct SaveEntity {
     std::optional<SaveBillList> bills;      // format 18 on
     std::optional<PowerPart> power;         // section "power"
     std::optional<SaveJoy> joy;             // section "recreation"
+    std::optional<Fuel> fuel;               // "fuel" section (C11)
 };
 
 // A stockpile zone, with its filter by defName.
@@ -923,6 +926,11 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("on", c.on);
             } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
                 ar.value("thing", c.thing);
+            } else if constexpr (std::is_same_v<Type, SetRefuelCommand>) {
+                auto* refuel = &c;
+                ar.value("building", refuel->building);
+                ar.value("autoRefuel", refuel->autoRefuel);
+                ar.value("fillNow", refuel->fillNow);
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }
@@ -1070,7 +1078,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::CleanFilth, "the save file has a bad job");
+    ar.require(job.type <= JobType::Refuel, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -1200,6 +1208,14 @@ template <typename Ar>
 void saveBedPart(Ar& ar, Bed& b) {
     ar.list("owners", b.owners, [&](Entity& owner) { ar.value(nullptr, owner); });
 
+}
+
+template <typename Ar>
+void saveFuelPart(Ar& ar, Fuel& fuel) {
+    ar.value("amount", fuel.amount);
+    ar.value("autoRefuel", fuel.autoRefuel);
+    ar.value("fillOrdered", fuel.fillOrdered);
+    ar.require(fuel.amount >= 0.0f && fuel.amount <= 1.0e6f, "the save file has an impossible amount of fuel");
 }
 
 template <typename Ar>
@@ -1803,6 +1819,9 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "joy", e, &SaveEntity::joy, [&](SaveJoy& j) { saveJoyPart(ar, j); });
     });
     ar.section("roomstats", 1, [&] { saveRoomStatsSection(ar, d); });
+    ar.section("fuel", 1, [&] {
+        saveParts(ar, "fuel", e, &SaveEntity::fuel, [&](Fuel& f) { saveFuelPart(ar, f); });
+    });
     // New sections go here, at the end.
 }
 
@@ -2042,6 +2061,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
                 saved.bills.push_back(SaveBill{bill.id, sim.defs_->get(bill.recipe).defName(), bill.mode, bill.count, bill.suspended});
             }
             out.bills = std::move(saved);
+        }
+        if (const Fuel* fuel = reg.try_get<Fuel>(e)) {
+            out.fuel = *fuel;
         }
         if (const Health* health = reg.try_get<Health>(e)) {
             SaveHealth saved;
@@ -2334,6 +2356,16 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             }
             reg.emplace<BillList>(entity, std::move(list));
         }
+        if (e.fuel) {
+            reg.emplace<Fuel>(entity, *e.fuel);
+        } else if (e.thing && e.thing->category == ThingCategory::Building && !e.site) {
+            // A building saved before fuel existed: it burns fuel now, and starts full (a stove that
+            // cooked for free keeps cooking until it first runs low).
+            const FuelSpec fuelSpec = readFuelSpec(*sim.defs_, *sim.defs_->find(kSaveThingsKind, e.thing->def));
+            if (fuelSpec.present) {
+                reg.emplace<Fuel>(entity, Fuel{fuelSpec.capacity});
+            }
+        }
         if (e.health) {
             Health health;
             health.protagonist = e.health->protagonist;
@@ -2593,6 +2625,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     sim.power_->markDirty();
     sim.power_->update();
     sim.roomStats_->refresh();
+    sim.lights_->update();  // derived from the buildings and roofs, so not saved: the first step must already see it
     sim.events_.clear();
     return true;
 }

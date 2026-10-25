@@ -183,6 +183,10 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
                 j["kind"] = c.kind;
                 j["layers"] = c.layers;
+            } else if constexpr (std::is_same_v<Type, SetRefuelCommand>) {
+                j["building"] = entt::to_integral(c.building);
+                j["autoRefuel"] = c.autoRefuel;
+                j["fillNow"] = c.fillNow;
             } else {
                 static_assert(std::is_same_v<Type, ShortCircuitCommand>, "write every command type");
                 j["thing"] = entt::to_integral(c.thing);
@@ -658,6 +662,15 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         if (!r.integer(j, "building", building, where) || !r.integer(j, "bill", c.bill, where) ||
             !replayReadBillMode(r, j, where, c.mode) || !r.integer(j, "count", c.count, where) ||
             !r.flag(j, "suspended", c.suspended, where)) {
+            return false;
+        }
+        c.building = static_cast<Entity>(building);
+        out.command = c;
+    } else if (type == "SetRefuel") {
+        SetRefuelCommand c;
+        uint32_t building = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "building", building, where) || !r.flag(j, "autoRefuel", c.autoRefuel, where) ||
+            !r.flag(j, "fillNow", c.fillNow, where)) {
             return false;
         }
         c.building = static_cast<Entity>(building);

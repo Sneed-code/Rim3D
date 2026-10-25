@@ -67,8 +67,9 @@
     "costs": { "Steel": 80 },
     "stats": { "maxHitPoints": 180, "workToBuild": 2880, "flammability": 1.0 },
     "building": { "isStove": true },
+    "fuel": { "item": "WoodLog", "capacity": 50, "perUse": 1.0, "autoRefuelPercent": 0.3 },
     "unverified": ["fillPercent"],
-    "ours": ["building.isStove"]
+    "ours": ["building.isStove", "fuel.perUse"]
   },
   {"defName": "HospitalBed", "researchPrerequisite": "HospitalBed", "parent": "BuildingBase", "label": "hospital bed", "size": [1, 2], "passability": "Standable", "designationCategory": "Furniture", "costs": {"Steel": 25, "ComponentIndustrial": 2}, "visual": {"parts": [{"shape": "box", "size": [0, 0, 0.22], "color": [0.62, 0.64, 0.68]}, {"shape": "box", "size": [-0.14, -0.14, 0.18], "at": [0, 0, 0.22], "color": [0.9, 0.93, 0.95]}, {"shape": "box", "size": [-0.2, 0.9, 0.04], "at": [0, -0.3, 0.4], "color": [0.4, 0.7, 0.75]}, {"shape": "box", "size": [0.55, 0.34, 0.1], "at": [0, 0.62, 0.4], "color": [0.95, 0.95, 0.97]}, {"shape": "box", "size": [0, 0.08, 0.6], "at": [0, 0.96, 0], "color": [0.62, 0.64, 0.68]}]}, "stats": {"maxHitPoints": 180, "workToBuild": 2880, "flammability": 0.5, "beauty": 1, "comfort": 0.7, "bedRestEffectiveness": 1.0, "medicalTendQualityOffset": 0.15, "surgerySuccessChanceFactor": 1.07, "immunityGainSpeedFactor": 1.07}, "building": {"bed": true, "sleepingSlots": 1, "medical": true}, "unverified": ["costs", "stats.workToBuild", "stats.comfort", "stats.medicalTendQualityOffset", "stats.surgerySuccessChanceFactor", "stats.immunityGainSpeedFactor"]},
   {"defName": "CraftingSpot", "parent": "BuildingBase", "label": "crafting spot", "size": [1, 1], "designationCategory": "Production", "passability": "Standable", "costs": {"WoodLog": 1}, "visual": {"parts": [{"shape": "box", "size": [0.8, 0.8, 0.02], "color": [0.45, 0.35, 0.25]}]}, "stats": {"maxHitPoints": 40, "workToBuild": 72, "flammability": 1.0}, "building": {"isWorkbench": true}, "unverified": ["costs", "stats.workToBuild"], "ours": ["building.isWorkbench"]},

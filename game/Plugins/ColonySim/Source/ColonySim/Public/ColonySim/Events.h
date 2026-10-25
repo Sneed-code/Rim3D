@@ -39,6 +39,8 @@ enum class EventType : uint8_t {
     RecipeDone,      // a pawn finished one run of a bill (docs/design/bills.md)
     PowerChanged,    // a building gained or lost power (docs/design/power.md)
     ShortCircuit,    // a short circuit emptied a net's batteries (docs/design/power.md)
+    OutOfFuel,       // a building's fuel ran out (docs/design/fuel.md)
+    Refueled,        // a pawn put fuel into a building
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -69,6 +71,7 @@ enum class PawnAction : uint8_t {
     Dodge,    // sidestepped into `cell` out of the way of the projectile `target`
     Cook,         // started work on a bill at `target`, a work building (once per run of the bill)
     Clean,        // started cleaning the filth in `cell`; a layer comes off every few seconds until its JobEnded
+    Refuel,       // started putting fuel into `target`, a building (once per refuel job; the work goes on until its JobEnded)
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
@@ -103,6 +106,8 @@ struct Event {
     // def, `cell` its origin, `message` "on" (in a net that works and switched on) or "off".
     // ShortCircuit: `thing` the building it happened at, `cell` its origin, `amount` the energy
     // released from the net's batteries, Wd.
+    // OutOfFuel: `thing` the building, `def` its Things def, `cell` the cell of its position. Refueled: the same, and
+    // `amount` how many items went in. PawnAction Refuel: `thing` the pawn, `target` the building.
     float amount = 0.0f;
     // ShotFired: `thing` the shooter, `def` its gun's Things def, `target` the projectile, (x, y, z)
     // the muzzle. ProjectileHit: `thing` the projectile (forget its id), `def` its Projectiles def,

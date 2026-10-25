@@ -262,6 +262,8 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     uint64_t picked = 0;
     uint64_t mealsMade = 0;
     uint64_t cleaned = 0;
+    uint64_t woodIn = 0;     // wood colonists put into buildings (Refueled events)
+    uint64_t outOfFuel = 0;  // times a building ran out
     uint64_t commandsFailed = 0;
     uint64_t recreations = 0;  // recreation jobs started
     uint64_t pinGames = 0;     // ... of them at the horseshoes pin
@@ -304,6 +306,8 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 case EventType::PlantHarvested: ++picked; break;
                 case EventType::PawnAction: cleaned += e.action == PawnAction::Clean ? 1 : 0; break;
                 case EventType::RecipeDone: mealsMade += static_cast<uint64_t>(std::max(0.0f, e.amount)); break;
+                case EventType::Refueled: woodIn += static_cast<uint64_t>(std::max(0.0f, e.amount)); break;
+                case EventType::OutOfFuel: ++outOfFuel; break;
                 case EventType::CommandFailed:
                     ++commandsFailed;
                     std::fprintf(stderr, "step %lld: command %llu failed: %s\n", static_cast<long long>(i),
@@ -470,7 +474,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 "\"mined\":%llu,\"felled\":%llu,\"picked\":%llu,"
                 "\"planned\":%zu,\"walls\":%d,\"doors\":%d,\"beds\":%d,\"tables\":%d,\"stools\":%d,\"stoves\":%d,\"unfinished\":%d,"
                 "\"allBuiltAtSecond\":%lld,\"stoveBuiltAtSecond\":%lld,\"roomOk\":%s,"
-                "\"mealsCooked\":%llu,\"ate\":%llu,\"atTable\":%llu,\"woke\":%llu,\"wokeInBed\":%llu,"
+                "\"woodIn\":%llu,\"outOfFuel\":%llu,\"mealsCooked\":%llu,\"ate\":%llu,\"atTable\":%llu,\"woke\":%llu,\"wokeInBed\":%llu,"
                 "\"cleaned\":%llu,\"filthLeft\":%zu,\"roomBeauty\":%.2f,\"roomImpressiveness\":%.1f,"
                 "\"commandsFailed\":%llu,\"failedJobs\":%llu,\"stateHash\":\"%016llx\"}}\n",
                 static_cast<unsigned long long>(seed), mapSize, days, colonists.size(), static_cast<unsigned long long>(died),
@@ -483,6 +487,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 static_cast<unsigned long long>(felled), static_cast<unsigned long long>(picked), plans.size(),
                 builtBy["Wall"], builtBy["Door"], builtBy["Bed"], builtBy["Table1x2"], builtBy["Stool"], builtBy["FueledStove"], unfinished,
                 static_cast<long long>(allBuiltAt), static_cast<long long>(stoveBuiltAt), bedroomsRoofed == 1 ? "true" : "false",
+                static_cast<unsigned long long>(woodIn), static_cast<unsigned long long>(outOfFuel),
                 static_cast<unsigned long long>(mealsMade), static_cast<unsigned long long>(ate),
                 static_cast<unsigned long long>(atTable), static_cast<unsigned long long>(slept),
                 static_cast<unsigned long long>(sleptInBed), static_cast<unsigned long long>(cleaned), sim.filth().totalLayers(),
@@ -541,6 +546,9 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     }
     if (roomStat == nullptr) {
         fail("%s", "the room has no stats");
+    }
+    if (woodIn == 0) {
+        fail("%s", "nobody put wood into the stove");
     }
     if (commandsFailed > 0 || sim.stats().failedJobs > 0) {
         fail("%llu commands and %llu jobs failed", static_cast<unsigned long long>(commandsFailed),

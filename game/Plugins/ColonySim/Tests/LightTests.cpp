@@ -7,6 +7,7 @@
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
+#include "FuelTestHelper.h"
 
 #include <doctest.h>
 
@@ -84,7 +85,7 @@ TEST_CASE("Light: a roof keeps the sun out, and a lamp lights the room") {
     CHECK(sim.lights().lightAt(inside) == 0.0f);        // noon, but roofed and no lamp
     CHECK(sim.lights().lightAt(CellPos{40, 40, 0}) == doctest::Approx(1.0f));
 
-    sim.things().spawn("TorchLamp", CellPos{24, 23, 0});
+    testFueled(sim, sim.things().spawn("TorchLamp", CellPos{24, 23, 0}));
     sim.step();
     CHECK(sim.lights().sources().size() == 1);
     CHECK(sim.lights().lightAt(CellPos{24, 23, 0}) == doctest::Approx(1.0f));
@@ -95,7 +96,7 @@ TEST_CASE("Light: a roof keeps the sun out, and a lamp lights the room") {
 TEST_CASE("Light: a lamp's light falls to nothing at its radius and walls cast shadows") {
     Sim sim = lightSim();
     lightGoTo(sim, 23.0);
-    sim.things().spawn("TorchLamp", CellPos{30, 30, 0});  // radius 10
+    testFueled(sim, sim.things().spawn("TorchLamp", CellPos{30, 30, 0}));  // radius 10
     for (int y = 28; y <= 32; ++y) {
         sim.things().spawn("Wall", CellPos{33, y, 0});
     }
@@ -112,7 +113,7 @@ TEST_CASE("Light: a lamp's light falls to nothing at its radius and walls cast s
 
 TEST_CASE("Light: the lamp layer is rebuilt only when something changed") {
     Sim sim = lightSim();
-    sim.things().spawn("TorchLamp", CellPos{30, 30, 0});
+    testFueled(sim, sim.things().spawn("TorchLamp", CellPos{30, 30, 0}));
     sim.step();
     const uint64_t rebuilds = sim.lights().rebuilds();
     sim.stepMany(100);
@@ -139,7 +140,7 @@ TEST_CASE("Light: darkness slows walking and work") {
     CHECK(sim.lights().moveSpeedAt(spot) < 0.9f);
     CHECK(sim.jobs().lightWorkFactor(pawn) == doctest::Approx(sim.lights().workSpeedAt(spot)));
     // A lamp beside it brings the speed back.
-    sim.things().spawn("TorchLamp", CellPos{31, 30, 0});
+    testFueled(sim, sim.things().spawn("TorchLamp", CellPos{31, 30, 0}));
     sim.step();
     CHECK(sim.jobs().lightWorkFactor(pawn) > 0.99f);
 }

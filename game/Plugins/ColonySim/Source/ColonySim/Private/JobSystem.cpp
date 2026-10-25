@@ -6,6 +6,7 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Events.h"
+#include "ColonySim/Fuel.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Movement.h"
@@ -47,7 +48,8 @@ enum class JobStepKind : uint8_t {
     BillWork,
     BillFinish,
     Play,  // recreation: stay for the activity's time (RecreationJobs.cpp)
-    CleanWork
+    CleanWork,
+    RefuelWork
 };
 
 constexpr JobStepKind kJobsWaitSteps[] = {JobStepKind::Wait};
@@ -71,6 +73,9 @@ constexpr JobStepKind kJobsDoBillSteps[] = {JobStepKind::GotoThing, JobStepKind:
                                             JobStepKind::BillFinish};
 static_assert(kDoBillPickUpStep == 1 && kDoBillDepositStep == 3, "the DoBill steps moved");
 constexpr JobStepKind kJobsRecreateSteps[] = {JobStepKind::WalkToSpot, JobStepKind::Play};
+constexpr JobStepKind kJobsRefuelSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::CarryToCell,
+                                            JobStepKind::RefuelWork};
+static_assert(kRefuelPickUpStep == 1, "the Refuel steps moved");
 
 // The most steps one pawn's job may run in one game second (guards against a loop of steps that
 // all end at once).
@@ -106,6 +111,7 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::DoBill: return {kJobsDoBillSteps, static_cast<int>(std::size(kJobsDoBillSteps))};
         case JobType::Recreate: return {kJobsRecreateSteps, static_cast<int>(std::size(kJobsRecreateSteps))};
         case JobType::CleanFilth: return {kJobsCleanSteps, static_cast<int>(std::size(kJobsCleanSteps))};
+        case JobType::Refuel: return {kJobsRefuelSteps, static_cast<int>(std::size(kJobsRefuelSteps))};
     }
     return {nullptr, 0};
 }
@@ -123,6 +129,7 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::PlantWork:
         case JobStepKind::BillWork:
         case JobStepKind::CleanWork:
+        case JobStepKind::RefuelWork:
         case JobStepKind::Eat:
         case JobStepKind::Lie:
             return true;
@@ -175,6 +182,7 @@ const char* jobTypeName(JobType type) {
         case JobType::DoBill: return "DoBill";
         case JobType::Recreate: return "Recreate";
         case JobType::CleanFilth: return "CleanFilth";
+        case JobType::Refuel: return "Refuel";
     }
     return "?";
 }
@@ -203,6 +211,7 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
       stats_(stats),
       events_(events),
       bills_(std::make_unique<BillSystem>(things, defs)),
+      fuel_(std::make_unique<FuelSystem>(things, defs, events)),
       givers_(makeWorkGivers()) {
     for (const DefId id : defs_.idsOfKind("WorkTypes")) {
         const Def& def = defs_.get(id);
@@ -367,6 +376,7 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
             out[0] = keyOf(JobTarget{kNoEntity, job.cell});
             return 1;
         case JobType::DeliverResources:
+        case JobType::Refuel:
             out[0] = keyOf(JobTarget{job.thing, CellPos{}});
             out[1] = keyOf(JobTarget{job.site, CellPos{}}, 1);
             return 2;
@@ -710,6 +720,9 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::CleanFilth) {
         return failCheckClean(pawn, job, why);
     }
+    if (job.type == JobType::Refuel) {
+        return failCheckRefuel(pawn, job, why);
+    }
     entt::registry& reg = things_.registry();
     if (job.type == JobType::DeliverResources) {
         const ConstructionSite* site = reg.valid(job.site) ? reg.try_get<ConstructionSite>(job.site) : nullptr;
@@ -824,6 +837,8 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return depositIngredient(pawn, job, why);
         case JobStepKind::BillWork:
             return billWork(pawn, job, why);
+        case JobStepKind::RefuelWork:
+            return refuelWork(pawn, job, why);
         case JobStepKind::BillFinish:
             return billFinish(pawn, job, why);
         case JobStepKind::Play:
@@ -1308,10 +1323,12 @@ bool JobSystem::afterLoad(std::string& error) {
                 return false;
             }
         }
-        if (job.type == JobType::HaulToCell || job.type == JobType::DeliverResources) {
+        if (job.type == JobType::HaulToCell || job.type == JobType::DeliverResources || job.type == JobType::Refuel) {
             const Carrying* carrying = reg.try_get<Carrying>(pawn);
             const bool carries = carrying != nullptr && carrying->thing == job.thing;
-            const uint8_t pickUpStep = job.type == JobType::HaulToCell ? kJobsHaulPickUpStep : kJobsDeliverPickUpStep;
+            const uint8_t pickUpStep = job.type == JobType::HaulToCell        ? kJobsHaulPickUpStep
+                                       : job.type == JobType::DeliverResources ? kJobsDeliverPickUpStep
+                                                                               : kRefuelPickUpStep;
             if (job.thing == kNoEntity || (job.step > pickUpStep) != carries) {
                 error = "the save has a carrying job that doesn't match what the pawn carries";
                 return false;
@@ -1321,7 +1338,7 @@ bool JobSystem::afterLoad(std::string& error) {
             error = "the save has a building job with nothing to work on";
             return false;
         }
-        if (job.type == JobType::DeliverResources && job.site == kNoEntity) {
+        if ((job.type == JobType::DeliverResources || job.type == JobType::Refuel) && job.site == kNoEntity) {
             error = "the save has a delivery with nowhere to deliver";
             return false;
         }

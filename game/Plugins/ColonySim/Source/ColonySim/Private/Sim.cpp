@@ -9,6 +9,7 @@
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Floors.h"
+#include "ColonySim/Fuel.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Jobs.h"
@@ -120,7 +121,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     // and the lamps are made again when that changes.
     power_->setSun([this](const GameTime&) { return static_cast<double>(lights_->skyGlow()); });
     power_->setOnChange([this] { lights_->markDirty(); });
-    lights_->setActive([this](Entity building) { return power_->running(building); });
+    // A lamp that burns fuel is dark without it (FuelSystem marks the lamps dirty when that changes).
+    lights_->setActive([this](Entity building) { return power_->running(building) && jobs_->fuel().lit(building); });
     movement_->setLights(lights_.get());
     recreation_ = std::make_unique<RecreationSystem>(*things_, *defs_);
     recreation_->setRooms(rooms_.get());
@@ -130,6 +132,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setPower(power_.get());
     jobs_->setRooms(rooms_.get());
     jobs_->setFilth(filth_.get());
+    jobs_->fuel().setLights(lights_.get());
+    // A wood-fired generator makes power only with fuel, and burns it only while it makes power.
+    power_->setFuel([this](Entity building) { return jobs_->fuel().lit(building); });
+    jobs_->fuel().setBurning([this](Entity building) { return !power_->hasPower(building) || power_->stateOf(building) != PowerState::Off; });
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
     fighters_->setEventLog(&events_);
@@ -612,6 +618,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!filth_->add(addFilth->cell, addFilth->kind, addFilth->layers)) {
             commandFailed(id, "no filth could be added there");
         }
+    } else if (const auto* refuel = std::get_if<SetRefuelCommand>(&command)) {
+        if (!jobs_->fuel().setRefuel(refuel->building, refuel->autoRefuel, refuel->fillNow, error)) {
+            commandFailed(id, error);
+        }
     }
 }
 
@@ -644,6 +654,7 @@ void Sim::step() {
             }
         }
     }
+    jobs_->fuel().step();
     jobs_->step();
     fighters_->step();
     recreation_->step();
@@ -760,6 +771,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 out.bills.push_back(BillView{bill.id, bill.recipe, bill.mode, bill.count, bill.suspended});
             }
             view.billCount = static_cast<uint32_t>(out.bills.size()) - view.firstBill;
+        }
+        if (const Fuel* fuel = reg.try_get<Fuel>(entity)) {
+            const FuelSpec& spec = jobs_->fuel().specOf(entity);
+            view.fuel = fuel->amount;
+            view.fuelCapacity = spec.capacity;
+            view.autoRefuel = fuel->autoRefuel;
+            view.fillOrdered = fuel->fillOrdered;
         }
         if (const StackCount* stack = reg.try_get<StackCount>(entity)) {
             view.stackCount = stack->count;
@@ -1058,6 +1076,11 @@ uint64_t Sim::stateHash() const {
                 h.add(bill.count);
                 h.add(bill.suspended);
             }
+        }
+        if (const Fuel* fuel = reg.try_get<Fuel>(e)) {
+            h.add(fuel->amount);
+            h.add(fuel->autoRefuel);
+            h.add(fuel->fillOrdered);
         }
         if (const Worker* worker = reg.try_get<Worker>(e)) {
             const Job& job = worker->job;

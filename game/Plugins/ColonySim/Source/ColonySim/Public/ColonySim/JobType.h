@@ -23,6 +23,7 @@ enum class JobType : uint8_t {
     DoBill,            // fetch ingredients to a work building, work, make the product (bills.md)
     Recreate,          // walk to a place and play, sit or stroll for a while, for joy (recreation.md)
     CleanFilth,        // walk to a cell with filth and clean it, a layer at a time (docs/design/room-stats.md)
+    Refuel,            // carry fuel to a building and put it in (fuel.md)
 };
 
 COLONY_API const char* jobTypeName(JobType type);

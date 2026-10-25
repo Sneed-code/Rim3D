@@ -85,6 +85,8 @@ const char* commandName(const Command& command) {
                 return "PlaceFloor";
             } else if constexpr (std::is_same_v<Type, AddFilthCommand>) {
                 return "AddFilth";
+            } else if constexpr (std::is_same_v<Type, SetRefuelCommand>) {
+                return "SetRefuel";
             } else {
                 static_assert(std::is_same_v<Type, ShortCircuitCommand>, "name every command type");
                 return "ShortCircuit";
@@ -143,6 +145,8 @@ const char* eventTypeName(EventType type) {
         case EventType::RecipeDone: return "RecipeDone";
         case EventType::PowerChanged: return "PowerChanged";
         case EventType::ShortCircuit: return "ShortCircuit";
+        case EventType::OutOfFuel: return "OutOfFuel";
+        case EventType::Refueled: return "Refueled";
     }
     return "?";
 }
@@ -163,6 +167,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Dodge: return "Dodge";
         case PawnAction::Cook: return "Cook";
         case PawnAction::Clean: return "Clean";
+        case PawnAction::Refuel: return "Refuel";
     }
     return "?";
 }
