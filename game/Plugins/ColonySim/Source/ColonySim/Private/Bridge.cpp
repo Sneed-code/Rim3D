@@ -4,7 +4,10 @@
 #include "ColonySim/Snapshot.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <type_traits>
+#include <utility>
+#include <variant>
 
 namespace colony {
 
@@ -80,6 +83,29 @@ const char* commandName(const Command& command) {
             }
         },
         command);
+}
+
+namespace {
+
+// Tries each command type in turn. Prefixed because Unreal's unity builds merge .cpp files.
+template <size_t I = 0>
+bool bridgeCommandFromName(const std::string& name, Command& out) {
+    if constexpr (I < std::variant_size_v<Command>) {
+        Command blank{std::in_place_index<I>};
+        if (name == commandName(blank)) {
+            out = std::move(blank);
+            return true;
+        }
+        return bridgeCommandFromName<I + 1>(name, out);
+    } else {
+        return false;
+    }
+}
+
+}  // namespace
+
+bool commandFromName(const std::string& name, Command& out) {
+    return bridgeCommandFromName(name, out);
 }
 
 const char* eventTypeName(EventType type) {

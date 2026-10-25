@@ -84,7 +84,7 @@ G2, A1 and A2 are Stage 1 tasks.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | S7 | **Saves and commands that merge in parallel.** Turn the save into named sections, each with its own version, listed in `saves.md`; today's formats 6 to 19 still load. Commands saved by name, not by their position in the `Command` variant. A short "how to add a system" checklist in `saves.md` and `bridge.md`. No behaviour change: every existing test and replay hash stays the same. | Cloud | Opus, high | 90 min | none |
+| ✓ | S7 | **Saves and commands that merge in parallel.** Turn the save into named sections, each with its own version, listed in `saves.md`; today's formats 6 to 19 still load. Commands saved by name, not by their position in the `Command` variant. A short "how to add a system" checklist in `saves.md` and `bridge.md`. No behaviour change: every existing test and replay hash stays the same. | Cloud | Opus, high | 90 min | none |
 | | S8 | **Map generation 2 and 1 km games.** Rivers (shallow and deep water, crossing costs), marsh and mud, the D4 biomes, old ruins (broken walls), steam geysers; new games default to 1,024 m. `simrun --png` shows it; generation time stays under a second. Old saves whose map no longer matches fail with a clear message. | Cloud | Sonnet, high | 90 min | D4, E1 |
 | | S9 | **Sim cost at Stage 2 size.** `simrun` on 1 km with 30 colonists, 300 animals, crops, fire and room temperature at 3x: time per system, fix the worst, write the budget into the next `docs/decisions/` file. Runs nightly. | Cloud | Sonnet, high | 90 min | N1, E2, E4, C13 |
 

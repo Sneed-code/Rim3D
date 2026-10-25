@@ -1,4 +1,5 @@
 #include "ColonySim/Defs.h"
+#include "ColonySim/Hash.h"
 #include "ColonySim/Pathfinder.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Replay.h"
@@ -12,6 +13,8 @@
 
 #include <doctest.h>
 
+#include <algorithm>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -110,6 +113,55 @@ std::shared_ptr<const DefDatabase> saveTestDefsWithout(const std::string& remove
     std::vector<std::string> errors;
     const std::string workTypes = R"([{"defName": "Hauling", "naturalPriority": 300, "tasks": ["HaulToStockpile"]}])";
     DefDatabase::build({{"Things", "test.json", items}, {"WorkTypes", "test.json", workTypes}}, "", *db, errors);
+    return db;
+}
+
+// The save file's checksum (Save.cpp's), written again after a test has changed the bytes, so the
+// load gets past it to the part being tested.
+void saveTestReseal(std::vector<uint8_t>& bytes) {
+    const size_t size = bytes.size() - 8;
+    StateHasher h;
+    h.add(static_cast<uint64_t>(size));
+    size_t i = 0;
+    for (; i + 8 <= size; i += 8) {
+        uint64_t word = 0;
+        for (size_t k = 0; k < 8; ++k) {
+            word |= static_cast<uint64_t>(bytes[i + k]) << (8 * k);
+        }
+        h.add(word);
+    }
+    uint64_t tail = 0;
+    for (size_t k = 0; i + k < size; ++k) {
+        tail |= static_cast<uint64_t>(bytes[i + k]) << (8 * k);
+    }
+    h.add(tail);
+    const uint64_t sum = h.value();
+    for (size_t k = 0; k < 8; ++k) {
+        bytes[size + k] = static_cast<uint8_t>((sum >> (8 * k)) & 0xFF);
+    }
+}
+
+// Where a text (its u32 length, then its bytes) starts in a save, or npos.
+size_t saveTestFindText(const std::vector<uint8_t>& bytes, const std::string& text) {
+    std::vector<uint8_t> pattern(4, 0);
+    pattern[0] = static_cast<uint8_t>(text.size());
+    pattern.insert(pattern.end(), text.begin(), text.end());
+    const auto at = std::search(bytes.begin(), bytes.end(), pattern.begin(), pattern.end());
+    return at == bytes.end() ? std::string::npos : static_cast<size_t>(at - bytes.begin());
+}
+
+uint32_t saveTestU32(const std::vector<uint8_t>& bytes, size_t at) {
+    uint32_t v = 0;
+    for (size_t k = 0; k < 4; ++k) {
+        v |= static_cast<uint32_t>(bytes[at + k]) << (8 * k);
+    }
+    return v;
+}
+
+std::shared_ptr<const DefDatabase> saveTestGameDefs() {
+    auto db = std::make_shared<DefDatabase>();
+    std::vector<std::string> errors;
+    DefDatabase::loadDirectory(COLONY_DATA_DIR, *db, errors);
     return db;
 }
 
@@ -372,4 +424,110 @@ TEST_CASE("Save: the JSON dump names defs and matches the save") {
     SAVE_REQUIRE(saveFileToJson(saveSim(sim), fromFile, error));
     CHECK(fromFile == json);
     CHECK_FALSE(saveFileToJson(std::vector<uint8_t>(20, 0), fromFile, error));
+}
+
+TEST_CASE("Save: format 19 files, from before the sections, still load and play the same") {
+    // Made on 2026-10-25 by the game as it was then: `simrun --start Crashlanded --size 64
+    // --days 0.5` and the colony-cook replay. They load with today's data files; when a def they
+    // name is dropped on purpose, a decision drops the file (as decision 0005 did for formats 1 to 5).
+    const auto defs = saveTestGameDefs();
+    for (const char* name : {"crashlanded-format19.save", "colony-cook-format19.save"}) {
+        CAPTURE(name);
+        std::vector<uint8_t> bytes;
+        std::string error;
+        SAVE_REQUIRE(readSaveFile(std::string(COLONY_TEST_SAVES_DIR) + "/" + name, bytes, error));
+        CHECK(saveTestU32(bytes, 8) == 19);
+        SaveLoadResult old = loadSim(bytes, defs);
+        CHECK(old.error == "");
+        SAVE_REQUIRE(old.sim != nullptr);
+        CHECK(old.sim->things().registry().view<const Thing>().size() >= 5);
+
+        // Saved again, it is a sectioned file that holds the same game.
+        const std::vector<uint8_t> resaved = saveSim(*old.sim);
+        CHECK(saveTestU32(resaved, 8) == 20);
+        SaveLoadResult again = loadSim(resaved, defs);
+        SAVE_REQUIRE(again.sim != nullptr);
+        CHECK(again.sim->stateHash() == old.sim->stateHash());
+        CHECK(saveSim(*again.sim) == resaved);
+        old.sim->stepMany(3000);
+        again.sim->stepMany(3000);
+        CHECK(again.sim->stateHash() == old.sim->stateHash());
+    }
+}
+
+TEST_CASE("Save: commands are saved by the name of their type") {
+    const auto defs = testDefs();
+    Sim original(saveTestSettings(), defs);
+    saveTestSession(original, 0, 1000);
+    const std::vector<uint8_t> good = saveSim(original);
+    const std::string json = saveToJson(original);
+    CHECK(json.find("\"commandNames\"") != std::string::npos);
+    CHECK(json.find("\"SpawnThing\"") != std::string::npos);
+
+    // A name this build has no command for is refused, saying which.
+    const size_t at = saveTestFindText(good, "SpawnThing");
+    SAVE_REQUIRE(at != std::string::npos);
+    std::vector<uint8_t> renamed = good;
+    renamed[at + 4 + 9] = 'X';
+    saveTestReseal(renamed);
+    const SaveLoadResult r = loadSim(renamed, defs);
+    CHECK(r.sim == nullptr);
+    CHECK(r.error.find("'SpawnThinX'") != std::string::npos);
+    CHECK(r.error.find("newer version") != std::string::npos);
+}
+
+TEST_CASE("Save: sections are found by name and each has its own version") {
+    const auto defs = testDefs();
+    Sim original(saveTestSettings(), defs);
+    saveTestSession(original, 0, 1000);
+    const std::vector<uint8_t> good = saveSim(original);
+    const std::string json = saveToJson(original);
+    for (const char* section : {"\"sim\"", "\"commands\"", "\"things\"", "\"jobs\"", "\"zones\"", "\"mining\""}) {
+        CHECK(json.find(section) != std::string::npos);
+    }
+    const size_t zones = saveTestFindText(good, "zones");
+    SAVE_REQUIRE(zones != std::string::npos);
+    const size_t zonesVersion = zones + 4 + 5;
+
+    SUBCASE("a section this build doesn't know") {
+        std::vector<uint8_t> bad = good;
+        bad[zones + 4 + 4] = 'Z';
+        saveTestReseal(bad);
+        const SaveLoadResult r = loadSim(bad, defs);
+        CHECK(r.sim == nullptr);
+        CHECK(r.error.find("'zoneZ' section") != std::string::npos);
+        CHECK(r.error.find("newer version") != std::string::npos);
+    }
+    SUBCASE("a section from a newer version") {
+        std::vector<uint8_t> bad = good;
+        CHECK(saveTestU32(bad, zonesVersion) == 1);
+        bad[zonesVersion] = 2;
+        saveTestReseal(bad);
+        const SaveLoadResult r = loadSim(bad, defs);
+        CHECK(r.sim == nullptr);
+        CHECK(r.error.find("'zones' section is version 2") != std::string::npos);
+    }
+    SUBCASE("a file without a section loads it empty, like a file from before it existed") {
+        CHECK_FALSE(original.zones().stockpiles().empty());
+        const size_t end = zonesVersion + 8 + saveTestU32(good, zonesVersion + 4);
+        std::vector<uint8_t> without(good.begin(), good.begin() + static_cast<std::ptrdiff_t>(zones));
+        without.insert(without.end(), good.begin() + static_cast<std::ptrdiff_t>(end), good.end());
+        saveTestReseal(without);
+        const SaveLoadResult r = loadSim(without, defs);
+        CHECK(r.error == "");
+        SAVE_REQUIRE(r.sim != nullptr);
+        CHECK(r.sim->zones().stockpiles().empty());
+    }
+    SUBCASE("a section with more in it than its layout") {
+        std::vector<uint8_t> bad = good;
+        const uint32_t size = saveTestU32(bad, zonesVersion + 4) + 1;
+        for (size_t k = 0; k < 4; ++k) {
+            bad[zonesVersion + 4 + k] = static_cast<uint8_t>((size >> (8 * k)) & 0xFF);
+        }
+        bad.insert(bad.begin() + static_cast<std::ptrdiff_t>(zonesVersion + 8 + size - 1), uint8_t{0});
+        saveTestReseal(bad);
+        const SaveLoadResult r = loadSim(bad, defs);
+        CHECK(r.sim == nullptr);
+        CHECK(r.error.find("'zones' section has extra data") != std::string::npos);
+    }
 }
