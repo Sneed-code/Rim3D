@@ -24,6 +24,7 @@ namespace colony {
 
 class DefDatabase;
 class MovementSystem;
+class Plants;
 class Regions;
 class Things;
 struct Snapshot;
@@ -105,6 +106,10 @@ public:
     Things& things() { return *things_; }
     const Things& things() const { return *things_; }
 
+    // The plant layer: wild plants from map generation, growing hourly (docs/design/plants.md).
+    Plants& plants() { return *plants_; }
+    const Plants& plants() const { return *plants_; }
+
     // Problems setting up the start (e.g. a def the settings name is missing). Empty when fine.
     const std::vector<std::string>& setupErrors() const { return setupErrors_; }
 
@@ -136,6 +141,7 @@ private:
     Map map_;
     Pathfinder pathfinder_;
     std::unique_ptr<Things> things_;
+    std::unique_ptr<Plants> plants_;
     std::unique_ptr<MovementSystem> movement_;
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;

@@ -41,7 +41,7 @@ pawn's velocity, ground height and route ahead (`docs/design/movement.md`). Sinc
 time, passes events to `OnSimEvent`, keeps the last two snapshots and blends positions between them
 (`GetBlendedLocation`, the one place sim metres become Unreal centimetres), loads `data/defs`, shows
 sim timings on screen, and has keys: Space pause, 1/2/3 speed, `.` step, F7 saves a replay to
-`Saved/Replays/` (that is the bug-replay key U12 planned; U12 keeps F5/F9 saves and autosave). Since U6 there is an overseer camera (`-Overseer` or console `Overseer.Enter`): WASD pan, Q/E turn, wheel zoom, middle-drag orbit, click to select a pawn, thing or ground cell (picked against the sim, not Unreal collision), with an ImGui speed bar and inspect panel; ImGui is the free VesCodes plugin in `game/Plugins/ImGui/` (not in Git, `assets/manifest.json` says how to get it back) (`docs/design/overseer.md`). **Every task that adds sim state must add it to the
+`Saved/Replays/` (that is the bug-replay key U12 planned; U12 keeps F5/F9 saves and autosave). Since U6 there is an overseer camera (`-Overseer` or console `Overseer.Enter`): WASD pan, Q/E turn, wheel zoom, middle-drag orbit, click to select a pawn, thing or ground cell (picked against the sim, not Unreal collision), with an ImGui speed bar and inspect panel; ImGui is the free VesCodes plugin in `game/Plugins/ImGui/` (not in Git, `assets/manifest.json` says how to get it back) (`docs/design/overseer.md`). Since C2 the map has plants: a grid layer (kind, growth, age per cell, `sim.plants()`) filled at map generation from fertility and the temperate forest biome (about 119,000 on a 512 m map) and grown hourly in the growing hours 06:00 to 19:00, dying at their lifespan; `simrun --png` draws them; save format 4 (`docs/design/plants.md`). **Every task that adds sim state must add it to the
 save** (the doc has the steps) and to the save round-trip test.
 
 Since D3 the game has real starting data in `data/defs/`, written by hand with RimWorld's numbers
@@ -94,7 +94,7 @@ the entity-registry hash order changed, so replays recorded before S6 have diffe
 FILE` draws what a pawn sees; sandbags and barricades were added to the importer list, and
 trees and rocks get their height from `fillPercent` when C2 adds plants) and ~~**U2** bridge v2~~
 done (PC Unreal; `docs/design/bridge.md`, smoke test `sim`; the first Unreal compile of EnTT and the
-S5 bridge, so S1's include path is confirmed). **C2** plants (cloud, Sonnet medium), **C8** colonists
+S5 bridge, so S1's include path is confirmed). ~~**C2** plants~~ done, **C8** colonists
 from a seed (cloud, Sonnet medium) and **F1** health basics (cloud, Sonnet high) are now unblocked;
 their defs are in `data/defs/`. Numbers marked `unverified` in a def were recalled, not read from the
 wiki; check them when a task leans on them.
@@ -105,7 +105,7 @@ sand, the doc says why). **C1** job system (cloud, Opus high) is open: its work 
 in `data/defs/`. **U5** pawns with animation by distance (PC Unreal, Opus high) has both its needs
 (U2, S4) and is open; it needs the PC free. ~~**U6** overseer camera and selection~~ done (PC Unreal;
 smoke test `overseer`; `docs/design/overseer.md`). **U3** terrain and plants (PC Unreal, Sonnet high)
-needs C2 as well.
+has C2 now, so it is open.
 
 ## Waiting on sneed
 

@@ -3,6 +3,7 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Movement.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
@@ -56,6 +57,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       map_(MapSettings{settings.mapSize, settings.mapSize, splitMix64(settings.seed ^ 0x6D6170ULL), settings.flatMap}),
       pathfinder_(map_),
       things_(std::make_unique<Things>(map_, defs_)),
+      plants_(std::make_unique<Plants>(map_, *defs_, splitMix64(settings.seed ^ 0x706C616E74ULL), "TemperateForest")),
       movement_(std::make_unique<MovementSystem>()),
       time_(),
       rng_(splitMix64(settings.seed ^ 0x7061776EULL)),
@@ -321,6 +323,9 @@ void Sim::step() {
     movement_->step(things_->registry(), map_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     time_.seconds += 1;
+    if (time_.seconds % kSecondsPerHour == 0) {
+        plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
+    }
     if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
         checkpoints_.push_back(Checkpoint{time_.seconds, stateHash()});
     }
@@ -391,6 +396,7 @@ uint64_t Sim::stateHash() const {
     h.add(stats_.hauls);
     h.add(stats_.failedJobs);
     h.add(stats_.repaths);
+    h.add(plants_->hash());
     pathfinder_.hashState(h);
 
     // The entity ids the registry has handed out: the free list in reuse order (it decides the

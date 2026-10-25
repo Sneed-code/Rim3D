@@ -30,6 +30,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Checkpoints | the state hashes recorded so far |
 | Hauling placeholder | stockpile cell, hauler list, counters, setup errors |
 | Pawn movement (format 3) | each pawn's velocity, line start, held-up counters (`Mover`), and the repath count |
+| Plants (format 4) | every plant as parallel lists: cell index, def, growth, age; fertility is rebuilt from the seed |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
@@ -106,6 +107,7 @@ region id decide anything (the pathfinder breaks ties by a region's anchor cell 
 - **3** (S4): a pawn's `Mover` also has its velocity, where its current line started, the held-up
   counters and `gaveUp`; the hauling job's `WaitPathCarrying` stage; `SimStats::repaths`. Older
   files load with pawns at rest.
+- **4** (C2): the plant layer after the paths (`docs/design/plants.md`). Older files load with a bare map.
 
 ## Why the state hash changed in S6
 
