@@ -36,6 +36,20 @@ std::string simCellText(CellPos c) {
     return "(" + std::to_string(c.x) + ", " + std::to_string(c.y) + ", level " + std::to_string(c.level) + ")";
 }
 
+// True if a job holds the thing (reserved, or carried).
+bool simJobUses(const JobSystem& jobs, const entt::registry& reg, Entity thing) {
+    if (jobs.reservedBy(JobTarget{thing, CellPos{}}) != kNoEntity) {
+        return true;
+    }
+    for (const auto [pawn, carrying] : reg.view<const Carrying>().each()) {
+        (void)pawn;
+        if (carrying.thing == thing) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void simHashCell(StateHasher& h, CellPos c) {
     h.add(c.x);
     h.add(c.y);
@@ -67,6 +81,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       designations_(std::make_unique<Designations>(map_)),
       movement_(std::make_unique<MovementSystem>()),
       health_(std::make_unique<HealthSystem>(*things_)),
+      combat_(std::make_unique<CombatSystem>(*things_, map_, *health_)),
       time_(),
       rng_(splitMix64(settings.seed ^ 0x7061776EULL)),
       groundHash_(map_.contentHash()) {
@@ -77,6 +92,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     mood_ = std::make_unique<MoodSystem>(*things_, *needs_, *defs_);
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
+    combat_->setEventLog(&events_);
+    combat_->setBeforeDestroy([this](Entity thing) { jobs_->forget(thing); });
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -221,9 +238,12 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             jobs_->addWorker(thing);  // until factions: every pawn is a colonist
         }
     } else if (const auto* destroy = std::get_if<DestroyThingCommand>(&command)) {
-        if (!things_->exists(destroy->thing)) {
+        if (!things_->exists(destroy->thing) || !things_->registry().all_of<Thing>(destroy->thing)) {
             commandFailed(id, "that thing doesn't exist");
+        } else if (things_->registry().all_of<EquippedBy>(destroy->thing)) {
+            commandFailed(id, "a pawn is holding or wearing that thing");
         } else {
+            combat_->dropGear(destroy->thing);
             jobs_->forget(destroy->thing);
             things_->destroy(destroy->thing);
         }
@@ -364,6 +384,21 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!construction_->markDeconstruct(deconstruct->thing, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* equip = std::get_if<EquipCommand>(&command)) {
+        if (simJobUses(*jobs_, things_->registry(), equip->item)) {
+            commandFailed(id, "a job is using that thing");
+        } else if (!combat_->equip(equip->pawn, equip->item, &error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* shoot = std::get_if<ShootCommand>(&command)) {
+        if (!combat_->shoot(shoot->pawn, shoot->target, shoot->x, shoot->y, shoot->z, shoot->player, &error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* stance = std::get_if<SetStanceCommand>(&command)) {
+        if (static_cast<int>(stance->stance) > static_cast<int>(Stance::Prone) ||
+            !combat_->setStance(stance->pawn, stance->stance)) {
+            commandFailed(id, "that is not a pawn");
+        }
     } else if (const auto* designate = std::get_if<DesignateCommand>(&command)) {
         const DesignationKind kind = designate->kind;
         const CellRect& area = designate->area;
@@ -452,6 +487,7 @@ void Sim::step() {
     jobs_->step();
     mood_->step(time_.seconds, events_);
     movement_->step(things_->registry(), map_);
+    combat_->step(rng_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     time_.seconds += 1;
     if (time_.seconds % kSecondsPerHour == 0) {
@@ -569,10 +605,25 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.carriedDef = reg.get<Thing>(carrying->thing).def;
             view.carriedCount = reg.get<StackCount>(carrying->thing).count;
         }
+        if (const Posture* posture = reg.try_get<Posture>(entity)) {
+            view.stance = view.downed || view.dead ? Stance::Prone : posture->stance;
+            view.facingX = posture->facingX;
+            view.facingY = posture->facingY;
+            view.shotReadyIn = combat_->shotReadyIn(entity);
+        }
+        if (const Gear* gear = reg.try_get<Gear>(entity); gear != nullptr && gear->weapon != kNoEntity) {
+            view.weapon = reg.get<Thing>(gear->weapon).def;
+        }
         out.things.push_back(view);
     }
     std::sort(out.things.begin(), out.things.end(),
               [](const ThingView& a, const ThingView& b) { return a.id < b.id; });
+    out.projectiles.clear();
+    for (const auto [shot, p] : reg.view<const Projectile>().each()) {
+        out.projectiles.push_back(ProjectileView{shot, p.def, p.x, p.y, p.z, p.vx, p.vy, p.vz, p.level});
+    }
+    std::sort(out.projectiles.begin(), out.projectiles.end(),
+              [](const ProjectileView& a, const ProjectileView& b) { return a.id < b.id; });
 }
 
 uint64_t Sim::stateHash() const {
@@ -793,6 +844,7 @@ uint64_t Sim::stateHash() const {
             h.add(health->dead);
             h.add(static_cast<int>(health->cause));
         }
+        combat_->hashThing(e, h);
     }
     return h.value();
 }

@@ -42,13 +42,13 @@ constexpr char kSaveMagic[8] = {'R', 'I', 'M', '3', 'D', 'S', 'A', 'V'};
 constexpr size_t kSaveMagicSize = sizeof kSaveMagic;
 // Bump when the layout below changes, and keep reading the old versions (the archive's
 // version() says which one a file is). Changing it needs a line in docs/design/saves.md.
-constexpr uint32_t kSaveFormatVersion = 12;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
+constexpr uint32_t kSaveFormatVersion = 13;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
                                             // 4: C8's scenario and colonists; 5: F1's pawn health; 6: C1's jobs,
                                             // work priorities and zones; 7: U9's direct control; 8: C6's needs,
                                             // schedules, bed owners, the eating job's chair; 9: C2's plants;
                                             // 10: C4's building plans, frames and deconstruct marks, a job's
-                                            // site and progress;
-                                            // 11: C9's mood; 12: C3's rock layer, designations
+                                            // site and progress; 11: C9's mood; 12: F2's posture, gear, triggers
+                                            // and projectiles; 13: C3's rock layer, designations
 // Saves from before the job system (formats 1 to 5) can't be read: their hauling placeholder has
 // no counterpart in the job system (docs/design/saves.md).
 constexpr uint32_t kSaveOldestFormat = 6;
@@ -140,6 +140,13 @@ struct SaveSite {
 
 struct SaveMark {};  // a building marked for deconstruction
 
+// A projectile as saved: its defs by name.
+struct SaveProjectile {
+    std::string def;     // Projectiles def
+    std::string weapon;  // Things def
+    Projectile p;
+};
+
 struct SaveEntity {
     uint32_t id = 0;
     std::optional<SaveThing> thing;
@@ -161,6 +168,11 @@ struct SaveEntity {
     std::optional<std::string> builtOf;     // format 10 on: the stuff a building was made of
     std::optional<SaveMark> marked;         // format 10 on
     std::optional<Mood> mood;          // format 11 on
+    std::optional<Posture> posture;    // format 12 on
+    std::optional<Gear> gear;
+    std::optional<EquippedBy> equippedBy;
+    std::optional<Shooter> shooter;
+    std::optional<SaveProjectile> projectile;
 };
 
 // A stockpile zone, with its filter by defName.
@@ -485,7 +497,7 @@ void saveRect(Ar& ar, CellRect& r) {
 
 template <typename Ar>
 void saveCommand(Ar& ar, Command& command) {
-    static_assert(std::variant_size_v<Command> == 19, "save every command type here");
+    static_assert(std::variant_size_v<Command> == 22, "save every command type here");
     uint8_t type = static_cast<uint8_t>(command.index());
     ar.value("type", type);
     if constexpr (Ar::kReading) {
@@ -507,13 +519,16 @@ void saveCommand(Ar& ar, Command& command) {
             case 14: command = PlaceBlueprintCommand{}; break;
             case 15: command = CancelBuildCommand{}; break;
             case 16: command = DeconstructCommand{}; break;
-            case 17: command = DesignateCommand{}; break;
-            case 18: command = CancelDesignationsCommand{}; break;
+            case 17: command = EquipCommand{}; break;
+            case 18: command = ShootCommand{}; break;
+            case 19: command = SetStanceCommand{}; break;
+            case 20: command = DesignateCommand{}; break;
+            case 21: command = CancelDesignationsCommand{}; break;
             default: ar.require(false, "the save file names a command this build doesn't know"); return;
         }
         // A format older than the command that was added in it can't contain it.
         ar.require((type < 10 || ar.version() >= 7) && (type < 12 || ar.version() >= 8) &&
-                       (type < 14 || ar.version() >= 10) && (type < 17 || ar.version() >= 12),
+                       (type < 14 || ar.version() >= 10) && (type < 17 || ar.version() >= 12) && (type < 20 || ar.version() >= 13),
                    "the save file names a command this build doesn't know");
     }
     ar.note("name", commandName(command));
@@ -578,6 +593,20 @@ void saveCommand(Ar& ar, Command& command) {
         ar.value("thing", cancel->thing);
     } else if (auto* deconstruct = std::get_if<DeconstructCommand>(&command)) {
         ar.value("thing", deconstruct->thing);
+    } else if (auto* equip = std::get_if<EquipCommand>(&command)) {
+        ar.value("pawn", equip->pawn);
+        ar.value("item", equip->item);
+    } else if (auto* shoot = std::get_if<ShootCommand>(&command)) {
+        ar.value("pawn", shoot->pawn);
+        ar.value("target", shoot->target);
+        ar.value("x", shoot->x);
+        ar.value("y", shoot->y);
+        ar.value("z", shoot->z);
+        ar.value("player", shoot->player);
+    } else if (auto* stance = std::get_if<SetStanceCommand>(&command)) {
+        ar.value("pawn", stance->pawn);
+        ar.value("stance", stance->stance);
+        ar.require(static_cast<int>(stance->stance) <= static_cast<int>(Stance::Prone), "the save file has a bad stance");
     } else if (auto* designate = std::get_if<DesignateCommand>(&command)) {
         ar.group("area", [&] { saveRect(ar, designate->area); });
         ar.value("kind", designate->kind);
@@ -691,7 +720,7 @@ void saveEntity(Ar& ar, SaveEntity& e) {
         ar.value("job", job.type);
         ar.require(job.type <= JobType::HarvestPlant, "the save file has a bad job");
         ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
-        ar.require(job.type <= JobType::Deconstruct || ar.version() >= 12, "the save file has a bad job");
+        ar.require(job.type <= JobType::Deconstruct || ar.version() >= 13, "the save file has a bad job");
         ar.value("thing", job.thing);
         ar.group("cell", [&] { saveCell(ar, job.cell); });
         ar.value("count", job.count);
@@ -813,6 +842,8 @@ void saveEntity(Ar& ar, SaveEntity& e) {
         });
         ar.optional("builtOf", e.builtOf, [&](std::string& stuff) { ar.text("stuff", stuff); });
         ar.optional("marked", e.marked, [&](SaveMark&) {});
+    }
+    if (ar.version() >= 11) {
         ar.optional("mood", e.mood, [&](Mood& m) {
             ar.value("level", m.level);
             ar.value("band", m.band);
@@ -822,6 +853,46 @@ void saveEntity(Ar& ar, SaveEntity& e) {
                 ar.text("def", memory.def);
                 ar.value("expires", memory.expires);
             });
+        });
+    }
+    if (ar.version() >= 12) {
+        ar.optional("posture", e.posture, [&](Posture& p) {
+            ar.value("stance", p.stance);
+            ar.value("facingX", p.facingX);
+            ar.value("facingY", p.facingY);
+            ar.require(static_cast<int>(p.stance) <= static_cast<int>(Stance::Prone), "the save file has a bad stance");
+        });
+        ar.optional("gear", e.gear, [&](Gear& g) {
+            ar.value("weapon", g.weapon);
+            ar.list("apparel", g.apparel, [&](Entity& a) { ar.value(nullptr, a); });
+        });
+        ar.optional("equippedBy", e.equippedBy, [&](EquippedBy& b) { ar.value("pawn", b.pawn); });
+        ar.optional("shooter", e.shooter, [&](Shooter& sh) {
+            ar.value("phase", sh.phase);
+            ar.require(static_cast<int>(sh.phase) <= static_cast<int>(ShotPhase::Cooling), "the save file has a bad trigger phase");
+            ar.value("stepsLeft", sh.stepsLeft);
+            ar.value("shotsLeft", sh.shotsLeft);
+            ar.value("target", sh.target);
+            ar.value("aimX", sh.aimX);
+            ar.value("aimY", sh.aimY);
+            ar.value("aimZ", sh.aimZ);
+            ar.value("player", sh.player);
+            ar.value("recoil", sh.recoil);
+        });
+        ar.optional("projectile", e.projectile, [&](SaveProjectile& sp) {
+            ar.text("def", sp.def);
+            ar.text("weapon", sp.weapon);
+            ar.value("launcher", sp.p.launcher);
+            ar.value("x", sp.p.x);
+            ar.value("y", sp.p.y);
+            ar.value("z", sp.p.z);
+            ar.value("vx", sp.p.vx);
+            ar.value("vy", sp.p.vy);
+            ar.value("vz", sp.p.vz);
+            ar.value("level", sp.p.level);
+            ar.value("age", sp.p.age);
+            ar.group("startCell", [&] { saveCell(ar, sp.p.startCell); });
+            ar.value("seed", sp.p.seed);
         });
     }
 }
@@ -922,7 +993,7 @@ void saveData(Ar& ar, SaveData& d) {
     if (ar.version() >= 9) {
         ar.group("plants", [&] { savePlants(ar, d.plants); });
     }
-    if (ar.version() >= 12) {
+    if (ar.version() >= 13) {
         d.hasRock = true;
         ar.group("mineables", [&] { saveMineables(ar, d.mineables); });
         ar.group("designations", [&] { saveDesignations(ar, d.designations); });
@@ -1137,6 +1208,21 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             saved.dead = health->dead;
             saved.cause = health->cause;
             out.health = std::move(saved);
+        }
+        if (const Posture* posture = reg.try_get<Posture>(e)) {
+            out.posture = *posture;
+        }
+        if (const Gear* gear = reg.try_get<Gear>(e)) {
+            out.gear = *gear;
+        }
+        if (const EquippedBy* by = reg.try_get<EquippedBy>(e)) {
+            out.equippedBy = *by;
+        }
+        if (const Shooter* shooter = reg.try_get<Shooter>(e)) {
+            out.shooter = *shooter;
+        }
+        if (const Projectile* p = reg.try_get<Projectile>(e)) {
+            out.projectile = SaveProjectile{sim.defs_->get(p->def).defName(), sim.defs_->get(p->weapon).defName(), *p};
         }
         d.entities.push_back(std::move(out));
     }
@@ -1389,6 +1475,30 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.playerControlled) {
             reg.emplace<PlayerControl>(entity);
         }
+        if (e.posture) {
+            reg.emplace<Posture>(entity, *e.posture);
+        } else if (e.thing && e.thing->category == ThingCategory::Pawn) {
+            reg.emplace<Posture>(entity);  // saved before pawns had a posture
+        }
+        if (e.gear) {
+            reg.emplace<Gear>(entity, std::move(*e.gear));
+        }
+        if (e.equippedBy) {
+            reg.emplace<EquippedBy>(entity, *e.equippedBy);
+        }
+        if (e.shooter) {
+            reg.emplace<Shooter>(entity, *e.shooter);
+        }
+        if (e.projectile) {
+            Projectile p = e.projectile->p;
+            p.def = sim.defs_->idOf("Projectiles", e.projectile->def);
+            p.weapon = sim.defs_->idOf(kSaveThingsKind, e.projectile->weapon);
+            if (!p.def.valid() || !p.weapon.valid()) {
+                error = "the save has a projectile of '" + e.projectile->def + "', which the data files no longer have";
+                return false;
+            }
+            reg.emplace<Projectile>(entity, p);
+        }
     }
     sim.health_->refreshAll();
     for (const SaveEntity& e : d.entities) {
@@ -1401,9 +1511,17 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     // Everything a thing names must exist.
     const auto exists = [&](Entity e) { return e == kNoEntity || reg.valid(e); };
     for (const SaveEntity& e : d.entities) {
+        bool gearExists = true;
+        if (e.gear) {
+            const Gear& gear = reg.get<Gear>(static_cast<Entity>(e.id));
+            gearExists = exists(gear.weapon);
+            for (const Entity a : gear.apparel) {
+                gearExists = gearExists && a != kNoEntity && reg.valid(a);
+            }
+        }
         if ((e.worker && (!exists(e.worker->job.thing) || !exists(e.worker->job.chair) ||
                           !exists(e.worker->job.site))) ||
-            (e.carrying && !exists(e.carrying->thing))) {
+            (e.carrying && !exists(e.carrying->thing)) || !gearExists || (e.equippedBy && !exists(e.equippedBy->pawn))) {
             error = "the save has a thing that names another thing that doesn't exist";
             return false;
         }

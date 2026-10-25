@@ -65,10 +65,10 @@ type; `CutOrHarvestPlantsGiver` in Plant cutting) and steps `GotoTouch` then `Mi
 
 ## Saves
 
-Format 12: the rock layer (a record per cell: def and hit points) and the designations. Cells that
+Format 13: the rock layer (a record per cell: def and hit points) and the designations. Cells that
 are `Terrain::Rock` in the generated ground but have no record were mined, so the load turns them
 back into rough stone. Older saves load with the generated rock layer. The job's `progress` holds
-the half-done pick. Commands 17 and 18. See `saves.md`.
+the half-done pick. Commands 20 and 21. See `saves.md`.
 
 ## Not yet
 
