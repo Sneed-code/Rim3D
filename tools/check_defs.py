@@ -93,6 +93,9 @@ REFERENCES = [
     ("Scenarios", "colonistApparel[].stuff", "Things"),
     ("Outfits", "allowed[]", "Things"),
     ("Outfits", "disallowed[]", "Things"),
+    ("Lineages", "genes[]", "Genes"),
+    ("Genes", "aptitudes{}", "Skills"),
+    ("Scenarios", "lineageWeights{}", "Lineages"),
 ]
 
 # Kinds whose defs may carry "researchPrerequisite" (a project name or a list of them). Every project

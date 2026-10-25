@@ -2,16 +2,51 @@
   {
     "defName": "Baseline", "source": "Rim3D", "label": "baseline",
     "description": "Unchanged humans, as the old ships carried them.",
-    "visual": {}
+    "genes": [], "metabolicEfficiency": 0, "complexity": 0
   },
   {
-    "defName": "Emberkin", "source": "Rim3D", "label": "Emberkin",
+    "defName": "Emberkin", "source": "RimWorld wiki", "label": "Emberkin",
     "description": "A lineage made for hot worlds: red skin, small horns and fire in the lungs.",
-    "visual": {
-      "skinColor": [0.58, 0.12, 0.07], "skinColorAmount": 0.9,
-      "hairColor": [0.09, 0.05, 0.04],
-      "horns": { "length": 0.22, "radius": 0.035, "spread": 0.05, "color": [0.08, 0.06, 0.05] }
-    },
-    "ours": ["visual"]
+    "geneType": "Endogene", "metabolicEfficiency": 0, "complexity": 11,
+    "genes": ["FireSpew", "WeakImmunity", "SlowWoundHealing", "VeryFastRunner", "Unhappy", "ColdWeakness",
+              "HeatSuperTolerant", "FireResistant", "WeakMelee", "Beardless", "MiniHorns", "EmberHair",
+              "DeepRedSkin", "PoorPlants", "PoorAnimals"],
+    "unverified": ["genes"],
+    "ours": ["genes: the cosmetic genes (the wiki's three skin and three hair choices are one each here)"]
+  },
+  {
+    "defName": "Frostkin", "source": "RimWorld wiki", "label": "Frostkin",
+    "description": "A lineage made for cold worlds: thick fur, a strong frame and a short temper.",
+    "geneType": "Endogene", "metabolicEfficiency": -1, "complexity": 13,
+    "genes": ["AnimalWarcall", "SlowWoundHealing", "ResonanceDull", "Aggressive", "StrongMelee", "Furskin",
+              "FurryTail", "GreatAnimals", "AwfulMining", "Robust", "Sleepy", "NakedSpeed"],
+    "unverified": ["genes"]
+  },
+  {
+    "defName": "Warbred", "source": "RimWorld wiki", "label": "Warbred",
+    "description": "A lineage made for war: quick to heal, hard to hurt and eager to fight.",
+    "geneType": "Xenogene", "metabolicEfficiency": 2, "complexity": 16,
+    "genes": ["SuperfastWoundHealing", "ResonanceDeaf", "ColdTolerant", "HeatTolerant", "PartialAntitoxicLungs",
+              "HyperAggressive", "ReducedPain", "Unstoppable", "GreatShooting", "GreatMelee", "AwfulAnimals",
+              "AwfulPlants", "AwfulArtistic", "AwfulSocial"],
+    "unverified": ["genes", "complexity"],
+    "later": ["go-juice (rush) dependency gene, with drugs in Stage 3", "the wiki gives complexity 16 on the Xenotypes page and 17 on the Hussar page"]
+  },
+  {
+    "defName": "Ashborn", "source": "RimWorld wiki", "label": "Ashborn",
+    "description": "A lineage made for ruined worlds: gray, hard to sicken and at home in poisoned air.",
+    "geneType": "Endogene", "metabolicEfficiency": 0, "complexity": 13,
+    "genes": ["SuperImmunity", "TotalAntitoxicLungs", "Aggressive", "Unattractive", "PoorCooking", "PoorArtistic",
+              "AwfulAnimals", "SlateGraySkin", "GrayHair"],
+    "unverified": ["genes"],
+    "later": ["pollution stimulus, wake-up (rush-like drug) immunity and psychite dependency genes, with pollution and drugs"]
+  },
+  {
+    "defName": "Delver", "source": "RimWorld wiki", "label": "Delver",
+    "description": "A lineage made for the dark under mountains: sharp in the dark, fast to heal, slow on the surface.",
+    "geneType": "Endogene", "metabolicEfficiency": 0, "complexity": 10,
+    "genes": ["FastWoundHealing", "SlowRunner", "UVSensitivity", "StrongMelee", "Nearsighted", "DarkVision",
+              "IndoorDweller", "GreatMining", "LightGraySkin"],
+    "unverified": ["genes"]
   }
 ]

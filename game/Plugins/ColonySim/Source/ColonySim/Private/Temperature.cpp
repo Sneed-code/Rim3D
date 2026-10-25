@@ -3,6 +3,7 @@
 #include "ColonySim/Clock.h"
 #include "ColonySim/Doors.h"
 #include "ColonySim/Hash.h"
+#include "ColonySim/Genes.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Random.h"
@@ -187,6 +188,10 @@ bool TemperatureSystem::comfortRange(Entity pawn, float& min, float& max) const 
     }
     min = tempFloat(def, "stats.comfyTemperatureMin", 16.0f);
     max = tempFloat(def, "stats.comfyTemperatureMax", 26.0f);
+    if (const PawnGenes* genes = reg.try_get<PawnGenes>(pawn)) {
+        min += genes->effects.comfyMinC;
+        max += genes->effects.comfyMaxC;
+    }
     if (modifier_) {
         modifier_(pawn, min, max);
     }
