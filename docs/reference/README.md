@@ -11,4 +11,5 @@ are generated: change `tools/rimworld_import_spec.py` and re-run the import inst
 metres per game second; days, hours, years, percentages and per-day rates are as in RimWorld. Work
 amounts are game seconds at work speed 1.
 
-_Nothing has been generated yet: D3 runs the import on sneed's PC._
+_Nothing is generated: D3 was dropped and the starting data is written by hand
+(`docs/design/starting-data.md`)._

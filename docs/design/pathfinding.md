@@ -79,7 +79,7 @@ all ask at once, the last waits about 50 steps (under 2 seconds at 1x).
 simrun --seed 42 --size 1024 --days 1 --pawns 100 --items 2000 --data game/Plugins/ColonySim/Tests/data --check
 ```
 
-The test fixture defs in `Tests/data` (`Human`, `Steel`) stand in until the RimWorld import (D3).
+The test fixture defs in `Tests/data` (`Human`, `Steel`) keep the check independent of the game data; `data/defs` has them too since D3.
 `--check` fails the run if any job or path search failed; CI runs it as `simrun_paths`. Result in
 the cloud, seeds 42 and 7: no failed jobs, no failed searches. Taking the fastest of three runs
 for each step (the cloud machine is shared, and single runs show random spikes of 4 to 7 ms on

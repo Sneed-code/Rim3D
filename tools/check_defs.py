@@ -3,15 +3,75 @@
 
 Each file is a JSON array of defs. The folder a file sits in is its def kind
 (Terrain, Things, ...). Checks: valid JSON, every def has a unique defName
-within its kind, and every parent exists in the same kind with no cycles.
-Exits 1 and lists every problem if anything is wrong. An optional argument checks another
-folder instead of data/defs (the importer's tests use this).
+within its kind, every parent exists in the same kind with no cycles, and the
+fields listed in REFERENCES name a concrete def of the right kind (a typo in a
+hand-written file is caught here, not in the game). A reference into a kind with
+no folder is not checked. Exits 1 and lists every problem if anything is wrong.
+An optional argument checks another folder instead of data/defs (the importer's tests use this,
+with --no-references because their small samples leave references dangling).
 """
 import json
 import sys
 from pathlib import Path
 
-ROOT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent / "data" / "defs"
+ARGS = [a for a in sys.argv[1:] if a != "--no-references"]
+CHECK_REFERENCES = "--no-references" not in sys.argv[1:]
+ROOT = Path(ARGS[0]) if ARGS else Path(__file__).resolve().parent.parent / "data" / "defs"
+
+# (kind, field path, kind the values name). Path steps are separated by dots; "x[]" walks the items
+# of list x, "x{}" takes the keys of object x, and "**" is the node plus every node nested in its
+# "parts" lists (the body tree).
+REFERENCES = [
+    ("Things", "plant.harvestedThingDef", "Things"),
+    ("Things", "race.body", "Bodies"),
+    ("Biomes", "wildPlants{}", "Things"),
+    ("Bodies", "corePart.**.def", "BodyParts"),
+    ("Bodies", "corePart.**.groups[]", "BodyPartGroups"),
+    ("WorkTypes", "relevantSkills[]", "Skills"),
+    ("Traits", "conflictingTraits[]", "Traits"),
+    ("Traits", "disallowedPassions[]", "Skills"),
+    ("Traits", "degreeDatas[].skillGains{}", "Skills"),
+    ("Backstories", "skillGains{}", "Skills"),
+    ("DamageTypes", "hediff", "Hediffs"),
+    ("DamageTypes", "hediffSolid", "Hediffs"),
+    ("Capacities", "parts[].part", "BodyParts"),
+    ("Capacities", "capacityFactors[].capacity", "Capacities"),
+    ("Hediffs", "stages[].capacityOffsets{}", "Capacities"),
+    ("Hediffs", "stages[].capacityMax{}", "Capacities"),
+    ("Scenarios", "startingThings[].thing", "Things"),
+    ("Scenarios", "nearbyThings[].thing", "Things"),
+    ("Scenarios", "scatteredThings[].thing", "Things"),
+    ("Scenarios", "colonistKind", "Things"),
+    ("Scenarios", "biome", "Biomes"),
+]
+
+
+def walk(node, steps):
+    """Yields the values at a REFERENCES path."""
+    if not steps:
+        yield node
+        return
+    step, rest = steps[0], steps[1:]
+    if step == "**":
+        stack = [node]
+        while stack:
+            current = stack.pop()
+            yield from walk(current, rest)
+            if isinstance(current, dict) and isinstance(current.get("parts"), list):
+                stack.extend(current["parts"])
+        return
+    if not isinstance(node, dict):
+        return
+    if step.endswith("[]"):
+        items = node.get(step[:-2])
+        for item in items if isinstance(items, list) else []:
+            yield from walk(item, rest)
+    elif step.endswith("{}"):
+        keys = node.get(step[:-2])
+        for key in keys if isinstance(keys, dict) else {}:
+            yield from walk(key, rest)
+    elif step in node:
+        yield from walk(node[step], rest)
 
 
 def main() -> int:
@@ -51,6 +111,17 @@ def main() -> int:
                     break
                 seen.add(parent)
                 parent = kind_defs[parent][1].get("parent")
+
+    for kind, path, target in REFERENCES:
+        if not CHECK_REFERENCES or kind not in defs_by_kind or target not in defs_by_kind:
+            continue
+        targets = defs_by_kind[target]
+        for name, (file, entry) in defs_by_kind[kind].items():
+            for value in walk(entry, path.split(".")):
+                if not isinstance(value, str) or value not in targets:
+                    problems.append(f"{file}: {kind} '{name}' {path} names unknown {target} def '{value}'")
+                elif targets[value][1].get("abstract") is True:
+                    problems.append(f"{file}: {kind} '{name}' {path} names abstract {target} def '{value}'")
 
     for problem in problems:
         print(problem)

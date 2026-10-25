@@ -20,7 +20,7 @@ Every thread working on the game follows these. Breaking one needs a written dec
 
 ```mermaid
 flowchart LR
-  RI["RimWorld import<br/>runs once on your PC<br/>Defs XML to JSON"] --> DF["Data files<br/>data/defs/*.json"]
+  RI["Starting data<br/>written by hand<br/>RimWorld wiki numbers"] --> DF["Data files<br/>data/defs/*.json"]
   DF -->|loaded at start| SC["Sim core (plain C++)<br/>grid, regions, rooms<br/>things (EnTT)<br/>AI: jobs, needs, combat<br/>steps, saves, replays"]
   SR["simrun<br/>headless tests, PNG snapshots"] --> SC
   SC -->|events, snapshot| UP["Unreal presentation<br/>terrain, buildings, plants<br/>pawns, animation, gore<br/>fire, weather, lighting<br/>UI, protagonist input"]
@@ -42,7 +42,7 @@ The sim is a RimWorld-style tick simulation on a 1 m grid, written in plain C++2
 
 **Things.** Pawns, items, buildings, corpses and projectiles are entities in an [EnTT](https://github.com/skypjack/entt) registry. Each has a def (its data file entry) plus components, much like RimWorld's comps: hit points, stack count, apparel, refuelable, power, and so on.
 
-**Time.** The sim steps at a fixed 30 steps per real second at 1x (60 at 2x, 90 at 3x) and keeps game time in game seconds. With a 48-minute day, one real second is 30 game seconds. The importer converts RimWorld's tick-based numbers (2,500 ticks per game hour) into per-hour rates, so its balance carries over. Work is split by cadence: every step (movement, projectiles, aiming), every few game minutes (needs, temperature) and every game hour (plant growth, slow changes). Movement and projectile speeds are in real metres per second at 1x, so a 4 m/s jog stays a 4 m/s jog.
+**Time.** The sim steps at a fixed 30 steps per real second at 1x (60 at 2x, 90 at 3x) and keeps game time in game seconds. With a 48-minute day, one real second is 30 game seconds. RimWorld's tick-based numbers are converted when written into the data files (2,500 ticks per game hour) into per-hour rates, so its balance carries over. Work is split by cadence: every step (movement, projectiles, aiming), every few game minutes (needs, temperature) and every game hour (plant growth, slow changes). Movement and projectile speeds are in real metres per second at 1x, so a 4 m/s jog stays a 4 m/s jog.
 
 **Determinism and replays.** All randomness comes from seeded random streams, one per system. Commands are applied only at tick boundaries and logged. A replay file (seed plus command log) reproduces any session exactly, so when something goes wrong you press one key and I can replay the bug in the cloud.
 
@@ -79,7 +79,7 @@ Content is defined the way RimWorld does it, as "defs", but in JSON instead of X
 - **Validation.** A Python checker in CI catches missing references, typos in field names and broken inheritance before anything runs.
 - **Hot reload.** A dev key reloads the data files while the game runs, so tuning a number doesn't need a rebuild.
 
-**RimWorld import.** A one-time script reads the Defs XML from your RimWorld install (Core plus each expansion) and produces two things: compact reference summaries in `docs/reference/`, and starter JSON defs with RimWorld's numbers. It runs on your PC. Only the converted output is committed, never RimWorld's raw files.
+**Starting data.** The defs are written by hand with RimWorld's numbers from public sources such as the RimWorld wiki (numbers only, never descriptions, textures or sounds), as a base we change freely. This replaced the planned one-time import from a RimWorld install (`docs/decisions/0003-hand-written-starting-data.md`); conventions are in `docs/design/starting-data.md`.
 
 ## Sim to Unreal bridge
 

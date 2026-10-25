@@ -20,7 +20,7 @@ inline constexpr float kPawnRadius = 0.3f;
 
 // RimWorld's path cost of the ground, in the units of its wiki: every point slows the walk by
 // 7.7% (`1 / (1 + cost * 0.077)`). Soil 2 and sand 4 give the wiki's 87% and 76%. These move into
-// the Terrain defs when terrain is loaded from data (see rimworld-import.md, `pathCost`).
+// the Terrain defs (`pathCost`, data/defs/Terrain) when the map reads terrain from data.
 COLONY_API float terrainPathCost(Terrain t);
 // Share of a pawn's `moveSpeed` it keeps on this ground: 0.87 on soil, 0.76 on sand.
 COLONY_API float terrainSpeedFactor(Terrain t);

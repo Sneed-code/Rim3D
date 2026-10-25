@@ -1,6 +1,6 @@
 #pragma once
 
-// Small Things defs for sim tests, so tests don't depend on what the RimWorld import contains.
+// Small Things defs for sim tests, so tests don't depend on the game's data files.
 // The numbers are test fixtures, not game numbers.
 
 #include "ColonySim/Defs.h"

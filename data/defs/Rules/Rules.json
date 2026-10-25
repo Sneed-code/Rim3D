@@ -1,0 +1,48 @@
+[
+  {
+    "defName": "PlantRules", "source": "RimWorld wiki",
+    "growHours": [6, 19],
+    "growthNeedsLight": 0.51
+  },
+  {
+    "defName": "SkillRules", "source": "RimWorld wiki",
+    "maxLevel": 20,
+    "xpToNextLevel": [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000,
+                      12000, 14000, 16000, 18000, 20000, 22000, 24000, 26000, 28000, 30000, 32000],
+    "passionLearnFactor": { "None": 0.35, "Minor": 1.0, "Major": 1.5 },
+    "passionMood": { "Minor": 8, "Major": 14 },
+    "dailyXpSoftCap": 4000,
+    "xpFactorOverCap": 0.2,
+    "decayXpPerDay": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      30, 60, 120, 180, 300, 540, 840, 1200, 1800, 2400, 3600],
+    "xpBelowZeroBeforeLevelLoss": 1000
+  },
+  {
+    "defName": "HealthRules", "source": "RimWorld wiki",
+    "painShockThreshold": 0.8,
+    "naturalHealPerDay": 8,
+    "restHealBonusPerDay": { "Ground": 4, "Bed": 8, "HospitalBed": 14 },
+    "tendedHealBonusPerDay": { "atQuality0": 4, "atQuality1": 12 },
+    "healIntervalHours": 0.24,
+    "healPerIntervalFactor": 0.01,
+    "lostPartBleedHpFactor": 2,
+    "scarChance": { "max": 0.02, "minHpLost": 4, "fullAtHpLost": 14 },
+    "bloodLossPerDayPerBleedRate": 1.0,
+    "bloodLossRecoveryPerDay": 0.333,
+    "bleedRateMinForBloodLoss": 0.1,
+    "medicineMaxTendQuality": { "None": 0.7, "Herbal": 0.7, "Medicine": 1.0, "Glitterworld": 1.3 },
+    "protagonistPartHitPointsFactor": 2.0,
+    "unverified": ["bloodLossPerDayPerBleedRate", "bloodLossRecoveryPerDay", "bleedRateMinForBloodLoss"]
+  },
+  {
+    "defName": "PawnGenRules", "source": "Rim3D",
+    "adultAgeMin": 18,
+    "ageGenerationCurve": [[14, 0], [16, 100], [50, 100], [60, 30], [70, 18], [80, 10], [90, 3], [100, 0]],
+    "traitCount": [1, 3],
+    "skillLevelRandomCurve": [[0, 0], [0.5, 150], [4, 150], [5, 25], [10, 5], [15, 0]],
+    "passionCount": [0, 4],
+    "majorPassionChance": 0.33,
+    "unverified": ["ageGenerationCurve", "skillLevelRandomCurve"],
+    "ours": ["adultAgeMin", "passionCount", "majorPassionChance"]
+  }
+]
