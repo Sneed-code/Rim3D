@@ -338,6 +338,32 @@ struct UnlockResearchCommand {
     std::string project;
 };
 
+// Throws a grenade (task F9, docs/design/explosives.md): the pawn winds up, then throws one grenade of
+// `item` (a Things defName; empty for the first kind on its belt) at the ground under `target` if that
+// is a pawn on the map, else at the point (x, y) in metres. `player` is the protagonist's own throw: no
+// wind-up. Fails if the pawn has no such grenade, is downed, knocked down or mid-shot, or is still
+// cooling down from its last throw.
+struct ThrowCommand {
+    Entity pawn = kNoEntity;
+    std::string item;
+    Entity target = kNoEntity;
+    float x = 0.0f;
+    float y = 0.0f;
+    bool player = false;
+};
+
+// Dev command: a blast now at (x, y) on the ground, as if a grenade went off there. `damageType` is a
+// DamageTypes defName ("Bomb"). Fails for an unknown type, a point off the map or a radius or damage
+// of 0 or less.
+struct ExplodeCommand {
+    float x = 0.0f;
+    float y = 0.0f;
+    float radius = 1.9f;
+    float damage = 50.0f;
+    std::string damageType = "Bomb";
+    float penetration = 0.1f;
+};
+
 // Raids (F6, docs/design/raids.md). Dev command until the narrator sends raids: a raid of
 // `faction` (a Factions defName) worth `points` raid points (0: what the colony is worth now, by
 // RimWorld's rule) walks in at `edge` (0 north, 1 east, 2 south, 3 west, -1 any) and attacks.
@@ -489,7 +515,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              RemoveBillCommand, SetBillCommand, HandsOnCommand, FlickCommand, ShortCircuitCommand,
                              PlaceFloorCommand, AddFilthCommand,
                              SetResearchCommand, UnlockResearchCommand, StartRaidCommand, SoundAlarmCommand,
-                             SetDefenseRoleCommand, MarkShelterCommand, MeleeCommand, DodgeRollCommand,
+                             SetDefenseRoleCommand, MarkShelterCommand, ThrowCommand, ExplodeCommand,
+                             MeleeCommand, DodgeRollCommand,
                              SetOutfitCommand, EditOutfitCommand, AddOutfitCommand, RemoveOutfitCommand,
                              StripCommand, SetWeatherCommand, MarkAnimalCommand, SetTrainingCommand,
                              CreateAnimalZoneCommand, RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand>;

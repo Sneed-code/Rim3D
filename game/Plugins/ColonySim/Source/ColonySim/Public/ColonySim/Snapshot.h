@@ -116,6 +116,11 @@ struct ThingView {
     float rollDirX = 0.0f;
     float rollDirY = 0.0f;
     bool hitProof = false;
+    // Pawns (docs/design/explosives.md): grenades on the belt, steps until the next throw can start
+    // (0: ready), and whether a blast has thrown the pawn to the ground (it lies prone meanwhile).
+    int grenades = 0;
+    int throwReadyIn = 0;
+    bool knockedDown = false;
     // Pawns: their side (1 is the player's), and for fighters (docs/design/fighters.md) whether the
     // player drafted them, whom they shoot at, the cell they hold and whether they are falling back.
     uint32_t faction = 1;
@@ -202,7 +207,10 @@ struct SquadView {
 };
 
 // A bullet in flight (docs/design/combat.md). Unreal draws a tracer along its velocity; it
-// appears with a ShotFired event and disappears with a ProjectileHit event.
+// appears with a ShotFired event and disappears with a ProjectileHit event. A thrown grenade is here
+// too (docs/design/explosives.md): its def is the grenade's Projectiles def, it appears with a
+// GrenadeThrown event and goes with an Explosion; `fuse` is -1 while it flies and the steps left
+// once it lies on the ground (its velocity is 0 then).
 struct ProjectileView {
     Entity id = kNoEntity;
     DefId def;  // Projectiles def
@@ -213,6 +221,7 @@ struct ProjectileView {
     float vy = 0.0f;
     float vz = 0.0f;
     int level = 0;
+    int fuse = -1;
 };
 
 // How a pawn looks (docs/design/looks.md). The lineage is invalid if the defs have no such

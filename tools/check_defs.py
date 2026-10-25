@@ -37,6 +37,8 @@ REFERENCES = [
     ("Things", "verbs[].defaultProjectile", "Projectiles"),
     ("Things", "apparel.bodyPartGroups[]", "BodyPartGroups"),
     ("Projectiles", "projectile.damageDef", "DamageTypes"),
+    ("Projectiles", "explosion.damageDef", "DamageTypes"),
+    ("Things", "thrown.projectile", "Projectiles"),
     ("Hitboxes", "body", "Bodies"),
     ("Recipes", "recipeUsers[]", "Things"),
     ("Recipes", "products{}", "Things"),

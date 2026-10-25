@@ -91,6 +91,10 @@ const char* commandName(const Command& command) {
                 return "SetResearch";
             } else if constexpr (std::is_same_v<Type, UnlockResearchCommand>) {
                 return "UnlockResearch";
+            } else if constexpr (std::is_same_v<Type, ThrowCommand>) {
+                return "Throw";
+            } else if constexpr (std::is_same_v<Type, ExplodeCommand>) {
+                return "Explode";
             } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
                 return "StartRaid";
             } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
@@ -184,6 +188,10 @@ const char* eventTypeName(EventType type) {
         case EventType::ItemSpoiled: return "ItemSpoiled";
         case EventType::PawnPoisoned: return "PawnPoisoned";
         case EventType::ResearchDone: return "ResearchDone";
+        case EventType::GrenadeThrown: return "GrenadeThrown";
+        case EventType::GrenadeLanded: return "GrenadeLanded";
+        case EventType::Explosion: return "Explosion";
+        case EventType::PawnKnockedDown: return "PawnKnockedDown";
         case EventType::RaidArrived: return "RaidArrived";
         case EventType::SquadChanged: return "SquadChanged";
         case EventType::AlarmChanged: return "AlarmChanged";
@@ -221,6 +229,8 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Cook: return "Cook";
         case PawnAction::Research: return "Research";
         case PawnAction::Clean: return "Clean";
+        case PawnAction::Throw: return "Throw";
+        case PawnAction::Dive: return "Dive";
         case PawnAction::Handle: return "Handle";
         case PawnAction::Slaughter: return "Slaughter";
         case PawnAction::Block: return "Block";

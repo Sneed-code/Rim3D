@@ -42,6 +42,10 @@ enum class EventType : uint8_t {
     ItemSpoiled,     // food rotted away or an item wore out in the open (docs/design/spoilage.md)
     PawnPoisoned,    // a pawn ate a poisoned meal and got food poisoning
     ResearchDone,    // a research project was finished (docs/design/research.md)
+    GrenadeThrown,   // a pawn released a grenade (docs/design/explosives.md)
+    GrenadeLanded,   // a thrown grenade came to rest; its fuse is running
+    Explosion,       // a blast went off
+    PawnKnockedDown, // a blast threw a pawn to the ground
     RaidArrived,     // a raid walked in (docs/design/raids.md)
     SquadChanged,    // a raid squad's morale changed
     AlarmChanged,    // the colony alarm went on or off
@@ -88,6 +92,8 @@ enum class PawnAction : uint8_t {
     Cook,         // started work on a bill at `target`, a work building (once per run of the bill)
     Research,     // started research at `target`, a research bench (once per job)
     Clean,        // started cleaning the filth in `cell`; a layer comes off every few seconds until its JobEnded
+    Throw,        // started winding up a throw (docs/design/explosives.md); the release is a GrenadeThrown event
+    Dive,         // ran or dived toward `cell` to get away from the grenade `target`
     Handle,       // started taming, training or feeding `target`, an animal; goes on until its JobEnded
     Slaughter,    // started to kill `target`, a tame animal
     Block,        // raised its melee weapon against the swing of `target` (none: the player's own block)
@@ -139,6 +145,13 @@ struct Event {
     // SeasonChanged: `message` the season's name, `amount` its number (0 spring to 3 winter).
     float amount = 0.0f;
     // PawnAction Roll: see there.
+    // GrenadeThrown: `thing` the thrower, `def` the grenade's Things def, `target` the grenade entity
+    // (it is in the snapshot's projectiles), (x, y, z) where it left the hand, `amount` the steps until
+    // it lands. GrenadeLanded: `thing` the grenade entity, `def` its Projectiles def, (x, y, z) where it
+    // lies, `amount` the fuse in steps. Explosion: `thing` the grenade entity (none for a dev blast),
+    // `target` who threw it, `def` the damage type's DamageTypes def, `amount` the radius, (x, y, z) the
+    // centre, `cell` its cell; hurt pawns and destroyed buildings follow as their own events.
+    // PawnKnockedDown: `thing` the pawn, `amount` the steps it stays down, (x, y, z) where it landed.
     // ShotFired: `thing` the shooter, `def` its gun's Things def, `target` the projectile, (x, y, z)
     // the muzzle. ProjectileHit: `thing` the projectile (forget its id), `def` its Projectiles def,
     // `hit` what stopped it, `target` the pawn or building hit, `part` the body part hit (index as

@@ -8,6 +8,7 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Doors.h"
+#include "ColonySim/Explosives.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Floors.h"
@@ -173,7 +174,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setApparel(apparel_.get());
     jobs_->setSpoilage(spoilage_.get());
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
+    explosives_ = std::make_unique<ExplosiveSystem>(*things_, map_, *combat_, *health_, *defs_);
+    fighters_->setExplosives(explosives_.get());
     combat_->setEventLog(&events_);
+    explosives_->setEventLog(&events_);
     fighters_->setEventLog(&events_);
     // The biome is the one the plants use; both move to the settings together.
     animals_ = std::make_unique<AnimalSystem>(*things_, map_, *plants_, *health_, *defs_, time_,
@@ -389,6 +393,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "a pawn is holding or wearing that thing");
         } else {
             combat_->dropGear(destroy->thing);
+            explosives_->dropBelt(destroy->thing);
             jobs_->forget(destroy->thing);
             fighters_->forget(destroy->thing);
             raids_->forget(destroy->thing);
@@ -500,9 +505,42 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         } else if (power_->info(things_->registry().get<Thing>(circuit->thing).def).transmitter) {
             // The conduit or switch burns out.
             combat_->dropGear(circuit->thing);
+            explosives_->dropBelt(circuit->thing);
             jobs_->forget(circuit->thing);
             fighters_->forget(circuit->thing);
             things_->destroy(circuit->thing);
+        }
+    } else if (const auto* throwCommand = std::get_if<ThrowCommand>(&command)) {
+        DefId item;
+        if (!throwCommand->item.empty()) {
+            item = defs_->idOf("Things", throwCommand->item);
+            if (!item.valid()) {
+                commandFailed(id, "there is no such grenade");
+                return;
+            }
+        }
+        if (!explosives_->throwAt(throwCommand->pawn, item, throwCommand->target, throwCommand->x, throwCommand->y,
+                                  throwCommand->player, &error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* explode = std::get_if<ExplodeCommand>(&command)) {
+        const DefId type = defs_->idOf("DamageTypes", explode->damageType);
+        const CellPos at{static_cast<int>(std::floor(explode->x)), static_cast<int>(std::floor(explode->y)), 0};
+        if (!type.valid()) {
+            commandFailed(id, "there is no such damage type");
+        } else if (!map_.inBounds(at) || !(explode->radius > 0.0f) || !(explode->damage > 0.0f)) {
+            commandFailed(id, "that is not a blast on the map");
+        } else {
+            Explosion blast;
+            blast.x = explode->x;
+            blast.y = explode->y;
+            blast.z = map_.heightAt(explode->x, explode->y) + 0.04f;
+            blast.radius = explode->radius;
+            blast.damage = explode->damage;
+            blast.damageType = type;
+            blast.penetration = explode->penetration;
+            blast.seed = splitMix64(settings_.seed ^ static_cast<uint64_t>(time_.seconds) ^ (id << 20));
+            combat_->explode(blast);
         }
     } else if (const auto* setResearch = std::get_if<SetResearchCommand>(&command)) {
         if (!research_->setCurrent(setResearch->project, error)) {
@@ -635,13 +673,18 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, error);
         }
     } else if (const auto* equip = std::get_if<EquipCommand>(&command)) {
+        const bool grenade = things_->registry().valid(equip->item) && things_->registry().all_of<Thing>(equip->item) &&
+                             explosives_->isThrown(things_->registry().get<Thing>(equip->item).def);
         if (simJobUses(*jobs_, things_->registry(), equip->item)) {
             commandFailed(id, "a job is using that thing");
-        } else if (!combat_->equip(equip->pawn, equip->item, &error)) {
+        } else if (grenade ? !explosives_->take(equip->pawn, equip->item, &error)
+                           : !combat_->equip(equip->pawn, equip->item, &error)) {
             commandFailed(id, error);
         }
     } else if (const auto* shoot = std::get_if<ShootCommand>(&command)) {
-        if (!combat_->shoot(shoot->pawn, shoot->target, shoot->x, shoot->y, shoot->z, shoot->player, &error)) {
+        if (explosives_->throwing(shoot->pawn)) {
+            commandFailed(id, "that pawn is throwing");
+        } else if (!combat_->shoot(shoot->pawn, shoot->target, shoot->x, shoot->y, shoot->z, shoot->player, &error)) {
             commandFailed(id, error);
         }
     } else if (const auto* stance = std::get_if<SetStanceCommand>(&command)) {
@@ -853,6 +896,7 @@ void Sim::step() {
     movement_->step(things_->registry(), map_);
     melee_->step();
     combat_->step(rng_);
+    explosives_->step(rng_);
     apparel_->step(time_.seconds, rng_, events_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     rooms_->update();
@@ -1080,6 +1124,9 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 combat_->rollDirection(entity, view.rollDirX, view.rollDirY);
             }
             view.hitProof = combat_->hitProof(entity);
+            view.grenades = explosives_->count(entity);
+            view.throwReadyIn = explosives_->throwReadyIn(entity);
+            view.knockedDown = combat_->knockedDownFor(entity) > 0;
         }
         if (const Gear* gear = reg.try_get<Gear>(entity); gear != nullptr && gear->weapon != kNoEntity) {
             view.weapon = reg.get<Thing>(gear->weapon).def;
@@ -1229,6 +1276,9 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.projectiles.clear();
     for (const auto [shot, p] : reg.view<const Projectile>().each()) {
         out.projectiles.push_back(ProjectileView{shot, p.def, p.x, p.y, p.z, p.vx, p.vy, p.vz, p.level});
+    }
+    for (const auto [grenade, g] : reg.view<const Grenade>().each()) {
+        out.projectiles.push_back(ProjectileView{grenade, g.def, g.x, g.y, g.z, g.vx, g.vy, g.vz, g.level, g.fuse});
     }
     std::sort(out.projectiles.begin(), out.projectiles.end(),
               [](const ProjectileView& a, const ProjectileView& b) { return a.id < b.id; });
@@ -1535,6 +1585,7 @@ uint64_t Sim::stateHash() const {
             h.add(static_cast<int>(health->cause));
         }
         combat_->hashThing(e, h);
+        explosives_->hashThing(e, h);
         fighters_->hashThing(e, h);
         animals_->hashThing(e, h);
         raids_->hashThing(e, h);

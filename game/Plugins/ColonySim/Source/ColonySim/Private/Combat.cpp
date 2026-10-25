@@ -96,6 +96,24 @@ struct CombatModel {
     float recoilSkillReduction = 0.025f;
     int maxFlight = 120;
     std::vector<std::string> layerOrder;
+    // F9's blasts: ExplosiveRules, and per damage type the explosion block of its def.
+    struct Blast {
+        float buildingFactor = 1.0f;
+        float impassableFactor = 1.0f;
+        float wallFactor = 1.0f;
+        int fragmentsMin = 1;
+        int fragmentsMax = 1;
+        float fragmentMinDamage = 1e30f;
+    };
+    std::vector<Blast> blast;  // by DamageTypes DefId value
+    float edgeFactor = 0.4f;
+    float stanceFactor[3] = {1.0f, 0.85f, 0.5f};
+    float blastHeight = 0.3f;
+    float knockMinDamage = 8.0f;
+    float knockBaseSteps = 20.0f;
+    float knockStepsPerDamage = 0.6f;
+    float knockMaxSteps = 90.0f;
+    float knockbackMetres = 1.5f;
     // F5's aiming by Shooting skill: the value at skill 0 and at skill 20, linear in between.
     float reactionSteps[2] = {15.0f, 5.0f};
     float lead[2] = {0.4f, 1.0f};
@@ -196,7 +214,21 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
     bullets.resize(defs.size());
     armorKind.resize(defs.size(), ArmorKind::None);
     kinds.resize(defs.size());
+    blast.resize(defs.size());
     melee.resize(defs.size(), 0);
+
+    if (const Def* rules = defs.find("Rules", "ExplosiveRules")) {
+        edgeFactor = combatNum(*rules, "edgeFactor", edgeFactor);
+        for (size_t i = 0; i < 3; ++i) {
+            stanceFactor[i] = static_cast<float>(rules->numberAt("stanceFactor", i, stanceFactor[i]));
+        }
+        blastHeight = combatNum(*rules, "blastHeight", blastHeight);
+        knockMinDamage = combatNum(*rules, "knockdownMinDamage", knockMinDamage);
+        knockBaseSteps = combatNum(*rules, "knockdownBaseSteps", knockBaseSteps);
+        knockStepsPerDamage = combatNum(*rules, "knockdownStepsPerDamage", knockStepsPerDamage);
+        knockMaxSteps = combatNum(*rules, "knockdownMaxSteps", knockMaxSteps);
+        knockbackMetres = combatNum(*rules, "knockbackMetres", knockbackMetres);
+    }
 
     if (const Def* rules = defs.find("Rules", "CombatRules")) {
         for (size_t i = 0; i < 21; ++i) {
@@ -253,6 +285,19 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
                                                     : ArmorKind::None;
     }
     bluntDamage = defs.idOf("DamageTypes", "Blunt");
+    for (const DefId id : defs.idsOfKind("DamageTypes")) {
+        const Def& def = defs.get(id);
+        if (!def.has("explosion")) {
+            continue;
+        }
+        Blast& b = blast[id.value];
+        b.buildingFactor = combatNum(def, "explosion.buildingFactor", 1.0);
+        b.impassableFactor = combatNum(def, "explosion.impassableFactor", 1.0);
+        b.wallFactor = combatNum(def, "explosion.wallFactor", 1.0);
+        b.fragmentsMin = std::max(1, static_cast<int>(def.integer("explosion.fragmentsMin", 1)));
+        b.fragmentsMax = std::max(b.fragmentsMin, static_cast<int>(def.integer("explosion.fragmentsMax", 1)));
+        b.fragmentMinDamage = combatNum(def, "explosion.fragmentMinDamage", 1e30);
+    }
 
     for (const DefId id : defs.idsOfKind("Projectiles")) {
         const Def& def = defs.get(id);
@@ -647,7 +692,7 @@ bool CombatSystem::hitboxesOf(Entity pawn, std::vector<HitboxView>& out) const {
 }
 
 TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, float bz, int level, Entity skipPawn,
-                             CellPos skipCell) const {
+                             CellPos skipCell, bool pawns) const {
     TraceHit best;
     const float dx = bx - ax;
     const float dy = by - ay;
@@ -727,7 +772,7 @@ TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, f
     const entt::registry& reg = things_.registry();
     const float len2 = dx * dx + dy * dy;
     for (const auto [pawn, thing, pos, posture] : reg.view<const Thing, const Position, const Posture>().each()) {
-        if (pawn == skipPawn || pos.level != level) {
+        if (!pawns || pawn == skipPawn || pos.level != level) {
             continue;
         }
         if (const DodgeRoll* roll = reg.try_get<DodgeRoll>(pawn); roll != nullptr && roll->proof) {
@@ -911,6 +956,9 @@ bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, 
     if (health_.incapacitated(pawn)) {
         return fail("that pawn can't shoot (downed or dead)");
     }
+    if (reg.all_of<KnockedDown>(pawn)) {
+        return fail("that pawn is knocked down");
+    }
     if (target != kNoEntity && (target == pawn || !things_.spawned(target) || !reg.all_of<Posture>(target))) {
         return fail("the target is not a pawn on the map");
     }
@@ -944,7 +992,7 @@ bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, 
 
 bool CombatSystem::setStance(Entity pawn, Stance stance) {
     Posture* posture = things_.registry().try_get<Posture>(pawn);
-    if (posture == nullptr) {
+    if (posture == nullptr || things_.registry().all_of<KnockedDown>(pawn)) {
         return false;
     }
     posture->stance = stance;
@@ -958,7 +1006,8 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
     const CombatModel::Gun* gun =
         gear != nullptr && gear->weapon != kNoEntity ? model_->gun(reg.get<Thing>(gear->weapon).def) : nullptr;
     if (s.phase == ShotPhase::Aiming || s.phase == ShotPhase::Firing || s.phase == ShotPhase::Reloading) {
-        if (gun == nullptr || (s.phase != ShotPhase::Reloading && (health_.incapacitated(pawn) || !things_.spawned(pawn)))) {
+        if (gun == nullptr || (s.phase != ShotPhase::Reloading &&
+                                  (health_.incapacitated(pawn) || !things_.spawned(pawn) || reg.all_of<KnockedDown>(pawn)))) {
             s.phase = ShotPhase::Ready;  // the shot (or reload) is off
             s.shotsLeft = 0;
             s.stepsLeft = 0;
@@ -1277,43 +1326,20 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
     }
 }
 
-PawnHitResult CombatSystem::hitPawn(Entity pawn, int hitboxPart, DefId damageType, float amount, float penetration,
-                                    uint64_t seed) const {
+// RimWorld's armor rule, per apparel piece covering the part hit, outermost layer first: armor
+// less penetration is the share of hits it changes; half of those bounce off (damage 0), the rest
+// do half damage and a sharp hit turns blunt. Bullets, melee blows and blast fragments all use it.
+PawnHitResult CombatSystem::armorPass(Entity pawn, int part, DefId damageType, float amount, float penetration,
+                                      Rng& rng) const {
     const entt::registry& reg = things_.registry();
     PawnHitResult result;
+    result.part = part;
     result.damageType = damageType;
     result.amount = amount;
     const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(pawn).def);
-    if (kind == nullptr || hitboxPart < 0) {
-        return result;  // no hitboxes: the caller picks the part (HealthSystem::applyDamage)
+    if (kind == nullptr) {
+        return result;
     }
-    Rng rng(seed);
-    // Which part under the hitbox: the part or its fingers, toes, eyes... by their share.
-    int part = hitboxPart;
-    const std::vector<int>& choices = kind->landsOn[static_cast<size_t>(hitboxPart)];
-    float total = 0.0f;
-    for (const int c : choices) {
-        total += health_.partHitPoints(pawn, c) > 0.0f ? kind->parts[static_cast<size_t>(c)].ownOutside : 0.0f;
-    }
-    if (total > 0.0f) {
-        const float roll = rng.unit() * total;
-        float acc = 0.0f;
-        for (const int c : choices) {
-            if (health_.partHitPoints(pawn, c) <= 0.0f || kind->parts[static_cast<size_t>(c)].ownOutside <= 0.0f) {
-                continue;
-            }
-            acc += kind->parts[static_cast<size_t>(c)].ownOutside;
-            part = c;
-            if (roll < acc) {
-                break;
-            }
-        }
-    }
-    part = health_.goInside(pawn, damageType, part, rng);
-    result.part = part;
-
-    // Armor, outside layer first: RimWorld's rule. Armor less penetration is the share of
-    // hits it changes: half of those bounce off, the rest do half damage as blunt.
     const CombatModel::ArmorKind armorKind =
         damageType.value < model_->armorKind.size() ? model_->armorKind[damageType.value] : CombatModel::ArmorKind::None;
     const Gear* gear = reg.try_get<Gear>(pawn);
@@ -1367,6 +1393,43 @@ PawnHitResult CombatSystem::hitPawn(Entity pawn, int hitboxPart, DefId damageTyp
         }
     }
     return result;
+}
+
+PawnHitResult CombatSystem::hitPawn(Entity pawn, int hitboxPart, DefId damageType, float amount, float penetration,
+                                    uint64_t seed) const {
+    const entt::registry& reg = things_.registry();
+    PawnHitResult result;
+    result.damageType = damageType;
+    result.amount = amount;
+    const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(pawn).def);
+    if (kind == nullptr || hitboxPart < 0) {
+        return result;  // no hitboxes: the caller picks the part (HealthSystem::applyDamage)
+    }
+    Rng rng(seed);
+    // Which part under the hitbox: the part or its fingers, toes, eyes... by their share.
+    int part = hitboxPart;
+    const std::vector<int>& choices = kind->landsOn[static_cast<size_t>(hitboxPart)];
+    float total = 0.0f;
+    for (const int c : choices) {
+        total += health_.partHitPoints(pawn, c) > 0.0f ? kind->parts[static_cast<size_t>(c)].ownOutside : 0.0f;
+    }
+    if (total > 0.0f) {
+        const float roll = rng.unit() * total;
+        float acc = 0.0f;
+        for (const int c : choices) {
+            if (health_.partHitPoints(pawn, c) <= 0.0f || kind->parts[static_cast<size_t>(c)].ownOutside <= 0.0f) {
+                continue;
+            }
+            acc += kind->parts[static_cast<size_t>(c)].ownOutside;
+            part = c;
+            if (roll < acc) {
+                break;
+            }
+        }
+    }
+    part = health_.goInside(pawn, damageType, part, rng);
+    result.part = part;
+    return armorPass(pawn, part, damageType, amount, penetration, rng);
 }
 
 float CombatSystem::spreadRadiusFor(float chance) const {
@@ -1439,6 +1502,23 @@ void CombatSystem::step(Rng& rng) {
         updateShooter(pawn, reg.get<Shooter>(pawn), rng);
     }
 
+    // Pawns thrown down by a blast (F9) get up when their time is over.
+    scratch_.clear();
+    for (const Entity pawn : reg.view<KnockedDown>()) {
+        scratch_.push_back(pawn);
+    }
+    std::sort(scratch_.begin(), scratch_.end());
+    for (const Entity pawn : scratch_) {
+        KnockedDown& k = reg.get<KnockedDown>(pawn);
+        if (--k.stepsLeft > 0 && !health_.incapacitated(pawn)) {
+            continue;
+        }
+        if (Posture* posture = reg.try_get<Posture>(pawn)) {
+            posture->stance = k.before;
+        }
+        reg.remove<KnockedDown>(pawn);
+    }
+
     // Projectiles, in id order: one may knock down a wall another would have hit.
     scratch_.clear();
     for (const Entity shot : reg.view<Projectile>()) {
@@ -1470,6 +1550,287 @@ void CombatSystem::step(Rng& rng) {
         p.z = nz;
         p.vz -= g;
     }
+}
+
+int CombatSystem::knockedDownFor(Entity pawn) const {
+    const KnockedDown* k = things_.registry().valid(pawn) ? things_.registry().try_get<KnockedDown>(pawn) : nullptr;
+    return k != nullptr ? k->stepsLeft : 0;
+}
+
+// An outside part of the pawn's body, by its share of the body, among those still there.
+int CombatSystem::pickOutsidePart(Entity pawn, Rng& rng) const {
+    const CombatModel::Kind* kind = model_->kind(things_.registry().get<Thing>(pawn).def);
+    if (kind == nullptr) {
+        return -1;
+    }
+    float total = 0.0f;
+    for (size_t q = 0; q < kind->parts.size(); ++q) {
+        if (!kind->parts[q].inside && health_.partHitPoints(pawn, static_cast<int>(q)) > 0.0f) {
+            total += kind->parts[q].ownOutside;
+        }
+    }
+    if (total <= 0.0f) {
+        return -1;
+    }
+    const float roll = rng.unit() * total;
+    float acc = 0.0f;
+    int pick = -1;
+    for (size_t q = 0; q < kind->parts.size(); ++q) {
+        if (kind->parts[q].inside || health_.partHitPoints(pawn, static_cast<int>(q)) <= 0.0f || kind->parts[q].ownOutside <= 0.0f) {
+            continue;
+        }
+        acc += kind->parts[q].ownOutside;
+        pick = static_cast<int>(q);
+        if (roll < acc) {
+            break;
+        }
+    }
+    return pick;
+}
+
+ExplosionResult CombatSystem::explode(const Explosion& ex) {
+    ExplosionResult result;
+    entt::registry& reg = things_.registry();
+    if (ex.radius <= 0.0f || ex.damage <= 0.0f) {
+        return result;
+    }
+    Rng rng(ex.seed);
+    const CombatModel::Blast blast = ex.damageType.valid() && ex.damageType.value < model_->blast.size()
+                                         ? model_->blast[ex.damageType.value]
+                                         : CombatModel::Blast{};
+    const float edge = model_->edgeFactor;
+    const auto falloff = [&](float d) { return 1.0f - (1.0f - edge) * std::clamp(d / ex.radius, 0.0f, 1.0f); };
+    const float bx = ex.x;
+    const float by = ex.y;
+    const float bz = ex.z + model_->blastHeight;
+    const CellPos nowhere{-100000, -100000, ex.level};
+
+    if (events_ != nullptr) {
+        Event e;
+        e.type = EventType::Explosion;
+        e.thing = ex.source;
+        e.target = ex.instigator;
+        e.def = ex.damageType;
+        e.amount = ex.radius;
+        e.x = ex.x;
+        e.y = ex.y;
+        e.z = ex.z;
+        e.cell = CellPos{static_cast<int>(std::floor(ex.x)), static_cast<int>(std::floor(ex.y)), ex.level};
+        events_->push_back(std::move(e));
+    }
+
+    // ---- Pawns, in id order.
+    scratch_.clear();
+    for (const auto [pawn, thing, pos, posture] : reg.view<const Thing, const Position, const Posture>().each()) {
+        (void)thing;
+        (void)posture;
+        if (pos.level != ex.level) {
+            continue;
+        }
+        const float dx = pos.x - bx;
+        const float dy = pos.y - by;
+        if (dx * dx + dy * dy <= (ex.radius + 1.0f) * (ex.radius + 1.0f)) {
+            scratch_.push_back(pawn);
+        }
+    }
+    std::sort(scratch_.begin(), scratch_.end());
+    const std::vector<Entity> pawns = scratch_;
+    for (const Entity pawn : pawns) {
+        const Health* health = reg.try_get<Health>(pawn);
+        const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(pawn).def);
+        if (kind == nullptr || (health != nullptr && health->dead)) {
+            continue;
+        }
+        const Position pos = reg.get<Position>(pawn);
+        const int stance = static_cast<int>(combatStanceOf(reg, pawn));
+        const float ground = map_.heightAt(pos.x, pos.y);
+        float chest[3];
+        if (!aimPoint(pawn, chest[0], chest[1], chest[2])) {
+            continue;
+        }
+        const float samples[3][3] = {{chest[0], chest[1], chest[2]},
+                                     {pos.x, pos.y, ground + 0.25f},
+                                     {pos.x, pos.y, ground + std::max(0.3f, kind->poses[stance].top - 0.1f)}};
+        float sum = 0.0f;
+        float nearest = ex.radius;
+        for (const auto& sample : samples) {
+            const float sx = sample[0] - bx;
+            const float sy = sample[1] - by;
+            const float sz = sample[2] - bz;
+            const float d = std::sqrt(sx * sx + sy * sy + sz * sz);
+            if (d > ex.radius) {
+                continue;
+            }
+            const TraceHit hit = trace(bx, by, bz, sample[0], sample[1], sample[2], ex.level, kNoEntity, nowhere, false);
+            if (hit.kind != ProjectileHitKind::None && hit.t < 0.97f) {
+                continue;  // a wall, a rock or the ground between
+            }
+            sum += falloff(d);
+            nearest = std::min(nearest, d);
+        }
+        const float amount = ex.damage * (sum / 3.0f) * model_->stanceFactor[stance];
+        if (amount < 1.0f) {
+            continue;
+        }
+        // Fragments: a hard enough blast splits into 2 to 4 pieces, each on a part of its own.
+        int pieces = 1;
+        if (amount >= blast.fragmentMinDamage && blast.fragmentsMax > blast.fragmentsMin) {
+            pieces = blast.fragmentsMin + static_cast<int>(rng.below(static_cast<uint32_t>(blast.fragmentsMax - blast.fragmentsMin + 1)));
+        } else if (amount >= blast.fragmentMinDamage) {
+            pieces = blast.fragmentsMin;
+        }
+        float weights[8];
+        pieces = std::min(pieces, 8);
+        float weightSum = 0.0f;
+        for (int i = 0; i < pieces; ++i) {
+            weights[i] = 0.5f + rng.unit();
+            weightSum += weights[i];
+        }
+        float dealt = 0.0f;
+        for (int i = 0; i < pieces; ++i) {
+            const int part = pickOutsidePart(pawn, rng);
+            if (part < 0) {
+                break;
+            }
+            const PawnHitResult piece = armorPass(pawn, part, ex.damageType, amount * weights[i] / weightSum, ex.penetration, rng);
+            if (piece.deflected || piece.amount <= 0.0f) {
+                wearApparel(pawn, piece);
+                continue;
+            }
+            const bool alive = health_.applyHit(pawn, piece.damageType, piece.amount, part);
+            wearApparel(pawn, piece);
+            if (!alive) {
+                break;
+            }
+            dealt += piece.amount;
+        }
+        if (dealt > 0.0f) {
+            ++result.pawnsHurt;
+        }
+        // Knock-down: the blast throws the pawn down and away, armor or not.
+        if (amount < model_->knockMinDamage || (health != nullptr && health->dead) || !things_.spawned(pawn)) {
+            continue;
+        }
+        Posture& posture = reg.get<Posture>(pawn);
+        const int steps = static_cast<int>(std::min(model_->knockMaxSteps, model_->knockBaseSteps + model_->knockStepsPerDamage * amount));
+        KnockedDown& knocked = reg.get_or_emplace<KnockedDown>(pawn, KnockedDown{0, posture.stance});
+        knocked.stepsLeft = std::max(knocked.stepsLeft, steps);
+        posture.stance = Stance::Prone;
+        if (Shooter* shooter = reg.try_get<Shooter>(pawn);
+            shooter != nullptr && (shooter->phase == ShotPhase::Aiming || shooter->phase == ShotPhase::Firing)) {
+            shooter->phase = ShotPhase::Ready;
+            shooter->shotsLeft = 0;
+            shooter->stepsLeft = 0;
+        }
+        Position& at = reg.get<Position>(pawn);
+        float pushX = at.x - bx;
+        float pushY = at.y - by;
+        float len = std::sqrt(pushX * pushX + pushY * pushY);
+        if (len < 0.05f) {
+            pushX = posture.facingX;
+            pushY = posture.facingY;
+            len = 1.0f;
+        }
+        const float share = std::clamp(1.0f - nearest / ex.radius, 0.0f, 1.0f);
+        for (const float scale : {1.0f, 0.5f}) {
+            const float push = model_->knockbackMetres * share * scale;
+            const float nx = at.x + pushX / len * push;
+            const float ny = at.y + pushY / len * push;
+            if (push > 0.01f && straightWalkIsClear(map_, at.x, at.y, nx, ny, kPawnRadius, at.level)) {
+                at.x = nx;
+                at.y = ny;
+                break;
+            }
+        }
+        if (Mover* mover = reg.try_get<Mover>(pawn)) {
+            mover->path.clear();
+            mover->next = 0;
+            mover->vx = 0.0f;
+            mover->vy = 0.0f;
+        }
+        ++result.pawnsKnocked;
+        if (events_ != nullptr) {
+            Event e;
+            e.type = EventType::PawnKnockedDown;
+            e.thing = pawn;
+            e.def = reg.get<Thing>(pawn).def;
+            e.amount = static_cast<float>(knocked.stepsLeft);
+            e.x = at.x;
+            e.y = at.y;
+            e.z = map_.heightAt(at.x, at.y);
+            e.cell = cellOf(at);
+            events_->push_back(std::move(e));
+        }
+    }
+
+    // ---- Buildings: each once, at its nearest cell, in cell order. A cell behind a wall is shielded.
+    struct BlastTarget {
+        Entity building;
+        float distance;
+    };
+    std::vector<BlastTarget> targets;
+    const int reach = static_cast<int>(std::ceil(ex.radius)) + 1;
+    const int cx = static_cast<int>(std::floor(ex.x));
+    const int cy = static_cast<int>(std::floor(ex.y));
+    for (int y = cy - reach; y <= cy + reach; ++y) {
+        for (int x = cx - reach; x <= cx + reach; ++x) {
+            const CellPos c{x, y, ex.level};
+            if (!map_.inBounds(c)) {
+                continue;
+            }
+            const Entity building = map_.buildingAt(c);
+            if (building == kNoEntity || !reg.valid(building)) {
+                continue;
+            }
+            const float nx = std::clamp(ex.x, static_cast<float>(x), static_cast<float>(x + 1));
+            const float ny = std::clamp(ex.y, static_cast<float>(y), static_cast<float>(y + 1));
+            const float d = std::sqrt((ex.x - nx) * (ex.x - nx) + (ex.y - ny) * (ex.y - ny));
+            if (d > ex.radius) {
+                continue;
+            }
+            // The cells strictly between the blast's cell and this one (a grid walk): a wall among them shields it.
+            bool shielded = false;
+            const int steps = std::max(std::abs(x - cx), std::abs(y - cy));
+            for (int i = 1; i < steps && !shielded; ++i) {
+                const CellPos mid{cx + (x - cx) * i / steps, cy + (y - cy) * i / steps, ex.level};
+                shielded = map_.inBounds(mid) && map_.obstacleDm(mid) > 0 && map_.buildingAt(mid) != building;
+            }
+            if (shielded) {
+                continue;
+            }
+            const auto at = std::find_if(targets.begin(), targets.end(), [&](const BlastTarget& t) { return t.building == building; });
+            if (at == targets.end()) {
+                targets.push_back(BlastTarget{building, d});
+            } else {
+                at->distance = std::min(at->distance, d);
+            }
+        }
+    }
+    for (const BlastTarget& target : targets) {
+        HitPoints* hp = reg.try_get<HitPoints>(target.building);
+        if (hp == nullptr) {
+            continue;
+        }
+        const Footprint* footprint = reg.try_get<Footprint>(target.building);
+        float factor = blast.buildingFactor;
+        if (footprint != nullptr && footprint->blocksMovement) {
+            factor *= blast.impassableFactor;
+            if (things_.defs().get(reg.get<Thing>(target.building).def).flag("building.holdsRoof")) {
+                factor *= blast.wallFactor;
+            }
+        }
+        const int damage = std::max(1, static_cast<int>(std::lround(ex.damage * falloff(target.distance) * factor)));
+        hp->current -= damage;
+        ++result.buildingsHit;
+        if (hp->current <= 0) {
+            ++result.buildingsDestroyed;
+            if (beforeDestroy_) {
+                beforeDestroy_(target.building);
+            }
+            things_.destroy(target.building);
+        }
+    }
+    return result;
 }
 
 void CombatSystem::drop(Entity pawn, Entity item) {
@@ -1617,7 +1978,7 @@ void CombatSystem::hashThing(Entity e, StateHasher& h) const {
     const entt::registry& reg = things_.registry();
     const bool has[] = {reg.all_of<Posture>(e), reg.all_of<Gear>(e), reg.all_of<EquippedBy>(e), reg.all_of<Shooter>(e),
                         reg.all_of<Projectile>(e), reg.all_of<Magazine>(e), reg.all_of<RecoilKick>(e),
-                        reg.all_of<DodgeRoll>(e)};
+                        reg.all_of<DodgeRoll>(e), reg.all_of<KnockedDown>(e)};
     uint64_t mask = 0;
     for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
         mask |= has[bit] ? (uint64_t{1} << bit) : 0;
@@ -1665,6 +2026,10 @@ void CombatSystem::hashThing(Entity e, StateHasher& h) const {
     }
     if (const Magazine* m = reg.try_get<Magazine>(e)) {
         h.add(m->rounds);
+    }
+    if (const KnockedDown* k = reg.try_get<KnockedDown>(e)) {
+        h.add(k->stepsLeft);
+        h.add(static_cast<int>(k->before));
     }
     if (const RecoilKick* k = reg.try_get<RecoilKick>(e)) {
         h.add(k->up);

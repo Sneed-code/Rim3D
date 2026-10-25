@@ -36,6 +36,7 @@ struct Colonist;
 struct PawnLooks;
 struct PawnGenes;
 class Designations;
+class ExplosiveSystem;
 class FighterSystem;
 class Husbandry;
 class JobSystem;
@@ -161,6 +162,9 @@ public:
     // Guns, projectiles, hitboxes and armor (docs/design/combat.md).
     CombatSystem& combat() { return *combat_; }
     const CombatSystem& combat() const { return *combat_; }
+    // Grenades: belts, throwing, fuses (docs/design/explosives.md). Blasts are `combat().explode`.
+    ExplosiveSystem& explosives() { return *explosives_; }
+    const ExplosiveSystem& explosives() const { return *explosives_; }
     // Clothes and armor, outfits, stripping (docs/design/apparel.md).
     ApparelSystem& apparel() { return *apparel_; }
     const ApparelSystem& apparel() const { return *apparel_; }
@@ -310,6 +314,7 @@ private:
     std::unique_ptr<RecreationSystem> recreation_;
     std::unique_ptr<ResearchSystem> research_;
     std::unique_ptr<CombatSystem> combat_;
+    std::unique_ptr<ExplosiveSystem> explosives_;  // after combat_ and health_
     std::unique_ptr<ApparelSystem> apparel_;  // after combat, which it uses
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
