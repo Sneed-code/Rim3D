@@ -282,6 +282,25 @@ void UBuildingSubsystem::ReadDefs(const colony::Sim& Sim)
 		Look.LayerCm = static_cast<float>(Def.number("visual.layer", 0.1)) * 100.0f;
 		Look.StackLimit = FMath::Max(1, static_cast<int32>(Def.integer("stackLimit", 1)));
 		Look.HeightCm = VisualMesh::HeightOf(Look.Parts);
+
+		// A mesh of the def's own (A1 makes them, tools/placeholder_art.py); without it the shapes above are drawn.
+		const std::string MeshPath = Def.text("visual.mesh");
+		if (!MeshPath.empty())
+		{
+			Look.ArtMesh = LoadObject<UStaticMesh>(nullptr, UTF8_TO_TCHAR(MeshPath.c_str()));
+			if (Look.ArtMesh)
+			{
+				KeepMeshes.Add(Look.ArtMesh);
+				if (!Look.bDoor)
+				{
+					Look.HeightCm = Look.ArtMesh->GetBounds().BoxExtent.Z * 2.0f;
+				}
+			}
+			else
+			{
+				UE_LOG(LogSimBuildings, Warning, TEXT("%s: mesh %s not found, drawing its shapes instead (python tools/placeholder_art.py, then the PlaceholderArt commandlet)"), UTF8_TO_TCHAR(Def.defName().c_str()), UTF8_TO_TCHAR(MeshPath.c_str()));
+			}
+		}
 	}
 }
 
@@ -317,8 +336,14 @@ int32 UBuildingSubsystem::GetLook(colony::DefId Def, colony::DefId Stuff)
 	Look.Fixed = Make(DefLook->bHasSliding ? VisualMesh::EPartSet::Fixed : VisualMesh::EPartSet::All);
 	if (DefLook->bHasSliding)
 	{
-		Look.Sliding = Make(VisualMesh::EPartSet::Sliding);
+		Look.Sliding = DefLook->bDoor && DefLook->ArtMesh ? DefLook->ArtMesh : Make(VisualMesh::EPartSet::Sliding);
 		Look.All = Make(VisualMesh::EPartSet::All);
+	}
+	else if (DefLook->ArtMesh)
+	{
+		// Frames and ghosts keep the plain shapes: the ghost material replaces only the first material of a mesh.
+		Look.All = Make(VisualMesh::EPartSet::All);
+		Look.Fixed = DefLook->ArtMesh;
 	}
 	else
 	{

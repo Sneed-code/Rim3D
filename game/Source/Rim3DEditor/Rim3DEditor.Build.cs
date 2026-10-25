@@ -12,7 +12,7 @@ public class Rim3DEditor : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"Core", "CoreUObject", "Engine", "UnrealEd", "AssetTools", "AssetRegistry",
-			"MeshDescription", "SkeletalMeshDescription", "StaticMeshDescription", "RigLogicModule", "MaterialEditor", "ImageCore",
+			"Json", "MeshDescription", "SkeletalMeshDescription", "StaticMeshDescription", "RigLogicModule", "MaterialEditor", "ImageCore",
 			"Rim3D",
 		});
 		// PawnLooks.h: names shared with the game module.

@@ -231,10 +231,15 @@ medicine, animals, melee and grenades, two-storey buildings, the narrator and ev
 traders, protagonist talents and loadout). Its extra rules keep parallel threads from colliding.
 **Wave 1 is open now in the cloud, alongside the rest of Stage 1:** S7 (saves and commands that
 merge in parallel; every sim task that saves state waits for it), E3 light, and the data tasks D4,
-D5, D6, D7, D8, D9, D11. D4 and D6 done (crops, three climates, weather kinds; apparel and textiles: `docs/design/starting-data.md`). Count in the plan. Tick tasks in `docs/plans/stage-2.md` as they merge.
+D5, D6, D7, D8, D9, D11. D4 and D6 done (crops, three climates, weather kinds; apparel, textiles and tailor benches: `docs/design/starting-data.md`). S7 done: a save is
+now named sections, each with its own version, and commands are saved by name, so **sim tasks that
+save state can start; none of them bumps the save format number again** (it stays 20; add your own
+section, `docs/design/saves.md` "Adding to the save"; a new system's checklist is in
+`docs/design/bridge.md`). Format 6 to 19 saves still load. Count in the plan. Tick tasks in `docs/plans/stage-2.md` as they merge.
 
 Stage 2 done so far: **D7** medicine and disease data (`docs/design/medicine-data.md`), **D11** building data 2 (power, climate, light, floors, furniture;
 `docs/design/starting-data.md`).
+**D5** animal data (15 animals, bodies, meat, leather, milk, eggs, wool: `docs/design/animals.md`).
 
 ## Next
 
@@ -293,7 +298,7 @@ U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priori
 AI: aiming~~ done (`docs/design/aiming.md`; save format 17), so **F6** raid and defense (cloud, Opus high)
 is open once C8 is in (it is); with U9 and F2 in, ~~**U11** fights on screen~~ is done (PC; smoke test `fights`; `docs/design/fights.md`; it
 binds R to reload; reload and sidestep animations are not drawn yet). ~~**C10** colony scenario test~~ done
-(`docs/design/colony-scenario.md`); ~~**U10** hands-on work~~ is done (PC; smoke test `handson`; `docs/design/handson.md`); open on the PC: **A1** placeholder art.
+(`docs/design/colony-scenario.md`); ~~**U10** hands-on work~~ is done (PC; smoke test `handson`; `docs/design/handson.md`); ~~**A1** placeholder art~~ is done (PC; free Poly Haven meshes on the bed, door, table, stool, stove, logs, meals, berries, trees and bushes; `docs/design/building-draw.md`, `python tools/placeholder_art.py` then the `PlaceholderArt` commandlet). **A2** terrain materials (needs sneed's Megascans) and **G1** are what is left on the PC.
 
 ## Waiting on sneed
 
