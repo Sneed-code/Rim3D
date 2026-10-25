@@ -264,6 +264,13 @@ Stage 2 done so far: **D7** medicine and disease data (`docs/design/medicine-dat
 D9 (thoughts, recreation, mental break and social data) is in: `docs/design/thoughts-data.md`. Data only; C15, C17, C18, C19, C20, E2 and E3 read it.
 **C17** room stats, beauty and filth (`docs/design/room-stats.md`): floors and filth layers, a cleaning job (indoors only for now), space, beauty, wealth, cleanliness and impressiveness by RimWorld's formulas, the beauty need and the room thoughts. Floors come only by `PlaceFloor` command: no floor-building job exists in any plan task yet (BACKLOG). Save section `roomstats` 1.
 
+**N1** animals on the map (`docs/design/animal-life.md`, tests `AnimalTests`, `simrun --animals`): `SimSettings::wildAnimals`
+(percent of the biome's density; 0 is the default, so nothing else changes) puts wild herds on the map when it is made; animals are pawns
+with `Animal` (no `Worker`, side 100), wander in herds behind the lowest-id leader, graze plants, sleep by day or night, walk in from and off
+the edges to keep the biome's density, and rot away 15 days after dying. About 300 animals on a 1 km map cost 0.36 ms a step, 80% of it in
+`MovementSystem` (for S9). Save section `animals`. Fighters never take an animal for an enemy on their own. **Unreal does not turn
+`wildAnimals` on until U15 draws animals** (the pawn drawing would show them as people); **code that counts pawns of another faction as raiders
+must skip `Animal`**.
 
 ## Next
 

@@ -139,7 +139,7 @@ G2, A1 and A2 are Stage 1 tasks.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | N1 | **Animals on the map.** Animal races with their bodies and health; wild herds placed by biome at map generation and wandering in and out at the edges; grazing from the plant layer, sleep, corpses. Hundreds stay cheap (`simrun --animals`). | Cloud | Sonnet, high | 90 min | S7, D5 |
+| ✓ | N1 | **Animals on the map.** Animal races with their bodies and health; wild herds placed by biome at map generation and wandering in and out at the edges; grazing from the plant layer, sleep, corpses. Hundreds stay cheap (`simrun --animals`). | Cloud | Sonnet, high | 90 min | S7, D5 |
 | | N2 | **Hunting and butchering.** A hunt mark and the Hunting job (shoot, carry the corpse home); butchering at the butcher table for meat and leather (so the fine meal can be cooked); hunted animals may turn on the hunter. | Cloud | Sonnet, high | 90 min | N1, C14 |
 | | N3 | **Taming, training and pens.** Tame mark and Handling job (wildness, food), tamed animals join the colony, training (obedience, release, rescue, haul), animal zones and pens, feeding hay and kibble, slaughter. | Cloud | Sonnet, high | 90 min | N1 |
 | | N4 | **Breeding and products.** Animal mating, gestation and eggs, young animals growing up, milking and shearing jobs, egg laying; a 500-chicken farm stays cheap. | Cloud | Sonnet, high | 90 min | N3 |

@@ -48,6 +48,8 @@ REFERENCES = [
     ("Hediffs", "addedPart.part", "BodyParts"),
     ("Hediffs", "addedPart.item", "Things"),
     ("Biomes", "wildPlants{}", "Things"),
+    ("Biomes", "animals{}", "Things"),
+    ("Things", "race.wildBiomes{}", "Biomes"),
     ("Biomes", "weather{}", "Weathers"),
     ("Bodies", "corePart.**.def", "BodyParts"),
     ("Bodies", "corePart.**.groups[]", "BodyPartGroups"),

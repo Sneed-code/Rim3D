@@ -1,5 +1,6 @@
 #include "ColonySim/Sim.h"
 
+#include "ColonySim/Animals.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
@@ -78,6 +79,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
     if (!settings_.scenario.empty()) {
         startScenario();
     }
+    animals_->populate(settings_.wildAnimals);  // after the colonists, so no herd starts on top of them
     rooms_->update();
     power_->update();
     lights_->update();
@@ -136,6 +138,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
     fighters_->setEventLog(&events_);
+    // The biome is the one the plants use; both move to the settings together.
+    animals_ = std::make_unique<AnimalSystem>(*things_, map_, *plants_, *health_, *defs_, time_,
+                                              splitMix64(settings.seed ^ 0x616E696D616C73ULL), "TemperateForest");
+    animals_->setEventLog(&events_);
     combat_->setBeforeDestroy([this](Entity thing) { jobs_->forget(thing); });
     map_.regions().update();  // build every region now, not in the first step
 }
@@ -297,7 +303,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "no Things def '" + spawn->def + "'");
         } else if ((thing = things_->spawn(def, spawn->cell, spawn->count, spawn->rot)) == kNoEntity) {
             commandFailed(id, "can't put " + spawn->def + " at " + simCellText(spawn->cell));
-        } else if (things_->registry().all_of<Mover>(thing)) {
+        } else if (things_->registry().all_of<Mover>(thing) && !things_->registry().all_of<Animal>(thing)) {
             jobs_->addWorker(thing);  // until factions: every pawn is a colonist
             const uint64_t looksSeed = splitMix64(settings_.seed ^ 0x7370617776ULL ^ (static_cast<uint64_t>(time_.seconds) << 20) ^
                                                   entt::to_integral(thing));
@@ -670,6 +676,7 @@ void Sim::step() {
     jobs_->step();
     fighters_->step();
     recreation_->step();
+    animals_->step();
     mood_->step(time_.seconds, events_);
     movement_->step(things_->registry(), map_);
     combat_->step(rng_);
@@ -861,6 +868,12 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (view.category == ThingCategory::Pawn) {
             view.faction = fighters_->factionOf(entity);
         }
+        if (reg.all_of<Animal>(entity)) {
+            view.lifeStage = animals_->lifeStage(entity);
+            view.bodySize = animals_->bodySize(entity);
+            view.food = animals_->foodShare(entity);
+            view.asleep = animals_->asleep(entity);
+        }
         if (const Fighter* fighter = reg.try_get<Fighter>(entity)) {
             view.drafted = fighter->drafted;
             view.fighting = true;
@@ -955,6 +968,7 @@ uint64_t Sim::stateHash() const {
     floors_->hashState(h);
     filth_->hashState(h);
     roomStats_->hashState(h);
+    animals_->hashState(h);
 
     // The entity ids the registry has handed out: the free list in reuse order (it decides the
     // next ids), then every live thing in id order with its components. The registry's own
@@ -1213,6 +1227,7 @@ uint64_t Sim::stateHash() const {
         }
         combat_->hashThing(e, h);
         fighters_->hashThing(e, h);
+        animals_->hashThing(e, h);
     }
     return h.value();
 }

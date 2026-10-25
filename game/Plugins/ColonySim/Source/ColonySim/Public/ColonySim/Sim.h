@@ -25,6 +25,7 @@
 
 namespace colony {
 
+class AnimalSystem;
 class Construction;
 class DefDatabase;
 class Filth;
@@ -65,6 +66,9 @@ struct SimSettings {
     // A Scenarios def to start (e.g. "Crashlanded"): colonists made from the seed, with starting
     // items, near the middle of the map (docs/design/colonists.md). Empty: no scenario.
     std::string scenario{};
+    // Wild animals when the map is made (docs/design/animal-life.md): 0 for none, else the biome's
+    // animal density in percent (100 = as the biome says). Needs the Biomes and animal defs.
+    int wildAnimals = 0;
 };
 
 struct SimStats {
@@ -198,6 +202,10 @@ public:
     FighterSystem& fighters() { return *fighters_; }
     const FighterSystem& fighters() const { return *fighters_; }
 
+    // Wild animals: herds, grazing, sleep, coming and going at the edges (docs/design/animal-life.md).
+    AnimalSystem& animals() { return *animals_; }
+    const AnimalSystem& animals() const { return *animals_; }
+
     // Blueprints, frames and taking buildings down (docs/design/construction.md).
     Construction& construction() { return *construction_; }
     const Construction& construction() const { return *construction_; }
@@ -266,6 +274,7 @@ private:
     std::unique_ptr<Floors> floors_;           // C17; filth and room stats read the floors
     std::unique_ptr<Filth> filth_;
     std::unique_ptr<RoomStats> roomStats_;
+    std::unique_ptr<AnimalSystem> animals_;
     std::vector<std::string> setupErrors_;
     std::vector<std::pair<uint64_t, Command>> pending_;  // id, command
     uint64_t submitted_ = 0;
