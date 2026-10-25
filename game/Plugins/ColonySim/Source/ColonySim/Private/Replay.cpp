@@ -97,13 +97,20 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, OrderHaulCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["thing"] = entt::to_integral(c.thing);
+            } else if constexpr (std::is_same_v<Type, ControlPawnCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+            } else if constexpr (std::is_same_v<Type, DirectMoveCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                // A float is written as the double that holds it exactly, so it reads back the same.
+                j["x"] = static_cast<double>(c.x);
+                j["y"] = static_cast<double>(c.y);
             } else if constexpr (std::is_same_v<Type, EquipCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["item"] = entt::to_integral(c.item);
             } else if constexpr (std::is_same_v<Type, ShootCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["target"] = entt::to_integral(c.target);
-                j["point"] = {c.x, c.y, c.z};
+                j["point"] = {static_cast<double>(c.x), static_cast<double>(c.y), static_cast<double>(c.z)};
                 j["player"] = c.player;
             } else {
                 static_assert(std::is_same_v<Type, SetStanceCommand>, "write every command type");
@@ -275,6 +282,27 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = DestroyThingCommand{static_cast<Entity>(thing)};
+    } else if (type == "ControlPawn") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where)) {
+            return false;
+        }
+        out.command = ControlPawnCommand{static_cast<Entity>(pawn)};
+    } else if (type == "DirectMove") {
+        DirectMoveCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        for (const auto& [key, field] : {std::pair<const char*, float*>{"x", &c.x}, std::pair<const char*, float*>{"y", &c.y}}) {
+            const auto it = j.find(key);
+            if (it == j.end() || !it->is_number()) {
+                return r.fail(where + "." + key + " must be a number");
+            }
+            *field = static_cast<float>(it->get<double>());
+        }
+        out.command = c;
     } else if (type == "DamagePawn") {
         uint32_t pawn = entt::to_integral(kNoEntity);
         DamagePawnCommand c;

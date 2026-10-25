@@ -7,6 +7,7 @@
 #include "InputCoreTypes.h"
 
 #include "OverseerSubsystem.h"
+#include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
 
 #include "ColonySim/Map.h"
@@ -57,6 +58,7 @@ void AOverseerPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	PlayerInputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AOverseerPawn::OnClearPressed);
 	PlayerInputComponent->BindKey(EKeys::F, IE_Pressed, this, &AOverseerPawn::OnFocusPressed);
 	PlayerInputComponent->BindKey(EKeys::Home, IE_Pressed, this, &AOverseerPawn::OnResetPressed);
+	PlayerInputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &AOverseerPawn::OnTakeControlPressed);
 	PlayerInputComponent->BindKey(EKeys::MouseScrollUp, IE_Pressed, this, &AOverseerPawn::OnZoomIn);
 	PlayerInputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed, this, &AOverseerPawn::OnZoomOut);
 }
@@ -232,4 +234,12 @@ void AOverseerPawn::OnFocusPressed()
 void AOverseerPawn::OnResetPressed()
 {
 	ResetView();
+}
+
+void AOverseerPawn::OnTakeControlPressed()
+{
+	if (UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>())
+	{
+		Protagonist->ToggleMode();
+	}
 }

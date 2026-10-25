@@ -23,10 +23,10 @@ runs, every queued command is applied in submit order and appended to `commandLo
 A command that can't be applied changes nothing, sends a `CommandFailed` event with its id and a
 reason, and is still logged.
 
-There are four dev commands, like RimWorld's dev mode, and since C1 the work and stockpile
-commands (below the table, and in [jobs.md](jobs.md)), and since F2 the combat commands
-([combat.md](combat.md)). The rest (place blueprint, designate,
-draft, protagonist moved and actions) come with the tasks that build those systems.
+There are four dev commands, like RimWorld's dev mode, since C1 the work and stockpile
+commands (below the table, and in [jobs.md](jobs.md)), since U9 the two for direct control
+([protagonist.md](protagonist.md)) and since F2 the combat commands ([combat.md](combat.md)). The
+rest (place blueprint, designate, draft, actions) come with the tasks that build those systems.
 
 | Command | Does | Fails when |
 | --- | --- | --- |
@@ -39,7 +39,9 @@ draft, protagonist moved and actions) come with the tasks that build those syste
 | `RemoveZoneCellsCommand{area}` | takes cells out of their zones | no zone cell in `area` |
 | `SetStockpilePriorityCommand{zone, priority}` | | unknown zone; Unstored |
 | `SetStockpileAllowedCommand{zone, def, allowed}` | the zone's filter | unknown zone or def |
-| `OrderHaulCommand{pawn, thing}` | "prioritize hauling": ends the pawn's job, hauls the item | not a working pawn; not an item; held by another pawn; unreachable; no room |
+| `OrderHaulCommand{pawn, thing}` | "prioritize hauling": ends the pawn's job, hauls the item | not a working pawn; not an item; held by another pawn; unreachable; no room; the player is controlling the pawn |
+| `ControlPawnCommand{pawn}` | the player takes over one colonist (the previous one is let go, its job ends); `kNoEntity` lets go ([protagonist.md](protagonist.md)) | not a living colonist on the map |
+| `DirectMoveCommand{pawn, x, y}` | moves the controlled pawn toward (x, y) metres, at most 0.5 m a step, out of walls | not the controlled pawn; downed or dead; x or y is not a number |
 | `EquipCommand{pawn, item}` | `CombatSystem::equip`: a gun in the hands or apparel on the body ([combat.md](combat.md)) | no body or dead; not a gun or apparel; someone else's; a job holds it |
 | `ShootCommand{pawn, target, x, y, z, player}` | `CombatSystem::shoot`: aimed (warm-up, skill spread) or the player's trigger (at once, gun spread) | no gun; downed; mid-burst or cooling down; target not a pawn on the map |
 | `SetStanceCommand{pawn, stance}` | standing, crouching or prone | not a pawn |

@@ -135,7 +135,7 @@ where, the part and damage) are in [bridge.md](bridge.md); a pawn hit is followe
 The snapshot has each pawn's stance, facing, gun and `shotReadyIn`, and `Snapshot::projectiles`
 (position and velocity, for tracers). Projectiles are entities with a `Projectile` component but no
 `Thing`, so they are not in the snapshot's things or the Things events. All combat state is in the
-state hash and the save (format 7). The random choices of a hit (part, armor rolls) come from a seed
+state hash and the save (format 8). The random choices of a hit (part, armor rolls) come from a seed
 each projectile gets when it is fired, so they don't depend on the order things are visited in;
 triggers fire in id order from the sim's random stream.
 

@@ -122,6 +122,12 @@ void MovementSystem::step(entt::registry& reg, const Map& map) {
     for (size_t index = 0; index < agents_.size(); ++index) {
         Agent& a = agents_[index];
         Mover& mover = reg.get<Mover>(a.entity);
+        if (reg.all_of<PlayerControl>(a.entity)) {
+            // The player's pawn: DirectMoveCommand moved it already. The others steer around it.
+            a.newVx = a.vx;
+            a.newVy = a.vy;
+            continue;
+        }
         // Injuries slow a pawn down (its Moving capacity); a downed or dead one doesn't walk.
         const Health* health = reg.try_get<Health>(a.entity);
         const float base = mover.metresPerStep * (health != nullptr ? health->movingFactor : 1.0f);
@@ -415,6 +421,9 @@ void MovementSystem::step(entt::registry& reg, const Map& map) {
 
     // Everyone moves together, from the state they all saw.
     for (const Agent& a : agents_) {
+        if (reg.all_of<PlayerControl>(a.entity)) {
+            continue;
+        }
         Position& pos = reg.get<Position>(a.entity);
         Mover& mover = reg.get<Mover>(a.entity);
         pos.x = a.x + a.newVx;

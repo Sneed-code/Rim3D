@@ -32,6 +32,10 @@ const char* commandName(const Command& command) {
                 return "SetStockpileAllowed";
             } else if constexpr (std::is_same_v<Type, OrderHaulCommand>) {
                 return "OrderHaul";
+            } else if constexpr (std::is_same_v<Type, ControlPawnCommand>) {
+                return "ControlPawn";
+            } else if constexpr (std::is_same_v<Type, DirectMoveCommand>) {
+                return "DirectMove";
             } else if constexpr (std::is_same_v<Type, EquipCommand>) {
                 return "Equip";
             } else if constexpr (std::is_same_v<Type, ShootCommand>) {
