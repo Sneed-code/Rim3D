@@ -158,6 +158,7 @@ TEST_CASE("Talents: ranks change the stats the systems ask for") {
     CHECK(sim.talents().statFactor(hero, "tradePrice") == doctest::Approx(0.96));
     CHECK(sim.jobs().constructionSpeed(hero) == doctest::Approx(build * 1.2f));
     CHECK(sim.jobs().carryLimit(hero, steel) > carry);
+    CHECK(sim.jobs().carryCapacity(hero) == doctest::Approx(sim.jobs().carryCapacity(other) * 1.2));
     // Everyone else is unchanged.
     CHECK(sim.talents().statFactor(other, "buildSpeed") == doctest::Approx(1.0));
     CHECK(sim.jobs().carryLimit(other, steel) == carry);

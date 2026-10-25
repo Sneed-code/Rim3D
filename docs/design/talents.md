@@ -25,7 +25,7 @@ rank) and optional `requires` (`{talent: rank}`). Factor = 1 + sum of `perRank x
 | --- | --- |
 | `buildSpeed` | `JobSystem::constructionSpeed` (building and deconstructing) |
 | `aimSpread` | `CombatSystem` when a shot is fired (multiplies the gun's spread, not recoil) |
-| `carryCapacity` | `JobSystem::carryLimit` |
+| `carryCapacity` | `JobSystem::carryCapacity` (so the load limit and the slowdown follow it) |
 | `tradePrice` | nothing yet: the trade task reads `sim.talents().statFactor(pawn, "tradePrice")` |
 
 Starting talents: FastBuilder, MasterBuilder, SteadyAim, DeadEye, PackMule, Haggler, SilverTongue (the

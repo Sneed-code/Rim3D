@@ -2,6 +2,8 @@
 
 Updated 2026-10-25.
 
+Stage 2 C24 done: carrying is by mass (capacity over item mass), a hauler takes neighbouring stacks of the same def in one trip, a load slows walking up to 25% (`docs/design/jobs.md`).
+
 ## Where we are
 
 Stage 0 (foundation) is done. Stage 1 (the playable prototype) is planned and starting.
