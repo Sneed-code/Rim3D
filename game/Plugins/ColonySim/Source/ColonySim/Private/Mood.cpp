@@ -3,6 +3,7 @@
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Events.h"
+#include "ColonySim/Temperature.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Needs.h"
@@ -163,6 +164,11 @@ bool MoodSystem::conditionValue(Entity pawn, const std::string& condition, float
             value = joy->outdoors;
             return true;
         }
+    }
+    if (temperature_ != nullptr && (condition == "coldBelowComfort" || condition == "hotAboveComfort")) {
+        value = condition == "coldBelowComfort" ? temperature_->degreesBelowComfort(pawn)
+                                                : temperature_->degreesAboveComfort(pawn);
+        return value > 0.0f;
     }
     return false;
 }
