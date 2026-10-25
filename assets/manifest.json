@@ -53,6 +53,15 @@
       "installedTo": "files in game/Content/ThirdParty/PlaceholderArt/ and the made meshes and materials in game/Content/Rim3D/Generated/Art/ (neither in Git)",
       "usedFor": "placeholder meshes for the bed, door, tables, stool, stove, logs, meals, berries, trees and bushes (docs/design/building-draw.md)",
       "reinstall": "python tools/placeholder_art.py, then \"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" C:\\Dev\\Rim3D\\game\\Rim3D.uproject -run=PlaceholderArt -unattended -nosplash -nullrhi"
+    },
+    {
+      "name": "Terrain textures (Poly Haven)",
+      "source": "https://polyhaven.com (and https://ambientcg.com if a layer says so), layers listed in assets/terrain_textures.json, 1k JPG colour and DirectX normal maps downloaded by tools/terrain_textures.py",
+      "licence": "CC0 (public domain)",
+      "version": "as downloaded 2026-10-25",
+      "installedTo": "files in game/Content/ThirdParty/TerrainTextures/ and the made textures and material (M_Terrain, MI_Terrain) in game/Content/Rim3D/Generated/Terrain/ (neither in Git)",
+      "usedFor": "the ground, sand, gravel and rock of the runtime terrain (docs/design/terrain.md); Megascans can replace them by setting a layer to \"local\" in the list",
+      "reinstall": "python tools/terrain_textures.py, then \"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" C:\\Dev\\Rim3D\\game\\Rim3D.uproject -run=TerrainMaterials -unattended -nosplash -AllowCommandletRendering"
     }
   ]
 }

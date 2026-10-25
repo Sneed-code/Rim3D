@@ -1,0 +1,333 @@
+[
+ {
+  "defName": "MeleeWeaponBase",
+  "abstract": true,
+  "parent": "ItemBase",
+  "source": "RimWorld wiki",
+  "category": "Item",
+  "stackLimit": 1,
+  "equipmentType": "Primary",
+  "thingCategories": [
+   "Weapons",
+   "MeleeWeapons"
+  ],
+  "stuffCategories": [
+   "Metallic",
+   "Woody"
+  ],
+  "stats": {
+   "maxHitPoints": 100,
+   "flammability": 0.6,
+   "deteriorationRate": 1,
+   "meleeCooldownMultiplier": 1,
+   "sharpDamageMultiplier": 1,
+   "bluntDamageMultiplier": 1
+  },
+  "unverified": [
+   "stats.maxHitPoints",
+   "stats.flammability",
+   "stats.deteriorationRate"
+  ],
+  "ours": [
+   "tools: power derived from the wiki's normal-quality DPS and cooldown (power = DPS x cooldown); handle powers from memory"
+  ]
+ },
+ {
+  "defName": "Melee_Knife",
+  "parent": "MeleeWeaponBase",
+  "label": "knife",
+  "stuffCategories": [
+   "Metallic",
+   "Woody"
+  ],
+  "costStuffCount": 30,
+  "stats": {
+   "mass": 0.5,
+   "marketValue": 64,
+   "workToMake": 864.0
+  },
+  "tools": [
+   {
+    "label": "blade",
+    "capacities": [
+     "Cut"
+    ],
+    "power": 11.4,
+    "cooldownTime": 48.9,
+    "armorPenetration": 0.1706,
+    "chanceFactor": 2.0
+   },
+   {
+    "label": "handle",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 3,
+    "cooldownTime": 48.9,
+    "chanceFactor": 0.5
+   }
+  ],
+  "unverified": [
+   "tools",
+   "costStuffCount",
+   "stats.workToMake",
+   "stats.mass",
+   "stats.marketValue"
+  ]
+ },
+ {
+  "defName": "Melee_Club",
+  "parent": "MeleeWeaponBase",
+  "label": "club",
+  "stuffCategories": [
+   "Woody"
+  ],
+  "costStuffCount": 25,
+  "stats": {
+   "mass": 1.5,
+   "marketValue": 80,
+   "workToMake": 864.0
+  },
+  "tools": [
+   {
+    "label": "head",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 12.6,
+    "cooldownTime": 60.0,
+    "armorPenetration": 0.1883,
+    "chanceFactor": 2.0
+   },
+   {
+    "label": "handle",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 11,
+    "cooldownTime": 60.0,
+    "chanceFactor": 0.5
+   }
+  ],
+  "unverified": [
+   "tools",
+   "costStuffCount",
+   "stats.workToMake",
+   "stats.mass",
+   "stats.marketValue"
+  ]
+ },
+ {
+  "defName": "Melee_Gladius",
+  "parent": "MeleeWeaponBase",
+  "label": "gladius",
+  "stuffCategories": [
+   "Metallic"
+  ],
+  "costStuffCount": 40,
+  "stats": {
+   "mass": 1.0,
+   "marketValue": 138,
+   "workToMake": 1728.0
+  },
+  "tools": [
+   {
+    "label": "blade",
+    "capacities": [
+     "Cut"
+    ],
+    "power": 14.1,
+    "cooldownTime": 60.0,
+    "armorPenetration": 0.2108,
+    "chanceFactor": 2.0
+   },
+   {
+    "label": "handle",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 10,
+    "cooldownTime": 60.0,
+    "chanceFactor": 0.5
+   }
+  ],
+  "unverified": [
+   "tools",
+   "costStuffCount",
+   "stats.workToMake",
+   "stats.mass",
+   "stats.marketValue"
+  ]
+ },
+ {
+  "defName": "Melee_Spear",
+  "parent": "MeleeWeaponBase",
+  "label": "spear",
+  "stuffCategories": [
+   "Metallic"
+  ],
+  "costStuffCount": 50,
+  "stats": {
+   "mass": 1.8,
+   "marketValue": 186,
+   "workToMake": 1440.0
+  },
+  "tools": [
+   {
+    "label": "point",
+    "capacities": [
+     "Stab"
+    ],
+    "power": 20.5,
+    "cooldownTime": 78.0,
+    "armorPenetration": 0.415,
+    "chanceFactor": 2.0
+   },
+   {
+    "label": "handle",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 11,
+    "cooldownTime": 78.0,
+    "chanceFactor": 0.5
+   }
+  ],
+  "unverified": [
+   "tools",
+   "costStuffCount",
+   "stats.workToMake",
+   "stats.mass",
+   "stats.marketValue"
+  ]
+ },
+ {
+  "defName": "Melee_Mace",
+  "parent": "MeleeWeaponBase",
+  "label": "mace",
+  "stuffCategories": [
+   "Metallic"
+  ],
+  "costStuffCount": 40,
+  "stats": {
+   "mass": 1.8,
+   "marketValue": 117,
+   "workToMake": 1440.0
+  },
+  "tools": [
+   {
+    "label": "head",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 13.9,
+    "cooldownTime": 60.0,
+    "armorPenetration": 0.2108,
+    "chanceFactor": 2.0
+   },
+   {
+    "label": "handle",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 11,
+    "cooldownTime": 60.0,
+    "chanceFactor": 0.5
+   }
+  ],
+  "unverified": [
+   "tools",
+   "costStuffCount",
+   "stats.workToMake",
+   "stats.mass",
+   "stats.marketValue"
+  ]
+ },
+ {
+  "defName": "Melee_Longsword",
+  "parent": "MeleeWeaponBase",
+  "label": "longsword",
+  "stuffCategories": [
+   "Metallic"
+  ],
+  "costStuffCount": 100,
+  "stats": {
+   "mass": 1.5,
+   "marketValue": 255,
+   "workToMake": 2880.0
+  },
+  "tools": [
+   {
+    "label": "blade",
+    "capacities": [
+     "Cut"
+    ],
+    "power": 19.4,
+    "cooldownTime": 73.5,
+    "armorPenetration": 0.2858,
+    "chanceFactor": 2.0
+   },
+   {
+    "label": "handle",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 12,
+    "cooldownTime": 73.5,
+    "chanceFactor": 0.5
+   }
+  ],
+  "unverified": [
+   "tools",
+   "costStuffCount",
+   "stats.workToMake",
+   "stats.mass",
+   "stats.marketValue"
+  ]
+ },
+ {
+  "defName": "Melee_BreachAxe",
+  "parent": "MeleeWeaponBase",
+  "label": "breach axe",
+  "stuffCategories": [
+   "Metallic"
+  ],
+  "costStuffCount": 50,
+  "stats": {
+   "mass": 2.5,
+   "marketValue": 113,
+   "workToMake": 2160.0
+  },
+  "tools": [
+   {
+    "label": "head",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 7.8,
+    "cooldownTime": 37.5,
+    "armorPenetration": 0.1138,
+    "chanceFactor": 2.0
+   },
+   {
+    "label": "handle",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 10,
+    "cooldownTime": 37.5,
+    "chanceFactor": 0.5
+   }
+  ],
+  "unverified": [
+   "tools",
+   "costStuffCount",
+   "stats.workToMake",
+   "stats.mass",
+   "stats.marketValue"
+  ],
+  "costs": {
+   "ComponentIndustrial": 2
+  }
+ }
+]

@@ -71,6 +71,16 @@ REFERENCES = [
     ("Scenarios", "colonistKind", "Things"),
     ("Scenarios", "biome", "Biomes"),
     ("Scenarios", "lineage", "Lineages"),
+    ("RecreationActivities", "kind", "RecreationKinds"),
+    ("RecreationActivities", "building", "Things"),
+    ("Things", "building.joyKind", "RecreationKinds"),
+    ("Interactions", "initiatorThought", "Thoughts"),
+    ("Interactions", "recipientThought", "Thoughts"),
+    ("Interactions", "rejectedThought", "Thoughts"),
+    ("Interactions", "acceptedThought", "Thoughts"),
+    ("Interactions", "bond", "Bonds"),
+    ("Bonds", "deathThought", "Thoughts"),
+    ("Rules", "catharsisThought", "Thoughts"),
 ]
 
 

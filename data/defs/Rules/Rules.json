@@ -226,5 +226,8 @@
     "bodyTemperatureC": { "normal": 37.0, "hypothermiaBelow": 35.0, "heatstrokeAbove": 37.5 },
     "unverified": ["tendQualityBySkill", "tendQualityRandomFactor", "tendQualityNoMedicineFactor", "surgerySuccessBySkill", "surgeryFailDeathChanceFactor", "diseaseOnsetMtbDays", "foodPoisoningChancePerMeal", "bodyTemperatureC"],
     "ours": ["immunityGainPerDayMultiplierWhenTended", "foodPoisoningChancePerMeal.dirtyKitchen"]
-  }
+  },
+  {"defName": "MentalBreakRules", "source": "RimWorld", "meanDaysBetweenBreaks": {"Minor": 4.0, "Major": 1.5, "Extreme": 0.5}, "moodCurve": [[0, 0.1], [0.5, 0.5], [1, 1]], "moodCurveNote": "x is mood / threshold level, y multiplies the mean days between breaks (lower mood, shorter wait)", "catharsisThought": "Catharsis", "minHoursBetweenBreaks": 24, "recoveryMoodMargin": 0.1, "restOnlyWhenAwake": true, "unverified": ["meanDaysBetweenBreaks", "moodCurve", "minHoursBetweenBreaks", "recoveryMoodMargin"], "ours": ["restOnlyWhenAwake"]},
+  {"defName": "JoyRules", "source": "RimWorld", "fallPerDay": 0.8, "joyHours": [16, 22], "toleranceMinGainFactor": 0.1, "toleranceMax": 1.0, "note": "Recreation falls fallPerDay when awake; it is done in the joy hours of the schedule (C18). Effective gain = joyPerHour x (1 - tolerance of the kind) x joyGainFactor, never under toleranceMinGainFactor.", "unverified": ["fallPerDay", "toleranceMinGainFactor"], "ours": ["joyHours", "toleranceMax"]},
+  {"defName": "SocialRules", "source": "RimWorld", "friendOpinion": 20, "rivalOpinion": -20, "interactionMeanHours": 6, "maxDistance": 6, "opinionMin": -100, "opinionMax": 100, "socialSkillXpPerInteraction": 15, "deadMansApparelDays": 6, "unverified": ["interactionMeanHours", "maxDistance"], "ours": ["opinionMin", "opinionMax", "socialSkillXpPerInteraction", "deadMansApparelDays"]}
 ]

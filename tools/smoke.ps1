@@ -20,7 +20,8 @@ param(
     [string]$Resolution = "1920x1080",
     [int]$Threads = 6,                    # cap for compiler jobs
     [int]$TimeoutSeconds = 300,           # the test fails itself after this long
-    [string]$EngineDir = "C:\Program Files\Epic Games\UE_5.8"
+    [string]$EngineDir = "C:\Program Files\Epic Games\UE_5.8",
+    [string[]]$ExtraArgs = @()           # more game arguments, e.g. "-ini:Engine:[SystemSettings]:Terrain.Textured=0" (a console variable from the first frame)
 )
 
 $ErrorActionPreference = "Continue"
@@ -77,6 +78,7 @@ $gameArgs = @(
     "-nosplash", "-nosound", "-unattended", "-SmokeTest=$Test", "-SmokeTimeout=$TimeoutSeconds"
 )
 if (-not $Visible) { $gameArgs += "-RenderOffScreen" }
+$gameArgs += $ExtraArgs
 Write-Host "Running smoke test '$Test' at $Resolution..."
 $game = Start-Process -FilePath $Editor -ArgumentList $gameArgs -PassThru
 try { $game.PriorityClass = "BelowNormal" } catch { }
