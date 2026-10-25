@@ -146,10 +146,12 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, AttackOrderCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["target"] = entt::to_integral(c.target);
-            } else {
-                static_assert(std::is_same_v<Type, SetFactionCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, SetFactionCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["faction"] = c.faction;
+            } else {
+                static_assert(std::is_same_v<Type, ReloadCommand>, "write every command type");
+                j["pawn"] = entt::to_integral(c.pawn);
             }
         },
         logged.command);
@@ -570,6 +572,12 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.pawn = static_cast<Entity>(pawn);
         out.command = c;
+    } else if (type == "Reload") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where)) {
+            return false;
+        }
+        out.command = ReloadCommand{static_cast<Entity>(pawn)};
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");
     }

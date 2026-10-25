@@ -62,9 +62,11 @@ const char* commandName(const Command& command) {
                 return "MoveOrder";
             } else if constexpr (std::is_same_v<Type, AttackOrderCommand>) {
                 return "AttackOrder";
-            } else {
-                static_assert(std::is_same_v<Type, SetFactionCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, SetFactionCommand>) {
                 return "SetFaction";
+            } else {
+                static_assert(std::is_same_v<Type, ReloadCommand>, "name every command type");
+                return "Reload";
             }
         },
         command);
@@ -110,6 +112,8 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Harvest: return "Harvest";
         case PawnAction::Build: return "Build";
         case PawnAction::Deconstruct: return "Deconstruct";
+        case PawnAction::Reload: return "Reload";
+        case PawnAction::Dodge: return "Dodge";
     }
     return "?";
 }

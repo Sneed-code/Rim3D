@@ -69,6 +69,7 @@ void saveTestSession(Sim& sim, int64_t from, int64_t to) {
         if (i == 1100) {
             sim.submit(MoveOrderCommand{sim.haulers()[4], CellPos{70, 60, 0}});
             sim.submit(AttackOrderCommand{sim.haulers()[4], sim.haulers()[5]});
+            sim.submit(ReloadCommand{sim.haulers()[4]});  // fails: no gun (F5)
         }
         if (i == 2200) {
             sim.submit(DraftCommand{sim.haulers()[4], false});

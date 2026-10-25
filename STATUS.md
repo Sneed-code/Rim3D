@@ -118,8 +118,17 @@ and pops up over sandbags or steps out past a wall's end to shoot, then ducks ba
 one or badly hurt it falls back. The F3 threat map isn't used (too slow to rebuild; fighters.md says
 why); 30 against 40 costs about 0.35 ms a step in the cloud. Snapshot `faction`, `drafted`,
 `fighting`, `fightTarget`, `fightSpot`, `fallingBack`; save format 15. **A new system that acts on
-pawns must skip pawns with `Fighter`** as the job system does. Not yet: aiming like a player (F5),
-squads, morale, raids and the alarm (F6); undrafted colonists ignore enemies.
+pawns must skip pawns with `Fighter`** as the job system does. Not yet: squads, morale, raids and
+the alarm (F6); undrafted colonists ignore enemies.
+
+Since F5 fighters aim like players (`docs/design/aiming.md`): Shooting skill sets a reaction time
+before shooting a new target (0.5 s at skill 0, 0.17 s at 20), how well a shot leads a moving target
+(a skill 20 shooter hits a man walking past about as often as one standing, a novice almost never)
+and reload speed. Guns have magazines (revolver 6, assault rifle 30...; ours) that reload by themselves
+when empty, `ReloadCommand` reloads early, and fighters top up in cover when they have no shot.
+Fighters sidestep slow projectiles they see coming in time (bullets are far too fast; for grenades
+and arrows later). Events `PawnAction` `Reload` and `Dodge`; snapshot `rounds`, `magazineSize`,
+`reloading`; save format 16.
 
 Since D3 the game has real starting data in `data/defs/`, written by hand with RimWorld's numbers
 from the RimWorld wiki (there is no RimWorld install to import from; `docs/decisions/0003`):
@@ -160,7 +169,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-27 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4). Tick tasks in `docs/plans/stage-1.md` as they merge.
+28 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, F5). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -215,9 +224,10 @@ roofs and rooms~~ done (`docs/design/rooms.md`; save format 13), C7 bills and co
 schedules~~ done (`docs/design/needs.md`; save format 8), ~~**F2** guns and hitboxes~~ done; ~~**C3** mining, chopping
 and harvesting~~ done (`docs/design/mining.md`; save format 14). On the PC, ~~**U9**~~ is done and **A3** needs only done tasks.
 U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priorities).
-~~**F4** fighter AI: where to stand~~ done (`docs/design/fighters.md`; save format 15), so **F5** fighter
-AI: aiming (cloud, Opus high) is open; with U9 and
-F2 in, **U11** fights on screen (PC) is too.
+~~**F4** fighter AI: where to stand~~ done (`docs/design/fighters.md`; save format 15), ~~**F5** fighter
+AI: aiming~~ done (`docs/design/aiming.md`; save format 16), so **F6** raid and defense (cloud, Opus high)
+is open once C8 is in (it is); with U9 and F2 in, **U11** fights on screen (PC) is too, and can now show
+reloads and sidesteps and bind a reload key.
 
 ## Waiting on sneed
 

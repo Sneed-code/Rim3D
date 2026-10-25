@@ -8,8 +8,8 @@ Every shot is a real projectile. It leaves the muzzle with spread, flies with sp
 stops at the first thing it touches: the ground, rock, a building, or a pawn's hitbox. A pawn hit
 goes through its armor to the body part that was hit, then into health (`HealthSystem::applyHit`,
 [health.md](health.md)). **There is no hit-chance roll.** Where to stand and when to shoot is the
-fighter AI ([fighters.md](fighters.md), F4); leading and reaction time are F5; Unreal's tracers and
-hit reactions are U11.
+fighter AI ([fighters.md](fighters.md), F4); leading, reaction time, magazines and dodging are F5
+([aiming.md](aiming.md)); Unreal's tracers and hit reactions are U11.
 
 ## Guns and bullets
 
@@ -18,7 +18,7 @@ shotgun, assault rifle. Units follow [starting-data.md](starting-data.md): ticks
 real seconds become steps (x30), so a gun's `verbs.0.warmupTime` (aiming), `stats.rangedWeaponCooldown`
 and `verbs.0.secondsBetweenBurstShots` are steps. `range` is metres (not used by the sim yet; the AI
 will use it). Bullets: `damageAmountBase`, `armorPenetrationBase`, `stoppingPower` (not used yet:
-stagger comes with F5) and `speed`.
+stagger comes later) and `speed`.
 
 **Speed.** The wiki gives bullet speed as "m/s" (revolver 55, rifles 70); the defs keep that,
 converted like the importer (/30, metres per step). RimWorld's bullets are slow because it is a
@@ -40,6 +40,8 @@ firefight) that leading (F5) has to deal with. Change the one number in `tuning.
    Each shot aims at the target's chest (`aimPoint`) as it is at that moment, or at the point.
 3. **Cooling**: the gun's cooldown. A new order is refused until it is over (`shotReadyIn` in the
    snapshot says when). A downed shooter's shot is off.
+4. **Reloading** (F5): after the shot that empties the magazine, the cooldown and then the reload
+   ([aiming.md](aiming.md)). An aimed shot at a moving pawn is led (same doc).
 
 **Drop is aimed for.** The shot goes up just enough that the arc passes through the aim point (the
 low of the two ballistic solutions), like a zeroed sight. **The muzzle** is above the pawn's centre
@@ -143,6 +145,6 @@ triggers fire in id order from the sim's random stream.
 ## Not done yet
 
 Melee (Crashlanded's knife), grenades and blast radius, stopping power, apparel damage, aim affected
-by sight and manipulation, leading and reaction time (F5), bullets
+by sight and manipulation, bullets
 hitting corpses and plants (C2's trees should stop some bullets), shooting through doorways when
 doors open and close (C5).

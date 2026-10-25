@@ -103,6 +103,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
+    fighters_->setEventLog(&events_);
     combat_->setBeforeDestroy([this](Entity thing) { jobs_->forget(thing); });
     map_.regions().update();  // build every region now, not in the first step
 }
@@ -479,6 +480,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!fighters_->setFaction(faction->pawn, faction->faction, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* reload = std::get_if<ReloadCommand>(&command)) {
+        if (!combat_->reload(reload->pawn, &error)) {
+            commandFailed(id, error);
+        }
     }
 }
 
@@ -642,6 +647,9 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.facingX = posture->facingX;
             view.facingY = posture->facingY;
             view.shotReadyIn = combat_->shotReadyIn(entity);
+            view.rounds = combat_->roundsLeft(entity);
+            view.magazineSize = combat_->magazineSize(entity);
+            view.reloading = combat_->reloading(entity);
         }
         if (const Gear* gear = reg.try_get<Gear>(entity); gear != nullptr && gear->weapon != kNoEntity) {
             view.weapon = reg.get<Thing>(gear->weapon).def;

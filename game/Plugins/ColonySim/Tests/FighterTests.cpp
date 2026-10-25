@@ -519,12 +519,15 @@ TEST_CASE("Fighters: the orders go through a replay file and play back the same 
     original.submit(AttackOrderCommand{colonist, raider});
     original.stepMany(600);
     CHECK(original.things().registry().get<Fighter>(colonist).target == raider);
+    original.submit(ReloadCommand{colonist});  // F5: may fail (full, mid-shot), but goes into the replay
+    original.stepMany(100);
     const Replay recorded = recordReplay(original);
     Replay loaded;
     std::string error;
     FIGHT_REQUIRE(readReplay(writeReplay(recorded), loaded, error));
     CHECK(writeReplay(loaded) == writeReplay(recorded));
     CHECK(writeReplay(loaded).find("\"AttackOrder\"") != std::string::npos);
+    CHECK(writeReplay(loaded).find("\"Reload\"") != std::string::npos);
     Sim replayed(loaded.settings, fightTestDefs());
     playReplay(loaded, replayed, loaded.endStep);
     CHECK(replayed.stateHash() == original.stateHash());

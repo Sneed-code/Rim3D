@@ -89,6 +89,10 @@ void fightReadRules(const DefDatabase& defs, FighterRules& r) {
     num("hurtBloodLoss", r.hurtBloodLoss);
     num("hurtMoving", r.hurtMoving);
     whole("stepBackBelow", r.stepBackBelow);
+    num("reloadBelow", r.reloadBelow);
+    num("dodgeRadius", r.dodgeRadius);
+    num("dodgeClearance", r.dodgeClearance);
+    whole("dodgeHoldSteps", r.dodgeHoldSteps);
     r.planEvery = std::max(1, r.planEvery);
     r.threats = std::clamp(r.threats, 1, kFightMaxThreats);
     r.refine = std::max(1, r.refine);
@@ -298,6 +302,12 @@ void FighterSystem::step() {
     }
     std::sort(pawns_.begin(), pawns_.end(), [](const PawnInfo& a, const PawnInfo& b) { return a.pawn < b.pawn; });
 
+    incoming_.clear();
+    for (const auto [shot, p] : reg.view<const Projectile>().each()) {
+        incoming_.push_back(Incoming{shot, p.launcher, p.x, p.y, p.z, p.vx, p.vy, p.vz, p.level, p.age});
+    }
+    std::sort(incoming_.begin(), incoming_.end(), [](const Incoming& a, const Incoming& b) { return a.shot < b.shot; });
+
     order_.clear();
     for (const Entity pawn : reg.view<Fighter>()) {
         order_.push_back(pawn);
@@ -311,6 +321,12 @@ void FighterSystem::step() {
                 stop(pawn, f);
                 f.hasSpot = false;
             }
+            continue;
+        }
+        if (now() < f.dodgeUntil) {
+            continue;  // out of the way of a shot: the plan waits until it has passed
+        }
+        if (dodge(pawn, f)) {
             continue;
         }
         if (now() >= f.nextPlan) {
@@ -481,7 +497,11 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
     }
     const PawnInfo self = *selfInfo;
     see(pawn, f, self);
+    const Entity previous = f.target;
     f.target = chooseTarget(pawn, f, self);
+    if (f.target != previous && f.target != kNoEntity) {
+        f.reactUntil = now() + combat_.reactionSteps(pawn);  // a new target: it takes a moment to react
+    }
     const PawnInfo* targetInfo = info(f.target);
     float tx = 0.0f;
     float ty = 0.0f;
@@ -765,7 +785,7 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
 
     const PawnInfo* target = info(f.target);
     const bool canShoot = target != nullptr && f.canFire;
-    if (canShoot && phase == ShotPhase::Ready) {
+    if (canShoot && phase == ShotPhase::Ready && now() >= f.reactUntil) {
         if (here != f.fireCell) {
             stepTo(pawn, f.fireCell);  // lean out round the corner
             return;
@@ -789,6 +809,124 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
         return;
     }
     combat_.setStance(pawn, f.known.empty() ? Stance::Standing : Stance::Crouching);
+    if (phase == ShotPhase::Ready) {
+        tacticalReload(pawn, f, canShoot);
+    }
+}
+
+// In cover with nothing to shoot just now: top the magazine up rather than run dry mid-fight.
+void FighterSystem::tacticalReload(Entity pawn, const Fighter& f, bool canShoot) {
+    const int size = combat_.magazineSize(pawn);
+    if (size <= 0 || canShoot) {
+        return;
+    }
+    const int rounds = combat_.roundsLeft(pawn);
+    const float below = f.known.empty() ? 1.0f : rules_.reloadBelow;
+    if (static_cast<float>(rounds) < below * static_cast<float>(size)) {
+        combat_.reload(pawn);
+    }
+}
+
+// A slow projectile coming at the pawn, noticed in time (its reaction time after it was fired) and
+// far enough away to get clear: a one-cell sidestep away from its line. Bullets are far too fast
+// for this at any range a gun reaches; arrows, grenades and rockets will not be.
+bool FighterSystem::dodge(Entity pawn, Fighter& f) {
+    if (incoming_.empty()) {
+        return false;
+    }
+    entt::registry& reg = things_.registry();
+    const Shooter* shooter = reg.try_get<Shooter>(pawn);
+    if (shooter != nullptr && shooter->phase == ShotPhase::Firing) {
+        return false;  // mid-burst
+    }
+    const Position pos = reg.get<Position>(pawn);
+    Mover& mover = reg.get<Mover>(pawn);
+    const Health* health = reg.try_get<Health>(pawn);
+    const float speed = mover.metresPerStep * (health != nullptr ? health->movingFactor : 1.0f);
+    if (speed <= 0.0f) {
+        return false;
+    }
+    const int reaction = combat_.reactionSteps(pawn);
+    const float ground = map_.heightAt(pos.x, pos.y);
+    const float top = eyeHeight(reg.get<Posture>(pawn).stance) + 0.2f;
+    const float g = combat_.gravity();
+    const Incoming* threat = nullptr;
+    float threatT = 0.0f;
+    float awayX = 0.0f;
+    float awayY = 0.0f;
+    float threatMiss = 0.0f;
+    for (const Incoming& p : incoming_) {
+        if (p.launcher == pawn || p.level != pos.level || p.age < reaction) {
+            continue;
+        }
+        const float v2 = p.vx * p.vx + p.vy * p.vy;
+        if (v2 < 1e-8f) {
+            continue;
+        }
+        // Closest approach on the ground, and the projectile's height there.
+        const float t = ((pos.x - p.x) * p.vx + (pos.y - p.y) * p.vy) / v2;
+        if (t <= 0.0f || (threat != nullptr && t >= threatT)) {
+            continue;
+        }
+        const float cx = p.x + p.vx * t - pos.x;
+        const float cy = p.y + p.vy * t - pos.y;
+        const float miss = std::sqrt(cx * cx + cy * cy);
+        const float z = p.z + p.vz * t - 0.5f * g * t * t - ground;
+        if (miss > rules_.dodgeRadius || z < -0.2f || z > top) {
+            continue;
+        }
+        if ((rules_.dodgeClearance - miss) / speed > t) {
+            continue;  // too fast to get out of the way
+        }
+        threat = &p;
+        threatT = t;
+        threatMiss = miss;
+        // Away from the line: from the closest point to the pawn, or to the left of the flight if dead on.
+        const float len = std::sqrt(v2);
+        awayX = miss > 0.05f ? -cx / miss : -p.vy / len;
+        awayY = miss > 0.05f ? -cy / miss : p.vx / len;
+    }
+    if (threat == nullptr) {
+        return false;
+    }
+    const CellPos here = cellOf(pos);
+    for (const float sign : {1.0f, -1.0f}) {
+        const Dir8Step d = dir8Step(dir8Toward(sign * awayX, sign * awayY));
+        const CellPos n{here.x + d.dx, here.y + d.dy, here.level};
+        if (!map_.walkable(n) || map_.obstacleDm(n) > 0 || map_.isDoor(n) ||
+            !straightWalkIsClear(map_, pos.x, pos.y, fightCentre(n.x), fightCentre(n.y), kPawnRadius, here.level)) {
+            continue;
+        }
+        // Far enough from the line once there, and there in time.
+        const float mx = fightCentre(n.x) - pos.x;
+        const float my = fightCentre(n.y) - pos.y;
+        const float gain = mx * sign * awayX + my * sign * awayY;
+        const float needed = rules_.dodgeClearance - (sign > 0.0f ? threatMiss : -threatMiss);
+        if (gain < needed || gain <= 0.0f) {
+            continue;
+        }
+        const float steps = std::sqrt(mx * mx + my * my) * (needed / gain) / speed;
+        if (steps > threatT) {
+            continue;
+        }
+        stop(pawn, f);
+        combat_.cancelAim(pawn);
+        stepTo(pawn, n);
+        f.dodgeUntil = now() + static_cast<int64_t>(std::ceil(threatT)) + rules_.dodgeHoldSteps;
+        f.nextPlan = std::min(f.nextPlan, f.dodgeUntil);
+        if (events_ != nullptr) {
+            Event e;
+            e.type = EventType::PawnAction;
+            e.action = PawnAction::Dodge;
+            e.thing = pawn;
+            e.def = reg.get<Thing>(pawn).def;
+            e.target = threat->shot;
+            e.cell = n;
+            events_->push_back(std::move(e));
+        }
+        return true;
+    }
+    return false;
 }
 
 void FighterSystem::walkToSpot(Entity pawn, Fighter& f) {
@@ -887,6 +1025,8 @@ void FighterSystem::hashThing(Entity e, StateHasher& h) const {
             h.add(k.level);
             h.add(k.seenAt);
         }
+        h.add(f->reactUntil);
+        h.add(f->dodgeUntil);
     }
 }
 

@@ -9,8 +9,8 @@ A **fighter** is a pawn that fights instead of working: a colonist the player dr
 of another faction. Every half real second it **re-plans**: it looks for enemies, picks a target,
 scores the cells around it and picks a spot. Every step it **acts** on that plan: walks to the
 spot, crouches there, and when its gun is ready stands up or steps out to shoot, then ducks back.
-Aiming itself is still F2's (warm-up, spread from skill); reaction time, leading and reloading are
-F5. Squads, morale, raids and the colony alarm are F6.
+Aiming is F2's (warm-up, spread from skill) plus F5's reaction time, leading, reloading in cover and
+sidestepping slow projectiles ([aiming.md](aiming.md)). Squads, morale, raids and the colony alarm are F6.
 
 ## Sides
 
@@ -94,16 +94,19 @@ waits for F6's squad strength numbers. Fleeing the map is F6's rout.
 Every step, for each fighter in id order (after the job system, before movement):
 
 1. Downed, dead, off the map or controlled by the player: it stops, and forgets its spot.
+   Sidestepping a projectile (F5): nothing else until it has passed. A slow projectile coming at it
+   that it can still get out of the way of: it sidesteps now ([aiming.md](aiming.md)).
 2. Re-plan when due (`planEvery` 15 steps). New fighters' first plans are spread over those 15 steps
    by pawn id, so 30 colonists drafted at once don't all plan in one step.
 3. Mid-shot (the gun aiming or firing a burst): hold still, whatever the plan says now.
 4. Walking to the spot: a path from the pathfinder queue, then the walk, upright. A pawn held up for
    good asks for a new path, three times at most, then plans again.
-5. At the spot with a target it can shoot and a ready gun: step to the fire cell if that is the cell
+5. At the spot with a target it can shoot, a ready gun and its reaction time over (F5): step to the fire cell if that is the cell
    beside (a one-cell straight step), take the fire stance, check it still sees the target and that
    it is in range, and give the aimed `shoot` order (F2's warm-up, spread and burst follow).
 6. Between shots: back to the spot if it stepped out (unless the gun is ready again within 20 steps,
-   `stepBackBelow`), and crouch. A fighter that knows no enemy stands.
+   `stepBackBelow`), and crouch. A fighter that knows no enemy stands. With no shot to take it tops up
+   its magazine (F5): below half with enemies about, any time it is not full when none are.
 
 So a rifleman behind sandbags crouches while his rifle cools down and stands up through the warm-up
 and the shot; behind a wall a fighter steps out past its end, fires and steps back.
@@ -156,7 +159,6 @@ steps as cover.md says.
 
 ## Not done yet
 
-- Aiming like a player: reaction time, leading moving targets, reloading, dodging slow shots (F5).
 - Squads, morale, rout and fleeing, raid plans, the colony alarm and defense roles (F6). Undrafted
   colonists don't react to enemies yet.
 - Strafing while shooting, prone, diving away from grenades, melee, rescuing the downed.

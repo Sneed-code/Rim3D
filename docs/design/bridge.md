@@ -56,6 +56,7 @@ rest (place blueprint, designate, draft, actions) come with the tasks that build
 | `MoveOrderCommand{pawn, cell}` | a drafted pawn goes there and holds, in the best cover within 2 m | not drafted; can't stand or get there |
 | `AttackOrderCommand{pawn, target}` | a drafted pawn shoots this one whenever it can; `kNoEntity` lets it choose | not drafted; target not a living pawn on the map |
 | `SetFactionCommand{pawn, faction}` | dev until raids (F6): puts a pawn on a side (1 is the player's); any other side fights at once | faction 0; not a pawn |
+| `ReloadCommand{pawn}` | `CombatSystem::reload`: a new magazine now (the protagonist's reload key, [aiming.md](aiming.md)) | no gun with a magazine; full; downed, mid-shot or reloading |
 
 In replay files a `rot` is `"North"`, `"East"`, `"South"` or `"West"` (`"North"` if left out) and an `area` is `[minX, minY, sizeX, sizeY, level]` and a storage priority its name
 (`"Preferred"`; `"Normal"` if left out).
@@ -82,7 +83,7 @@ starts, so read it after every step. Before the first step it holds what setting
 | `ThingDespawned` | `thing`, `def` | a thing leaves the map but still exists (picked up) |
 | `ThingDestroyed` | `thing`, `def` | a thing stops existing; comes after `ThingDespawned` if it was on the map |
 | `CommandFailed` | `command`, `message` | a command couldn't be applied |
-| `PawnAction` | `thing` (the pawn), `def`, `action`, `target` | a pawn did something Unreal animates: `PickUp`, `PutDown` (U5, [pawns.md](pawns.md)), `Eat`, `LieDown`, `GetUp` (C6); `Build` and `Deconstruct` (C4) when work on `target` begins |
+| `PawnAction` | `thing` (the pawn), `def`, `action`, `target` | a pawn did something Unreal animates: `PickUp`, `PutDown` (U5, [pawns.md](pawns.md)), `Eat`, `LieDown`, `GetUp` (C6); `Build` and `Deconstruct` (C4) when work on `target` begins; `Reload` (`target` the gun) and `Dodge` (`target` the projectile, `cell` where it steps) (F5) |
 | `FrameStarted` | `thing` (the plan), `def` (the building), `cell` | a blueprint got its first materials and is a frame now; the plan itself came with a `ThingSpawned` |
 | `PawnInjured` | `thing`, `def` (the injury), `part`, `amount`, `cell` | a pawn got an injury (F1) |
 | `PawnPartLost` | `thing`, `def` (MissingBodyPart), `part`, `amount`, `cell` | a pawn lost a body part |
@@ -120,7 +121,8 @@ not in it. Since S4 it also has the ground height under the thing (`z`), a pawn'
 rotation of what they will be ([construction.md](construction.md)).
 Since F2 pawns also have
 `stance` (prone when downed or dead), `facingX`/`facingY`, the `weapon` in their hands and
-`shotReadyIn`, and `Snapshot::projectiles` lists every bullet in flight ([combat.md](combat.md)).
+`shotReadyIn`, and `Snapshot::projectiles` lists every bullet in flight ([combat.md](combat.md)); since F5
+`rounds`, `magazineSize` and `reloading` ([aiming.md](aiming.md)).
 Since C5 a door's `ThingView` has `doorOpen` (0 to 1) and the snapshot has `rooms` (the enclosed rooms with role and
 size), `roofCells` (the thin roof) and `roofChanges` ([rooms.md](rooms.md)). Since C3 the snapshot lists the `designations`
 (cell and kind of every mine, cut and harvest mark; [mining.md](mining.md)).

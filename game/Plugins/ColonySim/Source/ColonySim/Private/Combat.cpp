@@ -28,6 +28,8 @@ struct CombatModel {
         int burstGap = 0;  // steps
         float accuracy[4] = {1.0f, 1.0f, 1.0f, 1.0f};  // touch, short, medium, long
         float recoil = 0.0f;
+        int magazine = 0;    // rounds; 0 for none (never reloads)
+        int reloadTime = 0;  // steps, at the skill where reloadTimeFactorBySkill is 1
     };
     struct Apparel {
         bool valid = false;
@@ -88,6 +90,11 @@ struct CombatModel {
     float recoilSkillReduction = 0.025f;
     int maxFlight = 120;
     std::vector<std::string> layerOrder;
+    // F5's aiming by Shooting skill: the value at skill 0 and at skill 20, linear in between.
+    float reactionSteps[2] = {15.0f, 5.0f};
+    float lead[2] = {0.4f, 1.0f};
+    float leadError[2] = {0.4f, 0.05f};
+    float reloadFactor[2] = {1.3f, 0.7f};
 
     explicit CombatModel(const DefDatabase& defs, const HealthSystem& health);
 
@@ -188,6 +195,15 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
         for (size_t i = 0; i < rules->count("apparelLayersOuterFirst"); ++i) {
             layerOrder.push_back(rules->textAt("apparelLayersOuterFirst", i));
         }
+        const auto bySkill = [&](const char* key, float (&out)[2]) {
+            for (size_t i = 0; i < 2; ++i) {
+                out[i] = static_cast<float>(rules->numberAt(key, i, out[i]));
+            }
+        };
+        bySkill("reactionStepsBySkill", reactionSteps);
+        bySkill("leadBySkill", lead);
+        bySkill("leadErrorBySkill", leadError);
+        bySkill("reloadTimeFactorBySkill", reloadFactor);
     } else {
         for (size_t i = 0; i < 21; ++i) {
             accuracyBySkill[i] = 0.89f + 0.005f * static_cast<float>(i);
@@ -228,6 +244,8 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
                 g.accuracy[i] = combatNum(def, acc[i], 1.0);
             }
             g.recoil = combatNum(def, "recoilPerShot", 0.0);
+            g.magazine = std::max(0, static_cast<int>(def.integer("magazineSize", 0)));
+            g.reloadTime = std::max(0, static_cast<int>(std::lround(def.number("reloadTime"))));
             g.valid = bullet(g.projectile) != nullptr;
         }
         if (def.has("apparel")) {
@@ -402,6 +420,11 @@ float combatPowDistance(float a, float d) {
 }
 
 float combatLerp(float a, float b, float t) { return a + (b - a) * t; }
+
+// A CombatRules value given at Shooting skill 0 and 20, at this skill.
+float combatBySkill(const float (&v)[2], int skill) {
+    return combatLerp(v[0], v[1], static_cast<float>(std::clamp(skill, 0, 20)) / 20.0f);
+}
 
 Stance combatStanceOf(const entt::registry& reg, Entity pawn) {
     const Health* health = reg.try_get<Health>(pawn);
@@ -838,10 +861,17 @@ bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, 
         return fail("the target is not a pawn on the map");
     }
     Shooter& s = reg.get_or_emplace<Shooter>(pawn);
+    if (s.phase == ShotPhase::Reloading) {
+        return fail("reloading");
+    }
     if (s.phase == ShotPhase::Firing || s.phase == ShotPhase::Cooling) {
         return fail("not ready to fire yet");
     }
     const CombatModel::Gun& gun = *model_->gun(reg.get<Thing>(gear->weapon).def);
+    if (gun.magazine > 0 && roundsLeft(pawn) <= 0) {
+        startReload(pawn, s, gear->weapon, 0);
+        return fail("reloading");
+    }
     s.target = target;
     s.aimX = x;
     s.aimY = y;
@@ -870,9 +900,9 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
     const Gear* gear = reg.try_get<Gear>(pawn);
     const CombatModel::Gun* gun =
         gear != nullptr && gear->weapon != kNoEntity ? model_->gun(reg.get<Thing>(gear->weapon).def) : nullptr;
-    if (s.phase == ShotPhase::Aiming || s.phase == ShotPhase::Firing) {
-        if (gun == nullptr || health_.incapacitated(pawn) || !things_.spawned(pawn)) {
-            s.phase = ShotPhase::Ready;  // the shot is off
+    if (s.phase == ShotPhase::Aiming || s.phase == ShotPhase::Firing || s.phase == ShotPhase::Reloading) {
+        if (gun == nullptr || (s.phase != ShotPhase::Reloading && (health_.incapacitated(pawn) || !things_.spawned(pawn)))) {
+            s.phase = ShotPhase::Ready;  // the shot (or reload) is off
             s.shotsLeft = 0;
             s.stepsLeft = 0;
             return;
@@ -885,6 +915,16 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
             if (--s.stepsLeft <= 0) {
                 s.phase = ShotPhase::Ready;
                 s.stepsLeft = 0;
+            }
+            return;
+        case ShotPhase::Reloading:
+            if (health_.incapacitated(pawn)) {
+                return;  // a downed pawn's hands stop; it goes on when it gets up
+            }
+            if (--s.stepsLeft <= 0) {
+                s.phase = ShotPhase::Ready;
+                s.stepsLeft = 0;
+                reg.emplace_or_replace<Magazine>(gear->weapon, Magazine{gun->magazine});
             }
             return;
         case ShotPhase::Aiming:
@@ -915,8 +955,28 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
     const float distance = std::sqrt(dx * dx + dy * dy);
     const int skill = shootingSkill(pawn);
     const DefId weaponDef = reg.get<Thing>(gear->weapon).def;
-    fire(pawn, s.aimX, s.aimY, s.aimZ, spread(weaponDef, skill, distance, s.player) + s.recoil, rng);
+    // Leading a moving target (F5): by how much follows skill, with an error that shrinks with it.
+    float fx = s.aimX;
+    float fy = s.aimY;
+    float fz = s.aimZ;
+    if (s.target != kNoEntity && !s.player) {
+        const Mover* mover = reg.try_get<Mover>(s.target);
+        if (mover != nullptr && mover->vx * mover->vx + mover->vy * mover->vy > 1e-8f) {
+            const float lead = combatBySkill(model_->lead, skill) +
+                               (2.0f * rng.unit() - 1.0f) * combatBySkill(model_->leadError, skill);
+            leadPoint(pawn, s.target, lead, fx, fy, fz);
+        }
+    }
+    fire(pawn, fx, fy, fz, spread(weaponDef, skill, distance, s.player) + s.recoil, rng);
     s.recoil += gun->recoil * std::max(0.0f, 1.0f - model_->recoilSkillReduction * static_cast<float>(skill));
+    if (gun->magazine > 0) {
+        Magazine& magazine = reg.get_or_emplace<Magazine>(gear->weapon, Magazine{gun->magazine});
+        if (--magazine.rounds <= 0) {
+            magazine.rounds = 0;
+            startReload(pawn, s, gear->weapon, gun->cooldown);  // the burst ends with the magazine
+            return;
+        }
+    }
     if (--s.shotsLeft > 0) {
         s.stepsLeft = std::max(1, gun->burstGap);
         return;
@@ -925,12 +985,140 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
     s.stepsLeft = gun->cooldown;
 }
 
+void CombatSystem::startReload(Entity pawn, Shooter& s, Entity weapon, int extraSteps) {
+    entt::registry& reg = things_.registry();
+    const CombatModel::Gun& gun = *model_->gun(reg.get<Thing>(weapon).def);
+    const float factor = combatBySkill(model_->reloadFactor, shootingSkill(pawn));
+    s.phase = ShotPhase::Reloading;
+    s.shotsLeft = 0;
+    s.stepsLeft = std::max(1, extraSteps + static_cast<int>(std::lround(static_cast<float>(gun.reloadTime) * factor)));
+    if (events_ != nullptr) {
+        Event e;
+        e.type = EventType::PawnAction;
+        e.action = PawnAction::Reload;
+        e.thing = pawn;
+        e.def = reg.get<Thing>(pawn).def;
+        e.target = weapon;
+        if (const Position* pos = reg.try_get<Position>(pawn)) {
+            e.cell = cellOf(*pos);
+        }
+        events_->push_back(std::move(e));
+    }
+}
+
+bool CombatSystem::reload(Entity pawn, std::string* why) {
+    entt::registry& reg = things_.registry();
+    const auto fail = [why](const char* message) {
+        if (why != nullptr) {
+            *why = message;
+        }
+        return false;
+    };
+    if (!things_.spawned(pawn) || !reg.all_of<Posture>(pawn)) {
+        return fail("that is not a pawn on the map");
+    }
+    const Gear* gear = reg.try_get<Gear>(pawn);
+    const CombatModel::Gun* gun =
+        gear != nullptr && gear->weapon != kNoEntity ? model_->gun(reg.get<Thing>(gear->weapon).def) : nullptr;
+    if (gun == nullptr || gun->magazine <= 0) {
+        return fail("that pawn has no gun to reload");
+    }
+    if (health_.incapacitated(pawn)) {
+        return fail("that pawn can't reload (downed or dead)");
+    }
+    Shooter& s = reg.get_or_emplace<Shooter>(pawn);
+    if (s.phase == ShotPhase::Aiming || s.phase == ShotPhase::Firing || s.phase == ShotPhase::Reloading) {
+        return fail(s.phase == ShotPhase::Reloading ? "reloading already" : "busy shooting");
+    }
+    if (roundsLeft(pawn) >= gun->magazine) {
+        return fail("the magazine is full");
+    }
+    startReload(pawn, s, gear->weapon, s.phase == ShotPhase::Cooling ? s.stepsLeft : 0);
+    return true;
+}
+
+int CombatSystem::roundsLeft(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Gear* gear = reg.valid(pawn) ? reg.try_get<Gear>(pawn) : nullptr;
+    if (gear == nullptr || gear->weapon == kNoEntity) {
+        return 0;
+    }
+    const CombatModel::Gun* gun = model_->gun(reg.get<Thing>(gear->weapon).def);
+    if (gun == nullptr || gun->magazine <= 0) {
+        return 0;
+    }
+    const Magazine* magazine = reg.try_get<Magazine>(gear->weapon);
+    return magazine != nullptr ? magazine->rounds : gun->magazine;
+}
+
+int CombatSystem::magazineSize(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Gear* gear = reg.valid(pawn) ? reg.try_get<Gear>(pawn) : nullptr;
+    const CombatModel::Gun* gun =
+        gear != nullptr && gear->weapon != kNoEntity ? model_->gun(reg.get<Thing>(gear->weapon).def) : nullptr;
+    return gun != nullptr ? gun->magazine : 0;
+}
+
+bool CombatSystem::reloading(Entity pawn) const {
+    const Shooter* s = things_.registry().try_get<Shooter>(pawn);
+    return s != nullptr && s->phase == ShotPhase::Reloading;
+}
+
+void CombatSystem::cancelAim(Entity pawn) {
+    if (Shooter* s = things_.registry().try_get<Shooter>(pawn); s != nullptr && s->phase == ShotPhase::Aiming) {
+        s->phase = ShotPhase::Ready;
+        s->shotsLeft = 0;
+        s->stepsLeft = 0;
+    }
+}
+
+int CombatSystem::reactionSteps(Entity pawn) const {
+    return std::max(0, static_cast<int>(std::lround(combatBySkill(model_->reactionSteps, shootingSkill(pawn)))));
+}
+
+float CombatSystem::gravity() const {
+    return model_->gravity;
+}
+
+bool CombatSystem::leadPoint(Entity shooter, Entity target, float lead, float& x, float& y, float& z) const {
+    const entt::registry& reg = things_.registry();
+    if (!aimPoint(target, x, y, z) || !reg.all_of<Position, Gear>(shooter)) {
+        return false;
+    }
+    const Entity weapon = reg.get<Gear>(shooter).weapon;
+    const CombatModel::Gun* gun = weapon != kNoEntity ? model_->gun(reg.get<Thing>(weapon).def) : nullptr;
+    if (gun == nullptr) {
+        return false;
+    }
+    const Mover* mover = reg.try_get<Mover>(target);
+    if (mover == nullptr) {
+        return true;
+    }
+    // The bullet flies its first step in the step it is fired and the target moves at the start of
+    // each step after, so it meets the target about half a step short of distance / speed. Twice
+    // round, since the lead changes the distance.
+    const Position& from = reg.get<Position>(shooter);
+    const float speed = model_->bullet(gun->projectile)->speed;
+    const float x0 = x;
+    const float y0 = y;
+    const float ground0 = map_.heightAt(x0, y0);
+    for (int i = 0; i < 2; ++i) {
+        const float dx = x - from.x;
+        const float dy = y - from.y;
+        const float t = std::max(0.0f, std::sqrt(dx * dx + dy * dy) / speed - 0.5f);
+        x = x0 + mover->vx * t * lead;
+        y = y0 + mover->vy * t * lead;
+    }
+    z += map_.heightAt(x, y) - ground0;
+    return true;
+}
+
 int CombatSystem::shotReadyIn(Entity pawn) const {
     const Shooter* s = things_.registry().try_get<Shooter>(pawn);
     if (s == nullptr || s->phase == ShotPhase::Ready) {
         return 0;
     }
-    if (s->phase == ShotPhase::Cooling) {
+    if (s->phase == ShotPhase::Cooling || s->phase == ShotPhase::Reloading) {
         return s->stepsLeft;
     }
     const Gear* gear = things_.registry().try_get<Gear>(pawn);
@@ -1229,7 +1417,7 @@ bool CombatSystem::equip(Entity pawn, Entity item, std::string* why) {
 void CombatSystem::hashThing(Entity e, StateHasher& h) const {
     const entt::registry& reg = things_.registry();
     const bool has[] = {reg.all_of<Posture>(e), reg.all_of<Gear>(e), reg.all_of<EquippedBy>(e), reg.all_of<Shooter>(e),
-                        reg.all_of<Projectile>(e)};
+                        reg.all_of<Projectile>(e), reg.all_of<Magazine>(e)};
     uint64_t mask = 0;
     for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
         mask |= has[bit] ? (uint64_t{1} << bit) : 0;
@@ -1274,6 +1462,9 @@ void CombatSystem::hashThing(Entity e, StateHasher& h) const {
         h.add(p->startCell.y);
         h.add(p->startCell.level);
         h.add(p->seed);
+    }
+    if (const Magazine* m = reg.try_get<Magazine>(e)) {
+        h.add(m->rounds);
     }
 }
 

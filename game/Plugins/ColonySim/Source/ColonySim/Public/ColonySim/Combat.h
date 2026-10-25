@@ -57,6 +57,7 @@ enum class ShotPhase : uint8_t {
     Aiming,   // the gun's warm-up before the first shot of a burst
     Firing,   // between the shots of a burst
     Cooling,  // the gun's cooldown after a burst
+    Reloading,  // the cooldown, then a new magazine (F5); the gun is full when it ends
 };
 
 struct Shooter {
@@ -69,6 +70,12 @@ struct Shooter {
     float aimZ = 0.0f;
     bool player = false;  // the player's own trigger: no aiming time, the gun's own spread only
     float recoil = 0.0f;  // extra spread from the shots just fired, as a slope; wears off
+};
+
+// On a gun item once it has been fired: the rounds left in its magazine (F5). A gun without one
+// is full. It stays with the gun when the gun is dropped and picked up again.
+struct Magazine {
+    int rounds = 0;
 };
 
 // A bullet in flight. Not a Thing: it has no def of kind Things and is not in the snapshot's
@@ -140,8 +147,28 @@ public:
     bool shoot(Entity pawn, Entity target, float x, float y, float z, bool player, std::string* why = nullptr);
 
     bool setStance(Entity pawn, Stance stance);
-    // Steps until the pawn can start a new shot (0: ready now).
+    // Steps until the pawn can start a new shot (0: ready now), a reload included.
     int shotReadyIn(Entity pawn) const;
+
+    // Magazines (F5). A gun's `magazineSize` rounds, then a reload of `reloadTime` steps (faster with
+    // Shooting skill) that starts by itself after the shot that empties it. reload() starts one early:
+    // false, changing nothing, if the pawn has no gun with a magazine, it is full, or the pawn is
+    // downed or mid-shot. Size 0: the gun never reloads (and roundsLeft is 0).
+    bool reload(Entity pawn, std::string* why = nullptr);
+    int roundsLeft(Entity pawn) const;
+    int magazineSize(Entity pawn) const;
+    bool reloading(Entity pawn) const;
+    // Ends an aimed shot still in its warm-up (a fighter that has to dodge). Nothing mid-burst.
+    void cancelAim(Entity pawn);
+
+    // Aiming like a player (F5), all by Shooting skill (CombatRules). Steps from seeing a new target
+    // to starting to aim at it (the fighter AI waits them) and to noticing a projectile coming.
+    int reactionSteps(Entity pawn) const;
+    // Where an aimed shot at a moving pawn should go so the bullet meets it: its aim point moved on
+    // by its velocity times the bullet's flight time times `lead` (1 a perfect lead, 0 none).
+    // False if the target isn't a pawn on the map or the shooter has no gun.
+    bool leadPoint(Entity shooter, Entity target, float lead, float& x, float& y, float& z) const;
+    float gravity() const;
 
     // One step: pawns face where they walk or aim, triggers count down and fire, then every
     // projectile flies one step. Runs after movement, so it sees where pawns are now.
@@ -184,6 +211,7 @@ private:
     void emitHit(Entity projectile, const Projectile& p, const TraceHit& hit, float amount);
     void impact(Entity projectile, Projectile& p, const TraceHit& hit);
     void updateShooter(Entity pawn, Shooter& s, Rng& rng);
+    void startReload(Entity pawn, Shooter& s, Entity weapon, int extraSteps);
     void drop(Entity pawn, Entity item);
 };
 

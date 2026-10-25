@@ -3,6 +3,7 @@
 #include "ColonySim/Api.h"
 #include "ColonySim/Cover.h"
 #include "ColonySim/Entity.h"
+#include "ColonySim/Events.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/Pathfinder.h"
 #include "ColonySim/ThreatMap.h"
@@ -26,8 +27,9 @@ struct GameTime;
 //
 // A fighter re-plans about twice a second: it scores the cells around it for cover from the
 // enemies it knows about, sight to its target, weapon range, distance and crowding, walks to the
-// best one, crouches there, and steps or stands up to fire. Aiming itself (reaction time, leading)
-// is F5; squads, morale and raids are F6.
+// best one, crouches there, and steps or stands up to fire. It waits its reaction time before
+// shooting a new target, reloads in cover and sidesteps slow projectiles (F5, docs/design/aiming.md);
+// squads, morale and raids are F6.
 //
 // Unreal does not include this header: it reads `drafted`, `faction`, `fightTarget` and
 // `fallingBack` from the snapshot and sends DraftCommand, MoveOrderCommand, AttackOrderCommand.
@@ -69,6 +71,8 @@ struct Fighter {
     uint8_t repaths = 0;
     PathTicket path;         // while `walk` is 1
     std::vector<KnownEnemy> known;  // by pawn id
+    int64_t reactUntil = 0;  // game second from which it may shoot its target (its reaction time, F5)
+    int64_t dodgeUntil = 0;  // sidestepping a projectile until this game second: no plans, no shots (F5)
 };
 
 // The numbers (FighterRules in data/defs/Rules/FighterRules.json, all ours: RimWorld has no
@@ -101,6 +105,11 @@ struct FighterRules {
     float hurtBloodLoss = 0.3f;
     float hurtMoving = 0.6f;
     int stepBackBelow = 20;         // steps of cooldown left under which it stays out instead of stepping back
+    // F5 (docs/design/aiming.md).
+    float reloadBelow = 0.5f;       // with enemies about but no shot, reloads in cover below this share of a magazine
+    float dodgeRadius = 0.6f;       // a projectile passing closer than this to the pawn's centre would hit it
+    float dodgeClearance = 0.9f;    // how far from the projectile's line a sidestep has to take it
+    int dodgeHoldSteps = 3;         // steps it stays out of the way after the projectile has passed
 };
 
 class COLONY_API FighterSystem {
@@ -112,6 +121,7 @@ public:
     FighterSystem& operator=(const FighterSystem&) = delete;
 
     const FighterRules& rules() const { return rules_; }
+    void setEventLog(std::vector<Event>* events) { events_ = events; }
 
     // A pawn's side (kPlayerFaction without a Faction component). Different factions are enemies.
     FactionId factionOf(Entity pawn) const;
@@ -161,7 +171,17 @@ private:
         bool canFire = false;
     };
 
+    struct Incoming {
+        Entity shot = kNoEntity;
+        Entity launcher = kNoEntity;
+        float x, y, z, vx, vy, vz;
+        int level;
+        int age;
+    };
+
     void plan(Entity pawn, Fighter& f);
+    bool dodge(Entity pawn, Fighter& f);
+    void tacticalReload(Entity pawn, const Fighter& f, bool canShoot);
     void act(Entity pawn, Fighter& f);
     void see(Entity pawn, Fighter& f, const PawnInfo& self);
     Entity chooseTarget(Entity pawn, const Fighter& f, const PawnInfo& self) const;
@@ -190,6 +210,8 @@ private:
     std::vector<CellPos> friendSpots_;   // scratch for one plan
     std::vector<KnownEnemy> merged_;     // scratch for sharing what friends know
     std::vector<Entity> order_;
+    std::vector<Incoming> incoming_;     // scratch: projectiles in flight this step, by id
+    std::vector<Event>* events_ = nullptr;
     uint64_t plans_ = 0;
     uint64_t sightChecks_ = 0;
 };

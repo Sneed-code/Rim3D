@@ -233,6 +233,13 @@ struct SetFactionCommand {
     uint32_t faction = 1;
 };
 
+// Reloads the pawn's gun now rather than when it runs dry (F5, docs/design/aiming.md): the
+// protagonist's reload key, or a tactical reload. Fails if the pawn has no gun with a magazine, the
+// magazine is full, or the pawn is downed, mid-shot or reloading already.
+struct ReloadCommand {
+    Entity pawn = kNoEntity;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -240,7 +247,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ControlPawnCommand, DirectMoveCommand, SetScheduleCommand, AssignBedCommand,
                              PlaceBlueprintCommand, CancelBuildCommand, DeconstructCommand, EquipCommand,
                              ShootCommand, SetStanceCommand, DesignateCommand, CancelDesignationsCommand,
-                             DraftCommand, MoveOrderCommand, AttackOrderCommand, SetFactionCommand>;
+                             DraftCommand, MoveOrderCommand, AttackOrderCommand, SetFactionCommand, ReloadCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.
