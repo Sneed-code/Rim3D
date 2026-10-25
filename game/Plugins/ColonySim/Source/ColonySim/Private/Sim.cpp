@@ -7,6 +7,8 @@
 #include "ColonySim/Designations.h"
 #include "ColonySim/Doors.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Filth.h"
+#include "ColonySim/Floors.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Jobs.h"
@@ -20,6 +22,7 @@
 #include "ColonySim/Plants.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Regions.h"
+#include "ColonySim/RoomStats.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
@@ -77,6 +80,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
     rooms_->update();
     power_->update();
     lights_->update();
+    roomStats_->refresh();
 }
 
 Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, EmptyStart)
@@ -106,6 +110,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     pathfinder_.setDoorCost(doorNumbers_.pathCost);
     rooms_ = std::make_unique<Rooms>(map_, *things_, *defs_);
     mood_->setRooms(rooms_.get());
+    floors_ = std::make_unique<Floors>(map_, *defs_);
+    filth_ = std::make_unique<Filth>(map_, *things_, *floors_, *defs_, settings.seed);
+    roomStats_ = std::make_unique<RoomStats>(map_, *things_, *rooms_, *floors_, *filth_, *plants_, *defs_);
+    mood_->setRoomStats(roomStats_.get());
     power_ = std::make_unique<PowerGrid>(map_, *things_, *rooms_, *defs_, events_);
     lights_ = std::make_unique<Lights>(map_, *things_, *rooms_, *defs_, time_);
     // The sun for solar panels is the light grid's; a lamp that draws power glows only while it has it,
@@ -121,6 +129,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setLights(lights_.get());
     jobs_->setPower(power_.get());
     jobs_->setRooms(rooms_.get());
+    jobs_->setFilth(filth_.get(), rooms_.get());
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
     fighters_->setEventLog(&events_);
@@ -580,6 +589,29 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
                                     error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* placeFloor = std::get_if<PlaceFloorCommand>(&command)) {
+        const DefId floor = placeFloor->floor.empty() ? DefId{} : defs_->idOf("Terrain", placeFloor->floor);
+        if (!placeFloor->floor.empty() && !floors_->isFloorDef(floor)) {
+            commandFailed(id, "no floor '" + placeFloor->floor + "'");
+        } else {
+            int changed = 0;
+            for (int y = placeFloor->area.minY; y < placeFloor->area.minY + placeFloor->area.sizeY; ++y) {
+                for (int x = placeFloor->area.minX; x < placeFloor->area.minX + placeFloor->area.sizeX; ++x) {
+                    const CellPos cell{x, y, placeFloor->area.level};
+                    const DefId before = floors_->at(cell);
+                    if (floors_->set(cell, floor) && floors_->at(cell) != before) {
+                        ++changed;
+                    }
+                }
+            }
+            if (changed == 0) {
+                commandFailed(id, "no floor changed there");
+            }
+        }
+    } else if (const auto* addFilth = std::get_if<AddFilthCommand>(&command)) {
+        if (!filth_->add(addFilth->cell, addFilth->kind, addFilth->layers)) {
+            commandFailed(id, "no filth could be added there");
+        }
     }
 }
 
@@ -622,6 +654,8 @@ void Sim::step() {
     rooms_->update();
     power_->step(time_);
     lights_->update();
+    filth_->step();
+    roomStats_->step(time_.seconds);
     time_.seconds += 1;
     if (time_.seconds % kSecondsPerHour == 0) {
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
@@ -768,6 +802,9 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.mood = mood->level;
             view.moodBand = static_cast<int>(mood->band);
         }
+        if (const BeautyNeed* beauty = roomStats_->beautyNeed(entity)) {
+            view.beautyNeed = beauty->level;
+        }
         if (const Worker* worker = reg.try_get<Worker>(entity)) {
             view.asleep = jobIsLyingDown(worker->job);
         }
@@ -818,9 +855,33 @@ void Sim::writeSnapshot(Snapshot& out) const {
         view.tables = room.tables;
         view.chairs = room.chairs;
         view.stoves = room.stoves;
+        if (const RoomStatValues* stats = roomStats_->statsOf(room.id)) {
+            view.hasStats = true;
+            view.beauty = stats->beauty;
+            view.space = stats->space;
+            view.wealth = stats->wealth;
+            view.cleanliness = stats->cleanliness;
+            view.impressiveness = stats->impressiveness;
+        }
         out.rooms.push_back(view);
     }
     out.powerNets = power_->nets();
+    if (out.floorChanges != floors_->changes()) {
+        out.floorChanges = floors_->changes();
+        out.floors.clear();
+        for (const auto& [index, def] : floors_->all()) {
+            out.floors.push_back(FloorView{map_.cellAt(index), def});
+        }
+    }
+    if (out.filthChanges != filth_->changes()) {
+        out.filthChanges = filth_->changes();
+        out.filth.clear();
+        for (const auto& [index, piles] : filth_->all()) {
+            for (const FilthPile& pile : piles) {
+                out.filth.push_back(FilthView{map_.cellAt(index), filth_->kinds()[pile.kind].def, pile.thickness});
+            }
+        }
+    }
     out.roofCells = rooms_->thinRoofCells();
     out.roofChanges = rooms_->roofChanges();
     out.projectiles.clear();
@@ -856,6 +917,9 @@ uint64_t Sim::stateHash() const {
     designations_->hashState(h);
     pathfinder_.hashState(h);
     zones_->hashState(h);
+    floors_->hashState(h);
+    filth_->hashState(h);
+    roomStats_->hashState(h);
 
     // The entity ids the registry has handed out: the free list in reuse order (it decides the
     // next ids), then every live thing in id order with its components. The registry's own

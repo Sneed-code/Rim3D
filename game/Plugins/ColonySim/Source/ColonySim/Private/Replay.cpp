@@ -176,6 +176,13 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, FlickCommand>) {
                 j["thing"] = entt::to_integral(c.thing);
                 j["on"] = c.on;
+            } else if constexpr (std::is_same_v<Type, PlaceFloorCommand>) {
+                j["area"] = replayRectJson(c.area);
+                j["floor"] = c.floor;
+            } else if constexpr (std::is_same_v<Type, AddFilthCommand>) {
+                j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
+                j["kind"] = c.kind;
+                j["layers"] = c.layers;
             } else {
                 static_assert(std::is_same_v<Type, ShortCircuitCommand>, "write every command type");
                 j["thing"] = entt::to_integral(c.thing);
@@ -695,6 +702,24 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = ShortCircuitCommand{static_cast<Entity>(thing)};
+    } else if (type == "PlaceFloor") {
+        PlaceFloorCommand c;
+        if (!replayReadRect(r, j, where, c.area) || !r.text(j, "floor", c.floor, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "AddFilth") {
+        AddFilthCommand c;
+        if (!r.text(j, "kind", c.kind, where) || !r.integer(j, "layers", c.layers, where)) {
+            return false;
+        }
+        const auto cell = j.find("cell");
+        if (cell == j.end() || !cell->is_array() || cell->size() != 3 || !(*cell)[0].is_number_integer() ||
+            !(*cell)[1].is_number_integer() || !(*cell)[2].is_number_integer()) {
+            return r.fail(where + ".cell must be [x, y, level]");
+        }
+        c.cell = CellPos{(*cell)[0].get<int>(), (*cell)[1].get<int>(), (*cell)[2].get<int>()};
+        out.command = std::move(c);
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");
     }

@@ -1,0 +1,42 @@
+[
+  {
+    "defName": "FilthRules", "source": "RimWorld wiki (Filth); the chances are ours",
+    "outdoorBeautyFactor": 0.3,
+    "ticksToSeconds": 1.44,
+    "maxCarried": 3,
+    "pickupChancePerCell": 0.05,
+    "dropChancePerCell": 0.05,
+    "bloodPerBleedDay": 4.0,
+    "cleaningSpeed": 1.0,
+    "tracked": ["Dirt", "Blood", "Vomit", "Ash", "AnimalFilth"],
+    "unverified": ["outdoorBeautyFactor"],
+    "ours": ["ticksToSeconds", "maxCarried", "pickupChancePerCell", "dropChancePerCell", "bloodPerBleedDay", "cleaningSpeed", "tracked"],
+    "note": "A pawn walking on bare ground (no floor) picks dirt up on its shoes with pickupChancePerCell for each new cell, times its def's stats.filthRate; it drops what it carries on floors with dropChancePerCell for each new cell. Trackable filth in the cell it enters is picked up the same way. A bleeding pawn drops about bloodPerBleedDay blood an hour for each point of blood loss a day it bleeds. ticksToSeconds is 1.44: a RimWorld tick is 1/60 s and our game day is 86,400 s against RimWorld's 60,000 ticks."
+  },
+  {
+    "defName": "RoomStatRules", "source": "RimWorld wiki (Rooms)",
+    "beauty": { "fullSizeCells": 40, "smallBase": 20, "smallHalf": 0.5 },
+    "space": { "perCell": 1.4, "blockerReduction": 0.9 },
+    "impressiveness": {
+      "wealthDivisor": 1500, "beautyDivisor": 3, "spaceDivisor": 125,
+      "cleanlinessBase": 1, "cleanlinessDivisor": 2.5,
+      "averageWeight": 65, "minWeight": 35,
+      "spaceCap": 500, "spaceCapKeep": 0.25
+    },
+    "marketValue": { "workTicksFactor": 0.0036, "ticksPerWorkSecond": 0.6944444 },
+    "unverified": ["marketValue"],
+    "ours": ["marketValue.ticksPerWorkSecond"],
+    "note": "Beauty: total of the room's cells and the ring of cells around it, over the room size (a room under 40 cells counts as 20 + size/2). Space: 1.4 a cell, minus 0.9 for each cell holding something you cannot stand on. Impressiveness as the wiki's formula. Wealth: market value of buildings in and around the room plus floors in it; a building's market value is its materials plus 0.0036 per RimWorld tick of work (ours: workToBuild is in game seconds, 1.44 per tick). The impressiveness soft cap for space is flagged [Verify] on the wiki."
+  },
+  {
+    "defName": "BeautyNeedRules", "source": "RimWorld wiki (Beauty)",
+    "sightRadius": 8.7,
+    "neutralMin": 0.35, "neutralMax": 0.65,
+    "beautyAtNeutralMin": -3.5, "beautyAtNeutralMax": 2.4,
+    "risePerHour": 0.12, "fallPerHour": 0.04,
+    "sampleEverySeconds": 30,
+    "unverified": ["sightRadius"],
+    "ours": ["beautyAtNeutralMin", "beautyAtNeutralMax", "risePerHour", "fallPerHour", "sampleEverySeconds"],
+    "note": "The need is 0 to 1; 35% to 65% is neutral. A pawn judges the average beauty of the cells within sightRadius metres it can see (about 241 cells). The need heads for a level that is a straight line of that average: 35% at beautyAtNeutralMin, 65% at beautyAtNeutralMax (the wiki's 'ugly' and 'pretty' edges), moving up quickly and down slowly, and only while the pawn is awake. Mood stages are the Beauty thought."
+  }
+]

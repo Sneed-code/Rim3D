@@ -46,7 +46,8 @@ enum class JobStepKind : uint8_t {
     DepositIngredient,
     BillWork,
     BillFinish,
-    Play  // recreation: stay for the activity's time (RecreationJobs.cpp)
+    Play,  // recreation: stay for the activity's time (RecreationJobs.cpp)
+    CleanWork
 };
 
 constexpr JobStepKind kJobsWaitSteps[] = {JobStepKind::Wait};
@@ -57,6 +58,7 @@ constexpr JobStepKind kJobsIngestSteps[] = {JobStepKind::GotoThing, JobStepKind:
 constexpr JobStepKind kJobsLayDownSteps[] = {JobStepKind::WalkToSpot, JobStepKind::Lie};
 constexpr JobStepKind kJobsMineSteps[] = {JobStepKind::GotoTouch, JobStepKind::MineWork};
 constexpr JobStepKind kJobsPlantSteps[] = {JobStepKind::GotoTouch, JobStepKind::PlantWork};
+constexpr JobStepKind kJobsCleanSteps[] = {JobStepKind::GotoCell, JobStepKind::CleanWork};
 constexpr uint8_t kJobsHaulPickUpStep = 1;
 constexpr uint8_t kJobsHaulCarryStep = 2;
 constexpr JobStepKind kJobsDeliverSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::CarryToCell,
@@ -103,6 +105,7 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::HarvestPlant: return {kJobsPlantSteps, static_cast<int>(std::size(kJobsPlantSteps))};
         case JobType::DoBill: return {kJobsDoBillSteps, static_cast<int>(std::size(kJobsDoBillSteps))};
         case JobType::Recreate: return {kJobsRecreateSteps, static_cast<int>(std::size(kJobsRecreateSteps))};
+        case JobType::CleanFilth: return {kJobsCleanSteps, static_cast<int>(std::size(kJobsCleanSteps))};
     }
     return {nullptr, 0};
 }
@@ -119,6 +122,7 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::MineWork:
         case JobStepKind::PlantWork:
         case JobStepKind::BillWork:
+        case JobStepKind::CleanWork:
         case JobStepKind::Eat:
         case JobStepKind::Lie:
             return true;
@@ -170,6 +174,7 @@ const char* jobTypeName(JobType type) {
         case JobType::HarvestPlant: return "HarvestPlant";
         case JobType::DoBill: return "DoBill";
         case JobType::Recreate: return "Recreate";
+        case JobType::CleanFilth: return "CleanFilth";
     }
     return "?";
 }
@@ -372,6 +377,7 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
         case JobType::Mine:
         case JobType::CutPlant:
         case JobType::HarvestPlant:
+        case JobType::CleanFilth:
             out[0] = keyOf(JobTarget{kNoEntity, job.cell});
             return 1;
         case JobType::DoBill: {
@@ -700,6 +706,8 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     }
     if (job.type == JobType::Recreate) {
         return failCheckRecreate(pawn, job, why);
+    if (job.type == JobType::CleanFilth) {
+        return failCheckClean(pawn, job, why);
     }
     entt::registry& reg = things_.registry();
     if (job.type == JobType::DeliverResources) {
@@ -819,6 +827,8 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return billFinish(pawn, job, why);
         case JobStepKind::Play:
             return play(pawn, job, why);
+        case JobStepKind::CleanWork:
+            return cleanWork(pawn, job, why);
     }
     return StepResult::Failed;
 }

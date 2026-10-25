@@ -219,6 +219,7 @@ void Things::despawn(Entity thing) {
 }
 
 void Things::indexItem(Entity thing, CellPos cell, bool add) {
+    ++itemChanges_;
     const uint64_t key = thingCellKey(cell);
     if (add) {
         std::vector<Entity>& list = itemsAt_[key];
