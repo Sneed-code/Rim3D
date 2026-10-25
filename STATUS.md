@@ -82,6 +82,14 @@ colonists eat through their starting food in about 5 days and begin to starve ar
 keep them alive**. Beds, tables and chairs are C4's defs: it reads `building.bed`, `building.isTable`,
 `building.isSittable` and `stats.bedRestEffectiveness`. Save format 8 (formats 6 and 7 still load).
 
+Since C9 colonists have a mood, 0 to 100 (`docs/design/mood.md`): base 50 plus trait offsets plus thoughts, the
+level following at 12 an hour up and 8 down and standing still asleep. Situations (hungry, ravenous, starving;
+drowsy, tired, exhausted) count while they hold; memories (ate without a table, ate raw food, ate a fine or
+lavish meal, slept on the ground) last 0.6 days. The three break thresholds (35%, 20%, 5%, moved by traits
+like Nerves) are recorded as `MoodBand` with a `PawnMoodBand` event; **no mental breaks yet**. "Slept outside"
+is defined but waits for roofs and rooms (C5). `thoughts()` is what the colonist panel (U8) reads. Thought
+numbers other than Hungry are recalled, not verified. Save format 11.
+
 Since D3 the game has real starting data in `data/defs/`, written by hand with RimWorld's numbers
 from the RimWorld wiki (there is no RimWorld install to import from; `docs/decisions/0003`):
 terrain fertility, wild plants and the temperate forest, basic items, the Human, skills, work
@@ -111,7 +119,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-21 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C4). Tick tasks in `docs/plans/stage-1.md` as they merge.
+22 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C4, C9). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 

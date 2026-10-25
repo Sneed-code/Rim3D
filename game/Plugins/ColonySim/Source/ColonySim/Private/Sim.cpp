@@ -6,6 +6,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Mood.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Plants.h"
@@ -69,6 +70,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     health_->setEventLog(&events_);
     construction_ = std::make_unique<Construction>(map_, *things_, *plants_, *defs_, rng_, events_);
     needs_ = std::make_unique<NeedsSystem>(*things_, *health_, *defs_);
+    mood_ = std::make_unique<MoodSystem>(*things_, *needs_, *defs_);
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *defs_, *health_, *needs_,
                                         time_, stats_, events_);
     map_.regions().update();  // build every region now, not in the first step
@@ -391,6 +393,7 @@ void Sim::step() {
         }
     }
     jobs_->step();
+    mood_->step(time_.seconds, events_);
     movement_->step(things_->registry(), map_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     time_.seconds += 1;
@@ -474,6 +477,10 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.food = needs->food;
             view.rest = needs->rest;
         }
+        if (const Mood* mood = reg.try_get<Mood>(entity)) {
+            view.mood = mood->level;
+            view.moodBand = static_cast<int>(mood->band);
+        }
         if (const Worker* worker = reg.try_get<Worker>(entity)) {
             view.asleep = jobIsLyingDown(worker->job);
         }
@@ -533,7 +540,8 @@ uint64_t Sim::stateHash() const {
                             reg.all_of<Colonist>(e),     reg.all_of<Health>(e),       reg.all_of<PlayerControl>(e),
                             reg.all_of<Needs>(e),        reg.all_of<Schedule>(e),     reg.all_of<Bed>(e),
                             reg.all_of<ConstructionSite>(e), reg.all_of<BuiltOf>(e),
-                            reg.all_of<MarkedForDeconstruct>(e)};
+                            reg.all_of<MarkedForDeconstruct>(e),
+                            reg.all_of<Mood>(e)};
         uint64_t mask = 0;
         for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
             mask |= has[bit] ? (uint64_t{1} << bit) : 0;
@@ -662,6 +670,15 @@ uint64_t Sim::stateHash() const {
             h.add(needs->rest);
             h.add(needs->malnutrition);
             h.add(needs->foodSearchAfter);
+        }
+        if (const Mood* mood = reg.try_get<Mood>(e)) {
+            h.add(mood->level);
+            h.add(static_cast<int>(mood->band));
+            h.add(static_cast<uint64_t>(mood->memories.size()));
+            for (const Memory& memory : mood->memories) {
+                h.add(memory.def.data(), memory.def.size());
+                h.add(memory.expires);
+            }
         }
         if (const Schedule* schedule = reg.try_get<Schedule>(e)) {
             for (const ScheduleKind kind : schedule->hours) {
