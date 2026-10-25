@@ -7,6 +7,7 @@
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Doors.h"
+#include "ColonySim/Power.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
@@ -212,6 +213,7 @@ struct SaveEntity {
     std::optional<PawnLooks> looks;  // format 16 on
     std::optional<Magazine> magazine;  // format 17 on
     std::optional<SaveBillList> bills;      // format 18 on
+    std::optional<PowerPart> power;         // section "power"
 };
 
 // A stockpile zone, with its filter by defName.
@@ -884,6 +886,11 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.require(hands->mode <= HandsOnMode::Stop, "the save file has a bad hands-on mode");
                 ar.value("thing", hands->thing);
                 ar.group("cell", [&] { saveCell(ar, hands->cell); });
+            } else if constexpr (std::is_same_v<Type, FlickCommand>) {
+                ar.value("thing", c.thing);
+                ar.value("on", c.on);
+            } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
+                ar.value("thing", c.thing);
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }
@@ -1280,6 +1287,16 @@ void saveDoorPart(Ar& ar, Door& d) {
     ar.value("hold", d.hold);
     ar.value("open", d.open);
 
+}
+
+template <typename Ar>
+void savePowerPart(Ar& ar, PowerPart& part) {
+    ar.value("on", part.on);
+    ar.value("powered", part.powered);
+    ar.value("stored", part.stored);
+    ar.require(part.stored >= 0.0 && part.stored < 1e9, "the save file has a battery with impossible charge");
+    ar.value("draw", part.draw);
+    ar.require(part.draw == part.draw && part.draw < 1e9, "the save file has an impossible power draw");
 }
 
 template <typename Ar>
@@ -1701,6 +1718,9 @@ void saveSections(Ar& ar, SaveData& d) {
         saveMineables(ar, d.mineables);
         saveDesignations(ar, d.designations);
     });
+    ar.section("power", 1, [&] {
+        saveParts(ar, "power", e, &SaveEntity::power, [&](PowerPart& part) { savePowerPart(ar, part); });
+    });
     // New sections go here, at the end.
 }
 
@@ -1881,6 +1901,11 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const Door* door = reg.try_get<Door>(e)) {
             out.door = *door;
+        }
+        if (const PowerPart* part = reg.try_get<PowerPart>(e)) {
+            out.power = *part;
+            out.power->net = 0;  // worked out again on loading
+            out.power->watts = 0.0;
         }
         if (const Mood* mood = reg.try_get<Mood>(e)) {
             out.mood = *mood;
@@ -2139,6 +2164,11 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.footprint && e.footprint->isDoor) {
             reg.emplace<Door>(entity, e.door.value_or(Door{}));  // saves before format 12: closed
+        }
+        if (e.power) {
+            reg.emplace<PowerPart>(entity, *e.power);
+        } else if (e.footprint && e.thing && sim.defs_->get(reg.get<Thing>(entity).def).has("power")) {
+            reg.emplace<PowerPart>(entity);  // saves from before the section: switched on, unpowered until the first step
         }
         if (e.schedule) {
             reg.emplace<Schedule>(entity, *e.schedule);
@@ -2440,6 +2470,8 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
     }
     sim.rooms_->update();
+    sim.power_->markDirty();
+    sim.power_->update();
     sim.events_.clear();
     return true;
 }

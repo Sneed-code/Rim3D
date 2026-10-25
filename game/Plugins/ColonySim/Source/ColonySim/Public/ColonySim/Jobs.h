@@ -150,6 +150,7 @@ class Map;
 class Mineables;
 class Pathfinder;
 class Plants;
+class PowerGrid;
 class Things;
 class WorkGiver;
 struct GameTime;
@@ -259,6 +260,10 @@ public:
     BillSystem& bills() { return *bills_; }
     const BillSystem& bills() const { return *bills_; }
     const DefDatabase& defs() const { return defs_; }
+    // Buildings that draw power only work while they have it (docs/design/power.md). Until a grid is
+    // set (some tests) nothing needs power.
+    void setPower(const PowerGrid* power) { power_ = power; }
+    bool buildingRuns(Entity building) const;
     int64_t now() const;
 
     // The pawn holding a target, or kNoEntity.
@@ -424,6 +429,7 @@ private:
     std::vector<Event>& events_;
 
     std::unique_ptr<BillSystem> bills_;
+    const PowerGrid* power_ = nullptr;
     std::vector<std::unique_ptr<WorkGiver>> givers_;
     std::vector<WorkType> workTypes_;
     std::vector<uint8_t> standable_;  // per def id: a building pawns can stand on (storage allowed)

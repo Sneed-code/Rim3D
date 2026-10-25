@@ -96,7 +96,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | | E2 | **Room temperature.** Each room's temperature moves toward outdoors through walls, doors, vents and open roof, by RimWorld's rule; heaters, coolers and campfires push it. Pawns' comfortable range (apparel adds to it after C15), hypothermia, heatstroke and frostbite, temperature thoughts. | Cloud | Sonnet, high | 90 min | E1, D7, D9, D11 |
 | ✓ | E3 | **Light and darkness.** A light grid from the sun (time of day, roofs) and from buildings that glow; darkness slows work and movement as in RimWorld; `lightAt` for others to use; `simrun` picture. Rebuilt, not saved, so it can start before S7. The darkness thought arrives with D9. | Cloud | Sonnet, medium | 60 min | none |
 | | E4 | **Fire.** Fire per cell in active chunks: starts from heat sources and flammable stuff, spreads to plants, buildings, items and pawns, burns them, leaves ash and burnt ground; rain and snow put it out; pawns on fire beat it out; a home area and the Firefighter work type's job. | Cloud | Sonnet, high | 90 min | E1 |
-| | E5 | **Power.** Power nets from conduits and buildings; wood-fired (fuel from C11), solar (from E3's sun) and wind generators; batteries; switches; buildings without power stop (lamps, heaters, electric stove, benches). A short-circuit hook for T3. | Cloud | Sonnet, high | 90 min | C11, D11, E3 |
+| ✓ | E5 | **Power.** Power nets from conduits and buildings; wood-fired (fuel from C11), solar (from E3's sun) and wind generators; batteries; switches; buildings without power stop (lamps, heaters, electric stove, benches). A short-circuit hook for T3. | Cloud | Sonnet, high | 90 min | C11, D11, E3 |
 
 ### Multi-storey (M)
 

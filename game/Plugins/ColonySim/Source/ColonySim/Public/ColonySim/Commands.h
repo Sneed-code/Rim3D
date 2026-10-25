@@ -294,6 +294,19 @@ struct HandsOnCommand {
 // How far from the edge of a rock, plant, frame or item a controlled colonist can work on it, in metres.
 inline constexpr float kHandsOnReach = 2.0f;
 
+// Power (task E5, docs/design/power.md): opens or closes a switch, or flicks a consumer or generator on
+// or off. Fails if the building has nothing to switch.
+struct FlickCommand {
+    Entity thing = kNoEntity;
+    bool on = true;
+};
+
+// Dev command, and what the events task T3 will send: a short circuit at a building on a net. Empties
+// the net's batteries and destroys the building if it is a conduit or a switch.
+struct ShortCircuitCommand {
+    Entity thing = kNoEntity;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -303,7 +316,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ShootCommand, SetStanceCommand, DesignateCommand, CancelDesignationsCommand,
                              DraftCommand, MoveOrderCommand, AttackOrderCommand, SetFactionCommand, SetLineageCommand,
                              ReloadCommand, AddBillCommand,
-                             RemoveBillCommand, SetBillCommand, HandsOnCommand>;
+                             RemoveBillCommand, SetBillCommand, HandsOnCommand, FlickCommand, ShortCircuitCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

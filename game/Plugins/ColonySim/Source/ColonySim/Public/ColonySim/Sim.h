@@ -38,6 +38,7 @@ class MovementSystem;
 class MoodSystem;
 class NeedsSystem;
 class Plants;
+class PowerGrid;
 class Regions;
 class Rooms;
 class Things;
@@ -183,6 +184,11 @@ public:
     Construction& construction() { return *construction_; }
     const Construction& construction() const { return *construction_; }
 
+    // Power nets, generators, batteries and who has power (docs/design/power.md). Stepped at the end
+    // of every step, after rooms (the sun needs roofs).
+    PowerGrid& power() { return *power_; }
+    const PowerGrid& power() const { return *power_; }
+
     // Hauling test: the middle of its stockpile zone (empty if no cell is walkable) and its pawns.
     const std::optional<CellPos>& stockpileCell() const { return stockpileCell_; }
     const std::vector<Entity>& haulers() const { return haulers_; }
@@ -220,6 +226,7 @@ private:
     std::unique_ptr<Designations> designations_;
     std::unique_ptr<MovementSystem> movement_;
     std::unique_ptr<Rooms> rooms_;
+    std::unique_ptr<PowerGrid> power_;
     std::unique_ptr<Lights> lights_;
     DoorNumbers doorNumbers_;  // for the snapshot's door animation
     std::unique_ptr<HealthSystem> health_;

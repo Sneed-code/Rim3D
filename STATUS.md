@@ -219,6 +219,16 @@ the fallen Lattice, magic called resonance) and our own names for RimWorld's pro
 storytellers are narrators named Orrin, Maren and Jinx). **Use those names in new data, code and
 docs**; plain words like steel and rifle stay. Item words like plasteel are only proposed so far.
 
+Since E5 buildings can have power (`docs/design/power.md`, tests `PowerTests`, `simrun --power`): conduits and closed switches join the
+buildings beside them into nets; generators (wood-fired, solar by the sun and the open share of its roof, wind turbine by wind and clear air),
+consumers (lamps, heaters, benches; any def with `power.consumption`) and batteries (charge kept at 50%, `idleDrain`) balance every step, and a
+net that cannot cover its consumers goes dark as a whole, coming back only after its batteries hold a minute of the shortfall. `sim.power()` answers
+`running(b)` (**a building that draws power must be checked with it before it works**; bill jobs already are, via `JobSystem::buildingRuns`),
+`powered`, `netOf`, `nets`, `wattsOf`, `storedIn`, and does `flick` (`FlickCommand`: switches, consumers, generators), `setDraw` (E2's heaters ask for
+less when warm) and `shortCircuit` (`ShortCircuitCommand`; empties the net's batteries, `ShortCircuit` event with the energy for T3, F9 and E4).
+Events `PowerChanged`; `ThingView` `power`, `powerNet`, `powerWatts`, `batteryFill` and `Snapshot::powerNets` for U19. Save section `power` (version 1).
+Solar panels follow E3's `lights().skyGlow()` and lamps that draw power glow only while `running` (the lamp layer is made again when power changes). **Two things are stubbed until their tasks land, each a one-line hook on `sim.power()`:** wind is
+a constant until E1 calls `setWind`, and **wood-fired generators run without fuel until C11 calls `setFuel`** (whoever merges second wires it).
 Since E3 every cell has a light level (`docs/design/light.md`, tests `LightTests`, `simrun --light FILE --hour H`): the sun by the hour of the day on cells with no roof, plus lamps (`glower`, with new `TorchLamp` and `Campfire` defs) falling off to their radius and stopped by walls; `sim.lights().lightAt(cell)`. Dark cells slow work (mining, plants, building, cooking) to 70% and walking to 85% at full dark. Rebuilt on change, not saved (no save format change). **The sim starts at midnight, so a test with the real defs that counts work steps needs a lamp beside the worker**; the tests' own small defs have no `LightRules` and no night.
 
 ## Stage 1 progress
@@ -242,6 +252,7 @@ section, `docs/design/saves.md` "Adding to the save"; a new system's checklist i
 Stage 2 done so far: **D7** medicine and disease data (`docs/design/medicine-data.md`), **D11** building data 2 (power, climate, light, floors, furniture;
 `docs/design/starting-data.md`).
 **D5** animal data (15 animals, bodies, meat, leather, milk, eggs, wool: `docs/design/animals.md`).
+**E5** power (`docs/design/power.md`).
 **E3** light and darkness (`docs/design/light.md`).
 **D8** production data (work tables, stone blocks, melee weapons with tools; the meal recipes still list only the fueled stove, C14 adds the electric stove).
 

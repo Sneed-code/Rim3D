@@ -14,6 +14,7 @@
 //   simrun --load game.save --days 0 --save-json game.json   (readable dump of a save)
 //   simrun --scenario colony [--seed 42] [--size 512] [--days 5] [--verbose]   (the colony test, C10;
 //                                     exit 1 if a check fails, docs/design/colony-scenario.md)
+//   simrun --power [--days 3] [--verbose]   (the power check, E5: solar, batteries, lamps and a switch; docs/design/power.md)
 // --replay takes the settings and commands from the file and runs to its endStep (--days
 // overrides). --record writes what this run did as a replay, with its state hashes.
 // --check makes it exit with 1 if any job or path search failed.
@@ -21,6 +22,7 @@
 // Human and Steel and the WorkTypes def Hauling, which data/defs provides. Its pawns haul items
 // scattered over the map to a stockpile zone in the middle through the job system (C1).
 #include "ColonyScenario.h"
+#include "PowerScenario.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Lights.h"
@@ -70,7 +72,8 @@ struct Options {
     int pathBudget = colony::Pathfinder::kDefaultBudget;
     std::string start;  // a Scenarios def; prints the colonists it makes
     std::string scenario;  // "colony": the scripted colony test (C10)
-    bool verbose = false;  // --scenario: an hourly line on stderr
+    bool verbose = false;  // --scenario, --power: an hourly line on stderr
+    bool power = false;    // --power: the power check (E5)
     bool check = false;  // exit 1 if a job or a path search failed
     int gather = 0;      // mark rock to mine and plants to harvest this many cells round the middle
     std::string png;
@@ -111,6 +114,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.start = argv[++i];
         } else if (std::strcmp(arg, "--scenario") == 0 && hasValue) {
             out.scenario = argv[++i];
+        } else if (std::strcmp(arg, "--power") == 0) {
+            out.power = true;
         } else if (std::strcmp(arg, "--verbose") == 0) {
             out.verbose = true;
         } else if (std::strcmp(arg, "--gather") == 0 && hasValue) {
@@ -142,7 +147,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--scenario colony [--verbose]] [--check] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--scenario colony [--verbose]] [--power] [--check] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE]\n");
             return false;
         }
@@ -533,6 +538,11 @@ int main(int argc, char** argv) {
             return 1;
         }
         defs = std::move(loaded);
+    }
+
+    // The power check (E5): its own small map and script; 3 days unless --days says.
+    if (options.power) {
+        return powerscenario::run(options.daysGiven ? options.days : 3.0, defs, options.verbose);
     }
 
     // The colony scenario (C10) runs its own script on the Crashlanded start; 5 days unless --days says.

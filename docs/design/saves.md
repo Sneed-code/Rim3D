@@ -110,6 +110,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `zones` | 1 | next zone id, stockpile zones |
 | `plants` | 1 | the plant layer |
 | `mining` | 1 | the rock layer and the designations |
+| `power` | 1 | `power`: per building with a power part, switched on, powered, battery charge (Wd) and requested draw; nets are made again on loading ([power.md](power.md)) |
 
 **Commands are saved by name (S7).** The `commands` section starts with the names of the command
 types it uses (`commandNames`); each command then gives its type as a place in that list, and its

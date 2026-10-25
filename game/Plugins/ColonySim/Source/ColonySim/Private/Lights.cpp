@@ -136,7 +136,7 @@ void Lights::rebuild() {
     const entt::registry& reg = things_.registry();
     for (const auto [building, thing, position] : reg.view<const Thing, const Position>().each()) {
         if (thing.category != ThingCategory::Building || lightDef_[thing.def.value] == 0 ||
-            reg.all_of<ConstructionSite>(building)) {
+            reg.all_of<ConstructionSite>(building) || (active_ && !active_(building))) {
             continue;
         }
         const Def& def = things_.defs().get(thing.def);

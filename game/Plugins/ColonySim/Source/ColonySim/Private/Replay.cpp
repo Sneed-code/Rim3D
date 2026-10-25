@@ -168,12 +168,17 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["mode"] = billModeName(c.mode);
                 j["count"] = c.count;
                 j["suspended"] = c.suspended;
-            } else {
-                static_assert(std::is_same_v<Type, HandsOnCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, HandsOnCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["mode"] = c.mode == HandsOnMode::Work ? "Work" : (c.mode == HandsOnMode::PutDown ? "PutDown" : "Stop");
                 j["thing"] = entt::to_integral(c.thing);
                 j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
+            } else if constexpr (std::is_same_v<Type, FlickCommand>) {
+                j["thing"] = entt::to_integral(c.thing);
+                j["on"] = c.on;
+            } else {
+                static_assert(std::is_same_v<Type, ShortCircuitCommand>, "write every command type");
+                j["thing"] = entt::to_integral(c.thing);
             }
         },
         logged.command);
@@ -676,6 +681,20 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         c.thing = static_cast<Entity>(thing);
         c.cell = CellPos{(*cell)[0].get<int>(), (*cell)[1].get<int>(), (*cell)[2].get<int>()};
         out.command = c;
+    } else if (type == "Flick") {
+        uint32_t thing = entt::to_integral(kNoEntity);
+        FlickCommand c;
+        if (!r.integer(j, "thing", thing, where) || !r.flag(j, "on", c.on, where)) {
+            return false;
+        }
+        c.thing = static_cast<Entity>(thing);
+        out.command = c;
+    } else if (type == "ShortCircuit") {
+        uint32_t thing = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "thing", thing, where)) {
+            return false;
+        }
+        out.command = ShortCircuitCommand{static_cast<Entity>(thing)};
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");
     }
