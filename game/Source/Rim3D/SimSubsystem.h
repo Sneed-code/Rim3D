@@ -51,8 +51,12 @@ struct FSimTimings
  * This is the only place that converts sim units (metres, Z up from the ground) to Unreal's.
  *
  * Keys (also work in the smoke tests): Space pauses and resumes, 1 / 2 / 3 set the speed,
- * . (period) steps once while paused, F7 saves a replay of the session to Saved/Replays/.
- * Console: Sim.Speed, Sim.Spawn, Sim.SaveReplay, Sim.ShowTimings, Sim.DebugDraw.
+ * . (period) steps once while paused, F7 saves a replay of the session to Saved/Replays/,
+ * F5 quicksaves and F9 quickloads (Saved/Saves/, docs/design/saves.md), F8 writes a bug report
+ * (a replay, a save and a readable dump in one folder under Saved/BugReports/). The game also
+ * autosaves once a game day, rotating through three files.
+ * Console: Sim.Speed, Sim.Spawn, Sim.SaveReplay, Sim.Save, Sim.Load, Sim.BugReport,
+ * Sim.ShowTimings, Sim.DebugDraw.
  */
 UCLASS()
 class RIM3D_API USimSubsystem : public UTickableWorldSubsystem
@@ -91,6 +95,37 @@ public:
 	 *  empty string if it could not be written. `simrun --replay FILE` plays it in the cloud. */
 	UFUNCTION(BlueprintCallable, Category = "Colony")
 	FString SaveReplay();
+
+	/** Writes the whole game to Saved/Saves/<Slot>.save (a half-written file never replaces a good
+	 *  one). Returns the path, or an empty string if it could not be written. */
+	UFUNCTION(BlueprintCallable, Category = "Colony")
+	FString SaveGame(const FString& Slot);
+
+	/** Replaces the running sim with the one in Saved/Saves/<Slot>.save. On any problem the running
+	 *  game is left alone, the reason goes to the log and the screen, and this returns false. */
+	UFUNCTION(BlueprintCallable, Category = "Colony")
+	bool LoadGame(const FString& Slot);
+
+	UFUNCTION(BlueprintCallable, Category = "Colony")
+	FString QuickSave() { return SaveGame(TEXT("quicksave")); }
+
+	UFUNCTION(BlueprintCallable, Category = "Colony")
+	bool QuickLoad() { return LoadGame(TEXT("quicksave")); }
+
+	/** Writes a folder in Saved/BugReports/ with the session as a replay (`simrun --replay`), a save
+	 *  (`simrun --load`), the save as readable JSON and a note about the build. Returns the folder,
+	 *  or an empty string on failure. */
+	UFUNCTION(BlueprintCallable, Category = "Colony")
+	FString WriteBugReport();
+
+	/** Folder the saves go in. */
+	static FString GetSaveDirectory();
+
+	/** Game seconds between autosaves; a day unless a test shortens it. 0 turns autosave off. */
+	void SetAutosaveInterval(int64 GameSeconds);
+	int64 GetAutosaveInterval() const { return AutosaveInterval; }
+	/** Number of autosaves written since the sim started or loaded. */
+	int32 GetAutosaveCount() const { return AutosaveCount; }
 
 	/** Handles one of the keys above. Returns true if it was one. */
 	bool HandleKey(const FKey& Key);
@@ -133,6 +168,8 @@ protected:
 
 private:
 	void RunSteps(int64 Steps);
+	void MaybeAutosave();
+	void ResetAfterSimChange();
 	void HandleEvents();
 	void AdvanceTimingWindow(double DeltaTime);
 	void ShowTimings() const;
@@ -152,6 +189,9 @@ private:
 	int32 Speed = 1;
 	int32 SpeedBeforePause = 1;
 	int64 LastLoggedHour = -1;
+	int64 AutosaveInterval = colony::kSecondsPerDay;
+	int64 LastAutosaveBucket = 0;
+	int32 AutosaveCount = 0;
 	int64 EventCount = 0;
 	FVector WorldOrigin = FVector::ZeroVector;
 
