@@ -52,6 +52,10 @@ rest (place blueprint, designate, draft, actions) come with the tasks that build
 | `EquipCommand{pawn, item}` | `CombatSystem::equip`: a gun in the hands or apparel on the body ([combat.md](combat.md)) | no body or dead; not a gun or apparel; someone else's; a job holds it |
 | `ShootCommand{pawn, target, x, y, z, player}` | `CombatSystem::shoot`: aimed (warm-up, skill spread) or the player's trigger (at once, gun spread) | no gun; downed; mid-burst or cooling down; target not a pawn on the map |
 | `SetStanceCommand{pawn, stance}` | standing, crouching or prone | not a pawn |
+| `DraftCommand{pawn, drafted}` | drafts one of the player's pawns (its job ends, the fighter AI takes it, [fighters.md](fighters.md)) or sends it back to work | not the player's pawn on the map; downed; drafted (undrafted) already |
+| `MoveOrderCommand{pawn, cell}` | a drafted pawn goes there and holds, in the best cover within 2 m | not drafted; can't stand or get there |
+| `AttackOrderCommand{pawn, target}` | a drafted pawn shoots this one whenever it can; `kNoEntity` lets it choose | not drafted; target not a living pawn on the map |
+| `SetFactionCommand{pawn, faction}` | dev until raids (F6): puts a pawn on a side (1 is the player's); any other side fights at once | faction 0; not a pawn |
 
 In replay files a `rot` is `"North"`, `"East"`, `"South"` or `"West"` (`"North"` if left out) and an `area` is `[minX, minY, sizeX, sizeY, level]` and a storage priority its name
 (`"Preferred"`; `"Normal"` if left out).

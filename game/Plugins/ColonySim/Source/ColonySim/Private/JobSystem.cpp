@@ -3,6 +3,7 @@
 #include "ColonySim/Clock.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Fighters.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
@@ -466,8 +467,9 @@ void JobSystem::step() {
                                                &JobSystem::thinkIdle};
 
     for (const Entity pawn : order_) {
-        // The player walks this one (U9): no think, no job, until control is let go.
-        if (reg.all_of<PlayerControl>(pawn)) {
+        // The player walks this one (U9), or it fights (drafted, or another faction's: F4): no
+        // think, no job, until control is let go or it is undrafted.
+        if (reg.any_of<PlayerControl, Fighter>(pawn)) {
             continue;
         }
         // Downed or dead (F1): the job ends, what it carried is put down, and it doesn't think.

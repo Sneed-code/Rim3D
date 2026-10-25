@@ -60,6 +60,20 @@ void saveTestSession(Sim& sim, int64_t from, int64_t to) {
         if (i == 1200) {
             sim.submit(DestroyThingCommand{sim.map().buildingAt(CellPos{11, 10, 0})});
         }
+        // Fighters (F4): a drafted hauler, another one turned hostile, orders, then back to work.
+        if (i == 900) {
+            sim.submit(DraftCommand{sim.haulers()[4], true});
+            sim.submit(SetFactionCommand{sim.haulers()[5], 2});
+            sim.submit(DraftCommand{sim.haulers()[5], true});  // fails: not the player's
+        }
+        if (i == 1100) {
+            sim.submit(MoveOrderCommand{sim.haulers()[4], CellPos{70, 60, 0}});
+            sim.submit(AttackOrderCommand{sim.haulers()[4], sim.haulers()[5]});
+        }
+        if (i == 2200) {
+            sim.submit(DraftCommand{sim.haulers()[4], false});
+            sim.submit(SetFactionCommand{sim.haulers()[5], 1});
+        }
         if (i == 2500) {
             sim.submit(SpawnThingCommand{"Door", CellPos{12, 10, 0}});
             sim.submit(SpawnThingCommand{"Wall", CellPos{11, 10, 0}});

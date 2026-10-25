@@ -7,8 +7,9 @@ Code: `ColonySim/Combat.h`, `Private/Combat.cpp`. Tests: `Tests/CombatTests.cpp`
 Every shot is a real projectile. It leaves the muzzle with spread, flies with speed and drop, and
 stops at the first thing it touches: the ground, rock, a building, or a pawn's hitbox. A pawn hit
 goes through its armor to the body part that was hit, then into health (`HealthSystem::applyHit`,
-[health.md](health.md)). **There is no hit-chance roll.** Fighter AI (where to stand, when to
-shoot, leading, reaction time) is F4 and F5; Unreal's tracers and hit reactions are U11.
+[health.md](health.md)). **There is no hit-chance roll.** Where to stand and when to shoot is the
+fighter AI ([fighters.md](fighters.md), F4); leading and reaction time are F5; Unreal's tracers and
+hit reactions are U11.
 
 ## Guns and bullets
 
@@ -142,6 +143,6 @@ triggers fire in id order from the sim's random stream.
 ## Not done yet
 
 Melee (Crashlanded's knife), grenades and blast radius, stopping power, apparel damage, aim affected
-by sight and manipulation, cover-hugging and leaning (F4), leading and reaction time (F5), bullets
+by sight and manipulation, leading and reaction time (F5), bullets
 hitting corpses and plants (C2's trees should stop some bullets), shooting through doorways when
 doors open and close (C5).
