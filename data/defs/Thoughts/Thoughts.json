@@ -1,0 +1,62 @@
+[
+  {
+    "defName": "Hungry", "label": "hungry", "source": "RimWorld wiki",
+    "moodOffset": -6, "situation": { "need": "food", "band": "Hungry" }
+  },
+  {
+    "defName": "Ravenous", "label": "ravenous", "source": "RimWorld",
+    "moodOffset": -12, "situation": { "need": "food", "band": "Ravenous" },
+    "unverified": ["moodOffset"]
+  },
+  {
+    "defName": "Malnourished", "label": "starving", "source": "RimWorld",
+    "moodOffset": -20, "situation": { "need": "food", "band": "Malnourished" },
+    "unverified": ["moodOffset"]
+  },
+  {
+    "defName": "Drowsy", "label": "drowsy", "source": "RimWorld",
+    "moodOffset": -6, "situation": { "need": "rest", "band": "Drowsy" },
+    "unverified": ["moodOffset"]
+  },
+  {
+    "defName": "Tired", "label": "tired", "source": "RimWorld",
+    "moodOffset": -12, "situation": { "need": "rest", "band": "Tired" },
+    "unverified": ["moodOffset"]
+  },
+  {
+    "defName": "Exhausted", "label": "exhausted", "source": "RimWorld",
+    "moodOffset": -18, "situation": { "need": "rest", "band": "Exhausted" },
+    "unverified": ["moodOffset"]
+  },
+  {
+    "defName": "AteWithoutTable", "label": "ate without a table", "source": "RimWorld",
+    "moodOffset": -3, "durationDays": 0.6, "trigger": "AteWithoutTable",
+    "unverified": ["moodOffset", "durationDays"]
+  },
+  {
+    "defName": "AteRawFood", "label": "ate raw food", "source": "RimWorld",
+    "moodOffset": -7, "durationDays": 0.6, "trigger": "AteRawFood",
+    "unverified": ["moodOffset", "durationDays"]
+  },
+  {
+    "defName": "AteFineMeal", "label": "ate a fine meal", "source": "RimWorld",
+    "moodOffset": 5, "durationDays": 0.6, "trigger": "AteFineMeal",
+    "unverified": ["moodOffset", "durationDays"]
+  },
+  {
+    "defName": "AteLavishMeal", "label": "ate a lavish meal", "source": "RimWorld",
+    "moodOffset": 12, "durationDays": 0.6, "trigger": "AteLavishMeal",
+    "unverified": ["moodOffset", "durationDays"]
+  },
+  {
+    "defName": "SleptOnGround", "label": "slept on the ground", "source": "RimWorld",
+    "moodOffset": -4, "durationDays": 0.6, "trigger": "SleptOnGround",
+    "unverified": ["moodOffset", "durationDays"]
+  },
+  {
+    "defName": "SleptOutside", "label": "slept outside", "source": "RimWorld",
+    "moodOffset": -6, "durationDays": 0.6, "trigger": "SleptOutside",
+    "note": "Not started by anything yet: needs roofs and rooms (C5).",
+    "unverified": ["moodOffset", "durationDays"]
+  }
+]

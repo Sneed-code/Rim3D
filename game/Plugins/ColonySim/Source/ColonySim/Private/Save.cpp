@@ -8,6 +8,7 @@
 #include "ColonySim/Hash.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Mood.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
 #include "ColonySim/Zones.h"
@@ -39,12 +40,13 @@ constexpr char kSaveMagic[8] = {'R', 'I', 'M', '3', 'D', 'S', 'A', 'V'};
 constexpr size_t kSaveMagicSize = sizeof kSaveMagic;
 // Bump when the layout below changes, and keep reading the old versions (the archive's
 // version() says which one a file is). Changing it needs a line in docs/design/saves.md.
-constexpr uint32_t kSaveFormatVersion = 10;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
+constexpr uint32_t kSaveFormatVersion = 11;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
                                             // 4: C8's scenario and colonists; 5: F1's pawn health; 6: C1's jobs,
                                             // work priorities and zones; 7: U9's direct control; 8: C6's needs,
                                             // schedules, bed owners, the eating job's chair; 9: C2's plants;
                                             // 10: C4's building plans, frames and deconstruct marks, a job's
-                                            // site and progress
+                                            // site and progress;
+                                            // 11: C9's mood
 // Saves from before the job system (formats 1 to 5) can't be read: their hauling placeholder has
 // no counterpart in the job system (docs/design/saves.md).
 constexpr uint32_t kSaveOldestFormat = 6;
@@ -156,6 +158,7 @@ struct SaveEntity {
     std::optional<SaveSite> site;           // format 10 on
     std::optional<std::string> builtOf;     // format 10 on: the stuff a building was made of
     std::optional<SaveMark> marked;         // format 10 on
+    std::optional<Mood> mood;          // format 11 on
 };
 
 // A stockpile zone, with its filter by defName.
@@ -205,7 +208,7 @@ struct SaveData {
     PathSavedState paths;              // the path queue (format 2 on)
     uint32_t nextZoneId = 1;           // format 4 on
     std::vector<SaveZone> zones;
-    SavePlants plants;                 // format 9 on
+    SavePlants plants;                 // format 10 on
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -778,6 +781,16 @@ void saveEntity(Ar& ar, SaveEntity& e) {
         });
         ar.optional("builtOf", e.builtOf, [&](std::string& stuff) { ar.text("stuff", stuff); });
         ar.optional("marked", e.marked, [&](SaveMark&) {});
+        ar.optional("mood", e.mood, [&](Mood& m) {
+            ar.value("level", m.level);
+            ar.value("band", m.band);
+            ar.require(m.level >= 0.0f && m.level <= 100.0f, "the save file has an impossible mood");
+            ar.require(m.band <= MoodBand::Extreme, "the save file has a bad mood band");
+            ar.list("memories", m.memories, [&](Memory& memory) {
+                ar.text("def", memory.def);
+                ar.value("expires", memory.expires);
+            });
+        });
     }
 }
 
@@ -1023,6 +1036,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const Needs* needs = reg.try_get<Needs>(e)) {
             out.needs = *needs;
         }
+        if (const Mood* mood = reg.try_get<Mood>(e)) {
+            out.mood = *mood;
+        }
         if (const Schedule* schedule = reg.try_get<Schedule>(e)) {
             out.schedule = *schedule;
         }
@@ -1214,6 +1230,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.needs) {
             reg.emplace<Needs>(entity, *e.needs);
+        }
+        if (e.mood) {
+            reg.emplace<Mood>(entity, *e.mood);
         }
         if (e.schedule) {
             reg.emplace<Schedule>(entity, *e.schedule);

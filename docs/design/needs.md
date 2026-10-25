@@ -7,7 +7,7 @@ Code: `ColonySim/Needs.h`, `Private/Needs.cpp` (the numbers and the per-second u
 A colonist has two needs, **food** and **rest**, each 1 (full) down to 0. When food runs low the
 pawn eats; when rest runs low, or the hourly **schedule** says so, it sleeps in its **bed**, else on
 the ground. Eating and sleeping are jobs on the C1 job system ([jobs.md](jobs.md)). Mood effects
-(ate without a table, slept on the ground) come with C9 and read the events below.
+(ate without a table, slept on the ground) are C9 and read the events below ([mood.md](mood.md)).
 
 Pawns get needs only when the data has a `NeedRules` def (`data/defs/Rules/Rules.json`). Without
 one (the test fixture defs) pawns have none. The hauling test's pawns (`SimSettings::pawns`) never
@@ -126,7 +126,7 @@ its food and rest still fall. Let go of it to have it look after itself.
 
 ## Not yet
 
-- Mood from hunger, tiredness and where the pawn ate or slept (C9). Overeating, food poisoning,
+- Overeating, food poisoning,
   rotting, food policies, baby and animal food.
 - Malnutrition's effect on consciousness; hunger and tiredness slowing work.
 - Cooking (C7), plants to harvest (C3), rooms and "slept outside" (C5), medical beds, beds for

@@ -19,6 +19,7 @@
 // scattered over the map to a stockpile zone in the middle through the job system (C1).
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Mood.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Cover.h"
 #include "ColonySim/Defs.h"
@@ -595,6 +596,27 @@ int main(int argc, char** argv) {
                         "\"minFood\":%.3f,\"minRest\":%.3f}}\n",
                         withNeeds, static_cast<unsigned long long>(ate), static_cast<unsigned long long>(wokeUp),
                         static_cast<unsigned long long>(died), asleep, static_cast<double>(minFood), static_cast<double>(minRest));
+        }
+        // Mood (docs/design/mood.md): the lowest level, the worst break band and how many thoughts count now.
+        {
+            int withMood = 0;
+            int worstBand = 0;
+            int thoughtsNow = 0;
+            float minMood = 100.0f;
+            for (const auto [pawn, mood] : sim.things().registry().view<const colony::Mood>().each()) {
+                ++withMood;
+                minMood = std::min(minMood, mood.level);
+                worstBand = std::max(worstBand, static_cast<int>(mood.band));
+                thoughtsNow += static_cast<int>(sim.mood().thoughts(pawn, sim.time().seconds).size());
+            }
+            if (withMood > 0) {
+                std::printf("{\"mood\":{\"pawns\":%d,\"minMood\":%.1f,\"worstBand\":\"%s\",\"thoughtsNow\":%d}}\n", withMood,
+                            static_cast<double>(minMood), colony::moodBandName(static_cast<colony::MoodBand>(worstBand)), thoughtsNow);
+            }
+            if (options.check && withMood != withNeeds) {
+                std::fprintf(stderr, "check failed: %d pawns have needs but %d have a mood\n", withNeeds, withMood);
+                return 1;
+            }
         }
         if (options.check && died > 0) {
             std::fprintf(stderr, "check failed: %llu pawn(s) died\n", static_cast<unsigned long long>(died));

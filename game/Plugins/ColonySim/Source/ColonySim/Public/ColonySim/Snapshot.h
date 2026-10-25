@@ -72,6 +72,9 @@ struct ThingView {
     float food = -1.0f;
     float rest = -1.0f;
     bool asleep = false;
+    // Mood (docs/design/mood.md): 0 to 100, else -1; the break band as a MoodBand (0 stable to 3 extreme).
+    float mood = -1.0f;
+    int moodBand = 0;
 };
 
 // One stockpile zone: `cellCount` cells from Snapshot::zoneCells[firstCell].
