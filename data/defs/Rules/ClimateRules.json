@@ -12,6 +12,7 @@
     "windGustDays": 0.25,
     "windGustRange": [0.25, 1.75],
     "windMax": 1.5,
+    "rainDeteriorationFactor": 5,
     "snowMeltBelow10PerDegreeSquared": 0.058,
     "snowMeltAbove10PerDegree": 0.58,
     "unverified": ["dayCyclePhase", "randomVariationAmplitude", "transitionHours"],

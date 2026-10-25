@@ -69,6 +69,13 @@ times a gust that drifts between 0.25 and 1.75 over a few hours, never above 1.5
 It comes from the seed and the time, so it has no saved state. The gust numbers are ours. With no climate
 defs it is a steady 1.0.
 
+## Rain and spoilage
+
+`weather().deteriorationFactor()` is 5 while it rains (the wiki's Deterioration page: rain multiplies an item's
+outdoor deterioration by 5) and 1 otherwise; `Sim` hands it to `SpoilageSystem::setOutdoorFactor` every step
+(C16, [spoilage.md](spoilage.md)). Spoilage applies it only to items on unroofed cells. The number is in
+`ClimateRules.rainDeteriorationFactor`.
+
 ## Snow
 
 A layer of depth per cell (0 to 100 %, kept in hundredths of a percent). Once an hour, on every cell

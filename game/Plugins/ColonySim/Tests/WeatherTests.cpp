@@ -503,3 +503,17 @@ TEST_CASE("Weather: wind follows the weather and drifts, and power reads it") {
     bare.stepMany(5 * 3600);
     CHECK(bare.weather().wind() == 1.0);
 }
+
+TEST_CASE("Weather: rain wears things under the open sky five times as fast, and not otherwise") {
+    auto defs = weatherRealDefs();
+    Sim sim(weatherSimSettings(6, 64), defs);
+    sim.submit(SetWeatherCommand{"Clear", 1000.0f});
+    sim.stepMany(4 * 3600);
+    CHECK(sim.weather().deteriorationFactor() == 1.0f);
+    sim.submit(SetWeatherCommand{"Rain", 1000.0f});
+    sim.stepMany(3600);
+    CHECK(sim.weather().deteriorationFactor() == 5.0f);
+    sim.submit(SetWeatherCommand{"Fog", 1000.0f});
+    sim.stepMany(3 * 3600);
+    CHECK(sim.weather().deteriorationFactor() == 1.0f);
+}

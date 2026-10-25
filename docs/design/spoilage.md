@@ -25,7 +25,7 @@ gone (`ItemSpoiled`, message "rotted"). Items being carried do not rot (they are
 
 An item with `stats.deteriorationRate` (hit points a game day) that lies on a cell with no roof, and not
 on a building with `building.preventDeteriorationOnTop` (no def has it yet), loses hit points at that
-rate times `outdoorDeteriorationFactor` (1; E1 calls `setOutdoorFactor` to raise it in rain). At 0 it
+rate times `outdoorDeteriorationFactor` (1; E1's weather calls `setOutdoorFactor` every step: 5 while it rains). At 0 it
 is gone (`ItemSpoiled`, message "weathered"). Quality's `deteriorationFactor` is not applied yet.
 
 ## Meals and food poisoning

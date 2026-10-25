@@ -63,6 +63,7 @@ Weather::Weather(const Map& map, const DefDatabase& defs, uint64_t seed, const s
         windGustMin_ = rules->numberAt("windGustRange", 0, windGustMin_);
         windGustMax_ = rules->numberAt("windGustRange", 1, windGustMax_);
         windMax_ = rules->number("windMax", windMax_);
+        rainDeterioration_ = rules->number("rainDeteriorationFactor", rainDeterioration_);
         snowPerHour_ = rules->number("snowPercentPerHourAtRate1", snowPerHour_);
         meltLow_ = rules->number("snowMeltBelow10PerDegreeSquared", meltLow_);
         meltHigh_ = rules->number("snowMeltAbove10PerDegree", meltHigh_);

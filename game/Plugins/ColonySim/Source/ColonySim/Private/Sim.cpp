@@ -822,6 +822,7 @@ void Sim::step() {
     spoilage_->step(time_.seconds);
     time_.seconds += 1;
     weather_->step(time_.seconds);
+    spoilage_->setOutdoorFactor(weather_->deteriorationFactor());
     if (time_.seconds % kSecondsPerHour == 0) {
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
         pruneDesignations();

@@ -102,6 +102,9 @@ public:
     // in storms and snow) times gusts that drift over hours, 0 to `windMax` (1.5). Worked out from the
     // seed and the time, so it has no state of its own.
     double wind() const;
+    // How much faster things lying under the open sky wear now: the wiki's 5 while it rains, else 1. For
+    // SpoilageSystem::setOutdoorFactor.
+    float deteriorationFactor() const { return cachedEffects().rainRate > 0.001f ? static_cast<float>(rainDeterioration_) : 1.0f; }
     // Game second the current weather ends, and the one it began.
     int64_t weatherEndsAt() const { return state_.endsAt; }
     int64_t weatherStartedAt() const { return state_.startedAt; }
@@ -183,6 +186,7 @@ private:
     double windGustMin_ = 0.25;
     double windGustMax_ = 1.75;
     double windMax_ = 1.5;
+    double rainDeterioration_ = 5.0;
     double transitionSeconds_ = 5760.0;
 
     // Snow, in hundredths of a percent per cell.
