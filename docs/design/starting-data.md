@@ -41,9 +41,10 @@ names in lowerCamel (`workSpeedGlobal`), keys that are def names keep their case
 | --- | --- | --- | --- |
 | `Terrain` | soil, rich soil, stony soil (`Gravel`), sand, marshy soil, mud, shallow and deep water, rough stone x5 | C2 | `fertility`, `pathCost` (walk speed = 13 / (13 + pathCost)), `affordances` |
 | `Things` | `Items.json`: steel, wood, silver, component, medicine, berries, survival meal, simple meal, fine meal (berries carry `thingCategories` that recipes filter on). `Plants.json`: oak, poplar, grass, tall grass, bush, brambles, dandelions, berry bush. `Pawns.json`: Human | C1, C2, C8, F1 | Plants are `category: "Plant"` with a `plant` block. Steel and wood carry `stuffProps` for C4 |
-| `Biomes` | temperate forest | C2 | `plantDensity` and `wildPlants` commonality (only the plants we have; newer expansion plants left out) |
+| `Biomes` | temperate forest, boreal forest, arid shrubland | C2, D4 | `plantDensity` and `wildPlants` commonality (only the plants we have; newer expansion plants left out) |
 | `Things` (buildings) | `Buildings.json`: wall, door, bed, stool, three tables, fueled stove | C4 | `costs`, `stuffCategories`, `costStuffCount`, `stats.workToBuild` (game seconds), `size`, `passability`, `building` flags C6 reads ([construction.md](construction.md)) |
 | `Recipes` | simple meal, four simple meals, fine meal | C7 | `recipeUsers`, `workAmount` (game seconds), `ingredients` (item categories and nutrition or count), `products` ([bills.md](bills.md)) |
+| `Weathers` | clear, fog, rain, foggy rain, dry and rainy thunderstorm, light and heavy snow | D4 (read by E1) | `durationHours` (range), `temperatureRange` (where it can happen), `skyGlow`, `moveSpeedFactor`, `accuracyFactor`, `sightFactor`, `rainRate`, `snowRate`, `extinguishesFire`; a biome's `weather` lists commonality per kind |
 | `Rules` | `PlantRules`, `SkillRules`, `HealthRules`, `PawnGenRules`, `JobRules`, `NeedRules`, `ConstructionRules`, `MoodRules`, `CombatRules`, `DoorRules`, `RoomRules`, `BillRules` | C2, C8, F1, C1, C6, C4, C9, F2, C5, C7 | Numbers RimWorld keeps in its code rather than its defs (`JobRules`: [jobs.md](jobs.md); `NeedRules`: [needs.md](needs.md); `ConstructionRules`: [construction.md](construction.md); `CombatRules`: [combat.md](combat.md); `DoorRules`, `RoomRules`: [rooms.md](rooms.md)) |
 | `Skills` | the 12 skills | C1, C8 | `disablingWorkTags` |
 | `WorkTypes` | the 20 Core work types, in Work tab order | C1 | `relevantSkills`, `workTags`, `alwaysStartActive`, `inPrototype`, `tasks` (our job names, in order) |
@@ -124,6 +125,21 @@ Add or change a def in the right kind folder, using the conventions above. Take 
 wiki where it has them; where it doesn't, write our own and list the field in `ours`, or list it
 in `unverified` if it is recalled. If a new field names other defs, add it to `REFERENCES` in
 `tools/check_defs.py`. Run `python3 tools/check_defs.py`.
+
+**Farming, climate and weather (D4).** Crops are `Plant_Rice`, `Plant_Potato`, `Plant_Corn`,
+`Plant_Strawberry`, `Plant_Haygrass`, `Plant_Cotton`, `Plant_Healroot`, `Plant_Devilstrand` in
+`Things/Plants.json`, all from `CropBase` (`plant.isCrop`; growing temperatures: nothing grows below 0
+or above 58 degrees, full speed between 6 and 42, `coldDamageBelow`, `heatDamageAbove`). Each has
+`growDays`, `harvestYield`, `sowWork` and `harvestWork` (game seconds), `sowMinSkill`,
+`fertilityMin` and `fertilitySensitivity` (C2's formula). What they yield is in
+`Things/CropProducts.json` (rice, potatoes, corn, strawberries, hay, cloth, herbal medicine,
+devilstrand). D6 and D7 add the stuff and tend numbers for cloth, devilstrand and herbal medicine;
+whoever merges second drops a duplicate def. Each biome has `climate` (`seasonMeanTemperature` per
+season of 15 days, `dailySwing` in degrees, `rainfallMmPerYear`, `growingSeasons`), `weather`
+(commonality per `Weathers` def) and `animals` (commonality by RimWorld's animal names until D5
+defines them). Only the temperate forest got wild healroot (0.06), so existing maps change a little.
+Almost every crop and climate number is in `unverified`: the wiki was not read for this task, so
+check the numbers a task leans on (C13 for crops, E1 for climate and weather).
 
 **Apparel and textiles (D6).** Clothes are made of a stuff, as in RimWorld. A garment has no armor
 or insulation of its own: `apparel.stuffEffectMultiplierArmor` times the stuff's armor factor
