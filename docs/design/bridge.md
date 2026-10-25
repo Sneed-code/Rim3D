@@ -72,6 +72,10 @@ rest (place blueprint, designate, draft, actions) come with the tasks that build
 | `SetLineageCommand{pawn, lineage}` | dev command: the pawn's looks become another lineage's (skin, hair, horns), the body stays ([looks.md](looks.md)) | the thing has no looks; unknown lineage |
 | `DodgeRollCommand{pawn, dx, dy}` | `CombatSystem::dodgeRoll`: the protagonist's roll, direction any length (zero or not a number: a backstep); start-up, a hit-proof roll, recovery, a short wait ([shooter-feel.md](shooter-feel.md)) | not a colonist under direct control; downed; prone; rolling already or waiting out the last roll |
 | `ReloadCommand{pawn}` | `CombatSystem::reload`: a new magazine now (the protagonist's reload key, [aiming.md](aiming.md)) | no gun with a magazine; full; downed, mid-shot or reloading |
+| `StartRaidCommand{faction, points, edge}` | dev until the narrator: a raid of a Factions def worth `points` (0: the colony's raid points) walks in at `edge` (0 N, 1 E, 2 S, 3 W, -1 any) ([raids.md](raids.md)) | unknown faction or edge; no way in from that edge |
+| `SoundAlarmCommand{on}` | the colony alarm on (every colonist to its defense role; stays on until the player stops it) or off (back to work) | on (off) already |
+| `SetDefenseRoleCommand{pawn, role, hasSpot, spot}` | a colonist's defense role: 0 Defender (with a spot to hold, or none), 1 Shelter, 2 Keep working | not the colony's colonist; a spot for another role; can't stand on the spot |
+| `MarkShelterCommand{cell, clear}` | the room at `cell` is the shelter, or with `clear` none is | not a roofed room; nothing to clear |
 | `MeleeCommand{pawn, target, mode}` | `Attack`: a melee swing at `target` (the controlled colonist may swing at none, straight ahead); `Block`: raises the melee weapon ([melee.md](melee.md)) | downed or dead; mid-shot; still swinging or recovering; nothing to fight with; the target isn't a living pawn in reach; no melee weapon to block with |
 
 In replay files a `rot` is `"North"`, `"East"`, `"South"` or `"West"` (`"North"` if left out) and an `area` is `[minX, minY, sizeX, sizeY, level]` and a storage priority its name
@@ -121,6 +125,10 @@ starts, so read it after every step. Before the first step it holds what setting
 | `PlantRemoved` | `cell`, `def`, `amount` (items left), `message` ("felled" or "cut") | a plant was taken away |
 | `PlantHarvested` | `cell`, `def`, `amount` (items left), `message` ("picked") | a bush was picked and goes on growing |
 | `DesignationsChanged` | none | the marks changed; read `snapshot.designations` again |
+| `RaidArrived` | `squad`, `message` (the Factions def), `count`, `amount` (raid points), `cell` (where it walks in) | a raid arrived (F6, [raids.md](raids.md)) |
+| `SquadChanged` | `squad`, `message` (`Advance`, `Hold`, `FallBack`, `Rout`, or `gave up`), `count` | a raid squad's morale changed |
+| `AlarmChanged` | `message` ("on: why", "off: why") | the colony alarm went on or off |
+| `PawnLeftMap` | `thing`, `def`, `cell`, `squad` | a routed raider walked off the map; its `ThingDestroyed` follows |
 | `PawnMoodBand` | `thing`, `amount` (its mood), `message` ("stable", "minor", "major" or "extreme") | a pawn's mood crossed a mental break threshold (C9, [mood.md](mood.md)) |
 | `ShotFired` | `thing` (shooter), `def` (gun), `target` (projectile), `x, y, z` (muzzle) | a pawn fired (F2, [combat.md](combat.md)) |
 | `PowerChanged` | `thing`, `def`, `cell`, `message` ("on" or "off") | a generator, consumer or battery gained or lost power (E5, [power.md](power.md)); conduits are not announced |

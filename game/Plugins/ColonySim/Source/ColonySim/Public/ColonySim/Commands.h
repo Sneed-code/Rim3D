@@ -338,6 +338,40 @@ struct UnlockResearchCommand {
     std::string project;
 };
 
+// Raids (F6, docs/design/raids.md). Dev command until the narrator sends raids: a raid of
+// `faction` (a Factions defName) worth `points` raid points (0: what the colony is worth now, by
+// RimWorld's rule) walks in at `edge` (0 north, 1 east, 2 south, 3 west, -1 any) and attacks.
+// Fails for an unknown faction or edge, or when there is no way in from that edge.
+struct StartRaidCommand {
+    std::string faction = "Pirate";
+    float points = 0.0f;
+    int edge = -1;
+};
+
+// The colony alarm: on calls every colonist to its defense role, off sends them back to work. It
+// also sounds by itself when a colonist spots an enemy, and stops when the enemies are gone or
+// fleeing; one the player sounded stays on until the player stops it. Fails if it already is.
+struct SoundAlarmCommand {
+    bool on = true;
+};
+
+// What a colonist does when the alarm sounds: 0 Defender, 1 Shelter, 2 Keep working (DefenseRole
+// in Raids.h). A Defender can have a defense spot it holds. Fails for a pawn that isn't the
+// colony's, a spot for another role, or a spot nobody can stand on.
+struct SetDefenseRoleCommand {
+    Entity pawn = kNoEntity;
+    uint8_t role = 0;
+    bool hasSpot = false;
+    CellPos spot;
+};
+
+// Marks the room at `cell` as the shelter for Shelter colonists, or with `clear` takes the mark off.
+// Fails if the cell is not in a room under a roof.
+struct MarkShelterCommand {
+    CellPos cell;
+    bool clear = false;
+};
+
 // Melee (task F8, docs/design/melee.md). Attack: `pawn` swings at `target`, a pawn within reach;
 // for the colonist the player controls, `target` may be none for a swing straight ahead, and its
 // swings have no spread (the player aims). Block: `pawn` raises its melee weapon for a moment.
@@ -413,8 +447,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ReloadCommand, AddBillCommand,
                              RemoveBillCommand, SetBillCommand, HandsOnCommand, FlickCommand, ShortCircuitCommand,
                              PlaceFloorCommand, AddFilthCommand,
-                             SetResearchCommand, UnlockResearchCommand,
-                             MeleeCommand, DodgeRollCommand,
+                             SetResearchCommand, UnlockResearchCommand, StartRaidCommand, SoundAlarmCommand,
+                             SetDefenseRoleCommand, MarkShelterCommand, MeleeCommand, DodgeRollCommand,
                              SetOutfitCommand, EditOutfitCommand, AddOutfitCommand, RemoveOutfitCommand,
                              StripCommand>;
 

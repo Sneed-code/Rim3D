@@ -37,6 +37,10 @@
 #include "ColonySim/Designations.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Pathfinder.h"
+#include "ColonySim/Raids.h"
+#include "ColonySim/Combat.h"
+#include "ColonySim/Fighters.h"
+#include "ColonySim/Health.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Regions.h"
@@ -84,6 +88,8 @@ struct Options {
     bool check = false;  // exit 1 if a job or a path search failed
     int gather = 0;      // mark rock to mine and plants to harvest this many cells round the middle
     int animals = 0;     // wild animals as a percent of the biome's density (0: none; --animals alone means 100)
+    double raid = -1.0;  // start a pirate raid of this many points at the first step (0: the colony's threat points)
+    bool armed = false;  // give every colonist an assault rifle first (not a command: not in replays)
     std::string png;
     std::string regionsPng;
     std::string replay;
@@ -134,6 +140,10 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.animals = std::max(out.animals, 100);
         } else if (std::strcmp(arg, "--animal-percent") == 0 && hasValue) {
             out.animals = std::atoi(argv[++i]);
+        } else if (std::strcmp(arg, "--raid") == 0 && hasValue) {
+            out.raid = std::atof(argv[++i]);
+        } else if (std::strcmp(arg, "--armed") == 0) {
+            out.armed = true;
         } else if (std::strcmp(arg, "--check") == 0) {
             out.check = true;
         } else if (std::strcmp(arg, "--png") == 0 && hasValue) {
@@ -164,7 +174,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--scenario colony [--verbose]] [--power] [--check] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--scenario colony [--verbose]] [--power] [--raid POINTS] [--armed] [--check] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS]\n");
             return false;
         }
@@ -683,6 +693,33 @@ int main(int argc, char** argv) {
         sim.submit(colony::DesignateCommand{area, colony::DesignationKind::HarvestPlant});
     }
 
+    // --raid: pirates walk in at the first step (F6, docs/design/raids.md); --armed gives the
+    // colonists assault rifles first.
+    if (options.armed) {
+        for (const auto [pawn, colonist] : sim.things().registry().view<const colony::Colonist>().each()) {
+            sim.combat().equip(pawn, sim.things().make(sim.defs().idOf("Things", "Gun_AssaultRifle")));
+        }
+    }
+    if (options.raid >= 0.0) {
+        sim.submit(colony::StartRaidCommand{"Pirate", static_cast<float>(options.raid), -1});
+    }
+    struct RaidReport {
+        int raiders = 0;
+        float points = 0.0f;
+        int64_t arrived = -1;
+        int64_t alarmOn = -1;
+        int64_t alarmOff = -1;
+        int64_t ended = -1;
+        int left = 0;
+        int raidersDowned = 0;
+        int raidersDied = 0;
+        int colonistsDowned = 0;
+        int colonistsDied = 0;
+        uint64_t raiderShots = 0;
+        uint64_t colonyShots = 0;
+        std::string states;
+    } raid;
+
     // Time every step so spikes (long path searches) show up, not just the average.
     colony::ReplayFeeder feeder(replay);
     uint64_t events = 0;
@@ -702,6 +739,9 @@ int main(int argc, char** argv) {
             gatherMarked = sim.designations().count();
         }
         stepMs[static_cast<size_t>(i)] = static_cast<float>(ms(before, Clock::now()));
+        if (raid.arrived >= 0 && raid.ended < 0 && sim.raids().state().squads.empty()) {
+            raid.ended = sim.time().seconds;
+        }
         events += sim.events().size();
         for (const colony::Event& e : sim.events()) {
             ate += e.type == colony::EventType::PawnAte ? 1 : 0;
@@ -710,6 +750,29 @@ int main(int argc, char** argv) {
             mined += e.type == colony::EventType::CellMined ? 1 : 0;
             felled += e.type == colony::EventType::PlantRemoved ? 1 : 0;
             picked += e.type == colony::EventType::PlantHarvested ? 1 : 0;
+            if (options.raid >= 0.0) {
+                const int64_t t = sim.time().seconds;
+                const bool ours = e.thing != colony::kNoEntity && sim.things().exists(e.thing) &&
+                                  sim.fighters().factionOf(e.thing) == colony::kPlayerFaction;
+                switch (e.type) {
+                    case colony::EventType::RaidArrived:
+                        raid.raiders = e.count;
+                        raid.points = e.amount;
+                        raid.arrived = t;
+                        break;
+                    case colony::EventType::SquadChanged:
+                        raid.states += (raid.states.empty() ? "" : ",") + e.message + "@" + std::to_string(t);
+                        break;
+                    case colony::EventType::AlarmChanged:
+                        (e.message.rfind("on", 0) == 0 ? raid.alarmOn : raid.alarmOff) = t;
+                        break;
+                    case colony::EventType::PawnLeftMap: ++raid.left; break;
+                    case colony::EventType::PawnDowned: ++(ours ? raid.colonistsDowned : raid.raidersDowned); break;
+                    case colony::EventType::PawnDied: ++(ours ? raid.colonistsDied : raid.raidersDied); break;
+                    case colony::EventType::ShotFired: ++(ours ? raid.colonyShots : raid.raiderShots); break;
+                    default: break;
+                }
+            }
             if (e.type == colony::EventType::CommandFailed) {
                 ++commandsFailed;
                 std::fprintf(stderr, "step %lld: command %llu failed: %s\n", static_cast<long long>(i),
@@ -876,7 +939,7 @@ int main(int argc, char** argv) {
                 return 1;
             }
         }
-        if (options.check && died > 0) {
+        if (options.check && died > 0 && options.raid < 0.0) {
             std::fprintf(stderr, "check failed: %llu pawn(s) died\n", static_cast<unsigned long long>(died));
             return 1;
         }
@@ -890,6 +953,21 @@ int main(int argc, char** argv) {
                     static_cast<unsigned long long>(picked), sim.designations().count(), sim.mineables().count());
         if (options.check && gatherMarked > 0 && mined + felled + picked == 0) {
             std::fprintf(stderr, "check failed: %zu cells marked and nothing was mined, felled or picked\n", gatherMarked);
+            return 1;
+        }
+    }
+
+    // Raid (docs/design/raids.md): who came, how the squad's morale went, how it ended.
+    if (options.raid >= 0.0) {
+        std::printf("{\"raid\":{\"raiders\":%d,\"points\":%.0f,\"arrived\":%lld,\"alarmOn\":%lld,\"alarmOff\":%lld,"
+                    "\"ended\":%lld,\"squad\":\"%s\",\"leftMap\":%d,\"raidersDowned\":%d,\"raidersDied\":%d,"
+                    "\"colonistsDowned\":%d,\"colonistsDied\":%d,\"raiderShots\":%llu,\"colonyShots\":%llu}}\n",
+                    raid.raiders, static_cast<double>(raid.points), static_cast<long long>(raid.arrived),
+                    static_cast<long long>(raid.alarmOn), static_cast<long long>(raid.alarmOff), static_cast<long long>(raid.ended),
+                    raid.states.c_str(), raid.left, raid.raidersDowned, raid.raidersDied, raid.colonistsDowned, raid.colonistsDied,
+                    static_cast<unsigned long long>(raid.raiderShots), static_cast<unsigned long long>(raid.colonyShots));
+        if (options.check && (raid.arrived < 0 || raid.ended < 0 || raid.raiderShots + raid.colonyShots == 0)) {
+            std::fprintf(stderr, "check failed: the raid didn't arrive, didn't end, or nobody fired a shot\n");
             return 1;
         }
     }

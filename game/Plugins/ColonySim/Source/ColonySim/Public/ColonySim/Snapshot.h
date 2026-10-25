@@ -124,6 +124,14 @@ struct ThingView {
     Entity fightTarget = kNoEntity;
     CellPos fightSpot;
     bool fallingBack = false;
+    // F6 (docs/design/raids.md): the colony's colonists' defense role (0 Defender, 1 Shelter, 2 Keep
+    // working); whether the alarm called it up; a fighter heading for a shelter or fleeing the map;
+    // and for raiders their squad (0 for none).
+    uint8_t defenseRole = 0;
+    bool defending = false;
+    bool sheltering = false;
+    bool fleeing = false;
+    uint32_t squad = 0;
     // Humanlike pawns: their looks, Snapshot::looks[looks]; -1 for other things.
     int32_t looks = -1;
     // Buildings with a power part (docs/design/power.md): whether they have power, the net they are
@@ -172,6 +180,17 @@ struct ApparelView {
 struct OutfitView {
     uint32_t id = 0;
     std::string name;
+};
+
+// A raid squad on the map (docs/design/raids.md). `state` is a SquadState: 0 Advance, 1 Hold,
+// 2 FallBack, 3 Rout.
+struct SquadView {
+    uint32_t id = 0;
+    uint32_t faction = 0;  // its pawns' faction
+    uint8_t state = 0;
+    int members = 0;       // still with it: on the map, downed ones included
+    int started = 0;
+    CellPos target;        // the cell it goes for
 };
 
 // A bullet in flight (docs/design/combat.md). Unreal draws a tracer along its velocity; it
@@ -295,6 +314,11 @@ struct Snapshot {
     uint64_t floorChanges = ~0ULL;
     std::vector<FilthView> filth;
     uint64_t filthChanges = ~0ULL;
+    // The colony alarm (docs/design/raids.md): on, and whether the player sounded it (only the
+    // player stops that one); the raid squads on the map.
+    bool alarm = false;
+    bool alarmManual = false;
+    std::vector<SquadView> squads;
     std::vector<ApparelView> apparel;      // worn apparel, see ThingView
     std::vector<OutfitView> outfits;       // the outfit policies, by id
 
