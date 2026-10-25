@@ -20,6 +20,7 @@
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Genes.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
@@ -269,6 +270,24 @@ void Sim::giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& 
     // Without the looks rules (the test defs) the pawn gets plain looks; that is not an error.
     generateLooks(*defs_, seed, female, lineage, looks, error);
     reg.emplace_or_replace<PawnLooks>(pawn, std::move(looks));
+    giveGenes(pawn);
+}
+
+void Sim::giveGenes(Entity pawn) {
+    entt::registry& reg = things_->registry();
+    const PawnLooks* looks = reg.try_get<PawnLooks>(pawn);
+    if (looks == nullptr) {
+        return;
+    }
+    PawnGenes genes;
+    std::string error;
+    // Without the Genes defs (the test defs) the pawn has no genes; that is not an error.
+    makeGenes(*defs_, looks->lineage, genes, error);
+    reg.emplace_or_replace<PawnGenes>(pawn, std::move(genes));
+}
+
+const PawnGenes* Sim::genesOf(Entity pawn) const {
+    return things_->exists(pawn) ? things_->registry().try_get<PawnGenes>(pawn) : nullptr;
 }
 
 const PawnLooks* Sim::looksOf(Entity pawn) const {
@@ -464,6 +483,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "that thing has no looks to change");
         } else if (!setLineage(*defs_, lineage->lineage, *looks, error)) {
             commandFailed(id, error);
+        } else {
+            giveGenes(lineage->pawn);
         }
     } else if (const auto* move = std::get_if<DirectMoveCommand>(&command)) {
         entt::registry& reg = things_->registry();
