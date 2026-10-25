@@ -13,6 +13,7 @@
 #include "ColonySim/Movement.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Weather.h"
 
 #include <algorithm>
 #include <cmath>
@@ -435,7 +436,9 @@ void FighterSystem::see(Entity pawn, Fighter& f, const PawnInfo& self) {
         }
         merge(reg.get<Fighter>(p.pawn).known);
     }
-    const float range2 = rules_.sightRange * rules_.sightRange;
+    const float sightRange =
+        rules_.sightRange * (weather_ != nullptr ? weather_->sightAt(CellPos{static_cast<int>(std::floor(self.x)), static_cast<int>(std::floor(self.y)), self.level}) : 1.0f);
+    const float range2 = sightRange * sightRange;
     const Viewpoint eye{self.x, self.y, self.level, Stance::Standing};
     size_t next = 0;  // walks f.known alongside pawns_, both in id order
     for (const PawnInfo& p : pawns_) {

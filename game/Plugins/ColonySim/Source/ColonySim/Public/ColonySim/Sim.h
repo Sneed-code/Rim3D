@@ -54,6 +54,7 @@ class Rooms;
 class TemperatureSystem;
 class SpoilageSystem;
 class Things;
+class Weather;
 class Zones;
 struct Snapshot;
 class SimSaveAccess;
@@ -178,6 +179,10 @@ public:
     Plants& plants() { return *plants_; }
     const Plants& plants() const { return *plants_; }
 
+    // Seasons, outdoor temperature, weather and snow (docs/design/weather.md).
+    Weather& weather() { return *weather_; }
+    const Weather& weather() const { return *weather_; }
+
     // The rock and ore layer, mined down by jobs (docs/design/mining.md), and the marks the player
     // has put on rock and plants for colonists to work on.
     Mineables& mineables() { return *mineables_; }
@@ -208,10 +213,10 @@ public:
     const TemperatureSystem& temperature() const { return *temperature_; }
     SpoilageSystem& spoilage() { return *spoilage_; }
     const SpoilageSystem& spoilage() const { return *spoilage_; }
-    // The temperature in the open right now, in degrees Celsius: the biome's season and the hour of
-    // the day. E1 replaces this with its seasons and weather.
+    // The temperature in the open right now, in degrees Celsius: the biome's season, the hour of the
+    // day and the random drift (Weather::temperatureAt).
     float outdoorTemperature() const;
-    // The biome's temperature at any game second, ignoring the override (for tests and previews).
+    // The open air's temperature at any game second, ignoring the override (for tests and previews).
     float outdoorTemperatureAt(int64_t gameSeconds) const;
     // The temperature under rock: the biome's mean over the year.
     float groundTemperature() const;
@@ -283,6 +288,7 @@ private:
     std::unique_ptr<Zones> zones_;
     std::unique_ptr<Things> things_;
     std::unique_ptr<Plants> plants_;
+    std::unique_ptr<Weather> weather_;
     std::unique_ptr<Mineables> mineables_;
     std::unique_ptr<Designations> designations_;
     std::unique_ptr<MovementSystem> movement_;

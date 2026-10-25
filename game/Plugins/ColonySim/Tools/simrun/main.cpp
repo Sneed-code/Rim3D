@@ -12,6 +12,7 @@
 //   simrun --seed 42 --days 1 --pawns 10 --items 100 --save game.save   (writes a save after the run)
 //   simrun --load game.save --days 1 --save later.save    (continues a save; --days defaults to 0)
 //   simrun --load game.save --days 0 --save-json game.json   (readable dump of a save)
+//   simrun --seed 42 --size 128 --days 60 --weather   (a line a day: season, temperatures, weather, snow; E1)
 //   simrun --scenario colony [--seed 42] [--size 512] [--days 5] [--verbose]   (the colony test, C10;
 //                                     exit 1 if a check fails, docs/design/colony-scenario.md)
 //   simrun --power [--days 3] [--verbose]   (the power check, E5: solar, batteries, lamps and a switch; docs/design/power.md)
@@ -52,6 +53,7 @@
 #include "ColonySim/ThreatMap.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
+#include "ColonySim/Weather.h"
 #include "ColonySim/Zones.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -86,6 +88,7 @@ struct Options {
     bool verbose = false;  // --scenario, --power: an hourly line on stderr
     bool power = false;    // --power: the power check (E5)
     bool check = false;  // exit 1 if a job or a path search failed
+    bool weather = false;  // print a line a day of the weather (E1)
     int gather = 0;      // mark rock to mine and plants to harvest this many cells round the middle
     int animals = 0;     // wild animals as a percent of the biome's density (0: none; --animals alone means 100)
     double raid = -1.0;  // start a pirate raid of this many points at the first step (0: the colony's threat points)
@@ -146,6 +149,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.armed = true;
         } else if (std::strcmp(arg, "--check") == 0) {
             out.check = true;
+        } else if (std::strcmp(arg, "--weather") == 0) {
+            out.weather = true;
         } else if (std::strcmp(arg, "--png") == 0 && hasValue) {
             out.png = argv[++i];
         } else if (std::strcmp(arg, "--regions") == 0 && hasValue) {
@@ -174,7 +179,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--scenario colony [--verbose]] [--power] [--raid POINTS] [--armed] [--check] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--scenario colony [--verbose]] [--power] [--raid POINTS] [--armed] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS]\n");
             return false;
         }
@@ -731,6 +736,10 @@ int main(int argc, char** argv) {
     uint64_t felled = 0;  // PlantRemoved events
     uint64_t picked = 0;  // PlantHarvested events
     std::vector<float> stepMs(static_cast<size_t>(steps));
+    // --weather: the day's lowest and highest temperature (sampled hourly), its weather changes, and the snow at its end.
+    double dayLow = 1.0e9;
+    double dayHigh = -1.0e9;
+    std::string dayWeather;
     for (int64_t i = 0; i < steps; ++i) {
         feeder.submitDue(sim);
         const auto before = Clock::now();
@@ -773,10 +782,31 @@ int main(int argc, char** argv) {
                     default: break;
                 }
             }
+            if (e.type == colony::EventType::WeatherChanged) {
+                dayWeather += (dayWeather.empty() ? "" : ", ") + e.message;
+            }
             if (e.type == colony::EventType::CommandFailed) {
                 ++commandsFailed;
                 std::fprintf(stderr, "step %lld: command %llu failed: %s\n", static_cast<long long>(i),
                              static_cast<unsigned long long>(e.command), e.message.c_str());
+            }
+        }
+        if (options.weather) {
+            const int64_t now = sim.time().seconds;
+            if (now % colony::kSecondsPerHour == 0) {
+                dayLow = std::min(dayLow, sim.weather().outdoorTemperature());
+                dayHigh = std::max(dayHigh, sim.weather().outdoorTemperature());
+            }
+            if (now % colony::kSecondsPerDay == 0) {
+                const colony::GameTime t{now - 1};  // the day that just ended
+                std::printf("day %2lld %-6s %6.1f..%5.1f C  snow %5.1f%%  %s%s\n", static_cast<long long>(t.dayOfYear() + 1),
+                            colony::seasonName(t.season()), dayLow, dayHigh,
+                            100.0 * static_cast<double>(sim.weather().snowCellCount()) /
+                                static_cast<double>(sim.map().width() * sim.map().height()),
+                            dayWeather.empty() ? "(unchanged)" : "-> ", dayWeather.c_str());
+                dayLow = 1.0e9;
+                dayHigh = -1.0e9;
+                dayWeather.clear();
             }
         }
     }

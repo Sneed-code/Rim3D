@@ -111,9 +111,11 @@ const char* commandName(const Command& command) {
                 return "AddOutfit";
             } else if constexpr (std::is_same_v<Type, RemoveOutfitCommand>) {
                 return "RemoveOutfit";
-            } else {
-                static_assert(std::is_same_v<Type, StripCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, StripCommand>) {
                 return "Strip";
+            } else {
+                static_assert(std::is_same_v<Type, SetWeatherCommand>, "name every command type");
+                return "SetWeather";
             }
         },
         command);
@@ -179,6 +181,8 @@ const char* eventTypeName(EventType type) {
         case EventType::MeleeSwing: return "MeleeSwing";
         case EventType::MeleeHit: return "MeleeHit";
         case EventType::ApparelDestroyed: return "ApparelDestroyed";
+        case EventType::WeatherChanged: return "WeatherChanged";
+        case EventType::SeasonChanged: return "SeasonChanged";
     }
     return "?";
 }
