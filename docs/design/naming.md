@@ -90,6 +90,12 @@ RimWorld's lore systems. `RimWorld defName` is the name in RimWorld's files wher
 | ideoligion | | creed | |
 | gravship | | skyhull | |
 
+### Medicine and disease words (D7)
+
+| RimWorld | RimWorld defName | Ours | Our defName |
+| --- | --- | --- | --- |
+| healroot | `Plant_Healroot`, `MedicineHerbal` ingredient `Healroot` | mendroot, mendroot leaves | `Plant_Mendroot`, `MendrootLeaves` |
+
 ### Narrators (RimWorld's storytellers)
 
 | RimWorld | RimWorld defName | Ours | Our defName |
