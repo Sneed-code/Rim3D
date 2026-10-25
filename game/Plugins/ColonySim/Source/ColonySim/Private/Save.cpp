@@ -7,6 +7,7 @@
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Doors.h"
+#include "ColonySim/Power.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
@@ -47,7 +48,7 @@ constexpr char kSaveMagic[8] = {'R', 'I', 'M', '3', 'D', 'S', 'A', 'V'};
 constexpr size_t kSaveMagicSize = sizeof kSaveMagic;
 // Bump when the layout below changes, and keep reading the old versions (the archive's
 // version() says which one a file is). Changing it needs a line in docs/design/saves.md.
-constexpr uint32_t kSaveFormatVersion = 19;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
+constexpr uint32_t kSaveFormatVersion = 20;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
                                             // 4: C8's scenario and colonists; 5: F1's pawn health; 6: C1's jobs,
                                             // work priorities and zones; 7: U9's direct control; 8: C6's needs,
                                             // schedules, bed owners, the eating job's chair; 9: C2's plants;
@@ -58,7 +59,8 @@ constexpr uint32_t kSaveFormatVersion = 19;  // 2: S3's path queue, pathBudget, 
                                             // 15: F4's factions and fighters; 16: A3's pawn looks; 17: F5's magazines,
                                             // reloading, a fighter's reaction and dodge times;
                                             // 18: C7's bills and the bill job;
-                                            // 19: U10's hands-on jobs
+                                            // 19: U10's hands-on jobs;
+                                            // 20: E5's power parts
 // Saves from before the job system (formats 1 to 5) can't be read: their hauling placeholder has
 // no counterpart in the job system (docs/design/saves.md).
 constexpr uint32_t kSaveOldestFormat = 6;
@@ -210,6 +212,7 @@ struct SaveEntity {
     std::optional<PawnLooks> looks;  // format 16 on
     std::optional<Magazine> magazine;  // format 17 on
     std::optional<SaveBillList> bills;      // format 18 on
+    std::optional<PowerPart> power;         // format 20 on
 };
 
 // A stockpile zone, with its filter by defName.
@@ -534,7 +537,7 @@ void saveRect(Ar& ar, CellRect& r) {
 
 template <typename Ar>
 void saveCommand(Ar& ar, Command& command) {
-    static_assert(std::variant_size_v<Command> == 32, "save every command type here");
+    static_assert(std::variant_size_v<Command> == 34, "save every command type here");
     uint8_t type = static_cast<uint8_t>(command.index());
     ar.value("type", type);
     if constexpr (Ar::kReading) {
@@ -571,13 +574,15 @@ void saveCommand(Ar& ar, Command& command) {
             case 29: command = RemoveBillCommand{}; break;
             case 30: command = SetBillCommand{}; break;
             case 31: command = HandsOnCommand{}; break;
+            case 32: command = FlickCommand{}; break;
+            case 33: command = ShortCircuitCommand{}; break;
             default: ar.require(false, "the save file names a command this build doesn't know"); return;
         }
         // A format older than the command that was added in it can't contain it.
         ar.require((type < 10 || ar.version() >= 7) && (type < 12 || ar.version() >= 8) &&
                        (type < 14 || ar.version() >= 10) && (type < 17 || ar.version() >= 12) && (type < 20 || ar.version() >= 14) &&
                        (type < 22 || ar.version() >= 15) && (type < 26 || ar.version() >= 16) &&
-                       (type < 27 || ar.version() >= 17) && (type < 28 || ar.version() >= 18) && (type < 31 || ar.version() >= 19),
+                       (type < 27 || ar.version() >= 17) && (type < 28 || ar.version() >= 18) && (type < 31 || ar.version() >= 19) && (type < 32 || ar.version() >= 20),
                    "the save file names a command this build doesn't know");
     }
     ar.note("name", commandName(command));
@@ -704,6 +709,11 @@ void saveCommand(Ar& ar, Command& command) {
         ar.require(hands->mode <= HandsOnMode::Stop, "the save file has a bad hands-on mode");
         ar.value("thing", hands->thing);
         ar.group("cell", [&] { saveCell(ar, hands->cell); });
+    } else if (auto* flick = std::get_if<FlickCommand>(&command)) {
+        ar.value("thing", flick->thing);
+        ar.value("on", flick->on);
+    } else if (auto* circuit = std::get_if<ShortCircuitCommand>(&command)) {
+        ar.value("thing", circuit->thing);
     }
 }
 
@@ -959,6 +969,16 @@ void saveEntity(Ar& ar, SaveEntity& e) {
                 ar.value("suspended", bill.suspended);
                 ar.require(bill.id != 0 && bill.id < list.nextId, "the save file has a bill with a bad id");
             });
+        });
+    }
+    if (ar.version() >= 20) {
+        ar.optional("power", e.power, [&](PowerPart& part) {
+            ar.value("on", part.on);
+            ar.value("powered", part.powered);
+            ar.value("stored", part.stored);
+            ar.require(part.stored >= 0.0 && part.stored < 1e9, "the save file has a battery with impossible charge");
+            ar.value("draw", part.draw);
+            ar.require(part.draw == part.draw && part.draw < 1e9, "the save file has an impossible power draw");
         });
     }
     if (ar.version() >= 10) {
@@ -1369,6 +1389,11 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const Door* door = reg.try_get<Door>(e)) {
             out.door = *door;
         }
+        if (const PowerPart* part = reg.try_get<PowerPart>(e)) {
+            out.power = *part;
+            out.power->net = 0;  // worked out again on loading
+            out.power->watts = 0.0;
+        }
         if (const Mood* mood = reg.try_get<Mood>(e)) {
             out.mood = *mood;
         }
@@ -1626,6 +1651,11 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.footprint && e.footprint->isDoor) {
             reg.emplace<Door>(entity, e.door.value_or(Door{}));  // saves before format 12: closed
+        }
+        if (e.power) {
+            reg.emplace<PowerPart>(entity, *e.power);
+        } else if (e.footprint && e.thing && sim.defs_->get(reg.get<Thing>(entity).def).has("power")) {
+            reg.emplace<PowerPart>(entity);  // saves before format 20: switched on, unpowered until the first step
         }
         if (e.schedule) {
             reg.emplace<Schedule>(entity, *e.schedule);
@@ -1927,6 +1957,8 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
     }
     sim.rooms_->update();
+    sim.power_->markDirty();
+    sim.power_->update();
     sim.events_.clear();
     return true;
 }

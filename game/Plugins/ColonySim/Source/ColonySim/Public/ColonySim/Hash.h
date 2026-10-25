@@ -21,6 +21,11 @@ public:
         std::memcpy(&bits, &value, sizeof bits);
         add(static_cast<uint64_t>(bits));
     }
+    void add(double value) {
+        uint64_t bits = 0;
+        std::memcpy(&bits, &value, sizeof bits);
+        add(bits);
+    }
     void add(const char* text, size_t length) {
         add(static_cast<uint64_t>(length));
         for (size_t i = 0; i < length; ++i) {

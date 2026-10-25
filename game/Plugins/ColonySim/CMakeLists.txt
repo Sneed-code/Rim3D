@@ -30,7 +30,7 @@ target_include_directories(colonysim SYSTEM PUBLIC ThirdParty)
 add_library(colonysim_thirdparty INTERFACE)
 target_include_directories(colonysim_thirdparty SYSTEM INTERFACE ThirdParty)
 
-add_executable(simrun Tools/simrun/main.cpp Tools/simrun/ColonyScenario.cpp)
+add_executable(simrun Tools/simrun/main.cpp Tools/simrun/ColonyScenario.cpp Tools/simrun/PowerScenario.cpp)
 target_link_libraries(simrun PRIVATE colonysim colonysim_thirdparty)
 target_compile_definitions(simrun PRIVATE COLONY_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../data")
 
@@ -55,6 +55,9 @@ add_test(NAME simrun_needs COMMAND simrun --seed 42 --size 128 --days 3 --start 
 # A second seed, because the first run on seed 7 found a bug seed 42 did not.
 add_test(NAME colony_scenario COMMAND simrun --scenario colony --seed 42)
 add_test(NAME colony_scenario_seed7 COMMAND simrun --scenario colony --seed 7)
+
+# The power check (E5, docs/design/power.md): solar, batteries, lamps and a switch for three days.
+add_test(NAME power_check COMMAND simrun --power)
 
 # Replays: play the scripted scenario and record it, then play the recording and check every
 # state hash matches. CI compares the recordings from Linux and Windows (docs/design/bridge.md).

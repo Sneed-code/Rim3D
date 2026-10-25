@@ -16,6 +16,7 @@
 #include "ColonySim/Looks.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Plants.h"
+#include "ColonySim/Power.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Snapshot.h"
@@ -72,6 +73,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
         startScenario();
     }
     rooms_->update();
+    power_->update();
 }
 
 Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, EmptyStart)
@@ -101,8 +103,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     pathfinder_.setDoorCost(doorNumbers_.pathCost);
     rooms_ = std::make_unique<Rooms>(map_, *things_, *defs_);
     mood_->setRooms(rooms_.get());
+    power_ = std::make_unique<PowerGrid>(map_, *things_, *rooms_, *defs_, events_);
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
+    jobs_->setPower(power_.get());
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
     fighters_->setEventLog(&events_);
@@ -379,6 +383,21 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         } else if (!jobs_->handsOn(hands->pawn, hands->thing, hands->cell, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* flick = std::get_if<FlickCommand>(&command)) {
+        if (!power_->flick(flick->thing, flick->on, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* circuit = std::get_if<ShortCircuitCommand>(&command)) {
+        double released = 0.0;
+        if (!power_->shortCircuit(circuit->thing, released, error)) {
+            commandFailed(id, error);
+        } else if (power_->info(things_->registry().get<Thing>(circuit->thing).def).transmitter) {
+            // The conduit or switch burns out.
+            combat_->dropGear(circuit->thing);
+            jobs_->forget(circuit->thing);
+            fighters_->forget(circuit->thing);
+            things_->destroy(circuit->thing);
+        }
     } else if (const auto* lineage = std::get_if<SetLineageCommand>(&command)) {
         PawnLooks* looks = things_->exists(lineage->pawn) ? things_->registry().try_get<PawnLooks>(lineage->pawn) : nullptr;
         if (looks == nullptr) {
@@ -586,6 +605,7 @@ void Sim::step() {
     combat_->step(rng_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     rooms_->update();
+    power_->step(time_);
     time_.seconds += 1;
     if (time_.seconds % kSecondsPerHour == 0) {
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
@@ -662,6 +682,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.markedForDeconstruct = reg.all_of<MarkedForDeconstruct>(entity);
             if (const Door* door = reg.try_get<Door>(entity)) {
                 view.doorOpen = door->openFraction(doorNumbers_);
+            }
+            if (const PowerPart* part = reg.try_get<PowerPart>(entity)) {
+                view.power = power_->stateOf(entity);
+                view.powerNet = part->net;
+                view.powerWatts = static_cast<float>(part->watts);
+                const double capacity = power_->capacityOf(entity);
+                view.batteryFill = capacity > 0.0 ? static_cast<float>(part->stored / capacity) : -1.0f;
             }
         }
         if (const ConstructionSite* site = reg.try_get<ConstructionSite>(entity)) {
@@ -772,6 +799,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
         view.stoves = room.stoves;
         out.rooms.push_back(view);
     }
+    out.powerNets = power_->nets();
     out.roofCells = rooms_->thinRoofCells();
     out.roofChanges = rooms_->roofChanges();
     out.projectiles.clear();
@@ -833,7 +861,8 @@ uint64_t Sim::stateHash() const {
                             reg.all_of<MarkedForDeconstruct>(e),
                             reg.all_of<Mood>(e),         reg.all_of<Door>(e),
                             reg.all_of<PawnLooks>(e),
-                            reg.all_of<BillList>(e)};
+                            reg.all_of<BillList>(e),
+                            reg.all_of<PowerPart>(e)};
         uint64_t mask = 0;
         for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
             mask |= has[bit] ? (uint64_t{1} << bit) : 0;
@@ -1017,6 +1046,12 @@ uint64_t Sim::stateHash() const {
             h.add(static_cast<uint64_t>(door->progress));
             h.add(static_cast<uint64_t>(door->hold));
             h.add(door->open);
+        }
+        if (const PowerPart* power = reg.try_get<PowerPart>(e)) {
+            h.add(power->on);
+            h.add(power->powered);
+            h.add(power->stored);
+            h.add(power->draw);
         }
         if (const Bed* bed = reg.try_get<Bed>(e)) {
             h.add(static_cast<uint64_t>(bed->owners.size()));

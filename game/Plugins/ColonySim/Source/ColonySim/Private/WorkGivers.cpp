@@ -296,7 +296,7 @@ public:
         const Position& at = reg.get<Position>(pawn);
         reg.view<const BillList, const Footprint, const Position>().each(
             [&](Entity building, const BillList& list, const Footprint& footprint, const Position& pos) {
-                if (pos.level != at.level || reg.all_of<MarkedForDeconstruct>(building)) {
+                if (pos.level != at.level || reg.all_of<MarkedForDeconstruct>(building) || !jobs.buildingRuns(building)) {
                     return;
                 }
                 // Cheap check only: some bill that isn't suspended (the stock of an "until you

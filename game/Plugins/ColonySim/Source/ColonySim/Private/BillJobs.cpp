@@ -5,11 +5,16 @@
 #include "ColonySim/Bills.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Power.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
 
 namespace colony {
+
+bool JobSystem::buildingRuns(Entity building) const {
+    return power_ == nullptr || power_->running(building);
+}
 
 bool JobSystem::failCheckDoBill(Entity pawn, Job& job, std::string& why) {
     const entt::registry& reg = things_.registry();
@@ -19,6 +24,10 @@ bool JobSystem::failCheckDoBill(Entity pawn, Job& job, std::string& why) {
     }
     if (!things_.spawned(job.site) || !reg.all_of<BillList>(job.site)) {
         why = "the work building is gone";
+        return false;
+    }
+    if (!buildingRuns(job.site)) {
+        why = "the work building has no power";
         return false;
     }
     const Bill* bill = bills_->find(job.site, job.bill);

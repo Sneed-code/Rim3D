@@ -37,6 +37,8 @@ enum class EventType : uint8_t {
     ShotFired,       // a pawn fired a projectile (docs/design/combat.md)
     ProjectileHit,   // a projectile stopped: it hit something, or flew off the map or too long
     RecipeDone,      // a pawn finished one run of a bill (docs/design/bills.md)
+    PowerChanged,    // a building gained or lost power (docs/design/power.md)
+    ShortCircuit,    // a short circuit emptied a net's batteries (docs/design/power.md)
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -96,6 +98,10 @@ struct Event {
     // RecipeDone: `thing` the pawn, `def` the Recipes def, `target` the work building, `cell` where the
     // pawn stood, `amount` how many products were made, `message` "bill finished" if that was the
     // bill's last run (a "Do X times" bill that reached 0, which is removed), else empty.
+    // PowerChanged: `thing` the building (a generator, consumer or battery; not conduits), `def` its
+    // def, `cell` its origin, `message` "on" (in a net that works and switched on) or "off".
+    // ShortCircuit: `thing` the building it happened at, `cell` its origin, `amount` the energy
+    // released from the net's batteries, Wd.
     float amount = 0.0f;
     // ShotFired: `thing` the shooter, `def` its gun's Things def, `target` the projectile, (x, y, z)
     // the muzzle. ProjectileHit: `thing` the projectile (forget its id), `def` its Projectiles def,

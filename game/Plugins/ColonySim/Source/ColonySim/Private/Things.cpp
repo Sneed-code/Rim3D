@@ -7,6 +7,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Power.h"
 
 #include <algorithm>
 #include <utility>
@@ -106,6 +107,9 @@ Entity Things::make(DefId defId, int stackCount) {
             }
             if (def.flag("building.bed")) {
                 registry_.emplace<Bed>(thing);  // who sleeps in it (Needs.h)
+            }
+            if (def.has("power")) {
+                registry_.emplace<PowerPart>(thing);  // switch, output, charge (Power.h)
             }
             break;
         }

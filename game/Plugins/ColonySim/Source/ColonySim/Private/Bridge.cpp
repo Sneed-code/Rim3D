@@ -74,9 +74,13 @@ const char* commandName(const Command& command) {
                 return "RemoveBill";
             } else if constexpr (std::is_same_v<Type, SetBillCommand>) {
                 return "SetBill";
-            } else {
-                static_assert(std::is_same_v<Type, HandsOnCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, HandsOnCommand>) {
                 return "HandsOn";
+            } else if constexpr (std::is_same_v<Type, FlickCommand>) {
+                return "Flick";
+            } else {
+                static_assert(std::is_same_v<Type, ShortCircuitCommand>, "name every command type");
+                return "ShortCircuit";
             }
         },
         command);
@@ -107,6 +111,8 @@ const char* eventTypeName(EventType type) {
         case EventType::ShotFired: return "ShotFired";
         case EventType::ProjectileHit: return "ProjectileHit";
         case EventType::RecipeDone: return "RecipeDone";
+        case EventType::PowerChanged: return "PowerChanged";
+        case EventType::ShortCircuit: return "ShortCircuit";
     }
     return "?";
 }
