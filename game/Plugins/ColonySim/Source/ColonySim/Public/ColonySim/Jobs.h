@@ -56,7 +56,8 @@ struct Job {
                                // the food lay); LayDown: the bed's cell for this pawn, or where it lies;
                                // the construction jobs: where the pawn stands to work; Mine, CutPlant,
                                // HarvestPlant: the rock or plant's cell
-    int count = 0;             // HaulToCell, Ingest, DeliverResources: how many to carry
+    int count = 0;             // HaulToCell, Ingest, DeliverResources: how many to carry; WearApparel: 1 takes off
+                               // the worn piece in `thing`, 0 puts on the clothes lying there
     Entity chair = kNoEntity;  // Ingest: the chair at a table it eats in, or none (it eats where the food lay)
     Entity site = kNoEntity;   // DeliverResources: the blueprint or frame it brings materials to; DoBill: the
                                // building that holds the bill; TameAnimal, TrainAnimal, SlaughterAnimal, FeedAnimal:
@@ -65,6 +66,7 @@ struct Job {
                                // HarvestPlant: work done on the plant. For the gather jobs both are game seconds
                                // at 100% work speed (the worker's speed adds to it every second); DoBill: work done
     uint32_t bill = 0;         // DoBill: the bill's id on the building in `site`; TrainAnimal: the Trainable being practised
+                               // (WearApparel and StripPawn: `progress` counts the steps worked)
     std::vector<BillPick> picks;  // DoBill: the ingredient stacks still to fetch after `thing`
     std::vector<BillUsed> used;   // DoBill: ingredients delivered so far
     DefId workType;            // the work type whose scanner gave it; none for orders and idling
@@ -157,6 +159,7 @@ struct HandsOnPlan {
     bool ok() const { return kind != HandsOnKind::None && inReach && error.empty(); }
 };
 
+class ApparelSystem;
 class BillSystem;
 class Construction;
 class DefDatabase;
@@ -315,6 +318,10 @@ public:
     bool reservedByOther(const JobTarget& target, Entity pawn) const;
     // A blueprint or frame that another pawn is bringing materials to: one deliverer at a time.
     bool deliveryReservedByOther(Entity site, Entity pawn) const;
+    // Clothes (docs/design/apparel.md): outfits, putting on and taking off, stripping. Null: pawns
+    // don't change clothes and there is nothing to strip.
+    void setApparel(ApparelSystem* apparel) { apparel_ = apparel; }
+    ApparelSystem* apparel() const { return apparel_; }
     // Work slows in the dark (docs/design/light.md). Null: it doesn't.
     void setLights(const Lights* lights) { lights_ = lights; }
     // The factor on a pawn's work speed from the light where it stands (1 in daylight).
@@ -352,9 +359,13 @@ public:
     // `better`, then the nearest, that takes the def, has room, isn't held by another pawn and
     // can be reached from `from`. False if there is none.
     bool findStorageCell(DefId def, CellPos from, StoragePriority better, Entity pawn, CellPos& out) const;
-    // How many of an item def a pawn can carry at once: RimWorld's `carryingCapacity` (75 when the
-    // pawn def has none), never more than a stack.
+    // How many of an item def a pawn can carry at once: its `carryingCapacity` (RimWorld's 75 kg when
+    // the pawn def has none) over the def's `stats.mass`, at least 1. It may be more than one stack.
     int carryLimit(Entity pawn, DefId def) const;
+    double carryCapacity(Entity pawn) const;
+    double massOf(DefId def) const;
+    // 1 with empty hands, down to 1 - `carrySlowdown` at a full load: what the pawn's walking speed is multiplied by.
+    float loadSpeedFactor(Entity pawn) const;
     int stackLimit(DefId def) const;
 
 private:
@@ -389,6 +400,7 @@ private:
     using ThinkNode = bool (JobSystem::*)(Entity pawn, Job& out);
     bool thinkNeeds(Entity pawn, Job& out);
     bool thinkSchedule(Entity pawn, Job& out);
+    bool thinkApparel(Entity pawn, Job& out);
     bool thinkWork(Entity pawn, Job& out);
     bool thinkIdle(Entity pawn, Job& out);
 
@@ -463,6 +475,12 @@ private:
     StepResult billWork(Entity pawn, Job& job, std::string& why);
     StepResult billFinish(Entity pawn, Job& job, std::string& why);
     bool failCheckDoBill(Entity pawn, Job& job, std::string& why);
+    // Clothes (ApparelJobs.cpp): walk to the clothes, put them on or take a worn piece off; and strip a
+    // downed or dead pawn.
+    StepResult apparelGoto(Entity pawn, Job& job, std::string& why);
+    StepResult apparelWork(Entity pawn, Job& job, std::string& why);
+    StepResult stripWork(Entity pawn, Job& job, std::string& why);
+    bool failCheckApparel(Entity pawn, Job& job, std::string& why);
     // Puts the ingredients delivered so far back on the ground near the pawn.
     void returnIngredients(Entity pawn, const Job& job);
     // Makes `count` of an item def and puts it down on the nearest free cell near the pawn.
@@ -477,6 +495,7 @@ private:
     bool handsOnInReach(Entity pawn, const Job& job) const;
     bool handsOnPickUp(Entity pawn, Entity item, std::string& error);
     void reserve(Entity pawn, const Job& job);
+    void gatherBeside(Entity pawn, Job& job, Entity carried);
     void release(Entity pawn, const Job& job);
     void jobEvent(Entity pawn, const Job& job, bool started, const std::string& message);
     void pawnDid(Entity pawn, PawnAction action, Entity target);
@@ -495,6 +514,7 @@ private:
     const NeedRules& rules_;
     const GameTime& time_;
     const Lights* lights_ = nullptr;
+    ApparelSystem* apparel_ = nullptr;
     SimStats& stats_;
     std::vector<Event>& events_;
 
@@ -509,6 +529,8 @@ private:
     std::vector<WorkType> workTypes_;
     std::vector<uint8_t> standable_;  // per def id: a building pawns can stand on (storage allowed)
     std::vector<int> stackLimits_;    // per def id
+    std::vector<double> masses_;      // per def id, `stats.mass` (1 if it has none)
+    double carrySlowdown_ = 0.25;
     // Per def id, from the Things defs (NeedJobs.cpp): food tiers (-1 not food), nutrition and how
     // long a sitting takes; the kinds of building.
     std::vector<int8_t> foodTier_;

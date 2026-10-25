@@ -70,11 +70,10 @@ written out again, so it isn't saved.
 ## Pawns
 
 A pawn feels `ambientOf(pawn)`: the temperature at the cell it stands in. Its **comfortable range**
-is the def's `stats.comfyTemperatureMin/Max` (Human 16 to 26). **Until C15 (apparel) a humanlike
-pawn's range is 12 degrees wider on the cold side and 4 on the hot side** (`clothesColdC`,
-`clothesHeatC`, ours), as a stand-in for clothes; C15 replaces it with real insulation through
-`TemperatureSystem::setComfortModifier(fn(Entity, float& min, float& max))` and deletes the two
-numbers. The **safe range** is the comfortable one widened by 10 degrees (`safeMarginC`,
+is the def's `stats.comfyTemperatureMin/Max` (Human 16 to 26). **What a pawn wears widens it** (C15): each worn piece's cold insulation lowers the minimum and
+its heat insulation raises the maximum, through `TemperatureSystem::setComfortModifier(fn(Entity,
+float& min, float& max))`, set by `Sim` from `ApparelSystem::insulation` (`apparel.md`). A pawn with
+no clothes has the plain def range. The **safe range** is the comfortable one widened by 10 degrees (`safeMarginC`,
 RimWorld's, recalled).
 
 - **Cold and Hot thoughts** (mood): a situation while the pawn is outside the comfortable range.
@@ -116,7 +115,6 @@ or answers, so a save made between steps loads back the same.
 
 - **A pawn that seeks a safe place**: RimWorld's colonists go indoors or toward warmth when they
   are outside their safe range; ours don't (BACKLOG). Colonists outdoors in hard frost just get sick.
-- **Apparel**: C15 sets the comfort modifier and deletes the clothes stand-in.
 - **Heat from fire, sunlight on rooms, cold from rain and snow**: E4 and E1. A building's own
   insulation (stone walls hold better than wood) isn't separate from the wall conductance.
 - **Food rot, crops, plants dying of frost and heat stroke in animals' habits** read the room

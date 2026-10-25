@@ -15,6 +15,7 @@
 #include "ColonySim/Zones.h"
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace colony {
@@ -153,6 +154,32 @@ struct ThingView {
     int meleeStepsLeft = 0;
     Entity meleeTarget = kNoEntity;
     bool blocking = false;
+    // Clothes (docs/design/apparel.md). Pawns: the outfit they follow (0 for other things), whether a strip
+    // order is on them, and what they wear: `apparelCount` pieces from Snapshot::apparel[firstApparel], in the
+    // order put on. Apparel items on the map: their `stuff` (as for buildings), `quality` (a place in
+    // QualityRules.levels, -1 for other things) and whether they are tainted.
+    uint32_t outfit = 0;
+    bool markedForStrip = false;
+    uint32_t firstApparel = 0;
+    uint32_t apparelCount = 0;
+    int quality = -1;
+    bool tainted = false;
+};
+
+// One piece of worn apparel (Unreal draws each layer on the pawn, torn by `hitPointShare`).
+struct ApparelView {
+    Entity item = kNoEntity;
+    DefId def;
+    DefId stuff;      // invalid for none
+    int quality = 2;
+    float hitPointShare = 1.0f;  // 0 to 1
+    bool tainted = false;
+};
+
+// An outfit policy by the id the commands use.
+struct OutfitView {
+    uint32_t id = 0;
+    std::string name;
 };
 
 // A bullet in flight (docs/design/combat.md). Unreal draws a tracer along its velocity; it
@@ -286,6 +313,8 @@ struct Snapshot {
     uint64_t floorChanges = ~0ULL;
     std::vector<FilthView> filth;
     uint64_t filthChanges = ~0ULL;
+    std::vector<ApparelView> apparel;      // worn apparel, see ThingView
+    std::vector<OutfitView> outfits;       // the outfit policies, by id
 
     // The thing with this id, or null if it is not on the map. Binary search.
     COLONY_API const ThingView* find(Entity id) const;

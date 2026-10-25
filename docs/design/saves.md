@@ -117,6 +117,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `husbandry` | 1 | animal zones (id and cells), counters, and the `care` part of every animal that has one: marks, zone, home, timers, training steps and wants, the path it waits on ([husbandry.md](husbandry.md)) |
 | `temperature` | 1 | each enclosed room's temperature, by its anchor cell (E2) |
 | `melee` | 1 | `melee`: each pawn's swing, its defense against one, its block (F8, [melee.md](melee.md)) |
+| `apparel` | 1 | `apparel`: the stuff and quality of an item, taint, a strip mark, a pawn's outfit and next look; the outfit policies ([apparel.md](apparel.md)) |
 | `feel` | 1 | `kick` (the player's gun kick and its spray) and `roll` (a dodge roll's phase, steps, direction, wait) ([shooter-feel.md](shooter-feel.md)) |
 
 **Commands are saved by name (S7).** The `commands` section starts with the names of the command
@@ -277,6 +278,7 @@ Every section is version 1 at format 20. A task that changes a section adds a li
 
 - `roomstats` 1 (C17): floors, filth, carried filth, the filth rng, beauty needs ([room-stats.md](room-stats.md)). Commands `PlaceFloor` and `AddFilth` by name.
 - `health` 2 (E2): each pawn's environment hediffs (hypothermia, heatstroke...), a list of def name and severity before `dead`. Version 1 files load with none.
+- `apparel` 1 (C15): item stuff and quality, taint, strip marks, outfits ([apparel.md](apparel.md)). Commands `SetOutfit`, `EditOutfit`, `AddOutfit`, `RemoveOutfit` and `Strip` by name.
 
 ## Why the state hash changed in S6
 

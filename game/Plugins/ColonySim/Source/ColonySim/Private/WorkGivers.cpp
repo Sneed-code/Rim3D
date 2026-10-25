@@ -1,6 +1,7 @@
 // The work scanners, one per task name in the WorkTypes defs (docs/design/jobs.md).
 #include "ColonySim/Jobs.h"
 
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Designations.h"
@@ -70,6 +71,43 @@ public:
 
 private:
     std::vector<std::tuple<uint32_t, uint32_t, int>> noRoom_;  // def, group, stored priority
+};
+
+// Stripping (RimWorld's WorkGiver_Strip, under Hauling): a downed or dead pawn the player marked has its
+// clothes and weapon taken off where it lies; hauling then carries them to a stockpile.
+class StripGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "Strip"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        ApparelSystem* apparel = jobs.apparel();
+        if (apparel == nullptr) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        reg.view<const StripMark, const Position>().each([&](Entity target, const Position& pos) {
+            if (target == pawn || pos.level != at.level) {
+                return;
+            }
+            const float dx = pos.x - at.x;
+            const float dy = pos.y - at.y;
+            out.push_back(WorkCandidate{JobTarget{target, CellPos{}}, dx * dx + dy * dy, 0, 0, false, CellPos{}});
+        });
+    }
+
+    bool makeJob(JobSystem& jobs, Entity, const WorkCandidate& candidate, Job& out) override {
+        const ApparelSystem* apparel = jobs.apparel();
+        const Entity target = candidate.target.thing;
+        if (apparel == nullptr || !apparel->stripMarked(target) || !apparel->hasGear(target)) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::StripPawn;
+        out.thing = target;
+        out.cell = cellOf(jobs.things().registry().get<Position>(target));
+        return true;
+    }
 };
 
 float workGiverDistSq(const Position& a, const Position& b) {
@@ -511,6 +549,7 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<DoBillsCookStoveGiver>());
     givers.push_back(std::make_unique<ResearchGiver>());
     givers.push_back(std::make_unique<CleanFilthGiver>());
+    givers.push_back(std::make_unique<StripGiver>());
     addHusbandryWorkGivers(givers);
     return givers;
 }

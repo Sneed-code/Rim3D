@@ -50,6 +50,9 @@ enum class JobStepKind : uint8_t {
     Play,  // recreation: stay for the activity's time (RecreationJobs.cpp)
     ResearchWork,  // research: add points to the current project (ResearchJobs.cpp)
     CleanWork,
+    ApparelGoto,  // walk to the clothes (none to take off a worn piece)
+    ApparelWork,  // put on or take off
+    StripWork,    // take the clothes and weapon off a downed or dead pawn
     ApproachAnimal,  // walk up to the job's animal (HusbandryJobs.cpp)
     HandleWork       // tame, train, kill or feed it, standing beside it
 };
@@ -76,6 +79,8 @@ constexpr JobStepKind kJobsDoBillSteps[] = {JobStepKind::GotoThing, JobStepKind:
 static_assert(kDoBillPickUpStep == 1 && kDoBillDepositStep == 3, "the DoBill steps moved");
 constexpr JobStepKind kJobsRecreateSteps[] = {JobStepKind::WalkToSpot, JobStepKind::Play};
 constexpr JobStepKind kJobsResearchSteps[] = {JobStepKind::GotoCell, JobStepKind::ResearchWork};
+constexpr JobStepKind kJobsWearSteps[] = {JobStepKind::ApparelGoto, JobStepKind::ApparelWork};
+constexpr JobStepKind kJobsStripSteps[] = {JobStepKind::GotoThing, JobStepKind::StripWork};
 constexpr JobStepKind kJobsHandleFoodSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::ApproachAnimal,
                                                 JobStepKind::HandleWork};
 constexpr JobStepKind kJobsHandleSteps[] = {JobStepKind::ApproachAnimal, JobStepKind::HandleWork};
@@ -92,6 +97,8 @@ constexpr double kJobsAvoidSeconds = 600.0;
 constexpr int kJobsMaxRepaths = 5;
 // RimWorld's base carrying capacity, for pawn defs without `stats.carryingCapacity`.
 constexpr double kJobsCarryingCapacity = 75.0;
+// Walking speed lost at a full load (ours; RimWorld has none for carried items).
+constexpr double kJobsCarrySlowdown = 0.25;
 
 struct JobsSteps {
     const JobStepKind* steps;
@@ -115,6 +122,8 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::Recreate: return {kJobsRecreateSteps, static_cast<int>(std::size(kJobsRecreateSteps))};
         case JobType::Research: return {kJobsResearchSteps, static_cast<int>(std::size(kJobsResearchSteps))};
         case JobType::CleanFilth: return {kJobsCleanSteps, static_cast<int>(std::size(kJobsCleanSteps))};
+        case JobType::WearApparel: return {kJobsWearSteps, static_cast<int>(std::size(kJobsWearSteps))};
+        case JobType::StripPawn: return {kJobsStripSteps, static_cast<int>(std::size(kJobsStripSteps))};
         case JobType::TameAnimal:
         case JobType::TrainAnimal:
         case JobType::FeedAnimal: return {kJobsHandleFoodSteps, static_cast<int>(std::size(kJobsHandleFoodSteps))};
@@ -137,6 +146,8 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::BillWork:
         case JobStepKind::ResearchWork:
         case JobStepKind::CleanWork:
+        case JobStepKind::ApparelWork:
+        case JobStepKind::StripWork:
         case JobStepKind::HandleWork:
         case JobStepKind::Eat:
         case JobStepKind::Lie:
@@ -191,6 +202,8 @@ const char* jobTypeName(JobType type) {
         case JobType::Recreate: return "Recreate";
         case JobType::Research: return "Research";
         case JobType::CleanFilth: return "CleanFilth";
+        case JobType::WearApparel: return "WearApparel";
+        case JobType::StripPawn: return "StripPawn";
         case JobType::TameAnimal: return "TameAnimal";
         case JobType::TrainAnimal: return "TrainAnimal";
         case JobType::SlaughterAnimal: return "SlaughterAnimal";
@@ -249,6 +262,7 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
 
     standable_.assign(defs_.size(), 0);
     stackLimits_.assign(defs_.size(), 1);
+    masses_.assign(defs_.size(), 1.0);
     foodTier_.assign(defs_.size(), -1);
     nutrition_.assign(defs_.size(), 0.0f);
     maxIngest_.assign(defs_.size(), 1);
@@ -263,6 +277,7 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
         }
         standable_[i] = def.text("category") == "Building" && def.text("passability") == "Standable" ? 1 : 0;
         stackLimits_[i] = std::max(1, static_cast<int>(def.integer("stackLimit", 1)));
+        masses_[i] = def.number("stats.mass", 1.0);
         isBed_[i] = def.flag("building.bed") ? 1 : 0;
         isTable_[i] = def.flag("building.isTable") ? 1 : 0;
         isChair_[i] = def.flag("building.isSittable") ? 1 : 0;
@@ -291,6 +306,7 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
     const Def* rules = defs_.find("Rules", "JobRules");
     idleSeconds_ = static_cast<int64_t>(rules ? rules->number("idleSeconds", kJobsIdleSeconds) : kJobsIdleSeconds);
     avoidSeconds_ = static_cast<int64_t>(rules ? rules->number("avoidFailedTargetSeconds", kJobsAvoidSeconds) : kJobsAvoidSeconds);
+    carrySlowdown_ = std::clamp(rules ? rules->number("carrySlowdown", kJobsCarrySlowdown) : kJobsCarrySlowdown, 0.0, 0.9);
     maxRepaths_ = static_cast<int>(rules ? rules->integer("maxRepaths", kJobsMaxRepaths) : kJobsMaxRepaths);
     defaultPriority_ = static_cast<uint8_t>(std::clamp(
         static_cast<int>(rules ? rules->integer("defaultWorkPriority", kDefaultPriority) : kDefaultPriority), 1, kMaxPriority));
@@ -425,6 +441,15 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
         case JobType::Research:
             out[0] = keyOf(JobTarget{job.site, CellPos{}});
             return 1;
+        case JobType::WearApparel:
+            if (job.count != 0) {
+                return 0;  // taking a worn piece off holds nothing
+            }
+            out[0] = keyOf(JobTarget{job.thing, CellPos{}});
+            return 1;
+        case JobType::StripPawn:
+            out[0] = keyOf(JobTarget{job.thing, CellPos{}});
+            return 1;
         case JobType::TameAnimal:
         case JobType::TrainAnimal:
         case JobType::SlaughterAnimal:
@@ -488,11 +513,70 @@ int JobSystem::stackLimit(DefId def) const {
     return def.valid() && def.value < stackLimits_.size() ? stackLimits_[def.value] : 1;
 }
 
-int JobSystem::carryLimit(Entity pawn, DefId def) const {
+double JobSystem::carryCapacity(Entity pawn) const {
     const Thing* thing = things_.registry().try_get<Thing>(pawn);
-    const double capacity =
-        thing ? defs_.get(thing->def).number("stats.carryingCapacity", kJobsCarryingCapacity) : kJobsCarryingCapacity;
-    return std::clamp(static_cast<int>(std::lround(capacity)), 1, stackLimit(def));
+    return thing ? defs_.get(thing->def).number("stats.carryingCapacity", kJobsCarryingCapacity) : kJobsCarryingCapacity;
+}
+
+double JobSystem::massOf(DefId def) const {
+    return def.valid() && def.value < masses_.size() ? masses_[def.value] : 1.0;
+}
+
+// The mass of the pawn's hands: its capacity decides how many fit, whole stacks or not.
+int JobSystem::carryLimit(Entity pawn, DefId def) const {
+    const double mass = std::max(massOf(def), 1e-6);
+    return std::max(1, static_cast<int>(std::floor(carryCapacity(pawn) / mass + 1e-9)));
+}
+
+float JobSystem::loadSpeedFactor(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Carrying* carrying = reg.try_get<Carrying>(pawn);
+    if (carrying == nullptr || !reg.valid(carrying->thing) || !reg.all_of<StackCount, Thing>(carrying->thing)) {
+        return 1.0f;
+    }
+    const double mass = reg.get<StackCount>(carrying->thing).count * massOf(reg.get<Thing>(carrying->thing).def);
+    const double fraction = std::clamp(mass / std::max(carryCapacity(pawn), 1e-6), 0.0, 1.0);
+    return static_cast<float>(1.0 - carrySlowdown_ * fraction);
+}
+
+// Stacks of the same def lying right beside the pawn that would be hauled to the same zone anyway
+// join the load, up to what its hands can carry (several stacks in one trip).
+void JobSystem::gatherBeside(Entity pawn, Job& job, Entity carried) {
+    entt::registry& reg = things_.registry();
+    const StockpileZone* zone = zones_.stockpileAt(job.cell);
+    if (zone == nullptr) {
+        return;
+    }
+    const DefId def = reg.get<Thing>(carried).def;
+    const int limit = carryLimit(pawn, def);
+    const CellPos here = cellOf(reg.get<Position>(pawn));
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            const CellPos cell{here.x + dx, here.y + dy, here.level};
+            if (!map_.inBounds(cell)) {
+                continue;
+            }
+            const std::vector<Entity> items = things_.itemsAt(cell);
+            for (const Entity other : items) {
+                const int have = reg.get<StackCount>(carried).count;
+                if (have >= limit) {
+                    return;
+                }
+                if (other == carried || reg.get<Thing>(other).def != def || reservedByOther(JobTarget{other, {}}, pawn) ||
+                    static_cast<int>(storedPriority(other)) >= static_cast<int>(zone->priority)) {
+                    continue;
+                }
+                const int take = std::min(limit - have, reg.get<StackCount>(other).count);
+                if (take >= reg.get<StackCount>(other).count) {
+                    things_.destroy(other);
+                } else {
+                    reg.get<StackCount>(other).count -= take;
+                }
+                reg.get<StackCount>(carried).count += take;
+                job.count += take;
+            }
+        }
+    }
 }
 
 StoragePriority JobSystem::storedPriority(Entity item) const {
@@ -565,8 +649,8 @@ void JobSystem::step() {
     // The think list, in order. Later tasks put theirs in place: emergencies first (downed, on
     // fire: F1 and later), then the defense plan (F6), urgent needs and the schedule (C6), work
     // and finally idling. Player orders don't wait for a think: the command starts them.
-    static constexpr ThinkNode kThinkList[] = {&JobSystem::thinkNeeds, &JobSystem::thinkSchedule, &JobSystem::thinkWork,
-                                               &JobSystem::thinkJoy, &JobSystem::thinkIdle};
+    static constexpr ThinkNode kThinkList[] = {&JobSystem::thinkNeeds, &JobSystem::thinkSchedule, &JobSystem::thinkApparel,
+                                               &JobSystem::thinkWork, &JobSystem::thinkJoy, &JobSystem::thinkIdle};
 
     for (const Entity pawn : order_) {
         reg.get<Mover>(pawn).hold = false;
@@ -755,6 +839,9 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::CleanFilth) {
         return failCheckClean(pawn, job, why);
     }
+    if (job.type == JobType::WearApparel || job.type == JobType::StripPawn) {
+        return failCheckApparel(pawn, job, why);
+    }
     if (jobIsHandling(job.type)) {
         return failCheckHandle(pawn, job, why);
     }
@@ -880,6 +967,12 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return researchWork(pawn, job, why);
         case JobStepKind::CleanWork:
             return cleanWork(pawn, job, why);
+        case JobStepKind::ApparelGoto:
+            return apparelGoto(pawn, job, why);
+        case JobStepKind::ApparelWork:
+            return apparelWork(pawn, job, why);
+        case JobStepKind::StripWork:
+            return stripWork(pawn, job, why);
         case JobStepKind::ApproachAnimal:
             return approachAnimal(pawn, job, why);
         case JobStepKind::HandleWork:
@@ -958,6 +1051,9 @@ JobSystem::StepResult JobSystem::pickUp(Entity pawn, Job& job, std::string& why)
     job.count = count;
     reserve(pawn, job);
     reg.emplace_or_replace<Carrying>(pawn, Carrying{carried});
+    if (job.type == JobType::HaulToCell) {
+        gatherBeside(pawn, job, carried);
+    }
     pawnDid(pawn, PawnAction::PickUp, carried);
     return StepResult::Next;
 }
@@ -977,6 +1073,13 @@ JobSystem::StepResult JobSystem::place(Entity pawn, Job& job, std::string& why) 
         reg.remove<Carrying>(pawn);
         things_.spawnAt(carried, job.cell);
         pawnDid(pawn, PawnAction::PutDown, carried);
+    } else if (there.empty() && room > 0) {
+        // More than one cell takes (a load of several stacks): fill this cell, the rest goes on.
+        const Entity part = things_.splitOff(carried, room);
+        if (part != kNoEntity) {
+            things_.spawnAt(part, job.cell);
+            pawnDid(pawn, PawnAction::PutDown, part);
+        }
     } else if (!there.empty() && room > 0) {
         // Onto the stack already there; what doesn't fit stays in the pawn's hands.
         const int put = std::min(room, count);
