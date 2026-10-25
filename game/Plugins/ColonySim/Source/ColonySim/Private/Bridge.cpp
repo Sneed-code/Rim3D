@@ -99,9 +99,11 @@ const char* commandName(const Command& command) {
                 return "CreateAnimalZone";
             } else if constexpr (std::is_same_v<Type, RemoveAnimalZoneCellsCommand>) {
                 return "RemoveAnimalZoneCells";
-            } else {
-                static_assert(std::is_same_v<Type, AssignAnimalZoneCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, AssignAnimalZoneCommand>) {
                 return "AssignAnimalZone";
+            } else {
+                static_assert(std::is_same_v<Type, MeleeCommand>, "name every command type");
+                return "Melee";
             }
         },
         command);
@@ -164,6 +166,8 @@ const char* eventTypeName(EventType type) {
         case EventType::AnimalAttemptFailed: return "AnimalAttemptFailed";
         case EventType::AnimalSlaughtered: return "AnimalSlaughtered";
         case EventType::AnimalStarved: return "AnimalStarved";
+        case EventType::MeleeSwing: return "MeleeSwing";
+        case EventType::MeleeHit: return "MeleeHit";
     }
     return "?";
 }
@@ -187,6 +191,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Clean: return "Clean";
         case PawnAction::Handle: return "Handle";
         case PawnAction::Slaughter: return "Slaughter";
+        case PawnAction::Block: return "Block";
     }
     return "?";
 }

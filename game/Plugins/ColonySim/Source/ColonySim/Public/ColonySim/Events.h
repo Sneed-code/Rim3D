@@ -46,6 +46,8 @@ enum class EventType : uint8_t {
     AnimalAttemptFailed,  // a taming or training attempt did not work
     AnimalSlaughtered,    // a colonist killed a tame animal
     AnimalStarved,        // a tame animal died of hunger
+    MeleeSwing,      // a pawn began a melee swing: the hit comes `amount` steps later (docs/design/melee.md)
+    MeleeHit,        // the hit moment of a swing: `message` says "hit", "deflected", "blocked", "dodged" or "missed"
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -79,6 +81,7 @@ enum class PawnAction : uint8_t {
     Clean,        // started cleaning the filth in `cell`; a layer comes off every few seconds until its JobEnded
     Handle,       // started taming, training or feeding `target`, an animal; goes on until its JobEnded
     Slaughter,    // started to kill `target`, a tame animal
+    Block,        // raised its melee weapon against the swing of `target` (none: the player's own block)
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
@@ -128,6 +131,12 @@ struct Event {
     float y = 0.0f;
     float z = 0.0f;
     ProjectileHitKind hit = ProjectileHitKind::None;
+    // MeleeSwing: `thing` the attacker, `target` whom it swings at (none: straight ahead), `def` its
+    // melee weapon's Things def (or its own def for fists, teeth...), `message` the tool ("blade",
+    // "left fist"), `amount` steps to the hit moment, `cell` where it stands. MeleeHit: the same
+    // `thing` and `def`; `target` the pawn struck (or the one aimed at if none was), `hit` Pawn, Armor
+    // (deflected), Building or None, `part` and `amount` as for ProjectileHit, (x, y, z) where the
+    // strike ended. Health events follow a hit.
 };
 
 COLONY_API const char* eventTypeName(EventType type);

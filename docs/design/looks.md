@@ -17,14 +17,14 @@ when it is made, from a seed and its own random stream, so looks never change an
 
 | Field | What | From |
 | --- | --- | --- |
-| `lineage` | Lineages defName (RimWorld's xenotype) | the scenario's `lineage` (Crashlanded: Baseline); `SetLineage` |
+| `lineage` | Lineages defName (RimWorld's xenotype) | the scenario's `lineage` or a roll from its `lineageWeights` (Crashlanded: Baseline); `SetLineage` |
 | `female` | gender | the colonist's; a coin flip for other pawns |
 | `body` | RimWorld's body types Thin, Average (Male or Female), Fat, Hulk | `bodyTypeWeights` |
 | `weight` | -1 thin to 1 heavy, the body shape blend | the body type's `weightRange` |
 | `height` | times 1.80 m | `heightMale`, `heightFemale`, `hulkHeightBonus` |
 | `melanin` | 0 light to 1 dark | `melaninRange` |
-| `skin` | the colour drawn | `skinColors` (by melanin), then the lineage's `visual.skinColor` over it by `skinColorAmount`, darker for more melanin |
-| `hair` | the colour drawn | `hairColors` by weight, or the lineage's `visual.hairColor` |
+| `skin` | the colour drawn | `skinColors` (by melanin), then the lineage's skin gene's `visual.skinColor` over it by `skinColorAmount`, darker for more melanin |
+| `hair` | the colour drawn | `hairColors` by weight, or the lineage's hair gene's `visual.hairColor` |
 
 Colonists use the colonist's seed (so the same colonist always looks the same), the hauling test
 pawns the map seed and their number, pawns spawned by command the seed, step and entity. All the
@@ -36,7 +36,7 @@ albedos for the MetaHuman textures, not RimWorld's sprite tints.
 stays. Looks are in the snapshot (`ThingView::looks` indexes `Snapshot::looks`), in `stateHash`
 and in saves (format 16). Pawns from older saves have none and keep Kellan's look.
 
-Lineage defs carry what Unreal draws under `visual`. Emberkin: red skin, dark hair, horns
+What Unreal draws is under `visual` on the lineage's **genes** (X1, [genes.md](genes.md)), not the lineage: the last gene with `skinColor`, `hairColor` or `horns` counts. Emberkin: red skin, dark hair, horns
 (`length`, base `radius`, `spread` from the middle of the forehead, all metres; `color`).
 
 ## The looks assets (generated, not in Git)

@@ -199,10 +199,14 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["wanted"] = c.wanted;
             } else if constexpr (std::is_same_v<Type, CreateAnimalZoneCommand> || std::is_same_v<Type, RemoveAnimalZoneCellsCommand>) {
                 j["area"] = replayRectJson(c.area);
-            } else {
-                static_assert(std::is_same_v<Type, AssignAnimalZoneCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, AssignAnimalZoneCommand>) {
                 j["animal"] = entt::to_integral(c.animal);
                 j["zone"] = c.zone;
+            } else {
+                static_assert(std::is_same_v<Type, MeleeCommand>, "write every command type");
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["target"] = entt::to_integral(c.target);
+                j["mode"] = c.mode == MeleeMode::Attack ? "Attack" : "Block";
             }
         },
         logged.command);
@@ -784,6 +788,24 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.cell = CellPos{(*cell)[0].get<int>(), (*cell)[1].get<int>(), (*cell)[2].get<int>()};
         out.command = std::move(c);
+    } else if (type == "Melee") {
+        MeleeCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        uint32_t target = entt::to_integral(kNoEntity);
+        std::string mode = "Attack";
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "target", target, where) || !r.text(j, "mode", mode, where)) {
+            return false;
+        }
+        if (mode == "Attack") {
+            c.mode = MeleeMode::Attack;
+        } else if (mode == "Block") {
+            c.mode = MeleeMode::Block;
+        } else {
+            return r.fail(where + ".mode must be Attack or Block");
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        c.target = static_cast<Entity>(target);
+        out.command = c;
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");
     }

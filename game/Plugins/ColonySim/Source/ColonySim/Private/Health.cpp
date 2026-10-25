@@ -1,6 +1,7 @@
 #include "ColonySim/Health.h"
 
 #include "ColonySim/Clock.h"
+#include "ColonySim/Genes.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -947,6 +948,9 @@ bool HealthSystem::hitPart(Entity pawn, DefId damageType, float amount, int targ
     const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);
     const HealthModel::DamageType& type = model_->damageTypes[damageType.value];
     Health& health = reg.get<Health>(pawn);
+    if (const PawnGenes* genes = reg.try_get<PawnGenes>(pawn)) {
+        amount *= genes->effects.damageTaken;  // docs/design/genes.md
+    }
     const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
     const auto hediffFor = [&](int p) {
         const DefId solid = type.hediffSolid;
@@ -1200,6 +1204,9 @@ void HealthSystem::step(int64_t seconds, uint64_t seed) {
             if (injury.tended()) {
                 const float q = std::clamp(injury.tendQuality, 0.0f, 1.0f);
                 rate += model_->tendBonusLow + (model_->tendBonusHigh - model_->tendBonusLow) * q;
+            }
+            if (const PawnGenes* genes = reg.try_get<PawnGenes>(pawn)) {
+                rate *= genes->effects.woundHealing;
             }
             injury.severity -= rate * model_->healFactor;
             if (injury.severity <= 0.0f) {
