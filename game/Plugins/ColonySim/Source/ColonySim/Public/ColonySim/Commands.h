@@ -327,5 +327,9 @@ struct LoggedCommand {
 
 // Name used in replay files and logs, e.g. "SpawnThing".
 COLONY_API const char* commandName(const Command& command);
+// The other way: sets `out` to a command of the type with that name, its fields at their defaults.
+// False if no command type has that name. Saves name commands this way (docs/design/saves.md), so
+// the order of the types in `Command` doesn't matter to any file.
+COLONY_API bool commandFromName(const std::string& name, Command& out);
 
 }  // namespace colony

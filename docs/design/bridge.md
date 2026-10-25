@@ -71,10 +71,17 @@ In replay files a `rot` is `"North"`, `"East"`, `"South"` or `"West"` (`"North"`
 **Speed and pause are not commands.** They decide how often Unreal calls `step()`, not what a step
 does, so they stay in `USimSubsystem`. A replay counts steps, so it doesn't need them.
 
-**Adding a command:** a struct in `Commands.h` added to the `Command` variant; its name in
-`commandName` (`Bridge.cpp`); applying it in `Sim::applyCommand`; reading and writing it in
-`Replay.cpp` (`replayCommandJson`, `replayReadCommand`); a test. The `static_assert`s in the
-visitors stop the build if one of the first two is forgotten. Things are named by `Entity`; the
+**Adding a command** (a short checklist, so tasks running in parallel merge cleanly):
+
+1. A struct in `Commands.h`, added at the end of the `Command` variant. Its place there doesn't
+   matter to any file: saves and replays name commands (since S7, [saves.md](saves.md)).
+2. Its name in `commandName` (`Bridge.cpp`), unique; `commandFromName` finds it from there.
+3. Applying it in `Sim::applyCommand`.
+4. Its fields in `saveCommand` (`Save.cpp`), and in `Replay.cpp` (`replayCommandJson`,
+   `replayReadCommand`).
+5. A row in the table above, and a test.
+
+The `static_assert`s in the visitors stop the build if 2 or 4 (the save) is forgotten. Things are named by `Entity`; the
 same commands give the same ids, so replays can name them too. Never apply a command anywhere but
 `applyCommand`, and never change sim state from outside a command.
 
@@ -228,6 +235,22 @@ recording and checks every hash). CI uploads the recording from Linux and Window
 `Saved/Replays/`; F8 (U12) writes a whole bug report folder (replay, save, readable dump, notes; see
 `saves.md`). The file plus the commit it was made on reproduces the session in the cloud
 with `simrun --replay`; `firstMismatch` and the checkpoints narrow down when things went wrong.
+
+## Adding a system (checklist)
+
+Stage 2 runs many tasks at once (`docs/plans/stage-2.md`, rule 1). A new sim system:
+
+1. **Its own files**: `Public/ColonySim/YourSystem.h`, `Private/YourSystem.cpp`, `Tests/YourSystemTests.cpp`
+   and `docs/design/your-system.md`. Helper names in anonymous namespaces get a prefix (unity builds).
+2. **Wired into `Sim`** with short additions at the end of each list (members, constructor, the step
+   order, `stateHash`), never reorders.
+3. **Commands** by the checklist under Commands above.
+4. **Events**: new `EventType` values at the end of the enum, a name in `eventTypeName`, a row in
+   the events table. **Snapshot**: new fields at the end of their struct, filled in `Sim::writeSnapshot`.
+5. **Saved** in a section of its own ([saves.md](saves.md), "Adding to the save"); never a new
+   format number. State that is rebuilt from other state needs no section.
+6. **Replays** stay the same: a change that alters what an existing replay does changes its hashes,
+   which the replay checks catch. Say so in the PR if it is meant.
 
 ## Unreal side (task U2)
 

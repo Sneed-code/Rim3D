@@ -98,9 +98,9 @@ generator burns `fuel.perDay` of its item while it makes power.
 - `ThingView` has `power` (`PowerState`), `powerNet`, `powerWatts` and `batteryFill` (0 to 1, -1 for
   other buildings); `Snapshot::powerNets` lists the nets (id, generation, demand, stored, capacity,
   served, counts) for U19's overlay.
-- Save format 20: a building's `on`, `powered`, `stored` and `draw`. Nets, net ids and watts are
-  made again on loading. Older saves load with every power building on and unpowered until the
-  first step. All four are in the state hash.
+- Save section `power` (version 1): a building's `on`, `powered`, `stored` and `draw`. Nets, net ids
+  and watts are made again on loading. Saves from before the section load with every power building
+  on and unpowered until the first step. All four are in the state hash.
 
 ## Not here
 

@@ -43,7 +43,6 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Combat (format 12) | per pawn its posture (stance, facing), gear (gun and apparel ids) and trigger (phase, steps, burst, aim, recoil); `EquippedBy` on gear; every projectile in flight with its defs **by `defName`** ([combat.md](combat.md)) |
 | Pawn looks (format 16) | each humanlike pawn's lineage (by `defName`), gender, body type, weight, height, melanin and colours; `SetLineage` commands in the log ([looks.md](looks.md)). Older files load with pawns that have no looks |
 | Aiming (format 17) | rounds left in each gun that has been fired (`Magazine`), the trigger's reloading phase, a fighter's reaction and dodge times ([aiming.md](aiming.md)) |
-| Power parts (format 20) | per building with a `power` def object: switched on, powered, battery charge (Wd) and requested draw. Nets are made again on loading ([power.md](power.md)) |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
@@ -64,52 +63,114 @@ needs it yet.
 
 ```
 "RIM3DSAV"            8 bytes
-format version        u32, little-endian
-data                  see below
+format version        u32, little-endian: 20 since S7, and it stays 20
+sections              one after another, to the checksum
 checksum              u64, over every byte before it
+
+section:
+  name                text, e.g. "fighters"
+  version             u32, the section's own version, from 1
+  size                u32, bytes of data
+  data                that section's fields
 ```
 
 All numbers are little-endian; floats are written as their bits, so the same state gives the same
 bytes on every platform. Text is a u32 length and the bytes. A list is a u32 count and the elements.
-An optional value is a byte (0 or 1) and then the value if present. The layout is the order of the
-`saveXxx` functions in `Save.cpp`; the JSON dump uses the same functions, so it shows exactly what the
-binary file holds, with field names.
+An optional value is a byte (0 or 1) and then the value if present. The layout is `saveSections` in
+`Save.cpp` and the `saveXxx` functions it calls; the JSON dump uses the same functions, so it shows
+exactly what the binary file holds, with field names: one object per section, with its `version`.
+
+**Sections (S7).** Each system keeps its state in a section of its own, with its own version, so
+tasks that run in parallel never fight over one format number. Loading finds a section by its name,
+whatever its place in the file. A file without a section loads that part empty (how a save from
+before the section existed loads); a section this build doesn't know, or of a newer version than it
+reads, is refused ("made by a newer version"); a section with more or less data than its layout is
+refused as damaged. A thing's parts other than its def, position, footprint, stack and hit points
+are kept by the section of the system they belong to, as a list of (thing id, part) in id order.
+
+| Section | Version | Holds |
+| --- | --- | --- |
+| `sim` | 1 | sim version, data files' hash, settings, clock, random stream, the map's hash, the hauling test |
+| `commands` | 1 | the names of the command types used, then queued commands, the command log and the checkpoints |
+| `things` | 1 | free ids, then every thing: id, def, position, footprint, stack, hit points |
+| `movement` | 1 | `mover` |
+| `jobs` | 1 | `worker` (the job, its bill picks and ingredients, avoid memory), `work` (Work tab), `carrying` |
+| `colonists` | 1 | `colonist` |
+| `health` | 1 | `health` |
+| `control` | 1 | `playerControlled`: the ids of controlled pawns |
+| `needs` | 1 | `needs`, `schedule`, `bed` |
+| `bills` | 1 | `bills` on work buildings |
+| `construction` | 1 | `site`, `builtOf`, `marked` |
+| `mood` | 1 | `mood` |
+| `combat` | 1 | `posture`, `gear`, `equippedBy`, `shooter`, `projectile`, `magazine` |
+| `doors` | 1 | `door` |
+| `fighters` | 1 | `faction`, `fighter` |
+| `looks` | 1 | `looks` |
+| `paths` | 1 | the path queue |
+| `zones` | 1 | next zone id, stockpile zones |
+| `plants` | 1 | the plant layer |
+| `mining` | 1 | the rock layer and the designations |
+| `power` | 1 | `power`: per building with a power part, switched on, powered, battery charge (Wd) and requested draw; nets are made again on loading ([power.md](power.md)) |
+
+**Commands are saved by name (S7).** The `commands` section starts with the names of the command
+types it uses (`commandNames`); each command then gives its type as a place in that list, and its
+fields. So the order of the types in the `Command` variant doesn't matter to any save or replay, and
+two tasks that add commands at once don't clash. `commandFromName` (`Commands.h`) turns a name back
+into a command. A name this build doesn't know is refused, saying which.
+
+**Formats 6 to 19** (before S7) were one long layout that each format added to. They still load:
+`saveLegacyData` and `saveLegacyEntity` read them with the same field functions (`saveXxxPart`), and
+there every section's version counts as 1. Their commands give the type's place in the variant as
+it was at format 19; that table in `saveCommand` is frozen and never grows. Saving always writes
+format 20. `Tests/saves/` keeps two format 19 files made by the game before S7, and a test loads
+them, saves them again and checks the game goes on the same.
 
 CI saves the same run on Linux (GCC) and Windows (MSVC) and compares the two files byte for byte
 (`cmp`), next to the replay check. So a save made on sneed's PC loads in the cloud.
 
 **Loading says no, with a plain reason, when:** the file isn't a save, is cut short or damaged (the
-checksum catches a changed byte anywhere), was made by a newer format, names a `Things` def the data
-files no longer have, or the map generator changed. It **warns** and carries on when the data files or
-the sim version differ from the ones the save was made with.
+checksum catches a changed byte anywhere), was made by a newer format or has a section or command
+from a newer version, names a `Things` def the data files no longer have, or the map generator
+changed. It **warns** and carries on when the data files or the sim version differ from the ones the
+save was made with.
 
 ## Adding to the save (every task that adds sim state)
 
 New sim state has to go in the save, the state hash and the round-trip test. Missing one of the
-three is a bug the tests are built to catch:
+three is a bug the tests are built to catch. **Never bump `kSaveFormatVersion`**: give new state
+a section of its own, and bump only your own section's version when you change its layout. Additions
+to shared lists (`SaveEntity`, `SaveData`, `collect`, `restore`, `saveSections`) go at the end, so
+parallel tasks merge cleanly.
 
-1. **A new component on things**: add an `std::optional<YourComponent>` to `SaveEntity`, read it in
-   `SimSaveAccess::collect`, write its fields in `saveEntity`, and `emplace` it in
-   `SimSaveAccess::restore`. Add `ar.require(...)` checks for values that must be in range (enums,
-   sizes), so a damaged file is refused and doesn't crash. Add it to `Sim::stateHash`.
-2. **New sim-level state** (a new system's counters, queues, tables): a field in `SaveData`, saved in
-   `saveData`, filled in `collect` and put back in `restore`. Hash it in `stateHash`.
-3. **A new map layer that changes during play** (mining, plants, roofs): the ground is regenerated
-   from the seed, so a layer that differs from generation must be saved as its own list in
-   `SaveData` and restored onto the map. Keep a running hash for it (see `stateHash`).
-4. **A new command**: write it in `saveCommand` (the `static_assert` on the variant size stops the
-   build until you do).
-5. **Entity references** inside components (like a job's target) are saved as the id; ids come back
+1. **A new system with state**: add a section at the end of `saveSections`:
+   `ar.section("fuel", 1, [&] { ... });` with a name nobody uses (add it to the table above). Saves
+   from before it have no such section and load it empty, so `restore` must give the defaults a
+   game without it would have (a stove that was saved before fuel existed starts full, say).
+2. **A new component on things**: add an `std::optional<YourComponent>` at the end of `SaveEntity`,
+   fill it in `SimSaveAccess::collect`, write its fields in a `saveYourPart(ar, part)` function, save
+   the list in your section with `saveParts(ar, "yourPart", e, &SaveEntity::yourPart, ...)`, and
+   `emplace` it in `SimSaveAccess::restore`. Add `ar.require(...)` checks for values that must be in
+   range (enums, sizes), so a damaged file is refused and doesn't crash. Add it to `Sim::stateHash`.
+3. **New sim-level state** (a new system's counters, queues, tables): a field at the end of
+   `SaveData`, saved in your section, filled in `collect` and put back in `restore`. Hash it in
+   `stateHash`.
+4. **A new map layer that changes during play** (mining, plants, roofs): the ground is regenerated
+   from the seed, so a layer that differs from generation must be saved as its own list in your
+   section and restored onto the map. Keep a running hash for it (see `stateHash`).
+5. **A new command**: write its fields in `saveCommand` (an `else if constexpr` before the last
+   `else`, whose `static_assert` stops the build until you do). Its name comes from `commandName`;
+   nothing about it goes in the frozen table for formats 6 to 19.
+6. **Entity references** inside components (like a job's target) are saved as the id; ids come back
    exactly, so they stay valid. `restore` checks that what they name exists.
-6. **Test**: add the new state to the session in `Tests/SaveTests.cpp` (`saveTestSession`) so the
-   "load and run on gives the same game" test exercises it. A cache needs no save, but it must be
-   rebuilt by whatever asks for it, and nothing that changes game state may read it stale.
-7. **Changing the layout of anything already saved**: bump `kSaveFormatVersion`, keep reading the old
-   version (the archive's `version()` says which one the file is: `if (ar.version() >= 2) ...`), and
-   write the change here. Old saves keep loading until a decision says otherwise (decision 0005
-   dropped formats 1 to 5 for the job system). Format 8 (C6) added needs, schedules, bed owners and
-   a job's chair; format 9 (C2) added the plant layer; format 10 (C4) added building plans, built-of and deconstruct marks and a job's site and
-   progress. Format 11 (C9) added mood, format 12 (F2) combat, format 13 (C5) door states, format 14 (C3) rock and designations, format 15 (F4) factions and fighters, format 16 (A3) pawn looks, format 17 (F5) magazines and reloading, format 18 (C7) a building's bills and a bill job's bill, picks and used ingredients, format 19 (U10) a job's `handsOn` state, format 20 (E5) power parts. Format 6 to 19 saves still load, their pawns without needs, mood or posture, or their buildings without plans, bills, their doors closed.
+7. **Test**: add the new state to the session in `Tests/SaveTests.cpp` (`saveTestSession`) so the
+   "load and run on gives the same game" test exercises it, or a save round trip in your own test
+   file. A cache needs no save, but it must be rebuilt by whatever asks for it, and nothing that
+   changes game state may read it stale.
+8. **Changing the layout of a section already saved**: bump that section's version in
+   `saveSections` (and in the table above), keep reading the old one (`if (ar.sectionVersion() >= 2)
+   ...` around the new fields), and write the change in the section list under "Format versions".
+   Old saves keep loading until a decision says otherwise (decision 0005 dropped formats 1 to 5 for
+   the job system).
 
 Never store a `DefId` (or any number that depends on load order) in a save: use the `defName`.
 The same goes for region ids, which a loaded map numbers afresh: keep a cell, and never let a
@@ -196,6 +257,16 @@ sneed's whole job for a bug is: press F8, then send the folder (zip it, or drop 
 - **17** (F5): a `Magazine` component on fired guns, the `Reloading` trigger phase, a fighter's
   `reactUntil` and `dodgeUntil` ([aiming.md](aiming.md)). Command 27 (`Reload`). Older files load
   with every gun full and no fighter waiting to react.
+- **18** (C7): a building's bills and a bill job's bill, picks and used ingredients; commands 28 to
+  30 (`AddBill`, `RemoveBill`, `SetBill`) ([bills.md](bills.md)).
+- **19** (U10): a job's `handsOn` state; command 31 (`HandsOn`) ([handson.md](handson.md)).
+- **20** (S7): named sections, each with its own version, and commands by name (above). The last
+  format number: from here on, sections change instead.
+
+### Section versions
+
+Every section is version 1 at format 20. A task that changes a section adds a line here, e.g.
+"`fighters` 2 (F9): ...". New sections are listed in the table above.
 
 ## Why the state hash changed in S6
 
