@@ -75,6 +75,7 @@ const char* eventTypeName(EventType type) {
         case EventType::PawnAte: return "PawnAte";
         case EventType::PawnWokeUp: return "PawnWokeUp";
         case EventType::FrameStarted: return "FrameStarted";
+        case EventType::PawnMoodBand: return "PawnMoodBand";
         case EventType::ShotFired: return "ShotFired";
         case EventType::ProjectileHit: return "ProjectileHit";
     }

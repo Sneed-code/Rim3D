@@ -29,6 +29,7 @@ class DefDatabase;
 struct Colonist;
 class JobSystem;
 class MovementSystem;
+class MoodSystem;
 class NeedsSystem;
 class Plants;
 class Regions;
@@ -123,6 +124,9 @@ public:
     // Food and rest (docs/design/needs.md). Eating and sleeping are jobs, see jobs().
     NeedsSystem& needs() { return *needs_; }
     const NeedsSystem& needs() const { return *needs_; }
+    // Mood and thoughts (docs/design/mood.md).
+    MoodSystem& mood() { return *mood_; }
+    const MoodSystem& mood() const { return *mood_; }
     // Guns, projectiles, hitboxes and armor (docs/design/combat.md).
     CombatSystem& combat() { return *combat_; }
     const CombatSystem& combat() const { return *combat_; }
@@ -184,6 +188,7 @@ private:
     std::unique_ptr<MovementSystem> movement_;
     std::unique_ptr<HealthSystem> health_;
     std::unique_ptr<NeedsSystem> needs_;
+    std::unique_ptr<MoodSystem> mood_;
     std::unique_ptr<CombatSystem> combat_;
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;

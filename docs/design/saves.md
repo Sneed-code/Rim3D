@@ -33,10 +33,11 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Pawn movement (format 3) | each pawn's velocity, line start, held-up counters (`Mover`), and the repath count |
 | Colonists (format 4) | each colonist's name, age, backstories, traits, skills and the scenario name in the settings ([colonists.md](colonists.md)) |
 | Needs, schedules and beds (format 8) | per pawn: food, rest, malnutrition, the next food search, the 24 schedule hours; per bed: its owners; per job: the chair it eats at ([needs.md](needs.md)) |
+| Mood (format 11) | per pawn: level, break band, memories (thought **by `defName`**, fade time) ([mood.md](mood.md)) |
 | Pawn health (format 5) | per pawn: protagonist flag, rest, injuries (part, hediff **by `defName`**, severity, tend quality), lost parts, blood loss, dead and cause. Pain, bleeding, capacities and downed are worked out again on loading ([health.md](health.md)) |
 | Direct control (format 7) | which colonist the player controls (a flag on the pawn); the `ControlPawn` and `DirectMove` commands in the log ([protagonist.md](protagonist.md)) |
 | Plants (format 9) | every plant as parallel lists: cell index, def, growth, age; fertility is rebuilt from the seed |
-| Combat (format 11) | per pawn its posture (stance, facing), gear (gun and apparel ids) and trigger (phase, steps, burst, aim, recoil); `EquippedBy` on gear; every projectile in flight with its defs **by `defName`** ([combat.md](combat.md)) |
+| Combat (format 12) | per pawn its posture (stance, facing), gear (gun and apparel ids) and trigger (phase, steps, burst, aim, recoil); `EquippedBy` on gear; every projectile in flight with its defs **by `defName`** ([combat.md](combat.md)) |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
@@ -102,7 +103,7 @@ three is a bug the tests are built to catch:
    write the change here. Old saves keep loading until a decision says otherwise (decision 0005
    dropped formats 1 to 5 for the job system). Format 8 (C6) added needs, schedules, bed owners and
    a job's chair; format 9 (C2) added the plant layer; format 10 (C4) added building plans, built-of and deconstruct marks and a job's site and
-   progress; format 11 (F2) combat. Format 6 to 10 saves still load, their pawns without needs or posture or their buildings without plans.
+   progress. Format 11 (C9) added mood, format 12 (F2) combat. Format 6 to 11 saves still load, their pawns without needs, mood or posture, or their buildings without plans.
 
 Never store a `DefId` (or any number that depends on load order) in a save: use the `defName`.
 The same goes for region ids, which a loaded map numbers afresh: keep a cell, and never let a
@@ -173,7 +174,9 @@ sneed's whole job for a bug is: press F8, then send the folder (zip it, or drop 
 - **9** (C2): the plant layer after the zones (`docs/design/plants.md`). Older files load with a bare map.
 - **10** (C4): building plans (`site`), `builtOf` and deconstruct marks, a job's site and progress;
   commands 14 to 16 (`PlaceBlueprint`, `CancelBuild`, `Deconstruct`) ([construction.md](construction.md)).
-- **11** (F2): `Posture`, `Gear`, `EquippedBy`, `Shooter` and `Projectile` components (a pawn saved
+- **11** (C9): mood (level, band, memories by `defName`) ([mood.md](mood.md)). Older files load with
+  pawns without a mood.
+- **12** (F2): `Posture`, `Gear`, `EquippedBy`, `Shooter` and `Projectile` components (a pawn saved
   without a posture stands facing east). Commands 17 to 19 (`Equip`, `Shoot`, `SetStance`).
 
 ## Why the state hash changed in S6

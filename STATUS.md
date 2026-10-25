@@ -82,6 +82,14 @@ colonists eat through their starting food in about 5 days and begin to starve ar
 keep them alive**. Beds, tables and chairs are C4's defs: it reads `building.bed`, `building.isTable`,
 `building.isSittable` and `stats.bedRestEffectiveness`. Save format 8 (formats 6 and 7 still load).
 
+Since C9 colonists have a mood, 0 to 100 (`docs/design/mood.md`): base 50 plus trait offsets plus thoughts, the
+level following at 12 an hour up and 8 down and standing still asleep. Situations (hungry, ravenous, starving;
+drowsy, tired, exhausted) count while they hold; memories (ate without a table, ate raw food, ate a fine or
+lavish meal, slept on the ground) last 0.6 days. The three break thresholds (35%, 20%, 5%, moved by traits
+like Nerves) are recorded as `MoodBand` with a `PawnMoodBand` event; **no mental breaks yet**. "Slept outside"
+is defined but waits for roofs and rooms (C5). `thoughts()` is what the colonist panel (U8) reads. Thought
+numbers other than Hungry are recalled, not verified. Save format 11.
+
 Since F2 pawns can shoot (`docs/design/combat.md`): five guns from the wiki, real bullets that fly
 with speed (RimWorld's x3, `tuning.json`) and drop, a spread cone instead of a hit roll (sized so a
 standing man in the open is hit as often as RimWorld's hit chance; Shooting skill tightens it),
@@ -89,7 +97,7 @@ recoil, warm-up, bursts and cooldown. Bullets stop at the ground, rock, walls an
 lose hit points and break) and pawn hitboxes for standing, crouching and prone (downed pawns lie
 prone); armor (flak vest, flak pants, helmet) deflects or softens hits by RimWorld's rule, then the
 part hit is injured. Commands `Equip`, `Shoot` (aimed, or the player's trigger) and `SetStance`;
-events `ShotFired` and `ProjectileHit`; snapshot projectiles, stance, facing and gun; save format 11.
+events `ShotFired` and `ProjectileHit`; snapshot projectiles, stance, facing and gun; save format 12.
 No fighter AI yet (F4, F5): pawns shoot only when told to.
 
 Since D3 the game has real starting data in `data/defs/`, written by hand with RimWorld's numbers
@@ -121,7 +129,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-23 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, F2). Tick tasks in `docs/plans/stage-1.md` as they merge.
+24 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -157,7 +165,7 @@ done (PC Unreal; `docs/design/bridge.md`, smoke test `sim`; the first Unreal com
 S5 bridge, so S1's include path is confirmed). ~~**C2** plants~~ done (`docs/design/plants.md`; save format 9), ~~**C8** colonists
 from a seed~~ done (`docs/design/colonists.md`; `simrun --start Crashlanded` lists the six; save format 4) and
 ~~**F1** health basics~~ done (`docs/design/health.md`; save format 5) and ~~**F2** guns, projectiles
-and hitboxes~~ done (`docs/design/combat.md`; save format 11; U11 can now draw tracers and hits);
+and hitboxes~~ done (`docs/design/combat.md`; save format 12; U11 can now draw tracers and hits);
 their defs are in `data/defs/`. Numbers marked `unverified` in a def were recalled, not read from the
 wiki; check them when a task leans on them.
 

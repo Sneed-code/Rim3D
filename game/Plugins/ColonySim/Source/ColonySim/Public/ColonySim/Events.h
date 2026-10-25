@@ -29,6 +29,7 @@ enum class EventType : uint8_t {
     PawnAte,         // a pawn finished eating (docs/design/needs.md)
     PawnWokeUp,      // a pawn got up after sleeping
     FrameStarted,    // a blueprint got its first materials and is a frame now (docs/design/construction.md)
+    PawnMoodBand,    // a pawn's mood crossed a mental break threshold (docs/design/mood.md)
     ShotFired,       // a pawn fired a projectile (docs/design/combat.md)
     ProjectileHit,   // a projectile stopped: it hit something, or flew off the map or too long
 };
@@ -74,6 +75,8 @@ struct Event {
     // PawnAte: `thing` the pawn, `def` the food's Things def, `amount` the nutrition gained, `cell`
     // where it stood and `message` "table" (in a chair at a table) or "ground". PawnWokeUp: `thing`
     // the pawn, `target` the bed it slept in or none, `message` "bed" or "ground", `amount` its rest.
+    // PawnMoodBand: `thing` the pawn, `message` the new band ("stable", "minor", "major", "extreme"),
+    // `amount` its mood.
     float amount = 0.0f;
     // ShotFired: `thing` the shooter, `def` its gun's Things def, `target` the projectile, (x, y, z)
     // the muzzle. ProjectileHit: `thing` the projectile (forget its id), `def` its Projectiles def,
