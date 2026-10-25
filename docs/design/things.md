@@ -29,7 +29,7 @@ layer in step with it; `Sim::things()` gives access. Each thing is made from a d
 | every thing | `Thing` (def id, category) | `category`: `Item`, `Building` or `Pawn` |
 | `Item` | `StackCount`, `HitPoints` if the def has them | `stackLimit` (1 if absent), `stats.maxHitPoints` |
 | `Building` | `Footprint`, `HitPoints` | `size` `[x, z]` (1x1 if absent), `passability` (`Impassable` blocks movement), `thingClass` (`Building_Door` makes a door), `stats.maxHitPoints` |
-| `Pawn` | `Mover` (speed, path) | `stats.moveSpeed`, metres per game second (converted from cells per second); 4 m/s at 1x if absent |
+| `Pawn` | `Mover` (speed, route, velocity; [movement.md](movement.md)) | `stats.moveSpeed`, metres per game second (converted from cells per second); 4 m/s at 1x if absent |
 
 Plants are not things: they are a grid layer (task C2), because a 1 km map holds hundreds of
 thousands of them. Projectiles and corpses come with combat (F2) and health (F1). Any other
@@ -60,8 +60,8 @@ Anything that fails returns `kNoEntity` (or `false`) and changes nothing.
 
 - **Determinism.** Entity ids come out of EnTT in a fixed order, so the same commands give the same
   ids. Don't depend on the order a view iterates: break ties by entity id (as the hauling
-  placeholder does), or keep your own ordered list (as `Sim::haulers()`). Saves (S6) must restore
-  the same ids.
+  placeholder does), or keep your own ordered list (as `Sim::haulers()`). Saves (`saves.md`) restore
+  the same ids, including the order destroyed ids are reused in.
 - **Don't add or remove components on other entities while iterating a view of those
   components.** Collect first, then change.
 - **Unreal doesn't include `Things.h`.** `Sim.h` only forward-declares `Things`, and Unreal will
@@ -79,7 +79,7 @@ the job system (C1) arrives. It gives the same hauls, path searches and cells ex
 Stage 0 version. Missing defs are listed in `Sim::setupErrors()`.
 
 `simrun` loads defs from `--data` (default: the repo's `data/` folder). Runs with `--pawns` or
-`--items` need `Human` and `Steel` in `data/defs/Things/`, which the RimWorld import (D3) provides.
+`--items` need `Human` and `Steel` in `data/defs/Things/`, which the starting data (D3) has.
 
 ## Not done here
 

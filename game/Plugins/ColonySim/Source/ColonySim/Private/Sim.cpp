@@ -2,8 +2,12 @@
 
 #include "ColonySim/Defs.h"
 #include "ColonySim/Hash.h"
+#include "ColonySim/Movement.h"
+#include "ColonySim/Regions.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
+#include "HaulJob.h"
+#include "MovementSystem.h"
 
 #include <algorithm>
 #include <cmath>
@@ -12,54 +16,13 @@
 
 namespace colony {
 
-// Stage 0 hauling placeholder: a pawn that only hauls items to one stockpile cell. The job
-// system (task C1) replaces these components and the code that uses them.
-enum class HaulStage : uint8_t { Idle, GoToItem, CarryToStockpile };
-
-struct HaulJob {
-    HaulStage stage = HaulStage::Idle;
-    Entity item = kNoEntity;
-};
-
-// On an item a pawn has claimed, so nobody else goes for it.
-struct HaulReservedBy {
-    Entity pawn = kNoEntity;
-};
-
-// On an item while a pawn carries it (the item is off the map).
-struct HaulCarriedBy {
-    Entity pawn = kNoEntity;
-};
-
-// On an item that has reached the stockpile.
-struct HaulStored {};
-
 namespace {
 
-// Moves the pawn along its path by one step's worth of walking. Returns true
-// once the end of the path is reached.
-bool haulAdvance(Position& pos, Mover& mover) {
-    float budget = mover.metresPerStep;
-    while (budget > 0.0f && mover.next < mover.path.size()) {
-        const CellPos c = mover.path[mover.next];
-        const float tx = static_cast<float>(c.x) + 0.5f;
-        const float ty = static_cast<float>(c.y) + 0.5f;
-        const float dx = tx - pos.x;
-        const float dy = ty - pos.y;
-        const float dist = std::sqrt(dx * dx + dy * dy);
-        if (dist <= budget) {
-            pos.x = tx;
-            pos.y = ty;
-            pos.level = c.level;
-            budget -= dist;
-            ++mover.next;
-        } else {
-            pos.x += dx / dist * budget;
-            pos.y += dy / dist * budget;
-            budget = 0.0f;
-        }
-    }
-    return mover.next >= mover.path.size();
+// Starts the pawn walking the path the pathfinder found: straightened where the ground allows.
+void simStartWalk(const Map& map, const Position& pos, Mover& mover) {
+    std::vector<CellPos> route = std::move(mover.path);
+    smoothPath(map, pos.x, pos.y, route);
+    mover.walkTo(pos.x, pos.y, std::move(route));
 }
 
 const DefDatabase& simEmptyDefs() {
@@ -82,17 +45,23 @@ void simHashCell(StateHasher& h, CellPos c) {
 Sim::Sim(const SimSettings& settings) : Sim(settings, nullptr) {}
 
 Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
+    : Sim(settings, std::move(defs), EmptyStart{}) {
+    placeStockpileAndThings();
+}
+
+Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, EmptyStart)
     : settings_(settings),
       // No defs: share a static empty database, owned by nobody.
       defs_(defs ? std::move(defs) : std::shared_ptr<const DefDatabase>(std::shared_ptr<const DefDatabase>(), &simEmptyDefs())),
       map_(MapSettings{settings.mapSize, settings.mapSize, splitMix64(settings.seed ^ 0x6D6170ULL), settings.flatMap}),
       pathfinder_(map_),
       things_(std::make_unique<Things>(map_, defs_)),
+      movement_(std::make_unique<MovementSystem>()),
       time_(),
       rng_(splitMix64(settings.seed ^ 0x7061776EULL)),
       groundHash_(map_.contentHash()) {
     things_->setEventLog(&events_);
-    placeStockpileAndThings();
+    map_.regions().update();  // build every region now, not in the first step
 }
 
 Sim::~Sim() = default;
@@ -207,15 +176,10 @@ void Sim::startNextHaul(Entity pawn) {
         return;
     }
     reg.emplace<HaulReservedBy>(best, HaulReservedBy{pawn});
-    Mover& mover = reg.get<Mover>(pawn);
-    mover.next = 0;
-    if (!pathfinder_.findPath(cellOf(pos), cellOf(reg.get<Position>(best)), mover.path)) {
-        ++stats_.failedJobs;  // item stays reserved so nobody retries it
-        return;
-    }
     HaulJob& job = reg.get<HaulJob>(pawn);
     job.item = best;
-    job.stage = HaulStage::GoToItem;
+    job.path = pathfinder_.request(cellOf(pos), cellOf(reg.get<Position>(best)));
+    job.stage = HaulStage::WaitPathToItem;
 }
 
 void Sim::updateHauler(Entity pawn) {
@@ -225,25 +189,77 @@ void Sim::updateHauler(Entity pawn) {
         case HaulStage::Idle:
             startNextHaul(pawn);
             break;
-        case HaulStage::GoToItem: {
-            Position& pos = reg.get<Position>(pawn);
+        case HaulStage::WaitPathToItem: {
+            if (pathfinder_.status(job.path) == PathStatus::Queued) {
+                break;
+            }
             Mover& mover = reg.get<Mover>(pawn);
-            if (haulAdvance(pos, mover)) {
-                mover.next = 0;
-                if (pathfinder_.findPath(cellOf(pos), *stockpileCell_, mover.path)) {
-                    things_->despawn(job.item);
-                    reg.emplace<HaulCarriedBy>(job.item, HaulCarriedBy{pawn});
-                    job.stage = HaulStage::CarryToStockpile;
-                } else {
-                    ++stats_.failedJobs;  // item stays where it is, reserved
-                    job.stage = HaulStage::Idle;
-                    job.item = kNoEntity;
-                }
+            mover.next = 0;
+            if (pathfinder_.takePath(job.path, mover.path)) {
+                simStartWalk(map_, reg.get<Position>(pawn), mover);
+                job.stage = HaulStage::GoToItem;
+            } else {
+                ++stats_.failedJobs;  // item stays reserved so nobody retries it
+                job.stage = HaulStage::Idle;
+                job.item = kNoEntity;
+            }
+            break;
+        }
+        case HaulStage::GoToItem:
+            if (reg.get<Mover>(pawn).gaveUp) {
+                // Held up for good (a rock in the way of the line it was on): ask for a path from here.
+                reg.get<Mover>(pawn).gaveUp = false;
+                ++stats_.repaths;
+                job.path = pathfinder_.request(cellOf(reg.get<Position>(pawn)), cellOf(reg.get<Position>(job.item)));
+                job.stage = HaulStage::WaitPathToItem;
+            } else if (reg.get<Mover>(pawn).arrived()) {
+                job.path = pathfinder_.request(cellOf(reg.get<Position>(pawn)), *stockpileCell_);
+                job.stage = HaulStage::WaitPathToStockpile;
+            }
+            break;
+        case HaulStage::WaitPathToStockpile: {
+            if (pathfinder_.status(job.path) == PathStatus::Queued) {
+                break;
+            }
+            Mover& mover = reg.get<Mover>(pawn);
+            mover.next = 0;
+            if (pathfinder_.takePath(job.path, mover.path)) {
+                simStartWalk(map_, reg.get<Position>(pawn), mover);
+                things_->despawn(job.item);
+                reg.emplace<HaulCarriedBy>(job.item, HaulCarriedBy{pawn});
+                job.stage = HaulStage::CarryToStockpile;
+            } else {
+                ++stats_.failedJobs;  // item stays where it is, reserved
+                job.stage = HaulStage::Idle;
+                job.item = kNoEntity;
+            }
+            break;
+        }
+        case HaulStage::WaitPathCarrying: {
+            if (pathfinder_.status(job.path) == PathStatus::Queued) {
+                break;
+            }
+            Mover& mover = reg.get<Mover>(pawn);
+            if (pathfinder_.takePath(job.path, mover.path)) {
+                simStartWalk(map_, reg.get<Position>(pawn), mover);
+                job.stage = HaulStage::CarryToStockpile;
+            } else {
+                // No way to the stockpile from here: puts the item down where it stands.
+                reg.remove<HaulCarriedBy, HaulReservedBy>(job.item);
+                things_->spawnAt(job.item, cellOf(reg.get<Position>(pawn)));
+                ++stats_.failedJobs;
+                job.stage = HaulStage::Idle;
+                job.item = kNoEntity;
             }
             break;
         }
         case HaulStage::CarryToStockpile:
-            if (haulAdvance(reg.get<Position>(pawn), reg.get<Mover>(pawn))) {
+            if (reg.get<Mover>(pawn).gaveUp) {
+                reg.get<Mover>(pawn).gaveUp = false;
+                ++stats_.repaths;
+                job.path = pathfinder_.request(cellOf(reg.get<Position>(pawn)), *stockpileCell_);
+                job.stage = HaulStage::WaitPathCarrying;
+            } else if (reg.get<Mover>(pawn).arrived()) {
                 reg.remove<HaulCarriedBy, HaulReservedBy>(job.item);
                 things_->spawnAt(job.item, *stockpileCell_);
                 reg.emplace<HaulStored>(job.item);
@@ -302,6 +318,8 @@ void Sim::step() {
     for (const Entity pawn : haulers_) {
         updateHauler(pawn);
     }
+    movement_->step(things_->registry(), map_);
+    pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     time_.seconds += 1;
     if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
         checkpoints_.push_back(Checkpoint{time_.seconds, stateHash()});
@@ -313,6 +331,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.mapWidth = map_.width();
     out.mapHeight = map_.height();
     out.things.clear();
+    out.waypoints.clear();
     const entt::registry& reg = things_->registry();
     for (const auto [entity, thing, pos] : reg.view<const Thing, const Position>().each()) {
         ThingView view;
@@ -321,7 +340,18 @@ void Sim::writeSnapshot(Snapshot& out) const {
         view.category = thing.category;
         view.x = pos.x;
         view.y = pos.y;
+        view.z = map_.heightAt(pos.x, pos.y);
         view.level = pos.level;
+        if (const Mover* mover = reg.try_get<Mover>(entity)) {
+            view.vx = mover->vx;
+            view.vy = mover->vy;
+            view.firstWaypoint = static_cast<uint32_t>(out.waypoints.size());
+            for (size_t k = mover->next; k < mover->path.size(); ++k) {
+                out.waypoints.push_back(PathPointView{static_cast<float>(mover->path[k].x) + 0.5f,
+                                                      static_cast<float>(mover->path[k].y) + 0.5f});
+            }
+            view.waypointCount = static_cast<uint32_t>(out.waypoints.size()) - view.firstWaypoint;
+        }
         if (const Footprint* footprint = reg.try_get<Footprint>(entity)) {
             const CellRect rect = footprint->rect();
             view.rotation = footprint->rotation;
@@ -360,18 +390,24 @@ uint64_t Sim::stateHash() const {
     }
     h.add(stats_.hauls);
     h.add(stats_.failedJobs);
+    h.add(stats_.repaths);
+    pathfinder_.hashState(h);
 
-    // Every entity id the registry has handed out, in its own order: live ones, then the free
-    // list that decides the next ids. Then each live thing's components.
+    // The entity ids the registry has handed out: the free list in reuse order (it decides the
+    // next ids), then every live thing in id order with its components. The registry's own
+    // order of live things depends on its history, and a loaded save doesn't repeat that.
     const entt::registry& reg = things_->registry();
     const auto* entities = reg.storage<Entity>();
+    const size_t live = entities->free_list();
     h.add(static_cast<uint64_t>(entities->size()));
-    h.add(static_cast<uint64_t>(entities->free_list()));
-    for (size_t i = 0; i < entities->size(); ++i) {
+    h.add(static_cast<uint64_t>(live));
+    for (size_t i = live; i < entities->size(); ++i) {
         h.add(entt::to_integral(entities->data()[i]));
     }
-    for (size_t i = 0; i < entities->free_list(); ++i) {
-        const Entity e = entities->data()[i];
+    std::vector<Entity> liveIds(entities->data(), entities->data() + live);
+    std::sort(liveIds.begin(), liveIds.end());
+    for (const Entity e : liveIds) {
+        h.add(entt::to_integral(e));
         // Which components it has, then their fields.
         const bool has[] = {reg.all_of<Thing>(e),         reg.all_of<Position>(e),       reg.all_of<Footprint>(e),
                             reg.all_of<StackCount>(e),    reg.all_of<HitPoints>(e),      reg.all_of<Mover>(e),
@@ -396,6 +432,7 @@ uint64_t Sim::stateHash() const {
             h.add(f->sizeY);
             h.add(f->blocksMovement);
             h.add(f->isDoor);
+            h.add(static_cast<int>(f->obstacleDm));
             simHashCell(h, f->origin);
             h.add(static_cast<int>(f->rotation));
         }
@@ -413,10 +450,20 @@ uint64_t Sim::stateHash() const {
                 simHashCell(h, c);
             }
             h.add(static_cast<uint64_t>(mover->next));
+            h.add(mover->vx);
+            h.add(mover->vy);
+            h.add(mover->fromX);
+            h.add(mover->fromY);
+            h.add(static_cast<uint64_t>(mover->blockedSteps));
+            h.add(static_cast<uint64_t>(mover->ghostSteps));
+            h.add(static_cast<uint64_t>(mover->heldSteps));
+            h.add(mover->gaveUp);
         }
         if (const HaulJob* job = reg.try_get<HaulJob>(e)) {
             h.add(static_cast<int>(job->stage));
             h.add(entt::to_integral(job->item));
+            h.add(job->path.slot);
+            h.add(job->path.serial);
         }
         if (const HaulReservedBy* by = reg.try_get<HaulReservedBy>(e)) {
             h.add(entt::to_integral(by->pawn));

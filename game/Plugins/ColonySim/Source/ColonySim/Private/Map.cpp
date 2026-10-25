@@ -4,6 +4,7 @@
 #include "ColonySim/Random.h"
 #include "ColonySim/Regions.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace colony {
@@ -122,6 +123,21 @@ void Map::generate() {
             }
         }
     }
+}
+
+float Map::heightAt(float x, float y) const {
+    x = std::clamp(x, 0.0f, static_cast<float>(width_ - 1));
+    y = std::clamp(y, 0.0f, static_cast<float>(height_ - 1));
+    const int x0 = static_cast<int>(x);
+    const int y0 = static_cast<int>(y);
+    const int x1 = std::min(x0 + 1, width_ - 1);
+    const int y1 = std::min(y0 + 1, height_ - 1);
+    const float fx = x - static_cast<float>(x0);
+    const float fy = y - static_cast<float>(y0);
+    const auto h = [this](int cx, int cy) { return groundHeight_[static_cast<size_t>(cy * width_ + cx)]; };
+    const float top = h(x0, y0) + (h(x1, y0) - h(x0, y0)) * fx;
+    const float bottom = h(x0, y1) + (h(x1, y1) - h(x0, y1)) * fx;
+    return top + (bottom - top) * fy;
 }
 
 uint64_t Map::contentHash() const {

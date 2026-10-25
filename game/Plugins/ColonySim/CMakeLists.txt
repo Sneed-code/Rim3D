@@ -53,3 +53,21 @@ add_test(NAME replay_record COMMAND simrun --data ${REPLAY_TEST_DATA}
 add_test(NAME replay_check COMMAND simrun --data ${REPLAY_TEST_DATA} --replay ${REPLAY_RECORDED})
 set_tests_properties(replay_record PROPERTIES FIXTURES_SETUP replay_recording)
 set_tests_properties(replay_check PROPERTIES FIXTURES_REQUIRED replay_recording)
+
+# Saves: run 0.05 days and save, then load that and run 0.05 more and save, and compare with a
+# straight run of 0.1 days. The two files must be identical, byte for byte. CI also compares the
+# straight run's save from Linux and Windows (docs/design/saves.md).
+set(SAVE_RUN_ARGS --data ${REPLAY_TEST_DATA} --seed 7 --size 128 --pawns 8 --items 80)
+add_test(NAME save_first_half COMMAND simrun ${SAVE_RUN_ARGS} --days 0.05 --save ${CMAKE_BINARY_DIR}/first-half.save)
+add_test(NAME save_second_half COMMAND simrun --data ${REPLAY_TEST_DATA} --load ${CMAKE_BINARY_DIR}/first-half.save
+         --days 0.05 --save ${CMAKE_BINARY_DIR}/loaded.save --save-json ${CMAKE_BINARY_DIR}/loaded.save.json)
+add_test(NAME save_straight_run COMMAND simrun ${SAVE_RUN_ARGS} --days 0.1 --save ${CMAKE_BINARY_DIR}/straight.save)
+add_test(NAME save_compare COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_BINARY_DIR}/loaded.save ${CMAKE_BINARY_DIR}/straight.save)
+set_tests_properties(save_first_half PROPERTIES FIXTURES_SETUP save_first_half)
+set_tests_properties(save_second_half PROPERTIES FIXTURES_REQUIRED save_first_half FIXTURES_SETUP save_loaded)
+set_tests_properties(save_straight_run PROPERTIES FIXTURES_SETUP save_straight)
+set_tests_properties(save_compare PROPERTIES FIXTURES_REQUIRED "save_loaded;save_straight")
+
+# Pathfinding load test (S3): 100 pawns hauling on a 1 km map for a day, no failed job or search.
+add_test(NAME simrun_paths COMMAND simrun --seed 42 --size 1024 --days 1 --pawns 100 --items 2000 --check
+         --data ${CMAKE_CURRENT_SOURCE_DIR}/Tests/data)

@@ -32,9 +32,14 @@ jobs:
         with:
           name: replay-${{ runner.os }}
           path: build/haul-and-build.recorded.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: save-${{ runner.os }}
+          path: build/straight.save
 
   # The same scenario must give the same state hashes on Linux (GCC) and Windows (MSVC), so a
-  # replay recorded on sneed's PC plays the same in the cloud.
+  # replay recorded on sneed's PC plays the same in the cloud, and the same save file byte for
+  # byte, so a save made on the PC loads in the cloud.
   replay-cross-platform:
     needs: build-and-test
     runs-on: ubuntu-latest
@@ -43,8 +48,13 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           pattern: replay-*
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: save-*
       - name: Compare Linux and Windows replays
         run: python3 tools/compare_replays.py replay-Linux/haul-and-build.recorded.json replay-Windows/haul-and-build.recorded.json
+      - name: Compare Linux and Windows saves
+        run: cmp save-Linux/straight.save save-Windows/straight.save && echo "the saves are identical"
 
   data:
     runs-on: ubuntu-latest

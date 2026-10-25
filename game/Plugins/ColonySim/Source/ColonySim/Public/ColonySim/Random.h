@@ -53,6 +53,11 @@ public:
     // The whole state, for state hashes and saves.
     uint64_t state() const { return state_; }
     uint64_t increment() const { return inc_; }
+    // Puts the stream back where state() and increment() found it, for loading a save.
+    void restore(uint64_t state, uint64_t increment) {
+        state_ = state;
+        inc_ = increment;
+    }
 
 private:
     uint64_t state_;

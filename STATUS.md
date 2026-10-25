@@ -25,11 +25,24 @@ regions (16 m blocks, doors as their own regions, links, reachability groups; `M
 Since S5 Unreal talks to the sim only through commands (`Sim::submit`), per-step events and a
 read-only snapshot; every session can be saved as a replay file and played back with
 `simrun --replay`, and CI checks Linux and Windows give the same state hashes
-(`docs/design/bridge.md`). The Stage 0 hauling job (now in `Sim.cpp`) and cell A* (`Pathfinder`)
-are still placeholders; C1 and S3 replace them. Since F3 buildings and ground have heights, so the
+(`docs/design/bridge.md`). Since S3 paths are hierarchical: region route, then cell A\* inside that
+corridor, asked for through a queue with a work budget per step (`sim.pathfinder().request`, an
+answer the next step at the earliest); a long 1 km search costs about 1,500 cells instead of
+34,000 (`docs/design/pathfinding.md`). The Stage 0 hauling job (`Sim.cpp`, `HaulJob.h`) is still a
+placeholder for C1. Since F3 buildings and ground have heights, so the
 sim can say how hidden a pawn is from each of eight sides (`Map::cover()`), whether one pawn can see
 another (`lineOfSight`, with standing, crouching and prone) and which ground a faction's enemies
-can shoot at (`Sim::threatMap`); `docs/design/cover.md`.
+can shoot at (`Sim::threatMap`); `docs/design/cover.md`. Since S6 the whole game state saves to
+one binary file and loads back to exactly the same game (`saveSim` / `loadSim`, `simrun --save`,
+`--load`, `--save-json`; `docs/design/saves.md`). Since S4 pawns walk instead of hopping from cell to
+cell: the cell path is straightened where a pawn fits, speed follows the ground (soil 87%, sand 76%, as
+RimWorld) and the slope, and pawns steer around each other deterministically; the snapshot has each
+pawn's velocity, ground height and route ahead (`docs/design/movement.md`). Since U2 `USimSubsystem` steps the sim one second at a
+time, passes events to `OnSimEvent`, keeps the last two snapshots and blends positions between them
+(`GetBlendedLocation`, the one place sim metres become Unreal centimetres), loads `data/defs`, shows
+sim timings on screen, and has keys: Space pause, 1/2/3 speed, `.` step, F7 saves a replay to
+`Saved/Replays/` (that is the bug-replay key U12 planned; U12 keeps F5/F9 saves and autosave). **Every task that adds sim state must add it to the
+save** (the doc has the steps) and to the save round-trip test.
 
 Since D3 the game has real starting data in `data/defs/`, written by hand with RimWorld's numbers
 from the RimWorld wiki (there is no RimWorld install to import from; `docs/decisions/0003`):
@@ -42,7 +55,7 @@ guns and raiders; the tasks that use them (C4, C6, C7, C9, F2, F6) add them the 
 
 ## Stage 1 progress
 
-8 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, F3). Tick tasks in `docs/plans/stage-1.md` as they merge.
+12 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -66,15 +79,25 @@ Wave 3, both cloud:
   commands so far (spawn and destroy a thing); each later system adds its own. New sim state
   must go into `Sim::stateHash()`.
 
-Wave 4, now open: **S3** hierarchical pathfinding (cloud, Opus high), **S6** save and load (cloud,
-Sonnet high), ~~**F3** cover, sight and threat maps~~ done (`docs/design/cover.md`; `simrun --sight
+Wave 4, now open: ~~**S3** hierarchical pathfinding~~ done (`docs/design/pathfinding.md`; CI runs
+the 1 km, 100 pawn check as `simrun_paths`; the path queue is in the save, save format 2),
+~~**S6** save and load~~ done
+(`docs/design/saves.md`; saves keep the command log, so a loaded session still records a full replay;
+the entity-registry hash order changed, so replays recorded before S6 have different hash values),
+~~**F3** cover, sight and threat maps~~ done (`docs/design/cover.md`; `simrun --sight
 FILE` draws what a pawn sees; sandbags and barricades were added to the importer list, and
-trees and rocks get their height from `fillPercent` when C2 adds plants) and **U2** bridge v2 (PC
-Unreal, Sonnet high; the first Unreal compile of EnTT and the S5 bridge, plus a dev key that saves
-a replay to `Saved/Replays/`). **C2** plants (cloud, Sonnet medium), **C8** colonists from a seed
-(cloud, Sonnet medium) and **F1** health basics (cloud, Sonnet high) are now unblocked; their defs
-are in `data/defs/`. Numbers marked `unverified` in a def were recalled, not read from the wiki;
-check them when a task leans on them.
+trees and rocks get their height from `fillPercent` when C2 adds plants) and ~~**U2** bridge v2~~
+done (PC Unreal; `docs/design/bridge.md`, smoke test `sim`; the first Unreal compile of EnTT and the
+S5 bridge, so S1's include path is confirmed). **C2** plants (cloud, Sonnet medium), **C8** colonists
+from a seed (cloud, Sonnet medium) and **F1** health basics (cloud, Sonnet high) are now unblocked;
+their defs are in `data/defs/`. Numbers marked `unverified` in a def were recalled, not read from the
+wiki; check them when a task leans on them.
+
+Wave 5: ~~**S4** smooth movement~~ done (`docs/design/movement.md`; save format 3; the hauling
+placeholder asks for a new path when a pawn gives up a walk; path *choice* still ignores slopes and
+sand, the doc says why). **C1** job system (cloud, Opus high) is open: its work types and skills are
+in `data/defs/`. **U5** pawns with animation by distance (PC Unreal, Opus high) has both its needs
+(U2, S4) and is open; it needs the PC free.
 
 ## Waiting on sneed
 

@@ -214,6 +214,7 @@ std::string writeReplay(const Replay& replay) {
     settings["pawnDef"] = s.pawnDef;
     settings["haulItemDef"] = s.haulItemDef;
     settings["checkpointEvery"] = s.checkpointEvery;
+    settings["pathBudget"] = s.pathBudget;
 
     // One command and one checkpoint per line, so files diff and read well.
     std::string out = "{\n";
@@ -278,11 +279,14 @@ bool readReplay(const std::string& text, Replay& out, std::string& error) {
         !r.integer(*settings, "pawns", s.pawns, where) || !r.integer(*settings, "items", s.items, where) ||
         !r.flag(*settings, "flatMap", s.flatMap, where) || !r.text(*settings, "pawnDef", s.pawnDef, where) ||
         !r.text(*settings, "haulItemDef", s.haulItemDef, where) ||
-        !r.integer(*settings, "checkpointEvery", s.checkpointEvery, where)) {
+        !r.integer(*settings, "checkpointEvery", s.checkpointEvery, where) ||
+        !r.integer(*settings, "pathBudget", s.pathBudget, where)) {
         return false;
     }
-    if (s.mapSize <= 0 || s.mapSize > 4096 || s.pawns < 0 || s.items < 0 || s.checkpointEvery < 0) {
-        return r.fail("settings: mapSize must be 1 to 4096; pawns, items and checkpointEvery not negative");
+    if (s.mapSize <= 0 || s.mapSize > 4096 || s.pawns < 0 || s.items < 0 || s.checkpointEvery < 0 ||
+        s.pathBudget <= 0) {
+        return r.fail(
+            "settings: mapSize must be 1 to 4096; pawns, items and checkpointEvery not negative; pathBudget above 0");
     }
 
     if (const auto commands = root.find("commands"); commands != root.end()) {

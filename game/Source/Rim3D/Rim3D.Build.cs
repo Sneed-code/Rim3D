@@ -9,6 +9,9 @@ public class Rim3D : ModuleRules
 
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "ColonySim" });
 
+		// The bridge's speed keys (SimSubsystem.cpp).
+		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
+
 		// Smoke tests (SmokeTest.cpp).
 		PrivateDependencyModuleNames.AddRange(new string[] { "AIModule", "ProceduralMeshComponent", "Json", "RenderCore", "RHI" });
 	}

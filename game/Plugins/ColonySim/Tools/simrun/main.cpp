@@ -6,15 +6,23 @@
 //   simrun --seed 42 --size 512 --days 0 --sight sight.png   (what a pawn sees among test walls)
 //   simrun --replay bug.replay.json            (plays a replay and says whether it matched)
 //   simrun --replay scenario.json --record out.replay.json
+//   simrun --seed 42 --size 1024 --days 1 --pawns 100 --items 2000 --data game/Plugins/ColonySim/Tests/data
+//                                     (pathfinding load test, with the test fixture defs; S3)
+//   simrun --seed 42 --days 1 --pawns 10 --items 100 --save game.save   (writes a save after the run)
+//   simrun --load game.save --days 1 --save later.save    (continues a save; --days defaults to 0)
+//   simrun --load game.save --days 0 --save-json game.json   (readable dump of a save)
 // --replay takes the settings and commands from the file and runs to its endStep (--days
 // overrides). --record writes what this run did as a replay, with its state hashes.
+// --check makes it exit with 1 if any job or path search failed.
 // Defs load from --data (default: the repo's data folder). The hauling test needs the Things defs
 // Human and Steel, which data/defs/Things provides.
 #include "ColonySim/Cover.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Pathfinder.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Replay.h"
+#include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/ThreatMap.h"
 #include "ColonySim/Things.h"
@@ -30,6 +38,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -43,11 +52,16 @@ struct Options {
     bool daysGiven = false;
     int pawns = 0;
     int items = 0;
+    int pathBudget = colony::Pathfinder::kDefaultBudget;
+    bool check = false;  // exit 1 if a job or a path search failed
     std::string png;
     std::string regionsPng;
     std::string replay;
     std::string record;
     std::string sightPng;
+    std::string load;
+    std::string save;
+    std::string saveJson;
 #ifdef COLONY_DATA_DIR
     std::string data = COLONY_DATA_DIR;
 #else
@@ -70,6 +84,10 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.pawns = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--items") == 0 && hasValue) {
             out.items = std::atoi(argv[++i]);
+        } else if (std::strcmp(arg, "--path-budget") == 0 && hasValue) {
+            out.pathBudget = std::atoi(argv[++i]);
+        } else if (std::strcmp(arg, "--check") == 0) {
+            out.check = true;
         } else if (std::strcmp(arg, "--png") == 0 && hasValue) {
             out.png = argv[++i];
         } else if (std::strcmp(arg, "--regions") == 0 && hasValue) {
@@ -82,15 +100,21 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.replay = argv[++i];
         } else if (std::strcmp(arg, "--record") == 0 && hasValue) {
             out.record = argv[++i];
+        } else if (std::strcmp(arg, "--load") == 0 && hasValue) {
+            out.load = argv[++i];
+        } else if (std::strcmp(arg, "--save") == 0 && hasValue) {
+            out.save = argv[++i];
+        } else if (std::strcmp(arg, "--save-json") == 0 && hasValue) {
+            out.saveJson = argv[++i];
         } else {
             std::fprintf(stderr,
-                         "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] [--png FILE] "
-                         "[--regions FILE] [--data DIR] [--replay FILE] [--record FILE]\n");
-            std::fprintf(stderr, "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] [--png FILE] [--regions FILE] [--sight FILE] [--data DIR]\n");
+                         "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
+                         "[--path-budget N] [--check] [--png FILE] [--regions FILE] [--sight FILE] [--data DIR] "
+                         "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE]\n");
             return false;
         }
     }
-    return out.size > 0 && out.size <= 4096 && out.days >= 0.0 && out.pawns >= 0 && out.items >= 0;
+    return out.size > 0 && out.size <= 4096 && out.days >= 0.0 && out.pawns >= 0 && out.items >= 0 && out.pathBudget > 0;
 }
 
 bool writeMapPng(const colony::Sim& sim, const std::string& path) {
@@ -339,6 +363,7 @@ int main(int argc, char** argv) {
     // A replay brings its own settings and commands; otherwise they come from the options.
     colony::Replay replay;
     colony::SimSettings settings{options.seed, options.size, options.pawns, options.items};
+    settings.pathBudget = options.pathBudget;
     int64_t steps = static_cast<int64_t>(options.days * static_cast<double>(colony::kSecondsPerDay));
     if (!options.replay.empty()) {
         std::string error;
@@ -361,7 +386,35 @@ int main(int argc, char** argv) {
     }
 
     const auto start = Clock::now();
-    colony::Sim sim(settings, defs);
+    std::unique_ptr<colony::Sim> simOwner;
+    if (!options.load.empty()) {
+        if (!options.replay.empty()) {
+            std::fprintf(stderr, "--load and --replay can't be used together\n");
+            return 2;
+        }
+        std::vector<uint8_t> bytes;
+        std::string error;
+        if (!colony::readSaveFile(options.load, bytes, error)) {
+            std::fprintf(stderr, "%s\n", error.c_str());
+            return 1;
+        }
+        colony::SaveLoadResult loaded = colony::loadSim(bytes, defs);
+        if (!loaded.sim) {
+            std::fprintf(stderr, "%s: %s\n", options.load.c_str(), loaded.error.c_str());
+            return 1;
+        }
+        for (const std::string& w : loaded.warnings) {
+            std::fprintf(stderr, "warning: %s\n", w.c_str());
+        }
+        simOwner = std::move(loaded.sim);
+        settings = simOwner->settings();
+        if (!options.daysGiven) {
+            steps = 0;
+        }
+    } else {
+        simOwner = std::make_unique<colony::Sim>(settings, defs);
+    }
+    colony::Sim& sim = *simOwner;
     const auto generated = Clock::now();
     if (!sim.setupErrors().empty()) {
         for (const std::string& e : sim.setupErrors()) {
@@ -411,18 +464,16 @@ int main(int argc, char** argv) {
 
     std::printf("{\"version\":\"%s\",\"seed\":%llu,\"size\":%d,\"day\":%lld,\"mapHash\":\"%016llx\","
                 "\"mapGenMs\":%.1f,\"stepMs\":%.1f,\"pawns\":%d,\"items\":%d,\"hauls\":%llu,\"itemsLeft\":%d,"
-                "\"failedJobs\":%llu,\"pathSearches\":%llu,\"cellsExpanded\":%llu,\"avgStepMs\":%.4f,"
-                "\"p99StepMs\":%.3f,\"maxStepMs\":%.3f,\"msPerFrameAt3x\":%.3f,\"defs\":%zu,\"things\":%zu,"
+                "\"failedJobs\":%llu,\"avgStepMs\":%.4f,\"p99StepMs\":%.3f,\"maxStepMs\":%.3f,"
+                "\"msPerFrameAt3x\":%.3f,\"defs\":%zu,\"things\":%zu,"
                 "\"commands\":%zu,\"commandsFailed\":%llu,\"events\":%llu,\"stateHash\":\"%016llx\","
                 "\"replay\":\"%s\",\"hashesCompared\":%d,\"firstMismatch\":%lld}\n",
                 colony::kSimVersion, static_cast<unsigned long long>(settings.seed), settings.mapSize,
                 static_cast<long long>(sim.time().day()), static_cast<unsigned long long>(sim.map().contentHash()),
                 ms(start, generated), ms(generated, finished), settings.pawns, settings.items,
                 static_cast<unsigned long long>(sim.stats().hauls), sim.itemsLeft(),
-                static_cast<unsigned long long>(sim.stats().failedJobs),
-                static_cast<unsigned long long>(sim.pathfinder().searches()),
-                static_cast<unsigned long long>(sim.pathfinder().cellsExpanded()), avgMs, percentile(0.99),
-                percentile(1.0), msPerFrameAt3x, defs ? defs->size() : static_cast<size_t>(0), sim.things().count(),
+                static_cast<unsigned long long>(sim.stats().failedJobs), avgMs, percentile(0.99), percentile(1.0),
+                msPerFrameAt3x, defs ? defs->size() : static_cast<size_t>(0), sim.things().count(),
                 sim.commandLog().size(), static_cast<unsigned long long>(commandsFailed),
                 static_cast<unsigned long long>(events), static_cast<unsigned long long>(sim.stateHash()), replayResult,
                 check.compared, static_cast<long long>(check.firstMismatch));
@@ -435,17 +486,66 @@ int main(int argc, char** argv) {
         }
     }
 
+    // Pathfinding queue (docs/design/pathfinding.md).
+    const colony::PathStats& paths = sim.pathfinder().stats();
+    std::printf("{\"pathBudget\":%d,\"pathRequests\":%llu,\"pathRefused\":%llu,\"pathSearches\":%llu,"
+                "\"pathFailedSearches\":%llu,\"pathRestarts\":%llu,\"regionsExpanded\":%llu,\"cellsExpanded\":%llu,"
+                "\"maxPathWorkInStep\":%llu,\"maxPathQueue\":%u,\"maxPathWaitSteps\":%u}\n",
+                settings.pathBudget, static_cast<unsigned long long>(paths.requests),
+                static_cast<unsigned long long>(paths.refused), static_cast<unsigned long long>(paths.searches),
+                static_cast<unsigned long long>(paths.failedSearches), static_cast<unsigned long long>(paths.restarts),
+                static_cast<unsigned long long>(paths.regionsExpanded),
+                static_cast<unsigned long long>(paths.cellsExpanded),
+                static_cast<unsigned long long>(paths.maxWorkInStep), paths.maxQueue, paths.maxWaitSteps);
+
+    // Movement (docs/design/movement.md): walks that were given up and asked for again.
+    std::printf("{\"repaths\":%llu,\"hauls\":%llu}\n", static_cast<unsigned long long>(sim.stats().repaths),
+                static_cast<unsigned long long>(sim.stats().hauls));
+
+    // A walk held up for good is rare (it was a rock corner once); many mean the movement is broken.
+    if (options.check && sim.stats().repaths > 5 + sim.stats().hauls / 100) {
+        std::fprintf(stderr, "check failed: %llu repaths for %llu hauls\n",
+                     static_cast<unsigned long long>(sim.stats().repaths), static_cast<unsigned long long>(sim.stats().hauls));
+        return 1;
+    }
+    if (options.check && (sim.stats().failedJobs > 0 || paths.failedSearches > 0)) {
+        std::fprintf(stderr, "check failed: %llu failed jobs, %llu failed path searches\n",
+                     static_cast<unsigned long long>(sim.stats().failedJobs),
+                     static_cast<unsigned long long>(paths.failedSearches));
+        return 1;
+    }
+
+    if (!options.save.empty() || !options.saveJson.empty()) {
+        std::string error;
+        if (!options.save.empty()) {
+            const auto before = Clock::now();
+            const std::vector<uint8_t> bytes = colony::saveSim(sim);
+            const auto saved = Clock::now();
+            if (!colony::writeSaveFile(options.save, bytes, error)) {
+                std::fprintf(stderr, "%s\n", error.c_str());
+                return 1;
+            }
+            std::printf("{\"saveBytes\":%zu,\"saveMs\":%.2f}\n", bytes.size(), ms(before, saved));
+        }
+        if (!options.saveJson.empty()) {
+            std::ofstream file(options.saveJson, std::ios::binary | std::ios::trunc);
+            const std::string json = colony::saveToJson(sim);
+            file.write(json.data(), static_cast<std::streamsize>(json.size()));
+            if (!file) {
+                std::fprintf(stderr, "could not write %s\n", options.saveJson.c_str());
+                return 1;
+            }
+        }
+    }
+
     if (!options.regionsPng.empty()) {
-        const auto before = Clock::now();
-        const size_t regionCount = sim.regions().regionCount();  // the first query builds every block
-        const auto built = Clock::now();
+        const size_t regionCount = sim.regions().regionCount();  // built with the sim, so in mapGenMs
         const size_t groups = sim.regions().groupCount();
         int biggest = 0;
         for (uint32_t g = 0; g < groups; ++g) {
             biggest = std::max(biggest, sim.regions().groupCellCount(g));
         }
-        std::printf("{\"regions\":%zu,\"groups\":%zu,\"biggestGroupCells\":%d,\"regionBuildMs\":%.2f}\n", regionCount,
-                    groups, biggest, ms(before, built));
+        std::printf("{\"regions\":%zu,\"groups\":%zu,\"biggestGroupCells\":%d}\n", regionCount, groups, biggest);
         if (!writeRegionsPng(sim, options.regionsPng)) {
             std::fprintf(stderr, "could not write %s\n", options.regionsPng.c_str());
             return 1;

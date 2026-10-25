@@ -23,9 +23,11 @@
 namespace colony {
 
 class DefDatabase;
+class MovementSystem;
 class Regions;
 class Things;
 struct Snapshot;
+class SimSaveAccess;
 
 struct SimSettings {
     uint64_t seed = 0;
@@ -37,11 +39,13 @@ struct SimSettings {
     std::string haulItemDef = "Steel";
     // Record a state hash every this many game seconds (0: never), for replays to compare.
     int64_t checkpointEvery = kSecondsPerHour;
+    int pathBudget = Pathfinder::kDefaultBudget;  // path search work per step (docs/design/pathfinding.md)
 };
 
 struct SimStats {
     uint64_t hauls = 0;
     uint64_t failedJobs = 0;
+    uint64_t repaths = 0;  // paths asked for again because a pawn gave up on its walk
 };
 
 // The state hash after a step, recorded every SimSettings::checkpointEvery game seconds.
@@ -109,9 +113,18 @@ public:
     const std::vector<Entity>& haulers() const { return haulers_; }
     int itemsLeft() const;
     const SimStats& stats() const { return stats_; }
+    // Path requests go through its queue, which runs once per step (docs/design/pathfinding.md).
+    Pathfinder& pathfinder() { return pathfinder_; }
     const Pathfinder& pathfinder() const { return pathfinder_; }
 
 private:
+    friend class SimSaveAccess;  // saves read and restore the private state (Save.h)
+
+    struct EmptyStart {};
+    // A sim with its map and nothing else: no hauling test. Sim(settings, defs) adds the test's
+    // stockpile, items and pawns; loading a save restores them from the file instead.
+    Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, EmptyStart);
+
     void applyCommand(const Command& command, uint64_t id);
     void commandFailed(uint64_t id, std::string message);
     void placeStockpileAndThings();
@@ -123,6 +136,7 @@ private:
     Map map_;
     Pathfinder pathfinder_;
     std::unique_ptr<Things> things_;
+    std::unique_ptr<MovementSystem> movement_;
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
     Rng rng_;
