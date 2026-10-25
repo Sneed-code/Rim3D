@@ -465,6 +465,7 @@ TEST_CASE("Construction: a door and a bed are built like a wall") {
     CHECK(sim.map().walkable(CellPos{14, 10, 0}));
     const Entity bed = sim.map().buildingAt(CellPos{30, 30, 0});
     CHECK(bed == sim.map().buildingAt(CellPos{31, 30, 0}));  // facing West, 2 cells wide
+    CHECK(sim.things().registry().all_of<Bed>(bed));          // a built bed can be slept in (needs.md)
     CHECK(buildItemTotal(sim, "Steel") == 50);
     CHECK(buildItemTotal(sim, "WoodLog") == 5);
 }

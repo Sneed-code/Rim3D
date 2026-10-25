@@ -36,8 +36,8 @@ a job; the first that does wins. It is `kThinkList` in `JobSystem::step`.
 | --- | --- | --- |
 | 1 | Emergencies: on fire, mental break (a downed pawn skips the list, above) | later |
 | 2 | Defense plan (alarm roles) | F6 |
-| 3 | Urgent needs (eat, sleep when exhausted) | C6 |
-| 4 | Schedule block (sleep, recreation) | C6 |
+| 3 | **Urgent needs** (`thinkNeeds`: eat, sleep when worn out) | C6, [needs.md](needs.md) |
+| 4 | **Schedule block** (`thinkSchedule`: sleep hours, recreation hours) | C6 |
 | 5 | **Work** (`thinkWork`) | C1 |
 | 6 | **Idle** (`thinkIdle`): wait 60 game seconds, then think again | C1 |
 
@@ -46,8 +46,10 @@ haul") and starts the ordered one at once, marked `forced`. The only order so fa
 `OrderHaulCommand`, RimWorld's "prioritize hauling"; draft, move and attack orders come with F4. A
 forced job ignores work priorities (it is done even with Hauling off), as in RimWorld.
 
-A pawn re-thinks only when its job ends. Interrupting a job for something more urgent (a need that
-turns urgent, an alarm) is the next node's task to add: it ends the job with `endJob(Interrupted)`.
+A pawn re-thinks only when its job ends, except that `interruptForNeeds` (C6) checks every step
+whether a pawn on a hauling or waiting job (not a player order) has become hungry or tired enough
+to put it down. Another node that needs to interrupt (an alarm) does the same: it ends the job with
+`endJob(Interrupted)`.
 
 ## Work types and priorities
 
@@ -93,6 +95,11 @@ state inside a go-to step. Each job type has a fixed list of steps (RimWorld's t
 | --- | --- |
 | `Wait` | wait until `until` |
 | `HaulToCell` | go to the item, pick it up, carry it to the cell, put it down |
+| `Ingest` | go to the food, pick it up, walk to the eating spot (none if it is already there), eat |
+| `LayDown` | walk to the bed (none if the pawn lies on the ground where it is), lie until rested |
+| `DeliverResources` | go to the materials, pick them up, carry them next to the site, hand them over |
+| `BuildFrame` | walk next to the frame, build until the work is done |
+| `Deconstruct` | walk next to the building, take it down |
 
 A step that ends at once (picking up, putting down) lets the next start in the same game second. A
 go-to step asks the pathfinder for a path (an answer the next step at the earliest), walks it, and if
@@ -120,7 +127,8 @@ and two deliveries to one plan never overlap. Which targets each job type holds 
 `JobSystem::reservationsOf`, used for reserving, releasing and rebuilding on load.
 
 A hauling job holds its item and its stockpile cell; no other pawn's scanner or storage search takes
-them. Reservations follow from the jobs (each job type knows what it holds), so they are not saved:
+them. An eating job holds the food and, if it eats in a chair, the chair's cell; a sleeping job holds
+its bed's cell (`JobSystem::heldTargets`). Reservations follow from the jobs (each job type knows what it holds), so they are not saved:
 loading rebuilds them from the jobs, and refuses a save where two jobs hold the same target.
 
 ## Stockpiles and hauling

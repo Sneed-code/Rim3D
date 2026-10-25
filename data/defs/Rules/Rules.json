@@ -45,6 +45,30 @@
     "ours": ["idleSeconds", "avoidFailedTargetSeconds", "maxRepaths"]
   },
   {
+    "defName": "NeedRules", "source": "RimWorld wiki",
+    "food": {
+      "seekBelow": 0.3, "hungryBelow": 0.25, "ravenousBelow": 0.125,
+      "fallFactor": { "Fed": 1.0, "Hungry": 0.5, "Ravenous": 0.25 },
+      "defaultFoodPerDay": 1.6,
+      "malnutritionPerDay": 0.48,
+      "ingestSeconds": 720,
+      "maxNumToIngestAtOnce": 20,
+      "eatSpotRadius": 40
+    },
+    "rest": {
+      "fallPerDay": { "Rested": 0.95, "Drowsy": 0.66, "Tired": 0.28, "Exhausted": 0.57 },
+      "drowsyBelow": 0.28, "tiredBelow": 0.14, "exhaustedBelow": 0.01,
+      "gainPerDay": 2.285714,
+      "groundEffectiveness": 0.8,
+      "fallAsleepBelow": 0.75,
+      "wakeAt": 1.0,
+      "wakeOutsideSleepAt": 0.7
+    },
+    "schedule": { "sleepFromHour": 22, "sleepToHour": 5 },
+    "unverified": ["food.ingestSeconds", "food.maxNumToIngestAtOnce", "rest.fallAsleepBelow", "rest.wakeAt", "schedule"],
+    "ours": ["food.eatSpotRadius", "food.ingestSeconds", "rest.wakeOutsideSleepAt", "rest.fallAsleepBelow", "rest.wakeAt"]
+  },
+  {
     "defName": "PawnGenRules", "source": "Rim3D",
     "adultAgeMin": 18,
     "ageGenerationCurve": [[14, 0], [16, 100], [50, 100], [60, 30], [70, 18], [80, 10], [90, 3], [100, 0]],

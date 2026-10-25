@@ -6,6 +6,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Needs.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Snapshot.h"
@@ -65,8 +66,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     things_->setEventLog(&events_);
     health_->setEventLog(&events_);
     construction_ = std::make_unique<Construction>(map_, *things_, *defs_, rng_, events_);
-    jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *defs_, *health_, time_,
-                                        stats_, events_);
+    needs_ = std::make_unique<NeedsSystem>(*things_, *health_, *defs_);
+    jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *defs_, *health_, *needs_,
+                                        time_, stats_, events_);
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -161,7 +163,7 @@ void Sim::placeStockpileAndThings() {
             setupErrors_.push_back("hauling test: '" + settings_.pawnDef + "' is not a pawn");
             return;
         }
-        jobs_->addWorker(pawn);
+        jobs_->addWorker(pawn, {}, false);  // the benchmark's pawns haul all day: no needs
         haulers_.push_back(pawn);
     }
 }
@@ -328,6 +330,14 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             mover.vx = moveX;
             mover.vy = moveY;
         }
+    } else if (const auto* schedule = std::get_if<SetScheduleCommand>(&command)) {
+        if (!jobs_->setSchedule(schedule->pawn, schedule->hour, schedule->kind, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* assign = std::get_if<AssignBedCommand>(&command)) {
+        if (!jobs_->assignBed(assign->bed, assign->pawn, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* place = std::get_if<PlaceBlueprintCommand>(&command)) {
         const DefId def = defs_->idOf("Things", place->def);
         const DefId stuff = place->stuff.empty() ? DefId{} : defs_->idOf("Things", place->stuff);
@@ -367,6 +377,7 @@ void Sim::step() {
     pending_.swap(applying);
 
     health_->step(time_.seconds, settings_.seed);
+    needs_->step();
     // A controlled colonist who goes down or dies is let go: the player can't walk it any more.
     {
         entt::registry& reg = things_->registry();
@@ -454,6 +465,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.job = worker->job.type;
             view.jobTarget = worker->job.thing;
         }
+        if (const Needs* needs = reg.try_get<Needs>(entity)) {
+            view.food = needs->food;
+            view.rest = needs->rest;
+        }
+        if (const Worker* worker = reg.try_get<Worker>(entity)) {
+            view.asleep = jobIsLyingDown(worker->job);
+        }
         if (const Carrying* carrying = reg.try_get<Carrying>(entity); carrying && reg.valid(carrying->thing)) {
             view.carriedDef = reg.get<Thing>(carrying->thing).def;
             view.carriedCount = reg.get<StackCount>(carrying->thing).count;
@@ -507,6 +525,7 @@ uint64_t Sim::stateHash() const {
                             reg.all_of<StackCount>(e),   reg.all_of<HitPoints>(e),    reg.all_of<Mover>(e),
                             reg.all_of<Worker>(e),       reg.all_of<WorkSettings>(e), reg.all_of<Carrying>(e),
                             reg.all_of<Colonist>(e),     reg.all_of<Health>(e),       reg.all_of<PlayerControl>(e),
+                            reg.all_of<Needs>(e),        reg.all_of<Schedule>(e),     reg.all_of<Bed>(e),
                             reg.all_of<ConstructionSite>(e), reg.all_of<BuiltOf>(e),
                             reg.all_of<MarkedForDeconstruct>(e)};
         uint64_t mask = 0;
@@ -602,6 +621,7 @@ uint64_t Sim::stateHash() const {
             h.add(entt::to_integral(job.thing));
             simHashCell(h, job.cell);
             h.add(job.count);
+            h.add(entt::to_integral(job.chair));
             h.add(entt::to_integral(job.site));
             h.add(job.progress);
             h.add(job.workType.value);
@@ -630,6 +650,23 @@ uint64_t Sim::stateHash() const {
         }
         if (const Carrying* carrying = reg.try_get<Carrying>(e)) {
             h.add(entt::to_integral(carrying->thing));
+        }
+        if (const Needs* needs = reg.try_get<Needs>(e)) {
+            h.add(needs->food);
+            h.add(needs->rest);
+            h.add(needs->malnutrition);
+            h.add(needs->foodSearchAfter);
+        }
+        if (const Schedule* schedule = reg.try_get<Schedule>(e)) {
+            for (const ScheduleKind kind : schedule->hours) {
+                h.add(static_cast<int>(kind));
+            }
+        }
+        if (const Bed* bed = reg.try_get<Bed>(e)) {
+            h.add(static_cast<uint64_t>(bed->owners.size()));
+            for (const Entity owner : bed->owners) {
+                h.add(entt::to_integral(owner));
+            }
         }
         if (const Health* health = reg.try_get<Health>(e)) {
             h.add(health->protagonist);

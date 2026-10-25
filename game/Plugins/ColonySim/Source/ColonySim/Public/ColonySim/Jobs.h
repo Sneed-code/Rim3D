@@ -6,6 +6,7 @@
 #include "ColonySim/Events.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/JobType.h"
+#include "ColonySim/Needs.h"
 #include "ColonySim/Pathfinder.h"
 #include "ColonySim/Zones.h"
 
@@ -32,10 +33,14 @@ struct JobTarget {
 // One job in progress. Which fields a job type uses is in its comment above.
 struct Job {
     JobType type = JobType::None;
-    Entity thing = kNoEntity;  // HaulToCell, DeliverResources: the item (the part in the pawn's hands once
-                               // picked up); BuildFrame: the frame; Deconstruct: the building
-    CellPos cell;              // HaulToCell: the storage cell; the other jobs: where the pawn stands to work
-    int count = 0;             // HaulToCell, DeliverResources: how many to carry
+    Entity thing = kNoEntity;  // HaulToCell, Ingest, DeliverResources: the item (the part in the pawn's hands
+                               // once picked up); LayDown: the bed, or none for the ground; BuildFrame: the
+                               // frame; Deconstruct: the building
+    CellPos cell;              // HaulToCell: the storage cell; Ingest: where it eats (a chair, else where
+                               // the food lay); LayDown: the bed's cell for this pawn, or where it lies;
+                               // the construction jobs: where the pawn stands to work
+    int count = 0;             // HaulToCell, Ingest, DeliverResources: how many to carry
+    Entity chair = kNoEntity;  // Ingest: the chair at a table it eats in, or none (it eats where the food lay)
     Entity site = kNoEntity;   // DeliverResources: the blueprint or frame it brings materials to
     float progress = 0.0f;     // Deconstruct: work done so far
     DefId workType;            // the work type whose scanner gave it; none for orders and idling
@@ -44,7 +49,8 @@ struct Job {
     uint8_t walk = 0;          // inside a go-to step: 0 not set off, 1 waiting for a path, 2 walking
     uint8_t repaths = 0;       // new paths asked for after giving up a walk
     int64_t startedAt = 0;     // game second
-    int64_t until = 0;         // Wait: the game second it ends
+    int64_t until = 0;         // Wait: the game second it ends; Ingest: the game second it finishes eating
+                               // (0 until it starts)
     PathTicket path;           // while `walk` is 1
 };
 
@@ -80,6 +86,15 @@ struct Carrying {
 
 // How many steps a job type has (for save checks).
 COLONY_API int jobStepCount(JobType type);
+
+// LayDown has two steps, walking to the bed and lying in it; rest rises during the second.
+inline constexpr uint8_t kLayDownLieStep = 1;
+// Ingest has four: go to the food, pick it up, go to the eating spot, eat. The pawn carries the
+// food from the third on.
+inline constexpr uint8_t kIngestPickUpStep = 1;
+inline bool jobIsLyingDown(const Job& job) {
+    return job.type == JobType::LayDown && job.step >= kLayDownLieStep;
+}
 
 class Construction;
 class DefDatabase;
@@ -122,7 +137,8 @@ public:
     };
 
     JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zones, Construction& construction,
-              const DefDatabase& defs, const HealthSystem& health, const GameTime& time, SimStats& stats,
+              const DefDatabase& defs, const HealthSystem& health, const NeedsSystem& needs, const GameTime& time,
+              SimStats& stats,
               std::vector<Event>& events);
     ~JobSystem();
     JobSystem(const JobSystem&) = delete;
@@ -135,8 +151,9 @@ public:
 
     // Makes a pawn a worker: no job, and priority 3 on every work type it can do.
     // Work types with a tag in `disabledWorkTags` (a colonist's backstories and traits) are off for
-    // good, as RimWorld's "incapable of".
-    void addWorker(Entity pawn, const std::vector<std::string>& disabledWorkTags = {});
+    // good, as RimWorld's "incapable of". With `withNeeds` (and a NeedRules def) it also gets food,
+    // rest and the standard schedule (Needs.h).
+    void addWorker(Entity pawn, const std::vector<std::string>& disabledWorkTags = {}, bool withNeeds = true);
     // A Work tab row with the default priorities.
     WorkSettings defaultWorkSettings(const std::vector<std::string>& disabledWorkTags = {}) const;
 
@@ -151,6 +168,14 @@ public:
     // Ends the pawn's job, if it has one, as interrupted for `why`: reservations let go, what it
     // carried put down. Used when the player takes the pawn over (ControlPawnCommand).
     void interrupt(Entity pawn, const std::string& why);
+    // Schedule: what a pawn does in an hour of the day (0 to 23).
+    bool setSchedule(Entity pawn, int hour, ScheduleKind kind, std::string& error);
+    // Bed ownership. `pawn` becomes an owner of `bed` (and stops owning any other bed); kNoEntity
+    // takes every owner off the bed. Fails if the bed is full or either is not what it should be.
+    bool assignBed(Entity bed, Entity pawn, std::string& error);
+    // The bed a pawn owns, or kNoEntity.
+    Entity bedOf(Entity pawn) const;
+    const NeedRules& needRules() const { return rules_; }
 
     // Call before a thing is destroyed: ends the jobs that carry it or are done by it.
     void forget(Entity thing);
@@ -212,14 +237,35 @@ private:
         }
     };
     static TargetKey keyOf(const JobTarget& target, uint8_t purpose = 0);
-    // What a job holds while it runs: its item and cell for hauling, its item and site for a
-    // delivery, its frame or building for building and taking down.
-    static void reservationsOf(const Job& job, std::vector<TargetKey>& out);
+    // What a job holds while it runs, which no other pawn's scanner takes; up to two. Hauling: its
+    // item and cell. Eating: the food and the chair's cell. Sleeping: the bed's cell. A delivery:
+    // its item and site. Building and taking down: the frame or the building.
+    static int reservationsOf(const Job& job, TargetKey out[2]);
 
     // The think list: each node may give a job; the first that does wins (docs/design/jobs.md).
     using ThinkNode = bool (JobSystem::*)(Entity pawn, Job& out);
+    bool thinkNeeds(Entity pawn, Job& out);
+    bool thinkSchedule(Entity pawn, Job& out);
     bool thinkWork(Entity pawn, Job& out);
     bool thinkIdle(Entity pawn, Job& out);
+
+    // Needs (NeedJobs.cpp). A pawn on a job it may drop (hauling, waiting) is checked every step:
+    // when it is hungry enough to eat or tired enough to sleep, the need job replaces its own.
+    void interruptForNeeds(Entity pawn);
+    ScheduleKind scheduleNow(Entity pawn) const;
+    float sleepBelow(ScheduleKind slot) const;
+    bool findFood(Entity pawn, Job& out);
+    // The chair, next to a table, that `pawn` would eat at when the food lies at `from`: the nearest
+    // within NeedRules.eatSpotRadius that it can reach and nobody holds. kNoEntity if there is none.
+    Entity findChair(Entity pawn, CellPos from, CellPos& cell) const;
+    bool makeSleepJob(Entity pawn, Job& out);
+    bool findBed(Entity pawn, Entity& bed, CellPos& cell);
+    bool bedSlotCell(Entity bed, Entity pawn, CellPos& out) const;
+    StepResult eat(Entity pawn, Job& job, std::string& why);
+    StepResult lie(Entity pawn, Job& job, std::string& why);
+    bool failCheckIngest(Entity pawn, Job& job, std::string& why);
+    bool failCheckLayDown(Entity pawn, Job& job, std::string& why);
+    void wakeUp(Entity pawn, const Job& job);
 
     void startJob(Entity pawn, Job job);
     void tickJob(Entity pawn);
@@ -246,6 +292,8 @@ private:
     Construction& construction_;
     const DefDatabase& defs_;
     const HealthSystem& health_;
+    const NeedsSystem& needs_;
+    const NeedRules& rules_;
     const GameTime& time_;
     SimStats& stats_;
     std::vector<Event>& events_;
@@ -254,6 +302,15 @@ private:
     std::vector<WorkType> workTypes_;
     std::vector<uint8_t> standable_;  // per def id: a building pawns can stand on (storage allowed)
     std::vector<int> stackLimits_;    // per def id
+    // Per def id, from the Things defs (NeedJobs.cpp): food tiers (-1 not food), nutrition and how
+    // long a sitting takes; the kinds of building.
+    std::vector<int8_t> foodTier_;
+    std::vector<float> nutrition_;
+    std::vector<uint16_t> maxIngest_;
+    std::vector<float> ingestSeconds_;
+    std::vector<uint8_t> isBed_;
+    std::vector<uint8_t> isTable_;
+    std::vector<uint8_t> isChair_;
     std::map<TargetKey, Entity> reservations_;  // follows from the jobs; rebuilt on load
     int64_t idleSeconds_ = 0;
     int64_t avoidSeconds_ = 0;

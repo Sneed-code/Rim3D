@@ -31,6 +31,9 @@ enum class JobStepKind : uint8_t {
     PickUp,
     CarryToCell,  // walk to the job's cell, carrying
     Place,
+    WalkToSpot,
+    Eat,
+    Lie,
     GotoCell,     // walk to the job's cell
     Deliver,
     BuildWork,
@@ -40,6 +43,9 @@ enum class JobStepKind : uint8_t {
 constexpr JobStepKind kJobsWaitSteps[] = {JobStepKind::Wait};
 constexpr JobStepKind kJobsHaulSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::CarryToCell,
                                           JobStepKind::Place};
+constexpr JobStepKind kJobsIngestSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::WalkToSpot,
+                                            JobStepKind::Eat};
+constexpr JobStepKind kJobsLayDownSteps[] = {JobStepKind::WalkToSpot, JobStepKind::Lie};
 constexpr uint8_t kJobsHaulPickUpStep = 1;
 constexpr uint8_t kJobsHaulCarryStep = 2;
 constexpr JobStepKind kJobsDeliverSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::CarryToCell,
@@ -71,6 +77,8 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::None: return {nullptr, 0};
         case JobType::Wait: return {kJobsWaitSteps, static_cast<int>(std::size(kJobsWaitSteps))};
         case JobType::HaulToCell: return {kJobsHaulSteps, static_cast<int>(std::size(kJobsHaulSteps))};
+        case JobType::Ingest: return {kJobsIngestSteps, static_cast<int>(std::size(kJobsIngestSteps))};
+        case JobType::LayDown: return {kJobsLayDownSteps, static_cast<int>(std::size(kJobsLayDownSteps))};
         case JobType::DeliverResources: return {kJobsDeliverSteps, static_cast<int>(std::size(kJobsDeliverSteps))};
         case JobType::BuildFrame: return {kJobsBuildSteps, static_cast<int>(std::size(kJobsBuildSteps))};
         case JobType::Deconstruct: return {kJobsDeconstructSteps, static_cast<int>(std::size(kJobsDeconstructSteps))};
@@ -109,6 +117,8 @@ const char* jobTypeName(JobType type) {
         case JobType::None: return "None";
         case JobType::Wait: return "Wait";
         case JobType::HaulToCell: return "HaulToCell";
+        case JobType::Ingest: return "Ingest";
+        case JobType::LayDown: return "LayDown";
         case JobType::DeliverResources: return "DeliverResources";
         case JobType::BuildFrame: return "BuildFrame";
         case JobType::Deconstruct: return "Deconstruct";
@@ -121,7 +131,8 @@ int jobStepCount(JobType type) {
 }
 
 JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zones, Construction& construction,
-                     const DefDatabase& defs, const HealthSystem& health, const GameTime& time, SimStats& stats,
+                     const DefDatabase& defs, const HealthSystem& health, const NeedsSystem& needs, const GameTime& time,
+                     SimStats& stats,
                      std::vector<Event>& events)
     : map_(map),
       things_(things),
@@ -130,6 +141,8 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
       construction_(construction),
       defs_(defs),
       health_(health),
+      needs_(needs),
+      rules_(needs.rules()),
       time_(time),
       stats_(stats),
       events_(events),
@@ -159,6 +172,13 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
 
     standable_.assign(defs_.size(), 0);
     stackLimits_.assign(defs_.size(), 1);
+    foodTier_.assign(defs_.size(), -1);
+    nutrition_.assign(defs_.size(), 0.0f);
+    maxIngest_.assign(defs_.size(), 1);
+    ingestSeconds_.assign(defs_.size(), 0.0f);
+    isBed_.assign(defs_.size(), 0);
+    isTable_.assign(defs_.size(), 0);
+    isChair_.assign(defs_.size(), 0);
     for (uint32_t i = 0; i < defs_.size(); ++i) {
         const Def& def = defs_.get(DefId{i});
         if (def.kind() != "Things") {
@@ -166,6 +186,27 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
         }
         standable_[i] = def.text("category") == "Building" && def.text("passability") == "Standable" ? 1 : 0;
         stackLimits_[i] = std::max(1, static_cast<int>(def.integer("stackLimit", 1)));
+        isBed_[i] = def.flag("building.bed") ? 1 : 0;
+        isTable_[i] = def.flag("building.isTable") ? 1 : 0;
+        isChair_[i] = def.flag("building.isSittable") ? 1 : 0;
+        if (def.has("ingestible") && def.number("stats.nutrition") > 0.0) {
+            // Food tiers, tastiest last (docs/design/needs.md). NeverForNutrition is not food.
+            const std::string taste = def.text("ingestible.preferability");
+            int tier = 1;
+            if (taste == "NeverForNutrition") tier = -1;
+            else if (taste == "DesperateOnly" || taste == "DesperateOnlyForHumanlikes") tier = 0;
+            else if (taste == "RawBad") tier = 1;
+            else if (taste == "RawTasty") tier = 2;
+            else if (taste == "MealAwful") tier = 3;
+            else if (taste == "MealSimple") tier = 4;
+            else if (taste == "MealFine") tier = 5;
+            else if (taste == "MealLavish") tier = 6;
+            foodTier_[i] = static_cast<int8_t>(tier);
+            nutrition_[i] = static_cast<float>(def.number("stats.nutrition"));
+            maxIngest_[i] = static_cast<uint16_t>(std::clamp<int64_t>(
+                def.integer("ingestible.maxNumToIngestAtOnce", rules_.maxNumToIngestAtOnce), 1, 1000));
+            ingestSeconds_[i] = static_cast<float>(def.number("ingestible.baseIngestSeconds", rules_.ingestSeconds));
+        }
     }
 
     const Def* rules = defs_.find("Rules", "JobRules");
@@ -202,10 +243,14 @@ WorkSettings JobSystem::defaultWorkSettings(const std::vector<std::string>& disa
     return settings;
 }
 
-void JobSystem::addWorker(Entity pawn, const std::vector<std::string>& disabledWorkTags) {
+void JobSystem::addWorker(Entity pawn, const std::vector<std::string>& disabledWorkTags, bool withNeeds) {
     entt::registry& reg = things_.registry();
     reg.emplace_or_replace<Worker>(pawn);
     reg.emplace_or_replace<WorkSettings>(pawn, defaultWorkSettings(disabledWorkTags));
+    if (withNeeds && rules_.present) {
+        reg.emplace_or_replace<Needs>(pawn);
+        reg.emplace_or_replace<Schedule>(pawn, rules_.standardSchedule());
+    }
 }
 
 // ---- Reservations ---------------------------------------------------------------------------
@@ -238,40 +283,57 @@ bool JobSystem::deliveryReservedByOther(Entity site, Entity pawn) const {
     return it != reservations_.end() && it->second != pawn;
 }
 
-void JobSystem::reservationsOf(const Job& job, std::vector<TargetKey>& out) {
-    out.clear();
+// What a job holds. Hauling: the item and the storage cell. Eating: the food and, if the pawn eats
+// in a chair, the chair's cell. Sleeping: the bed's cell (none for the ground). Delivering: the
+// item and the site (purpose 1, so the builder of the frame can hold it too). Building and taking
+// down: the frame or the building.
+int JobSystem::reservationsOf(const Job& job, TargetKey out[2]) {
     switch (job.type) {
         case JobType::HaulToCell:
-            out.push_back(keyOf(JobTarget{job.thing, CellPos{}}));
-            out.push_back(keyOf(JobTarget{kNoEntity, job.cell}));
-            break;
+            out[0] = keyOf(JobTarget{job.thing, CellPos{}});
+            out[1] = keyOf(JobTarget{kNoEntity, job.cell});
+            return 2;
+        case JobType::Ingest:
+            out[0] = keyOf(JobTarget{job.thing, CellPos{}});
+            if (job.chair != kNoEntity) {
+                out[1] = keyOf(JobTarget{kNoEntity, job.cell});
+                return 2;
+            }
+            return 1;
+        case JobType::LayDown:
+            if (job.thing == kNoEntity) {
+                return 0;
+            }
+            out[0] = keyOf(JobTarget{kNoEntity, job.cell});
+            return 1;
         case JobType::DeliverResources:
-            out.push_back(keyOf(JobTarget{job.thing, CellPos{}}));
-            out.push_back(keyOf(JobTarget{job.site, CellPos{}}, 1));
-            break;
+            out[0] = keyOf(JobTarget{job.thing, CellPos{}});
+            out[1] = keyOf(JobTarget{job.site, CellPos{}}, 1);
+            return 2;
         case JobType::BuildFrame:
         case JobType::Deconstruct:
-            out.push_back(keyOf(JobTarget{job.thing, CellPos{}}));
-            break;
+            out[0] = keyOf(JobTarget{job.thing, CellPos{}});
+            return 1;
         case JobType::None:
         case JobType::Wait:
-            break;
+            return 0;
     }
+    return 0;
 }
 
 void JobSystem::reserve(Entity pawn, const Job& job) {
-    std::vector<TargetKey> keys;
-    reservationsOf(job, keys);
-    for (const TargetKey& key : keys) {
-        reservations_[key] = pawn;
+    TargetKey keys[2];
+    const int n = reservationsOf(job, keys);
+    for (int i = 0; i < n; ++i) {
+        reservations_[keys[i]] = pawn;
     }
 }
 
 void JobSystem::release(Entity pawn, const Job& job) {
-    std::vector<TargetKey> keys;
-    reservationsOf(job, keys);
-    for (const TargetKey& key : keys) {
-        const auto it = reservations_.find(key);
+    TargetKey keys[2];
+    const int n = reservationsOf(job, keys);
+    for (int i = 0; i < n; ++i) {
+        const auto it = reservations_.find(keys[i]);
         if (it != reservations_.end() && it->second == pawn) {
             reservations_.erase(it);
         }
@@ -380,7 +442,8 @@ void JobSystem::step() {
     // The think list, in order. Later tasks put theirs in place: emergencies first (downed, on
     // fire: F1 and later), then the defense plan (F6), urgent needs and the schedule (C6), work
     // and finally idling. Player orders don't wait for a think: the command starts them.
-    static constexpr ThinkNode kThinkList[] = {&JobSystem::thinkWork, &JobSystem::thinkIdle};
+    static constexpr ThinkNode kThinkList[] = {&JobSystem::thinkNeeds, &JobSystem::thinkSchedule, &JobSystem::thinkWork,
+                                               &JobSystem::thinkIdle};
 
     for (const Entity pawn : order_) {
         // The player walks this one (U9): no think, no job, until control is let go.
@@ -399,7 +462,10 @@ void JobSystem::step() {
         worker.avoid.erase(std::remove_if(worker.avoid.begin(), worker.avoid.end(),
                                           [t](const AvoidTarget& a) { return a.until <= t; }),
                            worker.avoid.end());
-        if (worker.job.type == JobType::None) {
+        if (worker.job.type != JobType::None) {
+            interruptForNeeds(pawn);
+        }
+        if (reg.get<Worker>(pawn).job.type == JobType::None) {
             for (const ThinkNode node : kThinkList) {
                 Job job;
                 if ((this->*node)(pawn, job)) {
@@ -514,6 +580,12 @@ void JobSystem::tickJob(Entity pawn) {
 }
 
 bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
+    if (job.type == JobType::Ingest) {
+        return failCheckIngest(pawn, job, why);
+    }
+    if (job.type == JobType::LayDown) {
+        return failCheckLayDown(pawn, job, why);
+}
     entt::registry& reg = things_.registry();
     if (job.type == JobType::DeliverResources) {
         const ConstructionSite* site = reg.valid(job.site) ? reg.try_get<ConstructionSite>(job.site) : nullptr;
@@ -603,6 +675,13 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return walkTo(pawn, job, job.cell, why);
         case JobStepKind::Place:
             return place(pawn, job, why);
+        case JobStepKind::WalkToSpot:
+            // Already there (a pawn eating where the food lay, sleeping where it stands): no walk.
+            return cellOf(things_.registry().get<Position>(pawn)) == job.cell ? StepResult::Next : walkTo(pawn, job, job.cell, why);
+        case JobStepKind::Eat:
+            return eat(pawn, job, why);
+        case JobStepKind::Lie:
+            return lie(pawn, job, why);
         case JobStepKind::GotoCell:
             return walkTo(pawn, job, job.cell, why);
         case JobStepKind::Deliver:
@@ -875,6 +954,9 @@ void JobSystem::endJob(Entity pawn, JobEnd end, const std::string& why) {
         mover.next = 0;
     }
     dropCarried(pawn);
+    if (jobIsLyingDown(job)) {
+        wakeUp(pawn, job);
+    }
     Worker& worker = reg.get<Worker>(pawn);
     if (end == JobEnd::Failed) {
         ++stats_.failedJobs;
@@ -1027,11 +1109,19 @@ bool JobSystem::afterLoad(std::string& error) {
     std::sort(workers.begin(), workers.end());
     for (const Entity pawn : workers) {
         const Job& job = reg.get<Worker>(pawn).job;
-        std::vector<TargetKey> keys;
-        reservationsOf(job, keys);
-        for (const TargetKey& key : keys) {
-            if (!reservations_.emplace(key, pawn).second) {
+        TargetKey held[2];
+        const int heldCount = reservationsOf(job, held);
+        for (int i = 0; i < heldCount; ++i) {
+            if (!reservations_.emplace(held[i], pawn).second) {
                 error = "the save has two jobs holding the same thing or cell";
+                return false;
+            }
+        }
+        if (job.type == JobType::Ingest) {
+            const Carrying* carrying = reg.try_get<Carrying>(pawn);
+            const bool carries = carrying != nullptr && carrying->thing == job.thing;
+            if (job.thing == kNoEntity || (job.step > kIngestPickUpStep) != carries) {
+                error = "the save has an eating job that doesn't match what the pawn carries";
                 return false;
             }
         }

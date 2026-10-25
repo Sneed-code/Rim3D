@@ -36,6 +36,10 @@ const char* commandName(const Command& command) {
                 return "ControlPawn";
             } else if constexpr (std::is_same_v<Type, DirectMoveCommand>) {
                 return "DirectMove";
+            } else if constexpr (std::is_same_v<Type, SetScheduleCommand>) {
+                return "SetSchedule";
+            } else if constexpr (std::is_same_v<Type, AssignBedCommand>) {
+                return "AssignBed";
             } else if constexpr (std::is_same_v<Type, PlaceBlueprintCommand>) {
                 return "PlaceBlueprint";
             } else if constexpr (std::is_same_v<Type, CancelBuildCommand>) {
@@ -62,6 +66,8 @@ const char* eventTypeName(EventType type) {
         case EventType::JobStarted: return "JobStarted";
         case EventType::JobEnded: return "JobEnded";
         case EventType::PawnAction: return "PawnAction";
+        case EventType::PawnAte: return "PawnAte";
+        case EventType::PawnWokeUp: return "PawnWokeUp";
         case EventType::FrameStarted: return "FrameStarted";
     }
     return "?";
@@ -71,6 +77,9 @@ const char* pawnActionName(PawnAction action) {
     switch (action) {
         case PawnAction::PickUp: return "PickUp";
         case PawnAction::PutDown: return "PutDown";
+        case PawnAction::Eat: return "Eat";
+        case PawnAction::LieDown: return "LieDown";
+        case PawnAction::GetUp: return "GetUp";
         case PawnAction::Build: return "Build";
         case PawnAction::Deconstruct: return "Deconstruct";
     }

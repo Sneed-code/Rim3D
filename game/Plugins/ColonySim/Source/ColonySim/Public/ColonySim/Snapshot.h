@@ -64,6 +64,11 @@ struct ThingView {
     int materialsHave = 0;
     int materialsNeeded = 0;
     bool markedForDeconstruct = false;
+    // Pawns with needs (docs/design/needs.md): food and rest, 1 full to 0 empty, else -1; asleep
+    // while lying down in a bed or on the ground.
+    float food = -1.0f;
+    float rest = -1.0f;
+    bool asleep = false;
 };
 
 // One stockpile zone: `cellCount` cells from Snapshot::zoneCells[firstCell].

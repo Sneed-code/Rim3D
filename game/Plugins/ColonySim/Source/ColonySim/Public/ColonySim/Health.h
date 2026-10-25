@@ -30,7 +30,8 @@ enum class DeathCause : uint8_t {
     None,
     BloodLoss,      // blood loss reached its lethal severity
     VitalPartLost,  // a part with `lethalIfDestroyed` was destroyed (torso, head, brain, heart...)
-    VitalCapacity   // a capacity with `lethalAtZero` fell to zero (breathing, blood pumping...)
+    VitalCapacity,  // a capacity with `lethalAtZero` fell to zero (breathing, blood pumping...)
+    Starvation      // malnutrition reached its lethal severity (Needs.h)
 };
 
 COLONY_API const char* deathCauseName(DeathCause cause);
@@ -143,6 +144,9 @@ public:
     void refreshAll();
 
     bool incapacitated(Entity pawn) const;
+    // Kills a pawn for a cause that is not an injury (starvation). False if it has no tracked
+    // health or is dead already.
+    bool kill(Entity pawn, DeathCause cause);
     bool report(Entity pawn, HealthReport& out) const;
     // A capacity of the pawn (a Capacities defName like "Manipulation") as it is now, 1 for a
     // pawn with no body or a capacity the data doesn't have. Work speed uses it.
