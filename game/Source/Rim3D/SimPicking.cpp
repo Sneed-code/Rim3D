@@ -154,6 +154,22 @@ namespace SimPicking
 		return false;
 	}
 
+	FSimPick PickGroundFromRay(const USimSubsystem& Bridge, const FVector& Origin, const FVector& InDirection)
+	{
+		FSimPick Result;
+		FVector Direction = InDirection;
+		double GroundT = 0.0;
+		if (!Bridge.GetSim() || !Direction.Normalize() || !RayHitGround(Bridge, Origin, Direction, GroundT))
+		{
+			return Result;
+		}
+		Result.Location = Origin + Direction * GroundT;
+		const FVector Local = (Result.Location - Bridge.GetWorldOrigin()) / 100.0;
+		Result.Cell = colony::CellPos{FMath::FloorToInt32(Local.X), FMath::FloorToInt32(Local.Y), 0};
+		Result.Kind = Bridge.GetSim()->map().inBounds(Result.Cell) ? ESimPickKind::Cell : ESimPickKind::None;
+		return Result;
+	}
+
 	FSimPick PickFromRay(const USimSubsystem& Bridge, const FVector& Origin, const FVector& InDirection)
 	{
 		FSimPick Result;

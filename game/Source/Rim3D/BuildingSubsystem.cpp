@@ -205,6 +205,35 @@ int32 UBuildingSubsystem::GetGhostInstances() const
 	return Count;
 }
 
+UStaticMesh* UBuildingSubsystem::GetWholeMesh(colony::DefId Def, colony::DefId Stuff)
+{
+	const int32 LookId = bBuilt ? GetLook(Def, Stuff) : -1;
+	return LookId >= 0 ? Looks[LookId].All : nullptr;
+}
+
+bool UBuildingSubsystem::GetPlacedTransform(colony::DefId Def, colony::CellPos Cell, colony::Rot4 Rot, FTransform& OutWorld) const
+{
+	const FDefLook* Look = bBuilt ? LookOfDef(Def) : nullptr;
+	if (!Look || Look->bItem || !BuiltSim)
+	{
+		return false;
+	}
+	const colony::Map& Map = BuiltSim->map();
+	const colony::CellRect Rect = colony::footprintRect(Cell, FMath::RoundToInt32(Look->FootprintCm.X / 100.0f), FMath::RoundToInt32(Look->FootprintCm.Y / 100.0f), Rot);
+	// The lowest ground under the footprint, as the built building stands.
+	float Base = 1.0e9f;
+	for (int32 Y = Rect.minY; Y <= Rect.minY + Rect.sizeY; ++Y)
+	{
+		for (int32 X = Rect.minX; X <= Rect.minX + Rect.sizeX; ++X)
+		{
+			Base = FMath::Min(Base, Map.groundHeight(FMath::Clamp(X, 0, Map.width() - 1), FMath::Clamp(Y, 0, Map.height() - 1)));
+		}
+	}
+	const FVector Local((static_cast<float>(Rect.minX) + static_cast<float>(Rect.sizeX) * 0.5f) * 100.0f, (static_cast<float>(Rect.minY) + static_cast<float>(Rect.sizeY) * 0.5f) * 100.0f, Base * 100.0f);
+	OutWorld = FTransform(FRotator(0.0, BldYawOf(Rot), 0.0), BuiltOrigin + Local);
+	return true;
+}
+
 const UBuildingSubsystem::FDefLook* UBuildingSubsystem::LookOfDef(colony::DefId Def) const
 {
 	return Def.valid() && Def.value < static_cast<uint32>(DefLooks.Num()) && DefLooks[Def.value].bRead ? &DefLooks[Def.value] : nullptr;

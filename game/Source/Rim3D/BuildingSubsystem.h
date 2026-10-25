@@ -84,6 +84,13 @@ public:
 	/** Instance components that currently hold at least one instance and use the ghost material. */
 	int32 GetGhostInstances() const;
 
+	/** The mesh of a whole building of this def made of this stuff (invalid for none), made if it is new, for the placement ghost of
+	 *  the architect menu (docs/design/orders.md); null if the def has no picture or the subsystem is not built yet. */
+	UStaticMesh* GetWholeMesh(colony::DefId Def, colony::DefId Stuff);
+	/** Where a building of this def is drawn when its footprint starts at `Cell` and faces `Rot`: where a built one stands (on the lowest
+	 *  ground under its footprint). False if the def is not a building with a picture. */
+	bool GetPlacedTransform(colony::DefId Def, colony::CellPos Cell, colony::Rot4 Rot, FTransform& OutWorld) const;
+
 protected:
 	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
 

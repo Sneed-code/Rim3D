@@ -6,6 +6,7 @@
 #include "GameFramework/PlayerController.h"
 #include "InputCoreTypes.h"
 
+#include "OrdersSubsystem.h"
 #include "OverseerSubsystem.h"
 #include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
@@ -56,6 +57,9 @@ void AOverseerPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 	PlayerInputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &AOverseerPawn::OnSelectPressed);
+	PlayerInputComponent->BindKey(EKeys::LeftMouseButton, IE_Released, this, &AOverseerPawn::OnSelectReleased);
+	PlayerInputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed, this, &AOverseerPawn::OnOrderPressed);
+	PlayerInputComponent->BindKey(EKeys::R, IE_Pressed, this, &AOverseerPawn::OnRotateOrDraftPressed);
 	PlayerInputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AOverseerPawn::OnClearPressed);
 	PlayerInputComponent->BindKey(EKeys::F, IE_Pressed, this, &AOverseerPawn::OnFocusPressed);
 	PlayerInputComponent->BindKey(EKeys::Home, IE_Pressed, this, &AOverseerPawn::OnResetPressed);
@@ -215,12 +219,56 @@ void AOverseerPawn::OnSelectPressed()
 	float MouseY = 0.0f;
 	if (const APlayerController* PC = GetPlayerController(); PC && PC->GetMousePosition(MouseX, MouseY))
 	{
-		SelectAtScreenPosition(FVector2D(MouseX, MouseY));
+		// A tool of the architect menu in hand takes the click; else it selects.
+		UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>();
+		if (!Orders || !Orders->HandleLeftPressed(FVector2D(MouseX, MouseY)))
+		{
+			SelectAtScreenPosition(FVector2D(MouseX, MouseY));
+		}
+	}
+}
+
+void AOverseerPawn::OnSelectReleased()
+{
+	float MouseX = 0.0f;
+	float MouseY = 0.0f;
+	if (const APlayerController* PC = GetPlayerController(); PC && PC->GetMousePosition(MouseX, MouseY))
+	{
+		if (UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>())
+		{
+			Orders->HandleLeftReleased(FVector2D(MouseX, MouseY));
+		}
+	}
+}
+
+void AOverseerPawn::OnOrderPressed()
+{
+	float MouseX = 0.0f;
+	float MouseY = 0.0f;
+	if (const APlayerController* PC = GetPlayerController(); PC && PC->GetMousePosition(MouseX, MouseY))
+	{
+		if (UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>())
+		{
+			Orders->HandleRightClick(FVector2D(MouseX, MouseY));
+		}
+	}
+}
+
+void AOverseerPawn::OnRotateOrDraftPressed()
+{
+	if (UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>())
+	{
+		Orders->HandleRotateOrDraftKey();
 	}
 }
 
 void AOverseerPawn::OnClearPressed()
 {
+	// Esc puts down a tool first; only with none in hand does it clear the selection.
+	if (UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>(); Orders && Orders->CancelTool())
+	{
+		return;
+	}
 	if (UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>())
 	{
 		Overseer->ClearSelection();
