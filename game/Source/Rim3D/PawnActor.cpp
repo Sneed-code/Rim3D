@@ -11,12 +11,15 @@
 #include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "PhysicsEngine/PhysicsAsset.h"
 
 #include "PawnLooks.h"
 #include "PawnSubsystem.h"
 #include "SimSubsystem.h"
 
 #include "ColonySim/Clock.h"
+#include "ColonySim/Map.h"
+#include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 
 namespace
@@ -39,6 +42,15 @@ namespace
 	constexpr float PawnHornTilt = 22.0f;
 	// The horn mesh is 1 cm long with a 0.1 cm base radius (the PawnLooks commandlet makes it).
 	constexpr float PawnHornMeshRadius = 0.1f;
+	// A hit leans the pawn this far at most (degrees).
+	constexpr float PawnHitLeanDegrees = 14.0f;
+	// A ragdoll's floor: a slab this many metres across and thick, its top at the ground.
+	constexpr float PawnRagdollFloorSize = 10.0f;
+	constexpr float PawnRagdollFloorThickness = 0.5f;
+	const TCHAR* const PawnRagdollPhysicsAssetPath = TEXT("/Game/Characters/UEFN_Mannequin/Rigs/PA_UEFN_Mannequin.PA_UEFN_Mannequin");
+	const TCHAR* const PawnCubePath = TEXT("/Engine/BasicShapes/Cube.Cube");
+	// The mannequin faces +Y in its own space.
+	const FRotator PawnBodyRelativeRotation(0.0, -90.0, 0.0);
 }
 
 ASimPawnActor::ASimPawnActor()
@@ -49,11 +61,11 @@ ASimPawnActor::ASimPawnActor()
 	Body = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Body"));
 	Body->SetupAttachment(Root);
 	// The mannequin faces +Y in its own space.
-	Body->SetRelativeRotation(FRotator(0.0, -90.0, 0.0));
+	Body->SetRelativeRotation(PawnBodyRelativeRotation);
 	Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Body->SetGenerateOverlapEvents(false);
 	Body->SetCanEverAffectNavigation(false);
-	Body->bReceivesDecals = false;
+	Body->bReceivesDecals = true;  // wound decals (docs/design/fights.md)
 	Body->SetAnimInstanceClass(USimPawnAnimInstance::StaticClass());
 }
 
@@ -160,7 +172,18 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		const float Wanted = Velocity.Rotation().Yaw;
 		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * Speed);
 	}
+	else if ((Now.shotReadyIn > 0 || Now.fighting) && FMath::Abs(Now.facingX) + FMath::Abs(Now.facingY) > 0.1f)
+	{
+		// Standing and shooting: face where the sim says the pawn aims (docs/design/fights.md).
+		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
+	}
 	SetActorLocationAndRotation(Location, FRotator(0.0, Yaw, 0.0));
+	if (bRagdoll)
+	{
+		return;  // the physics body is on its own until the pawn gets up
+	}
+	ApplyLean(DeltaTime * Speed);
 
 	// Animation runs at the game's speed and stops while paused.
 	Body->GlobalAnimRateScale = static_cast<float>(Speed);
@@ -300,6 +323,145 @@ void ASimPawnActor::ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& In
 	}
 }
 
+void ASimPawnActor::PlayHitReaction(const FVector& ShotDirection, float Strength)
+{
+	ReactionDirection = FVector(ShotDirection.X, ShotDirection.Y, 0.0).GetSafeNormal();
+	if (ReactionDirection.IsNearlyZero())
+	{
+		ReactionDirection = GetActorForwardVector();
+	}
+	ReactionStrength = FMath::Clamp(Strength, 0.0f, 1.0f);
+	ReactionAge = 0.0f;
+	++HitReactions;
+}
+
+void ASimPawnActor::ApplyLean(float DeltaTime)
+{
+	if (ReactionAge >= kHitReactionSeconds)
+	{
+		if (LeanDegrees != 0.0f)
+		{
+			LeanDegrees = 0.0f;
+			Body->SetRelativeRotation(PawnBodyRelativeRotation);
+		}
+		return;
+	}
+	ReactionAge += DeltaTime;
+	const float T = FMath::Clamp(ReactionAge / kHitReactionSeconds, 0.0f, 1.0f);
+	// Snaps over in the first 15%, then settles back.
+	const float Envelope = T < 0.15f ? T / 0.15f : FMath::Square(1.0f - (T - 0.15f) / 0.85f);
+	LeanDegrees = PawnHitLeanDegrees * ReactionStrength * Envelope;
+	// The top of the body goes along the shot: turn about up x direction.
+	const FVector Axis = FVector::CrossProduct(FVector::UpVector, ReactionDirection).GetSafeNormal();
+	const FQuat LeanWorld(Axis, FMath::DegreesToRadians(LeanDegrees));
+	const FQuat RootQuat = GetActorQuat();
+	Body->SetRelativeRotation(RootQuat.Inverse() * LeanWorld * RootQuat * PawnBodyRelativeRotation.Quaternion());
+}
+
+void ASimPawnActor::SpawnRagdollFloor()
+{
+	if (RagdollFloor)
+	{
+		return;
+	}
+	const USimSubsystem* Bridge = GetWorld()->GetSubsystem<USimSubsystem>();
+	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, PawnCubePath);
+	if (!Bridge || !Bridge->GetSim() || !Cube)
+	{
+		return;
+	}
+	// Flat to the ground under the pawn: the normal from the height map around it.
+	const FVector Here = (GetActorLocation() - Bridge->GetWorldOrigin()) / 100.0;
+	const colony::Map& Map = Bridge->GetSim()->map();
+	const float X = static_cast<float>(Here.X);
+	const float Y = static_cast<float>(Here.Y);
+	const FVector Normal = FVector((Map.heightAt(X - 1.0f, Y) - Map.heightAt(X + 1.0f, Y)) * 0.5f, (Map.heightAt(X, Y - 1.0f) - Map.heightAt(X, Y + 1.0f)) * 0.5f, 1.0f).GetSafeNormal();
+	const FVector Ground = Bridge->SimToWorld(X, Y, 0);
+
+	RagdollFloor = NewObject<UStaticMeshComponent>(this, TEXT("RagdollFloor"));
+	RagdollFloor->SetStaticMesh(Cube);
+	RagdollFloor->SetMobility(EComponentMobility::Movable);
+	RagdollFloor->SetCollisionProfileName(TEXT("BlockAll"));
+	RagdollFloor->SetCollisionObjectType(ECC_WorldStatic);
+	RagdollFloor->SetCanEverAffectNavigation(false);
+	RagdollFloor->SetCastShadow(false);
+	RagdollFloor->SetVisibility(false);
+	RagdollFloor->SetHiddenInGame(true);
+	RagdollFloor->SetWorldScale3D(FVector(PawnRagdollFloorSize, PawnRagdollFloorSize, PawnRagdollFloorThickness));
+	RagdollFloor->RegisterComponent();
+	RagdollFloor->SetWorldLocationAndRotation(Ground - Normal * (PawnRagdollFloorThickness * 50.0f), FRotationMatrix::MakeFromZ(Normal).ToQuat());
+}
+
+void ASimPawnActor::StartRagdoll(const FVector& Impulse)
+{
+	if (bRagdoll || !Body->GetSkeletalMeshAsset())
+	{
+		return;
+	}
+	if (!Body->GetPhysicsAsset())
+	{
+		if (UPhysicsAsset* Asset = LoadObject<UPhysicsAsset>(nullptr, PawnRagdollPhysicsAssetPath))
+		{
+			Body->SetPhysicsAsset(Asset, true);
+		}
+	}
+	if (!Body->GetPhysicsAsset())
+	{
+		return;
+	}
+	SpawnRagdollFloor();
+	bRagdoll = true;
+	++RagdollsStarted;
+	ReactionAge = kHitReactionSeconds;
+	LeanDegrees = 0.0f;
+	Body->SetRelativeRotation(PawnBodyRelativeRotation);
+	Body->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	Body->SetCollisionProfileName(TEXT("Ragdoll"));
+	Body->SetAllBodiesSimulatePhysics(true);
+	Body->SetAllBodiesPhysicsBlendWeight(1.0f);
+	Body->bBlendPhysics = true;
+	Body->WakeAllRigidBodies();
+	if (!Impulse.IsNearlyZero())
+	{
+		Body->AddImpulse(Impulse, NAME_None, true);
+	}
+}
+
+void ASimPawnActor::StopRagdoll()
+{
+	if (!bRagdoll)
+	{
+		return;
+	}
+	bRagdoll = false;
+	Body->SetAllBodiesSimulatePhysics(false);
+	Body->bBlendPhysics = false;
+	Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Body->AttachToComponent(Root, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+	Body->SetRelativeLocationAndRotation(FVector::ZeroVector, PawnBodyRelativeRotation);
+	Body->SetRelativeScale3D(FVector(bHasLooks ? Looks.Height : 1.0f));
+	if (RagdollFloor)
+	{
+		RagdollFloor->DestroyComponent();
+		RagdollFloor = nullptr;
+	}
+}
+
+bool ASimPawnActor::GetRagdollPelvis(FVector& OutLocation) const
+{
+	if (!bRagdoll)
+	{
+		return false;
+	}
+	OutLocation = Body->DoesSocketExist(TEXT("pelvis")) ? Body->GetSocketLocation(TEXT("pelvis")) : Body->GetComponentLocation();
+	return true;
+}
+
+USkeletalMeshComponent* ASimPawnActor::GetDecalMesh() const
+{
+	return MetaHumanBody ? MetaHumanBody.Get() : Body.Get();
+}
+
 void ASimPawnActor::SetBodyHidden(bool bHide)
 {
 	SetActorHiddenInGame(bHide);
@@ -327,6 +489,11 @@ int32 ASimPawnActor::CountVisibleGrooms() const
 
 void ASimPawnActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (RagdollFloor)
+	{
+		RagdollFloor->DestroyComponent();
+		RagdollFloor = nullptr;
+	}
 	if (IsValid(MetaHuman))
 	{
 		MetaHuman->Destroy();
