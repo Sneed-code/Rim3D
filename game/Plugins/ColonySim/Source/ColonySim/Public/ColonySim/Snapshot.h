@@ -42,6 +42,10 @@ struct ThingView {
     int stackCount = 0;  // items
     int hitPoints = 0;   // 0 and 0 when the thing has no hit points
     int maxHitPoints = 0;
+    // Pawns with a body: can't act (pain shock, unconscious, can't move), and dead. A dead pawn
+    // stays where it fell. A full health report is `Sim::healthReport`.
+    bool downed = false;
+    bool dead = false;
 };
 
 struct Snapshot {

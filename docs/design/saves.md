@@ -23,7 +23,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | --- | --- |
 | Settings | seed, map size, hauling-test settings, checkpoint interval |
 | Clock and random stream | game second, the `Rng` state and stream |
-| Every thing | its id, its def **by `defName`**, and every component (position, footprint, stack, hit points, mover and its path, hauling job) |
+| Every thing | its id, its def **by `defName`**, and every component (position, footprint, stack, hit points, mover and its path, hauling job, health) |
 | Free entity ids | in the order the registry reuses them, so a loaded sim hands out the same ids as the saved one |
 | Command log | every command applied so far, failed ones too |
 | Queued commands | submitted but not yet applied; they apply at the first step after loading |
@@ -31,6 +31,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Hauling placeholder | stockpile cell, hauler list, counters, setup errors |
 | Pawn movement (format 3) | each pawn's velocity, line start, held-up counters (`Mover`), and the repath count |
 | Colonists (format 4) | each colonist's name, age, backstories, traits, skills and the scenario name in the settings ([colonists.md](colonists.md)) |
+| Pawn health (format 5) | per pawn: protagonist flag, rest, injuries (part, hediff **by `defName`**, severity, tend quality), lost parts, blood loss, dead and cause. Pain, bleeding, capacities and downed are worked out again on loading ([health.md](health.md)) |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
@@ -110,6 +111,8 @@ region id decide anything (the pathfinder breaks ties by a region's anchor cell 
 
 - **4** (C8): `scenario` in the settings and a `Colonist` component on a pawn. Older files load
   with no scenario and no colonists.
+- **5** (F1): `Health` on pawns (a pawn whose def has `race.body` and whose save has none gets a
+  healthy one). Commands 2 and 3 (`DamagePawn`, `TendPawn`).
 
 ## Why the state hash changed in S6
 

@@ -2,6 +2,7 @@
 
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Regions.h"
@@ -61,10 +62,12 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       pathfinder_(map_),
       things_(std::make_unique<Things>(map_, defs_)),
       movement_(std::make_unique<MovementSystem>()),
+      health_(std::make_unique<HealthSystem>(*things_)),
       time_(),
       rng_(splitMix64(settings.seed ^ 0x7061776EULL)),
       groundHash_(map_.contentHash()) {
     things_->setEventLog(&events_);
+    health_->setEventLog(&events_);
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -184,6 +187,30 @@ void Sim::startNextHaul(Entity pawn) {
     job.item = best;
     job.path = pathfinder_.request(cellOf(pos), cellOf(reg.get<Position>(best)));
     job.stage = HaulStage::WaitPathToItem;
+}
+
+// A hauler that went down or died drops what it was doing: the item it carried is put down where
+// it stands, the one it was walking to is free again. The job system (C1) will do this for every
+// job when it hears the pawn went down.
+void Sim::abandonHaul(Entity pawn) {
+    entt::registry& reg = things_->registry();
+    HaulJob& job = reg.get<HaulJob>(pawn);
+    if (job.stage == HaulStage::Idle) {
+        return;
+    }
+    if (job.stage == HaulStage::WaitPathToItem || job.stage == HaulStage::WaitPathToStockpile ||
+        job.stage == HaulStage::WaitPathCarrying) {
+        pathfinder_.cancel(job.path);
+    }
+    if (job.item != kNoEntity && reg.valid(job.item)) {
+        const bool carried = reg.all_of<HaulCarriedBy>(job.item);
+        reg.remove<HaulCarriedBy, HaulReservedBy>(job.item);
+        if (carried) {
+            things_->spawnAt(job.item, cellOf(reg.get<Position>(pawn)));
+        }
+    }
+    job.stage = HaulStage::Idle;
+    job.item = kNoEntity;
 }
 
 void Sim::updateHauler(Entity pawn) {
@@ -317,6 +344,23 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         } else {
             things_->destroy(destroy->thing);
         }
+    } else if (const auto* damage = std::get_if<DamagePawnCommand>(&command)) {
+        const DefId type = health_->damageTypeId(damage->damageType);
+        if (!health_->tracks(damage->pawn)) {
+            commandFailed(id, "that thing has no body to hurt");
+        } else if (!type.valid()) {
+            commandFailed(id, "no DamageTypes def '" + damage->damageType + "'");
+        } else if (!(damage->amount > 0.0f)) {
+            commandFailed(id, "damage must be more than zero");
+        } else if (!health_->applyDamage(damage->pawn, type, damage->amount, damage->part, rng_)) {
+            commandFailed(id, "can't hurt that pawn there (dead, or the part is gone)");
+        }
+    } else if (const auto* tend = std::get_if<TendPawnCommand>(&command)) {
+        if (!health_->tracks(tend->pawn)) {
+            commandFailed(id, "that thing has no body to tend");
+        } else if (health_->tendAll(tend->pawn, tend->quality) == 0) {
+            commandFailed(id, "nothing to tend");
+        }
     }
 }
 
@@ -332,7 +376,13 @@ void Sim::step() {
     applying.clear();
     pending_.swap(applying);
 
+    health_->step(time_.seconds, settings_.seed);
+
     for (const Entity pawn : haulers_) {
+        if (health_->incapacitated(pawn)) {
+            abandonHaul(pawn);
+            continue;
+        }
         updateHauler(pawn);
     }
     movement_->step(things_->registry(), map_);
@@ -382,6 +432,10 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.hitPoints = hp->current;
             view.maxHitPoints = hp->max;
         }
+        if (const Health* health = reg.try_get<Health>(entity)) {
+            view.downed = health->downed;
+            view.dead = health->dead;
+        }
         out.things.push_back(view);
     }
     std::sort(out.things.begin(), out.things.end(),
@@ -429,7 +483,7 @@ uint64_t Sim::stateHash() const {
         const bool has[] = {reg.all_of<Thing>(e),         reg.all_of<Position>(e),       reg.all_of<Footprint>(e),
                             reg.all_of<StackCount>(e),    reg.all_of<HitPoints>(e),      reg.all_of<Mover>(e),
                             reg.all_of<HaulJob>(e),       reg.all_of<HaulReservedBy>(e), reg.all_of<HaulCarriedBy>(e),
-                            reg.all_of<HaulStored>(e),    reg.all_of<Colonist>(e)};
+                            reg.all_of<HaulStored>(e),    reg.all_of<Colonist>(e),       reg.all_of<Health>(e)};
         uint64_t mask = 0;
         for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
             mask |= has[bit] ? (uint64_t{1} << bit) : 0;
@@ -509,6 +563,25 @@ uint64_t Sim::stateHash() const {
         }
         if (const HaulCarriedBy* by = reg.try_get<HaulCarriedBy>(e)) {
             h.add(entt::to_integral(by->pawn));
+        }
+        if (const Health* health = reg.try_get<Health>(e)) {
+            h.add(health->protagonist);
+            h.add(static_cast<int>(health->rest));
+            h.add(static_cast<uint64_t>(health->injuries.size()));
+            for (const Injury& injury : health->injuries) {
+                h.add(static_cast<int>(injury.part));
+                h.add(injury.hediff.value);
+                h.add(injury.severity);
+                h.add(injury.tendQuality);
+            }
+            h.add(static_cast<uint64_t>(health->missing.size()));
+            for (const MissingPart& missing : health->missing) {
+                h.add(static_cast<int>(missing.part));
+                h.add(missing.tendQuality);
+            }
+            h.add(health->bloodLoss);
+            h.add(health->dead);
+            h.add(static_cast<int>(health->cause));
         }
     }
     return h.value();

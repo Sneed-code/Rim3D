@@ -14,9 +14,13 @@ const char* commandName(const Command& command) {
             using Type = std::decay_t<decltype(c)>;
             if constexpr (std::is_same_v<Type, SpawnThingCommand>) {
                 return "SpawnThing";
-            } else {
-                static_assert(std::is_same_v<Type, DestroyThingCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, DestroyThingCommand>) {
                 return "DestroyThing";
+            } else if constexpr (std::is_same_v<Type, DamagePawnCommand>) {
+                return "DamagePawn";
+            } else {
+                static_assert(std::is_same_v<Type, TendPawnCommand>, "name every command type");
+                return "TendPawn";
             }
         },
         command);
@@ -28,6 +32,11 @@ const char* eventTypeName(EventType type) {
         case EventType::ThingDespawned: return "ThingDespawned";
         case EventType::ThingDestroyed: return "ThingDestroyed";
         case EventType::CommandFailed: return "CommandFailed";
+        case EventType::PawnInjured: return "PawnInjured";
+        case EventType::PawnPartLost: return "PawnPartLost";
+        case EventType::PawnDowned: return "PawnDowned";
+        case EventType::PawnGotUp: return "PawnGotUp";
+        case EventType::PawnDied: return "PawnDied";
         case EventType::PawnAction: return "PawnAction";
     }
     return "?";

@@ -64,7 +64,8 @@ struct StackCount {
     int count = 1;
 };
 
-// Items and buildings whose def has `stats.maxHitPoints`. Pawns get per-part health later (F1).
+// Items and buildings whose def has `stats.maxHitPoints`. Pawns have per-part health instead
+// (Health.h).
 struct HitPoints {
     int current = 0;
     int max = 0;

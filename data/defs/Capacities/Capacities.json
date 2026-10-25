@@ -13,10 +13,8 @@
   },
   {
     "defName": "Moving", "parent": "CapacityBase", "label": "moving", "listOrder": 1, "downedAtOrBelow": 0.15,
+    "limbs": { "core": "Leg", "segments": ["Femur", "Tibia", "Foot"], "digit": "Toe", "digitWeight": 0.4 },
     "parts": [
-      { "part": "Leg", "combine": "average" }, { "part": "Femur", "combine": "average" },
-      { "part": "Tibia", "combine": "average" }, { "part": "Foot", "combine": "average" },
-      { "part": "Toe", "combine": "digits", "perDigit": 0.04, "base": 0.6 },
       { "part": "Pelvis", "combine": "importance", "weight": 1.0 },
       { "part": "Spine", "combine": "importance", "weight": 1.0 }
     ],
@@ -28,12 +26,7 @@
   },
   {
     "defName": "Manipulation", "parent": "CapacityBase", "label": "manipulation", "listOrder": 2,
-    "parts": [
-      { "part": "Shoulder", "combine": "average" }, { "part": "Clavicle", "combine": "average" },
-      { "part": "Arm", "combine": "average" }, { "part": "Humerus", "combine": "average" },
-      { "part": "Radius", "combine": "average" }, { "part": "Hand", "combine": "average" },
-      { "part": "Finger", "combine": "digits", "perDigit": 0.08, "base": 0.2 }
-    ],
+    "limbs": { "core": "Shoulder", "segments": ["Clavicle", "Arm", "Humerus", "Radius", "Hand"], "digit": "Finger", "digitWeight": 0.8 },
     "capacityFactors": [{ "capacity": "Consciousness", "weight": 1.0 }]
   },
   {

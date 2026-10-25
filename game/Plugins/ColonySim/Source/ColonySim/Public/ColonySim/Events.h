@@ -17,6 +17,11 @@ enum class EventType : uint8_t {
     ThingDespawned,  // a thing left the map but still exists (e.g. picked up to carry)
     ThingDestroyed,  // a thing stopped existing; forget its id (a ThingDespawned comes first if it was on the map)
     CommandFailed,   // a command could not be applied
+    PawnInjured,     // a pawn got an injury (docs/design/health.md)
+    PawnPartLost,    // a pawn lost a body part (a PawnInjured does not come with it)
+    PawnDowned,      // a pawn can no longer act (pain shock, unconscious, or can't move)
+    PawnGotUp,       // a downed pawn recovered enough to act again
+    PawnDied,
     PawnAction,      // a pawn did something with its hands that Unreal animates (picked up, put down)
 };
 
@@ -34,9 +39,14 @@ struct Event {
     DefId def;                 // ThingSpawned, ThingDespawned, ThingDestroyed
     CellPos cell;              // ThingSpawned: its cell (for a building, the footprint origin)
     uint64_t command = 0;      // CommandFailed: the id Sim::submit returned
-    std::string message;       // CommandFailed: why, in plain words
+    std::string message;       // CommandFailed: why, in plain words; PawnDied: the cause ("blood loss")
     PawnAction action = PawnAction::PickUp;  // PawnAction
     Entity target = kNoEntity;               // PawnAction: the thing it was done to, if any
+    // PawnInjured: `def` is the injury's Hediffs def; PawnPartLost: the Hediffs def is MissingBodyPart.
+    // `thing` is the pawn, `cell` where it stands, `part` the index of the body part in its Bodies
+    // def (depth-first, torso 0), `amount` the hit points of damage dealt to it.
+    int part = -1;
+    float amount = 0.0f;
 };
 
 COLONY_API const char* eventTypeName(EventType type);

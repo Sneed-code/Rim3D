@@ -2,6 +2,7 @@
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Cover.h"
+#include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 
 #include <algorithm>
@@ -93,6 +94,9 @@ Entity Things::make(DefId defId, int stackCount) {
             Mover mover;
             mover.metresPerStep = static_cast<float>(def.number("stats.moveSpeed", fallback));
             registry_.emplace<Mover>(thing, std::move(mover));
+            if (def.has("race.body")) {
+                registry_.emplace<Health>(thing);
+            }
             break;
         }
     }
