@@ -98,7 +98,7 @@ cook makes a simple meal in 432 game seconds, 7.2 game minutes, plus the walking
   "bill finished" if a `Count` bill ended), `JobStarted`/`JobEnded` with `JobType::DoBill`, and the
   usual `ThingSpawned` for the meals.
 - Save format 18: a building's bills (`recipe` by defName), a job's `bill`, `picks` and `used`
-  (by defName). Format 6 to 11 saves still load.
+  (by defName). Format 6 to 17 saves still load.
 
 ## Not yet
 

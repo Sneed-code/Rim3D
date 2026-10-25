@@ -289,6 +289,9 @@ public:
     const char* task() const override { return "DoBillsCookStove"; }
 
     void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        if (!jobs.canUseHands(pawn)) {
+            return;
+        }
         const entt::registry& reg = jobs.things().registry();
         const Position& at = reg.get<Position>(pawn);
         reg.view<const BillList, const Footprint, const Position>().each(
@@ -428,9 +431,6 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<DeconstructGiver>());
     givers.push_back(std::make_unique<MineGiver>());
     givers.push_back(std::make_unique<CutOrHarvestPlantsGiver>());
-    }
-};
-
     givers.push_back(std::make_unique<DoBillsCookStoveGiver>());
     return givers;
 }

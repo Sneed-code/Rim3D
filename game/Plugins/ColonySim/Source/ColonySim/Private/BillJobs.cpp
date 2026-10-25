@@ -13,6 +13,10 @@ namespace colony {
 
 bool JobSystem::failCheckDoBill(Entity pawn, Job& job, std::string& why) {
     const entt::registry& reg = things_.registry();
+    if (!canUseHands(pawn)) {
+        why = "it can't use its hands";
+        return false;
+    }
     if (!things_.spawned(job.site) || !reg.all_of<BillList>(job.site)) {
         why = "the work building is gone";
         return false;
