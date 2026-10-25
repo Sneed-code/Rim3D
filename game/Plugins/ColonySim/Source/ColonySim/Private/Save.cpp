@@ -6,7 +6,9 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Plants.h"
+#include "ColonySim/Designations.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Mineables.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
 #include "ColonySim/Zones.h"
@@ -38,10 +40,11 @@ constexpr char kSaveMagic[8] = {'R', 'I', 'M', '3', 'D', 'S', 'A', 'V'};
 constexpr size_t kSaveMagicSize = sizeof kSaveMagic;
 // Bump when the layout below changes, and keep reading the old versions (the archive's
 // version() says which one a file is). Changing it needs a line in docs/design/saves.md.
-constexpr uint32_t kSaveFormatVersion = 9;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
+constexpr uint32_t kSaveFormatVersion = 10;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
                                             // 4: C8's scenario and colonists; 5: F1's pawn health; 6: C1's jobs,
                                             // work priorities and zones; 7: U9's direct control; 8: C6's needs,
-                                            // schedules, bed owners, the eating job's chair; 9: C2's plants
+                                            // schedules, bed owners, the eating job's chair; 9: C2's plants;
+                                            // 10: C3's rock layer, designations, a job's work done
 // Saves from before the job system (formats 1 to 5) can't be read: their hauling placeholder has
 // no counterpart in the job system (docs/design/saves.md).
 constexpr uint32_t kSaveOldestFormat = 6;
@@ -148,6 +151,21 @@ struct SavePlants {
     std::vector<uint32_t> ageHours;
 };
 
+// The rock layer as parallel lists, one entry per rock or ore cell in cell order (format 10 on).
+// Rock cells missing from it were mined.
+struct SaveMineables {
+    std::vector<std::string> defs;  // defNames of the rock and ore Things defs, in the order first met
+    std::vector<uint32_t> cells;    // cell index in the map
+    std::vector<uint32_t> defIndex;  // into `defs`
+    std::vector<uint32_t> hitPoints;
+};
+
+// The player's marks on rock and plants (format 10 on), in cell order.
+struct SaveDesignations {
+    std::vector<uint32_t> cells;
+    std::vector<uint8_t> kinds;
+};
+
 struct SavePending {
     uint64_t id = 0;
     Command command;
@@ -179,6 +197,9 @@ struct SaveData {
     uint32_t nextZoneId = 1;           // format 4 on
     std::vector<SaveZone> zones;
     SavePlants plants;                 // format 9 on
+    bool hasRock = false;              // the file has the rock layer (format 10 on); older saves keep the generated one
+    SaveMineables mineables;           // format 10 on
+    SaveDesignations designations;     // format 10 on
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -435,7 +456,7 @@ void saveRect(Ar& ar, CellRect& r) {
 
 template <typename Ar>
 void saveCommand(Ar& ar, Command& command) {
-    static_assert(std::variant_size_v<Command> == 14, "save every command type here");
+    static_assert(std::variant_size_v<Command> == 16, "save every command type here");
     uint8_t type = static_cast<uint8_t>(command.index());
     ar.value("type", type);
     if constexpr (Ar::kReading) {
@@ -454,10 +475,12 @@ void saveCommand(Ar& ar, Command& command) {
             case 11: command = DirectMoveCommand{}; break;
             case 12: command = SetScheduleCommand{}; break;
             case 13: command = AssignBedCommand{}; break;
+            case 14: command = DesignateCommand{}; break;
+            case 15: command = CancelDesignationsCommand{}; break;
             default: ar.require(false, "the save file names a command this build doesn't know"); return;
         }
         // A format older than the command that was added in it can't contain it.
-        ar.require((type < 10 || ar.version() >= 7) && (type < 12 || ar.version() >= 8),
+        ar.require((type < 10 || ar.version() >= 7) && (type < 12 || ar.version() >= 8) && (type < 14 || ar.version() >= 10),
                    "the save file names a command this build doesn't know");
     }
     ar.note("name", commandName(command));
@@ -512,6 +535,15 @@ void saveCommand(Ar& ar, Command& command) {
     } else if (auto* assign = std::get_if<AssignBedCommand>(&command)) {
         ar.value("bed", assign->bed);
         ar.value("pawn", assign->pawn);
+    } else if (auto* designate = std::get_if<DesignateCommand>(&command)) {
+        ar.group("area", [&] { saveRect(ar, designate->area); });
+        ar.value("kind", designate->kind);
+        ar.require(designate->kind >= DesignationKind::Mine && designate->kind <= DesignationKind::HarvestPlant,
+                   "the save file has a bad designation kind");
+    } else if (auto* cancel = std::get_if<CancelDesignationsCommand>(&command)) {
+        ar.group("area", [&] { saveRect(ar, cancel->area); });
+        ar.value("kind", cancel->kind);
+        ar.require(cancel->kind <= DesignationKind::HarvestPlant, "the save file has a bad designation kind");
     }
 }
 
@@ -614,7 +646,8 @@ void saveEntity(Ar& ar, SaveEntity& e) {
     ar.optional("worker", e.worker, [&](SaveWorker& w) {
         Job& job = w.job;
         ar.value("job", job.type);
-        ar.require(job.type <= JobType::LayDown, "the save file has a bad job");
+        ar.require(job.type <= JobType::HarvestPlant, "the save file has a bad job");
+        ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
         ar.value("thing", job.thing);
         ar.group("cell", [&] { saveCell(ar, job.cell); });
         ar.value("count", job.count);
@@ -630,6 +663,9 @@ void saveEntity(Ar& ar, SaveEntity& e) {
         ar.value("repaths", job.repaths);
         ar.value("startedAt", job.startedAt);
         ar.value("until", job.until);
+        if (ar.version() >= 10) {
+            ar.value("work", job.work);
+        }
         ar.value("pathSlot", job.path.slot);
         ar.value("pathSerial", job.path.serial);
         ar.list("avoid", w.avoid, [&](AvoidTarget& a) {
@@ -746,6 +782,23 @@ void savePlants(Ar& ar, SavePlants& p) {
 }
 
 template <typename Ar>
+void saveMineables(Ar& ar, SaveMineables& m) {
+    ar.list("defs", m.defs, [&](std::string& s) { ar.text(nullptr, s); });
+    ar.list("cells", m.cells, [&](uint32_t& v) { ar.value(nullptr, v); });
+    ar.list("defIndex", m.defIndex, [&](uint32_t& v) { ar.value(nullptr, v); });
+    ar.list("hitPoints", m.hitPoints, [&](uint32_t& v) { ar.value(nullptr, v); });
+    ar.require(m.cells.size() == m.defIndex.size() && m.cells.size() == m.hitPoints.size(),
+               "the save file's rock lists don't match");
+}
+
+template <typename Ar>
+void saveDesignations(Ar& ar, SaveDesignations& d) {
+    ar.list("cells", d.cells, [&](uint32_t& v) { ar.value(nullptr, v); });
+    ar.list("kinds", d.kinds, [&](uint8_t& v) { ar.value(nullptr, v); });
+    ar.require(d.cells.size() == d.kinds.size(), "the save file's designation lists don't match");
+}
+
+template <typename Ar>
 void saveData(Ar& ar, SaveData& d) {
     ar.text("simVersion", d.simVersion);
     ar.value("defsHash", d.defsHash);
@@ -784,6 +837,11 @@ void saveData(Ar& ar, SaveData& d) {
     ar.list("zones", d.zones, [&](SaveZone& z) { saveZone(ar, z); });
     if (ar.version() >= 9) {
         ar.group("plants", [&] { savePlants(ar, d.plants); });
+    }
+    if (ar.version() >= 10) {
+        d.hasRock = true;
+        ar.group("mineables", [&] { saveMineables(ar, d.mineables); });
+        ar.group("designations", [&] { saveDesignations(ar, d.designations); });
     }
 }
 
@@ -996,6 +1054,20 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         d.plants.defIndex.push_back(defIndexOf[r.def.value]);
         d.plants.growth.push_back(r.growth);
         d.plants.ageHours.push_back(r.ageHours);
+    }
+    std::vector<uint32_t> rockIndexOf(sim.defs_->size(), UINT32_MAX);
+    for (const MineableRecord& r : sim.mineables_->records()) {
+        if (rockIndexOf[r.def.value] == UINT32_MAX) {
+            rockIndexOf[r.def.value] = static_cast<uint32_t>(d.mineables.defs.size());
+            d.mineables.defs.push_back(sim.defs_->get(r.def).defName());
+        }
+        d.mineables.cells.push_back(static_cast<uint32_t>(r.cell));
+        d.mineables.defIndex.push_back(rockIndexOf[r.def.value]);
+        d.mineables.hitPoints.push_back(r.hitPoints);
+    }
+    for (const auto& [cell, kind] : sim.designations_->all()) {
+        d.designations.cells.push_back(static_cast<uint32_t>(cell));
+        d.designations.kinds.push_back(static_cast<uint8_t>(kind));
     }
     return d;
 }
@@ -1263,6 +1335,33 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (!sim.plants_->restore(records)) {
             error = "the save has a plant the data files can't place";
+            return false;
+        }
+    }
+    if (d.hasRock) {
+        std::vector<MineableRecord> records;
+        for (size_t i = 0; i < d.mineables.cells.size(); ++i) {
+            if (d.mineables.defIndex[i] >= d.mineables.defs.size() || d.mineables.hitPoints[i] > 65535) {
+                error = "the save has rock of an unknown kind";
+                return false;
+            }
+            const DefId def = sim.defs_->idOf("Things", d.mineables.defs[d.mineables.defIndex[i]]);
+            records.push_back(MineableRecord{static_cast<int>(d.mineables.cells[i]), def, static_cast<uint16_t>(d.mineables.hitPoints[i])});
+        }
+        if (!sim.mineables_->restore(records)) {
+            error = "the save has rock the data files can't place";
+            return false;
+        }
+        std::vector<std::pair<int, DesignationKind>> marks;
+        for (size_t i = 0; i < d.designations.cells.size(); ++i) {
+            if (d.designations.kinds[i] > static_cast<uint8_t>(DesignationKind::HarvestPlant)) {
+                error = "the save has a bad designation";
+                return false;
+            }
+            marks.emplace_back(static_cast<int>(d.designations.cells[i]), static_cast<DesignationKind>(d.designations.kinds[i]));
+        }
+        if (!sim.designations_->restore(marks)) {
+            error = "the save has a designation off the map";
             return false;
         }
     }

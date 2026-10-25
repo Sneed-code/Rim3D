@@ -23,6 +23,7 @@ ROOT = Path(ARGS[0]) if ARGS else Path(__file__).resolve().parent.parent / "data
 # "parts" lists (the body tree).
 REFERENCES = [
     ("Things", "plant.harvestedThingDef", "Things"),
+    ("Things", "mineable.dropDef", "Things"),
     ("Things", "race.body", "Bodies"),
     ("Biomes", "wildPlants{}", "Things"),
     ("Bodies", "corePart.**.def", "BodyParts"),

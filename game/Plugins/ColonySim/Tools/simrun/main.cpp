@@ -22,6 +22,8 @@
 #include "ColonySim/Needs.h"
 #include "ColonySim/Cover.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Designations.h"
+#include "ColonySim/Mineables.h"
 #include "ColonySim/Pathfinder.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Random.h"
@@ -61,6 +63,7 @@ struct Options {
     int pathBudget = colony::Pathfinder::kDefaultBudget;
     std::string start;  // a Scenarios def; prints the colonists it makes
     bool check = false;  // exit 1 if a job or a path search failed
+    int gather = 0;      // mark rock to mine and plants to harvest this many cells round the middle
     std::string png;
     std::string regionsPng;
     std::string replay;
@@ -95,6 +98,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.pathBudget = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--start") == 0 && hasValue) {
             out.start = argv[++i];
+        } else if (std::strcmp(arg, "--gather") == 0 && hasValue) {
+            out.gather = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--check") == 0) {
             out.check = true;
         } else if (std::strcmp(arg, "--png") == 0 && hasValue) {
@@ -118,7 +123,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
-                         "[--path-budget N] [--start SCENARIO] [--check] [--png FILE] [--regions FILE] [--sight FILE] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--check] [--png FILE] [--regions FILE] [--sight FILE] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE]\n");
             return false;
         }
@@ -141,6 +146,15 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
                 case colony::Terrain::Sand: r = 210; g = 195; b = 140; break;
                 case colony::Terrain::Soil: r = 90; g = 130; b = 60; break;
                 case colony::Terrain::Rock: r = 120; g = 115; b = 110; break;
+                case colony::Terrain::RoughStone: r = 150; g = 140; b = 125; break;
+            }
+            // Ore shows brighter than the rock round it: steel blue, silver white, components orange.
+            const colony::DefId rock = sim.mineables().defAt(colony::CellPos{x, y, 0});
+            if (rock.valid() && sim.mineables().isOre(rock)) {
+                const std::string& ore = sim.defs().get(rock).defName();
+                if (ore == "Ore_Steel") { r = 90; g = 150; b = 230; }
+                else if (ore == "Ore_Silver") { r = 240; g = 240; b = 250; }
+                else { r = 240; g = 140; b = 40; }
             }
             const float shade = 0.6f + 0.4f * (map.groundHeight(x, y) / 60.0f);
             const size_t i = (static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)) * 3;
@@ -485,6 +499,15 @@ int main(int argc, char** argv) {
         });
     }
 
+    // --gather: mark the rock to mine and the plants to harvest in a square round the middle (C3).
+    size_t gatherMarked = 0;
+    if (options.gather > 0) {
+        const int mid = sim.map().width() / 2;
+        const colony::CellRect area{mid - options.gather, mid - options.gather, 2 * options.gather, 2 * options.gather, 0};
+        sim.submit(colony::DesignateCommand{area, colony::DesignationKind::Mine});
+        sim.submit(colony::DesignateCommand{area, colony::DesignationKind::HarvestPlant});
+    }
+
     // Time every step so spikes (long path searches) show up, not just the average.
     colony::ReplayFeeder feeder(replay);
     uint64_t events = 0;
@@ -492,17 +515,26 @@ int main(int argc, char** argv) {
     uint64_t ate = 0;     // PawnAte events
     uint64_t wokeUp = 0;  // PawnWokeUp events
     uint64_t died = 0;    // PawnDied events
+    uint64_t mined = 0;   // CellMined events
+    uint64_t felled = 0;  // PlantRemoved events
+    uint64_t picked = 0;  // PlantHarvested events
     std::vector<float> stepMs(static_cast<size_t>(steps));
     for (int64_t i = 0; i < steps; ++i) {
         feeder.submitDue(sim);
         const auto before = Clock::now();
         sim.step();
+        if (i == 0) {
+            gatherMarked = sim.designations().count();
+        }
         stepMs[static_cast<size_t>(i)] = static_cast<float>(ms(before, Clock::now()));
         events += sim.events().size();
         for (const colony::Event& e : sim.events()) {
             ate += e.type == colony::EventType::PawnAte ? 1 : 0;
             wokeUp += e.type == colony::EventType::PawnWokeUp ? 1 : 0;
             died += e.type == colony::EventType::PawnDied ? 1 : 0;
+            mined += e.type == colony::EventType::CellMined ? 1 : 0;
+            felled += e.type == colony::EventType::PlantRemoved ? 1 : 0;
+            picked += e.type == colony::EventType::PlantHarvested ? 1 : 0;
             if (e.type == colony::EventType::CommandFailed) {
                 ++commandsFailed;
                 std::fprintf(stderr, "step %lld: command %llu failed: %s\n", static_cast<long long>(i),
@@ -598,6 +630,18 @@ int main(int argc, char** argv) {
         }
         if (options.check && died > 0) {
             std::fprintf(stderr, "check failed: %llu pawn(s) died\n", static_cast<unsigned long long>(died));
+            return 1;
+        }
+    }
+
+    // Mining, chopping and harvesting (docs/design/mining.md): only when something was marked.
+    if (options.gather > 0) {
+        std::printf("{\"gather\":{\"marked\":%zu,\"mined\":%llu,\"felled\":%llu,\"picked\":%llu,\"stillMarked\":%zu,"
+                    "\"rockCellsLeft\":%zu}}\n",
+                    gatherMarked, static_cast<unsigned long long>(mined), static_cast<unsigned long long>(felled),
+                    static_cast<unsigned long long>(picked), sim.designations().count(), sim.mineables().count());
+        if (options.check && gatherMarked > 0 && mined + felled + picked == 0) {
+            std::fprintf(stderr, "check failed: %zu cells marked and nothing was mined, felled or picked\n", gatherMarked);
             return 1;
         }
     }

@@ -95,6 +95,22 @@ void Map::clearBuilding(CellPos c) {
     setBuilding(c, kNoEntity, Passage::Open, 0);
 }
 
+void Map::setTerrain(CellPos c, Terrain terrain) {
+    const size_t i = static_cast<size_t>(index(c));
+    if (terrain_[i] == terrain) {
+        return;
+    }
+    const bool walkableBefore = groundWalkable(c);
+    const uint8_t obstacleBefore = obstacleDm(c);
+    terrain_[i] = terrain;
+    if (groundWalkable(c) != walkableBefore) {
+        regions_->markDirty(c);
+    }
+    if (obstacleDm(c) != obstacleBefore) {
+        cover_->markDirty(c);
+    }
+}
+
 void Map::generate() {
     for (int y = 0; y < height_; ++y) {
         for (int x = 0; x < width_; ++x) {

@@ -14,8 +14,10 @@ namespace colony {
 class Cover;
 class Regions;
 
-// Placeholder terrain types until terrain defs are loaded from data/defs.
-enum class Terrain : uint8_t { Water, Sand, Soil, Rock };
+// Placeholder terrain types until terrain defs are loaded from data/defs. Rock is solid until
+// it is mined (docs/design/mining.md), and leaves RoughStone: walkable, nothing grows on it.
+// New values go at the end.
+enum class Terrain : uint8_t { Water, Sand, Soil, Rock, RoughStone };
 
 // How the building in a cell affects movement. A door can be walked through but is a region of
 // its own (docs/design/regions.md).
@@ -67,6 +69,9 @@ public:
     // Ground height in metres. The cell must be in bounds.
     float groundHeight(CellPos c) const { return groundHeight_[static_cast<size_t>(index(c))]; }
     Terrain terrain(CellPos c) const { return terrain_[static_cast<size_t>(index(c))]; }
+    // Changes a cell's ground (mining turns Rock into RoughStone). Regions and cover are told when
+    // that changes what can be walked or seen through. Does not touch the ground height.
+    void setTerrain(CellPos c, Terrain terrain);
     // Ground height in metres at any point, interpolated between the heights of the four grid
     // corners around it. The corner (x, y) is the point x metres by y metres, which is how the
     // terrain mesh is drawn, so pawns stand on the surface the player sees. Clamped to the map.

@@ -61,6 +61,7 @@ namespace
 			case colony::Terrain::Sand: return TEXT("Sand");
 			case colony::Terrain::Soil: return TEXT("Soil");
 			case colony::Terrain::Rock: return TEXT("Rock");
+			case colony::Terrain::RoughStone: return TEXT("Rough stone");
 		}
 		return TEXT("?");
 	}

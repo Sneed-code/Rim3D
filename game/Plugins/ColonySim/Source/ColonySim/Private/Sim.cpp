@@ -2,9 +2,11 @@
 
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Designations.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Mineables.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Plants.h"
@@ -59,6 +61,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       zones_(std::make_unique<Zones>(map_)),
       things_(std::make_unique<Things>(map_, defs_)),
       plants_(std::make_unique<Plants>(map_, *defs_, splitMix64(settings.seed ^ 0x706C616E74ULL), "TemperateForest")),
+      mineables_(std::make_unique<Mineables>(map_, *defs_, splitMix64(settings.seed ^ 0x6D696E65ULL))),
+      designations_(std::make_unique<Designations>(map_)),
       movement_(std::make_unique<MovementSystem>()),
       health_(std::make_unique<HealthSystem>(*things_)),
       time_(),
@@ -67,7 +71,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     things_->setEventLog(&events_);
     health_->setEventLog(&events_);
     needs_ = std::make_unique<NeedsSystem>(*things_, *health_, *defs_);
-    jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *defs_, *health_, *needs_, time_, stats_, events_);
+    jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *plants_, *mineables_, *designations_, *defs_,
+                                        *health_, *needs_, time_, stats_, events_);
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -337,6 +342,59 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!jobs_->assignBed(assign->bed, assign->pawn, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* designate = std::get_if<DesignateCommand>(&command)) {
+        const DesignationKind kind = designate->kind;
+        const CellRect& area = designate->area;
+        int marked = 0;
+        if (kind == DesignationKind::None) {
+            commandFailed(id, "Designate needs Mine, CutPlant or HarvestPlant (CancelDesignations takes marks off)");
+            return;
+        }
+        for (int y = std::max(0, area.minY); y < std::min(map_.height(), area.minY + area.sizeY); ++y) {
+            for (int x = std::max(0, area.minX); x < std::min(map_.width(), area.minX + area.sizeX); ++x) {
+                const CellPos c{x, y, area.level};
+                if (!map_.inBounds(c)) {
+                    continue;
+                }
+                bool suits = false;
+                if (kind == DesignationKind::Mine) {
+                    suits = mineables_->has(c);
+                } else if (plants_->has(c)) {
+                    suits = kind == DesignationKind::CutPlant || defs_->get(plants_->defAt(c)).has("plant.harvestedThingDef");
+                }
+                if (suits) {
+                    designations_->set(c, kind);
+                    ++marked;
+                }
+            }
+        }
+        if (marked == 0) {
+            commandFailed(id, kind == DesignationKind::Mine ? "there is no rock to mine there"
+                                                            : (kind == DesignationKind::CutPlant ? "there is no plant to cut there"
+                                                                                                 : "there is nothing to harvest there"));
+        } else {
+            Event changed;
+            changed.type = EventType::DesignationsChanged;
+            events_.push_back(std::move(changed));
+        }
+    } else if (const auto* cancel = std::get_if<CancelDesignationsCommand>(&command)) {
+        std::vector<int> cells;
+        for (const auto& [index, kind] : designations_->all()) {
+            if ((cancel->kind == DesignationKind::None || cancel->kind == kind) && cancel->area.contains(map_.cellAt(index))) {
+                cells.push_back(index);
+            }
+        }
+        for (const int index : cells) {
+            designations_->set(map_.cellAt(index), DesignationKind::None);
+            jobs_->cancelGatherAt(map_.cellAt(index));
+        }
+        if (cells.empty()) {
+            commandFailed(id, "there is nothing marked there");
+        } else {
+            Event changed;
+            changed.type = EventType::DesignationsChanged;
+            events_.push_back(std::move(changed));
+        }
     }
 }
 
@@ -375,9 +433,29 @@ void Sim::step() {
     time_.seconds += 1;
     if (time_.seconds % kSecondsPerHour == 0) {
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
+        pruneDesignations();
     }
     if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
         checkpoints_.push_back(Checkpoint{time_.seconds, stateHash()});
+    }
+}
+
+// Marks whose rock or plant is gone (it died of old age): taken off, so they don't pile up.
+void Sim::pruneDesignations() {
+    std::vector<int> stale;
+    for (const auto& [index, kind] : designations_->all()) {
+        const CellPos c = map_.cellAt(index);
+        if (kind == DesignationKind::Mine ? !mineables_->has(c) : !plants_->has(c)) {
+            stale.push_back(index);
+        }
+    }
+    for (const int index : stale) {
+        designations_->set(map_.cellAt(index), DesignationKind::None);
+    }
+    if (!stale.empty()) {
+        Event changed;
+        changed.type = EventType::DesignationsChanged;
+        events_.push_back(std::move(changed));
     }
 }
 
@@ -389,6 +467,10 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.waypoints.clear();
     out.zones.clear();
     out.zoneCells.clear();
+    out.designations.clear();
+    for (const auto& [index, kind] : designations_->all()) {
+        out.designations.push_back(DesignationView{map_.cellAt(index), kind});
+    }
     for (const StockpileZone& zone : zones_->stockpiles()) {
         out.zones.push_back(ZoneView{zone.id, zone.priority, static_cast<uint32_t>(out.zoneCells.size()),
                                      static_cast<uint32_t>(zone.cells.size())});
@@ -473,6 +555,8 @@ uint64_t Sim::stateHash() const {
     h.add(stats_.failedJobs);
     h.add(stats_.repaths);
     h.add(plants_->hash());
+    h.add(mineables_->hash());
+    designations_->hashState(h);
     pathfinder_.hashState(h);
     zones_->hashState(h);
 
@@ -579,6 +663,7 @@ uint64_t Sim::stateHash() const {
             h.add(static_cast<int>(job.repaths));
             h.add(job.startedAt);
             h.add(job.until);
+            h.add(job.work);
             h.add(job.path.slot);
             h.add(job.path.serial);
             h.add(static_cast<uint64_t>(worker->avoid.size()));

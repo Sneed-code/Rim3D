@@ -24,7 +24,7 @@ namespace {
 
 // The steps of each job type (RimWorld's toils), run in order. A step that ends at once lets the
 // next one start in the same game second.
-enum class JobStepKind : uint8_t { Wait, GotoThing, PickUp, CarryToCell, Place, WalkToSpot, Eat, Lie };
+enum class JobStepKind : uint8_t { Wait, GotoThing, PickUp, CarryToCell, Place, WalkToSpot, Eat, Lie, GotoTouch, MineWork, PlantWork };
 
 constexpr JobStepKind kJobsWaitSteps[] = {JobStepKind::Wait};
 constexpr JobStepKind kJobsHaulSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::CarryToCell,
@@ -32,6 +32,8 @@ constexpr JobStepKind kJobsHaulSteps[] = {JobStepKind::GotoThing, JobStepKind::P
 constexpr JobStepKind kJobsIngestSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::WalkToSpot,
                                             JobStepKind::Eat};
 constexpr JobStepKind kJobsLayDownSteps[] = {JobStepKind::WalkToSpot, JobStepKind::Lie};
+constexpr JobStepKind kJobsMineSteps[] = {JobStepKind::GotoTouch, JobStepKind::MineWork};
+constexpr JobStepKind kJobsPlantSteps[] = {JobStepKind::GotoTouch, JobStepKind::PlantWork};
 constexpr uint8_t kJobsHaulPickUpStep = 1;
 constexpr uint8_t kJobsHaulCarryStep = 2;
 
@@ -60,6 +62,9 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::HaulToCell: return {kJobsHaulSteps, static_cast<int>(std::size(kJobsHaulSteps))};
         case JobType::Ingest: return {kJobsIngestSteps, static_cast<int>(std::size(kJobsIngestSteps))};
         case JobType::LayDown: return {kJobsLayDownSteps, static_cast<int>(std::size(kJobsLayDownSteps))};
+        case JobType::Mine: return {kJobsMineSteps, static_cast<int>(std::size(kJobsMineSteps))};
+        case JobType::CutPlant:
+        case JobType::HarvestPlant: return {kJobsPlantSteps, static_cast<int>(std::size(kJobsPlantSteps))};
     }
     return {nullptr, 0};
 }
@@ -97,6 +102,9 @@ const char* jobTypeName(JobType type) {
         case JobType::HaulToCell: return "HaulToCell";
         case JobType::Ingest: return "Ingest";
         case JobType::LayDown: return "LayDown";
+        case JobType::Mine: return "Mine";
+        case JobType::CutPlant: return "CutPlant";
+        case JobType::HarvestPlant: return "HarvestPlant";
     }
     return "?";
 }
@@ -105,13 +113,16 @@ int jobStepCount(JobType type) {
     return jobsStepsOf(type).count;
 }
 
-JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zones, const DefDatabase& defs,
-                     const HealthSystem& health, const NeedsSystem& needs, const GameTime& time, SimStats& stats,
-                     std::vector<Event>& events)
+JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zones, Plants& plants, Mineables& mineables,
+                     Designations& designations, const DefDatabase& defs, const HealthSystem& health,
+                     const NeedsSystem& needs, const GameTime& time, SimStats& stats, std::vector<Event>& events)
     : map_(map),
       things_(things),
       pathfinder_(pathfinder),
       zones_(zones),
+      plants_(plants),
+      mineables_(mineables),
+      designations_(designations),
       defs_(defs),
       health_(health),
       needs_(needs),
@@ -188,6 +199,7 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
     maxRepaths_ = static_cast<int>(rules ? rules->integer("maxRepaths", kJobsMaxRepaths) : kJobsMaxRepaths);
     defaultPriority_ = static_cast<uint8_t>(std::clamp(
         static_cast<int>(rules ? rules->integer("defaultWorkPriority", kDefaultPriority) : kDefaultPriority), 1, kMaxPriority));
+    loadGatherRules();
 }
 
 JobSystem::~JobSystem() = default;
@@ -270,6 +282,11 @@ int JobSystem::heldTargets(const Job& job, JobTarget out[2]) const {
             if (job.thing == kNoEntity) {
                 return 0;
             }
+            out[0] = JobTarget{kNoEntity, job.cell};
+            return 1;
+        case JobType::Mine:
+        case JobType::CutPlant:
+        case JobType::HarvestPlant:
             out[0] = JobTarget{kNoEntity, job.cell};
             return 1;
         default: return 0;
@@ -469,7 +486,9 @@ bool JobSystem::thinkWork(Entity pawn, Job& out) {
                 continue;
             }
             const CellPos targetCell = c.target.thing != kNoEntity ? cellOf(reg.get<Position>(c.target.thing)) : c.target.cell;
-            if (!canReach(at, targetCell)) {
+            // Rock can't be walked into: the pawn works from a cell next to it.
+            CellPos stand;
+            if (map_.walkable(targetCell) ? !canReach(at, targetCell) : !touchCell(at, targetCell, stand)) {
                 continue;
             }
             Job job;
@@ -533,6 +552,9 @@ void JobSystem::tickJob(Entity pawn) {
 }
 
 bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
+    if (jobIsGather(job.type)) {
+        return failCheckGather(pawn, job, why);
+    }
     if (job.type == JobType::Ingest) {
         return failCheckIngest(pawn, job, why);
     }
@@ -593,6 +615,12 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return eat(pawn, job, why);
         case JobStepKind::Lie:
             return lie(pawn, job, why);
+        case JobStepKind::GotoTouch:
+            return goToTouch(pawn, job, why);
+        case JobStepKind::MineWork:
+            return mineRock(pawn, job, why);
+        case JobStepKind::PlantWork:
+            return plantWork(pawn, job, why);
     }
     return StepResult::Failed;
 }
@@ -785,8 +813,9 @@ void JobSystem::endJob(Entity pawn, JobEnd end, const std::string& why) {
     Worker& worker = reg.get<Worker>(pawn);
     if (end == JobEnd::Failed) {
         ++stats_.failedJobs;
-        if (job.thing != kNoEntity) {
-            worker.avoid.push_back(AvoidTarget{JobTarget{job.thing, CellPos{}}, now() + avoidSeconds_});
+        if (job.thing != kNoEntity || jobIsGather(job.type)) {
+            const JobTarget avoided = job.thing != kNoEntity ? JobTarget{job.thing, CellPos{}} : JobTarget{kNoEntity, job.cell};
+            worker.avoid.push_back(AvoidTarget{avoided, now() + avoidSeconds_});
             if (worker.avoid.size() > kMaxAvoid) {
                 worker.avoid.erase(worker.avoid.begin());
             }

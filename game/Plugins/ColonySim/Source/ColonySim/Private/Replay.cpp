@@ -107,10 +107,16 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["hour"] = c.hour;
                 j["kind"] = scheduleKindName(c.kind);
-            } else {
-                static_assert(std::is_same_v<Type, AssignBedCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, AssignBedCommand>) {
                 j["bed"] = entt::to_integral(c.bed);
                 j["pawn"] = entt::to_integral(c.pawn);
+            } else if constexpr (std::is_same_v<Type, DesignateCommand>) {
+                j["area"] = replayRectJson(c.area);
+                j["kind"] = designationKindName(c.kind);
+            } else {
+                static_assert(std::is_same_v<Type, CancelDesignationsCommand>, "write every command type");
+                j["area"] = replayRectJson(c.area);
+                j["kind"] = designationKindName(c.kind);
             }
         },
         logged.command);
@@ -233,6 +239,21 @@ bool replayReadPriority(ReplayReader& r, const ReplayJson& j, const std::string&
     return r.fail(where + ".priority must be Low, Normal, Preferred, Important or Critical");
 }
 
+
+// "kind": "Mine", "CutPlant" or "HarvestPlant"; "None" (cancelling only) means every kind.
+bool replayReadDesignation(ReplayReader& r, const ReplayJson& j, const std::string& where, DesignationKind& out) {
+    std::string name = designationKindName(out);
+    if (!r.text(j, "kind", name, where)) {
+        return false;
+    }
+    for (const DesignationKind k : {DesignationKind::None, DesignationKind::Mine, DesignationKind::CutPlant, DesignationKind::HarvestPlant}) {
+        if (name == designationKindName(k)) {
+            out = k;
+            return true;
+        }
+    }
+    return r.fail(where + ".kind must be None, Mine, CutPlant or HarvestPlant");
+}
 
 bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& where, LoggedCommand& out) {
     if (!j.is_object()) {
@@ -382,6 +403,21 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = AssignBedCommand{static_cast<Entity>(bed), static_cast<Entity>(pawn)};
+    } else if (type == "Designate") {
+        DesignateCommand c;
+        if (!replayReadRect(r, j, where, c.area) || !replayReadDesignation(r, j, where, c.kind)) {
+            return false;
+        }
+        if (c.kind == DesignationKind::None) {
+            return r.fail(where + ".kind must be Mine, CutPlant or HarvestPlant");
+        }
+        out.command = c;
+    } else if (type == "CancelDesignations") {
+        CancelDesignationsCommand c;
+        if (!replayReadRect(r, j, where, c.area) || !replayReadDesignation(r, j, where, c.kind)) {
+            return false;
+        }
+        out.command = c;
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");
     }

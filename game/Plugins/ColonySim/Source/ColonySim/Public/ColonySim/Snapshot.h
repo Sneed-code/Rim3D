@@ -2,6 +2,7 @@
 
 #include "ColonySim/Api.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Designations.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/JobType.h"
@@ -68,6 +69,12 @@ struct ZoneView {
     uint32_t cellCount = 0;
 };
 
+// One mark on a cell: mine here, cut this plant, harvest it (docs/design/mining.md).
+struct DesignationView {
+    CellPos cell;
+    DesignationKind kind = DesignationKind::None;
+};
+
 struct Snapshot {
     int64_t gameSeconds = 0;  // Sim::time().seconds when it was written
     int mapWidth = 0;
@@ -76,6 +83,7 @@ struct Snapshot {
     std::vector<PathPointView> waypoints;  // the pawns' routes, see ThingView
     std::vector<ZoneView> zones;           // by id
     std::vector<CellPos> zoneCells;        // the zones' cells, see ZoneView
+    std::vector<DesignationView> designations;  // every mark, in cell order
 
     // The thing with this id, or null if it is not on the map. Binary search.
     COLONY_API const ThingView* find(Entity id) const;

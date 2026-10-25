@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ColonySim/Api.h"
+#include "ColonySim/Designations.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/Needs.h"
@@ -130,12 +131,28 @@ struct AssignBedCommand {
     Entity pawn = kNoEntity;
 };
 
+// Marks the cells in `area` for work (task C3, docs/design/mining.md): Mine marks rock and ore,
+// CutPlant any plant, HarvestPlant plants that give something. Cells that don't suit the kind are
+// left out; a cell already marked changes to this kind. Fails if no cell qualified. The designation
+// is the player's order: any colonist with the work type switched on takes it, nearest first.
+struct DesignateCommand {
+    CellRect area;
+    DesignationKind kind = DesignationKind::Mine;
+};
+
+// Takes the marks off the cells in `area`; with a kind, only marks of that kind. Fails if there
+// was none. A colonist working on a cancelled mark stops.
+struct CancelDesignationsCommand {
+    CellRect area;
+    DesignationKind kind = DesignationKind::None;  // None: every kind
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
                              SetStockpilePriorityCommand, SetStockpileAllowedCommand, OrderHaulCommand,
                              ControlPawnCommand, DirectMoveCommand, SetScheduleCommand,
-                             AssignBedCommand>;
+                             AssignBedCommand, DesignateCommand, CancelDesignationsCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.
