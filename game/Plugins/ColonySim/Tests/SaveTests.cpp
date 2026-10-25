@@ -1,4 +1,5 @@
 #include "ColonySim/Defs.h"
+#include "ColonySim/Pathfinder.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
@@ -114,6 +115,37 @@ TEST_CASE("Save: load and run on gives the same game as never saving") {
         CHECK(copy.checkpoints()[i].hash == original.checkpoints()[i].hash);
     }
     CHECK(saveSim(copy) == saveSim(original));
+}
+
+TEST_CASE("Save: path requests and a half-done path search come back the same") {
+    const auto defs = testDefs();
+    SimSettings settings = saveTestSettings();
+    settings.pathBudget = 15;  // small, so searches run over several steps
+    Sim straight(settings, defs);
+    saveTestSession(straight, 0, 4000);
+
+    int halfDone = 0;
+    for (const int64_t from : {0, 100, 1200, 2500, 3000}) {
+        // Save at the first step after `from` that ends with a search half done.
+        Sim original(settings, defs);
+        saveTestSession(original, 0, from);
+        int64_t at = from;
+        do {
+            saveTestSession(original, at, at + 1);
+            ++at;
+        } while (original.pathfinder().saveState().activeWork == 0 && at < from + 500);
+        halfDone += original.pathfinder().saveState().activeWork > 0 ? 1 : 0;
+        const std::vector<uint8_t> bytes = saveSim(original);
+        SaveLoadResult loaded = loadSim(bytes, defs);
+        SAVE_REQUIRE(loaded.sim != nullptr);
+        CHECK(loaded.sim->stateHash() == original.stateHash());
+        CHECK(loaded.sim->pathfinder().queued() == original.pathfinder().queued());
+        CHECK(loaded.sim->settings().pathBudget == 15);
+        CHECK(saveSim(*loaded.sim) == bytes);
+        saveTestSession(*loaded.sim, at, 4000);
+        CHECK(loaded.sim->stateHash() == straight.stateHash());
+    }
+    CHECK(halfDone == 5);
 }
 
 TEST_CASE("Save: saving and loading again and again changes nothing") {

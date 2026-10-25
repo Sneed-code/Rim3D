@@ -34,7 +34,7 @@ constexpr char kSaveMagic[8] = {'R', 'I', 'M', '3', 'D', 'S', 'A', 'V'};
 constexpr size_t kSaveMagicSize = sizeof kSaveMagic;
 // Bump when the layout below changes, and keep reading the old versions (the archive's
 // version() says which one a file is). Changing it needs a line in docs/design/saves.md.
-constexpr uint32_t kSaveFormatVersion = 1;
+constexpr uint32_t kSaveFormatVersion = 2;  // 2: S3's path queue, pathBudget, a hauler's path ticket
 constexpr const char* kSaveFormatName = "rim3d-save";
 constexpr const char* kSaveThingsKind = "Things";
 
@@ -105,6 +105,7 @@ struct SaveData {
     // one first), so a loaded sim hands out the same ids as the one that was saved.
     std::vector<uint32_t> freeIds;
     std::vector<SaveEntity> entities;  // live things, in id order
+    PathSavedState paths;              // the path queue (format 2 on)
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -386,6 +387,9 @@ void saveSettings(Ar& ar, SimSettings& s) {
     ar.text("pawnDef", s.pawnDef);
     ar.text("haulItemDef", s.haulItemDef);
     ar.value("checkpointEvery", s.checkpointEvery);
+    if (ar.version() >= 2) {
+        ar.value("pathBudget", s.pathBudget);
+    }
 }
 
 template <typename Ar>
@@ -430,12 +434,35 @@ void saveEntity(Ar& ar, SaveEntity& e) {
     ar.optional("haulJob", e.haulJob, [&](HaulJob& job) {
         ar.value("stage", job.stage);
         ar.value("item", job.item);
-        ar.require(static_cast<int>(job.stage) <= static_cast<int>(HaulStage::CarryToStockpile),
+        if (ar.version() >= 2) {
+            ar.value("pathSlot", job.path.slot);
+            ar.value("pathSerial", job.path.serial);
+        }
+        ar.require(static_cast<int>(job.stage) <= static_cast<int>(HaulStage::WaitPathToStockpile),
                    "the save file has a bad hauling stage");
     });
     ar.optional("haulReservedBy", e.haulReservedBy, [&](HaulReservedBy& r) { ar.value("pawn", r.pawn); });
     ar.optional("haulCarriedBy", e.haulCarriedBy, [&](HaulCarriedBy& c) { ar.value("pawn", c.pawn); });
     ar.value("haulStored", e.haulStored);
+}
+
+template <typename Ar>
+void savePaths(Ar& ar, PathSavedState& p) {
+    ar.value("nextSerial", p.nextSerial);
+    ar.value("updates", p.updates);
+    ar.list("requests", p.requests, [&](PathSavedRequest& r) {
+        ar.value("serial", r.serial);
+        ar.value("status", r.status);
+        ar.require(static_cast<int>(r.status) <= static_cast<int>(PathStatus::Failed),
+                   "the save file has a bad path status");
+        ar.group("start", [&] { saveCell(ar, r.start); });
+        ar.group("goal", [&] { saveCell(ar, r.goal); });
+        ar.value("askedAt", r.askedAt);
+        ar.list("path", r.path, [&](CellPos& c) { saveCell(ar, c); });
+    });
+    ar.list("freeSlots", p.freeSlots, [&](uint32_t& slot) { ar.value(nullptr, slot); });
+    ar.list("queue", p.queue, [&](uint32_t& slot) { ar.value(nullptr, slot); });
+    ar.value("activeWork", p.activeWork);
 }
 
 template <typename Ar>
@@ -467,6 +494,9 @@ void saveData(Ar& ar, SaveData& d) {
     });
     ar.list("freeIds", d.freeIds, [&](uint32_t& id) { ar.value(nullptr, id); });
     ar.list("entities", d.entities, [&](SaveEntity& e) { saveEntity(ar, e); });
+    if (ar.version() >= 2) {
+        ar.group("paths", [&] { savePaths(ar, d.paths); });
+    }
 }
 
 // The file: magic, format version, the data, then a checksum of everything before it.
@@ -616,6 +646,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         out.haulStored = reg.all_of<HaulStored>(e);
         d.entities.push_back(std::move(out));
     }
+    d.paths = sim.pathfinder_.saveState();
     return d;
 }
 
@@ -745,6 +776,18 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         sim.haulers_.push_back(pawn);
     }
+    // The path queue, once every building is back, and the tickets haulers wait on.
+    if (!sim.pathfinder_.loadState(std::move(d.paths), error)) {
+        return false;
+    }
+    for (const Entity pawn : sim.haulers_) {
+        const HaulJob& job = reg.get<HaulJob>(pawn);
+        const bool waiting = job.stage == HaulStage::WaitPathToItem || job.stage == HaulStage::WaitPathToStockpile;
+        if (waiting && sim.pathfinder_.status(job.path) == PathStatus::Unknown) {
+            error = "the save has a hauler waiting for a path nobody is looking for";
+            return false;
+        }
+    }
     if (d.stockpile && !sim.map_.inBounds(*d.stockpile)) {
         error = "the save has a stockpile outside the map";
         return false;
@@ -785,7 +828,8 @@ SaveLoadResult loadSim(const std::vector<uint8_t>& bytes, std::shared_ptr<const 
         return result;
     }
     const SimSettings& s = data.settings;
-    if (s.mapSize <= 0 || s.mapSize > 4096 || s.pawns < 0 || s.items < 0 || s.checkpointEvery < 0 || data.seconds < 0) {
+    if (s.mapSize <= 0 || s.mapSize > 4096 || s.pawns < 0 || s.items < 0 || s.checkpointEvery < 0 || s.pathBudget <= 0 ||
+        data.seconds < 0) {
         result.error = "the save file has impossible settings";
         return result;
     }

@@ -58,6 +58,16 @@ public:
     // True if a pawn can walk from `from` to `to`: both have regions in the same group.
     bool canReach(CellPos from, CellPos to);
 
+    // The region of a cell as of the last rebuild, without rebuilding: for hot loops (the
+    // pathfinder) that call update() first. kNoRegion off the map or on a cell that can't be walked.
+    RegionId regionAtNow(CellPos c) const;
+    // The same for a whole level at once, indexed by Map::index; for the pathfinder's inner loop.
+    const RegionId* regionIdsOnLevel(int level) const;
+    // One more than the highest region id ever used; arrays indexed by region id need this size.
+    size_t idLimit() const { return regions_.size(); }
+    // Goes up every time a cell's passage changes, so a caller can tell its region ids are stale.
+    uint64_t changeCount() const { return changeCount_; }
+
     // A region by id, from a query since the last change. Does not rebuild, so the reference
     // stays valid until the map changes and something queries again.
     const Region& region(RegionId id) const { return regions_[id]; }
@@ -105,6 +115,7 @@ private:
     size_t liveRegions_ = 0;
     uint64_t blocksRebuilt_ = 0;
     uint64_t groupRelabels_ = 0;
+    uint64_t changeCount_ = 0;
 
     // Scratch, kept between rebuilds to avoid allocations.
     std::vector<int> floodQueue_;

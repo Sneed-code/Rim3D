@@ -67,3 +67,7 @@ set_tests_properties(save_first_half PROPERTIES FIXTURES_SETUP save_first_half)
 set_tests_properties(save_second_half PROPERTIES FIXTURES_REQUIRED save_first_half FIXTURES_SETUP save_loaded)
 set_tests_properties(save_straight_run PROPERTIES FIXTURES_SETUP save_straight)
 set_tests_properties(save_compare PROPERTIES FIXTURES_REQUIRED "save_loaded;save_straight")
+
+# Pathfinding load test (S3): 100 pawns hauling on a 1 km map for a day, no failed job or search.
+add_test(NAME simrun_paths COMMAND simrun --seed 42 --size 1024 --days 1 --pawns 100 --items 2000 --check
+         --data ${CMAKE_CURRENT_SOURCE_DIR}/Tests/data)

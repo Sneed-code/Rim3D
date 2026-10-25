@@ -25,8 +25,11 @@ regions (16 m blocks, doors as their own regions, links, reachability groups; `M
 Since S5 Unreal talks to the sim only through commands (`Sim::submit`), per-step events and a
 read-only snapshot; every session can be saved as a replay file and played back with
 `simrun --replay`, and CI checks Linux and Windows give the same state hashes
-(`docs/design/bridge.md`). The Stage 0 hauling job (now in `Sim.cpp`) and cell A* (`Pathfinder`)
-are still placeholders; C1 and S3 replace them. Since F3 buildings and ground have heights, so the
+(`docs/design/bridge.md`). Since S3 paths are hierarchical: region route, then cell A\* inside that
+corridor, asked for through a queue with a work budget per step (`sim.pathfinder().request`, an
+answer the next step at the earliest); a long 1 km search costs about 1,500 cells instead of
+34,000 (`docs/design/pathfinding.md`). The Stage 0 hauling job (`Sim.cpp`, `HaulJob.h`) is still a
+placeholder for C1. Since F3 buildings and ground have heights, so the
 sim can say how hidden a pawn is from each of eight sides (`Map::cover()`), whether one pawn can see
 another (`lineOfSight`, with standing, crouching and prone) and which ground a faction's enemies
 can shoot at (`Sim::threatMap`); `docs/design/cover.md`. Since S6 the whole game state saves to
@@ -36,7 +39,7 @@ save** (the doc has the steps) and to the save round-trip test.
 
 ## Stage 1 progress
 
-8 of 43 tasks done (D1, D2, U1, S1, S2, S5, S6, F3). Tick tasks in `docs/plans/stage-1.md` as they merge.
+9 of 43 tasks done (D1, D2, U1, S1, S2, S5, S6, F3, S3). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -50,8 +53,8 @@ Wave 2:
 - ~~**S1** things and the world layout~~ done: `docs/design/things.md`. `ColonySim.Build.cs` now
   exposes `ThirdParty/` (EnTT) as a public system include path; the next PC Unreal task is the
   first to compile it in Unreal.
-- **D3** (PC light, Sonnet medium): runs the importer on sneed's PC. `simrun --pawns/--items`
-  needs its `Human` and `Steel` Things defs.
+- **D3** (PC light, Sonnet medium): runs the importer on sneed's PC. Until then `simrun
+  --pawns/--items` needs `--data game/Plugins/ColonySim/Tests/data` (test fixture defs).
 
 Wave 3, both cloud:
 - ~~**S2** regions and reachability~~ done: `docs/design/regions.md`. A door is a Things def with
@@ -60,7 +63,9 @@ Wave 3, both cloud:
   commands so far (spawn and destroy a thing); each later system adds its own. New sim state
   must go into `Sim::stateHash()`.
 
-Wave 4, now open: **S3** hierarchical pathfinding (cloud, Opus high), ~~**S6** save and load~~ done
+Wave 4, now open: ~~**S3** hierarchical pathfinding~~ done (`docs/design/pathfinding.md`; CI runs
+the 1 km, 100 pawn check as `simrun_paths`; the path queue is in the save, save format 2),
+~~**S6** save and load~~ done
 (`docs/design/saves.md`; saves keep the command log, so a loaded session still records a full replay;
 the entity-registry hash order changed, so replays recorded before S6 have different hash values),
 ~~**F3** cover, sight and threat maps~~ done (`docs/design/cover.md`; `simrun --sight
@@ -69,6 +74,9 @@ trees and rocks get their height from `fillPercent` when C2 adds plants) and **U
 Unreal, Sonnet high; the first Unreal compile of EnTT and the S5 bridge, plus a dev key that saves
 a replay to `Saved/Replays/`). C2, C8 and F1 in wave 4 also wait for **D3** (the RimWorld import
 on sneed's PC).
+
+Wave 5: **S4** smooth movement (cloud, Sonnet high) is open now that S3 is in. **C1** job system
+(cloud, Opus high) waits for D3.
 
 ## Waiting on sneed
 

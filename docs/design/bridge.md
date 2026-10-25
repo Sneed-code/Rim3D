@@ -118,7 +118,7 @@ Files are JSON text, one command and one checkpoint per line:
   "version": 1,
   "simVersion": "0.1.0",
   "defsHash": "49e4da1eea3c345a",
-  "settings": {"seed":42,"mapSize":128,"pawns":10,"items":80,"flatMap":false,"pawnDef":"Human","haulItemDef":"Steel","checkpointEvery":3600},
+  "settings": {"seed":42,"mapSize":128,"pawns":10,"items":80,"flatMap":false,"pawnDef":"Human","haulItemDef":"Steel","checkpointEvery":3600,"pathBudget":3000},
   "endStep": 86400,
   "endHash": "4abdc6ed43f4b211",
   "commands": [

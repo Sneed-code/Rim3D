@@ -16,7 +16,7 @@ As in RimWorld, walkable cells are grouped into **regions**:
 
 Regions that share at least one cell side are **linked**. A `RegionLink` holds the other region,
 how many cell sides they share, and the middle of that shared border in metres, which the
-region-graph search in S3 can use as the crossing point. Both regions hold the link, with the same
+region-graph search ([pathfinding.md](pathfinding.md)) uses as the crossing point. Both regions hold the link, with the same
 numbers, sorted by the other region's id. Regions that only touch at a corner are not linked: the
 pathfinder never cuts corners, so a diagonal step between them always passes a linked cell.
 
@@ -54,7 +54,7 @@ A rebuild:
    side. Links between two untouched blocks are still in place.
 4. Relabels every reachability group with a flood over the region graph in region id order.
 
-The first query builds every block. Measured in the cloud: a whole 1 km map takes about 30 ms
+The first query builds every block (a `Sim` does that when it is made). Measured in the cloud: a whole 1 km map takes about 30 ms
 (about 3,400 to 3,700 regions), a 512 m map about 7 ms. Rebuilding one block, groups included,
 takes about 40 microseconds on a 1 km map. Step 4 is the only part that grows with the map; if a
 profile ever shows it, relabel only the groups the dirty blocks touched.
@@ -76,8 +76,9 @@ profile ever shows it, relabel only the groups the dirty blocks touched.
 `simrun --seed 42 --size 512 --days 0 --regions regions.png` writes one colour per region, so the
 16 m blocks and the cuts inside them show. Regions outside the biggest group are drawn dark, doors
 white, and cells with no region in a dim version of their terrain (dark grey rock, dark blue
-water, dark red for a wall). It also prints the region count, group count and build time. CI draws
-a 128 m one on every run (`simrun_regions` test).
+water, dark red for a wall). It also prints the region count and group count. The sim builds every
+region when it is made (since S3), so the build time is part of `mapGenMs`. CI draws a 128 m one on
+every run (`simrun_regions` test).
 
 ## Not done here
 
