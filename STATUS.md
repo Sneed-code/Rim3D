@@ -245,6 +245,8 @@ Stage 2 done so far: **D7** medicine and disease data (`docs/design/medicine-dat
 **E3** light and darkness (`docs/design/light.md`).
 **D8** production data (work tables, stone blocks, melee weapons with tools; the meal recipes still list only the fueled stove, C14 adds the electric stove).
 
+**D12** research data (22 projects, tech levels, two research benches, content gated by `researchPrerequisite`: `docs/design/research-data.md`).
+
 D9 (thoughts, recreation, mental break and social data) is in: `docs/design/thoughts-data.md`. Data only; C15, C17, C18, C19, C20, E2 and E3 read it.
 
 

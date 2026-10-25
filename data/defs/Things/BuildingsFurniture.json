@@ -1,6 +1,6 @@
 [
  {
-  "defName": "Armchair",
+  "defName": "Armchair", "researchPrerequisite": "ComplexFurniture",
   "parent": "StuffBuildingBase",
   "label": "armchair",
   "size": [
@@ -28,7 +28,7 @@
   ]
  },
  {
-  "defName": "EndTable",
+  "defName": "EndTable", "researchPrerequisite": "ComplexFurniture",
   "parent": "StuffBuildingBase",
   "label": "end table",
   "size": [
@@ -52,7 +52,7 @@
   ]
  },
  {
-  "defName": "Dresser",
+  "defName": "Dresser", "researchPrerequisite": "ComplexFurniture",
   "parent": "StuffBuildingBase",
   "label": "dresser",
   "size": [
