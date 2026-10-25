@@ -37,6 +37,7 @@
 #include "PawnSubsystem.h"
 #include "SimPicking.h"
 #include "SimSubsystem.h"
+#include "TerrainDraw.h"
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Map.h"
@@ -1302,6 +1303,7 @@ namespace
 	}
 
 	// The Index-th cell (in a fixed scan) with open ground around it (no thing within 3 cells) that is visible on screen.
+	// A click lands on what is drawn, so a rock cell is aimed at on top of its block, not at the ground under it.
 	bool OverseerSmokeFindEmptyCell(UWorld* World, const USimSubsystem& Bridge, int32 Middle, int32 Index, colony::CellPos& OutCell, FVector2D& OutScreen)
 	{
 		int32 Found = 0;
@@ -1323,7 +1325,7 @@ namespace
 						break;
 					}
 				}
-				if (bClear && OverseerSmokeProject(World, Bridge.SimToWorld(X + 0.5f, Y + 0.5f, 0), OutScreen, 0.1f) && Found++ == Index)
+				if (bClear && OverseerSmokeProject(World, Bridge.SimToWorld(X + 0.5f, Y + 0.5f, 0) + FVector(0.0, 0.0, TerrainDraw::SurfaceBonusCm(Bridge.GetSim()->map(), X + 0.5, Y + 0.5)), OutScreen, 0.1f) && Found++ == Index)
 				{
 					OutCell = Cell;
 					return true;
@@ -1650,6 +1652,7 @@ namespace
 		int64 GroomOtherVisible = 0;
 		int32 MetaHumanMissing = 0;
 		TMap<uint32, FVector> LastLocation;
+		TMap<uint32, FVector> LastSimLocation;
 
 		void Reset() { *this = FPawnsSmokeState(); }
 	};
@@ -1746,8 +1749,18 @@ void USmokeTestSubsystem::BuildPawnsPhases()
 			}
 			const FVector Location = Pawn->GetActorLocation();
 			const FVector SimLocation = Bridge->SimToWorld(View.x, View.y, View.level);
-			State->WorstFollowCm = FMath::Max(State->WorstFollowCm, FVector::Dist2D(Location, SimLocation));
 			const uint32 Key = static_cast<uint32>(entt::to_integral(View.id));
+			// Actors are placed where the sim stood when the pawn subsystem last ticked, which is this frame's
+			// or the last frame's (the subsystems tick in no fixed order). After a slow frame the sim has caught
+			// up many steps at once, so a pawn one frame behind is as far as all those steps, not one: it is
+			// on time if it is near either place.
+			double Follow = FVector::Dist2D(Location, SimLocation);
+			if (const FVector* LastSim = State->LastSimLocation.Find(Key))
+			{
+				Follow = FMath::Min(Follow, FVector::Dist2D(Location, *LastSim));
+			}
+			State->LastSimLocation.Add(Key, SimLocation);
+			State->WorstFollowCm = FMath::Max(State->WorstFollowCm, Follow);
 			if (const FVector* Last = State->LastLocation.Find(Key))
 			{
 				State->Travelled += FVector::Dist2D(*Last, Location);
