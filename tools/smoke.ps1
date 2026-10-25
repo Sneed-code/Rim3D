@@ -6,7 +6,7 @@
   powershell -ExecutionPolicy Bypass -File tools\smoke.ps1 -Test load
 
 .NOTES
-  Tests: load, crowd, terrain (see game/Source/Rim3D/SmokeTest.h).
+  Tests: load, crowd, terrain, sim (see game/Source/Rim3D/SmokeTest.h).
   Output: game\Saved\Smoke\<test>.json and game\Saved\Smoke\<test>\*.png
   Exit code: 0 pass, 1 test failed, 2 build failed or PC busy, 3 crashed or timed out.
   Only run this while the PC is free: no game and no local AI tool (ComfyUI and the like).

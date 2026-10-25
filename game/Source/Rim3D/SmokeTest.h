@@ -15,7 +15,8 @@ class FJsonValue;
  * frame times, takes screenshots into Saved/Smoke/<name>/, writes
  * Saved/Smoke/<name>.json and quits with exit code 0 (pass) or 1 (fail).
  *
- * Tests: load (the level opens and the sim runs), crowd, terrain.
+ * Tests: load (the level opens and the sim runs), crowd, terrain, sim (the bridge: defs, commands,
+ * events, snapshots and blending, speed keys, replay file).
  * Optional: -SmokeTimeout=<seconds> (default 300) fails a run that hangs.
  * To add a test: write a Build<Name>Phases() and add a branch in OnWorldBeginPlay.
  * Run it with tools/smoke.ps1.
@@ -41,6 +42,10 @@ private:
 		TFunction<void()> Setup;
 		float WarmupSeconds = 5.0f;
 		float MeasureSeconds = 15.0f;
+		/** Runs when the phase ends, before the next one starts: checks results, calls Fail. */
+		TFunction<void()> Verify;
+		/** Runs every frame of the phase. */
+		TFunction<void()> OnFrame;
 	};
 
 	struct FFrameSample
@@ -54,6 +59,7 @@ private:
 	void BuildLoadPhases();
 	void BuildCrowdPhases();
 	void BuildTerrainPhases();
+	void BuildSimPhases();
 	void StartPhase(int32 Index);
 	void FinishPhase();
 	void WriteResultsAndQuit();
