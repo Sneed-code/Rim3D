@@ -99,6 +99,16 @@ const char* commandName(const Command& command) {
                 return "SetDefenseRole";
             } else if constexpr (std::is_same_v<Type, MarkShelterCommand>) {
                 return "MarkShelter";
+            } else if constexpr (std::is_same_v<Type, MarkAnimalCommand>) {
+                return "MarkAnimal";
+            } else if constexpr (std::is_same_v<Type, SetTrainingCommand>) {
+                return "SetTraining";
+            } else if constexpr (std::is_same_v<Type, CreateAnimalZoneCommand>) {
+                return "CreateAnimalZone";
+            } else if constexpr (std::is_same_v<Type, RemoveAnimalZoneCellsCommand>) {
+                return "RemoveAnimalZoneCells";
+            } else if constexpr (std::is_same_v<Type, AssignAnimalZoneCommand>) {
+                return "AssignAnimalZone";
             } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
                 return "Melee";
             } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
@@ -182,6 +192,12 @@ const char* eventTypeName(EventType type) {
         case EventType::SquadChanged: return "SquadChanged";
         case EventType::AlarmChanged: return "AlarmChanged";
         case EventType::PawnLeftMap: return "PawnLeftMap";
+        case EventType::AnimalTamed: return "AnimalTamed";
+        case EventType::AnimalReleased: return "AnimalReleased";
+        case EventType::AnimalTrained: return "AnimalTrained";
+        case EventType::AnimalAttemptFailed: return "AnimalAttemptFailed";
+        case EventType::AnimalSlaughtered: return "AnimalSlaughtered";
+        case EventType::AnimalStarved: return "AnimalStarved";
         case EventType::MeleeSwing: return "MeleeSwing";
         case EventType::MeleeHit: return "MeleeHit";
         case EventType::ApparelDestroyed: return "ApparelDestroyed";
@@ -210,6 +226,8 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Cook: return "Cook";
         case PawnAction::Research: return "Research";
         case PawnAction::Clean: return "Clean";
+        case PawnAction::Handle: return "Handle";
+        case PawnAction::Slaughter: return "Slaughter";
         case PawnAction::Block: return "Block";
     }
     return "?";

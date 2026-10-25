@@ -46,6 +46,12 @@ enum class EventType : uint8_t {
     SquadChanged,    // a raid squad's morale changed
     AlarmChanged,    // the colony alarm went on or off
     PawnLeftMap,     // a pawn walked off the map and is gone (a ThingDestroyed follows)
+    AnimalTamed,     // a wild animal became the colony's (docs/design/husbandry.md)
+    AnimalReleased,  // a tame animal went wild again
+    AnimalTrained,   // one successful training attempt: a step towards a trick
+    AnimalAttemptFailed,  // a taming or training attempt did not work
+    AnimalSlaughtered,    // a colonist killed a tame animal
+    AnimalStarved,        // a tame animal died of hunger
     MeleeSwing,      // a pawn began a melee swing: the hit comes `amount` steps later (docs/design/melee.md)
     MeleeHit,        // the hit moment of a swing: `message` says "hit", "deflected", "blocked", "dodged" or "missed"
     ApparelDestroyed,  // a worn piece wore out or was shot to pieces: `thing` the wearer, `def` the piece's def (docs/design/apparel.md)
@@ -83,6 +89,8 @@ enum class PawnAction : uint8_t {
     Cook,         // started work on a bill at `target`, a work building (once per run of the bill)
     Research,     // started research at `target`, a research bench (once per job)
     Clean,        // started cleaning the filth in `cell`; a layer comes off every few seconds until its JobEnded
+    Handle,       // started taming, training or feeding `target`, an animal; goes on until its JobEnded
+    Slaughter,    // started to kill `target`, a tame animal
     Block,        // raised its melee weapon against the swing of `target` (none: the player's own block)
     Roll,         // started a dodge roll (P2): `cell` where it began, (x, y) the unit direction, `amount` the steps from start-up to the end of recovery
 };
@@ -119,6 +127,10 @@ struct Event {
     // def, `cell` its origin, `message` "on" (in a net that works and switched on) or "off".
     // ResearchDone: `thing` the pawn who finished it (none if a dev command did), `message` the Research
     // def's defName, `amount` its cost in points.
+    // AnimalTamed, AnimalReleased, AnimalSlaughtered, AnimalStarved: `thing` the animal, `target` the colonist
+    // (none for a release or a starving), `cell` where. AnimalTrained: also `message` the trick (Trainable name),
+    // `amount` the steps it has now and `part` the steps it needs. AnimalAttemptFailed: `message` "tame" or the
+    // trick, `amount` the chance the attempt had.
     // TalentPoint: `thing` the protagonist, `def` its def, `amount` the points it can spend now.
     // ShortCircuit: `thing` the building it happened at, `cell` its origin, `amount` the energy
     // released from the net's batteries, Wd.

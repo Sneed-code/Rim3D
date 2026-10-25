@@ -2,6 +2,7 @@
 
 #include "ColonySim/Animals.h"
 #include "ColonySim/Apparel.h"
+#include "ColonySim/Husbandry.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
@@ -265,6 +266,7 @@ struct SaveEntity {
     std::optional<Animal> animal;           // section "animals"
     std::optional<DefensePlan> defense;     // section "raids"
     std::optional<Raider> raider;           // section "raids"
+    std::optional<AnimalCare> care;         // section "husbandry"
     std::optional<SaveSpoilage> spoilage;   // section "spoilage"
     std::optional<Melee> melee;             // section "melee" (F8)
     std::optional<SaveApparel> apparel;     // section "apparel" (format 20 on)
@@ -371,6 +373,7 @@ struct SaveData {
     int wildAnimals = 0;               // section "animals": SimSettings::wildAnimals
     AnimalSaved animals;               // section "animals": the system's own state
     RaidState raids;                   // section "raids" (F6)
+    HusbandrySaved husbandry;          // section "husbandry": animal zones and counters
     std::vector<RoomTemperature> roomTemperatures;  // section "temperature" (E2)
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
     uint32_t nextOutfitId = 1;
@@ -1011,6 +1014,19 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
             } else if constexpr (std::is_same_v<Type, MarkShelterCommand>) {
                 ar.group("cell", [&] { saveCell(ar, c.cell); });
                 ar.value("clear", c.clear);
+            } else if constexpr (std::is_same_v<Type, MarkAnimalCommand>) {
+                ar.value("animal", c.animal);
+                ar.text("mark", c.mark);
+                ar.value("on", c.on);
+            } else if constexpr (std::is_same_v<Type, SetTrainingCommand>) {
+                ar.value("animal", c.animal);
+                ar.text("trainable", c.trainable);
+                ar.value("wanted", c.wanted);
+            } else if constexpr (std::is_same_v<Type, CreateAnimalZoneCommand> || std::is_same_v<Type, RemoveAnimalZoneCellsCommand>) {
+                ar.group("area", [&] { saveRect(ar, c.area); });
+            } else if constexpr (std::is_same_v<Type, AssignAnimalZoneCommand>) {
+                ar.value("animal", c.animal);
+                ar.value("zone", c.zone);
             } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
                 auto* melee = &c;
                 ar.value("pawn", melee->pawn);
@@ -1287,7 +1303,7 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
     }
     ar.value("dead", h.dead);
     ar.value("cause", h.cause);
-    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Environment), "the save file has a bad cause of death");
+    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Slaughtered), "the save file has a bad cause of death");
 
 }
 
@@ -1462,8 +1478,34 @@ void saveAnimalPart(Ar& ar, Animal& a) {
     ar.value("nextThink", a.nextThink);
     ar.value("staysUntil", a.staysUntil);
     ar.group("goal", [&] { saveCell(ar, a.goal); });
-    ar.require(static_cast<int>(a.mode) <= static_cast<int>(AnimalMode::Leave), "the save file has a bad animal mode");
+    ar.require(static_cast<int>(a.mode) <= static_cast<int>(AnimalMode::EatItem), "the save file has a bad animal mode");
     ar.require(a.sleepShift < 24, "the save file has a bad animal sleep shift");
+}
+
+template <typename Ar>
+void saveCarePart(Ar& ar, AnimalCare& c) {
+    ar.value("markTame", c.markTame);
+    ar.value("markSlaughter", c.markSlaughter);
+    ar.value("zone", c.zone);
+    ar.value("hasHome", c.hasHome);
+    ar.group("home", [&] { saveCell(ar, c.home); });
+    ar.value("tamedAt", c.tamedAt);
+    ar.value("heldUntil", c.heldUntil);
+    ar.value("starvingSince", c.starvingSince);
+    ar.value("nextTrainAt", c.nextTrainAt);
+    ar.value("lastTrainAt", c.lastTrainAt);
+    ar.value("noPathUntil", c.noPathUntil);
+    for (int t = 0; t < kTrainableCount; ++t) {
+        ar.group(trainableName(static_cast<Trainable>(t)), [&] {
+            ar.value("steps", c.training[t].steps);
+            ar.value("wanted", c.training[t].wanted);
+        });
+    }
+    ar.value("pathSlot", c.path.slot);
+    ar.value("pathSerial", c.path.serial);
+    ar.group("pathGoal", [&] { saveCell(ar, c.pathGoal); });
+    ar.value("pathMode", c.pathMode);
+    ar.require(static_cast<int>(c.pathMode) <= static_cast<int>(AnimalMode::EatItem), "the save file has a bad animal path mode");
 }
 
 template <typename Ar>
@@ -2151,6 +2193,21 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.require(d.wildAnimals >= 0 && d.animals.percent >= 0, "the save file has a bad wild animal density");
         saveParts(ar, "animal", e, &SaveEntity::animal, [&](Animal& a) { saveAnimalPart(ar, a); });
     });
+    ar.section("husbandry", 1, [&] {
+        ar.value("nextZone", d.husbandry.nextZone);
+        ar.list("zones", d.husbandry.zones, [&](AnimalZone& z) {
+            ar.value("id", z.id);
+            ar.list("cells", z.cells, [&](CellPos& c) { saveCell(ar, c); });
+        });
+        ar.value("tamed", d.husbandry.stats.tamed);
+        ar.value("tameFailed", d.husbandry.stats.tameFailed);
+        ar.value("trainingSteps", d.husbandry.stats.trainingSteps);
+        ar.value("trainingFailed", d.husbandry.stats.trainingFailed);
+        ar.value("slaughtered", d.husbandry.stats.slaughtered);
+        ar.value("fed", d.husbandry.stats.fed);
+        ar.value("starved", d.husbandry.stats.starved);
+        saveParts(ar, "care", e, &SaveEntity::care, [&](AnimalCare& c) { saveCarePart(ar, c); });
+    });
     ar.section("temperature", 1, [&] {
         ar.list("roomTemperatures", d.roomTemperatures, [&](RoomTemperature& t) {
             ar.group("anchor", [&] { saveCell(ar, t.anchor); });
@@ -2307,6 +2364,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.settings = sim.settings_;
     d.wildAnimals = sim.settings_.wildAnimals;
     d.animals = sim.animals_->saved();
+    d.husbandry = sim.husbandry_->saved();
     d.seconds = sim.time_.seconds;
     d.rngState = sim.rng_.state();
     d.rngIncrement = sim.rng_.increment();
@@ -2522,6 +2580,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const Animal* animal = reg.try_get<Animal>(e)) {
             out.animal = *animal;
+        }
+        if (const AnimalCare* care = reg.try_get<AnimalCare>(e)) {
+            out.care = *care;
         }
         if (const Melee* melee = reg.try_get<Melee>(e)) {
             out.melee = *melee;
@@ -2938,6 +2999,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.raider) {
             reg.emplace<Raider>(entity, *e.raider);
         }
+        if (e.care) {
+            reg.emplace<AnimalCare>(entity, *e.care);
+        }
         if (e.spoilage) {
             Spoilage spoilage;
             spoilage.rot = e.spoilage->rot;
@@ -2960,6 +3024,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
     }
     sim.animals_->restore(d.animals);
+    if (!sim.husbandry_->restore(d.husbandry, error)) {
+        return false;
+    }
     sim.health_->refreshAll();
     for (const SaveEntity& e : d.entities) {
         if (e.position && !things.relink(static_cast<Entity>(e.id))) {

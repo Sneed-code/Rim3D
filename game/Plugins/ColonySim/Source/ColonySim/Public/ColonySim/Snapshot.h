@@ -148,6 +148,14 @@ struct ThingView {
     // `asleep` and `faction` (100 for wild) are filled for them too.
     int lifeStage = -1;
     float bodySize = 0.0f;
+    // Animals and husbandry (docs/design/husbandry.md): marked to be tamed (wild) or slaughtered (tame), the animal zone it
+    // stays in (0 none), and the tricks it has learned and that are wanted, a bit per Trainable (Obedience 1, Release 2,
+    // Rescue 4, Haul 8). A tame animal's `faction` is the player's.
+    bool markTame = false;
+    bool markSlaughter = false;
+    uint32_t animalZone = 0;
+    uint32_t learnedTricks = 0;
+    uint32_t wantedTricks = 0;
     // Pawns in melee (docs/design/melee.md): winding up a swing at meleeTarget (the hit comes in
     // meleeStepsLeft steps) or recovering from one, and whether their weapon is raised to block.
     MeleePhase meleePhase = MeleePhase::Ready;
@@ -234,6 +242,14 @@ struct ZoneView {
     StoragePriority priority = StoragePriority::Normal;
     uint32_t firstCell = 0;
     uint32_t cellCount = 0;
+};
+
+// One animal zone: `cellCount` cells from Snapshot::animalZoneCells[firstCell]. A pen is walled in all round.
+struct AnimalZoneView {
+    uint32_t id = 0;
+    uint32_t firstCell = 0;
+    uint32_t cellCount = 0;
+    bool pen = false;
 };
 
 // An enclosed room (docs/design/rooms.md); the outdoors is not listed. Ids are good until the next
@@ -330,6 +346,8 @@ struct Snapshot {
     std::vector<BillView> bills;           // the work buildings' bills, see ThingView
     std::vector<ZoneView> zones;           // by id
     std::vector<CellPos> zoneCells;        // the zones' cells, see ZoneView
+    std::vector<AnimalZoneView> animalZones;  // animal zones and pens (N3)
+    std::vector<CellPos> animalZoneCells;     // their cells, see AnimalZoneView
     std::vector<DesignationView> designations;  // every mark, in cell order
     std::vector<RoomView> rooms;           // enclosed rooms, by id
     float outdoorTemperature = 0.0f;       // degrees Celsius

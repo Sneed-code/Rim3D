@@ -13,6 +13,7 @@
 #include "ColonySim/Zones.h"
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -59,11 +60,12 @@ struct Job {
                                // the worn piece in `thing`, 0 puts on the clothes lying there
     Entity chair = kNoEntity;  // Ingest: the chair at a table it eats in, or none (it eats where the food lay)
     Entity site = kNoEntity;   // DeliverResources: the blueprint or frame it brings materials to; DoBill: the
-                               // building that holds the bill
+                               // building that holds the bill; TameAnimal, TrainAnimal, SlaughterAnimal, FeedAnimal:
+                               // the animal (`thing` is the food it fetches, none for slaughter)
     float progress = 0.0f;     // Deconstruct: work done so far; Mine: work towards the next pick hit; CutPlant,
                                // HarvestPlant: work done on the plant. For the gather jobs both are game seconds
                                // at 100% work speed (the worker's speed adds to it every second); DoBill: work done
-    uint32_t bill = 0;         // DoBill: the bill's id on the building in `site`
+    uint32_t bill = 0;         // DoBill: the bill's id on the building in `site`; TrainAnimal: the Trainable being practised
                                // (WearApparel and StripPawn: `progress` counts the steps worked)
     std::vector<BillPick> picks;  // DoBill: the ingredient stacks still to fetch after `thing`
     std::vector<BillUsed> used;   // DoBill: ingredients delivered so far
@@ -120,6 +122,12 @@ inline bool jobIsGather(JobType type) {
     return type == JobType::Mine || type == JobType::CutPlant || type == JobType::HarvestPlant;
 }
 
+// True for the jobs done to an animal (docs/design/husbandry.md): `site` is the animal.
+inline bool jobIsHandling(JobType type) {
+    return type == JobType::TameAnimal || type == JobType::TrainAnimal || type == JobType::SlaughterAnimal ||
+           type == JobType::FeedAnimal;
+}
+
 // How many steps a job type has (for save checks).
 COLONY_API int jobStepCount(JobType type);
 
@@ -133,6 +141,9 @@ inline constexpr uint8_t kDoBillDepositStep = 3;
 // Ingest has four: go to the food, pick it up, go to the eating spot, eat. The pawn carries the
 // food from the third on.
 inline constexpr uint8_t kIngestPickUpStep = 1;
+// TameAnimal, TrainAnimal and FeedAnimal: go to the food, pick it up, walk up to the animal, work; the pawn carries the
+// food from the third step on.
+inline constexpr uint8_t kHandlePickUpStep = 1;
 inline bool jobIsLyingDown(const Job& job) {
     return job.type == JobType::LayDown && job.step >= kLayDownLieStep;
 }
@@ -155,6 +166,7 @@ class DefDatabase;
 class Filth;
 class SpoilageSystem;
 class HealthSystem;
+class Husbandry;
 class Lights;
 class Map;
 class Mineables;
@@ -259,6 +271,13 @@ public:
     // everywhere is outdoors.
     void setRooms(Rooms* rooms) { rooms_ = rooms; }
     void setResearch(ResearchSystem* research) { research_ = research; }
+    // Taming, training and feeding animals (HusbandryJobs.cpp, docs/design/husbandry.md). Without it nobody handles animals.
+    void setHusbandry(Husbandry* husbandry) { husbandry_ = husbandry; }
+    Husbandry* husbandry() const { return husbandry_; }
+    // An animal that has learned to haul works through the job system with only the Hauling work type on. `on` false
+    // takes it off again (ending its job). The gate says whether it may work now (awake, fed, unhurt).
+    void setAnimalHauler(Entity animal, bool on);
+    void setAnimalWorkGate(std::function<bool(Entity)> gate) { animalGate_ = std::move(gate); }
     ResearchSystem* research() const { return research_; }
     void setTalents(const TalentSystem* talents) { talents_ = talents; }
 
@@ -420,6 +439,12 @@ private:
     bool failCheckResearch(Entity pawn, Job& job, std::string& why);
     StepResult researchWork(Entity pawn, Job& job, std::string& why);
 
+    // Husbandry jobs (HusbandryJobs.cpp): fetch food (TameAnimal, TrainAnimal, FeedAnimal), walk up to the animal, then
+    // work with it until the time is up; the animal is held still while the pawn is near.
+    bool failCheckHandle(Entity pawn, Job& job, std::string& why);
+    StepResult approachAnimal(Entity pawn, Job& job, std::string& why);
+    StepResult handleWork(Entity pawn, Job& job, std::string& why);
+
     // Gathering jobs (GatherJobs.cpp).
     bool failCheckGather(Entity pawn, Job& job, std::string& why);
     StepResult goToTouch(Entity pawn, Job& job, std::string& why);
@@ -497,6 +522,8 @@ private:
 
     Rooms* rooms_ = nullptr;
     ResearchSystem* research_ = nullptr;
+    Husbandry* husbandry_ = nullptr;
+    std::function<bool(Entity)> animalGate_;
     const TalentSystem* talents_ = nullptr;  // build speed and carrying capacity (docs/design/talents.md)
     RecreationRules recreation_;
     std::unique_ptr<BillSystem> bills_;
@@ -560,6 +587,8 @@ public:
 
 // The scanners that exist so far, one per task name. Later tasks add theirs here.
 std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers();
+// The scanners for taming, training, slaughtering and feeding animals (HusbandryJobs.cpp).
+void addHusbandryWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers);
 // Haul jobs, shared by the hauling scanner and the haul order: the job to store `item`, or false.
 bool makeHaulJob(JobSystem& jobs, Entity pawn, Entity item, Job& out);
 
