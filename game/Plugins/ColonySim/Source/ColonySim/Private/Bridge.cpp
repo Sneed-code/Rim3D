@@ -91,6 +91,10 @@ const char* commandName(const Command& command) {
                 return "SetResearch";
             } else if constexpr (std::is_same_v<Type, UnlockResearchCommand>) {
                 return "UnlockResearch";
+            } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
+                return "Melee";
+            } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
+                return "DodgeRoll";
             } else {
                 static_assert(std::is_same_v<Type, SetMedicalCareCommand>, "name every command type");
                 return "SetMedicalCare";
@@ -149,7 +153,11 @@ const char* eventTypeName(EventType type) {
         case EventType::RecipeDone: return "RecipeDone";
         case EventType::PowerChanged: return "PowerChanged";
         case EventType::ShortCircuit: return "ShortCircuit";
+        case EventType::ItemSpoiled: return "ItemSpoiled";
+        case EventType::PawnPoisoned: return "PawnPoisoned";
         case EventType::ResearchDone: return "ResearchDone";
+        case EventType::MeleeSwing: return "MeleeSwing";
+        case EventType::MeleeHit: return "MeleeHit";
         case EventType::PawnTended: return "PawnTended";
         case EventType::PawnScarred: return "PawnScarred";
     }
@@ -170,9 +178,11 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Deconstruct: return "Deconstruct";
         case PawnAction::Reload: return "Reload";
         case PawnAction::Dodge: return "Dodge";
+        case PawnAction::Roll: return "Roll";
         case PawnAction::Cook: return "Cook";
         case PawnAction::Research: return "Research";
         case PawnAction::Clean: return "Clean";
+        case PawnAction::Block: return "Block";
         case PawnAction::Tend: return "Tend";
         case PawnAction::LiftPawn: return "LiftPawn";
         case PawnAction::LayPawn: return "LayPawn";

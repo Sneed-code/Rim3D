@@ -2,6 +2,8 @@
 
 Updated 2026-10-25.
 
+Stage 2 C24 done: carrying is by mass (capacity over item mass), a hauler takes neighbouring stacks of the same def in one trip, a load slows walking up to 25% (`docs/design/jobs.md`).
+
 ## Where we are
 
 Stage 0 (foundation) is done. Stage 1 (the playable prototype) is planned and starting.
@@ -261,11 +263,25 @@ Stage 2 done so far: **D7** medicine and disease data (`docs/design/medicine-dat
 
 **H1** doctors, medicine and rescue (`docs/design/medicine.md`, tests `MedicineTests`): the Doctor work type tends colonists' wounds (`JobType::TendPatient`, the bleeding first) with the strongest medicine their care setting allows (`SetMedicalCareCommand`: NoCare, NoMedicine, Herbal, Normal, Best), quality from Medicine skill, medicine and bed offset (`MedicineSystem::tendQuality`); downed colonists are carried to a medical bed, else their own or a free bed (`JobType::Rescue`, the patient's position follows the rescuer's); hurt colonists rest in bed until healed (`JobType::BedRest`, work types Patient and PatientBedRest); hospital beds are not slept in; healed injuries may leave scars or old wounds (`Injury::peak`, `PawnScarred`); emergency work types are asked first at each priority and a pawn on a droppable job looks for them every 10 s; events `PawnTended`, `PawnScarred`, actions `Tend`, `LiftPawn`, `LayPawn`; save section `medicine`, health section 3. Also fixed: saves made while someone was cleaning filth could not be loaded.
 
+**P2** recoil kicks and a dodge roll (`docs/design/shooter-feel.md` "Built", tests `ShooterFeelTests`, save section `feel`): each gun has a `recoilKicks` list (degrees up and to the right per shot of a spray); the player's shots (`ShootCommand` with `player`) fly where the shots before have lifted the aim, the kick holds 5 steps then wears off, and the spray restarts after 15 steps; `Snapshot` has `kickUp`/`kickSide` for the camera. `DodgeRollCommand{pawn, dx, dy}` rolls the protagonist 4 m: 3 steps start-up, 15 rolling (bullets pass through for the first 12), 9 recovery, 6 waiting; the sim moves the pawn (**`DirectMove` is ignored while `rollLocked`**), shooting is off, a roll cancels aiming and firing but not a reload; snapshot `rollPhase`/`rollStepsLeft`/`rollDir`/`hitProof`, `PawnAction::Roll`. Numbers are ours (`CombatRules`, `Weapons.json`). **Not verified on screen: U21 binds the key, plays the animation over the sim's motion, applies the camera kick from the snapshot and must follow the sim's position during a roll (it must not keep sending its own).**
 **D12** research data (22 projects, tech levels, two research benches, content gated by `researchPrerequisite`: `docs/design/research-data.md`).
 **E2** room temperature is in (`docs/design/temperature.md`, tests `TemperatureTests`, `simrun --outdoor C`, CTest `simrun_temperature`): every roofed enclosed room has a temperature that follows the outdoors through its roof, walls, doors (open ones much faster), vents and rock, mixes when rooms join and split, and is pushed by heaters, coolers and campfires (`heatPusher` in the defs; **E5 power decides which run**: `Sim` wires `PowerGrid::running` into `TemperatureSystem::setSourceRunning`, a campfire needs none, and C11 fuel will add its test the same way). Pawns get Cold and Hot thoughts outside their comfortable range, and hypothermia or heatstroke (new *environment hediffs* in `Health`, with stages on the capacities and death at 1.0) outside the safe range, and a rare frostbite injury below -10. **Outdoor temperature is a stand-in until E1** (`Sim::outdoorTemperature()`: the biome's season and a daily swing; E1 replaces its body and everything else reads `temperature().outdoor()`); **humanlike pawns' comfort range is widened 12 degrees on the cold side as a stand-in for clothes until C15** (`TemperatureRules.clothesColdC`; C15 calls `setComfortModifier` and deletes it). Colonists do not yet go looking for warmth (BACKLOG). Save: section `temperature` 1 and `health` 2, no format change.
 
+**F8** melee is in (`docs/design/melee.md`, tests `MeleeTests`): fists and the D8 melee weapons swing with a
+wind-up, a hit moment and a recovery (the whole swing is the tool's cooldown, so RimWorld's damage per second
+holds); at the hit a level strike is traced against hitboxes as far as the weapon reaches (fists 0.85 m, spear
+1.9 m), aimed with a spread that hits a standing man as often as RimWorld's melee hit chance; damage goes through
+armor like a bullet's (`CombatSystem::hitPawn`). Defenders read a swing after a reaction time from Melee skill,
+then sidestep (fighters, as often as RimWorld's dodge chance) or block with a melee weapon from the front (ours).
+Fighters with a melee weapon or the Brawler trait and no gun charge; others strike back at enemies in reach, and
+unarmed fighters no longer walk at their target; a fighter falling back stands and fights an enemy at arm's
+length. `MeleeCommand` (Attack, Block) for the player and dev use, events `MeleeSwing`, `MeleeHit`, `PawnAction`
+`Block`, snapshot `meleePhase`, `meleeStepsLeft`, `meleeTarget`, `blocking`, save section `melee`. **C20's
+social fights and N5's animal fights start swings with `MeleeSystem::attack`.**
+
 D9 (thoughts, recreation, mental break and social data) is in: `docs/design/thoughts-data.md`. Data only; C15, C17, C18, C19, C20, E2 and E3 read it.
 **C17** room stats, beauty and filth (`docs/design/room-stats.md`): floors and filth layers, a cleaning job (indoors only for now), space, beauty, wealth, cleanliness and impressiveness by RimWorld's formulas, the beauty need and the room thoughts. Floors come only by `PlaceFloor` command: no floor-building job exists in any plan task yet (BACKLOG). Save section `roomstats` 1.
+**C16** rot and storage (`docs/design/spoilage.md`): food rots by the temperature of its cell (stops below 0, full speed from 10 degrees), items with a deterioration rate wear out under open sky, meals remember their ingredients and may be poisoned by a dirty kitchen or a poor cook; `SpoilageSystem::setPoisonHandler` is the hook **H2 must wire to give the `FoodPoisoning` hediff**; E1 can call `setOutdoorFactor` for rain. Save section `spoilage` 1.
 
 **N1** animals on the map (`docs/design/animal-life.md`, tests `AnimalTests`, `simrun --animals`): `SimSettings::wildAnimals`
 (percent of the biome's density; 0 is the default, so nothing else changes) puts wild herds on the map when it is made; animals are pawns
@@ -274,6 +290,8 @@ the edges to keep the biome's density, and rot away 15 days after dying. About 3
 `MovementSystem` (for S9). Save section `animals`. Fighters never take an animal for an enemy on their own. **Unreal does not turn
 `wildAnimals` on until U15 draws animals** (the pawn drawing would show them as people); **code that counts pawns of another faction as raiders
 must skip `Animal`**.
+
+**X1** genes and lineages (`docs/design/genes.md`, tests `GenesTests`): 55 genes as defs (`data/defs/Genes`) with stat offsets and factors, skill aptitudes and looks; Emberkin, Frostkin, Warbred, Ashborn and Delver as gene sets (wiki totals for metabolism and complexity; most single-gene numbers are recalled and marked `unverified`). `PawnGenes` on every humanlike pawn is made from its lineage (not saved; rebuilt on creation, `SetLineage` and load). Read today: walking speed, comfortable temperature range, hunger rate, mood, damage taken, wound healing, mining and plant speed, skill levels; every other stat is summed and available through `geneStat`. Looks take skin, hair and horns from genes (the lineage's own `visual` block is gone). Scenario `lineageWeights` rolls colonists' lineages (never the protagonist's); `CrashlandedMixed` does, `Crashlanded` is unchanged. **A new rule that a gene should change reads `geneStat(*sim.genesOf(pawn), "stat", base)`**; Unreal's horn lookup changed in `PawnSubsystem.cpp` (uncompiled until the PC builds).
 
 ## Next
 

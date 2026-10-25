@@ -159,9 +159,14 @@ An item is **stored** at its zone's priority if it lies in a zone that allows it
 `Unstored`. The hauling scanner offers every item stored below the best zone's priority; for one it
 picks, the best cell is in the **highest-priority zone that takes it, then the nearest** to the item,
 with room, not held by another hauler and reachable. RimWorld's rule is the same: haul only to better
-storage. The pawn carries as much as the cell has room for and it can carry (RimWorld's
-`carryingCapacity`, 75 for a human, never more than a stack); the rest of the stack stays where it
-was. Putting it down on a stack of the same def adds to that stack.
+storage. The pawn carries as much as the cell has room for and it can carry: its
+`carryingCapacity` (RimWorld's 75 kg for a human) over the item's `stats.mass` (1 if none), which can be
+more than one stack (C24). Right after picking up, stacks of the same def in the 3x3 cells around it
+that would go to the same zone anyway join the load, up to that limit (several stacks in one trip). The
+rest stays where it was. Putting it down on a stack of the same def adds to that stack; a load
+bigger than the cell takes fills it and goes on to the next cell. A load slows walking by up to
+`JobRules.carrySlowdown` (ours, 0.25) at full capacity, in proportion to the mass carried
+(`JobSystem::loadSpeedFactor`, used by the movement system). Nothing new is saved.
 
 `Things::itemsAt(cell)` is the items-per-cell index this needs; `Things::splitOff` takes part of a
 stack.

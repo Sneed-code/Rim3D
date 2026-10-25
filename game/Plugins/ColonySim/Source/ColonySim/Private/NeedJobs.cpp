@@ -6,6 +6,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Spoilage.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -258,6 +259,9 @@ JobSystem::StepResult JobSystem::eat(Entity pawn, Job& job, std::string&) {
     const float before = needs.food;
     needs.food = std::min(1.0f, needs.food + nutrition_[def.value] * static_cast<float>(count));
     reg.remove<Carrying>(pawn);
+    if (spoilage_ != nullptr) {
+        spoilage_->eaten(pawn, food);
+    }
     things_.destroy(food);
     Event event;
     event.type = EventType::PawnAte;

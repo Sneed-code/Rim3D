@@ -5,6 +5,7 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Looks.h"
+#include "ColonySim/Melee.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Doors.h"
@@ -20,6 +21,7 @@
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Mineables.h"
+#include "ColonySim/Spoilage.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Medicine.h"
@@ -30,6 +32,7 @@
 #include "ColonySim/Zones.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -128,6 +131,14 @@ struct SaveHealth {
     std::vector<SaveEnvironmentHediff> environment;  // health section 2 on
     bool dead = false;
     DeathCause cause = DeathCause::None;
+};
+
+// An item's rot and wear and what a meal was cooked from, by defName (section "spoilage").
+struct SaveSpoilage {
+    float rot = 0.0f;
+    float decay = 0.0f;
+    bool poisoned = false;
+    std::vector<std::string> ingredients;  // Things defNames
 };
 
 // A bill job's delivered ingredients, by defName.
@@ -238,6 +249,10 @@ struct SaveEntity {
     std::optional<PowerPart> power;         // section "power"
     std::optional<SaveJoy> joy;             // section "recreation"
     std::optional<Animal> animal;           // section "animals"
+    std::optional<SaveSpoilage> spoilage;   // section "spoilage"
+    std::optional<Melee> melee;             // section "melee" (F8)
+    std::optional<RecoilKick> kick;         // section "feel"
+    std::optional<DodgeRoll> roll;          // section "feel"
     std::optional<MedicalSettings> medical;  // section "medicine"
 };
 
@@ -322,6 +337,7 @@ struct SaveData {
     int wildAnimals = 0;               // section "animals": SimSettings::wildAnimals
     AnimalSaved animals;               // section "animals": the system's own state
     std::vector<RoomTemperature> roomTemperatures;  // section "temperature" (E2)
+    SpoilageState spoilageState;                    // section "spoilage" (C16)
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -942,6 +958,16 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("thing", c.thing);
             } else if constexpr (std::is_same_v<Type, SetResearchCommand> || std::is_same_v<Type, UnlockResearchCommand>) {
                 ar.text("project", c.project);
+            } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
+                auto* melee = &c;
+                ar.value("pawn", melee->pawn);
+                ar.value("target", melee->target);
+                ar.value("mode", melee->mode);
+                ar.require(melee->mode <= MeleeMode::Block, "the save file has a bad melee mode");
+            } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.value("dx", c.dx);
+                ar.value("dy", c.dy);
             } else if constexpr (std::is_same_v<Type, SetMedicalCareCommand>) {
                 ar.value("pawn", c.pawn);
                 ar.text("care", c.care);
@@ -1365,6 +1391,30 @@ void saveShooterPart(Ar& ar, Shooter& sh) {
 }
 
 template <typename Ar>
+void saveKickPart(Ar& ar, RecoilKick& k) {
+    ar.value("up", k.up);
+    ar.value("side", k.side);
+    ar.value("shots", k.shots);
+    ar.value("sinceShot", k.sinceShot);
+    ar.require(std::isfinite(k.up) && std::isfinite(k.side) && k.shots >= 0 && k.sinceShot >= 0,
+               "the save file has a bad gun kick");
+}
+
+template <typename Ar>
+void saveRollPart(Ar& ar, DodgeRoll& r) {
+    ar.value("phase", r.phase);
+    ar.require(static_cast<int>(r.phase) <= static_cast<int>(RollPhase::Recovery), "the save file has a bad dodge roll phase");
+    ar.value("stepsLeft", r.stepsLeft);
+    ar.value("rolled", r.rolled);
+    ar.value("dirX", r.dirX);
+    ar.value("dirY", r.dirY);
+    ar.value("cooldown", r.cooldown);
+    ar.value("proof", r.proof);
+    ar.require(r.stepsLeft >= 0 && r.rolled >= 0 && r.cooldown >= 0 && std::isfinite(r.dirX) && std::isfinite(r.dirY),
+               "the save file has a bad dodge roll");
+}
+
+template <typename Ar>
 void saveProjectilePart(Ar& ar, SaveProjectile& sp) {
     ar.text("def", sp.def);
     ar.text("weapon", sp.weapon);
@@ -1440,6 +1490,29 @@ void saveFighterPart(Ar& ar, Fighter& f) {
         ar.value("dodgeUntil", f.dodgeUntil);
     }
 
+}
+
+template <typename Ar>
+void saveMeleePart(Ar& ar, Melee& m) {
+    ar.value("phase", m.phase);
+    ar.require(m.phase <= MeleePhase::Recovery, "the save file has a bad melee phase");
+    ar.value("stepsLeft", m.stepsLeft);
+    ar.value("target", m.target);
+    ar.value("tool", m.tool);
+    ar.value("weaponTool", m.weaponTool);
+    ar.value("player", m.player);
+    ar.value("committed", m.committed);
+    ar.value("aimX", m.aimX);
+    ar.value("aimY", m.aimY);
+    ar.value("aimZ", m.aimZ);
+    ar.value("seed", m.seed);
+    ar.value("threat", m.threat);
+    ar.value("defense", m.defense);
+    ar.require(m.defense <= MeleeDefense::Block, "the save file has a bad melee defense");
+    ar.value("reactAt", m.reactAt);
+    ar.value("blockFrom", m.blockFrom);
+    ar.value("blockUntil", m.blockUntil);
+    ar.value("dodged", m.dodged);
 }
 
 template <typename Ar>
@@ -1910,6 +1983,24 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(t.celsius > -500.0f && t.celsius < 1000.0f, "the save file has an impossible room temperature");
         });
     });
+    ar.section("spoilage", 1, [&] {
+        ar.value("rngState", d.spoilageState.rngState);
+        ar.value("rngIncrement", d.spoilageState.rngIncrement);
+        saveParts(ar, "spoilage", e, &SaveEntity::spoilage, [&](SaveSpoilage& s) {
+            ar.value("rot", s.rot);
+            ar.value("decay", s.decay);
+            ar.value("poisoned", s.poisoned);
+            ar.list("ingredients", s.ingredients, [&](std::string& name) { ar.text(nullptr, name); });
+            ar.require(s.rot >= 0.0f && s.rot < 1.0f && s.decay >= 0.0f && s.decay < 1.0f, "the save file has an impossible rot or wear");
+        });
+    });
+    ar.section("melee", 1, [&] {
+        saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
+    });
+    ar.section("feel", 1, [&] {
+        saveParts(ar, "kick", e, &SaveEntity::kick, [&](RecoilKick& k) { saveKickPart(ar, k); });
+        saveParts(ar, "roll", e, &SaveEntity::roll, [&](DodgeRoll& r) { saveRollPart(ar, r); });
+    });
     // New sections go here, at the end.
 }
 
@@ -2079,6 +2170,16 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             w.avoid = worker->avoid;
             out.worker = std::move(w);
         }
+        if (const Spoilage* spoilage = reg.try_get<Spoilage>(e)) {
+            SaveSpoilage saved;
+            saved.rot = spoilage->rot;
+            saved.decay = spoilage->decay;
+            saved.poisoned = spoilage->poisoned;
+            for (const DefId ingredient : spoilage->ingredients) {
+                saved.ingredients.push_back(sim.defs_->get(ingredient).defName());
+            }
+            out.spoilage = std::move(saved);
+        }
         if (const Joy* joy = reg.try_get<Joy>(e)) {
             SaveJoy saved;
             saved.joy = *joy;
@@ -2192,11 +2293,20 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const Magazine* magazine = reg.try_get<Magazine>(e)) {
             out.magazine = *magazine;
         }
+        if (const RecoilKick* kick = reg.try_get<RecoilKick>(e)) {
+            out.kick = *kick;
+        }
+        if (const DodgeRoll* roll = reg.try_get<DodgeRoll>(e)) {
+            out.roll = *roll;
+        }
         if (const Animal* animal = reg.try_get<Animal>(e)) {
             out.animal = *animal;
         }
         if (const MedicalSettings* medical = reg.try_get<MedicalSettings>(e)) {
             out.medical = *medical;
+        }
+        if (const Melee* melee = reg.try_get<Melee>(e)) {
+            out.melee = *melee;
         }
         if (const Projectile* p = reg.try_get<Projectile>(e)) {
             out.projectile = SaveProjectile{sim.defs_->get(p->def).defName(), sim.defs_->get(p->weapon).defName(), *p};
@@ -2248,6 +2358,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.filth = sim.filth_->state();
     d.roomStats = sim.roomStats_->state();
     d.roomTemperatures = sim.temperature_->roomTemperatures();
+    d.spoilageState = sim.spoilage_->state();
     return d;
 }
 
@@ -2442,6 +2553,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.looks) {
             reg.emplace<PawnLooks>(entity, std::move(*e.looks));
+            sim.giveGenes(entity);  // genes follow the lineage and are not saved (docs/design/genes.md)
         }
         if (e.bills) {
             BillList list;
@@ -2536,6 +2648,12 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.magazine) {
             reg.emplace<Magazine>(entity, *e.magazine);
         }
+        if (e.kick) {
+            reg.emplace<RecoilKick>(entity, *e.kick);
+        }
+        if (e.roll) {
+            reg.emplace<DodgeRoll>(entity, *e.roll);
+        }
         if (e.joy) {
             reg.emplace<Joy>(entity, e.joy->joy);
             if (!e.joy->activity.empty()) {
@@ -2550,6 +2668,26 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.medical) {
             reg.emplace<MedicalSettings>(entity, *e.medical);
+        }
+        if (e.spoilage) {
+            Spoilage spoilage;
+            spoilage.rot = e.spoilage->rot;
+            spoilage.decay = e.spoilage->decay;
+            spoilage.poisoned = e.spoilage->poisoned;
+            for (const std::string& name : e.spoilage->ingredients) {
+                const DefId ingredient = sim.defs_->idOf(kSaveThingsKind, name);
+                if (ingredient.valid()) {  // an ingredient the data files dropped is forgotten
+                    spoilage.ingredients.push_back(ingredient);
+                }
+            }
+            std::sort(spoilage.ingredients.begin(), spoilage.ingredients.end(),
+                      [](DefId a, DefId b) { return a.value < b.value; });
+            reg.emplace_or_replace<Spoilage>(entity, std::move(spoilage));
+        } else if (e.thing && e.thing->category == ThingCategory::Item && thingHasSpoilage(sim.defs_->get(reg.get<Thing>(entity).def))) {
+            reg.emplace<Spoilage>(entity);  // saved before items could spoil
+        }
+        if (e.melee) {
+            reg.emplace<Melee>(entity, *e.melee);
         }
     }
     sim.animals_->restore(d.animals);
@@ -2749,6 +2887,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     sim.roomStats_->refresh();
     sim.temperature_->setOutdoor(sim.outdoorTemperature());
     sim.temperature_->restore(d.roomTemperatures);
+    sim.spoilage_->restore(d.spoilageState);
     sim.events_.clear();
     return true;
 }

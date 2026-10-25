@@ -150,6 +150,7 @@ class BillSystem;
 class Construction;
 class DefDatabase;
 class Filth;
+class SpoilageSystem;
 class HealthSystem;
 class MedicineSystem;
 class Lights;
@@ -269,6 +270,9 @@ public:
     // The filth layer, for the cleaning job (CleanJobs.cpp, docs/design/room-stats.md); it also needs
     // `setRooms`. Without them nobody cleans. Cleaning is limited to indoor cells until the home area exists.
     void setFilth(Filth* filth) { filth_ = filth; }
+    // Meals made by a bill remember their ingredients and may be poisoned; eating a poisoned meal may
+    // give food poisoning (Spoilage.h). Without it neither happens.
+    void setSpoilage(SpoilageSystem* spoilage) { spoilage_ = spoilage; }
     Filth* filth() const { return filth_; }
     Rooms* rooms() const { return rooms_; }
     // How fast a pawn cleans (1 is 100%): FilthRules.cleaningSpeed times its Manipulation.
@@ -352,9 +356,13 @@ public:
     // `better`, then the nearest, that takes the def, has room, isn't held by another pawn and
     // can be reached from `from`. False if there is none.
     bool findStorageCell(DefId def, CellPos from, StoragePriority better, Entity pawn, CellPos& out) const;
-    // How many of an item def a pawn can carry at once: RimWorld's `carryingCapacity` (75 when the
-    // pawn def has none), never more than a stack.
+    // How many of an item def a pawn can carry at once: its `carryingCapacity` (RimWorld's 75 kg when
+    // the pawn def has none) over the def's `stats.mass`, at least 1. It may be more than one stack.
     int carryLimit(Entity pawn, DefId def) const;
+    double carryCapacity(Entity pawn) const;
+    double massOf(DefId def) const;
+    // 1 with empty hands, down to 1 - `carrySlowdown` at a full load: what the pawn's walking speed is multiplied by.
+    float loadSpeedFactor(Entity pawn) const;
     int stackLimit(DefId def) const;
 
 private:
@@ -481,7 +489,8 @@ private:
     // Puts the ingredients delivered so far back on the ground near the pawn.
     void returnIngredients(Entity pawn, const Job& job);
     // Makes `count` of an item def and puts it down on the nearest free cell near the pawn.
-    void dropNewItems(Entity pawn, DefId def, int count);
+    // `madeFrom` is set for a bill's products: the spoilage system notes the ingredients on each new stack.
+    void dropNewItems(Entity pawn, DefId def, int count, const std::vector<BillUsed>* madeFrom = nullptr);
     bool retargetStorage(Entity pawn, Job& job);
     void dropCarried(Entity pawn);
     // Puts what the pawn carries on `cell` if all of it fits there and no other pawn holds the cell.
@@ -491,6 +500,7 @@ private:
     bool handsOnInReach(Entity pawn, const Job& job) const;
     bool handsOnPickUp(Entity pawn, Entity item, std::string& error);
     void reserve(Entity pawn, const Job& job);
+    void gatherBeside(Entity pawn, Job& job, Entity carried);
     void release(Entity pawn, const Job& job);
     void jobEvent(Entity pawn, const Job& job, bool started, const std::string& message);
     void pawnDid(Entity pawn, PawnAction action, Entity target);
@@ -522,6 +532,8 @@ private:
     std::vector<WorkType> workTypes_;
     std::vector<uint8_t> standable_;  // per def id: a building pawns can stand on (storage allowed)
     std::vector<int> stackLimits_;    // per def id
+    std::vector<double> masses_;      // per def id, `stats.mass` (1 if it has none)
+    double carrySlowdown_ = 0.25;
     // Per def id, from the Things defs (NeedJobs.cpp): food tiers (-1 not food), nutrition and how
     // long a sitting takes; the kinds of building.
     std::vector<int8_t> foodTier_;
@@ -555,6 +567,7 @@ private:
     int maxRepaths_ = 0;
     uint8_t defaultPriority_ = kDefaultPriority;
     Filth* filth_ = nullptr;
+    SpoilageSystem* spoilage_ = nullptr;
     std::vector<Entity> order_;              // scratch: workers this step
     std::vector<WorkCandidate> candidates_;  // scratch: one think
 };

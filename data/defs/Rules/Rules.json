@@ -17,10 +17,16 @@
     "leadBySkill": [0.4, 1.0],
     "leadErrorBySkill": [0.4, 0.05],
     "reloadTimeFactorBySkill": [1.3, 0.7],
+    "recoilKickHoldSteps": 5,
+    "recoilKickResetSteps": 15,
+    "recoilKickRecoveryPerStep": 0.2,
+    "recoilKickMaxDegrees": 10,
+    "dodgeRoll": { "startUpSteps": 3, "rollSteps": 15, "hitProofSteps": 12, "recoverySteps": 9, "cooldownSteps": 6, "distance": 4.0 },
     "unverified": ["accuracyDistances", "minHitChance"],
     "ours": ["defaultShootingSkill", "standardTarget", "playerSpreadDistance", "gravity", "recoilRecoveryPerSecond",
              "recoilSkillReduction", "maxFlightSeconds", "reactionStepsBySkill", "leadBySkill", "leadErrorBySkill",
-             "reloadTimeFactorBySkill"]
+             "reloadTimeFactorBySkill", "recoilKickHoldSteps", "recoilKickResetSteps", "recoilKickRecoveryPerStep",
+             "recoilKickMaxDegrees", "dodgeRoll"]
   },
   {
     "defName": "PlantRules", "source": "RimWorld wiki",
@@ -67,7 +73,8 @@
     "idleSeconds": 60,
     "avoidFailedTargetSeconds": 600,
     "maxRepaths": 5,
-    "ours": ["idleSeconds", "avoidFailedTargetSeconds", "maxRepaths"]
+    "carrySlowdown": 0.25,
+    "ours": ["idleSeconds", "avoidFailedTargetSeconds", "maxRepaths", "carrySlowdown"]
   },
   {
     "defName": "NeedRules", "source": "RimWorld wiki",

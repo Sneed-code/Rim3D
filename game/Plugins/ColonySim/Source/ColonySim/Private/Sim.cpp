@@ -11,6 +11,7 @@
 #include "ColonySim/Filth.h"
 #include "ColonySim/Floors.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Spoilage.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Jobs.h"
@@ -21,7 +22,9 @@
 #include "ColonySim/Medicine.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Genes.h"
 #include "ColonySim/Looks.h"
+#include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Power.h"
@@ -138,14 +141,19 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     mood_->setTemperature(temperature_.get());
     // A heater or cooler that draws power pushes heat only while it has it (E5); a campfire has no power part.
     temperature_->setSourceRunning([this](Entity building) { return power_->running(building); });
+    spoilage_ = std::make_unique<SpoilageSystem>(map_, *things_, *temperature_, *roomStats_, *defs_,
+                                                 splitMix64(settings.seed ^ 0x73706F696CULL));
+    spoilage_->setEventLog(&events_);
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
+    movement_->setSpeedFactor([this](Entity pawn) { return jobs_->loadSpeedFactor(pawn); });
     jobs_->setLights(lights_.get());
     jobs_->setPower(power_.get());
     jobs_->setRooms(rooms_.get());
     jobs_->setResearch(research_.get());
     jobs_->setMedicine(medicine_.get());
     jobs_->setFilth(filth_.get());
+    jobs_->setSpoilage(spoilage_.get());
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
     fighters_->setEventLog(&events_);
@@ -154,6 +162,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
                                               splitMix64(settings.seed ^ 0x616E696D616C73ULL), "TemperateForest");
     animals_->setEventLog(&events_);
     combat_->setBeforeDestroy([this](Entity thing) { jobs_->forget(thing); });
+    melee_ = std::make_unique<MeleeSystem>(*things_, map_, *combat_, *health_, *defs_, time_,
+                                           splitMix64(settings.seed ^ 0x6D656C6565ULL));
+    melee_->setEventLog(&events_);
+    fighters_->setMelee(melee_.get());
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -267,6 +279,24 @@ void Sim::giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& 
     // Without the looks rules (the test defs) the pawn gets plain looks; that is not an error.
     generateLooks(*defs_, seed, female, lineage, looks, error);
     reg.emplace_or_replace<PawnLooks>(pawn, std::move(looks));
+    giveGenes(pawn);
+}
+
+void Sim::giveGenes(Entity pawn) {
+    entt::registry& reg = things_->registry();
+    const PawnLooks* looks = reg.try_get<PawnLooks>(pawn);
+    if (looks == nullptr) {
+        return;
+    }
+    PawnGenes genes;
+    std::string error;
+    // Without the Genes defs (the test defs) the pawn has no genes; that is not an error.
+    makeGenes(*defs_, looks->lineage, genes, error);
+    reg.emplace_or_replace<PawnGenes>(pawn, std::move(genes));
+}
+
+const PawnGenes* Sim::genesOf(Entity pawn) const {
+    return things_->exists(pawn) ? things_->registry().try_get<PawnGenes>(pawn) : nullptr;
 }
 
 const PawnLooks* Sim::looksOf(Entity pawn) const {
@@ -471,6 +501,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "that thing has no looks to change");
         } else if (!setLineage(*defs_, lineage->lineage, *looks, error)) {
             commandFailed(id, error);
+        } else {
+            giveGenes(lineage->pawn);
         }
     } else if (const auto* move = std::get_if<DirectMoveCommand>(&command)) {
         entt::registry& reg = things_->registry();
@@ -480,6 +512,9 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "that pawn isn't under direct control");
         } else if (health_->incapacitated(move->pawn)) {
             commandFailed(id, "that colonist is downed or dead");
+        } else if (combat_->rollLocked(move->pawn)) {
+            // Rolling (P2): the sim moves the pawn; the player's position is ignored, without a failure
+            // because Unreal sends one every step.
         } else {
             Position& pos = reg.get<Position>(move->pawn);
             Mover& mover = reg.get<Mover>(move->pawn);
@@ -505,6 +540,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             pos.y += moveY;
             mover.vx = moveX;
             mover.vy = moveY;
+        }
+    } else if (const auto* roll = std::get_if<DodgeRollCommand>(&command)) {
+        if (!combat_->dodgeRoll(roll->pawn, roll->dx, roll->dy, &error)) {
+            commandFailed(id, error);
         }
     } else if (const auto* schedule = std::get_if<SetScheduleCommand>(&command)) {
         if (!jobs_->setSchedule(schedule->pawn, schedule->hour, schedule->kind, error)) {
@@ -633,6 +672,16 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!jobs_->bills().removeBill(removeBill->building, removeBill->bill, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* melee = std::get_if<MeleeCommand>(&command)) {
+        const bool done = melee->mode == MeleeMode::Block
+                              ? melee_->block(melee->pawn, &error)
+                              : melee_->attack(melee->pawn, melee->target,
+                                               things_->registry().valid(melee->pawn) &&
+                                                   things_->registry().all_of<PlayerControl>(melee->pawn),
+                                               &error);
+        if (!done) {
+            commandFailed(id, error);
+        }
     } else if (const auto* setBill = std::get_if<SetBillCommand>(&command)) {
         if (!jobs_->bills().setBill(setBill->building, setBill->bill, setBill->mode, setBill->count, setBill->suspended,
                                     error)) {
@@ -700,6 +749,7 @@ void Sim::step() {
     animals_->step();
     mood_->step(time_.seconds, events_);
     movement_->step(things_->registry(), map_);
+    melee_->step();
     combat_->step(rng_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     rooms_->update();
@@ -708,6 +758,7 @@ void Sim::step() {
     filth_->step();
     roomStats_->step(time_.seconds);
     temperature_->step(time_.seconds);
+    spoilage_->step(time_.seconds);
     time_.seconds += 1;
     if (time_.seconds % kSecondsPerHour == 0) {
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
@@ -891,6 +942,9 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const StackCount* stack = reg.try_get<StackCount>(entity)) {
             view.stackCount = stack->count;
         }
+        if (const Spoilage* spoilage = reg.try_get<Spoilage>(entity)) {
+            view.rot = spoilage->rot;
+        }
         if (const HitPoints* hp = reg.try_get<HitPoints>(entity)) {
             view.hitPoints = hp->current;
             view.maxHitPoints = hp->max;
@@ -947,6 +1001,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.rounds = combat_->roundsLeft(entity);
             view.magazineSize = combat_->magazineSize(entity);
             view.reloading = combat_->reloading(entity);
+            combat_->kickOf(entity, view.kickUp, view.kickSide);
+            view.rollPhase = static_cast<uint8_t>(combat_->rollPhase(entity));
+            if (view.rollPhase != 0) {
+                view.rollStepsLeft = combat_->rollStepsLeft(entity);
+                combat_->rollDirection(entity, view.rollDirX, view.rollDirY);
+            }
+            view.hitProof = combat_->hitProof(entity);
         }
         if (const Gear* gear = reg.try_get<Gear>(entity); gear != nullptr && gear->weapon != kNoEntity) {
             view.weapon = reg.get<Thing>(gear->weapon).def;
@@ -966,6 +1027,12 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.fightTarget = fighter->target;
             view.fightSpot = fighter->hasSpot ? fighter->spot : cellOf(pos);
             view.fallingBack = fighter->fallingBack;
+        }
+        if (const Melee* melee = reg.try_get<Melee>(entity)) {
+            view.meleePhase = melee->phase;
+            view.meleeStepsLeft = melee->stepsLeft;
+            view.meleeTarget = melee->phase == MeleePhase::Windup ? melee->target : kNoEntity;
+            view.blocking = melee_->blocking(entity);
         }
         out.things.push_back(view);
     }
@@ -1058,6 +1125,7 @@ uint64_t Sim::stateHash() const {
     roomStats_->hashState(h);
     animals_->hashState(h);
     temperature_->hashState(h);
+    spoilage_->hashState(h);
 
     // The entity ids the registry has handed out: the free list in reuse order (it decides the
     // next ids), then every live thing in id order with its components. The registry's own
@@ -1085,7 +1153,8 @@ uint64_t Sim::stateHash() const {
                             reg.all_of<Mood>(e),         reg.all_of<Door>(e),
                             reg.all_of<PawnLooks>(e),
                             reg.all_of<BillList>(e),
-                            reg.all_of<PowerPart>(e)};
+                            reg.all_of<PowerPart>(e),
+                            reg.all_of<Spoilage>(e)};
         uint64_t mask = 0;
         for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
             mask |= has[bit] ? (uint64_t{1} << bit) : 0;
@@ -1111,6 +1180,14 @@ uint64_t Sim::stateHash() const {
         }
         if (const StackCount* stack = reg.try_get<StackCount>(e)) {
             h.add(stack->count);
+        }
+        if (const Spoilage* spoilage = reg.try_get<Spoilage>(e)) {
+            h.add(spoilage->rot);
+            h.add(spoilage->decay);
+            h.add(spoilage->poisoned);
+            for (const DefId ingredient : spoilage->ingredients) {
+                h.add(ingredient.value);
+            }
         }
         if (const HitPoints* hp = reg.try_get<HitPoints>(e)) {
             h.add(hp->current);
@@ -1319,6 +1396,7 @@ uint64_t Sim::stateHash() const {
         combat_->hashThing(e, h);
         fighters_->hashThing(e, h);
         animals_->hashThing(e, h);
+        melee_->hashThing(e, h);
     }
     return h.value();
 }

@@ -72,6 +72,23 @@ struct HitPoints {
     int max = 0;
 };
 
+// Items that rot, wear out in the open, or remember how they were made (task C16,
+// docs/design/spoilage.md). Made with the item when its def has a `Rottable` comp, a
+// `stats.deteriorationRate`, or is a meal. `rot` goes from 0 (fresh) to 1 (rotted away); `decay` is
+// the part of a hit point worn off but not yet taken off HitPoints (always under 1). A meal lists
+// the defs of what it was cooked from (sorted by def id) and may be `poisoned`.
+struct Spoilage {
+    float rot = 0.0f;
+    float decay = 0.0f;
+    bool poisoned = false;
+    std::vector<DefId> ingredients;
+};
+
+// Whether a Things def makes items with a Spoilage component.
+bool thingHasSpoilage(const Def& def);
+// Days an item takes to rot (its Rottable comp's `daysToRotStart`); 0 if it doesn't rot.
+double thingRotDays(const Def& def);
+
 // Pawns. `metresPerStep` is the def's `stats.moveSpeed` (metres per game second, converted by the
 // importer): the speed on flat ground with no path cost. `path` is the route being walked, the
 // waypoints left after `smoothPath`; `next` the index of the waypoint being walked to, and
@@ -154,6 +171,10 @@ public:
     // Goes up whenever an item is put on the map or taken off it, so a system that reads what lies
     // in cells can tell its picture is stale (RoomStats).
     uint64_t itemChanges() const { return itemChanges_; }
+
+    // Adds `count` of `from` to the stack `into` (the caller destroys `from` or lowers its count): the
+    // rot of the two is averaged by count, ingredients are joined, and one poisoned part poisons the stack.
+    void addToStack(Entity into, Entity from, int count);
 
     // Splits `count` off an item stack: a new item of the same def, off the map, with `count`,
     // and the stack keeps the rest. Returns kNoEntity if `count` isn't less than the stack.
