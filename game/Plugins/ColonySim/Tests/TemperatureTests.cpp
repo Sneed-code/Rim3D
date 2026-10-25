@@ -4,6 +4,7 @@
 #include "ColonySim/Map.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Power.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
@@ -43,9 +44,13 @@ std::shared_ptr<const DefDatabase> tempDefs() {
     return defs;
 }
 
-std::unique_ptr<Sim> tempSim(float outdoor, int size = 48) {
+// `realPower` leaves the heaters and coolers to the power grid; otherwise they all run.
+std::unique_ptr<Sim> tempSim(float outdoor, int size = 48, bool realPower = false) {
     auto sim = std::make_unique<Sim>(SimSettings{5, size, 0, 0, true}, tempDefs());
     sim->setOutdoorOverride(outdoor);
+    if (!realPower) {
+        sim->temperature().setSourceRunning([](Entity) { return true; });
+    }
     return sim;
 }
 
@@ -168,6 +173,48 @@ TEST_CASE("Temperature: an open door lets the room follow the outdoors much fast
     CHECK(shut == doctest::Approx(20.0f * std::exp(-0.057f * 3.0f)).epsilon(0.03));
     CHECK(open < shut - 4.0f);
     tempClock = 0;
+}
+
+TEST_CASE("Temperature: a heater warms only while its power net runs it, a campfire needs no power") {
+    // No power: the heater stays cold, the campfire (no power part) works.
+    {
+        auto sim = tempSim(0.0f, 48, true);
+        tempRing(*sim, 10, 10, 16, 16);
+        const Entity heater = sim->things().spawn("Heater", CellPos{12, 12, 0});
+        TEMP_REQUIRE(heater != kNoEntity);
+        sim->rooms().update();
+        tempClock = 0;
+        tempHours(*sim, 6.0);
+        CHECK_FALSE(sim->power().running(heater));
+        CHECK(tempAt(*sim, 13, 13) < 1.0f);
+    }
+    {
+        auto sim = tempSim(0.0f, 48, true);
+        tempRing(*sim, 10, 10, 16, 16);
+        TEMP_REQUIRE(sim->things().spawn("Campfire", CellPos{12, 12, 0}) != kNoEntity);
+        sim->rooms().update();
+        tempClock = 0;
+        tempHours(*sim, 6.0);
+        CHECK(tempAt(*sim, 13, 13) > 10.0f);
+    }
+    // On a net with a charged battery the heater warms the room.
+    {
+        auto sim = tempSim(0.0f, 48, true);
+        sim->power().setSun([](const GameTime&) { return 0.0; });
+        tempRing(*sim, 10, 10, 16, 16);
+        const Entity heater = sim->things().spawn("Heater", CellPos{12, 12, 0});
+        sim->things().spawn("PowerConduit", CellPos{13, 12, 0});
+        const Entity battery = sim->things().spawn("Battery", CellPos{14, 12, 0});
+        TEMP_REQUIRE(heater != kNoEntity && battery != kNoEntity);
+        sim->things().registry().get<PowerPart>(battery).stored = 100.0;
+        sim->rooms().update();
+        sim->power().update();
+        sim->step();
+        tempClock = 0;
+        tempHours(*sim, 6.0);
+        CHECK(sim->power().running(heater));
+        CHECK(tempAt(*sim, 15, 15) > 10.0f);
+    }
 }
 
 TEST_CASE("Temperature: a heater warms a room to its limit and holds it, a cooler cools to its") {
@@ -401,10 +448,16 @@ TEST_CASE("Temperature: the snapshot has the outdoor temperature and each room's
 
 TEST_CASE("Temperature: the same game twice is the same, and a save in the middle of a cold night loads back the same") {
     const auto make = [] {
-        auto sim = tempSim(-20.0f);
+        auto sim = tempSim(-20.0f, 48, true);
+        sim->power().setSun([](const GameTime&) { return 0.0; });
         tempRing(*sim, 10, 10, 16, 16);
         tempRing(*sim, 16, 10, 22, 16);
         sim->things().spawn("Heater", CellPos{12, 12, 0});
+        sim->things().spawn("PowerConduit", CellPos{13, 12, 0});
+        const Entity battery = sim->things().spawn("Battery", CellPos{14, 12, 0});
+        if (battery != kNoEntity) {
+            sim->things().registry().get<PowerPart>(battery).stored = 100.0;
+        }
         sim->things().spawn("Human", CellPos{14, 14, 0});
         sim->things().spawn("Human", CellPos{30, 30, 0});
         return sim;

@@ -56,8 +56,10 @@ one game second of a heater with 21 adds 21 x 2500 / 60 / 3600 / cells degrees: 
 in a 25 cell room**. A pusher with `maxTemp` (heater 21, campfire 28) adds heat only while the room is
 below it and never takes the room past it; one with `minTemp` (cooler 10, passive cooler 9) cools
 only while above. Heat pushed into the open air is lost. The room is the one under the building, or
-beside it. **Until power (E5) and fuel (C11) exist every pusher runs**: they install their test with
-`TemperatureSystem::setSourceRunning(fn(Entity) -> bool)`.
+beside it. **Power (E5) decides which pushers run**: `Sim` installs
+`PowerGrid::running` with `TemperatureSystem::setSourceRunning(fn(Entity) -> bool)`, so a heater or
+cooler warms only while its net runs it, and a campfire (no power part) always does. Fuel (C11)
+will add its test the same way.
 
 **Rooms change.** A new room starts at the mean temperature its cells had (cells that were
 outdoors count as the outdoor temperature then), so joining two rooms mixes their heat by size and
