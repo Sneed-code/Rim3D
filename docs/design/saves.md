@@ -114,6 +114,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `recreation` | 1 | `joy`: recreation, comfort and outdoors needs, tolerances, and the activity of a recreation job ([recreation.md](recreation.md)) |
 | `research` | 1 | current project, neolithic start flag, finished projects, progress of unfinished ones ([research.md](research.md)) |
 | `animals` | 1 | `SimSettings::wildAnimals`, the animal system's state (populated, percent, random stream, next herd id, over-density flag, counters) and the `animal` part of every animal ([animal-life.md](animal-life.md)) |
+| `husbandry` | 1 | animal zones (id and cells), counters, and the `care` part of every animal that has one: marks, zone, home, timers, training steps and wants, the path it waits on ([husbandry.md](husbandry.md)) |
 | `temperature` | 1 | each enclosed room's temperature, by its anchor cell (E2) |
 | `melee` | 1 | `melee`: each pawn's swing, its defense against one, its block (F8, [melee.md](melee.md)) |
 

@@ -2273,6 +2273,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const AnimalCare* care = reg.try_get<AnimalCare>(e)) {
             out.care = *care;
+        }
         if (const Melee* melee = reg.try_get<Melee>(e)) {
             out.melee = *melee;
         }
@@ -2629,6 +2630,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.care) {
             reg.emplace<AnimalCare>(entity, *e.care);
+        }
         if (e.melee) {
             reg.emplace<Melee>(entity, *e.melee);
         }
