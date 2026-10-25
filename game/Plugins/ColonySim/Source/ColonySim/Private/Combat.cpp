@@ -1186,10 +1186,12 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
             if (result.deflected) {
                 h.kind = ProjectileHitKind::Armor;
                 emitHit(projectile, p, h, 0.0f);
+                wearApparel(hit.thing, result);
                 return;
             }
             emitHit(projectile, p, h, result.amount);
             health_.applyHit(hit.thing, result.damageType, result.amount, result.part);
+            wearApparel(hit.thing, result);
             break;
         }
         default:
@@ -1267,7 +1269,7 @@ PawnHitResult CombatSystem::hitPawn(Entity pawn, int hitboxPart, DefId damageTyp
         if (rng.unit() < lost - static_cast<float>(points)) {
             ++points;
         }
-        damageApparel(pawn, worn, points);
+        result.wear.emplace_back(worn, points);
     };
     for (const auto& [outerness, worn] : layers) {
         (void)outerness;
@@ -1418,6 +1420,12 @@ bool CombatSystem::unequip(Entity pawn, Entity item) {
     }
     drop(pawn, item);
     return true;
+}
+
+void CombatSystem::wearApparel(Entity pawn, const PawnHitResult& result) {
+    for (const auto& [item, points] : result.wear) {
+        damageApparel(pawn, item, points);
+    }
 }
 
 void CombatSystem::damageApparel(Entity pawn, Entity item, int hitPoints) {

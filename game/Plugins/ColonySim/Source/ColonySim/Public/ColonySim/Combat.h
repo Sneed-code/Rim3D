@@ -125,6 +125,9 @@ struct PawnHitResult {
     int part = -1;     // -1: the pawn has no hitboxes, so the caller lets health pick a part
     DefId damageType;  // Blunt if armor turned a sharp hit blunt
     float amount = 0.0f;
+    // Worn pieces that stopped or softened the hit and the hit points each loses (C15); the caller
+    // passes the result to CombatSystem::wearApparel.
+    std::vector<std::pair<Entity, int>> wear;
 };
 
 struct CombatModel;
@@ -223,6 +226,8 @@ public:
     // the caller does (HealthSystem::applyHit), so bullets and melee strikes land the same way (F8).
     PawnHitResult hitPawn(Entity pawn, int hitboxPart, DefId damageType, float amount, float penetration,
                           uint64_t seed) const;
+    // Takes the hit points off the pieces `result.wear` names; a piece at none is destroyed.
+    void wearApparel(Entity pawn, const PawnHitResult& result);
     // The radius around a standing man's chest, seen from the front, in which a point picked evenly
     // lands on him with this chance (the table aimed shots use). Melee strikes use it too (F8).
     float spreadRadiusFor(float chance) const;

@@ -754,6 +754,7 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
             if (!result.deflected) {
                 health_.applyHit(victim, result.damageType, result.amount, result.part);
             }
+            combat_.wearApparel(victim, result);
             return;
         }
     } else if (m.target != kNoEntity && reg.valid(m.target)) {

@@ -19,7 +19,7 @@ factor. Without a stuff a `stuffRequired` garment is worth nothing.
 
 **Combat** uses the same rule for every piece: per covered part, outermost layer first, a roll under
 half the armor deflects, under all of it halves the damage (F2, `combat.md`). Every layer that
-absorbs damage loses 1 hit point per 4 damage absorbed (random rounding). At 0 hit points the piece
+absorbs damage loses 1 hit point per 4 damage absorbed (random rounding). Bullets and melee blows (F8) share `CombatSystem::hitPawn`, which lists the pieces that absorbed (`PawnHitResult::wear`); the caller applies it with `wearApparel`. At 0 hit points the piece
 is destroyed (`ApparelDestroyed` event).
 
 ## Wear and tear, tattered, dead men's clothes
