@@ -10,6 +10,7 @@
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Regions.h"
+#include "ColonySim/Lights.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -103,15 +104,20 @@ bool JobSystem::canUseHands(Entity pawn) const {
     return gatherManipulation(things_.registry(), pawn, manipulationIndex_) > 0.0;
 }
 
+float JobSystem::lightWorkFactor(Entity pawn) const {
+    const Position* at = lights_ != nullptr ? things_.registry().try_get<Position>(pawn) : nullptr;
+    return at != nullptr ? lights_->workSpeedAt(cellOf(*at)) : 1.0f;
+}
+
 double JobSystem::miningSpeed(Entity pawn) const {
     const double speed = gather_.miningSpeedBase + gather_.miningSpeedPerLevel * skillLevel(pawn, "Mining");
-    return std::max(0.0, speed) * gatherManipulation(things_.registry(), pawn, manipulationIndex_);
+    return std::max(0.0, speed) * gatherManipulation(things_.registry(), pawn, manipulationIndex_) * lightWorkFactor(pawn);
 }
 
 double JobSystem::plantWorkSpeed(Entity pawn) const {
     const double speed = gather_.plantSpeedBase + gather_.plantSpeedPerLevel * skillLevel(pawn, "Plants");
     const double manip = gatherManipulation(things_.registry(), pawn, manipulationIndex_);
-    return manip > 0.0 ? std::max(kGatherMinPlantSpeed, speed * manip) : 0.0;
+    return manip > 0.0 ? std::max(kGatherMinPlantSpeed, speed * manip) * lightWorkFactor(pawn) : 0.0;
 }
 
 // Experience, as RimWorld's Learn: scaled by the pawn's passion for the skill; levels rise when the

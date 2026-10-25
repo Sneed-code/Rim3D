@@ -136,6 +136,15 @@
     "ours": ["stepsPerTick", "pathCost"]
   },
   {
+    "defName": "LightRules", "source": "RimWorld wiki",
+    "skyGlowByHour": { "at": [0, 5, 7, 17, 19, 24], "value": [0, 0, 1, 1, 0, 0] },
+    "workSpeedByGlow": { "at": [0, 0.3, 0.6], "value": [0.7, 0.8, 1.0] },
+    "moveSpeedByGlow": { "at": [0, 0.3, 0.6], "value": [0.85, 0.95, 1.0] },
+    "blockingHeightDm": 15,
+    "unverified": ["skyGlowByHour", "workSpeedByGlow"],
+    "ours": ["moveSpeedByGlow", "blockingHeightDm"]
+  },
+  {
     "defName": "RoomRules", "source": "RimWorld wiki",
     "roofSupportRadius": 6.9,
     "hugeRoomCells": 2000,

@@ -44,6 +44,8 @@ add_test(NAME unit COMMAND colonysim_tests)
 add_test(NAME simrun_smoke COMMAND simrun --seed 1 --size 64 --days 1 --png ${CMAKE_BINARY_DIR}/smoke.png)
 add_test(NAME simrun_regions COMMAND simrun --seed 1 --size 128 --days 0 --regions ${CMAKE_BINARY_DIR}/regions.png)
 add_test(NAME simrun_plants COMMAND simrun --seed 42 --size 256 --days 3 --check --png ${CMAKE_BINARY_DIR}/plants.png)
+# Light and darkness (E3): a roofed room, lamps and a campfire at night; the picture is the check.
+add_test(NAME simrun_light COMMAND simrun --seed 42 --size 128 --days 0 --light ${CMAKE_BINARY_DIR}/light.png --hour 22)
 add_test(NAME simrun_sight COMMAND simrun --seed 1 --size 128 --days 0 --sight ${CMAKE_BINARY_DIR}/sight.png)
 # Mining, chopping and harvesting (C3): the Crashlanded colonists work the marked rock and plants for two days.
 add_test(NAME simrun_gather COMMAND simrun --seed 42 --size 256 --days 2 --start Crashlanded --gather 60 --check

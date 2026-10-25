@@ -219,6 +219,8 @@ the fallen Lattice, magic called resonance) and our own names for RimWorld's pro
 storytellers are narrators named Orrin, Maren and Jinx). **Use those names in new data, code and
 docs**; plain words like steel and rifle stay. Item words like plasteel are only proposed so far.
 
+Since E3 every cell has a light level (`docs/design/light.md`, tests `LightTests`, `simrun --light FILE --hour H`): the sun by the hour of the day on cells with no roof, plus lamps (`glower`, with new `TorchLamp` and `Campfire` defs) falling off to their radius and stopped by walls; `sim.lights().lightAt(cell)`. Dark cells slow work (mining, plants, building, cooking) to 70% and walking to 85% at full dark. Rebuilt on change, not saved (no save format change). **The sim starts at midnight, so a test with the real defs that counts work steps needs a lamp beside the worker**; the tests' own small defs have no `LightRules` and no night.
+
 ## Stage 1 progress
 
 36 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7, U8, U11, U10). Tick tasks in `docs/plans/stage-1.md` as they merge.
@@ -240,9 +242,11 @@ section, `docs/design/saves.md` "Adding to the save"; a new system's checklist i
 Stage 2 done so far: **D7** medicine and disease data (`docs/design/medicine-data.md`), **D11** building data 2 (power, climate, light, floors, furniture;
 `docs/design/starting-data.md`).
 **D5** animal data (15 animals, bodies, meat, leather, milk, eggs, wool: `docs/design/animals.md`).
+**E3** light and darkness (`docs/design/light.md`).
 **D8** production data (work tables, stone blocks, melee weapons with tools; the meal recipes still list only the fueled stove, C14 adds the electric stove).
 
 D9 (thoughts, recreation, mental break and social data) is in: `docs/design/thoughts-data.md`. Data only; C15, C17, C18, C19, C20, E2 and E3 read it.
+
 
 ## Next
 
