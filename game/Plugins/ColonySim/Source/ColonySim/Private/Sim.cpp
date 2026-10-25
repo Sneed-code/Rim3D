@@ -13,6 +13,7 @@
 #include "ColonySim/Lights.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
+#include "ColonySim/Recreation.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/Movement.h"
@@ -113,10 +114,13 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     power_->setOnChange([this] { lights_->markDirty(); });
     lights_->setActive([this](Entity building) { return power_->running(building); });
     movement_->setLights(lights_.get());
+    recreation_ = std::make_unique<RecreationSystem>(*things_, *defs_);
+    recreation_->setRooms(rooms_.get());
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
     jobs_->setLights(lights_.get());
     jobs_->setPower(power_.get());
+    jobs_->setRooms(rooms_.get());
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
     fighters_->setEventLog(&events_);
@@ -610,6 +614,7 @@ void Sim::step() {
     }
     jobs_->step();
     fighters_->step();
+    recreation_->step();
     mood_->step(time_.seconds, events_);
     movement_->step(things_->registry(), map_);
     combat_->step(rng_);
@@ -753,6 +758,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Needs* needs = reg.try_get<Needs>(entity)) {
             view.food = needs->food;
             view.rest = needs->rest;
+        }
+        if (const Joy* joy = reg.try_get<Joy>(entity)) {
+            view.joy = joy->level;
+            view.comfort = joy->comfort;
+            view.outdoors = joy->outdoors;
         }
         if (const Mood* mood = reg.try_get<Mood>(entity)) {
             view.mood = mood->level;
@@ -1006,6 +1016,9 @@ uint64_t Sim::stateHash() const {
                 h.add(used.count);
             }
             h.add(job.workType.value);
+            if (job.activity.valid()) {
+                h.add(job.activity.value);
+            }
             h.add(job.forced);
             h.add(static_cast<int>(job.handsOn));
             h.add(static_cast<int>(job.step));
@@ -1038,6 +1051,16 @@ uint64_t Sim::stateHash() const {
             h.add(needs->rest);
             h.add(needs->malnutrition);
             h.add(needs->foodSearchAfter);
+        }
+        if (const Joy* joy = reg.try_get<Joy>(e)) {
+            h.add(joy->level);
+            h.add(joy->comfort);
+            h.add(joy->outdoors);
+            h.add(static_cast<uint64_t>(joy->tolerance.size()));
+            for (const JoyTolerance& t : joy->tolerance) {
+                h.add(t.kind.data(), t.kind.size());
+                h.add(t.amount);
+            }
         }
         if (const Mood* mood = reg.try_get<Mood>(e)) {
             h.add(mood->level);

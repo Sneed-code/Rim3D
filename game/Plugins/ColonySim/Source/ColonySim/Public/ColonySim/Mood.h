@@ -93,6 +93,17 @@ private:
         std::string need;       // situations: "food" or "rest"
         std::string band;       // situations: the band name
     };
+    // A situation with stages (`situation.condition` and `stages` in the def): which stage holds is
+    // decided by a measured number against the def's thresholds (Mood.cpp, `conditionValue`).
+    struct StagedThought {
+        DefId def;
+        std::string condition;
+        std::vector<float> thresholds;  // upper bounds of every stage but the last
+        std::vector<std::string> labels;
+        std::vector<float> offsets;
+    };
+    // The number a staged thought's condition measures for this pawn, or false if it has none now.
+    bool conditionValue(Entity pawn, const std::string& condition, float& value) const;
     float traitMoodOffset(Entity pawn) const;
     float traitBreakOffset(Entity pawn) const;
     void addMemory(Mood& mood, const std::string& trigger, int64_t now);
@@ -103,6 +114,7 @@ private:
     const DefDatabase& defs_;
     MoodRules rules_;
     std::vector<Thought> thoughts_;
+    std::vector<StagedThought> staged_;
 };
 
 }  // namespace colony

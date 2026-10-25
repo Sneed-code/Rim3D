@@ -1,0 +1,23 @@
+[
+  {
+    "defName": "RecreationRules", "source": "ours",
+    "startJoy": 0.6, "seekBelow": 0.35, "joyHoursUntil": 0.95,
+    "dayFromHour": 6, "dayToHour": 19, "walkRadius": 18, "spotRadius": 40,
+    "note": "C18. startJoy is the Recreation need a new colonist begins with. In an Anything hour a pawn with nothing to work on plays when the need is under seekBelow; in a Joy hour it plays until the need reaches joyHoursUntil. daytimeOnly activities (watching the clouds) run from dayFromHour to before dayToHour. walkRadius is how far a stroll goes from where the pawn is, spotRadius how far it looks for a game table, in metres.",
+    "ours": ["startJoy", "seekBelow", "joyHoursUntil", "dayFromHour", "dayToHour", "walkRadius", "spotRadius"]
+  },
+  {
+    "defName": "ComfortRules", "source": "RimWorld",
+    "start": 0.5, "fallPerDay": 0.6, "risePerHour": 0.5, "groundComfort": 0.1, "defaultBedComfort": 0.6,
+    "note": "C18. The Comfort need moves towards the comfort of the furniture a pawn sleeps in, eats at or sits in (a building's stats.comfort; the ground gives groundComfort) by at most risePerHour an hour, and falls fallPerDay a day when no furniture is in use. Using worse furniture than the need pulls it down four times as fast as it falls unused. RimWorld's rates are not on the wiki.",
+    "unverified": ["fallPerDay", "risePerHour", "groundComfort", "defaultBedComfort"],
+    "ours": ["start"]
+  },
+  {
+    "defName": "OutdoorsRules", "source": "RimWorld",
+    "start": 0.6, "fallPerDay": 0.5, "risePerDay": 3.0,
+    "note": "C18. The Outdoors need rises risePerDay a day while the pawn is outdoors (not under a roof in an enclosed room: Rooms::indoors) and falls fallPerDay a day indoors, sleeping included. RimWorld's rates are not on the wiki.",
+    "unverified": ["fallPerDay", "risePerDay"],
+    "ours": ["start"]
+  }
+]

@@ -9,6 +9,7 @@
 #include "ColonySim/JobType.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Pathfinder.h"
+#include "ColonySim/Recreation.h"
 #include "ColonySim/Zones.h"
 
 #include <cstdint>
@@ -65,6 +66,10 @@ struct Job {
     std::vector<BillPick> picks;  // DoBill: the ingredient stacks still to fetch after `thing`
     std::vector<BillUsed> used;   // DoBill: ingredients delivered so far
     DefId workType;            // the work type whose scanner gave it; none for orders and idling
+    DefId activity;            // Recreate: the RecreationActivities def; `thing` is the building it is done at (none for
+                               // a stroll or cloud watching), `cell` where the pawn stands or sits, `chair` the chair
+                               // it sits in (chatting at a table), `count` 1 when it walks about, `until` the game
+                               // second it ends (0 until it starts)
     bool forced = false;       // a player order (OrderHaulCommand)
     uint8_t handsOn = 0;       // 1: done by hand by the player's colonist, in place (HandsOnCommand, U10): no walking,
                                // ends if the player steps out of reach; 2: the same, and the job made the Mine, CutPlant
@@ -151,6 +156,7 @@ class Mineables;
 class Pathfinder;
 class Plants;
 class PowerGrid;
+class Rooms;
 class Things;
 class WorkGiver;
 struct GameTime;
@@ -242,6 +248,9 @@ public:
     // The bed a pawn owns, or kNoEntity.
     Entity bedOf(Entity pawn) const;
     const NeedRules& needRules() const { return rules_; }
+    // Whether a cell is indoors decides where a pawn can stroll or watch the clouds (Recreation); without rooms
+    // everywhere is outdoors.
+    void setRooms(Rooms* rooms) { rooms_ = rooms; }
 
     // Call before a thing is destroyed: ends the jobs that carry it or are done by it.
     void forget(Entity thing);
@@ -366,6 +375,17 @@ private:
     bool failCheckLayDown(Entity pawn, Job& job, std::string& why);
     void wakeUp(Entity pawn, const Job& job);
 
+    // Recreation (RecreationJobs.cpp, docs/design/recreation.md). thinkJoy is for an Anything hour with nothing
+    // to do; the schedule's Joy hours call makeRecreationJob too.
+    bool thinkJoy(Entity pawn, Job& out);
+    bool makeRecreationJob(Entity pawn, Job& out, float playUntil);
+    bool recreationSpot(Entity pawn, const RecreationActivity& activity, Job& out);
+    bool strollCell(Entity pawn, CellPos& out, bool wander);
+    bool isOutdoorsCell(CellPos cell) const;
+    int recreationUsers(Entity building, Entity except) const;
+    bool failCheckRecreate(Entity pawn, Job& job, std::string& why);
+    StepResult play(Entity pawn, Job& job, std::string& why);
+
     // Gathering jobs (GatherJobs.cpp).
     bool failCheckGather(Entity pawn, Job& job, std::string& why);
     StepResult goToTouch(Entity pawn, Job& job, std::string& why);
@@ -428,6 +448,8 @@ private:
     SimStats& stats_;
     std::vector<Event>& events_;
 
+    Rooms* rooms_ = nullptr;
+    RecreationRules recreation_;
     std::unique_ptr<BillSystem> bills_;
     const PowerGrid* power_ = nullptr;
     std::vector<std::unique_ptr<WorkGiver>> givers_;

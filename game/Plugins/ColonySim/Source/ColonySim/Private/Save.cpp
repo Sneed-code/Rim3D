@@ -17,6 +17,7 @@
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
+#include "ColonySim/Recreation.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
 #include "ColonySim/Zones.h"
@@ -181,6 +182,13 @@ struct SaveProjectile {
     Projectile p;
 };
 
+// A colonist's recreation, comfort and outdoors needs, with the activity of its recreation job by
+// defName (section "recreation").
+struct SaveJoy {
+    Joy joy;
+    std::string activity;  // RecreationActivities defName, empty without a recreation job
+};
+
 struct SaveEntity {
     uint32_t id = 0;
     std::optional<SaveThing> thing;
@@ -214,6 +222,7 @@ struct SaveEntity {
     std::optional<Magazine> magazine;  // format 17 on
     std::optional<SaveBillList> bills;      // format 18 on
     std::optional<PowerPart> power;         // section "power"
+    std::optional<SaveJoy> joy;             // section "recreation"
 };
 
 // A stockpile zone, with its filter by defName.
@@ -1038,7 +1047,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::DoBill, "the save file has a bad job");
+    ar.require(job.type <= JobType::Recreate, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -1224,6 +1233,22 @@ void saveMoodPart(Ar& ar, Mood& m) {
         ar.value("expires", memory.expires);
     });
 
+}
+
+template <typename Ar>
+void saveJoyPart(Ar& ar, SaveJoy& j) {
+    ar.value("level", j.joy.level);
+    ar.value("comfort", j.joy.comfort);
+    ar.value("outdoors", j.joy.outdoors);
+    ar.require(j.joy.level >= 0.0f && j.joy.level <= 1.0f && j.joy.comfort >= 0.0f && j.joy.comfort <= 1.0f &&
+                   j.joy.outdoors >= 0.0f && j.joy.outdoors <= 1.0f,
+               "the save file has an impossible need");
+    ar.list("tolerance", j.joy.tolerance, [&](JoyTolerance& t) {
+        ar.text("kind", t.kind);
+        ar.value("amount", t.amount);
+        ar.require(t.amount >= 0.0f && t.amount <= 1.0e3f, "the save file has an impossible tolerance");
+    });
+    ar.text("activity", j.activity);
 }
 
 template <typename Ar>
@@ -1721,6 +1746,9 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("power", 1, [&] {
         saveParts(ar, "power", e, &SaveEntity::power, [&](PowerPart& part) { savePowerPart(ar, part); });
     });
+    ar.section("recreation", 1, [&] {
+        saveParts(ar, "joy", e, &SaveEntity::joy, [&](SaveJoy& j) { saveJoyPart(ar, j); });
+    });
     // New sections go here, at the end.
 }
 
@@ -1885,6 +1913,15 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             w.job.used.clear();
             w.avoid = worker->avoid;
             out.worker = std::move(w);
+        }
+        if (const Joy* joy = reg.try_get<Joy>(e)) {
+            SaveJoy saved;
+            saved.joy = *joy;
+            const Worker* worker = reg.try_get<Worker>(e);
+            if (worker != nullptr && worker->job.activity.valid()) {
+                saved.activity = sim.defs_->get(worker->job.activity).defName();
+            }
+            out.joy = std::move(saved);
         }
         if (const WorkSettings* work = reg.try_get<WorkSettings>(e)) {
             SaveWorkSettings w;
@@ -2124,6 +2161,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             Worker worker;
             worker.job = e.worker->job;
             worker.job.workType = DefId{};
+            worker.job.activity = DefId{};  // from the recreation section below
             if (!e.worker->workType.empty()) {
                 // A work type the data files dropped leaves the job without one; it runs on.
                 worker.job.workType = sim.defs_->idOf(kSaveWorkTypesKind, e.worker->workType);
@@ -2305,6 +2343,15 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.magazine) {
             reg.emplace<Magazine>(entity, *e.magazine);
+        }
+        if (e.joy) {
+            reg.emplace<Joy>(entity, e.joy->joy);
+            if (!e.joy->activity.empty()) {
+                // An activity the data files dropped leaves the job without one; it ends at once.
+                if (Worker* worker = reg.try_get<Worker>(entity)) {
+                    worker->job.activity = sim.defs_->idOf("RecreationActivities", e.joy->activity);
+                }
+            }
         }
     }
     sim.health_->refreshAll();
