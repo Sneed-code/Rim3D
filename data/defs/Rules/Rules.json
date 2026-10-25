@@ -30,7 +30,7 @@
     "bloodLossPerDayPerBleedRate": 1.0,
     "bloodLossRecoveryPerDay": 0.333,
     "bleedRateMinForBloodLoss": 0.1,
-    "medicineMaxTendQuality": { "None": 0.7, "Herbal": 0.7, "Medicine": 1.0, "Glitterworld": 1.3 },
+    "medicineMaxTendQuality": { "None": 0.7, "Herbal": 0.7, "Medicine": 1.0, "Lumen": 1.3 },
     "protagonistPartHitPointsFactor": 2.0,
     "unverified": ["bloodLossPerDayPerBleedRate", "bloodLossRecoveryPerDay", "bleedRateMinForBloodLoss"]
   },

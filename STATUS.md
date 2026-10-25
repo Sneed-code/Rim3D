@@ -53,6 +53,12 @@ defs name defs that exist. `simrun --pawns/--items` runs on the real data.
 Not written yet: buildings (wall, door, bed, table, stove, sandbags), needs, thoughts, recipes,
 guns and raiders; the tasks that use them (C4, C6, C7, C9, F2, F6) add them the same way.
 
+Since 0004 the game has its own setting (`docs/design/lore.md`: the year 6650, slow star travel,
+the fallen Lattice, magic called resonance) and our own names for RimWorld's proper names
+(`docs/design/naming.md`: Impids are Emberkin, mechanoids the Remnant, insectoids chitinids,
+storytellers are narrators named Orrin, Maren and Jinx). **Use those names in new data, code and
+docs**; plain words like steel and rifle stay. Item words like plasteel are only proposed so far.
+
 ## Stage 1 progress
 
 12 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4). Tick tasks in `docs/plans/stage-1.md` as they merge.

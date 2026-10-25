@@ -273,20 +273,20 @@ ACharacter* USmokeTestSubsystem::SpawnRunner(const FVector& Location, bool bMeta
 
 void USmokeTestSubsystem::ApplySeededLook(AActor* MetaHuman, int32 Seed, FString& OutDescription)
 {
-	// The lineup shows fixed examples first (heavy, thin, Impid), then seeded ones.
+	// The lineup shows fixed examples first (heavy, thin, Emberkin), then seeded ones.
 	colony::Rng Rng(static_cast<uint64_t>(Seed));
 	float Height = 0.92f + Rng.unit() * 0.16f;
 	float Width = 0.9f + Rng.unit() * 0.25f;
-	bool bImpid = Rng.below(8) == 0;
+	bool bEmberkin = Rng.below(8) == 0;
 	const int32 Slot = Seed % 1000;
-	if (Seed < 2000 && Slot == 0) { Width = 1.3f; Height = 1.0f; bImpid = false; }
-	if (Seed < 2000 && Slot == 1) { Width = 0.8f; Height = 1.05f; bImpid = false; }
-	if (Seed < 2000 && Slot == 2) { Width = 1.0f; Height = 0.95f; bImpid = true; }
+	if (Seed < 2000 && Slot == 0) { Width = 1.3f; Height = 1.0f; bEmberkin = false; }
+	if (Seed < 2000 && Slot == 1) { Width = 0.8f; Height = 1.05f; bEmberkin = false; }
+	if (Seed < 2000 && Slot == 2) { Width = 1.0f; Height = 0.95f; bEmberkin = true; }
 
 	// Width scales the body sideways and front to back; a stand-in for real body types.
 	MetaHuman->SetActorRelativeScale3D(FVector(Width, Width, Height));
-	OutDescription = FString::Printf(TEXT("height %.2f, width %.2f%s"), Height, Width, bImpid ? TEXT(", Impid") : TEXT(""));
-	if (!bImpid)
+	OutDescription = FString::Printf(TEXT("height %.2f, width %.2f%s"), Height, Width, bEmberkin ? TEXT(", Emberkin") : TEXT(""));
+	if (!bEmberkin)
 	{
 		return;
 	}

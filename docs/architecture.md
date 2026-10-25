@@ -58,7 +58,7 @@ Libraries, all free and vendored into the repo: EnTT (entities), nlohmann/json (
 
 ## Data files
 
-Content is defined the way RimWorld does it, as "defs", but in JSON instead of XML. One folder per kind under `data/defs/` (things, buildings, pawn kinds, xenotypes, genes, recipes, research, incidents, thoughts and so on), many defs per file.
+Content is defined the way RimWorld does it, as "defs", but in JSON instead of XML. One folder per kind under `data/defs/` (things, buildings, pawn kinds, lineages, genes, recipes, research, incidents, thoughts and so on), many defs per file.
 
 ```json
 {
@@ -113,7 +113,7 @@ Unreal builds the 3D world from the sim's snapshot and events. We use the latest
 | Buildings, walls, furniture | Instanced static meshes per mesh type per chunk, Nanite where possible. Damage swaps to a worn variant at hit-point thresholds. |
 | Destruction | When the sim destroys a building, Unreal spawns a pre-fractured Chaos version that collapses into debris. Debris is cosmetic; the sim places rubble. |
 | Plants | Instanced meshes from the sim's plant layer. Felled trees topple with physics. Grass, pebbles and other clutter that don't matter to the game come from Unreal's PCG tools. |
-| Pawns and animals | One actor each; see "Pawn animation and looks" below. Animals and mechs use shared skeletons. Distant herds of hundreds of animals switch to cheap instanced meshes with baked animation. |
+| Pawns and animals | One actor each; see "Pawn animation and looks" below. Animals and remnant machines use shared skeletons. Distant herds of hundreds of animals switch to cheap instanced meshes with baked animation. |
 | Gore | Wound decals and blood on the skin material, hidden bones plus a physics severed limb for lost body parts, Chaos ragdolls for the downed and dead, and gib meshes with blood effects for explosions. |
 | Fire, gas, weather | Niagara effects placed from the sim's fire and gas layers; volumetric clouds, fog and particles for weather. |
 | Lighting | Lumen, virtual shadow maps and DLSS. The sim keeps its own simple light grid for gameplay (work speed, mood). |
@@ -126,7 +126,7 @@ Sound plays from sim events (gunshots, footsteps, construction) and from Unreal-
 
 - **The sim moves pawns; Unreal only animates them.** Pawn actors have no CharacterMovement. They blend between the last two snapshots and feed the sim's velocity and planned path to motion matching as its trajectory. Only the pawn under your direct control keeps CharacterMovement.
 - **Animation detail by distance.** About the 20 pawns nearest the camera get full motion matching. The rest get a cheaper animation graph, update less often the farther they are (Unreal's animation budget allocator and update rate settings), and switch to lower-detail bodies with card hair instead of strand hair. Short montages play actions (chop, mine, eat) at every distance.
-- **Seeded looks** come from MetaHuman body types and morph targets, never from stretching the mesh (Stage 0 showed that pushes body through clothes), plus our own skin material with tint, xenotype colour and wound settings. Horns and other gene parts are attached meshes sized to read from the overseer camera. The look system sits behind one interface, so the body source can change (for example to MPFB2) without touching the rest of the game.
+- **Seeded looks** come from MetaHuman body types and morph targets, never from stretching the mesh (Stage 0 showed that pushes body through clothes), plus our own skin material with tint, lineage colour and wound settings. Horns and other gene parts are attached meshes sized to read from the overseer camera. The look system sits behind one interface, so the body source can change (for example to MPFB2) without touching the rest of the game.
 - The target stays 100 animated pawns at 60 fps, measured in a packaged build, not the editor.
 
 ## AI
@@ -205,7 +205,7 @@ Five things could have forced a change of plan. Stage 0 tested the first three o
 
 | Risk | What Stage 0 found | What we do |
 | --- | --- | --- |
-| MetaHumans are too heavy for 100 characters, or too rigid for seeded variety and xenotypes | 100 MetaHumans: GPU fine (4 ms), CPU animation too slow (28 fps in the editor). Stretching bodies doesn't make body types; the sample skin can't be tinted. | Keep MetaHumans with animation detail by distance and real body types plus our own skin material (see "Pawn animation and looks"). Re-measure in a packaged build in Stage 1. MPFB2 stays the fallback. |
+| MetaHumans are too heavy for 100 characters, or too rigid for seeded variety and lineages | 100 MetaHumans: GPU fine (4 ms), CPU animation too slow (28 fps in the editor). Stretching bodies doesn't make body types; the sample skin can't be tinted. | Keep MetaHumans with animation detail by distance and real body types plus our own skin material (see "Pawn animation and looks"). Re-measure in a packaged build in Stage 1. MPFB2 stays the fallback. |
 | Runtime terrain looks worse than Unreal's Landscape | Cheap: 155 ms to build 1 km, about 4 ms to draw. | Keep runtime terrain. The look check with Megascans waits until sneed downloads the packs. |
 | The sim is too slow at 1 km | Average cost tiny (0.14 ms per frame at 3x with 100 pawns), but single long path searches hitch for 10 to 100 ms. | Keep the 1 km map. Hierarchical pathfinding with a per-step budget comes first in Stage 1. |
 | A C++-only UI is slow to build | Not tested | The prototype uses quick ImGui panels; the proper styled UI comes in the vanilla core |

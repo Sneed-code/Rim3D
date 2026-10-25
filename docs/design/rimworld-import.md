@@ -26,6 +26,11 @@ listed in the spec, converts them, and writes:
   dependencies (a gun's bullet, a plant's harvest), which fields point at defs that are not imported,
   what was dropped and which numbers were converted.
 
+RimWorld's proper names (peoples, factions, enemies, narrators) are swapped for ours from the
+"Applied" tables in `docs/design/naming.md` (`tools/naming.py`): a renamed def gets our `defName` and
+`label`, and every reference to it follows. The report lists the renames used. Names in the spec stay
+RimWorld's, because they are looked up in RimWorld's files.
+
 Only converted numbers and short labels are written. Descriptions, flavour text, sounds, textures
 and the raw XML are dropped and never committed. The output is the same every run.
 

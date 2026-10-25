@@ -9,6 +9,7 @@ defs listed in `rimworld_import_spec.py`, converts durations and speeds to game 
   docs/reference/<Kind>.md                 one compact table per kind
   docs/reference/import-report.md          what was found, missing, pulled in or dropped
 
+RimWorld's proper names are then swapped for ours from the table in docs/design/naming.md.
 Only the converted numbers and short labels are written. RimWorld's descriptions and raw XML are
 never copied. Standard library only. See docs/design/rimworld-import.md.
 """
@@ -27,6 +28,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import naming  # noqa: E402
 import rimworld_import_spec as spec  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
@@ -379,6 +381,41 @@ class ImportResult:
     drops: Counter
     conversions: Counter
     unresolved: Dict[str, List[str]]   # "Kind/defName.field" -> missing names
+    renamed: Dict[str, str]            # RimWorld defName -> ours, for the names that occurred
+
+
+def apply_renames(results: List[KindResult], renames: Dict[str, "naming.Rename"]) -> Dict[str, str]:
+    """Swaps RimWorld's proper names for ours (docs/design/naming.md): a renamed def gets our
+    defName and label, and every string or dictionary key elsewhere that is exactly a renamed
+    defName follows it. Returns the renames that were used."""
+    used: Dict[str, str] = {}
+
+    def swap(name: str) -> str:
+        r = renames.get(name)
+        if r is None:
+            return name
+        used[name] = r.def_name
+        return r.def_name
+
+    def walk(obj: Any) -> Any:
+        if isinstance(obj, dict):
+            return OrderedDict((swap(k) if isinstance(k, str) else k, walk(v)) for k, v in obj.items())
+        if isinstance(obj, list):
+            return [walk(v) for v in obj]
+        if isinstance(obj, str):
+            return swap(obj)
+        return obj
+
+    for r in results:
+        new_defs = []
+        for d in r.defs:
+            old = d.get("defName")
+            d = walk(d)
+            if old in renames and "label" in d:
+                d["label"] = renames[old].label
+            new_defs.append(d)
+        r.defs = new_defs
+    return used
 
 
 def run_import(rimworld: Path, packs: List[str]) -> ImportResult:
@@ -442,6 +479,7 @@ def run_import(rimworld: Path, packs: List[str]) -> ImportResult:
             things.dependencies.append(n)
             have.add(n)
 
+    renamed = apply_renames(results, naming.load_renames())
     for r in results:
         r.defs.sort(key=lambda d: d["defName"])
 
@@ -461,7 +499,7 @@ def run_import(rimworld: Path, packs: List[str]) -> ImportResult:
         if candidate.is_file():
             version = candidate.read_text(encoding="utf-8", errors="replace").strip().splitlines()[0]
             break
-    return ImportResult(results, used_packs, version, warnings, drops, conversions, unresolved)
+    return ImportResult(results, used_packs, version, warnings, drops, conversions, unresolved, renamed)
 
 
 # --- Output ---------------------------------------------------------------------------------
@@ -528,6 +566,9 @@ def report_markdown(result: ImportResult) -> str:
             L.append(f"- `{k}` -> {', '.join(sorted(set(result.unresolved[k])))}")
     else:
         L.append("None.")
+    L.append("")
+    L += ["## Renamed to our names (docs/design/naming.md)", ""]
+    L += [f"- `{k}` -> `{v}`" for k, v in sorted(result.renamed.items())] or ["None."]
     L.append("")
     L += ["## Fields dropped (presentation and prose)", ""]
     if result.drops:

@@ -2,13 +2,13 @@
 
 _Drafted 2026-10-24 with sneed. This file is the source of truth; the original Claude Doc is [here](https://claude.ai/artifact/CZyBNb87GP7E573BwEuBrq)._
 
-This is the game we are building: RimWorld's colony simulation, rebuilt in 3D in Unreal Engine 5, where you also walk the colony as one of its colonists. It fixes what the game is, so the [architecture doc](architecture.md) and every later system doc can build on it. Where you haven't decided something yet, I picked a default and marked it in the last section; change any of them by editing or commenting.
+This is the game we are building: RimWorld's colony simulation, rebuilt in 3D in Unreal Engine 5, where you also walk the colony as one of its colonists. It fixes what the game is, so the [architecture doc](architecture.md) and every later system doc can build on it. Where you haven't decided something yet, I picked a default and marked it in the last section; change any of them by editing or commenting. The story and setting are our own, set in the year 6650: see [lore.md](design/lore.md), with our names for RimWorld's in [naming.md](design/naming.md).
 
 ## Vision and pillars
 
 A story generator you can stand inside. The colony plays out like RimWorld, with the same systems, threats and long campaigns, but you see it at eye level and can pick up a rifle and join in. When two ideas conflict, these five pillars decide, in this order.
 
-1. **RimWorld's depth comes first.** Mechanics, numbers and content follow RimWorld and its expansions unless 3D forces a change. Loose resemblance is fine for art; the rules should feel the same.
+1. **RimWorld's depth comes first.** Mechanics, numbers and content follow RimWorld and its expansions unless 3D forces a change or we choose to add something of our own, such as magic. Loose resemblance is fine for art; the rules should feel the same.
 2. **You are there.** You play one colonist directly in first or third person, and can switch to a top-down overseer view at any time.
 3. **Colonists who don't need babysitting.** Work, schedules and defense run from assignments you set ahead of time. In a fight, pawns take cover, fall back and rescue each other on their own.
 4. **Grounded and physical.** Realistic lighting and materials, fire that spreads, walls that break into debris, wounds you can see, clothes that tear.
@@ -42,23 +42,23 @@ You switch freely between two modes with one key. The colony keeps running eithe
 
 ## Core loop
 
-The loop is RimWorld's: keep a growing group of people alive and sane while the storyteller throws problems at you. What changes is that you live the small moments in person.
+The loop is RimWorld's: keep a growing group of people alive and sane while the narrator throws problems at you. What changes is that you live the small moments in person.
 
 | Scale | What you do | What pushes back |
 | --- | --- | --- |
 | Minutes | Chop, haul, build a wall, shoot a raider, check on a wounded colonist | Your own needs, hunger, darkness, wild animals |
 | A day (about 48 real minutes) | Set priorities and schedules, plan new rooms, trade with a caravan, handle a mental break | Food and rest needs, moods, minor events |
 | A season (15 days) | Expand the base, research, gear up, recruit, grow and store food for winter | Raids, disease, heat waves and cold snaps, quests with deadlines |
-| A campaign (years) | Build a fortress, tame a world, chase a goal such as building a ship or a gravship to leave | Escalating raids, mechanoid clusters, the storyteller's bigger threats |
+| A campaign (years) | Build a fortress, tame a world, chase a goal such as building a ship or a skyhull to leave, or waking a Sleeper | Escalating raids, Remnant clusters, the narrator's bigger threats |
 
-The storyteller (Cassandra, Phoebe, Randy and their difficulty settings) drives the pacing, using RimWorld's threat-point rules so danger scales with colony wealth and size.
+The narrator (RimWorld's storyteller: Orrin, Maren or Jinx, with difficulty settings) drives the pacing, using RimWorld's threat-point rules so danger scales with colony wealth and size.
 
 ## Colonists
 
 Colonists work exactly like RimWorld pawns, with RimWorld's numbers as the starting point. Each system below gets its own short design doc when we build it.
 
-- **Identity:** name, age (adults only), backstories, traits, skills with passions, xenotype and genes. All rolled from a seed, so the same seed always gives the same person, looks included.
-- **Looks:** MetaHuman-based bodies and faces mixed by seed (heavy, thin, tall, muscular), skin tone, hair, body hair, scars, tattoos and gene parts such as Impid horns. Bodies are anatomically complete when unclothed.
+- **Identity:** name, age (adults only), backstories, traits, skills with passions, lineage (RimWorld's xenotype) and genes. All rolled from a seed, so the same seed always gives the same person, looks included.
+- **Looks:** MetaHuman-based bodies and faces mixed by seed (heavy, thin, tall, muscular), skin tone, hair, body hair, scars, tattoos and gene parts such as Emberkin horns. Bodies are anatomically complete when unclothed.
 - **Work:** RimWorld's work tab, with work types, priorities 1 to 4 and skill-based speed and quality. Within the same priority, pawns prefer closer jobs, which cuts down on cross-map walking.
 - **Schedules:** hourly sleep, work, recreation and anything blocks, as in RimWorld.
 - **Needs and mood:** food, rest, recreation, comfort, beauty, outdoors, temperature and the rest, feeding RimWorld's thought and mood system, with mental breaks at low mood.
@@ -89,7 +89,7 @@ Everything built has hit points, shows damage as it wears down, and breaks into 
 
 ## Threats, combat and defense
 
-Threats follow RimWorld: raids by factions, mechanoid clusters, insectoid hives, manhunter packs, sieges, sappers and drop pods, scaled by the storyteller. The difference is how colonists fight. They defend from plans you set ahead of time, and they fight sensibly without micro.
+Threats follow RimWorld: raids by factions, Remnant clusters, chitinid brood mounds, manhunter packs, sieges, sappers and drop pods, scaled by the narrator. The difference is how colonists fight. They defend from plans you set ahead of time, and they fight sensibly without micro.
 
 **Defense plans replace drafting.** You set these up once, and the alarm (manual, or automatic when a threat is spotted) puts the plan into action.
 
@@ -136,10 +136,10 @@ Your colony sits on one 1 km map, and the wider world is a RimWorld-style planet
 
 This is a private game for one player. These are the rules for now, and they can be revisited later.
 
-- **Adults only.** No children, no pregnancy, no growth stages. Biotech's gene systems apply to adults through xenogerms and gene implanting.
+- **Adults only.** No children, no pregnancy, no growth stages. Biotech's gene systems apply to adults through lineage grafts and gene implanting.
 - **Nudity yes, sex no.** Unclothed colonists are anatomically complete, and nudity matters to mood through ideology and traits, as in RimWorld. There is no sexual content of any kind.
 - **Gore yes.** Visible wounds, blood, dismemberment, bodies blown apart by explosions, ragdolls and corpses that rot.
-- **RimWorld names for now.** Item, creature and faction names come from RimWorld, stored only in data files, so renaming anything later is a one-line change that doesn't affect gameplay.
+- **Our own setting and names.** The lore is ours ([lore.md](design/lore.md)) and RimWorld's proper names (peoples, factions, enemies, narrators, places) have our own names ([naming.md](design/naming.md)). Plain words such as steel or sniper rifle stay. Names live in data files, so renaming anything is a one-line change that doesn't affect gameplay.
 - **Free assets only.** Each third-party asset is logged with its source and licence. Art only needs to fill the same role as RimWorld's, not copy it.
 
 ## Scope by milestone
@@ -149,8 +149,8 @@ We go systems first, art second. Every vanilla mechanic gets built and working w
 | Milestone | What's in it | Target |
 | --- | --- | --- |
 | Prototype | Protagonist in 1st/3rd person; overseer camera; 5 to 10 colonists who mine, chop, haul, build, cook, eat and sleep; work tab and schedules; walls, doors, beds, a stove, stockpiles; basic needs and mood; one raid type with shooter-style AI; a 512 m test map; quicksave | Weeks 3 to 4 |
-| Vanilla mechanics | Full health and medicine, apparel and armor, weapons and quality, crafting chains, research, power, mental breaks, social, fire, temperature, weather, multi-storey building, storyteller and events, animals and breeding, world map, caravans, trade, quests, full 1 km maps | Weeks 8 to 10 at 40% of a Max 5x plan |
-| Expansion pieces | Mechanitor and mechs, genes and xenotypes, psycasts, ideology roles, Anomaly entities, Odyssey content, brought in as standalone pieces first, with their quests later | Starting around week 4, ongoing |
+| Vanilla mechanics | Full health and medicine, apparel and armor, weapons and quality, crafting chains, research, power, mental breaks, social, fire, temperature, weather, multi-storey building, narrator and events, animals and breeding, world map, caravans, trade, quests, full 1 km maps | Weeks 8 to 10 at 40% of a Max 5x plan |
+| Expansion pieces | Binders and Remnant machines (Biotech's mechanitor), genes and lineages, resonance (Royalty's psycasts, our magic), creeds and roles (Ideology), the Black Spires (Anomaly), skyhulls (Odyssey), brought in as standalone pieces first, with their quests later | Starting around week 4, ongoing |
 | Art and polish | MetaHuman pawns with anatomy, the full creature and item roster, gore effects, sound, styled UI | Ongoing from week 2 |
 
 Usage is the main limit on speed. Staying on target needs two or three threads running most days, Sonnet for routine work, an Unreal session on your PC most days, and fast playtest feedback from you. We'll know at the end of week 2 whether we're on pace.
