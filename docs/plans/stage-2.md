@@ -201,7 +201,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | --- | --- | --- | --- | --- | --- | --- |
 | | A4 | **Animal art.** Free animal packs (Fab) for the D5 animals, retargeted onto a few shared skeletons; logged in `assets/manifest.json`. The thread sends sneed the download steps. | PC Unreal | Sonnet, medium | 90 min | U5, sneed's Fab download |
 | | A5 | **Clothes art.** Free clothing that fits MetaHuman bodies (MetaHuman's own outfits first) for the D6 apparel, per layer; logged in the manifest. | PC Unreal | Sonnet, high | 90 min | A3, sneed's download if needed |
-| | A6 | **Placeholder art 2.** Crops, work tables, power and climate buildings, furniture and floors, set in the defs' `visual` fields by an editor script. | PC Unreal | Sonnet, medium | 60 min | A1, D8, D11 |
+| ✓ | A6 | **Placeholder art 2.** Crops, work tables, power and climate buildings, furniture and floors, set in the defs' `visual` fields by an editor script. | PC Unreal | Sonnet, medium | 60 min | A1, D8, D11 |
 
 ### Wrap-up (G)
 

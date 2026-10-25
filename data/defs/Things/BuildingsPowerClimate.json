@@ -69,7 +69,7 @@
   ]
  },
  {
-  "defName": "WoodFiredGenerator",
+  "defName": "WoodFiredGenerator", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_WoodFiredGenerator.SM_WoodFiredGenerator" },
   "parent": "PowerBase",
   "label": "wood-fired generator",
   "size": [
@@ -157,7 +157,7 @@
   ]
  },
  {
-  "defName": "Battery",
+  "defName": "Battery", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Battery.SM_Battery" },
   "parent": "PowerBase",
   "label": "battery",
   "size": [
@@ -199,7 +199,7 @@
   ]
  },
  {
-  "defName": "Heater",
+  "defName": "Heater", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Heater.SM_Heater" },
   "parent": "ClimateBase",
   "label": "heater",
   "size": [
@@ -230,7 +230,7 @@
   ]
  },
  {
-  "defName": "Cooler",
+  "defName": "Cooler", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Cooler.SM_Cooler" },
   "parent": "ClimateBase",
   "label": "cooler",
   "size": [
@@ -316,7 +316,7 @@
   ]
  },
  {
-  "defName": "Campfire",
+  "defName": "Campfire", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Campfire.SM_Campfire" },
   "parent": "ClimateBase",
   "label": "campfire",
   "size": [
@@ -377,7 +377,7 @@
   ]
  },
  {
-  "defName": "StandingLamp",
+  "defName": "StandingLamp", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_StandingLamp.SM_StandingLamp" },
   "parent": "LampBase",
   "label": "standing lamp",
   "size": [
@@ -411,7 +411,7 @@
   ]
  },
  {
-  "defName": "SunLamp",
+  "defName": "SunLamp", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_SunLamp.SM_SunLamp" },
   "parent": "LampBase",
   "label": "sun lamp",
   "size": [
@@ -447,7 +447,7 @@
   ]
  },
  {
-  "defName": "TorchLamp",
+  "defName": "TorchLamp", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_TorchLamp.SM_TorchLamp" },
   "parent": "LampBase",
   "label": "torch lamp",
   "size": [

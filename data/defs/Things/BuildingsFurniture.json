@@ -1,6 +1,6 @@
 [
  {
-  "defName": "Armchair",
+  "defName": "Armchair", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Armchair.SM_Armchair" },
   "parent": "StuffBuildingBase",
   "label": "armchair",
   "size": [
@@ -28,7 +28,7 @@
   ]
  },
  {
-  "defName": "EndTable",
+  "defName": "EndTable", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_EndTable.SM_EndTable" },
   "parent": "StuffBuildingBase",
   "label": "end table",
   "size": [
@@ -52,7 +52,7 @@
   ]
  },
  {
-  "defName": "Dresser",
+  "defName": "Dresser", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Dresser.SM_Dresser" },
   "parent": "StuffBuildingBase",
   "label": "dresser",
   "size": [
@@ -82,7 +82,7 @@
   ]
  },
  {
-  "defName": "PlantPot",
+  "defName": "PlantPot", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_PlantPot.SM_PlantPot" },
   "parent": "StuffBuildingBase",
   "label": "plant pot",
   "size": [
