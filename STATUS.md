@@ -62,6 +62,8 @@ Since U4 the game draws buildings and items (`docs/design/building-draw.md`, smo
 
 Since U7 the player gives orders (`docs/design/orders.md`, smoke test `orders`): `UOrdersSubsystem` holds a tool for the left mouse button. The bottom bar has Orders (Mine, Chop trees, Harvest, Deconstruct, Cancel), Zones (Stockpile, Remove zone) and one button per architect category from the defs' `designationCategory`; a building is chosen with a stuff, shown as a grid-snapped ghost that is green where it can be planned and red where it can't (R turns it; a 1 x 1 building can be dragged out along a line), and everything else is dragged out as a rectangle. The sim's marks are drawn from the snapshot as instanced meshes (orange mine, green cut, yellow harvest, red deconstruct, blue stockpile cells). R drafts the selected colonist, a right click with a drafted colonist selected is a move order (on ground) or an attack order (on a pawn of another side), drafted colonists get a red ring and lines to their spot and target, and the Alarm button drafts everyone (a placeholder until F6's defence plans). Orders given while the game is paused make the sim step once so they show. Esc puts a tool down before it clears the selection. No sim changes.
 
+Since U8 the overseer has colony panels (`docs/design/panels.md`, smoke test `panels`): `UPanelsSubsystem` draws a top-left bar with Work, Schedule and Log buttons and one button per colonist coloured by mood; the Work tab (a priority 0 to 4 per colonist and kind of work, left click up, right click back) and the Schedule tab (anything, work, joy or sleep per hour); with a colonist selected a panel with needs, mood and its thoughts, skills and passions, health and bed (assign or free); with the stove selected its bills (add, change mode and count, pause, remove); and a message log under the alarm (deaths, wounds, mood trouble, finished bills, refused orders). All through commands, none changes the sim.
+
 Since U3 the game draws the ground and plants (`docs/design/terrain.md`, smoke test `world`): `UTerrainSubsystem` starts
 by itself with any sim and builds one mesh per 32 m chunk (a 1 km map is 32 x 32 chunks, about 220 ms
 to build). The ground has a vertex per cell corner at the sim's height, coloured by terrain type and soil fertility; **rock stands on it as a
@@ -203,7 +205,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-33 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7). Tick tasks in `docs/plans/stage-1.md` as they merge.
+34 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7, U8). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -254,8 +256,7 @@ smoke test `overseer`; `docs/design/overseer.md`). ~~**U9** protagonist~~ done (
 `docs/design/terrain.md`); ~~**U4** buildings and items~~ done (PC Unreal; smoke test `buildings`; `docs/design/building-draw.md`); ~~**U7** orders~~ done (PC Unreal; smoke test `orders`; `docs/design/orders.md`); **A2** terrain materials (needs sneed's Megascans) is open now.
 
 Wave 6, open now that C1 is in: ~~**C4** building~~ done (`docs/design/construction.md`; save format 10; ~~**C5** doors,
-roofs and rooms~~ done (`docs/design/rooms.md`; save format 13), ~~**C7** bills and cooking~~ done (`docs/design/bills.md`; save format 18; **U8** colony panels
-(work tab, schedule, stove bills, colonist panel) now has everything it needs), ~~**C6** food, rest and
+roofs and rooms~~ done (`docs/design/rooms.md`; save format 13), ~~**C7** bills and cooking~~ done (`docs/design/bills.md`; save format 18; ~~**U8** colony panels~~ done (PC Unreal; smoke test `panels`; `docs/design/panels.md`)), ~~**C6** food, rest and
 schedules~~ done (`docs/design/needs.md`; save format 8), ~~**F2** guns and hitboxes~~ done; ~~**C3** mining, chopping
 and harvesting~~ done (`docs/design/mining.md`; save format 14). On the PC, ~~**U9**~~ and ~~**A3** seeded looks~~ are done (smoke test `looks`; save format 16).
 U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priorities).

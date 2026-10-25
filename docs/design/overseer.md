@@ -86,7 +86,7 @@ Panels (`Overseer.UI 0` hides them):
 - **Bottom left: inspect.** A thing: label from its def, category and id, cell, ground height, hit
   point bar, and by category the pawn's speed and where it is heading, an item's stack, a
   building's footprint. A cell: terrain and height, walkable or door, the building on it and the
-  items and pawns standing in it. Needs, mood, skills and health come with U8 once the sim has them.
+  items and pawns standing in it. Needs, mood, skills and health are in the colonist panel of U8 ([panels.md](panels.md)).
 - **Bottom right: key hints.**
 
 ## Smoke test `overseer` (about 20 s)
