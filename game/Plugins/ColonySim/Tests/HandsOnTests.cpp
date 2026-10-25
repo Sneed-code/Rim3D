@@ -194,6 +194,8 @@ TEST_CASE("Hands-on: letting go stops the job, takes the mark with it, and the r
     HandFixture f;
     const CellPos rock{12, 10, 0};
     f.sim.mineables().place(rock, f.def("Rock_Sandstone"));
+    f.sim.things().spawn("TorchLamp", CellPos{11, 9, 0});  // the sim starts at midnight; the swing counts at full speed
+    f.sim.step();
     const int full = f.sim.mineables().hitPoints(rock);
     CHECK(f.work(rock).empty());
     for (int i = 0; i < 200; ++i) {

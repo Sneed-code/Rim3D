@@ -76,6 +76,7 @@ public:
 	void MarkPlantDirty(colony::CellPos Cell);
 
 	bool IsBuilt() const { return bBuilt; }
+	bool IsTextured() const { return bTextured; }
 	const FTerrainStats& GetStats() const { return Stats; }
 
 	/** Chunk numbers of a cell. */
@@ -152,6 +153,8 @@ private:
 	FVector BuiltOrigin = FVector::ZeroVector;
 	int32 ScanCursor = 0;
 	bool bBuilt = false;
+	/** Whether the ground is drawn with the terrain material (made by the TerrainMaterials commandlet) and not flat colours. */
+	bool bTextured = false;
 	bool bRoofsShown = true;
 	FTerrainStats Stats;
 

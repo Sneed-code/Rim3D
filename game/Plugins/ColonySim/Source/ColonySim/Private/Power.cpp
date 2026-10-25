@@ -426,12 +426,14 @@ void PowerGrid::balance(const GameTime& time) {
     }
 
     // Everyone's powered flag, and an event for each building whose flag changed.
+    bool anyChanged = false;
     for (uint32_t i = 0; i < members_.size(); ++i) {
         const Member& m = members_[i];
         PowerPart& part = reg.get<PowerPart>(m.entity);
         const bool now = part.net != 0 && nets_[part.net - 1].satisfied && part.on;
         if (now != part.powered) {
             part.powered = now;
+            anyChanged = true;
             if (m.info->transmitter) {
                 continue;  // conduits and switches would only add noise
             }
@@ -443,6 +445,9 @@ void PowerGrid::balance(const GameTime& time) {
             event.message = now ? "on" : "off";
             events_.push_back(std::move(event));
         }
+    }
+    if (anyChanged && onChange_) {
+        onChange_();
     }
 }
 

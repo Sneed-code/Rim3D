@@ -65,8 +65,8 @@ from the wiki), `restartReserveSeconds` (60, ours), the default sun curve and th
 5. **Flags.** Every building's `powered` is: in a served net and switched on. A change sends a
    `PowerChanged` event (not for conduits and switches).
 
-The sun is a curve from `PowerRules` (none before 05:00, full 08:00 to 16:00, none after 19:00; ours)
-until E3's light grid replaces it; wind is a constant 1.0 until E1's weather does.
+The sun is E3's sky glow. `PowerRules` still holds a fallback curve (none before 05:00, full 08:00 to 16:00,
+none after 19:00; ours) for a grid with no sun source set; wind is a constant 1.0 until E1's weather sets one.
 
 ## Asking and doing
 
@@ -82,11 +82,15 @@ until E3's light grid replaces it; wind is a constant 1.0 until E1's weather doe
 | `setDraw(b, watts)` | a consumer asks for less than its full draw (a heater that reached its temperature: E2), or negative for the def's value |
 | `shortCircuit(b, released, error)` | empties every battery on b's net, returns the energy in Wd, and sends a `ShortCircuit` event with it |
 
-**Hooks for systems that are not built yet** (all optional, set on the grid at start-up):
-`setSun(f(time) -> 0..1)` for E3, `setWind(f(time) -> factor)` for E1, and
-`setFuel(f(generator) -> bool)` for C11. **Until C11 sets it, a wood-fired generator runs without
-fuel.** Whoever merges second wires it: C11's refuelable part should answer the fuel check, and a
-generator burns `fuel.perDay` of its item while it makes power.
+**Hooks** (set on the grid by `Sim` or by the system that owns the source):
+`setSun(f(time) -> 0..1)`, wired to E3's `lights().skyGlow()`; `setWind(f(time) -> factor)` for E1
+(a constant 1.0 until then); `setFuel(f(generator) -> bool)` for C11. **Until C11 sets it, a wood-fired
+generator runs without fuel.** Whoever merges second wires it: C11's refuelable part should answer
+the fuel check, and a generator burns `fuel.perDay` of its item while it makes power.
+`setOnChange(f())` is called after a step in which any building gained or lost power; `Sim` uses it
+to make the lamp layer again, and `Lights::setActive` makes a lamp that draws power shine only while
+`running` (a flicked-off or unpowered lamp is dark). Lamps with no power part (torch lamp, campfire)
+always shine.
 
 ## Commands, events, snapshot, save
 
@@ -104,6 +108,6 @@ generator burns `fuel.perDay` of its item while it makes power.
 
 ## Not here
 
-Fuel use (C11), the sun and wind sources (E3, E1), heaters and coolers pushing room temperature (E2),
-lamps lighting the light grid (E3), the short-circuit event itself (T3), the overlay and power panel
+Fuel use (C11), the wind source (E1), heaters and coolers pushing room temperature (E2),
+the short-circuit event itself (T3), the overlay and power panel
 (U19), solar flares, power drain from damaged batteries, and conduits under buildings.

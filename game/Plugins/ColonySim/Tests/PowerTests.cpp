@@ -2,6 +2,7 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Lights.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Replay.h"
@@ -613,4 +614,38 @@ TEST_CASE("Power: a replay with flick commands plays back to the same hashes") {
     std::string error;
     POWER_REQUIRE(readReplay(text, parsed, error));
     CHECK(parsed.commands.size() == replay.commands.size());
+}
+
+TEST_CASE("Power: a lamp gives light only while it has power") {
+    Sim sim = powerSim();  // the sim starts at midnight
+    const PowerLine line = powerLine(sim);
+    const CellPos beside{16, 11, 0};
+    CHECK(sim.lights().lightAt(beside) == doctest::Approx(0.0f));  // not stepped yet: nothing is powered
+    powerRun(sim, 2);
+    CHECK(sim.lights().lightAt(beside) > 0.5f);
+
+    sim.submit(FlickCommand{line.lamp, false});
+    powerRun(sim, 2);
+    CHECK(sim.lights().lightAt(beside) == doctest::Approx(0.0f));
+    sim.submit(FlickCommand{line.lamp, true});
+    powerRun(sim, 2);
+    CHECK(sim.lights().lightAt(beside) > 0.5f);
+
+    // Cut the generator: the lamp goes dark with the net.
+    sim.submit(FlickCommand{line.generator, false});
+    powerRun(sim, 2);
+    CHECK(sim.lights().lightAt(beside) == doctest::Approx(0.0f));
+}
+
+TEST_CASE("Power: solar panels follow the light grid's sun") {
+    Sim sim = powerSim();
+    const Entity panel = powerPut(sim, "SolarGenerator", 10, 10);
+    powerWire(sim, 14, 15, 10);
+    powerPut(sim, "StandingLamp", 16, 10);
+    while (sim.time().seconds < 11 * 3600) {
+        sim.step();
+    }
+    sim.step();
+    CHECK(sim.power().wattsOf(panel) == doctest::Approx(1700.0 * sim.lights().skyGlow()).epsilon(0.001));
+    CHECK(sim.power().wattsOf(panel) > 0.0);
 }

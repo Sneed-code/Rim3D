@@ -10,6 +10,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Lights.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Needs.h"
@@ -74,6 +75,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
     }
     rooms_->update();
     power_->update();
+    lights_->update();
 }
 
 Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, EmptyStart)
@@ -104,8 +106,16 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     rooms_ = std::make_unique<Rooms>(map_, *things_, *defs_);
     mood_->setRooms(rooms_.get());
     power_ = std::make_unique<PowerGrid>(map_, *things_, *rooms_, *defs_, events_);
+    lights_ = std::make_unique<Lights>(map_, *things_, *rooms_, *defs_, time_);
+    // The sun for solar panels is the light grid's; a lamp that draws power glows only while it has it,
+    // and the lamps are made again when that changes.
+    power_->setSun([this](const GameTime&) { return static_cast<double>(lights_->skyGlow()); });
+    power_->setOnChange([this] { lights_->markDirty(); });
+    lights_->setActive([this](Entity building) { return power_->running(building); });
+    movement_->setLights(lights_.get());
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
+    jobs_->setLights(lights_.get());
     jobs_->setPower(power_.get());
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
@@ -606,6 +616,7 @@ void Sim::step() {
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     rooms_->update();
     power_->step(time_);
+    lights_->update();
     time_.seconds += 1;
     if (time_.seconds % kSecondsPerHour == 0) {
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));

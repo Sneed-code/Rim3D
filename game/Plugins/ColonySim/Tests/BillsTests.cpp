@@ -396,6 +396,7 @@ TEST_CASE("Bills: a better Cooking skill cooks faster, and a bill nobody is skil
         Sim sim = billsSim();
         const Entity stove = billsSpawn(sim, "FueledStove", kBillsStoveCell);
         billsCook(sim, CellPos{18, 18, 0}, level);
+        billsSpawn(sim, "TorchLamp", CellPos{17, 17, 0});  // the sim starts at midnight; cook at full speed
         billsSpawn(sim, "RawBerries", CellPos{19, 19, 0}, 20);
         billsAdd(sim, stove, "CookMealSimple", BillMode::Count, 1);
         return billsRunUntil(sim, 9000, [&] { return billsItemsOnMap(sim, "MealSimple") == 1; });

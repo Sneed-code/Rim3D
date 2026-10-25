@@ -106,6 +106,8 @@ public:
     void setSun(std::function<double(const GameTime&)> sun) { sun_ = std::move(sun); }
     void setWind(std::function<double(const GameTime&)> wind) { wind_ = std::move(wind); }
     void setFuel(std::function<bool(Entity)> fuel) { fuel_ = std::move(fuel); }
+    // Called after a step in which any building gained or lost power (the light grid rebuilds its lamps).
+    void setOnChange(std::function<void()> onChange) { onChange_ = std::move(onChange); }
 
     // Makes the nets again if a building was set or cleared or a switch flicked since the last
     // call. Cheap when nothing changed. The sim calls it at the end of loading and in every step.
@@ -181,6 +183,7 @@ private:
     std::function<double(const GameTime&)> sun_;
     std::function<double(const GameTime&)> wind_;
     std::function<bool(Entity)> fuel_;
+    std::function<void()> onChange_;
 
     bool dirty_ = true;
     uint64_t buildingChanges_ = 0;

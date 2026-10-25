@@ -110,7 +110,7 @@ JobSystem::StepResult JobSystem::billWork(Entity pawn, Job& job, std::string& wh
         job.walk = 2;
         pawnDid(pawn, PawnAction::Cook, job.site);
     }
-    job.progress += bills_->workSpeed(pawn, *recipe) * health_.capacityValue(pawn, "Manipulation");
+    job.progress += bills_->workSpeed(pawn, *recipe) * health_.capacityValue(pawn, "Manipulation") * lightWorkFactor(pawn);
     return job.progress < recipe->work ? StepResult::Running : StepResult::Next;
 }
 
