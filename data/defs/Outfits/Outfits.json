@@ -1,0 +1,6 @@
+[
+  {"defName": "Anything", "label": "Anything", "source": "RimWorld wiki", "note": "Wears whatever scores best. The default outfit.", "hitPoints": [0.0, 1.0], "quality": [0, 6]},
+  {"defName": "Worker", "label": "Worker", "source": "RimWorld wiki", "note": "Everyday clothes, no armor.", "disallowed": ["Apparel_FlakVest", "Apparel_FlakPants", "Apparel_SimpleHelmet"], "hitPoints": [0.0, 1.0], "quality": [0, 6], "unverified": ["disallowed"]},
+  {"defName": "Soldier", "label": "Soldier", "source": "RimWorld wiki", "note": "Armor and clothes in decent shape.", "hitPoints": [0.5, 1.0], "quality": [0, 6], "unverified": ["hitPoints"]},
+  {"defName": "Nudist", "label": "Nudist", "source": "RimWorld wiki", "note": "Hats and helmets only.", "allowed": ["Apparel_CowboyHat", "Apparel_Tuque", "Apparel_SimpleHelmet"], "hitPoints": [0.0, 1.0], "quality": [0, 6]}
+]

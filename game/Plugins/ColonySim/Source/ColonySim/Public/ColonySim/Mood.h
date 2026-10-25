@@ -5,6 +5,7 @@
 #include "ColonySim/Entity.h"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -73,6 +74,13 @@ class COLONY_API MoodSystem {
 public:
     MoodSystem(Things& things, const NeedsSystem& needs, const DefDatabase& defs);
 
+    // A condition other systems evaluate (task C15 on): a Thoughts def whose `situation.condition` is
+    // `condition` counts for a pawn while `stage` gives a stage number of the def's `stages` (0 first), and
+    // not at all for a negative number. `situation.trait` and `situation.notTrait` limit a thought to
+    // pawns with, or without, a trait.
+    using SituationStage = std::function<int(Entity pawn)>;
+    void addSituation(const std::string& condition, SituationStage stage);
+
     // Where a pawn slept decides "slept outside" (docs/design/rooms.md); without rooms nothing is outside.
     void setRooms(Rooms* rooms) { rooms_ = rooms; }
     // The room and beauty thoughts (C17, docs/design/room-stats.md) read the room stats and the beauty need.
@@ -112,6 +120,8 @@ private:
         std::vector<float> thresholds;
         std::vector<Stage> stages;
         std::vector<std::string> roomRoles;
+        std::string trait;      // staged by another system (addSituation): only for pawns with this trait
+        std::string notTrait;   // ...and not for pawns with this one
     };
     // A situation with stages (`situation.condition` and `stages` in the def): which stage holds is
     // decided by a measured number against the def's thresholds (Mood.cpp, `conditionValue`).
@@ -124,6 +134,15 @@ private:
     };
     // The number a staged thought's condition measures for this pawn, or false if it has none now.
     bool conditionValue(Entity pawn, const std::string& condition, float& value) const;
+    // A condition other systems evaluate (task C15 on): a Thoughts def whose `situation.condition` is
+    // `condition` counts for a pawn while `stage` gives a stage number of the def's `stages` (0 first), and
+    // not at all for a negative number. `situation.trait` and `situation.notTrait` limit a thought to
+    // pawns with, or without, a trait.
+    struct Situation {
+        std::string condition;
+        SituationStage stage;
+    };
+    bool hasTrait(Entity pawn, const std::string& trait) const;
     float traitMoodOffset(Entity pawn) const;
     float traitBreakOffset(Entity pawn) const;
     void addMemory(Mood& mood, const std::string& trigger, int64_t now);
@@ -137,6 +156,7 @@ private:
     MoodRules rules_;
     std::vector<Thought> thoughts_;
     std::vector<StagedThought> staged_;
+    std::vector<Situation> situations_;
 };
 
 }  // namespace colony

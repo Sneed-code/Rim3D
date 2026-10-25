@@ -16,6 +16,7 @@
 
 namespace colony {
 
+class ApparelStats;
 class HealthSystem;
 class Map;
 class StateHasher;
@@ -185,6 +186,9 @@ struct PawnHitResult {
     int part = -1;     // -1: the pawn has no hitboxes, so the caller lets health pick a part
     DefId damageType;  // Blunt if armor turned a sharp hit blunt
     float amount = 0.0f;
+    // Worn pieces that stopped or softened the hit and the hit points each loses (C15); the caller
+    // passes the result to CombatSystem::wearApparel.
+    std::vector<std::pair<Entity, int>> wear;
 };
 
 struct CombatModel;
@@ -205,6 +209,14 @@ public:
     // The item may be on the map (it is picked up) or not. False, changing nothing, if the pawn
     // has no body, is dead, or the item is neither a gun nor apparel, or is someone else's.
     bool equip(Entity pawn, Entity item, std::string* why = nullptr);
+    // Takes one worn piece (or the gun) off and puts it on the ground where the pawn stands. False if
+    // the pawn doesn't have it.
+    bool unequip(Entity pawn, Entity item);
+    // Takes `hitPoints` off a worn piece of apparel; at none it is destroyed (an ApparelDestroyed
+    // event). Used when armor takes a hit and by wear and tear (C15).
+    void damageApparel(Entity pawn, Entity item, int hitPoints);
+    // What the defs and the item's stuff and quality make of a piece of apparel (Apparel.h).
+    const ApparelStats& apparelStats() const { return *apparelStats_; }
     // Takes all of a pawn's gear off and puts it on the ground where it stands (or destroys it if
     // the pawn is off the map). For pawns about to be destroyed.
     void dropGear(Entity pawn);
@@ -306,6 +318,8 @@ public:
     // the caller does (HealthSystem::applyHit), so bullets and melee strikes land the same way (F8).
     PawnHitResult hitPawn(Entity pawn, int hitboxPart, DefId damageType, float amount, float penetration,
                           uint64_t seed) const;
+    // Takes the hit points off the pieces `result.wear` names; a piece at none is destroyed.
+    void wearApparel(Entity pawn, const PawnHitResult& result);
     // The radius around a standing man's chest, seen from the front, in which a point picked evenly
     // lands on him with this chance (the table aimed shots use). Melee strikes use it too (F8).
     float spreadRadiusFor(float chance) const;
@@ -318,6 +332,7 @@ private:
     Map& map_;
     HealthSystem& health_;
     std::unique_ptr<CombatModel> model_;
+    std::unique_ptr<ApparelStats> apparelStats_;
     std::vector<Event>* events_ = nullptr;
     std::function<void(Entity)> beforeDestroy_;
     std::vector<Entity> scratch_;
@@ -327,9 +342,10 @@ private:
     void updateShooter(Entity pawn, Shooter& s, Rng& rng);
     void startReload(Entity pawn, Shooter& s, Entity weapon, int extraSteps);
     void drop(Entity pawn, Entity item);
-    // The armor rolls of a hit on `part` (shared by bullets and fragments): the damage left, 0 if
-    // the armor turned it away, and the damage type (sharp may become blunt). Uses `rng`.
-    float armorPass(Entity pawn, int part, DefId& type, float damage, float penetration, Rng& rng) const;
+    // The armor rolls of a hit on `part` (shared by bullets, blows and blast fragments): the damage
+    // left (deflected if the armor turned it away), the damage type (sharp may become blunt) and the
+    // wear on the pieces. Uses `rng`.
+    PawnHitResult armorPass(Entity pawn, int part, DefId damageType, float damage, float penetration, Rng& rng) const;
     int pickOutsidePart(Entity pawn, Rng& rng) const;
     void stepRolls();
     void stepKicks();

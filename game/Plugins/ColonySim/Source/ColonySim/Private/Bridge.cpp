@@ -97,9 +97,19 @@ const char* commandName(const Command& command) {
                 return "Explode";
             } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
                 return "Melee";
-            } else {
-                static_assert(std::is_same_v<Type, DodgeRollCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
                 return "DodgeRoll";
+            } else if constexpr (std::is_same_v<Type, SetOutfitCommand>) {
+                return "SetOutfit";
+            } else if constexpr (std::is_same_v<Type, EditOutfitCommand>) {
+                return "EditOutfit";
+            } else if constexpr (std::is_same_v<Type, AddOutfitCommand>) {
+                return "AddOutfit";
+            } else if constexpr (std::is_same_v<Type, RemoveOutfitCommand>) {
+                return "RemoveOutfit";
+            } else {
+                static_assert(std::is_same_v<Type, StripCommand>, "name every command type");
+                return "Strip";
             }
         },
         command);
@@ -164,6 +174,7 @@ const char* eventTypeName(EventType type) {
         case EventType::PawnKnockedDown: return "PawnKnockedDown";
         case EventType::MeleeSwing: return "MeleeSwing";
         case EventType::MeleeHit: return "MeleeHit";
+        case EventType::ApparelDestroyed: return "ApparelDestroyed";
     }
     return "?";
 }

@@ -119,8 +119,8 @@ injury); under all of it halves the damage and turns a sharp hit blunt (a bruise
 layers still use their sharp rating. Flak vest (torso and neck, 100% sharp), flak pants (legs, 55%)
 and a simple helmet (upper head and ears, 45%, the steel one: RimWorld makes it from any metal and
 Crashlanded's is plasteel; materials come later). Against a revolver (18%) a flak vest stops 41% of
-torso hits and halves another 41%. Apparel doesn't wear down from hits yet (clothing repair is a
-design goal), and the vest's and pants' movement penalty (`equippedStatOffsets`) isn't applied yet.
+torso hits and halves another 41%. Since C15 every piece has its own armor (stuff, quality) and wears down
+by what it absorbs ([apparel.md](apparel.md)), and the vest's and pants' movement penalty (`equippedStatOffsets`) isn't applied yet.
 
 ## Gear
 
