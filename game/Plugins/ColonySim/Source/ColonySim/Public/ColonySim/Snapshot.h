@@ -331,6 +331,21 @@ struct WeatherView {
     float snowCover = 0.0f;   // share of the map's cells with snow
 };
 
+// A talent rank the protagonist has bought (docs/design/talents.md).
+struct TalentRankView {
+    DefId talent;  // a Talents def
+    int rank = 0;
+};
+
+// The protagonist's talent progress. One entry per pawn that has talents, in id order.
+struct TalentView {
+    Entity pawn = kNoEntity;
+    int64_t xp = 0;
+    int64_t xpForNextPoint = 0;  // total XP at which the next point comes (0 at the top)
+    int pointsFree = 0;
+    std::vector<TalentRankView> ranks;  // in Talents def order
+};
+
 struct Snapshot {
     int64_t gameSeconds = 0;  // Sim::time().seconds when it was written
     int mapWidth = 0;
@@ -354,6 +369,7 @@ struct Snapshot {
     std::vector<PawnLooksView> looks;      // see ThingView::looks
     std::vector<PowerNetView> powerNets;   // by id - 1, see ThingView::powerNet
     std::vector<ResearchView> research;    // every project, in def order
+    std::vector<TalentView> talents;       // see TalentView
     // Floors and filth, in cell order. Rewritten only when `floorChanges` / `filthChanges` goes up.
     std::vector<FloorView> floors;
     uint64_t floorChanges = ~0ULL;

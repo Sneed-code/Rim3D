@@ -6,6 +6,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Movement.h"
+#include "ColonySim/Talents.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Weather.h"
 
@@ -1087,7 +1088,8 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
     }
     const float accuracyFactor =
         weather_ != nullptr ? weather_->accuracyAt(CellPos{static_cast<int>(std::floor(pos.x)), static_cast<int>(std::floor(pos.y)), pos.level}) : 1.0f;
-    fire(pawn, fx, fy, fz, spread(weaponDef, skill, distance, s.player, accuracyFactor) + s.recoil, rng, kickUp, kickSide);
+    const float steady = talents_ != nullptr ? static_cast<float>(talents_->statFactor(pawn, "aimSpread")) : 1.0f;
+    fire(pawn, fx, fy, fz, spread(weaponDef, skill, distance, s.player, accuracyFactor) * steady + s.recoil, rng, kickUp, kickSide);
     const float skillFactor = std::max(0.0f, 1.0f - model_->recoilSkillReduction * static_cast<float>(skill));
     s.recoil += gun->recoil * skillFactor;
     if (kicks) {

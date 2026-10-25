@@ -31,6 +31,7 @@
 #include "ColonySim/Mood.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Research.h"
+#include "ColonySim/Talents.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
 #include "ColonySim/Zones.h"
@@ -383,6 +384,11 @@ struct SaveData {
     SaveMineables mineables;           // format 12 on
     SaveDesignations designations;     // format 12 on
     ResearchState research;            // section "research"
+    // Section "talents" (P3): per protagonist, parallel lists in pawn order.
+    std::vector<Entity> talentPawns;
+    std::vector<int64_t> talentXp;
+    std::vector<std::vector<std::string>> talentNames;
+    std::vector<std::vector<int32_t>> talentRanks;
     // Section "roomstats" (C17): floors, filth, what pawns carry on their shoes, beauty needs.
     bool hasRoomStats = false;
     std::vector<SaveFloor> floors;
@@ -1095,6 +1101,12 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 auto* setWeather = &c;
                 ar.text("weather", setWeather->weather);
                 ar.value("hours", setWeather->hours);
+            } else if constexpr (std::is_same_v<Type, SpendTalentPointCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.text("talent", c.talent);
+            } else if constexpr (std::is_same_v<Type, AddTalentXpCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.value("amount", c.amount);
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }
@@ -1908,6 +1920,24 @@ void saveResearch(Ar& ar, ResearchState& r) {
 }
 
 template <typename Ar>
+void saveTalents(Ar& ar, SaveData& d) {
+    ar.list("pawns", d.talentPawns, [&](Entity& pawn) { ar.value(nullptr, pawn); });
+    ar.list("xp", d.talentXp, [&](int64_t& xp) { ar.value(nullptr, xp); });
+    ar.list("names", d.talentNames, [&](std::vector<std::string>& names) {
+        ar.list(nullptr, names, [&](std::string& name) { ar.text(nullptr, name); });
+    });
+    ar.list("ranks", d.talentRanks, [&](std::vector<int32_t>& ranks) {
+        ar.list(nullptr, ranks, [&](int32_t& rank) { ar.value(nullptr, rank); });
+    });
+    ar.require(d.talentPawns.size() == d.talentXp.size() && d.talentPawns.size() == d.talentNames.size() &&
+                   d.talentPawns.size() == d.talentRanks.size(),
+               "the save file's talent lists don't match");
+    for (size_t i = 0; i < d.talentPawns.size(); ++i) {
+        ar.require(d.talentNames[i].size() == d.talentRanks[i].size(), "the save file's talent lists don't match");
+    }
+}
+
+template <typename Ar>
 void saveRoomStatsSection(Ar& ar, SaveData& d) {
     d.hasRoomStats = true;
     ar.list("floors", d.floors, [&](SaveFloor& f) {
@@ -2230,6 +2260,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "joy", e, &SaveEntity::joy, [&](SaveJoy& j) { saveJoyPart(ar, j); });
     });
     ar.section("research", 1, [&] { saveResearch(ar, d.research); });
+    ar.section("talents", 1, [&] { saveTalents(ar, d); });
     ar.section("roomstats", 1, [&] { saveRoomStatsSection(ar, d); });
     ar.section("animals", 1, [&] {
         ar.value("wildAnimals", d.wildAnimals);
@@ -2705,6 +2736,16 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         d.designations.kinds.push_back(static_cast<uint8_t>(kind));
     }
     d.research = sim.research_->state();
+    for (const auto& [pawn, s] : sim.talents_->states()) {
+        d.talentPawns.push_back(pawn);
+        d.talentXp.push_back(s.xp);
+        d.talentNames.emplace_back();
+        d.talentRanks.emplace_back();
+        for (const auto& [name, rank] : s.ranks) {
+            d.talentNames.back().push_back(name);
+            d.talentRanks.back().push_back(rank);
+        }
+    }
     d.hasRoomStats = true;
     for (const auto& [cell, def] : sim.floors_->all()) {
         d.floors.push_back(SaveFloor{static_cast<uint32_t>(cell), sim.defs_->get(def).defName()});
@@ -3319,6 +3360,24 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     } else {
         // A save from before the weather: it begins clear at the time the game had reached.
         sim.weather_->restore(sim.weather_->state(), {}, d.seconds);
+    }
+    {
+        // Talents of a pawn that is gone, or of a talent the data files dropped, are forgotten.
+        sim.talents_->states().clear();
+        for (size_t i = 0; i < d.talentPawns.size(); ++i) {
+            if (!sim.things_->exists(d.talentPawns[i])) {
+                continue;
+            }
+            TalentState state;
+            state.xp = std::max<int64_t>(0, d.talentXp[i]);
+            for (size_t k = 0; k < d.talentNames[i].size(); ++k) {
+                const TalentDef* talent = sim.talents_->find(d.talentNames[i][k]);
+                if (talent != nullptr && d.talentRanks[i][k] > 0) {
+                    state.ranks[talent->defName] = std::min(d.talentRanks[i][k], talent->maxRank);
+                }
+            }
+            sim.talents_->states()[d.talentPawns[i]] = std::move(state);
+        }
     }
     sim.time_.seconds = d.seconds;
     sim.rng_.restore(d.rngState, d.rngIncrement);

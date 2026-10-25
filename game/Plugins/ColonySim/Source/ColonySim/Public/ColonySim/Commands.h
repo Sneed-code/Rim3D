@@ -503,6 +503,20 @@ struct SetWeatherCommand {
     float hours = 0.0f;
 };
 
+// Talents (task P3, docs/design/talents.md): the protagonist spends talent points on one more rank of a
+// talent. Fails for a pawn that has no talents, a talent that doesn't exist or is at its top rank, a
+// requirement missing, or too few points.
+struct SpendTalentPointCommand {
+    Entity pawn = kNoEntity;
+    std::string talent;
+};
+
+// Dev command: adds talent XP to the protagonist.
+struct AddTalentXpCommand {
+    Entity pawn = kNoEntity;
+    int64_t amount = 0;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -519,7 +533,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              MeleeCommand, DodgeRollCommand,
                              SetOutfitCommand, EditOutfitCommand, AddOutfitCommand, RemoveOutfitCommand,
                              StripCommand, SetWeatherCommand, MarkAnimalCommand, SetTrainingCommand,
-                             CreateAnimalZoneCommand, RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand>;
+                             CreateAnimalZoneCommand, RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand,
+                             SpendTalentPointCommand, AddTalentXpCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

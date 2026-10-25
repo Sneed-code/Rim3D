@@ -174,6 +174,7 @@ class Pathfinder;
 class Plants;
 class PowerGrid;
 class ResearchSystem;
+class TalentSystem;
 class Rooms;
 class Things;
 class WorkGiver;
@@ -278,6 +279,7 @@ public:
     void setAnimalHauler(Entity animal, bool on);
     void setAnimalWorkGate(std::function<bool(Entity)> gate) { animalGate_ = std::move(gate); }
     ResearchSystem* research() const { return research_; }
+    void setTalents(const TalentSystem* talents) { talents_ = talents; }
 
     // Call before a thing is destroyed: ends the jobs that carry it or are done by it.
     void forget(Entity thing);
@@ -522,6 +524,7 @@ private:
     ResearchSystem* research_ = nullptr;
     Husbandry* husbandry_ = nullptr;
     std::function<bool(Entity)> animalGate_;
+    const TalentSystem* talents_ = nullptr;  // build speed and carrying capacity (docs/design/talents.md)
     RecreationRules recreation_;
     std::unique_ptr<BillSystem> bills_;
     const PowerGrid* power_ = nullptr;

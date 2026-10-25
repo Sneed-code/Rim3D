@@ -61,6 +61,7 @@ enum class EventType : uint8_t {
     ApparelDestroyed,  // a worn piece wore out or was shot to pieces: `thing` the wearer, `def` the piece's def (docs/design/apparel.md)
     WeatherChanged,  // the weather began to change into another kind (docs/design/weather.md)
     SeasonChanged,   // a new season began
+    TalentPoint,     // the protagonist earned a talent point (docs/design/talents.md)
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -136,6 +137,7 @@ struct Event {
     // (none for a release or a starving), `cell` where. AnimalTrained: also `message` the trick (Trainable name),
     // `amount` the steps it has now and `part` the steps it needs. AnimalAttemptFailed: `message` "tame" or the
     // trick, `amount` the chance the attempt had.
+    // TalentPoint: `thing` the protagonist, `def` its def, `amount` the points it can spend now.
     // ShortCircuit: `thing` the building it happened at, `cell` its origin, `amount` the energy
     // released from the net's batteries, Wd.
     // ItemSpoiled: `thing` the item (it is destroyed right after; forget its id), `def` its def, `cell` where it

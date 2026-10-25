@@ -18,6 +18,7 @@ namespace colony {
 
 class ApparelStats;
 class HealthSystem;
+class TalentSystem;
 class Map;
 class StateHasher;
 class Things;
@@ -204,6 +205,8 @@ public:
     void setEventLog(std::vector<Event>* events) { events_ = events; }
     // Weather and snow cut a shooter's hit chance under the open sky (docs/design/weather.md).
     void setWeather(const Weather* weather) { weather_ = weather; }
+    // The protagonist's talents make the spread of its shots smaller (docs/design/talents.md).
+    void setTalents(const TalentSystem* talents) { talents_ = talents; }
     // Called before combat destroys a thing (a building shot to pieces), so jobs can let go of it.
     void setBeforeDestroy(std::function<void(Entity)> hook) { beforeDestroy_ = std::move(hook); }
 
@@ -339,6 +342,7 @@ private:
     std::unique_ptr<ApparelStats> apparelStats_;
     std::vector<Event>* events_ = nullptr;
     const Weather* weather_ = nullptr;
+    const TalentSystem* talents_ = nullptr;
     std::function<void(Entity)> beforeDestroy_;
     std::vector<Entity> scratch_;
 

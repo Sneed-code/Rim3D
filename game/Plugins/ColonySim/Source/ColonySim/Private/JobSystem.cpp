@@ -12,6 +12,7 @@
 #include "ColonySim/Movement.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Talents.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -515,7 +516,9 @@ int JobSystem::stackLimit(DefId def) const {
 
 double JobSystem::carryCapacity(Entity pawn) const {
     const Thing* thing = things_.registry().try_get<Thing>(pawn);
-    return thing ? defs_.get(thing->def).number("stats.carryingCapacity", kJobsCarryingCapacity) : kJobsCarryingCapacity;
+    const double capacity =
+        thing ? defs_.get(thing->def).number("stats.carryingCapacity", kJobsCarryingCapacity) : kJobsCarryingCapacity;
+    return talents_ != nullptr ? capacity * talents_->statFactor(pawn, "carryCapacity") : capacity;
 }
 
 double JobSystem::massOf(DefId def) const {
@@ -1108,7 +1111,8 @@ JobSystem::StepResult JobSystem::place(Entity pawn, Job& job, std::string& why) 
 // pawn's first second of work, which sends the PawnAction.
 
 float JobSystem::constructionSpeed(Entity pawn) const {
-    return construction_.skillSpeed(pawn) * health_.capacityValue(pawn, "Manipulation") * lightWorkFactor(pawn);
+    const float talent = talents_ != nullptr ? static_cast<float>(talents_->statFactor(pawn, "buildSpeed")) : 1.0f;
+    return construction_.skillSpeed(pawn) * health_.capacityValue(pawn, "Manipulation") * lightWorkFactor(pawn) * talent;
 }
 
 JobSystem::StepResult JobSystem::deliver(Entity pawn, Job& job, std::string& why) {

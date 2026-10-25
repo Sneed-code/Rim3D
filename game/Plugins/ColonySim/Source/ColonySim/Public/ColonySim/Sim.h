@@ -47,6 +47,7 @@ class MovementSystem;
 class MoodSystem;
 class RecreationSystem;
 class ResearchSystem;
+class TalentSystem;
 class NeedsSystem;
 class RaidSystem;
 class Plants;
@@ -159,6 +160,9 @@ public:
     // Research projects and what they unlock (docs/design/research.md).
     ResearchSystem& research() { return *research_; }
     const ResearchSystem& research() const { return *research_; }
+    // The protagonist's talent XP, points and ranks (docs/design/talents.md).
+    TalentSystem& talents() { return *talents_; }
+    const TalentSystem& talents() const { return *talents_; }
     // Guns, projectiles, hitboxes and armor (docs/design/combat.md).
     CombatSystem& combat() { return *combat_; }
     const CombatSystem& combat() const { return *combat_; }
@@ -313,6 +317,7 @@ private:
     std::unique_ptr<MoodSystem> mood_;
     std::unique_ptr<RecreationSystem> recreation_;
     std::unique_ptr<ResearchSystem> research_;
+    std::unique_ptr<TalentSystem> talents_;
     std::unique_ptr<CombatSystem> combat_;
     std::unique_ptr<ExplosiveSystem> explosives_;  // after combat_ and health_
     std::unique_ptr<ApparelSystem> apparel_;  // after combat, which it uses
