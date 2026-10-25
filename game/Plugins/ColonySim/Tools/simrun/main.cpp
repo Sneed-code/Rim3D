@@ -4,6 +4,7 @@
 //   simrun --seed 42 --size 1024 --days 1 --pawns 20 --items 300   (Stage 0 sim speed test)
 //   simrun --seed 42 --size 512 --days 0 --regions regions.png   (picture of regions and groups)
 //   simrun --seed 42 --size 512 --days 0 --sight sight.png   (what a pawn sees among test walls)
+//   simrun --size 64 --days 0 --light light.png --hour 22   (light at that hour round lamps and a roofed room)
 //   simrun --replay bug.replay.json            (plays a replay and says whether it matched)
 //   simrun --replay scenario.json --record out.replay.json
 //   simrun --seed 42 --size 1024 --days 1 --pawns 100 --items 2000 --data game/Plugins/ColonySim/Tests/data
@@ -22,6 +23,7 @@
 #include "ColonyScenario.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Lights.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Cover.h"
@@ -76,6 +78,8 @@ struct Options {
     std::string replay;
     std::string record;
     std::string sightPng;
+    std::string lightPng;
+    double lightHour = 22.0;  // --light: the hour of day to draw
     std::string load;
     std::string save;
     std::string saveJson;
@@ -119,6 +123,10 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.regionsPng = argv[++i];
         } else if (std::strcmp(arg, "--sight") == 0 && hasValue) {
             out.sightPng = argv[++i];
+        } else if (std::strcmp(arg, "--light") == 0 && hasValue) {
+            out.lightPng = argv[++i];
+        } else if (std::strcmp(arg, "--hour") == 0 && hasValue) {
+            out.lightHour = std::atof(argv[++i]);
         } else if (std::strcmp(arg, "--data") == 0 && hasValue) {
             out.data = argv[++i];
         } else if (std::strcmp(arg, "--replay") == 0 && hasValue) {
@@ -134,7 +142,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--scenario colony [--verbose]] [--check] [--png FILE] [--regions FILE] [--sight FILE] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--scenario colony [--verbose]] [--check] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE]\n");
             return false;
         }
@@ -409,6 +417,96 @@ bool writeSightPng(colony::Sim& sim, const std::string& path, uint64_t seed) {
         }
     }
     return stbi_write_png(path.c_str(), w, h, 3, pixels.data(), w * 3) != 0;
+}
+
+// Light picture (docs/design/light.md): builds a walled, roofed room with a torch lamp inside, a torch
+// lamp and a campfire outside (one of them behind a wall) on the nearest open ground to the middle,
+// runs the game to `hour` of the day and draws the light of every cell, six pixels a cell. Cells under
+// a roof get a blue tint, lamps are red dots.
+bool writeLightPng(colony::Sim& sim, const std::string& path, double hour) {
+    const colony::Map& map = sim.map();
+    const int w = map.width();
+    const int h = map.height();
+    constexpr int kAreaW = 30;
+    constexpr int kAreaH = 20;
+    colony::CellPos origin{-1, -1, 0};
+    int bestFar = 1 << 30;
+    for (int y = 1; y + kAreaH < h - 1; y += 2) {
+        for (int x = 1; x + kAreaW < w - 1; x += 2) {
+            const int far = std::abs(x + kAreaW / 2 - w / 2) + std::abs(y + kAreaH / 2 - h / 2);
+            if (far >= bestFar) {
+                continue;
+            }
+            bool open = true;
+            for (int dy = 0; dy < kAreaH && open; ++dy) {
+                for (int dx = 0; dx < kAreaW; ++dx) {
+                    open = open && map.walkable(colony::CellPos{x + dx, y + dy, 0});
+                }
+            }
+            if (open) {
+                bestFar = far;
+                origin = colony::CellPos{x, y, 0};
+            }
+        }
+    }
+    if (origin.x < 0) {
+        std::fprintf(stderr, "no open ground of %d x %d cells for the light picture (try --size 128)\n", kAreaW, kAreaH);
+        return false;
+    }
+    colony::Things& things = sim.things();
+    for (int y = 2; y <= 10; ++y) {
+        for (int x = 2; x <= 12; ++x) {
+            if (x == 2 || x == 12 || y == 2 || y == 10) {
+                things.spawn("Wall", colony::CellPos{origin.x + x, origin.y + y, 0});
+            }
+        }
+    }
+    things.spawn("TorchLamp", colony::CellPos{origin.x + 7, origin.y + 6, 0});   // inside the room
+    things.spawn("TorchLamp", colony::CellPos{origin.x + 16, origin.y + 6, 0});  // outside, east of the room
+    for (int y = 12; y <= 16; ++y) {
+        things.spawn("Wall", colony::CellPos{origin.x + 22, origin.y + y, 0});   // a wall casting a shadow
+    }
+    things.spawn("Campfire", colony::CellPos{origin.x + 20, origin.y + 14, 0});
+    sim.stepMany(static_cast<int64_t>(hour * static_cast<double>(colony::kSecondsPerHour)));
+
+    const colony::Lights& lights = sim.lights();
+    constexpr int kScale = 6;
+    const int pw = w * kScale;
+    const int ph = h * kScale;
+    std::vector<unsigned char> pixels(static_cast<size_t>(pw) * static_cast<size_t>(ph) * 3);
+    int lit = 0;
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            const colony::CellPos c{x, y, 0};
+            const float light = lights.lightAt(c);
+            lit += light >= 0.3f ? 1 : 0;
+            const bool roofed = map.roof(c) != colony::Roof::None;
+            const float v = 30.0f + 225.0f * light;
+            unsigned char rgb[3] = {static_cast<unsigned char>(v * (roofed ? 0.8f : 1.0f)),
+                                    static_cast<unsigned char>(v * (roofed ? 0.85f : 1.0f)),
+                                    static_cast<unsigned char>(roofed ? std::min(255.0f, v * 1.15f + 10.0f) : v * 0.9f)};
+            if (map.passage(c) == colony::Passage::Blocked) {
+                rgb[0] = rgb[1] = rgb[2] = static_cast<unsigned char>(40.0f + 60.0f * light);
+            }
+            for (const colony::LightSource& s : lights.sources()) {
+                if (s.cell == c) {
+                    rgb[0] = 255; rgb[1] = 40; rgb[2] = 40;
+                }
+            }
+            for (int py = 0; py < kScale; ++py) {
+                for (int px = 0; px < kScale; ++px) {
+                    const size_t i = (static_cast<size_t>(y * kScale + py) * static_cast<size_t>(pw) + static_cast<size_t>(x * kScale + px)) * 3;
+                    pixels[i] = rgb[0];
+                    pixels[i + 1] = rgb[1];
+                    pixels[i + 2] = rgb[2];
+                }
+            }
+        }
+    }
+    std::printf("{\"hour\":%.1f,\"skyGlow\":%.2f,\"lightSources\":%zu,\"litCells\":%d,\"lightRebuilds\":%llu}\n", hour,
+                static_cast<double>(lights.skyGlow()), lights.sources().size(), lit,
+                static_cast<unsigned long long>(lights.rebuilds()));
+    return stbi_write_png(path.c_str(), pw, ph, 3, pixels.data(), pw * 3) != 0;
 }
 
 }  // namespace
@@ -768,6 +866,10 @@ int main(int argc, char** argv) {
     }
     if (!options.sightPng.empty() && !writeSightPng(sim, options.sightPng, options.seed)) {
         std::fprintf(stderr, "could not write %s\n", options.sightPng.c_str());
+        return 1;
+    }
+    if (!options.lightPng.empty() && !writeLightPng(sim, options.lightPng, options.lightHour)) {
+        std::fprintf(stderr, "could not write %s\n", options.lightPng.c_str());
         return 1;
     }
     if (!options.png.empty() && !writeMapPng(sim, options.png)) {
