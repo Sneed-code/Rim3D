@@ -65,7 +65,7 @@ Anything that fails returns `kNoEntity` (or `false`) and changes nothing.
 - **Don't add or remove components on other entities while iterating a view of those
   components.** Collect first, then change.
 - **Unreal doesn't include `Things.h`.** `Sim.h` only forward-declares `Things`, and Unreal will
-  read things through the snapshot (S5). Grid headers include only EnTT's small `entity.hpp`, so
+  read things through the snapshot and events (`docs/design/bridge.md`). Grid headers include only EnTT's small `entity.hpp`, so
   `ColonySim.Build.cs` exposes `ThirdParty/` as a public system include path.
 - Def ids inside `Thing` are valid only for the `DefDatabase` the sim was made with. The sim
   holds that database by `shared_ptr`; `Sim(settings)` without defs has an empty one.

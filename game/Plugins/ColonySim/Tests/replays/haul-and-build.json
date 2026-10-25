@@ -1,0 +1,17 @@
+{
+  "format": "rim3d-replay",
+  "version": 1,
+  "settings": {"seed": 42, "mapSize": 128, "pawns": 10, "items": 80},
+  "endStep": 86400,
+  "commands": [
+    {"step": 0, "type": "SpawnThing", "def": "Wall", "cell": [60, 60, 0]},
+    {"step": 0, "type": "SpawnThing", "def": "Wall", "cell": [61, 60, 0]},
+    {"step": 0, "type": "SpawnThing", "def": "Wall", "cell": [62, 60, 0]},
+    {"step": 30, "type": "SpawnThing", "def": "FueledStove", "cell": [70, 70, 0], "rot": "East"},
+    {"step": 600, "type": "SpawnThing", "def": "Steel", "cell": [20, 100, 0], "count": 40},
+    {"step": 601, "type": "SpawnThing", "def": "WoodLog", "cell": [80, 40, 0], "count": 75},
+    {"step": 3000, "type": "DestroyThing", "thing": 91},
+    {"step": 7200, "type": "SpawnThing", "def": "Bed", "cell": [50, 40, 0], "rot": "West"},
+    {"step": 7200, "type": "SpawnThing", "def": "NoSuchThing", "cell": [1, 1, 0]}
+  ]
+}

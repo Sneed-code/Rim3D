@@ -28,6 +28,23 @@ jobs:
         with:
           name: map-preview
           path: map.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: replay-${{ runner.os }}
+          path: build/haul-and-build.recorded.json
+
+  # The same scenario must give the same state hashes on Linux (GCC) and Windows (MSVC), so a
+  # replay recorded on sneed's PC plays the same in the cloud.
+  replay-cross-platform:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: replay-*
+      - name: Compare Linux and Windows replays
+        run: python3 tools/compare_replays.py replay-Linux/haul-and-build.recorded.json replay-Windows/haul-and-build.recorded.json
 
   data:
     runs-on: ubuntu-latest

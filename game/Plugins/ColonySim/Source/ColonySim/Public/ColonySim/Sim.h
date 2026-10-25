@@ -2,7 +2,9 @@
 
 #include "ColonySim/Api.h"
 #include "ColonySim/Clock.h"
+#include "ColonySim/Commands.h"
 #include "ColonySim/Entity.h"
+#include "ColonySim/Events.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Pathfinder.h"
@@ -12,6 +14,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace colony {
@@ -19,6 +22,7 @@ namespace colony {
 class DefDatabase;
 class Regions;
 class Things;
+struct Snapshot;
 
 struct SimSettings {
     uint64_t seed = 0;
@@ -28,6 +32,8 @@ struct SimSettings {
     bool flatMap = false;               // all soil at height 0, for tests
     std::string pawnDef = "Human";      // Things defs the hauling test spawns
     std::string haulItemDef = "Steel";
+    // Record a state hash every this many game seconds (0: never), for replays to compare.
+    int64_t checkpointEvery = kSecondsPerHour;
 };
 
 struct SimStats {
@@ -35,8 +41,14 @@ struct SimStats {
     uint64_t failedJobs = 0;
 };
 
-// The whole game state and its rules. Unreal reads it and sends commands;
-// it never changes sim state directly.
+// The state hash after a step, recorded every SimSettings::checkpointEvery game seconds.
+struct Checkpoint {
+    int64_t step = 0;  // game seconds
+    uint64_t hash = 0;
+};
+
+// The whole game state and its rules. Unreal sends commands, reads events and snapshots, and
+// never changes sim state directly (docs/design/bridge.md).
 class COLONY_API Sim {
 public:
     // A sim with no defs: a map but no things. Enough for terrain work and the Stage 0 tests.
@@ -47,10 +59,31 @@ public:
     Sim(const Sim&) = delete;
     Sim& operator=(const Sim&) = delete;
 
-    // Advances one game second.
+    // Advances one game second: applies the commands submitted since the last step, in order,
+    // then runs every system.
     void step();
     void stepMany(int64_t steps);
 
+    // Queues a command for the start of the next step. Returns its id: 1, 2, 3... in submit
+    // order, which a CommandFailed event names.
+    uint64_t submit(Command command);
+    // Every command applied so far, failed ones included.
+    const std::vector<LoggedCommand>& commandLog() const { return commandLog_; }
+
+    // What happened during the last step (before the first step: while setting up the map).
+    // Cleared when the next step starts, so read it after every step.
+    const std::vector<Event>& events() const { return events_; }
+
+    // Fills `out` with what Unreal draws, reusing its memory.
+    void writeSnapshot(Snapshot& out) const;
+
+    // Hash of the whole game state: same seed and commands, same hash. Every piece of sim state
+    // must go in it (docs/design/bridge.md). Hashes the whole map, so not for every step.
+    uint64_t stateHash() const;
+    const std::vector<Checkpoint>& checkpoints() const { return checkpoints_; }
+
+    const SimSettings& settings() const { return settings_; }
+    const DefDatabase& defs() const { return *defs_; }
     const GameTime& time() const { return time_; }
     const Map& map() const { return map_; }
     // Regions and reachability (docs/design/regions.md). Queries may rebuild, so not const.
@@ -72,6 +105,8 @@ public:
     const Pathfinder& pathfinder() const { return pathfinder_; }
 
 private:
+    void applyCommand(const Command& command, uint64_t id);
+    void commandFailed(uint64_t id, std::string message);
     void placeStockpileAndThings();
     void updateHauler(Entity pawn);
     void startNextHaul(Entity pawn);
@@ -87,6 +122,11 @@ private:
     std::vector<Entity> haulers_;
     SimStats stats_;
     std::vector<std::string> setupErrors_;
+    std::vector<std::pair<uint64_t, Command>> pending_;  // id, command
+    uint64_t submitted_ = 0;
+    std::vector<LoggedCommand> commandLog_;
+    std::vector<Event> events_;
+    std::vector<Checkpoint> checkpoints_;
 };
 
 }  // namespace colony

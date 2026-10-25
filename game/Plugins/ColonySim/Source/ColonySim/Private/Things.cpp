@@ -107,6 +107,7 @@ bool Things::spawnAt(Entity thing, CellPos cell, Rot4 rot) {
             return false;
         }
         registry_.emplace<Position>(thing, thingCellCentre(cell));
+        report(EventType::ThingSpawned, thing, cell);
         return true;
     }
 
@@ -132,6 +133,7 @@ bool Things::spawnAt(Entity thing, CellPos cell, Rot4 rot) {
     registry_.emplace<Position>(thing, Position{static_cast<float>(rect.minX) + 0.5f * static_cast<float>(rect.sizeX),
                                                 static_cast<float>(rect.minY) + 0.5f * static_cast<float>(rect.sizeY),
                                                 rect.level});
+    report(EventType::ThingSpawned, thing, cell);
     return true;
 }
 
@@ -148,6 +150,7 @@ void Things::despawn(Entity thing) {
         }
     }
     registry_.remove<Position>(thing);
+    report(EventType::ThingDespawned, thing);
 }
 
 void Things::destroy(Entity thing) {
@@ -155,7 +158,20 @@ void Things::destroy(Entity thing) {
         return;
     }
     despawn(thing);
+    report(EventType::ThingDestroyed, thing);
     registry_.destroy(thing);
+}
+
+void Things::report(EventType type, Entity thing, CellPos cell) {
+    if (events_ == nullptr) {
+        return;
+    }
+    Event event;
+    event.type = type;
+    event.thing = thing;
+    event.def = registry_.get<Thing>(thing).def;
+    event.cell = cell;
+    events_->push_back(std::move(event));
 }
 
 size_t Things::count() const {

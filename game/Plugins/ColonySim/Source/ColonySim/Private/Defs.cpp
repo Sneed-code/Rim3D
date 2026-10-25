@@ -1,5 +1,7 @@
 #include "ColonySim/Defs.h"
 
+#include "ColonySim/Hash.h"
+
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
@@ -139,7 +141,20 @@ double Def::numberAt(const char* path, size_t i, double fallback) const {
     return e.is_number() ? e.get<double>() : fallback;
 }
 
-DefDatabase::DefDatabase() : lookup_(new Lookup()) {}
+namespace {
+
+// Content hash of a database with no defs and no tuning values (see DefDatabase::build).
+uint64_t defsEmptyHash() {
+    StateHasher h;
+    h.add(static_cast<uint64_t>(0));
+    return h.value();
+}
+
+void defsHashText(StateHasher& h, const std::string& text) { h.add(text.data(), text.size()); }
+
+}  // namespace
+
+DefDatabase::DefDatabase() : lookup_(new Lookup()), contentHash_(defsEmptyHash()) {}
 DefDatabase::~DefDatabase() = default;
 DefDatabase::DefDatabase(DefDatabase&&) noexcept = default;
 DefDatabase& DefDatabase::operator=(DefDatabase&&) noexcept = default;
@@ -292,6 +307,22 @@ bool DefDatabase::build(const std::vector<DefSource>& sourcesIn, const std::stri
         out = DefDatabase();
         return false;
     }
+    // Fingerprint: defs in id order, each as kind, defName and its merged JSON (objects dump
+    // with sorted keys), then the tuning values sorted by name.
+    StateHasher hash;
+    hash.add(static_cast<uint64_t>(out.defs_.size()));
+    for (const Def& def : out.defs_) {
+        defsHashText(hash, def.kind_);
+        defsHashText(hash, def.defName_);
+        defsHashText(hash, def.data_->json.dump());
+    }
+    std::vector<std::pair<std::string, double>> sortedValues(out.lookup_->values.begin(), out.lookup_->values.end());
+    std::sort(sortedValues.begin(), sortedValues.end());
+    for (const auto& [name, value] : sortedValues) {
+        defsHashText(hash, name);
+        defsHashText(hash, Json(value).dump());
+    }
+    out.contentHash_ = hash.value();  // equals defsEmptyHash() when there is nothing
     return true;
 }
 
