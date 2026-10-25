@@ -1,8 +1,8 @@
 [
-  { "defName": "DamageTypeBase", "abstract": true, "source": "RimWorld wiki", "hediffSolid": "Crack", "unverified": ["hediffSolid"] },
-  { "defName": "Bullet", "parent": "DamageTypeBase", "label": "bullet", "hediff": "Gunshot" },
-  { "defName": "Cut", "parent": "DamageTypeBase", "label": "cut", "hediff": "Cut" },
-  { "defName": "Stab", "parent": "DamageTypeBase", "label": "stab", "hediff": "Stab" },
+  { "defName": "DamageTypeBase", "abstract": true, "source": "RimWorld wiki", "hediffSolid": "Crack", "ours": ["reachesInside"], "unverified": ["hediffSolid"], "reachesInside": false },
+  { "defName": "Bullet", "parent": "DamageTypeBase", "reachesInside": true, "label": "bullet", "hediff": "Gunshot" },
+  { "defName": "Cut", "parent": "DamageTypeBase", "reachesInside": true, "label": "cut", "hediff": "Cut" },
+  { "defName": "Stab", "parent": "DamageTypeBase", "reachesInside": true, "label": "stab", "hediff": "Stab" },
   { "defName": "Scratch", "parent": "DamageTypeBase", "label": "scratch", "hediff": "Scratch" },
   { "defName": "Bite", "parent": "DamageTypeBase", "label": "bite", "hediff": "Bite" },
   { "defName": "Blunt", "parent": "DamageTypeBase", "label": "blunt", "hediff": "Bruise" },

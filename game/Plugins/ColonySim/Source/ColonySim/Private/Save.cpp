@@ -3,6 +3,7 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
@@ -35,7 +36,7 @@ constexpr char kSaveMagic[8] = {'R', 'I', 'M', '3', 'D', 'S', 'A', 'V'};
 constexpr size_t kSaveMagicSize = sizeof kSaveMagic;
 // Bump when the layout below changes, and keep reading the old versions (the archive's
 // version() says which one a file is). Changing it needs a line in docs/design/saves.md.
-constexpr uint32_t kSaveFormatVersion = 4;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity; 4: C8's scenario and colonists
+constexpr uint32_t kSaveFormatVersion = 5;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity; 4: C8's scenario and colonists; 5: F1's pawn health
 constexpr const char* kSaveFormatName = "rim3d-save";
 constexpr const char* kSaveThingsKind = "Things";
 
@@ -66,6 +67,25 @@ struct SaveThing {
     ThingCategory category = ThingCategory::Item;
 };
 
+// A pawn's health as saved: the primary state of `Health` (what is derived is worked out again on
+// loading), with the injuries' defs by name.
+struct SaveInjury {
+    uint16_t part = 0;
+    std::string hediff;  // defName of a Hediffs def
+    float severity = 0.0f;
+    float tendQuality = -1.0f;
+};
+
+struct SaveHealth {
+    bool protagonist = false;
+    RestKind rest = RestKind::Ground;
+    std::vector<SaveInjury> injuries;
+    std::vector<MissingPart> missing;
+    float bloodLoss = 0.0f;
+    bool dead = false;
+    DeathCause cause = DeathCause::None;
+};
+
 struct SaveEntity {
     uint32_t id = 0;
     std::optional<SaveThing> thing;
@@ -79,6 +99,7 @@ struct SaveEntity {
     std::optional<HaulReservedBy> haulReservedBy;
     std::optional<HaulCarriedBy> haulCarriedBy;
     bool haulStored = false;
+    std::optional<SaveHealth> health;  // format 5 on
 };
 
 struct SavePending {
@@ -355,7 +376,7 @@ void saveCell(Ar& ar, CellPos& c) {
 
 template <typename Ar>
 void saveCommand(Ar& ar, Command& command) {
-    static_assert(std::variant_size_v<Command> == 2, "save every command type here");
+    static_assert(std::variant_size_v<Command> == 4, "save every command type here");
     uint8_t type = static_cast<uint8_t>(command.index());
     ar.value("type", type);
     if constexpr (Ar::kReading) {
@@ -363,6 +384,10 @@ void saveCommand(Ar& ar, Command& command) {
             command = SpawnThingCommand{};
         } else if (type == 1) {
             command = DestroyThingCommand{};
+        } else if (type == 2) {
+            command = DamagePawnCommand{};
+        } else if (type == 3) {
+            command = TendPawnCommand{};
         } else {
             ar.require(false, "the save file names a command this build doesn't know");
             return;
@@ -377,6 +402,14 @@ void saveCommand(Ar& ar, Command& command) {
         ar.require(static_cast<int>(spawn->rot) <= static_cast<int>(Rot4::West), "the save file has a bad rotation");
     } else if (auto* destroy = std::get_if<DestroyThingCommand>(&command)) {
         ar.value("thing", destroy->thing);
+    } else if (auto* damage = std::get_if<DamagePawnCommand>(&command)) {
+        ar.value("pawn", damage->pawn);
+        ar.text("damageType", damage->damageType);
+        ar.value("amount", damage->amount);
+        ar.value("part", damage->part);
+    } else if (auto* tend = std::get_if<TendPawnCommand>(&command)) {
+        ar.value("pawn", tend->pawn);
+        ar.value("quality", tend->quality);
     }
 }
 
@@ -491,6 +524,31 @@ void saveEntity(Ar& ar, SaveEntity& e) {
     ar.value("haulStored", e.haulStored);
     if (ar.version() >= 4) {
         ar.optional("colonist", e.colonist, [&](Colonist& c) { saveColonist(ar, c); });
+    }
+    if (ar.version() >= 5) {
+        ar.optional("health", e.health, [&](SaveHealth& h) {
+            ar.value("protagonist", h.protagonist);
+            ar.value("rest", h.rest);
+            ar.require(static_cast<int>(h.rest) <= static_cast<int>(RestKind::HospitalBed), "the save file has a bad rest kind");
+            ar.list("injuries", h.injuries, [&](SaveInjury& i) {
+                ar.value("part", i.part);
+                ar.text("hediff", i.hediff);
+                ar.value("severity", i.severity);
+                ar.value("tendQuality", i.tendQuality);
+                ar.require(i.severity >= 0.0f && i.severity < 1.0e6f, "the save file has an impossible injury");
+                ar.require(i.tendQuality >= -1.0f && i.tendQuality < 1.0e3f, "the save file has an impossible tend quality");
+            });
+            ar.list("missing", h.missing, [&](MissingPart& m) {
+                ar.value("part", m.part);
+                ar.value("tendQuality", m.tendQuality);
+                ar.require(m.tendQuality >= -1.0f && m.tendQuality < 1.0e3f, "the save file has an impossible tend quality");
+            });
+            ar.value("bloodLoss", h.bloodLoss);
+            ar.require(h.bloodLoss >= 0.0f && h.bloodLoss <= 1000.0f, "the save file has impossible blood loss");
+            ar.value("dead", h.dead);
+            ar.value("cause", h.cause);
+            ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::VitalCapacity), "the save file has a bad cause of death");
+        });
     }
 }
 
@@ -699,6 +757,20 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const Colonist* colonist = reg.try_get<Colonist>(e)) {
             out.colonist = *colonist;
         }
+        if (const Health* health = reg.try_get<Health>(e)) {
+            SaveHealth saved;
+            saved.protagonist = health->protagonist;
+            saved.rest = health->rest;
+            for (const Injury& injury : health->injuries) {
+                saved.injuries.push_back(SaveInjury{injury.part, sim.defs_->get(injury.hediff).defName(), injury.severity,
+                                                    injury.tendQuality});
+            }
+            saved.missing = health->missing;
+            saved.bloodLoss = health->bloodLoss;
+            saved.dead = health->dead;
+            saved.cause = health->cause;
+            out.health = std::move(saved);
+        }
         d.entities.push_back(std::move(out));
     }
     d.paths = sim.pathfinder_.saveState();
@@ -808,7 +880,42 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.colonist) {
             reg.emplace<Colonist>(entity, std::move(*e.colonist));
         }
+        if (e.health) {
+            Health health;
+            health.protagonist = e.health->protagonist;
+            health.rest = e.health->rest;
+            for (const SaveInjury& injury : e.health->injuries) {
+                const Def* hediff = sim.defs_->find("Hediffs", injury.hediff);
+                if (hediff == nullptr) {
+                    error = "the save has an injury of '" + injury.hediff + "', which the data files no longer have";
+                    return false;
+                }
+                health.injuries.push_back(Injury{injury.part, hediff->id(), injury.severity, injury.tendQuality});
+            }
+            health.missing = e.health->missing;
+            health.bloodLoss = e.health->bloodLoss;
+            health.dead = e.health->dead;
+            health.cause = e.health->cause;
+            const int parts = e.thing ? sim.health_->partCount(reg.get<Thing>(entity).def) : 0;
+            for (const Injury& injury : health.injuries) {
+                if (injury.part >= parts) {
+                    error = "the save has an injury on a body part its pawn doesn't have";
+                    return false;
+                }
+            }
+            for (const MissingPart& missing : health.missing) {
+                if (missing.part >= parts) {
+                    error = "the save has a lost body part its pawn doesn't have";
+                    return false;
+                }
+            }
+            reg.emplace<Health>(entity, std::move(health));
+        } else if (e.thing && e.thing->category == ThingCategory::Pawn &&
+                   sim.defs_->get(reg.get<Thing>(entity).def).has("race.body")) {
+            reg.emplace<Health>(entity);  // saved before pawns had health
+        }
     }
+    sim.health_->refreshAll();
     for (const SaveEntity& e : d.entities) {
         if (e.footprint && e.position && !things.relinkBuilding(static_cast<Entity>(e.id))) {
             error = "the save has a building that no longer fits on the map";

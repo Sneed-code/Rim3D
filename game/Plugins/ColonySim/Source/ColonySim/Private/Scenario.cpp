@@ -1,4 +1,5 @@
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Health.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Sim.h"
@@ -78,6 +79,9 @@ void Sim::startScenario() {
             things_->destroy(pawn);
             setupErrors_.push_back("scenario '" + settings_.scenario + "': '" + scenario->text("colonistKind", "Human") + "' is not a pawn");
             return;
+        }
+        if (Health* health = things_->registry().try_get<Health>(pawn)) {
+            health->protagonist = colonist.protagonist;  // 2x part hit points (docs/design/health.md)
         }
         things_->registry().emplace<Colonist>(pawn, std::move(colonist));
         used.insert(map_.index(cell));

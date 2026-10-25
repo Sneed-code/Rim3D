@@ -61,9 +61,17 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
                 j["count"] = c.count;
                 j["rot"] = kReplayRotNames[static_cast<int>(c.rot)];
-            } else {
-                static_assert(std::is_same_v<Type, DestroyThingCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, DestroyThingCommand>) {
                 j["thing"] = entt::to_integral(c.thing);
+            } else if constexpr (std::is_same_v<Type, DamagePawnCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["damageType"] = c.damageType;
+                j["amount"] = c.amount;
+                j["part"] = c.part;
+            } else {
+                static_assert(std::is_same_v<Type, TendPawnCommand>, "write every command type");
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["quality"] = c.quality;
             }
         },
         logged.command);
@@ -95,6 +103,18 @@ public:
             out = static_cast<Int>(it->get<int64_t>());
             return true;
         }
+    }
+
+    bool number(const ReplayJson& obj, const char* key, float& out, const std::string& where) {
+        const auto it = obj.find(key);
+        if (it == obj.end()) {
+            return true;
+        }
+        if (!it->is_number()) {
+            return fail(where + "." + key + " must be a number");
+        }
+        out = static_cast<float>(it->get<double>());
+        return true;
     }
 
     bool flag(const ReplayJson& obj, const char* key, bool& out, const std::string& where) {
@@ -182,6 +202,23 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = DestroyThingCommand{static_cast<Entity>(thing)};
+    } else if (type == "DamagePawn") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        DamagePawnCommand c;
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "damageType", c.damageType, where) ||
+            !r.number(j, "amount", c.amount, where) || !r.integer(j, "part", c.part, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "TendPawn") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        TendPawnCommand c;
+        if (!r.integer(j, "pawn", pawn, where) || !r.number(j, "quality", c.quality, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");
     }

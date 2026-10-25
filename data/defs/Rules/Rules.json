@@ -32,7 +32,9 @@
     "bleedRateMinForBloodLoss": 0.1,
     "medicineMaxTendQuality": { "None": 0.7, "Herbal": 0.7, "Medicine": 1.0, "Lumen": 1.3 },
     "protagonistPartHitPointsFactor": 2.0,
-    "unverified": ["bloodLossPerDayPerBleedRate", "bloodLossRecoveryPerDay", "bleedRateMinForBloodLoss"]
+    "innerInjuryAlsoHurtsOuter": true,
+    "unverified": ["bloodLossPerDayPerBleedRate", "bloodLossRecoveryPerDay", "bleedRateMinForBloodLoss", "innerInjuryAlsoHurtsOuter"],
+    "ours": ["protagonistPartHitPointsFactor", "innerInjuryAlsoHurtsOuter"]
   },
   {
     "defName": "PawnGenRules", "source": "Rim3D",

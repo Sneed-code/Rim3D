@@ -7,6 +7,7 @@
 #include "ColonySim/Entity.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Grid.h"
+#include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Pathfinder.h"
 #include "ColonySim/Random.h"
@@ -107,6 +108,12 @@ public:
     // Every pawn, item and building (docs/design/things.md).
     Things& things() { return *things_; }
     const Things& things() const { return *things_; }
+    // Body parts, injuries, bleeding, downed and death (docs/design/health.md). Damage comes in
+    // through `health().applyDamage` from other sim systems, or the DamagePawnCommand.
+    HealthSystem& health() { return *health_; }
+    const HealthSystem& health() const { return *health_; }
+    // What a health panel shows for a pawn; false if it has no body.
+    bool healthReport(Entity pawn, HealthReport& out) const { return health_->report(pawn, out); }
 
     // Problems setting up the start (e.g. a def the settings name is missing). Empty when fine.
     const std::vector<std::string>& setupErrors() const { return setupErrors_; }
@@ -135,6 +142,7 @@ private:
     void startScenario();
     void updateHauler(Entity pawn);
     void startNextHaul(Entity pawn);
+    void abandonHaul(Entity pawn);
 
     SimSettings settings_;
     std::shared_ptr<const DefDatabase> defs_;
@@ -142,6 +150,7 @@ private:
     Pathfinder pathfinder_;
     std::unique_ptr<Things> things_;
     std::unique_ptr<MovementSystem> movement_;
+    std::unique_ptr<HealthSystem> health_;
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
     Rng rng_;

@@ -23,7 +23,7 @@ runs, every queued command is applied in submit order and appended to `commandLo
 A command that can't be applied changes nothing, sends a `CommandFailed` event with its id and a
 reason, and is still logged.
 
-So far there are only two dev commands, like RimWorld's dev mode. The real ones (place blueprint,
+So far there are only four dev commands, like RimWorld's dev mode. The real ones (place blueprint,
 designate, work priorities, draft, protagonist moved and actions) come with the tasks that build
 those systems.
 
@@ -31,6 +31,8 @@ those systems.
 | --- | --- | --- |
 | `SpawnThingCommand{def, cell, count, rot}` | `Things::spawn` of a Things def | unknown def; the thing can't go there |
 | `DestroyThingCommand{thing}` | `Things::destroy` | the thing doesn't exist; the hauling placeholder is using it |
+| `DamagePawnCommand{pawn, damageType, amount, part}` | `HealthSystem::applyDamage`; `part` -1 picks like a hit would ([health.md](health.md)) | the thing has no body; unknown damage type; no damage; the pawn is dead or the part is missing or doesn't exist |
+| `TendPawnCommand{pawn, quality}` | `HealthSystem::tendAll` | the thing has no body; nothing to tend |
 
 **Speed and pause are not commands.** They decide how often Unreal calls `step()`, not what a step
 does, so they stay in `USimSubsystem`. A replay counts steps, so it doesn't need them.
@@ -55,6 +57,10 @@ starts, so read it after every step. Before the first step it holds what setting
 | `ThingDestroyed` | `thing`, `def` | a thing stops existing; comes after `ThingDespawned` if it was on the map |
 | `CommandFailed` | `command`, `message` | a command couldn't be applied |
 | `PawnAction` | `thing` (the pawn), `def`, `action`, `target` | a pawn did something Unreal animates: `PickUp`, `PutDown` (U5, [pawns.md](pawns.md)) |
+| `PawnInjured` | `thing`, `def` (the injury), `part`, `amount`, `cell` | a pawn got an injury (F1) |
+| `PawnPartLost` | `thing`, `def` (MissingBodyPart), `part`, `amount`, `cell` | a pawn lost a body part |
+| `PawnDowned`, `PawnGotUp` | `thing`, `cell` | a pawn can no longer act, or can again |
+| `PawnDied` | `thing`, `message` (the cause), `cell` | a pawn died; it stays on the map with `dead` set |
 
 `Things` reports its own spawns and despawns once the sim points it at the event list
 (`Things::setEventLog`). Later systems add their events (shot fired, wound added, job started,
@@ -65,7 +71,8 @@ letters) here. Events say what changed; positions and states are in the snapshot
 `Sim::writeSnapshot(out)` fills a `Snapshot` (reusing its memory): the game time, the map size
 and a `ThingView` per thing on the map, sorted by id (`Snapshot::find` is a binary search).
 A `ThingView` has the id, def, category, position (metres on a level), rotation and footprint
-size for buildings, stack count for items, and hit points. Things off the map (a carried item) are
+size for buildings, stack count for items, and hit points. Pawns with a body also have `downed` and
+`dead` (F1); the rest of a pawn's health is read with `Sim::healthReport`. Things off the map (a carried item) are
 not in it. Since S4 it also has the ground height under the thing (`z`), a pawn's velocity (`vx`,
 `vy`, metres per step) and the route still ahead (`waypointCount` points from
 `Snapshot::waypoints[firstWaypoint]`), see [movement.md](movement.md). Later tasks add what they draw

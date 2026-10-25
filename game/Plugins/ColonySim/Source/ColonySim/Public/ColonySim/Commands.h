@@ -29,7 +29,26 @@ struct DestroyThingCommand {
     Entity thing = kNoEntity;
 };
 
-using Command = std::variant<SpawnThingCommand, DestroyThingCommand>;
+// Dev command: hurts a pawn, like RimWorld's dev-mode damage tool. `damageType` is a DamageTypes
+// def ("Bullet", "Cut", "Blunt"...), `amount` hit points of damage, `part` an index into the
+// pawn's body (Bodies def, depth-first, torso 0) or -1 to pick at random as a hit would. Fails if
+// the pawn has no body, is dead, the type is unknown or the part is missing. Real damage comes
+// from combat (F2), not from commands.
+struct DamagePawnCommand {
+    Entity pawn = kNoEntity;
+    std::string damageType;
+    float amount = 0.0f;
+    int part = -1;
+};
+
+// Dev command: tends all of a pawn's untended injuries at this quality (0 to 1 and up), as a
+// doctor will once medicine is in. Fails if the pawn has no body, is dead, or has nothing to tend.
+struct TendPawnCommand {
+    Entity pawn = kNoEntity;
+    float quality = 1.0f;
+};
+
+using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

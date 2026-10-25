@@ -29,10 +29,10 @@ layer in step with it; `Sim::things()` gives access. Each thing is made from a d
 | every thing | `Thing` (def id, category) | `category`: `Item`, `Building` or `Pawn` |
 | `Item` | `StackCount`, `HitPoints` if the def has them | `stackLimit` (1 if absent), `stats.maxHitPoints` |
 | `Building` | `Footprint`, `HitPoints` | `size` `[x, z]` (1x1 if absent), `passability` (`Impassable` blocks movement), `thingClass` (`Building_Door` makes a door), `stats.maxHitPoints` |
-| `Pawn` | `Mover` (speed, route, velocity; [movement.md](movement.md)) | `stats.moveSpeed`, metres per game second (converted from cells per second); 4 m/s at 1x if absent |
+| `Pawn` | `Mover` (speed, route, velocity; [movement.md](movement.md)), `Health` if the def has `race.body` ([health.md](health.md)) | `stats.moveSpeed`, metres per game second (converted from cells per second); 4 m/s at 1x if absent |
 
 Plants are not things: they are a grid layer (task C2), because a 1 km map holds hundreds of
-thousands of them. Projectiles and corpses come with combat (F2) and health (F1). Any other
+thousands of them. Projectiles come with combat (F2); a dead pawn stays on the map as a pawn with `dead` set (health.md). Any other
 category, or a def of another kind, makes nothing.
 
 **Spawned or not.** A thing on the map has a `Position` (metres on a level: the centre of its

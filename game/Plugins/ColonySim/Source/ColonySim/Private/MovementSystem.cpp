@@ -1,5 +1,6 @@
 #include "MovementSystem.h"
 
+#include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Random.h"
@@ -121,7 +122,17 @@ void MovementSystem::step(entt::registry& reg, const Map& map) {
     for (size_t index = 0; index < agents_.size(); ++index) {
         Agent& a = agents_[index];
         Mover& mover = reg.get<Mover>(a.entity);
-        const float base = mover.metresPerStep;
+        // Injuries slow a pawn down (its Moving capacity); a downed or dead one doesn't walk.
+        const Health* health = reg.try_get<Health>(a.entity);
+        const float base = mover.metresPerStep * (health != nullptr ? health->movingFactor : 1.0f);
+        if (base <= 0.0f) {
+            // Downed or dead: it stays where it is. Others still steer around it.
+            a.newVx = 0.0f;
+            a.newVy = 0.0f;
+            mover.blockedSteps = 0;
+            mover.heldSteps = 0;
+            continue;
+        }
         const float accel = base * kMoveAccelFraction;
 
         // Where to: skip the waypoints already reached.
