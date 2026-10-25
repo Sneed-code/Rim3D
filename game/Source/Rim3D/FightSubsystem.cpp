@@ -17,6 +17,7 @@
 
 #include <imgui.h>
 
+#include "OrdersSubsystem.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
 #include "ProtagonistPawn.h"
@@ -1108,11 +1109,14 @@ void UFightSubsystem::UpdatePlayerInput()
 	{
 		return;
 	}
-	if (PC->IsInputKeyDown(EKeys::LeftMouseButton))
+	// With a building in hand the mouse button plans it and R turns it (UHandsOnSubsystem), so the gun stays quiet.
+	const UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>();
+	const bool bBuilding = Orders && Orders->IsDirectBuilding();
+	if (!bBuilding && PC->IsInputKeyDown(EKeys::LeftMouseButton))
 	{
 		Fire();
 	}
-	if (PC->WasInputKeyJustPressed(EKeys::R))
+	if (!bBuilding && PC->WasInputKeyJustPressed(EKeys::R))
 	{
 		Reload();
 	}

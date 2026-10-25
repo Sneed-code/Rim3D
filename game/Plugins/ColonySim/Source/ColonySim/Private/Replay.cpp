@@ -162,13 +162,18 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, RemoveBillCommand>) {
                 j["building"] = entt::to_integral(c.building);
                 j["bill"] = c.bill;
-            } else {
-                static_assert(std::is_same_v<Type, SetBillCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, SetBillCommand>) {
                 j["building"] = entt::to_integral(c.building);
                 j["bill"] = c.bill;
                 j["mode"] = billModeName(c.mode);
                 j["count"] = c.count;
                 j["suspended"] = c.suspended;
+            } else {
+                static_assert(std::is_same_v<Type, HandsOnCommand>, "write every command type");
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["mode"] = c.mode == HandsOnMode::Work ? "Work" : (c.mode == HandsOnMode::PutDown ? "PutDown" : "Stop");
+                j["thing"] = entt::to_integral(c.thing);
+                j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
             }
         },
         logged.command);
@@ -644,6 +649,32 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         c.building = static_cast<Entity>(building);
+        out.command = c;
+    } else if (type == "HandsOn") {
+        HandsOnCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        uint32_t thing = entt::to_integral(kNoEntity);
+        std::string mode = "Work";
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "thing", thing, where) || !r.text(j, "mode", mode, where)) {
+            return false;
+        }
+        if (mode == "Work") {
+            c.mode = HandsOnMode::Work;
+        } else if (mode == "PutDown") {
+            c.mode = HandsOnMode::PutDown;
+        } else if (mode == "Stop") {
+            c.mode = HandsOnMode::Stop;
+        } else {
+            return r.fail(where + ".mode must be Work, PutDown or Stop");
+        }
+        const auto cell = j.find("cell");
+        if (cell == j.end() || !cell->is_array() || cell->size() != 3 || !(*cell)[0].is_number_integer() ||
+            !(*cell)[1].is_number_integer() || !(*cell)[2].is_number_integer()) {
+            return r.fail(where + ".cell must be [x, y, level]");
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        c.thing = static_cast<Entity>(thing);
+        c.cell = CellPos{(*cell)[0].get<int>(), (*cell)[1].get<int>(), (*cell)[2].get<int>()};
         out.command = c;
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");

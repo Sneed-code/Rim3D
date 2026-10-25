@@ -514,9 +514,16 @@ void JobSystem::step() {
 
     for (const Entity pawn : order_) {
         reg.get<Mover>(pawn).hold = false;
-        // The player walks this one (U9), or it fights (drafted, or another faction's: F4): no
-        // think, no job, until control is let go or it is undrafted.
-        if (reg.any_of<PlayerControl, Fighter>(pawn)) {
+        // The player walks this one (U9): no think, until control is let go. Its only job is a
+        // hands-on one the player started (U10), done in place.
+        if (reg.all_of<PlayerControl>(pawn)) {
+            if (reg.get<Worker>(pawn).job.type != JobType::None) {
+                tickJob(pawn);
+            }
+            continue;
+        }
+        // It fights (drafted, or another faction's: F4): no think, no job, until it is undrafted.
+        if (reg.all_of<Fighter>(pawn)) {
             continue;
         }
         // Downed or dead (F1): the job ends, what it carried is put down, and it doesn't think.
@@ -524,6 +531,7 @@ void JobSystem::step() {
             if (reg.get<Worker>(pawn).job.type != JobType::None) {
                 endJob(pawn, JobEnd::Interrupted, reg.get<Health>(pawn).dead ? "died" : "downed");
             }
+            dropCarried(pawn);  // the player's colonist may carry something with no job (U10)
             continue;
         }
         Worker& worker = reg.get<Worker>(pawn);
@@ -614,7 +622,9 @@ bool JobSystem::thinkIdle(Entity, Job& out) {
 
 void JobSystem::startJob(Entity pawn, Job job) {
     job.startedAt = now();
-    job.step = 0;
+    if (job.handsOn == 0) {
+        job.step = 0;  // a hands-on job may start part-way (a delivery starts with the material in hand)
+    }
     job.walk = 0;
     job.repaths = 0;
     job.path = PathTicket{};
@@ -629,6 +639,10 @@ void JobSystem::tickJob(Entity pawn) {
     for (int guard = 0; guard < kJobsStepsPerTick; ++guard) {
         Job& job = reg.get<Worker>(pawn).job;
         std::string why;
+        if (job.handsOn != 0 && !handsOnInReach(pawn, job)) {
+            endJob(pawn, JobEnd::Interrupted, "out of reach");
+            return;
+        }
         if (!failCheck(pawn, job, why)) {
             endJob(pawn, JobEnd::Failed, why);
             return;
@@ -766,7 +780,7 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
         case JobStepKind::Lie:
             return lie(pawn, job, why);
         case JobStepKind::GotoCell:
-            return walkTo(pawn, job, job.cell, why);
+            return job.handsOn != 0 ? StepResult::Next : walkTo(pawn, job, job.cell, why);
         case JobStepKind::Deliver:
             return deliver(pawn, job, why);
         case JobStepKind::BuildWork:
@@ -911,7 +925,7 @@ float JobSystem::constructionSpeed(Entity pawn) const {
 
 JobSystem::StepResult JobSystem::deliver(Entity pawn, Job& job, std::string& why) {
     entt::registry& reg = things_.registry();
-    if (cellOf(reg.get<Position>(pawn)) != job.cell) {
+    if (job.handsOn == 0 && cellOf(reg.get<Position>(pawn)) != job.cell) {
         why = "the pawn isn't beside the building plan";
         return StepResult::Failed;
     }
@@ -935,7 +949,7 @@ JobSystem::StepResult JobSystem::deliver(Entity pawn, Job& job, std::string& why
 
 JobSystem::StepResult JobSystem::buildWork(Entity pawn, Job& job, std::string& why) {
     entt::registry& reg = things_.registry();
-    if (cellOf(reg.get<Position>(pawn)) != job.cell) {
+    if (job.handsOn == 0 && cellOf(reg.get<Position>(pawn)) != job.cell) {
         why = "the pawn left its place beside the frame";
         return StepResult::Failed;
     }
@@ -1006,46 +1020,63 @@ void JobSystem::dropCarried(Entity pawn) {
         return;
     }
     const Entity thing = carrying->thing;
-    reg.remove<Carrying>(pawn);
     if (!reg.valid(thing)) {
+        reg.remove<Carrying>(pawn);
         return;
     }
     const CellPos at = cellOf(reg.get<Position>(pawn));
-    const DefId def = reg.get<Thing>(thing).def;
-    const int count = reg.get<StackCount>(thing).count;
     // The nearest cell, ring by ring, with room for all of it and no other pawn's claim.
     for (int r = 0; r <= kJobsDropRadius; ++r) {
         for (int y = at.y - r; y <= at.y + r; ++y) {
             for (int x = at.x - r; x <= at.x + r; ++x) {
-                if (std::abs(x - at.x) != r && std::abs(y - at.y) != r) {
-                    continue;
+                if ((std::abs(x - at.x) == r || std::abs(y - at.y) == r) && placeCarriedAt(pawn, CellPos{x, y, at.level})) {
+                    return;
                 }
-                const CellPos c{x, y, at.level};
-                if (!map_.inBounds(c) || roomFor(def, c) < count || reservedByOther(JobTarget{kNoEntity, c}, pawn)) {
-                    continue;
-                }
-                const std::vector<Entity>& there = things_.itemsAt(c);
-                if (there.empty()) {
-                    things_.spawnAt(thing, c);
-                    pawnDid(pawn, PawnAction::PutDown, thing);
-                } else {
-                    const Entity stack = there.front();
-                    reg.get<StackCount>(stack).count += count;
-                    pawnDid(pawn, PawnAction::PutDown, stack);
-                    things_.destroy(thing);
-                }
-                return;
             }
         }
     }
+    reg.remove<Carrying>(pawn);
     things_.spawnAt(thing, at);  // nowhere better: on top of whatever is here
     pawnDid(pawn, PawnAction::PutDown, thing);
+}
+
+bool JobSystem::placeCarriedAt(Entity pawn, CellPos c) {
+    entt::registry& reg = things_.registry();
+    const Carrying* carrying = reg.try_get<Carrying>(pawn);
+    if (carrying == nullptr || !reg.valid(carrying->thing)) {
+        return false;
+    }
+    const Entity thing = carrying->thing;
+    const DefId def = reg.get<Thing>(thing).def;
+    const int count = reg.get<StackCount>(thing).count;
+    if (!map_.inBounds(c) || roomFor(def, c) < count || reservedByOther(JobTarget{kNoEntity, c}, pawn)) {
+        return false;
+    }
+    reg.remove<Carrying>(pawn);
+    const std::vector<Entity>& there = things_.itemsAt(c);
+    if (there.empty()) {
+        things_.spawnAt(thing, c);
+        pawnDid(pawn, PawnAction::PutDown, thing);
+    } else {
+        const Entity stack = there.front();
+        reg.get<StackCount>(stack).count += count;
+        pawnDid(pawn, PawnAction::PutDown, stack);
+        things_.destroy(thing);
+    }
+    return true;
 }
 
 void JobSystem::endJob(Entity pawn, JobEnd end, const std::string& why) {
     entt::registry& reg = things_.registry();
     const Job job = reg.get<Worker>(pawn).job;
     release(pawn, job);
+    if (job.handsOn == 2 && jobIsGather(job.type) && designations_.at(job.cell) != DesignationKind::None) {
+        // The player made this mark just to work by hand; if the work didn't finish, it goes again.
+        designations_.set(job.cell, DesignationKind::None);
+        Event changed;
+        changed.type = EventType::DesignationsChanged;
+        events_.push_back(std::move(changed));
+    }
     if (job.walk == 1) {
         pathfinder_.cancel(job.path);
     }

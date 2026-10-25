@@ -56,6 +56,7 @@ struct ThingView {
     // Pawns: the job they are on (docs/design/jobs.md) and what it is about, and what they carry.
     JobType job = JobType::None;
     Entity jobTarget = kNoEntity;
+    float jobProgress = 0.0f;  // 0 to 1: a swing of the pick, a plant being cut, a frame being built (hands-on work, U10)
     DefId carriedDef;
     int carriedCount = 0;
     // Buildings: Built, or a Blueprint or Frame still to be built (docs/design/construction.md). A

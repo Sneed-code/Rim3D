@@ -26,7 +26,8 @@ namespace colony { class Map; }
  * (blueprints, frames, finished buildings, doors that slide open, and items drawn from the sim), orders (the architect
  * menu, the marks overlay, draft, move and attack orders and the alarm, driven as the mouse does), panels (the work and
  * schedule tabs, the colonist and bills panels and the message log, driven by their click handlers), fights (the
- * protagonist's gun, muzzle flashes, tracers, impacts, hit reactions, ragdolls, wound decals and the hitbox view).
+ * protagonist's gun, muzzle flashes, tracers, impacts, hit reactions, ragdolls, wound decals and the hitbox view),
+ * handson (the controlled colonist mines, chops, picks up, delivers and builds by hand, and plans a building with the build ghost).
  * Optional: -SmokeTimeout=<seconds> (default 300) fails a run that hangs.
  * To add a test: write a Build<Name>Phases() and add a branch in OnWorldBeginPlay.
  * Run it with tools/smoke.ps1.
@@ -80,6 +81,7 @@ private:
 	void BuildOrdersPhases();       // SmokeTestOrders.cpp
 	void BuildPanelsPhases();       // SmokeTestPanels.cpp
 	void BuildFightsPhases();       // SmokeTestFights.cpp
+	void BuildHandsOnPhases();      // SmokeTestHandsOn.cpp
 	void StartPhase(int32 Index);
 	void FinishPhase();
 	void WriteResultsAndQuit();

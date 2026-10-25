@@ -349,6 +349,9 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         const std::vector<Entity> before(reg.view<PlayerControl>().begin(), reg.view<PlayerControl>().end());
         for (const Entity old : before) {
             reg.remove<PlayerControl>(old);
+            // Hands-on work ends and what it carries is put down where it stands (U10).
+            jobs_->interrupt(old, "let go by the player");
+            jobs_->putDown(old);
         }
         if (control->pawn != kNoEntity) {
             // Its job ends (what it carries is put down) and the job system leaves it alone.
@@ -360,6 +363,21 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             mover.vy = 0.0f;
             mover.gaveUp = false;
             reg.emplace<PlayerControl>(control->pawn);
+        }
+    } else if (const auto* hands = std::get_if<HandsOnCommand>(&command)) {
+        entt::registry& reg = things_->registry();
+        if (!things_->exists(hands->pawn) || !reg.all_of<PlayerControl, Worker, Position>(hands->pawn)) {
+            commandFailed(id, "that pawn isn't under direct control");
+        } else if (health_->incapacitated(hands->pawn)) {
+            commandFailed(id, "that colonist is downed or dead");
+        } else if (hands->mode == HandsOnMode::Stop) {
+            jobs_->handsOnStop(hands->pawn);
+        } else if (hands->mode == HandsOnMode::PutDown) {
+            if (!jobs_->handsOnPutDown(hands->pawn, hands->cell, error)) {
+                commandFailed(id, error);
+            }
+        } else if (!jobs_->handsOn(hands->pawn, hands->thing, hands->cell, error)) {
+            commandFailed(id, error);
         }
     } else if (const auto* lineage = std::get_if<SetLineageCommand>(&command)) {
         PawnLooks* looks = things_->exists(lineage->pawn) ? things_->registry().try_get<PawnLooks>(lineage->pawn) : nullptr;
@@ -692,6 +710,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Worker* worker = reg.try_get<Worker>(entity)) {
             view.job = worker->job.type;
             view.jobTarget = worker->job.thing;
+            view.jobProgress = worker->job.type != JobType::None ? jobs_->jobProgress(entity) : 0.0f;
         }
         if (const Needs* needs = reg.try_get<Needs>(entity)) {
             view.food = needs->food;
@@ -948,6 +967,7 @@ uint64_t Sim::stateHash() const {
             }
             h.add(job.workType.value);
             h.add(job.forced);
+            h.add(static_cast<int>(job.handsOn));
             h.add(static_cast<int>(job.step));
             h.add(static_cast<int>(job.walk));
             h.add(static_cast<int>(job.repaths));

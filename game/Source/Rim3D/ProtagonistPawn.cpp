@@ -6,6 +6,7 @@
 #include "GameFramework/PlayerController.h"
 #include "InputCoreTypes.h"
 
+#include "HandsOnSubsystem.h"
 #include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
 
@@ -197,6 +198,14 @@ void AProtagonistPawn::Look(float YawDegrees, float PitchDegrees)
 
 void AProtagonistPawn::Zoom(float Notches)
 {
+	// With a building in hand the wheel picks the building instead (U10).
+	if (const UWorld* World = GetWorld())
+	{
+		if (UHandsOnSubsystem* Hands = World->GetSubsystem<UHandsOnSubsystem>(); Hands && Hands->HandleWheel(Notches))
+		{
+			return;
+		}
+	}
 	ArmLength = FMath::Clamp(ArmLength * FMath::Pow(ProtagonistZoomPerNotch, Notches), kMinArm, kMaxArm);
 }
 

@@ -273,6 +273,9 @@ bool JobSystem::failCheckGather(Entity pawn, Job& job, std::string& why) {
 
 // Walks to the cell the pawn works from. Already standing next to the target at the start: no walk.
 JobSystem::StepResult JobSystem::goToTouch(Entity pawn, Job& job, std::string& why) {
+    if (job.handsOn != 0) {
+        return StepResult::Next;  // the player is already within reach (checked every step)
+    }
     const CellPos from = cellOf(things_.registry().get<Position>(pawn));
     CellPos stand;
     if (!touchCell(from, job.cell, stand)) {
