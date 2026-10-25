@@ -1,0 +1,8 @@
+[
+  {
+    "defName": "CrashlandedMixed", "parent": "Crashlanded", "source": "Rim3D", "label": "crashlanded, mixed peoples",
+    "description": "Crashlanded, but each colonist except the protagonist rolls a lineage from the weights.",
+    "lineageWeights": { "Baseline": 70, "Emberkin": 6, "Frostkin": 6, "Warbred": 4, "Ashborn": 6, "Delver": 8 },
+    "ours": ["lineageWeights"]
+  }
+]

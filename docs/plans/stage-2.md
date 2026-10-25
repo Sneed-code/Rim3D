@@ -177,7 +177,7 @@ G2, A1 and A2 are Stage 1 tasks.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | X1 | **Genes and lineages.** Genes as defs with stat effects; Emberkin, Frostkin, Warbred, Ashborn and Delver as gene sets; starting colonists can roll a lineage; looks (A3) read the genes. | Cloud | Sonnet, high | 90 min | S7 |
+| ✓ | X1 | **Genes and lineages.** Genes as defs with stat effects; Emberkin, Frostkin, Warbred, Ashborn and Delver as gene sets; starting colonists can roll a lineage; looks (A3) read the genes. | Cloud | Sonnet, high | 90 min | S7 |
 | | X2 | **Resonance, first powers.** Attunement levels, resonance strain and focus (names added to `naming.md`), four powers from Royalty's first level (stun, painblock, burden, short jump) through the sim's commands and the fighter AI. | Cloud | Opus, high | 90 min | S7, F9 |
 
 ### Unreal side (U)

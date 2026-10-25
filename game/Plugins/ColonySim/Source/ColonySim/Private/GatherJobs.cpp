@@ -5,6 +5,7 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Designations.h"
+#include "ColonySim/Genes.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Mineables.h"
@@ -89,7 +90,10 @@ int JobSystem::skillLevel(Entity pawn, const char* skill) const {
     const entt::registry& reg = things_.registry();
     const Colonist* colonist = reg.valid(pawn) ? reg.try_get<Colonist>(pawn) : nullptr;
     const SkillRecord* record = colonist != nullptr ? colonist->skill(skill) : nullptr;
-    return record != nullptr ? record->level : gather_.unskilledLevel;
+    const int level = record != nullptr ? record->level : gather_.unskilledLevel;
+    // Genes add skill levels (aptitudes); a pawn's own level and its gene bonus stay apart.
+    const PawnGenes* genes = reg.valid(pawn) ? reg.try_get<PawnGenes>(pawn) : nullptr;
+    return genes != nullptr ? std::max(0, level + geneAptitude(*genes, skill)) : level;
 }
 
 double JobSystem::yieldFactor(int level) const {
@@ -111,13 +115,18 @@ float JobSystem::lightWorkFactor(Entity pawn) const {
 
 double JobSystem::miningSpeed(Entity pawn) const {
     const double speed = gather_.miningSpeedBase + gather_.miningSpeedPerLevel * skillLevel(pawn, "Mining");
-    return std::max(0.0, speed) * gatherManipulation(things_.registry(), pawn, manipulationIndex_) * lightWorkFactor(pawn);
+    const PawnGenes* genes = things_.registry().valid(pawn) ? things_.registry().try_get<PawnGenes>(pawn) : nullptr;
+    return std::max(0.0, speed) * gatherManipulation(things_.registry(), pawn, manipulationIndex_) * lightWorkFactor(pawn) *
+           (genes != nullptr ? genes->effects.miningSpeed : 1.0);
 }
 
 double JobSystem::plantWorkSpeed(Entity pawn) const {
     const double speed = gather_.plantSpeedBase + gather_.plantSpeedPerLevel * skillLevel(pawn, "Plants");
     const double manip = gatherManipulation(things_.registry(), pawn, manipulationIndex_);
-    return manip > 0.0 ? std::max(kGatherMinPlantSpeed, speed * manip) * lightWorkFactor(pawn) : 0.0;
+    const PawnGenes* genes = things_.registry().valid(pawn) ? things_.registry().try_get<PawnGenes>(pawn) : nullptr;
+    return manip > 0.0 ? std::max(kGatherMinPlantSpeed, speed * manip) * lightWorkFactor(pawn) *
+                             (genes != nullptr ? genes->effects.plantWorkSpeed : 1.0)
+                       : 0.0;
 }
 
 // Experience, as RimWorld's Learn: scaled by the pawn's passion for the skill; levels rise when the
