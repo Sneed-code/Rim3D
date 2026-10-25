@@ -42,3 +42,13 @@ target_compile_definitions(colonysim_tests PRIVATE COLONY_DATA_DIR="${CMAKE_CURR
 add_test(NAME unit COMMAND colonysim_tests)
 add_test(NAME simrun_smoke COMMAND simrun --seed 1 --size 64 --days 1 --png ${CMAKE_BINARY_DIR}/smoke.png)
 add_test(NAME simrun_regions COMMAND simrun --seed 1 --size 128 --days 0 --regions ${CMAKE_BINARY_DIR}/regions.png)
+
+# Replays: play the scripted scenario and record it, then play the recording and check every
+# state hash matches. CI compares the recordings from Linux and Windows (docs/design/bridge.md).
+set(REPLAY_TEST_DATA ${CMAKE_CURRENT_SOURCE_DIR}/Tests/data)
+set(REPLAY_RECORDED ${CMAKE_BINARY_DIR}/haul-and-build.recorded.json)
+add_test(NAME replay_record COMMAND simrun --data ${REPLAY_TEST_DATA}
+         --replay ${CMAKE_CURRENT_SOURCE_DIR}/Tests/replays/haul-and-build.json --record ${REPLAY_RECORDED})
+add_test(NAME replay_check COMMAND simrun --data ${REPLAY_TEST_DATA} --replay ${REPLAY_RECORDED})
+set_tests_properties(replay_record PROPERTIES FIXTURES_SETUP replay_recording)
+set_tests_properties(replay_check PROPERTIES FIXTURES_REQUIRED replay_recording)

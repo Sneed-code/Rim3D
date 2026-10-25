@@ -22,12 +22,15 @@ Stage 0 in short:
 
 Things (pawns, items, buildings) are EnTT entities made from defs since S1. Since S2 the map has
 regions (16 m blocks, doors as their own regions, links, reachability groups; `Map::regions()`).
-The Stage 0 hauling job (now in `Sim.cpp`) and cell A* (`Pathfinder`) are still placeholders; C1
-and S3 replace them.
+Since S5 Unreal talks to the sim only through commands (`Sim::submit`), per-step events and a
+read-only snapshot; every session can be saved as a replay file and played back with
+`simrun --replay`, and CI checks Linux and Windows give the same state hashes
+(`docs/design/bridge.md`). The Stage 0 hauling job (now in `Sim.cpp`) and cell A* (`Pathfinder`)
+are still placeholders; C1 and S3 replace them.
 
 ## Stage 1 progress
 
-5 of 43 tasks done (D1, D2, U1, S1, S2). Tick tasks in `docs/plans/stage-1.md` as they merge.
+6 of 43 tasks done (D1, D2, U1, S1, S2, S5). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -47,11 +50,15 @@ Wave 2:
 Wave 3, both cloud:
 - ~~**S2** regions and reachability~~ done: `docs/design/regions.md`. A door is a Things def with
   `thingClass` `Building_Door`. `simrun --regions FILE` draws the regions.
-- **S5** commands, events, snapshot and replays (Opus high).
+- ~~**S5** commands, events, snapshot and replays~~ done: `docs/design/bridge.md`. Only two dev
+  commands so far (spawn and destroy a thing); each later system adds its own. New sim state
+  must go into `Sim::stateHash()`.
 
-Wave 4, now open (all cloud): **S3** hierarchical pathfinding (Opus high, needs S2), **F3** cover,
-sight and threat maps (Sonnet high, needs S2), and once S5 is merged **S6** save and load (Sonnet
-high). C2, C8 and F1 in wave 4 also wait for **D3** (the RimWorld import on sneed's PC).
+Wave 4, now open: **S3** hierarchical pathfinding (cloud, Opus high), **S6** save and load (cloud,
+Sonnet high), **F3** cover, sight and threat maps (cloud, Sonnet high) and **U2** bridge v2 (PC
+Unreal, Sonnet high; the first Unreal compile of EnTT and the S5 bridge, plus a dev key that saves
+a replay to `Saved/Replays/`). C2, C8 and F1 in wave 4 also wait for **D3** (the RimWorld import
+on sneed's PC).
 
 ## Waiting on sneed
 

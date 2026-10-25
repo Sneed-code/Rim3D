@@ -2,6 +2,7 @@
 
 #include "ColonySim/Defs.h"
 #include "ColonySim/Entity.h"
+#include "ColonySim/Events.h"
 #include "ColonySim/Grid.h"
 
 #include <entt/entity/registry.hpp>
@@ -20,10 +21,8 @@ class Map;
 // Things are pawns, items and buildings: entities in an EnTT registry, each made from a def of
 // kind "Things" plus components. See docs/design/things.md.
 //
-// Unreal does not include this header: it reads things through the sim's snapshot (task S5).
-
-// From the def's `category`, as RimWorld's ThingDef. Plants are a grid layer, not things.
-enum class ThingCategory : uint8_t { Item, Building, Pawn };
+// Unreal does not include this header: it reads things through the sim's snapshot and events
+// (docs/design/bridge.md).
 
 // Every thing has one.
 struct Thing {
@@ -109,6 +108,10 @@ public:
     // Despawns if needed, then destroys the entity.
     void destroy(Entity thing);
 
+    // Where spawn, despawn and destroy report ThingSpawned, ThingDespawned and ThingDestroyed
+    // events; null (the default) reports nothing. The sim points it at its event list.
+    void setEventLog(std::vector<Event>* events) { events_ = events; }
+
     bool exists(Entity thing) const { return registry_.valid(thing); }
     bool spawned(Entity thing) const { return registry_.valid(thing) && registry_.all_of<Position>(thing); }
     // Number of things that exist, spawned or not.
@@ -118,6 +121,9 @@ private:
     Map& map_;
     std::shared_ptr<const DefDatabase> defs_;
     entt::registry registry_;
+    std::vector<Event>* events_ = nullptr;
+
+    void report(EventType type, Entity thing, CellPos cell = CellPos{});
 };
 
 }  // namespace colony

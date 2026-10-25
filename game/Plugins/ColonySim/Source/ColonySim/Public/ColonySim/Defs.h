@@ -101,10 +101,15 @@ public:
     // Named global multiplier from tuning.json "values" (1.0 when not set).
     double tuning(const std::string& name) const;
 
+    // Fingerprint of every def (after inheritance and tuning) and the tuning values. Replays
+    // record it so a run with different data files says so. The empty database's is fixed.
+    uint64_t contentHash() const { return contentHash_; }
+
 private:
     struct Lookup;
     std::vector<Def> defs_;
     std::unique_ptr<Lookup> lookup_;
+    uint64_t contentHash_ = 0;
 };
 
 }  // namespace colony

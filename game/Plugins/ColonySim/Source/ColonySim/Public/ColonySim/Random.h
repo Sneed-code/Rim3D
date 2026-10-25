@@ -50,6 +50,10 @@ public:
 
     float range(float lo, float hi) { return lo + (hi - lo) * unit(); }
 
+    // The whole state, for state hashes and saves.
+    uint64_t state() const { return state_; }
+    uint64_t increment() const { return inc_; }
+
 private:
     uint64_t state_;
     uint64_t inc_;

@@ -1,10 +1,14 @@
 #include "ColonySim/Sim.h"
 
 #include "ColonySim/Defs.h"
+#include "ColonySim/Hash.h"
+#include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <utility>
 
 namespace colony {
 
@@ -63,6 +67,16 @@ const DefDatabase& simEmptyDefs() {
     return empty;
 }
 
+std::string simCellText(CellPos c) {
+    return "(" + std::to_string(c.x) + ", " + std::to_string(c.y) + ", level " + std::to_string(c.level) + ")";
+}
+
+void simHashCell(StateHasher& h, CellPos c) {
+    h.add(c.x);
+    h.add(c.y);
+    h.add(c.level);
+}
+
 }  // namespace
 
 Sim::Sim(const SimSettings& settings) : Sim(settings, nullptr) {}
@@ -75,7 +89,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
       pathfinder_(map_),
       things_(std::make_unique<Things>(map_, defs_)),
       time_(),
-      rng_(splitMix64(settings.seed ^ 0x7061776EULL)) {
+      rng_(splitMix64(settings.seed ^ 0x7061776EULL)),
+      groundHash_(map_.contentHash()) {
+    things_->setEventLog(&events_);
     placeStockpileAndThings();
 }
 
@@ -231,11 +247,177 @@ void Sim::updateHauler(Entity pawn) {
     }
 }
 
+uint64_t Sim::submit(Command command) {
+    pending_.emplace_back(++submitted_, std::move(command));
+    return submitted_;
+}
+
+void Sim::commandFailed(uint64_t id, std::string message) {
+    Event event;
+    event.type = EventType::CommandFailed;
+    event.command = id;
+    event.message = std::move(message);
+    events_.push_back(std::move(event));
+}
+
+void Sim::applyCommand(const Command& command, uint64_t id) {
+    if (const auto* spawn = std::get_if<SpawnThingCommand>(&command)) {
+        const DefId def = defs_->idOf("Things", spawn->def);
+        if (!def.valid()) {
+            commandFailed(id, "no Things def '" + spawn->def + "'");
+        } else if (things_->spawn(def, spawn->cell, spawn->count, spawn->rot) == kNoEntity) {
+            commandFailed(id, "can't put " + spawn->def + " at " + simCellText(spawn->cell));
+        }
+    } else if (const auto* destroy = std::get_if<DestroyThingCommand>(&command)) {
+        if (!things_->exists(destroy->thing)) {
+            commandFailed(id, "that thing doesn't exist");
+        } else if (things_->registry().any_of<HaulJob, HaulReservedBy, HaulCarriedBy>(destroy->thing)) {
+            commandFailed(id, "the hauling test is using that thing");
+        } else {
+            things_->destroy(destroy->thing);
+        }
+    }
+}
+
 void Sim::step() {
+    events_.clear();
+    // Commands first, in submit order. Swap out the queue so its memory is reused.
+    std::vector<std::pair<uint64_t, Command>> applying;
+    applying.swap(pending_);
+    for (auto& [id, command] : applying) {
+        applyCommand(command, id);
+        commandLog_.push_back(LoggedCommand{time_.seconds, std::move(command)});
+    }
+    applying.clear();
+    pending_.swap(applying);
+
     for (const Entity pawn : haulers_) {
         updateHauler(pawn);
     }
     time_.seconds += 1;
+    if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
+        checkpoints_.push_back(Checkpoint{time_.seconds, stateHash()});
+    }
+}
+
+void Sim::writeSnapshot(Snapshot& out) const {
+    out.gameSeconds = time_.seconds;
+    out.mapWidth = map_.width();
+    out.mapHeight = map_.height();
+    out.things.clear();
+    const entt::registry& reg = things_->registry();
+    for (const auto [entity, thing, pos] : reg.view<const Thing, const Position>().each()) {
+        ThingView view;
+        view.id = entity;
+        view.def = thing.def;
+        view.category = thing.category;
+        view.x = pos.x;
+        view.y = pos.y;
+        view.level = pos.level;
+        if (const Footprint* footprint = reg.try_get<Footprint>(entity)) {
+            const CellRect rect = footprint->rect();
+            view.rotation = footprint->rotation;
+            view.sizeX = rect.sizeX;
+            view.sizeY = rect.sizeY;
+        }
+        if (const StackCount* stack = reg.try_get<StackCount>(entity)) {
+            view.stackCount = stack->count;
+        }
+        if (const HitPoints* hp = reg.try_get<HitPoints>(entity)) {
+            view.hitPoints = hp->current;
+            view.maxHitPoints = hp->max;
+        }
+        out.things.push_back(view);
+    }
+    std::sort(out.things.begin(), out.things.end(),
+              [](const ThingView& a, const ThingView& b) { return a.id < b.id; });
+}
+
+uint64_t Sim::stateHash() const {
+    StateHasher h;
+    h.add(time_.seconds);
+    // The map's ground is fixed after generation, so its hash is taken once. Its building layer
+    // follows from the buildings' footprints, hashed below. Map layers that change in play
+    // (mining, plants, roofs) must keep their own running hash: hashing a 1 km map takes ~10 ms.
+    h.add(groundHash_);
+    h.add(rng_.state());
+    h.add(rng_.increment());
+    h.add(stockpileCell_.has_value());
+    if (stockpileCell_) {
+        simHashCell(h, *stockpileCell_);
+    }
+    h.add(static_cast<uint64_t>(haulers_.size()));
+    for (const Entity pawn : haulers_) {
+        h.add(entt::to_integral(pawn));
+    }
+    h.add(stats_.hauls);
+    h.add(stats_.failedJobs);
+
+    // Every entity id the registry has handed out, in its own order: live ones, then the free
+    // list that decides the next ids. Then each live thing's components.
+    const entt::registry& reg = things_->registry();
+    const auto* entities = reg.storage<Entity>();
+    h.add(static_cast<uint64_t>(entities->size()));
+    h.add(static_cast<uint64_t>(entities->free_list()));
+    for (size_t i = 0; i < entities->size(); ++i) {
+        h.add(entt::to_integral(entities->data()[i]));
+    }
+    for (size_t i = 0; i < entities->free_list(); ++i) {
+        const Entity e = entities->data()[i];
+        // Which components it has, then their fields.
+        const bool has[] = {reg.all_of<Thing>(e),         reg.all_of<Position>(e),       reg.all_of<Footprint>(e),
+                            reg.all_of<StackCount>(e),    reg.all_of<HitPoints>(e),      reg.all_of<Mover>(e),
+                            reg.all_of<HaulJob>(e),       reg.all_of<HaulReservedBy>(e), reg.all_of<HaulCarriedBy>(e),
+                            reg.all_of<HaulStored>(e)};
+        uint64_t mask = 0;
+        for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
+            mask |= has[bit] ? (uint64_t{1} << bit) : 0;
+        }
+        h.add(mask);
+        if (const Thing* thing = reg.try_get<Thing>(e)) {
+            h.add(thing->def.value);
+            h.add(static_cast<int>(thing->category));
+        }
+        if (const Position* pos = reg.try_get<Position>(e)) {
+            h.add(pos->x);
+            h.add(pos->y);
+            h.add(pos->level);
+        }
+        if (const Footprint* f = reg.try_get<Footprint>(e)) {
+            h.add(f->sizeX);
+            h.add(f->sizeY);
+            h.add(f->blocksMovement);
+            h.add(f->isDoor);
+            simHashCell(h, f->origin);
+            h.add(static_cast<int>(f->rotation));
+        }
+        if (const StackCount* stack = reg.try_get<StackCount>(e)) {
+            h.add(stack->count);
+        }
+        if (const HitPoints* hp = reg.try_get<HitPoints>(e)) {
+            h.add(hp->current);
+            h.add(hp->max);
+        }
+        if (const Mover* mover = reg.try_get<Mover>(e)) {
+            h.add(mover->metresPerStep);
+            h.add(static_cast<uint64_t>(mover->path.size()));
+            for (const CellPos& c : mover->path) {
+                simHashCell(h, c);
+            }
+            h.add(static_cast<uint64_t>(mover->next));
+        }
+        if (const HaulJob* job = reg.try_get<HaulJob>(e)) {
+            h.add(static_cast<int>(job->stage));
+            h.add(entt::to_integral(job->item));
+        }
+        if (const HaulReservedBy* by = reg.try_get<HaulReservedBy>(e)) {
+            h.add(entt::to_integral(by->pawn));
+        }
+        if (const HaulCarriedBy* by = reg.try_get<HaulCarriedBy>(e)) {
+            h.add(entt::to_integral(by->pawn));
+        }
+    }
+    return h.value();
 }
 
 void Sim::stepMany(int64_t steps) {
