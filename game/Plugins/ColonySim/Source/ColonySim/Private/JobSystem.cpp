@@ -706,6 +706,7 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     }
     if (job.type == JobType::Recreate) {
         return failCheckRecreate(pawn, job, why);
+    }
     if (job.type == JobType::CleanFilth) {
         return failCheckClean(pawn, job, why);
     }

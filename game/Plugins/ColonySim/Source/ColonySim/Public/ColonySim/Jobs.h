@@ -259,12 +259,9 @@ public:
     // `error`, if two jobs hold the same target or a job waits for a path nobody looks for.
     bool afterLoad(std::string& error);
 
-    // The filth layer and the rooms, for the cleaning job (CleanJobs.cpp, docs/design/room-stats.md).
-    // Without them nobody cleans. Cleaning is limited to indoor cells until the home area exists.
-    void setFilth(Filth* filth, Rooms* rooms) {
-        filth_ = filth;
-        rooms_ = rooms;
-    }
+    // The filth layer, for the cleaning job (CleanJobs.cpp, docs/design/room-stats.md); it also needs
+    // `setRooms`. Without them nobody cleans. Cleaning is limited to indoor cells until the home area exists.
+    void setFilth(Filth* filth) { filth_ = filth; }
     Filth* filth() const { return filth_; }
     Rooms* rooms() const { return rooms_; }
     // How fast a pawn cleans (1 is 100%): FilthRules.cleaningSpeed times its Manipulation.
@@ -504,7 +501,6 @@ private:
     int maxRepaths_ = 0;
     uint8_t defaultPriority_ = kDefaultPriority;
     Filth* filth_ = nullptr;
-    Rooms* rooms_ = nullptr;
     std::vector<Entity> order_;              // scratch: workers this step
     std::vector<WorkCandidate> candidates_;  // scratch: one think
 };
