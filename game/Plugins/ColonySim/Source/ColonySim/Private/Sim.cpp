@@ -8,6 +8,7 @@
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Movement.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
@@ -58,6 +59,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       pathfinder_(map_),
       zones_(std::make_unique<Zones>(map_)),
       things_(std::make_unique<Things>(map_, defs_)),
+      plants_(std::make_unique<Plants>(map_, *defs_, splitMix64(settings.seed ^ 0x706C616E74ULL), "TemperateForest")),
       movement_(std::make_unique<MovementSystem>()),
       health_(std::make_unique<HealthSystem>(*things_)),
       time_(),
@@ -65,7 +67,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       groundHash_(map_.contentHash()) {
     things_->setEventLog(&events_);
     health_->setEventLog(&events_);
-    construction_ = std::make_unique<Construction>(map_, *things_, *defs_, rng_, events_);
+    construction_ = std::make_unique<Construction>(map_, *things_, *plants_, *defs_, rng_, events_);
     needs_ = std::make_unique<NeedsSystem>(*things_, *health_, *defs_);
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *defs_, *health_, *needs_,
                                         time_, stats_, events_);
@@ -392,6 +394,9 @@ void Sim::step() {
     movement_->step(things_->registry(), map_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     time_.seconds += 1;
+    if (time_.seconds % kSecondsPerHour == 0) {
+        plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
+    }
     if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
         checkpoints_.push_back(Checkpoint{time_.seconds, stateHash()});
     }
@@ -502,6 +507,7 @@ uint64_t Sim::stateHash() const {
     h.add(stats_.hauls);
     h.add(stats_.failedJobs);
     h.add(stats_.repaths);
+    h.add(plants_->hash());
     pathfinder_.hashState(h);
     zones_->hashState(h);
 

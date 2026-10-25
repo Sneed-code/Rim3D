@@ -4,6 +4,7 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
@@ -450,6 +451,24 @@ TEST_CASE("Construction: a plan walled in where no pawn can stand is left alone"
     BUILD_REQUIRE(s != nullptr);
     CHECK(s->stage == ConstructionStage::Blueprint);
     CHECK(sim.stats().failedJobs == 0);
+}
+
+TEST_CASE("Construction: a finished building clears the plants under it") {
+    Sim sim = buildSim();
+    buildSpawn(sim, "Human", CellPos{10, 10, 0});
+    buildSpawn(sim, "Steel", CellPos{12, 11, 0}, 5);
+    const CellPos under{14, 10, 0};
+    const CellPos beside{15, 10, 0};
+    const DefId grass = sim.defs().idOf("Things", "Plant_Grass");
+    sim.plants().remove(under);
+    sim.plants().remove(beside);
+    BUILD_REQUIRE(sim.plants().place(under, grass, 1.0f));
+    BUILD_REQUIRE(sim.plants().place(beside, grass, 1.0f));
+    buildPlace(sim, "Wall", "Steel", under);
+    CHECK(sim.plants().has(under));  // a blueprint leaves it alone
+    BUILD_REQUIRE(buildRunUntil(sim, 3000, [&] { return sim.map().buildingAt(under) != kNoEntity; }) >= 0);
+    CHECK_FALSE(sim.plants().has(under));
+    CHECK(sim.plants().has(beside));
 }
 
 TEST_CASE("Construction: a door and a bed are built like a wall") {

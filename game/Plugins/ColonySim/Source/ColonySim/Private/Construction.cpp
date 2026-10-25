@@ -2,6 +2,7 @@
 
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Things.h"
@@ -72,8 +73,9 @@ int ConstructionSite::materialsHave() const {
     return total;
 }
 
-Construction::Construction(Map& map, Things& things, const DefDatabase& defs, Rng& rng, std::vector<Event>& events)
-    : map_(map), things_(things), defs_(defs), rng_(rng), events_(events) {
+Construction::Construction(Map& map, Things& things, Plants& plants, const DefDatabase& defs, Rng& rng,
+                           std::vector<Event>& events)
+    : map_(map), things_(things), plants_(plants), defs_(defs), rng_(rng), events_(events) {
     if (const Def* rules = defs_.find("Rules", "ConstructionRules")) {
         numbers_.buildWorkPerSecond = rules->number("buildWorkPerSecond", numbers_.buildWorkPerSecond);
         numbers_.deconstructWorkPerSecond = rules->number("deconstructWorkPerSecond", numbers_.deconstructWorkPerSecond);
@@ -392,6 +394,14 @@ Entity Construction::complete(Entity frame) {
     things_.destroy(frame);
     clearFootprint(frame, rect, blocks, standable);
     const Entity building = things_.spawn(def, site.origin, 1, site.rotation);
+    if (building != kNoEntity) {
+        // Plants don't grow under a building (docs/design/plants.md).
+        for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
+            for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
+                plants_.remove(CellPos{x, y, rect.level});
+            }
+        }
+    }
     if (building == kNoEntity) {
         for (const MaterialCount& m : site.materials) {
             dropNear(m.item, m.have, rect);

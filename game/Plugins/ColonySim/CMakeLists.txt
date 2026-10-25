@@ -42,6 +42,7 @@ target_compile_definitions(colonysim_tests PRIVATE COLONY_DATA_DIR="${CMAKE_CURR
 add_test(NAME unit COMMAND colonysim_tests)
 add_test(NAME simrun_smoke COMMAND simrun --seed 1 --size 64 --days 1 --png ${CMAKE_BINARY_DIR}/smoke.png)
 add_test(NAME simrun_regions COMMAND simrun --seed 1 --size 128 --days 0 --regions ${CMAKE_BINARY_DIR}/regions.png)
+add_test(NAME simrun_plants COMMAND simrun --seed 42 --size 256 --days 3 --check --png ${CMAKE_BINARY_DIR}/plants.png)
 add_test(NAME simrun_sight COMMAND simrun --seed 1 --size 128 --days 0 --sight ${CMAKE_BINARY_DIR}/sight.png)
 # Food, rest and schedules (C6): the Crashlanded colonists live three days on their starting food, nobody dies.
 add_test(NAME simrun_needs COMMAND simrun --seed 42 --size 128 --days 3 --start Crashlanded --check)

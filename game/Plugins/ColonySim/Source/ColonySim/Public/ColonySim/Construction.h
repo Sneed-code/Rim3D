@@ -14,6 +14,7 @@
 namespace colony {
 
 class Map;
+class Plants;
 class Rng;
 class Things;
 
@@ -77,7 +78,8 @@ public:
         int count = 0;
     };
 
-    Construction(Map& map, Things& things, const DefDatabase& defs, Rng& rng, std::vector<Event>& events);
+    Construction(Map& map, Things& things, Plants& plants, const DefDatabase& defs, Rng& rng,
+                 std::vector<Event>& events);
 
     const ConstructionNumbers& numbers() const { return numbers_; }
 
@@ -111,7 +113,7 @@ public:
     int deliver(Entity site, DefId item, int count);
     // Turns a frame with all its materials into the finished building: pawns standing in the way
     // of a building that blocks movement are moved out, items lying on it are moved off, then it
-    // is built (full hit points). Returns the building, or kNoEntity if it can't stand there any
+    // is built (full hit points) and the plants under it are gone. Returns the building, or kNoEntity if it can't stand there any
     // more (the materials are given back).
     Entity complete(Entity frame);
     // Takes a finished building down and puts back `deconstructRefundFactor` of its materials,
@@ -143,6 +145,7 @@ private:
 
     Map& map_;
     Things& things_;
+    Plants& plants_;
     const DefDatabase& defs_;
     Rng& rng_;
     std::vector<Event>& events_;

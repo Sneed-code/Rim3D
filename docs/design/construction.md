@@ -110,9 +110,13 @@ put back on the ground outside. Then the frame is destroyed and the building spa
 map layer, the regions (one rebuild for the touched blocks) and the cover. If the cells are no longer
 free (a building appeared there by command) the materials are given back and the job fails.
 
+**Plants** under the footprint are removed from the plant layer when the building appears
+(`sim.plants().remove`, [plants.md](plants.md)). A blueprint or a frame leaves them alone, and
+trees don't stop a plan yet (they don't block pawns either until C3).
+
 ## Saves and hashes
 
-Save format 9. A plan is a thing with an optional `site` (stage, stuff, origin, rotation, size,
+Save format 10. A plan is a thing with an optional `site` (stage, stuff, origin, rotation, size,
 materials with `needed` and `have` by item `defName`, `workTotal`, `workDone`); a building made of
 something has `builtOf`; a marked building has `marked`; a job has its `site` and `progress`. The cell
 index (`siteAt`) is rebuilt on loading and the delivery reservations follow from the jobs like the
