@@ -37,7 +37,7 @@
     }
   },
   {
-    "defName": "MedicineIndustrial", "visual": {"pieces": 4, "layer": 0.08, "parts": [{"shape": "box", "size": [0.2, 0.14, 0.07], "color": [0.93, 0.92, 0.9]}, {"shape": "box", "size": [0.08, 0.03, 0.005], "at": [0, 0, 0.07], "color": [0.8, 0.1, 0.1]}]}, "parent": "ItemBase", "label": "medicine", "stackLimit": 25,
+    "defName": "MedicineIndustrial", "visual": {"pieces": 4, "layer": 0.08, "parts": [{"shape": "box", "size": [0.2, 0.14, 0.07], "color": [0.93, 0.92, 0.9]}, {"shape": "box", "size": [0.08, 0.03, 0.005], "at": [0, 0, 0.07], "color": [0.8, 0.1, 0.1]}]}, "parent": "ItemBase", "label": "medicine", "stackLimit": 25, "thingCategories": ["Medicine"],
     "stats": {
       "maxHitPoints": 60, "marketValue": 18, "mass": 0.5, "flammability": 0.7, "deteriorationRate": 2,
       "medicalPotency": 1.0, "medicalQualityMax": 1.0
@@ -88,5 +88,15 @@
     "defName": "MealFine", "parent": "MealBase", "label": "fine meal",
     "stats": { "marketValue": 20 },
     "ingestible": { "foodType": "Meal", "preferability": "MealFine", "maxNumToIngestAtOnce": 1 }
-  }
+  },
+  {"defName": "MedicineLumen", "parent": "ItemBase", "label": "lumen medicine", "stackLimit": 25, "visual": {"pieces": 3, "layer": 0.08, "parts": [{"shape": "box", "size": [0.18, 0.12, 0.06], "color": [0.75, 0.9, 1.0]}]}, "thingCategories": ["Medicine"], "stats": {"maxHitPoints": 60, "marketValue": 90, "mass": 0.5, "flammability": 0.7, "deteriorationRate": 2, "medicalPotency": 1.6, "medicalQualityMax": 1.3}, "unverified": ["stats.marketValue", "stats.medicalPotency", "stats.medicalQualityMax"]},
+  {"defName": "PegLeg", "parent": "ItemBase", "label": "peg leg", "stackLimit": 1, "visual": {"pieces": 3, "layer": 0.08, "parts": [{"shape": "box", "size": [0.3, 0.1, 0.1], "color": [0.5, 0.35, 0.2]}]}, "thingCategories": ["BodyPartsArtificial"], "stats": {"maxHitPoints": 80, "marketValue": 60, "mass": 2.0, "flammability": 0.5}, "unverified": ["stats.marketValue"]},
+  {"defName": "WoodenFoot", "parent": "ItemBase", "label": "wooden foot", "stackLimit": 1, "visual": {"pieces": 3, "layer": 0.08, "parts": [{"shape": "box", "size": [0.3, 0.1, 0.1], "color": [0.5, 0.35, 0.2]}]}, "thingCategories": ["BodyPartsArtificial"], "stats": {"maxHitPoints": 80, "marketValue": 30, "mass": 0.5, "flammability": 0.5}, "unverified": ["stats.marketValue"]},
+  {"defName": "WoodenHand", "parent": "ItemBase", "label": "wooden hand", "stackLimit": 1, "visual": {"pieces": 3, "layer": 0.08, "parts": [{"shape": "box", "size": [0.3, 0.1, 0.1], "color": [0.5, 0.35, 0.2]}]}, "thingCategories": ["BodyPartsArtificial"], "stats": {"maxHitPoints": 80, "marketValue": 30, "mass": 0.5, "flammability": 0.5}, "unverified": ["stats.marketValue"]},
+  {"defName": "ProstheticArm", "parent": "ItemBase", "label": "prosthetic arm", "stackLimit": 1, "visual": {"pieces": 3, "layer": 0.08, "parts": [{"shape": "box", "size": [0.3, 0.1, 0.1], "color": [0.55, 0.57, 0.6]}]}, "thingCategories": ["BodyPartsArtificial"], "stats": {"maxHitPoints": 80, "marketValue": 250, "mass": 1.5, "flammability": 0.5}, "unverified": ["stats.marketValue"]},
+  {"defName": "ProstheticLeg", "parent": "ItemBase", "label": "prosthetic leg", "stackLimit": 1, "visual": {"pieces": 3, "layer": 0.08, "parts": [{"shape": "box", "size": [0.3, 0.1, 0.1], "color": [0.55, 0.57, 0.6]}]}, "thingCategories": ["BodyPartsArtificial"], "stats": {"maxHitPoints": 80, "marketValue": 250, "mass": 2.5, "flammability": 0.5}, "unverified": ["stats.marketValue"]},
+  {"defName": "BionicArm", "parent": "ItemBase", "label": "bionic arm", "stackLimit": 1, "visual": {"pieces": 3, "layer": 0.08, "parts": [{"shape": "box", "size": [0.3, 0.1, 0.1], "color": [0.7, 0.75, 0.8]}]}, "thingCategories": ["BodyPartsArtificial"], "stats": {"maxHitPoints": 80, "marketValue": 1000, "mass": 1.5, "flammability": 0.5}, "unverified": ["stats.marketValue"]},
+  {"defName": "BionicLeg", "parent": "ItemBase", "label": "bionic leg", "stackLimit": 1, "visual": {"pieces": 3, "layer": 0.08, "parts": [{"shape": "box", "size": [0.3, 0.1, 0.1], "color": [0.7, 0.75, 0.8]}]}, "thingCategories": ["BodyPartsArtificial"], "stats": {"maxHitPoints": 80, "marketValue": 1000, "mass": 2.5, "flammability": 0.5}, "unverified": ["stats.marketValue"]},
+  {"defName": "BionicEye", "parent": "ItemBase", "label": "bionic eye", "stackLimit": 1, "visual": {"pieces": 3, "layer": 0.08, "parts": [{"shape": "box", "size": [0.3, 0.1, 0.1], "color": [0.7, 0.75, 0.8]}]}, "thingCategories": ["BodyPartsArtificial"], "stats": {"maxHitPoints": 80, "marketValue": 1000, "mass": 0.3, "flammability": 0.5}, "unverified": ["stats.marketValue"]},
+  {"defName": "BionicEar", "parent": "ItemBase", "label": "bionic ear", "stackLimit": 1, "visual": {"pieces": 3, "layer": 0.08, "parts": [{"shape": "box", "size": [0.3, 0.1, 0.1], "color": [0.7, 0.75, 0.8]}]}, "thingCategories": ["BodyPartsArtificial"], "stats": {"maxHitPoints": 80, "marketValue": 800, "mass": 0.2, "flammability": 0.5}, "unverified": ["stats.marketValue"]}
 ]
