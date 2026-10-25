@@ -193,6 +193,10 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["target"] = entt::to_integral(c.target);
                 j["mode"] = c.mode == MeleeMode::Attack ? "Attack" : "Block";
+            } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["dx"] = static_cast<double>(c.dx);
+                j["dy"] = static_cast<double>(c.dy);
             } else if constexpr (std::is_same_v<Type, SpendTalentPointCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["talent"] = c.talent;
@@ -716,6 +720,21 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = ShortCircuitCommand{static_cast<Entity>(thing)};
+    } else if (type == "DodgeRoll") {
+        DodgeRollCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        for (const auto& [key, field] : {std::pair<const char*, float*>{"dx", &c.dx}, std::pair<const char*, float*>{"dy", &c.dy}}) {
+            const auto it = j.find(key);
+            if (it == j.end() || !it->is_number()) {
+                return r.fail(where + "." + key + " must be a number");
+            }
+            *field = static_cast<float>(it->get<double>());
+        }
+        out.command = c;
     } else if (type == "SetResearch" || type == "UnlockResearch") {
         std::string project;
         if (!r.text(j, "project", project, where)) {

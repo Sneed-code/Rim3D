@@ -350,6 +350,19 @@ struct MeleeCommand {
     MeleeMode mode = MeleeMode::Attack;
 };
 
+// The protagonist's dodge roll (P2, docs/design/shooter-feel.md): a start-up, a roll of a few metres
+// in the direction (dx, dy) (any length; not a number, or zero, is a backstep away from where the
+// pawn faces) in which bullets pass through the pawn for a short window, then a recovery in which it
+// can be hit again but can't move or shoot, then a short wait before the next roll. The sim moves
+// the pawn, so Unreal plays the animation on top and never moves the body itself. Fails if the pawn
+// isn't a colonist under direct control, is downed, lying prone, already rolling, or waiting out the
+// last roll.
+struct DodgeRollCommand {
+    Entity pawn = kNoEntity;
+    float dx = 0.0f;
+    float dy = 0.0f;
+};
+
 // Talents (task P3, docs/design/talents.md): the protagonist spends talent points on one more rank of a
 // talent. Fails for a pawn that has no talents, a talent that doesn't exist or is at its top rank, a
 // requirement missing, or too few points.
@@ -376,7 +389,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              RemoveBillCommand, SetBillCommand, HandsOnCommand, FlickCommand, ShortCircuitCommand,
                              PlaceFloorCommand, AddFilthCommand,
                              SetResearchCommand, UnlockResearchCommand,
-                             MeleeCommand,
+                             MeleeCommand, DodgeRollCommand,
                              SpendTalentPointCommand, AddTalentXpCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was

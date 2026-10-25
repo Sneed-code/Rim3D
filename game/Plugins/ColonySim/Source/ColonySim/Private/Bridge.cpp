@@ -93,6 +93,8 @@ const char* commandName(const Command& command) {
                 return "UnlockResearch";
             } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
                 return "Melee";
+            } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
+                return "DodgeRoll";
             } else if constexpr (std::is_same_v<Type, SpendTalentPointCommand>) {
                 return "SpendTalentPoint";
             } else {
@@ -175,6 +177,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Deconstruct: return "Deconstruct";
         case PawnAction::Reload: return "Reload";
         case PawnAction::Dodge: return "Dodge";
+        case PawnAction::Roll: return "Roll";
         case PawnAction::Cook: return "Cook";
         case PawnAction::Research: return "Research";
         case PawnAction::Clean: return "Clean";
