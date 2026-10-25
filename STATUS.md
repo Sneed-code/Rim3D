@@ -28,15 +28,18 @@ read-only snapshot; every session can be saved as a replay file and played back 
 (`docs/design/bridge.md`). Since S3 paths are hierarchical: region route, then cell A\* inside that
 corridor, asked for through a queue with a work budget per step (`sim.pathfinder().request`, an
 answer the next step at the earliest); a long 1 km search costs about 1,500 cells instead of
-34,000 (`docs/design/pathfinding.md`). The Stage 0 hauling job (now in `Sim.cpp`) is still a
+34,000 (`docs/design/pathfinding.md`). The Stage 0 hauling job (`Sim.cpp`, `HaulJob.h`) is still a
 placeholder for C1. Since F3 buildings and ground have heights, so the
 sim can say how hidden a pawn is from each of eight sides (`Map::cover()`), whether one pawn can see
 another (`lineOfSight`, with standing, crouching and prone) and which ground a faction's enemies
-can shoot at (`Sim::threatMap`); `docs/design/cover.md`.
+can shoot at (`Sim::threatMap`); `docs/design/cover.md`. Since S6 the whole game state saves to
+one binary file and loads back to exactly the same game (`saveSim` / `loadSim`, `simrun --save`,
+`--load`, `--save-json`; `docs/design/saves.md`). **Every task that adds sim state must add it to the
+save** (the doc has the steps) and to the save round-trip test.
 
 ## Stage 1 progress
 
-8 of 43 tasks done (D1, D2, U1, S1, S2, S5, F3, S3). Tick tasks in `docs/plans/stage-1.md` as they merge.
+9 of 43 tasks done (D1, D2, U1, S1, S2, S5, S6, F3, S3). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -61,9 +64,11 @@ Wave 3, both cloud:
   must go into `Sim::stateHash()`.
 
 Wave 4, now open: ~~**S3** hierarchical pathfinding~~ done (`docs/design/pathfinding.md`; CI runs
-the 1 km, 100 pawn check as `simrun_paths`; the save must store the path queue, see that doc),
-**S6** save and load (cloud,
-Sonnet high), ~~**F3** cover, sight and threat maps~~ done (`docs/design/cover.md`; `simrun --sight
+the 1 km, 100 pawn check as `simrun_paths`; the path queue is in the save, save format 2),
+~~**S6** save and load~~ done
+(`docs/design/saves.md`; saves keep the command log, so a loaded session still records a full replay;
+the entity-registry hash order changed, so replays recorded before S6 have different hash values),
+~~**F3** cover, sight and threat maps~~ done (`docs/design/cover.md`; `simrun --sight
 FILE` draws what a pawn sees; sandbags and barricades were added to the importer list, and
 trees and rocks get their height from `fillPercent` when C2 adds plants) and **U2** bridge v2 (PC
 Unreal, Sonnet high; the first Unreal compile of EnTT and the S5 bridge, plus a dev key that saves

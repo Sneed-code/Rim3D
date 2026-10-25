@@ -99,6 +99,17 @@ Entity Things::make(DefId defId, int stackCount) {
     return thing;
 }
 
+void Things::placeFootprint(Entity thing, const CellRect& rect, const Footprint& footprint) {
+    const Passage passage = footprint.blocksMovement ? Passage::Blocked
+                            : footprint.isDoor       ? Passage::Door
+                                                     : Passage::Open;
+    for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
+        for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
+            map_.setBuilding(CellPos{x, y, rect.level}, thing, passage, footprint.obstacleDm);
+        }
+    }
+}
+
 bool Things::spawnAt(Entity thing, CellPos cell, Rot4 rot) {
     if (!registry_.valid(thing) || registry_.all_of<Position>(thing)) {
         return false;
@@ -122,20 +133,34 @@ bool Things::spawnAt(Entity thing, CellPos cell, Rot4 rot) {
             }
         }
     }
-    const Passage passage = footprint->blocksMovement ? Passage::Blocked
-                            : footprint->isDoor       ? Passage::Door
-                                                      : Passage::Open;
-    for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
-        for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
-            map_.setBuilding(CellPos{x, y, rect.level}, thing, passage, footprint->obstacleDm);
-        }
-    }
+    placeFootprint(thing, rect, *footprint);
     footprint->origin = cell;
     footprint->rotation = rot;
     registry_.emplace<Position>(thing, Position{static_cast<float>(rect.minX) + 0.5f * static_cast<float>(rect.sizeX),
                                                 static_cast<float>(rect.minY) + 0.5f * static_cast<float>(rect.sizeY),
                                                 rect.level});
     report(EventType::ThingSpawned, thing, cell);
+    return true;
+}
+
+bool Things::relinkBuilding(Entity thing) {
+    if (!registry_.valid(thing) || !registry_.all_of<Position>(thing)) {
+        return false;
+    }
+    const Footprint* footprint = registry_.try_get<Footprint>(thing);
+    if (footprint == nullptr) {
+        return true;
+    }
+    const CellRect rect = footprint->rect();
+    for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
+        for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
+            const CellPos c{x, y, rect.level};
+            if (!map_.inBounds(c) || !map_.groundWalkable(c) || map_.buildingAt(c) != kNoEntity) {
+                return false;
+            }
+        }
+    }
+    placeFootprint(thing, rect, *footprint);
     return true;
 }
 

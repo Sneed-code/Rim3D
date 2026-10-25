@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <deque>
+#include <string>
 #include <vector>
 
 namespace colony {
@@ -59,6 +60,25 @@ struct PathStats {
     uint32_t maxWaitSteps = 0;      // most `update` calls a request waited for its answer
 };
 
+// The queue as plain values, for saves (docs/design/saves.md). Counters are not part of it.
+struct PathSavedRequest {
+    uint32_t serial = 0;
+    PathStatus status = PathStatus::Unknown;
+    CellPos start;
+    CellPos goal;
+    uint64_t askedAt = 0;
+    std::vector<CellPos> path;
+};
+
+struct PathSavedState {
+    uint32_t nextSerial = 1;
+    uint64_t updates = 0;
+    std::vector<PathSavedRequest> requests;  // by ticket slot
+    std::vector<uint32_t> freeSlots;         // in the order they are used again (the last first)
+    std::vector<uint32_t> queue;             // in request order
+    int64_t activeWork = 0;                  // work done on the front request's search so far
+};
+
 class COLONY_API Pathfinder {
 public:
     // Work per step when the sim doesn't say otherwise: regions plus cells expanded. Measured at
@@ -67,7 +87,8 @@ public:
 
     struct OpenNode {
         float f;
-        float h;  // ties on f go to the node nearer the goal, which keeps open ground cheap
+        float h;      // ties on f go to the node nearer the goal, which keeps open ground cheap
+        uint32_t tie;  // then the lower of these: the cell, or a region's anchor cell (never its id)
         uint32_t node;
     };
 
@@ -100,6 +121,10 @@ public:
     const PathStats& stats() const { return stats_; }
     // Adds the queue and the progress of the search in hand to a state hash (not the stats).
     void hashState(StateHasher& h) const;
+    PathSavedState saveState() const;
+    // Puts a saved queue back and redoes the half-done search, on a map that already has every
+    // building. Returns false, with `error`, if the state doesn't add up.
+    bool loadState(PathSavedState state, std::string& error);
 
 private:
     enum class Phase : uint8_t { Idle, Route, Guide, Cells };
@@ -123,6 +148,7 @@ private:
     // One search at a time, kept in the members below so it can stop and go on next step.
     bool beginSearch(CellPos start, CellPos goal);  // false if it can't succeed
     void pushRegion(uint32_t node, uint32_t parent, float g, float x, float y, float h, uint32_t gen);
+    uint32_t regionTie(uint32_t node) const;
     Outcome runRoute(int64_t& work, int64_t budget);
     void beginGuide();
     Outcome runGuide(int64_t& work, int64_t budget);

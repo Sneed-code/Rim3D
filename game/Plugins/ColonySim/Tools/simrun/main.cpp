@@ -8,6 +8,9 @@
 //   simrun --replay scenario.json --record out.replay.json
 //   simrun --seed 42 --size 1024 --days 1 --pawns 100 --items 2000 --data game/Plugins/ColonySim/Tests/data
 //                                     (pathfinding load test, with the test fixture defs; S3)
+//   simrun --seed 42 --days 1 --pawns 10 --items 100 --save game.save   (writes a save after the run)
+//   simrun --load game.save --days 1 --save later.save    (continues a save; --days defaults to 0)
+//   simrun --load game.save --days 0 --save-json game.json   (readable dump of a save)
 // --replay takes the settings and commands from the file and runs to its endStep (--days
 // overrides). --record writes what this run did as a replay, with its state hashes.
 // --check makes it exit with 1 if any job or path search failed.
@@ -19,6 +22,7 @@
 #include "ColonySim/Random.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Replay.h"
+#include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/ThreatMap.h"
 #include "ColonySim/Things.h"
@@ -34,6 +38,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -54,6 +59,9 @@ struct Options {
     std::string replay;
     std::string record;
     std::string sightPng;
+    std::string load;
+    std::string save;
+    std::string saveJson;
 #ifdef COLONY_DATA_DIR
     std::string data = COLONY_DATA_DIR;
 #else
@@ -92,11 +100,17 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.replay = argv[++i];
         } else if (std::strcmp(arg, "--record") == 0 && hasValue) {
             out.record = argv[++i];
+        } else if (std::strcmp(arg, "--load") == 0 && hasValue) {
+            out.load = argv[++i];
+        } else if (std::strcmp(arg, "--save") == 0 && hasValue) {
+            out.save = argv[++i];
+        } else if (std::strcmp(arg, "--save-json") == 0 && hasValue) {
+            out.saveJson = argv[++i];
         } else {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
                          "[--path-budget N] [--check] [--png FILE] [--regions FILE] [--sight FILE] [--data DIR] "
-                         "[--replay FILE] [--record FILE]\n");
+                         "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE]\n");
             return false;
         }
     }
@@ -372,7 +386,35 @@ int main(int argc, char** argv) {
     }
 
     const auto start = Clock::now();
-    colony::Sim sim(settings, defs);
+    std::unique_ptr<colony::Sim> simOwner;
+    if (!options.load.empty()) {
+        if (!options.replay.empty()) {
+            std::fprintf(stderr, "--load and --replay can't be used together\n");
+            return 2;
+        }
+        std::vector<uint8_t> bytes;
+        std::string error;
+        if (!colony::readSaveFile(options.load, bytes, error)) {
+            std::fprintf(stderr, "%s\n", error.c_str());
+            return 1;
+        }
+        colony::SaveLoadResult loaded = colony::loadSim(bytes, defs);
+        if (!loaded.sim) {
+            std::fprintf(stderr, "%s: %s\n", options.load.c_str(), loaded.error.c_str());
+            return 1;
+        }
+        for (const std::string& w : loaded.warnings) {
+            std::fprintf(stderr, "warning: %s\n", w.c_str());
+        }
+        simOwner = std::move(loaded.sim);
+        settings = simOwner->settings();
+        if (!options.daysGiven) {
+            steps = 0;
+        }
+    } else {
+        simOwner = std::make_unique<colony::Sim>(settings, defs);
+    }
+    colony::Sim& sim = *simOwner;
     const auto generated = Clock::now();
     if (!sim.setupErrors().empty()) {
         for (const std::string& e : sim.setupErrors()) {
@@ -461,6 +503,29 @@ int main(int argc, char** argv) {
                      static_cast<unsigned long long>(sim.stats().failedJobs),
                      static_cast<unsigned long long>(paths.failedSearches));
         return 1;
+    }
+
+    if (!options.save.empty() || !options.saveJson.empty()) {
+        std::string error;
+        if (!options.save.empty()) {
+            const auto before = Clock::now();
+            const std::vector<uint8_t> bytes = colony::saveSim(sim);
+            const auto saved = Clock::now();
+            if (!colony::writeSaveFile(options.save, bytes, error)) {
+                std::fprintf(stderr, "%s\n", error.c_str());
+                return 1;
+            }
+            std::printf("{\"saveBytes\":%zu,\"saveMs\":%.2f}\n", bytes.size(), ms(before, saved));
+        }
+        if (!options.saveJson.empty()) {
+            std::ofstream file(options.saveJson, std::ios::binary | std::ios::trunc);
+            const std::string json = colony::saveToJson(sim);
+            file.write(json.data(), static_cast<std::streamsize>(json.size()));
+            if (!file) {
+                std::fprintf(stderr, "could not write %s\n", options.saveJson.c_str());
+                return 1;
+            }
+        }
     }
 
     if (!options.regionsPng.empty()) {

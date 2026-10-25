@@ -5,6 +5,7 @@
 #include "ColonySim/Regions.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
+#include "HaulJob.h"
 
 #include <algorithm>
 #include <cmath>
@@ -12,29 +13,6 @@
 #include <utility>
 
 namespace colony {
-
-// Stage 0 hauling placeholder: a pawn that only hauls items to one stockpile cell. The job
-// system (task C1) replaces these components and the code that uses them.
-enum class HaulStage : uint8_t { Idle, WaitPathToItem, GoToItem, WaitPathToStockpile, CarryToStockpile };
-
-struct HaulJob {
-    HaulStage stage = HaulStage::Idle;
-    Entity item = kNoEntity;
-    PathTicket path;  // while waiting for a path
-};
-
-// On an item a pawn has claimed, so nobody else goes for it.
-struct HaulReservedBy {
-    Entity pawn = kNoEntity;
-};
-
-// On an item while a pawn carries it (the item is off the map).
-struct HaulCarriedBy {
-    Entity pawn = kNoEntity;
-};
-
-// On an item that has reached the stockpile.
-struct HaulStored {};
 
 namespace {
 
@@ -84,6 +62,11 @@ void simHashCell(StateHasher& h, CellPos c) {
 Sim::Sim(const SimSettings& settings) : Sim(settings, nullptr) {}
 
 Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
+    : Sim(settings, std::move(defs), EmptyStart{}) {
+    placeStockpileAndThings();
+}
+
+Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, EmptyStart)
     : settings_(settings),
       // No defs: share a static empty database, owned by nobody.
       defs_(defs ? std::move(defs) : std::shared_ptr<const DefDatabase>(std::shared_ptr<const DefDatabase>(), &simEmptyDefs())),
@@ -95,7 +78,6 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
       groundHash_(map_.contentHash()) {
     things_->setEventLog(&events_);
     map_.regions().update();  // build every region now, not in the first step
-    placeStockpileAndThings();
 }
 
 Sim::~Sim() = default;
@@ -382,17 +364,21 @@ uint64_t Sim::stateHash() const {
     h.add(stats_.failedJobs);
     pathfinder_.hashState(h);
 
-    // Every entity id the registry has handed out, in its own order: live ones, then the free
-    // list that decides the next ids. Then each live thing's components.
+    // The entity ids the registry has handed out: the free list in reuse order (it decides the
+    // next ids), then every live thing in id order with its components. The registry's own
+    // order of live things depends on its history, and a loaded save doesn't repeat that.
     const entt::registry& reg = things_->registry();
     const auto* entities = reg.storage<Entity>();
+    const size_t live = entities->free_list();
     h.add(static_cast<uint64_t>(entities->size()));
-    h.add(static_cast<uint64_t>(entities->free_list()));
-    for (size_t i = 0; i < entities->size(); ++i) {
+    h.add(static_cast<uint64_t>(live));
+    for (size_t i = live; i < entities->size(); ++i) {
         h.add(entt::to_integral(entities->data()[i]));
     }
-    for (size_t i = 0; i < entities->free_list(); ++i) {
-        const Entity e = entities->data()[i];
+    std::vector<Entity> liveIds(entities->data(), entities->data() + live);
+    std::sort(liveIds.begin(), liveIds.end());
+    for (const Entity e : liveIds) {
+        h.add(entt::to_integral(e));
         // Which components it has, then their fields.
         const bool has[] = {reg.all_of<Thing>(e),         reg.all_of<Position>(e),       reg.all_of<Footprint>(e),
                             reg.all_of<StackCount>(e),    reg.all_of<HitPoints>(e),      reg.all_of<Mover>(e),
@@ -417,6 +403,7 @@ uint64_t Sim::stateHash() const {
             h.add(f->sizeY);
             h.add(f->blocksMovement);
             h.add(f->isDoor);
+            h.add(static_cast<int>(f->obstacleDm));
             simHashCell(h, f->origin);
             h.add(static_cast<int>(f->rotation));
         }

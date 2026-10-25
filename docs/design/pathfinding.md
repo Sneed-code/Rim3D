@@ -61,10 +61,12 @@ cut the goal off, it fails without a search. A path handed out earlier is not ch
 pawn whose path gets blocked has to ask again (the job system, C1, will do that).
 
 **Determinism, replays and saves.** The queue is sim state. `Pathfinder::hashState` adds the
-requests, the queue and the work done so far on the search in hand to `Sim::stateHash`, and
-replays store `pathBudget` with the other settings. A half-done search is fully decided by its
-request, the map and that work count, so the save (S6) only needs to store the requests and the
-count, and on load start the search again and run it for that much work.
+requests, the queue and the work done so far on the search in hand to `Sim::stateHash`; replays
+store `pathBudget` with the other settings; saves (format 2) store the requests, the queue and that
+work count (`saveState` / `loadState`). A half-done search is fully decided by its request, the map
+and the work done, so loading starts it again and runs it for that much work. A loaded map numbers
+its regions afresh, so no search lets a region id decide anything: heap ties go to the region with
+the lower anchor cell, never the lower id.
 
 **Budget:** `Pathfinder::kDefaultBudget` = 3,000 units, `SimSettings::pathBudget` to change it. In
 the cloud 3,000 units take 1 to 1.5 ms; sneed's PC should be faster. A long 1 km search is about

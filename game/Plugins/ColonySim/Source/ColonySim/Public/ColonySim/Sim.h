@@ -26,6 +26,7 @@ class DefDatabase;
 class Regions;
 class Things;
 struct Snapshot;
+class SimSaveAccess;
 
 struct SimSettings {
     uint64_t seed = 0;
@@ -115,6 +116,13 @@ public:
     const Pathfinder& pathfinder() const { return pathfinder_; }
 
 private:
+    friend class SimSaveAccess;  // saves read and restore the private state (Save.h)
+
+    struct EmptyStart {};
+    // A sim with its map and nothing else: no hauling test. Sim(settings, defs) adds the test's
+    // stockpile, items and pawns; loading a save restores them from the file instead.
+    Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, EmptyStart);
+
     void applyCommand(const Command& command, uint64_t id);
     void commandFailed(uint64_t id, std::string message);
     void placeStockpileAndThings();

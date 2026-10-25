@@ -28,7 +28,9 @@ float pathOctileCells(int ax, int ay, int bx, int by) {
     return pathOctile(static_cast<float>(ax - bx), static_cast<float>(ay - by));
 }
 
-// Min-heap order. Equal f goes to the smaller h, then the lower node so searches are deterministic.
+// Min-heap order. Equal f goes to the smaller h, then the lower tie so searches are deterministic.
+// Region ids aren't used to break ties: a loaded save builds its regions afresh, and their ids may
+// differ from the saved game's, but their anchor cells don't.
 struct PathHeapAfter {
     bool operator()(const Pathfinder::OpenNode& a, const Pathfinder::OpenNode& b) const {
         if (a.f != b.f) {
@@ -37,7 +39,7 @@ struct PathHeapAfter {
         if (a.h != b.h) {
             return a.h > b.h;
         }
-        return a.node > b.node;
+        return a.tie > b.tie;
     }
 };
 
@@ -218,6 +220,90 @@ void Pathfinder::hashState(StateHasher& h) const {
     h.add(activeWork_);
 }
 
+PathSavedState Pathfinder::saveState() const {
+    PathSavedState out;
+    out.nextSerial = nextSerial_;
+    out.updates = updates_;
+    for (const Request& r : requests_) {
+        out.requests.push_back(PathSavedRequest{r.serial, r.status, r.start, r.goal, r.askedAt, r.path});
+    }
+    out.freeSlots = freeSlots_;
+    out.queue.assign(queue_.begin(), queue_.end());
+    out.activeWork = phase_ == Phase::Idle ? 0 : activeWork_;
+    return out;
+}
+
+bool Pathfinder::loadState(PathSavedState state, std::string& error) {
+    // Every slot is either free (Unknown, in freeSlots once) or live; the Queued ones are exactly
+    // the queue, each once.
+    const size_t slots = state.requests.size();
+    std::vector<uint8_t> listed(slots, 0);
+    for (const uint32_t slot : state.freeSlots) {
+        if (slot >= slots || listed[slot] != 0 || state.requests[slot].status != PathStatus::Unknown) {
+            error = "the save's path queue is damaged";
+            return false;
+        }
+        listed[slot] = 1;
+    }
+    for (const uint32_t slot : state.queue) {
+        if (slot >= slots || listed[slot] != 0 || state.requests[slot].status != PathStatus::Queued) {
+            error = "the save's path queue is damaged";
+            return false;
+        }
+        listed[slot] = 1;
+    }
+    for (size_t slot = 0; slot < slots; ++slot) {
+        const PathSavedRequest& r = state.requests[slot];
+        const bool bad = static_cast<int>(r.status) > static_cast<int>(PathStatus::Failed) ||
+                         (r.status == PathStatus::Unknown && listed[slot] == 0) ||
+                         (r.status == PathStatus::Queued && listed[slot] == 0) ||
+                         (r.status != PathStatus::Found && !r.path.empty());
+        if (bad) {
+            error = "the save's path queue is damaged";
+            return false;
+        }
+    }
+    if (state.activeWork < 0 || (state.activeWork > 0 && state.queue.empty()) || state.nextSerial == 0) {
+        error = "the save's path queue is damaged";
+        return false;
+    }
+
+    requests_.clear();
+    for (PathSavedRequest& r : state.requests) {
+        Request& to = requests_.emplace_back();
+        to.serial = r.serial;
+        to.status = r.status;
+        to.start = r.start;
+        to.goal = r.goal;
+        to.askedAt = r.askedAt;
+        to.path = std::move(r.path);
+    }
+    freeSlots_ = std::move(state.freeSlots);
+    queue_.assign(state.queue.begin(), state.queue.end());
+    nextSerial_ = state.nextSerial;
+    updates_ = state.updates;
+    phase_ = Phase::Idle;
+    activeWork_ = 0;
+
+    // Redo the half-done search: the same request, map and amount of work give the same state.
+    if (state.activeWork > 0) {
+        const Request& front = requests_[queue_.front()];
+        if (!map_.inBounds(front.start) || !map_.inBounds(front.goal) || !beginSearch(front.start, front.goal)) {
+            error = "the save has a path search the map can't have";
+            return false;
+        }
+        int64_t work = 0;
+        if (runSearch(work, state.activeWork) != Outcome::Running || work != state.activeWork) {
+            error = "the save has a path search the map can't have";
+            phase_ = Phase::Idle;
+            return false;
+        }
+        activeWork_ = work;
+    }
+    stats_ = PathStats{};
+    return true;
+}
+
 bool Pathfinder::findPath(CellPos start, CellPos goal, std::vector<CellPos>& out) {
     return searchNow(start, goal, out, true);
 }
@@ -303,7 +389,7 @@ bool Pathfinder::beginSearch(CellPos start, CellPos goal) {
     rSeen_[from] = routeGen_;
     const float h = pathOctile(sx - (static_cast<float>(goal.x) + 0.5f), sy - (static_cast<float>(goal.y) + 0.5f));
     open_.clear();
-    open_.push_back(OpenNode{h, h, from});
+    open_.push_back(OpenNode{h, h, regionTie(from), from});
     phase_ = Phase::Route;
     return true;
 }
@@ -335,8 +421,16 @@ void Pathfinder::pushRegion(uint32_t node, uint32_t parent, float g, float x, fl
     rParent_[node] = parent;
     rX_[node] = x;
     rY_[node] = y;
-    open_.push_back(OpenNode{g + h, h, node});
+    open_.push_back(OpenNode{g + h, h, regionTie(node), node});
     std::push_heap(open_.begin(), open_.end(), PathHeapAfter{});
+}
+
+uint32_t Pathfinder::regionTie(uint32_t node) const {
+    if (node == goalNode_) {
+        return 0xFFFFFFFFu;
+    }
+    const CellPos anchor = map_.regions().region(node).anchor;
+    return static_cast<uint32_t>((anchor.level * map_.height() + anchor.y) * map_.width() + anchor.x);
 }
 
 // Route pass: A* over the region graph. A region is entered at the middle of the border it was
@@ -436,7 +530,7 @@ void Pathfinder::beginCells(bool corridorOnly) {
     seen_[static_cast<size_t>(start)] = generation_;
     const float h = cellHeuristic(start_.x, start_.y, map_.regions().regionAtNow(start_));
     open_.clear();
-    open_.push_back(OpenNode{h, h, static_cast<uint32_t>(start)});
+    open_.push_back(OpenNode{h, h, static_cast<uint32_t>(start), static_cast<uint32_t>(start)});
     phase_ = Phase::Cells;
 }
 
@@ -504,7 +598,7 @@ Pathfinder::Outcome Pathfinder::runCells(int64_t& work, int64_t budget) {
                 at(g_, n) = ng;
                 at(parent_, n) = c;
                 const float nh = cellHeuristic(nx, ny, region);
-                open_.push_back(OpenNode{ng + nh, nh, static_cast<uint32_t>(n)});
+                open_.push_back(OpenNode{ng + nh, nh, static_cast<uint32_t>(n), static_cast<uint32_t>(n)});
                 std::push_heap(open_.begin(), open_.end(), PathHeapAfter{});
             }
         }
