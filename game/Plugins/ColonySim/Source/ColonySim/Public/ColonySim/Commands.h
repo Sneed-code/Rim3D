@@ -462,6 +462,14 @@ struct DodgeRollCommand {
     float dy = 0.0f;
 };
 
+// Dev command: the weather becomes this Weathers def now (by defName, e.g. "Rain") and lasts `hours`
+// game hours (0: its usual length), then the next is chosen as usual (docs/design/weather.md).
+// Fails if no Weathers def has the name.
+struct SetWeatherCommand {
+    std::string weather;
+    float hours = 0.0f;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -477,7 +485,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SetDefenseRoleCommand, MarkShelterCommand, ThrowCommand, ExplodeCommand,
                              MeleeCommand, DodgeRollCommand,
                              SetOutfitCommand, EditOutfitCommand, AddOutfitCommand, RemoveOutfitCommand,
-                             StripCommand>;
+                             StripCommand, SetWeatherCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

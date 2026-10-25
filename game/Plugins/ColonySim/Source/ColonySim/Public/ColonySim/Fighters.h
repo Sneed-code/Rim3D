@@ -24,6 +24,7 @@ class Map;
 class MeleeSystem;
 class StateHasher;
 class Things;
+class Weather;
 struct GameTime;
 
 // Fighter AI: where to stand, whom to shoot, when to fall back. See docs/design/fighters.md.
@@ -149,6 +150,8 @@ public:
     // Melee (F8, docs/design/melee.md): fighters armed for it charge, the others strike back at
     // enemies in reach. Without it nobody fights in melee.
     void setMelee(MeleeSystem* melee) { melee_ = melee; }
+    // Fog and the rest shorten how far a fighter under the open sky spots enemies (docs/design/weather.md).
+    void setWeather(const Weather* weather) { weather_ = weather; }
 
     // A pawn's side (kPlayerFaction without a Faction component). Different factions are enemies.
     FactionId factionOf(Entity pawn) const;
@@ -258,6 +261,7 @@ private:
     MeleeSystem* melee_ = nullptr;
     uint64_t plans_ = 0;
     uint64_t sightChecks_ = 0;
+    const Weather* weather_ = nullptr;
 };
 
 }  // namespace colony

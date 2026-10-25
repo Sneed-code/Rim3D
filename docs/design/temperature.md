@@ -2,23 +2,20 @@
 
 Code: `ColonySim/Temperature.h`, `Private/Temperature.cpp`; the hediff side in `Health.h` /
 `Private/Health.cpp` (environment hediffs), the thoughts in `Private/Mood.cpp`, the outdoor
-stand-in in `Private/Sim.cpp` (`Sim::outdoorTemperature`). Tests: `Tests/TemperatureTests.cpp`,
+outdoor temperature from [weather](weather.md) (`Sim::outdoorTemperature`). Tests: `Tests/TemperatureTests.cpp`,
 `simrun --outdoor C` (prints a `temperature` line), CTest `simrun_temperature`. Data:
 `TemperatureRules` in `data/defs/Rules/TemperatureRules.json`, `heatPusher` on the heater, cooler,
 passive cooler and campfire (`Things/BuildingsPowerClimate.json`, D11), `comfyTemperatureMin/Max`
 on pawn defs, the `Hypothermia`, `Heatstroke` and `Frostbite` hediffs (D7) and the `Cold` and `Hot`
 thoughts (D9). Task E2. Builds on [rooms](rooms.md) and [health](health.md).
 
-## The outdoor temperature (until E1)
+## The outdoor temperature
 
-`Sim::outdoorTemperature()` is what the sim says the open air is. E1 (seasons and weather) will
-replace its body; **everything else only asks `TemperatureSystem::outdoor()`**, which the sim sets
-at the start of every step. The stand-in reads the biome (`TemperateForest`): the season's mean
-joined smoothly from the middle of one season to the middle of the next, plus a daily swing of
-`climate.dailySwing` (14 degrees, peak to peak) that is coldest at 05:00 and warmest at 15:00. It
-uses no library maths (smoothstep only), so Linux and Windows agree to the bit. The ground (the
-temperature under rock) is the mean of the four seasons. `Sim::setOutdoorOverride(C)` (and
-`simrun --outdoor C`) holds both fixed for tests; it is not saved.
+`Sim::outdoorTemperature()` is what the sim says the open air is: `Weather::temperatureAt` from E1
+([weather.md](weather.md)), the season's mean, the day's cycle and a slow random drift. Everything
+else only asks `TemperatureSystem::outdoor()`, which the sim sets at the start of every step. The
+ground (the temperature under rock) is the mean of the four seasons (`Weather::yearMeanTemperature`).
+`Sim::setOutdoorOverride(C)` (and `simrun --outdoor C`) holds both fixed for tests; it is not saved.
 
 ## Rooms
 

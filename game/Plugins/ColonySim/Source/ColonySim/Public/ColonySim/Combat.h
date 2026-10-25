@@ -21,6 +21,7 @@ class HealthSystem;
 class Map;
 class StateHasher;
 class Things;
+class Weather;
 
 // Guns, bullets and hitboxes. See docs/design/combat.md.
 //
@@ -201,6 +202,8 @@ public:
     CombatSystem& operator=(const CombatSystem&) = delete;
 
     void setEventLog(std::vector<Event>* events) { events_ = events; }
+    // Weather and snow cut a shooter's hit chance under the open sky (docs/design/weather.md).
+    void setWeather(const Weather* weather) { weather_ = weather; }
     // Called before combat destroys a thing (a building shot to pieces), so jobs can let go of it.
     void setBeforeDestroy(std::function<void(Entity)> hook) { beforeDestroy_ = std::move(hook); }
 
@@ -261,7 +264,8 @@ public:
     // standing man in the open as RimWorld's hit chance (shooter accuracy ^ distance x the gun's
     // accuracy at that distance); a player's shot uses the gun's accuracy at the medium distance.
     // Recoil is not included.
-    float spread(DefId weapon, int shootingSkill, float distance, bool player) const;
+    // `accuracyFactor` multiplies the hit chance (the weather's, for a shooter outdoors).
+    float spread(DefId weapon, int shootingSkill, float distance, bool player, float accuracyFactor = 1.0f) const;
     int shootingSkill(Entity pawn) const;
 
     // Fires one projectile from the pawn's muzzle toward (x, y, z) with this spread. Returns it,
@@ -334,6 +338,7 @@ private:
     std::unique_ptr<CombatModel> model_;
     std::unique_ptr<ApparelStats> apparelStats_;
     std::vector<Event>* events_ = nullptr;
+    const Weather* weather_ = nullptr;
     std::function<void(Entity)> beforeDestroy_;
     std::vector<Entity> scratch_;
 

@@ -19,6 +19,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Plants.h"
+#include "ColonySim/Weather.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/RoomStats.h"
 #include "ColonySim/Rooms.h"
@@ -332,6 +333,19 @@ struct SaveFloor {
     std::string def;  // Terrain defName
 };
 
+// The weather: which kinds it is, when it ends, its random stream, and the snow as parallel lists, one
+// entry per cell with snow in cell order (section "weather").
+struct SaveWeather {
+    std::string current;   // Weathers defNames, empty for none
+    std::string previous;
+    int64_t startedAt = 0;
+    int64_t endsAt = 0;
+    uint64_t rngState = 0;
+    uint64_t rngIncrement = 0;
+    std::vector<uint32_t> snowCells;  // cell index in the map
+    std::vector<uint32_t> snowDepth;  // hundredths of a percent
+};
+
 struct SavePending {
     uint64_t id = 0;
     Command command;
@@ -379,6 +393,8 @@ struct SaveData {
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
     uint32_t nextOutfitId = 1;
     SpoilageState spoilageState;                    // section "spoilage" (C16)
+    bool hasWeather = false;           // the file has the weather section; older saves start it fresh
+    SaveWeather weather;
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -1059,6 +1075,10 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("pawn", c.pawn);
                 ar.value("dx", c.dx);
                 ar.value("dy", c.dy);
+            } else if constexpr (std::is_same_v<Type, SetWeatherCommand>) {
+                auto* setWeather = &c;
+                ar.text("weather", setWeather->weather);
+                ar.value("hours", setWeather->hours);
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }
@@ -1791,6 +1811,19 @@ void savePlants(Ar& ar, SavePlants& p) {
 }
 
 template <typename Ar>
+void saveWeather(Ar& ar, SaveWeather& w) {
+    ar.text("current", w.current);
+    ar.text("previous", w.previous);
+    ar.value("startedAt", w.startedAt);
+    ar.value("endsAt", w.endsAt);
+    ar.value("rngState", w.rngState);
+    ar.value("rngIncrement", w.rngIncrement);
+    ar.list("snowCells", w.snowCells, [&](uint32_t& v) { ar.value(nullptr, v); });
+    ar.list("snowDepth", w.snowDepth, [&](uint32_t& v) { ar.value(nullptr, v); });
+    ar.require(w.snowCells.size() == w.snowDepth.size(), "the save file's snow lists don't match");
+}
+
+template <typename Ar>
 void saveMineables(Ar& ar, SaveMineables& m) {
     ar.list("defs", m.defs, [&](std::string& s) { ar.text(nullptr, s); });
     ar.list("cells", m.cells, [&](uint32_t& v) { ar.value(nullptr, v); });
@@ -2214,6 +2247,10 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "kick", e, &SaveEntity::kick, [&](RecoilKick& k) { saveKickPart(ar, k); });
         saveParts(ar, "roll", e, &SaveEntity::roll, [&](DodgeRoll& r) { saveRollPart(ar, r); });
     });
+    ar.section("weather", 1, [&] {
+        d.hasWeather = true;
+        saveWeather(ar, d.weather);
+    });
     ar.section("explosives", 1, [&] {
         saveParts(ar, "belt", e, &SaveEntity::belt, [&](SaveBelt& b) { saveBeltPart(ar, b); });
         saveParts(ar, "thrower", e, &SaveEntity::thrower, [&](SaveThrower& t) { saveThrowerPart(ar, t); });
@@ -2616,6 +2653,20 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.roomTemperatures = sim.temperature_->roomTemperatures();
     d.raids = sim.raids_->state();
     d.spoilageState = sim.spoilage_->state();
+    {
+        const WeatherState state = sim.weather_->state();
+        const auto nameOf = [&](DefId def) { return def.valid() ? sim.defs_->get(def).defName() : std::string(); };
+        d.weather.current = nameOf(state.current);
+        d.weather.previous = nameOf(state.previous);
+        d.weather.startedAt = state.startedAt;
+        d.weather.endsAt = state.endsAt;
+        d.weather.rngState = state.rngState;
+        d.weather.rngIncrement = state.rngIncrement;
+        for (const WeatherSnowRecord& r : sim.weather_->snowRecords()) {
+            d.weather.snowCells.push_back(static_cast<uint32_t>(r.cell));
+            d.weather.snowDepth.push_back(r.depth);
+        }
+    }
     return d;
 }
 
@@ -3177,6 +3228,31 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         return false;
     }
     sim.apparel_->restoreOutfits(std::move(d.outfits), d.nextOutfitId);
+    if (d.hasWeather) {
+        WeatherState state;
+        state.current = d.weather.current.empty() ? DefId{} : sim.defs_->idOf("Weathers", d.weather.current);
+        state.previous = d.weather.previous.empty() ? DefId{} : sim.defs_->idOf("Weathers", d.weather.previous);
+        state.startedAt = d.weather.startedAt;
+        state.endsAt = d.weather.endsAt;
+        state.rngState = d.weather.rngState;
+        state.rngIncrement = d.weather.rngIncrement;
+        std::vector<WeatherSnowRecord> snow;
+        for (size_t i = 0; i < d.weather.snowCells.size(); ++i) {
+            if (d.weather.snowDepth[i] > 65535) {
+                error = "the save has snow that is too deep";
+                return false;
+            }
+            snow.push_back(WeatherSnowRecord{static_cast<int>(d.weather.snowCells[i]), static_cast<uint16_t>(d.weather.snowDepth[i])});
+        }
+        if ((!d.weather.current.empty() && !state.current.valid()) || (!d.weather.previous.empty() && !state.previous.valid()) ||
+            !sim.weather_->restore(state, snow, d.seconds)) {
+            error = "the save has weather the data files can't place";
+            return false;
+        }
+    } else {
+        // A save from before the weather: it begins clear at the time the game had reached.
+        sim.weather_->restore(sim.weather_->state(), {}, d.seconds);
+    }
     sim.time_.seconds = d.seconds;
     sim.rng_.restore(d.rngState, d.rngIncrement);
     sim.stockpileCell_ = d.stockpile;

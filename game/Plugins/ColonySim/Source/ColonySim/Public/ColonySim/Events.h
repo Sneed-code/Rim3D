@@ -53,6 +53,8 @@ enum class EventType : uint8_t {
     MeleeSwing,      // a pawn began a melee swing: the hit comes `amount` steps later (docs/design/melee.md)
     MeleeHit,        // the hit moment of a swing: `message` says "hit", "deflected", "blocked", "dodged" or "missed"
     ApparelDestroyed,  // a worn piece wore out or was shot to pieces: `thing` the wearer, `def` the piece's def (docs/design/apparel.md)
+    WeatherChanged,  // the weather began to change into another kind (docs/design/weather.md)
+    SeasonChanged,   // a new season began
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -127,6 +129,8 @@ struct Event {
     // ItemSpoiled: `thing` the item (it is destroyed right after; forget its id), `def` its def, `cell` where it
     // lay, `message` "rotted" or "weathered". PawnPoisoned: `thing` the pawn, `def` the meal's def, `target` the
     // meal, `cell` where the pawn stands.
+    // WeatherChanged: `def` the new Weathers def, `message` its label, `amount` the outdoor temperature.
+    // SeasonChanged: `message` the season's name, `amount` its number (0 spring to 3 winter).
     float amount = 0.0f;
     // PawnAction Roll: see there.
     // GrenadeThrown: `thing` the thrower, `def` the grenade's Things def, `target` the grenade entity

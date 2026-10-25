@@ -297,6 +297,24 @@ struct ResearchView {
     bool current = false;
 };
 
+// The date, the weather and the sky's mood (docs/design/weather.md). Snow per cell is not here:
+// read `Sim::weather().snowDepth(cell)` when `snowChanges` goes up.
+struct WeatherView {
+    int year = 0;       // 0 for the first
+    int dayOfYear = 0;  // 0 to 59
+    int season = 0;     // 0 spring to 3 winter
+    float temperature = 15.0f;  // outdoors, degrees Celsius
+    DefId weather;      // the Weathers def now, and the one it is changing from
+    DefId previous;
+    float transition = 1.0f;  // 0 just changed to 1 fully changed: blend the looks by it
+    float skyGlow = 1.0f;     // the effects now, blended by the transition
+    float rainRate = 0.0f;
+    float snowRate = 0.0f;
+    float wetness = 0.0f;
+    uint64_t snowChanges = 0;
+    float snowCover = 0.0f;   // share of the map's cells with snow
+};
+
 struct Snapshot {
     int64_t gameSeconds = 0;  // Sim::time().seconds when it was written
     int mapWidth = 0;
@@ -330,6 +348,7 @@ struct Snapshot {
     std::vector<SquadView> squads;
     std::vector<ApparelView> apparel;      // worn apparel, see ThingView
     std::vector<OutfitView> outfits;       // the outfit policies, by id
+    WeatherView weather;
 
     // The thing with this id, or null if it is not on the map. Binary search.
     COLONY_API const ThingView* find(Entity id) const;
