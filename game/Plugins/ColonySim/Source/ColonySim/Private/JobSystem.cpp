@@ -104,6 +104,26 @@ JobsSteps jobsStepsOf(JobType type) {
     return {nullptr, 0};
 }
 
+// Job steps the pawn does standing still, in its working cell: nobody may push it out of it.
+bool jobHoldsStill(const Job& job) {
+    const JobsSteps steps = jobsStepsOf(job.type);
+    if (job.type == JobType::None || job.step >= steps.count) {
+        return false;
+    }
+    switch (steps.steps[job.step]) {
+        case JobStepKind::BuildWork:
+        case JobStepKind::DeconstructWork:
+        case JobStepKind::MineWork:
+        case JobStepKind::PlantWork:
+        case JobStepKind::BillWork:
+        case JobStepKind::Eat:
+        case JobStepKind::Lie:
+            return true;
+        default:
+            return false;
+    }
+}
+
 void jobsStartWalk(const Map& map, const Position& pos, Mover& mover) {
     std::vector<CellPos> route = std::move(mover.path);
     smoothPath(map, pos.x, pos.y, route);
@@ -493,6 +513,7 @@ void JobSystem::step() {
                                                &JobSystem::thinkIdle};
 
     for (const Entity pawn : order_) {
+        reg.get<Mover>(pawn).hold = false;
         // The player walks this one (U9), or it fights (drafted, or another faction's: F4): no
         // think, no job, until control is let go or it is undrafted.
         if (reg.any_of<PlayerControl, Fighter>(pawn)) {
@@ -524,6 +545,7 @@ void JobSystem::step() {
         }
         if (reg.get<Worker>(pawn).job.type != JobType::None) {
             tickJob(pawn);
+            reg.get<Mover>(pawn).hold = jobHoldsStill(reg.get<Worker>(pawn).job);
         }
     }
 }
@@ -811,6 +833,12 @@ JobSystem::StepResult JobSystem::walkTo(Entity pawn, Job& job, CellPos goal, std
 JobSystem::StepResult JobSystem::pickUp(Entity pawn, Job& job, std::string& why) {
     entt::registry& reg = things_.registry();
     if (cellOf(reg.get<Position>(job.thing)) != cellOf(reg.get<Position>(pawn))) {
+        if (job.repaths < maxRepaths_) {
+            // The stack was moved while the pawn walked (a wall went up under it): walk to where it is now.
+            ++job.repaths;
+            ++stats_.repaths;
+            return StepResult::Repeat;
+        }
         why = "the item isn't where the pawn stands";
         return StepResult::Failed;
     }

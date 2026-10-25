@@ -11,12 +11,15 @@
 //   simrun --seed 42 --days 1 --pawns 10 --items 100 --save game.save   (writes a save after the run)
 //   simrun --load game.save --days 1 --save later.save    (continues a save; --days defaults to 0)
 //   simrun --load game.save --days 0 --save-json game.json   (readable dump of a save)
+//   simrun --scenario colony [--seed 42] [--size 512] [--days 5] [--verbose]   (the colony test, C10;
+//                                     exit 1 if a check fails, docs/design/colony-scenario.md)
 // --replay takes the settings and commands from the file and runs to its endStep (--days
 // overrides). --record writes what this run did as a replay, with its state hashes.
 // --check makes it exit with 1 if any job or path search failed.
 // Defs load from --data (default: the repo's data folder). The hauling test needs the Things defs
 // Human and Steel and the WorkTypes def Hauling, which data/defs provides. Its pawns haul items
 // scattered over the map to a stockpile zone in the middle through the job system (C1).
+#include "ColonyScenario.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Mood.h"
@@ -64,6 +67,8 @@ struct Options {
     int items = 0;
     int pathBudget = colony::Pathfinder::kDefaultBudget;
     std::string start;  // a Scenarios def; prints the colonists it makes
+    std::string scenario;  // "colony": the scripted colony test (C10)
+    bool verbose = false;  // --scenario: an hourly line on stderr
     bool check = false;  // exit 1 if a job or a path search failed
     int gather = 0;      // mark rock to mine and plants to harvest this many cells round the middle
     std::string png;
@@ -100,6 +105,10 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.pathBudget = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--start") == 0 && hasValue) {
             out.start = argv[++i];
+        } else if (std::strcmp(arg, "--scenario") == 0 && hasValue) {
+            out.scenario = argv[++i];
+        } else if (std::strcmp(arg, "--verbose") == 0) {
+            out.verbose = true;
         } else if (std::strcmp(arg, "--gather") == 0 && hasValue) {
             out.gather = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--check") == 0) {
@@ -125,7 +134,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--check] [--png FILE] [--regions FILE] [--sight FILE] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--scenario colony [--verbose]] [--check] [--png FILE] [--regions FILE] [--sight FILE] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE]\n");
             return false;
         }
@@ -426,6 +435,15 @@ int main(int argc, char** argv) {
             return 1;
         }
         defs = std::move(loaded);
+    }
+
+    // The colony scenario (C10) runs its own script on the Crashlanded start; 5 days unless --days says.
+    if (!options.scenario.empty()) {
+        if (options.scenario != "colony" || !defs) {
+            std::fprintf(stderr, "--scenario takes 'colony' and needs the game's defs\n");
+            return 2;
+        }
+        return colonyscenario::run(options.seed, options.size, options.daysGiven ? options.days : 5.0, defs, options.verbose);
     }
 
     // A replay brings its own settings and commands; otherwise they come from the options.

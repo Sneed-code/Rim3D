@@ -105,8 +105,11 @@ seconds, 1.9 game minutes, a bit under 4 real seconds at 1x.
 
 `Construction::complete` first moves out of the footprint what shouldn't be inside: **pawns** standing
 in the cells of a building that blocks movement are put on the nearest free ground (their path is
-cleared and they walk again from there), and **items** lying under a building that isn't standable are
-put back on the ground outside. Then the frame is destroyed and the building spawned, which tells the
+cleared and `Mover::gaveUp` is set if they were walking, so the job asks for a new path from there),
+and **items** lying under a building that isn't standable are moved, as the same stack (same entity, so
+a pawn on its way to it, or a job holding it, still has it), to the nearest empty cell outside; with no
+empty cell near they are made again by `dropNear`. A pawn walking to a stack that moved walks to where
+it is now (the pick-up step repeats the walk, up to the job's repath limit). Then the frame is destroyed and the building spawned, which tells the
 map layer, the regions (one rebuild for the touched blocks) and the cover. If the cells are no longer
 free (a building appeared there by command) the materials are given back and the job fails.
 

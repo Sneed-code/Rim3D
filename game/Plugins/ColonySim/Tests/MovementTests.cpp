@@ -452,3 +452,37 @@ TEST_CASE("Movement: the snapshot shows velocity, height and the route ahead") {
     MOVE_REQUIRE(view->waypointCount == 2);
     CHECK(snap.waypoints[view->firstWaypoint + 1].x == doctest::Approx(static_cast<float>(to.x) + 0.5f));
 }
+
+TEST_CASE("Movement: pawns pushing each other sideways along a wall they can't pass still give up") {
+    Sim sim = moveTestSim(64);
+    moveTestWall(sim, 5, 30, 58, 30);  // a long wall, with both pawns' routes straight through it
+    const Entity a = moveTestPawn(sim, 30, 32);
+    const Entity b = moveTestPawn(sim, 30, 32);  // on top of each other: they push apart along the wall
+    moveTestWalk(sim, a, {CellPos{30, 20, 0}});
+    moveTestWalk(sim, b, {CellPos{31, 20, 0}});
+    int steps = 0;
+    while ((!moveTestMover(sim, a).gaveUp || !moveTestMover(sim, b).gaveUp) && steps < 3000) {
+        sim.step();
+        ++steps;
+    }
+    CHECK(moveTestMover(sim, a).gaveUp);
+    CHECK(moveTestMover(sim, b).gaveUp);
+}
+
+TEST_CASE("Movement: a pawn held in place (working) is not shoved by one walking up to its cell") {
+    Sim sim = moveTestSim(64);
+    const Entity worker = moveTestPawn(sim, 20, 30);
+    const Entity walker = moveTestPawn(sim, 5, 30);
+    const float startX = moveTestPos(sim, worker).x;
+    const float startY = moveTestPos(sim, worker).y;
+    moveTestWalk(sim, walker, {CellPos{20, 30, 0}});  // wants the very cell the worker stands in
+    for (int i = 0; i < 400; ++i) {
+        sim.things().registry().get<Mover>(worker).hold = true;  // the job system does this every step
+        sim.step();
+    }
+    CHECK(moveTestPos(sim, worker).x == startX);
+    CHECK(moveTestPos(sim, worker).y == startY);
+    // The walker came up to it and was kept out of it.
+    CHECK(moveTestPos(sim, walker).x > 18.0f);
+    CHECK(moveTestDistance(sim, walker, worker) >= 0.4f);
+}
