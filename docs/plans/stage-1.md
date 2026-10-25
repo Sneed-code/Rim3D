@@ -70,7 +70,7 @@ Times are one sitting of thread work. "Needs" lists tasks that must be merged fi
 | | S3 | **Hierarchical pathfinding.** Region-graph A\* then cell A\* inside the route's regions; queue with a per-step budget in cells expanded; unreachable requests rejected by reachability groups. Done when the 1 km simrun runs (`--size 1024 --pawns 100`) have no step over about 3 ms and no failed jobs. Doc: `design/pathfinding.md`. | Cloud | Opus, high | 90 min | S2 |
 | | S4 | **Smooth movement.** Smooth cell paths into straight lines where the ground allows, slope and terrain speed, deterministic local avoidance so pawns step around each other. | Cloud | Sonnet, high | 90 min | S3 |
 | ✓ | S5 | **Commands, events, snapshot and replays.** The bridge contract from `architecture.md`: commands applied at step boundaries and logged, events per step, a read-only snapshot, replay files (seed plus command log) and `simrun --replay`. Test: same seed and commands give the same state hash. Doc: `design/bridge.md`. | Cloud | Opus, high | 90 min | S1 |
-| | S6 | **Save and load.** Versioned binary save of all sim state, `defName` references, JSON dump for debugging. Test: save, load and run on gives the same hash as never saving. | Cloud | Sonnet, high | 90 min | S5 |
+| ✓ | S6 | **Save and load.** Versioned binary save of all sim state, `defName` references, JSON dump for debugging. Test: save, load and run on gives the same hash as never saving. Doc: `design/saves.md`. | Cloud | Sonnet, high | 90 min | S5 |
 
 ### Colony life (C)
 

@@ -29,11 +29,14 @@ read-only snapshot; every session can be saved as a replay file and played back 
 are still placeholders; C1 and S3 replace them. Since F3 buildings and ground have heights, so the
 sim can say how hidden a pawn is from each of eight sides (`Map::cover()`), whether one pawn can see
 another (`lineOfSight`, with standing, crouching and prone) and which ground a faction's enemies
-can shoot at (`Sim::threatMap`); `docs/design/cover.md`.
+can shoot at (`Sim::threatMap`); `docs/design/cover.md`. Since S6 the whole game state saves to
+one binary file and loads back to exactly the same game (`saveSim` / `loadSim`, `simrun --save`,
+`--load`, `--save-json`; `docs/design/saves.md`). **Every task that adds sim state must add it to the
+save** (the doc has the steps) and to the save round-trip test.
 
 ## Stage 1 progress
 
-7 of 43 tasks done (D1, D2, U1, S1, S2, S5, F3). Tick tasks in `docs/plans/stage-1.md` as they merge.
+8 of 43 tasks done (D1, D2, U1, S1, S2, S5, S6, F3). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -57,8 +60,10 @@ Wave 3, both cloud:
   commands so far (spawn and destroy a thing); each later system adds its own. New sim state
   must go into `Sim::stateHash()`.
 
-Wave 4, now open: **S3** hierarchical pathfinding (cloud, Opus high), **S6** save and load (cloud,
-Sonnet high), ~~**F3** cover, sight and threat maps~~ done (`docs/design/cover.md`; `simrun --sight
+Wave 4, now open: **S3** hierarchical pathfinding (cloud, Opus high), ~~**S6** save and load~~ done
+(`docs/design/saves.md`; saves keep the command log, so a loaded session still records a full replay;
+the entity-registry hash order changed, so replays recorded before S6 have different hash values),
+~~**F3** cover, sight and threat maps~~ done (`docs/design/cover.md`; `simrun --sight
 FILE` draws what a pawn sees; sandbags and barricades were added to the importer list, and
 trees and rocks get their height from `fillPercent` when C2 adds plants) and **U2** bridge v2 (PC
 Unreal, Sonnet high; the first Unreal compile of EnTT and the S5 bridge, plus a dev key that saves

@@ -102,6 +102,12 @@ public:
     // buildings. Returns false, and changes nothing, if the thing can't go there.
     bool spawnAt(Entity thing, CellPos cell, Rot4 rot = Rot4::North);
 
+    // For loading a save: a thing that already has its Position and Footprint put its building on
+    // the map again (the footprint's cells get the building and its passage). Returns false, and
+    // changes nothing, if the cells are off the map, not walkable ground or already taken.
+    // Things without a Footprint need nothing.
+    bool relinkBuilding(Entity thing);
+
     // Takes a thing off the map (removes its Position, frees its building cells). It still
     // exists, e.g. to be carried. Does nothing if it is not spawned.
     void despawn(Entity thing);
@@ -124,6 +130,7 @@ private:
     entt::registry registry_;
     std::vector<Event>* events_ = nullptr;
 
+    void placeFootprint(Entity thing, const CellRect& rect, const Footprint& footprint);
     void report(EventType type, Entity thing, CellPos cell = CellPos{});
 };
 

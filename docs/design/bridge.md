@@ -171,8 +171,8 @@ with `simrun --replay`; `firstMismatch` and the checkpoints narrow down when thi
 ## Limits for now
 
 - The command log grows for the whole session. Fine for dev commands; when the protagonist sends
-  a position every step (vanilla core input) it is about 3 MB per game day, still fine, but saves
-  (S6) decide how saves and the log fit together (a replay could become a save plus the log since).
+  a position every step (vanilla core input) it is about 3 MB per game day, still fine. Saves
+  (S6, `saves.md`) keep the log, so a loaded session still records a full replay from step 0.
 - Not thread-safe: submit, step and writeSnapshot all run on the game thread through Stage 1.
 - Replays from a different build or different data files may not match; they say so instead of
   pretending.
