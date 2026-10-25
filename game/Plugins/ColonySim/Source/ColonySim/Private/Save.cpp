@@ -5,6 +5,7 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
@@ -37,11 +38,11 @@ constexpr char kSaveMagic[8] = {'R', 'I', 'M', '3', 'D', 'S', 'A', 'V'};
 constexpr size_t kSaveMagicSize = sizeof kSaveMagic;
 // Bump when the layout below changes, and keep reading the old versions (the archive's
 // version() says which one a file is). Changing it needs a line in docs/design/saves.md.
-constexpr uint32_t kSaveFormatVersion = 9;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
+constexpr uint32_t kSaveFormatVersion = 10;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
                                             // 4: C8's scenario and colonists; 5: F1's pawn health; 6: C1's jobs,
                                             // work priorities and zones; 7: U9's direct control; 8: C6's needs,
-                                            // schedules, bed owners, the eating job's chair; 9: F2's posture,
-                                            // gear, triggers and projectiles
+                                            // schedules, bed owners, the eating job's chair; 9: C2's plants;
+                                            // 10: F2's posture, gear, triggers and projectiles
 // Saves from before the job system (formats 1 to 5) can't be read: their hauling placeholder has
 // no counterpart in the job system (docs/design/saves.md).
 constexpr uint32_t kSaveOldestFormat = 6;
@@ -136,7 +137,7 @@ struct SaveEntity {
     std::optional<Needs> needs;        // format 8 on
     std::optional<Schedule> schedule;  // format 8 on
     std::optional<Bed> bed;            // format 8 on
-    std::optional<Posture> posture;    // format 9 on
+    std::optional<Posture> posture;    // format 10 on
     std::optional<Gear> gear;
     std::optional<EquippedBy> equippedBy;
     std::optional<Shooter> shooter;
@@ -149,6 +150,15 @@ struct SaveZone {
     StoragePriority priority = StoragePriority::Normal;
     std::vector<std::string> disallowed;  // Things defNames
     std::vector<CellPos> cells;
+};
+
+// The plant layer as parallel lists, one entry per plant in cell order (format 9 on).
+struct SavePlants {
+    std::vector<std::string> defs;  // defNames of the plants' Things defs, in the order first met
+    std::vector<uint32_t> cells;    // cell index in the map
+    std::vector<uint32_t> defIndex;  // into `defs`
+    std::vector<uint32_t> growth;
+    std::vector<uint32_t> ageHours;
 };
 
 struct SavePending {
@@ -181,6 +191,7 @@ struct SaveData {
     PathSavedState paths;              // the path queue (format 2 on)
     uint32_t nextZoneId = 1;           // format 4 on
     std::vector<SaveZone> zones;
+    SavePlants plants;                 // format 9 on
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -462,7 +473,7 @@ void saveCommand(Ar& ar, Command& command) {
             default: ar.require(false, "the save file names a command this build doesn't know"); return;
         }
         // A format older than the command that was added in it can't contain it.
-        ar.require((type < 10 || ar.version() >= 7) && (type < 12 || ar.version() >= 8) && (type < 14 || ar.version() >= 9),
+        ar.require((type < 10 || ar.version() >= 7) && (type < 12 || ar.version() >= 8) && (type < 14 || ar.version() >= 10),
                    "the save file names a command this build doesn't know");
     }
     ar.note("name", commandName(command));
@@ -723,7 +734,7 @@ void saveEntity(Ar& ar, SaveEntity& e) {
             ar.list("owners", b.owners, [&](Entity& owner) { ar.value(nullptr, owner); });
         });
     }
-    if (ar.version() >= 9) {
+    if (ar.version() >= 10) {
         ar.optional("posture", e.posture, [&](Posture& p) {
             ar.value("stance", p.stance);
             ar.value("facingX", p.facingX);
@@ -794,6 +805,17 @@ void savePaths(Ar& ar, PathSavedState& p) {
 }
 
 template <typename Ar>
+void savePlants(Ar& ar, SavePlants& p) {
+    ar.list("defs", p.defs, [&](std::string& s) { ar.text(nullptr, s); });
+    ar.list("cells", p.cells, [&](uint32_t& v) { ar.value(nullptr, v); });
+    ar.list("defIndex", p.defIndex, [&](uint32_t& v) { ar.value(nullptr, v); });
+    ar.list("growth", p.growth, [&](uint32_t& v) { ar.value(nullptr, v); });
+    ar.list("ageHours", p.ageHours, [&](uint32_t& v) { ar.value(nullptr, v); });
+    ar.require(p.cells.size() == p.defIndex.size() && p.cells.size() == p.growth.size() && p.cells.size() == p.ageHours.size(),
+               "the save file's plant lists don't match");
+}
+
+template <typename Ar>
 void saveData(Ar& ar, SaveData& d) {
     ar.text("simVersion", d.simVersion);
     ar.value("defsHash", d.defsHash);
@@ -830,6 +852,9 @@ void saveData(Ar& ar, SaveData& d) {
     }
     ar.value("nextZoneId", d.nextZoneId);
     ar.list("zones", d.zones, [&](SaveZone& z) { saveZone(ar, z); });
+    if (ar.version() >= 9) {
+        ar.group("plants", [&] { savePlants(ar, d.plants); });
+    }
 }
 
 // The file: magic, format version, the data, then a checksum of everything before it.
@@ -1045,6 +1070,17 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         z.cells = zone.cells;
         d.zones.push_back(std::move(z));
+    }
+    std::vector<uint32_t> defIndexOf(sim.defs_->size(), UINT32_MAX);
+    for (const PlantRecord& r : sim.plants_->records()) {
+        if (defIndexOf[r.def.value] == UINT32_MAX) {
+            defIndexOf[r.def.value] = static_cast<uint32_t>(d.plants.defs.size());
+            d.plants.defs.push_back(sim.defs_->get(r.def).defName());
+        }
+        d.plants.cells.push_back(static_cast<uint32_t>(r.cell));
+        d.plants.defIndex.push_back(defIndexOf[r.def.value]);
+        d.plants.growth.push_back(r.growth);
+        d.plants.ageHours.push_back(r.ageHours);
     }
     return d;
 }
@@ -1331,6 +1367,22 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
     }
 
+    {
+        // Older saves have no plants: the map starts bare.
+        std::vector<PlantRecord> records;
+        for (size_t i = 0; i < d.plants.cells.size(); ++i) {
+            if (d.plants.defIndex[i] >= d.plants.defs.size()) {
+                error = "the save has a plant of an unknown kind";
+                return false;
+            }
+            const DefId def = sim.defs_->idOf("Things", d.plants.defs[d.plants.defIndex[i]]);
+            records.push_back(PlantRecord{static_cast<int>(d.plants.cells[i]), def, d.plants.growth[i], d.plants.ageHours[i]});
+        }
+        if (!sim.plants_->restore(records)) {
+            error = "the save has a plant the data files can't place";
+            return false;
+        }
+    }
     sim.time_.seconds = d.seconds;
     sim.rng_.restore(d.rngState, d.rngIncrement);
     sim.stockpileCell_ = d.stockpile;

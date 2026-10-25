@@ -78,7 +78,7 @@ Times are one sitting of thread work. "Needs" lists tasks that must be merged fi
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | C1 | **Job system.** RimWorld-style think list (emergencies, orders, needs, schedule, work), work types and priorities from data, work scanners that weigh distance and skip unreachable targets, reservations, jobs as steps with fail checks. Stockpile zones and hauling move onto it. Doc: `design/jobs.md`. | Cloud | Opus, high | 90 min | S3, D3 |
-| | C2 | **Plants.** Plant grid layer from defs; map generation places trees, berry bushes and grass by fertility; hourly growth. Shows in the simrun picture. | Cloud | Sonnet, medium | 60 min | S1, D3 |
+| ✓ | C2 | **Plants.** Plant grid layer from defs; map generation places trees, berry bushes and grass by fertility; hourly growth. Shows in the simrun picture. | Cloud | Sonnet, medium | 60 min | S1, D3 |
 | | C3 | **Mining, chopping and harvesting.** Designations and jobs: rock cells become rock chunks or ore, trees become wood, bushes give berries. Mining rebuilds regions. Work speed from skill. | Cloud | Sonnet, high | 90 min | C1, C2 |
 | | C4 | **Building.** Blueprints, frames, hauling materials to frames, build jobs, deconstruct. Wall, door, bed, table and stove from defs. Buildings block cells and rebuild regions. Doc: `design/construction.md`. | Cloud | Sonnet, high | 90 min | C1 |
 | | C5 | **Doors, roofs and rooms.** Doors open for pawns and cost path time; auto-roof over enclosed areas; rooms from enclosed regions with a role (bedroom, kitchen, dining room) and size. | Cloud | Sonnet, high | 90 min | C4 |

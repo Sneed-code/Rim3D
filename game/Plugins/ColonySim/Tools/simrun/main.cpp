@@ -23,6 +23,7 @@
 #include "ColonySim/Cover.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Pathfinder.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Replay.h"
@@ -146,6 +147,36 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
             pixels[i] = static_cast<unsigned char>(r * shade);
             pixels[i + 1] = static_cast<unsigned char>(g * shade);
             pixels[i + 2] = static_cast<unsigned char>(b * shade);
+        }
+    }
+    // Plants: trees dark green, berry bushes purple, other bushes and brambles olive, flowers
+    // yellow-white, grass a little greener and darker than the ground. A plant that is still
+    // growing is shown fainter.
+    const colony::Plants& plants = sim.plants();
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            const colony::CellPos c{x, y, 0};
+            if (!plants.has(c)) {
+                continue;
+            }
+            const std::string& name = sim.defs().get(plants.defAt(c)).defName();
+            float r = 60;
+            float g = 125;
+            float b = 40;
+            if (name.find("Tree") != std::string::npos) {
+                r = 15; g = 70; b = 25;
+            } else if (name == "Plant_Berry") {
+                r = 120; g = 40; b = 130;
+            } else if (name == "Plant_Bush" || name == "Plant_Brambles") {
+                r = 90; g = 100; b = 30;
+            } else if (name == "Plant_Dandelion") {
+                r = 235; g = 230; b = 150;
+            }
+            const float grown = 0.5f + 0.5f * plants.growth(c);
+            const size_t i = static_cast<size_t>(map.index(c)) * 3;
+            pixels[i] = static_cast<unsigned char>(pixels[i] + (r - pixels[i]) * grown);
+            pixels[i + 1] = static_cast<unsigned char>(pixels[i + 1] + (g - pixels[i + 1]) * grown);
+            pixels[i + 2] = static_cast<unsigned char>(pixels[i + 2] + (b - pixels[i + 2]) * grown);
         }
     }
     // Buildings dark grey, items yellow, pawns red (drawn last, on top). Ground level only.
@@ -514,6 +545,17 @@ int main(int argc, char** argv) {
                 sim.commandLog().size(), static_cast<unsigned long long>(commandsFailed),
                 static_cast<unsigned long long>(events), static_cast<unsigned long long>(sim.stateHash()), replayResult,
                 check.compared, static_cast<long long>(check.firstMismatch));
+
+    {
+        const colony::Plants& plants = sim.plants();
+        size_t mature = 0;
+        size_t trees = 0;
+        for (const colony::PlantRecord& r : plants.records()) {
+            mature += r.growth >= colony::kPlantFullGrowth ? 1 : 0;
+            trees += sim.defs().get(r.def).flag("plant.isTree") ? 1 : 0;
+        }
+        std::printf("{\"plants\":%zu,\"trees\":%zu,\"maturePlants\":%zu}\n", plants.count(), trees, mature);
+    }
 
     if (!options.record.empty()) {
         std::string error;
