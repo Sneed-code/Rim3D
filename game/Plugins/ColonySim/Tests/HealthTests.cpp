@@ -649,3 +649,21 @@ TEST_CASE("Health: a save with an injury on a part the body doesn't have is refu
     CHECK(bad.sim == nullptr);
     CHECK_FALSE(bad.error.empty());
 }
+
+TEST_CASE("Health: in the Crashlanded start only the protagonist has double hit points") {
+    SimSettings settings;
+    settings.seed = 42;
+    settings.mapSize = 256;
+    settings.scenario = "Crashlanded";
+    Sim sim(settings, healthTestDefs());
+    CHECK(sim.setupErrors().empty());
+    int heroes = 0;
+    int colonists = 0;
+    for (const auto [pawn, health] : sim.things().registry().view<const Health>().each()) {
+        ++colonists;
+        heroes += health.protagonist ? 1 : 0;
+        CHECK(sim.health().partMaxHitPoints(pawn, 0) == (health.protagonist ? 80.0f : 40.0f));
+    }
+    CHECK(colonists == 6);
+    CHECK(heroes == 1);
+}
