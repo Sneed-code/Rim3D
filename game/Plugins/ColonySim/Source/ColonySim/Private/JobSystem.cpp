@@ -129,7 +129,8 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::TameAnimal:
         case JobType::TrainAnimal:
         case JobType::FeedAnimal: return {kJobsHandleFoodSteps, static_cast<int>(std::size(kJobsHandleFoodSteps))};
-        case JobType::SlaughterAnimal: return {kJobsHandleSteps, static_cast<int>(std::size(kJobsHandleSteps))};
+        case JobType::SlaughterAnimal:
+        case JobType::GatherAnimal: return {kJobsHandleSteps, static_cast<int>(std::size(kJobsHandleSteps))};
     }
     return {nullptr, 0};
 }
@@ -210,6 +211,7 @@ const char* jobTypeName(JobType type) {
         case JobType::TrainAnimal: return "TrainAnimal";
         case JobType::SlaughterAnimal: return "SlaughterAnimal";
         case JobType::FeedAnimal: return "FeedAnimal";
+        case JobType::GatherAnimal: return "GatherAnimal";
     }
     return "?";
 }
@@ -455,6 +457,7 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
         case JobType::TameAnimal:
         case JobType::TrainAnimal:
         case JobType::SlaughterAnimal:
+        case JobType::GatherAnimal:
         case JobType::FeedAnimal: {
             // The animal, and the food being fetched or carried to it.
             int n = 0;

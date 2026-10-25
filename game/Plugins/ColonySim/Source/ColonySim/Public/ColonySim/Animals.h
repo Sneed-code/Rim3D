@@ -162,6 +162,9 @@ public:
     float foodCapacity(Entity animal) const;
     // Adds nutrition (up to what it can hold).
     void addFood(Entity animal, float nutrition);
+    // Sends a tame animal walking to a cell, round walls if need be (a male setting out for a female, Breeding.h). False if it
+    // can't set off now: it is wild, asleep, not set up yet, or waiting for another path.
+    bool goTo(Entity animal, CellPos goal);
     // A tame animal that has learned to haul works while it is awake, fed and unhurt (the job system asks).
     bool mayWork(Entity animal) const;
 
@@ -175,6 +178,8 @@ public:
     int lifeStage(Entity animal) const;
     // The def's body size times the stage's factor; 0 for a thing that is no animal.
     float bodySize(Entity animal) const;
+    // In its last life stage: old enough to mate, to give milk and wool, to work. False for a thing that is no animal.
+    bool isAdult(Entity animal) const;
     // Food as a share of the animal's capacity, 0 to 1; -1 for a thing that is no animal.
     float foodShare(Entity animal) const;
     bool asleep(Entity animal) const;

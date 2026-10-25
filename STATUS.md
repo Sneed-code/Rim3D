@@ -3,6 +3,7 @@
 Updated 2026-10-25.
 
 Stage 2 P1 done: a pawn carries a rifle, a sidearm and a melee weapon (`docs/design/weapons.md`).
+Stage 2 N4 done: tame animals mate and bear young, hens lay eggs, calves and chicks grow up, colonists milk and shear (`docs/design/breeding.md`).
 Stage 2 F11 done: turrets and traps (`docs/design/defense.md`).
 Stage 2 C24 done: carrying is by mass (capacity over item mass), a hauler takes neighbouring stacks of the same def in one trip, a load slows walking up to 25% (`docs/design/jobs.md`).
 
@@ -343,6 +344,8 @@ must skip `Animal`**.
 `(0.5 + 0.05 x Animals) x (1 - wildness)`; a failed try keeps the mark. Tame animals join side 1, eat hay, kibble, meat and plants (walking round walls by path tickets), are hand-fed under 25% food and starve after 5 days.
 Training (Obedience, Release, Rescue, Haul: 10/5/20/30 steps, one try per 6 h, fades over 6 days) is by `SetTraining`; **Haul makes the animal a Hauling-only worker**. Animal zones and pens (`isPen`: no walkable way out except doors), `AssignAnimalZone`, `Release`, slaughter (corpse only; butchering is N2).
 Save section `husbandry` 1, five new commands (`MarkAnimal`, `SetTraining`, `CreateAnimalZone`, `RemoveAnimalZoneCells`, `AssignAnimalZone`). **Obedience, Release and Rescue only count steps; their effects wait for later tasks.** Animals walk through doors (only the pen test treats them as barriers). Not done: names for tamed animals, manhunters on a failed try (N5), a taming line in the colony scenario (C25 can add it).
+
+**N4** breeding and products (`docs/design/breeding.md`, tests `BreedingTests`, ctest `simrun_farm`): tame, grown animals mate (a male rolls about every 12 hours, picks the nearest willing female of his kind and zone within 40 m, walks to her if she is further than 12 m, and 50% of matings leave a gestating female pregnant); litters are born tame into the mother's zone after the def's `gestationDays`; hens lay an egg every 1.5 days (unfertilized ones stack, a mated hen's next egg is fertilized and hatches into a tame chick after 3.8 days); cows and muffalo fill with milk, muffalo and alpacas with wool, and the Handling tasks **Milk** and **Shear** send a colonist (new job `GatherAnimal`). Everything runs from one pass a minute over the tame animals (`Breeding::step`), so it costs about 0.005 ms a step for 500 chickens (`simrun --farm 500`). Sex is fixed per animal from the seed and its id (nothing saved); save section `breeding` 1; events `AnimalMated`, `AnimalBorn`, `EggLaid`, `EggHatched`, `AnimalGathered`; snapshot `sex`, `pregnant`, `milkFullness`, `woolFullness`. Young animals aren't adults until their last life stage: no mating, products or hauling before. **Also fixed:** a save made while a colonist was taming or feeding an animal used to be refused on load (the job check stopped at `StripPawn`). **Worth knowing for S9:** 500 animals cost about 0.8 ms a step, mostly movement (N1 put 80% of it in `MovementSystem::movePawns`), not breeding. Not done: health scaling with age, hatching needs no warmth, no breeding switch (BACKLOG).
 
 ## Next
 

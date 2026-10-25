@@ -81,6 +81,23 @@ void AnimalSystem::addFood(Entity animal, float nutrition) {
     a.food = std::min(capacity(*kind, age), a.food + nutrition);
 }
 
+bool AnimalSystem::goTo(Entity animal, CellPos goal) {
+    entt::registry& reg = things_.registry();
+    const Kind* kind = kindOf(animal);
+    if (kind == nullptr || husbandry_ == nullptr || !reg.all_of<Mover, Position>(animal)) {
+        return false;
+    }
+    Animal& a = reg.get<Animal>(animal);
+    if (a.wild || !a.started || a.mode == AnimalMode::Sleep || a.mode == AnimalMode::WaitPath) {
+        return false;
+    }
+    AnimalCare* care = husbandry_->careFor(animal);
+    if (care == nullptr || !map_.inBounds(goal)) {
+        return false;
+    }
+    return walkOrPath(animal, a, *kind, *care, goal, AnimalMode::Wander);
+}
+
 bool AnimalSystem::mayWork(Entity animal) const {
     const entt::registry& reg = things_.registry();
     const Kind* kind = kindOf(animal);
@@ -91,7 +108,7 @@ bool AnimalSystem::mayWork(Entity animal) const {
     const AnimalCare* care = husbandry_->care(animal);
     const Health* health = reg.try_get<Health>(animal);
     const int64_t now = time_.seconds;
-    if (a.wild || !a.started || a.mode == AnimalMode::Sleep || sleepNow(*kind, a, now)) {
+    if (a.wild || !a.started || a.mode == AnimalMode::Sleep || sleepNow(*kind, a, now) || !isAdult(animal)) {
         return false;
     }
     if (health != nullptr && (health->incapacitated() || !health->injuries.empty())) {

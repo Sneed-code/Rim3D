@@ -62,6 +62,11 @@ enum class EventType : uint8_t {
     WeatherChanged,  // the weather began to change into another kind (docs/design/weather.md)
     SeasonChanged,   // a new season began
     TalentPoint,     // the protagonist earned a talent point (docs/design/talents.md)
+    AnimalMated,     // a male mated with a female (docs/design/breeding.md)
+    AnimalBorn,      // a tame animal was born to a mother, or hatched
+    EggLaid,         // a hen laid an egg
+    EggHatched,      // a fertilized egg hatched into a young animal
+    AnimalGathered,  // a colonist milked or sheared an animal
     TrapSprung,      // a pawn set off a trap (docs/design/defense.md)
     TrapRearmed,     // a sprung trap was set again
     WeaponSwitched,  // a pawn finished switching weapons (P1, docs/design/weapons.md): `thing` the pawn, `def` the weapon now in its hands, `target` that weapon
@@ -141,6 +146,11 @@ struct Event {
     // (none for a release or a starving), `cell` where. AnimalTrained: also `message` the trick (Trainable name),
     // `amount` the steps it has now and `part` the steps it needs. AnimalAttemptFailed: `message` "tame" or the
     // trick, `amount` the chance the attempt had.
+    // AnimalMated: `thing` the male, `target` the female, `def` their def, `cell` where; `message` "pregnant" (she carries young
+    // now) or "fertilized" (a hen's next egg is), else empty. AnimalBorn: `thing` the young animal, `target` its mother (none
+    // when it hatched), `amount` the litter size. EggLaid: `thing` the egg item (the stack it joined), `target` the hen, `def` the
+    // egg, `message` "fertilized" or empty, `amount` the eggs laid. EggHatched: `thing` the young animal, `def` the egg's def.
+    // AnimalGathered: `thing` the animal, `target` the colonist, `def` the product, `amount` how many, `message` "milk" or "wool".
     // TrapSprung: `thing` the trap (it may be gone: an IED always is), `def` its def, `target` the pawn that set it off,
     // `cell` its cell, (x, y, z) where. The hurt come as PawnInjured and the blast as Explosion. TrapRearmed: `thing`,
     // `def`, `cell`. A turret's shots are ShotFired with `thing` the turret and `def` its gun's Things def.

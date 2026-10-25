@@ -60,12 +60,13 @@ struct Job {
                                // the worn piece in `thing`, 0 puts on the clothes lying there
     Entity chair = kNoEntity;  // Ingest: the chair at a table it eats in, or none (it eats where the food lay)
     Entity site = kNoEntity;   // DeliverResources: the blueprint or frame it brings materials to; DoBill: the
-                               // building that holds the bill; TameAnimal, TrainAnimal, SlaughterAnimal, FeedAnimal:
+                               // building that holds the bill; TameAnimal, TrainAnimal, SlaughterAnimal, FeedAnimal, GatherAnimal:
                                // the animal (`thing` is the food it fetches, none for slaughter)
     float progress = 0.0f;     // Deconstruct: work done so far; Mine: work towards the next pick hit; CutPlant,
                                // HarvestPlant: work done on the plant. For the gather jobs both are game seconds
                                // at 100% work speed (the worker's speed adds to it every second); DoBill: work done
-    uint32_t bill = 0;         // DoBill: the bill's id on the building in `site`; TrainAnimal: the Trainable being practised
+    uint32_t bill = 0;         // DoBill: the bill's id on the building in `site`; TrainAnimal: the Trainable being practised;
+                               // GatherAnimal: the AnimalProduct (0 milk, 1 wool)
                                // (WearApparel and StripPawn: `progress` counts the steps worked)
     std::vector<BillPick> picks;  // DoBill: the ingredient stacks still to fetch after `thing`
     std::vector<BillUsed> used;   // DoBill: ingredients delivered so far
@@ -125,7 +126,7 @@ inline bool jobIsGather(JobType type) {
 // True for the jobs done to an animal (docs/design/husbandry.md): `site` is the animal.
 inline bool jobIsHandling(JobType type) {
     return type == JobType::TameAnimal || type == JobType::TrainAnimal || type == JobType::SlaughterAnimal ||
-           type == JobType::FeedAnimal;
+           type == JobType::FeedAnimal || type == JobType::GatherAnimal;
 }
 
 // How many steps a job type has (for save checks).
@@ -161,6 +162,7 @@ struct HandsOnPlan {
 
 class ApparelSystem;
 class BillSystem;
+class Breeding;
 class Construction;
 class DefDatabase;
 class Filth;
@@ -274,6 +276,9 @@ public:
     // Taming, training and feeding animals (HusbandryJobs.cpp, docs/design/husbandry.md). Without it nobody handles animals.
     void setHusbandry(Husbandry* husbandry) { husbandry_ = husbandry; }
     Husbandry* husbandry() const { return husbandry_; }
+    // Milking and shearing (Breeding.h); without it nobody gathers from animals.
+    void setBreeding(Breeding* breeding) { breeding_ = breeding; }
+    Breeding* breeding() const { return breeding_; }
     // An animal that has learned to haul works through the job system with only the Hauling work type on. `on` false
     // takes it off again (ending its job). The gate says whether it may work now (awake, fed, unhurt).
     void setAnimalHauler(Entity animal, bool on);
@@ -525,6 +530,7 @@ private:
     Rooms* rooms_ = nullptr;
     ResearchSystem* research_ = nullptr;
     Husbandry* husbandry_ = nullptr;
+    Breeding* breeding_ = nullptr;
     std::function<bool(Entity)> animalGate_;
     const TalentSystem* talents_ = nullptr;  // build speed and carrying capacity (docs/design/talents.md)
     RecreationRules recreation_;

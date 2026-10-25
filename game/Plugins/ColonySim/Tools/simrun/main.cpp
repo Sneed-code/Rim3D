@@ -18,6 +18,8 @@
 //   simrun --power [--days 3] [--verbose]   (the power check, E5: solar, batteries, lamps and a switch; docs/design/power.md)
 //   simrun --seed 42 --size 1024 --days 3 --animals [--animal-percent 300] --check   (wild animals, N1:
 //                                     herds by biome, a report of them, checks they stay on walkable ground)
+//   simrun --seed 42 --size 256 --days 3 --farm 500 --check   (a farm of tame chickens, N4: they are fed every hour; reports
+//                                     eggs, chicks and what a step costs on the minute the breeding pass runs; docs/design/breeding.md)
 // --replay takes the settings and commands from the file and runs to its endStep (--days
 // overrides). --record writes what this run did as a replay, with its state hashes.
 // --check makes it exit with 1 if any job or path search failed.
@@ -27,6 +29,8 @@
 #include "ColonyScenario.h"
 #include "PowerScenario.h"
 #include "ColonySim/Animals.h"
+#include "ColonySim/Breeding.h"
+#include "ColonySim/Husbandry.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
@@ -91,6 +95,7 @@ struct Options {
     bool weather = false;  // print a line a day of the weather (E1)
     int gather = 0;      // mark rock to mine and plants to harvest this many cells round the middle
     int animals = 0;     // wild animals as a percent of the biome's density (0: none; --animals alone means 100)
+    int farm = 0;        // --farm N: N tame chickens, fed every hour (N4)
     double raid = -1.0;  // start a pirate raid of this many points at the first step (0: the colony's threat points)
     bool armed = false;  // give every colonist an assault rifle first (not a command: not in replays)
     std::string png;
@@ -141,6 +146,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.gather = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--animals") == 0) {
             out.animals = std::max(out.animals, 100);
+        } else if (std::strcmp(arg, "--farm") == 0 && hasValue) {
+            out.farm = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--animal-percent") == 0 && hasValue) {
             out.animals = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--raid") == 0 && hasValue) {
@@ -179,12 +186,12 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--scenario colony [--verbose]] [--power] [--raid POINTS] [--armed] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--scenario colony [--verbose]] [--power] [--raid POINTS] [--armed] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS]\n");
             return false;
         }
     }
-    return out.size > 0 && out.size <= 4096 && out.days >= 0.0 && out.pawns >= 0 && out.items >= 0 && out.pathBudget > 0 && out.animals >= 0;
+    return out.size > 0 && out.size <= 4096 && out.days >= 0.0 && out.pawns >= 0 && out.items >= 0 && out.pathBudget > 0 && out.animals >= 0 && out.farm >= 0;
 }
 
 bool writeMapPng(const colony::Sim& sim, const std::string& path) {
@@ -725,6 +732,34 @@ int main(int argc, char** argv) {
         std::string states;
     } raid;
 
+    // --farm: tame, grown chickens on a grid in the middle of the map (N4, docs/design/breeding.md).
+    int farmPlaced = 0;
+    if (options.farm > 0) {
+        const int side = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(options.farm))));
+        const int x0 = std::max(2, sim.map().width() / 2 - side / 2);
+        const int y0 = std::max(2, sim.map().height() / 2 - side / 2);
+        for (int i = 0; i < options.farm; ++i) {
+            const colony::CellPos cell{x0 + i % side, y0 + i / side, 0};
+            const colony::Entity e = sim.things().spawn("Chicken", cell);
+            if (e == colony::kNoEntity) {
+                continue;
+            }
+            colony::Animal& a = sim.things().registry().get<colony::Animal>(e);
+            a.wild = false;
+            a.bornAt = -400 * colony::kSecondsPerDay;
+            sim.things().registry().emplace_or_replace<colony::Faction>(e, colony::Faction{colony::kPlayerFaction});
+            colony::AnimalCare* care = sim.husbandry().careFor(e);
+            care->hasHome = true;
+            care->home = cell;
+            care->tamedAt = 0;
+            ++farmPlaced;
+        }
+    }
+    double passMs = 0.0;
+    int64_t passSteps = 0;
+    double otherMs = 0.0;
+    int64_t otherSteps = 0;
+
     // Time every step so spikes (long path searches) show up, not just the average.
     colony::ReplayFeeder feeder(replay);
     uint64_t events = 0;
@@ -742,12 +777,24 @@ int main(int argc, char** argv) {
     std::string dayWeather;
     for (int64_t i = 0; i < steps; ++i) {
         feeder.submitDue(sim);
+        if (options.farm > 0 && sim.time().seconds % colony::kSecondsPerHour == 0) {
+            std::vector<colony::Entity> animals;
+            for (const colony::Entity e : sim.things().registry().view<const colony::Animal>()) {
+                animals.push_back(e);
+            }
+            for (const colony::Entity e : animals) {
+                sim.animals().addFood(e, 50.0f);
+            }
+        }
+        const bool passStep = options.farm > 0 && sim.time().seconds > 0 && sim.time().seconds % sim.breeding().rules().passSeconds == 0;
         const auto before = Clock::now();
         sim.step();
         if (i == 0) {
             gatherMarked = sim.designations().count();
         }
         stepMs[static_cast<size_t>(i)] = static_cast<float>(ms(before, Clock::now()));
+        (passStep ? passMs : otherMs) += static_cast<double>(stepMs[static_cast<size_t>(i)]);
+        ++(passStep ? passSteps : otherSteps);
         if (raid.arrived >= 0 && raid.ended < 0 && sim.raids().state().squads.empty()) {
             raid.ended = sim.time().seconds;
         }
@@ -1052,6 +1099,45 @@ int main(int argc, char** argv) {
             if (animals.wildWeight() < 0.5f * animals.targetWeight()) {
                 std::fprintf(stderr, "check failed: the wild herd is at %.1f of %.1f body sizes\n",
                              static_cast<double>(animals.wildWeight()), static_cast<double>(animals.targetWeight()));
+                return 1;
+            }
+        }
+    }
+
+    // The farm (N4): the breeding pass runs on the steps whose second is a multiple of passSeconds; the extra a step costs
+    // there, spread over the pass interval, is what breeding costs per step.
+    if (options.farm > 0) {
+        const colony::Breeding& breeding = sim.breeding();
+        int hens = 0;
+        int chicks = 0;
+        const auto& reg = sim.things().registry();
+        for (const auto [e, a, thing] : reg.view<const colony::Animal, const colony::Thing>().each()) {
+            const colony::Health* h = reg.try_get<colony::Health>(e);
+            if (h != nullptr && h->dead) {
+                continue;
+            }
+            hens += breeding.female(e) && sim.animals().isAdult(e) ? 1 : 0;
+            chicks += sim.animals().isAdult(e) ? 0 : 1;
+        }
+        const double passAvg = passSteps > 0 ? passMs / static_cast<double>(passSteps) : 0.0;
+        const double otherAvg = otherSteps > 0 ? otherMs / static_cast<double>(otherSteps) : 0.0;
+        const double extraPerStep = std::max(0.0, passAvg - otherAvg) / static_cast<double>(breeding.rules().passSeconds);
+        std::printf("{\"farm\":{\"placed\":%d,\"hens\":%d,\"chicks\":%d,\"matings\":%llu,\"eggsLaid\":%llu,\"hatched\":%llu,"
+                    "\"things\":%zu,\"passStepMs\":%.3f,\"otherStepMs\":%.3f,\"breedingMsPerStep\":%.4f}}\n",
+                    farmPlaced, hens, chicks, static_cast<unsigned long long>(breeding.stats().matings),
+                    static_cast<unsigned long long>(breeding.stats().eggsLaid), static_cast<unsigned long long>(breeding.stats().hatched),
+                    sim.things().count(), passAvg, otherAvg, extraPerStep);
+        if (options.check) {
+            if (farmPlaced == 0) {
+                std::fprintf(stderr, "check failed: no chickens were placed\n");
+                return 1;
+            }
+            if (options.days >= 2.0 && breeding.stats().eggsLaid == 0) {
+                std::fprintf(stderr, "check failed: nobody laid an egg in %.1f days\n", options.days);
+                return 1;
+            }
+            if (extraPerStep > 0.5) {
+                std::fprintf(stderr, "check failed: breeding costs %.3f ms a step\n", extraPerStep);
                 return 1;
             }
         }

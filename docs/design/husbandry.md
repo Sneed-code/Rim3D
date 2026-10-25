@@ -98,3 +98,4 @@ Snapshot `ThingView` has `markTame`, `markSlaughter`, `animalZone`, `learnedTric
 - A taming or feeding trip needs one stack with enough food.
 - Failed taming does not make animals manhunters (N5).
 - Animals walk through doors; only the pen test treats them as barriers.
+- Mating, young, eggs, milk and wool are in [breeding.md](breeding.md) (N4); the animal zone a mother is in is the zone her young are born into.
