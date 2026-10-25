@@ -54,10 +54,12 @@ names in lowerCamel (`workSpeedGlobal`), keys that are def names keep their case
 | `Names` | first names (two lists), last names, nicknames (ours) | C8 | `names` |
 | `Scenarios` | Crashlanded | C8, F2 | RimWorld's starting items, with the rifle, revolver and flak gear since F2 (the knife waits for melee) |
 | `Bodies` | Human | F1 | Part tree: `def`, `label`, `coverage`, `depth`, `groups`, `parts` |
+| `Things` (D5) | `Animals.json`: 15 animals. `AnimalProducts.json`: meats, leathers, milk, eggs, wool. `Bodies`: `QuadrupedAnimal`, `BirdAnimal` | D5 | See [animals.md](animals.md) |
 | `BodyParts` | 32 part kinds | F1 | `hitPoints`, `bleedRate`, `solid`, `destroyableByDamage`, `lethalIfDestroyed`, scarring flags |
 | `BodyPartGroups` | 12 groups | F1, apparel later | |
 | `Capacities` | consciousness, moving, manipulation, sight, hearing, talking, eating, breathing, blood filtration, blood pumping, digestion | F1 | How parts and other capacities feed each one; downed and lethal thresholds |
 | `Hediffs` | injuries (cut, stab, gunshot, scratch, bite, shredded, crush, bruise, crack, burn), missing part, blood loss | F1 | `injuryProps.painPerSeverity`, `bleedRate`, blood loss stages |
+| `Hediffs` (D7) | diseases, environment sicknesses, scars, artificial parts: see [medicine-data.md](medicine-data.md) | D7 | `immunity`, `tend`, `stages`, `addedPart` |
 | `DamageTypes` | bullet, cut, stab, scratch, bite, blunt, crush, burn | F1, F2 | Which injury each damage makes (`hediff`, `hediffSolid` on bones); `reachesInside` (ours: bullet, cut, stab) lets a random hit go in to organs and bones; `armorCategory` (Sharp, Blunt, Heat) says which armor rating stops it |
 | `Things` (F2) | `Weapons.json`: revolver, autopistol, bolt-action rifle, pump shotgun, assault rifle. `Apparel.json`: flak vest, flak pants, simple helmet (steel) | F2 | `verbs`, accuracy and cooldown stats, `recoilPerShot` (ours); armor ratings, `apparel.bodyPartGroups` and `layers`. See [combat.md](combat.md) |
 | `Projectiles` | the five guns' bullets | F2 | damage, armor penetration, stopping power, speed (wiki m/s / 30; `tuning.json` multiplies it by 3) |

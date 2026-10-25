@@ -212,5 +212,19 @@
     "maxIngredientStacks": 8,
     "unverified": ["maxBillsPerBuilding", "skillSpeedBase", "skillSpeedPerLevel"],
     "ours": ["maxBillCount", "defaultSkillLevel", "maxIngredientStacks"]
+  },
+  {
+    "defName": "MedicineRules", "source": "RimWorld wiki",
+    "tendQualityBySkill": [[0, 0.2], [5, 0.5], [10, 0.8], [15, 1.0], [20, 1.2]],
+    "tendQualityRandomFactor": [0.7, 1.3],
+    "tendQualityNoMedicineFactor": 0.7,
+    "surgerySuccessBySkill": [[0, 0.5], [5, 0.75], [10, 1.0], [15, 1.2], [20, 1.4]],
+    "surgeryFailDeathChanceFactor": 0.1,
+    "immunityGainPerDayMultiplierWhenTended": 1.0,
+    "diseaseOnsetMtbDays": { "Flu": 50, "Plague": 80, "Malaria": 80, "SleepingSickness": 80, "GutWorms": 80, "MuscleParasites": 80 },
+    "foodPoisoningChancePerMeal": { "default": 0.0, "dirtyKitchen": 0.02, "rotten": 0.25 },
+    "bodyTemperatureC": { "normal": 37.0, "hypothermiaBelow": 35.0, "heatstrokeAbove": 37.5 },
+    "unverified": ["tendQualityBySkill", "tendQualityRandomFactor", "tendQualityNoMedicineFactor", "surgerySuccessBySkill", "surgeryFailDeathChanceFactor", "diseaseOnsetMtbDays", "foodPoisoningChancePerMeal", "bodyTemperatureC"],
+    "ours": ["immunityGainPerDayMultiplierWhenTended", "foodPoisoningChancePerMeal.dirtyKitchen"]
   }
 ]
