@@ -97,6 +97,14 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
 
 Sim::~Sim() = default;
 
+ThreatMap& Sim::threatMap(FactionId faction) {
+    std::unique_ptr<ThreatMap>& slot = threatMaps_[faction];
+    if (!slot) {
+        slot = std::make_unique<ThreatMap>(map_);
+    }
+    return *slot;
+}
+
 void Sim::placeStockpileAndThings() {
     // Stockpile: the walkable cell nearest the middle, searched in growing squares.
     const int size = map_.width();

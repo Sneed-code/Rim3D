@@ -3,17 +3,20 @@
 //   simrun --seed 42 --size 512 --days 1 --png map.png
 //   simrun --seed 42 --size 1024 --days 1 --pawns 20 --items 300   (Stage 0 sim speed test)
 //   simrun --seed 42 --size 512 --days 0 --regions regions.png   (picture of regions and groups)
+//   simrun --seed 42 --size 512 --days 0 --sight sight.png   (what a pawn sees among test walls)
 //   simrun --replay bug.replay.json            (plays a replay and says whether it matched)
 //   simrun --replay scenario.json --record out.replay.json
 // --replay takes the settings and commands from the file and runs to its endStep (--days
 // overrides). --record writes what this run did as a replay, with its state hashes.
 // Defs load from --data (default: the repo's data folder). The hauling test needs the Things defs
 // Human and Steel, which the RimWorld import provides.
+#include "ColonySim/Cover.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/ThreatMap.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
 
@@ -44,6 +47,7 @@ struct Options {
     std::string regionsPng;
     std::string replay;
     std::string record;
+    std::string sightPng;
 #ifdef COLONY_DATA_DIR
     std::string data = COLONY_DATA_DIR;
 #else
@@ -70,6 +74,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.png = argv[++i];
         } else if (std::strcmp(arg, "--regions") == 0 && hasValue) {
             out.regionsPng = argv[++i];
+        } else if (std::strcmp(arg, "--sight") == 0 && hasValue) {
+            out.sightPng = argv[++i];
         } else if (std::strcmp(arg, "--data") == 0 && hasValue) {
             out.data = argv[++i];
         } else if (std::strcmp(arg, "--replay") == 0 && hasValue) {
@@ -80,6 +86,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] [--png FILE] "
                          "[--regions FILE] [--data DIR] [--replay FILE] [--record FILE]\n");
+            std::fprintf(stderr, "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] [--png FILE] [--regions FILE] [--sight FILE] [--data DIR]\n");
             return false;
         }
     }
@@ -182,6 +189,118 @@ bool writeRegionsPng(colony::Sim& sim, const std::string& path) {
                     const int v = 110 + static_cast<int>((hash >> (k * 8)) & 0x7F);  // 110..237
                     rgb[k] = static_cast<unsigned char>(inMain ? v : v / 3);
                 }
+            }
+            pixels[i] = rgb[0];
+            pixels[i + 1] = rgb[1];
+            pixels[i + 2] = rgb[2];
+        }
+    }
+    return stbi_write_png(path.c_str(), w, h, 3, pixels.data(), w * 3) != 0;
+}
+
+// Sight picture: scatters test walls (red) and sandbags (orange) around the middle of the map,
+// then shows what a standing pawn (white) there can see within 60 m (bright) and what a crouching
+// pawn can see (medium); the rest is dark. Also times the cover build and a threat map of 40
+// armed pawns, which is what the fighter AI will ask for a few times a second.
+bool writeSightPng(colony::Sim& sim, const std::string& path, uint64_t seed) {
+    colony::Map& map = const_cast<colony::Map&>(sim.map());
+    const int w = map.width();
+    const int h = map.height();
+    colony::Cover& cover = sim.cover();
+    colony::Rng rng(seed ^ 0x5163ULL);
+
+    // The pawn stands where the most ground around it can be walked (nearest the middle on a tie),
+    // so the picture isn't mostly mountain.
+    colony::CellPos centre{w / 2, h / 2, 0};
+    int bestOpen = -1;
+    for (int y = 16; y < h - 16; y += 8) {
+        for (int x = 16; x < w - 16; x += 8) {
+            int open = 0;
+            for (int dy = -16; dy <= 16; dy += 4) {
+                for (int dx = -16; dx <= 16; dx += 4) {
+                    open += map.walkable(colony::CellPos{x + dx, y + dy, 0}) ? 1 : 0;
+                }
+            }
+            const int far = std::abs(x - w / 2) + std::abs(y - h / 2);
+            const int score = open * 4096 - far;
+            if (map.walkable(colony::CellPos{x, y, 0}) && score > bestOpen) {
+                bestOpen = score;
+                centre = colony::CellPos{x, y, 0};
+            }
+        }
+    }
+    const int radius = std::min(60, std::min(w, h) / 2 - 1);
+    for (int i = 0; i < 60; ++i) {
+        const bool wall = i % 3 != 0;
+        const bool horizontal = rng.below(2) == 0;
+        const int length = 3 + static_cast<int>(rng.below(8));
+        const int x = centre.x - radius + static_cast<int>(rng.below(static_cast<uint32_t>(2 * radius)));
+        const int y = centre.y - radius + static_cast<int>(rng.below(static_cast<uint32_t>(2 * radius)));
+        for (int k = 0; k < length; ++k) {
+            const colony::CellPos c{x + (horizontal ? k : 0), y + (horizontal ? 0 : k), 0};
+            if (map.walkable(c) && !(c == centre)) {
+                map.setBuilding(c, colony::kNoEntity, wall ? colony::Passage::Blocked : colony::Passage::Open,
+                                wall ? colony::kObstacleTallDm : colony::obstacleFromFill(0.55));
+            }
+        }
+    }
+
+    using Clock = std::chrono::steady_clock;
+    const auto t0 = Clock::now();
+    cover.update();
+    const auto t1 = Clock::now();
+    colony::ThreatMap& threat = sim.threatMap(1);
+    int placed = 0;
+    for (int tries = 0; tries < 4000 && placed < 40; ++tries) {
+        const int x = centre.x - 100 + static_cast<int>(rng.below(200));
+        const int y = centre.y - 100 + static_cast<int>(rng.below(200));
+        if (map.walkable(colony::CellPos{x, y, 0})) {
+            threat.addSource(colony::Viewpoint::at(colony::CellPos{x, y, 0}), 40.0f, 1.0f);
+            ++placed;
+        }
+    }
+    const auto t2 = Clock::now();
+    int exposed = 0;
+    int walkable = 0;
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            const colony::CellPos c{x, y, 0};
+            walkable += map.walkable(c) ? 1 : 0;
+            exposed += threat.threatAt(c) > 0.0f ? 1 : 0;
+        }
+    }
+    std::printf("{\"coverBuildMs\":%.2f,\"threatSources\":%d,\"threatMs\":%.2f,\"exposedCells\":%d,\"walkableCells\":%d}\n",
+                std::chrono::duration<double, std::milli>(t1 - t0).count(), placed,
+                std::chrono::duration<double, std::milli>(t2 - t1).count(), exposed, walkable);
+
+    std::vector<unsigned char> pixels(static_cast<size_t>(w) * static_cast<size_t>(h) * 3);
+    const colony::Viewpoint standing = colony::Viewpoint::at(centre, colony::Stance::Standing);
+    const colony::Viewpoint crouching = colony::Viewpoint::at(centre, colony::Stance::Crouching);
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            const colony::CellPos c{x, y, 0};
+            const size_t i = (static_cast<size_t>(h - 1 - y) * static_cast<size_t>(w) + static_cast<size_t>(x)) * 3;
+            unsigned char rgb[3];
+            const uint8_t dm = map.obstacleDm(c);
+            const float dx = static_cast<float>(x - centre.x);
+            const float dy = static_cast<float>(y - centre.y);
+            const bool inRange = dx * dx + dy * dy <= static_cast<float>(radius * radius);
+            if (map.terrain(c) == colony::Terrain::Rock) {
+                rgb[0] = rgb[1] = rgb[2] = 60;
+            } else if (dm == colony::kObstacleTallDm) {
+                rgb[0] = 200; rgb[1] = 40; rgb[2] = 40;
+            } else if (dm > 0) {
+                rgb[0] = 230; rgb[1] = 140; rgb[2] = 30;
+            } else if (map.terrain(c) == colony::Terrain::Water) {
+                rgb[0] = 20; rgb[1] = 35; rgb[2] = 70;
+            } else if (inRange && cover.lineOfSight(standing, colony::Viewpoint::at(c, colony::Stance::Standing))) {
+                const bool low = cover.lineOfSight(crouching, colony::Viewpoint::at(c, colony::Stance::Crouching));
+                rgb[0] = low ? 235 : 160; rgb[1] = low ? 235 : 190; rgb[2] = low ? 140 : 90;
+            } else {
+                rgb[0] = 35; rgb[1] = 50; rgb[2] = 35;
+            }
+            if (colony::CellPos{x, y, 0} == centre) {
+                rgb[0] = rgb[1] = rgb[2] = 255;
             }
             pixels[i] = rgb[0];
             pixels[i + 1] = rgb[1];
@@ -331,6 +450,10 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "could not write %s\n", options.regionsPng.c_str());
             return 1;
         }
+    }
+    if (!options.sightPng.empty() && !writeSightPng(sim, options.sightPng, options.seed)) {
+        std::fprintf(stderr, "could not write %s\n", options.sightPng.c_str());
+        return 1;
     }
     if (!options.png.empty() && !writeMapPng(sim, options.png)) {
         std::fprintf(stderr, "could not write %s\n", options.png.c_str());

@@ -11,6 +11,7 @@
 
 namespace colony {
 
+class Cover;
 class Regions;
 
 // Placeholder terrain types until terrain defs are loaded from data/defs.
@@ -73,12 +74,21 @@ public:
     // Building layer: the building covering each cell, kNoEntity if none. Kept up to date by
     // Things when buildings spawn and despawn; nothing else should call the setters.
     Entity buildingAt(CellPos c) const { return building_[static_cast<size_t>(index(c))]; }
-    void setBuilding(CellPos c, Entity building, Passage passage);
+    // `obstacleDm` is how tall the building is for sight and cover (see Cover.h); 0 for a
+    // building that is neither.
+    void setBuilding(CellPos c, Entity building, Passage passage, uint8_t obstacleDm = 0);
     void clearBuilding(CellPos c);
     Passage passage(CellPos c) const { return passage_[static_cast<size_t>(index(c))]; }
+    // How tall what stands in the cell is for sight and cover, in decimetres above the ground
+    // (docs/design/cover.md). Rock is always the tallest value, 255, which blocks everything.
+    uint8_t obstacleDm(CellPos c) const {
+        return terrain(c) == Terrain::Rock ? uint8_t{255} : obstacle_[static_cast<size_t>(index(c))];
+    }
 
     // Regions and reachability groups of the walkable cells (docs/design/regions.md).
     Regions& regions();
+    // Cover from the eight sides and line of sight (docs/design/cover.md).
+    Cover& cover();
 
     // Hash of every layer, for determinism tests.
     uint64_t contentHash() const;
@@ -93,7 +103,9 @@ private:
     std::vector<Terrain> terrain_;
     std::vector<Entity> building_;
     std::vector<Passage> passage_;
+    std::vector<uint8_t> obstacle_;
     std::unique_ptr<Regions> regions_;
+    std::unique_ptr<Cover> cover_;
 };
 
 }  // namespace colony

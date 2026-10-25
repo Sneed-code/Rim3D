@@ -1,6 +1,7 @@
 #include "ColonySim/Things.h"
 
 #include "ColonySim/Clock.h"
+#include "ColonySim/Cover.h"
 #include "ColonySim/Map.h"
 
 #include <algorithm>
@@ -83,6 +84,7 @@ Entity Things::make(DefId defId, int stackCount) {
             footprint.sizeY = std::max(1, static_cast<int>(def.numberAt("size", 1, 1.0)));
             footprint.isDoor = def.text("thingClass") == "Building_Door";
             footprint.blocksMovement = !footprint.isDoor && def.text("passability") == "Impassable";
+            footprint.obstacleDm = obstacleFromFill(def.number("fillPercent"));
             registry_.emplace<Footprint>(thing, footprint);
             break;
         }
@@ -125,7 +127,7 @@ bool Things::spawnAt(Entity thing, CellPos cell, Rot4 rot) {
                                                       : Passage::Open;
     for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
         for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
-            map_.setBuilding(CellPos{x, y, rect.level}, thing, passage);
+            map_.setBuilding(CellPos{x, y, rect.level}, thing, passage, footprint->obstacleDm);
         }
     }
     footprint->origin = cell;

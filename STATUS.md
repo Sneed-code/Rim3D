@@ -26,11 +26,14 @@ Since S5 Unreal talks to the sim only through commands (`Sim::submit`), per-step
 read-only snapshot; every session can be saved as a replay file and played back with
 `simrun --replay`, and CI checks Linux and Windows give the same state hashes
 (`docs/design/bridge.md`). The Stage 0 hauling job (now in `Sim.cpp`) and cell A* (`Pathfinder`)
-are still placeholders; C1 and S3 replace them.
+are still placeholders; C1 and S3 replace them. Since F3 buildings and ground have heights, so the
+sim can say how hidden a pawn is from each of eight sides (`Map::cover()`), whether one pawn can see
+another (`lineOfSight`, with standing, crouching and prone) and which ground a faction's enemies
+can shoot at (`Sim::threatMap`); `docs/design/cover.md`.
 
 ## Stage 1 progress
 
-6 of 43 tasks done (D1, D2, U1, S1, S2, S5). Tick tasks in `docs/plans/stage-1.md` as they merge.
+7 of 43 tasks done (D1, D2, U1, S1, S2, S5, F3). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -55,7 +58,9 @@ Wave 3, both cloud:
   must go into `Sim::stateHash()`.
 
 Wave 4, now open: **S3** hierarchical pathfinding (cloud, Opus high), **S6** save and load (cloud,
-Sonnet high), **F3** cover, sight and threat maps (cloud, Sonnet high) and **U2** bridge v2 (PC
+Sonnet high), ~~**F3** cover, sight and threat maps~~ done (`docs/design/cover.md`; `simrun --sight
+FILE` draws what a pawn sees; sandbags and barricades were added to the importer list, and
+trees and rocks get their height from `fillPercent` when C2 adds plants) and **U2** bridge v2 (PC
 Unreal, Sonnet high; the first Unreal compile of EnTT and the S5 bridge, plus a dev key that saves
 a replay to `Saved/Replays/`). C2, C8 and F1 in wave 4 also wait for **D3** (the RimWorld import
 on sneed's PC).
