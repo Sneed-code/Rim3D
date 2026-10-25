@@ -86,6 +86,11 @@ struct ThingView {
     float facingY = 0.0f;
     DefId weapon;
     int shotReadyIn = 0;
+    // Pawns with a gun that takes a magazine (docs/design/aiming.md): rounds left of magazineSize
+    // (both 0 without one), and whether it is reloading (shotReadyIn then counts the reload down).
+    int rounds = 0;
+    int magazineSize = 0;
+    bool reloading = false;
     // Pawns: their side (1 is the player's), and for fighters (docs/design/fighters.md) whether the
     // player drafted them, whom they shoot at, the cell they hold and whether they are falling back.
     uint32_t faction = 1;

@@ -13,9 +13,14 @@
     "recoilSkillReduction": 0.025,
     "maxFlightSeconds": 120,
     "apparelLayersOuterFirst": ["Overhead", "Shell", "Middle", "OnSkin"],
+    "reactionStepsBySkill": [15, 5],
+    "leadBySkill": [0.4, 1.0],
+    "leadErrorBySkill": [0.4, 0.05],
+    "reloadTimeFactorBySkill": [1.3, 0.7],
     "unverified": ["accuracyDistances", "minHitChance"],
     "ours": ["defaultShootingSkill", "standardTarget", "playerSpreadDistance", "gravity", "recoilRecoveryPerSecond",
-             "recoilSkillReduction", "maxFlightSeconds"]
+             "recoilSkillReduction", "maxFlightSeconds", "reactionStepsBySkill", "leadBySkill", "leadErrorBySkill",
+             "reloadTimeFactorBySkill"]
   },
   {
     "defName": "PlantRules", "source": "RimWorld wiki",

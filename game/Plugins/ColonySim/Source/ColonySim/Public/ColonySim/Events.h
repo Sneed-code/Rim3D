@@ -62,6 +62,8 @@ enum class PawnAction : uint8_t {
     Mine,     // swung the pick at the rock in `cell`: once for every hit, for sounds and dust
     Cut,      // started cutting down or felling the plant in `cell`; the work goes on until its JobEnded
     Harvest,  // started picking from the plant in `cell`
+    Reload,   // started reloading the gun `target` (docs/design/aiming.md); it is ready again when shotReadyIn is 0
+    Dodge,    // sidestepped into `cell` out of the way of the projectile `target`
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
