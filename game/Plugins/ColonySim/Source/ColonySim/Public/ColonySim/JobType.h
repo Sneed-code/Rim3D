@@ -26,6 +26,10 @@ enum class JobType : uint8_t {
     CleanFilth,        // walk to a cell with filth and clean it, a layer at a time (docs/design/room-stats.md)
     WearApparel,       // walk to clothes lying on the map and put them on, or take off a worn piece (apparel.md)
     StripPawn,         // walk to a downed or dead pawn marked for it and take its clothes and weapon (apparel.md)
+    TameAnimal,        // fetch animal food, walk to a marked wild animal, feed it and try to tame it (docs/design/husbandry.md)
+    TrainAnimal,       // the same for one training attempt on a tame animal
+    SlaughterAnimal,   // walk to a marked tame animal and kill it
+    FeedAnimal,        // fetch animal food and carry it to a hungry tame animal
 };
 
 COLONY_API const char* jobTypeName(JobType type);

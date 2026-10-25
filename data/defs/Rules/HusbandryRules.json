@@ -1,0 +1,40 @@
+[
+  {
+    "defName": "HusbandryRules", "source": "Rim3D",
+    "interactSeconds": 388.8,
+    "slaughterSeconds": 259.2,
+    "feedSeconds": 20,
+    "skillChanceBase": 0.5,
+    "skillChancePerLevel": 0.05,
+    "feedNutritionPerBodySize": 0.15,
+    "handReach": 1.6,
+    "holdRadius": 6,
+    "attemptIntervalSeconds": 21600,
+    "decayDays": 6,
+    "starveDays": 5,
+    "handFeedBelow": 0.25,
+    "workMinFood": 0.3,
+    "homeRadius": 40,
+    "itemRadius": 12,
+    "tameXp": 200,
+    "trainXp": 100,
+    "slaughterXp": 50,
+    "feedXp": 20,
+    "repathSeconds": 600,
+    "dietFoods": {
+      "Herbivore": ["Plant"],
+      "Carnivore": ["Meat", "Kibble"],
+      "Omnivore": ["Plant", "Meat", "Kibble"]
+    },
+    "trainables": [
+      {"name": "Obedience", "trainability": "Simple", "steps": 10, "prerequisite": ""},
+      {"name": "Release", "trainability": "Intermediate", "steps": 5, "prerequisite": "Obedience"},
+      {"name": "Rescue", "trainability": "Intermediate", "steps": 20, "prerequisite": "Obedience"},
+      {"name": "Haul", "trainability": "Advanced", "steps": 30, "prerequisite": "Obedience"}
+    ],
+    "unverified": ["interactSeconds", "slaughterSeconds", "feedNutritionPerBodySize", "attemptIntervalSeconds", "decayDays",
+                   "trainables", "tameXp", "trainXp", "slaughterXp"],
+    "ours": ["feedSeconds", "skillChanceBase", "skillChancePerLevel", "handReach", "holdRadius", "starveDays", "handFeedBelow",
+             "workMinFood", "homeRadius", "itemRadius", "feedXp", "repathSeconds", "dietFoods"]
+  }
+]

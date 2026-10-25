@@ -1,0 +1,3 @@
+[
+  {"defName": "Kibble", "parent": "ItemBase", "label": "kibble", "stackLimit": 75, "stats": {"maxHitPoints": 50, "marketValue": 0.14, "mass": 0.0045, "flammability": 0.5, "deteriorationRate": 2, "nutrition": 0.05}, "thingCategories": ["Foods", "AnimalFeed"], "ingestible": {"foodType": "Kibble", "preferability": "RawBad"}, "comps": [{"type": "Rottable", "daysToRotStart": 50}], "visual": {"pieces": 3, "layer": 0.1, "parts": [{"shape": "cylinder", "radius": 0.15, "height": 0.1, "at": [0, 0, 0], "color": [0.5, 0.33, 0.2]}]}, "unverified": ["stats.marketValue", "stats.mass", "stackLimit", "comps"], "note": "Animal feed made at a stove from meat and plants; carnivores and omnivores eat it, people only in a pinch."}
+]
