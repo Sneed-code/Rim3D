@@ -36,6 +36,7 @@ class Mineables;
 class MovementSystem;
 class MoodSystem;
 class NeedsSystem;
+class RaidSystem;
 class Plants;
 class Regions;
 class Rooms;
@@ -174,6 +175,10 @@ public:
     FighterSystem& fighters() { return *fighters_; }
     const FighterSystem& fighters() const { return *fighters_; }
 
+    // Raids, raid squads and the colony alarm with its defense roles (docs/design/raids.md).
+    RaidSystem& raids() { return *raids_; }
+    const RaidSystem& raids() const { return *raids_; }
+
     // Blueprints, frames and taking buildings down (docs/design/construction.md).
     Construction& construction() { return *construction_; }
     const Construction& construction() const { return *construction_; }
@@ -230,6 +235,7 @@ private:
     std::unique_ptr<Construction> construction_;
     std::unique_ptr<JobSystem> jobs_;  // after everything it holds a reference to
     std::unique_ptr<FighterSystem> fighters_;  // after the job system
+    std::unique_ptr<RaidSystem> raids_;        // after the fighters
     std::vector<std::string> setupErrors_;
     std::vector<std::pair<uint64_t, Command>> pending_;  // id, command
     uint64_t submitted_ = 0;

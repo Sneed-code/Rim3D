@@ -99,8 +99,27 @@ struct ThingView {
     Entity fightTarget = kNoEntity;
     CellPos fightSpot;
     bool fallingBack = false;
+    // F6 (docs/design/raids.md): the colony's colonists' defense role (0 Defender, 1 Shelter, 2 Keep
+    // working); whether the alarm called it up; a fighter heading for a shelter or fleeing the map;
+    // and for raiders their squad (0 for none).
+    uint8_t defenseRole = 0;
+    bool defending = false;
+    bool sheltering = false;
+    bool fleeing = false;
+    uint32_t squad = 0;
     // Humanlike pawns: their looks, Snapshot::looks[looks]; -1 for other things.
     int32_t looks = -1;
+};
+
+// A raid squad on the map (docs/design/raids.md). `state` is a SquadState: 0 Advance, 1 Hold,
+// 2 FallBack, 3 Rout.
+struct SquadView {
+    uint32_t id = 0;
+    uint32_t faction = 0;  // its pawns' faction
+    uint8_t state = 0;
+    int members = 0;       // still with it: on the map, downed ones included
+    int started = 0;
+    CellPos target;        // the cell it goes for
 };
 
 // A bullet in flight (docs/design/combat.md). Unreal draws a tracer along its velocity; it
@@ -175,6 +194,11 @@ struct Snapshot {
     uint64_t roofChanges = 0;
     std::vector<ProjectileView> projectiles;  // sorted by id
     std::vector<PawnLooksView> looks;      // see ThingView::looks
+    // The colony alarm (docs/design/raids.md): on, and whether the player sounded it (only the
+    // player stops that one); the raid squads on the map.
+    bool alarm = false;
+    bool alarmManual = false;
+    std::vector<SquadView> squads;
 
     // The thing with this id, or null if it is not on the map. Binary search.
     COLONY_API const ThingView* find(Entity id) const;

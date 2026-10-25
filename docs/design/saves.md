@@ -42,6 +42,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Combat (format 12) | per pawn its posture (stance, facing), gear (gun and apparel ids) and trigger (phase, steps, burst, aim, recoil); `EquippedBy` on gear; every projectile in flight with its defs **by `defName`** ([combat.md](combat.md)) |
 | Pawn looks (format 16) | each humanlike pawn's lineage (by `defName`), gender, body type, weight, height, melanin and colours; `SetLineage` commands in the log ([looks.md](looks.md)). Older files load with pawns that have no looks |
 | Aiming (format 17) | rounds left in each gun that has been fired (`Magazine`), the trigger's reloading phase, a fighter's reaction and dodge times ([aiming.md](aiming.md)) |
+| Raids (format 18) | the raid squads (faction, points, state, target, members, when they give up), the alarm and its threat and home points, the shelter mark, the factions met so far; per pawn its `Raider` squad and kind and its `DefensePlan`; a fighter's mode, goal, squad, `defending` and `retreat` ([raids.md](raids.md)) |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
@@ -107,7 +108,7 @@ three is a bug the tests are built to catch:
    write the change here. Old saves keep loading until a decision says otherwise (decision 0005
    dropped formats 1 to 5 for the job system). Format 8 (C6) added needs, schedules, bed owners and
    a job's chair; format 9 (C2) added the plant layer; format 10 (C4) added building plans, built-of and deconstruct marks and a job's site and
-   progress. Format 11 (C9) added mood, format 12 (F2) combat, format 13 (C5) door states, format 14 (C3) rock and designations, format 15 (F4) factions and fighters, format 16 (A3) pawn looks, format 17 (F5) magazines and reloading. Format 6 to 16 saves still load, their pawns without needs, mood or posture, or their buildings without plans, their doors closed.
+   progress. Format 11 (C9) added mood, format 12 (F2) combat, format 13 (C5) door states, format 14 (C3) rock and designations, format 15 (F4) factions and fighters, format 16 (A3) pawn looks, format 17 (F5) magazines and reloading, format 18 (F6) raids and the alarm. Format 6 to 17 saves still load, their pawns without needs, mood or posture, or their buildings without plans, their doors closed.
 
 Never store a `DefId` (or any number that depends on load order) in a save: use the `defName`.
 The same goes for region ids, which a loaded map numbers afresh: keep a cell, and never let a
@@ -194,6 +195,10 @@ sneed's whole job for a bug is: press F8, then send the folder (zip it, or drop 
 - **17** (F5): a `Magazine` component on fired guns, the `Reloading` trigger phase, a fighter's
   `reactUntil` and `dodgeUntil` ([aiming.md](aiming.md)). Command 27 (`Reload`). Older files load
   with every gun full and no fighter waiting to react.
+- **18** (F6): the raid state after the designations (squads, alarm, shelter, factions), `Raider` and
+  `DefensePlan` components, a fighter's `mode`, `defending`, `squad`, `hasGoal`, `goal` and `retreat`
+  ([raids.md](raids.md)). Commands 28 to 31 (`StartRaid`, `SoundAlarm`, `SetDefenseRole`,
+  `MarkShelter`). Older files load with no raid and the alarm off.
 
 ## Why the state hash changed in S6
 

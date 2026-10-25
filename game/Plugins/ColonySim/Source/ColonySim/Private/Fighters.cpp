@@ -168,6 +168,21 @@ bool FighterSystem::draft(Entity pawn, bool drafted, std::string& error) {
     }
     Fighter* existing = reg.try_get<Fighter>(pawn);
     if (drafted) {
+        if (existing != nullptr && !existing->drafted && existing->defending) {
+            // Called up by the alarm: the player takes it over where it stands.
+            stop(pawn, *existing);
+            existing->drafted = true;
+            existing->defending = false;
+            existing->mode = FightMode::Fight;
+            existing->hasGoal = false;
+            existing->moveOrdered = false;
+            existing->retreat = false;
+            existing->hasSpot = false;
+            existing->anchor = cellOf(reg.get<Position>(pawn));
+            existing->leash = rules_.draftLeash;
+            existing->nextPlan = now();
+            return true;
+        }
         if (existing != nullptr) {
             error = "that pawn is drafted already";
             return false;
@@ -185,7 +200,7 @@ bool FighterSystem::draft(Entity pawn, bool drafted, std::string& error) {
         reg.emplace<Fighter>(pawn, std::move(f));
         return true;
     }
-    if (existing == nullptr) {
+    if (existing == nullptr || !existing->drafted) {
         error = "that pawn isn't drafted";
         return false;
     }
@@ -271,6 +286,38 @@ bool FighterSystem::setFaction(Entity pawn, FactionId faction, std::string& erro
     fighter.nextPlan = now() + fightStagger(pawn, rules_.planEvery);
     reg.emplace<Fighter>(pawn, std::move(fighter));
     return true;
+}
+
+Fighter& FighterSystem::enlist(Entity pawn, const char* why) {
+    entt::registry& reg = things_.registry();
+    if (Fighter* f = reg.try_get<Fighter>(pawn)) {
+        return *f;
+    }
+    jobs_.interrupt(pawn, why);
+    Fighter f;
+    f.anchor = things_.spawned(pawn) ? cellOf(reg.get<Position>(pawn)) : CellPos{};
+    f.nextPlan = now() + fightStagger(pawn, rules_.planEvery);
+    return reg.emplace<Fighter>(pawn, std::move(f));
+}
+
+void FighterSystem::standDown(Entity pawn) {
+    entt::registry& reg = things_.registry();
+    if (Fighter* f = reg.valid(pawn) ? reg.try_get<Fighter>(pawn) : nullptr) {
+        stop(pawn, *f);
+        reg.remove<Fighter>(pawn);
+        if (things_.spawned(pawn)) {
+            combat_.setStance(pawn, Stance::Standing);
+        }
+    }
+}
+
+void FighterSystem::replan(Entity pawn) {
+    entt::registry& reg = things_.registry();
+    if (Fighter* f = reg.valid(pawn) ? reg.try_get<Fighter>(pawn) : nullptr) {
+        stop(pawn, *f);
+        f->hasSpot = false;
+        f->nextPlan = std::min(f->nextPlan, now());
+    }
 }
 
 // ---- Each step ------------------------------------------------------------------------------
@@ -496,6 +543,10 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
         return;
     }
     const PawnInfo self = *selfInfo;
+    if (f.mode != FightMode::Fight) {
+        planGoal(pawn, f, self);
+        return;
+    }
     see(pawn, f, self);
     const Entity previous = f.target;
     f.target = chooseTarget(pawn, f, self);
@@ -556,14 +607,20 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
             ++friendsNear;
         }
     }
-    f.fallingBack = enemiesNear > 0 && (static_cast<float>(enemiesNear) >= rules_.outnumberedRatio * static_cast<float>(friendsNear) ||
-                                        badlyHurt(pawn));
+    f.fallingBack = f.retreat ||
+                    (enemiesNear > 0 && (static_cast<float>(enemiesNear) >= rules_.outnumberedRatio * static_cast<float>(friendsNear) ||
+                                         badlyHurt(pawn)));
 
     // Nothing to fear and nobody to shoot: stay put.
     const CellPos at = cellOf(Position{self.x, self.y, self.level});
     if (threatCount == 0 && targetInfo == nullptr) {
-        if (!f.hasSpot || f.moveOrdered) {
-            const CellPos goal = f.moveOrdered ? f.anchor : at;
+        // A raider heads for its squad's target (F6); everyone else stays put or keeps to its order.
+        const bool heads = f.moveOrdered || f.hasGoal;
+        if (!f.hasSpot || heads) {
+            const CellPos goal = f.moveOrdered ? f.anchor : f.hasGoal ? f.goal : at;
+            if (f.hasSpot && f.spot == goal && (f.walk != 0 || at == goal)) {
+                return;  // on its way there already, or there
+            }
             f.hasSpot = true;
             f.spot = goal;
             f.fireCell = goal;
@@ -720,6 +777,65 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
         if (here != f.spot && !(fightAdjacent(here, f.spot) && here == f.fireCell)) {
             walkToSpot(pawn, f);
         }
+    }
+}
+
+// Shelter and Flee (F6): no enemies, no shots, just the nearest free cell to the goal (a shelter
+// room, the way off the map).
+void FighterSystem::planGoal(Entity pawn, Fighter& f, const PawnInfo& self) {
+    f.known.clear();
+    f.target = kNoEntity;
+    f.forcedTarget = kNoEntity;
+    f.canFire = false;
+    f.fallingBack = false;
+    const CellPos at = cellOf(Position{self.x, self.y, self.level});
+    const CellPos goal = f.hasGoal ? f.goal : at;
+    const auto nearGoal = [&](CellPos c) { return c.level == goal.level && std::abs(c.x - goal.x) <= 3 && std::abs(c.y - goal.y) <= 3; };
+    if (f.hasSpot && nearGoal(f.spot) && (f.walk != 0 || at == f.spot)) {
+        return;
+    }
+    entt::registry& reg = things_.registry();
+    friendSpots_.clear();
+    for (const PawnInfo& p : pawns_) {
+        if (p.fighter && p.pawn != pawn && p.faction == self.faction) {
+            const Fighter& other = reg.get<Fighter>(p.pawn);
+            if (other.hasSpot && nearGoal(other.spot)) {
+                friendSpots_.push_back(other.spot);
+            }
+        }
+    }
+    // Rings out from the goal: the first free cell it can reach.
+    Regions& regions = map_.regions();
+    bool found = false;
+    CellPos best = goal;
+    for (int r = 0; r <= 3 && !found; ++r) {
+        for (int dy = -r; dy <= r && !found; ++dy) {
+            for (int dx = -r; dx <= r; ++dx) {
+                if (std::max(std::abs(dx), std::abs(dy)) != r) {
+                    continue;
+                }
+                const CellPos c{goal.x + dx, goal.y + dy, goal.level};
+                if (!map_.walkable(c) || map_.obstacleDm(c) > 0 || map_.isDoor(c) ||
+                    std::find(friendSpots_.begin(), friendSpots_.end(), c) != friendSpots_.end() || !regions.canReach(at, c)) {
+                    continue;
+                }
+                best = c;
+                found = true;
+                break;
+            }
+        }
+    }
+    if (!found) {
+        return;  // nowhere free: keep the old plan, try again next time
+    }
+    if (f.walk != 0) {
+        stop(pawn, f);
+    }
+    f.hasSpot = true;
+    f.spot = best;
+    f.fireCell = best;
+    if (best != at) {
+        walkToSpot(pawn, f);
     }
 }
 
@@ -1027,6 +1143,12 @@ void FighterSystem::hashThing(Entity e, StateHasher& h) const {
         }
         h.add(f->reactUntil);
         h.add(f->dodgeUntil);
+        h.add(static_cast<int>(f->mode));
+        h.add(f->defending);
+        h.add(f->squad);
+        h.add(f->hasGoal);
+        cell(f->goal);
+        h.add(f->retreat);
     }
 }
 

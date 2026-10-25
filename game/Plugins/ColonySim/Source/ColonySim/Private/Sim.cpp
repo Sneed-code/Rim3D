@@ -6,6 +6,7 @@
 #include "ColonySim/Designations.h"
 #include "ColonySim/Doors.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Raids.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Jobs.h"
@@ -105,7 +106,13 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
     fighters_->setEventLog(&events_);
-    combat_->setBeforeDestroy([this](Entity thing) { jobs_->forget(thing); });
+    raids_ = std::make_unique<RaidSystem>(*things_, map_, *rooms_, *combat_, *health_, *jobs_, *fighters_, *defs_, time_, rng_);
+    raids_->setEventLog(&events_);
+    raids_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
+    combat_->setBeforeDestroy([this](Entity thing) {
+        jobs_->forget(thing);
+        raids_->forget(thing);
+    });
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -281,6 +288,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             combat_->dropGear(destroy->thing);
             jobs_->forget(destroy->thing);
             fighters_->forget(destroy->thing);
+            raids_->forget(destroy->thing);
             things_->destroy(destroy->thing);
         }
     } else if (const auto* damage = std::get_if<DamagePawnCommand>(&command)) {
@@ -515,6 +523,24 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!combat_->reload(reload->pawn, &error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* raid = std::get_if<StartRaidCommand>(&command)) {
+        if (!raids_->startRaid(raid->faction, raid->points, raid->edge, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* alarm = std::get_if<SoundAlarmCommand>(&command)) {
+        if (!raids_->soundAlarm(alarm->on, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* role = std::get_if<SetDefenseRoleCommand>(&command)) {
+        if (role->role > static_cast<uint8_t>(DefenseRole::KeepWorking)) {
+            commandFailed(id, "no such defense role");
+        } else if (!raids_->setRole(role->pawn, static_cast<DefenseRole>(role->role), role->hasSpot, role->spot, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* shelter = std::get_if<MarkShelterCommand>(&command)) {
+        if (!raids_->markShelter(shelter->cell, shelter->clear, error)) {
+            commandFailed(id, error);
+        }
     }
 }
 
@@ -548,6 +574,7 @@ void Sim::step() {
         }
     }
     jobs_->step();
+    raids_->step();
     fighters_->step();
     mood_->step(time_.seconds, events_);
     movement_->step(things_->registry(), map_);
@@ -707,11 +734,28 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.fightTarget = fighter->target;
             view.fightSpot = fighter->hasSpot ? fighter->spot : cellOf(pos);
             view.fallingBack = fighter->fallingBack;
+            view.defending = fighter->defending;
+            view.sheltering = fighter->mode == FightMode::Shelter;
+            view.fleeing = fighter->mode == FightMode::Flee;
+        }
+        if (reg.all_of<Colonist>(entity) && view.faction == kPlayerFaction) {
+            view.defenseRole = static_cast<uint8_t>(raids_->roleOf(entity));
+        }
+        if (const Raider* raider = reg.try_get<Raider>(entity)) {
+            view.squad = raider->squad;
         }
         out.things.push_back(view);
     }
     std::sort(out.things.begin(), out.things.end(),
               [](const ThingView& a, const ThingView& b) { return a.id < b.id; });
+
+    out.alarm = raids_->state().alarm;
+    out.alarmManual = raids_->state().manual;
+    out.squads.clear();
+    for (const Squad& squad : raids_->state().squads) {
+        out.squads.push_back(SquadView{squad.id, squad.side, static_cast<uint8_t>(squad.state),
+                                       static_cast<int>(squad.members.size()), squad.started, squad.target});
+    }
 
     out.rooms.clear();
     for (const Room& room : rooms_->rooms()) {
@@ -764,6 +808,7 @@ uint64_t Sim::stateHash() const {
     h.add(plants_->hash());
     h.add(mineables_->hash());
     designations_->hashState(h);
+    raids_->hashState(h);
     pathfinder_.hashState(h);
     zones_->hashState(h);
 
@@ -980,6 +1025,7 @@ uint64_t Sim::stateHash() const {
         }
         combat_->hashThing(e, h);
         fighters_->hashThing(e, h);
+        raids_->hashThing(e, h);
     }
     return h.value();
 }

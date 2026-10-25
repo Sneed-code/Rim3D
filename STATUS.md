@@ -127,8 +127,7 @@ and pops up over sandbags or steps out past a wall's end to shoot, then ducks ba
 one or badly hurt it falls back. The F3 threat map isn't used (too slow to rebuild; fighters.md says
 why); 30 against 40 costs about 0.35 ms a step in the cloud. Snapshot `faction`, `drafted`,
 `fighting`, `fightTarget`, `fightSpot`, `fallingBack`; save format 15. **A new system that acts on
-pawns must skip pawns with `Fighter`** as the job system does. Not yet: squads, morale, raids and
-the alarm (F6); undrafted colonists ignore enemies.
+pawns must skip pawns with `Fighter`** as the job system does.
 
 Since F5 fighters aim like players (`docs/design/aiming.md`): Shooting skill sets a reaction time
 before shooting a new target (0.5 s at skill 0, 0.17 s at 20), how well a shot leads a moving target
@@ -139,13 +138,29 @@ Fighters sidestep slow projectiles they see coming in time (bullets are far too 
 and arrows later). Events `PawnAction` `Reload` and `Dodge`; snapshot `rounds`, `magazineSize`,
 `reloading`; save format 17.
 
+Since F6 there are raids and a colony defense (`docs/design/raids.md`): `StartRaidCommand` (dev until
+the narrator) buys pirates with RimWorld's raid points (from colony wealth and colonists, the wiki's
+curves; about 50 points for the Crashlanded start) among three gunner kinds (`data/defs/PawnKinds`,
+`Factions`), each a whole person with a gun and some flak, and walks them in at a map edge toward the
+colony. The squad advances, holds or falls back by comparing its strength (health, gun, armor) with
+the enemies it knows, and routs off the map after losing half its pawns or after 10 to 15 game hours.
+The colony alarm sounds by itself when a colonist spots an enemy (or `SoundAlarmCommand`) and stops
+when no enemy can fight any more; colonists then follow their defense role (`SetDefenseRoleCommand`):
+Defender (holds its defense spot, or a line 15 m from home toward the threat and fights freely once
+in contact), Shelter (goes to the room marked with `MarkShelterCommand`) or Keep working (until an
+enemy is within 20 m). Drafting still wins. Events `RaidArrived`, `SquadChanged`, `AlarmChanged`,
+`PawnLeftMap`; snapshot `alarm`, `squads` and per pawn `defenseRole`, `defending`, `sheltering`,
+`fleeing`, `squad`; save format 18. `simrun --raid POINTS --armed` plays a raid and reports it (CTest
+`simrun_raid`). Findings for F7: on open ground, crouched pawns are hit about 1 shot in 100 at 20 to
+30 m, so fights take long and downed colonists bleed out (no rescue or doctors yet).
+
 Since D3 the game has real starting data in `data/defs/`, written by hand with RimWorld's numbers
 from the RimWorld wiki (there is no RimWorld install to import from; `docs/decisions/0003`):
 terrain fertility, wild plants and the temperate forest, basic items, the Human, skills, work
 types, traits, our own backstories and names, the Crashlanded start, the Human body, capacities,
 injuries and blood loss (`docs/design/starting-data.md`). `check_defs.py` now also checks that
 defs name defs that exist. `simrun --pawns/--items` runs on the real data.
-Not written yet: sandbags, thoughts, recipes and raiders; the tasks that use them
+Not written yet: sandbags, thoughts and recipes (raiders came with F6); the tasks that use them
 (C7, C9, F6) add them the same way. Guns, bullets, flak gear and hitboxes came with F2. C4 wrote the buildings (wall, door, bed, stool, three tables,
 fueled stove).
 
@@ -178,7 +193,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-29 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5). Tick tasks in `docs/plans/stage-1.md` as they merge.
+30 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, F6). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -234,8 +249,9 @@ schedules~~ done (`docs/design/needs.md`; save format 8), ~~**F2** guns and hitb
 and harvesting~~ done (`docs/design/mining.md`; save format 14). On the PC, ~~**U9**~~ and ~~**A3** seeded looks~~ are done (smoke test `looks`; save format 16).
 U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priorities).
 ~~**F4** fighter AI: where to stand~~ done (`docs/design/fighters.md`; save format 15), ~~**F5** fighter
-AI: aiming~~ done (`docs/design/aiming.md`; save format 17), so **F6** raid and defense (cloud, Opus high)
-is open once C8 is in (it is); with U9 and F2 in, **U11** fights on screen (PC) is too, and can now show
+AI: aiming~~ done (`docs/design/aiming.md`; save format 17), ~~**F6** raid and defense~~ done
+(`docs/design/raids.md`; save format 18), so **F7** raid scenario tests and nightly soak (cloud, Sonnet
+high) is open; with U9 and F2 in, **U11** fights on screen (PC) is too, and can now show
 reloads and sidesteps and bind a reload key.
 
 ## Waiting on sneed

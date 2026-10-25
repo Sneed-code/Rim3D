@@ -248,6 +248,40 @@ struct ReloadCommand {
     Entity pawn = kNoEntity;
 };
 
+// Raids (F6, docs/design/raids.md). Dev command until the narrator sends raids: a raid of
+// `faction` (a Factions defName) worth `points` raid points (0: what the colony is worth now, by
+// RimWorld's rule) walks in at `edge` (0 north, 1 east, 2 south, 3 west, -1 any) and attacks.
+// Fails for an unknown faction or edge, or when there is no way in from that edge.
+struct StartRaidCommand {
+    std::string faction = "Pirate";
+    float points = 0.0f;
+    int edge = -1;
+};
+
+// The colony alarm: on calls every colonist to its defense role, off sends them back to work. It
+// also sounds by itself when a colonist spots an enemy, and stops when the enemies are gone or
+// fleeing; one the player sounded stays on until the player stops it. Fails if it already is.
+struct SoundAlarmCommand {
+    bool on = true;
+};
+
+// What a colonist does when the alarm sounds: 0 Defender, 1 Shelter, 2 Keep working (DefenseRole
+// in Raids.h). A Defender can have a defense spot it holds. Fails for a pawn that isn't the
+// colony's, a spot for another role, or a spot nobody can stand on.
+struct SetDefenseRoleCommand {
+    Entity pawn = kNoEntity;
+    uint8_t role = 0;
+    bool hasSpot = false;
+    CellPos spot;
+};
+
+// Marks the room at `cell` as the shelter for Shelter colonists, or with `clear` takes the mark off.
+// Fails if the cell is not in a room under a roof.
+struct MarkShelterCommand {
+    CellPos cell;
+    bool clear = false;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -256,7 +290,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              PlaceBlueprintCommand, CancelBuildCommand, DeconstructCommand, EquipCommand,
                              ShootCommand, SetStanceCommand, DesignateCommand, CancelDesignationsCommand,
                              DraftCommand, MoveOrderCommand, AttackOrderCommand, SetFactionCommand, SetLineageCommand,
-                             ReloadCommand>;
+                             ReloadCommand, StartRaidCommand, SoundAlarmCommand, SetDefenseRoleCommand,
+                             MarkShelterCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

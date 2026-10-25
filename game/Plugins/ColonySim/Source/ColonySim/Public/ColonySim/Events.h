@@ -36,6 +36,10 @@ enum class EventType : uint8_t {
     DesignationsChanged,  // marks were added, removed or finished: read the snapshot's designations
     ShotFired,       // a pawn fired a projectile (docs/design/combat.md)
     ProjectileHit,   // a projectile stopped: it hit something, or flew off the map or too long
+    RaidArrived,     // a raid walked in (docs/design/raids.md)
+    SquadChanged,    // a raid squad's morale changed
+    AlarmChanged,    // the colony alarm went on or off
+    PawnLeftMap,     // a pawn walked off the map and is gone (a ThingDestroyed follows)
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -100,6 +104,13 @@ struct Event {
     float y = 0.0f;
     float z = 0.0f;
     ProjectileHitKind hit = ProjectileHitKind::None;
+    // RaidArrived: `squad` its id, `message` the Factions def, `count` its pawns, `amount` its raid
+    // points, `cell` where it walked in. SquadChanged: `squad`, `message` the new state ("Advance",
+    // "Hold", "FallBack", "Rout", or "gave up" for a rout because time ran out), `count` its pawns.
+    // AlarmChanged: `message` "on: why" or "off: why". PawnLeftMap: `thing` the pawn, `cell` where
+    // it left, `squad` its raid squad.
+    uint32_t squad = 0;
+    int count = 0;
 };
 
 COLONY_API const char* eventTypeName(EventType type);

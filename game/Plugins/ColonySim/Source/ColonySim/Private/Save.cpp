@@ -7,6 +7,7 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Doors.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Raids.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Plants.h"
@@ -46,7 +47,7 @@ constexpr char kSaveMagic[8] = {'R', 'I', 'M', '3', 'D', 'S', 'A', 'V'};
 constexpr size_t kSaveMagicSize = sizeof kSaveMagic;
 // Bump when the layout below changes, and keep reading the old versions (the archive's
 // version() says which one a file is). Changing it needs a line in docs/design/saves.md.
-constexpr uint32_t kSaveFormatVersion = 17;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
+constexpr uint32_t kSaveFormatVersion = 18;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
                                             // 4: C8's scenario and colonists; 5: F1's pawn health; 6: C1's jobs,
                                             // work priorities and zones; 7: U9's direct control; 8: C6's needs,
                                             // schedules, bed owners, the eating job's chair; 9: C2's plants;
@@ -55,7 +56,8 @@ constexpr uint32_t kSaveFormatVersion = 17;  // 2: S3's path queue, pathBudget, 
                                             // and projectiles;
                                             // 13: C5's door states; 14: C3's rock layer, designations;
                                             // 15: F4's factions and fighters; 16: A3's pawn looks; 17: F5's magazines,
-                                            // reloading, a fighter's reaction and dodge times
+                                            // reloading, a fighter's reaction and dodge times; 18: F6's raids,
+                                            // squads, the alarm, defense roles and a fighter's mode and goal
 // Saves from before the job system (formats 1 to 5) can't be read: their hauling placeholder has
 // no counterpart in the job system (docs/design/saves.md).
 constexpr uint32_t kSaveOldestFormat = 6;
@@ -185,6 +187,8 @@ struct SaveEntity {
     std::optional<Fighter> fighter;  // format 15 on
     std::optional<PawnLooks> looks;  // format 16 on
     std::optional<Magazine> magazine;  // format 17 on
+    std::optional<DefensePlan> defense;  // format 18 on
+    std::optional<Raider> raider;        // format 18 on
 };
 
 // A stockpile zone, with its filter by defName.
@@ -253,6 +257,7 @@ struct SaveData {
     bool hasRock = false;              // the file has the rock layer (format 12 on); older saves keep the generated one
     SaveMineables mineables;           // format 12 on
     SaveDesignations designations;     // format 12 on
+    RaidState raids;                   // format 18 on
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -509,7 +514,7 @@ void saveRect(Ar& ar, CellRect& r) {
 
 template <typename Ar>
 void saveCommand(Ar& ar, Command& command) {
-    static_assert(std::variant_size_v<Command> == 28, "save every command type here");
+    static_assert(std::variant_size_v<Command> == 32, "save every command type here");
     uint8_t type = static_cast<uint8_t>(command.index());
     ar.value("type", type);
     if constexpr (Ar::kReading) {
@@ -542,13 +547,17 @@ void saveCommand(Ar& ar, Command& command) {
             case 25: command = SetFactionCommand{}; break;
             case 26: command = SetLineageCommand{}; break;
             case 27: command = ReloadCommand{}; break;
+            case 28: command = StartRaidCommand{}; break;
+            case 29: command = SoundAlarmCommand{}; break;
+            case 30: command = SetDefenseRoleCommand{}; break;
+            case 31: command = MarkShelterCommand{}; break;
             default: ar.require(false, "the save file names a command this build doesn't know"); return;
         }
         // A format older than the command that was added in it can't contain it.
         ar.require((type < 10 || ar.version() >= 7) && (type < 12 || ar.version() >= 8) &&
                        (type < 14 || ar.version() >= 10) && (type < 17 || ar.version() >= 12) && (type < 20 || ar.version() >= 14) &&
                        (type < 22 || ar.version() >= 15) && (type < 26 || ar.version() >= 16) &&
-                       (type < 27 || ar.version() >= 17),
+                       (type < 27 || ar.version() >= 17) && (type < 28 || ar.version() >= 18),
                    "the save file names a command this build doesn't know");
     }
     ar.note("name", commandName(command));
@@ -653,6 +662,20 @@ void saveCommand(Ar& ar, Command& command) {
         ar.text("lineage", lineage->lineage);
     } else if (auto* reload = std::get_if<ReloadCommand>(&command)) {
         ar.value("pawn", reload->pawn);
+    } else if (auto* raid = std::get_if<StartRaidCommand>(&command)) {
+        ar.text("faction", raid->faction);
+        ar.value("points", raid->points);
+        ar.value("edge", raid->edge);
+    } else if (auto* alarm = std::get_if<SoundAlarmCommand>(&command)) {
+        ar.value("on", alarm->on);
+    } else if (auto* role = std::get_if<SetDefenseRoleCommand>(&command)) {
+        ar.value("pawn", role->pawn);
+        ar.value("role", role->role);
+        ar.value("hasSpot", role->hasSpot);
+        ar.group("spot", [&] { saveCell(ar, role->spot); });
+    } else if (auto* shelter = std::get_if<MarkShelterCommand>(&command)) {
+        ar.group("cell", [&] { saveCell(ar, shelter->cell); });
+        ar.value("clear", shelter->clear);
     }
 }
 
@@ -1000,6 +1023,27 @@ void saveEntity(Ar& ar, SaveEntity& e) {
                 ar.value("reactUntil", f.reactUntil);
                 ar.value("dodgeUntil", f.dodgeUntil);
             }
+            if (ar.version() >= 18) {
+                ar.value("mode", f.mode);
+                ar.require(static_cast<int>(f.mode) <= static_cast<int>(FightMode::Flee), "the save file has a bad fighter mode");
+                ar.value("defending", f.defending);
+                ar.value("squad", f.squad);
+                ar.value("hasGoal", f.hasGoal);
+                ar.group("goal", [&] { saveCell(ar, f.goal); });
+                ar.value("retreat", f.retreat);
+            }
+        });
+    }
+    if (ar.version() >= 18) {
+        ar.optional("defense", e.defense, [&](DefensePlan& p) {
+            ar.value("role", p.role);
+            ar.require(static_cast<int>(p.role) <= static_cast<int>(DefenseRole::KeepWorking), "the save file has a bad defense role");
+            ar.value("hasSpot", p.hasSpot);
+            ar.group("spot", [&] { saveCell(ar, p.spot); });
+        });
+        ar.optional("raider", e.raider, [&](Raider& r) {
+            ar.value("squad", r.squad);
+            ar.text("kind", r.kind);
         });
     }
     if (ar.version() >= 17) {
@@ -1011,6 +1055,42 @@ void saveEntity(Ar& ar, SaveEntity& e) {
     if (ar.version() >= 16) {
         ar.optional("looks", e.looks, [&](PawnLooks& l) { saveLooks(ar, l); });
     }
+}
+
+template <typename Ar>
+void saveRaids(Ar& ar, RaidState& r) {
+    ar.list("factions", r.factions, [&](std::string& f) { ar.text(nullptr, f); });
+    ar.list("squads", r.squads, [&](Squad& s) {
+        ar.value("id", s.id);
+        ar.text("faction", s.faction);
+        ar.value("side", s.side);
+        ar.value("points", s.points);
+        ar.value("started", s.started);
+        ar.value("arrivedAt", s.arrivedAt);
+        ar.value("giveUpAt", s.giveUpAt);
+        ar.value("state", s.state);
+        ar.require(static_cast<int>(s.state) <= static_cast<int>(SquadState::Rout), "the save file has a bad squad state");
+        ar.value("gaveUp", s.gaveUp);
+        ar.group("entry", [&] { saveCell(ar, s.entry); });
+        ar.value("hasTarget", s.hasTarget);
+        ar.group("target", [&] { saveCell(ar, s.target); });
+        ar.value("nextThink", s.nextThink);
+        ar.list("members", s.members, [&](Entity& m) { ar.value(nullptr, m); });
+    });
+    ar.value("nextSquad", r.nextSquad);
+    ar.value("alarm", r.alarm);
+    ar.value("manual", r.manual);
+    ar.value("suppressed", r.suppressed);
+    ar.value("hasThreat", r.hasThreat);
+    ar.value("threatX", r.threatX);
+    ar.value("threatY", r.threatY);
+    ar.value("threatSeenAt", r.threatSeenAt);
+    ar.value("hasHome", r.hasHome);
+    ar.value("homeX", r.homeX);
+    ar.value("homeY", r.homeY);
+    ar.value("hasShelter", r.hasShelter);
+    ar.group("shelter", [&] { saveCell(ar, r.shelter); });
+    ar.value("nextAlarmThink", r.nextAlarmThink);
 }
 
 template <typename Ar>
@@ -1113,6 +1193,9 @@ void saveData(Ar& ar, SaveData& d) {
         d.hasRock = true;
         ar.group("mineables", [&] { saveMineables(ar, d.mineables); });
         ar.group("designations", [&] { saveDesignations(ar, d.designations); });
+    }
+    if (ar.version() >= 18) {
+        ar.group("raids", [&] { saveRaids(ar, d.raids); });
     }
 }
 
@@ -1352,6 +1435,12 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const Magazine* magazine = reg.try_get<Magazine>(e)) {
             out.magazine = *magazine;
         }
+        if (const DefensePlan* plan = reg.try_get<DefensePlan>(e)) {
+            out.defense = *plan;
+        }
+        if (const Raider* raider = reg.try_get<Raider>(e)) {
+            out.raider = *raider;
+        }
         if (const Projectile* p = reg.try_get<Projectile>(e)) {
             out.projectile = SaveProjectile{sim.defs_->get(p->def).defName(), sim.defs_->get(p->weapon).defName(), *p};
         }
@@ -1390,6 +1479,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         d.mineables.defIndex.push_back(rockIndexOf[r.def.value]);
         d.mineables.hitPoints.push_back(r.hitPoints);
     }
+    d.raids = sim.raids_->state();
     for (const auto& [cell, kind] : sim.designations_->all()) {
         d.designations.cells.push_back(static_cast<uint32_t>(cell));
         d.designations.kinds.push_back(static_cast<uint8_t>(kind));
@@ -1645,6 +1735,12 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.magazine) {
             reg.emplace<Magazine>(entity, *e.magazine);
         }
+        if (e.defense) {
+            reg.emplace<DefensePlan>(entity, *e.defense);
+        }
+        if (e.raider) {
+            reg.emplace<Raider>(entity, *e.raider);
+        }
     }
     sim.health_->refreshAll();
     for (const SaveEntity& e : d.entities) {
@@ -1787,6 +1883,17 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             error = "the save has a designation off the map";
             return false;
         }
+    }
+    for (const Squad& squad : d.raids.squads) {
+        for (const Entity m : squad.members) {
+            if (!reg.valid(m) || !reg.all_of<Raider>(m)) {
+                error = "the save has a raid squad with a pawn that isn't there";
+                return false;
+            }
+        }
+    }
+    if (!sim.raids_->restore(std::move(d.raids), error)) {
+        return false;
     }
     sim.time_.seconds = d.seconds;
     sim.rng_.restore(d.rngState, d.rngIncrement);

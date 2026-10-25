@@ -49,6 +49,9 @@ add_test(NAME simrun_gather COMMAND simrun --seed 42 --size 256 --days 2 --start
          --png ${CMAKE_BINARY_DIR}/gather.png)
 # Food, rest and schedules (C6): the Crashlanded colonists live three days on their starting food, nobody dies.
 add_test(NAME simrun_needs COMMAND simrun --seed 42 --size 128 --days 3 --start Crashlanded --check)
+# Raids (F6): pirates walk in, the alarm sounds, the armed colonists fight, and the raid ends
+# (beaten, routed or gone) within a quarter of a day.
+add_test(NAME simrun_raid COMMAND simrun --seed 1 --size 256 --days 0.25 --start Crashlanded --raid 300 --armed --check)
 
 # Replays: play the scripted scenario and record it, then play the recording and check every
 # state hash matches. CI compares the recordings from Linux and Windows (docs/design/bridge.md).

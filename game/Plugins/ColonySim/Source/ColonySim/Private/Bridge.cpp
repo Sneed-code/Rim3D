@@ -66,9 +66,17 @@ const char* commandName(const Command& command) {
                 return "SetFaction";
             } else if constexpr (std::is_same_v<Type, SetLineageCommand>) {
                 return "SetLineage";
-            } else {
-                static_assert(std::is_same_v<Type, ReloadCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, ReloadCommand>) {
                 return "Reload";
+            } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
+                return "StartRaid";
+            } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
+                return "SoundAlarm";
+            } else if constexpr (std::is_same_v<Type, SetDefenseRoleCommand>) {
+                return "SetDefenseRole";
+            } else {
+                static_assert(std::is_same_v<Type, MarkShelterCommand>, "name every command type");
+                return "MarkShelter";
             }
         },
         command);
@@ -98,6 +106,10 @@ const char* eventTypeName(EventType type) {
         case EventType::PawnMoodBand: return "PawnMoodBand";
         case EventType::ShotFired: return "ShotFired";
         case EventType::ProjectileHit: return "ProjectileHit";
+        case EventType::RaidArrived: return "RaidArrived";
+        case EventType::SquadChanged: return "SquadChanged";
+        case EventType::AlarmChanged: return "AlarmChanged";
+        case EventType::PawnLeftMap: return "PawnLeftMap";
     }
     return "?";
 }

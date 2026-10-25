@@ -50,8 +50,12 @@ struct KnownEnemy {
     int64_t seenAt = 0;
 };
 
-// On a pawn that fights instead of working: a drafted colonist, or every pawn of another faction.
-// The job system leaves it alone. Every field is saved.
+// What a fighter is doing (F6, docs/design/raids.md): fighting, hiding in a shelter (the alarm's
+// Shelter role) or running off the map (a routed raider). Only Fight looks for enemies and shoots.
+enum class FightMode : uint8_t { Fight, Shelter, Flee };
+
+// On a pawn that fights instead of working: a drafted colonist, a colonist the colony alarm called
+// up, or every pawn of another faction. The job system leaves it alone. Every field is saved.
 struct Fighter {
     bool drafted = false;    // a colonist the player drafted; otherwise an AI fighter of its faction
     bool advances = false;   // moves toward its target when it can't shoot from where it is
@@ -73,6 +77,13 @@ struct Fighter {
     std::vector<KnownEnemy> known;  // by pawn id
     int64_t reactUntil = 0;  // game second from which it may shoot its target (its reaction time, F5)
     int64_t dodgeUntil = 0;  // sidestepping a projectile until this game second: no plans, no shots (F5)
+    // F6 (docs/design/raids.md).
+    FightMode mode = FightMode::Fight;
+    bool defending = false;  // called up by the colony alarm, not drafted: the alarm sends it back to work
+    uint32_t squad = 0;      // the raid squad it belongs to, 0 for none
+    bool hasGoal = false;    // where it heads while it knows no enemy: the raid's target, a shelter, the way out
+    CellPos goal;
+    bool retreat = false;    // its squad falls back: it falls back whatever the odds around it
 };
 
 // The numbers (FighterRules in data/defs/Rules/FighterRules.json, all ours: RimWorld has no
@@ -137,6 +148,14 @@ public:
     // player's fights at once and advances on its enemies; back on the player's side it works again.
     bool setFaction(Entity pawn, FactionId faction, std::string& error);
 
+    // F6: the colony alarm calls a colonist up (its job ends; `defending` is set) or sends it back
+    // to work, and squads change what their fighters do. `enlist` returns the new fighter, whose
+    // first plan is spread over the next planEvery steps like a drafted one's.
+    Fighter& enlist(Entity pawn, const char* why);
+    void standDown(Entity pawn);
+    // Drops the fighter's spot and walk, so it plans again in this step (a new goal or mode).
+    void replan(Entity pawn);
+
     // One step for every fighter, in id order: re-plan when due, walk, crouch, step out and shoot.
     // Runs after the job system and before movement.
     void step();
@@ -180,6 +199,7 @@ private:
     };
 
     void plan(Entity pawn, Fighter& f);
+    void planGoal(Entity pawn, Fighter& f, const PawnInfo& self);
     bool dodge(Entity pawn, Fighter& f);
     void tacticalReload(Entity pawn, const Fighter& f, bool canShoot);
     void act(Entity pawn, Fighter& f);
