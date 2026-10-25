@@ -35,7 +35,12 @@ namespace
 	TAutoConsoleVariable<int32> GTerrainPlantScan(
 		TEXT("Terrain.PlantScan"), 24, TEXT("How many chunks a frame are checked for plants that grew, died or were built over."), ECVF_Default);
 
-	// Flat vertex colours until the terrain materials (A2) come.
+	TAutoConsoleVariable<int32> GTerrainTextured(
+		TEXT("Terrain.Textured"), 1, TEXT("1 draws the ground with the terrain textures (made by the TerrainMaterials commandlet), 0 with flat vertex colours. Read when the terrain is built."), ECVF_Default);
+
+	// The terrain material of A2 (docs/design/terrain.md), made by the TerrainMaterials commandlet; without it
+	// (it is not in Git) the ground is drawn with flat vertex colours by the engine's debug material.
+	const TCHAR* const TerrTexturedMaterialPath = TEXT("/Game/Rim3D/Generated/Terrain/MI_Terrain.MI_Terrain");
 	const TCHAR* const TerrMaterialPath = TEXT("/Engine/EngineDebugMaterials/VertexColorMaterial.VertexColorMaterial");
 
 	// A plant is drawn at one of this many sizes between a sprout and fully grown; a chunk's plants
@@ -92,28 +97,87 @@ namespace
 		return FColor(static_cast<uint8>(Mix.R), static_cast<uint8>(Mix.G), static_cast<uint8>(Mix.B));
 	}
 
+	/**
+	 * How a vertex looks. Either one flat colour (an sRGB one, as you'd pick it in a paint program), or, with the
+	 * terrain material, a mix of its texture layers (weights of sand, rock, gravel and water; the rest is grass)
+	 * and a tint that multiplies them (1 is neutral). The material reads them from the vertex colour and UV 1 and 2.
+	 */
+	struct FTerrLook
+	{
+		FColor Solid;
+		FLinearColor Tint = FLinearColor::White;
+		float Sand = 0.0f;
+		float Rock = 0.0f;
+		float Gravel = 0.0f;
+		float Water = 0.0f;
+		bool bSolid = true;
+
+		FTerrLook(const FColor& InSolid) : Solid(InSolid) {}
+		FTerrLook(const FLinearColor& InTint, float InSand, float InRock, float InGravel, float InWater)
+			: Solid(FColor::White), Tint(InTint), Sand(InSand), Rock(InRock), Gravel(InGravel), Water(InWater), bSolid(false) {}
+	};
+
+	/** How a cell's ground looks with the terrain material. Soil follows the fertility the plants use: dry and gravelly, soil, rich and dark. */
+	FTerrLook TerrCellLook(const colony::Map& Map, const colony::Plants& Plants, int32 X, int32 Y)
+	{
+		const colony::CellPos Cell{X, Y, 0};
+		switch (Map.terrain(Cell))
+		{
+			case colony::Terrain::Water: return FTerrLook(FLinearColor::White, 0.0f, 0.0f, 0.0f, 1.0f);
+			case colony::Terrain::Sand: return FTerrLook(FLinearColor(1.15f, 1.0f, 0.75f), 1.0f, 0.0f, 0.0f, 0.0f);
+			case colony::Terrain::RoughStone: return FTerrLook(FLinearColor::White, 0.0f, 0.0f, 1.0f, 0.0f);
+			case colony::Terrain::Rock: return FTerrLook(FLinearColor::White, 0.0f, 1.0f, 0.0f, 0.0f);
+			case colony::Terrain::Soil: break;
+		}
+		const float Fertility = Plants.fertility(Cell);
+		// The grass texture is dull on its own; these push it toward green (dry ground yellower, rich ground darker).
+		const FLinearColor Dry(1.0f, 1.0f, 0.6f);
+		const FLinearColor Soil(0.62f, 0.98f, 0.45f);
+		const FLinearColor Rich(0.42f, 0.82f, 0.36f);
+		const FLinearColor Tint = Fertility < 1.0f
+			? FMath::Lerp(Dry, Soil, FMath::Clamp((Fertility - 0.7f) / 0.3f, 0.0f, 1.0f))
+			: FMath::Lerp(Soil, Rich, FMath::Clamp((Fertility - 1.0f) / 0.4f, 0.0f, 1.0f));
+		return FTerrLook(Tint, 0.0f, 0.0f, FMath::Clamp((0.9f - Fertility) / 0.2f, 0.0f, 1.0f) * 0.7f, 0.0f);
+	}
+
 	/** Triangles with their own vertices (flat shaded), for a procedural mesh section. */
 	struct FTerrMesh
 	{
 		TArray<FVector> Positions;
 		TArray<FVector> Normals;
 		TArray<FVector2D> UVs;
+		TArray<FVector2D> Weights1;
+		TArray<FVector2D> Weights2;
 		TArray<FColor> Colors;
 		TArray<int32> Triangles;
 
 		int32 Num() const { return Positions.Num(); }
 
-		int32 AddVertex(const FVector& Position, const FVector& Normal, const FColor& Color)
+		int32 AddVertex(const FVector& Position, const FVector& Normal, const FTerrLook& Look)
 		{
 			UVs.Add(FVector2D(Position.X * 0.01, Position.Y * 0.01));
 			Normals.Add(Normal);
-			// The colours here are the sRGB ones you'd pick in a paint program; the material reads vertex colours as linear.
-			Colors.Add(FLinearColor::FromSRGBColor(Color).ToFColor(false));
+			if (Look.bSolid)
+			{
+				// The material reads vertex colours as linear. Alpha 1 says "use it as it is".
+				Colors.Add(FLinearColor::FromSRGBColor(Look.Solid).ToFColor(false));
+				Weights1.Add(FVector2D::ZeroVector);
+				Weights2.Add(FVector2D::ZeroVector);
+			}
+			else
+			{
+				// The tint is kept in half, so that it can go up to 2.
+				FColor Tint = FLinearColor(Look.Tint.R * 0.5f, Look.Tint.G * 0.5f, Look.Tint.B * 0.5f, 0.0f).ToFColor(false);
+				Tint.A = 0;
+				Colors.Add(Tint);
+				Weights1.Add(FVector2D(Look.Sand, Look.Rock));
+				Weights2.Add(FVector2D(Look.Gravel, Look.Water));
+			}
 			return Positions.Add(Position);
 		}
 
 		/** A triangle whose front faces the `Facing` side, whichever way round the corners were given. */
-		void AddFlatTriangle(const FVector& A, FVector B, FVector C, const FVector& Facing, const FColor& Color)
+		void AddFlatTriangle(const FVector& A, FVector B, FVector C, const FVector& Facing, const FTerrLook& Color)
 		{
 			FVector Normal = FVector::CrossProduct(C - A, B - A);
 			if (Normal.IsNearlyZero(1.0e-6))
@@ -133,7 +197,7 @@ namespace
 		}
 
 		/** A quad given around its edge. */
-		void AddFlatQuad(const FVector& A, const FVector& B, const FVector& C, const FVector& D, const FVector& Facing, const FColor& Color)
+		void AddFlatQuad(const FVector& A, const FVector& B, const FVector& C, const FVector& D, const FVector& Facing, const FTerrLook& Color)
 		{
 			AddFlatTriangle(A, B, C, Facing, Color);
 			AddFlatTriangle(A, C, D, Facing, Color);
@@ -154,7 +218,7 @@ namespace
 	}
 
 	/** The ground of a chunk (section 0) and its roofs (section 1), as vertices in cm from the map's corner. */
-	void TerrBuildChunkMeshes(const colony::Map& Map, const colony::Plants& Plants, const TArray<uint8>& ThinRoof,
+	void TerrBuildChunkMeshes(const colony::Map& Map, const colony::Plants& Plants, const TArray<uint8>& ThinRoof, bool bTextured,
 		int32 ChunkX, int32 ChunkY, FTerrMesh& Ground, FTerrMesh& Roof)
 	{
 		const int32 MapW = Map.width();
@@ -192,6 +256,8 @@ namespace
 				const int32 MX = X0 + VX;
 				const int32 MY = Y0 + VY;
 				int32 R = 0, G = 0, B = 0, Count = 0;
+				FLinearColor Tint(0.0f, 0.0f, 0.0f);
+				float Sand = 0.0f, Rock = 0.0f, Gravel = 0.0f, Water = 0.0f;
 				for (int32 DY = -1; DY <= 0; ++DY)
 				{
 					for (int32 DX = -1; DX <= 0; ++DX)
@@ -200,17 +266,37 @@ namespace
 						const int32 CY = MY + DY;
 						if (CX >= 0 && CY >= 0 && CX < MapW && CY < MapH && !IsRock(CX, CY))
 						{
-							const FColor Color = TerrCellColor(Map, Plants, CX, CY);
-							R += Color.R;
-							G += Color.G;
-							B += Color.B;
+							if (bTextured)
+							{
+								const FTerrLook Look = TerrCellLook(Map, Plants, CX, CY);
+								Tint += Look.Tint;
+								Sand += Look.Sand;
+								Rock += Look.Rock;
+								Gravel += Look.Gravel;
+								Water += Look.Water;
+							}
+							else
+							{
+								const FColor Color = TerrCellColor(Map, Plants, CX, CY);
+								R += Color.R;
+								G += Color.G;
+								B += Color.B;
+							}
 							++Count;
 						}
 					}
 				}
-				const FColor Color = Count ? FColor(static_cast<uint8>(R / Count), static_cast<uint8>(G / Count), static_cast<uint8>(B / Count)) : TerrRockTopColor;
 				const FVector Normal = FVector(Height(MX - 1, MY) - Height(MX + 1, MY), Height(MX, MY - 1) - Height(MX, MY + 1), 200.0).GetSafeNormal();
-				Ground.AddVertex(Corner(MX, MY, 0.0), Normal, Color);
+				if (bTextured)
+				{
+					const float Scale = Count ? 1.0f / Count : 0.0f;
+					Ground.AddVertex(Corner(MX, MY, 0.0), Normal, Count ? FTerrLook(FLinearColor(Tint.R * Scale, Tint.G * Scale, Tint.B * Scale), Sand * Scale, Rock * Scale, Gravel * Scale, Water * Scale)
+						: FTerrLook(FLinearColor::White, 0.0f, 1.0f, 0.0f, 0.0f));
+				}
+				else
+				{
+					Ground.AddVertex(Corner(MX, MY, 0.0), Normal, Count ? FColor(static_cast<uint8>(R / Count), static_cast<uint8>(G / Count), static_cast<uint8>(B / Count)) : TerrRockTopColor);
+				}
 			}
 		}
 		for (int32 Y = 0; Y < Ny; ++Y)
@@ -244,8 +330,11 @@ namespace
 				const FVector Top01 = Low01 + FVector(0.0, 0.0, RockCm);
 				const FVector Top10 = Low10 + FVector(0.0, 0.0, RockCm);
 				const FVector Top11 = Low11 + FVector(0.0, 0.0, RockCm);
-				Ground.AddFlatQuad(Top00, Top01, Top11, Top10, Up, TerrShade(TerrRockTopColor, Variation));
-				const FColor SideColor = TerrShade(TerrRockSideColor, Variation);
+				// Rock is the texture's rock layer, a little lighter or darker block by block; its sides are in shade.
+				const float Shade = Variation * 0.01f;
+				const FTerrLook TopLook = bTextured ? FTerrLook(FLinearColor(1.0f + Shade, 1.0f + Shade, 1.0f + Shade), 0.0f, 1.0f, 0.0f, 0.0f) : FTerrLook(TerrShade(TerrRockTopColor, Variation));
+				const FTerrLook SideColor = bTextured ? FTerrLook(FLinearColor(0.8f + Shade, 0.8f + Shade, 0.8f + Shade), 0.0f, 1.0f, 0.0f, 0.0f) : FTerrLook(TerrShade(TerrRockSideColor, Variation));
+				Ground.AddFlatQuad(Top00, Top01, Top11, Top10, Up, TopLook);
 				const auto Face = [&](int32 NX, int32 NY, const FVector& LowA, const FVector& LowB, const FVector& TopB, const FVector& TopA, const FVector& Out)
 				{
 					if (NX >= 0 && NY >= 0 && NX < MapW && NY < MapH && !IsRock(NX, NY))
@@ -279,10 +368,12 @@ namespace
 				const FVector B = Corner(X, Y + 1, Rise);
 				const FVector C = Corner(X + 1, Y + 1, Rise);
 				const FVector D = Corner(X + 1, Y, Rise);
-				Roof.AddFlatQuad(A, B, C, D, Up, bThick ? TerrRockTopColor : TerrThinRoofColor);
+				const FTerrLook ThickTop = bTextured ? FTerrLook(FLinearColor::White, 0.0f, 1.0f, 0.0f, 0.0f) : FTerrLook(TerrRockTopColor);
+				const FTerrLook ThickUnder = bTextured ? FTerrLook(FLinearColor(0.45f, 0.45f, 0.45f), 0.0f, 1.0f, 0.0f, 0.0f) : FTerrLook(TerrThickRoofUnderColor);
+				Roof.AddFlatQuad(A, B, C, D, Up, bThick ? ThickTop : FTerrLook(TerrThinRoofColor));
 				// The engine's vertex colour material draws both sides, so the underside sits a hand below the top.
 				const FVector Thickness(0.0, 0.0, -4.0);
-				Roof.AddFlatQuad(A + Thickness, B + Thickness, C + Thickness, D + Thickness, Down, bThick ? TerrThickRoofUnderColor : TerrThinRoofUnderColor);
+				Roof.AddFlatQuad(A + Thickness, B + Thickness, C + Thickness, D + Thickness, Down, bThick ? ThickUnder : FTerrLook(TerrThinRoofUnderColor));
 			}
 		}
 	}
@@ -584,7 +675,7 @@ namespace
 			Mesh->ClearMeshSection(Section);
 			return;
 		}
-		Mesh->CreateMeshSection(Section, Data.Positions, Data.Triangles, Data.Normals, Data.UVs, Data.Colors, TArray<FProcMeshTangent>(), false);
+		Mesh->CreateMeshSection(Section, Data.Positions, Data.Triangles, Data.Normals, Data.UVs, Data.Weights1, Data.Weights2, TArray<FVector2D>(), Data.Colors, TArray<FProcMeshTangent>(), false);
 		if (Material)
 		{
 			Mesh->SetMaterial(Section, Material);
@@ -599,7 +690,7 @@ void UTerrainSubsystem::RebuildChunkGround(int32 ChunkX, int32 ChunkY)
 	FChunk& Chunk = Chunks[ChunkIndex(ChunkX, ChunkY)];
 	FTerrMesh Ground;
 	FTerrMesh Roof;
-	TerrBuildChunkMeshes(Sim.map(), Sim.plants(), ThinRoof, ChunkX, ChunkY, Ground, Roof);
+	TerrBuildChunkMeshes(Sim.map(), Sim.plants(), ThinRoof, bTextured, ChunkX, ChunkY, Ground, Roof);
 	Stats.GroundVertices += Ground.Num() - Chunk.GroundVertices;
 	Stats.RoofVertices += Roof.Num() - Chunk.RoofVertices;
 	Chunk.GroundVertices = Ground.Num();
@@ -797,6 +888,9 @@ void UTerrainSubsystem::RebuildAll()
 	TerrainActor->SetActorLabel(TEXT("Terrain"));
 #endif
 
+	// The terrain material if it was made and wanted, else the flat vertex colours.
+	GroundMaterial = GTerrainTextured.GetValueOnGameThread() != 0 ? LoadObject<UMaterialInterface>(nullptr, TerrTexturedMaterialPath) : nullptr;
+	bTextured = GroundMaterial != nullptr;
 	if (!GroundMaterial)
 	{
 		GroundMaterial = LoadObject<UMaterialInterface>(nullptr, TerrMaterialPath);
@@ -822,7 +916,7 @@ void UTerrainSubsystem::RebuildAll()
 			const int32 CX = (First + I) % ChunksX;
 			const int32 CY = (First + I) / ChunksX;
 			FTerrChunkBuild& Build = Builds[I];
-			TerrBuildChunkMeshes(Core.map(), Core.plants(), ThinRoof, CX, CY, Build.Ground, Build.Roof);
+			TerrBuildChunkMeshes(Core.map(), Core.plants(), ThinRoof, bTextured, CX, CY, Build.Ground, Build.Roof);
 			Build.Plants.SetNum(PlantVisuals.Num());
 			Build.PlantSignature = GatherChunkPlants(CX, CY, &Build.Plants);
 		});

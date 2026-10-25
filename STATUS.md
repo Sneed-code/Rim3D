@@ -77,8 +77,8 @@ solid 4 m block** (`TerrainDraw::RockHeightM`, picking and the overseer camera k
 roof still over it. The thin roof of C5's rooms is a second section of the chunk; **roofs are hidden in the overseer view and shown in direct mode**
 (`Terrain.Roofs` overrides). Mining rebuilds only that chunk (about 0.1 ms). Plants are instanced low-poly meshes made at start from
 each plant def's new `visual` field (stem and crown shapes with colours; A1 can set `visual.mesh` instead), one component per chunk and kind, with cull
-distances for grass; the sim's plant events and a rotating scan of chunk plant sizes keep them current, no snapshot copy. Looks are placeholders
-(flat colours, engine vertex-colour material) until A2. The old Stage 0 terrain test is still the `terrain` smoke test; the other smoke tests now
+distances for grass; the sim's plant events and a rotating scan of chunk plant sizes keep them current, no snapshot copy. Since A2 the ground
+has CC0 PBR textures (grass, sand, gravel, rock blended by terrain type and slope; the generated material is not in Git, without it the old flat colours are drawn). The old Stage 0 terrain test is still the `terrain` smoke test; the other smoke tests now
 get their ground from this subsystem. No sim changes except `USimSubsystem::GetSimGeneration`.
 
 Since F1 every pawn with a body (`race.body`) has per-part health: the Human body's 64 parts, injuries
@@ -283,7 +283,7 @@ sand, the doc says why). ~~**C1** job system~~ done (`docs/design/jobs.md`; save
 actions too). ~~**U6** overseer camera and selection~~ done (PC Unreal;
 smoke test `overseer`; `docs/design/overseer.md`). ~~**U9** protagonist~~ done (PC Unreal; smoke test
 `protagonist`; `docs/design/protagonist.md`; save format 7). ~~**U3** terrain and plants~~ done (PC Unreal; smoke test `world`;
-`docs/design/terrain.md`); ~~**U4** buildings and items~~ done (PC Unreal; smoke test `buildings`; `docs/design/building-draw.md`); ~~**U7** orders~~ done (PC Unreal; smoke test `orders`; `docs/design/orders.md`); **A2** terrain materials (needs sneed's Megascans) is open now.
+`docs/design/terrain.md`); ~~**U4** buildings and items~~ done (PC Unreal; smoke test `buildings`; `docs/design/building-draw.md`); ~~**U7** orders~~ done (PC Unreal; smoke test `orders`; `docs/design/orders.md`).
 
 Wave 6, open now that C1 is in: ~~**C4** building~~ done (`docs/design/construction.md`; save format 10; ~~**C5** doors,
 roofs and rooms~~ done (`docs/design/rooms.md`; save format 13), ~~**C7** bills and cooking~~ done (`docs/design/bills.md`; save format 18; ~~**U8** colony panels~~ done (PC Unreal; smoke test `panels`; `docs/design/panels.md`)), ~~**C6** food, rest and
@@ -294,9 +294,9 @@ U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priori
 AI: aiming~~ done (`docs/design/aiming.md`; save format 17), so **F6** raid and defense (cloud, Opus high)
 is open once C8 is in (it is); with U9 and F2 in, ~~**U11** fights on screen~~ is done (PC; smoke test `fights`; `docs/design/fights.md`; it
 binds R to reload; reload and sidestep animations are not drawn yet). ~~**C10** colony scenario test~~ done
-(`docs/design/colony-scenario.md`); ~~**U10** hands-on work~~ is done (PC; smoke test `handson`; `docs/design/handson.md`); ~~**A1** placeholder art~~ is done (PC; free Poly Haven meshes on the bed, door, table, stool, stove, logs, meals, berries, trees and bushes; `docs/design/building-draw.md`, `python tools/placeholder_art.py` then the `PlaceholderArt` commandlet). **A2** terrain materials (needs sneed's Megascans) and **G1** are what is left on the PC.
+(`docs/design/colony-scenario.md`); ~~**U10** hands-on work~~ is done (PC; smoke test `handson`; `docs/design/handson.md`); ~~**A1** placeholder art~~ is done (PC; free Poly Haven meshes on the bed, door, table, stool, stove, logs, meals, berries, trees and bushes; `docs/design/building-draw.md`, `python tools/placeholder_art.py` then the `PlaceholderArt` commandlet). ~~**A2** terrain materials~~ is done (PC; free CC0 Poly Haven textures instead of Megascans, so nobody had to download anything: grass, sand, gravel and rock blended by terrain type and slope, placed by world position; `docs/design/terrain.md`, `python tools/terrain_textures.py` then the `TerrainMaterials` commandlet; swapping in Megascans later is a change in `assets/terrain_textures.json`). **G1** is what is left on the PC.
 
 ## Waiting on sneed
 
-- Megascans: download terrain material packs from Fab for task A2 (not needed before wave 10;
-  that thread sends the steps).
+- Nothing now. (Megascans for A2 are no longer needed: the free textures are in; Megascans can replace them
+  later through `assets/terrain_textures.json`.)
