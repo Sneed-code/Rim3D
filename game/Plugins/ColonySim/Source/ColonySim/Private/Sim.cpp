@@ -20,6 +20,7 @@
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Genes.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
@@ -270,6 +271,24 @@ void Sim::giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& 
     // Without the looks rules (the test defs) the pawn gets plain looks; that is not an error.
     generateLooks(*defs_, seed, female, lineage, looks, error);
     reg.emplace_or_replace<PawnLooks>(pawn, std::move(looks));
+    giveGenes(pawn);
+}
+
+void Sim::giveGenes(Entity pawn) {
+    entt::registry& reg = things_->registry();
+    const PawnLooks* looks = reg.try_get<PawnLooks>(pawn);
+    if (looks == nullptr) {
+        return;
+    }
+    PawnGenes genes;
+    std::string error;
+    // Without the Genes defs (the test defs) the pawn has no genes; that is not an error.
+    makeGenes(*defs_, looks->lineage, genes, error);
+    reg.emplace_or_replace<PawnGenes>(pawn, std::move(genes));
+}
+
+const PawnGenes* Sim::genesOf(Entity pawn) const {
+    return things_->exists(pawn) ? things_->registry().try_get<PawnGenes>(pawn) : nullptr;
 }
 
 const PawnLooks* Sim::looksOf(Entity pawn) const {
@@ -465,6 +484,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "that thing has no looks to change");
         } else if (!setLineage(*defs_, lineage->lineage, *looks, error)) {
             commandFailed(id, error);
+        } else {
+            giveGenes(lineage->pawn);
         }
     } else if (const auto* move = std::get_if<DirectMoveCommand>(&command)) {
         entt::registry& reg = things_->registry();
@@ -474,6 +495,9 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "that pawn isn't under direct control");
         } else if (health_->incapacitated(move->pawn)) {
             commandFailed(id, "that colonist is downed or dead");
+        } else if (combat_->rollLocked(move->pawn)) {
+            // Rolling (P2): the sim moves the pawn; the player's position is ignored, without a failure
+            // because Unreal sends one every step.
         } else {
             Position& pos = reg.get<Position>(move->pawn);
             Mover& mover = reg.get<Mover>(move->pawn);
@@ -499,6 +523,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             pos.y += moveY;
             mover.vx = moveX;
             mover.vy = moveY;
+        }
+    } else if (const auto* roll = std::get_if<DodgeRollCommand>(&command)) {
+        if (!combat_->dodgeRoll(roll->pawn, roll->dx, roll->dy, &error)) {
+            commandFailed(id, error);
         }
     } else if (const auto* schedule = std::get_if<SetScheduleCommand>(&command)) {
         if (!jobs_->setSchedule(schedule->pawn, schedule->hour, schedule->kind, error)) {
@@ -952,6 +980,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.rounds = combat_->roundsLeft(entity);
             view.magazineSize = combat_->magazineSize(entity);
             view.reloading = combat_->reloading(entity);
+            combat_->kickOf(entity, view.kickUp, view.kickSide);
+            view.rollPhase = static_cast<uint8_t>(combat_->rollPhase(entity));
+            if (view.rollPhase != 0) {
+                view.rollStepsLeft = combat_->rollStepsLeft(entity);
+                combat_->rollDirection(entity, view.rollDirX, view.rollDirY);
+            }
+            view.hitProof = combat_->hitProof(entity);
         }
         if (const Gear* gear = reg.try_get<Gear>(entity); gear != nullptr && gear->weapon != kNoEntity) {
             view.weapon = reg.get<Thing>(gear->weapon).def;

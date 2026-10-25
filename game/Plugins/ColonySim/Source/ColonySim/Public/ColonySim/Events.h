@@ -74,6 +74,7 @@ enum class PawnAction : uint8_t {
     Research,     // started research at `target`, a research bench (once per job)
     Clean,        // started cleaning the filth in `cell`; a layer comes off every few seconds until its JobEnded
     Block,        // raised its melee weapon against the swing of `target` (none: the player's own block)
+    Roll,         // started a dodge roll (P2): `cell` where it began, (x, y) the unit direction, `amount` the steps from start-up to the end of recovery
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
@@ -111,6 +112,7 @@ struct Event {
     // ShortCircuit: `thing` the building it happened at, `cell` its origin, `amount` the energy
     // released from the net's batteries, Wd.
     float amount = 0.0f;
+    // PawnAction Roll: see there.
     // ShotFired: `thing` the shooter, `def` its gun's Things def, `target` the projectile, (x, y, z)
     // the muzzle. ProjectileHit: `thing` the projectile (forget its id), `def` its Projectiles def,
     // `hit` what stopped it, `target` the pawn or building hit, `part` the body part hit (index as

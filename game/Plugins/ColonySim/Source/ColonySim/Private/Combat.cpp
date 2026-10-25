@@ -4,6 +4,7 @@
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Movement.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -30,6 +31,9 @@ struct CombatModel {
         float recoil = 0.0f;
         int magazine = 0;    // rounds; 0 for none (never reloads)
         int reloadTime = 0;  // steps, at the skill where reloadTimeFactorBySkill is 1
+        // The player's gun kick per shot of a spray (P2), degrees: up, then to the right. The shot
+        // after the last entry repeats it. Empty: no kick.
+        std::vector<std::pair<float, float>> kicks;
     };
     struct Apparel {
         bool valid = false;
@@ -96,6 +100,19 @@ struct CombatModel {
     float lead[2] = {0.4f, 1.0f};
     float leadError[2] = {0.4f, 0.05f};
     float reloadFactor[2] = {1.3f, 0.7f};
+    // P2's gun kick: it holds for kickHold steps after a shot, then wears off by kickRecovery degrees
+    // a step; a spray restarts after kickReset steps without a shot; the kick never passes kickMax.
+    int kickHold = 5;
+    int kickReset = 15;
+    float kickRecovery = 0.2f;
+    float kickMax = 10.0f;
+    // P2's dodge roll, all in steps but the distance (metres, along the whole roll).
+    int rollStartUp = 3;
+    int rollActive = 15;
+    int rollHitProof = 12;  // the first this many steps of the roll
+    int rollRecovery = 9;
+    int rollCooldown = 6;
+    float rollDistance = 4.0f;
 
     explicit CombatModel(const DefDatabase& defs, const HealthSystem& health);
 
@@ -206,6 +223,16 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
         bySkill("leadBySkill", lead);
         bySkill("leadErrorBySkill", leadError);
         bySkill("reloadTimeFactorBySkill", reloadFactor);
+        kickHold = std::max(0, static_cast<int>(rules->integer("recoilKickHoldSteps", kickHold)));
+        kickReset = std::max(1, static_cast<int>(rules->integer("recoilKickResetSteps", kickReset)));
+        kickRecovery = std::max(0.0f, combatNum(*rules, "recoilKickRecoveryPerStep", kickRecovery));
+        kickMax = std::max(0.0f, combatNum(*rules, "recoilKickMaxDegrees", kickMax));
+        rollStartUp = std::max(0, static_cast<int>(rules->integer("dodgeRoll.startUpSteps", rollStartUp)));
+        rollActive = std::max(1, static_cast<int>(rules->integer("dodgeRoll.rollSteps", rollActive)));
+        rollHitProof = std::clamp(static_cast<int>(rules->integer("dodgeRoll.hitProofSteps", rollHitProof)), 0, rollActive);
+        rollRecovery = std::max(0, static_cast<int>(rules->integer("dodgeRoll.recoverySteps", rollRecovery)));
+        rollCooldown = std::max(0, static_cast<int>(rules->integer("dodgeRoll.cooldownSteps", rollCooldown)));
+        rollDistance = std::max(0.0f, combatNum(*rules, "dodgeRoll.distance", rollDistance));
     } else {
         for (size_t i = 0; i < 21; ++i) {
             accuracyBySkill[i] = 0.89f + 0.005f * static_cast<float>(i);
@@ -248,6 +275,10 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
             g.recoil = combatNum(def, "recoilPerShot", 0.0);
             g.magazine = std::max(0, static_cast<int>(def.integer("magazineSize", 0)));
             g.reloadTime = std::max(0, static_cast<int>(std::lround(def.number("reloadTime"))));
+            for (size_t k = 0; k < def.count("recoilKicks"); ++k) {
+                const std::string at = "recoilKicks." + std::to_string(k);
+                g.kicks.emplace_back(combatNum(def, at + ".up", 0.0), combatNum(def, at + ".side", 0.0));
+            }
             g.valid = bullet(g.projectile) != nullptr;
         }
         if (def.has("tools") && !def.has("race") && !def.has("verbs.0.defaultProjectile")) {
@@ -692,6 +723,9 @@ TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, f
         if (pawn == skipPawn || pos.level != level) {
             continue;
         }
+        if (const DodgeRoll* roll = reg.try_get<DodgeRoll>(pawn); roll != nullptr && roll->proof) {
+            continue;  // rolling out of the way (P2): the bullet goes through
+        }
         const Health* health = reg.try_get<Health>(pawn);
         const CombatModel::Kind* kind = model_->kind(thing.def);
         if (kind == nullptr || (health != nullptr && health->dead)) {
@@ -745,7 +779,8 @@ TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, f
     return best;
 }
 
-Entity CombatSystem::fire(Entity pawn, float x, float y, float z, float spreadSlope, Rng& rng) {
+Entity CombatSystem::fire(Entity pawn, float x, float y, float z, float spreadSlope, Rng& rng, float kickUp,
+                          float kickSide) {
     entt::registry& reg = things_.registry();
     if (!reg.valid(pawn) || !reg.all_of<Gear, Position, Posture>(pawn)) {
         return kNoEntity;
@@ -792,12 +827,12 @@ Entity CombatSystem::fire(Entity pawn, float x, float y, float z, float spreadSl
     dir = {dir.x / n, dir.y / n, dir.z / n};
 
     // Spread: a direction picked evenly in a circle around the aim.
+    CombatVec right{dir.y, -dir.x, 0.0f};
+    n = std::sqrt(combatDot(right, right));
+    right = n > 1e-6f ? CombatVec{right.x / n, right.y / n, 0.0f} : CombatVec{0.0f, -1.0f, 0.0f};
+    const CombatVec up{right.y * dir.z - right.z * dir.y, right.z * dir.x - right.x * dir.z,
+                       right.x * dir.y - right.y * dir.x};
     if (spreadSlope > 0.0f) {
-        CombatVec right{dir.y, -dir.x, 0.0f};
-        n = std::sqrt(combatDot(right, right));
-        right = n > 1e-6f ? CombatVec{right.x / n, right.y / n, 0.0f} : CombatVec{0.0f, -1.0f, 0.0f};
-        const CombatVec up{right.y * dir.z - right.z * dir.y, right.z * dir.x - right.x * dir.z,
-                           right.x * dir.y - right.y * dir.x};
         float u = 0.0f;
         float w = 0.0f;
         for (int tries = 0; tries < 16; ++tries) {
@@ -811,6 +846,13 @@ Entity CombatSystem::fire(Entity pawn, float x, float y, float z, float spreadSl
         }
         dir = {dir.x + (right.x * u + up.x * w) * spreadSlope, dir.y + (right.y * u + up.y * w) * spreadSlope,
                dir.z + (right.z * u + up.z * w) * spreadSlope};
+        n = std::sqrt(combatDot(dir, dir));
+        dir = {dir.x / n, dir.y / n, dir.z / n};
+    }
+    // The player's gun kick (P2): the shot goes up and to the right of the aim.
+    if (kickUp != 0.0f || kickSide != 0.0f) {
+        dir = {dir.x + right.x * kickSide + up.x * kickUp, dir.y + right.y * kickSide + up.y * kickUp,
+               dir.z + right.z * kickSide + up.z * kickUp};
         n = std::sqrt(combatDot(dir, dir));
         dir = {dir.x / n, dir.y / n, dir.z / n};
     }
@@ -864,6 +906,9 @@ bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, 
     }
     if (target != kNoEntity && (target == pawn || !things_.spawned(target) || !reg.all_of<Posture>(target))) {
         return fail("the target is not a pawn on the map");
+    }
+    if (rollLocked(pawn)) {
+        return fail("rolling");
     }
     Shooter& s = reg.get_or_emplace<Shooter>(pawn);
     if (s.phase == ShotPhase::Reloading) {
@@ -972,8 +1017,34 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
             leadPoint(pawn, s.target, lead, fx, fy, fz);
         }
     }
-    fire(pawn, fx, fy, fz, spread(weaponDef, skill, distance, s.player) + s.recoil, rng);
-    s.recoil += gun->recoil * std::max(0.0f, 1.0f - model_->recoilSkillReduction * static_cast<float>(skill));
+    // The player's gun kick (P2): this shot goes where the shots before it have lifted the aim, then
+    // its own kick is added for the next.
+    constexpr float kDegreesToSlope = 0.0174533f;  // small angles: the tangent is the angle
+    float kickUp = 0.0f;
+    float kickSide = 0.0f;
+    const bool kicks = s.player && !gun->kicks.empty();
+    if (kicks) {
+        if (const RecoilKick* kick = reg.try_get<RecoilKick>(pawn)) {
+            kickUp = kick->up * kDegreesToSlope;
+            kickSide = kick->side * kDegreesToSlope;
+        }
+    }
+    fire(pawn, fx, fy, fz, spread(weaponDef, skill, distance, s.player) + s.recoil, rng, kickUp, kickSide);
+    const float skillFactor = std::max(0.0f, 1.0f - model_->recoilSkillReduction * static_cast<float>(skill));
+    s.recoil += gun->recoil * skillFactor;
+    if (kicks) {
+        RecoilKick& kick = reg.get_or_emplace<RecoilKick>(pawn);
+        const auto& entry = gun->kicks[static_cast<size_t>(std::min<int>(kick.shots, static_cast<int>(gun->kicks.size()) - 1))];
+        kick.up += entry.first * skillFactor;
+        kick.side += entry.second * skillFactor;
+        const float length = std::sqrt(kick.up * kick.up + kick.side * kick.side);
+        if (length > model_->kickMax && length > 0.0f) {
+            kick.up *= model_->kickMax / length;
+            kick.side *= model_->kickMax / length;
+        }
+        ++kick.shots;
+        kick.sinceShot = 0;
+    }
     if (gun->magazine > 0) {
         Magazine& magazine = reg.get_or_emplace<Magazine>(gear->weapon, Magazine{gun->magazine});
         if (--magazine.rounds <= 0) {
@@ -1030,6 +1101,9 @@ bool CombatSystem::reload(Entity pawn, std::string* why) {
     }
     if (health_.incapacitated(pawn)) {
         return fail("that pawn can't reload (downed or dead)");
+    }
+    if (rollLocked(pawn)) {
+        return fail("rolling");
     }
     Shooter& s = reg.get_or_emplace<Shooter>(pawn);
     if (s.phase == ShotPhase::Aiming || s.phase == ShotPhase::Firing || s.phase == ShotPhase::Reloading) {
@@ -1301,6 +1375,8 @@ bool CombatSystem::isGun(DefId def) const {
 
 void CombatSystem::step(Rng& rng) {
     entt::registry& reg = things_.registry();
+    stepRolls();
+    stepKicks();
     // Pawns face where they aim, else where they walk.
     for (const auto [pawn, posture, mover] : reg.view<Posture, const Mover>().each()) {
         const Shooter* s = reg.try_get<Shooter>(pawn);
@@ -1470,7 +1546,8 @@ bool CombatSystem::equip(Entity pawn, Entity item, std::string* why) {
 void CombatSystem::hashThing(Entity e, StateHasher& h) const {
     const entt::registry& reg = things_.registry();
     const bool has[] = {reg.all_of<Posture>(e), reg.all_of<Gear>(e), reg.all_of<EquippedBy>(e), reg.all_of<Shooter>(e),
-                        reg.all_of<Projectile>(e), reg.all_of<Magazine>(e)};
+                        reg.all_of<Projectile>(e), reg.all_of<Magazine>(e), reg.all_of<RecoilKick>(e),
+                        reg.all_of<DodgeRoll>(e)};
     uint64_t mask = 0;
     for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
         mask |= has[bit] ? (uint64_t{1} << bit) : 0;
@@ -1518,6 +1595,214 @@ void CombatSystem::hashThing(Entity e, StateHasher& h) const {
     }
     if (const Magazine* m = reg.try_get<Magazine>(e)) {
         h.add(m->rounds);
+    }
+    if (const RecoilKick* k = reg.try_get<RecoilKick>(e)) {
+        h.add(k->up);
+        h.add(k->side);
+        h.add(k->shots);
+        h.add(k->sinceShot);
+    }
+    if (const DodgeRoll* r = reg.try_get<DodgeRoll>(e)) {
+        h.add(static_cast<int>(r->phase));
+        h.add(r->stepsLeft);
+        h.add(r->rolled);
+        h.add(r->dirX);
+        h.add(r->dirY);
+        h.add(r->cooldown);
+        h.add(r->proof);
+    }
+}
+
+void CombatSystem::kickOf(Entity pawn, float& up, float& side) const {
+    const entt::registry& reg = things_.registry();
+    const RecoilKick* kick = reg.valid(pawn) ? reg.try_get<RecoilKick>(pawn) : nullptr;
+    up = kick != nullptr ? kick->up : 0.0f;
+    side = kick != nullptr ? kick->side : 0.0f;
+}
+
+void CombatSystem::stepKicks() {
+    entt::registry& reg = things_.registry();
+    for (const auto [pawn, kick] : reg.view<RecoilKick>().each()) {
+        ++kick.sinceShot;
+        if (kick.sinceShot >= model_->kickReset) {
+            kick.shots = 0;
+        }
+        // Held for a moment after a shot, then it drops straight back toward the aim.
+        if (kick.sinceShot > model_->kickHold && (kick.up != 0.0f || kick.side != 0.0f)) {
+            const float length = std::sqrt(kick.up * kick.up + kick.side * kick.side);
+            if (length <= model_->kickRecovery) {
+                kick.up = 0.0f;
+                kick.side = 0.0f;
+            } else {
+                const float scale = 1.0f - model_->kickRecovery / length;
+                kick.up *= scale;
+                kick.side *= scale;
+            }
+        }
+    }
+}
+
+RollPhase CombatSystem::rollPhase(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const DodgeRoll* roll = reg.valid(pawn) ? reg.try_get<DodgeRoll>(pawn) : nullptr;
+    return roll != nullptr ? roll->phase : RollPhase::Idle;
+}
+
+int CombatSystem::rollStepsLeft(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const DodgeRoll* roll = reg.valid(pawn) ? reg.try_get<DodgeRoll>(pawn) : nullptr;
+    return roll != nullptr && roll->phase != RollPhase::Idle ? roll->stepsLeft : 0;
+}
+
+bool CombatSystem::hitProof(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const DodgeRoll* roll = reg.valid(pawn) ? reg.try_get<DodgeRoll>(pawn) : nullptr;
+    return roll != nullptr && roll->proof;
+}
+
+bool CombatSystem::rollDirection(Entity pawn, float& x, float& y) const {
+    const entt::registry& reg = things_.registry();
+    const DodgeRoll* roll = reg.valid(pawn) ? reg.try_get<DodgeRoll>(pawn) : nullptr;
+    if (roll == nullptr || roll->phase == RollPhase::Idle) {
+        return false;
+    }
+    x = roll->dirX;
+    y = roll->dirY;
+    return true;
+}
+
+bool CombatSystem::dodgeRoll(Entity pawn, float dx, float dy, std::string* why) {
+    entt::registry& reg = things_.registry();
+    const auto fail = [why](const char* message) {
+        if (why != nullptr) {
+            *why = message;
+        }
+        return false;
+    };
+    if (!things_.spawned(pawn) || !reg.all_of<Posture, Position, Mover, PlayerControl>(pawn)) {
+        return fail("that pawn isn't under direct control");
+    }
+    if (health_.incapacitated(pawn)) {
+        return fail("that pawn can't roll (downed or dead)");
+    }
+    Posture& posture = reg.get<Posture>(pawn);
+    if (posture.stance == Stance::Prone) {
+        return fail("get up before rolling");
+    }
+    DodgeRoll& roll = reg.get_or_emplace<DodgeRoll>(pawn);
+    if (roll.phase != RollPhase::Idle) {
+        return fail("already rolling");
+    }
+    if (roll.cooldown > 0) {
+        return fail("not ready to roll again yet");
+    }
+    float length = std::isfinite(dx) && std::isfinite(dy) ? std::sqrt(dx * dx + dy * dy) : 0.0f;
+    if (length < 1e-4f) {
+        dx = -posture.facingX;  // no direction: a backstep
+        dy = -posture.facingY;
+        length = std::sqrt(dx * dx + dy * dy);
+    }
+    roll.dirX = length > 1e-6f ? dx / length : 1.0f;
+    roll.dirY = length > 1e-6f ? dy / length : 0.0f;
+    roll.phase = model_->rollStartUp > 0 ? RollPhase::StartUp : RollPhase::Rolling;
+    roll.stepsLeft = model_->rollStartUp > 0 ? model_->rollStartUp : model_->rollActive;
+    roll.rolled = 0;
+    roll.proof = false;
+    posture.facingX = roll.dirX;
+    posture.facingY = roll.dirY;
+    // The roll ends a shot being aimed or fired; a reload goes on.
+    if (Shooter* s = reg.try_get<Shooter>(pawn); s != nullptr && (s->phase == ShotPhase::Aiming || s->phase == ShotPhase::Firing)) {
+        s->phase = ShotPhase::Ready;
+        s->shotsLeft = 0;
+        s->stepsLeft = 0;
+    }
+    if (events_ != nullptr) {
+        Event e;
+        e.type = EventType::PawnAction;
+        e.action = PawnAction::Roll;
+        e.thing = pawn;
+        e.def = reg.get<Thing>(pawn).def;
+        e.cell = cellOf(reg.get<Position>(pawn));
+        e.x = roll.dirX;
+        e.y = roll.dirY;
+        e.amount = static_cast<float>(model_->rollStartUp + model_->rollActive + model_->rollRecovery);
+        events_->push_back(std::move(e));
+    }
+    return true;
+}
+
+// Runs every roll one step: the phase it is in acts, then counts down into the next.
+void CombatSystem::stepRolls() {
+    entt::registry& reg = things_.registry();
+    scratch_.clear();
+    for (const Entity pawn : reg.view<DodgeRoll>()) {
+        scratch_.push_back(pawn);
+    }
+    std::sort(scratch_.begin(), scratch_.end());
+    for (const Entity pawn : scratch_) {
+        DodgeRoll& roll = reg.get<DodgeRoll>(pawn);
+        roll.proof = false;
+        if (roll.phase == RollPhase::Idle) {
+            roll.cooldown = std::max(0, roll.cooldown - 1);
+            continue;
+        }
+        if (health_.incapacitated(pawn) || !things_.spawned(pawn)) {
+            roll.phase = RollPhase::Idle;  // knocked down mid-roll: it ends where the pawn lies
+            roll.stepsLeft = 0;
+            roll.cooldown = model_->rollCooldown;
+            continue;
+        }
+        switch (roll.phase) {
+            case RollPhase::StartUp:
+                if (--roll.stepsLeft <= 0) {
+                    roll.phase = RollPhase::Rolling;
+                    roll.stepsLeft = model_->rollActive;
+                    roll.rolled = 0;
+                }
+                break;
+            case RollPhase::Rolling: {
+                roll.proof = roll.rolled < model_->rollHitProof;
+                ++roll.rolled;
+                Position& pos = reg.get<Position>(pawn);
+                const float stride = model_->rollDistance / static_cast<float>(model_->rollActive);
+                const float dx = roll.dirX * stride;
+                const float dy = roll.dirY * stride;
+                // The whole move, or sliding along one axis (a wall), or staying where it is.
+                const float tries[3][2] = {{dx, dy}, {dx, 0.0f}, {0.0f, dy}};
+                float moveX = 0.0f;
+                float moveY = 0.0f;
+                for (const auto& t : tries) {
+                    if ((t[0] != 0.0f || t[1] != 0.0f) && pawnFitsAt(map_, pos.x + t[0], pos.y + t[1], kPawnRadius, pos.level)) {
+                        moveX = t[0];
+                        moveY = t[1];
+                        break;
+                    }
+                }
+                pos.x += moveX;
+                pos.y += moveY;
+                if (Mover* mover = reg.try_get<Mover>(pawn)) {
+                    mover->vx = moveX;
+                    mover->vy = moveY;
+                }
+                if (--roll.stepsLeft <= 0) {
+                    roll.phase = RollPhase::Recovery;
+                    roll.stepsLeft = model_->rollRecovery;
+                }
+                break;
+            }
+            case RollPhase::Recovery:
+                if (--roll.stepsLeft <= 0) {
+                    roll.phase = RollPhase::Idle;
+                    roll.cooldown = model_->rollCooldown;
+                }
+                break;
+            case RollPhase::Idle:
+                break;
+        }
+        if (roll.phase == RollPhase::Recovery && roll.stepsLeft <= 0) {  // no recovery configured
+            roll.phase = RollPhase::Idle;
+            roll.cooldown = model_->rollCooldown;
+        }
     }
 }
 

@@ -1,6 +1,7 @@
 #include "ColonySim/Needs.h"
 
 #include "ColonySim/Clock.h"
+#include "ColonySim/Genes.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Things.h"
@@ -127,6 +128,9 @@ void NeedsSystem::step() {
         float perDay = rules_.defaultFoodPerDay;
         if (const Thing* thing = reg.try_get<Thing>(pawn)) {
             perDay = static_cast<float>(defs_.get(thing->def).number("race.foodPerDay", perDay));
+        }
+        if (const PawnGenes* genes = reg.try_get<PawnGenes>(pawn)) {
+            perDay *= genes->effects.foodRate;
         }
         switch (foodBandOf(rules_, needs.food)) {
             case FoodBand::Fed: perDay *= rules_.foodFallFactorFed; break;

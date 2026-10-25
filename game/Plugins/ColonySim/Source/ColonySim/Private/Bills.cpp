@@ -2,6 +2,7 @@
 
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
+#include "ColonySim/Genes.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -252,12 +253,16 @@ bool BillSystem::shouldDo(const Bill& bill) const {
 }
 
 int BillSystem::skillLevel(Entity pawn, const std::string& skill) const {
+    int level = numbers_.defaultSkillLevel;
     if (const Colonist* colonist = things_.registry().try_get<Colonist>(pawn)) {
         if (const SkillRecord* record = colonist->skill(skill)) {
-            return record->level;
+            level = record->level;
         }
     }
-    return numbers_.defaultSkillLevel;
+    if (const PawnGenes* genes = things_.registry().try_get<PawnGenes>(pawn)) {
+        level = std::max(0, level + geneAptitude(*genes, skill));
+    }
+    return level;
 }
 
 float BillSystem::workSpeed(Entity pawn, const Recipe& recipe) const {

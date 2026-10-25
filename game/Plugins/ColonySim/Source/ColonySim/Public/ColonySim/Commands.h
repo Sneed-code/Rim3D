@@ -350,6 +350,19 @@ struct MeleeCommand {
     MeleeMode mode = MeleeMode::Attack;
 };
 
+// The protagonist's dodge roll (P2, docs/design/shooter-feel.md): a start-up, a roll of a few metres
+// in the direction (dx, dy) (any length; not a number, or zero, is a backstep away from where the
+// pawn faces) in which bullets pass through the pawn for a short window, then a recovery in which it
+// can be hit again but can't move or shoot, then a short wait before the next roll. The sim moves
+// the pawn, so Unreal plays the animation on top and never moves the body itself. Fails if the pawn
+// isn't a colonist under direct control, is downed, lying prone, already rolling, or waiting out the
+// last roll.
+struct DodgeRollCommand {
+    Entity pawn = kNoEntity;
+    float dx = 0.0f;
+    float dy = 0.0f;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -362,7 +375,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              RemoveBillCommand, SetBillCommand, HandsOnCommand, FlickCommand, ShortCircuitCommand,
                              PlaceFloorCommand, AddFilthCommand,
                              SetResearchCommand, UnlockResearchCommand,
-                             MeleeCommand>;
+                             MeleeCommand, DodgeRollCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.
