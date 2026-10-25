@@ -53,3 +53,7 @@ add_test(NAME replay_record COMMAND simrun --data ${REPLAY_TEST_DATA}
 add_test(NAME replay_check COMMAND simrun --data ${REPLAY_TEST_DATA} --replay ${REPLAY_RECORDED})
 set_tests_properties(replay_record PROPERTIES FIXTURES_SETUP replay_recording)
 set_tests_properties(replay_check PROPERTIES FIXTURES_REQUIRED replay_recording)
+
+# Pathfinding load test (S3): 100 pawns hauling on a 1 km map for a day, no failed job or search.
+add_test(NAME simrun_paths COMMAND simrun --seed 42 --size 1024 --days 1 --pawns 100 --items 2000 --check
+         --data ${CMAKE_CURRENT_SOURCE_DIR}/Tests/data)

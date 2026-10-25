@@ -2,6 +2,7 @@
 
 #include "ColonySim/Defs.h"
 #include "ColonySim/Hash.h"
+#include "ColonySim/Regions.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
 
@@ -14,11 +15,12 @@ namespace colony {
 
 // Stage 0 hauling placeholder: a pawn that only hauls items to one stockpile cell. The job
 // system (task C1) replaces these components and the code that uses them.
-enum class HaulStage : uint8_t { Idle, GoToItem, CarryToStockpile };
+enum class HaulStage : uint8_t { Idle, WaitPathToItem, GoToItem, WaitPathToStockpile, CarryToStockpile };
 
 struct HaulJob {
     HaulStage stage = HaulStage::Idle;
     Entity item = kNoEntity;
+    PathTicket path;  // while waiting for a path
 };
 
 // On an item a pawn has claimed, so nobody else goes for it.
@@ -92,6 +94,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
       rng_(splitMix64(settings.seed ^ 0x7061776EULL)),
       groundHash_(map_.contentHash()) {
     things_->setEventLog(&events_);
+    map_.regions().update();  // build every region now, not in the first step
     placeStockpileAndThings();
 }
 
@@ -207,15 +210,10 @@ void Sim::startNextHaul(Entity pawn) {
         return;
     }
     reg.emplace<HaulReservedBy>(best, HaulReservedBy{pawn});
-    Mover& mover = reg.get<Mover>(pawn);
-    mover.next = 0;
-    if (!pathfinder_.findPath(cellOf(pos), cellOf(reg.get<Position>(best)), mover.path)) {
-        ++stats_.failedJobs;  // item stays reserved so nobody retries it
-        return;
-    }
     HaulJob& job = reg.get<HaulJob>(pawn);
     job.item = best;
-    job.stage = HaulStage::GoToItem;
+    job.path = pathfinder_.request(cellOf(pos), cellOf(reg.get<Position>(best)));
+    job.stage = HaulStage::WaitPathToItem;
 }
 
 void Sim::updateHauler(Entity pawn) {
@@ -225,20 +223,41 @@ void Sim::updateHauler(Entity pawn) {
         case HaulStage::Idle:
             startNextHaul(pawn);
             break;
-        case HaulStage::GoToItem: {
-            Position& pos = reg.get<Position>(pawn);
+        case HaulStage::WaitPathToItem: {
+            if (pathfinder_.status(job.path) == PathStatus::Queued) {
+                break;
+            }
             Mover& mover = reg.get<Mover>(pawn);
-            if (haulAdvance(pos, mover)) {
-                mover.next = 0;
-                if (pathfinder_.findPath(cellOf(pos), *stockpileCell_, mover.path)) {
-                    things_->despawn(job.item);
-                    reg.emplace<HaulCarriedBy>(job.item, HaulCarriedBy{pawn});
-                    job.stage = HaulStage::CarryToStockpile;
-                } else {
-                    ++stats_.failedJobs;  // item stays where it is, reserved
-                    job.stage = HaulStage::Idle;
-                    job.item = kNoEntity;
-                }
+            mover.next = 0;
+            if (pathfinder_.takePath(job.path, mover.path)) {
+                job.stage = HaulStage::GoToItem;
+            } else {
+                ++stats_.failedJobs;  // item stays reserved so nobody retries it
+                job.stage = HaulStage::Idle;
+                job.item = kNoEntity;
+            }
+            break;
+        }
+        case HaulStage::GoToItem:
+            if (haulAdvance(reg.get<Position>(pawn), reg.get<Mover>(pawn))) {
+                job.path = pathfinder_.request(cellOf(reg.get<Position>(pawn)), *stockpileCell_);
+                job.stage = HaulStage::WaitPathToStockpile;
+            }
+            break;
+        case HaulStage::WaitPathToStockpile: {
+            if (pathfinder_.status(job.path) == PathStatus::Queued) {
+                break;
+            }
+            Mover& mover = reg.get<Mover>(pawn);
+            mover.next = 0;
+            if (pathfinder_.takePath(job.path, mover.path)) {
+                things_->despawn(job.item);
+                reg.emplace<HaulCarriedBy>(job.item, HaulCarriedBy{pawn});
+                job.stage = HaulStage::CarryToStockpile;
+            } else {
+                ++stats_.failedJobs;  // item stays where it is, reserved
+                job.stage = HaulStage::Idle;
+                job.item = kNoEntity;
             }
             break;
         }
@@ -302,6 +321,7 @@ void Sim::step() {
     for (const Entity pawn : haulers_) {
         updateHauler(pawn);
     }
+    pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     time_.seconds += 1;
     if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
         checkpoints_.push_back(Checkpoint{time_.seconds, stateHash()});
@@ -360,6 +380,7 @@ uint64_t Sim::stateHash() const {
     }
     h.add(stats_.hauls);
     h.add(stats_.failedJobs);
+    pathfinder_.hashState(h);
 
     // Every entity id the registry has handed out, in its own order: live ones, then the free
     // list that decides the next ids. Then each live thing's components.
@@ -417,6 +438,8 @@ uint64_t Sim::stateHash() const {
         if (const HaulJob* job = reg.try_get<HaulJob>(e)) {
             h.add(static_cast<int>(job->stage));
             h.add(entt::to_integral(job->item));
+            h.add(job->path.slot);
+            h.add(job->path.serial);
         }
         if (const HaulReservedBy* by = reg.try_get<HaulReservedBy>(e)) {
             h.add(entt::to_integral(by->pawn));

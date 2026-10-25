@@ -38,6 +38,14 @@ RegionId Regions::regionAt(CellPos c) {
     return map_.inBounds(c) ? regionOf_[cellSlot(c)] : kNoRegion;
 }
 
+RegionId Regions::regionAtNow(CellPos c) const {
+    return map_.inBounds(c) ? regionOf_[cellSlot(c)] : kNoRegion;
+}
+
+const RegionId* Regions::regionIdsOnLevel(int level) const {
+    return regionOf_.data() + cellSlot(CellPos{0, 0, level});
+}
+
 uint32_t Regions::groupAt(CellPos c) {
     const RegionId id = regionAt(c);
     return id == kNoRegion ? kNoGroup : regions_[id].group;
@@ -72,6 +80,7 @@ int Regions::groupCellCount(uint32_t group) {
 }
 
 void Regions::markDirty(CellPos c) {
+    ++changeCount_;
     if (!built_ || !map_.inBounds(c)) {
         return;  // before the first build every block is built anyway
     }

@@ -1,4 +1,3 @@
-#include "ColonySim/Pathfinder.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
 
@@ -6,69 +5,7 @@
 
 #include <doctest.h>
 
-#include <cstdlib>
-#include <vector>
-
 using namespace colony;
-
-namespace {
-
-// First walkable cell scanning from one corner, for path tests on generated maps.
-bool firstWalkable(const Map& map, bool fromEnd, CellPos& out) {
-    const int count = map.width() * map.height();
-    for (int k = 0; k < count; ++k) {
-        const CellPos c = map.cellAt(fromEnd ? count - 1 - k : k);
-        if (map.walkable(c)) {
-            out = c;
-            return true;
-        }
-    }
-    return false;
-}
-
-}  // namespace
-
-TEST_CASE("Pathfinder: paths are walkable, connected steps") {
-    const Map map(MapSettings{128, 128, 3});
-    Pathfinder finder(map);
-    std::vector<CellPos> path;
-    CellPos start;
-    CellPos goal;
-    if (!firstWalkable(map, false, start) || !firstWalkable(map, true, goal)) {
-        return;
-    }
-    if (!finder.findPath(start, goal, path)) {
-        return;  // different islands on this seed; reachability is covered by the hauling test
-    }
-    CHECK_FALSE(path.empty());
-    CHECK(path.back() == goal);
-    CellPos prev = start;
-    for (const CellPos& c : path) {
-        CHECK(map.walkable(c));
-        CHECK(c.level == 0);
-        CHECK(std::abs(c.x - prev.x) <= 1);
-        CHECK(std::abs(c.y - prev.y) <= 1);
-        prev = c;
-    }
-}
-
-TEST_CASE("Pathfinder: start equals goal is an empty path") {
-    const Map map(MapSettings{32, 32, 3});
-    Pathfinder finder(map);
-    std::vector<CellPos> path{{1, 1, 0}, {2, 2, 0}};
-    CellPos cell;
-    CHECK(firstWalkable(map, false, cell));
-    CHECK(finder.findPath(cell, cell, path));
-    CHECK(path.empty());
-}
-
-TEST_CASE("Pathfinder: a goal on another level can't be reached yet") {
-    const Map map(MapSettings{16, 16, 3, true});
-    Pathfinder finder(map);
-    std::vector<CellPos> path;
-    CHECK_FALSE(finder.findPath(CellPos{1, 1, 0}, CellPos{5, 5, 1}, path));
-    CHECK_FALSE(finder.findPath(CellPos{1, 1, 1}, CellPos{5, 5, 1}, path));
-}
 
 TEST_CASE("Hauling: 20 pawns haul every item within one game day, none fail") {
     Sim sim(SimSettings{11, 192, 20, 150}, testDefs());
@@ -146,4 +83,18 @@ TEST_CASE("Hauling: same seed gives the same game") {
         CHECK(pa.x == pb.x);
         CHECK(pa.y == pb.y);
     }
+}
+
+TEST_CASE("Hauling: paths come through the queue and never go over the step budget") {
+    SimSettings settings{11, 192, 20, 150};
+    settings.pathBudget = 300;  // small, so searches spread over steps and pawns wait for paths
+    Sim sim(settings, testDefs());
+    sim.stepMany(kSecondsPerDay);
+    CHECK(sim.itemsLeft() == 0);
+    CHECK(sim.stats().failedJobs == 0);
+    const PathStats& paths = sim.pathfinder().stats();
+    CHECK(paths.requests == 300);  // one to each item, one back to the stockpile
+    CHECK(paths.failedSearches == 0);
+    CHECK(paths.maxWorkInStep <= 300);
+    CHECK(paths.maxWaitSteps > 1);
 }

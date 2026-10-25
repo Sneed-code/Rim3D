@@ -40,6 +40,7 @@ TEST_CASE("Replay: playing a recorded session gives the same state, checkpoint f
     const auto defs = testDefs();
     SimSettings settings{31, 128, 6, 60, true};
     settings.checkpointEvery = 600;
+    settings.pathBudget = 150;  // small, so path searches are still half done at checkpoints
     Sim original(settings, defs);
     replayTestSession(original, 5000);
     const Replay recorded = recordReplay(original);
@@ -56,6 +57,7 @@ TEST_CASE("Replay: playing a recorded session gives the same state, checkpoint f
     CHECK(error.empty());
     CHECK(loaded.commands.size() == recorded.commands.size());
     CHECK(loaded.endHash == recorded.endHash);
+    CHECK(loaded.settings.pathBudget == 150);
     CHECK(writeReplay(loaded) == writeReplay(recorded));
 
     Sim replayed(loaded.settings, defs);
@@ -110,6 +112,7 @@ TEST_CASE("Replay: a short scenario file with defaults and no hashes plays and r
     CHECK(replay.settings.pawns == 0);
     CHECK(replay.settings.pawnDef == "Human");
     CHECK(replay.settings.checkpointEvery == kSecondsPerHour);
+    CHECK(replay.settings.pathBudget == Pathfinder::kDefaultBudget);
     CHECK_FALSE(replay.hasEndHash);
     CHECK(replay.checkpoints.empty());
     CHECK(std::get<SpawnThingCommand>(replay.commands[0].command).count == 1);

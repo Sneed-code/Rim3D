@@ -37,6 +37,7 @@ struct SimSettings {
     std::string haulItemDef = "Steel";
     // Record a state hash every this many game seconds (0: never), for replays to compare.
     int64_t checkpointEvery = kSecondsPerHour;
+    int pathBudget = Pathfinder::kDefaultBudget;  // path search work per step (docs/design/pathfinding.md)
 };
 
 struct SimStats {
@@ -109,6 +110,8 @@ public:
     const std::vector<Entity>& haulers() const { return haulers_; }
     int itemsLeft() const;
     const SimStats& stats() const { return stats_; }
+    // Path requests go through its queue, which runs once per step (docs/design/pathfinding.md).
+    Pathfinder& pathfinder() { return pathfinder_; }
     const Pathfinder& pathfinder() const { return pathfinder_; }
 
 private:
