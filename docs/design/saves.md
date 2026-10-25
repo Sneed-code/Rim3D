@@ -31,9 +31,10 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Stockpile zones (format 6) | each zone's id, priority, filter by `defName` and cells, and the next zone id |
 | Pawn movement (format 3) | each pawn's velocity, line start, held-up counters (`Mover`), and the repath count |
 | Colonists (format 4) | each colonist's name, age, backstories, traits, skills and the scenario name in the settings ([colonists.md](colonists.md)) |
+| Needs, schedules and beds (format 8) | per pawn: food, rest, malnutrition, the next food search, the 24 schedule hours; per bed: its owners; per job: the chair it eats at ([needs.md](needs.md)) |
 | Pawn health (format 5) | per pawn: protagonist flag, rest, injuries (part, hediff **by `defName`**, severity, tend quality), lost parts, blood loss, dead and cause. Pain, bleeding, capacities and downed are worked out again on loading ([health.md](health.md)) |
 | Direct control (format 7) | which colonist the player controls (a flag on the pawn); the `ControlPawn` and `DirectMove` commands in the log ([protagonist.md](protagonist.md)) |
-| Plants (format 8) | every plant as parallel lists: cell index, def, growth, age; fertility is rebuilt from the seed |
+| Plants (format 9) | every plant as parallel lists: cell index, def, growth, age; fertility is rebuilt from the seed |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
@@ -97,7 +98,8 @@ three is a bug the tests are built to catch:
 7. **Changing the layout of anything already saved**: bump `kSaveFormatVersion`, keep reading the old
    version (the archive's `version()` says which one the file is: `if (ar.version() >= 2) ...`), and
    write the change here. Old saves keep loading until a decision says otherwise (decision 0005
-   dropped formats 1 to 5 for the job system).
+   dropped formats 1 to 5 for the job system). Format 8 (C6) added needs, schedules, bed owners and
+   a job's chair; format 6 and 7 saves still load, their pawns without needs.
 
 Never store a `DefId` (or any number that depends on load order) in a save: use the `defName`.
 The same goes for region ids, which a loaded map numbers afresh: keep a cell, and never let a
@@ -164,7 +166,7 @@ sneed's whole job for a bug is: press F8, then send the folder (zip it, or drop 
 - **7** (U9): a `playerControlled` flag on a thing, and command types 10 (`ControlPawn`) and 11
   (`DirectMove`) in the command log. Older files load with nobody controlled. A file with two
   controlled pawns, or a controlled pawn that isn't a colonist on the map, is refused.
-- **8** (C2): the plant layer after the zones (`docs/design/plants.md`). Older files load with a bare map.
+- **9** (C2): the plant layer after the zones (`docs/design/plants.md`). Older files load with a bare map.
 
 ## Why the state hash changed in S6
 

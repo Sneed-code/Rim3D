@@ -66,7 +66,7 @@ plants change) which `Sim::stateHash` includes; asking costs nothing.
 
 ## Saves
 
-Save format 8: the plants as parallel lists (def names used, then per plant its cell index, def, growth
+Save format 9: the plants as parallel lists (def names used, then per plant its cell index, def, growth
 and age), after the zones. Older saves load with no plants. See `saves.md`.
 
 ## For Unreal (U3)

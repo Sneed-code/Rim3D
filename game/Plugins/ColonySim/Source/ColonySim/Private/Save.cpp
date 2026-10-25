@@ -38,9 +38,10 @@ constexpr char kSaveMagic[8] = {'R', 'I', 'M', '3', 'D', 'S', 'A', 'V'};
 constexpr size_t kSaveMagicSize = sizeof kSaveMagic;
 // Bump when the layout below changes, and keep reading the old versions (the archive's
 // version() says which one a file is). Changing it needs a line in docs/design/saves.md.
-constexpr uint32_t kSaveFormatVersion = 8;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
+constexpr uint32_t kSaveFormatVersion = 9;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
                                             // 4: C8's scenario and colonists; 5: F1's pawn health; 6: C1's jobs,
-                                            // work priorities and zones; 7: U9's direct control; 8: C2's plants
+                                            // work priorities and zones; 7: U9's direct control; 8: C6's needs,
+                                            // schedules, bed owners, the eating job's chair; 9: C2's plants
 // Saves from before the job system (formats 1 to 5) can't be read: their hauling placeholder has
 // no counterpart in the job system (docs/design/saves.md).
 constexpr uint32_t kSaveOldestFormat = 6;
@@ -125,6 +126,9 @@ struct SaveEntity {
     std::optional<SaveWorkSettings> work;
     std::optional<Carrying> carrying;
     bool playerControlled = false;  // format 7 on
+    std::optional<Needs> needs;        // format 8 on
+    std::optional<Schedule> schedule;  // format 8 on
+    std::optional<Bed> bed;            // format 8 on
 };
 
 // A stockpile zone, with its filter by defName.
@@ -135,7 +139,7 @@ struct SaveZone {
     std::vector<CellPos> cells;
 };
 
-// The plant layer as parallel lists, one entry per plant in cell order (format 8 on).
+// The plant layer as parallel lists, one entry per plant in cell order (format 9 on).
 struct SavePlants {
     std::vector<std::string> defs;  // defNames of the plants' Things defs, in the order first met
     std::vector<uint32_t> cells;    // cell index in the map
@@ -174,7 +178,7 @@ struct SaveData {
     PathSavedState paths;              // the path queue (format 2 on)
     uint32_t nextZoneId = 1;           // format 4 on
     std::vector<SaveZone> zones;
-    SavePlants plants;                 // format 8 on
+    SavePlants plants;                 // format 9 on
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -431,7 +435,7 @@ void saveRect(Ar& ar, CellRect& r) {
 
 template <typename Ar>
 void saveCommand(Ar& ar, Command& command) {
-    static_assert(std::variant_size_v<Command> == 12, "save every command type here");
+    static_assert(std::variant_size_v<Command> == 14, "save every command type here");
     uint8_t type = static_cast<uint8_t>(command.index());
     ar.value("type", type);
     if constexpr (Ar::kReading) {
@@ -448,10 +452,13 @@ void saveCommand(Ar& ar, Command& command) {
             case 9: command = OrderHaulCommand{}; break;
             case 10: command = ControlPawnCommand{}; break;
             case 11: command = DirectMoveCommand{}; break;
+            case 12: command = SetScheduleCommand{}; break;
+            case 13: command = AssignBedCommand{}; break;
             default: ar.require(false, "the save file names a command this build doesn't know"); return;
         }
         // A format older than the command that was added in it can't contain it.
-        ar.require(type < 10 || ar.version() >= 7, "the save file names a command this build doesn't know");
+        ar.require((type < 10 || ar.version() >= 7) && (type < 12 || ar.version() >= 8),
+                   "the save file names a command this build doesn't know");
     }
     ar.note("name", commandName(command));
     if (auto* spawn = std::get_if<SpawnThingCommand>(&command)) {
@@ -497,6 +504,14 @@ void saveCommand(Ar& ar, Command& command) {
         ar.value("pawn", move->pawn);
         ar.value("x", move->x);
         ar.value("y", move->y);
+    } else if (auto* schedule = std::get_if<SetScheduleCommand>(&command)) {
+        ar.value("pawn", schedule->pawn);
+        ar.value("hour", schedule->hour);
+        ar.value("kind", schedule->kind);
+        ar.require(schedule->kind <= ScheduleKind::Sleep, "the save file has a bad schedule kind");
+    } else if (auto* assign = std::get_if<AssignBedCommand>(&command)) {
+        ar.value("bed", assign->bed);
+        ar.value("pawn", assign->pawn);
     }
 }
 
@@ -599,10 +614,13 @@ void saveEntity(Ar& ar, SaveEntity& e) {
     ar.optional("worker", e.worker, [&](SaveWorker& w) {
         Job& job = w.job;
         ar.value("job", job.type);
-        ar.require(job.type <= JobType::HaulToCell, "the save file has a bad job");
+        ar.require(job.type <= JobType::LayDown, "the save file has a bad job");
         ar.value("thing", job.thing);
         ar.group("cell", [&] { saveCell(ar, job.cell); });
         ar.value("count", job.count);
+        if (ar.version() >= 8) {
+            ar.value("chair", job.chair);
+        }
         ar.text("workType", w.workType);
         ar.value("forced", job.forced);
         ar.value("step", job.step);
@@ -646,7 +664,7 @@ void saveEntity(Ar& ar, SaveEntity& e) {
             ar.require(h.bloodLoss >= 0.0f && h.bloodLoss <= 1000.0f, "the save file has impossible blood loss");
             ar.value("dead", h.dead);
             ar.value("cause", h.cause);
-            ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::VitalCapacity), "the save file has a bad cause of death");
+            ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Starvation), "the save file has a bad cause of death");
         });
     }
     ar.optional("work", e.work, [&](SaveWorkSettings& w) {
@@ -660,6 +678,31 @@ void saveEntity(Ar& ar, SaveEntity& e) {
     ar.optional("carrying", e.carrying, [&](Carrying& c) { ar.value("thing", c.thing); });
     if (ar.version() >= 7) {
         ar.value("playerControlled", e.playerControlled);
+    }
+    if (ar.version() >= 8) {
+        ar.optional("needs", e.needs, [&](Needs& n) {
+            ar.value("food", n.food);
+            ar.value("rest", n.rest);
+            ar.value("malnutrition", n.malnutrition);
+            ar.value("foodSearchAfter", n.foodSearchAfter);
+            ar.require(n.food >= 0.0f && n.food <= 1000.0f && n.rest >= 0.0f && n.rest <= 1000.0f &&
+                           n.malnutrition >= 0.0f && n.malnutrition <= 1000.0f,
+                       "the save file has an impossible need level");
+        });
+        ar.optional("schedule", e.schedule, [&](Schedule& s) {
+            std::vector<ScheduleKind> hours(s.hours.begin(), s.hours.end());
+            ar.list("hours", hours, [&](ScheduleKind& kind) {
+                ar.value(nullptr, kind);
+                ar.require(kind <= ScheduleKind::Sleep, "the save file has a bad schedule kind");
+            });
+            ar.require(hours.size() == s.hours.size(), "the save file has a schedule that isn't 24 hours");
+            if (hours.size() == s.hours.size()) {
+                std::copy(hours.begin(), hours.end(), s.hours.begin());
+            }
+        });
+        ar.optional("bed", e.bed, [&](Bed& b) {
+            ar.list("owners", b.owners, [&](Entity& owner) { ar.value(nullptr, owner); });
+        });
     }
 }
 
@@ -739,7 +782,7 @@ void saveData(Ar& ar, SaveData& d) {
     }
     ar.value("nextZoneId", d.nextZoneId);
     ar.list("zones", d.zones, [&](SaveZone& z) { saveZone(ar, z); });
-    if (ar.version() >= 8) {
+    if (ar.version() >= 9) {
         ar.group("plants", [&] { savePlants(ar, d.plants); });
     }
 }
@@ -901,6 +944,15 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const Carrying* carrying = reg.try_get<Carrying>(e)) {
             out.carrying = *carrying;
+        }
+        if (const Needs* needs = reg.try_get<Needs>(e)) {
+            out.needs = *needs;
+        }
+        if (const Schedule* schedule = reg.try_get<Schedule>(e)) {
+            out.schedule = *schedule;
+        }
+        if (const Bed* bed = reg.try_get<Bed>(e)) {
+            out.bed = *bed;
         }
         if (const Colonist* colonist = reg.try_get<Colonist>(e)) {
             out.colonist = *colonist;
@@ -1064,6 +1116,15 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.carrying) {
             reg.emplace<Carrying>(entity, *e.carrying);
         }
+        if (e.needs) {
+            reg.emplace<Needs>(entity, *e.needs);
+        }
+        if (e.schedule) {
+            reg.emplace<Schedule>(entity, *e.schedule);
+        }
+        if (e.bed) {
+            reg.emplace<Bed>(entity, *e.bed);
+        }
         if (e.colonist) {
             reg.emplace<Colonist>(entity, std::move(*e.colonist));
         }
@@ -1116,9 +1177,18 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     // Everything a thing names must exist.
     const auto exists = [&](Entity e) { return e == kNoEntity || reg.valid(e); };
     for (const SaveEntity& e : d.entities) {
-        if ((e.worker && !exists(e.worker->job.thing)) || (e.carrying && !exists(e.carrying->thing))) {
+        if ((e.worker && (!exists(e.worker->job.thing) || !exists(e.worker->job.chair))) ||
+            (e.carrying && !exists(e.carrying->thing))) {
             error = "the save has a thing that names another thing that doesn't exist";
             return false;
+        }
+        if (e.bed) {
+            for (const Entity owner : e.bed->owners) {
+                if (!reg.valid(owner)) {
+                    error = "the save has a bed owned by a pawn that doesn't exist";
+                    return false;
+                }
+            }
         }
     }
     // At most one controlled pawn, and it must be one a command could have taken over.

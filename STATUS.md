@@ -41,7 +41,7 @@ time, passes events to `OnSimEvent`, keeps the last two snapshots and blends pos
 (`GetBlendedLocation`, the one place sim metres become Unreal centimetres), loads `data/defs`, shows
 sim timings on screen, and has keys: Space pause, 1/2/3 speed, `.` step, F7 saves a replay to
 `Saved/Replays/` (the bug-replay key U12 planned). Since U6 there is an overseer camera (`-Overseer` or console `Overseer.Enter`): WASD pan, Q/E turn, wheel zoom, middle-drag orbit, click to select a pawn, thing or ground cell (picked against the sim, not Unreal collision), with an ImGui speed bar and inspect panel; ImGui is the free VesCodes plugin in `game/Plugins/ImGui/` (not in Git, `assets/manifest.json` says how to get it back) (`docs/design/overseer.md`). Since U5 every sim pawn is drawn as an actor without a movement component that follows the snapshot: the 20 nearest the camera are motion matched (Epic's motion matching run from our own C++, no Animation Blueprint; trajectory from the sim's route), the rest play walk, run and idle loops updated 20 or 8 times a second; the sim's `PawnAction` events (pick up, put down) play a short action animation; `Pawns.MetaHumans 1` draws them as MetaHumans with strand hair only up close (`docs/design/pawns.md`). Since U12 the game saves and loads: F5 quicksave, F9 quickload, an autosave every game day (three files in turn) and F8 writes a bug report folder (replay, save, readable dump, notes) to hand to the cloud (`docs/design/saves.md`, smoke test `saves`). **Every task that adds sim state must add it to the
-save** (the doc has the steps) and to the save round-trip test. Since C2 the map has plants: a grid layer (kind, growth, age per cell, `sim.plants()`) filled at map generation from fertility and the temperate forest biome (about 119,000 on a 512 m map) and grown hourly in the growing hours 06:00 to 19:00, dying at their lifespan; `simrun --png` draws them; save format 8 (`docs/design/plants.md`). Since U9 you can walk a colonist yourself: Tab switches between the
+save** (the doc has the steps) and to the save round-trip test. Since C2 the map has plants: a grid layer (kind, growth, age per cell, `sim.plants()`) filled at map generation from fertility and the temperate forest biome (about 119,000 on a 512 m map) and grown hourly in the growing hours 06:00 to 19:00, dying at their lifespan; `simrun --png` draws them; save format 9 (`docs/design/plants.md`). Since U9 you can walk a colonist yourself: Tab switches between the
 overseer view and direct mode on the protagonist (or the selected colonist), in first or third person (V), T takes over the colonist
 under the crosshair. In the sim that is two commands, `ControlPawn` and `DirectMove` (a position every step, kept out of walls); while a colonist
 is controlled its job ends and the job system and movement system leave it alone until control is let go (**a new think-list node or system
@@ -70,6 +70,18 @@ items stack up to their stack limit. A downed pawn drops its job and what it car
 `JobStarted`/`JobEnded`, and the snapshot shows each pawn's job, load and the zones. Save format 6:
 **saves from before C1 (U12's quicksaves too) no longer load** (`docs/decisions/0005`).
 
+Since C6 colonists have food and rest (`docs/design/needs.md`): food falls 1.6 a day and rest 0.95 a
+day in bands, as the RimWorld wiki says; a hungry pawn picks the tastiest food it can reach, takes it to
+a chair next to a table if there is one (else eats where it lay) and eats; a pawn sleeps in its own bed,
+else the nearest free one (which it then owns), else on the ground; the hourly schedule (Anything, Work,
+Joy, Sleep; standard Sleep 22:00 to 05:59) sends tired pawns to bed, and a pawn hauling or waiting puts
+the job down when it gets hungry or tired. Starving kills (`DeathCause::Starvation`). Commands
+`SetSchedule` and `AssignBed`; events `PawnAte`, `PawnWokeUp`, actions `Eat`, `LieDown`, `GetUp`; the
+snapshot has `food`, `rest`, `asleep`. Needs exist only where the data has a `NeedRules` def. The Crashlanded
+colonists eat through their starting food in about 5 days and begin to starve around day 8, so **farming (C2, C3) and cooking (C7) are now the way to
+keep them alive**. Beds, tables and chairs are C4's defs: it reads `building.bed`, `building.isTable`,
+`building.isSittable` and `stats.bedRestEffectiveness`. Save format 8 (formats 6 and 7 still load).
+
 Since D3 the game has real starting data in `data/defs/`, written by hand with RimWorld's numbers
 from the RimWorld wiki (there is no RimWorld install to import from; `docs/decisions/0003`):
 terrain fertility, wild plants and the temperate forest, basic items, the Human, skills, work
@@ -87,7 +99,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-19 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9). Tick tasks in `docs/plans/stage-1.md` as they merge.
+20 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -120,7 +132,7 @@ the entity-registry hash order changed, so replays recorded before S6 have diffe
 FILE` draws what a pawn sees; sandbags and barricades were added to the importer list, and
 trees and rocks get their height from `fillPercent` when C2 adds plants) and ~~**U2** bridge v2~~
 done (PC Unreal; `docs/design/bridge.md`, smoke test `sim`; the first Unreal compile of EnTT and the
-S5 bridge, so S1's include path is confirmed). ~~**C2** plants~~ done (`docs/design/plants.md`; save format 8), ~~**C8** colonists
+S5 bridge, so S1's include path is confirmed). ~~**C2** plants~~ done (`docs/design/plants.md`; save format 9), ~~**C8** colonists
 from a seed~~ done (`docs/design/colonists.md`; `simrun --start Crashlanded` lists the six; save format 4) and
 ~~**F1** health basics~~ done (`docs/design/health.md`; save format 5; **F2** guns can now hit pawns);
 their defs are in `data/defs/`. Numbers marked `unverified` in a def were recalled, not read from the
@@ -136,8 +148,8 @@ smoke test `overseer`; `docs/design/overseer.md`). ~~**U9** protagonist~~ done (
 `protagonist`; `docs/design/protagonist.md`; save format 7). **U3** terrain and plants (PC Unreal, Sonnet high)
 has C2 now, so it is open.
 
-Wave 6, open now that C1 is in: **C4** building (cloud, Sonnet high), **C6** food, rest and
-schedules (cloud, Sonnet high), **F2** guns and hitboxes (cloud, Opus high); **C3** mining, chopping
+Wave 6, open now that C1 is in: **C4** building (cloud, Sonnet high), ~~**C6** food, rest and
+schedules~~ done (`docs/design/needs.md`; save format 8), **F2** guns and hitboxes (cloud, Opus high); **C3** mining, chopping
 and harvesting (cloud, Sonnet high) once C2 is in. On the PC, ~~**U9**~~ is done and **A3** needs only done tasks.
 U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priorities).
 
