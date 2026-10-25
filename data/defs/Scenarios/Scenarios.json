@@ -1,7 +1,7 @@
 [
   {
     "defName": "Crashlanded", "source": "RimWorld wiki", "label": "crashlanded",
-    "colonists": 5, "protagonist": true, "colonistKind": "Human", "biome": "TemperateForest",
+    "colonists": 5, "protagonist": true, "colonistKind": "Human", "lineage": "Baseline", "biome": "TemperateForest",
     "startingThings": [
       { "thing": "Silver", "count": 800 },
       { "thing": "MealSurvivalPack", "count": 50 },

@@ -50,9 +50,11 @@ const char* commandName(const Command& command) {
                 return "Equip";
             } else if constexpr (std::is_same_v<Type, ShootCommand>) {
                 return "Shoot";
-            } else {
-                static_assert(std::is_same_v<Type, SetStanceCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, SetStanceCommand>) {
                 return "SetStance";
+            } else {
+                static_assert(std::is_same_v<Type, SetLineageCommand>, "name every command type");
+                return "SetLineage";
             }
         },
         command);

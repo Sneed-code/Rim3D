@@ -6,10 +6,14 @@
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
+#include "Engine/StaticMesh.h"
 #include "HAL/IConsoleManager.h"
+#include "Materials/MaterialInterface.h"
+#include "Misc/PackageName.h"
 #include "PoseSearch/PoseSearchDatabase.h"
 
 #include "PawnActor.h"
+#include "PawnLooks.h"
 #include "SimSubsystem.h"
 
 #include "ColonySim/Clock.h"
@@ -143,6 +147,119 @@ void USimPawnSubsystem::LoadAssets()
 	}
 }
 
+namespace
+{
+	/** Loads a generated looks asset by name, or null (without a warning) if it isn't there. */
+	template <typename T>
+	T* PawnLoadLooksAsset(const FString& Name)
+	{
+		const FString Package = FString(PawnLooksFolder) / Name;
+		return FPackageName::DoesPackageExist(Package) ? LoadObject<T>(nullptr, *PawnLooksAssetPath(Name)) : nullptr;
+	}
+
+	FLinearColor PawnLinear(const colony::LooksColor& C)
+	{
+		return FLinearColor::FromSRGBColor(FColor(FMath::RoundToInt32(FMath::Clamp(C.r, 0.0f, 1.0f) * 255.0f),
+			FMath::RoundToInt32(FMath::Clamp(C.g, 0.0f, 1.0f) * 255.0f), FMath::RoundToInt32(FMath::Clamp(C.b, 0.0f, 1.0f) * 255.0f)));
+	}
+}
+
+TArray<TPair<FName, float>> FSimPawnLooks::MorphWeights() const
+{
+	const float Thin = FMath::Max(0.0f, -Weight);
+	const float Heavy = FMath::Max(0.0f, Weight);
+	if (bFemale)
+	{
+		return {{TEXT("Thin"), 0.0f}, {TEXT("Heavy"), 0.0f}, {TEXT("Female"), 1.0f - Thin - Heavy}, {TEXT("FemaleThin"), Thin},
+			{TEXT("FemaleHeavy"), Heavy}};
+	}
+	return {{TEXT("Thin"), Thin}, {TEXT("Heavy"), Heavy}, {TEXT("Female"), 0.0f}, {TEXT("FemaleThin"), 0.0f}, {TEXT("FemaleHeavy"), 0.0f}};
+}
+
+FSimPawnLooks USimPawnSubsystem::MakeLooks(const colony::PawnLooksView& View, const colony::DefDatabase* Defs)
+{
+	FSimPawnLooks Looks;
+	Looks.Height = FMath::Clamp(View.height, 0.5f, 1.5f);
+	Looks.Weight = FMath::Clamp(View.weight, -1.0f, 1.0f);
+	Looks.bFemale = View.female;
+	Looks.Skin = PawnLinear(View.skin);
+	Looks.Hair = PawnLinear(View.hair);
+	if (Defs && View.lineage.valid())
+	{
+		const colony::Def& Lineage = Defs->get(View.lineage);
+		Looks.HornLength = static_cast<float>(Lineage.number("visual.horns.length", 0.0) * 100.0);
+		if (Looks.HornLength > 0.0f)
+		{
+			Looks.HornRadius = static_cast<float>(Lineage.number("visual.horns.radius", 0.03) * 100.0);
+			Looks.HornSpread = static_cast<float>(Lineage.number("visual.horns.spread", 0.05) * 100.0);
+			Looks.HornColor = PawnLinear(colony::LooksColor{static_cast<float>(Lineage.numberAt("visual.horns.color", 0, 0.1)),
+				static_cast<float>(Lineage.numberAt("visual.horns.color", 1, 0.08)), static_cast<float>(Lineage.numberAt("visual.horns.color", 2, 0.07))});
+		}
+	}
+	return Looks;
+}
+
+USkeletalMesh* USimPawnSubsystem::GetMorphMesh(const USkeletalMesh* Original)
+{
+	if (!Original)
+	{
+		return nullptr;
+	}
+	if (const TObjectPtr<USkeletalMesh>* Found = MorphMeshes.Find(Original->GetFName()))
+	{
+		return *Found;
+	}
+	USkeletalMesh* Mesh = PawnLoadLooksAsset<USkeletalMesh>(PawnLooksMorphMeshName(Original->GetName()));
+	MorphMeshes.Add(Original->GetFName(), Mesh);
+	if (!Mesh && !bLooksMissingLogged && Original->GetName() == TEXT("m_med_nrw_body"))
+	{
+		bLooksMissingLogged = true;
+		UE_LOG(LogSimPawns, Warning, TEXT("No pawn looks assets in %s: run the PawnLooks commandlet (docs/design/looks.md); pawns all look like Kellan"),
+			PawnLooksFolder);
+	}
+	return Mesh;
+}
+
+UMaterialInterface* USimPawnSubsystem::GetSkinMaterial(const UMaterialInterface* Original)
+{
+	if (!Original)
+	{
+		return nullptr;
+	}
+	if (const TObjectPtr<UMaterialInterface>* Found = SkinMaterials.Find(Original->GetFName()))
+	{
+		return *Found;
+	}
+	UMaterialInterface* Material = PawnLoadLooksAsset<UMaterialInterface>(PawnLooksSkinInstanceName(Original->GetName()));
+	SkinMaterials.Add(Original->GetFName(), Material);
+	return Material;
+}
+
+UMaterialInterface* USimPawnSubsystem::GetClothMaterial(const UMaterialInterface* Original)
+{
+	if (!Original)
+	{
+		return nullptr;
+	}
+	if (const TObjectPtr<UMaterialInterface>* Found = ClothMaterials.Find(Original->GetFName()))
+	{
+		return *Found;
+	}
+	UMaterialInterface* Material = PawnLoadLooksAsset<UMaterialInterface>(PawnLooksClothInstanceName(Original->GetName()));
+	ClothMaterials.Add(Original->GetFName(), Material);
+	return Material;
+}
+
+UStaticMesh* USimPawnSubsystem::GetHornMesh()
+{
+	if (!bHornTried)
+	{
+		bHornTried = true;
+		HornMesh = PawnLoadLooksAsset<UStaticMesh>(PawnLooksHornMesh);
+	}
+	return HornMesh;
+}
+
 UAnimSequence* USimPawnSubsystem::GetActionAnimation(colony::PawnAction Action) const
 {
 	switch (Action)
@@ -248,6 +365,10 @@ void USimPawnSubsystem::Tick(float DeltaTime)
 			Pawn->Setup(*this, View.id, Cruise, bMetaHumans);
 		}
 		Pawn->UpdateFromSim(*Bridge, View, Before.find(View.id), DeltaTime, Bridge->GetSpeed());
+		if (View.looks >= 0 && View.looks < static_cast<int32>(Now.looks.size()))
+		{
+			Pawn->ApplyLooks(*this, MakeLooks(Now.looks[static_cast<size_t>(View.looks)], Defs));
+		}
 	}
 	for (auto It = Pawns.CreateIterator(); It; ++It)
 	{

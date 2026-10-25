@@ -124,6 +124,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildProtagonistPhases();
 	}
+	else if (TestName == TEXT("looks"))
+	{
+		BuildLooksPhases();
+	}
 	else
 	{
 		Fail(FString::Printf(TEXT("Unknown smoke test '%s'"), *TestName));

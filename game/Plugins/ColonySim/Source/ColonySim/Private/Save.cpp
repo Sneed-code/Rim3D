@@ -2,6 +2,7 @@
 
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
+#include "ColonySim/Looks.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Doors.h"
@@ -42,7 +43,7 @@ constexpr char kSaveMagic[8] = {'R', 'I', 'M', '3', 'D', 'S', 'A', 'V'};
 constexpr size_t kSaveMagicSize = sizeof kSaveMagic;
 // Bump when the layout below changes, and keep reading the old versions (the archive's
 // version() says which one a file is). Changing it needs a line in docs/design/saves.md.
-constexpr uint32_t kSaveFormatVersion = 13;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
+constexpr uint32_t kSaveFormatVersion = 14;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
                                             // 4: C8's scenario and colonists; 5: F1's pawn health; 6: C1's jobs,
                                             // work priorities and zones; 7: U9's direct control; 8: C6's needs,
                                             // schedules, bed owners, the eating job's chair; 9: C2's plants;
@@ -50,6 +51,7 @@ constexpr uint32_t kSaveFormatVersion = 13;  // 2: S3's path queue, pathBudget, 
                                             // site and progress; 11: C9's mood; 12: F2's posture, gear, triggers
                                             // and projectiles;
                                             // 13: C5's door states
+                                            // 14: A3's pawn looks
 // Saves from before the job system (formats 1 to 5) can't be read: their hauling placeholder has
 // no counterpart in the job system (docs/design/saves.md).
 constexpr uint32_t kSaveOldestFormat = 6;
@@ -175,6 +177,7 @@ struct SaveEntity {
     std::optional<Shooter> shooter;
     std::optional<SaveProjectile> projectile;
     std::optional<Door> door;          // format 13 on
+    std::optional<PawnLooks> looks;  // format 14 on
 };
 
 // A stockpile zone, with its filter by defName.
@@ -481,7 +484,7 @@ void saveRect(Ar& ar, CellRect& r) {
 
 template <typename Ar>
 void saveCommand(Ar& ar, Command& command) {
-    static_assert(std::variant_size_v<Command> == 20, "save every command type here");
+    static_assert(std::variant_size_v<Command> == 21, "save every command type here");
     uint8_t type = static_cast<uint8_t>(command.index());
     ar.value("type", type);
     if constexpr (Ar::kReading) {
@@ -506,11 +509,13 @@ void saveCommand(Ar& ar, Command& command) {
             case 17: command = EquipCommand{}; break;
             case 18: command = ShootCommand{}; break;
             case 19: command = SetStanceCommand{}; break;
+            case 20: command = SetLineageCommand{}; break;
             default: ar.require(false, "the save file names a command this build doesn't know"); return;
         }
         // A format older than the command that was added in it can't contain it.
         ar.require((type < 10 || ar.version() >= 7) && (type < 12 || ar.version() >= 8) &&
-                       (type < 14 || ar.version() >= 10) && (type < 17 || ar.version() >= 12),
+                       (type < 14 || ar.version() >= 10) && (type < 17 || ar.version() >= 12) &&
+                       (type < 20 || ar.version() >= 14),
                    "the save file names a command this build doesn't know");
     }
     ar.note("name", commandName(command));
@@ -589,6 +594,9 @@ void saveCommand(Ar& ar, Command& command) {
         ar.value("pawn", stance->pawn);
         ar.value("stance", stance->stance);
         ar.require(static_cast<int>(stance->stance) <= static_cast<int>(Stance::Prone), "the save file has a bad stance");
+    } else if (auto* lineage = std::get_if<SetLineageCommand>(&command)) {
+        ar.value("pawn", lineage->pawn);
+        ar.text("lineage", lineage->lineage);
     }
 }
 
@@ -633,6 +641,30 @@ void saveColonist(Ar& ar, Colonist& c) {
     });
     ar.list("disabledWorkTags", c.disabledWorkTags, [&](std::string& tag) { ar.text(nullptr, tag); });
     ar.value("protagonist", c.protagonist);
+}
+
+template <typename Ar>
+void saveLooksColor(Ar& ar, const char* name, LooksColor& c) {
+    ar.group(name, [&] {
+        ar.value("r", c.r);
+        ar.value("g", c.g);
+        ar.value("b", c.b);
+    });
+}
+
+template <typename Ar>
+void saveLooks(Ar& ar, PawnLooks& l) {
+    ar.text("lineage", l.lineage);
+    ar.value("female", l.female);
+    ar.value("body", l.body);
+    ar.require(static_cast<int>(l.body) <= static_cast<int>(BodyType::Hulk), "the save file has a bad body type");
+    ar.value("weight", l.weight);
+    ar.value("height", l.height);
+    ar.value("melanin", l.melanin);
+    ar.require(l.weight >= -1.0f && l.weight <= 1.0f && l.height > 0.0f && l.height < 10.0f, "the save file has impossible looks");
+    saveLooksColor(ar, "naturalHair", l.naturalHair);
+    saveLooksColor(ar, "skin", l.skin);
+    saveLooksColor(ar, "hair", l.hair);
 }
 
 template <typename Ar>
@@ -873,6 +905,9 @@ void saveEntity(Ar& ar, SaveEntity& e) {
             ar.value("hold", d.hold);
             ar.value("open", d.open);
         });
+    }
+    if (ar.version() >= 14) {
+        ar.optional("looks", e.looks, [&](PawnLooks& l) { saveLooks(ar, l); });
     }
 }
 
@@ -1133,6 +1168,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const Colonist* colonist = reg.try_get<Colonist>(e)) {
             out.colonist = *colonist;
         }
+        if (const PawnLooks* looks = reg.try_get<PawnLooks>(e)) {
+            out.looks = *looks;
+        }
         out.playerControlled = reg.all_of<PlayerControl>(e);
         if (const ConstructionSite* site = reg.try_get<ConstructionSite>(e)) {
             SaveSite s;
@@ -1386,6 +1424,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.marked) {
             reg.emplace<MarkedForDeconstruct>(entity);
+        }
+        if (e.looks) {
+            reg.emplace<PawnLooks>(entity, std::move(*e.looks));
         }
         if (e.health) {
             Health health;

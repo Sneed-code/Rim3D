@@ -7,6 +7,6 @@ public class Rim3DEditorTarget : TargetRules
 		Type = TargetType.Editor;
 		DefaultBuildSettings = BuildSettingsVersion.Latest;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Latest;
-		ExtraModuleNames.Add("Rim3D");
+		ExtraModuleNames.AddRange(new string[] { "Rim3D", "Rim3DEditor" });
 	}
 }

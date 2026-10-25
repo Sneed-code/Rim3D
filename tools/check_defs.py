@@ -52,6 +52,7 @@ REFERENCES = [
     ("Scenarios", "scatteredThings[].thing", "Things"),
     ("Scenarios", "colonistKind", "Things"),
     ("Scenarios", "biome", "Biomes"),
+    ("Scenarios", "lineage", "Lineages"),
 ]
 
 

@@ -6,6 +6,7 @@
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/JobType.h"
+#include "ColonySim/Looks.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Zones.h"
 
@@ -84,6 +85,8 @@ struct ThingView {
     float facingY = 0.0f;
     DefId weapon;
     int shotReadyIn = 0;
+    // Humanlike pawns: their looks, Snapshot::looks[looks]; -1 for other things.
+    int32_t looks = -1;
 };
 
 // A bullet in flight (docs/design/combat.md). Unreal draws a tracer along its velocity; it
@@ -98,6 +101,18 @@ struct ProjectileView {
     float vy = 0.0f;
     float vz = 0.0f;
     int level = 0;
+};
+
+// How a pawn looks (docs/design/looks.md). The lineage is invalid if the defs have no such
+// Lineages def (the test defs).
+struct PawnLooksView {
+    DefId lineage;
+    bool female = false;
+    BodyType body = BodyType::Average;
+    float weight = 0.0f;  // -1 thin to 1 heavy
+    float height = 1.0f;  // times 1.80 m
+    LooksColor skin;
+    LooksColor hair;
 };
 
 // One stockpile zone: `cellCount` cells from Snapshot::zoneCells[firstCell].
@@ -138,6 +153,7 @@ struct Snapshot {
     std::vector<CellPos> roofCells;
     uint64_t roofChanges = 0;
     std::vector<ProjectileView> projectiles;  // sorted by id
+    std::vector<PawnLooksView> looks;      // see ThingView::looks
 
     // The thing with this id, or null if it is not on the map. Binary search.
     COLONY_API const ThingView* find(Entity id) const;
