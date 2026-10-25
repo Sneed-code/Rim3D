@@ -18,7 +18,7 @@ namespace colony { class Map; }
  *
  * Tests: load (the level opens and the sim runs), crowd, terrain, sim (the bridge: defs, commands,
  * events, snapshots and blending, speed keys, replay file), overseer (the camera, picking, selection
- * and the ImGui panels).
+ * and the ImGui panels), pawns (pawn actors, animation detail by distance, actions, MetaHumans).
  * Optional: -SmokeTimeout=<seconds> (default 300) fails a run that hangs.
  * To add a test: write a Build<Name>Phases() and add a branch in OnWorldBeginPlay.
  * Run it with tools/smoke.ps1.
@@ -63,6 +63,7 @@ private:
 	void BuildTerrainPhases();
 	void BuildSimPhases();
 	void BuildOverseerPhases();
+	void BuildPawnsPhases();
 	void StartPhase(int32 Index);
 	void FinishPhase();
 	void WriteResultsAndQuit();
