@@ -11,6 +11,7 @@
 #include "ColonySim/Filth.h"
 #include "ColonySim/Floors.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Spoilage.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Jobs.h"
@@ -138,6 +139,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     mood_->setTemperature(temperature_.get());
     // A heater or cooler that draws power pushes heat only while it has it (E5); a campfire has no power part.
     temperature_->setSourceRunning([this](Entity building) { return power_->running(building); });
+    spoilage_ = std::make_unique<SpoilageSystem>(map_, *things_, *temperature_, *roomStats_, *defs_,
+                                                 splitMix64(settings.seed ^ 0x73706F696CULL));
+    spoilage_->setEventLog(&events_);
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
     jobs_->setLights(lights_.get());
@@ -145,6 +149,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setRooms(rooms_.get());
     jobs_->setResearch(research_.get());
     jobs_->setFilth(filth_.get());
+    jobs_->setSpoilage(spoilage_.get());
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
     fighters_->setEventLog(&events_);
@@ -740,6 +745,7 @@ void Sim::step() {
     filth_->step();
     roomStats_->step(time_.seconds);
     temperature_->step(time_.seconds);
+    spoilage_->step(time_.seconds);
     time_.seconds += 1;
     if (time_.seconds % kSecondsPerHour == 0) {
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
@@ -923,6 +929,9 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const StackCount* stack = reg.try_get<StackCount>(entity)) {
             view.stackCount = stack->count;
         }
+        if (const Spoilage* spoilage = reg.try_get<Spoilage>(entity)) {
+            view.rot = spoilage->rot;
+        }
         if (const HitPoints* hp = reg.try_get<HitPoints>(entity)) {
             view.hitPoints = hp->current;
             view.maxHitPoints = hp->max;
@@ -1103,6 +1112,7 @@ uint64_t Sim::stateHash() const {
     roomStats_->hashState(h);
     animals_->hashState(h);
     temperature_->hashState(h);
+    spoilage_->hashState(h);
 
     // The entity ids the registry has handed out: the free list in reuse order (it decides the
     // next ids), then every live thing in id order with its components. The registry's own
@@ -1130,7 +1140,8 @@ uint64_t Sim::stateHash() const {
                             reg.all_of<Mood>(e),         reg.all_of<Door>(e),
                             reg.all_of<PawnLooks>(e),
                             reg.all_of<BillList>(e),
-                            reg.all_of<PowerPart>(e)};
+                            reg.all_of<PowerPart>(e),
+                            reg.all_of<Spoilage>(e)};
         uint64_t mask = 0;
         for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
             mask |= has[bit] ? (uint64_t{1} << bit) : 0;
@@ -1156,6 +1167,14 @@ uint64_t Sim::stateHash() const {
         }
         if (const StackCount* stack = reg.try_get<StackCount>(e)) {
             h.add(stack->count);
+        }
+        if (const Spoilage* spoilage = reg.try_get<Spoilage>(e)) {
+            h.add(spoilage->rot);
+            h.add(spoilage->decay);
+            h.add(spoilage->poisoned);
+            for (const DefId ingredient : spoilage->ingredients) {
+                h.add(ingredient.value);
+            }
         }
         if (const HitPoints* hp = reg.try_get<HitPoints>(e)) {
             h.add(hp->current);
