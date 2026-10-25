@@ -225,10 +225,13 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["name"] = c.name;
             } else if constexpr (std::is_same_v<Type, RemoveOutfitCommand>) {
                 j["outfit"] = c.outfit;
-            } else {
-                static_assert(std::is_same_v<Type, StripCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, StripCommand>) {
                 j["thing"] = entt::to_integral(c.thing);
                 j["strip"] = c.strip;
+            } else {
+                static_assert(std::is_same_v<Type, SetWeatherCommand>, "write every command type");
+                j["weather"] = c.weather;
+                j["hours"] = c.hours;
             }
         },
         logged.command);
@@ -895,6 +898,12 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.pawn = static_cast<Entity>(pawn);
         c.target = static_cast<Entity>(target);
+        out.command = c;
+    } else if (type == "SetWeather") {
+        SetWeatherCommand c;
+        if (!r.text(j, "weather", c.weather, where) || !r.number(j, "hours", c.hours, where)) {
+            return false;
+        }
         out.command = c;
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");

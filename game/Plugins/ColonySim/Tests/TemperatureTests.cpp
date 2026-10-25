@@ -108,21 +108,17 @@ const HealthReport::EnvironmentLine* tempIllness(const HealthReport& report, con
 
 }  // namespace
 
-TEST_CASE("Temperature: the stand-in outdoor climate is coldest before dawn, warmest mid-afternoon, and follows the seasons") {
+TEST_CASE("Temperature: the outdoor climate is E1's weather curve, and the ground is the year's mean") {
     Sim sim(SimSettings{5, 24, 0, 0, true}, tempDefs());
     const auto at = [&](int64_t day, int hour) { return sim.outdoorTemperatureAt(day * 86400 + hour * 3600); };
-    const float dawn = at(0, 5);
-    const float afternoon = at(0, 15);
-    CHECK(afternoon - dawn == doctest::Approx(14.0f).epsilon(0.03));  // the biome's daily swing (and a little spring)
-    CHECK(at(0, 11) > dawn);
-    CHECK(at(0, 11) < afternoon);
-    CHECK(at(0, 20) < afternoon);
-    CHECK(at(0, 2) > dawn);
-    // Mid-summer (day 22) is warmer than mid-winter (day 52), and a day's mean is the season's mean.
-    const float summerNoon = at(22, 15);
-    const float winterNoon = at(52, 15);
-    CHECK(summerNoon > winterNoon + 15.0f);
-    CHECK((at(22, 5) + at(22, 15)) * 0.5f == doctest::Approx(19.0f).epsilon(0.02));  // summer's mean
+    for (int64_t day : {0, 22, 37, 52}) {
+        for (int hour : {0, 5, 11, 15, 20}) {
+            CHECK(at(day, hour) == static_cast<float>(sim.weather().temperatureAt(day * 86400 + hour * 3600)));
+        }
+    }
+    // Mid-summer (day 22) is warmer than mid-winter (day 52), and the day's mean is near the season's.
+    CHECK(at(22, 15) > at(52, 15) + 10.0f);
+    CHECK((at(22, 5) + at(22, 15)) * 0.5f == doctest::Approx(19.0f).epsilon(0.5));  // summer's mean, give or take the drift
     CHECK(sim.groundTemperature() == doctest::Approx((9.0f + 19.0f + 9.0f - 2.0f) / 4.0f));
     // The override beats it, and clearing it brings it back.
     sim.setOutdoorOverride(-5.0f);

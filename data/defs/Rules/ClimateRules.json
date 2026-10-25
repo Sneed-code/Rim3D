@@ -1,0 +1,21 @@
+[
+  {
+    "defName": "ClimateRules", "source": "RimWorld wiki",
+    "dayCyclePhase": 0.32,
+    "randomVariationAmplitude": 7,
+    "randomVariationDays": 2,
+    "transitionHours": 1.6,
+    "defaultMeanTemperature": 15,
+    "snowSpeedDepths": [3, 25, 50, 75],
+    "snowSpeedFactors": [1.0, 0.76, 0.62, 0.52],
+    "snowPercentPerHourAtRate1": 5,
+    "windGustDays": 0.25,
+    "windGustRange": [0.25, 1.75],
+    "windMax": 1.5,
+    "snowMeltBelow10PerDegreeSquared": 0.058,
+    "snowMeltAbove10PerDegree": 0.58,
+    "unverified": ["dayCyclePhase", "randomVariationAmplitude", "transitionHours"],
+    "ours": ["windGustDays", "windGustRange", "randomVariationDays", "defaultMeanTemperature", "snowPercentPerHourAtRate1"],
+    "note": "snowSpeed* and the melt numbers are the wiki's Snow page (depth in percent; melt in percent of depth, applied once per game hour here, which is ours). dayCyclePhase is the share of a day added to the time of day before the cosine, so the day is coldest about 04:20 and warmest about 16:20; the wiki doesn't give it."
+  }
+]
