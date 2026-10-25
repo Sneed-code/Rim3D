@@ -511,6 +511,7 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<DoBillsCookStoveGiver>());
     givers.push_back(std::make_unique<ResearchGiver>());
     givers.push_back(std::make_unique<CleanFilthGiver>());
+    addHusbandryWorkGivers(givers);
     return givers;
 }
 

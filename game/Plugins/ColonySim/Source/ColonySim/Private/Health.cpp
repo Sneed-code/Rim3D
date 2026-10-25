@@ -45,6 +45,7 @@ const char* deathCauseName(DeathCause cause) {
         case DeathCause::Hypothermia: return "hypothermia";
         case DeathCause::Heatstroke: return "heatstroke";
         case DeathCause::Environment: return "exposure";
+        case DeathCause::Slaughtered: return "slaughtered";
     }
     return "";
 }

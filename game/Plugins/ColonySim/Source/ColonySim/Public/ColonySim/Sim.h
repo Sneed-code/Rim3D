@@ -35,6 +35,7 @@ struct Colonist;
 struct PawnLooks;
 class Designations;
 class FighterSystem;
+class Husbandry;
 class JobSystem;
 class Lights;
 class Mineables;
@@ -221,6 +222,10 @@ public:
     AnimalSystem& animals() { return *animals_; }
     const AnimalSystem& animals() const { return *animals_; }
 
+    // Taming, training, animal zones and pens (docs/design/husbandry.md).
+    Husbandry& husbandry() { return *husbandry_; }
+    const Husbandry& husbandry() const { return *husbandry_; }
+
     // Blueprints, frames and taking buildings down (docs/design/construction.md).
     Construction& construction() { return *construction_; }
     const Construction& construction() const { return *construction_; }
@@ -292,6 +297,7 @@ private:
     std::unique_ptr<Filth> filth_;
     std::unique_ptr<RoomStats> roomStats_;
     std::unique_ptr<AnimalSystem> animals_;
+    std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system
     std::vector<std::string> setupErrors_;
     std::vector<std::pair<uint64_t, Command>> pending_;  // id, command
     uint64_t submitted_ = 0;

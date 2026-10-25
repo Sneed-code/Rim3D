@@ -40,6 +40,12 @@ enum class EventType : uint8_t {
     PowerChanged,    // a building gained or lost power (docs/design/power.md)
     ShortCircuit,    // a short circuit emptied a net's batteries (docs/design/power.md)
     ResearchDone,    // a research project was finished (docs/design/research.md)
+    AnimalTamed,     // a wild animal became the colony's (docs/design/husbandry.md)
+    AnimalReleased,  // a tame animal went wild again
+    AnimalTrained,   // one successful training attempt: a step towards a trick
+    AnimalAttemptFailed,  // a taming or training attempt did not work
+    AnimalSlaughtered,    // a colonist killed a tame animal
+    AnimalStarved,        // a tame animal died of hunger
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -71,6 +77,8 @@ enum class PawnAction : uint8_t {
     Cook,         // started work on a bill at `target`, a work building (once per run of the bill)
     Research,     // started research at `target`, a research bench (once per job)
     Clean,        // started cleaning the filth in `cell`; a layer comes off every few seconds until its JobEnded
+    Handle,       // started taming, training or feeding `target`, an animal; goes on until its JobEnded
+    Slaughter,    // started to kill `target`, a tame animal
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
@@ -105,6 +113,10 @@ struct Event {
     // def, `cell` its origin, `message` "on" (in a net that works and switched on) or "off".
     // ResearchDone: `thing` the pawn who finished it (none if a dev command did), `message` the Research
     // def's defName, `amount` its cost in points.
+    // AnimalTamed, AnimalReleased, AnimalSlaughtered, AnimalStarved: `thing` the animal, `target` the colonist
+    // (none for a release or a starving), `cell` where. AnimalTrained: also `message` the trick (Trainable name),
+    // `amount` the steps it has now and `part` the steps it needs. AnimalAttemptFailed: `message` "tame" or the
+    // trick, `amount` the chance the attempt had.
     // ShortCircuit: `thing` the building it happened at, `cell` its origin, `amount` the energy
     // released from the net's batteries, Wd.
     float amount = 0.0f;

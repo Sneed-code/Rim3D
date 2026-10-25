@@ -13,6 +13,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Hash.h"
+#include "ColonySim/Husbandry.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Lights.h"
 #include "ColonySim/Mineables.h"
@@ -150,6 +151,13 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     animals_ = std::make_unique<AnimalSystem>(*things_, map_, *plants_, *health_, *defs_, time_,
                                               splitMix64(settings.seed ^ 0x616E696D616C73ULL), "TemperateForest");
     animals_->setEventLog(&events_);
+    husbandry_ = std::make_unique<Husbandry>(*things_, map_, *animals_, *health_, *defs_, time_, settings.seed);
+    husbandry_->setEventLog(&events_);
+    animals_->setHusbandry(husbandry_.get());
+    animals_->setPathfinder(&pathfinder_);
+    jobs_->setHusbandry(husbandry_.get());
+    husbandry_->setHaulerHook([this](Entity animal, bool on) { jobs_->setAnimalHauler(animal, on); });
+    jobs_->setAnimalWorkGate([this](Entity animal) { return animals_->mayWork(animal); });
     combat_->setBeforeDestroy([this](Entity thing) { jobs_->forget(thing); });
     map_.regions().update();  // build every region now, not in the first step
 }
@@ -453,6 +461,39 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             event.message = unlockResearch->project;
             events_.push_back(std::move(event));
         }
+    } else if (const auto* mark = std::get_if<MarkAnimalCommand>(&command)) {
+        bool ok = false;
+        if (mark->mark == "Tame") {
+            ok = husbandry_->markTame(mark->animal, mark->on, error);
+        } else if (mark->mark == "Slaughter") {
+            ok = husbandry_->markSlaughter(mark->animal, mark->on, error);
+        } else if (mark->mark == "Release") {
+            ok = husbandry_->release(mark->animal, error);
+        } else {
+            error = "a mark is Tame, Slaughter or Release";
+        }
+        if (!ok) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* training = std::get_if<SetTrainingCommand>(&command)) {
+        Trainable what = Trainable::Obedience;
+        if (!trainableFromName(training->trainable, what)) {
+            commandFailed(id, "a trick is Obedience, Release, Rescue or Haul");
+        } else if (!husbandry_->setTraining(training->animal, what, training->wanted, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* createAnimalZone = std::get_if<CreateAnimalZoneCommand>(&command)) {
+        if (husbandry_->createZone(createAnimalZone->area) == kNoAnimalZone) {
+            commandFailed(id, "no free walkable ground in that area for an animal zone");
+        }
+    } else if (const auto* removeAnimalZone = std::get_if<RemoveAnimalZoneCellsCommand>(&command)) {
+        if (husbandry_->removeZoneCells(removeAnimalZone->area) == 0) {
+            commandFailed(id, "no animal zone there");
+        }
+    } else if (const auto* assignAnimalZone = std::get_if<AssignAnimalZoneCommand>(&command)) {
+        if (!husbandry_->assignZone(assignAnimalZone->animal, assignAnimalZone->zone, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* lineage = std::get_if<SetLineageCommand>(&command)) {
         PawnLooks* looks = things_->exists(lineage->pawn) ? things_->registry().try_get<PawnLooks>(lineage->pawn) : nullptr;
         if (looks == nullptr) {
@@ -686,6 +727,7 @@ void Sim::step() {
     fighters_->step();
     recreation_->step();
     animals_->step();
+    husbandry_->step();
     mood_->step(time_.seconds, events_);
     movement_->step(things_->registry(), map_);
     combat_->step(rng_);
@@ -798,6 +840,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.bills.clear();
     out.zones.clear();
     out.zoneCells.clear();
+    out.animalZones.clear();
+    out.animalZoneCells.clear();
     out.looks.clear();
     out.research.clear();
     for (const ResearchProject& project : research_->projects()) {
@@ -818,6 +862,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
         out.zones.push_back(ZoneView{zone.id, zone.priority, static_cast<uint32_t>(out.zoneCells.size()),
                                      static_cast<uint32_t>(zone.cells.size())});
         out.zoneCells.insert(out.zoneCells.end(), zone.cells.begin(), zone.cells.end());
+    }
+    for (const AnimalZone& zone : husbandry_->zones()) {
+        out.animalZones.push_back(AnimalZoneView{zone.id, static_cast<uint32_t>(out.animalZoneCells.size()),
+                                                 static_cast<uint32_t>(zone.cells.size()), husbandry_->isPen(zone.id)});
+        out.animalZoneCells.insert(out.animalZoneCells.end(), zone.cells.begin(), zone.cells.end());
     }
     const entt::registry& reg = things_->registry();
     for (const auto [entity, thing, pos] : reg.view<const Thing, const Position>().each()) {
@@ -947,6 +996,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.bodySize = animals_->bodySize(entity);
             view.food = animals_->foodShare(entity);
             view.asleep = animals_->asleep(entity);
+            if (const AnimalCare* care = husbandry_->care(entity)) {
+                view.markTame = care->markTame;
+                view.markSlaughter = care->markSlaughter;
+                view.animalZone = care->zone;
+                view.learnedTricks = husbandry_->learnedMask(entity);
+                view.wantedTricks = husbandry_->wantedMask(entity);
+            }
         }
         if (const Fighter* fighter = reg.try_get<Fighter>(entity)) {
             view.drafted = fighter->drafted;
@@ -1045,6 +1101,7 @@ uint64_t Sim::stateHash() const {
     filth_->hashState(h);
     roomStats_->hashState(h);
     animals_->hashState(h);
+    husbandry_->hashState(h);
     temperature_->hashState(h);
 
     // The entity ids the registry has handed out: the free list in reuse order (it decides the
@@ -1305,6 +1362,7 @@ uint64_t Sim::stateHash() const {
         combat_->hashThing(e, h);
         fighters_->hashThing(e, h);
         animals_->hashThing(e, h);
+        husbandry_->hashThing(e, h);
     }
     return h.value();
 }
