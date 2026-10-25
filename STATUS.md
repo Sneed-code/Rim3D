@@ -221,6 +221,16 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 36 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7, U8, U11, U10). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
+## Stage 2
+
+Planned 2026-10-25 in `docs/plans/stage-2.md`: "a colony that lasts a year", 74 tasks in seven
+waves (seasons, weather, temperature, light, fire, power, farming, crafting, apparel, research,
+medicine, animals, melee and grenades, two-storey buildings, the narrator and events, prisoners,
+traders, protagonist talents and loadout). Its extra rules keep parallel threads from colliding.
+**Wave 1 is open now in the cloud, alongside the rest of Stage 1:** S7 (saves and commands that
+merge in parallel; every sim task that saves state waits for it), E3 light, and the data tasks D4,
+D5, D6, D7, D8, D9, D11. 0 of 74 done. Tick tasks in `docs/plans/stage-2.md` as they merge.
+
 ## Next
 
 Wave 1:
