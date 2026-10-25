@@ -78,6 +78,37 @@ struct Magazine {
     int rounds = 0;
 };
 
+// The player's gun kick (P2, docs/design/shooter-feel.md): the shots just fired lift the aim by
+// the weapon's list of kicks, shot by shot; it wears off by itself. Added to a pawn the first time
+// its player trigger fires a gun that has a kick list, and kept. Degrees: `up` raises the aim,
+// `side` turns it to the right (left when negative). Only player shots follow it; fighters get
+// their spread from skill.
+struct RecoilKick {
+    float up = 0.0f;
+    float side = 0.0f;
+    int shots = 0;      // shots in the current spray: the next one reads this place in the kick list
+    int sinceShot = 0;  // steps since the last shot; the kick holds, then wears off, and the spray restarts
+};
+
+// A dodge roll (P2): start-up, a roll in which bullets pass through the pawn for a short window,
+// recovery, then a wait before the next. Added by the first DodgeRollCommand and kept.
+enum class RollPhase : uint8_t {
+    Idle,
+    StartUp,   // crouching into it: not moving yet, can be hit
+    Rolling,   // moving; hit-proof for the first part of it
+    Recovery,  // getting up: not moving, can be hit
+};
+
+struct DodgeRoll {
+    RollPhase phase = RollPhase::Idle;
+    int stepsLeft = 0;   // of the phase
+    int rolled = 0;      // steps rolled so far, while Rolling
+    float dirX = 1.0f;   // unit vector on the ground
+    float dirY = 0.0f;
+    int cooldown = 0;    // Idle: steps before the next roll may start
+    bool proof = false;  // bullets passed through the pawn in the step just run
+};
+
 // On a pawn thrown to the ground by a blast (F9): prone and unable to act or walk until the steps run
 // out, then it gets back to the stance it had.
 struct KnockedDown {
@@ -222,8 +253,29 @@ public:
     int shootingSkill(Entity pawn) const;
 
     // Fires one projectile from the pawn's muzzle toward (x, y, z) with this spread. Returns it,
-    // or kNoEntity if the pawn has no gun. The ShotFired event comes with it.
-    Entity fire(Entity pawn, float x, float y, float z, float spreadSlope, Rng& rng);
+    // or kNoEntity if the pawn has no gun. The ShotFired event comes with it. `kickUp` and `kickSide`
+    // (slopes) turn the shot up and to the right of the aim, the player's gun kick.
+    Entity fire(Entity pawn, float x, float y, float z, float spreadSlope, Rng& rng, float kickUp = 0.0f,
+                float kickSide = 0.0f);
+
+    // Gun kick (P2): where the player's shots are going above and to the right of the aim now, in
+    // degrees. Zero for a pawn that has not fired a gun with a kick list.
+    void kickOf(Entity pawn, float& up, float& side) const;
+
+    // Dodge roll (P2, docs/design/shooter-feel.md). Starts a roll of the pawn in the direction
+    // (dx, dy): a start-up, then a roll in which bullets pass through it, then a recovery. Not a
+    // number or zero means a backstep away from where it faces. Fails, changing nothing, if the pawn
+    // isn't a colonist under direct control, is downed, lies prone, or is rolling or waiting out
+    // the last roll. A roll ends a shot being aimed or fired (a reload goes on). While it lasts the
+    // pawn can't shoot or reload, and the sim moves it: DirectMove is ignored (rollLocked).
+    bool dodgeRoll(Entity pawn, float dx, float dy, std::string* why = nullptr);
+    RollPhase rollPhase(Entity pawn) const;
+    // True from the command to the end of the recovery: the pawn is not its player's to move.
+    bool rollLocked(Entity pawn) const { return rollPhase(pawn) != RollPhase::Idle; }
+    int rollStepsLeft(Entity pawn) const;
+    // Whether bullets pass through the pawn right now.
+    bool hitProof(Entity pawn) const;
+    bool rollDirection(Entity pawn, float& x, float& y) const;
 
     // What the straight stretch from a to b meets first: ground, rock, a building (not in
     // `skipCell`'s cell) or a pawn's hitbox (not `skipPawn`). Kind None if nothing.
@@ -279,6 +331,8 @@ private:
     // the armor turned it away, and the damage type (sharp may become blunt). Uses `rng`.
     float armorPass(Entity pawn, int part, DefId& type, float damage, float penetration, Rng& rng) const;
     int pickOutsidePart(Entity pawn, Rng& rng) const;
+    void stepRolls();
+    void stepKicks();
 };
 
 }  // namespace colony

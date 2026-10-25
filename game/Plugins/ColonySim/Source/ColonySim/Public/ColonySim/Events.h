@@ -39,6 +39,8 @@ enum class EventType : uint8_t {
     RecipeDone,      // a pawn finished one run of a bill (docs/design/bills.md)
     PowerChanged,    // a building gained or lost power (docs/design/power.md)
     ShortCircuit,    // a short circuit emptied a net's batteries (docs/design/power.md)
+    ItemSpoiled,     // food rotted away or an item wore out in the open (docs/design/spoilage.md)
+    PawnPoisoned,    // a pawn ate a poisoned meal and got food poisoning
     ResearchDone,    // a research project was finished (docs/design/research.md)
     GrenadeThrown,   // a pawn released a grenade (docs/design/explosives.md)
     GrenadeLanded,   // a thrown grenade came to rest; its fuse is running
@@ -80,6 +82,7 @@ enum class PawnAction : uint8_t {
     Throw,        // started winding up a throw (docs/design/explosives.md); the release is a GrenadeThrown event
     Dive,         // ran or dived toward `cell` to get away from the grenade `target`
     Block,        // raised its melee weapon against the swing of `target` (none: the player's own block)
+    Roll,         // started a dodge roll (P2): `cell` where it began, (x, y) the unit direction, `amount` the steps from start-up to the end of recovery
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
@@ -116,7 +119,11 @@ struct Event {
     // def's defName, `amount` its cost in points.
     // ShortCircuit: `thing` the building it happened at, `cell` its origin, `amount` the energy
     // released from the net's batteries, Wd.
+    // ItemSpoiled: `thing` the item (it is destroyed right after; forget its id), `def` its def, `cell` where it
+    // lay, `message` "rotted" or "weathered". PawnPoisoned: `thing` the pawn, `def` the meal's def, `target` the
+    // meal, `cell` where the pawn stands.
     float amount = 0.0f;
+    // PawnAction Roll: see there.
     // GrenadeThrown: `thing` the thrower, `def` the grenade's Things def, `target` the grenade entity
     // (it is in the snapshot's projectiles), (x, y, z) where it left the hand, `amount` the steps until
     // it lands. GrenadeLanded: `thing` the grenade entity, `def` its Projectiles def, (x, y, z) where it

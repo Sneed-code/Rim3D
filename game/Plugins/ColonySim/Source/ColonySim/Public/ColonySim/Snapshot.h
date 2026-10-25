@@ -49,6 +49,7 @@ struct ThingView {
     int sizeX = 1;                // buildings: footprint as placed (rotation already applied)
     int sizeY = 1;
     int stackCount = 0;  // items
+    float rot = 0.0f;       // items that rot: 0 fresh to 1 rotted away (docs/design/spoilage.md)
     int hitPoints = 0;   // 0 and 0 when the thing has no hit points
     int maxHitPoints = 0;
     // Pawns with a body: can't act (pain shock, unconscious, can't move), and dead. A dead pawn
@@ -102,6 +103,18 @@ struct ThingView {
     int rounds = 0;
     int magazineSize = 0;
     bool reloading = false;
+    // The player's gun kick (P2, docs/design/shooter-feel.md): where the shots are going above and to
+    // the right of where the player aims, in degrees, from the last shots; it wears off by itself. The
+    // camera shows the same offset. Zero for everyone else.
+    float kickUp = 0.0f;
+    float kickSide = 0.0f;
+    // A dodge roll in progress (P2): 0 none, 1 start-up, 2 rolling (hitProof says whether bullets pass
+    // through it), 3 recovery; the steps left in that phase and its direction (unit vector).
+    uint8_t rollPhase = 0;
+    int rollStepsLeft = 0;
+    float rollDirX = 0.0f;
+    float rollDirY = 0.0f;
+    bool hitProof = false;
     // Pawns (docs/design/explosives.md): grenades on the belt, steps until the next throw can start
     // (0: ready), and whether a blast has thrown the pawn to the ground (it lies prone meanwhile).
     int grenades = 0;
