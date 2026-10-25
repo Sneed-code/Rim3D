@@ -45,6 +45,9 @@ rest (place blueprint, designate, draft, actions) come with the tasks that build
 | `PlaceBlueprintCommand{def, stuff, cell, rot}` | plans a building ([construction.md](construction.md)); `stuff` is "" for a building that takes none | unknown def or stuff; can't be built; the stuff doesn't fit; the footprint is off the map, on water or rock, on a building or on another plan |
 | `CancelBuildCommand{thing}` | takes back a blueprint or frame (what was delivered is put back on the ground), or unmarks a building | `thing` is none of those |
 | `DeconstructCommand{thing}` | marks a finished building to be taken down | not a building; marked already |
+| `AddBillCommand{building, recipe, mode, count}` | puts a bill on a work building: `mode` `Count`, `UntilHave` or `Forever` ([bills.md](bills.md)) | not a finished building; unknown recipe; the building can't make it; bad count; 15 bills already |
+| `RemoveBillCommand{building, bill}` | takes a bill off | no such bill |
+| `SetBillCommand{building, bill, mode, count, suspended}` | changes a bill or pauses it | no such bill; bad count |
 | `SetScheduleCommand{pawn, hour, kind}` | the pawn's schedule for one hour (0 to 23): Anything, Work, Joy or Sleep ([needs.md](needs.md)) | the pawn has no schedule; bad hour |
 | `DesignateCommand{area, kind}` | marks rock (`Mine`), plants (`CutPlant`) or ripe plants (`HarvestPlant`) in the rectangle for work ([mining.md](mining.md)) | `kind` is None; nothing in `area` suits |
 | `CancelDesignationsCommand{area, kind}` | takes marks off, `None` for every kind, and ends the jobs on them | nothing marked in `area` |
@@ -84,8 +87,9 @@ starts, so read it after every step. Before the first step it holds what setting
 | `ThingDespawned` | `thing`, `def` | a thing leaves the map but still exists (picked up) |
 | `ThingDestroyed` | `thing`, `def` | a thing stops existing; comes after `ThingDespawned` if it was on the map |
 | `CommandFailed` | `command`, `message` | a command couldn't be applied |
-| `PawnAction` | `thing` (the pawn), `def`, `action`, `target` | a pawn did something Unreal animates: `PickUp`, `PutDown` (U5, [pawns.md](pawns.md)), `Eat`, `LieDown`, `GetUp` (C6); `Build` and `Deconstruct` (C4) when work on `target` begins; `Reload` (`target` the gun) and `Dodge` (`target` the projectile, `cell` where it steps) (F5) |
+| `PawnAction` | `thing` (the pawn), `def`, `action`, `target` | a pawn did something Unreal animates: `PickUp`, `PutDown` (U5, [pawns.md](pawns.md)), `Eat`, `LieDown`, `GetUp` (C6); `Build` and `Deconstruct` (C4) when work on `target` begins; `Cook` (C7) when a run of a bill begins at the stove `target`; `Reload` (`target` the gun) and `Dodge` (`target` the projectile, `cell` where it steps) (F5) |
 | `FrameStarted` | `thing` (the plan), `def` (the building), `cell` | a blueprint got its first materials and is a frame now; the plan itself came with a `ThingSpawned` |
+| `RecipeDone` | `thing` (the cook), `def` (the Recipes def), `target` (the stove), `cell`, `amount` (products made), `message` | one run of a bill is done; `message` is "bill finished" when a "do X times" bill reached 0 and went ([bills.md](bills.md)) |
 | `PawnInjured` | `thing`, `def` (the injury), `part`, `amount`, `cell` | a pawn got an injury (F1) |
 | `PawnPartLost` | `thing`, `def` (MissingBodyPart), `part`, `amount`, `cell` | a pawn lost a body part |
 | `PawnDowned`, `PawnGotUp` | `thing`, `cell` | a pawn can no longer act, or can again |

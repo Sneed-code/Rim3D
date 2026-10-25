@@ -2,6 +2,7 @@
 
 #include "ColonySim/Api.h"
 #include "ColonySim/Cover.h"
+#include "ColonySim/BillMode.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Entity.h"
@@ -70,6 +71,9 @@ struct ThingView {
     bool markedForDeconstruct = false;
     // Doors: 0 closed to 1 open (it opens over about 0.75 real seconds while a pawn waits).
     float doorOpen = 0.0f;
+    // Work buildings with bills (docs/design/bills.md): `billCount` bills from Snapshot::bills[firstBill].
+    uint32_t firstBill = 0;
+    uint32_t billCount = 0;
     // Pawns with needs (docs/design/needs.md): food and rest, 1 full to 0 empty, else -1; asleep
     // while lying down in a bed or on the ground.
     float food = -1.0f;
@@ -129,6 +133,15 @@ struct PawnLooksView {
     LooksColor hair;
 };
 
+// One bill on a work building, in the building's order (first is tried first).
+struct BillView {
+    uint32_t id = 0;  // the id the bill commands use, per building
+    DefId recipe;     // a Recipes def
+    BillMode mode = BillMode::Count;
+    int count = 0;    // Count: times left; UntilHave: the stock to reach; Forever: 0
+    bool suspended = false;
+};
+
 // One stockpile zone: `cellCount` cells from Snapshot::zoneCells[firstCell].
 struct ZoneView {
     ZoneId id = kNoZone;
@@ -164,6 +177,7 @@ struct Snapshot {
     int mapHeight = 0;
     std::vector<ThingView> things;  // sorted by id
     std::vector<PathPointView> waypoints;  // the pawns' routes, see ThingView
+    std::vector<BillView> bills;           // the work buildings' bills, see ThingView
     std::vector<ZoneView> zones;           // by id
     std::vector<CellPos> zoneCells;        // the zones' cells, see ZoneView
     std::vector<DesignationView> designations;  // every mark, in cell order

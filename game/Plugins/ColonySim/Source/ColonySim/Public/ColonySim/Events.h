@@ -36,6 +36,7 @@ enum class EventType : uint8_t {
     DesignationsChanged,  // marks were added, removed or finished: read the snapshot's designations
     ShotFired,       // a pawn fired a projectile (docs/design/combat.md)
     ProjectileHit,   // a projectile stopped: it hit something, or flew off the map or too long
+    RecipeDone,      // a pawn finished one run of a bill (docs/design/bills.md)
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -64,6 +65,7 @@ enum class PawnAction : uint8_t {
     Harvest,  // started picking from the plant in `cell`
     Reload,   // started reloading the gun `target` (docs/design/aiming.md); it is ready again when shotReadyIn is 0
     Dodge,    // sidestepped into `cell` out of the way of the projectile `target`
+    Cook,         // started work on a bill at `target`, a work building (once per run of the bill)
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
@@ -91,6 +93,9 @@ struct Event {
     // plant's Things def, `amount` how many items it gave (they come as a ThingSpawned); `message`
     // "felled" (a tree) or "cut" for removed, "picked" for harvested. PawnAction Mine, Cut, Harvest:
     // `thing` the pawn, `cell` the cell worked on, `def` the pawn's def.
+    // RecipeDone: `thing` the pawn, `def` the Recipes def, `target` the work building, `cell` where the
+    // pawn stood, `amount` how many products were made, `message` "bill finished" if that was the
+    // bill's last run (a "Do X times" bill that reached 0, which is removed), else empty.
     float amount = 0.0f;
     // ShotFired: `thing` the shooter, `def` its gun's Things def, `target` the projectile, (x, y, z)
     // the muzzle. ProjectileHit: `thing` the projectile (forget its id), `def` its Projectiles def,

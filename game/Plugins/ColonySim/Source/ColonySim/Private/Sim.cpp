@@ -1,5 +1,6 @@
 #include "ColonySim/Sim.h"
 
+#include "ColonySim/Bills.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Defs.h"
@@ -515,6 +516,19 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!combat_->reload(reload->pawn, &error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* addBill = std::get_if<AddBillCommand>(&command)) {
+        if (jobs_->bills().addBill(addBill->building, addBill->recipe, addBill->mode, addBill->count, error) == 0) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* removeBill = std::get_if<RemoveBillCommand>(&command)) {
+        if (!jobs_->bills().removeBill(removeBill->building, removeBill->bill, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* setBill = std::get_if<SetBillCommand>(&command)) {
+        if (!jobs_->bills().setBill(setBill->building, setBill->bill, setBill->mode, setBill->count, setBill->suspended,
+                                    error)) {
+            commandFailed(id, error);
+        }
     }
 }
 
@@ -589,6 +603,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.mapHeight = map_.height();
     out.things.clear();
     out.waypoints.clear();
+    out.bills.clear();
     out.zones.clear();
     out.zoneCells.clear();
     out.looks.clear();
@@ -643,6 +658,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.materialsNeeded = site->materialsNeeded();
         } else if (const BuiltOf* made = reg.try_get<BuiltOf>(entity)) {
             view.stuff = made->stuff;
+        }
+        if (const BillList* list = reg.try_get<BillList>(entity)) {
+            view.firstBill = static_cast<uint32_t>(out.bills.size());
+            for (const Bill& bill : list->bills) {
+                out.bills.push_back(BillView{bill.id, bill.recipe, bill.mode, bill.count, bill.suspended});
+            }
+            view.billCount = static_cast<uint32_t>(out.bills.size()) - view.firstBill;
         }
         if (const StackCount* stack = reg.try_get<StackCount>(entity)) {
             view.stackCount = stack->count;
@@ -791,7 +813,8 @@ uint64_t Sim::stateHash() const {
                             reg.all_of<ConstructionSite>(e), reg.all_of<BuiltOf>(e),
                             reg.all_of<MarkedForDeconstruct>(e),
                             reg.all_of<Mood>(e),         reg.all_of<Door>(e),
-                            reg.all_of<PawnLooks>(e)};
+                            reg.all_of<PawnLooks>(e),
+                            reg.all_of<BillList>(e)};
         uint64_t mask = 0;
         for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
             mask |= has[bit] ? (uint64_t{1} << bit) : 0;
@@ -892,6 +915,17 @@ uint64_t Sim::stateHash() const {
                 h.add(c->b);
             }
         }
+        if (const BillList* list = reg.try_get<BillList>(e)) {
+            h.add(list->nextId);
+            h.add(static_cast<uint64_t>(list->bills.size()));
+            for (const Bill& bill : list->bills) {
+                h.add(bill.id);
+                h.add(bill.recipe.value);
+                h.add(static_cast<int>(bill.mode));
+                h.add(bill.count);
+                h.add(bill.suspended);
+            }
+        }
         if (const Worker* worker = reg.try_get<Worker>(e)) {
             const Job& job = worker->job;
             h.add(static_cast<int>(job.type));
@@ -901,6 +935,17 @@ uint64_t Sim::stateHash() const {
             h.add(entt::to_integral(job.chair));
             h.add(entt::to_integral(job.site));
             h.add(job.progress);
+            h.add(job.bill);
+            h.add(static_cast<uint64_t>(job.picks.size()));
+            for (const BillPick& pick : job.picks) {
+                h.add(entt::to_integral(pick.item));
+                h.add(pick.count);
+            }
+            h.add(static_cast<uint64_t>(job.used.size()));
+            for (const BillUsed& used : job.used) {
+                h.add(used.def.value);
+                h.add(used.count);
+            }
             h.add(job.workType.value);
             h.add(job.forced);
             h.add(static_cast<int>(job.step));
