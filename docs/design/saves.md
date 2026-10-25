@@ -28,6 +28,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Queued commands | submitted but not yet applied; they apply at the first step after loading |
 | Checkpoints | the state hashes recorded so far |
 | Hauling test | its stockpile's middle cell, hauler list, counters, setup errors |
+| Building plans, marks and a job's site (format 10) | per plan (a thing with a `site`): stage, stuff **by `defName`**, origin, rotation, size, each material by `defName` with how many are needed and delivered, work total and done; per building: what it was `builtOf`, and `marked` for deconstruction; per job: its `site` and `progress` ([construction.md](construction.md)). The cell index of plans is rebuilt on loading |
 | Stockpile zones (format 6) | each zone's id, priority, filter by `defName` and cells, and the next zone id |
 | Pawn movement (format 3) | each pawn's velocity, line start, held-up counters (`Mover`), and the repath count |
 | Colonists (format 4) | each colonist's name, age, backstories, traits, skills and the scenario name in the settings ([colonists.md](colonists.md)) |
@@ -99,7 +100,8 @@ three is a bug the tests are built to catch:
    version (the archive's `version()` says which one the file is: `if (ar.version() >= 2) ...`), and
    write the change here. Old saves keep loading until a decision says otherwise (decision 0005
    dropped formats 1 to 5 for the job system). Format 8 (C6) added needs, schedules, bed owners and
-   a job's chair; format 6 and 7 saves still load, their pawns without needs.
+   a job's chair; format 9 (C2) added the plant layer; format 10 (C4) added building plans, built-of and deconstruct marks and a job's site and
+   progress. Format 6 to 9 saves still load, their pawns without needs or their buildings without plans.
 
 Never store a `DefId` (or any number that depends on load order) in a save: use the `defName`.
 The same goes for region ids, which a loaded map numbers afresh: keep a cell, and never let a

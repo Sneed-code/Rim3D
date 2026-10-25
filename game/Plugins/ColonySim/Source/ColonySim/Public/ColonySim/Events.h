@@ -28,6 +28,7 @@ enum class EventType : uint8_t {
     JobEnded,        // a pawn's job ended: `message` says "done", "failed: why" or "interrupted: why"
     PawnAte,         // a pawn finished eating (docs/design/needs.md)
     PawnWokeUp,      // a pawn got up after sleeping
+    FrameStarted,    // a blueprint got its first materials and is a frame now (docs/design/construction.md)
 };
 
 // What a PawnAction event's pawn did. Later jobs add theirs (chop, mine, build, eat); Unreal plays
@@ -38,6 +39,8 @@ enum class PawnAction : uint8_t {
     Eat,      // started eating the carried `target`
     LieDown,  // lay down to sleep in the bed `target`, or on the ground (no target)
     GetUp,    // got up from sleeping
+    Build,    // started work on `target`, a frame (once per job; the work itself takes game seconds)
+    Deconstruct,  // started taking down `target`, a building
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.

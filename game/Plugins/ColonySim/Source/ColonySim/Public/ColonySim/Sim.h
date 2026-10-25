@@ -23,6 +23,7 @@
 
 namespace colony {
 
+class Construction;
 class DefDatabase;
 struct Colonist;
 class JobSystem;
@@ -142,6 +143,10 @@ public:
     JobSystem& jobs() { return *jobs_; }
     const JobSystem& jobs() const { return *jobs_; }
 
+    // Blueprints, frames and taking buildings down (docs/design/construction.md).
+    Construction& construction() { return *construction_; }
+    const Construction& construction() const { return *construction_; }
+
     // Hauling test: the middle of its stockpile zone (empty if no cell is walkable) and its pawns.
     const std::optional<CellPos>& stockpileCell() const { return stockpileCell_; }
     const std::vector<Entity>& haulers() const { return haulers_; }
@@ -182,6 +187,7 @@ private:
     std::optional<CellPos> stockpileCell_;
     std::vector<Entity> haulers_;
     SimStats stats_;
+    std::unique_ptr<Construction> construction_;
     std::unique_ptr<JobSystem> jobs_;  // after everything it holds a reference to
     std::vector<std::string> setupErrors_;
     std::vector<std::pair<uint64_t, Command>> pending_;  // id, command

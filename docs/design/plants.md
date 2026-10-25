@@ -53,7 +53,7 @@ Tune it all at once with the `plantGrowth` multiplier in `data/tuning.json` (1 i
 
 Not in yet, each for a later task: the light threshold (`growMinGlow`, with day and night light),
 temperature limits, plants spreading and sowing (C3 harvests, a farming task sows), blight, and
-fire. Plants under buildings: **a building task (C4) must call `plants().remove` on its footprint**.
+fire. Plants under buildings: C4 removes them from a building's footprint when it is finished.
 Plants also do not slow or block pawns yet: the path layer ignores `pathCost` from plant defs, so
 `Plant_TreeOak`'s `PassThroughOnly` is not enforced until C3 or the next movement task decides how
 trees stand in the way.
