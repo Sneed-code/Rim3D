@@ -29,6 +29,7 @@ class AnimalSystem;
 class ApparelSystem;
 class Construction;
 class DefDatabase;
+class DefenseSystem;
 class Filth;
 class Floors;
 class RoomStats;
@@ -169,6 +170,9 @@ public:
     // Grenades: belts, throwing, fuses (docs/design/explosives.md). Blasts are `combat().explode`.
     ExplosiveSystem& explosives() { return *explosives_; }
     const ExplosiveSystem& explosives() const { return *explosives_; }
+    // Turrets and traps (docs/design/defense.md).
+    DefenseSystem& defense() { return *defense_; }
+    const DefenseSystem& defense() const { return *defense_; }
     // Clothes and armor, outfits, stripping (docs/design/apparel.md).
     ApparelSystem& apparel() { return *apparel_; }
     const ApparelSystem& apparel() const { return *apparel_; }
@@ -344,6 +348,7 @@ private:
     std::vector<Event> events_;
     std::vector<Checkpoint> checkpoints_;
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
+    std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
 };
 
 }  // namespace colony

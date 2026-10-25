@@ -7,6 +7,7 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Looks.h"
+#include "ColonySim/Defense.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
@@ -296,6 +297,8 @@ struct SaveEntity {
     std::optional<SaveApparel> apparel;     // section "apparel" (format 20 on)
     std::optional<RecoilKick> kick;         // section "feel"
     std::optional<DodgeRoll> roll;          // section "feel"
+    std::optional<Turret> turret;           // section "defense" (F11)
+    std::optional<Trap> trap;               // section "defense" (F11)
 };
 
 // A stockpile zone, with its filter by defName.
@@ -1107,6 +1110,8 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
             } else if constexpr (std::is_same_v<Type, AddTalentXpCommand>) {
                 ar.value("pawn", c.pawn);
                 ar.value("amount", c.amount);
+            } else if constexpr (std::is_same_v<Type, RearmTrapCommand>) {
+                ar.value("trap", c.trap);
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }
@@ -1755,6 +1760,25 @@ void saveMeleePart(Ar& ar, Melee& m) {
 }
 
 template <typename Ar>
+void saveTurretPart(Ar& ar, Turret& t) {
+    ar.value("phase", t.phase);
+    ar.require(static_cast<int>(t.phase) <= static_cast<int>(TurretPhase::Cooling), "the save file has a bad turret phase");
+    ar.value("stepsLeft", t.stepsLeft);
+    ar.value("shotsLeft", t.shotsLeft);
+    ar.value("target", t.target);
+}
+
+template <typename Ar>
+void saveTrapPart(Ar& ar, Trap& t) {
+    ar.value("sprung", t.sprung);
+    ar.list("known", t.known, [&](FactionId& f) {
+        ar.value(nullptr, f);
+        ar.require(f != 0, "the save file has faction 0");
+    });
+    ar.require(std::is_sorted(t.known.begin(), t.known.end()), "the save file has a trap's sides out of order");
+}
+
+template <typename Ar>
 void saveMagazinePart(Ar& ar, Magazine& m) {
     ar.value("rounds", m.rounds);
     ar.require(m.rounds >= 0, "the save file has a magazine with fewer than no rounds");
@@ -2345,6 +2369,10 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "grenade", e, &SaveEntity::grenade, [&](SaveGrenade& g) { saveGrenadePart(ar, g); });
         saveParts(ar, "knockedDown", e, &SaveEntity::knocked, [&](KnockedDown& k) { saveKnockedPart(ar, k); });
     });
+    ar.section("defense", 1, [&] {
+        saveParts(ar, "turret", e, &SaveEntity::turret, [&](Turret& t) { saveTurretPart(ar, t); });
+        saveParts(ar, "trap", e, &SaveEntity::trap, [&](Trap& t) { saveTrapPart(ar, t); });
+    });
     // New sections go here, at the end.
 }
 
@@ -2673,6 +2701,12 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const AnimalCare* care = reg.try_get<AnimalCare>(e)) {
             out.care = *care;
+        }
+        if (const Turret* turret = reg.try_get<Turret>(e)) {
+            out.turret = *turret;
+        }
+        if (const Trap* trap = reg.try_get<Trap>(e)) {
+            out.trap = *trap;
         }
         if (const Melee* melee = reg.try_get<Melee>(e)) {
             out.melee = *melee;
@@ -3161,6 +3195,16 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.melee) {
             reg.emplace<Melee>(entity, *e.melee);
+        }
+        if (e.turret) {
+            reg.emplace<Turret>(entity, *e.turret);
+        } else if (e.footprint && e.thing && sim.defs_->get(reg.get<Thing>(entity).def).has("turret")) {
+            reg.emplace<Turret>(entity);  // saved before turrets existed
+        }
+        if (e.trap) {
+            reg.emplace<Trap>(entity, *e.trap);
+        } else if (e.footprint && e.thing && sim.defs_->get(reg.get<Thing>(entity).def).has("trap")) {
+            reg.emplace<Trap>(entity);
         }
     }
     sim.animals_->restore(d.animals);

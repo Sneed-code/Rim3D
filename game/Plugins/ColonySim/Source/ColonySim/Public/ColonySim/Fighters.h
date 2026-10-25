@@ -17,6 +17,7 @@ namespace colony {
 
 class CombatSystem;
 class DefDatabase;
+class DefenseSystem;
 class ExplosiveSystem;
 class HealthSystem;
 class JobSystem;
@@ -147,6 +148,9 @@ public:
     void setEventLog(std::vector<Event>* events) { events_ = events; }
     // Grenades (F9): fighters throw the ones on their belts and dive away from ones about to go off.
     void setExplosives(ExplosiveSystem* explosives) { explosives_ = explosives; }
+    // Traps (F11, docs/design/defense.md): fighters of a side that knows where armed traps are keep their spots off
+    // those cells and walk round them. Without it nobody does.
+    void setDefense(const DefenseSystem* defense) { defense_ = defense; }
     // Melee (F8, docs/design/melee.md): fighters armed for it charge, the others strike back at
     // enemies in reach. Without it nobody fights in melee.
     void setMelee(MeleeSystem* melee) { melee_ = melee; }
@@ -259,6 +263,7 @@ private:
     std::vector<GrenadeDanger> blasts_;  // scratch: grenades about to go off this step, by id
     std::vector<Event>* events_ = nullptr;
     MeleeSystem* melee_ = nullptr;
+    const DefenseSystem* defense_ = nullptr;
     uint64_t plans_ = 0;
     uint64_t sightChecks_ = 0;
     const Weather* weather_ = nullptr;
