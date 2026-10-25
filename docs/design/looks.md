@@ -108,7 +108,26 @@ next to nothing. At the default overseer distance horns are about 2 px long and 
   sign-in), or face morphs made from its presets.
 - **Proportions.** Shorter limbs, narrower shoulders and wider hips are skeleton, which the leader
   pose takes from the mannequin; body types change shape and the scale changes height.
-- **Clothes.** Everyone wears Kellan's outfit. Apparel (F2's armour, later clothing) brings its own
-  meshes and needs the same morphs.
+- **Clothes.** Everyone wears Kellan's outfit until U16 draws worn apparel (meshes: A5, below).
 - **Mannequins** (the default look) get height and horns only.
 - **Hair styles and beards** stay Kellan's; their colour follows `hair`.
+
+## Apparel meshes (A5)
+
+`python tools/clothes_art.py` (hat download, sets `visual.worn` on each apparel def), then the
+`ClothesArt` commandlet (`Rim3DEditor/ClothesArtCommandlet.*`, about 1 minute, PawnLooks first)
+makes `/Game/Rim3D/Generated/Clothes` from `assets/clothes_art.json`. Nothing needs a sign-in.
+
+- **Body garments** (`SK_<def>_<n>`, one per part): copies of the morphed hoodie (tops, coats) and
+  cargo trousers (legs) with the triangles on named bones cut away (sleeves, hood, shins), thickened
+  along the normals (OnSkin 0.2-0.3 cm, jacket 1.1, flak 1.2-1.3, parka 2.4, duster 1.6/2.6) and
+  put on a flat `M_Garment` colour (`Color` vector parameter, so U16 can tint by stuff). They share
+  Kellan's skeleton and body shape morphs, so they fit every body type like his clothes do.
+- **Head pieces** (`SM_<def>`, `"bone": "head"`): cowboy hat from Poly Haven's Fishermans Hat (CC0),
+  tuque and simple helmet made in code. Vertices are already in head bone space: attach at the
+  `head` bone with no offset.
+- Thicker outward by layer (OnSkin < Middle < Shell), so U16 draws in layer order without z-fighting.
+
+Not done: the duster has no long skirt (thickened trousers instead), no boots or gloves defs yet,
+tribalwear is a tunic and shorts from the same two meshes, and none of it has been looked at in the
+game (fit, hat position). U16's smoke test should screenshot each piece on thin, heavy and female pawns.

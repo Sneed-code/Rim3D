@@ -1,0 +1,145 @@
+[
+ {
+  "defName": "Armchair", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Armchair.SM_Armchair" }, "researchPrerequisite": "ComplexFurniture",
+  "parent": "StuffBuildingBase",
+  "label": "armchair",
+  "size": [
+   1,
+   1
+  ],
+  "costStuffCount": 70,
+  "fillPercent": 0.4,
+  "designationCategory": "Furniture",
+  "stats": {
+   "maxHitPoints": 100,
+   "workToBuild": 1728.0,
+   "beauty": 1,
+   "comfort": 0.8,
+   "flammability": 1.0
+  },
+  "passability": "Standable",
+  "building": {
+   "isSittable": true
+  },
+  "unverified": [
+   "costStuffCount",
+   "stats",
+   "fillPercent"
+  ]
+ },
+ {
+  "defName": "EndTable", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_EndTable.SM_EndTable" }, "researchPrerequisite": "ComplexFurniture",
+  "parent": "StuffBuildingBase",
+  "label": "end table",
+  "size": [
+   1,
+   1
+  ],
+  "costStuffCount": 25,
+  "fillPercent": 0.25,
+  "designationCategory": "Furniture",
+  "stats": {
+   "maxHitPoints": 80,
+   "workToBuild": 864.0,
+   "beauty": 1,
+   "flammability": 1.0
+  },
+  "passability": "Standable",
+  "unverified": [
+   "costStuffCount",
+   "stats",
+   "fillPercent"
+  ]
+ },
+ {
+  "defName": "Dresser", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Dresser.SM_Dresser" }, "researchPrerequisite": "ComplexFurniture",
+  "parent": "StuffBuildingBase",
+  "label": "dresser",
+  "size": [
+   2,
+   1
+  ],
+  "costStuffCount": 50,
+  "fillPercent": 0.5,
+  "designationCategory": "Furniture",
+  "stats": {
+   "maxHitPoints": 100,
+   "workToBuild": 2592.0,
+   "beauty": 2,
+   "flammability": 1.0
+  },
+  "building": {
+   "storesApparel": true
+  },
+  "unverified": [
+   "costStuffCount",
+   "stats",
+   "fillPercent",
+   "building.storesApparel"
+  ],
+  "ours": [
+   "building.storesApparel"
+  ]
+ },
+ {
+  "defName": "PlantPot", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_PlantPot.SM_PlantPot" },
+  "parent": "StuffBuildingBase",
+  "label": "plant pot",
+  "size": [
+   1,
+   1
+  ],
+  "costStuffCount": 10,
+  "fillPercent": 0.25,
+  "designationCategory": "Furniture",
+  "stats": {
+   "maxHitPoints": 60,
+   "workToBuild": 432.0,
+   "beauty": 0.5,
+   "flammability": 1.0
+  },
+  "passability": "Standable",
+  "plantSpot": {
+   "fertility": 1.0
+  },
+  "unverified": [
+   "costStuffCount",
+   "stats",
+   "fillPercent",
+   "plantSpot"
+  ],
+  "ours": [
+   "plantSpot"
+  ]
+ },
+ {
+  "defName": "Column",
+  "parent": "StuffBuildingBase",
+  "label": "column",
+  "size": [
+   1,
+   1
+  ],
+  "costStuffCount": 15,
+  "fillPercent": 1.0,
+  "designationCategory": "Furniture",
+  "stats": {
+   "maxHitPoints": 200,
+   "workToBuild": 576.0,
+   "beauty": 1,
+   "flammability": 1.0
+  },
+  "passability": "Impassable",
+  "building": {
+   "holdsRoof": true
+  },
+  "unverified": [
+   "costStuffCount",
+   "stats",
+   "fillPercent"
+  ],
+  "ours": [
+   "building.holdsRoof"
+  ]
+ }
+]

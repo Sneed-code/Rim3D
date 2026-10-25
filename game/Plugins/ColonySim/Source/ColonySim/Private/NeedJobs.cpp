@@ -71,7 +71,8 @@ bool JobSystem::thinkNeeds(Entity pawn, Job& out) {
 }
 
 // The schedule: a Sleep hour sends a pawn that isn't well rested to bed; a Joy hour keeps it from
-// working (there is no recreation yet, so it waits about).
+// working and sends it to play, sit or stroll until its recreation is full (RecreationJobs.cpp),
+// else it waits about.
 bool JobSystem::thinkSchedule(Entity pawn, Job& out) {
     const Needs* needs = things_.registry().try_get<Needs>(pawn);
     if (needs == nullptr) {
@@ -81,6 +82,9 @@ bool JobSystem::thinkSchedule(Entity pawn, Job& out) {
         case ScheduleKind::Sleep:
             return needs->rest < rules_.fallAsleepBelow && makeSleepJob(pawn, out);
         case ScheduleKind::Joy:
+            if (makeRecreationJob(pawn, out, recreation_.joyHoursUntil)) {
+                return true;
+            }
             out = Job{};
             out.type = JobType::Wait;
             out.until = now() + idleSeconds_;
@@ -96,7 +100,12 @@ bool JobSystem::thinkSchedule(Entity pawn, Job& out) {
 void JobSystem::interruptForNeeds(Entity pawn) {
     entt::registry& reg = things_.registry();
     const Job& current = reg.get<Worker>(pawn).job;
-    if (current.forced || (current.type != JobType::Wait && current.type != JobType::HaulToCell && !jobIsGather(current.type))) {
+    if (current.type == JobType::Recreate && scheduleNow(pawn) == ScheduleKind::Work) {
+        endJob(pawn, JobEnd::Interrupted, "time to work");
+        return;
+    }
+    if (current.forced || (current.type != JobType::Wait && current.type != JobType::HaulToCell &&
+                           current.type != JobType::Recreate && !jobIsGather(current.type))) {
         return;
     }
     const Needs* needs = reg.try_get<Needs>(pawn);

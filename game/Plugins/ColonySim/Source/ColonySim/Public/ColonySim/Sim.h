@@ -25,21 +25,30 @@
 
 namespace colony {
 
+class AnimalSystem;
 class Construction;
 class DefDatabase;
+class Filth;
+class Floors;
+class RoomStats;
 struct Colonist;
 struct PawnLooks;
 class Designations;
 class FighterSystem;
 class JobSystem;
+class Lights;
 class Mineables;
 class MovementSystem;
 class MoodSystem;
+class RecreationSystem;
+class ResearchSystem;
 class NeedsSystem;
 class RaidSystem;
 class Plants;
+class PowerGrid;
 class Regions;
 class Rooms;
+class TemperatureSystem;
 class Things;
 class Zones;
 struct Snapshot;
@@ -59,6 +68,9 @@ struct SimSettings {
     // A Scenarios def to start (e.g. "Crashlanded"): colonists made from the seed, with starting
     // items, near the middle of the map (docs/design/colonists.md). Empty: no scenario.
     std::string scenario{};
+    // Wild animals when the map is made (docs/design/animal-life.md): 0 for none, else the biome's
+    // animal density in percent (100 = as the biome says). Needs the Biomes and animal defs.
+    int wildAnimals = 0;
 };
 
 struct SimStats {
@@ -134,6 +146,12 @@ public:
     // Mood and thoughts (docs/design/mood.md).
     MoodSystem& mood() { return *mood_; }
     const MoodSystem& mood() const { return *mood_; }
+    // Recreation, comfort and the outdoors need (docs/design/recreation.md).
+    RecreationSystem& recreation() { return *recreation_; }
+    const RecreationSystem& recreation() const { return *recreation_; }
+    // Research projects and what they unlock (docs/design/research.md).
+    ResearchSystem& research() { return *research_; }
+    const ResearchSystem& research() const { return *research_; }
     // Guns, projectiles, hitboxes and armor (docs/design/combat.md).
     CombatSystem& combat() { return *combat_; }
     const CombatSystem& combat() const { return *combat_; }
@@ -165,6 +183,31 @@ public:
     Rooms& rooms() { return *rooms_; }
     const Rooms& rooms() const { return *rooms_; }
 
+    // Light and darkness (docs/design/light.md). Brought up to date at the end of every step.
+    Lights& lights() { return *lights_; }
+    const Lights& lights() const { return *lights_; }
+    // Floors, filth, room stats and the beauty need (docs/design/room-stats.md).
+    Floors& floors() { return *floors_; }
+    const Floors& floors() const { return *floors_; }
+    Filth& filth() { return *filth_; }
+    const Filth& filth() const { return *filth_; }
+    RoomStats& roomStats() { return *roomStats_; }
+    const RoomStats& roomStats() const { return *roomStats_; }
+
+    // Room temperature, comfort and exposure (docs/design/temperature.md).
+    TemperatureSystem& temperature() { return *temperature_; }
+    const TemperatureSystem& temperature() const { return *temperature_; }
+    // The temperature in the open right now, in degrees Celsius: the biome's season and the hour of
+    // the day. E1 replaces this with its seasons and weather.
+    float outdoorTemperature() const;
+    // The biome's temperature at any game second, ignoring the override (for tests and previews).
+    float outdoorTemperatureAt(int64_t gameSeconds) const;
+    // The temperature under rock: the biome's mean over the year.
+    float groundTemperature() const;
+    // Fixes the outdoor temperature (and so the ground's) for tests and `simrun --outdoor`. Not saved:
+    // a loaded game goes back to the biome's own. Pass nullopt to let the biome decide again.
+    void setOutdoorOverride(std::optional<float> celsius);
+
     // Stockpile zones (docs/design/jobs.md).
     const Zones& zones() const { return *zones_; }
     // Work types, the think list, jobs and reservations (docs/design/jobs.md).
@@ -175,6 +218,9 @@ public:
     FighterSystem& fighters() { return *fighters_; }
     const FighterSystem& fighters() const { return *fighters_; }
 
+    // Wild animals: herds, grazing, sleep, coming and going at the edges (docs/design/animal-life.md).
+    AnimalSystem& animals() { return *animals_; }
+    const AnimalSystem& animals() const { return *animals_; }
     // Raids, raid squads and the colony alarm with its defense roles (docs/design/raids.md).
     RaidSystem& raids() { return *raids_; }
     const RaidSystem& raids() const { return *raids_; }
@@ -182,6 +228,11 @@ public:
     // Blueprints, frames and taking buildings down (docs/design/construction.md).
     Construction& construction() { return *construction_; }
     const Construction& construction() const { return *construction_; }
+
+    // Power nets, generators, batteries and who has power (docs/design/power.md). Stepped at the end
+    // of every step, after rooms (the sun needs roofs).
+    PowerGrid& power() { return *power_; }
+    const PowerGrid& power() const { return *power_; }
 
     // Hauling test: the middle of its stockpile zone (empty if no cell is walkable) and its pawns.
     const std::optional<CellPos>& stockpileCell() const { return stockpileCell_; }
@@ -220,10 +271,16 @@ private:
     std::unique_ptr<Designations> designations_;
     std::unique_ptr<MovementSystem> movement_;
     std::unique_ptr<Rooms> rooms_;
+    std::unique_ptr<PowerGrid> power_;
+    std::unique_ptr<Lights> lights_;
+    std::unique_ptr<TemperatureSystem> temperature_;  // after rooms_ and health_
+    std::optional<float> outdoorOverride_;
     DoorNumbers doorNumbers_;  // for the snapshot's door animation
     std::unique_ptr<HealthSystem> health_;
     std::unique_ptr<NeedsSystem> needs_;
     std::unique_ptr<MoodSystem> mood_;
+    std::unique_ptr<RecreationSystem> recreation_;
+    std::unique_ptr<ResearchSystem> research_;
     std::unique_ptr<CombatSystem> combat_;
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
@@ -235,6 +292,10 @@ private:
     std::unique_ptr<Construction> construction_;
     std::unique_ptr<JobSystem> jobs_;  // after everything it holds a reference to
     std::unique_ptr<FighterSystem> fighters_;  // after the job system
+    std::unique_ptr<Floors> floors_;           // C17; filth and room stats read the floors
+    std::unique_ptr<Filth> filth_;
+    std::unique_ptr<RoomStats> roomStats_;
+    std::unique_ptr<AnimalSystem> animals_;
     std::unique_ptr<RaidSystem> raids_;        // after the fighters
     std::vector<std::string> setupErrors_;
     std::vector<std::pair<uint64_t, Command>> pending_;  // id, command

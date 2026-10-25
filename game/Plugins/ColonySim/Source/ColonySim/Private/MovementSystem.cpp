@@ -1,6 +1,7 @@
 #include "MovementSystem.h"
 
 #include "ColonySim/Health.h"
+#include "ColonySim/Lights.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Random.h"
@@ -177,9 +178,10 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
         }
         // Injuries slow a pawn down (its Moving capacity); a downed or dead one doesn't walk.
         const Health* health = reg.try_get<Health>(a.entity);
-        const float base = mover.metresPerStep * (health != nullptr ? health->movingFactor : 1.0f);
-        if (base <= 0.0f) {
-            // Downed or dead: it stays where it is. Others still steer around it.
+        const float lightFactor = lights_ != nullptr ? lights_->moveSpeedAt(here) : 1.0f;
+        const float base = mover.metresPerStep * (health != nullptr ? health->movingFactor : 1.0f) * lightFactor;
+        if (base <= 0.0f || mover.hold) {
+            // Downed or dead, or working standing still: it stays where it is. Others still steer around it.
             a.newVx = 0.0f;
             a.newVy = 0.0f;
             mover.blockedSteps = 0;
@@ -450,7 +452,9 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
         // Held back for too long: first walk through the other pawns for a while, and if that
         // doesn't help (a wall in the way), give up the walk.
         const bool wantsToWalk = walking && wantLen > 1.0e-6f;
-        const float got = std::sqrt(bestVx * bestVx + bestVy * bestVy);
+        // How much of the wanted velocity it gets: along the wanted direction, so sliding sideways along a
+        // wall it can't go through is not progress (it used to count, and the pawn never gave up).
+        const float got = wantLen > 1.0e-6f ? (bestVx * wantX + bestVy * wantY) / wantLen : 0.0f;
         if (mover.ghostSteps > 0) {
             --mover.ghostSteps;
         } else if (wantsToWalk && got < kMoveHeldBackShare * wantLen) {

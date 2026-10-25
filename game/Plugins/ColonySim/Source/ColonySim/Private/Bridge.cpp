@@ -4,7 +4,10 @@
 #include "ColonySim/Snapshot.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <type_traits>
+#include <utility>
+#include <variant>
 
 namespace colony {
 
@@ -68,6 +71,26 @@ const char* commandName(const Command& command) {
                 return "SetLineage";
             } else if constexpr (std::is_same_v<Type, ReloadCommand>) {
                 return "Reload";
+            } else if constexpr (std::is_same_v<Type, AddBillCommand>) {
+                return "AddBill";
+            } else if constexpr (std::is_same_v<Type, RemoveBillCommand>) {
+                return "RemoveBill";
+            } else if constexpr (std::is_same_v<Type, SetBillCommand>) {
+                return "SetBill";
+            } else if constexpr (std::is_same_v<Type, HandsOnCommand>) {
+                return "HandsOn";
+            } else if constexpr (std::is_same_v<Type, FlickCommand>) {
+                return "Flick";
+            } else if constexpr (std::is_same_v<Type, PlaceFloorCommand>) {
+                return "PlaceFloor";
+            } else if constexpr (std::is_same_v<Type, AddFilthCommand>) {
+                return "AddFilth";
+            } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
+                return "ShortCircuit";
+            } else if constexpr (std::is_same_v<Type, SetResearchCommand>) {
+                return "SetResearch";
+            } else if constexpr (std::is_same_v<Type, UnlockResearchCommand>) {
+                return "UnlockResearch";
             } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
                 return "StartRaid";
             } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
@@ -80,6 +103,29 @@ const char* commandName(const Command& command) {
             }
         },
         command);
+}
+
+namespace {
+
+// Tries each command type in turn. Prefixed because Unreal's unity builds merge .cpp files.
+template <size_t I = 0>
+bool bridgeCommandFromName(const std::string& name, Command& out) {
+    if constexpr (I < std::variant_size_v<Command>) {
+        Command blank{std::in_place_index<I>};
+        if (name == commandName(blank)) {
+            out = std::move(blank);
+            return true;
+        }
+        return bridgeCommandFromName<I + 1>(name, out);
+    } else {
+        return false;
+    }
+}
+
+}  // namespace
+
+bool commandFromName(const std::string& name, Command& out) {
+    return bridgeCommandFromName(name, out);
 }
 
 const char* eventTypeName(EventType type) {
@@ -106,6 +152,10 @@ const char* eventTypeName(EventType type) {
         case EventType::PawnMoodBand: return "PawnMoodBand";
         case EventType::ShotFired: return "ShotFired";
         case EventType::ProjectileHit: return "ProjectileHit";
+        case EventType::RecipeDone: return "RecipeDone";
+        case EventType::PowerChanged: return "PowerChanged";
+        case EventType::ShortCircuit: return "ShortCircuit";
+        case EventType::ResearchDone: return "ResearchDone";
         case EventType::RaidArrived: return "RaidArrived";
         case EventType::SquadChanged: return "SquadChanged";
         case EventType::AlarmChanged: return "AlarmChanged";
@@ -128,6 +178,9 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Deconstruct: return "Deconstruct";
         case PawnAction::Reload: return "Reload";
         case PawnAction::Dodge: return "Dodge";
+        case PawnAction::Cook: return "Cook";
+        case PawnAction::Research: return "Research";
+        case PawnAction::Clean: return "Clean";
     }
     return "?";
 }

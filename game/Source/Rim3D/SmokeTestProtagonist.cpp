@@ -206,7 +206,6 @@ void USmokeTestSubsystem::BuildProtagonistPhases()
 			Fail(FString::Printf(TEXT("Sim setup: %s"), UTF8_TO_TCHAR(Problem.c_str())));
 		}
 		B->SetSpeed(1);
-		BuildTerrainMesh(B->GetSim()->map(), FPlatformTime::Seconds());
 
 		State->Protagonist = P->FindProtagonist();
 		int32 Colonists = 0;

@@ -4,6 +4,7 @@
 //   simrun --seed 42 --size 1024 --days 1 --pawns 20 --items 300   (Stage 0 sim speed test)
 //   simrun --seed 42 --size 512 --days 0 --regions regions.png   (picture of regions and groups)
 //   simrun --seed 42 --size 512 --days 0 --sight sight.png   (what a pawn sees among test walls)
+//   simrun --size 64 --days 0 --light light.png --hour 22   (light at that hour round lamps and a roofed room)
 //   simrun --replay bug.replay.json            (plays a replay and says whether it matched)
 //   simrun --replay scenario.json --record out.replay.json
 //   simrun --seed 42 --size 1024 --days 1 --pawns 100 --items 2000 --data game/Plugins/ColonySim/Tests/data
@@ -11,14 +12,24 @@
 //   simrun --seed 42 --days 1 --pawns 10 --items 100 --save game.save   (writes a save after the run)
 //   simrun --load game.save --days 1 --save later.save    (continues a save; --days defaults to 0)
 //   simrun --load game.save --days 0 --save-json game.json   (readable dump of a save)
+//   simrun --scenario colony [--seed 42] [--size 512] [--days 5] [--verbose]   (the colony test, C10;
+//                                     exit 1 if a check fails, docs/design/colony-scenario.md)
+//   simrun --power [--days 3] [--verbose]   (the power check, E5: solar, batteries, lamps and a switch; docs/design/power.md)
+//   simrun --seed 42 --size 1024 --days 3 --animals [--animal-percent 300] --check   (wild animals, N1:
+//                                     herds by biome, a report of them, checks they stay on walkable ground)
 // --replay takes the settings and commands from the file and runs to its endStep (--days
 // overrides). --record writes what this run did as a replay, with its state hashes.
 // --check makes it exit with 1 if any job or path search failed.
 // Defs load from --data (default: the repo's data folder). The hauling test needs the Things defs
 // Human and Steel and the WorkTypes def Hauling, which data/defs provides. Its pawns haul items
 // scattered over the map to a stockpile zone in the middle through the job system (C1).
+#include "ColonyScenario.h"
+#include "PowerScenario.h"
+#include "ColonySim/Animals.h"
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Lights.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Cover.h"
@@ -37,6 +48,7 @@
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Temperature.h"
 #include "ColonySim/ThreatMap.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
@@ -53,7 +65,9 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -68,8 +82,12 @@ struct Options {
     int items = 0;
     int pathBudget = colony::Pathfinder::kDefaultBudget;
     std::string start;  // a Scenarios def; prints the colonists it makes
+    std::string scenario;  // "colony": the scripted colony test (C10)
+    bool verbose = false;  // --scenario, --power: an hourly line on stderr
+    bool power = false;    // --power: the power check (E5)
     bool check = false;  // exit 1 if a job or a path search failed
     int gather = 0;      // mark rock to mine and plants to harvest this many cells round the middle
+    int animals = 0;     // wild animals as a percent of the biome's density (0: none; --animals alone means 100)
     double raid = -1.0;  // start a pirate raid of this many points at the first step (0: the colony's threat points)
     bool armed = false;  // give every colonist an assault rifle first (not a command: not in replays)
     std::string png;
@@ -77,9 +95,13 @@ struct Options {
     std::string replay;
     std::string record;
     std::string sightPng;
+    std::string lightPng;
+    double lightHour = 22.0;  // --light: the hour of day to draw
     std::string load;
     std::string save;
     std::string saveJson;
+    bool hasOutdoor = false;  // --outdoor C: hold the outdoor temperature fixed (docs/design/temperature.md)
+    double outdoor = 0.0;
 #ifdef COLONY_DATA_DIR
     std::string data = COLONY_DATA_DIR;
 #else
@@ -106,8 +128,18 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.pathBudget = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--start") == 0 && hasValue) {
             out.start = argv[++i];
+        } else if (std::strcmp(arg, "--scenario") == 0 && hasValue) {
+            out.scenario = argv[++i];
+        } else if (std::strcmp(arg, "--power") == 0) {
+            out.power = true;
+        } else if (std::strcmp(arg, "--verbose") == 0) {
+            out.verbose = true;
         } else if (std::strcmp(arg, "--gather") == 0 && hasValue) {
             out.gather = std::atoi(argv[++i]);
+        } else if (std::strcmp(arg, "--animals") == 0) {
+            out.animals = std::max(out.animals, 100);
+        } else if (std::strcmp(arg, "--animal-percent") == 0 && hasValue) {
+            out.animals = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--raid") == 0 && hasValue) {
             out.raid = std::atof(argv[++i]);
         } else if (std::strcmp(arg, "--armed") == 0) {
@@ -120,6 +152,10 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.regionsPng = argv[++i];
         } else if (std::strcmp(arg, "--sight") == 0 && hasValue) {
             out.sightPng = argv[++i];
+        } else if (std::strcmp(arg, "--light") == 0 && hasValue) {
+            out.lightPng = argv[++i];
+        } else if (std::strcmp(arg, "--hour") == 0 && hasValue) {
+            out.lightHour = std::atof(argv[++i]);
         } else if (std::strcmp(arg, "--data") == 0 && hasValue) {
             out.data = argv[++i];
         } else if (std::strcmp(arg, "--replay") == 0 && hasValue) {
@@ -132,15 +168,18 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.save = argv[++i];
         } else if (std::strcmp(arg, "--save-json") == 0 && hasValue) {
             out.saveJson = argv[++i];
+        } else if (std::strcmp(arg, "--outdoor") == 0 && hasValue) {
+            out.hasOutdoor = true;
+            out.outdoor = std::atof(argv[++i]);
         } else {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--raid POINTS] [--armed] [--check] [--png FILE] [--regions FILE] [--sight FILE] [--data DIR] "
-                         "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE]\n");
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--scenario colony [--verbose]] [--power] [--raid POINTS] [--armed] [--check] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS]\n");
             return false;
         }
     }
-    return out.size > 0 && out.size <= 4096 && out.days >= 0.0 && out.pawns >= 0 && out.items >= 0 && out.pathBudget > 0;
+    return out.size > 0 && out.size <= 4096 && out.days >= 0.0 && out.pawns >= 0 && out.items >= 0 && out.pathBudget > 0 && out.animals >= 0;
 }
 
 bool writeMapPng(const colony::Sim& sim, const std::string& path) {
@@ -239,12 +278,31 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
     const entt::registry& reg = sim.things().registry();
     for (const colony::ThingCategory category : {colony::ThingCategory::Item, colony::ThingCategory::Pawn}) {
         reg.view<const colony::Thing, const colony::Position>().each(
-            [&](const colony::Thing& thing, const colony::Position& pos) {
+            [&](entt::entity e, const colony::Thing& thing, const colony::Position& pos) {
                 if (thing.category != category) {
                     return;
                 }
                 if (category == colony::ThingCategory::Item) {
                     mark(pos, 255, 220, 0);
+                } else if (reg.all_of<colony::Animal>(e)) {
+                    // Animals: a 3 by 3 block (a single pixel looks like a dandelion), white,
+                    // predators magenta, the dead dark grey, with a black middle.
+                    const colony::Health* health = reg.try_get<colony::Health>(e);
+                    unsigned char r = 250;
+                    unsigned char g = 250;
+                    unsigned char b = 250;
+                    if (health != nullptr && health->dead) {
+                        r = g = b = 90;
+                    } else if (sim.defs().get(thing.def).flag("race.predator")) {
+                        r = 230; g = 40; b = 230;
+                    }
+                    for (int dy = -1; dy <= 1; ++dy) {
+                        for (int dx = -1; dx <= 1; ++dx) {
+                            const bool middle = dx == 0 && dy == 0;
+                            mark(colony::Position{pos.x + static_cast<float>(dx), pos.y + static_cast<float>(dy), pos.level},
+                                 middle ? 0 : r, middle ? 0 : g, middle ? 0 : b);
+                        }
+                    }
                 } else {
                     mark(pos, 230, 20, 20);
                 }
@@ -412,6 +470,96 @@ bool writeSightPng(colony::Sim& sim, const std::string& path, uint64_t seed) {
     return stbi_write_png(path.c_str(), w, h, 3, pixels.data(), w * 3) != 0;
 }
 
+// Light picture (docs/design/light.md): builds a walled, roofed room with a torch lamp inside, a torch
+// lamp and a campfire outside (one of them behind a wall) on the nearest open ground to the middle,
+// runs the game to `hour` of the day and draws the light of every cell, six pixels a cell. Cells under
+// a roof get a blue tint, lamps are red dots.
+bool writeLightPng(colony::Sim& sim, const std::string& path, double hour) {
+    const colony::Map& map = sim.map();
+    const int w = map.width();
+    const int h = map.height();
+    constexpr int kAreaW = 30;
+    constexpr int kAreaH = 20;
+    colony::CellPos origin{-1, -1, 0};
+    int bestFar = 1 << 30;
+    for (int y = 1; y + kAreaH < h - 1; y += 2) {
+        for (int x = 1; x + kAreaW < w - 1; x += 2) {
+            const int far = std::abs(x + kAreaW / 2 - w / 2) + std::abs(y + kAreaH / 2 - h / 2);
+            if (far >= bestFar) {
+                continue;
+            }
+            bool open = true;
+            for (int dy = 0; dy < kAreaH && open; ++dy) {
+                for (int dx = 0; dx < kAreaW; ++dx) {
+                    open = open && map.walkable(colony::CellPos{x + dx, y + dy, 0});
+                }
+            }
+            if (open) {
+                bestFar = far;
+                origin = colony::CellPos{x, y, 0};
+            }
+        }
+    }
+    if (origin.x < 0) {
+        std::fprintf(stderr, "no open ground of %d x %d cells for the light picture (try --size 128)\n", kAreaW, kAreaH);
+        return false;
+    }
+    colony::Things& things = sim.things();
+    for (int y = 2; y <= 10; ++y) {
+        for (int x = 2; x <= 12; ++x) {
+            if (x == 2 || x == 12 || y == 2 || y == 10) {
+                things.spawn("Wall", colony::CellPos{origin.x + x, origin.y + y, 0});
+            }
+        }
+    }
+    things.spawn("TorchLamp", colony::CellPos{origin.x + 7, origin.y + 6, 0});   // inside the room
+    things.spawn("TorchLamp", colony::CellPos{origin.x + 16, origin.y + 6, 0});  // outside, east of the room
+    for (int y = 12; y <= 16; ++y) {
+        things.spawn("Wall", colony::CellPos{origin.x + 22, origin.y + y, 0});   // a wall casting a shadow
+    }
+    things.spawn("Campfire", colony::CellPos{origin.x + 20, origin.y + 14, 0});
+    sim.stepMany(static_cast<int64_t>(hour * static_cast<double>(colony::kSecondsPerHour)));
+
+    const colony::Lights& lights = sim.lights();
+    constexpr int kScale = 6;
+    const int pw = w * kScale;
+    const int ph = h * kScale;
+    std::vector<unsigned char> pixels(static_cast<size_t>(pw) * static_cast<size_t>(ph) * 3);
+    int lit = 0;
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            const colony::CellPos c{x, y, 0};
+            const float light = lights.lightAt(c);
+            lit += light >= 0.3f ? 1 : 0;
+            const bool roofed = map.roof(c) != colony::Roof::None;
+            const float v = 30.0f + 225.0f * light;
+            unsigned char rgb[3] = {static_cast<unsigned char>(v * (roofed ? 0.8f : 1.0f)),
+                                    static_cast<unsigned char>(v * (roofed ? 0.85f : 1.0f)),
+                                    static_cast<unsigned char>(roofed ? std::min(255.0f, v * 1.15f + 10.0f) : v * 0.9f)};
+            if (map.passage(c) == colony::Passage::Blocked) {
+                rgb[0] = rgb[1] = rgb[2] = static_cast<unsigned char>(40.0f + 60.0f * light);
+            }
+            for (const colony::LightSource& s : lights.sources()) {
+                if (s.cell == c) {
+                    rgb[0] = 255; rgb[1] = 40; rgb[2] = 40;
+                }
+            }
+            for (int py = 0; py < kScale; ++py) {
+                for (int px = 0; px < kScale; ++px) {
+                    const size_t i = (static_cast<size_t>(y * kScale + py) * static_cast<size_t>(pw) + static_cast<size_t>(x * kScale + px)) * 3;
+                    pixels[i] = rgb[0];
+                    pixels[i + 1] = rgb[1];
+                    pixels[i + 2] = rgb[2];
+                }
+            }
+        }
+    }
+    std::printf("{\"hour\":%.1f,\"skyGlow\":%.2f,\"lightSources\":%zu,\"litCells\":%d,\"lightRebuilds\":%llu}\n", hour,
+                static_cast<double>(lights.skyGlow()), lights.sources().size(), lit,
+                static_cast<unsigned long long>(lights.rebuilds()));
+    return stbi_write_png(path.c_str(), pw, ph, 3, pixels.data(), pw * 3) != 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -438,11 +586,26 @@ int main(int argc, char** argv) {
         defs = std::move(loaded);
     }
 
+    // The power check (E5): its own small map and script; 3 days unless --days says.
+    if (options.power) {
+        return powerscenario::run(options.daysGiven ? options.days : 3.0, defs, options.verbose);
+    }
+
+    // The colony scenario (C10) runs its own script on the Crashlanded start; 5 days unless --days says.
+    if (!options.scenario.empty()) {
+        if (options.scenario != "colony" || !defs) {
+            std::fprintf(stderr, "--scenario takes 'colony' and needs the game's defs\n");
+            return 2;
+        }
+        return colonyscenario::run(options.seed, options.size, options.daysGiven ? options.days : 5.0, defs, options.verbose);
+    }
+
     // A replay brings its own settings and commands; otherwise they come from the options.
     colony::Replay replay;
     colony::SimSettings settings{options.seed, options.size, options.pawns, options.items};
     settings.pathBudget = options.pathBudget;
     settings.scenario = options.start;
+    settings.wildAnimals = options.animals;
     int64_t steps = static_cast<int64_t>(options.days * static_cast<double>(colony::kSecondsPerDay));
     if (!options.replay.empty()) {
         std::string error;
@@ -494,6 +657,9 @@ int main(int argc, char** argv) {
         simOwner = std::make_unique<colony::Sim>(settings, defs);
     }
     colony::Sim& sim = *simOwner;
+    if (options.hasOutdoor) {
+        sim.setOutdoorOverride(static_cast<float>(options.outdoor));
+    }
     const auto generated = Clock::now();
     if (!sim.setupErrors().empty()) {
         for (const std::string& e : sim.setupErrors()) {
@@ -700,6 +866,39 @@ int main(int argc, char** argv) {
                 static_cast<unsigned long long>(paths.cellsExpanded),
                 static_cast<unsigned long long>(paths.maxWorkInStep), paths.maxQueue, paths.maxWaitSteps);
 
+    // Temperature (docs/design/temperature.md): the outdoor temperature, the enclosed rooms' range, and how
+    // sick the pawns are from cold or heat.
+    {
+        float coldest = 1000.0f;
+        float warmest = -1000.0f;
+        int rooms = 0;
+        for (const colony::Room& room : sim.rooms().rooms()) {
+            if (room.enclosed() && !room.outdoors()) {
+                const float t = sim.temperature().roomTemperature(room.id);
+                coldest = std::min(coldest, t);
+                warmest = std::max(warmest, t);
+                ++rooms;
+            }
+        }
+        float worstCold = 0.0f;
+        float worstHeat = 0.0f;
+        int sick = 0;
+        for (const auto [pawn, health] : sim.things().registry().view<const colony::Health>().each()) {
+            bool isSick = false;
+            for (const colony::EnvironmentHediff& env : health.environment) {
+                const std::string& name = sim.defs().get(env.def).defName();
+                (name == "Hypothermia" ? worstCold : worstHeat) = std::max(name == "Hypothermia" ? worstCold : worstHeat, env.severity);
+                isSick = true;
+            }
+            sick += isSick ? 1 : 0;
+        }
+        std::printf("{\"temperature\":{\"outdoor\":%.1f,\"rooms\":%d,\"coldestRoom\":%.1f,\"warmestRoom\":%.1f,"
+                    "\"pawnsSick\":%d,\"worstHypothermia\":%.3f,\"worstHeatstroke\":%.3f}}\n",
+                    static_cast<double>(sim.temperature().outdoor()), rooms, static_cast<double>(rooms > 0 ? coldest : 0.0f),
+                    static_cast<double>(rooms > 0 ? warmest : 0.0f), sick, static_cast<double>(worstCold),
+                    static_cast<double>(worstHeat));
+    }
+
     // Needs (docs/design/needs.md): only when some pawn has food and rest.
     {
         int withNeeds = 0;
@@ -773,6 +972,61 @@ int main(int argc, char** argv) {
         }
     }
 
+    // Wild animals (docs/design/animal-life.md): only when the run has some.
+    if (sim.animals().populated() || sim.animals().livingCount() > 0) {
+        const colony::AnimalSystem& animals = sim.animals();
+        const auto& reg = sim.things().registry();
+        std::map<std::string, int> bySpecies;
+        int asleep = 0;
+        int offGround = 0;
+        int herdsSeen = 0;
+        std::set<uint32_t> herds;
+        float minFood = 1.0f;
+        for (const auto [e, a, pos, thing] : reg.view<const colony::Animal, const colony::Position, const colony::Thing>().each()) {
+            const colony::Health* h = reg.try_get<colony::Health>(e);
+            if (h != nullptr && h->dead) {
+                continue;
+            }
+            ++bySpecies[sim.defs().get(thing.def).defName()];
+            asleep += animals.asleep(e) ? 1 : 0;
+            minFood = std::min(minFood, animals.foodShare(e));
+            if (a.herd != 0 && herds.insert(a.herd).second) {
+                ++herdsSeen;
+            }
+            const colony::CellPos cell = colony::cellOf(pos);
+            if (!sim.map().inBounds(cell) || !sim.map().groundWalkable(cell)) {
+                ++offGround;
+            }
+        }
+        std::string species;
+        for (const auto& [name, count] : bySpecies) {
+            species += (species.empty() ? "\"" : ",\"") + name + "\":" + std::to_string(count);
+        }
+        std::printf("{\"animals\":{\"living\":%zu,\"wild\":%zu,\"herds\":%d,\"weight\":%.1f,\"targetWeight\":%.1f,"
+                    "\"asleepNow\":%d,\"minFood\":%.2f,\"offGround\":%d,\"arrived\":%llu,\"left\":%llu,\"grazed\":%llu,"
+                    "\"cleared\":%llu,\"species\":{%s}}}\n",
+                    animals.livingCount(), animals.wildCount(), herdsSeen, static_cast<double>(animals.wildWeight()),
+                    static_cast<double>(animals.targetWeight()), asleep, static_cast<double>(minFood), offGround,
+                    static_cast<unsigned long long>(animals.stats().arrived), static_cast<unsigned long long>(animals.stats().left),
+                    static_cast<unsigned long long>(animals.stats().grazed), static_cast<unsigned long long>(animals.stats().cleared),
+                    species.c_str());
+        if (options.check && settings.wildAnimals > 0) {
+            if (animals.livingCount() == 0) {
+                std::fprintf(stderr, "check failed: no wild animals were placed\n");
+                return 1;
+            }
+            if (offGround > 0) {
+                std::fprintf(stderr, "check failed: %d animal(s) stand on ground they can't walk\n", offGround);
+                return 1;
+            }
+            if (animals.wildWeight() < 0.5f * animals.targetWeight()) {
+                std::fprintf(stderr, "check failed: the wild herd is at %.1f of %.1f body sizes\n",
+                             static_cast<double>(animals.wildWeight()), static_cast<double>(animals.targetWeight()));
+                return 1;
+            }
+        }
+    }
+
     // Movement (docs/design/movement.md): walks that were given up and asked for again.
     std::printf("{\"repaths\":%llu,\"hauls\":%llu}\n", static_cast<unsigned long long>(sim.stats().repaths),
                 static_cast<unsigned long long>(sim.stats().hauls));
@@ -828,6 +1082,10 @@ int main(int argc, char** argv) {
     }
     if (!options.sightPng.empty() && !writeSightPng(sim, options.sightPng, options.seed)) {
         std::fprintf(stderr, "could not write %s\n", options.sightPng.c_str());
+        return 1;
+    }
+    if (!options.lightPng.empty() && !writeLightPng(sim, options.lightPng, options.lightHour)) {
+        std::fprintf(stderr, "could not write %s\n", options.lightPng.c_str());
         return 1;
     }
     if (!options.png.empty() && !writeMapPng(sim, options.png)) {

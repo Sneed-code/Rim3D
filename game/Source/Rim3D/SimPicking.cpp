@@ -1,13 +1,16 @@
 #include "SimPicking.h"
 
+#include "BuildingSubsystem.h"
+#include "Engine/World.h"
 #include "SimSubsystem.h"
+#include "TerrainDraw.h"
 
 #include "ColonySim/Map.h"
 #include "ColonySim/Sim.h"
 
 namespace
 {
-	// Heights in cm of the click boxes. Buildings use one height until their visuals say otherwise.
+	// Heights in cm of the click boxes. A building is as tall as it is drawn; this is for one that has no look.
 	constexpr double SimPickPawnHeight = 190.0;
 	constexpr double SimPickPawnHalfWidth = 45.0;
 	constexpr double SimPickItemHeight = 40.0;
@@ -57,7 +60,8 @@ namespace
 		{
 			return false;
 		}
-		OutAbove = Point.Z - Bridge.SimToWorld(static_cast<float>(Local.X), static_cast<float>(Local.Y), 0).Z;
+		// The surface is the ground, plus the rock block where the cell is rock (TerrainDraw.h).
+		OutAbove = Point.Z - Bridge.SimToWorld(static_cast<float>(Local.X), static_cast<float>(Local.Y), 0).Z - TerrainDraw::SurfaceBonusCm(Map, Local.X, Local.Y);
 		return true;
 	}
 }
@@ -83,7 +87,16 @@ namespace SimPicking
 			case colony::ThingCategory::Building:
 				HalfX = View.sizeX * 50.0;
 				HalfY = View.sizeY * 50.0;
+				// As tall as it is drawn (BuildingSubsystem), else a default.
 				Height = SimPickBuildingHeight;
+				if (const UWorld* World = Bridge.GetWorld())
+				{
+					if (const UBuildingSubsystem* Drawn = World->GetSubsystem<UBuildingSubsystem>())
+					{
+						const float DrawnHeight = Drawn->GetDrawnHeightCm(View.def);
+						Height = DrawnHeight > 0.0f ? DrawnHeight : Height;
+					}
+				}
 				break;
 			case colony::ThingCategory::Item:
 				break;
@@ -139,6 +152,22 @@ namespace SimPicking
 			T += FMath::Clamp(T * 0.005, 20.0, 300.0);
 		}
 		return false;
+	}
+
+	FSimPick PickGroundFromRay(const USimSubsystem& Bridge, const FVector& Origin, const FVector& InDirection)
+	{
+		FSimPick Result;
+		FVector Direction = InDirection;
+		double GroundT = 0.0;
+		if (!Bridge.GetSim() || !Direction.Normalize() || !RayHitGround(Bridge, Origin, Direction, GroundT))
+		{
+			return Result;
+		}
+		Result.Location = Origin + Direction * GroundT;
+		const FVector Local = (Result.Location - Bridge.GetWorldOrigin()) / 100.0;
+		Result.Cell = colony::CellPos{FMath::FloorToInt32(Local.X), FMath::FloorToInt32(Local.Y), 0};
+		Result.Kind = Bridge.GetSim()->map().inBounds(Result.Cell) ? ESimPickKind::Cell : ESimPickKind::None;
+		return Result;
 	}
 
 	FSimPick PickFromRay(const USimSubsystem& Bridge, const FVector& Origin, const FVector& InDirection)

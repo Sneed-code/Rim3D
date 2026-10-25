@@ -464,3 +464,27 @@ TEST_CASE("Raids: the raid commands go through a replay file and play back the s
     playReplay(back, played, sim->time().seconds);
     CHECK(played.stateHash() == sim->stateHash());
 }
+
+TEST_CASE("Raids: wild animals near the colony don't sound the alarm and aren't a raid's target") {
+    auto sim = raidTestSim(81, 128);
+    const std::vector<Entity> colonists = raidTestColonists(*sim);
+    RAID_REQUIRE(colonists.size() == 6);
+    const Position& at = sim->things().registry().get<Position>(colonists[0]);
+    sim->submit(SpawnThingCommand{"Deer", CellPos{static_cast<int>(at.x) + 4, static_cast<int>(at.y), 0}});
+    sim->stepMany(120);
+    CHECK_FALSE(raidTestFailed(*sim));
+    CHECK_FALSE(sim->raids().state().alarm);
+    // A raid's target is still one of the colonists, not the deer.
+    sim->submit(StartRaidCommand{"Pirate", 100.0f, 0});
+    sim->stepMany(40);
+    RAID_REQUIRE(!sim->raids().state().squads.empty());
+    const Squad& squad = sim->raids().state().squads.front();
+    RAID_REQUIRE(squad.hasTarget);
+    bool onColonist = false;
+    for (const Entity c : colonists) {
+        const Position& p = sim->things().registry().get<Position>(c);
+        onColonist = onColonist || (std::abs(static_cast<int>(p.x) - squad.target.x) <= 1 &&
+                                    std::abs(static_cast<int>(p.y) - squad.target.y) <= 1);
+    }
+    CHECK(onColonist);
+}

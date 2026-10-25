@@ -27,11 +27,30 @@ REFERENCES = [
     ("Things", "race.body", "Bodies"),
     ("Things", "costs{}", "Things"),
     ("Things", "race.hitboxes", "Hitboxes"),
+    ("Things", "race.meatDef", "Things"),
+    ("Things", "race.leatherDef", "Things"),
+    ("Things", "race.milk.thing", "Things"),
+    ("Things", "race.wool.thing", "Things"),
+    ("Things", "race.eggs.unfertilizedThing", "Things"),
+    ("Things", "race.eggs.fertilizedThing", "Things"),
+    ("Things", "hatches.into", "Things"),
     ("Things", "verbs[].defaultProjectile", "Projectiles"),
     ("Things", "apparel.bodyPartGroups[]", "BodyPartGroups"),
     ("Projectiles", "projectile.damageDef", "DamageTypes"),
     ("Hitboxes", "body", "Bodies"),
+    ("Recipes", "recipeUsers[]", "Things"),
+    ("Recipes", "products{}", "Things"),
+    ("Recipes", "workSkill", "Skills"),
+    ("Recipes", "ingredients[].items[]", "Things"),
+    ("Recipes", "surgery.addsHediff", "Hediffs"),
+    ("Recipes", "surgery.ingredient", "Things"),
+    ("Recipes", "surgery.part", "BodyParts"),
+    ("Hediffs", "addedPart.part", "BodyParts"),
+    ("Hediffs", "addedPart.item", "Things"),
     ("Biomes", "wildPlants{}", "Things"),
+    ("Biomes", "animals{}", "Things"),
+    ("Things", "race.wildBiomes{}", "Biomes"),
+    ("Biomes", "weather{}", "Weathers"),
     ("Bodies", "corePart.**.def", "BodyParts"),
     ("Bodies", "corePart.**.groups[]", "BodyPartGroups"),
     ("WorkTypes", "relevantSkills[]", "Skills"),
@@ -59,7 +78,27 @@ REFERENCES = [
     ("PawnKinds", "faction", "Factions"),
     ("Scenarios", "biome", "Biomes"),
     ("Scenarios", "lineage", "Lineages"),
+    ("RecreationActivities", "kind", "RecreationKinds"),
+    ("RecreationActivities", "building", "Things"),
+    ("Things", "building.joyKind", "RecreationKinds"),
+    ("Interactions", "initiatorThought", "Thoughts"),
+    ("Interactions", "recipientThought", "Thoughts"),
+    ("Interactions", "rejectedThought", "Thoughts"),
+    ("Interactions", "acceptedThought", "Thoughts"),
+    ("Interactions", "bond", "Bonds"),
+    ("Bonds", "deathThought", "Thoughts"),
+    ("Rules", "catharsisThought", "Thoughts"),
+    ("Research", "techLevel", "TechLevels"),
+    ("Research", "prerequisites[]", "Research"),
+    ("Research", "hiddenPrerequisites[]", "Research"),
+    ("Research", "unlocks.Things[]", "Things"),
+    ("Research", "unlocks.Recipes[]", "Recipes"),
+    ("Research", "unlocks.Terrain[]", "Terrain"),
 ]
+
+# Kinds whose defs may carry "researchPrerequisite" (a project name or a list of them). Every project
+# it names must list the def under unlocks.<kind>, and every unlocks entry must be named back.
+RESEARCH_GATED_KINDS = ("Things", "Recipes", "Terrain")
 
 
 def walk(node, steps):
@@ -88,6 +127,42 @@ def walk(node, steps):
             yield from walk(key, rest)
     elif step in node:
         yield from walk(node[step], rest)
+
+
+def gate_of(kind_defs, name):
+    """The def's researchPrerequisite as a list, taken from the nearest ancestor that has one."""
+    while name in kind_defs:
+        entry = kind_defs[name][1]
+        if "researchPrerequisite" in entry:
+            value = entry["researchPrerequisite"]
+            return [value] if isinstance(value, str) else list(value)
+        name = entry.get("parent")
+    return []
+
+
+def check_research_unlocks(defs_by_kind):
+    """researchPrerequisite on a def and unlocks on a project must say the same thing."""
+    problems = []
+    projects = defs_by_kind["Research"]
+    listed = set()
+    for project, (file, entry) in projects.items():
+        for kind, names in (entry.get("unlocks") or {}).items():
+            for name in names:
+                listed.add((kind, name, project))
+    for kind in RESEARCH_GATED_KINDS:
+        for name, (file, entry) in defs_by_kind.get(kind, {}).items():
+            gate = gate_of(defs_by_kind[kind], name)
+            if entry.get("abstract") is True:
+                continue
+            for project in gate:
+                if project not in projects:
+                    problems.append(f"{file}: {kind} '{name}' researchPrerequisite names unknown Research def '{project}'")
+                elif (kind, name, project) not in listed:
+                    problems.append(f"{file}: {kind} '{name}' needs '{project}' but it is not in that project's unlocks")
+    for kind, name, project in sorted(listed):
+        if project in projects and project not in gate_of(defs_by_kind.get(kind, {}), name):
+            problems.append(f"{projects[project][0]}: Research '{project}' unlocks {kind} '{name}' but its researchPrerequisite does not name it")
+    return problems
 
 
 def main() -> int:
@@ -138,6 +213,9 @@ def main() -> int:
                     problems.append(f"{file}: {kind} '{name}' {path} names unknown {target} def '{value}'")
                 elif targets[value][1].get("abstract") is True:
                     problems.append(f"{file}: {kind} '{name}' {path} names abstract {target} def '{value}'")
+
+    if CHECK_REFERENCES and "Research" in defs_by_kind:
+        problems.extend(check_research_unlocks(defs_by_kind))
 
     for problem in problems:
         print(problem)

@@ -94,6 +94,11 @@ struct Mover {
     uint16_t ghostSteps = 0;
     uint16_t heldSteps = 0;
     bool gaveUp = false;
+    // Set by the job system every step for a pawn at a job step it does standing still (building,
+    // mining, cooking, eating, sleeping): the movement system keeps it where it is, so a pawn
+    // walking past can't shove it out of its working cell. Others steer round it. Not saved: the
+    // next step sets it again before anyone moves.
+    bool hold = false;
 
     bool arrived() const { return next >= path.size(); }
     // Sets off along `route` (cells after the one the pawn is in) from where the pawn stands.
@@ -146,6 +151,9 @@ public:
     // Items lying in a cell, in entity id order. Usually none or one (one stack per cell is the
     // storage rule), but spawning can put more in one cell.
     const std::vector<Entity>& itemsAt(CellPos cell) const;
+    // Goes up whenever an item is put on the map or taken off it, so a system that reads what lies
+    // in cells can tell its picture is stale (RoomStats).
+    uint64_t itemChanges() const { return itemChanges_; }
 
     // Splits `count` off an item stack: a new item of the same def, off the map, with `count`,
     // and the stack keeps the rest. Returns kNoEntity if `count` isn't less than the stack.
@@ -174,6 +182,7 @@ private:
     std::vector<Event>* events_ = nullptr;
     // Items per cell, by packed cell key. Looked up only, never iterated (its order is not fixed).
     std::unordered_map<uint64_t, std::vector<Entity>> itemsAt_;
+    uint64_t itemChanges_ = 0;
 
     void indexItem(Entity thing, CellPos cell, bool add);
     void placeFootprint(Entity thing, const CellRect& rect, const Footprint& footprint);

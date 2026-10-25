@@ -58,6 +58,29 @@ and horns. The shapes and materials are made by the `PawnLooks` commandlet (new 
 `Rim3DEditor`) into `game/Content/Rim3D/Generated/` (not in Git; `assets/manifest.json` says how to
 make them again). Everyone still has Kellan's face and outfit.
 
+Since U4 the game draws buildings and items (`docs/design/building-draw.md`, smoke test `buildings`): `UBuildingSubsystem` reads the snapshot and keeps one instanced mesh component per kind of thing per 32 m chunk, rebuilding only chunks whose things changed. Walls, doors, beds, stools, tables and the stove are boxes and cylinders from each def's `visual.parts`, coloured by their stuff; blueprints are blue see-through ghosts, frames rise inside their ghosts as materials arrive and work is done; a door's leaf slides into the wall as the sim's door opens and shuts; items are little piles that grow with the stack. Pieces of this are shared with the terrain's plants (`VisualMesh.*`). Ghosts use a material the `BuildingMaterials` commandlet makes (`assets/manifest.json`; the engine's own translucent materials draw black on instanced meshes). Picking uses the drawn height of a building. Everything stays on the ordinary static-mesh path, so DLSS stays possible.
+
+Since U7 the player gives orders (`docs/design/orders.md`, smoke test `orders`): `UOrdersSubsystem` holds a tool for the left mouse button. The bottom bar has Orders (Mine, Chop trees, Harvest, Deconstruct, Cancel), Zones (Stockpile, Remove zone) and one button per architect category from the defs' `designationCategory`; a building is chosen with a stuff, shown as a grid-snapped ghost that is green where it can be planned and red where it can't (R turns it; a 1 x 1 building can be dragged out along a line), and everything else is dragged out as a rectangle. The sim's marks are drawn from the snapshot as instanced meshes (orange mine, green cut, yellow harvest, red deconstruct, blue stockpile cells). R drafts the selected colonist, a right click with a drafted colonist selected is a move order (on ground) or an attack order (on a pawn of another side), drafted colonists get a red ring and lines to their spot and target, and the Alarm button drafts everyone (a placeholder until F6's defence plans). Orders given while the game is paused make the sim step once so they show. Esc puts a tool down before it clears the selection. No sim changes.
+
+Since U8 the overseer has colony panels (`docs/design/panels.md`, smoke test `panels`): `UPanelsSubsystem` draws a top-left bar with Work, Schedule and Log buttons and one button per colonist coloured by mood; the Work tab (a priority 0 to 4 per colonist and kind of work, left click up, right click back) and the Schedule tab (anything, work, joy or sleep per hour); with a colonist selected a panel with needs, mood and its thoughts, skills and passions, health and bed (assign or free); with the stove selected its bills (add, change mode and count, pause, remove); and a message log under the alarm (deaths, wounds, mood trouble, finished bills, refused orders). All through commands, none changes the sim.
+
+Since U11 fights show on screen (`docs/design/fights.md`, smoke test `fights`; no sim changes): `UFightSubsystem` draws a muzzle flash (blobs, a short light, smoke) at every `ShotFired`, a tracer that flies from the muzzle to where the bullet ended at the bullet's own speed in real time, and an impact when it arrives (dust, sparks and chips, blood); a pawn that is hit flinches (a lean); downed and dead pawns become physics ragdolls on an invisible floor made under them; hits on flesh leave a dark patch on the body at the nearest bone and blood on the ground (**needs `game/Content/Rim3D/Generated/Fights/M_WoundDecal`, made once per machine by the `FightMaterials` commandlet, `assets/manifest.json`**); armed pawns show a placeholder gun floating at the chest (from the weapon def's `visual.parts`); standing pawns that aim face the sim's facing. In direct mode the left mouse button fires at the crosshair through the sim (`ShootCommand` with `player`, aimed by the sim's own `trace`), R reloads, C crouches, Z lies down, E picks up the nearest gun, and a small HUD shows the gun and rounds. `Fight.Hitboxes 1` draws every pawn's hitboxes, and every pawn hit is checked to lie on them (within 5 cm in the smoke test). `Fight.Effects 0` turns the effects off. Not here: a real gun in the hands or aim animations, sounds, first-person gun.
+
+Since U10 the player works with their own hands (`docs/design/handson.md`, smoke test `handson`, tests `HandsOnTests`): in direct mode the crosshair finds a rock, plant, item, building plan or frame (against the sim, not Unreal collision) and **holding F** runs the sim's own job on it in place with the colonist's skill and speed: mine, chop, pick, pick up (at once), put materials into a plan, build a frame; **X** puts down what is carried; **B** takes the architect menu's Build tool in hand with a grid-snapped ghost aimed by the crosshair (wheel picks the building, Q the stuff, R turns, click plans, and the gun stays quiet meanwhile). Sim side: `HandsOnCommand{pawn, mode, thing, cell}` (Work, PutDown, Stop), jobs with a `handsOn` field that skip the walking steps and end as interrupted if the player steps out of reach (**a job on a `PlayerControl` pawn is ticked only if `handsOn`; the think list still skips it**), a made-for-the-job designation that goes again if the work is dropped, `JobSystem::planHandsOn` (the prompt), `jobProgress` (the bar; `ThingView::jobProgress`), save format 19. Letting go of the colonist puts down what it carries. No work animation or sound yet.
+
+Since D7 the data for medicine and disease is in `data/defs` (`docs/design/medicine-data.md`, test "medicine and disease data"): herbal, ordinary and lumen medicine with their potencies, diseases and sicknesses (infection, flu, plague, malaria, sleeping sickness, gut worms, muscle parasites, food poisoning, hypothermia, heatstroke, frostbite, toxic buildup), scars, nine artificial parts with install surgeries, the hospital bed and a crafting spot, and `MedicineRules`. Nothing in the sim reads most of it yet (H1 and E2 do).
+
+Since U3 the game draws the ground and plants (`docs/design/terrain.md`, smoke test `world`): `UTerrainSubsystem` starts
+by itself with any sim and builds one mesh per 32 m chunk (a 1 km map is 32 x 32 chunks, about 220 ms
+to build). The ground has a vertex per cell corner at the sim's height, coloured by terrain type and soil fertility; **rock stands on it as a
+solid 4 m block** (`TerrainDraw::RockHeightM`, picking and the overseer camera know), and a mined cell becomes a rough stone floor, with the mountain's thick
+roof still over it. The thin roof of C5's rooms is a second section of the chunk; **roofs are hidden in the overseer view and shown in direct mode**
+(`Terrain.Roofs` overrides). Mining rebuilds only that chunk (about 0.1 ms). Plants are instanced low-poly meshes made at start from
+each plant def's new `visual` field (stem and crown shapes with colours; A1 can set `visual.mesh` instead), one component per chunk and kind, with cull
+distances for grass; the sim's plant events and a rotating scan of chunk plant sizes keep them current, no snapshot copy. Since A2 the ground
+has CC0 PBR textures (grass, sand, gravel, rock blended by terrain type and slope; the generated material is not in Git, without it the old flat colours are drawn). The old Stage 0 terrain test is still the `terrain` smoke test; the other smoke tests now
+get their ground from this subsystem. No sim changes except `USimSubsystem::GetSimGeneration`.
+
 Since F1 every pawn with a body (`race.body`) has per-part health: the Human body's 64 parts, injuries
 with pain and bleeding, blood loss, downed (pain shock, unconscious, can't move) and death, slow natural
 healing and tending (`sim.health().applyDamage`, the dev commands `DamagePawn` and `TendPawn`, events
@@ -106,6 +129,16 @@ like Nerves) are recorded as `MoodBand` with a `PawnMoodBand` event; **no mental
 starts when a pawn wakes up outdoors (C5). `thoughts()` is what the colonist panel (U8) reads. Thought
 numbers other than Hungry are recalled, not verified. Save format 11.
 
+Since C10 there is one test that runs the whole colony together (`docs/design/colony-scenario.md`,
+`simrun --scenario colony`, in CI on seeds 42 and 7): the six Crashlanded colonists build a walled room with a door,
+six beds, a table with stools and a stove, mine, chop and pick on marks, cook from a bill and sleep in assigned beds for 5 days. It fails
+if anyone dies or starves, stands stuck for a game hour, or a mark or building is left undone. Its first runs found four real
+bugs, now fixed: a wall finished under a walking pawn left the pawn thinking it had arrived; pawns walking past shoved builders and
+cooks out of their working cell (new `Mover::hold`, set by the job system for stand-still steps); two pawns slid along a wall for
+65 game hours without giving up (sliding is no longer progress, so they time out and re-path) and starved; steel lying under a new
+wall was destroyed instead of moved, failing the delivery that was fetching it. **Anything new that colonists do should get a line
+in that script.** No save format change (`Mover::hold` is not saved).
+
 Since F2 pawns can shoot (`docs/design/combat.md`): five guns from the wiki, real bullets that fly
 with speed (RimWorld's x3, `tuning.json`) and drop, a spread cone instead of a hit roll (sized so a
 standing man in the open is hit as often as RimWorld's hit chance; Shooting skill tightens it),
@@ -150,7 +183,7 @@ Defender (holds its defense spot, or a line 15 m from home toward the threat and
 in contact), Shelter (goes to the room marked with `MarkShelterCommand`) or Keep working (until an
 enemy is within 20 m). Drafting still wins. Events `RaidArrived`, `SquadChanged`, `AlarmChanged`,
 `PawnLeftMap`; snapshot `alarm`, `squads` and per pawn `defenseRole`, `defending`, `sheltering`,
-`fleeing`, `squad`; save format 18. `simrun --raid POINTS --armed` plays a raid and reports it (CTest
+`fleeing`, `squad`; save section `raids` and `fighters` 2. `simrun --raid POINTS --armed` plays a raid and reports it (CTest
 `simrun_raid`). Findings for F7: on open ground, crouched pawns are hit about 1 shot in 100 at 20 to
 30 m, so fights take long and downed colonists bleed out (no rescue or doctors yet).
 
@@ -160,8 +193,8 @@ terrain fertility, wild plants and the temperate forest, basic items, the Human,
 types, traits, our own backstories and names, the Crashlanded start, the Human body, capacities,
 injuries and blood loss (`docs/design/starting-data.md`). `check_defs.py` now also checks that
 defs name defs that exist. `simrun --pawns/--items` runs on the real data.
-Not written yet: sandbags, thoughts and recipes (raiders came with F6); the tasks that use them
-(C7, C9, F6) add them the same way. Guns, bullets, flak gear and hitboxes came with F2. C4 wrote the buildings (wall, door, bed, stool, three tables,
+Not written yet: sandbags and thoughts; the tasks that use them
+(C9) add them the same way. F6 wrote the raiders (the Pirate faction, three gunner pawn kinds, `RaidRules`). C7 wrote the recipes (simple meal, four simple meals, fine meal) and `BillRules`. Guns, bullets, flak gear and hitboxes came with F2. C4 wrote the buildings (wall, door, bed, stool, three tables,
 fueled stove).
 
 Since C4 colonists build (`docs/design/construction.md`): `PlaceBlueprintCommand{def, stuff, cell, rot}`
@@ -185,15 +218,75 @@ in it (2 beds Barracks, 1 Bedroom, a stove Kitchen, a table DiningRoom). `sim.ro
 roofs are rebuilt from the walls, not saved; save format 13 adds door states. Not built yet: roof collapse, room
 temperature, cleanliness and beauty, locked and per-faction doors, owner-assigned bedrooms.
 
+Since C7 the stove cooks (`docs/design/bills.md`): `AddBillCommand{building, recipe, mode, count}` puts a bill
+on a work building (modes: do X times, do until you have X, do forever; `RemoveBillCommand`, `SetBillCommand` change
+or pause it), and colonists with Cooking work fetch the ingredients (the nearest raw food to the stove, up to 8 stacks,
+all reserved), work at a speed from their Cooking skill and Manipulation, and drop the meals by the stove, where
+haulers and hungry pawns find them. Recipes are a new def kind (`data/defs/Recipes/`): simple meal (10 berries, 300
+ticks), four simple meals at once, fine meal (needs Cooking 6 and meat, which no item is yet). Simple and fine meals
+are in `Items.json`. A job that ends early gives the ingredients back. New job `DoBill`, event `RecipeDone`, action
+`Cook`; save format 18 (formats 6 to 17 still load). **Not built: stove fuel (it cooks for free; in BACKLOG), skill
+learning, bill reordering.**
+
 Since 0004 the game has its own setting (`docs/design/lore.md`: the year 6650, slow star travel,
 the fallen Lattice, magic called resonance) and our own names for RimWorld's proper names
 (`docs/design/naming.md`: Impids are Emberkin, mechanoids the Remnant, insectoids chitinids,
 storytellers are narrators named Orrin, Maren and Jinx). **Use those names in new data, code and
 docs**; plain words like steel and rifle stay. Item words like plasteel are only proposed so far.
 
+Since E5 buildings can have power (`docs/design/power.md`, tests `PowerTests`, `simrun --power`): conduits and closed switches join the
+buildings beside them into nets; generators (wood-fired, solar by the sun and the open share of its roof, wind turbine by wind and clear air),
+consumers (lamps, heaters, benches; any def with `power.consumption`) and batteries (charge kept at 50%, `idleDrain`) balance every step, and a
+net that cannot cover its consumers goes dark as a whole, coming back only after its batteries hold a minute of the shortfall. `sim.power()` answers
+`running(b)` (**a building that draws power must be checked with it before it works**; bill jobs already are, via `JobSystem::buildingRuns`),
+`powered`, `netOf`, `nets`, `wattsOf`, `storedIn`, and does `flick` (`FlickCommand`: switches, consumers, generators), `setDraw` (E2's heaters ask for
+less when warm) and `shortCircuit` (`ShortCircuitCommand`; empties the net's batteries, `ShortCircuit` event with the energy for T3, F9 and E4).
+Events `PowerChanged`; `ThingView` `power`, `powerNet`, `powerWatts`, `batteryFill` and `Snapshot::powerNets` for U19. Save section `power` (version 1).
+Solar panels follow E3's `lights().skyGlow()` and lamps that draw power glow only while `running` (the lamp layer is made again when power changes). **Two things are stubbed until their tasks land, each a one-line hook on `sim.power()`:** wind is
+a constant until E1 calls `setWind`, and **wood-fired generators run without fuel until C11 calls `setFuel`** (whoever merges second wires it).
+Since E3 every cell has a light level (`docs/design/light.md`, tests `LightTests`, `simrun --light FILE --hour H`): the sun by the hour of the day on cells with no roof, plus lamps (`glower`, with new `TorchLamp` and `Campfire` defs) falling off to their radius and stopped by walls; `sim.lights().lightAt(cell)`. Dark cells slow work (mining, plants, building, cooking) to 70% and walking to 85% at full dark. Rebuilt on change, not saved (no save format change). **The sim starts at midnight, so a test with the real defs that counts work steps needs a lamp beside the worker**; the tests' own small defs have no `LightRules` and no night.
+
 ## Stage 1 progress
 
-30 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, F6). Tick tasks in `docs/plans/stage-1.md` as they merge.
+40 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7, U8, U11, U10, C10, A1, A2, F6); F7, G1 and G2 are left. Tick tasks in `docs/plans/stage-1.md` as they merge.
+
+## Stage 2
+
+Planned 2026-10-25 in `docs/plans/stage-2.md`: "a colony that lasts a year", 74 tasks in seven
+waves (seasons, weather, temperature, light, fire, power, farming, crafting, apparel, research,
+medicine, animals, melee and grenades, two-storey buildings, the narrator and events, prisoners,
+traders, protagonist talents and loadout). Its extra rules keep parallel threads from colliding.
+**Wave 1 is open now in the cloud, alongside the rest of Stage 1:** S7 (saves and commands that
+merge in parallel; every sim task that saves state waits for it), E3 light, and the data tasks D4,
+D5, D6, D7, D8, D9, D11. D4 and D6 done (crops, three climates, weather kinds; apparel, textiles and tailor benches: `docs/design/starting-data.md`). S7 done: a save is
+now named sections, each with its own version, and commands are saved by name, so **sim tasks that
+save state can start; none of them bumps the save format number again** (it stays 20; add your own
+section, `docs/design/saves.md` "Adding to the save"; a new system's checklist is in
+`docs/design/bridge.md`). Format 6 to 19 saves still load. Count in the plan. Tick tasks in `docs/plans/stage-2.md` as they merge.
+
+Stage 2 done so far: **D7** medicine and disease data (`docs/design/medicine-data.md`), **D11** building data 2 (power, climate, light, floors, furniture;
+`docs/design/starting-data.md`).
+**D5** animal data (15 animals, bodies, meat, leather, milk, eggs, wool: `docs/design/animals.md`).
+**E5** power (`docs/design/power.md`).
+**E3** light and darkness (`docs/design/light.md`).
+**D8** production data (work tables, stone blocks, melee weapons with tools; the meal recipes still list only the fueled stove, C14 adds the electric stove).
+**C18** recreation, comfort and outdoors (`docs/design/recreation.md`, tests `RecreationTests`, colony scenario): colonists have three new needs (`Joy` component; save section `recreation`). The standard schedule now has **Joy 19:00 to 21:59**; in Joy hours (or when bored with no work, Anything hours) they play horseshoes, chess or billiards, chat at a table, stroll or watch the clouds (`JobType::Recreate`), kinds wear in with tolerance. Comfort follows the bed or chair in use, Outdoors the roof. The D9 thoughts apply by stage (`MoodSystem::conditionValue` is where a task adds its own staged condition). Snapshot has `joy`, `comfort`, `outdoors`. Not yet: talk while chatting (C20), weather for the clouds (E1), the Unreal side (animations, a need bar; a U task).
+
+**C21** research (`docs/design/research.md`, tests `ResearchTests`): one current project, `SetResearchCommand` picks it; colonists with the Research work type sit at a research bench and add points per second by Intellectual skill and bench speed (`JobType::Research`); finished projects open the defs with a `researchPrerequisite` (plans and bills fail until then); `Snapshot::research`; save section `research`. A new colony has nothing researched (a scenario may list `startingResearch`). Not yet: multi-analyzer bonus and facility check, skill XP, gating floors/plants, the Unreal research tab (U18).
+
+**D12** research data (22 projects, tech levels, two research benches, content gated by `researchPrerequisite`: `docs/design/research-data.md`).
+**E2** room temperature is in (`docs/design/temperature.md`, tests `TemperatureTests`, `simrun --outdoor C`, CTest `simrun_temperature`): every roofed enclosed room has a temperature that follows the outdoors through its roof, walls, doors (open ones much faster), vents and rock, mixes when rooms join and split, and is pushed by heaters, coolers and campfires (`heatPusher` in the defs; **E5 power decides which run**: `Sim` wires `PowerGrid::running` into `TemperatureSystem::setSourceRunning`, a campfire needs none, and C11 fuel will add its test the same way). Pawns get Cold and Hot thoughts outside their comfortable range, and hypothermia or heatstroke (new *environment hediffs* in `Health`, with stages on the capacities and death at 1.0) outside the safe range, and a rare frostbite injury below -10. **Outdoor temperature is a stand-in until E1** (`Sim::outdoorTemperature()`: the biome's season and a daily swing; E1 replaces its body and everything else reads `temperature().outdoor()`); **humanlike pawns' comfort range is widened 12 degrees on the cold side as a stand-in for clothes until C15** (`TemperatureRules.clothesColdC`; C15 calls `setComfortModifier` and deletes it). Colonists do not yet go looking for warmth (BACKLOG). Save: section `temperature` 1 and `health` 2, no format change.
+
+D9 (thoughts, recreation, mental break and social data) is in: `docs/design/thoughts-data.md`. Data only; C15, C17, C18, C19, C20, E2 and E3 read it.
+**C17** room stats, beauty and filth (`docs/design/room-stats.md`): floors and filth layers, a cleaning job (indoors only for now), space, beauty, wealth, cleanliness and impressiveness by RimWorld's formulas, the beauty need and the room thoughts. Floors come only by `PlaceFloor` command: no floor-building job exists in any plan task yet (BACKLOG). Save section `roomstats` 1.
+
+**N1** animals on the map (`docs/design/animal-life.md`, tests `AnimalTests`, `simrun --animals`): `SimSettings::wildAnimals`
+(percent of the biome's density; 0 is the default, so nothing else changes) puts wild herds on the map when it is made; animals are pawns
+with `Animal` (no `Worker`, side 100), wander in herds behind the lowest-id leader, graze plants, sleep by day or night, walk in from and off
+the edges to keep the biome's density, and rot away 15 days after dying. About 300 animals on a 1 km map cost 0.36 ms a step, 80% of it in
+`MovementSystem` (for S9). Save section `animals`. Fighters never take an animal for an enemy on their own. **Unreal does not turn
+`wildAnimals` on until U15 draws animals** (the pawn drawing would show them as people); **code that counts pawns of another faction as raiders
+must skip `Animal`**.
 
 ## Next
 
@@ -240,21 +333,22 @@ sand, the doc says why). ~~**C1** job system~~ done (`docs/design/jobs.md`; save
 `docs/design/pawns.md`; the sim's new `PawnAction` event, which C1's jobs should send for their
 actions too). ~~**U6** overseer camera and selection~~ done (PC Unreal;
 smoke test `overseer`; `docs/design/overseer.md`). ~~**U9** protagonist~~ done (PC Unreal; smoke test
-`protagonist`; `docs/design/protagonist.md`; save format 7). **U3** terrain and plants (PC Unreal, Sonnet high)
-has C2 now, so it is open.
+`protagonist`; `docs/design/protagonist.md`; save format 7). ~~**U3** terrain and plants~~ done (PC Unreal; smoke test `world`;
+`docs/design/terrain.md`); ~~**U4** buildings and items~~ done (PC Unreal; smoke test `buildings`; `docs/design/building-draw.md`); ~~**U7** orders~~ done (PC Unreal; smoke test `orders`; `docs/design/orders.md`).
 
 Wave 6, open now that C1 is in: ~~**C4** building~~ done (`docs/design/construction.md`; save format 10; ~~**C5** doors,
-roofs and rooms~~ done (`docs/design/rooms.md`; save format 13), C7 bills and cooking can start now), ~~**C6** food, rest and
+roofs and rooms~~ done (`docs/design/rooms.md`; save format 13), ~~**C7** bills and cooking~~ done (`docs/design/bills.md`; save format 18; ~~**U8** colony panels~~ done (PC Unreal; smoke test `panels`; `docs/design/panels.md`)), ~~**C6** food, rest and
 schedules~~ done (`docs/design/needs.md`; save format 8), ~~**F2** guns and hitboxes~~ done; ~~**C3** mining, chopping
 and harvesting~~ done (`docs/design/mining.md`; save format 14). On the PC, ~~**U9**~~ and ~~**A3** seeded looks~~ are done (smoke test `looks`; save format 16).
 U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priorities).
 ~~**F4** fighter AI: where to stand~~ done (`docs/design/fighters.md`; save format 15), ~~**F5** fighter
 AI: aiming~~ done (`docs/design/aiming.md`; save format 17), ~~**F6** raid and defense~~ done
-(`docs/design/raids.md`; save format 18), so **F7** raid scenario tests and nightly soak (cloud, Sonnet
-high) is open; with U9 and F2 in, **U11** fights on screen (PC) is too, and can now show
-reloads and sidesteps and bind a reload key.
+(`docs/design/raids.md`; save section `raids`, `fighters` 2), so **F7** raid scenario tests and nightly soak (cloud, Sonnet
+high) is open; with U9 and F2 in, ~~**U11** fights on screen~~ is done (PC; smoke test `fights`; `docs/design/fights.md`; it
+binds R to reload; reload and sidestep animations are not drawn yet). ~~**C10** colony scenario test~~ done
+(`docs/design/colony-scenario.md`); ~~**U10** hands-on work~~ is done (PC; smoke test `handson`; `docs/design/handson.md`); ~~**A1** placeholder art~~ is done (PC; free Poly Haven meshes on the bed, door, table, stool, stove, logs, meals, berries, trees and bushes; `docs/design/building-draw.md`, `python tools/placeholder_art.py` then the `PlaceholderArt` commandlet). ~~**A2** terrain materials~~ is done (PC; free CC0 Poly Haven textures instead of Megascans, so nobody had to download anything: grass, sand, gravel and rock blended by terrain type and slope, placed by world position; `docs/design/terrain.md`, `python tools/terrain_textures.py` then the `TerrainMaterials` commandlet; swapping in Megascans later is a change in `assets/terrain_textures.json`). ~~**A6** placeholder art 2~~ is done (PC; 30 more free Poly Haven meshes on crops, work tables, power, climate, lamps and furniture, same list and commandlet as A1; walls, floors, solar panel, wind turbine and a few small things stay shapes). ~~**A5** clothes art~~ is done (PC; worn meshes for all 12 apparel defs by layer, made from the morphed hoodie and trousers plus a free CC0 Poly Haven hat, no downloads by sneed; `docs/design/looks.md`, `python tools/clothes_art.py` then the `ClothesArt` commandlet; not yet seen in game, U16 draws them). **G1** is what is left on the PC.
 
 ## Waiting on sneed
 
-- Megascans: download terrain material packs from Fab for task A2 (not needed before wave 10;
-  that thread sends the steps).
+- Nothing now. (Megascans for A2 are no longer needed: the free textures are in; Megascans can replace them
+  later through `assets/terrain_textures.json`.)

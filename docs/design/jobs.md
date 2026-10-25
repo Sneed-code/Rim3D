@@ -46,6 +46,8 @@ haul") and starts the ordered one at once, marked `forced`. The only order so fa
 `OrderHaulCommand`, RimWorld's "prioritize hauling"; draft, move and attack orders come with F4. A
 forced job ignores work priorities (it is done even with Hauling off), as in RimWorld.
 
+**Hands-on work** (U10, [handson.md](handson.md)) is the other way a player starts a job: the controlled colonist (`PlayerControl`) is skipped by the think list, but a job with `handsOn` set that `HandsOnCommand` started is ticked for it, in place with no walking, ending when the player steps out of reach.
+
 A pawn re-thinks only when its job ends, except that `interruptForNeeds` (C6) checks every step
 whether a pawn on a hauling or waiting job (not a player order) has become hungry or tired enough
 to put it down. Another node that needs to interrupt (an alarm) does the same: it ends the job with
@@ -64,8 +66,10 @@ gives no work; the tasks with scanners so far:
 | `ConstructDeliverResources` | Construction | blueprints and frames that need materials ([construction.md](construction.md)) |
 | `ConstructFinishFrames` | Construction | frames with all their materials |
 | `Deconstruct` | Construction | buildings marked for deconstruction |
+| `DoBillsCookStove` | Cooking | work buildings with a bill to do ([bills.md](bills.md)) |
+| `CleanFilth` | Cleaning | the nearest filthy cell indoors ([room-stats.md](room-stats.md)); job `CleanFilth`, steps GotoCell, CleanWork |
 
-C3 adds `Mine` and `CutOrHarvestDesignatedPlants`, C6 `DoBillsCookStove`
+C3 adds `Mine` and `CutOrHarvestDesignatedPlants`
 and so on: a class deriving from `WorkGiver` in `WorkGivers.cpp`, added in `makeWorkGivers`.
 
 A pawn's priority per work type is 0 (doesn't do it) or 1 to 4 (1 first), as RimWorld's manual
@@ -100,6 +104,7 @@ state inside a go-to step. Each job type has a fixed list of steps (RimWorld's t
 | `DeliverResources` | go to the materials, pick them up, carry them next to the site, hand them over |
 | `BuildFrame` | walk next to the frame, build until the work is done |
 | `Deconstruct` | walk next to the building, take it down |
+| `DoBill` | go to an ingredient, pick it up, carry it beside the stove, hand it over (and again for the next ingredient), work, make the product ([bills.md](bills.md)) |
 
 A step that ends at once (picking up, putting down) lets the next start in the same game second. A
 go-to step asks the pathfinder for a path (an answer the next step at the earliest), walks it, and if

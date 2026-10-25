@@ -61,6 +61,9 @@ public:
 
 private:
 	void OnSelectPressed();
+	void OnSelectReleased();
+	void OnOrderPressed();
+	void OnRotateOrDraftPressed();
 	void OnClearPressed();
 	void OnFocusPressed();
 	void OnResetPressed();

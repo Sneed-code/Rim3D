@@ -3,6 +3,7 @@
 #include "ColonySim/Api.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Cover.h"
+#include "ColonySim/BillMode.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/Needs.h"
@@ -248,6 +249,94 @@ struct ReloadCommand {
     Entity pawn = kNoEntity;
 };
 
+// Puts a bill on a work building (the stove): make `recipe` (a Recipes defName) `count` times
+// (`Count`), until `count` of the product lie on the map (`UntilHave`), or forever. `count` is
+// ignored for Forever. Pawns with the recipe's work type do bills in the order listed
+// (docs/design/bills.md). Fails if the building is not a finished building that can make the
+// recipe, the recipe or count is wrong, or the building already has the most bills it can hold.
+struct AddBillCommand {
+    Entity building = kNoEntity;
+    std::string recipe;
+    BillMode mode = BillMode::Count;
+    int count = 1;
+};
+
+// Takes a bill off a building by the id the snapshot shows. Fails if there is no such bill.
+struct RemoveBillCommand {
+    Entity building = kNoEntity;
+    uint32_t bill = 0;
+};
+
+// Changes a bill's mode and count and whether it is suspended (paused). Fails like AddBill.
+struct SetBillCommand {
+    Entity building = kNoEntity;
+    uint32_t bill = 0;
+    BillMode mode = BillMode::Count;
+    int count = 1;
+    bool suspended = false;
+};
+
+// Hands-on work (task U10, docs/design/handson.md): what the controlled colonist does with its
+// hands. Work: start the sim's own job on what the player looks at, in place (no walking): `thing` is
+// a blueprint, a frame or an item, else `cell` is a rock to mine or a plant to chop or pick. The job
+// runs while the player stays within kHandsOnReach and ends when it is done, or on Stop. Picking up
+// is instant. PutDown: set down what the colonist carries on `cell` (else near its feet). Fails if
+// the pawn is not the controlled one, the target is out of reach or taken, or there is nothing to do.
+enum class HandsOnMode : uint8_t { Work, PutDown, Stop };
+
+struct HandsOnCommand {
+    Entity pawn = kNoEntity;
+    HandsOnMode mode = HandsOnMode::Work;
+    Entity thing = kNoEntity;
+    CellPos cell;
+};
+
+// Lays a floor (a Terrain def whose designationCategory is Floors, by defName) on every cell of `area`
+// that can take one (walkable ground), replacing what is there; an empty `floor` takes floors off
+// instead. Instant for now: the architect's floor tool and the work to lay one come later
+// (docs/design/room-stats.md). Fails if no cell changed or the floor is unknown.
+struct PlaceFloorCommand {
+    CellRect area;
+    std::string floor;
+};
+
+// Dev command: adds `layers` of filth (a Filth defName: Dirt, Blood, Ash...) to a cell. Fires, fights
+// and spills make filth through the sim; this is for tests and the console. Fails for an unknown kind
+// or a cell that can't hold filth (rock, water, a wall) or is already as thick as it gets.
+struct AddFilthCommand {
+    CellPos cell;
+    std::string kind;
+    int layers = 1;
+};
+
+// How far from the edge of a rock, plant, frame or item a controlled colonist can work on it, in metres.
+inline constexpr float kHandsOnReach = 2.0f;
+
+// Power (task E5, docs/design/power.md): opens or closes a switch, or flicks a consumer or generator on
+// or off. Fails if the building has nothing to switch.
+struct FlickCommand {
+    Entity thing = kNoEntity;
+    bool on = true;
+};
+
+// Dev command, and what the events task T3 will send: a short circuit at a building on a net. Empties
+// the net's batteries and destroys the building if it is a conduit or a switch.
+struct ShortCircuitCommand {
+    Entity thing = kNoEntity;
+};
+
+// Research (task C21, docs/design/research.md): picks the project the colony works on; an empty name puts
+// the current one down (its progress is kept). Fails for a project that doesn't exist, is done or has
+// prerequisites missing.
+struct SetResearchCommand {
+    std::string project;
+};
+
+// Dev command: a project is done at once, whatever it needs. Fails for a project that doesn't exist.
+struct UnlockResearchCommand {
+    std::string project;
+};
+
 // Raids (F6, docs/design/raids.md). Dev command until the narrator sends raids: a raid of
 // `faction` (a Factions defName) worth `points` raid points (0: what the colony is worth now, by
 // RimWorld's rule) walks in at `edge` (0 north, 1 east, 2 south, 3 west, -1 any) and attacks.
@@ -290,8 +379,11 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              PlaceBlueprintCommand, CancelBuildCommand, DeconstructCommand, EquipCommand,
                              ShootCommand, SetStanceCommand, DesignateCommand, CancelDesignationsCommand,
                              DraftCommand, MoveOrderCommand, AttackOrderCommand, SetFactionCommand, SetLineageCommand,
-                             ReloadCommand, StartRaidCommand, SoundAlarmCommand, SetDefenseRoleCommand,
-                             MarkShelterCommand>;
+                             ReloadCommand, AddBillCommand,
+                             RemoveBillCommand, SetBillCommand, HandsOnCommand, FlickCommand, ShortCircuitCommand,
+                             PlaceFloorCommand, AddFilthCommand,
+                             SetResearchCommand, UnlockResearchCommand, StartRaidCommand, SoundAlarmCommand,
+                             SetDefenseRoleCommand, MarkShelterCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.
@@ -302,5 +394,9 @@ struct LoggedCommand {
 
 // Name used in replay files and logs, e.g. "SpawnThing".
 COLONY_API const char* commandName(const Command& command);
+// The other way: sets `out` to a command of the type with that name, its fields at their defaults.
+// False if no command type has that name. Saves name commands this way (docs/design/saves.md), so
+// the order of the types in `Command` doesn't matter to any file.
+COLONY_API bool commandFromName(const std::string& name, Command& out);
 
 }  // namespace colony

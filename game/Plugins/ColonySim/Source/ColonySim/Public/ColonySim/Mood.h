@@ -6,13 +6,16 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace colony {
 
 struct Event;
 class NeedsSystem;
+class RoomStats;
 class Rooms;
+class TemperatureSystem;
 class Things;
 
 // Mood and thoughts (task C9). See docs/design/mood.md.
@@ -72,6 +75,10 @@ public:
 
     // Where a pawn slept decides "slept outside" (docs/design/rooms.md); without rooms nothing is outside.
     void setRooms(Rooms* rooms) { rooms_ = rooms; }
+    // The room and beauty thoughts (C17, docs/design/room-stats.md) read the room stats and the beauty need.
+    void setRoomStats(RoomStats* roomStats) { roomStats_ = roomStats; }
+    // Where the temperature thoughts (Cold, Hot) get the degrees outside a pawn's comfort from.
+    void setTemperature(TemperatureSystem* temperature) { temperature_ = temperature; }
 
     const MoodRules& rules() const { return rules_; }
     // The mood the pawn is heading for (not clamped to the 0 to 100 scale), or its base if it has none.
@@ -92,17 +99,44 @@ private:
         std::string trigger;    // memories: what starts it (see Mood.cpp)
         std::string need;       // situations: "food" or "rest"
         std::string band;       // situations: the band name
+        // Situations with stages (D9): `condition` names a state RoomStats knows, `thresholds` are
+        // the values each stage ends at (one fewer than the stages), `stages` their offsets and labels
+        // (and the room roles a stage counts in, none: any), `roomRoles` the roles the thought is
+        // about at all (none: any).
+        struct Stage {
+            float offset = 0.0f;
+            std::string label;
+            std::vector<std::string> roles;
+        };
+        std::string condition;
+        std::vector<float> thresholds;
+        std::vector<Stage> stages;
+        std::vector<std::string> roomRoles;
     };
+    // A situation with stages (`situation.condition` and `stages` in the def): which stage holds is
+    // decided by a measured number against the def's thresholds (Mood.cpp, `conditionValue`).
+    struct StagedThought {
+        DefId def;
+        std::string condition;
+        std::vector<float> thresholds;  // upper bounds of every stage but the last
+        std::vector<std::string> labels;
+        std::vector<float> offsets;
+    };
+    // The number a staged thought's condition measures for this pawn, or false if it has none now.
+    bool conditionValue(Entity pawn, const std::string& condition, float& value) const;
     float traitMoodOffset(Entity pawn) const;
     float traitBreakOffset(Entity pawn) const;
     void addMemory(Mood& mood, const std::string& trigger, int64_t now);
 
     Things& things_;
     Rooms* rooms_ = nullptr;
+    RoomStats* roomStats_ = nullptr;
+    TemperatureSystem* temperature_ = nullptr;
     const NeedsSystem& needs_;
     const DefDatabase& defs_;
     MoodRules rules_;
     std::vector<Thought> thoughts_;
+    std::vector<StagedThought> staged_;
 };
 
 }  // namespace colony

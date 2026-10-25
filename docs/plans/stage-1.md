@@ -83,10 +83,10 @@ Times are one sitting of thread work. "Needs" lists tasks that must be merged fi
 | ✓ | C4 | **Building.** Blueprints, frames, hauling materials to frames, build jobs, deconstruct. Wall, door, bed, table and stove from defs. Buildings block cells and rebuild regions. Doc: `design/construction.md`. | Cloud | Sonnet, high | 90 min | C1 |
 | ✓ | C5 | **Doors, roofs and rooms.** Doors open for pawns and cost path time; auto-roof over enclosed areas; rooms from enclosed regions with a role (bedroom, kitchen, dining room) and size. | Cloud | Sonnet, high | 90 min | C4 |
 | ✓ | C6 | **Food, rest and schedules.** Food and rest needs at RimWorld rates, eat job (best reachable food, at a table if there is one), sleep job (own bed, else the ground), bed ownership, hourly schedules. Doc: `design/needs.md`. | Cloud | Sonnet, high | 90 min | C1 |
-| | C7 | **Bills and cooking.** Minimal bill and recipe system on the stove ("cook simple meal" do-forever and do-X-times), fetching ingredients, cooking skill. | Cloud | Sonnet, high | 90 min | C4, C6 |
+| ✓ | C7 | **Bills and cooking.** Minimal bill and recipe system on the stove ("cook simple meal" do-forever and do-X-times), fetching ingredients, cooking skill. Doc: `design/bills.md`. | Cloud | Sonnet, high | 90 min | C4, C6 |
 | ✓ | C8 | **Colonists from a seed.** Name, adult age, backstories, traits, skills with passions and experience, from the defs (`design/starting-data.md`); crashlanded start (protagonist plus 5 colonists, starting gear). The protagonist is flagged for 2x part hit points and the talent tree later. | Cloud | Sonnet, medium | 60 min | S1, D3 |
 | ✓ | C9 | **Mood.** Thoughts (ate without table, slept on the ground, slept outside, hungry, tired, ate raw food, ate a fine meal), mood value, mental break thresholds recorded (breaks themselves come later). | Cloud | Sonnet, medium | 60 min | C6, C8 |
-| | C10 | **Colony scenario test.** `simrun --scenario colony`: 6 colonists on a 512 m map, a script of commands builds a room with beds, a table and a stove, designates mining and chopping, and runs 5 days. Checks: nobody starves, nobody stuck over a game hour, all designations done. Runs in CI. | Cloud | Sonnet, high | 90 min | C3, C5, C7, C9 |
+| ✓ | C10 | **Colony scenario test.** `simrun --scenario colony`: 6 colonists on a 512 m map, a script of commands builds a room with beds, a table and a stove, designates mining and chopping, and runs 5 days. Checks: nobody starves, nobody stuck over a game hour, all designations done. Runs in CI. | Cloud | Sonnet, high | 90 min | C3, C5, C7, C9 |
 
 ### Fighting (F)
 
@@ -106,23 +106,23 @@ Times are one sitting of thread work. "Needs" lists tasks that must be merged fi
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | U1 | **Smoke test harness.** Turn `Stage0Test` into `-SmokeTest=<name>` runs (load, run, screenshots and timings to `Saved/Smoke/`, quit) and a PowerShell script that builds at low priority, runs a smoke test and reports. Every later U task uses it. | PC Unreal | Sonnet, high | 60 min | none |
 | ✓ | U2 | **Bridge v2.** `USimSubsystem` on commands, events and snapshots; loads `data/defs`; blends between snapshots; pause and 1x/2x/3x keys; on-screen sim timings. | PC Unreal | Sonnet, high | 60 min | S5, U1 |
-| | U3 | **Terrain and plants.** Terrain chunk component (from the Stage 0 code), one chunk rebuilt when a cell is mined; plants as instanced meshes from the plant layer. | PC Unreal | Sonnet, high | 90 min | U2, C2 |
-| | U4 | **Buildings and items.** Instanced meshes per type per chunk from each def's `visual`; blueprints as see-through ghosts, frames part-built; items on the ground and in stockpiles. | PC Unreal | Sonnet, high | 90 min | U3, C4 |
+| ✓ | U3 | **Terrain and plants.** Terrain chunk component (from the Stage 0 code), one chunk rebuilt when a cell is mined; plants as instanced meshes from the plant layer. | PC Unreal | Sonnet, high | 90 min | U2, C2 |
+| ✓ | U4 | **Buildings and items.** Instanced meshes per type per chunk from each def's `visual`; blueprints as see-through ghosts, frames part-built; items on the ground and in stockpiles. | PC Unreal | Sonnet, high | 90 min | U3, C4 |
 | ✓ | U5 | **Pawns with animation by distance.** Pawn actors without CharacterMovement, driven by snapshots; sim velocity and path as the motion-matching trajectory; full motion matching for the 20 nearest, cheaper and slower updates farther out, no strand hair far away; action montages from sim events. Smoke test with 100 sim pawns. | PC Unreal | Opus, high | 90 min | U2, S4 |
 | ✓ | U6 | **Overseer camera and selection.** Free top-down camera (pan, zoom, rotate), click to select pawns, things and cells; add a free ImGui plugin (logged in `assets/manifest.json`) for the inspect panel and speed controls. | PC Unreal | Sonnet, high | 90 min | U2 |
-| | U7 | **Orders.** Architect menu (wall, door, bed, table, stove, stockpile zone) with grid-snapped ghost placement; mine, chop, harvest and cancel designations; draft, move and attack orders; alarm button. | PC Unreal | Sonnet, high | 90 min | U4, U6, C3 |
-| | U8 | **Colony panels.** Work tab, schedule tab, stove bills, colonist panel (needs, mood and thoughts, skills, health), message log. All ImGui. | PC Unreal | Sonnet, medium | 90 min | U6, C7, C9 |
+| ✓ | U7 | **Orders.** Architect menu (wall, door, bed, table, stove, stockpile zone) with grid-snapped ghost placement; mine, chop, harvest and cancel designations; draft, move and attack orders; alarm button. | PC Unreal | Sonnet, high | 90 min | U4, U6, C3 |
+| ✓ | U8 | **Colony panels.** Work tab, schedule tab, stove bills, colonist panel (needs, mood and thoughts, skills, health), message log. All ImGui. | PC Unreal | Sonnet, medium | 90 min | U6, C7, C9 |
 | ✓ | U9 | **Protagonist.** Game Animation Sample character as the protagonist, position sent to the sim each step, 1st/3rd person toggle, one key between direct and overseer mode (the AI takes over), possessing another colonist. | PC Unreal | Sonnet, high | 90 min | U5, U6, C8 |
-| | U10 | **Hands-on work.** Look at a thing and hold interact to get the sim job (chop, mine, build, pick up); in direct mode, a build ghost that snaps to the grid. | PC Unreal | Sonnet, high | 90 min | U9, U7 |
-| | U11 | **Fights on screen and shooting.** Tracers, muzzle flashes, impacts, hit reactions, cosmetic ragdolls, placeholder wound decals; the protagonist aims and fires through the sim; a hitbox debug view to check hits match bodies. | PC Unreal | Sonnet, high | 90 min | U9, F2 |
+| ✓ | U10 | **Hands-on work.** Look at a thing and hold interact to get the sim job (chop, mine, build, pick up); in direct mode, a build ghost that snaps to the grid. | PC Unreal | Sonnet, high | 90 min | U9, U7 |
+| ✓ | U11 | **Fights on screen and shooting.** Tracers, muzzle flashes, impacts, hit reactions, cosmetic ragdolls, placeholder wound decals; the protagonist aims and fires through the sim; a hitbox debug view to check hits match bodies. | PC Unreal | Sonnet, high | 90 min | U9, F2 |
 | ✓ | U12 | **Saves and bug replays in game.** F5 quicksave, F9 quickload, daily autosave; a bug key that writes a replay file I can run in the cloud. | PC Unreal | Sonnet, medium | 60 min | S6, U2 |
 
 ### Art (A)
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | A1 | **Placeholder art.** Free meshes for wall, door, bed, table, stove, logs, steel, meals, berries, trees and bushes; set in the defs' `visual` fields by an editor script; logged in `assets/manifest.json`. | PC Unreal | Sonnet, medium | 60 min | U4 |
-| | A2 | **Terrain materials.** Megascans ground, rock and sand on the runtime terrain by terrain type and slope; side-by-side screenshots against a Landscape so sneed can judge. | PC Unreal | Sonnet, high | 90 min | U3, sneed's Megascans download |
+| ✓ | A1 | **Placeholder art.** Free meshes for wall, door, bed, table, stove, logs, steel, meals, berries, trees and bushes; set in the defs' `visual` fields by an editor script; logged in `assets/manifest.json`. | PC Unreal | Sonnet, medium | 60 min | U4 |
+| ✓ | A2 | **Terrain materials.** Ground, rock and sand textures on the runtime terrain by terrain type and slope; before and after screenshots so sneed can judge. Done with free CC0 Poly Haven textures (no Megascans, no Landscape comparison); Megascans can replace them through `assets/terrain_textures.json`. | PC Unreal | Sonnet, high | 90 min | U3 |
 | ✓ | A3 | **Seeded pawn looks.** Our own skin material (tint, lineage colour), MetaHuman body types and morph targets mixed by seed; Emberkin test with red skin and horns readable from the overseer camera. May take two sittings. | PC Unreal | Opus, high | 90 min | U5 |
 
 ### Wrap-up (G)
@@ -165,6 +165,4 @@ The prototype still plays without them.
 - **Say when the PC is free** when a thread asks. Unreal tasks need up to about 45 minutes with no
   game or local AI running. (No PC light tasks are left: D3 became a cloud task.)
 - **Approve Remote Control** when the prompt appears.
-- **Download the Megascans packs** for A2 when that thread sends the click-by-click steps. It isn't
-  needed before wave 10.
 - **Look at screenshots** along the way, and **play the prototype** at G2.

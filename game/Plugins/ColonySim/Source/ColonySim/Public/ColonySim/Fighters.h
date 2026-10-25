@@ -180,6 +180,7 @@ private:
         int level = 0;
         bool able = false;    // not downed
         bool fighter = false;
+        bool animal = false;  // wild animals are nobody's enemy unless ordered or provoked (animal-life.md, N5)
         Stance stance = Stance::Standing;  // as it stands now (prone when downed)
     };
     struct Candidate {

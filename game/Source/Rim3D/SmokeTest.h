@@ -21,7 +21,13 @@ namespace colony { class Map; }
  * and the ImGui panels), pawns (pawn actors, animation detail by distance, actions, MetaHumans),
  * saves (autosave, F5 quicksave, F9 quickload, F8 bug report), protagonist (direct control of a
  * colonist: Tab, first and third person, taking over another colonist, walls, pause, saves), looks
- * (seeded pawn looks on MetaHumans: body shapes, skin colour, height, Emberkin horns).
+ * (seeded pawn looks on MetaHumans: body shapes, skin colour, height, Emberkin horns), world (the ground,
+ * rock, roofs and plants drawn from the sim, rebuilt when rock is mined or a tree felled), buildings
+ * (blueprints, frames, finished buildings, doors that slide open, and items drawn from the sim), orders (the architect
+ * menu, the marks overlay, draft, move and attack orders and the alarm, driven as the mouse does), panels (the work and
+ * schedule tabs, the colonist and bills panels and the message log, driven by their click handlers), fights (the
+ * protagonist's gun, muzzle flashes, tracers, impacts, hit reactions, ragdolls, wound decals and the hitbox view),
+ * handson (the controlled colonist mines, chops, picks up, delivers and builds by hand, and plans a building with the build ghost).
  * Optional: -SmokeTimeout=<seconds> (default 300) fails a run that hangs.
  * To add a test: write a Build<Name>Phases() and add a branch in OnWorldBeginPlay.
  * Run it with tools/smoke.ps1.
@@ -70,6 +76,12 @@ private:
 	void BuildSavesPhases();
 	void BuildProtagonistPhases();  // SmokeTestProtagonist.cpp
 	void BuildLooksPhases();        // SmokeTestLooks.cpp
+	void BuildWorldPhases();        // SmokeTestWorld.cpp
+	void BuildBuildingsPhases();    // SmokeTestBuildings.cpp
+	void BuildOrdersPhases();       // SmokeTestOrders.cpp
+	void BuildPanelsPhases();       // SmokeTestPanels.cpp
+	void BuildFightsPhases();       // SmokeTestFights.cpp
+	void BuildHandsOnPhases();      // SmokeTestHandsOn.cpp
 	void StartPhase(int32 Index);
 	void FinishPhase();
 	void WriteResultsAndQuit();

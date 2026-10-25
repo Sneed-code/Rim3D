@@ -1,22 +1,32 @@
 #include "ColonySim/Sim.h"
 
+#include "ColonySim/Animals.h"
+#include "ColonySim/Bills.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Doors.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Filth.h"
+#include "ColonySim/Floors.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Temperature.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Lights.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
+#include "ColonySim/Recreation.h"
+#include "ColonySim/Research.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Plants.h"
+#include "ColonySim/Power.h"
 #include "ColonySim/Regions.h"
+#include "ColonySim/RoomStats.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
@@ -71,7 +81,11 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
     if (!settings_.scenario.empty()) {
         startScenario();
     }
+    animals_->populate(settings_.wildAnimals);  // after the colonists, so no herd starts on top of them
     rooms_->update();
+    power_->update();
+    lights_->update();
+    roomStats_->refresh();
 }
 
 Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, EmptyStart)
@@ -101,11 +115,42 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     pathfinder_.setDoorCost(doorNumbers_.pathCost);
     rooms_ = std::make_unique<Rooms>(map_, *things_, *defs_);
     mood_->setRooms(rooms_.get());
+    floors_ = std::make_unique<Floors>(map_, *defs_);
+    filth_ = std::make_unique<Filth>(map_, *things_, *floors_, *defs_, settings.seed);
+    roomStats_ = std::make_unique<RoomStats>(map_, *things_, *rooms_, *floors_, *filth_, *plants_, *defs_);
+    mood_->setRoomStats(roomStats_.get());
+    power_ = std::make_unique<PowerGrid>(map_, *things_, *rooms_, *defs_, events_);
+    lights_ = std::make_unique<Lights>(map_, *things_, *rooms_, *defs_, time_);
+    // The sun for solar panels is the light grid's; a lamp that draws power glows only while it has it,
+    // and the lamps are made again when that changes.
+    power_->setSun([this](const GameTime&) { return static_cast<double>(lights_->skyGlow()); });
+    power_->setOnChange([this] { lights_->markDirty(); });
+    lights_->setActive([this](Entity building) { return power_->running(building); });
+    movement_->setLights(lights_.get());
+    recreation_ = std::make_unique<RecreationSystem>(*things_, *defs_);
+    recreation_->setRooms(rooms_.get());
+    research_ = std::make_unique<ResearchSystem>(*things_, *defs_);
+    temperature_ = std::make_unique<TemperatureSystem>(map_, *things_, *rooms_, *health_, *defs_,
+                                                       splitMix64(settings.seed ^ 0x74656D70ULL));
+    temperature_->setOutdoor(outdoorTemperature());
+    temperature_->setGround(groundTemperature());
+    mood_->setTemperature(temperature_.get());
+    // A heater or cooler that draws power pushes heat only while it has it (E5); a campfire has no power part.
+    temperature_->setSourceRunning([this](Entity building) { return power_->running(building); });
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
+    jobs_->setLights(lights_.get());
+    jobs_->setPower(power_.get());
+    jobs_->setRooms(rooms_.get());
+    jobs_->setResearch(research_.get());
+    jobs_->setFilth(filth_.get());
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
     fighters_->setEventLog(&events_);
+    // The biome is the one the plants use; both move to the settings together.
+    animals_ = std::make_unique<AnimalSystem>(*things_, map_, *plants_, *health_, *defs_, time_,
+                                              splitMix64(settings.seed ^ 0x616E696D616C73ULL), "TemperateForest");
+    animals_->setEventLog(&events_);
     raids_ = std::make_unique<RaidSystem>(*things_, map_, *rooms_, *combat_, *health_, *jobs_, *fighters_, *defs_, time_, rng_);
     raids_->setEventLog(&events_);
     raids_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
@@ -273,7 +318,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "no Things def '" + spawn->def + "'");
         } else if ((thing = things_->spawn(def, spawn->cell, spawn->count, spawn->rot)) == kNoEntity) {
             commandFailed(id, "can't put " + spawn->def + " at " + simCellText(spawn->cell));
-        } else if (things_->registry().all_of<Mover>(thing)) {
+        } else if (things_->registry().all_of<Mover>(thing) && !things_->registry().all_of<Animal>(thing)) {
             jobs_->addWorker(thing);  // until factions: every pawn is a colonist
             const uint64_t looksSeed = splitMix64(settings_.seed ^ 0x7370617776ULL ^ (static_cast<uint64_t>(time_.seconds) << 20) ^
                                                   entt::to_integral(thing));
@@ -356,6 +401,9 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         const std::vector<Entity> before(reg.view<PlayerControl>().begin(), reg.view<PlayerControl>().end());
         for (const Entity old : before) {
             reg.remove<PlayerControl>(old);
+            // Hands-on work ends and what it carries is put down where it stands (U10).
+            jobs_->interrupt(old, "let go by the player");
+            jobs_->putDown(old);
         }
         if (control->pawn != kNoEntity) {
             // Its job ends (what it carries is put down) and the job system leaves it alone.
@@ -367,6 +415,51 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             mover.vy = 0.0f;
             mover.gaveUp = false;
             reg.emplace<PlayerControl>(control->pawn);
+        }
+    } else if (const auto* hands = std::get_if<HandsOnCommand>(&command)) {
+        entt::registry& reg = things_->registry();
+        if (!things_->exists(hands->pawn) || !reg.all_of<PlayerControl, Worker, Position>(hands->pawn)) {
+            commandFailed(id, "that pawn isn't under direct control");
+        } else if (health_->incapacitated(hands->pawn)) {
+            commandFailed(id, "that colonist is downed or dead");
+        } else if (hands->mode == HandsOnMode::Stop) {
+            jobs_->handsOnStop(hands->pawn);
+        } else if (hands->mode == HandsOnMode::PutDown) {
+            if (!jobs_->handsOnPutDown(hands->pawn, hands->cell, error)) {
+                commandFailed(id, error);
+            }
+        } else if (!jobs_->handsOn(hands->pawn, hands->thing, hands->cell, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* flick = std::get_if<FlickCommand>(&command)) {
+        if (!power_->flick(flick->thing, flick->on, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* circuit = std::get_if<ShortCircuitCommand>(&command)) {
+        double released = 0.0;
+        if (!power_->shortCircuit(circuit->thing, released, error)) {
+            commandFailed(id, error);
+        } else if (power_->info(things_->registry().get<Thing>(circuit->thing).def).transmitter) {
+            // The conduit or switch burns out.
+            combat_->dropGear(circuit->thing);
+            jobs_->forget(circuit->thing);
+            fighters_->forget(circuit->thing);
+            things_->destroy(circuit->thing);
+        }
+    } else if (const auto* setResearch = std::get_if<SetResearchCommand>(&command)) {
+        if (!research_->setCurrent(setResearch->project, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* unlockResearch = std::get_if<UnlockResearchCommand>(&command)) {
+        const bool wasDone = research_->isDone(unlockResearch->project);
+        if (!research_->unlock(unlockResearch->project, error)) {
+            commandFailed(id, error);
+        } else if (!wasDone) {
+            Event event;
+            event.type = EventType::ResearchDone;
+            event.def = defs_->idOf("Research", unlockResearch->project);
+            event.message = unlockResearch->project;
+            events_.push_back(std::move(event));
         }
     } else if (const auto* lineage = std::get_if<SetLineageCommand>(&command)) {
         PawnLooks* looks = things_->exists(lineage->pawn) ? things_->registry().try_get<PawnLooks>(lineage->pawn) : nullptr;
@@ -424,6 +517,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "no Things def '" + place->def + "'");
         } else if (!place->stuff.empty() && !stuff.valid()) {
             commandFailed(id, "no Things def '" + place->stuff + "'");
+        } else if (!research_->unlocked(defs_->get(def), error)) {
+            commandFailed(id, error);
         } else if (construction_->placeBlueprint(def, stuff, place->cell, place->rot, error) == kNoEntity) {
             commandFailed(id, error);
         }
@@ -523,6 +618,45 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!combat_->reload(reload->pawn, &error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* addBill = std::get_if<AddBillCommand>(&command)) {
+        const Def* recipeDef = defs_->find("Recipes", addBill->recipe);
+        if (recipeDef != nullptr && !research_->unlocked(*recipeDef, error)) {
+            commandFailed(id, error);
+        } else if (jobs_->bills().addBill(addBill->building, addBill->recipe, addBill->mode, addBill->count, error) == 0) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* removeBill = std::get_if<RemoveBillCommand>(&command)) {
+        if (!jobs_->bills().removeBill(removeBill->building, removeBill->bill, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* setBill = std::get_if<SetBillCommand>(&command)) {
+        if (!jobs_->bills().setBill(setBill->building, setBill->bill, setBill->mode, setBill->count, setBill->suspended,
+                                    error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* placeFloor = std::get_if<PlaceFloorCommand>(&command)) {
+        const DefId floor = placeFloor->floor.empty() ? DefId{} : defs_->idOf("Terrain", placeFloor->floor);
+        if (!placeFloor->floor.empty() && !floors_->isFloorDef(floor)) {
+            commandFailed(id, "no floor '" + placeFloor->floor + "'");
+        } else {
+            int changed = 0;
+            for (int y = placeFloor->area.minY; y < placeFloor->area.minY + placeFloor->area.sizeY; ++y) {
+                for (int x = placeFloor->area.minX; x < placeFloor->area.minX + placeFloor->area.sizeX; ++x) {
+                    const CellPos cell{x, y, placeFloor->area.level};
+                    const DefId before = floors_->at(cell);
+                    if (floors_->set(cell, floor) && floors_->at(cell) != before) {
+                        ++changed;
+                    }
+                }
+            }
+            if (changed == 0) {
+                commandFailed(id, "no floor changed there");
+            }
+        }
+    } else if (const auto* addFilth = std::get_if<AddFilthCommand>(&command)) {
+        if (!filth_->add(addFilth->cell, addFilth->kind, addFilth->layers)) {
+            commandFailed(id, "no filth could be added there");
+        }
     } else if (const auto* raid = std::get_if<StartRaidCommand>(&command)) {
         if (!raids_->startRaid(raid->faction, raid->points, raid->edge, error)) {
             commandFailed(id, error);
@@ -561,6 +695,7 @@ void Sim::step() {
     applying.clear();
     pending_.swap(applying);
 
+    temperature_->setOutdoor(outdoorTemperature());
     health_->step(time_.seconds, settings_.seed);
     needs_->step();
     // A controlled colonist who goes down or dies is let go: the player can't walk it any more.
@@ -576,11 +711,18 @@ void Sim::step() {
     jobs_->step();
     raids_->step();
     fighters_->step();
+    recreation_->step();
+    animals_->step();
     mood_->step(time_.seconds, events_);
     movement_->step(things_->registry(), map_);
     combat_->step(rng_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     rooms_->update();
+    power_->step(time_);
+    lights_->update();
+    filth_->step();
+    roomStats_->step(time_.seconds);
+    temperature_->step(time_.seconds);
     time_.seconds += 1;
     if (time_.seconds % kSecondsPerHour == 0) {
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
@@ -589,6 +731,70 @@ void Sim::step() {
     if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
         checkpoints_.push_back(Checkpoint{time_.seconds, stateHash()});
     }
+}
+
+namespace {
+
+// Smooth 0 to 1 between two edges, with no library maths so every platform agrees to the bit.
+float simSmooth(float x) {
+    x = x < 0.0f ? 0.0f : (x > 1.0f ? 1.0f : x);
+    return x * x * (3.0f - 2.0f * x);
+}
+
+constexpr const char* kSimClimateBiome = "TemperateForest";
+constexpr const char* kSimSeasonNames[4] = {"spring", "summer", "fall", "winter"};
+
+float simSeasonMean(const Def& biome, int season) {
+    return static_cast<float>(biome.number((std::string("climate.seasonMeanTemperature.") + kSimSeasonNames[season & 3]).c_str(), 10.0));
+}
+
+}  // namespace
+
+// E2's stand-in for E1: the biome's mean for the season (joined smoothly from the middle of one
+// season to the middle of the next) plus a daily swing that is coldest at 05:00 and warmest at 15:00.
+float Sim::outdoorTemperature() const {
+    return outdoorOverride_ ? *outdoorOverride_ : outdoorTemperatureAt(time_.seconds);
+}
+
+float Sim::outdoorTemperatureAt(int64_t gameSeconds) const {
+    const Def* biome = defs_->find("Biomes", kSimClimateBiome);
+    if (biome == nullptr) {
+        return 15.0f;
+    }
+    const GameTime time{gameSeconds};
+    const int64_t day = time.dayOfYear();
+    const int64_t secondOfDay = gameSeconds % kSecondsPerDay;
+    // Position along the year in seasons, measured from the middle of spring.
+    const float inSeason = (static_cast<float>(day % kDaysPerSeason) + static_cast<float>(secondOfDay) / static_cast<float>(kSecondsPerDay) -
+                            static_cast<float>(kDaysPerSeason) * 0.5f) / static_cast<float>(kDaysPerSeason);
+    const int season = time.season();
+    const int from = inSeason < 0.0f ? season + 3 : season;
+    const int to = inSeason < 0.0f ? season : season + 1;
+    const float along = inSeason < 0.0f ? inSeason + 1.0f : inSeason;
+    const float seasonal = simSeasonMean(*biome, from) + (simSeasonMean(*biome, to) - simSeasonMean(*biome, from)) * along;
+    const float swing = static_cast<float>(biome->number("climate.dailySwing", 14.0));
+    const float hour = static_cast<float>(secondOfDay) / static_cast<float>(kSecondsPerHour);
+    // -1 at 05:00 up to +1 at 15:00, then back down by 05:00 the next day.
+    const float shape = hour >= 5.0f && hour < 15.0f ? -1.0f + 2.0f * simSmooth((hour - 5.0f) / 10.0f)
+                                                      : 1.0f - 2.0f * simSmooth((hour < 5.0f ? hour + 24.0f - 15.0f : hour - 15.0f) / 14.0f);
+    return seasonal + swing * 0.5f * shape;
+}
+
+void Sim::setOutdoorOverride(std::optional<float> celsius) {
+    outdoorOverride_ = celsius;
+    temperature_->setOutdoor(outdoorTemperature());
+    temperature_->setGround(groundTemperature());
+}
+
+float Sim::groundTemperature() const {
+    if (outdoorOverride_) {
+        return *outdoorOverride_;
+    }
+    const Def* biome = defs_->find("Biomes", kSimClimateBiome);
+    if (biome == nullptr) {
+        return 15.0f;
+    }
+    return (simSeasonMean(*biome, 0) + simSeasonMean(*biome, 1) + simSeasonMean(*biome, 2) + simSeasonMean(*biome, 3)) * 0.25f;
 }
 
 // Marks whose rock or plant is gone (it died of old age): taken off, so they don't pile up.
@@ -616,9 +822,21 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.mapHeight = map_.height();
     out.things.clear();
     out.waypoints.clear();
+    out.bills.clear();
     out.zones.clear();
     out.zoneCells.clear();
     out.looks.clear();
+    out.research.clear();
+    for (const ResearchProject& project : research_->projects()) {
+        ResearchView view;
+        view.project = project.def;
+        view.progress = research_->progress(project.defName);
+        view.cost = research_->cost(project);
+        view.done = research_->isDone(project.defName);
+        view.available = research_->available(project);
+        view.current = research_->current() == project.defName;
+        out.research.push_back(view);
+    }
     out.designations.clear();
     for (const auto& [index, kind] : designations_->all()) {
         out.designations.push_back(DesignationView{map_.cellAt(index), kind});
@@ -657,6 +875,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
             if (const Door* door = reg.try_get<Door>(entity)) {
                 view.doorOpen = door->openFraction(doorNumbers_);
             }
+            if (const PowerPart* part = reg.try_get<PowerPart>(entity)) {
+                view.power = power_->stateOf(entity);
+                view.powerNet = part->net;
+                view.powerWatts = static_cast<float>(part->watts);
+                const double capacity = power_->capacityOf(entity);
+                view.batteryFill = capacity > 0.0 ? static_cast<float>(part->stored / capacity) : -1.0f;
+            }
         }
         if (const ConstructionSite* site = reg.try_get<ConstructionSite>(entity)) {
             const CellRect rect = site->rect();
@@ -670,6 +895,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.materialsNeeded = site->materialsNeeded();
         } else if (const BuiltOf* made = reg.try_get<BuiltOf>(entity)) {
             view.stuff = made->stuff;
+        }
+        if (const BillList* list = reg.try_get<BillList>(entity)) {
+            view.firstBill = static_cast<uint32_t>(out.bills.size());
+            for (const Bill& bill : list->bills) {
+                out.bills.push_back(BillView{bill.id, bill.recipe, bill.mode, bill.count, bill.suspended});
+            }
+            view.billCount = static_cast<uint32_t>(out.bills.size()) - view.firstBill;
         }
         if (const StackCount* stack = reg.try_get<StackCount>(entity)) {
             view.stackCount = stack->count;
@@ -697,14 +929,23 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Worker* worker = reg.try_get<Worker>(entity)) {
             view.job = worker->job.type;
             view.jobTarget = worker->job.thing;
+            view.jobProgress = worker->job.type != JobType::None ? jobs_->jobProgress(entity) : 0.0f;
         }
         if (const Needs* needs = reg.try_get<Needs>(entity)) {
             view.food = needs->food;
             view.rest = needs->rest;
         }
+        if (const Joy* joy = reg.try_get<Joy>(entity)) {
+            view.joy = joy->level;
+            view.comfort = joy->comfort;
+            view.outdoors = joy->outdoors;
+        }
         if (const Mood* mood = reg.try_get<Mood>(entity)) {
             view.mood = mood->level;
             view.moodBand = static_cast<int>(mood->band);
+        }
+        if (const BeautyNeed* beauty = roomStats_->beautyNeed(entity)) {
+            view.beautyNeed = beauty->level;
         }
         if (const Worker* worker = reg.try_get<Worker>(entity)) {
             view.asleep = jobIsLyingDown(worker->job);
@@ -727,6 +968,12 @@ void Sim::writeSnapshot(Snapshot& out) const {
         }
         if (view.category == ThingCategory::Pawn) {
             view.faction = fighters_->factionOf(entity);
+        }
+        if (reg.all_of<Animal>(entity)) {
+            view.lifeStage = animals_->lifeStage(entity);
+            view.bodySize = animals_->bodySize(entity);
+            view.food = animals_->foodShare(entity);
+            view.asleep = animals_->asleep(entity);
         }
         if (const Fighter* fighter = reg.try_get<Fighter>(entity)) {
             view.drafted = fighter->drafted;
@@ -773,7 +1020,34 @@ void Sim::writeSnapshot(Snapshot& out) const {
         view.tables = room.tables;
         view.chairs = room.chairs;
         view.stoves = room.stoves;
+        if (const RoomStatValues* stats = roomStats_->statsOf(room.id)) {
+            view.hasStats = true;
+            view.beauty = stats->beauty;
+            view.space = stats->space;
+            view.wealth = stats->wealth;
+            view.cleanliness = stats->cleanliness;
+            view.impressiveness = stats->impressiveness;
+        }
+        view.temperature = temperature_->roomTemperature(room.id);
         out.rooms.push_back(view);
+    }
+    out.powerNets = power_->nets();
+    out.outdoorTemperature = temperature_->outdoor();
+    if (out.floorChanges != floors_->changes()) {
+        out.floorChanges = floors_->changes();
+        out.floors.clear();
+        for (const auto& [index, def] : floors_->all()) {
+            out.floors.push_back(FloorView{map_.cellAt(index), def});
+        }
+    }
+    if (out.filthChanges != filth_->changes()) {
+        out.filthChanges = filth_->changes();
+        out.filth.clear();
+        for (const auto& [index, piles] : filth_->all()) {
+            for (const FilthPile& pile : piles) {
+                out.filth.push_back(FilthView{map_.cellAt(index), filth_->kinds()[pile.kind].def, pile.thickness});
+            }
+        }
     }
     out.roofCells = rooms_->thinRoofCells();
     out.roofChanges = rooms_->roofChanges();
@@ -808,9 +1082,15 @@ uint64_t Sim::stateHash() const {
     h.add(plants_->hash());
     h.add(mineables_->hash());
     designations_->hashState(h);
+    research_->hashState(h);
     raids_->hashState(h);
     pathfinder_.hashState(h);
     zones_->hashState(h);
+    floors_->hashState(h);
+    filth_->hashState(h);
+    roomStats_->hashState(h);
+    animals_->hashState(h);
+    temperature_->hashState(h);
 
     // The entity ids the registry has handed out: the free list in reuse order (it decides the
     // next ids), then every live thing in id order with its components. The registry's own
@@ -836,7 +1116,9 @@ uint64_t Sim::stateHash() const {
                             reg.all_of<ConstructionSite>(e), reg.all_of<BuiltOf>(e),
                             reg.all_of<MarkedForDeconstruct>(e),
                             reg.all_of<Mood>(e),         reg.all_of<Door>(e),
-                            reg.all_of<PawnLooks>(e)};
+                            reg.all_of<PawnLooks>(e),
+                            reg.all_of<BillList>(e),
+                            reg.all_of<PowerPart>(e)};
         uint64_t mask = 0;
         for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
             mask |= has[bit] ? (uint64_t{1} << bit) : 0;
@@ -937,6 +1219,17 @@ uint64_t Sim::stateHash() const {
                 h.add(c->b);
             }
         }
+        if (const BillList* list = reg.try_get<BillList>(e)) {
+            h.add(list->nextId);
+            h.add(static_cast<uint64_t>(list->bills.size()));
+            for (const Bill& bill : list->bills) {
+                h.add(bill.id);
+                h.add(bill.recipe.value);
+                h.add(static_cast<int>(bill.mode));
+                h.add(bill.count);
+                h.add(bill.suspended);
+            }
+        }
         if (const Worker* worker = reg.try_get<Worker>(e)) {
             const Job& job = worker->job;
             h.add(static_cast<int>(job.type));
@@ -946,8 +1239,23 @@ uint64_t Sim::stateHash() const {
             h.add(entt::to_integral(job.chair));
             h.add(entt::to_integral(job.site));
             h.add(job.progress);
+            h.add(job.bill);
+            h.add(static_cast<uint64_t>(job.picks.size()));
+            for (const BillPick& pick : job.picks) {
+                h.add(entt::to_integral(pick.item));
+                h.add(pick.count);
+            }
+            h.add(static_cast<uint64_t>(job.used.size()));
+            for (const BillUsed& used : job.used) {
+                h.add(used.def.value);
+                h.add(used.count);
+            }
             h.add(job.workType.value);
+            if (job.activity.valid()) {
+                h.add(job.activity.value);
+            }
             h.add(job.forced);
+            h.add(static_cast<int>(job.handsOn));
             h.add(static_cast<int>(job.step));
             h.add(static_cast<int>(job.walk));
             h.add(static_cast<int>(job.repaths));
@@ -979,6 +1287,16 @@ uint64_t Sim::stateHash() const {
             h.add(needs->malnutrition);
             h.add(needs->foodSearchAfter);
         }
+        if (const Joy* joy = reg.try_get<Joy>(e)) {
+            h.add(joy->level);
+            h.add(joy->comfort);
+            h.add(joy->outdoors);
+            h.add(static_cast<uint64_t>(joy->tolerance.size()));
+            for (const JoyTolerance& t : joy->tolerance) {
+                h.add(t.kind.data(), t.kind.size());
+                h.add(t.amount);
+            }
+        }
         if (const Mood* mood = reg.try_get<Mood>(e)) {
             h.add(mood->level);
             h.add(static_cast<int>(mood->band));
@@ -997,6 +1315,12 @@ uint64_t Sim::stateHash() const {
             h.add(static_cast<uint64_t>(door->progress));
             h.add(static_cast<uint64_t>(door->hold));
             h.add(door->open);
+        }
+        if (const PowerPart* power = reg.try_get<PowerPart>(e)) {
+            h.add(power->on);
+            h.add(power->powered);
+            h.add(power->stored);
+            h.add(power->draw);
         }
         if (const Bed* bed = reg.try_get<Bed>(e)) {
             h.add(static_cast<uint64_t>(bed->owners.size()));
@@ -1025,6 +1349,7 @@ uint64_t Sim::stateHash() const {
         }
         combat_->hashThing(e, h);
         fighters_->hashThing(e, h);
+        animals_->hashThing(e, h);
         raids_->hashThing(e, h);
     }
     return h.value();

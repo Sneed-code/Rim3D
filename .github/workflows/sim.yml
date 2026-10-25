@@ -1,17 +1,31 @@
 name: Sim
 
+# The repo is public, so Actions minutes are free. To keep runs cheap anyway:
+#  - a newer push cancels the run before it;
+#  - docs-only and picture-only changes skip the run.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'assets/**'
+      - '!docs/design/naming.md'
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'assets/**'
+      - '!docs/design/naming.md'
+  workflow_dispatch:
+
+concurrency:
+  group: sim-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Configure
@@ -21,30 +35,53 @@ jobs:
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
       - name: Map picture
-        if: runner.os == 'Linux'
         run: ./build/simrun --seed 42 --size 512 --days 1 --png map.png
       - uses: actions/upload-artifact@v4
-        if: runner.os == 'Linux'
         with:
           name: map-preview
           path: map.png
       - uses: actions/upload-artifact@v4
         with:
-          name: replay-${{ runner.os }}
+          name: replay-Linux
           path: |
             build/haul-and-build.recorded.json
             build/colony-build.recorded.json
             build/colony-rooms.recorded.json
+            build/colony-cook.recorded.json
       - uses: actions/upload-artifact@v4
         with:
-          name: save-${{ runner.os }}
+          name: save-Linux
+          path: build/straight.save
+
+  # Windows (MSVC), same tests as Linux.
+  build-and-test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S game/Plugins/ColonySim -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - uses: actions/upload-artifact@v4
+        with:
+          name: replay-Windows
+          path: |
+            build/haul-and-build.recorded.json
+            build/colony-build.recorded.json
+            build/colony-rooms.recorded.json
+            build/colony-cook.recorded.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: save-Windows
           path: build/straight.save
 
   # The same scenario must give the same state hashes on Linux (GCC) and Windows (MSVC), so a
   # replay recorded on sneed's PC plays the same in the cloud, and the same save file byte for
   # byte, so a save made on the PC loads in the cloud.
   replay-cross-platform:
-    needs: build-and-test
+    needs: [build-and-test, build-and-test-windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,6 +97,8 @@ jobs:
         run: python3 tools/compare_replays.py replay-Linux/colony-build.recorded.json replay-Windows/colony-build.recorded.json
       - name: Compare Linux and Windows rooms replays
         run: python3 tools/compare_replays.py replay-Linux/colony-rooms.recorded.json replay-Windows/colony-rooms.recorded.json
+      - name: Compare Linux and Windows cooking replays
+        run: python3 tools/compare_replays.py replay-Linux/colony-cook.recorded.json replay-Windows/colony-cook.recorded.json
       - name: Compare Linux and Windows saves
         run: cmp save-Linux/straight.save save-Windows/straight.save && echo "the saves are identical"
 

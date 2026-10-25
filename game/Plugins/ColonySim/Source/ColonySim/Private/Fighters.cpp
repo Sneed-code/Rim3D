@@ -1,5 +1,6 @@
 #include "ColonySim/Fighters.h"
 
+#include "ColonySim/Animals.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Defs.h"
@@ -344,6 +345,7 @@ void FighterSystem::step() {
         p.level = pos.level;
         p.able = h == nullptr || !h->downed;
         p.fighter = reg.all_of<Fighter>(e);
+        p.animal = reg.all_of<Animal>(e);
         p.stance = p.able ? posture.stance : Stance::Prone;
         pawns_.push_back(p);
     }
@@ -435,7 +437,7 @@ void FighterSystem::see(Entity pawn, Fighter& f, const PawnInfo& self) {
     const Viewpoint eye{self.x, self.y, self.level, Stance::Standing};
     size_t next = 0;  // walks f.known alongside pawns_, both in id order
     for (const PawnInfo& p : pawns_) {
-        if (p.faction == self.faction || p.level != self.level) {
+        if (p.faction == self.faction || p.animal || p.level != self.level) {
             continue;
         }
         const float dx = p.x - self.x;

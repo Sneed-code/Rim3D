@@ -53,11 +53,24 @@ it is a situation, when a memory fades; strongest first.
 (`MoodSystem::breakLevels`). `Mood::band` is kept up to date; when it changes a **`PawnMoodBand`** event
 says so (`message` the new band, `amount` the mood). Nothing happens yet: mental breaks come later.
 
+## Temperature thoughts (E2)
+
+A thought def with `situation.condition` `coldBelowComfort` or `hotAboveComfort` (D9's `Cold` and `Hot`)
+counts while the pawn is outside its comfortable temperature range; its `stages` are picked by the degrees
+outside it ([temperature.md](temperature.md)). The thought's label in the panel is the stage's (`chilly`,
+`freezing`, `warm`, `scorching`). Like the food and rest situations it exists only while it holds.
+
 ## What Unreal sees
 
 - **Snapshot:** a pawn with a mood has `mood` (else -1) and `moodBand` (0 to 3).
 - **Events:** `PawnMoodBand`.
 - **Read:** `sim.mood().thoughts(pawn, seconds)`, `target`, `breakLevels`.
+
+## Staged situations (C17)
+
+A thought with `condition`, `stageThresholds` and `stages` is one thought whose stage follows a value
+from `RoomStats::conditionValue` (beauty need, room space, impressiveness, cleanliness, shared
+bedroom). See [room-stats.md](room-stats.md).
 
 ## Save format 11
 
@@ -65,8 +78,16 @@ says so (`message` the new band, `amount` the mood). Nothing happens yet: mental
 still load (the mood starts fresh). A memory whose def the data no longer has stays in the file and counts
 for nothing.
 
+## Staged situations (C18)
+
+A thought def with `situation.condition` and `stages` (D9's Thoughts2) is a situation that has several
+stages: `MoodSystem::conditionValue` measures a number for the condition (`joyNeed`, `comfortNeed`,
+`outdoorsNeed` so far, [recreation.md](recreation.md)), the def's `<condition without Need>Thresholds`
+list says where each stage ends, and the stage's `moodOffset` counts. A condition nobody measures yet
+(temperature, clothes...) gives nothing. A task that owns a condition adds its case to `conditionValue`.
+
 ## Not yet
 
-Mental breaks, inspirations, ideology and precepts; thoughts from pain, injuries, rooms, beauty,
-temperature, joy, relationships, other pawns' deaths, passions at work (`SkillRules.passionMood` is read by
+Mental breaks, inspirations, ideology and precepts; thoughts from pain, injuries,
+joy, relationships, other pawns' deaths, passions at work (`SkillRules.passionMood` is read by
 nothing yet); social and mood stacking beyond one of each; thoughts from traits' `moodWithRangedWeapon`.

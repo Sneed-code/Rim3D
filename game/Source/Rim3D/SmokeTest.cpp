@@ -37,6 +37,7 @@
 #include "PawnSubsystem.h"
 #include "SimPicking.h"
 #include "SimSubsystem.h"
+#include "TerrainDraw.h"
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Map.h"
@@ -127,6 +128,30 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	else if (TestName == TEXT("looks"))
 	{
 		BuildLooksPhases();
+	}
+	else if (TestName == TEXT("world"))
+	{
+		BuildWorldPhases();
+	}
+	else if (TestName == TEXT("buildings"))
+	{
+		BuildBuildingsPhases();
+	}
+	else if (TestName == TEXT("orders"))
+	{
+		BuildOrdersPhases();
+	}
+	else if (TestName == TEXT("panels"))
+	{
+		BuildPanelsPhases();
+	}
+	else if (TestName == TEXT("fights"))
+	{
+		BuildFightsPhases();
+	}
+	else if (TestName == TEXT("handson"))
+	{
+		BuildHandsOnPhases();
 	}
 	else
 	{
@@ -1145,12 +1170,13 @@ void USmokeTestSubsystem::Tick(float DeltaTime)
 	}
 	Samples.Add({DeltaTime * 1000.0f, static_cast<float>(FPlatformTime::ToMilliseconds(GGameThreadTime)),
 		static_cast<float>(FPlatformTime::ToMilliseconds(GRenderThreadTime)), static_cast<float>(FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()))});
-	if (!bScreenshotTaken && PhaseTime >= Phase.WarmupSeconds + 1.0f)
+	// A second into the measuring, or earlier in a phase measured for less than that (the file is written a frame or two later).
+	if (!bScreenshotTaken && PhaseTime >= Phase.WarmupSeconds + FMath::Min(1.0f, Phase.MeasureSeconds * 0.6f))
 	{
 		bScreenshotTaken = true;
 		const FString Path = FPaths::ProjectSavedDir() / TEXT("Smoke") / TestName / (Phase.Name + TEXT(".png"));
 		// The sim tests show the on-screen sim timings and the overseer its ImGui panels, which count as UI.
-		FScreenshotRequest::RequestScreenshot(Path, TestName == TEXT("sim") || TestName == TEXT("overseer") || TestName == TEXT("saves") || TestName == TEXT("protagonist"), false);
+		FScreenshotRequest::RequestScreenshot(Path, TestName == TEXT("sim") || TestName == TEXT("overseer") || TestName == TEXT("saves") || TestName == TEXT("protagonist") || TestName == TEXT("orders") || TestName == TEXT("panels") || TestName == TEXT("fights") || TestName == TEXT("handson"), false);
 	}
 	if (PhaseTime >= Phase.WarmupSeconds + Phase.MeasureSeconds)
 	{
@@ -1278,6 +1304,7 @@ namespace
 	}
 
 	// The Index-th cell (in a fixed scan) with open ground around it (no thing within 3 cells) that is visible on screen.
+	// A click lands on what is drawn, so a rock cell is aimed at on top of its block, not at the ground under it.
 	bool OverseerSmokeFindEmptyCell(UWorld* World, const USimSubsystem& Bridge, int32 Middle, int32 Index, colony::CellPos& OutCell, FVector2D& OutScreen)
 	{
 		int32 Found = 0;
@@ -1299,7 +1326,7 @@ namespace
 						break;
 					}
 				}
-				if (bClear && OverseerSmokeProject(World, Bridge.SimToWorld(X + 0.5f, Y + 0.5f, 0), OutScreen, 0.1f) && Found++ == Index)
+				if (bClear && OverseerSmokeProject(World, Bridge.SimToWorld(X + 0.5f, Y + 0.5f, 0) + FVector(0.0, 0.0, TerrainDraw::SurfaceBonusCm(Bridge.GetSim()->map(), X + 0.5, Y + 0.5)), OutScreen, 0.1f) && Found++ == Index)
 				{
 					OutCell = Cell;
 					return true;
@@ -1348,7 +1375,6 @@ void USmokeTestSubsystem::BuildOverseerPhases()
 				++Walls;
 			}
 		}
-		BuildTerrainMesh(Bridge->GetSim()->map(), FPlatformTime::Seconds());
 		if (IConsoleVariable* DebugDraw = IConsoleManager::Get().FindConsoleVariable(TEXT("Sim.DebugDraw")))
 		{
 			DebugDraw->Set(1);
@@ -1627,6 +1653,7 @@ namespace
 		int64 GroomOtherVisible = 0;
 		int32 MetaHumanMissing = 0;
 		TMap<uint32, FVector> LastLocation;
+		TMap<uint32, FVector> LastSimLocation;
 
 		void Reset() { *this = FPawnsSmokeState(); }
 	};
@@ -1723,8 +1750,18 @@ void USmokeTestSubsystem::BuildPawnsPhases()
 			}
 			const FVector Location = Pawn->GetActorLocation();
 			const FVector SimLocation = Bridge->SimToWorld(View.x, View.y, View.level);
-			State->WorstFollowCm = FMath::Max(State->WorstFollowCm, FVector::Dist2D(Location, SimLocation));
 			const uint32 Key = static_cast<uint32>(entt::to_integral(View.id));
+			// Actors are placed where the sim stood when the pawn subsystem last ticked, which is this frame's
+			// or the last frame's (the subsystems tick in no fixed order). After a slow frame the sim has caught
+			// up many steps at once, so a pawn one frame behind is as far as all those steps, not one: it is
+			// on time if it is near either place.
+			double Follow = FVector::Dist2D(Location, SimLocation);
+			if (const FVector* LastSim = State->LastSimLocation.Find(Key))
+			{
+				Follow = FMath::Min(Follow, FVector::Dist2D(Location, *LastSim));
+			}
+			State->LastSimLocation.Add(Key, SimLocation);
+			State->WorstFollowCm = FMath::Max(State->WorstFollowCm, Follow);
 			if (const FVector* Last = State->LastLocation.Find(Key))
 			{
 				State->Travelled += FVector::Dist2D(*Last, Location);
@@ -1927,7 +1964,6 @@ void USmokeTestSubsystem::BuildPawnsPhases()
 			return;
 		}
 		Bridge->SetSpeed(1);
-		BuildTerrainMesh(Bridge->GetSim()->map(), FPlatformTime::Seconds());
 		OverseerView();
 		StartPhaseCounters();
 	}, Warmup, 10.0f, [=, this]()

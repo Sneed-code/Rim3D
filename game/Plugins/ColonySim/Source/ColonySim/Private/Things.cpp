@@ -1,5 +1,6 @@
 #include "ColonySim/Things.h"
 
+#include "ColonySim/Animals.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Cover.h"
@@ -7,6 +8,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Power.h"
 
 #include <algorithm>
 #include <utility>
@@ -107,6 +109,9 @@ Entity Things::make(DefId defId, int stackCount) {
             if (def.flag("building.bed")) {
                 registry_.emplace<Bed>(thing);  // who sleeps in it (Needs.h)
             }
+            if (def.has("power")) {
+                registry_.emplace<PowerPart>(thing);  // switch, output, charge (Power.h)
+            }
             break;
         }
         case ThingCategory::Pawn: {
@@ -117,6 +122,9 @@ Entity Things::make(DefId defId, int stackCount) {
             registry_.emplace<Posture>(thing);
             if (def.has("race.body")) {
                 registry_.emplace<Health>(thing);
+            }
+            if (def.text("race.intelligence") == "Animal") {
+                registry_.emplace<Animal>(thing, makeAnimalFor(def));  // Animals.h
             }
             break;
         }
@@ -215,6 +223,7 @@ void Things::despawn(Entity thing) {
 }
 
 void Things::indexItem(Entity thing, CellPos cell, bool add) {
+    ++itemChanges_;
     const uint64_t key = thingCellKey(cell);
     if (add) {
         std::vector<Entity>& list = itemsAt_[key];

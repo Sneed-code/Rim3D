@@ -94,7 +94,7 @@ to the alarm at the next check while the alarm is on.
   per pawn `defenseRole` (colonists), `defending`, `sheltering`, `fleeing` and `squad` (raiders).
   The overseer view (U8) can show the alarm button and roles, U11 can show routs.
 - **Events**: `RaidArrived`, `SquadChanged`, `AlarmChanged`, `PawnLeftMap` (bridge.md).
-- **Saves** (format 18): the whole `RaidState`, `Raider` and `DefensePlan` components and the new
+- **Saves** (section `raids`, and `fighters` 2): the whole `RaidState`, `Raider` and `DefensePlan` components and the new
   fighter fields. A raid goes on the same after a save and load (test).
 - All of it is in `Sim::stateHash`; the four commands are in replays.
 

@@ -175,6 +175,9 @@ public:
 	void SetWorldOrigin(const FVector& NewOrigin) { WorldOrigin = NewOrigin; }
 	FVector GetWorldOrigin() const { return WorldOrigin; }
 
+	/** Counts up every time the sim is replaced (a new start or a load), so a system that mirrors the sim can tell. */
+	int32 GetSimGeneration() const { return SimGeneration; }
+
 	const FSimTimings& GetTimings() const { return Timings; }
 	int64 GetEventCount() const { return EventCount; }
 
@@ -209,6 +212,7 @@ private:
 	int64 LastAutosaveBucket = 0;
 	int32 AutosaveCount = 0;
 	int64 EventCount = 0;
+	int32 SimGeneration = 0;
 	FVector WorldOrigin = FVector::ZeroVector;
 
 	// Timing window (about one second of real time).

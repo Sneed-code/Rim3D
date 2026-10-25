@@ -127,7 +127,7 @@ to try W A S D, the mouse and Tab once.
   until U4; it can see through them for now.
 - **Stairs, jumping, crouching, sprinting.** None of them (no levels in Stage 1, no sim state for
   stance). The slow walk is a key, not a sim state.
-- **Hands-on work** (chop, mine, build, pick up) is U10; shooting is U11. Both use what is here:
+- **Hands-on work** (chop, mine, build, pick up) is U10, done ([handson.md](handson.md)); shooting is U11. Both use what is here:
   the controlled pawn, its position and the crosshair.
 - **Pawns in the way.** Other pawns steer around the player, but the player walks through them
   (`DirectMove` checks walls only).

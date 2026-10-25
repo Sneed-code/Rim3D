@@ -9,6 +9,7 @@
 #include "ColonySim/JobType.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Pathfinder.h"
+#include "ColonySim/Recreation.h"
 #include "ColonySim/Zones.h"
 
 #include <cstdint>
@@ -31,6 +32,19 @@ struct JobTarget {
     CellPos cell;
 };
 
+// DoBill: a stack of an ingredient the cook is to fetch, and how many to take from it.
+struct BillPick {
+    Entity item = kNoEntity;
+    int count = 0;
+};
+
+// DoBill: ingredients the cook has brought to the building so far. They are used up when the
+// product is made, and put back on the ground if the job ends before that.
+struct BillUsed {
+    DefId def;
+    int count = 0;
+};
+
 // One job in progress. Which fields a job type uses is in its comment above.
 struct Job {
     JobType type = JobType::None;
@@ -43,12 +57,23 @@ struct Job {
                                // HarvestPlant: the rock or plant's cell
     int count = 0;             // HaulToCell, Ingest, DeliverResources: how many to carry
     Entity chair = kNoEntity;  // Ingest: the chair at a table it eats in, or none (it eats where the food lay)
-    Entity site = kNoEntity;   // DeliverResources: the blueprint or frame it brings materials to
+    Entity site = kNoEntity;   // DeliverResources: the blueprint or frame it brings materials to; DoBill: the
+                               // building that holds the bill
     float progress = 0.0f;     // Deconstruct: work done so far; Mine: work towards the next pick hit; CutPlant,
                                // HarvestPlant: work done on the plant. For the gather jobs both are game seconds
-                               // at 100% work speed (the worker's speed adds to it every second)
+                               // at 100% work speed (the worker's speed adds to it every second); DoBill: work done
+    uint32_t bill = 0;         // DoBill: the bill's id on the building in `site`
+    std::vector<BillPick> picks;  // DoBill: the ingredient stacks still to fetch after `thing`
+    std::vector<BillUsed> used;   // DoBill: ingredients delivered so far
     DefId workType;            // the work type whose scanner gave it; none for orders and idling
+    DefId activity;            // Recreate: the RecreationActivities def; `thing` is the building it is done at (none for
+                               // a stroll or cloud watching), `cell` where the pawn stands or sits, `chair` the chair
+                               // it sits in (chatting at a table), `count` 1 when it walks about, `until` the game
+                               // second it ends (0 until it starts)
     bool forced = false;       // a player order (OrderHaulCommand)
+    uint8_t handsOn = 0;       // 1: done by hand by the player's colonist, in place (HandsOnCommand, U10): no walking,
+                               // ends if the player steps out of reach; 2: the same, and the job made the Mine, CutPlant
+                               // or HarvestPlant mark on its cell, which goes again if the job doesn't finish
     uint8_t step = 0;          // which of the job type's steps is running
     uint8_t walk = 0;          // inside a go-to step: 0 not set off, 1 waiting for a path, 2 walking
     uint8_t repaths = 0;       // new paths asked for after giving up a walk
@@ -98,6 +123,11 @@ COLONY_API int jobStepCount(JobType type);
 
 // LayDown has two steps, walking to the bed and lying in it; rest rises during the second.
 inline constexpr uint8_t kLayDownLieStep = 1;
+// DoBill: go to an ingredient, pick it up, carry it beside the building, hand it over (and back to
+// the first step while more are to fetch), work, make the product. The pawn carries an ingredient
+// after the pick-up step until it hands it over.
+inline constexpr uint8_t kDoBillPickUpStep = 1;
+inline constexpr uint8_t kDoBillDepositStep = 3;
 // Ingest has four: go to the food, pick it up, go to the eating spot, eat. The pawn carries the
 // food from the third on.
 inline constexpr uint8_t kIngestPickUpStep = 1;
@@ -105,13 +135,30 @@ inline bool jobIsLyingDown(const Job& job) {
     return job.type == JobType::LayDown && job.step >= kLayDownLieStep;
 }
 
+// What the controlled colonist would do with its hands on a target (JobSystem::planHandsOn).
+enum class HandsOnKind : uint8_t { None, Mine, Chop, Cut, Harvest, Build, Deliver, PickUp };
+
+struct HandsOnPlan {
+    HandsOnKind kind = HandsOnKind::None;
+    std::string label;  // "mine granite", "chop poplar", "build wall", "pick up steel"; empty for None
+    bool inReach = false;
+    std::string error;  // why it can't be done now (empty if it can, apart from reach)
+    bool ok() const { return kind != HandsOnKind::None && inReach && error.empty(); }
+};
+
+class BillSystem;
 class Construction;
 class DefDatabase;
+class Filth;
 class HealthSystem;
+class Lights;
 class Map;
 class Mineables;
 class Pathfinder;
 class Plants;
+class PowerGrid;
+class ResearchSystem;
+class Rooms;
 class Things;
 class WorkGiver;
 struct GameTime;
@@ -176,6 +223,19 @@ public:
     // A player order: haul this item to the best stockpile now, ending the pawn's current job.
     // Refused for the pawn the player controls directly (PlayerControl).
     bool orderHaul(Entity pawn, Entity thing, std::string& error);
+    // Hands-on work (HandsOnCommand, docs/design/handson.md). What the controlled pawn would do with
+    // its hands on this blueprint, frame or item (`thing`), else on the rock or plant in `cell`.
+    HandsOnPlan planHandsOn(Entity pawn, Entity thing, CellPos cell) const;
+    // Starts it (picking up is done at once). Refused with the plan's error, or "too far".
+    bool handsOn(Entity pawn, Entity thing, CellPos cell, std::string& error);
+    // Sets down what the pawn carries on `cell` if that is within reach and has room, else near its feet.
+    bool handsOnPutDown(Entity pawn, CellPos cell, std::string& error);
+    // Ends the pawn's hands-on job, if it has one.
+    void handsOnStop(Entity pawn);
+    // How far along the pawn's job is, 0 to 1 (a swing of the pick, a plant, a frame); 0 with no job.
+    float jobProgress(Entity pawn) const;
+    // Puts down what the pawn carries on the nearest free cell. Used when the player lets a colonist go.
+    void putDown(Entity pawn) { dropCarried(pawn); }
     // Ends the job of any pawn mining, cutting or picking at this cell, as interrupted: the mark was
     // taken off (CancelDesignationsCommand).
     void cancelGatherAt(CellPos cell);
@@ -190,12 +250,25 @@ public:
     // The bed a pawn owns, or kNoEntity.
     Entity bedOf(Entity pawn) const;
     const NeedRules& needRules() const { return rules_; }
+    // Whether a cell is indoors decides where a pawn can stroll or watch the clouds (Recreation); without rooms
+    // everywhere is outdoors.
+    void setRooms(Rooms* rooms) { rooms_ = rooms; }
+    void setResearch(ResearchSystem* research) { research_ = research; }
+    ResearchSystem* research() const { return research_; }
 
     // Call before a thing is destroyed: ends the jobs that carry it or are done by it.
     void forget(Entity thing);
     // After loading a save: rebuilds the reservations from the jobs. Returns false, with
     // `error`, if two jobs hold the same target or a job waits for a path nobody looks for.
     bool afterLoad(std::string& error);
+
+    // The filth layer, for the cleaning job (CleanJobs.cpp, docs/design/room-stats.md); it also needs
+    // `setRooms`. Without them nobody cleans. Cleaning is limited to indoor cells until the home area exists.
+    void setFilth(Filth* filth) { filth_ = filth; }
+    Filth* filth() const { return filth_; }
+    Rooms* rooms() const { return rooms_; }
+    // How fast a pawn cleans (1 is 100%): FilthRules.cleaningSpeed times its Manipulation.
+    double cleaningSpeed(Entity pawn) const;
 
     // ---- For scanners and tests -----------------------------------------------------------
     Things& things() { return things_; }
@@ -205,7 +278,13 @@ public:
     Plants& plants() { return plants_; }
     Mineables& mineables() { return mineables_; }
     Designations& designations() { return designations_; }
+    BillSystem& bills() { return *bills_; }
+    const BillSystem& bills() const { return *bills_; }
     const DefDatabase& defs() const { return defs_; }
+    // Buildings that draw power only work while they have it (docs/design/power.md). Until a grid is
+    // set (some tests) nothing needs power.
+    void setPower(const PowerGrid* power) { power_ = power; }
+    bool buildingRuns(Entity building) const;
     int64_t now() const;
 
     // The pawn holding a target, or kNoEntity.
@@ -213,6 +292,10 @@ public:
     bool reservedByOther(const JobTarget& target, Entity pawn) const;
     // A blueprint or frame that another pawn is bringing materials to: one deliverer at a time.
     bool deliveryReservedByOther(Entity site, Entity pawn) const;
+    // Work slows in the dark (docs/design/light.md). Null: it doesn't.
+    void setLights(const Lights* lights) { lights_ = lights; }
+    // The factor on a pawn's work speed from the light where it stands (1 in daylight).
+    float lightWorkFactor(Entity pawn) const;
     // How fast a pawn builds and takes down: its Construction skill's speed times its Manipulation.
     float constructionSpeed(Entity pawn) const;
     bool avoiding(Entity pawn, const JobTarget& target) const;
@@ -252,7 +335,8 @@ public:
     int stackLimit(DefId def) const;
 
 private:
-    enum class StepResult : uint8_t { Running, Next, Failed };
+    // Repeat starts the job's steps again from the first (DoBill: another ingredient to fetch).
+    enum class StepResult : uint8_t { Running, Next, Failed, Repeat };
     enum class JobEnd : uint8_t { Done, Failed, Interrupted };
 
     // `purpose` 1 is a delivery to a site; 0 is everything else.
@@ -271,10 +355,12 @@ private:
         }
     };
     static TargetKey keyOf(const JobTarget& target, uint8_t purpose = 0);
-    // What a job holds while it runs, which no other pawn's scanner takes; up to two. Hauling: its
-    // item and cell. Eating: the food and the chair's cell. Sleeping: the bed's cell. A delivery:
-    // its item and site. Building and taking down: the frame or the building.
-    static int reservationsOf(const Job& job, TargetKey out[2]);
+    // What a job holds while it runs, which no other pawn's scanner takes. Hauling: its item and
+    // cell. Eating: the food and the chair's cell. Sleeping: the bed's cell. A delivery: its item
+    // and site. Building and taking down: the frame or the building. A bill: the building and every
+    // ingredient stack still to be fetched.
+    static constexpr int kMaxReservations = 12;
+    static int reservationsOf(const Job& job, TargetKey out[kMaxReservations]);
 
     // The think list: each node may give a job; the first that does wins (docs/design/jobs.md).
     using ThinkNode = bool (JobSystem::*)(Entity pawn, Job& out);
@@ -301,6 +387,21 @@ private:
     bool failCheckLayDown(Entity pawn, Job& job, std::string& why);
     void wakeUp(Entity pawn, const Job& job);
 
+    // Recreation (RecreationJobs.cpp, docs/design/recreation.md). thinkJoy is for an Anything hour with nothing
+    // to do; the schedule's Joy hours call makeRecreationJob too.
+    bool thinkJoy(Entity pawn, Job& out);
+    bool makeRecreationJob(Entity pawn, Job& out, float playUntil);
+    bool recreationSpot(Entity pawn, const RecreationActivity& activity, Job& out);
+    bool strollCell(Entity pawn, CellPos& out, bool wander);
+    bool isOutdoorsCell(CellPos cell) const;
+    int recreationUsers(Entity building, Entity except) const;
+    bool failCheckRecreate(Entity pawn, Job& job, std::string& why);
+    StepResult play(Entity pawn, Job& job, std::string& why);
+
+    // Research (ResearchJobs.cpp, docs/design/research.md). `site` is the bench, `cell` where the pawn sits.
+    bool failCheckResearch(Entity pawn, Job& job, std::string& why);
+    StepResult researchWork(Entity pawn, Job& job, std::string& why);
+
     // Gathering jobs (GatherJobs.cpp).
     bool failCheckGather(Entity pawn, Job& job, std::string& why);
     StepResult goToTouch(Entity pawn, Job& job, std::string& why);
@@ -313,6 +414,10 @@ private:
     void gatherEvent(Entity pawn, PawnAction action, CellPos cell);
     void loadGatherRules();
 
+    // Cleaning (CleanJobs.cpp).
+    bool failCheckClean(Entity pawn, Job& job, std::string& why);
+    StepResult cleanWork(Entity pawn, Job& job, std::string& why);
+
     void startJob(Entity pawn, Job job);
     void tickJob(Entity pawn);
     void endJob(Entity pawn, JobEnd end, const std::string& why);
@@ -324,8 +429,23 @@ private:
     StepResult deliver(Entity pawn, Job& job, std::string& why);
     StepResult buildWork(Entity pawn, Job& job, std::string& why);
     StepResult deconstructWork(Entity pawn, Job& job, std::string& why);
+    // Bills (BillJobs.cpp): bring the ingredients, work, make the product.
+    StepResult depositIngredient(Entity pawn, Job& job, std::string& why);
+    StepResult billWork(Entity pawn, Job& job, std::string& why);
+    StepResult billFinish(Entity pawn, Job& job, std::string& why);
+    bool failCheckDoBill(Entity pawn, Job& job, std::string& why);
+    // Puts the ingredients delivered so far back on the ground near the pawn.
+    void returnIngredients(Entity pawn, const Job& job);
+    // Makes `count` of an item def and puts it down on the nearest free cell near the pawn.
+    void dropNewItems(Entity pawn, DefId def, int count);
     bool retargetStorage(Entity pawn, Job& job);
     void dropCarried(Entity pawn);
+    // Puts what the pawn carries on `cell` if all of it fits there and no other pawn holds the cell.
+    bool placeCarriedAt(Entity pawn, CellPos cell);
+    // Whether a standing point is within kHandsOnReach of the rect; for a job, of what it works on.
+    static bool handsReach(float x, float y, int level, const CellRect& rect);
+    bool handsOnInReach(Entity pawn, const Job& job) const;
+    bool handsOnPickUp(Entity pawn, Entity item, std::string& error);
     void reserve(Entity pawn, const Job& job);
     void release(Entity pawn, const Job& job);
     void jobEvent(Entity pawn, const Job& job, bool started, const std::string& message);
@@ -344,9 +464,15 @@ private:
     const NeedsSystem& needs_;
     const NeedRules& rules_;
     const GameTime& time_;
+    const Lights* lights_ = nullptr;
     SimStats& stats_;
     std::vector<Event>& events_;
 
+    Rooms* rooms_ = nullptr;
+    ResearchSystem* research_ = nullptr;
+    RecreationRules recreation_;
+    std::unique_ptr<BillSystem> bills_;
+    const PowerGrid* power_ = nullptr;
     std::vector<std::unique_ptr<WorkGiver>> givers_;
     std::vector<WorkType> workTypes_;
     std::vector<uint8_t> standable_;  // per def id: a building pawns can stand on (storage allowed)
@@ -382,6 +508,7 @@ private:
     int64_t avoidSeconds_ = 0;
     int maxRepaths_ = 0;
     uint8_t defaultPriority_ = kDefaultPriority;
+    Filth* filth_ = nullptr;
     std::vector<Entity> order_;              // scratch: workers this step
     std::vector<WorkCandidate> candidates_;  // scratch: one think
 };

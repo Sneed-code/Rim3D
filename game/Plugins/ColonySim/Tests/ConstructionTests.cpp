@@ -423,7 +423,7 @@ TEST_CASE("Construction: a pawn standing where a wall is finished is moved out, 
     sim.submit(SetWorkPriorityCommand{bystander, "Hauling", 0});
     (void)builder;
     buildSpawn(sim, "Steel", CellPos{5, 5, 0}, 5);
-    buildSpawn(sim, "WoodLog", CellPos{16, 16, 0}, 20);
+    const Entity wood = buildSpawn(sim, "WoodLog", CellPos{16, 16, 0}, 20);
     buildPlace(sim, "Wall", "Steel", CellPos{16, 16, 0});
     BUILD_REQUIRE(buildRunUntil(sim, 3000, [&] { return buildIsWall(sim, CellPos{16, 16, 0}); }) >= 0);
     const Position& pos = sim.things().registry().get<Position>(bystander);
@@ -432,6 +432,28 @@ TEST_CASE("Construction: a pawn standing where a wall is finished is moved out, 
     // The wood is still on the map, not under the wall.
     CHECK(buildItemsOnMap(sim, "WoodLog") == 20);
     CHECK(sim.things().itemsAt(CellPos{16, 16, 0}).empty());
+    // It is the same stack, moved: a pawn on its way to it (or a job holding it) still has it.
+    CHECK(sim.things().spawned(wood));
+    CHECK(sim.things().registry().get<StackCount>(wood).count == 20);
+}
+
+TEST_CASE("Construction: a pawn walking when a wall goes up under it gives up the walk, so its job asks again") {
+    Sim sim = buildSim();
+    const Entity walker = buildSpawn(sim, "Human", CellPos{16, 16, 0});
+    sim.submit(SetWorkPriorityCommand{walker, "Construction", 0});
+    sim.submit(SetWorkPriorityCommand{walker, "Hauling", 0});
+    const Entity site = buildPlace(sim, "Wall", "Steel", CellPos{16, 16, 0});
+    BUILD_REQUIRE(site != kNoEntity);
+    Mover& mover = sim.things().registry().get<Mover>(walker);
+    const Position& at = sim.things().registry().get<Position>(walker);
+    mover.walkTo(at.x, at.y, {CellPos{30, 16, 0}});
+    CHECK_FALSE(mover.arrived());
+    CHECK(sim.construction().deliver(site, sim.defs().idOf("Things", "Steel"), 5) == 5);
+    const Entity wall = sim.construction().complete(site);
+    BUILD_REQUIRE(wall != kNoEntity);
+    CHECK(cellOf(sim.things().registry().get<Position>(walker)) != CellPos{16, 16, 0});
+    CHECK(mover.arrived());  // the route is cleared...
+    CHECK(mover.gaveUp);     // ...and the walk is said to be given up, not finished
 }
 
 TEST_CASE("Construction: a plan walled in where no pawn can stand is left alone") {
@@ -586,4 +608,25 @@ TEST_CASE("Construction: the same commands give the same game, and a save in the
     CHECK(buildIsWall(straight, CellPos{24, 14, 0}));
     CHECK(straight.map().passage(CellPos{26, 14, 0}) == Passage::Door);
     CHECK(straight.stats().failedJobs < 10);
+}
+
+TEST_CASE("Construction: a builder holds still while it builds, and walks free again after") {
+    Sim sim = buildSim();
+    const Entity builder = buildSpawn(sim, "Human", CellPos{10, 10, 0});
+    buildSpawn(sim, "Steel", CellPos{12, 10, 0}, 5);
+    const Entity site = buildPlace(sim, "Wall", "Steel", CellPos{14, 10, 0});
+    BUILD_REQUIRE(site != kNoEntity);
+    const Worker& worker = sim.things().registry().get<Worker>(builder);
+    const Mover& mover = sim.things().registry().get<Mover>(builder);
+    bool heldWhileWorking = false;
+    bool heldWhileWalking = false;
+    for (int i = 0; i < 3000 && !buildIsWall(sim, CellPos{14, 10, 0}); ++i) {
+        sim.step();
+        const bool working = worker.job.type == JobType::BuildFrame && worker.job.step >= 1;
+        heldWhileWorking = heldWhileWorking || (working && mover.hold);
+        heldWhileWalking = heldWhileWalking || (!working && mover.hold);
+    }
+    CHECK(buildIsWall(sim, CellPos{14, 10, 0}));
+    CHECK(heldWhileWorking);
+    CHECK_FALSE(heldWhileWalking);
 }

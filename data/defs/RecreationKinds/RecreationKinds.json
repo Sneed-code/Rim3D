@@ -1,0 +1,6 @@
+[
+  {"defName": "Meditative", "label": "meditative", "source": "RimWorld", "toleranceGainPerUse": 0.05, "toleranceDecayPerDay": 0.1, "unverified": ["toleranceGainPerUse", "toleranceDecayPerDay"]},
+  {"defName": "Social", "label": "social", "source": "RimWorld", "toleranceGainPerUse": 0.04, "toleranceDecayPerDay": 0.1, "unverified": ["toleranceGainPerUse", "toleranceDecayPerDay"]},
+  {"defName": "Dexterity", "label": "dexterity games", "source": "RimWorld", "toleranceGainPerUse": 0.05, "toleranceDecayPerDay": 0.1, "unverified": ["toleranceGainPerUse", "toleranceDecayPerDay"]},
+  {"defName": "Cerebral", "label": "thinking games", "source": "RimWorld", "toleranceGainPerUse": 0.05, "toleranceDecayPerDay": 0.1, "unverified": ["toleranceGainPerUse", "toleranceDecayPerDay"]}
+]

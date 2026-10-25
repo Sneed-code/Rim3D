@@ -2,7 +2,12 @@
 
 Ideas parked for later. Newest first. Move an item into a stage plan when it's picked up.
 
-- **Shooter feel (research 2026-10-25, `docs/design/shooter-feel.md`).** Not in any stage yet. Pieces: weapon recoil patterns as data in weapon defs (kick curve per shot, in the sim; Unreal only shows the camera kick); camera shake (Unreal built-in shake assets, fired by sim events: shots, hits, explosions); motion blur and explosion screen effects (post process); protagonist dodge roll (sim command with a short "can't be hit" window and sim-driven movement, roll animation from a free pack, retargeted); grenade and rocket visuals (Niagara, Chaos debris). Pick up after F2 and U11 are merged, as one cloud task plus one PC task.
+- Floor-building job and architect tool (floors are placed by `PlaceFloor` command only; found in C17, no plan task covers it). Needs a Construction-style job: pick floor, mark area, colonists lay it.
+- Cleaning outdoors needs the home area (C17 cleans indoors only); vomit, ash and animal filth have no sources yet (E4 fire, animals).
+- Colonists that seek a safe temperature (go indoors or toward a heater when outside their safe range, like RimWorld's `SeekSafeTemperature`): E2 only makes them sick (`docs/design/temperature.md` "Not yet"). Needed before the year scenario C25 can say nobody freezes; fits H-tasks or C25 itself.
+- Per-building thermostat targets for heaters and coolers (U19 panels).
+
+- Cooking leftovers and shooter feel: picked up in `docs/plans/stage-2.md` (C11 fuel, C14 bills, C16 food poisoning; P2 and U21 shooter feel).
 - Protagonist needs sleep or not (open question in `docs/game-design.md`).
 - Elevators for multi-storey buildings (after stairs and ladders).
 - Carry on as another colonist after the protagonist dies (currently game over).

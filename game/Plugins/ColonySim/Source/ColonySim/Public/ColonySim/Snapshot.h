@@ -2,12 +2,14 @@
 
 #include "ColonySim/Api.h"
 #include "ColonySim/Cover.h"
+#include "ColonySim/BillMode.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/JobType.h"
 #include "ColonySim/Looks.h"
+#include "ColonySim/Power.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Zones.h"
 
@@ -55,6 +57,7 @@ struct ThingView {
     // Pawns: the job they are on (docs/design/jobs.md) and what it is about, and what they carry.
     JobType job = JobType::None;
     Entity jobTarget = kNoEntity;
+    float jobProgress = 0.0f;  // 0 to 1: a swing of the pick, a plant being cut, a frame being built (hands-on work, U10)
     DefId carriedDef;
     int carriedCount = 0;
     // Buildings: Built, or a Blueprint or Frame still to be built (docs/design/construction.md). A
@@ -70,6 +73,9 @@ struct ThingView {
     bool markedForDeconstruct = false;
     // Doors: 0 closed to 1 open (it opens over about 0.75 real seconds while a pawn waits).
     float doorOpen = 0.0f;
+    // Work buildings with bills (docs/design/bills.md): `billCount` bills from Snapshot::bills[firstBill].
+    uint32_t firstBill = 0;
+    uint32_t billCount = 0;
     // Pawns with needs (docs/design/needs.md): food and rest, 1 full to 0 empty, else -1; asleep
     // while lying down in a bed or on the ground.
     float food = -1.0f;
@@ -78,6 +84,10 @@ struct ThingView {
     // Mood (docs/design/mood.md): 0 to 100, else -1; the break band as a MoodBand (0 stable to 3 extreme).
     float mood = -1.0f;
     int moodBand = 0;
+    // Recreation, comfort and outdoors needs (docs/design/recreation.md): 0 empty to 1 full, else -1.
+    float joy = -1.0f;
+    float comfort = -1.0f;
+    float outdoors = -1.0f;
     // Pawns: how they hold their body and which way they face (a unit vector; +x east), the gun
     // in their hands (invalid if none) and steps until it can start a new shot (0: ready).
     // Downed pawns lie prone (docs/design/combat.md).
@@ -109,6 +119,20 @@ struct ThingView {
     uint32_t squad = 0;
     // Humanlike pawns: their looks, Snapshot::looks[looks]; -1 for other things.
     int32_t looks = -1;
+    // Buildings with a power part (docs/design/power.md): whether they have power, the net they are
+    // in (Snapshot::powerNets[powerNet - 1]; 0 for none), watts now (+ generating, - drawing) and,
+    // for batteries, how full (0 to 1; -1 for other buildings).
+    PowerState power = PowerState::None;
+    uint32_t powerNet = 0;
+    float powerWatts = 0.0f;
+    float batteryFill = -1.0f;
+    // Pawns with needs: the beauty need (docs/design/room-stats.md), 0 to 1 with 35% to 65% neutral; else -1.
+    float beautyNeed = -1.0f;
+    // Animals (docs/design/animal-life.md): life stage (0 baby, 1 juvenile, 2 adult) and body size in
+    // RimWorld's units (a human is 1); -1 and 0 for other things. `food` (a share of their capacity),
+    // `asleep` and `faction` (100 for wild) are filled for them too.
+    int lifeStage = -1;
+    float bodySize = 0.0f;
 };
 
 // A raid squad on the map (docs/design/raids.md). `state` is a SquadState: 0 Advance, 1 Hold,
@@ -148,6 +172,15 @@ struct PawnLooksView {
     LooksColor hair;
 };
 
+// One bill on a work building, in the building's order (first is tried first).
+struct BillView {
+    uint32_t id = 0;  // the id the bill commands use, per building
+    DefId recipe;     // a Recipes def
+    BillMode mode = BillMode::Count;
+    int count = 0;    // Count: times left; UntilHave: the stock to reach; Forever: 0
+    bool suspended = false;
+};
+
 // One stockpile zone: `cellCount` cells from Snapshot::zoneCells[firstCell].
 struct ZoneView {
     ZoneId id = kNoZone;
@@ -169,6 +202,27 @@ struct RoomView {
     int tables = 0;
     int chairs = 0;
     int stoves = 0;
+    // Room stats (docs/design/room-stats.md); all 0 for a room without stats (open to the sky).
+    // The names of their stages come from beautyLabel(), spaceLabel() and the like (RoomStats.h).
+    bool hasStats = false;
+    float beauty = 0.0f;
+    float space = 0.0f;
+    float wealth = 0.0f;
+    float cleanliness = 0.0f;
+    float impressiveness = 0.0f;
+    float temperature = 0.0f;  // degrees Celsius (docs/design/temperature.md)
+};
+
+// A floor laid on a cell, and a pile of filth on one (docs/design/room-stats.md).
+struct FloorView {
+    CellPos cell;
+    DefId def;  // a Terrain def
+};
+
+struct FilthView {
+    CellPos cell;
+    DefId def;  // a Filth def
+    int thickness = 1;
 };
 
 // One mark on a cell: mine here, cut this plant, harvest it (docs/design/mining.md).
@@ -177,16 +231,28 @@ struct DesignationView {
     DesignationKind kind = DesignationKind::None;
 };
 
+// One research project and where it stands (docs/design/research.md).
+struct ResearchView {
+    DefId project;          // a Research def
+    double progress = 0.0;  // points so far (the cost when done)
+    double cost = 0.0;
+    bool done = false;
+    bool available = false;  // not done, every prerequisite done: can be picked
+    bool current = false;
+};
+
 struct Snapshot {
     int64_t gameSeconds = 0;  // Sim::time().seconds when it was written
     int mapWidth = 0;
     int mapHeight = 0;
     std::vector<ThingView> things;  // sorted by id
     std::vector<PathPointView> waypoints;  // the pawns' routes, see ThingView
+    std::vector<BillView> bills;           // the work buildings' bills, see ThingView
     std::vector<ZoneView> zones;           // by id
     std::vector<CellPos> zoneCells;        // the zones' cells, see ZoneView
     std::vector<DesignationView> designations;  // every mark, in cell order
     std::vector<RoomView> rooms;           // enclosed rooms, by id
+    float outdoorTemperature = 0.0f;       // degrees Celsius
     // The cells with a thin (built) roof, in cell order; `roofChanges` goes up when the set
     // changes, so Unreal rebuilds the roof only then. The mountain's thick roof is the rock itself
     // (`Map::roof` says which).
@@ -194,6 +260,13 @@ struct Snapshot {
     uint64_t roofChanges = 0;
     std::vector<ProjectileView> projectiles;  // sorted by id
     std::vector<PawnLooksView> looks;      // see ThingView::looks
+    std::vector<PowerNetView> powerNets;   // by id - 1, see ThingView::powerNet
+    std::vector<ResearchView> research;    // every project, in def order
+    // Floors and filth, in cell order. Rewritten only when `floorChanges` / `filthChanges` goes up.
+    std::vector<FloorView> floors;
+    uint64_t floorChanges = ~0ULL;
+    std::vector<FilthView> filth;
+    uint64_t filthChanges = ~0ULL;
     // The colony alarm (docs/design/raids.md): on, and whether the player sounded it (only the
     // player stops that one); the raid squads on the map.
     bool alarm = false;

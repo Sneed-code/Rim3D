@@ -1,15 +1,20 @@
 // The work scanners, one per task name in the WorkTypes defs (docs/design/jobs.md).
 #include "ColonySim/Jobs.h"
 
+#include "ColonySim/Bills.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Designations.h"
+#include "ColonySim/Filth.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Regions.h"
+#include "ColonySim/Research.h"
+#include "ColonySim/Rooms.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
+#include <cmath>
 #include <tuple>
 
 namespace colony {
@@ -278,6 +283,205 @@ public:
     }
 };
 
+// Bills on a stove (RimWorld's WorkGiver_DoBill): the first bill in the building's list that should
+// be done now, that the pawn is skilled enough for, and whose ingredients it can fetch. The
+// ingredients are the nearest free stacks to the building; the pawn carries them one stack at a
+// time (docs/design/bills.md).
+class DoBillsCookStoveGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "DoBillsCookStove"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        if (!jobs.canUseHands(pawn)) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        reg.view<const BillList, const Footprint, const Position>().each(
+            [&](Entity building, const BillList& list, const Footprint& footprint, const Position& pos) {
+                if (pos.level != at.level || reg.all_of<MarkedForDeconstruct>(building) || !jobs.buildingRuns(building)) {
+                    return;
+                }
+                // Cheap check only: some bill that isn't suspended (the stock of an "until you
+                // have" bill is counted when the job is made).
+                const bool any = std::any_of(list.bills.begin(), list.bills.end(), [](const Bill& bill) {
+                    return !bill.suspended && (bill.mode != BillMode::Count || bill.count > 0);
+                });
+                CellPos stand;
+                if (!any || !jobs.construction().workCell(footprint.rect(), cellOf(at), stand)) {
+                    return;
+                }
+                out.push_back(WorkCandidate{JobTarget{building, CellPos{}}, workGiverDistSq(at, pos), 0, 0, true, stand});
+            });
+    }
+
+    bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
+        const entt::registry& reg = jobs.things().registry();
+        const Entity building = candidate.target.thing;
+        const BillList* list = reg.try_get<BillList>(building);
+        if (list == nullptr) {
+            return false;
+        }
+        const BillSystem& bills = jobs.bills();
+        for (const Bill& bill : list->bills) {
+            const Recipe* recipe = bills.recipe(bill.recipe);
+            if (recipe == nullptr || recipe->work <= 0.0f || !bills.shouldDo(bill) ||
+                bills.skillLevel(pawn, recipe->skill) < recipe->minSkill) {
+                continue;
+            }
+            std::vector<BillPick> picks;
+            if (!planIngredients(jobs, pawn, building, *recipe, picks)) {
+                continue;
+            }
+            out = Job{};
+            out.type = JobType::DoBill;
+            out.site = building;
+            out.cell = candidate.reach;
+            out.bill = bill.id;
+            out.thing = picks.front().item;
+            out.count = picks.front().count;
+            out.picks.assign(picks.begin() + 1, picks.end());
+            return true;
+        }
+        return false;
+    }
+
+private:
+    struct Stack {
+        float distSq = 0.0f;
+        Entity item = kNoEntity;
+    };
+
+    // Picks stacks that cover every ingredient of the recipe, nearest to the building first, never
+    // one that is held, avoided or unreachable. False if the map doesn't have enough.
+    static bool planIngredients(JobSystem& jobs, Entity pawn, Entity building, const Recipe& recipe,
+                                std::vector<BillPick>& picks) {
+        const entt::registry& reg = jobs.things().registry();
+        const BillSystem& bills = jobs.bills();
+        const Position& at = reg.get<Position>(pawn);
+        const Position& stove = reg.get<Position>(building);
+        const CellPos from = cellOf(at);
+        std::vector<Stack> stacks;
+        for (const RecipeIngredient& ingredient : recipe.ingredients) {
+            stacks.clear();
+            reg.view<const Thing, const Position, const StackCount>().each(
+                [&](Entity item, const Thing& thing, const Position& pos, const StackCount&) {
+                    if (pos.level != at.level ||
+                        std::find(ingredient.items.begin(), ingredient.items.end(), thing.def) == ingredient.items.end()) {
+                        return;
+                    }
+                    const JobTarget target{item, CellPos{}};
+                    if (jobs.reservedByOther(target, pawn) || jobs.avoiding(pawn, target) ||
+                        std::any_of(picks.begin(), picks.end(), [item](const BillPick& p) { return p.item == item; }) ||
+                        !jobs.canReach(from, cellOf(pos))) {
+                        return;
+                    }
+                    stacks.push_back(Stack{workGiverDistSq(stove, pos), item});
+                });
+            std::sort(stacks.begin(), stacks.end(), [](const Stack& a, const Stack& b) {
+                return a.distSq != b.distSq ? a.distSq < b.distSq : a.item < b.item;
+            });
+            double left = ingredient.amount;  // nutrition or count still to cover
+            for (const Stack& stack : stacks) {
+                if (left <= 1.0e-6) {
+                    break;
+                }
+                const DefId def = reg.get<Thing>(stack.item).def;
+                const double unit = ingredient.byNutrition ? bills.nutritionOf(def) : 1.0;
+                const int wanted = ingredient.byNutrition ? static_cast<int>(std::ceil(left / unit - 1.0e-6))
+                                                          : static_cast<int>(std::lround(left));
+                const int take = std::min({wanted, reg.get<StackCount>(stack.item).count, jobs.carryLimit(pawn, def)});
+                if (take <= 0) {
+                    continue;
+                }
+                if (static_cast<int>(picks.size()) >= bills.numbers().maxIngredientStacks) {
+                    return false;
+                }
+                picks.push_back(BillPick{stack.item, take});
+                left -= take * unit;
+            }
+            if (left > 1.0e-6) {
+                return false;
+            }
+        }
+        return !picks.empty();
+    }
+};
+
+// Research (RimWorld's WorkGiver_Researcher): a research bench that can work on the colony's current
+// project, with nobody else at it (docs/design/research.md). The pawn sits at a cell beside the bench.
+class ResearchGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "Research"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        const ResearchSystem* research = jobs.research();
+        if (research == nullptr || research->current().empty()) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        reg.view<const Thing, const Footprint, const Position>().each(
+            [&](Entity bench, const Thing& thing, const Footprint& footprint, const Position& pos) {
+                const ResearchBenchInfo* info = research->benchInfo(thing.def);
+                if (info == nullptr || pos.level != at.level || reg.all_of<ConstructionSite>(bench) ||
+                    reg.all_of<MarkedForDeconstruct>(bench) || !research->benchCanWork(*info) ||
+                    !jobs.buildingRuns(bench)) {
+                    return;
+                }
+                CellPos stand;
+                if (!jobs.construction().workCell(footprint.rect(), cellOf(at), stand)) {
+                    return;
+                }
+                out.push_back(WorkCandidate{JobTarget{bench, CellPos{}}, workGiverDistSq(at, pos), 0, 0, true, stand});
+            });
+    }
+
+    bool makeJob(JobSystem&, Entity, const WorkCandidate& candidate, Job& out) override {
+        out = Job{};
+        out.type = JobType::Research;
+        out.site = candidate.target.thing;
+        out.cell = candidate.reach;
+        return true;
+    }
+};
+
+// Cleaning filth (RimWorld's WorkGiver_CleanFilth, in the Cleaning work type): any cell indoors with
+// filth in it. Outdoor filth waits for the home area, which RimWorld's cleaners are limited to.
+class CleanFilthGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "CleanFilth"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        Filth* filth = jobs.filth();
+        Rooms* rooms = jobs.rooms();
+        if (filth == nullptr || rooms == nullptr || filth->cellCount() == 0 || !jobs.canUseHands(pawn)) {
+            return;
+        }
+        const Position& at = jobs.things().registry().get<Position>(pawn);
+        for (const auto& [index, piles] : filth->all()) {
+            (void)piles;
+            const CellPos cell = jobs.map().cellAt(index);
+            if (cell.level != at.level || !rooms->indoors(cell)) {
+                continue;
+            }
+            const float dx = static_cast<float>(cell.x) + 0.5f - at.x;
+            const float dy = static_cast<float>(cell.y) + 0.5f - at.y;
+            out.push_back(WorkCandidate{JobTarget{kNoEntity, cell}, dx * dx + dy * dy, 0, 0, false, CellPos{}});
+        }
+    }
+
+    bool makeJob(JobSystem& jobs, Entity, const WorkCandidate& candidate, Job& out) override {
+        if (jobs.filth() == nullptr || !jobs.filth()->has(candidate.target.cell)) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::CleanFilth;
+        out.cell = candidate.target.cell;
+        return true;
+    }
+};
+
 }  // namespace
 
 bool makeHaulJob(JobSystem& jobs, Entity pawn, Entity item, Job& out) {
@@ -304,6 +508,9 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<DeconstructGiver>());
     givers.push_back(std::make_unique<MineGiver>());
     givers.push_back(std::make_unique<CutOrHarvestPlantsGiver>());
+    givers.push_back(std::make_unique<DoBillsCookStoveGiver>());
+    givers.push_back(std::make_unique<ResearchGiver>());
+    givers.push_back(std::make_unique<CleanFilthGiver>());
     return givers;
 }
 

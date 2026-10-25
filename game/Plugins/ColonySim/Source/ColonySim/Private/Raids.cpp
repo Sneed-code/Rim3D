@@ -1,5 +1,6 @@
 #include "ColonySim/Raids.h"
 
+#include "ColonySim/Animals.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
@@ -465,7 +466,8 @@ bool RaidSystem::soundAlarm(bool on, std::string& error) {
     // Enemies still about: don't sound it again by itself until they are gone.
     const entt::registry& reg = things_.registry();
     for (const auto [pawn, faction] : reg.view<const Faction>().each()) {
-        if (faction.id != kPlayerFaction && things_.spawned(pawn) && !health_.incapacitated(pawn)) {
+        if (faction.id != kPlayerFaction && !reg.all_of<Animal>(pawn) && things_.spawned(pawn) &&
+            !health_.incapacitated(pawn)) {
             state_.suppressed = true;
             break;
         }
@@ -647,7 +649,7 @@ void RaidSystem::thinkSquad(Squad& squad) {
     CellPos nearest;
     float bestD = 0.0f;
     for (const auto [pawn, pos, mover] : reg.view<const Position, const Mover>().each()) {
-        if (fighters_.factionOf(pawn) != kPlayerFaction || health_.incapacitated(pawn)) {
+        if (fighters_.factionOf(pawn) != kPlayerFaction || reg.all_of<Animal>(pawn) || health_.incapacitated(pawn)) {
             continue;
         }
         const float d = raidDist(pos.x, pos.y, cx, cy);
@@ -864,7 +866,8 @@ void RaidSystem::thinkAlarm() {
     // Enemies on the map that still fight; routed ones running off don't count.
     std::vector<Entity> hostiles;
     for (const auto [pawn, faction, pos] : reg.view<const Faction, const Position>().each()) {
-        if (faction.id == kPlayerFaction || health_.incapacitated(pawn)) {
+        // Wild animals aren't enemies (Animals.h); a hunted one fights back on its own.
+        if (faction.id == kPlayerFaction || reg.all_of<Animal>(pawn) || health_.incapacitated(pawn)) {
             continue;
         }
         const Fighter* f = reg.try_get<Fighter>(pawn);

@@ -42,9 +42,17 @@ rest (place blueprint, designate, draft, actions) come with the tasks that build
 | `OrderHaulCommand{pawn, thing}` | "prioritize hauling": ends the pawn's job, hauls the item | not a working pawn; not an item; held by another pawn; unreachable; no room; the player is controlling the pawn |
 | `ControlPawnCommand{pawn}` | the player takes over one colonist (the previous one is let go, its job ends); `kNoEntity` lets go ([protagonist.md](protagonist.md)) | not a living colonist on the map |
 | `DirectMoveCommand{pawn, x, y}` | moves the controlled pawn toward (x, y) metres, at most 0.5 m a step, out of walls | not the controlled pawn; downed or dead; x or y is not a number |
+| `HandsOnCommand{pawn, mode, thing, cell}` | the controlled colonist works by hand ([handson.md](handson.md)): `Work` starts the sim's job on the blueprint, frame or item `thing`, else the rock or plant in `cell` (picking up is at once); `PutDown` sets down what it carries; `Stop` ends the job | not the controlled pawn; downed or dead; out of reach; taken by another colonist; hands full; a plan with no materials; nothing to work on |
 | `PlaceBlueprintCommand{def, stuff, cell, rot}` | plans a building ([construction.md](construction.md)); `stuff` is "" for a building that takes none | unknown def or stuff; can't be built; the stuff doesn't fit; the footprint is off the map, on water or rock, on a building or on another plan |
 | `CancelBuildCommand{thing}` | takes back a blueprint or frame (what was delivered is put back on the ground), or unmarks a building | `thing` is none of those |
 | `DeconstructCommand{thing}` | marks a finished building to be taken down | not a building; marked already |
+| `AddBillCommand{building, recipe, mode, count}` | puts a bill on a work building: `mode` `Count`, `UntilHave` or `Forever` ([bills.md](bills.md)) | not a finished building; unknown recipe; the building can't make it; bad count; 15 bills already |
+| `RemoveBillCommand{building, bill}` | takes a bill off | no such bill |
+| `SetBillCommand{building, bill, mode, count, suspended}` | changes a bill or pauses it | no such bill; bad count |
+| `FlickCommand{thing, on}` | opens or closes a power switch, or switches a consumer or generator on or off ([power.md](power.md)) | the building has no power part; a conduit or battery |
+| `ShortCircuitCommand{thing}` | dev command and T3's hook: empties the net's batteries, destroys a conduit or switch | no power part |
+| `PlaceFloorCommand{area, floor}` | lays a floor def over a rectangle at once; an empty `floor` takes floors off ([room-stats.md](room-stats.md)) | unknown or non-floor def; cell not on the map |
+| `AddFilthCommand{cell, kind, layers}` | puts filth down (dev, and the hook for later sources of vomit and ash) | unknown filth kind; cell not on the map |
 | `SetScheduleCommand{pawn, hour, kind}` | the pawn's schedule for one hour (0 to 23): Anything, Work, Joy or Sleep ([needs.md](needs.md)) | the pawn has no schedule; bad hour |
 | `DesignateCommand{area, kind}` | marks rock (`Mine`), plants (`CutPlant`) or ripe plants (`HarvestPlant`) in the rectangle for work ([mining.md](mining.md)) | `kind` is None; nothing in `area` suits |
 | `CancelDesignationsCommand{area, kind}` | takes marks off, `None` for every kind, and ends the jobs on them | nothing marked in `area` |
@@ -69,10 +77,17 @@ In replay files a `rot` is `"North"`, `"East"`, `"South"` or `"West"` (`"North"`
 **Speed and pause are not commands.** They decide how often Unreal calls `step()`, not what a step
 does, so they stay in `USimSubsystem`. A replay counts steps, so it doesn't need them.
 
-**Adding a command:** a struct in `Commands.h` added to the `Command` variant; its name in
-`commandName` (`Bridge.cpp`); applying it in `Sim::applyCommand`; reading and writing it in
-`Replay.cpp` (`replayCommandJson`, `replayReadCommand`); a test. The `static_assert`s in the
-visitors stop the build if one of the first two is forgotten. Things are named by `Entity`; the
+**Adding a command** (a short checklist, so tasks running in parallel merge cleanly):
+
+1. A struct in `Commands.h`, added at the end of the `Command` variant. Its place there doesn't
+   matter to any file: saves and replays name commands (since S7, [saves.md](saves.md)).
+2. Its name in `commandName` (`Bridge.cpp`), unique; `commandFromName` finds it from there.
+3. Applying it in `Sim::applyCommand`.
+4. Its fields in `saveCommand` (`Save.cpp`), and in `Replay.cpp` (`replayCommandJson`,
+   `replayReadCommand`).
+5. A row in the table above, and a test.
+
+The `static_assert`s in the visitors stop the build if 2 or 4 (the save) is forgotten. Things are named by `Entity`; the
 same commands give the same ids, so replays can name them too. Never apply a command anywhere but
 `applyCommand`, and never change sim state from outside a command.
 
@@ -88,8 +103,9 @@ starts, so read it after every step. Before the first step it holds what setting
 | `ThingDespawned` | `thing`, `def` | a thing leaves the map but still exists (picked up) |
 | `ThingDestroyed` | `thing`, `def` | a thing stops existing; comes after `ThingDespawned` if it was on the map |
 | `CommandFailed` | `command`, `message` | a command couldn't be applied |
-| `PawnAction` | `thing` (the pawn), `def`, `action`, `target` | a pawn did something Unreal animates: `PickUp`, `PutDown` (U5, [pawns.md](pawns.md)), `Eat`, `LieDown`, `GetUp` (C6); `Build` and `Deconstruct` (C4) when work on `target` begins; `Reload` (`target` the gun) and `Dodge` (`target` the projectile, `cell` where it steps) (F5) |
+| `PawnAction` | `thing` (the pawn), `def`, `action`, `target` | a pawn did something Unreal animates: `PickUp`, `PutDown` (U5, [pawns.md](pawns.md)), `Eat`, `LieDown`, `GetUp` (C6); `Build` and `Deconstruct` (C4) when work on `target` begins; `Cook` (C7) when a run of a bill begins at the stove `target`; `Clean` (C17) when a layer of filth at `target`'s cell starts to be cleaned; `Reload` (`target` the gun) and `Dodge` (`target` the projectile, `cell` where it steps) (F5) |
 | `FrameStarted` | `thing` (the plan), `def` (the building), `cell` | a blueprint got its first materials and is a frame now; the plan itself came with a `ThingSpawned` |
+| `RecipeDone` | `thing` (the cook), `def` (the Recipes def), `target` (the stove), `cell`, `amount` (products made), `message` | one run of a bill is done; `message` is "bill finished" when a "do X times" bill reached 0 and went ([bills.md](bills.md)) |
 | `PawnInjured` | `thing`, `def` (the injury), `part`, `amount`, `cell` | a pawn got an injury (F1) |
 | `PawnPartLost` | `thing`, `def` (MissingBodyPart), `part`, `amount`, `cell` | a pawn lost a body part |
 | `PawnDowned`, `PawnGotUp` | `thing`, `cell` | a pawn can no longer act, or can again |
@@ -108,6 +124,8 @@ starts, so read it after every step. Before the first step it holds what setting
 | `PawnLeftMap` | `thing`, `def`, `cell`, `squad` | a routed raider walked off the map; its `ThingDestroyed` follows |
 | `PawnMoodBand` | `thing`, `amount` (its mood), `message` ("stable", "minor", "major" or "extreme") | a pawn's mood crossed a mental break threshold (C9, [mood.md](mood.md)) |
 | `ShotFired` | `thing` (shooter), `def` (gun), `target` (projectile), `x, y, z` (muzzle) | a pawn fired (F2, [combat.md](combat.md)) |
+| `PowerChanged` | `thing`, `def`, `cell`, `message` ("on" or "off") | a generator, consumer or battery gained or lost power (E5, [power.md](power.md)); conduits are not announced |
+| `ShortCircuit` | `thing`, `def`, `cell`, `amount` (Wd released) | a short circuit emptied a net's batteries (E5) |
 | `ProjectileHit` | `thing` (projectile), `def` (Projectiles def), `hit`, `target`, `part`, `amount`, `x, y, z`, `cell` | a projectile stopped: ground, rock, building, pawn, armor, or gone |
 
 `Things` reports its own spawns and despawns once the sim points it at the event list
@@ -120,7 +138,7 @@ letters) here. Events say what changed; positions and states are in the snapshot
 and a `ThingView` per thing on the map, sorted by id (`Snapshot::find` is a binary search).
 A `ThingView` has the id, def, category, position (metres on a level), rotation and footprint
 size for buildings, stack count for items, and hit points. Pawns with needs also have `food`, `rest` and
-`asleep` ([needs.md](needs.md)), and `mood` and `moodBand` ([mood.md](mood.md)). Pawns with a body also have `downed` and
+`asleep` ([needs.md](needs.md)), `mood` and `moodBand` ([mood.md](mood.md)), and `joy`, `comfort` and `outdoors` ([recreation.md](recreation.md)). `Snapshot::research` lists the research projects ([research.md](research.md)). Pawns with a body also have `downed` and
 `dead` (F1); the rest of a pawn's health is read with `Sim::healthReport`. Things off the map (a carried item) are
 not in it. Since S4 it also has the ground height under the thing (`z`), a pawn's velocity (`vx`,
 `vy`, metres per step) and the route still ahead (`waypointCount` points from
@@ -132,7 +150,7 @@ Since F2 pawns also have
 `stance` (prone when downed or dead), `facingX`/`facingY`, the `weapon` in their hands and
 `shotReadyIn`, and `Snapshot::projectiles` lists every bullet in flight ([combat.md](combat.md)); since F5
 `rounds`, `magazineSize` and `reloading` ([aiming.md](aiming.md)).
-Since C5 a door's `ThingView` has `doorOpen` (0 to 1) and the snapshot has `rooms` (the enclosed rooms with role and
+Since E5 a building with a power part has `power`, `powerNet`, `powerWatts` and `batteryFill`, and the snapshot has `powerNets` ([power.md](power.md)). Since C5 a door's `ThingView` has `doorOpen` (0 to 1) and the snapshot has `rooms` (the enclosed rooms with role and
 size), `roofCells` (the thin roof) and `roofChanges` ([rooms.md](rooms.md)). Since C3 the snapshot lists the `designations`
 (cell and kind of every mine, cut and harvest mark; [mining.md](mining.md)).
 Later tasks add what they draw and show: pawn info, the work tab.
@@ -227,6 +245,22 @@ recording and checks every hash). CI uploads the recording from Linux and Window
 `Saved/Replays/`; F8 (U12) writes a whole bug report folder (replay, save, readable dump, notes; see
 `saves.md`). The file plus the commit it was made on reproduces the session in the cloud
 with `simrun --replay`; `firstMismatch` and the checkpoints narrow down when things went wrong.
+
+## Adding a system (checklist)
+
+Stage 2 runs many tasks at once (`docs/plans/stage-2.md`, rule 1). A new sim system:
+
+1. **Its own files**: `Public/ColonySim/YourSystem.h`, `Private/YourSystem.cpp`, `Tests/YourSystemTests.cpp`
+   and `docs/design/your-system.md`. Helper names in anonymous namespaces get a prefix (unity builds).
+2. **Wired into `Sim`** with short additions at the end of each list (members, constructor, the step
+   order, `stateHash`), never reorders.
+3. **Commands** by the checklist under Commands above.
+4. **Events**: new `EventType` values at the end of the enum, a name in `eventTypeName`, a row in
+   the events table. **Snapshot**: new fields at the end of their struct, filled in `Sim::writeSnapshot`.
+5. **Saved** in a section of its own ([saves.md](saves.md), "Adding to the save"); never a new
+   format number. State that is rebuilt from other state needs no section.
+6. **Replays** stay the same: a change that alters what an existing replay does changes its hashes,
+   which the replay checks catch. Say so in the PR if it is meant.
 
 ## Unreal side (task U2)
 

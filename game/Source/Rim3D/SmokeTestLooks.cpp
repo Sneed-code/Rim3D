@@ -265,7 +265,6 @@ void USmokeTestSubsystem::BuildLooksPhases()
 		}
 		B->StepOnce();
 		B->SetSpeed(0);
-		BuildTerrainMesh(B->GetSim()->map(), FPlatformTime::Seconds());
 		// Facing the row of spawned pawns (they face +X, the way a pawn faces before it has walked).
 		const FVector Target = B->SimToWorld(Middle.x + 3.5f, Middle.y - 3.0f, 0) + FVector(0.0, 0.0, 110.0);
 		const FVector From = Target + FVector(520.0, -60.0, 60.0);

@@ -154,6 +154,41 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["lineage"] = c.lineage;
             } else if constexpr (std::is_same_v<Type, ReloadCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
+            } else if constexpr (std::is_same_v<Type, AddBillCommand>) {
+                j["building"] = entt::to_integral(c.building);
+                j["recipe"] = c.recipe;
+                j["mode"] = billModeName(c.mode);
+                j["count"] = c.count;
+            } else if constexpr (std::is_same_v<Type, RemoveBillCommand>) {
+                j["building"] = entt::to_integral(c.building);
+                j["bill"] = c.bill;
+            } else if constexpr (std::is_same_v<Type, SetBillCommand>) {
+                j["building"] = entt::to_integral(c.building);
+                j["bill"] = c.bill;
+                j["mode"] = billModeName(c.mode);
+                j["count"] = c.count;
+                j["suspended"] = c.suspended;
+            } else if constexpr (std::is_same_v<Type, HandsOnCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["mode"] = c.mode == HandsOnMode::Work ? "Work" : (c.mode == HandsOnMode::PutDown ? "PutDown" : "Stop");
+                j["thing"] = entt::to_integral(c.thing);
+                j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
+            } else if constexpr (std::is_same_v<Type, FlickCommand>) {
+                j["thing"] = entt::to_integral(c.thing);
+                j["on"] = c.on;
+            } else if constexpr (std::is_same_v<Type, PlaceFloorCommand>) {
+                j["area"] = replayRectJson(c.area);
+                j["floor"] = c.floor;
+            } else if constexpr (std::is_same_v<Type, AddFilthCommand>) {
+                j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
+                j["kind"] = c.kind;
+                j["layers"] = c.layers;
+            } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
+                j["thing"] = entt::to_integral(c.thing);
+            } else if constexpr (std::is_same_v<Type, SetResearchCommand>) {
+                j["project"] = c.project;
+            } else if constexpr (std::is_same_v<Type, UnlockResearchCommand>) {
+                j["project"] = c.project;
             } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
                 j["faction"] = c.faction;
                 j["points"] = static_cast<double>(c.points);
@@ -305,6 +340,21 @@ bool replayReadDesignation(ReplayReader& r, const ReplayJson& j, const std::stri
         }
     }
     return r.fail(where + ".kind must be None, Mine, CutPlant or HarvestPlant");
+}
+
+// "mode": "Count" (the default), "UntilHave" or "Forever"
+bool replayReadBillMode(ReplayReader& r, const ReplayJson& j, const std::string& where, BillMode& out) {
+    std::string name = billModeName(BillMode::Count);
+    if (!r.text(j, "mode", name, where)) {
+        return false;
+    }
+    for (const BillMode m : {BillMode::Count, BillMode::UntilHave, BillMode::Forever}) {
+        if (name == billModeName(m)) {
+            out = m;
+            return true;
+        }
+    }
+    return r.fail(where + ".mode must be Count, UntilHave or Forever");
 }
 
 bool replayReadCellAndRot(ReplayReader& r, const ReplayJson& j, const std::string& where, CellPos& cellOut, Rot4& rotOut) {
@@ -617,6 +667,101 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = ReloadCommand{static_cast<Entity>(pawn)};
+    } else if (type == "AddBill") {
+        AddBillCommand c;
+        uint32_t building = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "building", building, where) || !r.text(j, "recipe", c.recipe, where) ||
+            !replayReadBillMode(r, j, where, c.mode) || !r.integer(j, "count", c.count, where)) {
+            return false;
+        }
+        c.building = static_cast<Entity>(building);
+        out.command = std::move(c);
+    } else if (type == "RemoveBill") {
+        RemoveBillCommand c;
+        uint32_t building = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "building", building, where) || !r.integer(j, "bill", c.bill, where)) {
+            return false;
+        }
+        c.building = static_cast<Entity>(building);
+        out.command = c;
+    } else if (type == "SetBill") {
+        SetBillCommand c;
+        uint32_t building = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "building", building, where) || !r.integer(j, "bill", c.bill, where) ||
+            !replayReadBillMode(r, j, where, c.mode) || !r.integer(j, "count", c.count, where) ||
+            !r.flag(j, "suspended", c.suspended, where)) {
+            return false;
+        }
+        c.building = static_cast<Entity>(building);
+        out.command = c;
+    } else if (type == "HandsOn") {
+        HandsOnCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        uint32_t thing = entt::to_integral(kNoEntity);
+        std::string mode = "Work";
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "thing", thing, where) || !r.text(j, "mode", mode, where)) {
+            return false;
+        }
+        if (mode == "Work") {
+            c.mode = HandsOnMode::Work;
+        } else if (mode == "PutDown") {
+            c.mode = HandsOnMode::PutDown;
+        } else if (mode == "Stop") {
+            c.mode = HandsOnMode::Stop;
+        } else {
+            return r.fail(where + ".mode must be Work, PutDown or Stop");
+        }
+        const auto cell = j.find("cell");
+        if (cell == j.end() || !cell->is_array() || cell->size() != 3 || !(*cell)[0].is_number_integer() ||
+            !(*cell)[1].is_number_integer() || !(*cell)[2].is_number_integer()) {
+            return r.fail(where + ".cell must be [x, y, level]");
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        c.thing = static_cast<Entity>(thing);
+        c.cell = CellPos{(*cell)[0].get<int>(), (*cell)[1].get<int>(), (*cell)[2].get<int>()};
+        out.command = c;
+    } else if (type == "Flick") {
+        uint32_t thing = entt::to_integral(kNoEntity);
+        FlickCommand c;
+        if (!r.integer(j, "thing", thing, where) || !r.flag(j, "on", c.on, where)) {
+            return false;
+        }
+        c.thing = static_cast<Entity>(thing);
+        out.command = c;
+    } else if (type == "ShortCircuit") {
+        uint32_t thing = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "thing", thing, where)) {
+            return false;
+        }
+        out.command = ShortCircuitCommand{static_cast<Entity>(thing)};
+    } else if (type == "SetResearch" || type == "UnlockResearch") {
+        std::string project;
+        if (!r.text(j, "project", project, where)) {
+            return false;
+        }
+        if (type == "SetResearch") {
+            out.command = SetResearchCommand{project};
+        } else {
+            out.command = UnlockResearchCommand{project};
+        }
+    } else if (type == "PlaceFloor") {
+        PlaceFloorCommand c;
+        if (!replayReadRect(r, j, where, c.area) || !r.text(j, "floor", c.floor, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "AddFilth") {
+        AddFilthCommand c;
+        if (!r.text(j, "kind", c.kind, where) || !r.integer(j, "layers", c.layers, where)) {
+            return false;
+        }
+        const auto cell = j.find("cell");
+        if (cell == j.end() || !cell->is_array() || cell->size() != 3 || !(*cell)[0].is_number_integer() ||
+            !(*cell)[1].is_number_integer() || !(*cell)[2].is_number_integer()) {
+            return r.fail(where + ".cell must be [x, y, level]");
+        }
+        c.cell = CellPos{(*cell)[0].get<int>(), (*cell)[1].get<int>(), (*cell)[2].get<int>()};
+        out.command = std::move(c);
     } else if (type == "StartRaid") {
         StartRaidCommand c;
         if (!r.text(j, "faction", c.faction, where) || !r.number(j, "points", c.points, where) ||
@@ -680,6 +825,9 @@ std::string writeReplay(const Replay& replay) {
     settings["pathBudget"] = s.pathBudget;
     if (!s.scenario.empty()) {
         settings["scenario"] = s.scenario;
+    }
+    if (s.wildAnimals != 0) {
+        settings["wildAnimals"] = s.wildAnimals;
     }
 
     // One command and one checkpoint per line, so files diff and read well.
@@ -746,13 +894,14 @@ bool readReplay(const std::string& text, Replay& out, std::string& error) {
         !r.flag(*settings, "flatMap", s.flatMap, where) || !r.text(*settings, "pawnDef", s.pawnDef, where) ||
         !r.text(*settings, "haulItemDef", s.haulItemDef, where) ||
         !r.integer(*settings, "checkpointEvery", s.checkpointEvery, where) ||
-        !r.integer(*settings, "pathBudget", s.pathBudget, where) || !r.text(*settings, "scenario", s.scenario, where)) {
+        !r.integer(*settings, "pathBudget", s.pathBudget, where) || !r.text(*settings, "scenario", s.scenario, where) ||
+        !r.integer(*settings, "wildAnimals", s.wildAnimals, where)) {
         return false;
     }
     if (s.mapSize <= 0 || s.mapSize > 4096 || s.pawns < 0 || s.items < 0 || s.checkpointEvery < 0 ||
-        s.pathBudget <= 0) {
+        s.pathBudget <= 0 || s.wildAnimals < 0) {
         return r.fail(
-            "settings: mapSize must be 1 to 4096; pawns, items and checkpointEvery not negative; pathBudget above 0");
+            "settings: mapSize must be 1 to 4096; pawns, items, checkpointEvery and wildAnimals not negative; pathBudget above 0");
     }
 
     if (const auto commands = root.find("commands"); commands != root.end()) {
