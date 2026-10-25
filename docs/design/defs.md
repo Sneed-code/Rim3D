@@ -15,7 +15,8 @@ kind, no cycles), but reports every problem in `errors` and builds nothing if th
 - **Ids.** Every concrete def gets a dense `DefId` (0, 1, 2...). Order: kinds by name, files by
   name, then position in the file, so the same files always give the same ids, whatever order they
   are listed in. Ids are for fast lookups inside one running game. Saves store `defName`.
-- **Reading fields.** `Def::number/integer/flag/text("stats.maxHitPoints")` use dotted paths and
+- **Reading fields.** `Def::number/integer/flag/text("stats.maxHitPoints")` use dotted paths (a
+  number picks an array element: `degreeDatas.0.label`) and
   return a fallback when the field is absent. `count`, `keys`, `textAt`, `numberAt` cover arrays
   and objects. The JSON library stays inside `Defs.cpp`, so no other file needs it.
 - **No exceptions.** The JSON library is built with `JSON_NOEXCEPTION`; bad files give error

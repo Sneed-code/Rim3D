@@ -1,5 +1,6 @@
 #include "ColonySim/Save.h"
 
+#include "ColonySim/Colonist.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Hash.h"
@@ -34,7 +35,7 @@ constexpr char kSaveMagic[8] = {'R', 'I', 'M', '3', 'D', 'S', 'A', 'V'};
 constexpr size_t kSaveMagicSize = sizeof kSaveMagic;
 // Bump when the layout below changes, and keep reading the old versions (the archive's
 // version() says which one a file is). Changing it needs a line in docs/design/saves.md.
-constexpr uint32_t kSaveFormatVersion = 3;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity
+constexpr uint32_t kSaveFormatVersion = 4;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity; 4: C8's scenario and colonists
 constexpr const char* kSaveFormatName = "rim3d-save";
 constexpr const char* kSaveThingsKind = "Things";
 
@@ -73,6 +74,7 @@ struct SaveEntity {
     std::optional<StackCount> stack;
     std::optional<HitPoints> hitPoints;
     std::optional<Mover> mover;
+    std::optional<Colonist> colonist;  // format 4 on
     std::optional<HaulJob> haulJob;
     std::optional<HaulReservedBy> haulReservedBy;
     std::optional<HaulCarriedBy> haulCarriedBy;
@@ -391,6 +393,34 @@ void saveSettings(Ar& ar, SimSettings& s) {
     if (ar.version() >= 2) {
         ar.value("pathBudget", s.pathBudget);
     }
+    if (ar.version() >= 4) {
+        ar.text("scenario", s.scenario);
+    }
+}
+
+template <typename Ar>
+void saveColonist(Ar& ar, Colonist& c) {
+    ar.text("firstName", c.firstName);
+    ar.text("nickName", c.nickName);
+    ar.text("lastName", c.lastName);
+    ar.value("female", c.female);
+    ar.value("age", c.age);
+    ar.text("childhood", c.childhood);
+    ar.text("adulthood", c.adulthood);
+    ar.list("traits", c.traits, [&](TraitRecord& t) {
+        ar.text("def", t.def);
+        ar.value("degree", t.degree);
+    });
+    ar.list("skills", c.skills, [&](SkillRecord& s) {
+        ar.text("def", s.def);
+        ar.value("level", s.level);
+        ar.value("passion", s.passion);
+        ar.value("xp", s.xp);
+        ar.value("disabled", s.disabled);
+        ar.require(static_cast<int>(s.passion) <= static_cast<int>(Passion::Major), "the save file has a bad passion");
+    });
+    ar.list("disabledWorkTags", c.disabledWorkTags, [&](std::string& tag) { ar.text(nullptr, tag); });
+    ar.value("protagonist", c.protagonist);
 }
 
 template <typename Ar>
@@ -459,6 +489,9 @@ void saveEntity(Ar& ar, SaveEntity& e) {
     ar.optional("haulReservedBy", e.haulReservedBy, [&](HaulReservedBy& r) { ar.value("pawn", r.pawn); });
     ar.optional("haulCarriedBy", e.haulCarriedBy, [&](HaulCarriedBy& c) { ar.value("pawn", c.pawn); });
     ar.value("haulStored", e.haulStored);
+    if (ar.version() >= 4) {
+        ar.optional("colonist", e.colonist, [&](Colonist& c) { saveColonist(ar, c); });
+    }
 }
 
 template <typename Ar>
@@ -663,6 +696,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             out.haulCarriedBy = *carried;
         }
         out.haulStored = reg.all_of<HaulStored>(e);
+        if (const Colonist* colonist = reg.try_get<Colonist>(e)) {
+            out.colonist = *colonist;
+        }
         d.entities.push_back(std::move(out));
     }
     d.paths = sim.pathfinder_.saveState();
@@ -768,6 +804,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.haulStored) {
             reg.emplace<HaulStored>(entity);
+        }
+        if (e.colonist) {
+            reg.emplace<Colonist>(entity, std::move(*e.colonist));
         }
     }
     for (const SaveEntity& e : d.entities) {

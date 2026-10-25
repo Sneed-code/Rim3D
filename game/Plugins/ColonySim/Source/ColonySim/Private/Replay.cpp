@@ -215,6 +215,9 @@ std::string writeReplay(const Replay& replay) {
     settings["haulItemDef"] = s.haulItemDef;
     settings["checkpointEvery"] = s.checkpointEvery;
     settings["pathBudget"] = s.pathBudget;
+    if (!s.scenario.empty()) {
+        settings["scenario"] = s.scenario;
+    }
 
     // One command and one checkpoint per line, so files diff and read well.
     std::string out = "{\n";
@@ -280,7 +283,7 @@ bool readReplay(const std::string& text, Replay& out, std::string& error) {
         !r.flag(*settings, "flatMap", s.flatMap, where) || !r.text(*settings, "pawnDef", s.pawnDef, where) ||
         !r.text(*settings, "haulItemDef", s.haulItemDef, where) ||
         !r.integer(*settings, "checkpointEvery", s.checkpointEvery, where) ||
-        !r.integer(*settings, "pathBudget", s.pathBudget, where)) {
+        !r.integer(*settings, "pathBudget", s.pathBudget, where) || !r.text(*settings, "scenario", s.scenario, where)) {
         return false;
     }
     if (s.mapSize <= 0 || s.mapSize > 4096 || s.pawns < 0 || s.items < 0 || s.checkpointEvery < 0 ||

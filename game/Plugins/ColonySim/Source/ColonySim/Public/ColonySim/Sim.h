@@ -40,6 +40,9 @@ struct SimSettings {
     // Record a state hash every this many game seconds (0: never), for replays to compare.
     int64_t checkpointEvery = kSecondsPerHour;
     int pathBudget = Pathfinder::kDefaultBudget;  // path search work per step (docs/design/pathfinding.md)
+    // A Scenarios def to start (e.g. "Crashlanded"): colonists made from the seed, with starting
+    // items, near the middle of the map (docs/design/colonists.md). Empty: no scenario.
+    std::string scenario{};
 };
 
 struct SimStats {
@@ -128,6 +131,7 @@ private:
     void applyCommand(const Command& command, uint64_t id);
     void commandFailed(uint64_t id, std::string message);
     void placeStockpileAndThings();
+    void startScenario();
     void updateHauler(Entity pawn);
     void startNextHaul(Entity pawn);
 

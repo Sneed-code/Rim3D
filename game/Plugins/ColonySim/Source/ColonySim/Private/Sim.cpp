@@ -1,5 +1,6 @@
 #include "ColonySim/Sim.h"
 
+#include "ColonySim/Colonist.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Movement.h"
@@ -47,6 +48,9 @@ Sim::Sim(const SimSettings& settings) : Sim(settings, nullptr) {}
 Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
     : Sim(settings, std::move(defs), EmptyStart{}) {
     placeStockpileAndThings();
+    if (!settings_.scenario.empty()) {
+        startScenario();
+    }
 }
 
 Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, EmptyStart)
@@ -412,7 +416,7 @@ uint64_t Sim::stateHash() const {
         const bool has[] = {reg.all_of<Thing>(e),         reg.all_of<Position>(e),       reg.all_of<Footprint>(e),
                             reg.all_of<StackCount>(e),    reg.all_of<HitPoints>(e),      reg.all_of<Mover>(e),
                             reg.all_of<HaulJob>(e),       reg.all_of<HaulReservedBy>(e), reg.all_of<HaulCarriedBy>(e),
-                            reg.all_of<HaulStored>(e)};
+                            reg.all_of<HaulStored>(e),    reg.all_of<Colonist>(e)};
         uint64_t mask = 0;
         for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
             mask |= has[bit] ? (uint64_t{1} << bit) : 0;
@@ -458,6 +462,28 @@ uint64_t Sim::stateHash() const {
             h.add(static_cast<uint64_t>(mover->ghostSteps));
             h.add(static_cast<uint64_t>(mover->heldSteps));
             h.add(mover->gaveUp);
+        }
+        if (const Colonist* c = reg.try_get<Colonist>(e)) {
+            for (const std::string* text : {&c->firstName, &c->nickName, &c->lastName, &c->childhood, &c->adulthood}) {
+                h.add(text->data(), text->size());
+            }
+            h.add(c->female);
+            h.add(c->age);
+            h.add(c->protagonist);
+            for (const TraitRecord& t : c->traits) {
+                h.add(t.def.data(), t.def.size());
+                h.add(t.degree);
+            }
+            for (const SkillRecord& s : c->skills) {
+                h.add(s.def.data(), s.def.size());
+                h.add(s.level);
+                h.add(static_cast<int>(s.passion));
+                h.add(s.xp);
+                h.add(s.disabled);
+            }
+            for (const std::string& tag : c->disabledWorkTags) {
+                h.add(tag.data(), tag.size());
+            }
         }
         if (const HaulJob* job = reg.try_get<HaulJob>(e)) {
             h.add(static_cast<int>(job->stage));

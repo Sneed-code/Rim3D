@@ -39,6 +39,19 @@ const Json* defsFindPath(const Json& root, const char* path) {
     while (*p != '\0') {
         const char* end = p;
         while (*end != '\0' && *end != '.') ++end;
+        if (cur->is_array()) {
+            // A number picks an array element ("degreeDatas.0.label").
+            size_t index = 0;
+            if (p == end) return nullptr;
+            for (const char* d = p; d != end; ++d) {
+                if (*d < '0' || *d > '9') return nullptr;
+                index = index * 10 + static_cast<size_t>(*d - '0');
+            }
+            if (index >= cur->size()) return nullptr;
+            cur = &(*cur)[index];
+            p = (*end == '.') ? end + 1 : end;
+            continue;
+        }
         if (!cur->is_object()) return nullptr;
         const auto it = cur->find(std::string(p, end));
         if (it == cur->end()) return nullptr;
