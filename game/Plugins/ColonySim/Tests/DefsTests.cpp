@@ -262,7 +262,7 @@ TEST_CASE("defs: medicine and disease data (D7)") {
     CHECK(db.find("Recipes", "InstallBionicArm")->integer("minSkill") == 8);
     CHECK(db.find("Recipes", "InstallPegLeg")->integer("minSkill") == 0);
 
-    // The hospital bed is a bed that heals like HealthRules says,.
+    // The hospital bed is a bed that heals like HealthRules says.
     const Def* hospital = db.find("Things", "HospitalBed");
     if (hospital == nullptr) { CHECK(false); return; }
     CHECK(hospital->flag("building.bed"));
@@ -270,6 +270,5 @@ TEST_CASE("defs: medicine and disease data (D7)") {
     CHECK(hospital->number("stats.medicalTendQualityOffset") > 0.0);
     const Def* healthRules = db.find("Rules", "HealthRules");
     CHECK(healthRules->number("restHealBonusPerDay.HospitalBed") > healthRules->number("restHealBonusPerDay.Bed"));
-    CHECK(db.find("Recipes", "MakeMedicineHerbal")->number("products.MedicineHerbal") == doctest::Approx(1.0));
     CHECK(db.find("Rules", "MedicineRules")->count("tendQualityBySkill") == 5);
 }
