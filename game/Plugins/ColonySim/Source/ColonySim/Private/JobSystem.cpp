@@ -48,7 +48,10 @@ enum class JobStepKind : uint8_t {
     BillFinish,
     Play,  // recreation: stay for the activity's time (RecreationJobs.cpp)
     ResearchWork,  // research: add points to the current project (ResearchJobs.cpp)
-    CleanWork
+    CleanWork,
+    ApparelGoto,  // walk to the clothes (none to take off a worn piece)
+    ApparelWork,  // put on or take off
+    StripWork     // take the clothes and weapon off a downed or dead pawn
 };
 
 constexpr JobStepKind kJobsWaitSteps[] = {JobStepKind::Wait};
@@ -73,6 +76,8 @@ constexpr JobStepKind kJobsDoBillSteps[] = {JobStepKind::GotoThing, JobStepKind:
 static_assert(kDoBillPickUpStep == 1 && kDoBillDepositStep == 3, "the DoBill steps moved");
 constexpr JobStepKind kJobsRecreateSteps[] = {JobStepKind::WalkToSpot, JobStepKind::Play};
 constexpr JobStepKind kJobsResearchSteps[] = {JobStepKind::GotoCell, JobStepKind::ResearchWork};
+constexpr JobStepKind kJobsWearSteps[] = {JobStepKind::ApparelGoto, JobStepKind::ApparelWork};
+constexpr JobStepKind kJobsStripSteps[] = {JobStepKind::GotoThing, JobStepKind::StripWork};
 
 // The most steps one pawn's job may run in one game second (guards against a loop of steps that
 // all end at once).
@@ -111,6 +116,8 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::Recreate: return {kJobsRecreateSteps, static_cast<int>(std::size(kJobsRecreateSteps))};
         case JobType::Research: return {kJobsResearchSteps, static_cast<int>(std::size(kJobsResearchSteps))};
         case JobType::CleanFilth: return {kJobsCleanSteps, static_cast<int>(std::size(kJobsCleanSteps))};
+        case JobType::WearApparel: return {kJobsWearSteps, static_cast<int>(std::size(kJobsWearSteps))};
+        case JobType::StripPawn: return {kJobsStripSteps, static_cast<int>(std::size(kJobsStripSteps))};
     }
     return {nullptr, 0};
 }
@@ -129,6 +136,8 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::BillWork:
         case JobStepKind::ResearchWork:
         case JobStepKind::CleanWork:
+        case JobStepKind::ApparelWork:
+        case JobStepKind::StripWork:
         case JobStepKind::Eat:
         case JobStepKind::Lie:
             return true;
@@ -182,6 +191,8 @@ const char* jobTypeName(JobType type) {
         case JobType::Recreate: return "Recreate";
         case JobType::Research: return "Research";
         case JobType::CleanFilth: return "CleanFilth";
+        case JobType::WearApparel: return "WearApparel";
+        case JobType::StripPawn: return "StripPawn";
     }
     return "?";
 }
@@ -415,6 +426,15 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
         case JobType::Research:
             out[0] = keyOf(JobTarget{job.site, CellPos{}});
             return 1;
+        case JobType::WearApparel:
+            if (job.count != 0) {
+                return 0;  // taking a worn piece off holds nothing
+            }
+            out[0] = keyOf(JobTarget{job.thing, CellPos{}});
+            return 1;
+        case JobType::StripPawn:
+            out[0] = keyOf(JobTarget{job.thing, CellPos{}});
+            return 1;
         case JobType::None:
         case JobType::Wait:
             return 0;
@@ -602,8 +622,8 @@ void JobSystem::step() {
     // The think list, in order. Later tasks put theirs in place: emergencies first (downed, on
     // fire: F1 and later), then the defense plan (F6), urgent needs and the schedule (C6), work
     // and finally idling. Player orders don't wait for a think: the command starts them.
-    static constexpr ThinkNode kThinkList[] = {&JobSystem::thinkNeeds, &JobSystem::thinkSchedule, &JobSystem::thinkWork,
-                                               &JobSystem::thinkJoy, &JobSystem::thinkIdle};
+    static constexpr ThinkNode kThinkList[] = {&JobSystem::thinkNeeds, &JobSystem::thinkSchedule, &JobSystem::thinkApparel,
+                                               &JobSystem::thinkWork, &JobSystem::thinkJoy, &JobSystem::thinkIdle};
 
     for (const Entity pawn : order_) {
         reg.get<Mover>(pawn).hold = false;
@@ -785,6 +805,9 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::CleanFilth) {
         return failCheckClean(pawn, job, why);
     }
+    if (job.type == JobType::WearApparel || job.type == JobType::StripPawn) {
+        return failCheckApparel(pawn, job, why);
+    }
     entt::registry& reg = things_.registry();
     if (job.type == JobType::DeliverResources) {
         const ConstructionSite* site = reg.valid(job.site) ? reg.try_get<ConstructionSite>(job.site) : nullptr;
@@ -907,6 +930,12 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return researchWork(pawn, job, why);
         case JobStepKind::CleanWork:
             return cleanWork(pawn, job, why);
+        case JobStepKind::ApparelGoto:
+            return apparelGoto(pawn, job, why);
+        case JobStepKind::ApparelWork:
+            return apparelWork(pawn, job, why);
+        case JobStepKind::StripWork:
+            return stripWork(pawn, job, why);
     }
     return StepResult::Failed;
 }

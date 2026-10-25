@@ -1,3 +1,4 @@
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Health.h"
@@ -139,6 +140,22 @@ void Sim::startScenario() {
         giveLooks(pawn, colonistSeed, colonist.female,
                   protagonist ? lineage : scenarioRollLineage(*scenario, colonistSeed, lineage));
         things_->registry().emplace<Colonist>(pawn, std::move(colonist));
+        // They land dressed, as RimWorld's colonists are (nudists excepted).
+        const Colonist& made = things_->registry().get<Colonist>(pawn);
+        const bool nudist = std::any_of(made.traits.begin(), made.traits.end(),
+                                        [](const TraitRecord& trait) { return trait.def == "Nudist"; });
+        for (size_t i = 0; !nudist && i < scenario->count("colonistApparel"); ++i) {
+            const std::string base = "colonistApparel." + std::to_string(i);
+            const DefId piece = defs_->idOf("Things", scenario->text((base + ".thing").c_str()));
+            const DefId stuff = defs_->idOf("Things", scenario->text((base + ".stuff").c_str()));
+            std::string why;
+            const Entity item = piece.valid() ? apparel_->make(piece, stuff, -1, cell, &why) : kNoEntity;
+            if (item == kNoEntity || !apparel_->putOn(pawn, item, why)) {
+                setupErrors_.push_back("scenario '" + settings_.scenario + "': can't dress a colonist in '" +
+                                       scenario->text((base + ".thing").c_str()) + "'" + (why.empty() ? "" : ": " + why));
+                return;
+            }
+        }
         used.insert(map_.index(cell));
         ++placed;
     }
