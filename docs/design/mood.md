@@ -53,6 +53,12 @@ it is a situation, when a memory fades; strongest first.
 (`MoodSystem::breakLevels`). `Mood::band` is kept up to date; when it changes a **`PawnMoodBand`** event
 says so (`message` the new band, `amount` the mood). Nothing happens yet: mental breaks come later.
 
+## Passion at work
+
+Two more situations, `PassionMinorWork` (+8) and `PassionMajorWork` (+14, from `SkillRules.passionMood`),
+count while the pawn's job uses a skill it has that passion for ([skills.md](skills.md)). A situation def
+has `situation: {passion: "Minor"}` instead of a need and band.
+
 ## What Unreal sees
 
 - **Snapshot:** a pawn with a mood has `mood` (else -1) and `moodBand` (0 to 3).
@@ -68,5 +74,4 @@ for nothing.
 ## Not yet
 
 Mental breaks, inspirations, ideology and precepts; thoughts from pain, injuries, rooms, beauty,
-temperature, joy, relationships, other pawns' deaths, passions at work (`SkillRules.passionMood` is read by
-nothing yet); social and mood stacking beyond one of each; thoughts from traits' `moodWithRangedWeapon`.
+temperature, joy, relationships, other pawns' deaths; social and mood stacking beyond one of each; thoughts from traits' `moodWithRangedWeapon`.

@@ -100,11 +100,15 @@ cook makes a simple meal in 432 game seconds, 7.2 game minutes, plus the walking
 - Save format 18: a building's bills (`recipe` by defName), a job's `bill`, `picks` and `used`
   (by defName). Format 6 to 17 saves still load.
 
+## Experience
+
+Every second of bill work teaches the recipe's `workSkill` `workSkillXp / work` XP ([skills.md](skills.md)).
+
 ## Not yet
 
 - **Fuel.** The fueled stove should burn wood (RimWorld: 1 wood a meal, capacity 50, a refuel job
   under Hauling). It cooks for free for now; BACKLOG has it.
-- Skill learning (XP is in the recipe, no sim system gives it), food poisoning, meals remembering
+- Food poisoning, meals remembering
   their ingredients (mood from human or insect meat), rot.
 - Bill details: reordering, the ingredient radius, allowed skill range, "store products in" choice,
   per-bill ingredient filters, "pause when stock is full".

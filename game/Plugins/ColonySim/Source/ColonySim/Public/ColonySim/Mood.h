@@ -5,6 +5,7 @@
 #include "ColonySim/Entity.h"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -73,6 +74,10 @@ public:
     // Where a pawn slept decides "slept outside" (docs/design/rooms.md); without rooms nothing is outside.
     void setRooms(Rooms* rooms) { rooms_ = rooms; }
 
+    // Which skill a pawn's job is using right now (Skills `defName`), or empty: passion for it
+    // lifts the mood while the work goes on (docs/design/skills.md). Without one, no work thoughts.
+    void setActiveSkill(std::function<std::string(Entity)> activeSkill) { activeSkill_ = std::move(activeSkill); }
+
     const MoodRules& rules() const { return rules_; }
     // The mood the pawn is heading for (not clamped to the 0 to 100 scale), or its base if it has none.
     float target(Entity pawn, int64_t now) const;
@@ -92,6 +97,7 @@ private:
         std::string trigger;    // memories: what starts it (see Mood.cpp)
         std::string need;       // situations: "food" or "rest"
         std::string band;       // situations: the band name
+        std::string passion;    // situations: "Minor" or "Major", while working at a skill with that passion
     };
     float traitMoodOffset(Entity pawn) const;
     float traitBreakOffset(Entity pawn) const;
@@ -103,6 +109,7 @@ private:
     const DefDatabase& defs_;
     MoodRules rules_;
     std::vector<Thought> thoughts_;
+    std::function<std::string(Entity)> activeSkill_;
 };
 
 }  // namespace colony

@@ -95,7 +95,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `things` | 1 | free ids, then every thing: id, def, position, footprint, stack, hit points |
 | `movement` | 1 | `mover` |
 | `jobs` | 1 | `worker` (the job, its bill picks and ingredients, avoid memory), `work` (Work tab), `carrying` |
-| `colonists` | 1 | `colonist` |
+| `colonists` | 2 | `colonist` (2: each skill's `xpToday`, C12) |
 | `health` | 1 | `health` |
 | `control` | 1 | `playerControlled`: the ids of controlled pawns |
 | `needs` | 1 | `needs`, `schedule`, `bed` |

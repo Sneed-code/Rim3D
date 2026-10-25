@@ -38,6 +38,7 @@ stderr for each of these that does not hold:
 - Everything planned is built (walls, door, 6 beds, table, 3 stools, stove) and the room is one
   enclosed, roofed room holding them.
 - The stove made meals and colonists ate them; at least one colonist woke up in a bed.
+- The work taught something: the total experience of skills under level 10 went up (`skillXpGained`).
 - No command and no job failed (a failed job is a bug here: nothing in the script can legitimately
   fail one).
 

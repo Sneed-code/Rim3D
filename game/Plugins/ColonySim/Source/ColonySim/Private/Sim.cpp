@@ -103,6 +103,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     mood_->setRooms(rooms_.get());
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
+    mood_->setActiveSkill([this](Entity pawn) { return jobs_->activeSkill(pawn); });
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
     fighters_->setEventLog(&events_);
@@ -587,6 +588,9 @@ void Sim::step() {
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     rooms_->update();
     time_.seconds += 1;
+    if (time_.seconds % kSecondsPerDay == 0) {
+        jobs_->skillsNewDay();
+    }
     if (time_.seconds % kSecondsPerHour == 0) {
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
         pruneDesignations();
@@ -896,6 +900,7 @@ uint64_t Sim::stateHash() const {
                 h.add(s.level);
                 h.add(static_cast<int>(s.passion));
                 h.add(s.xp);
+                h.add(s.xpToday);
                 h.add(s.disabled);
             }
             for (const std::string& tag : c->disabledWorkTags) {

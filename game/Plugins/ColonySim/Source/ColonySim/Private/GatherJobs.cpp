@@ -2,6 +2,7 @@
 // plants, and the skill maths behind them.
 #include "ColonySim/Jobs.h"
 
+#include "ColonySim/Bills.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Designations.h"
@@ -57,6 +58,7 @@ void JobSystem::loadGatherRules() {
         gather_.plantSpeedBase = rules->number("plants.speedBase", gather_.plantSpeedBase);
         gather_.plantSpeedPerLevel = rules->number("plants.speedPerLevel", gather_.plantSpeedPerLevel);
         gather_.plantXpPerSecond = rules->number("plants.xpPerSecond", gather_.plantXpPerSecond);
+        gather_.constructionXpPerSecond = rules->number("construction.xpPerSecond", gather_.constructionXpPerSecond);
         gather_.growthYieldFloor = rules->number("growthYieldFloor", gather_.growthYieldFloor);
         gather_.unskilledLevel = static_cast<int>(rules->integer("unskilledSkillLevel", gather_.unskilledLevel));
         if (rules->count("yieldByLevel") > 0) {
@@ -66,14 +68,7 @@ void JobSystem::loadGatherRules() {
             }
         }
     }
-    if (const Def* skills = defs_.find("Rules", "SkillRules")) {
-        for (size_t i = 0; i < skills->count("xpToNextLevel"); ++i) {
-            gather_.xpToNextLevel.push_back(skills->numberAt("xpToNextLevel", i, 0.0));
-        }
-        gather_.passionLearn[0] = skills->number("passionLearnFactor.None", gather_.passionLearn[0]);
-        gather_.passionLearn[1] = skills->number("passionLearnFactor.Minor", gather_.passionLearn[1]);
-        gather_.passionLearn[2] = skills->number("passionLearnFactor.Major", gather_.passionLearn[2]);
-    }
+    skillRules_ = SkillRules::read(defs_);
     const std::vector<DefId> capacities = defs_.idsOfKind("Capacities");
     for (size_t i = 0; i < capacities.size(); ++i) {
         if (defs_.get(capacities[i]).defName() == "Manipulation") {
@@ -114,29 +109,52 @@ double JobSystem::plantWorkSpeed(Entity pawn) const {
     return manip > 0.0 ? std::max(kGatherMinPlantSpeed, speed * manip) : 0.0;
 }
 
-// Experience, as RimWorld's Learn: scaled by the pawn's passion for the skill; levels rise when the
-// experience passes what the level needs. (RimWorld's daily cap and the decay of high skills are not
-// in yet.)
+// Experience, as RimWorld's Learn (Skills.cpp has the maths: passion, the daily cap, levels).
 void JobSystem::learnSkill(Entity pawn, const char* skill, double xp) {
-    entt::registry& reg = things_.registry();
-    Colonist* colonist = reg.try_get<Colonist>(pawn);
+    Colonist* colonist = things_.registry().try_get<Colonist>(pawn);
     if (colonist == nullptr) {
         return;
     }
     for (SkillRecord& record : colonist->skills) {
-        if (record.def != skill) {
-            continue;
-        }
-        const int maxLevel = static_cast<int>(gather_.xpToNextLevel.size()) - 1;
-        if (record.disabled || maxLevel < 1 || record.level >= maxLevel) {
+        if (record.def == skill) {
+            learnSkillXp(skillRules_, record, xp);
             return;
         }
-        record.xp += static_cast<float>(xp * gather_.passionLearn[std::min(2, static_cast<int>(record.passion))]);
-        while (record.level < maxLevel && record.xp >= static_cast<float>(gather_.xpToNextLevel[static_cast<size_t>(record.level)])) {
-            record.xp -= static_cast<float>(gather_.xpToNextLevel[static_cast<size_t>(record.level)]);
-            ++record.level;
+    }
+}
+
+// Midnight: every colonist's skills start a new day (the cap resets, high skills decay).
+void JobSystem::skillsNewDay() {
+    for (const Entity pawn : things_.registry().view<Colonist>()) {
+        for (SkillRecord& record : things_.registry().get<Colonist>(pawn).skills) {
+            skillDayPassed(skillRules_, record);
         }
-        return;
+    }
+}
+
+std::string JobSystem::activeSkill(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Worker* worker = reg.valid(pawn) ? reg.try_get<Worker>(pawn) : nullptr;
+    if (worker == nullptr) {
+        return std::string();
+    }
+    const Job& job = worker->job;
+    switch (job.type) {
+        case JobType::Mine:
+            return "Mining";
+        case JobType::CutPlant:
+        case JobType::HarvestPlant:
+            return "Plants";
+        case JobType::BuildFrame:
+        case JobType::Deconstruct:
+            return "Construction";
+        case JobType::DoBill: {
+            const Bill* bill = bills_->find(job.site, job.bill);
+            const Recipe* recipe = bill != nullptr ? bills_->recipe(bill->recipe) : nullptr;
+            return recipe != nullptr ? recipe->skill : std::string();
+        }
+        default:
+            return std::string();
     }
 }
 

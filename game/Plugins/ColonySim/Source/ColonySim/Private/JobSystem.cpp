@@ -959,6 +959,7 @@ JobSystem::StepResult JobSystem::buildWork(Entity pawn, Job& job, std::string& w
     }
     ConstructionSite& site = reg.get<ConstructionSite>(job.thing);
     site.workDone += constructionSpeed(pawn) * static_cast<float>(construction_.numbers().buildWorkPerSecond);
+    learnSkill(pawn, "Construction", gather_.constructionXpPerSecond);
     if (site.workDone < site.workTotal) {
         return StepResult::Running;
     }
@@ -984,6 +985,7 @@ JobSystem::StepResult JobSystem::deconstructWork(Entity pawn, Job& job, std::str
         pawnDid(pawn, PawnAction::Deconstruct, job.thing);
     }
     job.progress += constructionSpeed(pawn) * static_cast<float>(construction_.numbers().deconstructWorkPerSecond);
+    learnSkill(pawn, "Construction", gather_.constructionXpPerSecond);
     if (job.progress < construction_.deconstructWork(job.thing)) {
         return StepResult::Running;
     }

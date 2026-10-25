@@ -244,6 +244,8 @@ Stage 2 done so far: **D7** medicine and disease data (`docs/design/medicine-dat
 
 D9 (thoughts, recreation, mental break and social data) is in: `docs/design/thoughts-data.md`. Data only; C15, C17, C18, C19, C20, E2 and E3 read it.
 
+**C12** skill learning (`docs/design/skills.md`): every job that uses a skill teaches it (mining, plants, building, taking down, every bill's recipe), with passion factors, the 4,000 XP daily soft cap, the slow loss above level 10 at midnight, and a mood lift (+8 minor, +14 major) while working at a passion. **A new job that uses a skill calls `JobSystem::learnSkill` each working second and is listed in `JobSystem::activeSkill`.** Save: `colonists` section version 2.
+
 ## Next
 
 Wave 1:
