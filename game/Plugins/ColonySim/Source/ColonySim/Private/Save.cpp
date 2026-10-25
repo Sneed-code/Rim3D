@@ -37,9 +37,9 @@ constexpr char kSaveMagic[8] = {'R', 'I', 'M', '3', 'D', 'S', 'A', 'V'};
 constexpr size_t kSaveMagicSize = sizeof kSaveMagic;
 // Bump when the layout below changes, and keep reading the old versions (the archive's
 // version() says which one a file is). Changing it needs a line in docs/design/saves.md.
-constexpr uint32_t kSaveFormatVersion = 6;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
+constexpr uint32_t kSaveFormatVersion = 7;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
                                             // 4: C8's scenario and colonists; 5: F1's pawn health; 6: C1's jobs,
-                                            // work priorities and zones
+                                            // work priorities and zones; 7: U9's direct control
 // Saves from before the job system (formats 1 to 5) can't be read: their hauling placeholder has
 // no counterpart in the job system (docs/design/saves.md).
 constexpr uint32_t kSaveOldestFormat = 6;
@@ -123,6 +123,7 @@ struct SaveEntity {
     std::optional<SaveWorker> worker;
     std::optional<SaveWorkSettings> work;
     std::optional<Carrying> carrying;
+    bool playerControlled = false;  // format 7 on
 };
 
 // A stockpile zone, with its filter by defName.
@@ -419,7 +420,7 @@ void saveRect(Ar& ar, CellRect& r) {
 
 template <typename Ar>
 void saveCommand(Ar& ar, Command& command) {
-    static_assert(std::variant_size_v<Command> == 10, "save every command type here");
+    static_assert(std::variant_size_v<Command> == 12, "save every command type here");
     uint8_t type = static_cast<uint8_t>(command.index());
     ar.value("type", type);
     if constexpr (Ar::kReading) {
@@ -434,8 +435,12 @@ void saveCommand(Ar& ar, Command& command) {
             case 7: command = SetStockpilePriorityCommand{}; break;
             case 8: command = SetStockpileAllowedCommand{}; break;
             case 9: command = OrderHaulCommand{}; break;
+            case 10: command = ControlPawnCommand{}; break;
+            case 11: command = DirectMoveCommand{}; break;
             default: ar.require(false, "the save file names a command this build doesn't know"); return;
         }
+        // A format older than the command that was added in it can't contain it.
+        ar.require(type < 10 || ar.version() >= 7, "the save file names a command this build doesn't know");
     }
     ar.note("name", commandName(command));
     if (auto* spawn = std::get_if<SpawnThingCommand>(&command)) {
@@ -475,6 +480,12 @@ void saveCommand(Ar& ar, Command& command) {
     } else if (auto* haul = std::get_if<OrderHaulCommand>(&command)) {
         ar.value("pawn", haul->pawn);
         ar.value("thing", haul->thing);
+    } else if (auto* control = std::get_if<ControlPawnCommand>(&command)) {
+        ar.value("pawn", control->pawn);
+    } else if (auto* move = std::get_if<DirectMoveCommand>(&command)) {
+        ar.value("pawn", move->pawn);
+        ar.value("x", move->x);
+        ar.value("y", move->y);
     }
 }
 
@@ -636,6 +647,9 @@ void saveEntity(Ar& ar, SaveEntity& e) {
         });
     });
     ar.optional("carrying", e.carrying, [&](Carrying& c) { ar.value("thing", c.thing); });
+    if (ar.version() >= 7) {
+        ar.value("playerControlled", e.playerControlled);
+    }
 }
 
 template <typename Ar>
@@ -866,6 +880,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const Colonist* colonist = reg.try_get<Colonist>(e)) {
             out.colonist = *colonist;
         }
+        out.playerControlled = reg.all_of<PlayerControl>(e);
         if (const Health* health = reg.try_get<Health>(e)) {
             SaveHealth saved;
             saved.protagonist = health->protagonist;
@@ -1050,6 +1065,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                    sim.defs_->get(reg.get<Thing>(entity).def).has("race.body")) {
             reg.emplace<Health>(entity);  // saved before pawns had health
         }
+        if (e.playerControlled) {
+            reg.emplace<PlayerControl>(entity);
+        }
     }
     sim.health_->refreshAll();
     for (const SaveEntity& e : d.entities) {
@@ -1066,6 +1084,21 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             error = "the save has a thing that names another thing that doesn't exist";
             return false;
         }
+    }
+    // At most one controlled pawn, and it must be one a command could have taken over.
+    int controlled = 0;
+    for (const SaveEntity& e : d.entities) {
+        if (e.playerControlled) {
+            ++controlled;
+            if (!e.position || !e.mover || !e.colonist || !e.worker) {
+                error = "the save has a controlled pawn that isn't a colonist on the map";
+                return false;
+            }
+        }
+    }
+    if (controlled > 1) {
+        error = "the save has more than one controlled pawn";
+        return false;
     }
     sim.haulers_.clear();
     for (const uint32_t id : d.haulers) {

@@ -44,6 +44,10 @@ public:
 	/** Plays the short animation for what the pawn did (picked up, put down). */
 	void PlayAction(colony::PawnAction Action);
 
+	/** Hides or shows the whole pawn, MetaHuman included (first person view hides the player's own body). */
+	void SetBodyHidden(bool bHide);
+	bool IsBodyHidden() const { return IsHidden(); }
+
 	colony::Entity GetThing() const { return Thing; }
 	ESimPawnDetail GetDetail() const { return Detail; }
 	USkeletalMeshComponent* GetBody() const { return Body; }

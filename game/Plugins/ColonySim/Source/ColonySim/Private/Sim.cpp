@@ -5,6 +5,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Movement.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
@@ -162,6 +163,17 @@ void Sim::placeStockpileAndThings() {
     }
 }
 
+Entity Sim::controlledPawn() const {
+    for (const Entity pawn : things_->registry().view<const PlayerControl>()) {
+        return pawn;
+    }
+    return kNoEntity;
+}
+
+const Colonist* Sim::colonistOf(Entity pawn) const {
+    return things_->exists(pawn) ? things_->registry().try_get<Colonist>(pawn) : nullptr;
+}
+
 int Sim::itemsLeft() const {
     int left = 0;
     for (const auto [item, thing] : things_->registry().view<const Thing>().each()) {
@@ -251,11 +263,78 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!jobs_->orderHaul(haul->pawn, haul->thing, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* control = std::get_if<ControlPawnCommand>(&command)) {
+        entt::registry& reg = things_->registry();
+        if (control->pawn != kNoEntity) {
+            if (!things_->spawned(control->pawn) || !reg.all_of<Colonist, Worker, Mover>(control->pawn)) {
+                commandFailed(id, "that isn't a colonist on the map");
+                return;
+            }
+            if (health_->incapacitated(control->pawn)) {
+                commandFailed(id, "that colonist is downed or dead");
+                return;
+            }
+        }
+        // Whoever was controlled before is let go where it stands, and its job system takes over.
+        const std::vector<Entity> before(reg.view<PlayerControl>().begin(), reg.view<PlayerControl>().end());
+        for (const Entity old : before) {
+            reg.remove<PlayerControl>(old);
+        }
+        if (control->pawn != kNoEntity) {
+            // Its job ends (what it carries is put down) and the job system leaves it alone.
+            jobs_->interrupt(control->pawn, "taken over by the player");
+            Mover& mover = reg.get<Mover>(control->pawn);
+            mover.path.clear();
+            mover.next = 0;
+            mover.vx = 0.0f;
+            mover.vy = 0.0f;
+            mover.gaveUp = false;
+            reg.emplace<PlayerControl>(control->pawn);
+        }
+    } else if (const auto* move = std::get_if<DirectMoveCommand>(&command)) {
+        entt::registry& reg = things_->registry();
+        if (!std::isfinite(move->x) || !std::isfinite(move->y)) {
+            commandFailed(id, "that position isn't a number");
+        } else if (!things_->exists(move->pawn) || !reg.all_of<PlayerControl, Position, Mover>(move->pawn)) {
+            commandFailed(id, "that pawn isn't under direct control");
+        } else if (health_->incapacitated(move->pawn)) {
+            commandFailed(id, "that colonist is downed or dead");
+        } else {
+            Position& pos = reg.get<Position>(move->pawn);
+            Mover& mover = reg.get<Mover>(move->pawn);
+            float dx = move->x - pos.x;
+            float dy = move->y - pos.y;
+            const float length = std::sqrt(dx * dx + dy * dy);
+            if (length > kDirectMaxStep) {
+                dx *= kDirectMaxStep / length;
+                dy *= kDirectMaxStep / length;
+            }
+            // The whole move, or sliding along one axis (a wall), or staying where it is.
+            const float tries[3][2] = {{dx, dy}, {dx, 0.0f}, {0.0f, dy}};
+            float moveX = 0.0f;
+            float moveY = 0.0f;
+            for (const auto& t : tries) {
+                if ((t[0] != 0.0f || t[1] != 0.0f) && pawnFitsAt(map_, pos.x + t[0], pos.y + t[1], kPawnRadius, pos.level)) {
+                    moveX = t[0];
+                    moveY = t[1];
+                    break;
+                }
+            }
+            pos.x += moveX;
+            pos.y += moveY;
+            mover.vx = moveX;
+            mover.vy = moveY;
+        }
     }
 }
 
 void Sim::step() {
     events_.clear();
+    // A controlled pawn only has a velocity in the steps it was moved.
+    for (const auto [pawn, mover] : things_->registry().view<Mover, const PlayerControl>().each()) {
+        mover.vx = 0.0f;
+        mover.vy = 0.0f;
+    }
     // Commands first, in submit order. Swap out the queue so its memory is reused.
     std::vector<std::pair<uint64_t, Command>> applying;
     applying.swap(pending_);
@@ -267,6 +346,16 @@ void Sim::step() {
     pending_.swap(applying);
 
     health_->step(time_.seconds, settings_.seed);
+    // A controlled colonist who goes down or dies is let go: the player can't walk it any more.
+    {
+        entt::registry& reg = things_->registry();
+        const std::vector<Entity> controlled(reg.view<PlayerControl>().begin(), reg.view<PlayerControl>().end());
+        for (const Entity pawn : controlled) {
+            if (health_->incapacitated(pawn)) {
+                reg.remove<PlayerControl>(pawn);
+            }
+        }
+    }
     jobs_->step();
     movement_->step(things_->registry(), map_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
@@ -382,7 +471,7 @@ uint64_t Sim::stateHash() const {
         const bool has[] = {reg.all_of<Thing>(e),        reg.all_of<Position>(e),     reg.all_of<Footprint>(e),
                             reg.all_of<StackCount>(e),   reg.all_of<HitPoints>(e),    reg.all_of<Mover>(e),
                             reg.all_of<Worker>(e),       reg.all_of<WorkSettings>(e), reg.all_of<Carrying>(e),
-                            reg.all_of<Colonist>(e),     reg.all_of<Health>(e)};
+                            reg.all_of<Colonist>(e),     reg.all_of<Health>(e),       reg.all_of<PlayerControl>(e)};
         uint64_t mask = 0;
         for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
             mask |= has[bit] ? (uint64_t{1} << bit) : 0;

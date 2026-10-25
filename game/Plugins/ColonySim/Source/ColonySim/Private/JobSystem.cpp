@@ -332,6 +332,10 @@ void JobSystem::step() {
     static constexpr ThinkNode kThinkList[] = {&JobSystem::thinkWork, &JobSystem::thinkIdle};
 
     for (const Entity pawn : order_) {
+        // The player walks this one (U9): no think, no job, until control is let go.
+        if (reg.all_of<PlayerControl>(pawn)) {
+            continue;
+        }
         // Downed or dead (F1): the job ends, what it carried is put down, and it doesn't think.
         if (health_.incapacitated(pawn)) {
             if (reg.get<Worker>(pawn).job.type != JobType::None) {
@@ -765,6 +769,10 @@ bool JobSystem::orderHaul(Entity pawn, Entity thing, std::string& error) {
         error = "the pawn can't work now (downed or dead)";
         return false;
     }
+    if (reg.all_of<PlayerControl>(pawn)) {
+        error = "the player is controlling that pawn";
+        return false;
+    }
     if (!things_.spawned(thing) || !reg.all_of<StackCount>(thing)) {
         error = "that isn't an item on the map";
         return false;
@@ -788,6 +796,13 @@ bool JobSystem::orderHaul(Entity pawn, Entity thing, std::string& error) {
     job.forced = true;
     startJob(pawn, std::move(job));
     return true;
+}
+
+void JobSystem::interrupt(Entity pawn, const std::string& why) {
+    const entt::registry& reg = things_.registry();
+    if (reg.valid(pawn) && reg.all_of<Worker>(pawn) && reg.get<Worker>(pawn).job.type != JobType::None) {
+        endJob(pawn, JobEnd::Interrupted, why);
+    }
 }
 
 void JobSystem::forget(Entity thing) {

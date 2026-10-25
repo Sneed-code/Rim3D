@@ -90,6 +90,7 @@ namespace
 		FParse::Value(Line, TEXT("SimPawns="), Options.Pawns);
 		FParse::Value(Line, TEXT("SimItems="), Options.Items);
 		Options.bFlatMap = FParse::Param(Line, TEXT("SimFlat"));
+		FParse::Value(Line, TEXT("SimScenario="), Options.Scenario);
 		return Options;
 	}
 
@@ -282,6 +283,7 @@ bool USimSubsystem::StartSim(const FSimStartOptions& Options)
 	Settings.pawns = Options.Pawns;
 	Settings.items = Options.Items;
 	Settings.flatMap = Options.bFlatMap;
+	Settings.scenario = SimBridgeUtf8(Options.Scenario);
 	Sim = Defs ? std::make_unique<colony::Sim>(Settings, Defs) : std::make_unique<colony::Sim>(Settings);
 	for (const std::string& Problem : Sim->setupErrors())
 	{
@@ -359,6 +361,7 @@ void USimSubsystem::RunSteps(int64 Steps)
 	double SnapshotMs = 0.0;
 	for (int64 Index = 0; Index < Steps; ++Index)
 	{
+		OnBeforeStep.Broadcast();
 		const double StepStart = FPlatformTime::Seconds();
 		Sim->step();
 		const double StepMs = (FPlatformTime::Seconds() - StepStart) * 1000.0;
@@ -484,9 +487,19 @@ void USimSubsystem::DrawDebug() const
 	}
 }
 
+void USimSubsystem::SetMaxSpeed(int32 NewMax)
+{
+	MaxSpeed = FMath::Clamp(NewMax, 1, 3);
+	SpeedBeforePause = FMath::Min(SpeedBeforePause, MaxSpeed);
+	if (Speed > MaxSpeed)
+	{
+		SetSpeed(MaxSpeed);
+	}
+}
+
 void USimSubsystem::SetSpeed(int32 NewSpeed)
 {
-	Speed = FMath::Clamp(NewSpeed, 0, 3);
+	Speed = FMath::Clamp(NewSpeed, 0, MaxSpeed);
 	if (Speed > 0)
 	{
 		SpeedBeforePause = Speed;

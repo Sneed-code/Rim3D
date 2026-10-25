@@ -17,6 +17,9 @@ class FSimInputProcessor;
 /** Called once per sim event, right after the step that produced it. */
 DECLARE_MULTICAST_DELEGATE_OneParam(FSimEventSignature, const colony::Event&);
 
+/** Called before every sim step, right before the commands queued so far are applied by it. */
+DECLARE_MULTICAST_DELEGATE(FSimBeforeStepSignature);
+
 /** How a sim is started: which data folder, which seed, and the Stage 0 hauling test's size. */
 struct FSimStartOptions
 {
@@ -27,6 +30,9 @@ struct FSimStartOptions
 	int32 Pawns = 0;
 	int32 Items = 0;
 	bool bFlatMap = false;
+	/** A Scenarios def to start, e.g. "Crashlanded": the protagonist and colonists near the middle
+	 *  of the map. Empty: none. Command line: -SimScenario=Crashlanded. */
+	FString Scenario;
 };
 
 /** Sim cost, averaged over about a second of real time. */
@@ -79,6 +85,11 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Colony")
 	int32 GetSpeed() const { return Speed; }
+
+	/** The fastest speed the keys and buttons may set (3 normally; direct control holds it at 1,
+	 *  because the player's body moves in real time). Lowering it lowers the current speed too. */
+	void SetMaxSpeed(int32 NewMax);
+	int32 GetMaxSpeed() const { return MaxSpeed; }
 
 	/** Pauses, or resumes at the speed it had before. */
 	UFUNCTION(BlueprintCallable, Category = "Colony")
@@ -136,6 +147,10 @@ public:
 	/** Sim events, one call each, straight after the step. Failed commands also show on screen. */
 	FSimEventSignature OnSimEvent;
 
+	/** Called before each sim step, so a listener can Submit a command that step will apply
+	 *  (the protagonist sends its position this way, once per step). */
+	FSimBeforeStepSignature OnBeforeStep;
+
 	const colony::Sim* GetSim() const { return Sim.get(); }
 	std::shared_ptr<const colony::DefDatabase> GetDefs() const { return Defs; }
 	/** Number of defs loaded from the data folder; 0 when it was missing or broken. */
@@ -188,6 +203,7 @@ private:
 	double StepAccumulator = 0.0;
 	int32 Speed = 1;
 	int32 SpeedBeforePause = 1;
+	int32 MaxSpeed = 3;
 	int64 LastLoggedHour = -1;
 	int64 AutosaveInterval = colony::kSecondsPerDay;
 	int64 LastAutosaveBucket = 0;

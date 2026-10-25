@@ -30,9 +30,13 @@ const char* commandName(const Command& command) {
                 return "SetStockpilePriority";
             } else if constexpr (std::is_same_v<Type, SetStockpileAllowedCommand>) {
                 return "SetStockpileAllowed";
-            } else {
-                static_assert(std::is_same_v<Type, OrderHaulCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, OrderHaulCommand>) {
                 return "OrderHaul";
+            } else if constexpr (std::is_same_v<Type, ControlPawnCommand>) {
+                return "ControlPawn";
+            } else {
+                static_assert(std::is_same_v<Type, DirectMoveCommand>, "name every command type");
+                return "DirectMove";
             }
         },
         command);
