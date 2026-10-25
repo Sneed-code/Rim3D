@@ -25,6 +25,7 @@ namespace colony {
 
 class Construction;
 class DefDatabase;
+struct Colonist;
 class JobSystem;
 class MovementSystem;
 class Regions;
@@ -118,6 +119,11 @@ public:
     const HealthSystem& health() const { return *health_; }
     // What a health panel shows for a pawn; false if it has no body.
     bool healthReport(Entity pawn, HealthReport& out) const { return health_->report(pawn, out); }
+
+    // The colonist the player controls directly (ControlPawnCommand), or kNoEntity.
+    Entity controlledPawn() const;
+    // A pawn's colonist record (name, skills...), or null if it is not a colonist.
+    const Colonist* colonistOf(Entity pawn) const;
 
     // Problems setting up the start (e.g. a def the settings name is missing). Empty when fine.
     const std::vector<std::string>& setupErrors() const { return setupErrors_; }

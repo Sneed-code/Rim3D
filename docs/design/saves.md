@@ -28,11 +28,12 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Queued commands | submitted but not yet applied; they apply at the first step after loading |
 | Checkpoints | the state hashes recorded so far |
 | Hauling test | its stockpile's middle cell, hauler list, counters, setup errors |
-| Building plans, marks and a job's site (format 7) | per plan (a thing with a `site`): stage, stuff **by `defName`**, origin, rotation, size, each material by `defName` with how many are needed and delivered, work total and done; per building: what it was `builtOf`, and `marked` for deconstruction; per job: its `site` and `progress` ([construction.md](construction.md)). The cell index of plans is rebuilt on loading |
+| Building plans, marks and a job's site (format 8) | per plan (a thing with a `site`): stage, stuff **by `defName`**, origin, rotation, size, each material by `defName` with how many are needed and delivered, work total and done; per building: what it was `builtOf`, and `marked` for deconstruction; per job: its `site` and `progress` ([construction.md](construction.md)). The cell index of plans is rebuilt on loading |
 | Stockpile zones (format 6) | each zone's id, priority, filter by `defName` and cells, and the next zone id |
 | Pawn movement (format 3) | each pawn's velocity, line start, held-up counters (`Mover`), and the repath count |
 | Colonists (format 4) | each colonist's name, age, backstories, traits, skills and the scenario name in the settings ([colonists.md](colonists.md)) |
 | Pawn health (format 5) | per pawn: protagonist flag, rest, injuries (part, hediff **by `defName`**, severity, tend quality), lost parts, blood loss, dead and cause. Pain, bleeding, capacities and downed are worked out again on loading ([health.md](health.md)) |
+| Direct control (format 7) | which colonist the player controls (a flag on the pawn); the `ControlPawn` and `DirectMove` commands in the log ([protagonist.md](protagonist.md)) |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
@@ -159,6 +160,10 @@ sneed's whole job for a bug is: press F8, then send the folder (zip it, or drop 
   [decision 0005](../decisions/0005-saves-before-jobs.md)): the placeholder's state has no
   counterpart in jobs. The `ar.version() >= 2` to `>= 5` branches stay, so the old layout is still
   written down in one place.
+
+- **7** (U9): a `playerControlled` flag on a thing, and command types 10 (`ControlPawn`) and 11
+  (`DirectMove`) in the command log. Older files load with nobody controlled. A file with two
+  controlled pawns, or a controlled pawn that isn't a colonist on the map, is refused.
 
 ## Why the state hash changed in S6
 

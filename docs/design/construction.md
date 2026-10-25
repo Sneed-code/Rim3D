@@ -112,11 +112,11 @@ free (a building appeared there by command) the materials are given back and the
 
 ## Saves and hashes
 
-Save format 7. A plan is a thing with an optional `site` (stage, stuff, origin, rotation, size,
+Save format 8. A plan is a thing with an optional `site` (stage, stuff, origin, rotation, size,
 materials with `needed` and `have` by item `defName`, `workTotal`, `workDone`); a building made of
 something has `builtOf`; a marked building has `marked`; a job has its `site` and `progress`. The cell
 index (`siteAt`) is rebuilt on loading and the delivery reservations follow from the jobs like the
-others. All of it is in `Sim::stateHash`. Saves of format 6 still load.
+others. All of it is in `Sim::stateHash`. Saves of formats 6 and 7 still load.
 
 ## Not yet
 

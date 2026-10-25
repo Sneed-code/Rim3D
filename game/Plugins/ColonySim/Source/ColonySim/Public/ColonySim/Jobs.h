@@ -146,7 +146,11 @@ public:
     // Commands. Return false, with a reason in plain words, when they can't be done.
     bool setPriority(Entity pawn, DefId workType, int priority, std::string& error);
     // A player order: haul this item to the best stockpile now, ending the pawn's current job.
+    // Refused for the pawn the player controls directly (PlayerControl).
     bool orderHaul(Entity pawn, Entity thing, std::string& error);
+    // Ends the pawn's job, if it has one, as interrupted for `why`: reservations let go, what it
+    // carried put down. Used when the player takes the pawn over (ControlPawnCommand).
+    void interrupt(Entity pawn, const std::string& why);
 
     // Call before a thing is destroyed: ends the jobs that carry it or are done by it.
     void forget(Entity thing);
