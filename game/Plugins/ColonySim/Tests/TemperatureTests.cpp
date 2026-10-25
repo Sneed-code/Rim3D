@@ -8,6 +8,7 @@
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Weather.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Things.h"
