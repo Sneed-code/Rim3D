@@ -45,7 +45,8 @@ enum class JobStepKind : uint8_t {
     PlantWork,
     DepositIngredient,
     BillWork,
-    BillFinish
+    BillFinish,
+    Play  // recreation: stay for the activity's time (RecreationJobs.cpp)
 };
 
 constexpr JobStepKind kJobsWaitSteps[] = {JobStepKind::Wait};
@@ -67,6 +68,7 @@ constexpr JobStepKind kJobsDoBillSteps[] = {JobStepKind::GotoThing, JobStepKind:
                                             JobStepKind::DepositIngredient, JobStepKind::BillWork,
                                             JobStepKind::BillFinish};
 static_assert(kDoBillPickUpStep == 1 && kDoBillDepositStep == 3, "the DoBill steps moved");
+constexpr JobStepKind kJobsRecreateSteps[] = {JobStepKind::WalkToSpot, JobStepKind::Play};
 
 // The most steps one pawn's job may run in one game second (guards against a loop of steps that
 // all end at once).
@@ -100,6 +102,7 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::CutPlant:
         case JobType::HarvestPlant: return {kJobsPlantSteps, static_cast<int>(std::size(kJobsPlantSteps))};
         case JobType::DoBill: return {kJobsDoBillSteps, static_cast<int>(std::size(kJobsDoBillSteps))};
+        case JobType::Recreate: return {kJobsRecreateSteps, static_cast<int>(std::size(kJobsRecreateSteps))};
     }
     return {nullptr, 0};
 }
@@ -119,6 +122,8 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::Eat:
         case JobStepKind::Lie:
             return true;
+        case JobStepKind::Play:
+            return job.count == 0;  // a stroll walks about
         default:
             return false;
     }
@@ -164,6 +169,7 @@ const char* jobTypeName(JobType type) {
         case JobType::CutPlant: return "CutPlant";
         case JobType::HarvestPlant: return "HarvestPlant";
         case JobType::DoBill: return "DoBill";
+        case JobType::Recreate: return "Recreate";
     }
     return "?";
 }
@@ -254,6 +260,8 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
             ingestSeconds_[i] = static_cast<float>(def.number("ingestible.baseIngestSeconds", rules_.ingestSeconds));
         }
     }
+
+    recreation_ = RecreationRules::read(defs_);
 
     const Def* rules = defs_.find("Rules", "JobRules");
     idleSeconds_ = static_cast<int64_t>(rules ? rules->number("idleSeconds", kJobsIdleSeconds) : kJobsIdleSeconds);
@@ -381,6 +389,13 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
             }
             return n;
         }
+        case JobType::Recreate:
+            // The place it plays at: a cell beside the building, the chair it sits in, or none (a stroll).
+            if (job.thing == kNoEntity && job.chair == kNoEntity) {
+                return 0;
+            }
+            out[0] = keyOf(JobTarget{kNoEntity, job.cell});
+            return 1;
         case JobType::None:
         case JobType::Wait:
             return 0;
@@ -510,7 +525,7 @@ void JobSystem::step() {
     // fire: F1 and later), then the defense plan (F6), urgent needs and the schedule (C6), work
     // and finally idling. Player orders don't wait for a think: the command starts them.
     static constexpr ThinkNode kThinkList[] = {&JobSystem::thinkNeeds, &JobSystem::thinkSchedule, &JobSystem::thinkWork,
-                                               &JobSystem::thinkIdle};
+                                               &JobSystem::thinkJoy, &JobSystem::thinkIdle};
 
     for (const Entity pawn : order_) {
         reg.get<Mover>(pawn).hold = false;
@@ -683,6 +698,9 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::DoBill) {
         return failCheckDoBill(pawn, job, why);
     }
+    if (job.type == JobType::Recreate) {
+        return failCheckRecreate(pawn, job, why);
+    }
     entt::registry& reg = things_.registry();
     if (job.type == JobType::DeliverResources) {
         const ConstructionSite* site = reg.valid(job.site) ? reg.try_get<ConstructionSite>(job.site) : nullptr;
@@ -799,6 +817,8 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return billWork(pawn, job, why);
         case JobStepKind::BillFinish:
             return billFinish(pawn, job, why);
+        case JobStepKind::Play:
+            return play(pawn, job, why);
     }
     return StepResult::Failed;
 }

@@ -84,6 +84,10 @@ struct ThingView {
     // Mood (docs/design/mood.md): 0 to 100, else -1; the break band as a MoodBand (0 stable to 3 extreme).
     float mood = -1.0f;
     int moodBand = 0;
+    // Recreation, comfort and outdoors needs (docs/design/recreation.md): 0 empty to 1 full, else -1.
+    float joy = -1.0f;
+    float comfort = -1.0f;
+    float outdoors = -1.0f;
     // Pawns: how they hold their body and which way they face (a unit vector; +x east), the gun
     // in their hands (invalid if none) and steps until it can start a new shot (0: ready).
     // Downed pawns lie prone (docs/design/combat.md).

@@ -6,6 +6,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Recreation.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Things.h"
 
@@ -100,7 +101,50 @@ MoodSystem::MoodSystem(Things& things, const NeedsSystem& needs, const DefDataba
         thought.need = def.text("situation.need");
         thought.band = def.text("situation.band");
         thoughts_.push_back(std::move(thought));
+
+        StagedThought staged;
+        staged.def = id;
+        staged.condition = def.text("situation.condition");
+        const size_t stages = def.count("stages");
+        if (staged.condition.empty() || stages == 0) {
+            continue;
+        }
+        // The thresholds sit in a list named after the condition: "joyNeed" has "joyThresholds".
+        std::string key = staged.condition;
+        if (key.size() > 4 && key.compare(key.size() - 4, 4, "Need") == 0) {
+            key.resize(key.size() - 4);
+        }
+        key += "Thresholds";
+        for (size_t i = 0; i < def.count(key.c_str()); ++i) {
+            staged.thresholds.push_back(static_cast<float>(def.numberAt(key.c_str(), i)));
+        }
+        for (size_t i = 0; i < stages; ++i) {
+            const std::string path = "stages." + std::to_string(i);
+            staged.labels.push_back(def.text((path + ".label").c_str()));
+            staged.offsets.push_back(moodFloat(def, (path + ".moodOffset").c_str(), 0.0f));
+        }
+        staged_.push_back(std::move(staged));
     }
+}
+
+// What each staged condition measures. A task that adds a condition adds its case here.
+bool MoodSystem::conditionValue(Entity pawn, const std::string& condition, float& value) const {
+    const entt::registry& reg = things_.registry();
+    if (const Joy* joy = reg.try_get<Joy>(pawn)) {
+        if (condition == "joyNeed") {
+            value = joy->level;
+            return true;
+        }
+        if (condition == "comfortNeed") {
+            value = joy->comfort;
+            return true;
+        }
+        if (condition == "outdoorsNeed") {
+            value = joy->outdoors;
+            return true;
+        }
+    }
+    return false;
 }
 
 float MoodSystem::traitMoodOffset(Entity pawn) const {
@@ -164,6 +208,19 @@ std::vector<ThoughtView> MoodSystem::thoughts(Entity pawn, int64_t now) const {
                 out.push_back(ThoughtView{def.defName(), def.label(), thought.offset, true, 0});
             }
         }
+    }
+    for (const StagedThought& staged : staged_) {
+        float value = 0.0f;
+        if (!conditionValue(pawn, staged.condition, value)) {
+            continue;
+        }
+        size_t stage = 0;
+        while (stage < staged.thresholds.size() && stage + 1 < staged.offsets.size() && value >= staged.thresholds[stage]) {
+            ++stage;
+        }
+        const Def& def = defs_.get(staged.def);
+        out.push_back(ThoughtView{def.defName(), staged.labels[stage].empty() ? def.label() : staged.labels[stage],
+                                  staged.offsets[stage], true, 0});
     }
     if (const Mood* mood = reg.try_get<Mood>(pawn)) {
         for (const Memory& memory : mood->memories) {

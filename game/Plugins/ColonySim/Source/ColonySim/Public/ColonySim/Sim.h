@@ -36,6 +36,7 @@ class Lights;
 class Mineables;
 class MovementSystem;
 class MoodSystem;
+class RecreationSystem;
 class NeedsSystem;
 class Plants;
 class PowerGrid;
@@ -135,6 +136,9 @@ public:
     // Mood and thoughts (docs/design/mood.md).
     MoodSystem& mood() { return *mood_; }
     const MoodSystem& mood() const { return *mood_; }
+    // Recreation, comfort and the outdoors need (docs/design/recreation.md).
+    RecreationSystem& recreation() { return *recreation_; }
+    const RecreationSystem& recreation() const { return *recreation_; }
     // Guns, projectiles, hitboxes and armor (docs/design/combat.md).
     CombatSystem& combat() { return *combat_; }
     const CombatSystem& combat() const { return *combat_; }
@@ -232,6 +236,7 @@ private:
     std::unique_ptr<HealthSystem> health_;
     std::unique_ptr<NeedsSystem> needs_;
     std::unique_ptr<MoodSystem> mood_;
+    std::unique_ptr<RecreationSystem> recreation_;
     std::unique_ptr<CombatSystem> combat_;
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;

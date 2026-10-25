@@ -16,7 +16,7 @@ The Crashlanded start (protagonist and 5 colonists, 50 survival meals, steel and
 
 | What | Commands |
 | --- | --- |
-| A room 9 x 7 cells, at the spot near the landing with the fewest trees | 27 steel walls, a wood door in the south wall, 6 steel beds, a wood table with 3 wood stools, a stove |
+| A room 9 x 7 cells, at the spot near the landing with the fewest trees | 27 steel walls, a wood door in the south wall, 6 steel beds, a wood table with 3 wood stools, a stove, a wood horseshoes pin (C18) |
 | Mining, chopping, picking | `Designate` on the nearest 12 reachable rock cells, 12 mature trees and 24 mature berry bushes |
 | Cooking | once the stove stands (checked every game hour): `AddBill` "simple meal, until 8 on the map" |
 | Beds | once all six stand: `AssignBed`, one each |
@@ -38,10 +38,12 @@ stderr for each of these that does not hold:
 - Everything planned is built (walls, door, 6 beds, table, 3 stools, stove) and the room is one
   enclosed, roofed room holding them.
 - The stove made meals and colonists ate them; at least one colonist woke up in a bed.
+- Colonists started recreation jobs, at least one at the horseshoes pin (C18: Joy hours 19:00 to 21:59).
+  Standing or lying still while playing doesn't count as stuck.
 - No command and no job failed (a failed job is a bug here: nothing in the script can legitimately
   fail one).
 
-It also reports, without failing on it, the longest idle spell (about 10 hours at night once the
+It also reports, without failing on it, the lowest recreation, comfort and outdoors needs, the recreation jobs and how many were at the pin, the longest idle spell (about 10 hours at night once the
 work is done) and the mood minimum.
 
 A typical seed 42 run: everything built by game hour 7 of day 1, marks done by hour 11, 22 meals
