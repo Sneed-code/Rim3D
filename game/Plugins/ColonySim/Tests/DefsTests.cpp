@@ -211,3 +211,64 @@ TEST_CASE("defs: the real data folder loads") {
     CHECK_FALSE(DefDatabase::loadDirectory(COLONY_DATA_DIR "/nope", missing, errors));
     CHECK_FALSE(errors.empty());
 }
+
+TEST_CASE("defs: medicine and disease data (D7)") {
+    DefDatabase db;
+    std::vector<std::string> errors;
+    if (!DefDatabase::loadDirectory(COLONY_DATA_DIR, db, errors)) { CHECK(false); return; }
+
+    // Medicine items: potency and the best tend quality each allows.
+    const Def* herbal = db.find("Things", "MedicineHerbal");
+    const Def* medicine = db.find("Things", "MedicineIndustrial");
+    const Def* lumen = db.find("Things", "MedicineLumen");
+    if (herbal == nullptr || medicine == nullptr || lumen == nullptr) { CHECK(false); return; }
+    CHECK(herbal->number("stats.medicalPotency") == doctest::Approx(0.6));
+    CHECK(medicine->number("stats.medicalPotency") == doctest::Approx(1.0));
+    CHECK(lumen->number("stats.medicalPotency") == doctest::Approx(1.6));
+    CHECK(herbal->number("stats.medicalQualityMax") == doctest::Approx(0.7));
+    CHECK(lumen->number("stats.medicalQualityMax") == doctest::Approx(1.3));
+    CHECK(herbal->count("thingCategories") == 1);
+
+    // Diseases inherit from DiseaseBase and every stage names real capacities (check_defs.py also checks that).
+    for (const char* name : {"Infection", "Flu", "Plague", "Malaria", "SleepingSickness", "GutWorms", "MuscleParasites", "FoodPoisoning"}) {
+        const Def* d = db.find("Hediffs", name);
+        if (d == nullptr) { CHECK_MESSAGE(false, name); continue; }
+        CHECK_MESSAGE(d->text("hediffClass") == "Disease", name);
+        CHECK_MESSAGE(d->count("stages") >= 2, name);
+    }
+    CHECK(db.find("Hediffs", "Plague")->number("lethalSeverity") == doctest::Approx(1.0));
+    CHECK(db.find("Hediffs", "GutWorms")->number("lethalSeverity") == doctest::Approx(0.0));
+    for (const char* name : {"Hypothermia", "Heatstroke", "Frostbite", "ToxicBuildup", "Scar", "OldWound"}) {
+        CHECK_MESSAGE(db.find("Hediffs", name) != nullptr, name);
+    }
+
+    // Every artificial part is a hediff, an item and an install surgery that agree with each other.
+    int artificial = 0;
+    for (const DefId id : db.idsOfKind("Hediffs")) {
+        const Def& h = db.get(id);
+        if (h.text("hediffClass") != "AddedPart") continue;
+        ++artificial;
+        CHECK_MESSAGE(db.find("Things", h.text("addedPart.item").c_str()) != nullptr, h.defName());
+        CHECK_MESSAGE(db.find("BodyParts", h.text("addedPart.part").c_str()) != nullptr, h.defName());
+        const Def* surgery = db.find("Recipes", ("Install" + h.defName()).c_str());
+        if (surgery == nullptr) { CHECK_MESSAGE(false, h.defName()); continue; }
+        CHECK_MESSAGE(surgery->text("surgery.addsHediff") == h.defName(), h.defName());
+        CHECK_MESSAGE(surgery->text("surgery.part") == h.text("addedPart.part"), h.defName());
+        CHECK_MESSAGE(surgery->text("workSkill") == "Medicine", h.defName());   // from SurgeryBase
+    }
+    CHECK(artificial == 9);
+    CHECK(db.find("Hediffs", "PegLeg")->number("addedPart.efficiency") < 1.0);
+    CHECK(db.find("Hediffs", "BionicEye")->number("addedPart.efficiency") > 1.0);
+    CHECK(db.find("Recipes", "InstallBionicArm")->integer("minSkill") == 8);
+    CHECK(db.find("Recipes", "InstallPegLeg")->integer("minSkill") == 0);
+
+    // The hospital bed is a bed that heals like HealthRules says.
+    const Def* hospital = db.find("Things", "HospitalBed");
+    if (hospital == nullptr) { CHECK(false); return; }
+    CHECK(hospital->flag("building.bed"));
+    CHECK(hospital->flag("building.medical"));
+    CHECK(hospital->number("stats.medicalTendQualityOffset") > 0.0);
+    const Def* healthRules = db.find("Rules", "HealthRules");
+    CHECK(healthRules->number("restHealBonusPerDay.HospitalBed") > healthRules->number("restHealBonusPerDay.Bed"));
+    CHECK(db.find("Rules", "MedicineRules")->count("tendQualityBySkill") == 5);
+}

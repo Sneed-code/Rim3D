@@ -58,6 +58,7 @@ names in lowerCamel (`workSpeedGlobal`), keys that are def names keep their case
 | `BodyPartGroups` | 12 groups | F1, apparel later | |
 | `Capacities` | consciousness, moving, manipulation, sight, hearing, talking, eating, breathing, blood filtration, blood pumping, digestion | F1 | How parts and other capacities feed each one; downed and lethal thresholds |
 | `Hediffs` | injuries (cut, stab, gunshot, scratch, bite, shredded, crush, bruise, crack, burn), missing part, blood loss | F1 | `injuryProps.painPerSeverity`, `bleedRate`, blood loss stages |
+| `Hediffs` (D7) | diseases, environment sicknesses, scars, artificial parts: see [medicine-data.md](medicine-data.md) | D7 | `immunity`, `tend`, `stages`, `addedPart` |
 | `DamageTypes` | bullet, cut, stab, scratch, bite, blunt, crush, burn | F1, F2 | Which injury each damage makes (`hediff`, `hediffSolid` on bones); `reachesInside` (ours: bullet, cut, stab) lets a random hit go in to organs and bones; `armorCategory` (Sharp, Blunt, Heat) says which armor rating stops it |
 | `Things` (F2) | `Weapons.json`: revolver, autopistol, bolt-action rifle, pump shotgun, assault rifle. `Apparel.json`: flak vest, flak pants, simple helmet (steel) | F2 | `verbs`, accuracy and cooldown stats, `recoilPerShot` (ours); armor ratings, `apparel.bodyPartGroups` and `layers`. See [combat.md](combat.md) |
 | `Projectiles` | the five guns' bullets | F2 | damage, armor penetration, stopping power, speed (wiki m/s / 30; `tuning.json` multiplies it by 3) |
