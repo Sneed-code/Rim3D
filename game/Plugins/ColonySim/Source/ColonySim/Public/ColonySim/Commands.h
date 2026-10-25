@@ -337,6 +337,19 @@ struct UnlockResearchCommand {
     std::string project;
 };
 
+// Melee (task F8, docs/design/melee.md). Attack: `pawn` swings at `target`, a pawn within reach;
+// for the colonist the player controls, `target` may be none for a swing straight ahead, and its
+// swings have no spread (the player aims). Block: `pawn` raises its melee weapon for a moment.
+// Fails if the pawn can't swing or block now (downed, mid-shot, still swinging, out of reach, no
+// melee weapon to block with).
+enum class MeleeMode : uint8_t { Attack, Block };
+
+struct MeleeCommand {
+    Entity pawn = kNoEntity;
+    Entity target = kNoEntity;
+    MeleeMode mode = MeleeMode::Attack;
+};
+
 // Talents (task P3, docs/design/talents.md): the protagonist spends talent points on one more rank of a
 // talent. Fails for a pawn that has no talents, a talent that doesn't exist or is at its top rank, a
 // requirement missing, or too few points.
@@ -363,6 +376,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              RemoveBillCommand, SetBillCommand, HandsOnCommand, FlickCommand, ShortCircuitCommand,
                              PlaceFloorCommand, AddFilthCommand,
                              SetResearchCommand, UnlockResearchCommand,
+                             MeleeCommand,
                              SpendTalentPointCommand, AddTalentXpCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was

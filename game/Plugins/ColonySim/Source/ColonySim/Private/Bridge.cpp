@@ -91,6 +91,8 @@ const char* commandName(const Command& command) {
                 return "SetResearch";
             } else if constexpr (std::is_same_v<Type, UnlockResearchCommand>) {
                 return "UnlockResearch";
+            } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
+                return "Melee";
             } else if constexpr (std::is_same_v<Type, SpendTalentPointCommand>) {
                 return "SpendTalentPoint";
             } else {
@@ -152,6 +154,8 @@ const char* eventTypeName(EventType type) {
         case EventType::PowerChanged: return "PowerChanged";
         case EventType::ShortCircuit: return "ShortCircuit";
         case EventType::ResearchDone: return "ResearchDone";
+        case EventType::MeleeSwing: return "MeleeSwing";
+        case EventType::MeleeHit: return "MeleeHit";
         case EventType::TalentPoint: return "TalentPoint";
     }
     return "?";
@@ -174,6 +178,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Cook: return "Cook";
         case PawnAction::Research: return "Research";
         case PawnAction::Clean: return "Clean";
+        case PawnAction::Block: return "Block";
     }
     return "?";
 }

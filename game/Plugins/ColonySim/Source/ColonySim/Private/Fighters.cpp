@@ -8,6 +8,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Things.h"
@@ -560,6 +561,22 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
     }
     f.fallingBack = enemiesNear > 0 && (static_cast<float>(enemiesNear) >= rules_.outnumberedRatio * static_cast<float>(friendsNear) ||
                                         badlyHurt(pawn));
+    // With an enemy already at arm's length there is no getting away on foot: it stands and fights (F8).
+    if (f.fallingBack && melee_ != nullptr && threatCount > 0 && threats[0].d <= melee_->reach(pawn) + melee_->rules().standGround) {
+        f.fallingBack = false;
+    }
+
+    // Armed for melee, or a Brawler: it runs at its target instead of taking cover (F8). A drafted
+    // one only as far as its leash allows, unless the player ordered the attack.
+    if (melee_ != nullptr && targetInfo != nullptr && !f.fallingBack && melee_->charges(pawn)) {
+        const CellPos goal = cellOf(Position{tx, ty, targetInfo->level});
+        if (f.leash <= 0.0f || f.forcedTarget == f.target ||
+            fightDist(fightCentre(goal.x), fightCentre(goal.y), fightCentre(f.anchor.x), fightCentre(f.anchor.y)) <=
+                f.leash + melee_->reach(pawn) + 1.0f) {
+            planCharge(pawn, f, goal);
+            return;
+        }
+    }
 
     // Nothing to fear and nobody to shoot: stay put.
     const CellPos at = cellOf(Position{self.x, self.y, self.level});
@@ -648,7 +665,7 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
             }
             s -= rules_.travelWeight * fightDist(cx, cy, self.x, self.y);
             s -= rules_.crowdWeight * crowd;
-            if (targetInfo != nullptr) {
+            if (targetInfo != nullptr && range > 0.0f) {  // without a gun there is no range to get into (F8)
                 const float dt = fightDist(cx, cy, tx, ty);
                 if (dt > range) {
                     s -= rules_.rangeWeight * (dt - range);
@@ -735,6 +752,9 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
     if (phase == ShotPhase::Aiming || phase == ShotPhase::Firing) {
         return;  // holds still and exposed until the burst is out, even if the plan has moved on
     }
+    if (meleeAct(pawn, f)) {
+        return;  // swinging, or an enemy in reach to swing at (F8)
+    }
 
     // Walking to the spot: upright, not shooting.
     if (f.walk == 1) {
@@ -814,6 +834,85 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
     if (phase == ShotPhase::Ready) {
         tacticalReload(pawn, f, canShoot);
     }
+}
+
+// A charge (F8): the spot is the cell the target was last seen in, walked to by the usual path. Once
+// the target is in reach meleeAct takes over.
+void FighterSystem::planCharge(Entity pawn, Fighter& f, CellPos goal) {
+    f.canFire = false;
+    f.fireStance = Stance::Standing;
+    const bool moved = !f.hasSpot || f.spot != goal;
+    f.hasSpot = true;
+    f.spot = goal;
+    f.fireCell = goal;
+    if (!moved) {
+        return;
+    }
+    if (f.walk != 0) {
+        // Keeps running along the old route while the pathfinder works out the new one, so a chase
+        // doesn't stop each time the target moves.
+        if (f.walk == 1) {
+            pathfinder_.cancel(f.path);
+        }
+        f.path = pathfinder_.request(cellOf(things_.registry().get<Position>(pawn)), goal);
+        f.walk = 1;
+        f.repaths = 0;
+        return;
+    }
+    walkToSpot(pawn, f);
+}
+
+// Melee (F8). Winding up a swing it holds still. Without a gun, with its target or another able enemy
+// in reach, it stops, stands and swings whenever it is ready. A pawn with a gun shoots instead, even
+// point blank.
+bool FighterSystem::meleeAct(Entity pawn, Fighter& f) {
+    if (melee_ == nullptr) {
+        return false;
+    }
+    if (melee_->winding(pawn)) {
+        return true;
+    }
+    if (weaponRange(pawn) > 0.0f) {
+        return false;
+    }
+    Entity victim = kNoEntity;
+    if (info(f.target) != nullptr && melee_->inReach(pawn, f.target)) {
+        victim = f.target;
+    } else {
+        const PawnInfo* self = info(pawn);
+        float best = 0.0f;
+        for (const PawnInfo& p : pawns_) {
+            if (self == nullptr || p.faction == self->faction || !p.able || p.level != self->level ||
+                !melee_->inReach(pawn, p.pawn)) {
+                continue;
+            }
+            const float d = fightDist(p.x, p.y, self->x, self->y);
+            if (victim == kNoEntity || d < best) {
+                victim = p.pawn;
+                best = d;
+            }
+        }
+    }
+    if (victim == kNoEntity) {
+        return false;
+    }
+    if (victim == f.target && f.walk != 0 && melee_->charges(pawn)) {
+        // A charge walks on until the target is well inside its reach, not just at the edge of it.
+        const Position& a = things_.registry().get<Position>(pawn);
+        const Position& b = things_.registry().get<Position>(victim);
+        const float close = std::max(0.7f, melee_->reach(pawn) - melee_->rules().closeIn);
+        if (fightDist(a.x, a.y, b.x, b.y) > close) {
+            return false;
+        }
+    }
+    if (f.walk != 0) {
+        stop(pawn, f);
+    }
+    combat_.setStance(pawn, Stance::Standing);
+    if (melee_->ready(pawn)) {
+        melee_->attack(pawn, victim, false);
+    }
+    return true;
 }
 
 // In cover with nothing to shoot just now: top the magazine up rather than run dry mid-fight.

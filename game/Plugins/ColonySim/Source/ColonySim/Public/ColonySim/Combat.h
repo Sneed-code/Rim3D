@@ -118,6 +118,15 @@ struct TraceHit {
     int part = -1;             // the body part whose hitbox was hit (outside part)
 };
 
+// What a hit on a pawn came to (CombatSystem::hitPawn): the part it lands on, and the damage left
+// after armor (none if the armor deflected it).
+struct PawnHitResult {
+    bool deflected = false;
+    int part = -1;     // -1: the pawn has no hitboxes, so the caller lets health pick a part
+    DefId damageType;  // Blunt if armor turned a sharp hit blunt
+    float amount = 0.0f;
+};
+
 struct CombatModel;
 
 class COLONY_API CombatSystem {
@@ -133,7 +142,7 @@ public:
     // Called before combat destroys a thing (a building shot to pieces), so jobs can let go of it.
     void setBeforeDestroy(std::function<void(Entity)> hook) { beforeDestroy_ = std::move(hook); }
 
-    // Puts a gun in the pawn's hands (the one held before is dropped where the pawn stands) or
+    // Puts a weapon (a gun, or a melee weapon since F8) in the pawn's hands (the one held before is dropped where the pawn stands) or
     // apparel on its body (one piece per layer and body part group: what it replaces is dropped).
     // The item may be on the map (it is picked up) or not. False, changing nothing, if the pawn
     // has no body, is dead, or the item is neither a gun nor apparel, or is someone else's.
@@ -201,6 +210,19 @@ public:
 
     // Hashes the combat components of one thing (Sim::stateHash calls it for every thing).
     void hashThing(Entity e, StateHasher& h) const;
+
+    // A hit on the hitbox of `hitboxPart`: picks the part under it (a hand or a finger...), goes in
+    // to an organ or bone if the damage type reaches inside, then through the pawn's armor, outside
+    // layer first (RimWorld's rule). Every random choice comes from `seed`. Doesn't apply the damage:
+    // the caller does (HealthSystem::applyHit), so bullets and melee strikes land the same way (F8).
+    PawnHitResult hitPawn(Entity pawn, int hitboxPart, DefId damageType, float amount, float penetration,
+                          uint64_t seed) const;
+    // The radius around a standing man's chest, seen from the front, in which a point picked evenly
+    // lands on him with this chance (the table aimed shots use). Melee strikes use it too (F8).
+    float spreadRadiusFor(float chance) const;
+    // Things defs that go in a pawn's hands: a melee weapon (an item with `tools`, F8) or a gun.
+    bool isMeleeWeapon(DefId def) const;
+    bool isGun(DefId def) const;
 
 private:
     Things& things_;

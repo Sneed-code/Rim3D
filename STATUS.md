@@ -264,6 +264,18 @@ Stage 2 done so far: **D7** medicine and disease data (`docs/design/medicine-dat
 **D12** research data (22 projects, tech levels, two research benches, content gated by `researchPrerequisite`: `docs/design/research-data.md`).
 **E2** room temperature is in (`docs/design/temperature.md`, tests `TemperatureTests`, `simrun --outdoor C`, CTest `simrun_temperature`): every roofed enclosed room has a temperature that follows the outdoors through its roof, walls, doors (open ones much faster), vents and rock, mixes when rooms join and split, and is pushed by heaters, coolers and campfires (`heatPusher` in the defs; **E5 power decides which run**: `Sim` wires `PowerGrid::running` into `TemperatureSystem::setSourceRunning`, a campfire needs none, and C11 fuel will add its test the same way). Pawns get Cold and Hot thoughts outside their comfortable range, and hypothermia or heatstroke (new *environment hediffs* in `Health`, with stages on the capacities and death at 1.0) outside the safe range, and a rare frostbite injury below -10. **Outdoor temperature is a stand-in until E1** (`Sim::outdoorTemperature()`: the biome's season and a daily swing; E1 replaces its body and everything else reads `temperature().outdoor()`); **humanlike pawns' comfort range is widened 12 degrees on the cold side as a stand-in for clothes until C15** (`TemperatureRules.clothesColdC`; C15 calls `setComfortModifier` and deletes it). Colonists do not yet go looking for warmth (BACKLOG). Save: section `temperature` 1 and `health` 2, no format change.
 
+**F8** melee is in (`docs/design/melee.md`, tests `MeleeTests`): fists and the D8 melee weapons swing with a
+wind-up, a hit moment and a recovery (the whole swing is the tool's cooldown, so RimWorld's damage per second
+holds); at the hit a level strike is traced against hitboxes as far as the weapon reaches (fists 0.85 m, spear
+1.9 m), aimed with a spread that hits a standing man as often as RimWorld's melee hit chance; damage goes through
+armor like a bullet's (`CombatSystem::hitPawn`). Defenders read a swing after a reaction time from Melee skill,
+then sidestep (fighters, as often as RimWorld's dodge chance) or block with a melee weapon from the front (ours).
+Fighters with a melee weapon or the Brawler trait and no gun charge; others strike back at enemies in reach, and
+unarmed fighters no longer walk at their target; a fighter falling back stands and fights an enemy at arm's
+length. `MeleeCommand` (Attack, Block) for the player and dev use, events `MeleeSwing`, `MeleeHit`, `PawnAction`
+`Block`, snapshot `meleePhase`, `meleeStepsLeft`, `meleeTarget`, `blocking`, save section `melee`. **C20's
+social fights and N5's animal fights start swings with `MeleeSystem::attack`.**
+
 D9 (thoughts, recreation, mental break and social data) is in: `docs/design/thoughts-data.md`. Data only; C15, C17, C18, C19, C20, E2 and E3 read it.
 **C17** room stats, beauty and filth (`docs/design/room-stats.md`): floors and filth layers, a cleaning job (indoors only for now), space, beauty, wealth, cleanliness and impressiveness by RimWorld's formulas, the beauty need and the room thoughts. Floors come only by `PlaceFloor` command: no floor-building job exists in any plan task yet (BACKLOG). Save section `roomstats` 1.
 
