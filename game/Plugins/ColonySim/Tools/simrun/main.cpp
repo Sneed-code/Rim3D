@@ -15,7 +15,9 @@
 // overrides). --record writes what this run did as a replay, with its state hashes.
 // --check makes it exit with 1 if any job or path search failed.
 // Defs load from --data (default: the repo's data folder). The hauling test needs the Things defs
-// Human and Steel, which data/defs/Things provides.
+// Human and Steel and the WorkTypes def Hauling, which data/defs provides. Its pawns haul items
+// scattered over the map to a stockpile zone in the middle through the job system (C1).
+#include "ColonySim/Colonist.h"
 #include "ColonySim/Cover.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Pathfinder.h"
@@ -28,6 +30,7 @@
 #include "ColonySim/ThreatMap.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
+#include "ColonySim/Zones.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
@@ -54,6 +57,7 @@ struct Options {
     int pawns = 0;
     int items = 0;
     int pathBudget = colony::Pathfinder::kDefaultBudget;
+    std::string start;  // a Scenarios def; prints the colonists it makes
     bool check = false;  // exit 1 if a job or a path search failed
     std::string png;
     std::string regionsPng;
@@ -87,6 +91,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.items = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--path-budget") == 0 && hasValue) {
             out.pathBudget = std::atoi(argv[++i]);
+        } else if (std::strcmp(arg, "--start") == 0 && hasValue) {
+            out.start = argv[++i];
         } else if (std::strcmp(arg, "--check") == 0) {
             out.check = true;
         } else if (std::strcmp(arg, "--png") == 0 && hasValue) {
@@ -110,7 +116,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
-                         "[--path-budget N] [--check] [--png FILE] [--regions FILE] [--sight FILE] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--check] [--png FILE] [--regions FILE] [--sight FILE] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE]\n");
             return false;
         }
@@ -189,12 +195,18 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
             }
         }
     }
+    // Stockpile zones in pale blue, under the items stored in them.
+    for (const colony::StockpileZone& zone : sim.zones().stockpiles()) {
+        for (const colony::CellPos& c : zone.cells) {
+            mark(colony::Position{static_cast<float>(c.x), static_cast<float>(c.y), 0}, 150, 190, 230);
+        }
+    }
     const entt::registry& reg = sim.things().registry();
     for (const colony::ThingCategory category : {colony::ThingCategory::Item, colony::ThingCategory::Pawn}) {
         reg.view<const colony::Thing, const colony::Position>().each(
             [&](const colony::Thing& thing, const colony::Position& pos) {
-                if (thing.category != category || sim.stockpileCell() == colony::cellOf(pos)) {
-                    return;  // stored items pile up on the stockpile; leave it showing the ground
+                if (thing.category != category) {
+                    return;
                 }
                 if (category == colony::ThingCategory::Item) {
                     mark(pos, 255, 220, 0);
@@ -395,6 +407,7 @@ int main(int argc, char** argv) {
     colony::Replay replay;
     colony::SimSettings settings{options.seed, options.size, options.pawns, options.items};
     settings.pathBudget = options.pathBudget;
+    settings.scenario = options.start;
     int64_t steps = static_cast<int64_t>(options.days * static_cast<double>(colony::kSecondsPerDay));
     if (!options.replay.empty()) {
         std::string error;
@@ -452,6 +465,22 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "%s\n", e.c_str());
         }
         return 1;
+    }
+    if (!settings.scenario.empty()) {
+        // The colonists the scenario made, one line each.
+        sim.things().registry().view<const colony::Colonist>().each([](const colony::Colonist& c) {
+            std::printf("%s%s \"%s\" %s, %d, %s / %s; traits:", c.protagonist ? "* " : "  ", c.firstName.c_str(),
+                        c.nickName.c_str(), c.lastName.c_str(), c.age, c.childhood.c_str(), c.adulthood.c_str());
+            for (const colony::TraitRecord& t : c.traits) {
+                std::printf(" %s(%d)", t.def.c_str(), t.degree);
+            }
+            std::printf("; skills:");
+            for (const colony::SkillRecord& s : c.skills) {
+                std::printf(" %s %d%s%s", s.def.c_str(), s.level, s.passion == colony::Passion::Major ? "++" : s.passion == colony::Passion::Minor ? "+" : "",
+                            s.disabled ? "x" : "");
+            }
+            std::printf("\n");
+        });
     }
 
     // Time every step so spikes (long path searches) show up, not just the average.

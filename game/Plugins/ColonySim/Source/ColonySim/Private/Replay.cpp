@@ -29,6 +29,12 @@ constexpr const char* kReplayFormat = "rim3d-replay";
 constexpr int64_t kReplayFormatVersion = 1;
 
 const char* const kReplayRotNames[] = {"North", "East", "South", "West"};
+constexpr StoragePriority kReplayPriorities[] = {StoragePriority::Low, StoragePriority::Normal, StoragePriority::Preferred,
+                                                 StoragePriority::Important, StoragePriority::Critical};
+
+ReplayOrderedJson replayRectJson(const CellRect& r) {
+    return ReplayOrderedJson::array({r.minX, r.minY, r.sizeX, r.sizeY, r.level});
+}
 
 std::string replayHex(uint64_t value) {
     char text[17];
@@ -61,9 +67,43 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
                 j["count"] = c.count;
                 j["rot"] = kReplayRotNames[static_cast<int>(c.rot)];
-            } else {
-                static_assert(std::is_same_v<Type, DestroyThingCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, DestroyThingCommand>) {
                 j["thing"] = entt::to_integral(c.thing);
+            } else if constexpr (std::is_same_v<Type, DamagePawnCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["damageType"] = c.damageType;
+                j["amount"] = c.amount;
+                j["part"] = c.part;
+            } else if constexpr (std::is_same_v<Type, TendPawnCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["quality"] = c.quality;
+            } else if constexpr (std::is_same_v<Type, SetWorkPriorityCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["workType"] = c.workType;
+                j["priority"] = c.priority;
+            } else if constexpr (std::is_same_v<Type, CreateStockpileCommand>) {
+                j["area"] = replayRectJson(c.area);
+                j["priority"] = storagePriorityName(c.priority);
+            } else if constexpr (std::is_same_v<Type, RemoveZoneCellsCommand>) {
+                j["area"] = replayRectJson(c.area);
+            } else if constexpr (std::is_same_v<Type, SetStockpilePriorityCommand>) {
+                j["zone"] = c.zone;
+                j["priority"] = storagePriorityName(c.priority);
+            } else if constexpr (std::is_same_v<Type, SetStockpileAllowedCommand>) {
+                j["zone"] = c.zone;
+                j["def"] = c.def;
+                j["allowed"] = c.allowed;
+            } else if constexpr (std::is_same_v<Type, OrderHaulCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["thing"] = entt::to_integral(c.thing);
+            } else if constexpr (std::is_same_v<Type, ControlPawnCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+            } else {
+                static_assert(std::is_same_v<Type, DirectMoveCommand>, "write every command type");
+                j["pawn"] = entt::to_integral(c.pawn);
+                // A float is written as the double that holds it exactly, so it reads back the same.
+                j["x"] = static_cast<double>(c.x);
+                j["y"] = static_cast<double>(c.y);
             }
         },
         logged.command);
@@ -95,6 +135,18 @@ public:
             out = static_cast<Int>(it->get<int64_t>());
             return true;
         }
+    }
+
+    bool number(const ReplayJson& obj, const char* key, float& out, const std::string& where) {
+        const auto it = obj.find(key);
+        if (it == obj.end()) {
+            return true;
+        }
+        if (!it->is_number()) {
+            return fail(where + "." + key + " must be a number");
+        }
+        out = static_cast<float>(it->get<double>());
+        return true;
     }
 
     bool flag(const ReplayJson& obj, const char* key, bool& out, const std::string& where) {
@@ -139,6 +191,42 @@ private:
     std::string& error_;
 };
 
+// "area": [minX, minY, sizeX, sizeY, level]
+bool replayReadRect(ReplayReader& r, const ReplayJson& j, const std::string& where, CellRect& out) {
+    const auto area = j.find("area");
+    if (area == j.end() || !area->is_array() || area->size() != 5) {
+        return r.fail(where + ".area must be [minX, minY, sizeX, sizeY, level]");
+    }
+    int v[5] = {};
+    for (size_t i = 0; i < 5; ++i) {
+        if (!(*area)[i].is_number_integer()) {
+            return r.fail(where + ".area must be [minX, minY, sizeX, sizeY, level]");
+        }
+        v[i] = (*area)[i].get<int>();
+    }
+    if (v[2] < 0 || v[3] < 0) {
+        return r.fail(where + ".area must not have a negative size");
+    }
+    out = CellRect{v[0], v[1], v[2], v[3], v[4]};
+    return true;
+}
+
+// "priority": "Low", "Normal" (the default), "Preferred", "Important" or "Critical"
+bool replayReadPriority(ReplayReader& r, const ReplayJson& j, const std::string& where, StoragePriority& out) {
+    std::string name = storagePriorityName(StoragePriority::Normal);
+    if (!r.text(j, "priority", name, where)) {
+        return false;
+    }
+    for (const StoragePriority p : kReplayPriorities) {
+        if (name == storagePriorityName(p)) {
+            out = p;
+            return true;
+        }
+    }
+    return r.fail(where + ".priority must be Low, Normal, Preferred, Important or Critical");
+}
+
+
 bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& where, LoggedCommand& out) {
     if (!j.is_object()) {
         return r.fail(where + " must be an object");
@@ -182,6 +270,85 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = DestroyThingCommand{static_cast<Entity>(thing)};
+    } else if (type == "ControlPawn") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where)) {
+            return false;
+        }
+        out.command = ControlPawnCommand{static_cast<Entity>(pawn)};
+    } else if (type == "DirectMove") {
+        DirectMoveCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        for (const auto& [key, field] : {std::pair<const char*, float*>{"x", &c.x}, std::pair<const char*, float*>{"y", &c.y}}) {
+            const auto it = j.find(key);
+            if (it == j.end() || !it->is_number()) {
+                return r.fail(where + "." + key + " must be a number");
+            }
+            *field = static_cast<float>(it->get<double>());
+        }
+        out.command = c;
+    } else if (type == "DamagePawn") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        DamagePawnCommand c;
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "damageType", c.damageType, where) ||
+            !r.number(j, "amount", c.amount, where) || !r.integer(j, "part", c.part, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "TendPawn") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        TendPawnCommand c;
+        if (!r.integer(j, "pawn", pawn, where) || !r.number(j, "quality", c.quality, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "SetWorkPriority") {
+        SetWorkPriorityCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "workType", c.workType, where) ||
+            !r.integer(j, "priority", c.priority, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "CreateStockpile") {
+        CreateStockpileCommand c;
+        if (!replayReadRect(r, j, where, c.area) || !replayReadPriority(r, j, where, c.priority)) {
+            return false;
+        }
+        out.command = c;
+    } else if (type == "RemoveZoneCells") {
+        RemoveZoneCellsCommand c;
+        if (!replayReadRect(r, j, where, c.area)) {
+            return false;
+        }
+        out.command = c;
+    } else if (type == "SetStockpilePriority") {
+        SetStockpilePriorityCommand c;
+        if (!r.integer(j, "zone", c.zone, where) || !replayReadPriority(r, j, where, c.priority)) {
+            return false;
+        }
+        out.command = c;
+    } else if (type == "SetStockpileAllowed") {
+        SetStockpileAllowedCommand c;
+        if (!r.integer(j, "zone", c.zone, where) || !r.text(j, "def", c.def, where) ||
+            !r.flag(j, "allowed", c.allowed, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "OrderHaul") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        uint32_t thing = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "thing", thing, where)) {
+            return false;
+        }
+        out.command = OrderHaulCommand{static_cast<Entity>(pawn), static_cast<Entity>(thing)};
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");
     }
@@ -215,6 +382,9 @@ std::string writeReplay(const Replay& replay) {
     settings["haulItemDef"] = s.haulItemDef;
     settings["checkpointEvery"] = s.checkpointEvery;
     settings["pathBudget"] = s.pathBudget;
+    if (!s.scenario.empty()) {
+        settings["scenario"] = s.scenario;
+    }
 
     // One command and one checkpoint per line, so files diff and read well.
     std::string out = "{\n";
@@ -280,7 +450,7 @@ bool readReplay(const std::string& text, Replay& out, std::string& error) {
         !r.flag(*settings, "flatMap", s.flatMap, where) || !r.text(*settings, "pawnDef", s.pawnDef, where) ||
         !r.text(*settings, "haulItemDef", s.haulItemDef, where) ||
         !r.integer(*settings, "checkpointEvery", s.checkpointEvery, where) ||
-        !r.integer(*settings, "pathBudget", s.pathBudget, where)) {
+        !r.integer(*settings, "pathBudget", s.pathBudget, where) || !r.text(*settings, "scenario", s.scenario, where)) {
         return false;
     }
     if (s.mapSize <= 0 || s.mapSize > 4096 || s.pawns < 0 || s.items < 0 || s.checkpointEvery < 0 ||

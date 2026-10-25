@@ -1,6 +1,7 @@
 #include "ColonySim/Replay.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Zones.h"
 #include "ColonySim/Version.h"
 
 #include "TestDefs.h"
@@ -27,6 +28,23 @@ void replayTestSession(Sim& sim, int64_t steps) {
             sim.submit(SpawnThingCommand{"Steel", CellPos{60, 70, 0}, 30});
             sim.submit(SpawnThingCommand{"Bed", CellPos{20, 30, 0}, 1, Rot4::West});
         }
+        // Jobs and zones (C1): priorities, a second stockpile and its filter, a haul order.
+        if (i == 300) {
+            sim.submit(SetWorkPriorityCommand{sim.haulers()[1], "Hauling", 0});
+            sim.submit(SetWorkPriorityCommand{sim.haulers()[2], "NoSuchWork", 2});  // fails
+            sim.submit(CreateStockpileCommand{CellRect{20, 20, 4, 4, 0}, StoragePriority::Preferred});
+        }
+        if (i == 800) {
+            sim.submit(SetStockpileAllowedCommand{2, "Steel", false});
+            sim.submit(SetStockpilePriorityCommand{1, StoragePriority::Low});
+        }
+        if (i == 1500) {
+            const std::vector<Entity>& there = sim.things().itemsAt(CellPos{60, 70, 0});
+            sim.submit(OrderHaulCommand{sim.haulers()[3], there.empty() ? kNoEntity : there.front()});
+            sim.submit(RemoveZoneCellsCommand{CellRect{20, 20, 2, 4, 0}});
+            sim.submit(SetWorkPriorityCommand{sim.haulers()[1], "Hauling", 3});
+            sim.submit(SetStockpileAllowedCommand{2, "Steel", true});
+        }
         if (i == 2400) {
             sim.submit(DestroyThingCommand{sim.map().buildingAt(CellPos{11, 10, 0})});
         }
@@ -44,7 +62,7 @@ TEST_CASE("Replay: playing a recorded session gives the same state, checkpoint f
     Sim original(settings, defs);
     replayTestSession(original, 5000);
     const Replay recorded = recordReplay(original);
-    CHECK(recorded.commands.size() == 6);
+    CHECK(recorded.commands.size() == 15);
     CHECK(recorded.checkpoints.size() == 8);
     CHECK(recorded.endStep == 5000);
     CHECK(recorded.simVersion == kSimVersion);

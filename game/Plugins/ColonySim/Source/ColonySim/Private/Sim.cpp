@@ -1,13 +1,16 @@
 #include "ColonySim/Sim.h"
 
+#include "ColonySim/Colonist.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
+#include "ColonySim/Jobs.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
-#include "HaulJob.h"
+#include "ColonySim/Zones.h"
 #include "MovementSystem.h"
 
 #include <algorithm>
@@ -18,13 +21,6 @@
 namespace colony {
 
 namespace {
-
-// Starts the pawn walking the path the pathfinder found: straightened where the ground allows.
-void simStartWalk(const Map& map, const Position& pos, Mover& mover) {
-    std::vector<CellPos> route = std::move(mover.path);
-    smoothPath(map, pos.x, pos.y, route);
-    mover.walkTo(pos.x, pos.y, std::move(route));
-}
 
 const DefDatabase& simEmptyDefs() {
     static const DefDatabase empty;
@@ -48,6 +44,9 @@ Sim::Sim(const SimSettings& settings) : Sim(settings, nullptr) {}
 Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
     : Sim(settings, std::move(defs), EmptyStart{}) {
     placeStockpileAndThings();
+    if (!settings_.scenario.empty()) {
+        startScenario();
+    }
 }
 
 Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, EmptyStart)
@@ -56,13 +55,17 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       defs_(defs ? std::move(defs) : std::shared_ptr<const DefDatabase>(std::shared_ptr<const DefDatabase>(), &simEmptyDefs())),
       map_(MapSettings{settings.mapSize, settings.mapSize, splitMix64(settings.seed ^ 0x6D6170ULL), settings.flatMap}),
       pathfinder_(map_),
+      zones_(std::make_unique<Zones>(map_)),
       things_(std::make_unique<Things>(map_, defs_)),
       plants_(std::make_unique<Plants>(map_, *defs_, splitMix64(settings.seed ^ 0x706C616E74ULL), "TemperateForest")),
       movement_(std::make_unique<MovementSystem>()),
+      health_(std::make_unique<HealthSystem>(*things_)),
       time_(),
       rng_(splitMix64(settings.seed ^ 0x7061776EULL)),
       groundHash_(map_.contentHash()) {
     things_->setEventLog(&events_);
+    health_->setEventLog(&events_);
+    jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *defs_, *health_, time_, stats_, events_);
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -77,7 +80,7 @@ ThreatMap& Sim::threatMap(FactionId faction) {
 }
 
 void Sim::placeStockpileAndThings() {
-    // Stockpile: the walkable cell nearest the middle, searched in growing squares.
+    // The stockpile's middle: the walkable cell nearest the middle, searched in growing squares.
     const int size = map_.width();
     const int mid = size / 2;
     for (int r = 0; r < size && !stockpileCell_; ++r) {
@@ -97,15 +100,27 @@ void Sim::placeStockpileAndThings() {
 
     const DefId pawnDef = defs_->idOf("Things", settings_.pawnDef);
     const DefId itemDef = defs_->idOf("Things", settings_.haulItemDef);
+    const DefId hauling = defs_->idOf("WorkTypes", "Hauling");
     if (settings_.pawns > 0 && !pawnDef.valid()) {
         setupErrors_.push_back("hauling test: no Things def '" + settings_.pawnDef + "'");
     }
     if (settings_.items > 0 && !itemDef.valid()) {
         setupErrors_.push_back("hauling test: no Things def '" + settings_.haulItemDef + "'");
     }
+    if (settings_.pawns > 0 && pawnDef.valid() && !hauling.valid()) {
+        setupErrors_.push_back("hauling test: no WorkTypes def 'Hauling'");
+    }
     if (!setupErrors_.empty()) {
         return;
     }
+
+    // The stockpile: a square around its middle with a cell for every pawn to carry to at once
+    // (each cell is held by one hauler) plus the full stacks, the cells that can hold one.
+    const int stackLimit = itemDef.valid() ? jobs_->stackLimit(itemDef) : 1;
+    const int cellsWanted = 2 * settings_.pawns + settings_.items / stackLimit + 1;
+    const int side = std::clamp(static_cast<int>(std::ceil(std::sqrt(static_cast<double>(cellsWanted)))), 3, 32);
+    const CellRect area{stockpileCell_->x - side / 2, stockpileCell_->y - side / 2, side, side, 0};
+    zones_->createStockpile(area);
 
     // Everything reachable from the stockpile (4-connected, so always pathable).
     std::vector<int> reachable{map_.index(*stockpileCell_)};
@@ -125,8 +140,12 @@ void Sim::placeStockpileAndThings() {
             }
         }
     }
+    // Items go outside the stockpile, so every one of them is a haul.
+    reachable.erase(std::remove_if(reachable.begin(), reachable.end(),
+                                   [&](int i) { return zones_->zoneAt(map_.cellAt(i)) != kNoZone; }),
+                    reachable.end());
 
-    for (int i = 0; i < settings_.items; ++i) {
+    for (int i = 0; i < settings_.items && !reachable.empty(); ++i) {
         const uint32_t pick = rng_.below(static_cast<uint32_t>(reachable.size()));
         if (things_->spawn(itemDef, map_.cellAt(reachable[pick])) == kNoEntity) {
             setupErrors_.push_back("hauling test: '" + settings_.haulItemDef + "' is not an item");
@@ -141,139 +160,28 @@ void Sim::placeStockpileAndThings() {
             setupErrors_.push_back("hauling test: '" + settings_.pawnDef + "' is not a pawn");
             return;
         }
-        things_->registry().emplace<HaulJob>(pawn);
+        jobs_->addWorker(pawn);
         haulers_.push_back(pawn);
     }
 }
 
+Entity Sim::controlledPawn() const {
+    for (const Entity pawn : things_->registry().view<const PlayerControl>()) {
+        return pawn;
+    }
+    return kNoEntity;
+}
+
+const Colonist* Sim::colonistOf(Entity pawn) const {
+    return things_->exists(pawn) ? things_->registry().try_get<Colonist>(pawn) : nullptr;
+}
+
 int Sim::itemsLeft() const {
     int left = 0;
-    things_->registry().view<const Thing>(entt::exclude<HaulStored>).each([&left](const Thing& thing) {
-        left += thing.category == ThingCategory::Item ? 1 : 0;
-    });
+    for (const auto [item, thing] : things_->registry().view<const Thing>().each()) {
+        left += thing.category == ThingCategory::Item && jobs_->storedPriority(item) == StoragePriority::Unstored ? 1 : 0;
+    }
     return left;
-}
-
-void Sim::startNextHaul(Entity pawn) {
-    // Nearest free item in a straight line, ties to the lowest entity id. A linear scan is fine
-    // for the Stage 0 test; the real job system keeps ready-made haul lists per chunk.
-    entt::registry& reg = things_->registry();
-    const Position& pos = reg.get<Position>(pawn);
-    Entity best = kNoEntity;
-    float bestDist = 0.0f;
-    for (const auto [item, thing, itemPos] :
-         reg.view<const Thing, const Position>(entt::exclude<HaulStored, HaulReservedBy>).each()) {
-        if (thing.category != ThingCategory::Item || itemPos.level != pos.level) {
-            continue;
-        }
-        const float dx = itemPos.x - pos.x;
-        const float dy = itemPos.y - pos.y;
-        const float dist = dx * dx + dy * dy;
-        if (best == kNoEntity || dist < bestDist || (dist == bestDist && item < best)) {
-            best = item;
-            bestDist = dist;
-        }
-    }
-    if (best == kNoEntity) {
-        return;
-    }
-    reg.emplace<HaulReservedBy>(best, HaulReservedBy{pawn});
-    HaulJob& job = reg.get<HaulJob>(pawn);
-    job.item = best;
-    job.path = pathfinder_.request(cellOf(pos), cellOf(reg.get<Position>(best)));
-    job.stage = HaulStage::WaitPathToItem;
-}
-
-void Sim::updateHauler(Entity pawn) {
-    entt::registry& reg = things_->registry();
-    HaulJob& job = reg.get<HaulJob>(pawn);
-    switch (job.stage) {
-        case HaulStage::Idle:
-            startNextHaul(pawn);
-            break;
-        case HaulStage::WaitPathToItem: {
-            if (pathfinder_.status(job.path) == PathStatus::Queued) {
-                break;
-            }
-            Mover& mover = reg.get<Mover>(pawn);
-            mover.next = 0;
-            if (pathfinder_.takePath(job.path, mover.path)) {
-                simStartWalk(map_, reg.get<Position>(pawn), mover);
-                job.stage = HaulStage::GoToItem;
-            } else {
-                ++stats_.failedJobs;  // item stays reserved so nobody retries it
-                job.stage = HaulStage::Idle;
-                job.item = kNoEntity;
-            }
-            break;
-        }
-        case HaulStage::GoToItem:
-            if (reg.get<Mover>(pawn).gaveUp) {
-                // Held up for good (a rock in the way of the line it was on): ask for a path from here.
-                reg.get<Mover>(pawn).gaveUp = false;
-                ++stats_.repaths;
-                job.path = pathfinder_.request(cellOf(reg.get<Position>(pawn)), cellOf(reg.get<Position>(job.item)));
-                job.stage = HaulStage::WaitPathToItem;
-            } else if (reg.get<Mover>(pawn).arrived()) {
-                job.path = pathfinder_.request(cellOf(reg.get<Position>(pawn)), *stockpileCell_);
-                job.stage = HaulStage::WaitPathToStockpile;
-            }
-            break;
-        case HaulStage::WaitPathToStockpile: {
-            if (pathfinder_.status(job.path) == PathStatus::Queued) {
-                break;
-            }
-            Mover& mover = reg.get<Mover>(pawn);
-            mover.next = 0;
-            if (pathfinder_.takePath(job.path, mover.path)) {
-                simStartWalk(map_, reg.get<Position>(pawn), mover);
-                things_->despawn(job.item);
-                pawnDid(pawn, PawnAction::PickUp, job.item);
-                reg.emplace<HaulCarriedBy>(job.item, HaulCarriedBy{pawn});
-                job.stage = HaulStage::CarryToStockpile;
-            } else {
-                ++stats_.failedJobs;  // item stays where it is, reserved
-                job.stage = HaulStage::Idle;
-                job.item = kNoEntity;
-            }
-            break;
-        }
-        case HaulStage::WaitPathCarrying: {
-            if (pathfinder_.status(job.path) == PathStatus::Queued) {
-                break;
-            }
-            Mover& mover = reg.get<Mover>(pawn);
-            if (pathfinder_.takePath(job.path, mover.path)) {
-                simStartWalk(map_, reg.get<Position>(pawn), mover);
-                job.stage = HaulStage::CarryToStockpile;
-            } else {
-                // No way to the stockpile from here: puts the item down where it stands.
-                reg.remove<HaulCarriedBy, HaulReservedBy>(job.item);
-                things_->spawnAt(job.item, cellOf(reg.get<Position>(pawn)));
-                pawnDid(pawn, PawnAction::PutDown, job.item);
-                ++stats_.failedJobs;
-                job.stage = HaulStage::Idle;
-                job.item = kNoEntity;
-            }
-            break;
-        }
-        case HaulStage::CarryToStockpile:
-            if (reg.get<Mover>(pawn).gaveUp) {
-                reg.get<Mover>(pawn).gaveUp = false;
-                ++stats_.repaths;
-                job.path = pathfinder_.request(cellOf(reg.get<Position>(pawn)), *stockpileCell_);
-                job.stage = HaulStage::WaitPathCarrying;
-            } else if (reg.get<Mover>(pawn).arrived()) {
-                reg.remove<HaulCarriedBy, HaulReservedBy>(job.item);
-                things_->spawnAt(job.item, *stockpileCell_);
-                pawnDid(pawn, PawnAction::PutDown, job.item);
-                reg.emplace<HaulStored>(job.item);
-                ++stats_.hauls;
-                job.stage = HaulStage::Idle;
-                job.item = kNoEntity;
-            }
-            break;
-    }
 }
 
 uint64_t Sim::submit(Command command) {
@@ -289,37 +197,146 @@ void Sim::commandFailed(uint64_t id, std::string message) {
     events_.push_back(std::move(event));
 }
 
-void Sim::pawnDid(Entity pawn, PawnAction action, Entity target) {
-    Event event;
-    event.type = EventType::PawnAction;
-    event.thing = pawn;
-    event.def = things_->registry().get<Thing>(pawn).def;
-    event.action = action;
-    event.target = target;
-    events_.push_back(std::move(event));
-}
-
 void Sim::applyCommand(const Command& command, uint64_t id) {
+    std::string error;
     if (const auto* spawn = std::get_if<SpawnThingCommand>(&command)) {
         const DefId def = defs_->idOf("Things", spawn->def);
+        Entity thing = kNoEntity;
         if (!def.valid()) {
             commandFailed(id, "no Things def '" + spawn->def + "'");
-        } else if (things_->spawn(def, spawn->cell, spawn->count, spawn->rot) == kNoEntity) {
+        } else if ((thing = things_->spawn(def, spawn->cell, spawn->count, spawn->rot)) == kNoEntity) {
             commandFailed(id, "can't put " + spawn->def + " at " + simCellText(spawn->cell));
+        } else if (things_->registry().all_of<Mover>(thing)) {
+            jobs_->addWorker(thing);  // until factions: every pawn is a colonist
         }
     } else if (const auto* destroy = std::get_if<DestroyThingCommand>(&command)) {
         if (!things_->exists(destroy->thing)) {
             commandFailed(id, "that thing doesn't exist");
-        } else if (things_->registry().any_of<HaulJob, HaulReservedBy, HaulCarriedBy>(destroy->thing)) {
-            commandFailed(id, "the hauling test is using that thing");
         } else {
+            jobs_->forget(destroy->thing);
             things_->destroy(destroy->thing);
+        }
+    } else if (const auto* damage = std::get_if<DamagePawnCommand>(&command)) {
+        const DefId type = health_->damageTypeId(damage->damageType);
+        if (!health_->tracks(damage->pawn)) {
+            commandFailed(id, "that thing has no body to hurt");
+        } else if (!type.valid()) {
+            commandFailed(id, "no DamageTypes def '" + damage->damageType + "'");
+        } else if (!(damage->amount > 0.0f)) {
+            commandFailed(id, "damage must be more than zero");
+        } else if (!health_->applyDamage(damage->pawn, type, damage->amount, damage->part, rng_)) {
+            commandFailed(id, "can't hurt that pawn there (dead, or the part is gone)");
+        }
+    } else if (const auto* tend = std::get_if<TendPawnCommand>(&command)) {
+        if (!health_->tracks(tend->pawn)) {
+            commandFailed(id, "that thing has no body to tend");
+        } else if (health_->tendAll(tend->pawn, tend->quality) == 0) {
+            commandFailed(id, "nothing to tend");
+        }
+    } else if (const auto* work = std::get_if<SetWorkPriorityCommand>(&command)) {
+        const DefId type = defs_->idOf("WorkTypes", work->workType);
+        if (!type.valid()) {
+            commandFailed(id, "no WorkTypes def '" + work->workType + "'");
+        } else if (!jobs_->setPriority(work->pawn, type, work->priority, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* create = std::get_if<CreateStockpileCommand>(&command)) {
+        if (create->priority == StoragePriority::Unstored) {
+            commandFailed(id, "a stockpile's priority can't be Unstored");
+        } else if (zones_->createStockpile(create->area, create->priority) == kNoZone) {
+            commandFailed(id, "no cell there can hold a stockpile");
+        }
+    } else if (const auto* remove = std::get_if<RemoveZoneCellsCommand>(&command)) {
+        if (zones_->removeCells(remove->area) == 0) {
+            commandFailed(id, "no zone there");
+        }
+    } else if (const auto* priority = std::get_if<SetStockpilePriorityCommand>(&command)) {
+        if (!zones_->setPriority(priority->zone, priority->priority)) {
+            commandFailed(id, zones_->find(priority->zone) ? "a stockpile's priority can't be Unstored" : "no such zone");
+        }
+    } else if (const auto* allowed = std::get_if<SetStockpileAllowedCommand>(&command)) {
+        const DefId def = defs_->idOf("Things", allowed->def);
+        if (!def.valid()) {
+            commandFailed(id, "no Things def '" + allowed->def + "'");
+        } else if (!zones_->setAllowed(allowed->zone, def, allowed->allowed)) {
+            commandFailed(id, "no such zone");
+        }
+    } else if (const auto* haul = std::get_if<OrderHaulCommand>(&command)) {
+        if (!jobs_->orderHaul(haul->pawn, haul->thing, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* control = std::get_if<ControlPawnCommand>(&command)) {
+        entt::registry& reg = things_->registry();
+        if (control->pawn != kNoEntity) {
+            if (!things_->spawned(control->pawn) || !reg.all_of<Colonist, Worker, Mover>(control->pawn)) {
+                commandFailed(id, "that isn't a colonist on the map");
+                return;
+            }
+            if (health_->incapacitated(control->pawn)) {
+                commandFailed(id, "that colonist is downed or dead");
+                return;
+            }
+        }
+        // Whoever was controlled before is let go where it stands, and its job system takes over.
+        const std::vector<Entity> before(reg.view<PlayerControl>().begin(), reg.view<PlayerControl>().end());
+        for (const Entity old : before) {
+            reg.remove<PlayerControl>(old);
+        }
+        if (control->pawn != kNoEntity) {
+            // Its job ends (what it carries is put down) and the job system leaves it alone.
+            jobs_->interrupt(control->pawn, "taken over by the player");
+            Mover& mover = reg.get<Mover>(control->pawn);
+            mover.path.clear();
+            mover.next = 0;
+            mover.vx = 0.0f;
+            mover.vy = 0.0f;
+            mover.gaveUp = false;
+            reg.emplace<PlayerControl>(control->pawn);
+        }
+    } else if (const auto* move = std::get_if<DirectMoveCommand>(&command)) {
+        entt::registry& reg = things_->registry();
+        if (!std::isfinite(move->x) || !std::isfinite(move->y)) {
+            commandFailed(id, "that position isn't a number");
+        } else if (!things_->exists(move->pawn) || !reg.all_of<PlayerControl, Position, Mover>(move->pawn)) {
+            commandFailed(id, "that pawn isn't under direct control");
+        } else if (health_->incapacitated(move->pawn)) {
+            commandFailed(id, "that colonist is downed or dead");
+        } else {
+            Position& pos = reg.get<Position>(move->pawn);
+            Mover& mover = reg.get<Mover>(move->pawn);
+            float dx = move->x - pos.x;
+            float dy = move->y - pos.y;
+            const float length = std::sqrt(dx * dx + dy * dy);
+            if (length > kDirectMaxStep) {
+                dx *= kDirectMaxStep / length;
+                dy *= kDirectMaxStep / length;
+            }
+            // The whole move, or sliding along one axis (a wall), or staying where it is.
+            const float tries[3][2] = {{dx, dy}, {dx, 0.0f}, {0.0f, dy}};
+            float moveX = 0.0f;
+            float moveY = 0.0f;
+            for (const auto& t : tries) {
+                if ((t[0] != 0.0f || t[1] != 0.0f) && pawnFitsAt(map_, pos.x + t[0], pos.y + t[1], kPawnRadius, pos.level)) {
+                    moveX = t[0];
+                    moveY = t[1];
+                    break;
+                }
+            }
+            pos.x += moveX;
+            pos.y += moveY;
+            mover.vx = moveX;
+            mover.vy = moveY;
         }
     }
 }
 
 void Sim::step() {
     events_.clear();
+    // A controlled pawn only has a velocity in the steps it was moved.
+    for (const auto [pawn, mover] : things_->registry().view<Mover, const PlayerControl>().each()) {
+        mover.vx = 0.0f;
+        mover.vy = 0.0f;
+    }
     // Commands first, in submit order. Swap out the queue so its memory is reused.
     std::vector<std::pair<uint64_t, Command>> applying;
     applying.swap(pending_);
@@ -330,9 +347,18 @@ void Sim::step() {
     applying.clear();
     pending_.swap(applying);
 
-    for (const Entity pawn : haulers_) {
-        updateHauler(pawn);
+    health_->step(time_.seconds, settings_.seed);
+    // A controlled colonist who goes down or dies is let go: the player can't walk it any more.
+    {
+        entt::registry& reg = things_->registry();
+        const std::vector<Entity> controlled(reg.view<PlayerControl>().begin(), reg.view<PlayerControl>().end());
+        for (const Entity pawn : controlled) {
+            if (health_->incapacitated(pawn)) {
+                reg.remove<PlayerControl>(pawn);
+            }
+        }
     }
+    jobs_->step();
     movement_->step(things_->registry(), map_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     time_.seconds += 1;
@@ -350,6 +376,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.mapHeight = map_.height();
     out.things.clear();
     out.waypoints.clear();
+    out.zones.clear();
+    out.zoneCells.clear();
+    for (const StockpileZone& zone : zones_->stockpiles()) {
+        out.zones.push_back(ZoneView{zone.id, zone.priority, static_cast<uint32_t>(out.zoneCells.size()),
+                                     static_cast<uint32_t>(zone.cells.size())});
+        out.zoneCells.insert(out.zoneCells.end(), zone.cells.begin(), zone.cells.end());
+    }
     const entt::registry& reg = things_->registry();
     for (const auto [entity, thing, pos] : reg.view<const Thing, const Position>().each()) {
         ThingView view;
@@ -383,6 +416,18 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.hitPoints = hp->current;
             view.maxHitPoints = hp->max;
         }
+        if (const Health* health = reg.try_get<Health>(entity)) {
+            view.downed = health->downed;
+            view.dead = health->dead;
+        }
+        if (const Worker* worker = reg.try_get<Worker>(entity)) {
+            view.job = worker->job.type;
+            view.jobTarget = worker->job.thing;
+        }
+        if (const Carrying* carrying = reg.try_get<Carrying>(entity); carrying && reg.valid(carrying->thing)) {
+            view.carriedDef = reg.get<Thing>(carrying->thing).def;
+            view.carriedCount = reg.get<StackCount>(carrying->thing).count;
+        }
         out.things.push_back(view);
     }
     std::sort(out.things.begin(), out.things.end(),
@@ -411,6 +456,7 @@ uint64_t Sim::stateHash() const {
     h.add(stats_.repaths);
     h.add(plants_->hash());
     pathfinder_.hashState(h);
+    zones_->hashState(h);
 
     // The entity ids the registry has handed out: the free list in reuse order (it decides the
     // next ids), then every live thing in id order with its components. The registry's own
@@ -428,10 +474,10 @@ uint64_t Sim::stateHash() const {
     for (const Entity e : liveIds) {
         h.add(entt::to_integral(e));
         // Which components it has, then their fields.
-        const bool has[] = {reg.all_of<Thing>(e),         reg.all_of<Position>(e),       reg.all_of<Footprint>(e),
-                            reg.all_of<StackCount>(e),    reg.all_of<HitPoints>(e),      reg.all_of<Mover>(e),
-                            reg.all_of<HaulJob>(e),       reg.all_of<HaulReservedBy>(e), reg.all_of<HaulCarriedBy>(e),
-                            reg.all_of<HaulStored>(e)};
+        const bool has[] = {reg.all_of<Thing>(e),        reg.all_of<Position>(e),     reg.all_of<Footprint>(e),
+                            reg.all_of<StackCount>(e),   reg.all_of<HitPoints>(e),    reg.all_of<Mover>(e),
+                            reg.all_of<Worker>(e),       reg.all_of<WorkSettings>(e), reg.all_of<Carrying>(e),
+                            reg.all_of<Colonist>(e),     reg.all_of<Health>(e),       reg.all_of<PlayerControl>(e)};
         uint64_t mask = 0;
         for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
             mask |= has[bit] ? (uint64_t{1} << bit) : 0;
@@ -478,17 +524,79 @@ uint64_t Sim::stateHash() const {
             h.add(static_cast<uint64_t>(mover->heldSteps));
             h.add(mover->gaveUp);
         }
-        if (const HaulJob* job = reg.try_get<HaulJob>(e)) {
-            h.add(static_cast<int>(job->stage));
-            h.add(entt::to_integral(job->item));
-            h.add(job->path.slot);
-            h.add(job->path.serial);
+        if (const Colonist* c = reg.try_get<Colonist>(e)) {
+            for (const std::string* text : {&c->firstName, &c->nickName, &c->lastName, &c->childhood, &c->adulthood}) {
+                h.add(text->data(), text->size());
+            }
+            h.add(c->female);
+            h.add(c->age);
+            h.add(c->protagonist);
+            for (const TraitRecord& t : c->traits) {
+                h.add(t.def.data(), t.def.size());
+                h.add(t.degree);
+            }
+            for (const SkillRecord& s : c->skills) {
+                h.add(s.def.data(), s.def.size());
+                h.add(s.level);
+                h.add(static_cast<int>(s.passion));
+                h.add(s.xp);
+                h.add(s.disabled);
+            }
+            for (const std::string& tag : c->disabledWorkTags) {
+                h.add(tag.data(), tag.size());
+            }
         }
-        if (const HaulReservedBy* by = reg.try_get<HaulReservedBy>(e)) {
-            h.add(entt::to_integral(by->pawn));
+        if (const Worker* worker = reg.try_get<Worker>(e)) {
+            const Job& job = worker->job;
+            h.add(static_cast<int>(job.type));
+            h.add(entt::to_integral(job.thing));
+            simHashCell(h, job.cell);
+            h.add(job.count);
+            h.add(job.workType.value);
+            h.add(job.forced);
+            h.add(static_cast<int>(job.step));
+            h.add(static_cast<int>(job.walk));
+            h.add(static_cast<int>(job.repaths));
+            h.add(job.startedAt);
+            h.add(job.until);
+            h.add(job.path.slot);
+            h.add(job.path.serial);
+            h.add(static_cast<uint64_t>(worker->avoid.size()));
+            for (const AvoidTarget& avoid : worker->avoid) {
+                h.add(entt::to_integral(avoid.target.thing));
+                simHashCell(h, avoid.target.cell);
+                h.add(avoid.until);
+            }
         }
-        if (const HaulCarriedBy* by = reg.try_get<HaulCarriedBy>(e)) {
-            h.add(entt::to_integral(by->pawn));
+        if (const WorkSettings* work = reg.try_get<WorkSettings>(e)) {
+            h.add(static_cast<uint64_t>(work->entries.size()));
+            for (const WorkPriority& entry : work->entries) {
+                h.add(entry.workType.value);
+                h.add(static_cast<int>(entry.priority));
+                h.add(entry.disabled);
+            }
+        }
+        if (const Carrying* carrying = reg.try_get<Carrying>(e)) {
+            h.add(entt::to_integral(carrying->thing));
+        }
+        if (const Health* health = reg.try_get<Health>(e)) {
+            h.add(health->protagonist);
+            h.add(static_cast<int>(health->rest));
+            h.add(static_cast<uint64_t>(health->injuries.size()));
+            for (const Injury& injury : health->injuries) {
+                h.add(static_cast<int>(injury.part));
+                h.add(injury.hediff.value);
+                h.add(injury.severity);
+                h.add(injury.tendQuality);
+            }
+            h.add(static_cast<uint64_t>(health->missing.size()));
+            for (const MissingPart& missing : health->missing) {
+                h.add(static_cast<int>(missing.part));
+                h.add(missing.tendQuality);
+            }
+            h.add(health->bloodLoss);
+            h.add(health->dead);
+            h.add(static_cast<int>(health->cause));
         }
     }
     return h.value();

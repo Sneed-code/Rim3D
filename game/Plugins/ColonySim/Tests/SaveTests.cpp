@@ -6,6 +6,7 @@
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Zones.h"
 
 #include "TestDefs.h"
 
@@ -38,6 +39,23 @@ void saveTestSession(Sim& sim, int64_t from, int64_t to) {
         if (i == 500) {
             sim.submit(SpawnThingCommand{"Steel", CellPos{60, 70, 0}, 30});
             sim.submit(SpawnThingCommand{"Bed", CellPos{20, 30, 0}, 1, Rot4::West});
+        }
+        // Jobs and zones (C1): priorities, a second stockpile and its filter, a haul order.
+        if (i == 300) {
+            sim.submit(SetWorkPriorityCommand{sim.haulers()[1], "Hauling", 0});
+            sim.submit(SetWorkPriorityCommand{sim.haulers()[2], "NoSuchWork", 2});  // fails
+            sim.submit(CreateStockpileCommand{CellRect{20, 20, 4, 4, 0}, StoragePriority::Preferred});
+        }
+        if (i == 800) {
+            sim.submit(SetStockpileAllowedCommand{2, "Steel", false});
+            sim.submit(SetStockpilePriorityCommand{1, StoragePriority::Low});
+        }
+        if (i == 1500) {
+            const std::vector<Entity>& there = sim.things().itemsAt(CellPos{60, 70, 0});
+            sim.submit(OrderHaulCommand{sim.haulers()[3], there.empty() ? kNoEntity : there.front()});
+            sim.submit(RemoveZoneCellsCommand{CellRect{20, 20, 2, 4, 0}});
+            sim.submit(SetWorkPriorityCommand{sim.haulers()[1], "Hauling", 3});
+            sim.submit(SetStockpileAllowedCommand{2, "Steel", true});
         }
         if (i == 1200) {
             sim.submit(DestroyThingCommand{sim.map().buildingAt(CellPos{11, 10, 0})});
@@ -75,7 +93,8 @@ std::shared_ptr<const DefDatabase> saveTestDefsWithout(const std::string& remove
     }
     auto db = std::make_shared<DefDatabase>();
     std::vector<std::string> errors;
-    DefDatabase::build({{"Things", "test.json", items}}, "", *db, errors);
+    const std::string workTypes = R"([{"defName": "Hauling", "naturalPriority": 300, "tasks": ["HaulToStockpile"]}])";
+    DefDatabase::build({{"Things", "test.json", items}, {"WorkTypes", "test.json", workTypes}}, "", *db, errors);
     return db;
 }
 
@@ -283,6 +302,13 @@ TEST_CASE("Save: damaged, wrong and out of date files are refused with a reason"
         const SaveLoadResult r = loadSim(newer, defs);
         CHECK(r.sim == nullptr);
         CHECK(r.error.find("newer version") != std::string::npos);
+    }
+    SUBCASE("a format from before the job system") {
+        std::vector<uint8_t> older = good;
+        older[8] = 3;
+        const SaveLoadResult r = loadSim(older, defs);
+        CHECK(r.sim == nullptr);
+        CHECK(r.error.find("before the job system") != std::string::npos);
     }
     SUBCASE("a def the data files no longer have") {
         const SaveLoadResult r = loadSim(good, saveTestDefsWithout("Bed"));

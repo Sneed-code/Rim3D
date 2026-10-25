@@ -77,14 +77,14 @@ Times are one sitting of thread work. "Needs" lists tasks that must be merged fi
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | C1 | **Job system.** RimWorld-style think list (emergencies, orders, needs, schedule, work), work types and priorities from data, work scanners that weigh distance and skip unreachable targets, reservations, jobs as steps with fail checks. Stockpile zones and hauling move onto it. Doc: `design/jobs.md`. | Cloud | Opus, high | 90 min | S3, D3 |
+| ✓ | C1 | **Job system.** RimWorld-style think list (emergencies, orders, needs, schedule, work), work types and priorities from data, work scanners that weigh distance and skip unreachable targets, reservations, jobs as steps with fail checks. Stockpile zones and hauling move onto it. Doc: `design/jobs.md`. | Cloud | Opus, high | 90 min | S3, D3 |
 | ✓ | C2 | **Plants.** Plant grid layer from defs; map generation places trees, berry bushes and grass by fertility; hourly growth. Shows in the simrun picture. | Cloud | Sonnet, medium | 60 min | S1, D3 |
 | | C3 | **Mining, chopping and harvesting.** Designations and jobs: rock cells become rock chunks or ore, trees become wood, bushes give berries. Mining rebuilds regions. Work speed from skill. | Cloud | Sonnet, high | 90 min | C1, C2 |
 | | C4 | **Building.** Blueprints, frames, hauling materials to frames, build jobs, deconstruct. Wall, door, bed, table and stove from defs. Buildings block cells and rebuild regions. Doc: `design/construction.md`. | Cloud | Sonnet, high | 90 min | C1 |
 | | C5 | **Doors, roofs and rooms.** Doors open for pawns and cost path time; auto-roof over enclosed areas; rooms from enclosed regions with a role (bedroom, kitchen, dining room) and size. | Cloud | Sonnet, high | 90 min | C4 |
 | | C6 | **Food, rest and schedules.** Food and rest needs at RimWorld rates, eat job (best reachable food, at a table if there is one), sleep job (own bed, else the ground), bed ownership, hourly schedules. Doc: `design/needs.md`. | Cloud | Sonnet, high | 90 min | C1 |
 | | C7 | **Bills and cooking.** Minimal bill and recipe system on the stove ("cook simple meal" do-forever and do-X-times), fetching ingredients, cooking skill. | Cloud | Sonnet, high | 90 min | C4, C6 |
-| | C8 | **Colonists from a seed.** Name, adult age, backstories, traits, skills with passions and experience, from the defs (`design/starting-data.md`); crashlanded start (protagonist plus 5 colonists, starting gear). The protagonist is flagged for 2x part hit points and the talent tree later. | Cloud | Sonnet, medium | 60 min | S1, D3 |
+| ✓ | C8 | **Colonists from a seed.** Name, adult age, backstories, traits, skills with passions and experience, from the defs (`design/starting-data.md`); crashlanded start (protagonist plus 5 colonists, starting gear). The protagonist is flagged for 2x part hit points and the talent tree later. | Cloud | Sonnet, medium | 60 min | S1, D3 |
 | | C9 | **Mood.** Thoughts (ate without table, slept on the ground, slept outside, hungry, tired, ate raw food, ate a fine meal), mood value, mental break thresholds recorded (breaks themselves come later). | Cloud | Sonnet, medium | 60 min | C6, C8 |
 | | C10 | **Colony scenario test.** `simrun --scenario colony`: 6 colonists on a 512 m map, a script of commands builds a room with beds, a table and a stove, designates mining and chopping, and runs 5 days. Checks: nobody starves, nobody stuck over a game hour, all designations done. Runs in CI. | Cloud | Sonnet, high | 90 min | C3, C5, C7, C9 |
 
@@ -92,7 +92,7 @@ Times are one sitting of thread work. "Needs" lists tasks that must be merged fi
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | F1 | **Health basics.** Body parts from the Human body defs, hit points per part (2x for the protagonist), injuries with bleeding and pain, downed, death, slow natural healing. Doc: `design/health.md`. | Cloud | Sonnet, high | 90 min | S1, D3 |
+| ✓ | F1 | **Health basics.** Body parts from the Human body defs, hit points per part (2x for the protagonist), injuries with bleeding and pain, downed, death, slow natural healing. Doc: `design/health.md`. | Cloud | Sonnet, high | 90 min | S1, D3 |
 | | F2 | **Guns, projectiles and hitboxes.** Weapon defs, firing with spread and recoil, projectiles with speed and drop, hits against terrain, walls and per-part hitboxes posed for standing, crouching and prone; armor penetration, then injury to the part hit. Doc: `design/combat.md`. | Cloud | Opus, high | 90 min | F1, S4 |
 | ✓ | F3 | **Cover, sight and threat maps.** Cover strength per cell in 8 directions, rebuilt only where something is built or destroyed; line-of-sight queries; a threat map per faction. | Cloud | Sonnet, high | 90 min | S2 |
 | | F4 | **Fighter AI: where to stand.** Re-plan about twice a second by scoring nearby cells (cover from known enemies, sight to a target, weapon range, distance, crowding); crouch and lean at cover; target choice per the design doc; draft, move and attack orders. | Cloud | Opus, high | 120 min | F2, F3, C1 |
@@ -112,10 +112,10 @@ Times are one sitting of thread work. "Needs" lists tasks that must be merged fi
 | ✓ | U6 | **Overseer camera and selection.** Free top-down camera (pan, zoom, rotate), click to select pawns, things and cells; add a free ImGui plugin (logged in `assets/manifest.json`) for the inspect panel and speed controls. | PC Unreal | Sonnet, high | 90 min | U2 |
 | | U7 | **Orders.** Architect menu (wall, door, bed, table, stove, stockpile zone) with grid-snapped ghost placement; mine, chop, harvest and cancel designations; draft, move and attack orders; alarm button. | PC Unreal | Sonnet, high | 90 min | U4, U6, C3 |
 | | U8 | **Colony panels.** Work tab, schedule tab, stove bills, colonist panel (needs, mood and thoughts, skills, health), message log. All ImGui. | PC Unreal | Sonnet, medium | 90 min | U6, C7, C9 |
-| | U9 | **Protagonist.** Game Animation Sample character as the protagonist, position sent to the sim each step, 1st/3rd person toggle, one key between direct and overseer mode (the AI takes over), possessing another colonist. | PC Unreal | Sonnet, high | 90 min | U5, U6, C8 |
+| ✓ | U9 | **Protagonist.** Game Animation Sample character as the protagonist, position sent to the sim each step, 1st/3rd person toggle, one key between direct and overseer mode (the AI takes over), possessing another colonist. | PC Unreal | Sonnet, high | 90 min | U5, U6, C8 |
 | | U10 | **Hands-on work.** Look at a thing and hold interact to get the sim job (chop, mine, build, pick up); in direct mode, a build ghost that snaps to the grid. | PC Unreal | Sonnet, high | 90 min | U9, U7 |
 | | U11 | **Fights on screen and shooting.** Tracers, muzzle flashes, impacts, hit reactions, cosmetic ragdolls, placeholder wound decals; the protagonist aims and fires through the sim; a hitbox debug view to check hits match bodies. | PC Unreal | Sonnet, high | 90 min | U9, F2 |
-| | U12 | **Saves and bug replays in game.** F5 quicksave, F9 quickload, daily autosave; a bug key that writes a replay file I can run in the cloud. | PC Unreal | Sonnet, medium | 60 min | S6, U2 |
+| ✓ | U12 | **Saves and bug replays in game.** F5 quicksave, F9 quickload, daily autosave; a bug key that writes a replay file I can run in the cloud. | PC Unreal | Sonnet, medium | 60 min | S6, U2 |
 
 ### Art (A)
 

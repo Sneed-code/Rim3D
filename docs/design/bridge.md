@@ -23,14 +23,28 @@ runs, every queued command is applied in submit order and appended to `commandLo
 A command that can't be applied changes nothing, sends a `CommandFailed` event with its id and a
 reason, and is still logged.
 
-So far there are only two dev commands, like RimWorld's dev mode. The real ones (place blueprint,
-designate, work priorities, draft, protagonist moved and actions) come with the tasks that build
-those systems.
+There are four dev commands, like RimWorld's dev mode, since C1 the work and stockpile
+commands (below the table, and in [jobs.md](jobs.md)), and since U9 the two for direct control
+([protagonist.md](protagonist.md)). The rest (place blueprint, designate, draft, actions) come with
+the tasks that build those systems.
 
 | Command | Does | Fails when |
 | --- | --- | --- |
 | `SpawnThingCommand{def, cell, count, rot}` | `Things::spawn` of a Things def | unknown def; the thing can't go there |
-| `DestroyThingCommand{thing}` | `Things::destroy` | the thing doesn't exist; the hauling placeholder is using it |
+| `DestroyThingCommand{thing}` | `Things::destroy`; jobs using it end first (`JobSystem::forget`) | the thing doesn't exist |
+| `DamagePawnCommand{pawn, damageType, amount, part}` | `HealthSystem::applyDamage`; `part` -1 picks like a hit would ([health.md](health.md)) | the thing has no body; unknown damage type; no damage; the pawn is dead or the part is missing or doesn't exist |
+| `TendPawnCommand{pawn, quality}` | `HealthSystem::tendAll` | the thing has no body; nothing to tend |
+| `SetWorkPriorityCommand{pawn, workType, priority}` | a pawn's Work tab: 0 off, 1 to 4 | not a working pawn; unknown work type; priority outside 0 to 4; work it can never do |
+| `CreateStockpileCommand{area, priority}` | a stockpile zone (ids 1, 2, 3...) | no walkable cell outside other zones in `area` |
+| `RemoveZoneCellsCommand{area}` | takes cells out of their zones | no zone cell in `area` |
+| `SetStockpilePriorityCommand{zone, priority}` | | unknown zone; Unstored |
+| `SetStockpileAllowedCommand{zone, def, allowed}` | the zone's filter | unknown zone or def |
+| `OrderHaulCommand{pawn, thing}` | "prioritize hauling": ends the pawn's job, hauls the item | not a working pawn; not an item; held by another pawn; unreachable; no room; the player is controlling the pawn |
+| `ControlPawnCommand{pawn}` | the player takes over one colonist (the previous one is let go, its job ends); `kNoEntity` lets go ([protagonist.md](protagonist.md)) | not a living colonist on the map |
+| `DirectMoveCommand{pawn, x, y}` | moves the controlled pawn toward (x, y) metres, at most 0.5 m a step, out of walls | not the controlled pawn; downed or dead; x or y is not a number |
+
+In replay files an `area` is `[minX, minY, sizeX, sizeY, level]` and a storage priority its name
+(`"Preferred"`; `"Normal"` if left out).
 
 **Speed and pause are not commands.** They decide how often Unreal calls `step()`, not what a step
 does, so they stay in `USimSubsystem`. A replay counts steps, so it doesn't need them.
@@ -55,6 +69,12 @@ starts, so read it after every step. Before the first step it holds what setting
 | `ThingDestroyed` | `thing`, `def` | a thing stops existing; comes after `ThingDespawned` if it was on the map |
 | `CommandFailed` | `command`, `message` | a command couldn't be applied |
 | `PawnAction` | `thing` (the pawn), `def`, `action`, `target` | a pawn did something Unreal animates: `PickUp`, `PutDown` (U5, [pawns.md](pawns.md)) |
+| `PawnInjured` | `thing`, `def` (the injury), `part`, `amount`, `cell` | a pawn got an injury (F1) |
+| `PawnPartLost` | `thing`, `def` (MissingBodyPart), `part`, `amount`, `cell` | a pawn lost a body part |
+| `PawnDowned`, `PawnGotUp` | `thing`, `cell` | a pawn can no longer act, or can again |
+| `PawnDied` | `thing`, `message` (the cause), `cell` | a pawn died; it stays on the map with `dead` set |
+| `JobStarted` | `thing` (the pawn), `def`, `job`, `target`, `cell` | a pawn took a job ([jobs.md](jobs.md)) |
+| `JobEnded` | the same, and `message`: "done", "failed: why" or "interrupted: why" | a pawn's job ended |
 
 `Things` reports its own spawns and despawns once the sim points it at the event list
 (`Things::setEventLog`). Later systems add their events (shot fired, wound added, job started,
@@ -65,7 +85,8 @@ letters) here. Events say what changed; positions and states are in the snapshot
 `Sim::writeSnapshot(out)` fills a `Snapshot` (reusing its memory): the game time, the map size
 and a `ThingView` per thing on the map, sorted by id (`Snapshot::find` is a binary search).
 A `ThingView` has the id, def, category, position (metres on a level), rotation and footprint
-size for buildings, stack count for items, and hit points. Things off the map (a carried item) are
+size for buildings, stack count for items, and hit points. Pawns with a body also have `downed` and
+`dead` (F1); the rest of a pawn's health is read with `Sim::healthReport`. Things off the map (a carried item) are
 not in it. Since S4 it also has the ground height under the thing (`z`), a pawn's velocity (`vx`,
 `vy`, metres per step) and the route still ahead (`waypointCount` points from
 `Snapshot::waypoints[firstWaypoint]`), see [movement.md](movement.md). Later tasks add what they draw
@@ -78,7 +99,7 @@ what Unreal sees.
 ## State hash and checkpoints
 
 `Sim::stateHash()` is a 64-bit hash of the whole game state: time, the map's ground, the random
-stream, the hauling placeholder's lists and stats, every entity id the registry has handed out
+stream, the hauling test's lists and stats, the stockpile zones, every entity id the registry has handed out
 (including the free list, which decides the next ids), and every component of every thing. Floats
 are hashed by their bits. Same seed and commands give the same hash; anything else almost surely
 doesn't.
@@ -158,7 +179,8 @@ recording and checks every hash). CI uploads the recording from Linux and Window
 `tools/compare_replays.py` checks they match hash for hash.
 
 **Bug reports from sneed's PC.** F7 in the game (U2) writes `recordReplay` to
-`Saved/Replays/`. The file plus the commit it was made on reproduces the session in the cloud
+`Saved/Replays/`; F8 (U12) writes a whole bug report folder (replay, save, readable dump, notes; see
+`saves.md`). The file plus the commit it was made on reproduces the session in the cloud
 with `simrun --replay`; `firstMismatch` and the checkpoints narrow down when things went wrong.
 
 ## Unreal side (task U2)

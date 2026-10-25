@@ -3,6 +3,7 @@
 #include "ColonySim/Api.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
+#include "ColonySim/Zones.h"
 
 #include <cstdint>
 #include <string>
@@ -24,12 +25,100 @@ struct SpawnThingCommand {
     Rot4 rot = Rot4::North;
 };
 
-// Dev command: destroys a thing. Fails if it no longer exists or a job is using it.
+// Dev command: destroys a thing. Fails if it no longer exists. Jobs using it end or fail.
 struct DestroyThingCommand {
     Entity thing = kNoEntity;
 };
 
-using Command = std::variant<SpawnThingCommand, DestroyThingCommand>;
+// Direct control (task U9, docs/design/protagonist.md): the player takes over one colonist. Its
+// job ends and the job system leaves it alone until control is let go. Only one colonist is
+// controlled at a time: taking a second lets the first go. `pawn` = kNoEntity lets go of whoever is
+// controlled. Fails if the thing is not a living colonist on the map.
+struct ControlPawnCommand {
+    Entity pawn = kNoEntity;
+};
+
+// Where the player's body wants to be (metres, on its level), sent every step while a colonist is
+// controlled. The sim moves the pawn there, at most kDirectMaxStep metres a step, and keeps it
+// out of walls and off ground it can't walk: a blocked move slides along the wall or stops. The
+// pawn's velocity becomes the distance it really moved, which Unreal animates from. Fails if the
+// pawn is not the controlled one or the position is not a number.
+struct DirectMoveCommand {
+    Entity pawn = kNoEntity;
+    float x = 0.0f;
+    float y = 0.0f;
+};
+
+// The farthest a controlled pawn moves in one step: 0.5 m, which is 15 m/s at 1x, over three times
+// the fastest pawn. Longer requests are cut to this.
+inline constexpr float kDirectMaxStep = 0.5f;
+
+// Dev command: hurts a pawn, like RimWorld's dev-mode damage tool. `damageType` is a DamageTypes
+// def ("Bullet", "Cut", "Blunt"...), `amount` hit points of damage, `part` an index into the
+// pawn's body (Bodies def, depth-first, torso 0) or -1 to pick at random as a hit would. Fails if
+// the pawn has no body, is dead, the type is unknown or the part is missing. Real damage comes
+// from combat (F2), not from commands.
+struct DamagePawnCommand {
+    Entity pawn = kNoEntity;
+    std::string damageType;
+    float amount = 0.0f;
+    int part = -1;
+};
+
+// Dev command: tends all of a pawn's untended injuries at this quality (0 to 1 and up), as a
+// doctor will once medicine is in. Fails if the pawn has no body, is dead, or has nothing to tend.
+struct TendPawnCommand {
+    Entity pawn = kNoEntity;
+    float quality = 1.0f;
+};
+
+
+// Work tab: sets a pawn's priority for a work type (a WorkTypes defName): 0 off, 1 first to 4 last.
+// Fails for a pawn that doesn't work, an unknown work type, or work the pawn can never do.
+struct SetWorkPriorityCommand {
+    Entity pawn = kNoEntity;
+    std::string workType;
+    int priority = 3;
+};
+
+// Makes a stockpile zone of the cells in `area` that can hold one (walkable, in no zone yet).
+// Its id is the next zone id: 1, 2, 3... in the order zones are made. Fails if no cell qualifies.
+struct CreateStockpileCommand {
+    CellRect area;
+    StoragePriority priority = StoragePriority::Normal;
+};
+
+// Takes the cells in `area` out of every zone; zones left empty are deleted. Fails if no cell was
+// in a zone.
+struct RemoveZoneCellsCommand {
+    CellRect area;
+};
+
+// Fails for an unknown zone or the Unstored priority.
+struct SetStockpilePriorityCommand {
+    ZoneId zone = kNoZone;
+    StoragePriority priority = StoragePriority::Normal;
+};
+
+// Lets a stockpile take an item def (a Things defName), or not.
+struct SetStockpileAllowedCommand {
+    ZoneId zone = kNoZone;
+    std::string def;
+    bool allowed = true;
+};
+
+// A player order, RimWorld's "prioritize hauling": the pawn drops what it is doing and hauls this
+// item to the best stockpile. Fails if it can't (unreachable, no room, another pawn has it).
+struct OrderHaulCommand {
+    Entity pawn = kNoEntity;
+    Entity thing = kNoEntity;
+};
+
+// New commands go at the end: a save names a command by its place in this list.
+using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
+                             SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
+                             SetStockpilePriorityCommand, SetStockpileAllowedCommand, OrderHaulCommand,
+                             ControlPawnCommand, DirectMoveCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

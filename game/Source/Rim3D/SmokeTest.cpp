@@ -42,6 +42,7 @@
 #include "ColonySim/Map.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Replay.h"
+#include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSmoke, Log, All);
@@ -114,6 +115,14 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	else if (TestName == TEXT("pawns"))
 	{
 		BuildPawnsPhases();
+	}
+	else if (TestName == TEXT("saves"))
+	{
+		BuildSavesPhases();
+	}
+	else if (TestName == TEXT("protagonist"))
+	{
+		BuildProtagonistPhases();
 	}
 	else
 	{
@@ -817,6 +826,253 @@ void USmokeTestSubsystem::BuildSimPhases()
 	}});
 }
 
+namespace
+{
+	struct FSavesSmokeState
+	{
+		FSimSmokeState Keys;
+		int64 SavedSeconds = 0;
+		uint64 SavedHash = 0;
+		int32 SavedThings = 0;
+		int32 SavedPawns = 0;
+		int32 AutosavesBefore = 0;
+	};
+
+	int32 SavesSmokeCountPawns(const colony::Snapshot& Snapshot)
+	{
+		int32 Count = 0;
+		for (const colony::ThingView& View : Snapshot.things)
+		{
+			Count += View.category == colony::ThingCategory::Pawn ? 1 : 0;
+		}
+		return Count;
+	}
+}
+
+void USmokeTestSubsystem::BuildSavesPhases()
+{
+	const TSharedRef<FSavesSmokeState> State = MakeShared<FSavesSmokeState>();
+
+	// Phase 1 (3x): a sim with hauling pawns runs while the autosave interval is 120 game seconds,
+	// so autosaves must appear; then F5 writes the quicksave at a paused moment.
+	Phases.Add({TEXT("saves_autosave_and_quicksave"), [=, this]()
+	{
+		USimSubsystem* Bridge = GetWorld()->GetSubsystem<USimSubsystem>();
+		if (!Bridge)
+		{
+			Fail(TEXT("USimSubsystem did not start"));
+			return;
+		}
+		IFileManager::Get().DeleteDirectory(*USimSubsystem::GetSaveDirectory(), false, true);
+		FSimStartOptions Options;
+		Options.DataRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("Plugins/ColonySim/Tests/data"));
+		Options.Seed = 7;
+		Options.MapSize = 128;
+		Options.Pawns = 10;
+		Options.Items = 40;
+		Bridge->SetWorldOrigin(SmokeOrigin);
+		if (!Bridge->StartSim(Options))
+		{
+			Fail(TEXT("The test defs did not load"));
+			return;
+		}
+		Bridge->SetAutosaveInterval(120);
+		Bridge->SetSpeed(3);
+		const FVector Centre = Bridge->SimToWorld(Options.MapSize / 2, Options.MapSize / 2, 0);
+		ViewFrom(Centre + FVector(-3200.0, 0.0, 3200.0), FRotator(-42.0, 0.0, 0.0));
+	}, 1.0f, 6.0f, [=, this]()
+	{
+		USimSubsystem* Bridge = GetWorld()->GetSubsystem<USimSubsystem>();
+		if (!Bridge || !Bridge->GetSim())
+		{
+			return;
+		}
+		const int32 Autosaves = Bridge->GetAutosaveCount();
+		Notes.Add(FString::Printf(TEXT("%d autosaves in %lld game seconds (interval 120)"), Autosaves, static_cast<long long>(Bridge->GetGameSeconds())));
+		if (Autosaves < 2)
+		{
+			Fail(FString::Printf(TEXT("Expected at least 2 autosaves, got %d"), Autosaves));
+		}
+		const FString Directory = USimSubsystem::GetSaveDirectory();
+		if (!IFileManager::Get().FileExists(*(Directory / TEXT("autosave-1.save"))) && !IFileManager::Get().FileExists(*(Directory / TEXT("autosave-2.save"))))
+		{
+			Fail(TEXT("No autosave file in Saved/Saves/"));
+		}
+		State->AutosavesBefore = Autosaves;
+
+		// Pause so F5 captures one exact moment, then press it as the keyboard would.
+		Bridge->SetSpeed(0);
+		State->SavedSeconds = Bridge->GetGameSeconds();
+		State->SavedHash = Bridge->GetSim()->stateHash();
+		State->SavedThings = static_cast<int32>(Bridge->GetCurrentSnapshot().things.size());
+		State->SavedPawns = SavesSmokeCountPawns(Bridge->GetCurrentSnapshot());
+		const FString Quick = Directory / TEXT("quicksave.save");
+		if (!SimSmokePressKey(*Bridge, EKeys::F5, State->Keys, [&Quick]() { return IFileManager::Get().FileExists(*Quick); }))
+		{
+			Fail(TEXT("F5 did not write the quicksave"));
+		}
+		Notes.Add(FString::Printf(TEXT("Quicksave at game second %lld: %lld bytes"), static_cast<long long>(State->SavedSeconds), IFileManager::Get().FileSize(*Quick)));
+		Bridge->SetSpeed(3);
+	}});
+
+	// Phase 2 (3x): the game moves on, then F9 puts it back exactly, and running on from there
+	// gives the same game as a second sim loaded from the same file.
+	Phases.Add({TEXT("saves_quickload"), [this]() {}, 1.0f, 3.0f, [=, this]()
+	{
+		USimSubsystem* Bridge = GetWorld()->GetSubsystem<USimSubsystem>();
+		if (!Bridge || !Bridge->GetSim())
+		{
+			return;
+		}
+		Bridge->SetSpeed(0);
+		if (Bridge->GetGameSeconds() <= State->SavedSeconds)
+		{
+			Fail(TEXT("The game did not move on after the quicksave, so the quickload proves nothing"));
+		}
+		const int64 SecondsBefore = Bridge->GetGameSeconds();
+		const int64 Target = State->SavedSeconds;
+		if (!SimSmokePressKey(*Bridge, EKeys::F9, State->Keys, [Bridge, Target]() { return Bridge->GetGameSeconds() == Target; }))
+		{
+			Fail(TEXT("F9 did not load the quicksave"));
+			return;
+		}
+		const uint64 LoadedHash = Bridge->GetSim()->stateHash();
+		Notes.Add(FString::Printf(TEXT("Quickload went from game second %lld back to %lld; hash %s"),
+			static_cast<long long>(SecondsBefore), static_cast<long long>(Bridge->GetGameSeconds()), LoadedHash == State->SavedHash ? TEXT("same") : TEXT("DIFFERENT")));
+		if (LoadedHash != State->SavedHash)
+		{
+			Fail(TEXT("The loaded game has a different state hash than the one saved"));
+		}
+		if (static_cast<int32>(Bridge->GetCurrentSnapshot().things.size()) != State->SavedThings || SavesSmokeCountPawns(Bridge->GetCurrentSnapshot()) != State->SavedPawns)
+		{
+			Fail(TEXT("The snapshot after loading does not show the same things as when saved"));
+		}
+
+		// A second sim from the same file must run on exactly like the one the bridge loaded.
+		std::vector<uint8_t> Bytes;
+		std::string Error;
+		if (!colony::readSaveFile(std::string(TCHAR_TO_UTF8(*(USimSubsystem::GetSaveDirectory() / TEXT("quicksave.save")))), Bytes, Error))
+		{
+			Fail(FString::Printf(TEXT("Could not read the quicksave: %s"), UTF8_TO_TCHAR(Error.c_str())));
+			return;
+		}
+		colony::SaveLoadResult Other = colony::loadSim(Bytes, Bridge->GetDefs());
+		if (!Other.sim)
+		{
+			Fail(FString::Printf(TEXT("A second load of the quicksave failed: %s"), UTF8_TO_TCHAR(Other.error.c_str())));
+			return;
+		}
+		constexpr int32 RunOn = 300;
+		for (int32 Step = 0; Step < RunOn; ++Step)
+		{
+			Bridge->StepOnce();
+			Other.sim->step();
+		}
+		const bool bSame = Bridge->GetSim()->stateHash() == Other.sim->stateHash() && Bridge->GetGameSeconds() == Other.sim->time().seconds;
+		Notes.Add(FString::Printf(TEXT("Ran %d steps on after the load; the bridge and a second sim loaded from the file are %s"), RunOn, bSame ? TEXT("the same") : TEXT("DIFFERENT")));
+		if (!bSame)
+		{
+			Fail(TEXT("Running on after F9 gave a different game than running on from the same file"));
+		}
+
+		// A damaged file is refused and the running game stays as it is.
+		const FString BadPath = USimSubsystem::GetSaveDirectory() / TEXT("broken.save");
+		FFileHelper::SaveStringToFile(TEXT("this is not a save"), *BadPath);
+		const int64 Now = Bridge->GetGameSeconds();
+		const uint64 NowHash = Bridge->GetSim()->stateHash();
+		if (Bridge->LoadGame(TEXT("broken")) || Bridge->GetGameSeconds() != Now || Bridge->GetSim()->stateHash() != NowHash)
+		{
+			Fail(TEXT("A damaged save was not refused cleanly"));
+		}
+		if (Bridge->LoadGame(TEXT("no-such-slot")))
+		{
+			Fail(TEXT("Loading a save that does not exist said it worked"));
+		}
+		Notes.Add(TEXT("A damaged save and a missing save were refused and the running game was untouched"));
+		Bridge->SetSpeed(3);
+	}});
+
+	// Phase 3: the pawn actors followed the loaded sim, and F8 writes a bug report whose replay
+	// plays back to the same state.
+	Phases.Add({TEXT("saves_bug_report"), [this]() {}, 2.0f, 2.0f, [=, this]()
+	{
+		USimSubsystem* Bridge = GetWorld()->GetSubsystem<USimSubsystem>();
+		USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>();
+		if (!Bridge || !Bridge->GetSim())
+		{
+			return;
+		}
+		if (Pawns && Pawns->AreAssetsLoaded())
+		{
+			const int32 SimPawns = SavesSmokeCountPawns(Bridge->GetCurrentSnapshot());
+			const int32 Actors = Pawns->GetPawns().Num();
+			Notes.Add(FString::Printf(TEXT("%d pawn actors for %d sim pawns after the quickload"), Actors, SimPawns));
+			if (Actors != SimPawns)
+			{
+				Fail(TEXT("The pawn actors do not match the sim's pawns after loading"));
+			}
+		}
+		else
+		{
+			Notes.Add(TEXT("Pawn assets are not loaded in this run, so the pawn actors were not checked"));
+		}
+
+		Bridge->SetSpeed(0);
+		FString Folder;
+		const FString Reports = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("BugReports"));
+		TArray<FString> Before;
+		IFileManager::Get().FindFiles(Before, *(Reports / TEXT("*")), false, true);
+		if (!SimSmokePressKey(*Bridge, EKeys::F8, State->Keys, [&]()
+		{
+			TArray<FString> After;
+			IFileManager::Get().FindFiles(After, *(Reports / TEXT("*")), false, true);
+			return After.Num() > Before.Num();
+		}))
+		{
+			Fail(TEXT("F8 did not write a bug report folder"));
+			return;
+		}
+		TArray<FString> After;
+		IFileManager::Get().FindFiles(After, *(Reports / TEXT("*")), false, true);
+		After.Sort();
+		Folder = Reports / After.Last();
+		for (const FString& Name : TArray<FString>{TEXT("replay.json"), TEXT("state.save"), TEXT("state.json"), TEXT("notes.txt")})
+		{
+			if (!IFileManager::Get().FileExists(*(Folder / Name)))
+			{
+				Fail(FString::Printf(TEXT("The bug report has no %s"), *Name));
+			}
+		}
+
+		colony::Replay Replay;
+		std::string Error;
+		if (!colony::loadReplayFile(std::string(TCHAR_TO_UTF8(*(Folder / TEXT("replay.json")))), Replay, Error))
+		{
+			Fail(FString::Printf(TEXT("The bug report's replay did not load: %s"), UTF8_TO_TCHAR(Error.c_str())));
+			return;
+		}
+		// The session was loaded from a save halfway, but the command log came with it, so the
+		// replay from step 0 must still end in the same state.
+		colony::Sim Fresh(Replay.settings, Bridge->GetDefs());
+		colony::playReplay(Replay, Fresh, Replay.endStep);
+		const bool bSameEnd = Replay.hasEndHash && Fresh.stateHash() == Replay.endHash && Fresh.time().seconds == Bridge->GetGameSeconds();
+		Notes.Add(FString::Printf(TEXT("Bug report %s: replay of %d commands to step %lld played again in a fresh sim: %s"),
+			*FPaths::GetCleanFilename(Folder), static_cast<int32>(Replay.commands.size()), static_cast<long long>(Replay.endStep), bSameEnd ? TEXT("same final hash") : TEXT("DIFFERENT")));
+		if (!bSameEnd)
+		{
+			Fail(TEXT("The bug report's replay did not give the same game"));
+		}
+		if (!State->Keys.bSlateKeysWork)
+		{
+			Notes.Add(TEXT("Keys sent through Slate did not reach the bridge in this run; the bridge's key handler was used directly instead"));
+		}
+		else
+		{
+			Notes.Add(TEXT("F5, F9 and F8 worked through Slate input"));
+		}
+	}});
+}
+
 // ---------------------------------------------------------------------------
 // Phases and measurement.
 
@@ -889,7 +1145,7 @@ void USmokeTestSubsystem::Tick(float DeltaTime)
 		bScreenshotTaken = true;
 		const FString Path = FPaths::ProjectSavedDir() / TEXT("Smoke") / TestName / (Phase.Name + TEXT(".png"));
 		// The sim tests show the on-screen sim timings and the overseer its ImGui panels, which count as UI.
-		FScreenshotRequest::RequestScreenshot(Path, TestName == TEXT("sim") || TestName == TEXT("overseer"), false);
+		FScreenshotRequest::RequestScreenshot(Path, TestName == TEXT("sim") || TestName == TEXT("overseer") || TestName == TEXT("saves") || TestName == TEXT("protagonist"), false);
 	}
 	if (PhaseTime >= Phase.WarmupSeconds + Phase.MeasureSeconds)
 	{

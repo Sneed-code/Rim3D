@@ -23,7 +23,11 @@ inline std::shared_ptr<const DefDatabase> testDefs() {
         {"defName": "FueledStove", "category": "Building", "size": [3, 1], "passability": "PassThroughOnly"},
         {"defName": "Plant_Grass", "category": "Plant"}
     ])"},
-                                            {"Terrain", "test.json", R"([{"defName": "Soil"}])"}};
+                                            {"Terrain", "test.json", R"([{"defName": "Soil"}])"},
+                                            {"WorkTypes", "test.json", R"([
+        {"defName": "Hauling", "naturalPriority": 300, "tasks": ["Refuel", "HaulToStockpile"]},
+        {"defName": "Cleaning", "naturalPriority": 200, "tasks": ["CleanFilth"]}
+    ])"}};
     auto db = std::make_shared<DefDatabase>();
     std::vector<std::string> errors;
     DefDatabase::build(sources, "", *db, errors);

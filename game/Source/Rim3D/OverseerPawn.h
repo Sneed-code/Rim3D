@@ -64,6 +64,7 @@ private:
 	void OnClearPressed();
 	void OnFocusPressed();
 	void OnResetPressed();
+	void OnTakeControlPressed();
 	void OnZoomIn() { Zoom(1.0f); }
 	void OnZoomOut() { Zoom(-1.0f); }
 
