@@ -54,6 +54,7 @@ names in lowerCamel (`workSpeedGlobal`), keys that are def names keep their case
 | `Names` | first names (two lists), last names, nicknames (ours) | C8 | `names` |
 | `Scenarios` | Crashlanded | C8, F2 | RimWorld's starting items, with the rifle, revolver and flak gear since F2 (the knife waits for melee) |
 | `Bodies` | Human | F1 | Part tree: `def`, `label`, `coverage`, `depth`, `groups`, `parts` |
+| `Things` (D5) | `Animals.json`: 15 animals. `AnimalProducts.json`: meats, leathers, milk, eggs, wool. `Bodies`: `QuadrupedAnimal`, `BirdAnimal` | D5 | See [animals.md](animals.md) |
 | `BodyParts` | 32 part kinds | F1 | `hitPoints`, `bleedRate`, `solid`, `destroyableByDamage`, `lethalIfDestroyed`, scarring flags |
 | `BodyPartGroups` | 12 groups | F1, apparel later | |
 | `Capacities` | consciousness, moving, manipulation, sight, hearing, talking, eating, breathing, blood filtration, blood pumping, digestion | F1 | How parts and other capacities feed each one; downed and lethal thresholds |

@@ -206,6 +206,27 @@ TEST_CASE("defs: the real data folder loads") {
     CHECK(db.find("Rules", "SkillRules")->count("xpToNextLevel") == 21);
     CHECK(db.find("Scenarios", "Crashlanded")->integer("colonists") == 5);
 
+    // Animals (D5, docs/design/animals.md): the 15 races, their bodies, and what they leave behind.
+    const char* const animals[] = {"Hare", "Squirrel", "Deer", "WildBoar", "Muffalo", "Alpaca", "Cow", "Chicken",
+                                   "Husky", "Cat", "TimberWolf", "GrizzlyBear", "Cougar", "Boomalope", "Thrumbo"};
+    for (const char* name : animals) {
+        const Def* animal = db.find("Things", name);
+        if (animal == nullptr) { CHECK(false); MESSAGE(name); continue; }
+        CHECK(animal->text("category") == "Pawn");
+        CHECK(animal->text("race.intelligence") == "Animal");       // from AnimalBase
+        CHECK(db.find("Bodies", animal->text("race.body")) != nullptr);
+        CHECK(db.find("Things", animal->text("race.meatDef")) != nullptr);
+        CHECK(animal->number("race.meatAmount") > 0);
+        CHECK(animal->count("race.lifeStages") == 3);
+        CHECK(animal->number("stats.moveSpeed") > 0);
+    }
+    CHECK(db.find("Things", "Chicken")->text("race.body") == "BirdAnimal");
+    CHECK(db.find("Things", "Muffalo")->text("race.body") == "QuadrupedAnimal");
+    CHECK(db.find("Things", "Cow")->number("race.milk.amount") > 0);
+    CHECK(db.find("Things", "Alpaca")->text("race.wool.thing") == "WoolAlpaca");
+    CHECK(db.find("Things", "EggChickenFertilized")->text("hatches.into") == "Chicken");
+    CHECK(db.find("Things", "Meat_Deer")->number("stats.nutrition") == doctest::Approx(0.05));  // from MeatBase
+
     errors.clear();
     DefDatabase missing;
     CHECK_FALSE(DefDatabase::loadDirectory(COLONY_DATA_DIR "/nope", missing, errors));
