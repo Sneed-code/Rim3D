@@ -116,7 +116,7 @@ Unreal builds the 3D world from the sim's snapshot and events. We use the latest
 | Pawns and animals | One actor each; see "Pawn animation and looks" below. Animals and remnant machines use shared skeletons. Distant herds of hundreds of animals switch to cheap instanced meshes with baked animation. |
 | Gore | Wound decals and blood on the skin material, hidden bones plus a physics severed limb for lost body parts, Chaos ragdolls for the downed and dead, and gib meshes with blood effects for explosions. |
 | Fire, gas, weather | Niagara effects placed from the sim's fire and gas layers; volumetric clouds, fog and particles for weather. |
-| Lighting | Lumen, virtual shadow maps and DLSS. The sim keeps its own simple light grid for gameplay (work speed, mood). |
+| Lighting | Lumen, virtual shadow maps and DLSS (NVIDIA's free DLSS plugin for Unreal 5.8: Super Resolution, Frame Generation, Ray Reconstruction; the RTX 5080 also does Multi-Frame Generation). Keep rendering features behind Unreal's standard upscaler and scalability settings so newer tech can be swapped in; no custom rendering that blocks them. The sim keeps its own simple light grid for gameplay (work speed, mood). |
 | UI | Built in C++ (UMG widgets created in code, no Widget Blueprints) so I can read and edit all of it. Developer tools and inspectors use an ImGui plugin. |
 | Protagonist | Character and camera based on Epic's free Game Animation Sample (motion matching, 1st/3rd person). Lyra is heavier than we need. |
 
