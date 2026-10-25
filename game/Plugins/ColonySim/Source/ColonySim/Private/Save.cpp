@@ -29,6 +29,7 @@
 #include "ColonySim/Zones.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -236,6 +237,8 @@ struct SaveEntity {
     std::optional<PowerPart> power;         // section "power"
     std::optional<SaveJoy> joy;             // section "recreation"
     std::optional<Animal> animal;           // section "animals"
+    std::optional<RecoilKick> kick;         // section "feel"
+    std::optional<DodgeRoll> roll;          // section "feel"
 };
 
 // A stockpile zone, with its filter by defName.
@@ -939,6 +942,10 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("thing", c.thing);
             } else if constexpr (std::is_same_v<Type, SetResearchCommand> || std::is_same_v<Type, UnlockResearchCommand>) {
                 ar.text("project", c.project);
+            } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.value("dx", c.dx);
+                ar.value("dy", c.dy);
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }
@@ -1352,6 +1359,30 @@ void saveShooterPart(Ar& ar, Shooter& sh) {
     ar.value("player", sh.player);
     ar.value("recoil", sh.recoil);
 
+}
+
+template <typename Ar>
+void saveKickPart(Ar& ar, RecoilKick& k) {
+    ar.value("up", k.up);
+    ar.value("side", k.side);
+    ar.value("shots", k.shots);
+    ar.value("sinceShot", k.sinceShot);
+    ar.require(std::isfinite(k.up) && std::isfinite(k.side) && k.shots >= 0 && k.sinceShot >= 0,
+               "the save file has a bad gun kick");
+}
+
+template <typename Ar>
+void saveRollPart(Ar& ar, DodgeRoll& r) {
+    ar.value("phase", r.phase);
+    ar.require(static_cast<int>(r.phase) <= static_cast<int>(RollPhase::Recovery), "the save file has a bad dodge roll phase");
+    ar.value("stepsLeft", r.stepsLeft);
+    ar.value("rolled", r.rolled);
+    ar.value("dirX", r.dirX);
+    ar.value("dirY", r.dirY);
+    ar.value("cooldown", r.cooldown);
+    ar.value("proof", r.proof);
+    ar.require(r.stepsLeft >= 0 && r.rolled >= 0 && r.cooldown >= 0 && std::isfinite(r.dirX) && std::isfinite(r.dirY),
+               "the save file has a bad dodge roll");
 }
 
 template <typename Ar>
@@ -1894,6 +1925,10 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(t.celsius > -500.0f && t.celsius < 1000.0f, "the save file has an impossible room temperature");
         });
     });
+    ar.section("feel", 1, [&] {
+        saveParts(ar, "kick", e, &SaveEntity::kick, [&](RecoilKick& k) { saveKickPart(ar, k); });
+        saveParts(ar, "roll", e, &SaveEntity::roll, [&](DodgeRoll& r) { saveRollPart(ar, r); });
+    });
     // New sections go here, at the end.
 }
 
@@ -2175,6 +2210,12 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const Magazine* magazine = reg.try_get<Magazine>(e)) {
             out.magazine = *magazine;
+        }
+        if (const RecoilKick* kick = reg.try_get<RecoilKick>(e)) {
+            out.kick = *kick;
+        }
+        if (const DodgeRoll* roll = reg.try_get<DodgeRoll>(e)) {
+            out.roll = *roll;
         }
         if (const Animal* animal = reg.try_get<Animal>(e)) {
             out.animal = *animal;
@@ -2516,6 +2557,12 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.magazine) {
             reg.emplace<Magazine>(entity, *e.magazine);
+        }
+        if (e.kick) {
+            reg.emplace<RecoilKick>(entity, *e.kick);
+        }
+        if (e.roll) {
+            reg.emplace<DodgeRoll>(entity, *e.roll);
         }
         if (e.joy) {
             reg.emplace<Joy>(entity, e.joy->joy);

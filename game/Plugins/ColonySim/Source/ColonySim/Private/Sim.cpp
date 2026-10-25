@@ -468,6 +468,9 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "that pawn isn't under direct control");
         } else if (health_->incapacitated(move->pawn)) {
             commandFailed(id, "that colonist is downed or dead");
+        } else if (combat_->rollLocked(move->pawn)) {
+            // Rolling (P2): the sim moves the pawn; the player's position is ignored, without a failure
+            // because Unreal sends one every step.
         } else {
             Position& pos = reg.get<Position>(move->pawn);
             Mover& mover = reg.get<Mover>(move->pawn);
@@ -493,6 +496,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             pos.y += moveY;
             mover.vx = moveX;
             mover.vy = moveY;
+        }
+    } else if (const auto* roll = std::get_if<DodgeRollCommand>(&command)) {
+        if (!combat_->dodgeRoll(roll->pawn, roll->dx, roll->dy, &error)) {
+            commandFailed(id, error);
         }
     } else if (const auto* schedule = std::get_if<SetScheduleCommand>(&command)) {
         if (!jobs_->setSchedule(schedule->pawn, schedule->hour, schedule->kind, error)) {
@@ -935,6 +942,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.rounds = combat_->roundsLeft(entity);
             view.magazineSize = combat_->magazineSize(entity);
             view.reloading = combat_->reloading(entity);
+            combat_->kickOf(entity, view.kickUp, view.kickSide);
+            view.rollPhase = static_cast<uint8_t>(combat_->rollPhase(entity));
+            if (view.rollPhase != 0) {
+                view.rollStepsLeft = combat_->rollStepsLeft(entity);
+                combat_->rollDirection(entity, view.rollDirX, view.rollDirY);
+            }
+            view.hitProof = combat_->hitProof(entity);
         }
         if (const Gear* gear = reg.try_get<Gear>(entity); gear != nullptr && gear->weapon != kNoEntity) {
             view.weapon = reg.get<Thing>(gear->weapon).def;
