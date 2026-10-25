@@ -57,7 +57,7 @@ decide). A full copy of 119,000 plants each step would be wasteful, and plants c
 
 - A plant's look is its def's `visual` (below). Each plant kind gets one static mesh made when the
   sim starts (cones, cylinders and low spheres with their colours baked into the vertices, lit by
-  the shared `VertexColorMaterial`). A def with `visual.mesh` (an asset path, A1's job) uses that
+  the shared `VertexColorMaterial`). A def with `visual.mesh` (an asset path, made by A1: `building-draw.md`) uses that
   mesh instead.
 - Each plant is one instance. Where it stands in its cell, which way round it faces and a few
   percent of size come from a hash of the cell, so a forest isn't a grid; none of it is sim state.
@@ -85,7 +85,7 @@ decide). A full copy of 119,000 plants each step would be wasteful, and plants c
 is above the ground) are in metres at full growth; `color` is red, green, blue from 0 to 1. Both
 `stem` and `crown` are optional; a plant with neither gets a small green cone so it still shows.
 `cullDistance` is in metres (0: never culled), `scale` and `jitter` (0.15) change the size.
-`mesh` is an asset path for A1's real meshes; if it does not load, the shapes are used.
+`mesh` is an asset path (A1's meshes, `building-draw.md`); if it does not load, the shapes are used.
 
 ## Upscalers (DLSS and later)
 

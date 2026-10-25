@@ -1,0 +1,21 @@
+{
+  "source": "Poly Haven (https://polyhaven.com), CC0, 1k glTF",
+  "sizeNote": "size is metres [x, y, z] of the box the mesh is fitted into (same proportions) and stands in; stretch scales each axis on its own. long says which footprint axis the mesh's long side goes along. tris is the triangle count the commandlet reduces it to.",
+  "meshes": [
+    {"def": "Door", "id": "rollershutter_door", "size": [0.74, 0.1, 2.15], "long": "x", "tris": 2500, "stretch": true},
+    {"def": "Bed", "id": "vintage_day_bed", "size": [0.95, 2.0, 1.2], "long": "y", "tris": 2700},
+    {"def": "Stool", "id": "wooden_stool_01", "size": [0.4, 0.4, 0.45], "tris": 1500},
+    {"def": "Table1x2", "id": "wooden_table_02", "size": [0.94, 1.94, 0.8], "long": "y", "stretch": true, "tris": 200},
+    {"def": "Table2x2", "id": "wooden_table_02", "size": [1.94, 1.94, 0.8], "stretch": true, "tris": 200},
+    {"def": "Table2x4", "id": "dining_table", "size": [1.94, 3.94, 0.8], "long": "y", "stretch": true, "tris": 1000},
+    {"def": "FueledStove", "id": "barrel_stove", "size": [0.9, 0.9, 1.0], "tris": 2000},
+    {"def": "WoodLog", "id": "dead_quiver_trunk", "size": [0.15, 0.55, 0.15], "long": "y", "tris": 800, "lieFlat": true},
+    {"def": "MealSimple", "id": "wooden_bowl_02", "size": [0.22, 0.22, 0.1], "tris": 800},
+    {"def": "MealFine", "id": "wooden_bowl_01", "size": [0.28, 0.28, 0.1], "tris": 800},
+    {"def": "RawBerries", "id": "food_pomegranate_01", "size": [0.11, 0.11, 0.11], "tris": 500},
+    {"def": "Plant_TreeOak", "id": "quiver_tree_01", "size": [4.0, 4.0, 5.2], "tris": 3000, "stretch": true},
+    {"def": "Plant_TreePoplar", "id": "pine_sapling_small", "size": [2.0, 2.0, 6.0], "tris": 3000, "stretch": true},
+    {"def": "Plant_Bush", "id": "shrub_02", "size": [1.2, 1.0, 1.0], "tris": 3000, "stretch": true},
+    {"def": "Plant_Berry", "id": "wild_rooibos_bush", "size": [1.1, 0.9, 0.9], "tris": 3000, "stretch": true}
+  ]
+}
