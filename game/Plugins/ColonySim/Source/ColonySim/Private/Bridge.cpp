@@ -28,6 +28,15 @@ const char* eventTypeName(EventType type) {
         case EventType::ThingDespawned: return "ThingDespawned";
         case EventType::ThingDestroyed: return "ThingDestroyed";
         case EventType::CommandFailed: return "CommandFailed";
+        case EventType::PawnAction: return "PawnAction";
+    }
+    return "?";
+}
+
+const char* pawnActionName(PawnAction action) {
+    switch (action) {
+        case PawnAction::PickUp: return "PickUp";
+        case PawnAction::PutDown: return "PutDown";
     }
     return "?";
 }
