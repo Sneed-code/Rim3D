@@ -1,6 +1,6 @@
 [
   {
-    "defName": "GunBase", "abstract": true, "source": "RimWorld wiki",
+    "defName": "GunBase", "visual": {"parts": [{"shape": "box", "size": [0.55, 0.05, 0.05], "at": [0.1, 0, 0.04], "color": [0.15, 0.15, 0.17]}, {"shape": "box", "size": [0.22, 0.06, 0.1], "at": [-0.22, 0, 0.02], "color": [0.4, 0.27, 0.15]}]}, "abstract": true, "source": "RimWorld wiki",
     "category": "Item", "stackLimit": 1, "equipmentType": "Primary",
     "stats": { "maxHitPoints": 100 },
     "unverified": ["stats.maxHitPoints"],

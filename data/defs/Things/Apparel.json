@@ -1,6 +1,6 @@
 [
   {
-    "defName": "ApparelBase", "abstract": true, "source": "RimWorld wiki",
+    "defName": "ApparelBase", "visual": {"parts": [{"shape": "box", "size": [0.32, 0.26, 0.06], "color": [0.3, 0.35, 0.28]}]}, "abstract": true, "source": "RimWorld wiki",
     "category": "Item", "stackLimit": 1
   },
   {

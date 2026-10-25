@@ -132,6 +132,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildWorldPhases();
 	}
+	else if (TestName == TEXT("buildings"))
+	{
+		BuildBuildingsPhases();
+	}
 	else
 	{
 		Fail(FString::Printf(TEXT("Unknown smoke test '%s'"), *TestName));
