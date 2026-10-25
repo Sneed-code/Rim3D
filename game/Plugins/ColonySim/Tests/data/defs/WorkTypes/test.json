@@ -1,0 +1,4 @@
+[
+  {"defName": "Hauling", "naturalPriority": 300, "tasks": ["Refuel", "HaulToStockpile"]},
+  {"defName": "Cleaning", "naturalPriority": 200, "tasks": ["CleanFilth"]}
+]

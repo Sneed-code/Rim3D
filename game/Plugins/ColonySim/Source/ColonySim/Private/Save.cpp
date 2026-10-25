@@ -5,9 +5,10 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
+#include "ColonySim/Jobs.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
-#include "HaulJob.h"
+#include "ColonySim/Zones.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -36,9 +37,15 @@ constexpr char kSaveMagic[8] = {'R', 'I', 'M', '3', 'D', 'S', 'A', 'V'};
 constexpr size_t kSaveMagicSize = sizeof kSaveMagic;
 // Bump when the layout below changes, and keep reading the old versions (the archive's
 // version() says which one a file is). Changing it needs a line in docs/design/saves.md.
-constexpr uint32_t kSaveFormatVersion = 5;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity; 4: C8's scenario and colonists; 5: F1's pawn health
+constexpr uint32_t kSaveFormatVersion = 6;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
+                                            // 4: C8's scenario and colonists; 5: F1's pawn health; 6: C1's jobs,
+                                            // work priorities and zones
+// Saves from before the job system (formats 1 to 5) can't be read: their hauling placeholder has
+// no counterpart in the job system (docs/design/saves.md).
+constexpr uint32_t kSaveOldestFormat = 6;
 constexpr const char* kSaveFormatName = "rim3d-save";
 constexpr const char* kSaveThingsKind = "Things";
+constexpr const char* kSaveWorkTypesKind = "WorkTypes";
 
 uint64_t saveChecksum(const uint8_t* data, size_t size) {
     StateHasher h;
@@ -86,6 +93,23 @@ struct SaveHealth {
     DeathCause cause = DeathCause::None;
 };
 
+// A worker's job and memory, with the work type by defName (empty for none).
+struct SaveWorker {
+    Job job;
+    std::string workType;
+    std::vector<AvoidTarget> avoid;
+};
+
+struct SaveWorkPriority {
+    std::string workType;  // WorkTypes defName
+    uint8_t priority = 0;
+    bool disabled = false;
+};
+
+struct SaveWorkSettings {
+    std::vector<SaveWorkPriority> entries;
+};
+
 struct SaveEntity {
     uint32_t id = 0;
     std::optional<SaveThing> thing;
@@ -95,11 +119,18 @@ struct SaveEntity {
     std::optional<HitPoints> hitPoints;
     std::optional<Mover> mover;
     std::optional<Colonist> colonist;  // format 4 on
-    std::optional<HaulJob> haulJob;
-    std::optional<HaulReservedBy> haulReservedBy;
-    std::optional<HaulCarriedBy> haulCarriedBy;
-    bool haulStored = false;
     std::optional<SaveHealth> health;  // format 5 on
+    std::optional<SaveWorker> worker;
+    std::optional<SaveWorkSettings> work;
+    std::optional<Carrying> carrying;
+};
+
+// A stockpile zone, with its filter by defName.
+struct SaveZone {
+    uint32_t id = 0;
+    StoragePriority priority = StoragePriority::Normal;
+    std::vector<std::string> disallowed;  // Things defNames
+    std::vector<CellPos> cells;
 };
 
 struct SavePending {
@@ -130,6 +161,8 @@ struct SaveData {
     std::vector<uint32_t> freeIds;
     std::vector<SaveEntity> entities;  // live things, in id order
     PathSavedState paths;              // the path queue (format 2 on)
+    uint32_t nextZoneId = 1;           // format 4 on
+    std::vector<SaveZone> zones;
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -375,22 +408,33 @@ void saveCell(Ar& ar, CellPos& c) {
 }
 
 template <typename Ar>
+void saveRect(Ar& ar, CellRect& r) {
+    ar.value("minX", r.minX);
+    ar.value("minY", r.minY);
+    ar.value("sizeX", r.sizeX);
+    ar.value("sizeY", r.sizeY);
+    ar.value("level", r.level);
+    ar.require(r.sizeX >= 0 && r.sizeY >= 0 && r.sizeX <= 4096 && r.sizeY <= 4096, "the save file has a bad area");
+}
+
+template <typename Ar>
 void saveCommand(Ar& ar, Command& command) {
-    static_assert(std::variant_size_v<Command> == 4, "save every command type here");
+    static_assert(std::variant_size_v<Command> == 10, "save every command type here");
     uint8_t type = static_cast<uint8_t>(command.index());
     ar.value("type", type);
     if constexpr (Ar::kReading) {
-        if (type == 0) {
-            command = SpawnThingCommand{};
-        } else if (type == 1) {
-            command = DestroyThingCommand{};
-        } else if (type == 2) {
-            command = DamagePawnCommand{};
-        } else if (type == 3) {
-            command = TendPawnCommand{};
-        } else {
-            ar.require(false, "the save file names a command this build doesn't know");
-            return;
+        switch (type) {
+            case 0: command = SpawnThingCommand{}; break;
+            case 1: command = DestroyThingCommand{}; break;
+            case 2: command = DamagePawnCommand{}; break;
+            case 3: command = TendPawnCommand{}; break;
+            case 4: command = SetWorkPriorityCommand{}; break;
+            case 5: command = CreateStockpileCommand{}; break;
+            case 6: command = RemoveZoneCellsCommand{}; break;
+            case 7: command = SetStockpilePriorityCommand{}; break;
+            case 8: command = SetStockpileAllowedCommand{}; break;
+            case 9: command = OrderHaulCommand{}; break;
+            default: ar.require(false, "the save file names a command this build doesn't know"); return;
         }
     }
     ar.note("name", commandName(command));
@@ -410,6 +454,27 @@ void saveCommand(Ar& ar, Command& command) {
     } else if (auto* tend = std::get_if<TendPawnCommand>(&command)) {
         ar.value("pawn", tend->pawn);
         ar.value("quality", tend->quality);
+    } else if (auto* work = std::get_if<SetWorkPriorityCommand>(&command)) {
+        ar.value("pawn", work->pawn);
+        ar.text("workType", work->workType);
+        ar.value("priority", work->priority);
+    } else if (auto* create = std::get_if<CreateStockpileCommand>(&command)) {
+        ar.group("area", [&] { saveRect(ar, create->area); });
+        ar.value("priority", create->priority);
+        ar.require(create->priority <= StoragePriority::Critical, "the save file has a bad storage priority");
+    } else if (auto* remove = std::get_if<RemoveZoneCellsCommand>(&command)) {
+        ar.group("area", [&] { saveRect(ar, remove->area); });
+    } else if (auto* priority = std::get_if<SetStockpilePriorityCommand>(&command)) {
+        ar.value("zone", priority->zone);
+        ar.value("priority", priority->priority);
+        ar.require(priority->priority <= StoragePriority::Critical, "the save file has a bad storage priority");
+    } else if (auto* allowed = std::get_if<SetStockpileAllowedCommand>(&command)) {
+        ar.value("zone", allowed->zone);
+        ar.text("def", allowed->def);
+        ar.value("allowed", allowed->allowed);
+    } else if (auto* haul = std::get_if<OrderHaulCommand>(&command)) {
+        ar.value("pawn", haul->pawn);
+        ar.value("thing", haul->thing);
     }
 }
 
@@ -509,19 +574,31 @@ void saveEntity(Ar& ar, SaveEntity& e) {
             m.fromY = e.position->y;
         }
     });
-    ar.optional("haulJob", e.haulJob, [&](HaulJob& job) {
-        ar.value("stage", job.stage);
-        ar.value("item", job.item);
-        if (ar.version() >= 2) {
-            ar.value("pathSlot", job.path.slot);
-            ar.value("pathSerial", job.path.serial);
-        }
-        ar.require(static_cast<int>(job.stage) <= static_cast<int>(HaulStage::WaitPathCarrying),
-                   "the save file has a bad hauling stage");
+    ar.optional("worker", e.worker, [&](SaveWorker& w) {
+        Job& job = w.job;
+        ar.value("job", job.type);
+        ar.require(job.type <= JobType::HaulToCell, "the save file has a bad job");
+        ar.value("thing", job.thing);
+        ar.group("cell", [&] { saveCell(ar, job.cell); });
+        ar.value("count", job.count);
+        ar.text("workType", w.workType);
+        ar.value("forced", job.forced);
+        ar.value("step", job.step);
+        ar.require(job.step < std::max(1, jobStepCount(job.type)), "the save file has a job past its last step");
+        ar.value("walk", job.walk);
+        ar.require(job.walk <= 2, "the save file has a bad walk state");
+        ar.value("repaths", job.repaths);
+        ar.value("startedAt", job.startedAt);
+        ar.value("until", job.until);
+        ar.value("pathSlot", job.path.slot);
+        ar.value("pathSerial", job.path.serial);
+        ar.list("avoid", w.avoid, [&](AvoidTarget& a) {
+            ar.value("thing", a.target.thing);
+            ar.group("cell", [&] { saveCell(ar, a.target.cell); });
+            ar.value("until", a.until);
+        });
+        ar.require(w.avoid.size() <= JobSystem::kMaxAvoid, "the save file has a worker with too long a memory");
     });
-    ar.optional("haulReservedBy", e.haulReservedBy, [&](HaulReservedBy& r) { ar.value("pawn", r.pawn); });
-    ar.optional("haulCarriedBy", e.haulCarriedBy, [&](HaulCarriedBy& c) { ar.value("pawn", c.pawn); });
-    ar.value("haulStored", e.haulStored);
     if (ar.version() >= 4) {
         ar.optional("colonist", e.colonist, [&](Colonist& c) { saveColonist(ar, c); });
     }
@@ -550,6 +627,24 @@ void saveEntity(Ar& ar, SaveEntity& e) {
             ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::VitalCapacity), "the save file has a bad cause of death");
         });
     }
+    ar.optional("work", e.work, [&](SaveWorkSettings& w) {
+        ar.list("entries", w.entries, [&](SaveWorkPriority& p) {
+            ar.text("workType", p.workType);
+            ar.value("priority", p.priority);
+            ar.value("disabled", p.disabled);
+            ar.require(p.priority <= JobSystem::kMaxPriority, "the save file has a bad work priority");
+        });
+    });
+    ar.optional("carrying", e.carrying, [&](Carrying& c) { ar.value("thing", c.thing); });
+}
+
+template <typename Ar>
+void saveZone(Ar& ar, SaveZone& z) {
+    ar.value("id", z.id);
+    ar.value("priority", z.priority);
+    ar.require(z.priority <= StoragePriority::Critical, "the save file has a bad storage priority");
+    ar.list("disallowed", z.disallowed, [&](std::string& def) { ar.text(nullptr, def); });
+    ar.list("cells", z.cells, [&](CellPos& c) { saveCell(ar, c); });
 }
 
 template <typename Ar>
@@ -606,6 +701,8 @@ void saveData(Ar& ar, SaveData& d) {
     if (ar.version() >= 2) {
         ar.group("paths", [&] { savePaths(ar, d.paths); });
     }
+    ar.value("nextZoneId", d.nextZoneId);
+    ar.list("zones", d.zones, [&](SaveZone& z) { saveZone(ar, z); });
 }
 
 // The file: magic, format version, the data, then a checksum of everything before it.
@@ -634,6 +731,11 @@ bool saveDecode(const std::vector<uint8_t>& bytes, SaveData& out, std::string& e
     if (version == 0 || version > kSaveFormatVersion) {
         error = "this save is format " + std::to_string(version) + ", made by a newer version of the game (this one reads up to " +
                 std::to_string(kSaveFormatVersion) + ")";
+        return false;
+    }
+    if (version < kSaveOldestFormat) {
+        error = "this save is format " + std::to_string(version) + ", made before the job system; this version reads format " +
+                std::to_string(kSaveOldestFormat) + " and later";
         return false;
     }
     const size_t bodyEnd = bytes.size() - sizeof(uint64_t);
@@ -744,16 +846,23 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const Mover* mover = reg.try_get<Mover>(e)) {
             out.mover = *mover;
         }
-        if (const HaulJob* job = reg.try_get<HaulJob>(e)) {
-            out.haulJob = *job;
+        if (const Worker* worker = reg.try_get<Worker>(e)) {
+            SaveWorker w;
+            w.job = worker->job;
+            w.workType = worker->job.workType.valid() ? sim.defs_->get(worker->job.workType).defName() : std::string();
+            w.avoid = worker->avoid;
+            out.worker = std::move(w);
         }
-        if (const HaulReservedBy* reserved = reg.try_get<HaulReservedBy>(e)) {
-            out.haulReservedBy = *reserved;
+        if (const WorkSettings* work = reg.try_get<WorkSettings>(e)) {
+            SaveWorkSettings w;
+            for (const WorkPriority& entry : work->entries) {
+                w.entries.push_back(SaveWorkPriority{sim.defs_->get(entry.workType).defName(), entry.priority, entry.disabled});
+            }
+            out.work = std::move(w);
         }
-        if (const HaulCarriedBy* carried = reg.try_get<HaulCarriedBy>(e)) {
-            out.haulCarriedBy = *carried;
+        if (const Carrying* carrying = reg.try_get<Carrying>(e)) {
+            out.carrying = *carrying;
         }
-        out.haulStored = reg.all_of<HaulStored>(e);
         if (const Colonist* colonist = reg.try_get<Colonist>(e)) {
             out.colonist = *colonist;
         }
@@ -774,6 +883,17 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         d.entities.push_back(std::move(out));
     }
     d.paths = sim.pathfinder_.saveState();
+    d.nextZoneId = sim.zones_->nextId();
+    for (const StockpileZone& zone : sim.zones_->stockpiles()) {
+        SaveZone z;
+        z.id = zone.id;
+        z.priority = zone.priority;
+        for (const DefId def : zone.disallowed) {
+            z.disallowed.push_back(sim.defs_->get(def).defName());
+        }
+        z.cells = zone.cells;
+        d.zones.push_back(std::move(z));
+    }
     return d;
 }
 
@@ -865,17 +985,33 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.mover) {
             reg.emplace<Mover>(entity, std::move(*e.mover));
         }
-        if (e.haulJob) {
-            reg.emplace<HaulJob>(entity, *e.haulJob);
+        if (e.worker) {
+            Worker worker;
+            worker.job = e.worker->job;
+            worker.job.workType = DefId{};
+            if (!e.worker->workType.empty()) {
+                // A work type the data files dropped leaves the job without one; it runs on.
+                worker.job.workType = sim.defs_->idOf(kSaveWorkTypesKind, e.worker->workType);
+            }
+            worker.avoid = std::move(e.worker->avoid);
+            reg.emplace<Worker>(entity, std::move(worker));
         }
-        if (e.haulReservedBy) {
-            reg.emplace<HaulReservedBy>(entity, *e.haulReservedBy);
+        if (e.work) {
+            // Matched to today's work types by name: one the save doesn't know gets the default
+            // priority, one the data files dropped is forgotten.
+            WorkSettings work = sim.jobs_->defaultWorkSettings();
+            for (WorkPriority& entry : work.entries) {
+                for (const SaveWorkPriority& saved : e.work->entries) {
+                    if (saved.workType == sim.defs_->get(entry.workType).defName()) {
+                        entry.priority = saved.priority;
+                        entry.disabled = saved.disabled;
+                    }
+                }
+            }
+            reg.emplace<WorkSettings>(entity, std::move(work));
         }
-        if (e.haulCarriedBy) {
-            reg.emplace<HaulCarriedBy>(entity, *e.haulCarriedBy);
-        }
-        if (e.haulStored) {
-            reg.emplace<HaulStored>(entity);
+        if (e.carrying) {
+            reg.emplace<Carrying>(entity, *e.carrying);
         }
         if (e.colonist) {
             reg.emplace<Colonist>(entity, std::move(*e.colonist));
@@ -917,7 +1053,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     }
     sim.health_->refreshAll();
     for (const SaveEntity& e : d.entities) {
-        if (e.footprint && e.position && !things.relinkBuilding(static_cast<Entity>(e.id))) {
+        if (e.position && !things.relink(static_cast<Entity>(e.id))) {
             error = "the save has a building that no longer fits on the map";
             return false;
         }
@@ -926,8 +1062,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     // Everything a thing names must exist.
     const auto exists = [&](Entity e) { return e == kNoEntity || reg.valid(e); };
     for (const SaveEntity& e : d.entities) {
-        if ((e.haulJob && !exists(e.haulJob->item)) || (e.haulReservedBy && !exists(e.haulReservedBy->pawn)) ||
-            (e.haulCarriedBy && !exists(e.haulCarriedBy->pawn))) {
+        if ((e.worker && !exists(e.worker->job.thing)) || (e.carrying && !exists(e.carrying->thing))) {
             error = "the save has a thing that names another thing that doesn't exist";
             return false;
         }
@@ -935,24 +1070,35 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     sim.haulers_.clear();
     for (const uint32_t id : d.haulers) {
         const Entity pawn = static_cast<Entity>(id);
-        if (!reg.valid(pawn) || !reg.all_of<Position, Mover, HaulJob>(pawn)) {
-            error = "the save lists a hauler that isn't a pawn with a hauling job";
+        if (!reg.valid(pawn) || !reg.all_of<Position, Mover, Worker>(pawn)) {
+            error = "the save lists a hauler that isn't a pawn who works";
             return false;
         }
         sim.haulers_.push_back(pawn);
     }
-    // The path queue, once every building is back, and the tickets haulers wait on.
+    // Zones, then the path queue once every building is back, then the jobs that wait on it.
+    std::vector<StockpileZone> zones;
+    for (SaveZone& z : d.zones) {
+        StockpileZone zone;
+        zone.id = z.id;
+        zone.priority = z.priority;
+        for (const std::string& name : z.disallowed) {
+            const DefId def = sim.defs_->idOf(kSaveThingsKind, name);
+            if (def.valid()) {  // a def the data files dropped can't be stored anyway
+                zone.disallowed.push_back(def);
+            }
+        }
+        zone.cells = std::move(z.cells);
+        zones.push_back(std::move(zone));
+    }
+    if (!sim.zones_->restore(std::move(zones), d.nextZoneId, error)) {
+        return false;
+    }
     if (!sim.pathfinder_.loadState(std::move(d.paths), error)) {
         return false;
     }
-    for (const Entity pawn : sim.haulers_) {
-        const HaulJob& job = reg.get<HaulJob>(pawn);
-        const bool waiting = job.stage == HaulStage::WaitPathToItem || job.stage == HaulStage::WaitPathToStockpile ||
-                             job.stage == HaulStage::WaitPathCarrying;
-        if (waiting && sim.pathfinder_.status(job.path) == PathStatus::Unknown) {
-            error = "the save has a hauler waiting for a path nobody is looking for";
-            return false;
-        }
+    if (!sim.jobs_->afterLoad(error)) {
+        return false;
     }
     if (d.stockpile && !sim.map_.inBounds(*d.stockpile)) {
         error = "the save has a stockpile outside the map";

@@ -1,6 +1,7 @@
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Events.h"
+#include "ColonySim/Jobs.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
@@ -90,21 +91,48 @@ TEST_CASE("Commands: a command that can't be applied reports why and is still lo
     CHECK(failed == std::vector<uint64_t>{twice, nothing});
 }
 
-TEST_CASE("Commands: things the hauling test is using can't be destroyed") {
-    Sim sim(SimSettings{11, 64, 1, 1, true}, testDefs());
-    if (!(sim.haulers().size() == 1)) {
-        CHECK(false);
-        return;
+TEST_CASE("Commands: destroying what a job uses ends the job, and what was carried is put down") {
+    for (const bool destroyPawn : {true, false}) {
+        Sim sim(SimSettings{11, 64, 1, 1, true}, testDefs());
+        if (!(sim.haulers().size() == 1)) {
+            CHECK(false);
+            return;
+        }
+        const Entity pawn = sim.haulers()[0];
+        const entt::registry& reg = sim.things().registry();
+        for (int i = 0; i < 3600 && !reg.all_of<Carrying>(pawn); ++i) {
+            sim.step();
+        }
+        if (!reg.all_of<Carrying>(pawn)) {
+            CHECK(false);
+            return;
+        }
+        const Entity item = reg.get<Carrying>(pawn).thing;
+        sim.submit(DestroyThingCommand{destroyPawn ? pawn : item});
+        sim.step();
+        CHECK(countEvents(sim, EventType::CommandFailed) == 0);
+        int interrupted = 0;
+        for (const Event& e : sim.events()) {
+            interrupted += e.type == EventType::JobEnded && e.message.rfind("interrupted: ", 0) == 0 ? 1 : 0;
+        }
+        CHECK(interrupted == 1);
+        if (destroyPawn) {
+            // The pawn is gone; the item it carried lies where it stood.
+            CHECK_FALSE(sim.things().exists(pawn));
+            CHECK(sim.things().spawned(item));
+            CHECK(sim.itemsLeft() == 1);
+        } else {
+            // The item is gone; the pawn's hands are empty and it finds other things to do.
+            CHECK_FALSE(sim.things().exists(item));
+            CHECK_FALSE(reg.all_of<Carrying>(pawn));
+            CHECK(sim.itemsLeft() == 0);
+            sim.stepMany(10);
+            CHECK(reg.get<Worker>(pawn).job.type == JobType::Wait);
+        }
     }
-    sim.submit(DestroyThingCommand{sim.haulers()[0]});
-    sim.step();
-    CHECK(countEvents(sim, EventType::CommandFailed) == 1);
-    CHECK(sim.things().exists(sim.haulers()[0]));
-    sim.stepMany(3600);
-    CHECK(sim.itemsLeft() == 0);
 }
 
-TEST_CASE("Events: spawn, despawn and destroy are reported, and cleared each step") {
+TEST_CASE("Events: spawn, despawn, destroy and jobs are reported, and cleared each step") {
     Sim sim(SimSettings{11, 64, 1, 1, true}, testDefs());
     // Setting up the map reports its spawns until the first step.
     CHECK(countEvents(sim, EventType::ThingSpawned) == 2);
@@ -113,12 +141,15 @@ TEST_CASE("Events: spawn, despawn and destroy are reported, and cleared each ste
         CHECK(e.def.valid());
     }
 
-    // Hauling: the item is picked up (despawned) and put down (spawned) at the stockpile.
-    // The hauler's hands are reported too (PawnAction), in the same step as the despawn and spawn.
+    // Hauling: the item is picked up (despawned) and put down (spawned) in the stockpile.
+    // The hauler's hands are reported too (PawnAction), in the same step as the despawn and spawn,
+    // and the job's start and end.
     int pickedUp = 0;
     int putDown = 0;
     int pickUpActions = 0;
     int putDownActions = 0;
+    int jobsStarted = 0;
+    int jobsDone = 0;
     for (int i = 0; i < 3600 && sim.itemsLeft() > 0; ++i) {
         sim.step();
         pickedUp += countEvents(sim, EventType::ThingDespawned);
@@ -129,7 +160,7 @@ TEST_CASE("Events: spawn, despawn and destroy are reported, and cleared each ste
             }
             if (e.type == EventType::ThingSpawned) {
                 ++putDown;
-                CHECK(e.cell == *sim.stockpileCell());
+                CHECK(sim.zones().zoneAt(e.cell) != kNoZone);
             }
             if (e.type == EventType::PawnAction) {
                 CHECK(e.thing == sim.haulers()[0]);
@@ -137,14 +168,35 @@ TEST_CASE("Events: spawn, despawn and destroy are reported, and cleared each ste
                 CHECK(e.target == moved);
                 ++(e.action == PawnAction::PickUp ? pickUpActions : putDownActions);
             }
+            if (e.type == EventType::JobStarted) {
+                CHECK(e.thing == sim.haulers()[0]);
+                CHECK(e.job == JobType::HaulToCell);
+                ++jobsStarted;
+            }
+            if (e.type == EventType::JobEnded) {
+                CHECK(e.job == JobType::HaulToCell);
+                CHECK(e.message == "done");
+                ++jobsDone;
+            }
         }
     }
     CHECK(pickedUp == 1);
     CHECK(putDown == 1);
     CHECK(pickUpActions == 1);
     CHECK(putDownActions == 1);
+    CHECK(jobsStarted == 1);
+    CHECK(jobsDone == 1);
     CHECK(std::string(pawnActionName(PawnAction::PutDown)) == "PutDown");
     CHECK(std::string(eventTypeName(EventType::PawnAction)) == "PawnAction");
+    CHECK(std::string(eventTypeName(EventType::JobEnded)) == "JobEnded");
+    // The next step holds only its own events: the pawn, with nothing left to haul, goes idle.
+    sim.step();
+    if (!(sim.events().size() == 1)) {
+        CHECK(false);
+        return;
+    }
+    CHECK(sim.events()[0].type == EventType::JobStarted);
+    CHECK(sim.events()[0].job == JobType::Wait);
     sim.step();
     CHECK(sim.events().empty());
 

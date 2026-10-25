@@ -23,16 +23,25 @@ runs, every queued command is applied in submit order and appended to `commandLo
 A command that can't be applied changes nothing, sends a `CommandFailed` event with its id and a
 reason, and is still logged.
 
-So far there are only four dev commands, like RimWorld's dev mode. The real ones (place blueprint,
-designate, work priorities, draft, protagonist moved and actions) come with the tasks that build
-those systems.
+There are four dev commands, like RimWorld's dev mode, and since C1 the work and stockpile
+commands (below the table, and in [jobs.md](jobs.md)). The rest (place blueprint, designate,
+draft, protagonist moved and actions) come with the tasks that build those systems.
 
 | Command | Does | Fails when |
 | --- | --- | --- |
 | `SpawnThingCommand{def, cell, count, rot}` | `Things::spawn` of a Things def | unknown def; the thing can't go there |
-| `DestroyThingCommand{thing}` | `Things::destroy` | the thing doesn't exist; the hauling placeholder is using it |
+| `DestroyThingCommand{thing}` | `Things::destroy`; jobs using it end first (`JobSystem::forget`) | the thing doesn't exist |
 | `DamagePawnCommand{pawn, damageType, amount, part}` | `HealthSystem::applyDamage`; `part` -1 picks like a hit would ([health.md](health.md)) | the thing has no body; unknown damage type; no damage; the pawn is dead or the part is missing or doesn't exist |
 | `TendPawnCommand{pawn, quality}` | `HealthSystem::tendAll` | the thing has no body; nothing to tend |
+| `SetWorkPriorityCommand{pawn, workType, priority}` | a pawn's Work tab: 0 off, 1 to 4 | not a working pawn; unknown work type; priority outside 0 to 4; work it can never do |
+| `CreateStockpileCommand{area, priority}` | a stockpile zone (ids 1, 2, 3...) | no walkable cell outside other zones in `area` |
+| `RemoveZoneCellsCommand{area}` | takes cells out of their zones | no zone cell in `area` |
+| `SetStockpilePriorityCommand{zone, priority}` | | unknown zone; Unstored |
+| `SetStockpileAllowedCommand{zone, def, allowed}` | the zone's filter | unknown zone or def |
+| `OrderHaulCommand{pawn, thing}` | "prioritize hauling": ends the pawn's job, hauls the item | not a working pawn; not an item; held by another pawn; unreachable; no room |
+
+In replay files an `area` is `[minX, minY, sizeX, sizeY, level]` and a storage priority its name
+(`"Preferred"`; `"Normal"` if left out).
 
 **Speed and pause are not commands.** They decide how often Unreal calls `step()`, not what a step
 does, so they stay in `USimSubsystem`. A replay counts steps, so it doesn't need them.
@@ -61,6 +70,8 @@ starts, so read it after every step. Before the first step it holds what setting
 | `PawnPartLost` | `thing`, `def` (MissingBodyPart), `part`, `amount`, `cell` | a pawn lost a body part |
 | `PawnDowned`, `PawnGotUp` | `thing`, `cell` | a pawn can no longer act, or can again |
 | `PawnDied` | `thing`, `message` (the cause), `cell` | a pawn died; it stays on the map with `dead` set |
+| `JobStarted` | `thing` (the pawn), `def`, `job`, `target`, `cell` | a pawn took a job ([jobs.md](jobs.md)) |
+| `JobEnded` | the same, and `message`: "done", "failed: why" or "interrupted: why" | a pawn's job ended |
 
 `Things` reports its own spawns and despawns once the sim points it at the event list
 (`Things::setEventLog`). Later systems add their events (shot fired, wound added, job started,
@@ -85,7 +96,7 @@ what Unreal sees.
 ## State hash and checkpoints
 
 `Sim::stateHash()` is a 64-bit hash of the whole game state: time, the map's ground, the random
-stream, the hauling placeholder's lists and stats, every entity id the registry has handed out
+stream, the hauling test's lists and stats, the stockpile zones, every entity id the registry has handed out
 (including the free list, which decides the next ids), and every component of every thing. Floats
 are hashed by their bits. Same seed and commands give the same hash; anything else almost surely
 doesn't.

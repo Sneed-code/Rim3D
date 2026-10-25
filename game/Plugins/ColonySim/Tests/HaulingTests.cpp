@@ -13,20 +13,25 @@ TEST_CASE("Hauling: 20 pawns haul every item within one game day, none fail") {
     CHECK(sim.stockpileCell().has_value());
     CHECK(sim.haulers().size() == 20);
     CHECK(sim.things().count() == 170);
+    CHECK(sim.zones().stockpiles().size() == 1);
     CHECK(sim.itemsLeft() == 150);
     sim.stepMany(kSecondsPerDay);
     CHECK(sim.itemsLeft() == 0);
     CHECK(sim.stats().hauls == 150);
     CHECK(sim.stats().failedJobs == 0);
-    // Every item ended on the map, at the stockpile.
+    // Every item ended on the map, in the stockpile, in stacks of at most 75, one per cell.
     const entt::registry& reg = sim.things().registry();
     int onStockpile = 0;
-    reg.view<const Thing, const Position>().each([&](const Thing& thing, const Position& pos) {
-        if (thing.category == ThingCategory::Item && cellOf(pos) == *sim.stockpileCell()) {
-            ++onStockpile;
-        }
+    int stacks = 0;
+    reg.view<const Thing, const Position, const StackCount>().each([&](const Thing&, const Position& pos, const StackCount& stack) {
+        CHECK(sim.zones().zoneAt(cellOf(pos)) != kNoZone);
+        CHECK(stack.count <= 75);
+        CHECK(sim.things().itemsAt(cellOf(pos)).size() == 1);
+        onStockpile += stack.count;
+        ++stacks;
     });
     CHECK(onStockpile == 150);
+    CHECK(stacks < 150);  // they were put together
 }
 
 TEST_CASE("Hauling: a carried item is off the map until it is put down") {

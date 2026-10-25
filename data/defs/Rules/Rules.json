@@ -37,6 +37,14 @@
     "ours": ["protagonistPartHitPointsFactor", "innerInjuryAlsoHurtsOuter"]
   },
   {
+    "defName": "JobRules", "source": "Rim3D",
+    "defaultWorkPriority": 3,
+    "idleSeconds": 60,
+    "avoidFailedTargetSeconds": 600,
+    "maxRepaths": 5,
+    "ours": ["idleSeconds", "avoidFailedTargetSeconds", "maxRepaths"]
+  },
+  {
     "defName": "PawnGenRules", "source": "Rim3D",
     "adultAgeMin": 18,
     "ageGenerationCurve": [[14, 0], [16, 100], [50, 100], [60, 30], [70, 18], [80, 10], [90, 3], [100, 0]],

@@ -18,9 +18,21 @@ const char* commandName(const Command& command) {
                 return "DestroyThing";
             } else if constexpr (std::is_same_v<Type, DamagePawnCommand>) {
                 return "DamagePawn";
-            } else {
-                static_assert(std::is_same_v<Type, TendPawnCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, TendPawnCommand>) {
                 return "TendPawn";
+            } else if constexpr (std::is_same_v<Type, SetWorkPriorityCommand>) {
+                return "SetWorkPriority";
+            } else if constexpr (std::is_same_v<Type, CreateStockpileCommand>) {
+                return "CreateStockpile";
+            } else if constexpr (std::is_same_v<Type, RemoveZoneCellsCommand>) {
+                return "RemoveZoneCells";
+            } else if constexpr (std::is_same_v<Type, SetStockpilePriorityCommand>) {
+                return "SetStockpilePriority";
+            } else if constexpr (std::is_same_v<Type, SetStockpileAllowedCommand>) {
+                return "SetStockpileAllowed";
+            } else {
+                static_assert(std::is_same_v<Type, OrderHaulCommand>, "name every command type");
+                return "OrderHaul";
             }
         },
         command);
@@ -37,6 +49,8 @@ const char* eventTypeName(EventType type) {
         case EventType::PawnDowned: return "PawnDowned";
         case EventType::PawnGotUp: return "PawnGotUp";
         case EventType::PawnDied: return "PawnDied";
+        case EventType::JobStarted: return "JobStarted";
+        case EventType::JobEnded: return "JobEnded";
         case EventType::PawnAction: return "PawnAction";
     }
     return "?";

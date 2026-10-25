@@ -1,6 +1,7 @@
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Jobs.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
@@ -472,11 +473,14 @@ TEST_CASE("Health: a downed or dead hauler drops its job, and the others carry o
     CHECK(healthTestHit(*sim, victim, "Blunt", 9.0f, "brain"));  // consciousness 10%
     healthTestRun(*sim, 1);
     CHECK(sim->health().incapacitated(victim));
+    CHECK(sim->things().registry().get<Worker>(victim).job.type == JobType::None);
+    CHECK_FALSE(sim->things().registry().all_of<Carrying>(victim));
     const Position where = sim->things().registry().get<Position>(victim);
     healthTestRun(*sim, 600);
     const Position later = sim->things().registry().get<Position>(victim);
     CHECK(later.x == where.x);
     CHECK(later.y == where.y);
+    CHECK(sim->things().registry().get<Worker>(victim).job.type == JobType::None);
     // Nothing it was going for stays reserved: the others finish all the items.
     healthTestRun(*sim, 30000);
     CHECK(sim->stats().hauls > haulsBefore);

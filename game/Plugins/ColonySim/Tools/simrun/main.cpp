@@ -15,7 +15,8 @@
 // overrides). --record writes what this run did as a replay, with its state hashes.
 // --check makes it exit with 1 if any job or path search failed.
 // Defs load from --data (default: the repo's data folder). The hauling test needs the Things defs
-// Human and Steel, which data/defs/Things provides.
+// Human and Steel and the WorkTypes def Hauling, which data/defs provides. Its pawns haul items
+// scattered over the map to a stockpile zone in the middle through the job system (C1).
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Cover.h"
 #include "ColonySim/Defs.h"
@@ -28,6 +29,7 @@
 #include "ColonySim/ThreatMap.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
+#include "ColonySim/Zones.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
@@ -162,12 +164,18 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
             }
         }
     }
+    // Stockpile zones in pale blue, under the items stored in them.
+    for (const colony::StockpileZone& zone : sim.zones().stockpiles()) {
+        for (const colony::CellPos& c : zone.cells) {
+            mark(colony::Position{static_cast<float>(c.x), static_cast<float>(c.y), 0}, 150, 190, 230);
+        }
+    }
     const entt::registry& reg = sim.things().registry();
     for (const colony::ThingCategory category : {colony::ThingCategory::Item, colony::ThingCategory::Pawn}) {
         reg.view<const colony::Thing, const colony::Position>().each(
             [&](const colony::Thing& thing, const colony::Position& pos) {
-                if (thing.category != category || sim.stockpileCell() == colony::cellOf(pos)) {
-                    return;  // stored items pile up on the stockpile; leave it showing the ground
+                if (thing.category != category) {
+                    return;
                 }
                 if (category == colony::ThingCategory::Item) {
                     mark(pos, 255, 220, 0);

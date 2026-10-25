@@ -3,6 +3,7 @@
 #include "ColonySim/Api.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
+#include "ColonySim/Zones.h"
 
 #include <cstdint>
 #include <string>
@@ -24,7 +25,7 @@ struct SpawnThingCommand {
     Rot4 rot = Rot4::North;
 };
 
-// Dev command: destroys a thing. Fails if it no longer exists or a job is using it.
+// Dev command: destroys a thing. Fails if it no longer exists. Jobs using it end or fail.
 struct DestroyThingCommand {
     Entity thing = kNoEntity;
 };
@@ -48,7 +49,51 @@ struct TendPawnCommand {
     float quality = 1.0f;
 };
 
-using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand>;
+
+// Work tab: sets a pawn's priority for a work type (a WorkTypes defName): 0 off, 1 first to 4 last.
+// Fails for a pawn that doesn't work, an unknown work type, or work the pawn can never do.
+struct SetWorkPriorityCommand {
+    Entity pawn = kNoEntity;
+    std::string workType;
+    int priority = 3;
+};
+
+// Makes a stockpile zone of the cells in `area` that can hold one (walkable, in no zone yet).
+// Its id is the next zone id: 1, 2, 3... in the order zones are made. Fails if no cell qualifies.
+struct CreateStockpileCommand {
+    CellRect area;
+    StoragePriority priority = StoragePriority::Normal;
+};
+
+// Takes the cells in `area` out of every zone; zones left empty are deleted. Fails if no cell was
+// in a zone.
+struct RemoveZoneCellsCommand {
+    CellRect area;
+};
+
+// Fails for an unknown zone or the Unstored priority.
+struct SetStockpilePriorityCommand {
+    ZoneId zone = kNoZone;
+    StoragePriority priority = StoragePriority::Normal;
+};
+
+// Lets a stockpile take an item def (a Things defName), or not.
+struct SetStockpileAllowedCommand {
+    ZoneId zone = kNoZone;
+    std::string def;
+    bool allowed = true;
+};
+
+// A player order, RimWorld's "prioritize hauling": the pawn drops what it is doing and hauls this
+// item to the best stockpile. Fails if it can't (unreachable, no room, another pawn has it).
+struct OrderHaulCommand {
+    Entity pawn = kNoEntity;
+    Entity thing = kNoEntity;
+};
+
+using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
+                             SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
+                             SetStockpilePriorityCommand, SetStockpileAllowedCommand, OrderHaulCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

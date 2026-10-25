@@ -28,8 +28,7 @@ read-only snapshot; every session can be saved as a replay file and played back 
 (`docs/design/bridge.md`). Since S3 paths are hierarchical: region route, then cell A\* inside that
 corridor, asked for through a queue with a work budget per step (`sim.pathfinder().request`, an
 answer the next step at the earliest); a long 1 km search costs about 1,500 cells instead of
-34,000 (`docs/design/pathfinding.md`). The Stage 0 hauling job (`Sim.cpp`, `HaulJob.h`) is still a
-placeholder for C1. Since F3 buildings and ground have heights, so the
+34,000 (`docs/design/pathfinding.md`). Since F3 buildings and ground have heights, so the
 sim can say how hidden a pawn is from each of eight sides (`Map::cover()`), whether one pawn can see
 another (`lineOfSight`, with standing, crouching and prone) and which ground a faction's enemies
 can shoot at (`Sim::threatMap`); `docs/design/cover.md`. Since S6 the whole game state saves to
@@ -52,6 +51,19 @@ healing and tending (`sim.health().applyDamage`, the dev commands `DamagePawn` a
 (one lost leg is 50% moving), see `starting-data.md`. The protagonist from the Crashlanded start has 2x
 part hit points. Not built yet: scars, infections, diseases, medicine items and the doctor job.
 
+Since C1 pawns work through a job system like RimWorld's (`docs/design/jobs.md`): a think list
+(work, then idle; emergencies, defense, needs and schedule slot in ahead of work later), the 20 work
+types from the data in Work tab order with priorities 1 to 4 per pawn (`SetWorkPriority`; colonists
+can't do the work their backstories and traits rule out), work scanners that take the nearest target
+and skip ones nobody can reach, reservations so two pawns never go for the same thing, and jobs as
+steps with fail checks (a pawn that fails remembers the target for 10 minutes). Stockpile zones
+replace the placeholder stockpile: priorities Low to Critical, a filter, one stack per cell, better
+stockpiles pull from worse ones (`CreateStockpile`, `RemoveZoneCells`, `SetStockpilePriority`,
+`SetStockpileAllowed`), and `OrderHaul` is "prioritize hauling". Hauling is the first job on it;
+items stack up to their stack limit. A downed pawn drops its job and what it carries. Events
+`JobStarted`/`JobEnded`, and the snapshot shows each pawn's job, load and the zones. Save format 6:
+**saves from before C1 (U12's quicksaves too) no longer load** (`docs/decisions/0005`).
+
 Since D3 the game has real starting data in `data/defs/`, written by hand with RimWorld's numbers
 from the RimWorld wiki (there is no RimWorld install to import from; `docs/decisions/0003`):
 terrain fertility, wild plants and the temperate forest, basic items, the Human, skills, work
@@ -69,7 +81,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-17 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1). Tick tasks in `docs/plans/stage-1.md` as they merge.
+18 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -110,12 +122,17 @@ wiki; check them when a task leans on them.
 
 Wave 5: ~~**S4** smooth movement~~ done (`docs/design/movement.md`; save format 3; the hauling
 placeholder asks for a new path when a pawn gives up a walk; path *choice* still ignores slopes and
-sand, the doc says why). **C1** job system (cloud, Opus high) is open: its work types and skills are
-in `data/defs/`. ~~**U5** pawns with animation by distance~~ done (PC Unreal; smoke test `pawns`;
+sand, the doc says why). ~~**C1** job system~~ done (`docs/design/jobs.md`; save format 6; new jobs add a
+`JobType`, their steps and a `WorkGiver`, the doc says how). ~~**U5** pawns with animation by distance~~ done (PC Unreal; smoke test `pawns`;
 `docs/design/pawns.md`; the sim's new `PawnAction` event, which C1's jobs should send for their
 actions too). ~~**U6** overseer camera and selection~~ done (PC Unreal;
 smoke test `overseer`; `docs/design/overseer.md`). **U3** terrain and plants (PC Unreal, Sonnet high)
 needs C2 as well.
+
+Wave 6, open now that C1 is in: **C4** building (cloud, Sonnet high), **C6** food, rest and
+schedules (cloud, Sonnet high), **F2** guns and hitboxes (cloud, Opus high); **C3** mining, chopping
+and harvesting (cloud, Sonnet high) once C2 is in. On the PC, **U9** and **A3** need only done tasks.
+U6's work tab and U9's colonist panel can now read `sim.jobs()` (work types, priorities).
 
 ## Waiting on sneed
 
