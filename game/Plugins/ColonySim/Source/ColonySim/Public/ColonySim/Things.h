@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace colony {
@@ -69,12 +70,40 @@ struct HitPoints {
     int max = 0;
 };
 
-// Pawns. Speed from the def's `stats.moveSpeed` (metres per game second, converted by the
-// importer). `path` is the cell route being walked; `next` the index of the next cell in it.
+// Pawns. `metresPerStep` is the def's `stats.moveSpeed` (metres per game second, converted by the
+// importer): the speed on flat ground with no path cost. `path` is the route being walked, the
+// waypoints left after `smoothPath`; `next` the index of the waypoint being walked to, and
+// (`fromX`, `fromY`) where the line to it started. The sim's movement system moves the pawn along
+// it (docs/design/movement.md); a pawn whose `next` has reached the end of `path` has arrived, or
+// has given up (`gaveUp`) after being held up for too long.
 struct Mover {
     float metresPerStep = 0.0f;
     std::vector<CellPos> path;
     size_t next = 0;
+    float fromX = 0.0f;
+    float fromY = 0.0f;
+    // Metres per step right now. Unreal reads it to turn and animate the pawn.
+    float vx = 0.0f;
+    float vy = 0.0f;
+    // Steps in a row spent wanting to walk but held back (by pawns or walls), and steps left of
+    // walking through other pawns after that went on too long (the fix for two pawns meeting in a
+    // one-cell corridor). `heldSteps` keeps counting through that, until the pawn gives up.
+    uint16_t blockedSteps = 0;
+    uint16_t ghostSteps = 0;
+    uint16_t heldSteps = 0;
+    bool gaveUp = false;
+
+    bool arrived() const { return next >= path.size(); }
+    // Sets off along `route` (cells after the one the pawn is in) from where the pawn stands.
+    void walkTo(float x, float y, std::vector<CellPos> route) {
+        path = std::move(route);
+        next = 0;
+        fromX = x;
+        fromY = y;
+        blockedSteps = 0;
+        heldSteps = 0;
+        gaveUp = false;
+    }
 };
 
 // Owns the registry of every thing and keeps the map's building layer in step with it.

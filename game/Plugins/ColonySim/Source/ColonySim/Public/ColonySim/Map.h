@@ -67,6 +67,10 @@ public:
     // Ground height in metres. The cell must be in bounds.
     float groundHeight(CellPos c) const { return groundHeight_[static_cast<size_t>(index(c))]; }
     Terrain terrain(CellPos c) const { return terrain_[static_cast<size_t>(index(c))]; }
+    // Ground height in metres at any point, interpolated between the heights of the four grid
+    // corners around it. The corner (x, y) is the point x metres by y metres, which is how the
+    // terrain mesh is drawn, so pawns stand on the surface the player sees. Clamped to the map.
+    float heightAt(float x, float y) const;
     // Ground-column shorthands for code that only reads the ground surface (the terrain mesh).
     float groundHeight(int x, int y) const { return groundHeight(CellPos{x, y, 0}); }
     Terrain terrain(int x, int y) const { return terrain(CellPos{x, y, 0}); }

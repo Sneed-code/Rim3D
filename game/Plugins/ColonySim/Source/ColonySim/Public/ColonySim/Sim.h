@@ -23,6 +23,7 @@
 namespace colony {
 
 class DefDatabase;
+class MovementSystem;
 class Regions;
 class Things;
 struct Snapshot;
@@ -44,6 +45,7 @@ struct SimSettings {
 struct SimStats {
     uint64_t hauls = 0;
     uint64_t failedJobs = 0;
+    uint64_t repaths = 0;  // paths asked for again because a pawn gave up on its walk
 };
 
 // The state hash after a step, recorded every SimSettings::checkpointEvery game seconds.
@@ -134,6 +136,7 @@ private:
     Map map_;
     Pathfinder pathfinder_;
     std::unique_ptr<Things> things_;
+    std::unique_ptr<MovementSystem> movement_;
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
     Rng rng_;

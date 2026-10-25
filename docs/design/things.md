@@ -29,7 +29,7 @@ layer in step with it; `Sim::things()` gives access. Each thing is made from a d
 | every thing | `Thing` (def id, category) | `category`: `Item`, `Building` or `Pawn` |
 | `Item` | `StackCount`, `HitPoints` if the def has them | `stackLimit` (1 if absent), `stats.maxHitPoints` |
 | `Building` | `Footprint`, `HitPoints` | `size` `[x, z]` (1x1 if absent), `passability` (`Impassable` blocks movement), `thingClass` (`Building_Door` makes a door), `stats.maxHitPoints` |
-| `Pawn` | `Mover` (speed, path) | `stats.moveSpeed`, metres per game second (the importer converts it); 4 m/s at 1x if absent |
+| `Pawn` | `Mover` (speed, route, velocity; [movement.md](movement.md)) | `stats.moveSpeed`, metres per game second (the importer converts it); 4 m/s at 1x if absent |
 
 Plants are not things: they are a grid layer (task C2), because a 1 km map holds hundreds of
 thousands of them. Projectiles and corpses come with combat (F2) and health (F1). Any other

@@ -34,7 +34,7 @@ constexpr char kSaveMagic[8] = {'R', 'I', 'M', '3', 'D', 'S', 'A', 'V'};
 constexpr size_t kSaveMagicSize = sizeof kSaveMagic;
 // Bump when the layout below changes, and keep reading the old versions (the archive's
 // version() says which one a file is). Changing it needs a line in docs/design/saves.md.
-constexpr uint32_t kSaveFormatVersion = 2;  // 2: S3's path queue, pathBudget, a hauler's path ticket
+constexpr uint32_t kSaveFormatVersion = 3;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity
 constexpr const char* kSaveFormatName = "rim3d-save";
 constexpr const char* kSaveThingsKind = "Things";
 
@@ -96,6 +96,7 @@ struct SaveData {
     std::vector<uint32_t> haulers;
     uint64_t hauls = 0;
     uint64_t failedJobs = 0;
+    uint64_t repaths = 0;  // format 3 on
     std::vector<std::string> setupErrors;
     uint64_t submitted = 0;
     std::vector<SavePending> pending;
@@ -430,6 +431,20 @@ void saveEntity(Ar& ar, SaveEntity& e) {
         ar.value("next", next);
         m.next = static_cast<size_t>(next);
         ar.require(m.next <= m.path.size(), "the save file has a pawn walking past the end of its path");
+        if (ar.version() >= 3) {
+            ar.value("vx", m.vx);
+            ar.value("vy", m.vy);
+            ar.value("fromX", m.fromX);
+            ar.value("fromY", m.fromY);
+            ar.value("blockedSteps", m.blockedSteps);
+            ar.value("ghostSteps", m.ghostSteps);
+            ar.value("heldSteps", m.heldSteps);
+            ar.value("gaveUp", m.gaveUp);
+        } else if (e.position) {
+            // Older saves: a pawn mid-walk sets off along the line from where it stands.
+            m.fromX = e.position->x;
+            m.fromY = e.position->y;
+        }
     });
     ar.optional("haulJob", e.haulJob, [&](HaulJob& job) {
         ar.value("stage", job.stage);
@@ -438,7 +453,7 @@ void saveEntity(Ar& ar, SaveEntity& e) {
             ar.value("pathSlot", job.path.slot);
             ar.value("pathSerial", job.path.serial);
         }
-        ar.require(static_cast<int>(job.stage) <= static_cast<int>(HaulStage::WaitPathToStockpile),
+        ar.require(static_cast<int>(job.stage) <= static_cast<int>(HaulStage::WaitPathCarrying),
                    "the save file has a bad hauling stage");
     });
     ar.optional("haulReservedBy", e.haulReservedBy, [&](HaulReservedBy& r) { ar.value("pawn", r.pawn); });
@@ -478,6 +493,9 @@ void saveData(Ar& ar, SaveData& d) {
     ar.list("haulers", d.haulers, [&](uint32_t& id) { ar.value(nullptr, id); });
     ar.value("hauls", d.hauls);
     ar.value("failedJobs", d.failedJobs);
+    if (ar.version() >= 3) {
+        ar.value("repaths", d.repaths);
+    }
     ar.list("setupErrors", d.setupErrors, [&](std::string& s) { ar.text(nullptr, s); });
     ar.value("submitted", d.submitted);
     ar.list("pending", d.pending, [&](SavePending& p) {
@@ -596,6 +614,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     }
     d.hauls = sim.stats_.hauls;
     d.failedJobs = sim.stats_.failedJobs;
+    d.repaths = sim.stats_.repaths;
     d.setupErrors = sim.setupErrors_;
     d.submitted = sim.submitted_;
     for (const auto& [id, command] : sim.pending_) {
@@ -782,7 +801,8 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     }
     for (const Entity pawn : sim.haulers_) {
         const HaulJob& job = reg.get<HaulJob>(pawn);
-        const bool waiting = job.stage == HaulStage::WaitPathToItem || job.stage == HaulStage::WaitPathToStockpile;
+        const bool waiting = job.stage == HaulStage::WaitPathToItem || job.stage == HaulStage::WaitPathToStockpile ||
+                             job.stage == HaulStage::WaitPathCarrying;
         if (waiting && sim.pathfinder_.status(job.path) == PathStatus::Unknown) {
             error = "the save has a hauler waiting for a path nobody is looking for";
             return false;
@@ -804,6 +824,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     sim.stockpileCell_ = d.stockpile;
     sim.stats_.hauls = d.hauls;
     sim.stats_.failedJobs = d.failedJobs;
+    sim.stats_.repaths = d.repaths;
     sim.setupErrors_ = d.setupErrors;
     sim.submitted_ = d.submitted;
     sim.pending_.clear();

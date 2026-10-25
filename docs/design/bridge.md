@@ -65,8 +65,10 @@ letters) here. Events say what changed; positions and states are in the snapshot
 and a `ThingView` per thing on the map, sorted by id (`Snapshot::find` is a binary search).
 A `ThingView` has the id, def, category, position (metres on a level), rotation and footprint
 size for buildings, stack count for items, and hit points. Things off the map (a carried item) are
-not in it. Later tasks add what they draw and show: pawn velocity and path for motion matching
-(S4, U5), pawn info, the work tab, room stats.
+not in it. Since S4 it also has the ground height under the thing (`z`), a pawn's velocity (`vx`,
+`vy`, metres per step) and the route still ahead (`waypointCount` points from
+`Snapshot::waypoints[firstWaypoint]`), see [movement.md](movement.md). Later tasks add what they draw
+and show: pawn info, the work tab, room stats.
 
 Unreal reads only snapshots and events, never the registry or `Things.h`. That lets the sim move to
 its own thread later: it will write snapshots into a buffer that Unreal swaps, with no change to

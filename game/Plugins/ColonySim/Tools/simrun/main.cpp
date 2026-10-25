@@ -498,6 +498,16 @@ int main(int argc, char** argv) {
                 static_cast<unsigned long long>(paths.cellsExpanded),
                 static_cast<unsigned long long>(paths.maxWorkInStep), paths.maxQueue, paths.maxWaitSteps);
 
+    // Movement (docs/design/movement.md): walks that were given up and asked for again.
+    std::printf("{\"repaths\":%llu,\"hauls\":%llu}\n", static_cast<unsigned long long>(sim.stats().repaths),
+                static_cast<unsigned long long>(sim.stats().hauls));
+
+    // A walk held up for good is rare (it was a rock corner once); many mean the movement is broken.
+    if (options.check && sim.stats().repaths > 5 + sim.stats().hauls / 100) {
+        std::fprintf(stderr, "check failed: %llu repaths for %llu hauls\n",
+                     static_cast<unsigned long long>(sim.stats().repaths), static_cast<unsigned long long>(sim.stats().hauls));
+        return 1;
+    }
     if (options.check && (sim.stats().failedJobs > 0 || paths.failedSearches > 0)) {
         std::fprintf(stderr, "check failed: %llu failed jobs, %llu failed path searches\n",
                      static_cast<unsigned long long>(sim.stats().failedJobs),
