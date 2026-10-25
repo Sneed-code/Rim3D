@@ -4,6 +4,7 @@
 #include "ColonySim/Construction.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Designations.h"
+#include "ColonySim/Doors.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Jobs.h"
@@ -13,6 +14,7 @@
 #include "ColonySim/Movement.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Regions.h"
+#include "ColonySim/Rooms.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Zones.h"
@@ -66,6 +68,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
     if (!settings_.scenario.empty()) {
         startScenario();
     }
+    rooms_->update();
 }
 
 Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, EmptyStart)
@@ -90,6 +93,11 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     construction_ = std::make_unique<Construction>(map_, *things_, *plants_, *defs_, rng_, events_);
     needs_ = std::make_unique<NeedsSystem>(*things_, *health_, *defs_);
     mood_ = std::make_unique<MoodSystem>(*things_, *needs_, *defs_);
+    doorNumbers_ = DoorNumbers::read(*defs_);
+    movement_->setDoors(doorNumbers_);
+    pathfinder_.setDoorCost(doorNumbers_.pathCost);
+    rooms_ = std::make_unique<Rooms>(map_, *things_, *defs_);
+    mood_->setRooms(rooms_.get());
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
     combat_->setEventLog(&events_);
@@ -489,6 +497,7 @@ void Sim::step() {
     movement_->step(things_->registry(), map_);
     combat_->step(rng_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
+    rooms_->update();
     time_.seconds += 1;
     if (time_.seconds % kSecondsPerHour == 0) {
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
@@ -561,6 +570,9 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.sizeX = rect.sizeX;
             view.sizeY = rect.sizeY;
             view.markedForDeconstruct = reg.all_of<MarkedForDeconstruct>(entity);
+            if (const Door* door = reg.try_get<Door>(entity)) {
+                view.doorOpen = door->openFraction(doorNumbers_);
+            }
         }
         if (const ConstructionSite* site = reg.try_get<ConstructionSite>(entity)) {
             const CellRect rect = site->rect();
@@ -618,6 +630,27 @@ void Sim::writeSnapshot(Snapshot& out) const {
     }
     std::sort(out.things.begin(), out.things.end(),
               [](const ThingView& a, const ThingView& b) { return a.id < b.id; });
+
+    out.rooms.clear();
+    for (const Room& room : rooms_->rooms()) {
+        if (!room.enclosed()) {
+            continue;  // the outdoors has no stats worth showing
+        }
+        RoomView view;
+        view.id = room.id;
+        view.role = room.role;
+        view.cellCount = room.cellCount;
+        view.bounds = room.bounds;
+        view.outdoors = room.outdoors();
+        view.openRoofCount = room.openRoofCount;
+        view.beds = room.beds;
+        view.tables = room.tables;
+        view.chairs = room.chairs;
+        view.stoves = room.stoves;
+        out.rooms.push_back(view);
+    }
+    out.roofCells = rooms_->thinRoofCells();
+    out.roofChanges = rooms_->roofChanges();
     out.projectiles.clear();
     for (const auto [shot, p] : reg.view<const Projectile>().each()) {
         out.projectiles.push_back(ProjectileView{shot, p.def, p.x, p.y, p.z, p.vx, p.vy, p.vz, p.level});
@@ -675,7 +708,7 @@ uint64_t Sim::stateHash() const {
                             reg.all_of<Needs>(e),        reg.all_of<Schedule>(e),     reg.all_of<Bed>(e),
                             reg.all_of<ConstructionSite>(e), reg.all_of<BuiltOf>(e),
                             reg.all_of<MarkedForDeconstruct>(e),
-                            reg.all_of<Mood>(e)};
+                            reg.all_of<Mood>(e),         reg.all_of<Door>(e)};
         uint64_t mask = 0;
         for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
             mask |= has[bit] ? (uint64_t{1} << bit) : 0;
@@ -818,6 +851,11 @@ uint64_t Sim::stateHash() const {
             for (const ScheduleKind kind : schedule->hours) {
                 h.add(static_cast<int>(kind));
             }
+        }
+        if (const Door* door = reg.try_get<Door>(e)) {
+            h.add(static_cast<uint64_t>(door->progress));
+            h.add(static_cast<uint64_t>(door->hold));
+            h.add(door->open);
         }
         if (const Bed* bed = reg.try_get<Bed>(e)) {
             h.add(static_cast<uint64_t>(bed->owners.size()));

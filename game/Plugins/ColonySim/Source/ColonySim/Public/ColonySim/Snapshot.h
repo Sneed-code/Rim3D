@@ -7,6 +7,7 @@
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/JobType.h"
+#include "ColonySim/Rooms.h"
 #include "ColonySim/Zones.h"
 
 #include <cstdint>
@@ -66,6 +67,8 @@ struct ThingView {
     int materialsHave = 0;
     int materialsNeeded = 0;
     bool markedForDeconstruct = false;
+    // Doors: 0 closed to 1 open (it opens over about 0.75 real seconds while a pawn waits).
+    float doorOpen = 0.0f;
     // Pawns with needs (docs/design/needs.md): food and rest, 1 full to 0 empty, else -1; asleep
     // while lying down in a bed or on the ground.
     float food = -1.0f;
@@ -106,6 +109,21 @@ struct ZoneView {
     uint32_t cellCount = 0;
 };
 
+// An enclosed room (docs/design/rooms.md); the outdoors is not listed. Ids are good until the next
+// change to the walls.
+struct RoomView {
+    RoomId id = kNoRoom;
+    RoomRole role = RoomRole::None;
+    int cellCount = 0;
+    CellRect bounds;
+    bool outdoors = false;  // enclosed but with cells the roof does not reach
+    int openRoofCount = 0;
+    int beds = 0;
+    int tables = 0;
+    int chairs = 0;
+    int stoves = 0;
+};
+
 // One mark on a cell: mine here, cut this plant, harvest it (docs/design/mining.md).
 struct DesignationView {
     CellPos cell;
@@ -121,6 +139,12 @@ struct Snapshot {
     std::vector<ZoneView> zones;           // by id
     std::vector<CellPos> zoneCells;        // the zones' cells, see ZoneView
     std::vector<DesignationView> designations;  // every mark, in cell order
+    std::vector<RoomView> rooms;           // enclosed rooms, by id
+    // The cells with a thin (built) roof, in cell order; `roofChanges` goes up when the set
+    // changes, so Unreal rebuilds the roof only then. The mountain's thick roof is the rock itself
+    // (`Map::roof` says which).
+    std::vector<CellPos> roofCells;
+    uint64_t roofChanges = 0;
     std::vector<ProjectileView> projectiles;  // sorted by id
 
     // The thing with this id, or null if it is not on the map. Binary search.

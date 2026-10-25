@@ -13,6 +13,7 @@ namespace colony {
 
 class Cover;
 class Regions;
+class Rooms;
 
 // Placeholder terrain types until terrain defs are loaded from data/defs. Rock is solid until
 // it is mined (docs/design/mining.md), and leaves RoughStone: walkable, nothing grows on it.
@@ -22,6 +23,10 @@ enum class Terrain : uint8_t { Water, Sand, Soil, Rock, RoughStone };
 // How the building in a cell affects movement. A door can be walked through but is a region of
 // its own (docs/design/regions.md).
 enum class Passage : uint8_t { Open, Blocked, Door };
+
+// The roof over a cell. Rock is the mountain's own roof (thick) and stays when a cell is mined
+// out; Thin is the roof that Rooms puts over enclosed rooms (docs/design/rooms.md).
+enum class Roof : uint8_t { None, Thin, Thick };
 
 struct MapSettings {
     int width = 512;   // cells, 1 m each
@@ -87,12 +92,26 @@ public:
     // building that is neither.
     void setBuilding(CellPos c, Entity building, Passage passage, uint8_t obstacleDm = 0);
     void clearBuilding(CellPos c);
+    // Changes only the height for sight and cover of the building in a cell; a door does it when it
+    // opens (it stops blocking sight) and closes (docs/design/rooms.md).
+    void setObstacle(CellPos c, uint8_t obstacleDm);
     Passage passage(CellPos c) const { return passage_[static_cast<size_t>(index(c))]; }
     // How tall what stands in the cell is for sight and cover, in decimetres above the ground
     // (docs/design/cover.md). Rock is always the tallest value, 255, which blocks everything.
     uint8_t obstacleDm(CellPos c) const {
         return terrain(c) == Terrain::Rock ? uint8_t{255} : obstacle_[static_cast<size_t>(index(c))];
     }
+
+    // Raw passage layer of a level, indexed by `index`, for the pathfinder's inner loop.
+    const Passage* passageOnLevel(int) const { return passage_.data(); }
+    // Counts up every time a building is set or cleared in any cell, so a system that reads the
+    // building layer can tell its picture is stale (Rooms).
+    uint64_t buildingChanges() const { return buildingChanges_; }
+
+    // The roof over a cell. Thick over the rock the map was generated with (and over it for good,
+    // even once mined out), Thin where Rooms roofed an enclosed room, else None. The cell must be
+    // in bounds.
+    Roof roof(CellPos c) const { return roof_[static_cast<size_t>(index(c))]; }
 
     // Regions and reachability groups of the walkable cells (docs/design/regions.md).
     Regions& regions();
@@ -103,6 +122,8 @@ public:
     uint64_t contentHash() const;
 
 private:
+    friend class Rooms;  // the only writer of the thin roof
+
     void generate();
 
     int width_;
@@ -113,6 +134,8 @@ private:
     std::vector<Entity> building_;
     std::vector<Passage> passage_;
     std::vector<uint8_t> obstacle_;
+    std::vector<Roof> roof_;
+    uint64_t buildingChanges_ = 0;
     std::unique_ptr<Regions> regions_;
     std::unique_ptr<Cover> cover_;
 };

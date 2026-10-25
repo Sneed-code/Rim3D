@@ -33,7 +33,7 @@ listed in each def's `unverified`.
 | Ate a fine meal | +5 | memory, 0.6 days | `MealFine` |
 | Ate a lavish meal | +12 | memory, 0.6 days | `MealLavish` |
 | Slept on the ground | -4 | memory, 0.6 days | woke up from sleeping with no bed |
-| Slept outside | -6 | memory, 0.6 days | **not started by anything yet**: needs roofs and rooms (C5) |
+| Slept outside | -6 | memory, 0.6 days | woke up in a cell that is not indoors (`Rooms::indoors`: under a roof and not in an outdoor room, [rooms.md](rooms.md)); a bed outside gives this one only, the bare ground both |
 
 A **situation** exists while the state holds and is not stored. A **memory** is added from the step's
 `PawnAte` and `PawnWokeUp` events, lasts `durationDays` (`MoodRules.memoryDays`, 0.6, if the def has none)

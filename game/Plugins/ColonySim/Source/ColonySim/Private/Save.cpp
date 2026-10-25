@@ -4,10 +4,12 @@
 #include "ColonySim/Construction.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Doors.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Designations.h"
+#include "ColonySim/Rooms.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
@@ -42,13 +44,14 @@ constexpr char kSaveMagic[8] = {'R', 'I', 'M', '3', 'D', 'S', 'A', 'V'};
 constexpr size_t kSaveMagicSize = sizeof kSaveMagic;
 // Bump when the layout below changes, and keep reading the old versions (the archive's
 // version() says which one a file is). Changing it needs a line in docs/design/saves.md.
-constexpr uint32_t kSaveFormatVersion = 13;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
+constexpr uint32_t kSaveFormatVersion = 14;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
                                             // 4: C8's scenario and colonists; 5: F1's pawn health; 6: C1's jobs,
                                             // work priorities and zones; 7: U9's direct control; 8: C6's needs,
                                             // schedules, bed owners, the eating job's chair; 9: C2's plants;
                                             // 10: C4's building plans, frames and deconstruct marks, a job's
                                             // site and progress; 11: C9's mood; 12: F2's posture, gear, triggers
-                                            // and projectiles; 13: C3's rock layer, designations
+                                            // and projectiles;
+                                            // 13: C5's door states; 14: C3's rock layer, designations
 // Saves from before the job system (formats 1 to 5) can't be read: their hauling placeholder has
 // no counterpart in the job system (docs/design/saves.md).
 constexpr uint32_t kSaveOldestFormat = 6;
@@ -173,6 +176,7 @@ struct SaveEntity {
     std::optional<EquippedBy> equippedBy;
     std::optional<Shooter> shooter;
     std::optional<SaveProjectile> projectile;
+    std::optional<Door> door;          // format 13 on
 };
 
 // A stockpile zone, with its filter by defName.
@@ -528,7 +532,7 @@ void saveCommand(Ar& ar, Command& command) {
         }
         // A format older than the command that was added in it can't contain it.
         ar.require((type < 10 || ar.version() >= 7) && (type < 12 || ar.version() >= 8) &&
-                       (type < 14 || ar.version() >= 10) && (type < 17 || ar.version() >= 12) && (type < 20 || ar.version() >= 13),
+                       (type < 14 || ar.version() >= 10) && (type < 17 || ar.version() >= 12) && (type < 20 || ar.version() >= 14),
                    "the save file names a command this build doesn't know");
     }
     ar.note("name", commandName(command));
@@ -720,7 +724,7 @@ void saveEntity(Ar& ar, SaveEntity& e) {
         ar.value("job", job.type);
         ar.require(job.type <= JobType::HarvestPlant, "the save file has a bad job");
         ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
-        ar.require(job.type <= JobType::Deconstruct || ar.version() >= 13, "the save file has a bad job");
+        ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
         ar.value("thing", job.thing);
         ar.group("cell", [&] { saveCell(ar, job.cell); });
         ar.value("count", job.count);
@@ -895,6 +899,13 @@ void saveEntity(Ar& ar, SaveEntity& e) {
             ar.value("seed", sp.p.seed);
         });
     }
+    if (ar.version() >= 13) {
+        ar.optional("door", e.door, [&](Door& d) {
+            ar.value("progress", d.progress);
+            ar.value("hold", d.hold);
+            ar.value("open", d.open);
+        });
+    }
 }
 
 template <typename Ar>
@@ -993,7 +1004,7 @@ void saveData(Ar& ar, SaveData& d) {
     if (ar.version() >= 9) {
         ar.group("plants", [&] { savePlants(ar, d.plants); });
     }
-    if (ar.version() >= 13) {
+    if (ar.version() >= 14) {
         d.hasRock = true;
         ar.group("mineables", [&] { saveMineables(ar, d.mineables); });
         ar.group("designations", [&] { saveDesignations(ar, d.designations); });
@@ -1160,6 +1171,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const Needs* needs = reg.try_get<Needs>(e)) {
             out.needs = *needs;
+        }
+        if (const Door* door = reg.try_get<Door>(e)) {
+            out.door = *door;
         }
         if (const Mood* mood = reg.try_get<Mood>(e)) {
             out.mood = *mood;
@@ -1387,6 +1401,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.mood) {
             reg.emplace<Mood>(entity, *e.mood);
+        }
+        if (e.footprint && e.footprint->isDoor) {
+            reg.emplace<Door>(entity, e.door.value_or(Door{}));  // saves before format 12: closed
         }
         if (e.schedule) {
             reg.emplace<Schedule>(entity, *e.schedule);
@@ -1653,6 +1670,13 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     }
     sim.commandLog_ = std::move(d.commandLog);
     sim.checkpoints_ = std::move(d.checkpoints);
+    // A door that was open when the game was saved doesn't block sight.
+    for (const auto [entity, door, footprint] : reg.view<const Door, const Footprint>().each()) {
+        if (door.open) {
+            setDoorSight(sim.map_, footprint, true);
+        }
+    }
+    sim.rooms_->update();
     sim.events_.clear();
     return true;
 }

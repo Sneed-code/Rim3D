@@ -28,8 +28,10 @@ class StateHasher;
 // A search left half done at the end of a step goes on in the next one; if the map's regions
 // change in between, it starts again.
 //
-// For now every walkable cell costs the same, and cells with a blocking building can't be
-// walked. Terrain, slope, door and danger costs come later.
+// Every walkable cell costs the same, except a door cell: it costs `doorCost` extra metres (a
+// pawn waits for the door to open, docs/design/rooms.md), so a path takes a gap in the wall that
+// is a few metres longer in preference to a door. Cells with a blocking building can't be walked.
+// Terrain, slope and danger costs come later.
 
 // A request in the queue. Copy it freely; a ticket for a freed request is simply unknown.
 struct PathTicket {
@@ -94,6 +96,10 @@ public:
 
     // Not const: region queries rebuild dirty blocks.
     explicit Pathfinder(Map& map);
+
+    // Extra cost of walking through a door, in metres. Set once, before any request.
+    void setDoorCost(float metres) { doorCost_ = metres; }
+    float doorCost() const { return doorCost_; }
 
     // Queues a path search from `start` to `goal`. A request that can't succeed (different
     // reachability groups, off the map, another level) is Failed at once; start == goal is Found
@@ -174,6 +180,7 @@ private:
     CellPos start_;
     CellPos goal_;
     bool corridorOnly_ = true;
+    float doorCost_ = 3.5f;
 
     // Region passes, indexed by region id, plus the goal node at goalNode_. The route pass fills
     // them with the cost from the start and the entry point, the guide pass then with the cost to

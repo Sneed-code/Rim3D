@@ -38,6 +38,7 @@ constexpr float kMoveSeparationSpeed = 0.5f;      // of the pawn's speed, pushin
 constexpr float kMoveHeldBackShare = 0.3f;        // under this share of the wanted speed counts as held back
 constexpr int kMoveGhostAfter = 45;               // steps held back before walking through the others
 constexpr int kMoveGhostSteps = 30;               // and for how many steps
+constexpr float kMoveDoorLookAhead = 8.0f;        // steps ahead the pawn the player walks asks a door to open
 
 // Unit vectors every 22.5 degrees (cos, sin), counter-clockwise on a map with y up. Written out
 // so no platform's cos() and sin() can make two machines disagree.
@@ -81,7 +82,42 @@ float moveTimeToMeet(float px, float py, float vx, float vy, float reach) {
 
 }  // namespace
 
-void MovementSystem::step(entt::registry& reg, const Map& map) {
+void MovementSystem::step(entt::registry& reg, Map& map) {
+    doorRequests_.clear();
+    movePawns(reg, map);
+    updateDoors(reg, map);
+}
+
+// Each door opens while some pawn needs it and closes `closeDelaySteps` after the last one did.
+void MovementSystem::updateDoors(entt::registry& reg, Map& map) {
+    std::sort(doorRequests_.begin(), doorRequests_.end());
+    for (const auto [entity, door] : reg.view<Door>().each()) {
+        const bool wasOpen = door.open;
+        if (std::binary_search(doorRequests_.begin(), doorRequests_.end(), entity)) {
+            if (door.open) {
+                door.hold = static_cast<uint16_t>(doors_.closeDelaySteps);
+            } else if (++door.progress >= doors_.openSteps) {
+                door.open = true;
+                door.hold = static_cast<uint16_t>(doors_.closeDelaySteps);
+            }
+        } else if (door.open) {
+            if (door.hold > 0) {
+                --door.hold;
+            }
+            if (door.hold == 0) {
+                door.open = false;
+                door.progress = 0;
+            }
+        } else {
+            door.progress = 0;
+        }
+        if (door.open != wasOpen) {
+            setDoorSight(map, reg.get<Footprint>(entity), door.open);
+        }
+    }
+}
+
+void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
     heldUp_ = 0;
     agents_.clear();
     for (const auto [entity, pos, mover] : reg.view<const Position, const Mover>().each()) {
@@ -122,8 +158,19 @@ void MovementSystem::step(entt::registry& reg, const Map& map) {
     for (size_t index = 0; index < agents_.size(); ++index) {
         Agent& a = agents_[index];
         Mover& mover = reg.get<Mover>(a.entity);
+        // A pawn standing in a door keeps it open, even a downed one.
+        const CellPos here{static_cast<int>(std::floor(a.x)), static_cast<int>(std::floor(a.y)), a.level};
+        if (map.inBounds(here) && map.passage(here) == Passage::Door) {
+            requestDoor(map.buildingAt(here));
+        }
         if (reg.all_of<PlayerControl>(a.entity)) {
-            // The player's pawn: DirectMoveCommand moved it already. The others steer around it.
+            // The player's pawn: DirectMoveCommand moved it already. The others steer around it. It
+            // is never held up by a door, but it opens the one it is walking up to.
+            const CellPos ahead{static_cast<int>(std::floor(a.x + a.vx * kMoveDoorLookAhead)),
+                                static_cast<int>(std::floor(a.y + a.vy * kMoveDoorLookAhead)), a.level};
+            if (map.inBounds(ahead) && map.passage(ahead) == Passage::Door) {
+                requestDoor(map.buildingAt(ahead));
+            }
             a.newVx = a.vx;
             a.newVy = a.vy;
             continue;
@@ -385,6 +432,17 @@ void MovementSystem::step(entt::registry& reg, const Map& map) {
         if (bestVx * bestVx + bestVy * bestVy < 1.0e-10f) {
             bestVx = 0.0f;
             bestVy = 0.0f;
+        }
+        // A closed door's cell can't be entered: the pawn waits at its edge while the door opens.
+        const CellPos into{static_cast<int>(std::floor(a.x + bestVx)), static_cast<int>(std::floor(a.y + bestVy)), a.level};
+        if (!(into == here) && map.inBounds(into) && map.passage(into) == Passage::Door) {
+            const Entity door = map.buildingAt(into);
+            requestDoor(door);
+            const Door* state = reg.try_get<Door>(door);
+            if (state != nullptr && !state->open) {
+                bestVx = 0.0f;
+                bestVy = 0.0f;
+            }
         }
         a.newVx = bestVx;
         a.newVy = bestVy;

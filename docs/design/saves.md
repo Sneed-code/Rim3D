@@ -33,6 +33,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Pawn movement (format 3) | each pawn's velocity, line start, held-up counters (`Mover`), and the repath count |
 | Colonists (format 4) | each colonist's name, age, backstories, traits, skills and the scenario name in the settings ([colonists.md](colonists.md)) |
 | Needs, schedules and beds (format 8) | per pawn: food, rest, malnutrition, the next food search, the 24 schedule hours; per bed: its owners; per job: the chair it eats at ([needs.md](needs.md)) |
+| Doors (format 13) | per door: opening progress, steps before it closes, open. Rooms and roofs are rebuilt from the walls ([rooms.md](rooms.md)) |
 | Mood (format 11) | per pawn: level, break band, memories (thought **by `defName`**, fade time) ([mood.md](mood.md)) |
 | Pawn health (format 5) | per pawn: protagonist flag, rest, injuries (part, hediff **by `defName`**, severity, tend quality), lost parts, blood loss, dead and cause. Pain, bleeding, capacities and downed are worked out again on loading ([health.md](health.md)) |
 | Direct control (format 7) | which colonist the player controls (a flag on the pawn); the `ControlPawn` and `DirectMove` commands in the log ([protagonist.md](protagonist.md)) |
@@ -103,7 +104,7 @@ three is a bug the tests are built to catch:
    write the change here. Old saves keep loading until a decision says otherwise (decision 0005
    dropped formats 1 to 5 for the job system). Format 8 (C6) added needs, schedules, bed owners and
    a job's chair; format 9 (C2) added the plant layer; format 10 (C4) added building plans, built-of and deconstruct marks and a job's site and
-   progress. Format 11 (C9) added mood, format 12 (F2) combat. Format 6 to 11 saves still load, their pawns without needs, mood or posture, or their buildings without plans.
+   progress. Format 11 (C9) added mood, format 12 (F2) combat, format 13 (C5) door states. Format 6 to 12 saves still load, their pawns without needs, mood or posture, or their buildings without plans, their doors closed.
 
 Never store a `DefId` (or any number that depends on load order) in a save: use the `defName`.
 The same goes for region ids, which a loaded map numbers afresh: keep a cell, and never let a
@@ -178,7 +179,8 @@ sneed's whole job for a bug is: press F8, then send the folder (zip it, or drop 
   pawns without a mood.
 - **12** (F2): `Posture`, `Gear`, `EquippedBy`, `Shooter` and `Projectile` components (a pawn saved
   without a posture stands facing east). Commands 17 to 19 (`Equip`, `Shoot`, `SetStance`).
-- **13** (C3): the rock layer and the designations after the plants, job types `Mine`, `CutPlant`
+- **13** (C5): a `Door` component (progress, hold, open) on doors ([rooms.md](rooms.md)). Older files load with closed doors.
+- **14** (C3): the rock layer and the designations after the plants, job types `Mine`, `CutPlant`
   and `HarvestPlant`, commands 20 (`Designate`) and 21 (`CancelDesignations`)
   (`docs/design/mining.md`). Cells of rock in the generated ground with no record in the file were
   mined and load as rough stone. Older files load with the generated rock layer and no marks.
