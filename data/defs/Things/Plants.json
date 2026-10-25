@@ -17,13 +17,13 @@
   },
   {
     "defName": "Plant_TreeOak", "parent": "TreeBase", "label": "oak tree",
-    "visual": { "stem": { "shape": "cylinder", "radius": 0.28, "height": 2.6, "color": [0.30, 0.20, 0.12] }, "crown": { "shape": "sphere", "radius": 2.1, "height": 3.4, "lift": 1.8, "color": [0.16, 0.34, 0.12] }, "cullDistance": 1500 },
+    "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Plant_TreeOak.SM_Plant_TreeOak", "stem": { "shape": "cylinder", "radius": 0.28, "height": 2.6, "color": [0.30, 0.20, 0.12] }, "crown": { "shape": "sphere", "radius": 2.1, "height": 3.4, "lift": 1.8, "color": [0.16, 0.34, 0.12] }, "cullDistance": 1500 },
     "stats": { "beautyOutdoors": 2, "nutrition": 2 },
     "plant": { "growDays": 30, "harvestWork": 2016, "harvestYield": 46 }
   },
   {
     "defName": "Plant_TreePoplar", "parent": "TreeBase", "label": "poplar tree",
-    "visual": { "stem": { "shape": "cylinder", "radius": 0.18, "height": 2.0, "color": [0.40, 0.33, 0.24] }, "crown": { "shape": "sphere", "radius": 0.95, "height": 4.6, "lift": 1.4, "color": [0.30, 0.45, 0.14] }, "cullDistance": 1500 },
+    "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Plant_TreePoplar.SM_Plant_TreePoplar", "stem": { "shape": "cylinder", "radius": 0.18, "height": 2.0, "color": [0.40, 0.33, 0.24] }, "crown": { "shape": "sphere", "radius": 0.95, "height": 4.6, "lift": 1.4, "color": [0.30, 0.45, 0.14] }, "cullDistance": 1500 },
     "stats": { "beautyOutdoors": 1, "nutrition": 1.5 },
     "plant": { "growDays": 15.05, "harvestWork": 1152, "harvestYield": 27 }
   },
@@ -41,7 +41,7 @@
   },
   {
     "defName": "Plant_Bush", "parent": "PlantBase", "label": "bush", "pathCost": 30, "fillPercent": 0.2,
-    "visual": { "crown": { "shape": "sphere", "radius": 0.6, "height": 0.95, "lift": 0.05, "color": [0.20, 0.38, 0.14] }, "cullDistance": 400 },
+    "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Plant_Bush.SM_Plant_Bush", "crown": { "shape": "sphere", "radius": 0.6, "height": 0.95, "lift": 0.05, "color": [0.20, 0.38, 0.14] }, "cullDistance": 400 },
     "stats": { "maxHitPoints": 120, "flammability": 1.0, "beautyOutdoors": 1, "nutrition": 0.5 },
     "plant": { "growDays": 3, "harvestWork": 288, "fertilityMin": 0.7, "fertilitySensitivity": 0.5 }
   },
@@ -59,7 +59,7 @@
   },
   {
     "defName": "Plant_Berry", "parent": "PlantBase", "label": "berry bush", "pathCost": 30, "fillPercent": 0.2,
-    "visual": { "crown": { "shape": "sphere", "radius": 0.55, "height": 0.85, "lift": 0.05, "color": [0.18, 0.34, 0.16] }, "cullDistance": 400 },
+    "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Plant_Berry.SM_Plant_Berry", "crown": { "shape": "sphere", "radius": 0.55, "height": 0.85, "lift": 0.05, "color": [0.18, 0.34, 0.16] }, "cullDistance": 400 },
     "stats": { "maxHitPoints": 120, "flammability": 1.0, "beautyOutdoors": 1, "nutrition": 0.5 },
     "plant": {
       "growDays": 6, "harvestWork": 360, "harvestYield": 10, "harvestedThingDef": "RawBerries",

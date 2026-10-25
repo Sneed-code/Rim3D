@@ -15,7 +15,7 @@
     }
   },
   {
-    "defName": "WoodLog", "visual": {"color": [0.6, 0.42, 0.26], "pieces": 6, "layer": 0.14, "parts": [{"shape": "cylinder", "radius": 0.07, "height": 0.55, "at": [0, 0, -0.205], "color": [0.55, 0.38, 0.22], "rot": [90, 0, 0]}]}, "parent": "ItemBase", "label": "wood",
+    "defName": "WoodLog", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_WoodLog.SM_WoodLog", "color": [0.6, 0.42, 0.26], "pieces": 6, "layer": 0.14, "parts": [{"shape": "cylinder", "radius": 0.07, "height": 0.55, "at": [0, 0, -0.205], "color": [0.55, 0.38, 0.22], "rot": [90, 0, 0]}]}, "parent": "ItemBase", "label": "wood",
     "stats": { "maxHitPoints": 150, "marketValue": 1.2, "mass": 0.4, "beauty": -4, "deteriorationRate": 0.5 },
     "stuffProps": {
       "categories": ["Woody"],
@@ -44,7 +44,7 @@
     }
   },
   {
-    "defName": "RawBerries", "visual": {"pieces": 5, "layer": 0.1, "parts": [{"shape": "sphere", "radius": 0.06, "height": 0.11, "at": [-0.06, 0, 0], "color": [0.78, 0.12, 0.18]}, {"shape": "sphere", "radius": 0.06, "height": 0.11, "at": [0.06, 0.03, 0], "color": [0.7, 0.1, 0.2]}, {"shape": "sphere", "radius": 0.06, "height": 0.11, "at": [0, -0.06, 0], "color": [0.82, 0.16, 0.14]}]}, "parent": "ItemBase", "label": "berries",
+    "defName": "RawBerries", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_RawBerries.SM_RawBerries", "pieces": 5, "layer": 0.1, "parts": [{"shape": "sphere", "radius": 0.06, "height": 0.11, "at": [-0.06, 0, 0], "color": [0.78, 0.12, 0.18]}, {"shape": "sphere", "radius": 0.06, "height": 0.11, "at": [0.06, 0.03, 0], "color": [0.7, 0.1, 0.2]}, {"shape": "sphere", "radius": 0.06, "height": 0.11, "at": [0, -0.06, 0], "color": [0.82, 0.16, 0.14]}]}, "parent": "ItemBase", "label": "berries",
     "stats": {
       "maxHitPoints": 100, "marketValue": 1.2, "mass": 0.027, "flammability": 1.0, "deteriorationRate": 6,
       "nutrition": 0.05
@@ -80,12 +80,12 @@
     "comps": [{ "type": "Rottable", "daysToRotStart": 4 }]
   },
   {
-    "defName": "MealSimple", "parent": "MealBase", "label": "simple meal",
+    "defName": "MealSimple", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_MealSimple.SM_MealSimple" }, "parent": "MealBase", "label": "simple meal",
     "stats": { "marketValue": 15 },
     "ingestible": { "foodType": "Meal", "preferability": "MealSimple", "maxNumToIngestAtOnce": 1 }
   },
   {
-    "defName": "MealFine", "parent": "MealBase", "label": "fine meal",
+    "defName": "MealFine", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_MealFine.SM_MealFine" }, "parent": "MealBase", "label": "fine meal",
     "stats": { "marketValue": 20 },
     "ingestible": { "foodType": "Meal", "preferability": "MealFine", "maxNumToIngestAtOnce": 1 }
   }
