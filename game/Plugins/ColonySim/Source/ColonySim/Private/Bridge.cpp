@@ -155,6 +155,8 @@ const char* eventTypeName(EventType type) {
         case EventType::RecipeDone: return "RecipeDone";
         case EventType::PowerChanged: return "PowerChanged";
         case EventType::ShortCircuit: return "ShortCircuit";
+        case EventType::ItemSpoiled: return "ItemSpoiled";
+        case EventType::PawnPoisoned: return "PawnPoisoned";
         case EventType::ResearchDone: return "ResearchDone";
         case EventType::MeleeSwing: return "MeleeSwing";
         case EventType::MeleeHit: return "MeleeHit";

@@ -944,7 +944,7 @@ JobSystem::StepResult JobSystem::place(Entity pawn, Job& job, std::string& why) 
         // Onto the stack already there; what doesn't fit stays in the pawn's hands.
         const int put = std::min(room, count);
         const Entity stack = there.front();
-        reg.get<StackCount>(stack).count += put;
+        things_.addToStack(stack, carried, put);
         pawnDid(pawn, PawnAction::PutDown, stack);
         if (put == count) {
             reg.remove<Carrying>(pawn);
@@ -1108,7 +1108,7 @@ bool JobSystem::placeCarriedAt(Entity pawn, CellPos c) {
         pawnDid(pawn, PawnAction::PutDown, thing);
     } else {
         const Entity stack = there.front();
-        reg.get<StackCount>(stack).count += count;
+        things_.addToStack(stack, thing, count);
         pawnDid(pawn, PawnAction::PutDown, stack);
         things_.destroy(thing);
     }
