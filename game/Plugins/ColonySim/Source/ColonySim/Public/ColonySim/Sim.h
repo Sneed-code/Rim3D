@@ -78,7 +78,7 @@ public:
     void writeSnapshot(Snapshot& out) const;
 
     // Hash of the whole game state: same seed and commands, same hash. Every piece of sim state
-    // must go in it (docs/design/bridge.md). Hashes the whole map, so not for every step.
+    // must go in it (docs/design/bridge.md). Costs about a microsecond per thing.
     uint64_t stateHash() const;
     const std::vector<Checkpoint>& checkpoints() const { return checkpoints_; }
 
@@ -118,6 +118,7 @@ private:
     std::unique_ptr<Things> things_;
     GameTime time_;
     Rng rng_;
+    uint64_t groundHash_;  // map content hash before anything was built
     std::optional<CellPos> stockpileCell_;
     std::vector<Entity> haulers_;
     SimStats stats_;

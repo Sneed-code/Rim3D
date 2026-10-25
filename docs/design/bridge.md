@@ -74,11 +74,17 @@ what Unreal sees.
 
 ## State hash and checkpoints
 
-`Sim::stateHash()` is a 64-bit hash of the whole game state: time, the map's layers, the random
+`Sim::stateHash()` is a 64-bit hash of the whole game state: time, the map's ground, the random
 stream, the hauling placeholder's lists and stats, every entity id the registry has handed out
 (including the free list, which decides the next ids), and every component of every thing. Floats
 are hashed by their bits. Same seed and commands give the same hash; anything else almost surely
-doesn't. It hashes the whole map, so it is for checks, not for every step.
+doesn't.
+
+It must stay cheap, because checkpoints run inside a step and S3 holds every step under about
+3 ms on a 1 km map. Hashing a 1 km map's cells takes about 10 ms, so the ground (fixed after
+generation) is hashed once when the sim starts, and the building layer is covered by the
+buildings' footprints. A task that makes map cells change in play (mining, plants, roofs, terrain)
+keeps a running hash of its layer, updated when a cell changes, and adds that.
 
 **Every new piece of sim state must go into `stateHash()`** (and, after S6, into the save). A
 missing piece makes replays look fine when they aren't.

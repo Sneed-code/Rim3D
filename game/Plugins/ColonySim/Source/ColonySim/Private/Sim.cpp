@@ -89,7 +89,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
       pathfinder_(map_),
       things_(std::make_unique<Things>(map_, defs_)),
       time_(),
-      rng_(splitMix64(settings.seed ^ 0x7061776EULL)) {
+      rng_(splitMix64(settings.seed ^ 0x7061776EULL)),
+      groundHash_(map_.contentHash()) {
     things_->setEventLog(&events_);
     placeStockpileAndThings();
 }
@@ -335,7 +336,10 @@ void Sim::writeSnapshot(Snapshot& out) const {
 uint64_t Sim::stateHash() const {
     StateHasher h;
     h.add(time_.seconds);
-    h.add(map_.contentHash());
+    // The map's ground is fixed after generation, so its hash is taken once. Its building layer
+    // follows from the buildings' footprints, hashed below. Map layers that change in play
+    // (mining, plants, roofs) must keep their own running hash: hashing a 1 km map takes ~10 ms.
+    h.add(groundHash_);
     h.add(rng_.state());
     h.add(rng_.increment());
     h.add(stockpileCell_.has_value());
