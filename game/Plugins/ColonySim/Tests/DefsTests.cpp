@@ -187,7 +187,15 @@ TEST_CASE("defs: the real data folder loads") {
     if (snow == nullptr) { CHECK(false); return; }
     CHECK(snow->number("skyGlow") < 1.0);
     CHECK(snow->number("accuracyFactor") < 1.0);
-    CHECK(snow->number("moveSpeedFactor") == doctest::Approx(0.9));
+    CHECK(snow->number("moveSpeedFactor") == doctest::Approx(0.8));  // wiki: heavy snow 80%
+    CHECK(snow->number("snowRate") == doctest::Approx(1.2));
+    CHECK(snow->numberAt("temperatureRange", 1) == doctest::Approx(-0.5));
+    for (const char* name : {"TemperateForest", "BorealForest", "AridShrubland"}) {
+        // Wiki: the three biomes share one weather table (snow is held back by the temperature).
+        CHECK(db.find("Biomes", name)->number("weather.Clear") == doctest::Approx(18));
+        CHECK(db.find("Biomes", name)->number("weather.SnowGentle") == doctest::Approx(4));
+    }
+    CHECK(db.find("Rules", "ClimateRules") != nullptr);
     CHECK(db.find("Weathers", "WeatherBase") == nullptr);
     const Def* soil = db.find("Terrain", "Soil");
     CHECK(soil->number("fertility") == doctest::Approx(1.0));

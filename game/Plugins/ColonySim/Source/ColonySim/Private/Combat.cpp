@@ -8,6 +8,7 @@
 #include "ColonySim/Movement.h"
 #include "ColonySim/Talents.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Weather.h"
 
 #include <algorithm>
 #include <cmath>
@@ -548,7 +549,7 @@ int CombatSystem::shootingSkill(Entity pawn) const {
     return std::clamp(model_->defaultSkill, 0, 20);
 }
 
-float CombatSystem::spread(DefId weapon, int skill, float distance, bool player) const {
+float CombatSystem::spread(DefId weapon, int skill, float distance, bool player, float accuracyFactor) const {
     const CombatModel::Gun* gun = model_->gun(weapon);
     if (gun == nullptr) {
         return 0.0f;
@@ -568,12 +569,12 @@ float CombatSystem::spread(DefId weapon, int skill, float distance, bool player)
     };
     if (player) {
         const float d = model_->playerSpreadDistance;
-        const float hit = std::clamp(gunAccuracy(d), model_->minHitChance, 1.0f);
+        const float hit = std::clamp(gunAccuracy(d) * accuracyFactor, model_->minHitChance, 1.0f);
         return model_->radiusFor(hit) / d;
     }
     const float d = std::max(distance, 1.0f);
     const float shooter = combatPowDistance(model_->accuracyBySkill[std::clamp(skill, 0, 20)], d);
-    const float hit = std::clamp(shooter * gunAccuracy(d), model_->minHitChance, 1.0f);
+    const float hit = std::clamp(shooter * gunAccuracy(d) * accuracyFactor, model_->minHitChance, 1.0f);
     return model_->radiusFor(hit) / d;
 }
 
@@ -1036,8 +1037,10 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
             kickSide = kick->side * kDegreesToSlope;
         }
     }
+    const float accuracyFactor =
+        weather_ != nullptr ? weather_->accuracyAt(CellPos{static_cast<int>(std::floor(pos.x)), static_cast<int>(std::floor(pos.y)), pos.level}) : 1.0f;
     const float steady = talents_ != nullptr ? static_cast<float>(talents_->statFactor(pawn, "aimSpread")) : 1.0f;
-    fire(pawn, fx, fy, fz, spread(weaponDef, skill, distance, s.player) * steady + s.recoil, rng, kickUp, kickSide);
+    fire(pawn, fx, fy, fz, spread(weaponDef, skill, distance, s.player, accuracyFactor) * steady + s.recoil, rng, kickUp, kickSide);
     const float skillFactor = std::max(0.0f, 1.0f - model_->recoilSkillReduction * static_cast<float>(skill));
     s.recoil += gun->recoil * skillFactor;
     if (kicks) {

@@ -162,8 +162,7 @@ and pops up over sandbags or steps out past a wall's end to shoot, then ducks ba
 one or badly hurt it falls back. The F3 threat map isn't used (too slow to rebuild; fighters.md says
 why); 30 against 40 costs about 0.35 ms a step in the cloud. Snapshot `faction`, `drafted`,
 `fighting`, `fightTarget`, `fightSpot`, `fallingBack`; save format 15. **A new system that acts on
-pawns must skip pawns with `Fighter`** as the job system does. Not yet: squads, morale, raids and
-the alarm (F6); undrafted colonists ignore enemies.
+pawns must skip pawns with `Fighter`** as the job system does.
 
 Since F5 fighters aim like players (`docs/design/aiming.md`): Shooting skill sets a reaction time
 before shooting a new target (0.5 s at skill 0, 0.17 s at 20), how well a shot leads a moving target
@@ -174,14 +173,30 @@ Fighters sidestep slow projectiles they see coming in time (bullets are far too 
 and arrows later). Events `PawnAction` `Reload` and `Dodge`; snapshot `rounds`, `magazineSize`,
 `reloading`; save format 17.
 
+Since F6 there are raids and a colony defense (`docs/design/raids.md`): `StartRaidCommand` (dev until
+the narrator) buys pirates with RimWorld's raid points (from colony wealth and colonists, the wiki's
+curves; about 50 points for the Crashlanded start) among three gunner kinds (`data/defs/PawnKinds`,
+`Factions`), each a whole person with a gun and some flak, and walks them in at a map edge toward the
+colony. The squad advances, holds or falls back by comparing its strength (health, gun, armor) with
+the enemies it knows, and routs off the map after losing half its pawns or after 10 to 15 game hours.
+The colony alarm sounds by itself when a colonist spots an enemy (or `SoundAlarmCommand`) and stops
+when no enemy can fight any more; colonists then follow their defense role (`SetDefenseRoleCommand`):
+Defender (holds its defense spot, or a line 15 m from home toward the threat and fights freely once
+in contact), Shelter (goes to the room marked with `MarkShelterCommand`) or Keep working (until an
+enemy is within 20 m). Drafting still wins. Events `RaidArrived`, `SquadChanged`, `AlarmChanged`,
+`PawnLeftMap`; snapshot `alarm`, `squads` and per pawn `defenseRole`, `defending`, `sheltering`,
+`fleeing`, `squad`; save section `raids` and `fighters` 2. `simrun --raid POINTS --armed` plays a raid and reports it (CTest
+`simrun_raid`). Findings for F7: on open ground, crouched pawns are hit about 1 shot in 100 at 20 to
+30 m, so fights take long and downed colonists bleed out (no rescue or doctors yet).
+
 Since D3 the game has real starting data in `data/defs/`, written by hand with RimWorld's numbers
 from the RimWorld wiki (there is no RimWorld install to import from; `docs/decisions/0003`):
 terrain fertility, wild plants and the temperate forest, basic items, the Human, skills, work
 types, traits, our own backstories and names, the Crashlanded start, the Human body, capacities,
 injuries and blood loss (`docs/design/starting-data.md`). `check_defs.py` now also checks that
 defs name defs that exist. `simrun --pawns/--items` runs on the real data.
-Not written yet: sandbags, thoughts and raiders; the tasks that use them
-(C9, F6) add them the same way. C7 wrote the recipes (simple meal, four simple meals, fine meal) and `BillRules`. Guns, bullets, flak gear and hitboxes came with F2. C4 wrote the buildings (wall, door, bed, stool, three tables,
+Not written yet: sandbags and thoughts; the tasks that use them
+(C9) add them the same way. F6 wrote the raiders (the Pirate faction, three gunner pawn kinds, `RaidRules`). C7 wrote the recipes (simple meal, four simple meals, fine meal) and `BillRules`. Guns, bullets, flak gear and hitboxes came with F2. C4 wrote the buildings (wall, door, bed, stool, three tables,
 fueled stove).
 
 Since C4 colonists build (`docs/design/construction.md`): `PlaceBlueprintCommand{def, stuff, cell, rot}`
@@ -233,9 +248,11 @@ Solar panels follow E3's `lights().skyGlow()` and lamps that draw power glow onl
 a constant until E1 calls `setWind`, and **wood-fired generators run without fuel until C11 calls `setFuel`** (whoever merges second wires it).
 Since E3 every cell has a light level (`docs/design/light.md`, tests `LightTests`, `simrun --light FILE --hour H`): the sun by the hour of the day on cells with no roof, plus lamps (`glower`, with new `TorchLamp` and `Campfire` defs) falling off to their radius and stopped by walls; `sim.lights().lightAt(cell)`. Dark cells slow work (mining, plants, building, cooking) to 70% and walking to 85% at full dark. Rebuilt on change, not saved (no save format change). **The sim starts at midnight, so a test with the real defs that counts work steps needs a lamp beside the worker**; the tests' own small defs have no `LightRules` and no night.
 
+Since E1 the sim has a calendar, an outdoor temperature, weather and snow (`docs/design/weather.md`, tests `WeatherTests`, `simrun --days 60 --weather` prints a line a day): the 60-day year in four seasons (`SeasonChanged`), `sim.weather().outdoorTemperature()` from the biome's season means, a day cycle (coldest about 04:20, warmest about 16:20) and a slow random drift, and weather chosen by the biome's commonalities among the kinds that can happen at that temperature, lasting its `durationHours`, blending in over 1.6 hours (`WeatherChanged`, snapshot `weather`). Under the open sky rain, fog, storms and snow slow walking, cut the hit chance, shorten how far a fighter sees and dim the sun (`Lights::skyGlow`). `weather().wind()` drives wind turbines. Snow falls and melts hourly per cell (`weather().snowDepth(cell)`) and slows walking by depth. `SetWeatherCommand{weather, hours}` is the dev command. E1 checked D4's weather numbers against the wiki and fixed them (`weather.md` lists what). New save section `weather` (the sim and snapshot gained a Weather system; no save format change). **The weather is random from the first hours, so a test with the real defs that needs a clear sky or an exact walking speed sends `SetWeatherCommand{"Clear", 1000}` first** (`LightTests` and `PowerTests` do); the tests' own small defs have no climate and always clear weather.
+
 ## Stage 1 progress
 
-36 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7, U8, U11, U10). Tick tasks in `docs/plans/stage-1.md` as they merge.
+40 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7, U8, U11, U10, C10, A1, A2, F6); F7, G1 and G2 are left. Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Stage 2
 
@@ -256,6 +273,7 @@ Stage 2 done so far: **D7** medicine and disease data (`docs/design/medicine-dat
 **D5** animal data (15 animals, bodies, meat, leather, milk, eggs, wool: `docs/design/animals.md`).
 **E5** power (`docs/design/power.md`).
 **E3** light and darkness (`docs/design/light.md`).
+**E1** seasons, weather, outdoor temperature and snow (`docs/design/weather.md`).
 **D8** production data (work tables, stone blocks, melee weapons with tools; the meal recipes still list only the fueled stove, C14 adds the electric stove).
 **C18** recreation, comfort and outdoors (`docs/design/recreation.md`, tests `RecreationTests`, colony scenario): colonists have three new needs (`Joy` component; save section `recreation`). The standard schedule now has **Joy 19:00 to 21:59**; in Joy hours (or when bored with no work, Anything hours) they play horseshoes, chess or billiards, chat at a table, stroll or watch the clouds (`JobType::Recreate`), kinds wear in with tolerance. Comfort follows the bed or chair in use, Outdoors the roof. The D9 thoughts apply by stage (`MoodSystem::conditionValue` is where a task adds its own staged condition). Snapshot has `joy`, `comfort`, `outdoors`. Not yet: talk while chatting (C20), weather for the clouds (E1), the Unreal side (animations, a need bar; a U task).
 
@@ -348,8 +366,9 @@ schedules~~ done (`docs/design/needs.md`; save format 8), ~~**F2** guns and hitb
 and harvesting~~ done (`docs/design/mining.md`; save format 14). On the PC, ~~**U9**~~ and ~~**A3** seeded looks~~ are done (smoke test `looks`; save format 16).
 U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priorities).
 ~~**F4** fighter AI: where to stand~~ done (`docs/design/fighters.md`; save format 15), ~~**F5** fighter
-AI: aiming~~ done (`docs/design/aiming.md`; save format 17), so **F6** raid and defense (cloud, Opus high)
-is open once C8 is in (it is); with U9 and F2 in, ~~**U11** fights on screen~~ is done (PC; smoke test `fights`; `docs/design/fights.md`; it
+AI: aiming~~ done (`docs/design/aiming.md`; save format 17), ~~**F6** raid and defense~~ done
+(`docs/design/raids.md`; save section `raids`, `fighters` 2), so **F7** raid scenario tests and nightly soak (cloud, Sonnet
+high) is open; with U9 and F2 in, ~~**U11** fights on screen~~ is done (PC; smoke test `fights`; `docs/design/fights.md`; it
 binds R to reload; reload and sidestep animations are not drawn yet). ~~**C10** colony scenario test~~ done
 (`docs/design/colony-scenario.md`); ~~**U10** hands-on work~~ is done (PC; smoke test `handson`; `docs/design/handson.md`); ~~**A1** placeholder art~~ is done (PC; free Poly Haven meshes on the bed, door, table, stool, stove, logs, meals, berries, trees and bushes; `docs/design/building-draw.md`, `python tools/placeholder_art.py` then the `PlaceholderArt` commandlet). ~~**A2** terrain materials~~ is done (PC; free CC0 Poly Haven textures instead of Megascans, so nobody had to download anything: grass, sand, gravel and rock blended by terrain type and slope, placed by world position; `docs/design/terrain.md`, `python tools/terrain_textures.py` then the `TerrainMaterials` commandlet; swapping in Megascans later is a change in `assets/terrain_textures.json`). ~~**A6** placeholder art 2~~ is done (PC; 30 more free Poly Haven meshes on crops, work tables, power, climate, lamps and furniture, same list and commandlet as A1; walls, floors, solar panel, wind turbine and a few small things stay shapes). ~~**A5** clothes art~~ is done (PC; worn meshes for all 12 apparel defs by layer, made from the morphed hoodie and trousers plus a free CC0 Poly Haven hat, no downloads by sneed; `docs/design/looks.md`, `python tools/clothes_art.py` then the `ClothesArt` commandlet; not yet seen in game, U16 draws them). **G1** is what is left on the PC.
 

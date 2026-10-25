@@ -11,6 +11,7 @@
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Floors.h"
+#include "ColonySim/Raids.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Spoilage.h"
 #include "ColonySim/Temperature.h"
@@ -34,6 +35,7 @@
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Weather.h"
 #include "ColonySim/Zones.h"
 #include "MovementSystem.h"
 
@@ -111,6 +113,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       groundHash_(map_.contentHash()) {
     things_->setEventLog(&events_);
     health_->setEventLog(&events_);
+    weather_ = std::make_unique<Weather>(map_, *defs_, splitMix64(settings.seed ^ 0x636C696D617465ULL), "TemperateForest");
+    weather_->setEventLog(&events_);
+    movement_->setWeather(weather_.get());
+    combat_->setWeather(weather_.get());
     construction_ = std::make_unique<Construction>(map_, *things_, *plants_, *defs_, rng_, events_);
     needs_ = std::make_unique<NeedsSystem>(*things_, *health_, *defs_);
     mood_ = std::make_unique<MoodSystem>(*things_, *needs_, *defs_);
@@ -129,6 +135,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     lights_ = std::make_unique<Lights>(map_, *things_, *rooms_, *defs_, time_);
     // The sun for solar panels is the light grid's; a lamp that draws power glows only while it has it,
     // and the lamps are made again when that changes.
+    power_->setWind([this](const GameTime&) { return weather_->wind(); });
     power_->setSun([this](const GameTime&) { return static_cast<double>(lights_->skyGlow()); });
     power_->setOnChange([this] { lights_->markDirty(); });
     lights_->setActive([this](Entity building) { return power_->running(building); });
@@ -155,6 +162,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     spoilage_ = std::make_unique<SpoilageSystem>(map_, *things_, *temperature_, *roomStats_, *defs_,
                                                  splitMix64(settings.seed ^ 0x73706F696CULL));
     spoilage_->setEventLog(&events_);
+    lights_->setWeather(weather_.get());
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
     movement_->setSpeedFactor([this](Entity pawn) { return jobs_->loadSpeedFactor(pawn); });
@@ -174,7 +182,14 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     animals_ = std::make_unique<AnimalSystem>(*things_, map_, *plants_, *health_, *defs_, time_,
                                               splitMix64(settings.seed ^ 0x616E696D616C73ULL), "TemperateForest");
     animals_->setEventLog(&events_);
-    combat_->setBeforeDestroy([this](Entity thing) { jobs_->forget(thing); });
+    raids_ = std::make_unique<RaidSystem>(*things_, map_, *rooms_, *combat_, *health_, *jobs_, *fighters_, *defs_, time_, rng_);
+    raids_->setEventLog(&events_);
+    raids_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
+    combat_->setBeforeDestroy([this](Entity thing) {
+        jobs_->forget(thing);
+        raids_->forget(thing);
+    });
+    fighters_->setWeather(weather_.get());
     melee_ = std::make_unique<MeleeSystem>(*things_, map_, *combat_, *health_, *defs_, time_,
                                            splitMix64(settings.seed ^ 0x6D656C6565ULL));
     melee_->setEventLog(&events_);
@@ -372,6 +387,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             combat_->dropGear(destroy->thing);
             jobs_->forget(destroy->thing);
             fighters_->forget(destroy->thing);
+            raids_->forget(destroy->thing);
             things_->destroy(destroy->thing);
         }
     } else if (const auto* damage = std::get_if<DamagePawnCommand>(&command)) {
@@ -498,6 +514,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             event.def = defs_->idOf("Research", unlockResearch->project);
             event.message = unlockResearch->project;
             events_.push_back(std::move(event));
+        }
+    } else if (const auto* setWeather = std::get_if<SetWeatherCommand>(&command)) {
+        if (!weather_->force(setWeather->weather, static_cast<double>(setWeather->hours))) {
+            commandFailed(id, "there is no weather called " + setWeather->weather);
         }
     } else if (const auto* spendTalent = std::get_if<SpendTalentPointCommand>(&command)) {
         if (!talents_->spend(spendTalent->pawn, spendTalent->talent, error)) {
@@ -722,6 +742,24 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!filth_->add(addFilth->cell, addFilth->kind, addFilth->layers)) {
             commandFailed(id, "no filth could be added there");
         }
+    } else if (const auto* raid = std::get_if<StartRaidCommand>(&command)) {
+        if (!raids_->startRaid(raid->faction, raid->points, raid->edge, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* alarm = std::get_if<SoundAlarmCommand>(&command)) {
+        if (!raids_->soundAlarm(alarm->on, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* role = std::get_if<SetDefenseRoleCommand>(&command)) {
+        if (role->role > static_cast<uint8_t>(DefenseRole::KeepWorking)) {
+            commandFailed(id, "no such defense role");
+        } else if (!raids_->setRole(role->pawn, static_cast<DefenseRole>(role->role), role->hasSpot, role->spot, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* shelter = std::get_if<MarkShelterCommand>(&command)) {
+        if (!raids_->markShelter(shelter->cell, shelter->clear, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* setOutfit = std::get_if<SetOutfitCommand>(&command)) {
         if (!apparel_->setOutfit(setOutfit->pawn, setOutfit->outfit, error)) {
             commandFailed(id, error);
@@ -778,6 +816,7 @@ void Sim::step() {
     }
     const size_t eventsBefore = events_.size();
     jobs_->step();
+    raids_->step();
     {
         std::vector<Event> gained;
         talents_->awardJobXp(events_, eventsBefore, gained);
@@ -800,6 +839,8 @@ void Sim::step() {
     temperature_->step(time_.seconds);
     spoilage_->step(time_.seconds);
     time_.seconds += 1;
+    weather_->step(time_.seconds);
+    spoilage_->setOutdoorFactor(weather_->deteriorationFactor());
     if (time_.seconds % kSecondsPerHour == 0) {
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
         pruneDesignations();
@@ -809,51 +850,13 @@ void Sim::step() {
     }
 }
 
-namespace {
-
-// Smooth 0 to 1 between two edges, with no library maths so every platform agrees to the bit.
-float simSmooth(float x) {
-    x = x < 0.0f ? 0.0f : (x > 1.0f ? 1.0f : x);
-    return x * x * (3.0f - 2.0f * x);
-}
-
-constexpr const char* kSimClimateBiome = "TemperateForest";
-constexpr const char* kSimSeasonNames[4] = {"spring", "summer", "fall", "winter"};
-
-float simSeasonMean(const Def& biome, int season) {
-    return static_cast<float>(biome.number((std::string("climate.seasonMeanTemperature.") + kSimSeasonNames[season & 3]).c_str(), 10.0));
-}
-
-}  // namespace
-
-// E2's stand-in for E1: the biome's mean for the season (joined smoothly from the middle of one
-// season to the middle of the next) plus a daily swing that is coldest at 05:00 and warmest at 15:00.
+// The open air's temperature is E1's: the biome's season, the hour and a slow random drift.
 float Sim::outdoorTemperature() const {
     return outdoorOverride_ ? *outdoorOverride_ : outdoorTemperatureAt(time_.seconds);
 }
 
 float Sim::outdoorTemperatureAt(int64_t gameSeconds) const {
-    const Def* biome = defs_->find("Biomes", kSimClimateBiome);
-    if (biome == nullptr) {
-        return 15.0f;
-    }
-    const GameTime time{gameSeconds};
-    const int64_t day = time.dayOfYear();
-    const int64_t secondOfDay = gameSeconds % kSecondsPerDay;
-    // Position along the year in seasons, measured from the middle of spring.
-    const float inSeason = (static_cast<float>(day % kDaysPerSeason) + static_cast<float>(secondOfDay) / static_cast<float>(kSecondsPerDay) -
-                            static_cast<float>(kDaysPerSeason) * 0.5f) / static_cast<float>(kDaysPerSeason);
-    const int season = time.season();
-    const int from = inSeason < 0.0f ? season + 3 : season;
-    const int to = inSeason < 0.0f ? season : season + 1;
-    const float along = inSeason < 0.0f ? inSeason + 1.0f : inSeason;
-    const float seasonal = simSeasonMean(*biome, from) + (simSeasonMean(*biome, to) - simSeasonMean(*biome, from)) * along;
-    const float swing = static_cast<float>(biome->number("climate.dailySwing", 14.0));
-    const float hour = static_cast<float>(secondOfDay) / static_cast<float>(kSecondsPerHour);
-    // -1 at 05:00 up to +1 at 15:00, then back down by 05:00 the next day.
-    const float shape = hour >= 5.0f && hour < 15.0f ? -1.0f + 2.0f * simSmooth((hour - 5.0f) / 10.0f)
-                                                      : 1.0f - 2.0f * simSmooth((hour < 5.0f ? hour + 24.0f - 15.0f : hour - 15.0f) / 14.0f);
-    return seasonal + swing * 0.5f * shape;
+    return static_cast<float>(weather_->temperatureAt(gameSeconds));
 }
 
 void Sim::setOutdoorOverride(std::optional<float> celsius) {
@@ -863,14 +866,7 @@ void Sim::setOutdoorOverride(std::optional<float> celsius) {
 }
 
 float Sim::groundTemperature() const {
-    if (outdoorOverride_) {
-        return *outdoorOverride_;
-    }
-    const Def* biome = defs_->find("Biomes", kSimClimateBiome);
-    if (biome == nullptr) {
-        return 15.0f;
-    }
-    return (simSeasonMean(*biome, 0) + simSeasonMean(*biome, 1) + simSeasonMean(*biome, 2) + simSeasonMean(*biome, 3)) * 0.25f;
+    return outdoorOverride_ ? *outdoorOverride_ : static_cast<float>(weather_->yearMeanTemperature());
 }
 
 // Marks whose rock or plant is gone (it died of old age): taken off, so they don't pile up.
@@ -1113,6 +1109,15 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.fightTarget = fighter->target;
             view.fightSpot = fighter->hasSpot ? fighter->spot : cellOf(pos);
             view.fallingBack = fighter->fallingBack;
+            view.defending = fighter->defending;
+            view.sheltering = fighter->mode == FightMode::Shelter;
+            view.fleeing = fighter->mode == FightMode::Flee;
+        }
+        if (reg.all_of<Colonist>(entity) && view.faction == kPlayerFaction) {
+            view.defenseRole = static_cast<uint8_t>(raids_->roleOf(entity));
+        }
+        if (const Raider* raider = reg.try_get<Raider>(entity)) {
+            view.squad = raider->squad;
         }
         if (const Melee* melee = reg.try_get<Melee>(entity)) {
             view.meleePhase = melee->phase;
@@ -1124,6 +1129,14 @@ void Sim::writeSnapshot(Snapshot& out) const {
     }
     std::sort(out.things.begin(), out.things.end(),
               [](const ThingView& a, const ThingView& b) { return a.id < b.id; });
+
+    out.alarm = raids_->state().alarm;
+    out.alarmManual = raids_->state().manual;
+    out.squads.clear();
+    for (const Squad& squad : raids_->state().squads) {
+        out.squads.push_back(SquadView{squad.id, squad.side, static_cast<uint8_t>(squad.state),
+                                       static_cast<int>(squad.members.size()), squad.started, squad.target});
+    }
 
     out.rooms.clear();
     for (const Room& room : rooms_->rooms()) {
@@ -1172,6 +1185,24 @@ void Sim::writeSnapshot(Snapshot& out) const {
     }
     out.roofCells = rooms_->thinRoofCells();
     out.roofChanges = rooms_->roofChanges();
+    {
+        const WeatherEffects effects = weather_->effects();
+        WeatherView& w = out.weather;
+        w.year = static_cast<int>(time_.year());
+        w.dayOfYear = static_cast<int>(time_.dayOfYear());
+        w.season = time_.season();
+        w.temperature = static_cast<float>(weather_->outdoorTemperature());
+        w.weather = weather_->current();
+        w.previous = weather_->previous();
+        w.transition = weather_->transition();
+        w.skyGlow = effects.skyGlow;
+        w.rainRate = effects.rainRate;
+        w.snowRate = effects.snowRate;
+        w.wetness = effects.wetness;
+        w.snowChanges = weather_->snowChanges();
+        w.snowCover = static_cast<float>(weather_->snowCellCount()) /
+                      static_cast<float>(std::max(1, map_.width() * map_.height()));
+    }
     out.projectiles.clear();
     for (const auto [shot, p] : reg.view<const Projectile>().each()) {
         out.projectiles.push_back(ProjectileView{shot, p.def, p.x, p.y, p.z, p.vx, p.vy, p.vz, p.level});
@@ -1201,9 +1232,11 @@ uint64_t Sim::stateHash() const {
     h.add(stats_.failedJobs);
     h.add(stats_.repaths);
     h.add(plants_->hash());
+    h.add(weather_->hash());
     h.add(mineables_->hash());
     designations_->hashState(h);
     research_->hashState(h);
+    raids_->hashState(h);
     talents_->hashState(h);
     pathfinder_.hashState(h);
     zones_->hashState(h);
@@ -1481,6 +1514,7 @@ uint64_t Sim::stateHash() const {
         combat_->hashThing(e, h);
         fighters_->hashThing(e, h);
         animals_->hashThing(e, h);
+        raids_->hashThing(e, h);
         melee_->hashThing(e, h);
         apparel_->hashThing(e, h);
     }

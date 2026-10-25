@@ -42,9 +42,15 @@ enum class EventType : uint8_t {
     ItemSpoiled,     // food rotted away or an item wore out in the open (docs/design/spoilage.md)
     PawnPoisoned,    // a pawn ate a poisoned meal and got food poisoning
     ResearchDone,    // a research project was finished (docs/design/research.md)
+    RaidArrived,     // a raid walked in (docs/design/raids.md)
+    SquadChanged,    // a raid squad's morale changed
+    AlarmChanged,    // the colony alarm went on or off
+    PawnLeftMap,     // a pawn walked off the map and is gone (a ThingDestroyed follows)
     MeleeSwing,      // a pawn began a melee swing: the hit comes `amount` steps later (docs/design/melee.md)
     MeleeHit,        // the hit moment of a swing: `message` says "hit", "deflected", "blocked", "dodged" or "missed"
     ApparelDestroyed,  // a worn piece wore out or was shot to pieces: `thing` the wearer, `def` the piece's def (docs/design/apparel.md)
+    WeatherChanged,  // the weather began to change into another kind (docs/design/weather.md)
+    SeasonChanged,   // a new season began
     TalentPoint,     // the protagonist earned a talent point (docs/design/talents.md)
 };
 
@@ -119,6 +125,8 @@ struct Event {
     // ItemSpoiled: `thing` the item (it is destroyed right after; forget its id), `def` its def, `cell` where it
     // lay, `message` "rotted" or "weathered". PawnPoisoned: `thing` the pawn, `def` the meal's def, `target` the
     // meal, `cell` where the pawn stands.
+    // WeatherChanged: `def` the new Weathers def, `message` its label, `amount` the outdoor temperature.
+    // SeasonChanged: `message` the season's name, `amount` its number (0 spring to 3 winter).
     float amount = 0.0f;
     // PawnAction Roll: see there.
     // ShotFired: `thing` the shooter, `def` its gun's Things def, `target` the projectile, (x, y, z)
@@ -135,6 +143,13 @@ struct Event {
     // `thing` and `def`; `target` the pawn struck (or the one aimed at if none was), `hit` Pawn, Armor
     // (deflected), Building or None, `part` and `amount` as for ProjectileHit, (x, y, z) where the
     // strike ended. Health events follow a hit.
+    // RaidArrived: `squad` its id, `message` the Factions def, `count` its pawns, `amount` its raid
+    // points, `cell` where it walked in. SquadChanged: `squad`, `message` the new state ("Advance",
+    // "Hold", "FallBack", "Rout", or "gave up" for a rout because time ran out), `count` its pawns.
+    // AlarmChanged: `message` "on: why" or "off: why". PawnLeftMap: `thing` the pawn, `cell` where
+    // it left, `squad` its raid squad.
+    uint32_t squad = 0;
+    int count = 0;
 };
 
 COLONY_API const char* eventTypeName(EventType type);

@@ -12,11 +12,13 @@
 #include "ColonySim/Doors.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Raids.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Floors.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Plants.h"
+#include "ColonySim/Weather.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/RoomStats.h"
 #include "ColonySim/Rooms.h"
@@ -261,6 +263,8 @@ struct SaveEntity {
     std::optional<PowerPart> power;         // section "power"
     std::optional<SaveJoy> joy;             // section "recreation"
     std::optional<Animal> animal;           // section "animals"
+    std::optional<DefensePlan> defense;     // section "raids"
+    std::optional<Raider> raider;           // section "raids"
     std::optional<SaveSpoilage> spoilage;   // section "spoilage"
     std::optional<Melee> melee;             // section "melee" (F8)
     std::optional<SaveApparel> apparel;     // section "apparel" (format 20 on)
@@ -304,6 +308,19 @@ struct SaveDesignations {
 struct SaveFloor {
     uint32_t cell = 0;
     std::string def;  // Terrain defName
+};
+
+// The weather: which kinds it is, when it ends, its random stream, and the snow as parallel lists, one
+// entry per cell with snow in cell order (section "weather").
+struct SaveWeather {
+    std::string current;   // Weathers defNames, empty for none
+    std::string previous;
+    int64_t startedAt = 0;
+    int64_t endsAt = 0;
+    uint64_t rngState = 0;
+    uint64_t rngIncrement = 0;
+    std::vector<uint32_t> snowCells;  // cell index in the map
+    std::vector<uint32_t> snowDepth;  // hundredths of a percent
 };
 
 struct SavePending {
@@ -353,10 +370,13 @@ struct SaveData {
     RoomStatsState roomStats;
     int wildAnimals = 0;               // section "animals": SimSettings::wildAnimals
     AnimalSaved animals;               // section "animals": the system's own state
+    RaidState raids;                   // section "raids" (F6)
     std::vector<RoomTemperature> roomTemperatures;  // section "temperature" (E2)
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
     uint32_t nextOutfitId = 1;
     SpoilageState spoilageState;                    // section "spoilage" (C16)
+    bool hasWeather = false;           // the file has the weather section; older saves start it fresh
+    SaveWeather weather;
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -977,6 +997,20 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("thing", c.thing);
             } else if constexpr (std::is_same_v<Type, SetResearchCommand> || std::is_same_v<Type, UnlockResearchCommand>) {
                 ar.text("project", c.project);
+            } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
+                ar.text("faction", c.faction);
+                ar.value("points", c.points);
+                ar.value("edge", c.edge);
+            } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
+                ar.value("on", c.on);
+            } else if constexpr (std::is_same_v<Type, SetDefenseRoleCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.value("role", c.role);
+                ar.value("hasSpot", c.hasSpot);
+                ar.group("spot", [&] { saveCell(ar, c.spot); });
+            } else if constexpr (std::is_same_v<Type, MarkShelterCommand>) {
+                ar.group("cell", [&] { saveCell(ar, c.cell); });
+                ar.value("clear", c.clear);
             } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
                 auto* melee = &c;
                 ar.value("pawn", melee->pawn);
@@ -1009,6 +1043,10 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("pawn", c.pawn);
                 ar.value("dx", c.dx);
                 ar.value("dy", c.dy);
+            } else if constexpr (std::is_same_v<Type, SetWeatherCommand>) {
+                auto* setWeather = &c;
+                ar.text("weather", setWeather->weather);
+                ar.value("hours", setWeather->hours);
             } else if constexpr (std::is_same_v<Type, SpendTalentPointCommand>) {
                 ar.value("pawn", c.pawn);
                 ar.text("talent", c.talent);
@@ -1555,6 +1593,15 @@ void saveFighterPart(Ar& ar, Fighter& f) {
         ar.value("reactUntil", f.reactUntil);
         ar.value("dodgeUntil", f.dodgeUntil);
     }
+    if (ar.sectionVersion() >= 2) {  // F6: what the alarm or a raid has it do
+        ar.value("mode", f.mode);
+        ar.require(static_cast<int>(f.mode) <= static_cast<int>(FightMode::Flee), "the save file has a bad fighter mode");
+        ar.value("defending", f.defending);
+        ar.value("squad", f.squad);
+        ar.value("hasGoal", f.hasGoal);
+        ar.group("goal", [&] { saveCell(ar, f.goal); });
+        ar.value("retreat", f.retreat);
+    }
 
 }
 
@@ -1689,6 +1736,19 @@ void savePlants(Ar& ar, SavePlants& p) {
     ar.list("ageHours", p.ageHours, [&](uint32_t& v) { ar.value(nullptr, v); });
     ar.require(p.cells.size() == p.defIndex.size() && p.cells.size() == p.growth.size() && p.cells.size() == p.ageHours.size(),
                "the save file's plant lists don't match");
+}
+
+template <typename Ar>
+void saveWeather(Ar& ar, SaveWeather& w) {
+    ar.text("current", w.current);
+    ar.text("previous", w.previous);
+    ar.value("startedAt", w.startedAt);
+    ar.value("endsAt", w.endsAt);
+    ar.value("rngState", w.rngState);
+    ar.value("rngIncrement", w.rngIncrement);
+    ar.list("snowCells", w.snowCells, [&](uint32_t& v) { ar.value(nullptr, v); });
+    ar.list("snowDepth", w.snowDepth, [&](uint32_t& v) { ar.value(nullptr, v); });
+    ar.require(w.snowCells.size() == w.snowDepth.size(), "the save file's snow lists don't match");
 }
 
 template <typename Ar>
@@ -1827,6 +1887,42 @@ void saveLegacyData(Ar& ar, SaveData& d) {
         ar.group("mineables", [&] { saveMineables(ar, d.mineables); });
         ar.group("designations", [&] { saveDesignations(ar, d.designations); });
     }
+}
+
+template <typename Ar>
+void saveRaids(Ar& ar, RaidState& r) {
+    ar.list("factions", r.factions, [&](std::string& f) { ar.text(nullptr, f); });
+    ar.list("squads", r.squads, [&](Squad& s) {
+        ar.value("id", s.id);
+        ar.text("faction", s.faction);
+        ar.value("side", s.side);
+        ar.value("points", s.points);
+        ar.value("started", s.started);
+        ar.value("arrivedAt", s.arrivedAt);
+        ar.value("giveUpAt", s.giveUpAt);
+        ar.value("state", s.state);
+        ar.require(static_cast<int>(s.state) <= static_cast<int>(SquadState::Rout), "the save file has a bad squad state");
+        ar.value("gaveUp", s.gaveUp);
+        ar.group("entry", [&] { saveCell(ar, s.entry); });
+        ar.value("hasTarget", s.hasTarget);
+        ar.group("target", [&] { saveCell(ar, s.target); });
+        ar.value("nextThink", s.nextThink);
+        ar.list("members", s.members, [&](Entity& m) { ar.value(nullptr, m); });
+    });
+    ar.value("nextSquad", r.nextSquad);
+    ar.value("alarm", r.alarm);
+    ar.value("manual", r.manual);
+    ar.value("suppressed", r.suppressed);
+    ar.value("hasThreat", r.hasThreat);
+    ar.value("threatX", r.threatX);
+    ar.value("threatY", r.threatY);
+    ar.value("threatSeenAt", r.threatSeenAt);
+    ar.value("hasHome", r.hasHome);
+    ar.value("homeX", r.homeX);
+    ar.value("homeY", r.homeY);
+    ar.value("hasShelter", r.hasShelter);
+    ar.group("shelter", [&] { saveCell(ar, r.shelter); });
+    ar.value("nextAlarmThink", r.nextAlarmThink);
 }
 
 // ---- Sections (format 20 on) -----------------------------------------------------------------
@@ -2013,7 +2109,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("doors", 1, [&] {
         saveParts(ar, "door", e, &SaveEntity::door, [&](Door& door) { saveDoorPart(ar, door); });
     });
-    ar.section("fighters", 1, [&] {
+    ar.section("fighters", 2, [&] {
         saveParts(ar, "faction", e, &SaveEntity::faction, [&](Faction& f) { saveFactionPart(ar, f); });
         saveParts(ar, "fighter", e, &SaveEntity::fighter, [&](Fighter& f) { saveFighterPart(ar, f); });
     });
@@ -2062,6 +2158,19 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(t.celsius > -500.0f && t.celsius < 1000.0f, "the save file has an impossible room temperature");
         });
     });
+    ar.section("raids", 1, [&] {
+        saveRaids(ar, d.raids);
+        saveParts(ar, "defense", e, &SaveEntity::defense, [&](DefensePlan& p) {
+            ar.value("role", p.role);
+            ar.require(static_cast<int>(p.role) <= static_cast<int>(DefenseRole::KeepWorking), "the save file has a bad defense role");
+            ar.value("hasSpot", p.hasSpot);
+            ar.group("spot", [&] { saveCell(ar, p.spot); });
+        });
+        saveParts(ar, "raider", e, &SaveEntity::raider, [&](Raider& r) {
+            ar.value("squad", r.squad);
+            ar.text("kind", r.kind);
+        });
+    });
     ar.section("spoilage", 1, [&] {
         ar.value("rngState", d.spoilageState.rngState);
         ar.value("rngIncrement", d.spoilageState.rngIncrement);
@@ -2084,6 +2193,10 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("feel", 1, [&] {
         saveParts(ar, "kick", e, &SaveEntity::kick, [&](RecoilKick& k) { saveKickPart(ar, k); });
         saveParts(ar, "roll", e, &SaveEntity::roll, [&](DodgeRoll& r) { saveRollPart(ar, r); });
+    });
+    ar.section("weather", 1, [&] {
+        d.hasWeather = true;
+        saveWeather(ar, d.weather);
     });
     // New sections go here, at the end.
 }
@@ -2395,6 +2508,12 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const Magazine* magazine = reg.try_get<Magazine>(e)) {
             out.magazine = *magazine;
         }
+        if (const DefensePlan* plan = reg.try_get<DefensePlan>(e)) {
+            out.defense = *plan;
+        }
+        if (const Raider* raider = reg.try_get<Raider>(e)) {
+            out.raider = *raider;
+        }
         if (const RecoilKick* kick = reg.try_get<RecoilKick>(e)) {
             out.kick = *kick;
         }
@@ -2467,7 +2586,22 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.filth = sim.filth_->state();
     d.roomStats = sim.roomStats_->state();
     d.roomTemperatures = sim.temperature_->roomTemperatures();
+    d.raids = sim.raids_->state();
     d.spoilageState = sim.spoilage_->state();
+    {
+        const WeatherState state = sim.weather_->state();
+        const auto nameOf = [&](DefId def) { return def.valid() ? sim.defs_->get(def).defName() : std::string(); };
+        d.weather.current = nameOf(state.current);
+        d.weather.previous = nameOf(state.previous);
+        d.weather.startedAt = state.startedAt;
+        d.weather.endsAt = state.endsAt;
+        d.weather.rngState = state.rngState;
+        d.weather.rngIncrement = state.rngIncrement;
+        for (const WeatherSnowRecord& r : sim.weather_->snowRecords()) {
+            d.weather.snowCells.push_back(static_cast<uint32_t>(r.cell));
+            d.weather.snowDepth.push_back(r.depth);
+        }
+    }
     return d;
 }
 
@@ -2798,6 +2932,12 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.animal) {
             reg.emplace<Animal>(entity, *e.animal);
         }
+        if (e.defense) {
+            reg.emplace<DefensePlan>(entity, *e.defense);
+        }
+        if (e.raider) {
+            reg.emplace<Raider>(entity, *e.raider);
+        }
         if (e.spoilage) {
             Spoilage spoilage;
             spoilage.rot = e.spoilage->rot;
@@ -2977,7 +3117,43 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         sim.research_->state() = std::move(research);
     }
+    for (const Squad& squad : d.raids.squads) {
+        for (const Entity m : squad.members) {
+            if (!reg.valid(m) || !reg.all_of<Raider>(m)) {
+                error = "the save has a raid squad with a pawn that isn't there";
+                return false;
+            }
+        }
+    }
+    if (!sim.raids_->restore(std::move(d.raids), error)) {
+        return false;
+    }
     sim.apparel_->restoreOutfits(std::move(d.outfits), d.nextOutfitId);
+    if (d.hasWeather) {
+        WeatherState state;
+        state.current = d.weather.current.empty() ? DefId{} : sim.defs_->idOf("Weathers", d.weather.current);
+        state.previous = d.weather.previous.empty() ? DefId{} : sim.defs_->idOf("Weathers", d.weather.previous);
+        state.startedAt = d.weather.startedAt;
+        state.endsAt = d.weather.endsAt;
+        state.rngState = d.weather.rngState;
+        state.rngIncrement = d.weather.rngIncrement;
+        std::vector<WeatherSnowRecord> snow;
+        for (size_t i = 0; i < d.weather.snowCells.size(); ++i) {
+            if (d.weather.snowDepth[i] > 65535) {
+                error = "the save has snow that is too deep";
+                return false;
+            }
+            snow.push_back(WeatherSnowRecord{static_cast<int>(d.weather.snowCells[i]), static_cast<uint16_t>(d.weather.snowDepth[i])});
+        }
+        if ((!d.weather.current.empty() && !state.current.valid()) || (!d.weather.previous.empty() && !state.previous.valid()) ||
+            !sim.weather_->restore(state, snow, d.seconds)) {
+            error = "the save has weather the data files can't place";
+            return false;
+        }
+    } else {
+        // A save from before the weather: it begins clear at the time the game had reached.
+        sim.weather_->restore(sim.weather_->state(), {}, d.seconds);
+    }
     {
         // Talents of a pawn that is gone, or of a talent the data files dropped, are forgotten.
         sim.talents_->states().clear();

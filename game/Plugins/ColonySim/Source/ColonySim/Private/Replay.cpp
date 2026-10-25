@@ -189,6 +189,20 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["project"] = c.project;
             } else if constexpr (std::is_same_v<Type, UnlockResearchCommand>) {
                 j["project"] = c.project;
+            } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
+                j["faction"] = c.faction;
+                j["points"] = static_cast<double>(c.points);
+                j["edge"] = c.edge;
+            } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
+                j["on"] = c.on;
+            } else if constexpr (std::is_same_v<Type, SetDefenseRoleCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["role"] = c.role;
+                j["hasSpot"] = c.hasSpot;
+                j["spot"] = {c.spot.x, c.spot.y, c.spot.level};
+            } else if constexpr (std::is_same_v<Type, MarkShelterCommand>) {
+                j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
+                j["clear"] = c.clear;
             } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["target"] = entt::to_integral(c.target);
@@ -214,6 +228,9 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, StripCommand>) {
                 j["thing"] = entt::to_integral(c.thing);
                 j["strip"] = c.strip;
+            } else if constexpr (std::is_same_v<Type, SetWeatherCommand>) {
+                j["weather"] = c.weather;
+                j["hours"] = c.hours;
             } else if constexpr (std::is_same_v<Type, SpendTalentPointCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["talent"] = c.talent;
@@ -392,6 +409,20 @@ bool replayReadCellAndRot(ReplayReader& r, const ReplayJson& j, const std::strin
         }
     }
     return r.fail(where + ".rot must be North, East, South or West");
+}
+
+// A cell as [x, y, level]; left alone when the key is absent.
+bool replayCell(ReplayReader& r, const ReplayJson& j, const char* key, CellPos& out, const std::string& where) {
+    const auto cell = j.find(key);
+    if (cell == j.end()) {
+        return true;
+    }
+    if (!cell->is_array() || cell->size() != 3 || !(*cell)[0].is_number_integer() || !(*cell)[1].is_number_integer() ||
+        !(*cell)[2].is_number_integer()) {
+        return r.fail(where + "." + key + " must be [x, y, level]");
+    }
+    out = CellPos{(*cell)[0].get<int>(), (*cell)[1].get<int>(), (*cell)[2].get<int>()};
+    return true;
 }
 
 bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& where, LoggedCommand& out) {
@@ -844,6 +875,34 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.cell = CellPos{(*cell)[0].get<int>(), (*cell)[1].get<int>(), (*cell)[2].get<int>()};
         out.command = std::move(c);
+    } else if (type == "StartRaid") {
+        StartRaidCommand c;
+        if (!r.text(j, "faction", c.faction, where) || !r.number(j, "points", c.points, where) ||
+            !r.integer(j, "edge", c.edge, where)) {
+            return false;
+        }
+        out.command = c;
+    } else if (type == "SoundAlarm") {
+        SoundAlarmCommand c;
+        if (!r.flag(j, "on", c.on, where)) {
+            return false;
+        }
+        out.command = c;
+    } else if (type == "SetDefenseRole") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        SetDefenseRoleCommand c;
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "role", c.role, where) || !r.flag(j, "hasSpot", c.hasSpot, where) ||
+            !replayCell(r, j, "spot", c.spot, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = c;
+    } else if (type == "MarkShelter") {
+        MarkShelterCommand c;
+        if (!replayCell(r, j, "cell", c.cell, where) || !r.flag(j, "clear", c.clear, where)) {
+            return false;
+        }
+        out.command = c;
     } else if (type == "Melee") {
         MeleeCommand c;
         uint32_t pawn = entt::to_integral(kNoEntity);
@@ -861,6 +920,12 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.pawn = static_cast<Entity>(pawn);
         c.target = static_cast<Entity>(target);
+        out.command = c;
+    } else if (type == "SetWeather") {
+        SetWeatherCommand c;
+        if (!r.text(j, "weather", c.weather, where) || !r.number(j, "hours", c.hours, where)) {
+            return false;
+        }
         out.command = c;
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");

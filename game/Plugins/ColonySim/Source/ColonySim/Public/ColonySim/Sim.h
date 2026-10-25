@@ -47,6 +47,7 @@ class RecreationSystem;
 class ResearchSystem;
 class TalentSystem;
 class NeedsSystem;
+class RaidSystem;
 class Plants;
 class PowerGrid;
 class Regions;
@@ -54,6 +55,7 @@ class Rooms;
 class TemperatureSystem;
 class SpoilageSystem;
 class Things;
+class Weather;
 class Zones;
 struct Snapshot;
 class SimSaveAccess;
@@ -181,6 +183,10 @@ public:
     Plants& plants() { return *plants_; }
     const Plants& plants() const { return *plants_; }
 
+    // Seasons, outdoor temperature, weather and snow (docs/design/weather.md).
+    Weather& weather() { return *weather_; }
+    const Weather& weather() const { return *weather_; }
+
     // The rock and ore layer, mined down by jobs (docs/design/mining.md), and the marks the player
     // has put on rock and plants for colonists to work on.
     Mineables& mineables() { return *mineables_; }
@@ -211,10 +217,10 @@ public:
     const TemperatureSystem& temperature() const { return *temperature_; }
     SpoilageSystem& spoilage() { return *spoilage_; }
     const SpoilageSystem& spoilage() const { return *spoilage_; }
-    // The temperature in the open right now, in degrees Celsius: the biome's season and the hour of
-    // the day. E1 replaces this with its seasons and weather.
+    // The temperature in the open right now, in degrees Celsius: the biome's season, the hour of the
+    // day and the random drift (Weather::temperatureAt).
     float outdoorTemperature() const;
-    // The biome's temperature at any game second, ignoring the override (for tests and previews).
+    // The open air's temperature at any game second, ignoring the override (for tests and previews).
     float outdoorTemperatureAt(int64_t gameSeconds) const;
     // The temperature under rock: the biome's mean over the year.
     float groundTemperature() const;
@@ -238,6 +244,9 @@ public:
     // Wild animals: herds, grazing, sleep, coming and going at the edges (docs/design/animal-life.md).
     AnimalSystem& animals() { return *animals_; }
     const AnimalSystem& animals() const { return *animals_; }
+    // Raids, raid squads and the colony alarm with its defense roles (docs/design/raids.md).
+    RaidSystem& raids() { return *raids_; }
+    const RaidSystem& raids() const { return *raids_; }
 
     // Blueprints, frames and taking buildings down (docs/design/construction.md).
     Construction& construction() { return *construction_; }
@@ -283,6 +292,7 @@ private:
     std::unique_ptr<Zones> zones_;
     std::unique_ptr<Things> things_;
     std::unique_ptr<Plants> plants_;
+    std::unique_ptr<Weather> weather_;
     std::unique_ptr<Mineables> mineables_;
     std::unique_ptr<Designations> designations_;
     std::unique_ptr<MovementSystem> movement_;
@@ -315,6 +325,7 @@ private:
     std::unique_ptr<Filth> filth_;
     std::unique_ptr<RoomStats> roomStats_;
     std::unique_ptr<AnimalSystem> animals_;
+    std::unique_ptr<RaidSystem> raids_;        // after the fighters
     std::vector<std::string> setupErrors_;
     std::vector<std::pair<uint64_t, Command>> pending_;  // id, command
     uint64_t submitted_ = 0;
