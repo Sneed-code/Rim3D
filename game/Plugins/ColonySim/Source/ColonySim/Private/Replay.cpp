@@ -176,9 +176,13 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, FlickCommand>) {
                 j["thing"] = entt::to_integral(c.thing);
                 j["on"] = c.on;
-            } else {
-                static_assert(std::is_same_v<Type, ShortCircuitCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
                 j["thing"] = entt::to_integral(c.thing);
+            } else if constexpr (std::is_same_v<Type, SetResearchCommand>) {
+                j["project"] = c.project;
+            } else {
+                static_assert(std::is_same_v<Type, UnlockResearchCommand>, "write every command type");
+                j["project"] = c.project;
             }
         },
         logged.command);
@@ -695,6 +699,16 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = ShortCircuitCommand{static_cast<Entity>(thing)};
+    } else if (type == "SetResearch" || type == "UnlockResearch") {
+        std::string project;
+        if (!r.text(j, "project", project, where)) {
+            return false;
+        }
+        if (type == "SetResearch") {
+            out.command = SetResearchCommand{project};
+        } else {
+            out.command = UnlockResearchCommand{project};
+        }
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");
     }

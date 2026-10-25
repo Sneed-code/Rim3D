@@ -18,6 +18,7 @@
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Recreation.h"
+#include "ColonySim/Research.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
 #include "ColonySim/Zones.h"
@@ -291,6 +292,7 @@ struct SaveData {
     bool hasRock = false;              // the file has the rock layer (format 12 on); older saves keep the generated one
     SaveMineables mineables;           // format 12 on
     SaveDesignations designations;     // format 12 on
+    ResearchState research;            // section "research"
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -900,6 +902,8 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("on", c.on);
             } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
                 ar.value("thing", c.thing);
+            } else if constexpr (std::is_same_v<Type, SetResearchCommand> || std::is_same_v<Type, UnlockResearchCommand>) {
+                ar.text("project", c.project);
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }
@@ -1047,7 +1051,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::Recreate, "the save file has a bad job");
+    ar.require(job.type <= JobType::Research, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -1493,6 +1497,31 @@ void saveDesignations(Ar& ar, SaveDesignations& d) {
     ar.require(d.cells.size() == d.kinds.size(), "the save file's designation lists don't match");
 }
 
+template <typename Ar>
+void saveResearch(Ar& ar, ResearchState& r) {
+    ar.text("current", r.current);
+    ar.value("neolithicStart", r.neolithicStart);
+    ar.list("done", r.done, [&](std::string& name) { ar.text(nullptr, name); });
+    ar.require(std::is_sorted(r.done.begin(), r.done.end()), "the save file's finished research isn't in order");
+    // The progress map is saved as parallel lists in name order.
+    std::vector<std::string> names;
+    std::vector<double> points;
+    for (const auto& [name, value] : r.progress) {
+        names.push_back(name);
+        points.push_back(value);
+    }
+    ar.list("progressNames", names, [&](std::string& name) { ar.text(nullptr, name); });
+    ar.list("progressPoints", points, [&](double& value) { ar.value(nullptr, value); });
+    ar.require(names.size() == points.size(), "the save file's research lists don't match");
+    if (Ar::kReading) {
+        r.progress.clear();
+        for (size_t i = 0; i < names.size(); ++i) {
+            ar.require(points[i] >= 0.0 && points[i] < 1.0e9, "the save file has impossible research progress");
+            r.progress[names[i]] = points[i];
+        }
+    }
+}
+
 // Formats 6 to 19, read only: one long layout, each format adding to it.
 template <typename Ar>
 void saveLegacyData(Ar& ar, SaveData& d) {
@@ -1749,6 +1778,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("recreation", 1, [&] {
         saveParts(ar, "joy", e, &SaveEntity::joy, [&](SaveJoy& j) { saveJoyPart(ar, j); });
     });
+    ar.section("research", 1, [&] { saveResearch(ar, d.research); });
     // New sections go here, at the end.
 }
 
@@ -2066,6 +2096,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         d.designations.cells.push_back(static_cast<uint32_t>(cell));
         d.designations.kinds.push_back(static_cast<uint8_t>(kind));
     }
+    d.research = sim.research_->state();
     return d;
 }
 
@@ -2495,6 +2526,21 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             error = "the save has a designation off the map";
             return false;
         }
+    }
+    {
+        // A project the data files dropped is forgotten; a save from before research starts with none done.
+        ResearchState research = d.research;
+        const ResearchSystem& known = *sim.research_;
+        research.done.erase(std::remove_if(research.done.begin(), research.done.end(),
+                                           [&](const std::string& n) { return known.find(n) == nullptr; }),
+                            research.done.end());
+        for (auto it = research.progress.begin(); it != research.progress.end();) {
+            it = known.find(it->first) == nullptr ? research.progress.erase(it) : std::next(it);
+        }
+        if (known.find(research.current) == nullptr) {
+            research.current.clear();
+        }
+        sim.research_->state() = std::move(research);
     }
     sim.time_.seconds = d.seconds;
     sim.rng_.restore(d.rngState, d.rngIncrement);

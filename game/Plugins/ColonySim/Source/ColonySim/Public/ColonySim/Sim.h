@@ -37,6 +37,7 @@ class Mineables;
 class MovementSystem;
 class MoodSystem;
 class RecreationSystem;
+class ResearchSystem;
 class NeedsSystem;
 class Plants;
 class PowerGrid;
@@ -139,6 +140,9 @@ public:
     // Recreation, comfort and the outdoors need (docs/design/recreation.md).
     RecreationSystem& recreation() { return *recreation_; }
     const RecreationSystem& recreation() const { return *recreation_; }
+    // Research projects and what they unlock (docs/design/research.md).
+    ResearchSystem& research() { return *research_; }
+    const ResearchSystem& research() const { return *research_; }
     // Guns, projectiles, hitboxes and armor (docs/design/combat.md).
     CombatSystem& combat() { return *combat_; }
     const CombatSystem& combat() const { return *combat_; }
@@ -237,6 +241,7 @@ private:
     std::unique_ptr<NeedsSystem> needs_;
     std::unique_ptr<MoodSystem> mood_;
     std::unique_ptr<RecreationSystem> recreation_;
+    std::unique_ptr<ResearchSystem> research_;
     std::unique_ptr<CombatSystem> combat_;
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;

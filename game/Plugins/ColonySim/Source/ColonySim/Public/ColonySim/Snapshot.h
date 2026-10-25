@@ -184,6 +184,16 @@ struct DesignationView {
     DesignationKind kind = DesignationKind::None;
 };
 
+// One research project and where it stands (docs/design/research.md).
+struct ResearchView {
+    DefId project;          // a Research def
+    double progress = 0.0;  // points so far (the cost when done)
+    double cost = 0.0;
+    bool done = false;
+    bool available = false;  // not done, every prerequisite done: can be picked
+    bool current = false;
+};
+
 struct Snapshot {
     int64_t gameSeconds = 0;  // Sim::time().seconds when it was written
     int mapWidth = 0;
@@ -203,6 +213,7 @@ struct Snapshot {
     std::vector<ProjectileView> projectiles;  // sorted by id
     std::vector<PawnLooksView> looks;      // see ThingView::looks
     std::vector<PowerNetView> powerNets;   // by id - 1, see ThingView::powerNet
+    std::vector<ResearchView> research;    // every project, in def order
 
     // The thing with this id, or null if it is not on the map. Binary search.
     COLONY_API const ThingView* find(Entity id) const;

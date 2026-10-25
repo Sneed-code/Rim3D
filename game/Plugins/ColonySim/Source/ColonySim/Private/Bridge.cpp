@@ -81,9 +81,13 @@ const char* commandName(const Command& command) {
                 return "HandsOn";
             } else if constexpr (std::is_same_v<Type, FlickCommand>) {
                 return "Flick";
-            } else {
-                static_assert(std::is_same_v<Type, ShortCircuitCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
                 return "ShortCircuit";
+            } else if constexpr (std::is_same_v<Type, SetResearchCommand>) {
+                return "SetResearch";
+            } else {
+                static_assert(std::is_same_v<Type, UnlockResearchCommand>, "name every command type");
+                return "UnlockResearch";
             }
         },
         command);
@@ -139,6 +143,7 @@ const char* eventTypeName(EventType type) {
         case EventType::RecipeDone: return "RecipeDone";
         case EventType::PowerChanged: return "PowerChanged";
         case EventType::ShortCircuit: return "ShortCircuit";
+        case EventType::ResearchDone: return "ResearchDone";
     }
     return "?";
 }
@@ -158,6 +163,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Reload: return "Reload";
         case PawnAction::Dodge: return "Dodge";
         case PawnAction::Cook: return "Cook";
+        case PawnAction::Research: return "Research";
     }
     return "?";
 }

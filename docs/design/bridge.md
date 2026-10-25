@@ -128,7 +128,7 @@ letters) here. Events say what changed; positions and states are in the snapshot
 and a `ThingView` per thing on the map, sorted by id (`Snapshot::find` is a binary search).
 A `ThingView` has the id, def, category, position (metres on a level), rotation and footprint
 size for buildings, stack count for items, and hit points. Pawns with needs also have `food`, `rest` and
-`asleep` ([needs.md](needs.md)), `mood` and `moodBand` ([mood.md](mood.md)), and `joy`, `comfort` and `outdoors` ([recreation.md](recreation.md)). Pawns with a body also have `downed` and
+`asleep` ([needs.md](needs.md)), `mood` and `moodBand` ([mood.md](mood.md)), and `joy`, `comfort` and `outdoors` ([recreation.md](recreation.md)). `Snapshot::research` lists the research projects ([research.md](research.md)). Pawns with a body also have `downed` and
 `dead` (F1); the rest of a pawn's health is read with `Sim::healthReport`. Things off the map (a carried item) are
 not in it. Since S4 it also has the ground height under the thing (`z`), a pawn's velocity (`vx`,
 `vy`, metres per step) and the route still ahead (`waypointCount` points from
