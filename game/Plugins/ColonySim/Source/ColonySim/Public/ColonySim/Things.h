@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -132,11 +133,19 @@ public:
     // buildings. Returns false, and changes nothing, if the thing can't go there.
     bool spawnAt(Entity thing, CellPos cell, Rot4 rot = Rot4::North);
 
-    // For loading a save: a thing that already has its Position and Footprint put its building on
-    // the map again (the footprint's cells get the building and its passage). Returns false, and
-    // changes nothing, if the cells are off the map, not walkable ground or already taken.
-    // Things without a Footprint need nothing.
-    bool relinkBuilding(Entity thing);
+    // For loading a save: a thing that already has its Position goes back into the map's layers
+    // (a building's footprint cells get the building and its passage; an item goes into the
+    // items-per-cell index). Returns false, and changes nothing, if a building's cells are off the
+    // map, not walkable ground or already taken.
+    bool relink(Entity thing);
+
+    // Items lying in a cell, in entity id order. Usually none or one (one stack per cell is the
+    // storage rule), but spawning can put more in one cell.
+    const std::vector<Entity>& itemsAt(CellPos cell) const;
+
+    // Splits `count` off an item stack: a new item of the same def, off the map, with `count`,
+    // and the stack keeps the rest. Returns kNoEntity if `count` isn't less than the stack.
+    Entity splitOff(Entity item, int count);
 
     // Takes a thing off the map (removes its Position, frees its building cells). It still
     // exists, e.g. to be carried. Does nothing if it is not spawned.
@@ -159,7 +168,10 @@ private:
     std::shared_ptr<const DefDatabase> defs_;
     entt::registry registry_;
     std::vector<Event>* events_ = nullptr;
+    // Items per cell, by packed cell key. Looked up only, never iterated (its order is not fixed).
+    std::unordered_map<uint64_t, std::vector<Entity>> itemsAt_;
 
+    void indexItem(Entity thing, CellPos cell, bool add);
     void placeFootprint(Entity thing, const CellRect& rect, const Footprint& footprint);
     void report(EventType type, Entity thing, CellPos cell = CellPos{});
 };

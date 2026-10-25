@@ -4,6 +4,8 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
+#include "ColonySim/JobType.h"
+#include "ColonySim/Zones.h"
 
 #include <cstdint>
 #include <vector>
@@ -46,6 +48,19 @@ struct ThingView {
     // stays where it fell. A full health report is `Sim::healthReport`.
     bool downed = false;
     bool dead = false;
+    // Pawns: the job they are on (docs/design/jobs.md) and what it is about, and what they carry.
+    JobType job = JobType::None;
+    Entity jobTarget = kNoEntity;
+    DefId carriedDef;
+    int carriedCount = 0;
+};
+
+// One stockpile zone: `cellCount` cells from Snapshot::zoneCells[firstCell].
+struct ZoneView {
+    ZoneId id = kNoZone;
+    StoragePriority priority = StoragePriority::Normal;
+    uint32_t firstCell = 0;
+    uint32_t cellCount = 0;
 };
 
 struct Snapshot {
@@ -54,6 +69,8 @@ struct Snapshot {
     int mapHeight = 0;
     std::vector<ThingView> things;  // sorted by id
     std::vector<PathPointView> waypoints;  // the pawns' routes, see ThingView
+    std::vector<ZoneView> zones;           // by id
+    std::vector<CellPos> zoneCells;        // the zones' cells, see ZoneView
 
     // The thing with this id, or null if it is not on the map. Binary search.
     COLONY_API const ThingView* find(Entity id) const;

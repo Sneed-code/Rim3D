@@ -2,6 +2,7 @@
 
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Jobs.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
@@ -230,6 +231,34 @@ TEST_CASE("Crashlanded: same seed and same game, other seeds other colonists") {
     a.stepMany(200);
     b.stepMany(200);
     CHECK(a.stateHash() == b.stateHash());
+}
+
+TEST_CASE("Crashlanded: colonists work, except the work their backstories and traits rule out") {
+    const auto defs = colonistTestDefs();
+    int incapable = 0;  // colonists with some work off, over a few games
+    for (uint64_t seed = 1; seed <= 6; ++seed) {
+        Sim sim(colonistStartSettings(seed), defs);
+        const JobSystem& jobs = sim.jobs();
+        sim.things().registry().view<const Colonist>().each([&](const Entity pawn, const Colonist& c) {
+            const WorkSettings* work = sim.things().registry().try_get<WorkSettings>(pawn);
+            CHECK(sim.things().registry().all_of<Worker>(pawn));
+            if (work == nullptr) {
+                CHECK(false);
+                return;
+            }
+            CHECK(work->entries.size() == jobs.workTypes().size());
+            incapable += c.disabledWorkTags.empty() ? 0 : 1;
+            for (size_t i = 0; i < work->entries.size() && i < jobs.workTypes().size(); ++i) {
+                const JobSystem::WorkType& type = jobs.workTypes()[i];
+                const bool ruledOut = std::any_of(type.workTags.begin(), type.workTags.end(), [&](const std::string& tag) {
+                    return std::binary_search(c.disabledWorkTags.begin(), c.disabledWorkTags.end(), tag);
+                });
+                CHECK(work->entries[i].disabled == ruledOut);
+                CHECK(work->entries[i].priority == (ruledOut ? 0 : JobSystem::kDefaultPriority));
+            }
+        });
+    }
+    CHECK(incapable > 0);
 }
 
 TEST_CASE("Crashlanded: colonists survive a save and load") {

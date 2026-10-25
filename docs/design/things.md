@@ -59,8 +59,8 @@ Anything that fails returns `kNoEntity` (or `false`) and changes nothing.
 ## Rules for code that uses things
 
 - **Determinism.** Entity ids come out of EnTT in a fixed order, so the same commands give the same
-  ids. Don't depend on the order a view iterates: break ties by entity id (as the hauling
-  placeholder does), or keep your own ordered list (as `Sim::haulers()`). Saves (`saves.md`) restore
+  ids. Don't depend on the order a view iterates: break ties by entity id (as the job system
+  does), or keep your own ordered list (as `Sim::haulers()`). Saves (`saves.md`) restore
   the same ids, including the order destroyed ids are reused in.
 - **Don't add or remove components on other entities while iterating a view of those
   components.** Collect first, then change.
@@ -70,18 +70,16 @@ Anything that fails returns `kNoEntity` (or `false`) and changes nothing.
 - Def ids inside `Thing` are valid only for the `DefDatabase` the sim was made with. The sim
   holds that database by `shared_ptr`; `Sim(settings)` without defs has an empty one.
 
-## Stage 0 hauling placeholder
+## Items per cell
+
+`Things::itemsAt(cell)` lists the items lying in a cell, in id order, kept up to date by `spawnAt`
+and `despawn` (and `relink` when a save loads). Storage keeps one stack per cell; spawning can still
+put more in one. `Things::splitOff(item, count)` takes part of a stack off as a new item, off the
+map. Both came with the job system ([jobs.md](jobs.md)).
+
+## The hauling test
 
 The Stage 0 speed test still runs on things: `SimSettings::pawns` pawns of `pawnDef` (default
-`Human`) haul `items` items of `haulItemDef` (default `Steel`) to one stockpile cell. Carried items
-are off the map until put down. Its components (`HaulJob` and friends) live in `Sim.cpp` and go when
-the job system (C1) arrives. It gives the same hauls, path searches and cells expanded as the
-Stage 0 version. Missing defs are listed in `Sim::setupErrors()`.
-
-`simrun` loads defs from `--data` (default: the repo's `data/` folder). Runs with `--pawns` or
-`--items` need `Human` and `Steel` in `data/defs/Things/`, which the starting data (D3) has.
-
-## Not done here
-
-- A thing list per cell (what items lie here). The job system's haul lists (C1) decide its shape.
-- Rotation-aware interaction cells, multi-level buildings, roofs (C5).
+`Human`) haul `items` items of `haulItemDef` (default `Steel`). Since C1 they are ordinary workers
+hauling to a stockpile zone through the job system ([jobs.md](jobs.md), "The hauling test"). Missing
+defs are listed in `Sim::setupErrors()`.

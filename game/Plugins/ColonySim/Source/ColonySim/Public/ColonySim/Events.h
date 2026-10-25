@@ -4,6 +4,7 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
+#include "ColonySim/JobType.h"
 
 #include <cstdint>
 #include <string>
@@ -23,25 +24,28 @@ enum class EventType : uint8_t {
     PawnGotUp,       // a downed pawn recovered enough to act again
     PawnDied,
     PawnAction,      // a pawn did something with its hands that Unreal animates (picked up, put down)
+    JobStarted,      // a pawn took a job (docs/design/jobs.md)
+    JobEnded,        // a pawn's job ended: `message` says "done", "failed: why" or "interrupted: why"
 };
 
 // What a PawnAction event's pawn did. Later jobs add theirs (chop, mine, build, eat); Unreal plays
 // an animation for each, and a short default one for any it doesn't know.
 enum class PawnAction : uint8_t {
     PickUp,   // took `target` off the map to carry it
-    PutDown,  // put the carried `target` down (it gets a ThingSpawned too)
+    PutDown,  // put the carried `target` down (it gets a ThingSpawned too), or the stack it was added to
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
 struct Event {
     EventType type = EventType::ThingSpawned;
-    Entity thing = kNoEntity;  // ThingSpawned, ThingDespawned, ThingDestroyed; PawnAction: the pawn
-    DefId def;                 // ThingSpawned, ThingDespawned, ThingDestroyed
-    CellPos cell;              // ThingSpawned: its cell (for a building, the footprint origin)
+    Entity thing = kNoEntity;  // ThingSpawned, ThingDespawned, ThingDestroyed; PawnAction, Job*: the pawn
+    DefId def;                 // ThingSpawned, ThingDespawned, ThingDestroyed; Job*: the pawn's def
+    CellPos cell;              // ThingSpawned: its cell (for a building, the footprint origin); Job*: the job's cell
+    JobType job = JobType::None;  // JobStarted, JobEnded
     uint64_t command = 0;      // CommandFailed: the id Sim::submit returned
-    std::string message;       // CommandFailed: why, in plain words; PawnDied: the cause ("blood loss")
+    std::string message;       // CommandFailed: why, in plain words; PawnDied: the cause ("blood loss"); JobEnded: how it ended
     PawnAction action = PawnAction::PickUp;  // PawnAction
-    Entity target = kNoEntity;               // PawnAction: the thing it was done to, if any
+    Entity target = kNoEntity;               // PawnAction: the thing it was done to; Job*: what the job is about, if any
     // PawnInjured: `def` is the injury's Hediffs def; PawnPartLost: the Hediffs def is MissingBodyPart.
     // `thing` is the pawn, `cell` where it stands, `part` the index of the body part in its Bodies
     // def (depth-first, torso 0), `amount` the hit points of damage dealt to it.
