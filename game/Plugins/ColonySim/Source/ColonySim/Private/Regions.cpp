@@ -21,29 +21,39 @@ Regions::Regions(const Map& map) : map_(map) {
     blocksX_ = (map.width() + kBlockSize - 1) / kBlockSize;
     blocksY_ = (map.height() + kBlockSize - 1) / kBlockSize;
     blocks_ = blocksX_ * blocksY_ * map.levels();
-    regionOf_.assign(static_cast<size_t>(map.width()) * static_cast<size_t>(map.height()) *
-                         static_cast<size_t>(map.levels()),
-                     kNoRegion);
+    static_assert(Map::kUpperChunk == kBlockSize, "upper-level chunks and region blocks must line up");
+    regionOf_.resize(static_cast<size_t>(map.levels()));
+    regionOf_[0].assign(static_cast<size_t>(map.width()) * static_cast<size_t>(map.height()), kNoRegion);
     blockRegions_.resize(static_cast<size_t>(blocks_));
     blockDirty_.assign(static_cast<size_t>(blocks_), 0);
 }
 
-size_t Regions::cellSlot(CellPos c) const {
-    return static_cast<size_t>(c.level) * static_cast<size_t>(map_.width()) * static_cast<size_t>(map_.height()) +
-           static_cast<size_t>(map_.index(c));
+int Regions::cellIndex(CellPos c) const {
+    return map_.index(c);
+}
+
+RegionId& Regions::regionSlot(CellPos c) {
+    std::vector<RegionId>& level = regionOf_[static_cast<size_t>(c.level)];
+    if (level.empty()) {
+        level.assign(static_cast<size_t>(map_.width()) * static_cast<size_t>(map_.height()), kNoRegion);
+    }
+    return level[static_cast<size_t>(map_.index(c))];
 }
 
 RegionId Regions::regionAt(CellPos c) {
     update();
-    return map_.inBounds(c) ? regionOf_[cellSlot(c)] : kNoRegion;
+    return map_.inBounds(c) ? regionOfCell(c) : kNoRegion;
 }
 
 RegionId Regions::regionAtNow(CellPos c) const {
-    return map_.inBounds(c) ? regionOf_[cellSlot(c)] : kNoRegion;
+    return map_.inBounds(c) ? regionOfCell(c) : kNoRegion;
 }
 
 const RegionId* Regions::regionIdsOnLevel(int level) const {
-    return regionOf_.data() + cellSlot(CellPos{0, 0, level});
+    if (level < 0 || level >= map_.levels() || regionOf_[static_cast<size_t>(level)].empty()) {
+        return nullptr;
+    }
+    return regionOf_[static_cast<size_t>(level)].data();
 }
 
 uint32_t Regions::groupAt(CellPos c) {
@@ -94,7 +104,13 @@ void Regions::markDirty(CellPos c) {
 void Regions::update() {
     if (!built_) {
         built_ = true;
+        const int perLevel = blocksX_ * blocksY_;
         for (int block = 0; block < blocks_; ++block) {
+            const int level = block / perLevel;
+            const CellPos corner{(block % perLevel) % blocksX_ * kBlockSize, (block % perLevel) / blocksX_ * kBlockSize, level};
+            if (!map_.hasUpperChunk(corner)) {
+                continue;  // empty sky: nothing to walk on
+            }
             blockDirty_[static_cast<size_t>(block)] = 1;
             dirtyBlocks_.push_back(block);
         }
@@ -195,24 +211,31 @@ void Regions::floodBlock(int block) {
     const int y0 = (block % perLevel) / blocksX_ * kBlockSize;
     const int x1 = std::min(x0 + kBlockSize, map_.width());
     const int y1 = std::min(y0 + kBlockSize, map_.height());
+    const bool stored = map_.hasUpperChunk(CellPos{x0, y0, level});
+    if (!stored && regionOf_[static_cast<size_t>(level)].empty()) {
+        return;  // an upper level with nothing built on it yet
+    }
     for (int y = y0; y < y1; ++y) {
         for (int x = x0; x < x1; ++x) {
-            regionOf_[cellSlot(CellPos{x, y, level})] = kNoRegion;
+            regionSlot(CellPos{x, y, level}) = kNoRegion;
         }
+    }
+    if (!stored) {
+        return;
     }
 
     std::vector<RegionId>& inBlock = blockRegions_[static_cast<size_t>(block)];
     for (int y = y0; y < y1; ++y) {
         for (int x = x0; x < x1; ++x) {
             const CellPos start{x, y, level};
-            if (regionOf_[cellSlot(start)] != kNoRegion || !map_.walkable(start)) {
+            if (regionOfCell(start) != kNoRegion || !map_.walkable(start)) {
                 continue;
             }
             const RegionId id = newRegion();
             inBlock.push_back(id);
             Region& region = regions_[id];
             region.anchor = start;
-            regionOf_[cellSlot(start)] = id;
+            regionSlot(start) = id;
             if (map_.isDoor(start)) {
                 region.kind = RegionKind::Door;
                 region.cellCount = 1;
@@ -239,11 +262,11 @@ void Regions::floodBlock(int block) {
                     if (n.x < x0 || n.y < y0 || n.x >= x1 || n.y >= y1) {
                         continue;
                     }
-                    const size_t slot = cellSlot(n);
-                    if (regionOf_[slot] != kNoRegion || !map_.walkable(n) || map_.isDoor(n)) {
+                    RegionId& slot = regionSlot(n);
+                    if (slot != kNoRegion || !map_.walkable(n) || map_.isDoor(n)) {
                         continue;
                     }
-                    regionOf_[slot] = id;
+                    slot = id;
                     floodQueue_.push_back(n.y * map_.width() + n.x);
                 }
             }
@@ -264,8 +287,7 @@ void Regions::linkBlock(int block) {
     for (int y = y0; y < y1; ++y) {
         for (int x = x0; x < x1; ++x) {
             const CellPos c{x, y, level};
-            const size_t slot = cellSlot(c);
-            const RegionId r = regionOf_[slot];
+            const RegionId r = regionOfCell(c);
             if (r == kNoRegion) {
                 continue;
             }
@@ -291,7 +313,7 @@ void Regions::linkBlock(int block) {
                 if (backward && blockDirty_[static_cast<size_t>(blockOf(side.n.x, side.n.y, level))] != 0) {
                     continue;  // the cell on the other side counts it as its +x or +y side
                 }
-                const RegionId s = regionOf_[cellSlot(side.n)];
+                const RegionId s = regionOfCell(side.n);
                 if (s == kNoRegion || s == r) {
                     continue;
                 }

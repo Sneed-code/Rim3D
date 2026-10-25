@@ -187,9 +187,12 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["thing"] = entt::to_integral(c.thing);
             } else if constexpr (std::is_same_v<Type, SetResearchCommand>) {
                 j["project"] = c.project;
-            } else {
-                static_assert(std::is_same_v<Type, UnlockResearchCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, UnlockResearchCommand>) {
                 j["project"] = c.project;
+            } else {
+                static_assert(std::is_same_v<Type, PlaceUpperFloorCommand>, "write every command type");
+                j["area"] = replayRectJson(c.area);
+                j["remove"] = c.remove;
             }
         },
         logged.command);
@@ -716,6 +719,12 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         } else {
             out.command = UnlockResearchCommand{project};
         }
+    } else if (type == "PlaceUpperFloor") {
+        PlaceUpperFloorCommand c;
+        if (!replayReadRect(r, j, where, c.area) || !r.flag(j, "remove", c.remove, where)) {
+            return false;
+        }
+        out.command = c;
     } else if (type == "PlaceFloor") {
         PlaceFloorCommand c;
         if (!replayReadRect(r, j, where, c.area) || !r.text(j, "floor", c.floor, where)) {

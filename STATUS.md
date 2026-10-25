@@ -273,6 +273,15 @@ the edges to keep the biome's density, and rot away 15 days after dying. About 3
 `wildAnimals` on until U15 draws animals** (the pawn drawing would show them as people); **code that counts pawns of another faction as raiders
 must skip `Animal`**.
 
+**M1** upper levels (`docs/design/levels.md`, tests `LevelsTests`): the map has four levels, 3 m apart; upper levels are stored in
+16 m chunks made only where something is built, so empty sky costs nothing. A cell up there is `Terrain::Air` until an **upper
+floor** is laid (`PlaceUpperFloorCommand`, instant for now; `UpperFloors::lay`): it needs a wall or column within the roof support
+radius (6.9 m) on the level below, never over a mountain, and is the roof of the cell under it (`Map::roof` says `Thin`, Rooms puts
+no roof of its own there). Buildings and items go only on a floor. Regions, rooms and room temperature work on every level; an upper
+room beside open air is outdoors (`Room::openToAir`); heat passes through a floor like a thin roof. Save section `levels`; snapshot `z`
+includes the level. **Systems that only know the ground use `Map::onGround(c)` instead of `inBounds`** (plants, zones, filth, lights,
+cover, threat maps, floors, designations); `Map::inBounds` now takes levels 0 to 3. No stairs yet (M2), no collapse (M3), nothing drawn (U17).
+
 ## Next
 
 Wave 1:

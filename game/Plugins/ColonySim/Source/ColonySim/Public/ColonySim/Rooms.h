@@ -24,6 +24,10 @@ class Things;
 // thin roof over every cell that has a roof holder (a wall, a door, rock) within the roof support
 // radius; a room with a cell left unroofed counts as outdoors. A room's role comes from what is
 // in it.
+//
+// Every level has its own rooms (docs/design/levels.md). On an upper level a room that reaches the
+// edge of its floor (a cell beside open air) is outdoors too, like one that reaches the map edge.
+// A cell under an upper floor has that floor for a roof, so Rooms never puts a thin roof there.
 
 using RoomId = uint32_t;
 inline constexpr RoomId kNoRoom = 0xFFFFFFFFu;
@@ -57,6 +61,8 @@ struct Room {
     CellPos anchor;      // the room's first cell in row order, one of the room's cells
     bool touchesEdge = false;
     bool huge = false;
+    bool openToAir = false;  // on an upper level: a cell beside one with no floor
+
     // Cells with no roof. An outdoor room that was not looked at has them all.
     int openRoofCount = 0;
     RoomRole role = RoomRole::None;
@@ -65,12 +71,12 @@ struct Room {
     int tables = 0;
     int chairs = 0;
     int stoves = 0;
-    uint32_t firstCell = 0;  // into Rooms::cellsOf; only rooms that are not edge or huge list their cells
+    uint32_t firstCell = 0;  // into Rooms::cellsOf; only enclosed rooms list their cells
     uint32_t listedCells = 0;
 
-    bool enclosed() const { return !touchesEdge && !huge; }
-    // Under the open sky: reaches the map edge, is huge, or has a cell with no roof.
-    bool outdoors() const { return touchesEdge || huge || openRoofCount > 0; }
+    bool enclosed() const { return !touchesEdge && !huge && !openToAir; }
+    // Under the open sky: reaches the map edge or open air, is huge, or has a cell with no roof.
+    bool outdoors() const { return !enclosed() || openRoofCount > 0; }
 };
 
 class COLONY_API Rooms {
@@ -103,7 +109,12 @@ public:
     // has a roof.
     bool indoors(CellPos c);
 
-    // The cells with a thin roof, in cell index order, and how many times that set has changed.
+    // True if a roof over the cell could be held up: rock (on the ground) or a building that holds
+    // roofs (a wall, a column) within the roof support radius, on the cell's own level. An upper
+    // floor needs this of the cell under it (docs/design/levels.md).
+    bool roofSupported(CellPos c) const;
+
+    // The cells with a thin roof, by level then cell index, and how many times that set has changed.
     const std::vector<CellPos>& thinRoofCells() const { return thinCells_; }
     uint64_t roofChanges() const { return roofChanges_; }
 
@@ -113,8 +124,7 @@ private:
     void rebuild();
     void roof();
     void scanContents();
-    bool roofHolderAt(int x, int y) const;
-    bool supported(int x, int y) const;
+    bool roofHolderAt(CellPos c) const;
 
     Map& map_;
     Things& things_;

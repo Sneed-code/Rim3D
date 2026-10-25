@@ -337,6 +337,16 @@ struct UnlockResearchCommand {
     std::string project;
 };
 
+// Multi-storey (task M1, docs/design/levels.md): lays an upper floor on every cell of `area` (on
+// level 1 or above) that can hold one, or takes them up with `remove`. A floor needs a wall or column
+// within the roof support radius on the level below; one is taken up only when nothing stands on it.
+// Instant for now: the work to build one comes with stairs (M2). Fails, with the last reason, if no
+// cell changed.
+struct PlaceUpperFloorCommand {
+    CellRect area;
+    bool remove = false;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -348,7 +358,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ReloadCommand, AddBillCommand,
                              RemoveBillCommand, SetBillCommand, HandsOnCommand, FlickCommand, ShortCircuitCommand,
                              PlaceFloorCommand, AddFilthCommand,
-                             SetResearchCommand, UnlockResearchCommand>;
+                             SetResearchCommand, UnlockResearchCommand, PlaceUpperFloorCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

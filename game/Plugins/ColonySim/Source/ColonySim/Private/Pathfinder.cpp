@@ -550,8 +550,12 @@ Pathfinder::Outcome Pathfinder::runCells(int64_t& work, int64_t budget) {
     const int w = map_.width();
     const int h = map_.height();
     const int goal = map_.index(goal_);
-    const RegionId* regionOf = map_.regions().regionIdsOnLevel(goal_.level);  // kNoRegion: can't be walked
-    const Passage* passage = map_.passageOnLevel(goal_.level);
+    const Regions& regions = map_.regions();
+    const RegionId* regionOf = regions.regionIdsOnLevel(goal_.level);  // kNoRegion: can't be walked
+    if (regionOf == nullptr) {
+        return Outcome::Failed;  // an upper level with nothing built on it
+    }
+    const Passage* passage = goal_.level == 0 ? map_.groundPassage() : nullptr;  // null: ask the regions
     const auto at = [](auto& v, int i) -> auto& { return v[static_cast<size_t>(i)]; };
 
     static constexpr int kDx[8] = {1, -1, 0, 0, 1, 1, -1, -1};
@@ -594,7 +598,7 @@ Pathfinder::Outcome Pathfinder::runCells(int64_t& work, int64_t budget) {
             if (at(closed_, n) == gen) {
                 continue;
             }
-            const float ng = at(g_, c) + (diagonal ? kPathDiagonalCost : 1.0f) + (passage[n] == Passage::Door ? doorCost_ : 0.0f);
+            const float ng = at(g_, c) + (diagonal ? kPathDiagonalCost : 1.0f) + ((passage != nullptr ? passage[n] == Passage::Door : regions.region(region).kind == RegionKind::Door) ? doorCost_ : 0.0f);
             if (at(seen_, n) != gen || ng < at(g_, n)) {
                 at(seen_, n) = gen;
                 at(g_, n) = ng;

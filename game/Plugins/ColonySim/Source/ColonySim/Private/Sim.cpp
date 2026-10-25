@@ -29,6 +29,7 @@
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/UpperFloors.h"
 #include "ColonySim/Zones.h"
 #include "MovementSystem.h"
 
@@ -151,6 +152,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
                                               splitMix64(settings.seed ^ 0x616E696D616C73ULL), "TemperateForest");
     animals_->setEventLog(&events_);
     combat_->setBeforeDestroy([this](Entity thing) { jobs_->forget(thing); });
+    upperFloors_ = std::make_unique<UpperFloors>(map_, *rooms_, *things_);
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -649,6 +651,22 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!filth_->add(addFilth->cell, addFilth->kind, addFilth->layers)) {
             commandFailed(id, "no filth could be added there");
         }
+    } else if (const auto* upper = std::get_if<PlaceUpperFloorCommand>(&command)) {
+        int changed = 0;
+        std::string why;
+        for (int y = upper->area.minY; y < upper->area.minY + upper->area.sizeY; ++y) {
+            for (int x = upper->area.minX; x < upper->area.minX + upper->area.sizeX; ++x) {
+                const CellPos cell{x, y, upper->area.level};
+                const bool before = map_.upperFloor(cell);
+                const bool done = upper->remove ? upperFloors_->remove(cell, &why) : upperFloors_->lay(cell, &why);
+                if (done && map_.upperFloor(cell) != before) {
+                    ++changed;
+                }
+            }
+        }
+        if (changed == 0) {
+            commandFailed(id, why.empty() ? std::string("no upper floor changed there") : why);
+        }
     }
 }
 
@@ -827,7 +845,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
         view.category = thing.category;
         view.x = pos.x;
         view.y = pos.y;
-        view.z = map_.heightAt(pos.x, pos.y);
+        view.z = map_.heightAt(pos.x, pos.y, pos.level);
         view.level = pos.level;
         if (const Mover* mover = reg.try_get<Mover>(entity)) {
             view.vx = mover->vx;
@@ -1046,6 +1064,7 @@ uint64_t Sim::stateHash() const {
     roomStats_->hashState(h);
     animals_->hashState(h);
     temperature_->hashState(h);
+    h.add(map_.upperFloorHash());
 
     // The entity ids the registry has handed out: the free list in reuse order (it decides the
     // next ids), then every live thing in id order with its components. The registry's own

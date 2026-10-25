@@ -49,6 +49,7 @@ class Regions;
 class Rooms;
 class TemperatureSystem;
 class Things;
+class UpperFloors;
 class Zones;
 struct Snapshot;
 class SimSaveAccess;
@@ -207,6 +208,10 @@ public:
     // a loaded game goes back to the biome's own. Pass nullopt to let the biome decide again.
     void setOutdoorOverride(std::optional<float> celsius);
 
+    // Upper floors and the rules for laying them (docs/design/levels.md).
+    UpperFloors& upperFloors() { return *upperFloors_; }
+    const UpperFloors& upperFloors() const { return *upperFloors_; }
+
     // Stockpile zones (docs/design/jobs.md).
     const Zones& zones() const { return *zones_; }
     // Work types, the think list, jobs and reservations (docs/design/jobs.md).
@@ -292,6 +297,7 @@ private:
     std::unique_ptr<Filth> filth_;
     std::unique_ptr<RoomStats> roomStats_;
     std::unique_ptr<AnimalSystem> animals_;
+    std::unique_ptr<UpperFloors> upperFloors_;  // M1
     std::vector<std::string> setupErrors_;
     std::vector<std::pair<uint64_t, Command>> pending_;  // id, command
     uint64_t submitted_ = 0;

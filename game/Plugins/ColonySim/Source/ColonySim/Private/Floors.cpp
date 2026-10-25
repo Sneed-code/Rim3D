@@ -8,7 +8,7 @@ namespace colony {
 Floors::Floors(const Map& map, const DefDatabase& defs) : map_(map), defs_(defs) {}
 
 DefId Floors::at(CellPos c) const {
-    if (!map_.inBounds(c)) {
+    if (!map_.onGround(c)) {
         return DefId{};
     }
     const auto it = floors_.find(map_.index(c));
@@ -21,7 +21,7 @@ bool Floors::isFloorDef(DefId def) const {
 }
 
 bool Floors::set(CellPos c, DefId floor) {
-    if (!map_.inBounds(c) || !map_.groundWalkable(c)) {
+    if (!map_.onGround(c) || !map_.groundWalkable(c)) {
         return false;
     }
     const int index = map_.index(c);
