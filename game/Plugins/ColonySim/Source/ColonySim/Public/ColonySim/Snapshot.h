@@ -165,6 +165,12 @@ struct ThingView {
     uint32_t animalZone = 0;
     uint32_t learnedTricks = 0;
     uint32_t wantedTricks = 0;
+    // Breeding and products (docs/design/breeding.md): sex (0 male, 1 female; -1 for other things), carrying young, and how
+    // full its milk and wool are, 0 to 1 (-1: it gives none now).
+    int sex = -1;
+    bool pregnant = false;
+    float milkFullness = -1.0f;
+    float woolFullness = -1.0f;
     // Pawns in melee (docs/design/melee.md): winding up a swing at meleeTarget (the hit comes in
     // meleeStepsLeft steps) or recovering from one, and whether their weapon is raised to block.
     MeleePhase meleePhase = MeleePhase::Ready;

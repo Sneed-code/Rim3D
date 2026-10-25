@@ -1,6 +1,7 @@
 // Taming, training, slaughtering and feeding animals (task N3, docs/design/husbandry.md): the Handling work type's
 // scanners and the steps their jobs run.
 #include "ColonySim/Animals.h"
+#include "ColonySim/Breeding.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Jobs.h"
@@ -195,6 +196,34 @@ public:
     }
 };
 
+// Milking and shearing: a grown tame animal whose milk or wool is full (docs/design/breeding.md).
+class GatherGiver final : public WorkGiver {
+public:
+    GatherGiver(AnimalProduct what, const char* task) : what_(what), task_(task) {}
+    const char* task() const override { return task_; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        const Breeding* breeding = jobs.breeding();
+        if (breeding == nullptr) {
+            return;
+        }
+        husbandryScan(jobs, pawn, out, [&](Entity animal) { return breeding->readyToGather(animal, what_); });
+    }
+
+    bool makeJob(JobSystem& jobs, Entity, const WorkCandidate& candidate, Job& out) override {
+        out = Job{};
+        out.type = JobType::GatherAnimal;
+        out.site = candidate.target.thing;
+        out.bill = static_cast<uint32_t>(what_);
+        out.cell = cellOf(jobs.things().registry().get<Position>(candidate.target.thing));
+        return true;
+    }
+
+private:
+    AnimalProduct what_;
+    const char* task_;
+};
+
 }  // namespace
 
 void addHusbandryWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers) {
@@ -202,6 +231,8 @@ void addHusbandryWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers) {
     givers.push_back(std::make_unique<TrainGiver>());
     givers.push_back(std::make_unique<SlaughterGiver>());
     givers.push_back(std::make_unique<FeedAnimalsGiver>());
+    givers.push_back(std::make_unique<GatherGiver>(AnimalProduct::Milk, "Milk"));
+    givers.push_back(std::make_unique<GatherGiver>(AnimalProduct::Wool, "Shear"));
 }
 
 // ---- The job's steps ------------------------------------------------------------------------
@@ -245,6 +276,12 @@ bool JobSystem::failCheckHandle(Entity pawn, Job& job, std::string& why) {
         case JobType::SlaughterAnimal:
             if (!tame || care == nullptr || !care->markSlaughter) {
                 why = "the animal is no longer marked for slaughter";
+                return false;
+            }
+            break;
+        case JobType::GatherAnimal:
+            if (breeding_ == nullptr || !breeding_->readyToGather(animal, static_cast<AnimalProduct>(job.bill))) {
+                why = "the animal has nothing to give now";
                 return false;
             }
             break;
@@ -337,7 +374,10 @@ JobSystem::StepResult JobSystem::handleWork(Entity pawn, Job& job, std::string& 
 
     double total = rules.interactSeconds;
     double xp = rules.tameXp;
-    if (job.type == JobType::SlaughterAnimal) {
+    if (job.type == JobType::GatherAnimal) {
+        total = breeding_->gatherSeconds(static_cast<AnimalProduct>(job.bill));
+        xp = breeding_->rules().gatherXp;
+    } else if (job.type == JobType::SlaughterAnimal) {
         total = rules.slaughterSeconds;
         xp = rules.slaughterXp;
     } else if (job.type == JobType::FeedAnimal) {
@@ -368,6 +408,7 @@ JobSystem::StepResult JobSystem::handleWork(Entity pawn, Job& job, std::string& 
         case JobType::TameAnimal: husbandry_->finishTame(pawn, animal, skill); break;
         case JobType::TrainAnimal: husbandry_->finishTrain(pawn, animal, static_cast<Trainable>(job.bill), skill); break;
         case JobType::SlaughterAnimal: husbandry_->finishSlaughter(pawn, animal); break;
+        case JobType::GatherAnimal: breeding_->finishGather(pawn, animal, static_cast<AnimalProduct>(job.bill)); break;
         default: break;
     }
     return StepResult::Next;

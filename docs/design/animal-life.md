@@ -20,7 +20,7 @@ saved and hashed.
 **Life stages** come from the def's `race.lifeStages` and the animal's age: `lifeStage()` is 0 baby,
 1 juvenile, 2 adult and `bodySize()` is the def's size times the stage's factor. A game year is 60
 days. Nothing ages into a new stage yet that the sim cares about except the size and food numbers;
-births are N4. Animals placed at map generation are adults up to half their life expectancy.
+births are N4 ([breeding.md](breeding.md)). Animals placed at map generation are adults up to half their life expectancy.
 
 ## Putting animals on the map
 
@@ -78,8 +78,8 @@ nothing. Animals are visited in entity id order anyway, because two may want the
 
 ## Not here
 
-Hunting and the corpse as an item (N2), taming, training, pens (N3), breeding, young growing up,
-milk, wool, eggs (N4), animals drawn on screen
+Hunting and the corpse as an item (N2), taming, training, pens (N3, done: [husbandry.md](husbandry.md)), breeding, young growing up,
+milk, wool, eggs (N4, done: [breeding.md](breeding.md)), animals drawn on screen
 (U15; until then Unreal does not turn `wildAnimals` on, because the pawn drawing would show every
 animal as a person). Animal temperature comfort, the weather and seasons (E tasks) and old age.
 

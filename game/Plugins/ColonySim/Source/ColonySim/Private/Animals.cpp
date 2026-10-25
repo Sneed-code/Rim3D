@@ -247,6 +247,12 @@ int AnimalSystem::lifeStage(Entity animal) const {
     return kind != nullptr ? stageAt(*kind, time_.seconds - things_.registry().get<Animal>(animal).bornAt) : -1;
 }
 
+bool AnimalSystem::isAdult(Entity animal) const {
+    const Kind* kind = kindOf(animal);
+    return kind != nullptr &&
+           stageAt(*kind, time_.seconds - things_.registry().get<Animal>(animal).bornAt) == static_cast<int>(kind->stages.size()) - 1;
+}
+
 float AnimalSystem::bodySize(Entity animal) const {
     const Kind* kind = kindOf(animal);
     return kind != nullptr ? capacity(*kind, time_.seconds - things_.registry().get<Animal>(animal).bornAt) : 0.0f;
