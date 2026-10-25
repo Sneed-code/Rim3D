@@ -62,6 +62,8 @@ enum class EventType : uint8_t {
     WeatherChanged,  // the weather began to change into another kind (docs/design/weather.md)
     SeasonChanged,   // a new season began
     TalentPoint,     // the protagonist earned a talent point (docs/design/talents.md)
+    TrapSprung,      // a pawn set off a trap (docs/design/defense.md)
+    TrapRearmed,     // a sprung trap was set again
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -137,6 +139,9 @@ struct Event {
     // (none for a release or a starving), `cell` where. AnimalTrained: also `message` the trick (Trainable name),
     // `amount` the steps it has now and `part` the steps it needs. AnimalAttemptFailed: `message` "tame" or the
     // trick, `amount` the chance the attempt had.
+    // TrapSprung: `thing` the trap (it may be gone: an IED always is), `def` its def, `target` the pawn that set it off,
+    // `cell` its cell, (x, y, z) where. The hurt come as PawnInjured and the blast as Explosion. TrapRearmed: `thing`,
+    // `def`, `cell`. A turret's shots are ShotFired with `thing` the turret and `def` its gun's Things def.
     // TalentPoint: `thing` the protagonist, `def` its def, `amount` the points it can spend now.
     // ShortCircuit: `thing` the building it happened at, `cell` its origin, `amount` the energy
     // released from the net's batteries, Wd.

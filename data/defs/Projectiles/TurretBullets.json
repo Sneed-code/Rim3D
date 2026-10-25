@@ -1,0 +1,7 @@
+[
+  {
+    "defName": "Bullet_MiniTurret", "parent": "BulletBase", "label": "mini-turret bullet",
+    "projectile": { "damageAmountBase": 12, "armorPenetrationBase": 0.15, "stoppingPower": 1, "speed": 2.333333 },
+    "unverified": ["projectile"]
+  }
+]
