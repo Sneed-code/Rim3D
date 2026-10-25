@@ -95,6 +95,14 @@ const char* commandName(const Command& command) {
                 return "Throw";
             } else if constexpr (std::is_same_v<Type, ExplodeCommand>) {
                 return "Explode";
+            } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
+                return "StartRaid";
+            } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
+                return "SoundAlarm";
+            } else if constexpr (std::is_same_v<Type, SetDefenseRoleCommand>) {
+                return "SetDefenseRole";
+            } else if constexpr (std::is_same_v<Type, MarkShelterCommand>) {
+                return "MarkShelter";
             } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
                 return "Melee";
             } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
@@ -172,6 +180,10 @@ const char* eventTypeName(EventType type) {
         case EventType::GrenadeLanded: return "GrenadeLanded";
         case EventType::Explosion: return "Explosion";
         case EventType::PawnKnockedDown: return "PawnKnockedDown";
+        case EventType::RaidArrived: return "RaidArrived";
+        case EventType::SquadChanged: return "SquadChanged";
+        case EventType::AlarmChanged: return "AlarmChanged";
+        case EventType::PawnLeftMap: return "PawnLeftMap";
         case EventType::MeleeSwing: return "MeleeSwing";
         case EventType::MeleeHit: return "MeleeHit";
         case EventType::ApparelDestroyed: return "ApparelDestroyed";

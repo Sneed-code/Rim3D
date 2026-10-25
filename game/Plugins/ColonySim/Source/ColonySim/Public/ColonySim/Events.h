@@ -46,6 +46,10 @@ enum class EventType : uint8_t {
     GrenadeLanded,   // a thrown grenade came to rest; its fuse is running
     Explosion,       // a blast went off
     PawnKnockedDown, // a blast threw a pawn to the ground
+    RaidArrived,     // a raid walked in (docs/design/raids.md)
+    SquadChanged,    // a raid squad's morale changed
+    AlarmChanged,    // the colony alarm went on or off
+    PawnLeftMap,     // a pawn walked off the map and is gone (a ThingDestroyed follows)
     MeleeSwing,      // a pawn began a melee swing: the hit comes `amount` steps later (docs/design/melee.md)
     MeleeHit,        // the hit moment of a swing: `message` says "hit", "deflected", "blocked", "dodged" or "missed"
     ApparelDestroyed,  // a worn piece wore out or was shot to pieces: `thing` the wearer, `def` the piece's def (docs/design/apparel.md)
@@ -146,6 +150,13 @@ struct Event {
     // `thing` and `def`; `target` the pawn struck (or the one aimed at if none was), `hit` Pawn, Armor
     // (deflected), Building or None, `part` and `amount` as for ProjectileHit, (x, y, z) where the
     // strike ended. Health events follow a hit.
+    // RaidArrived: `squad` its id, `message` the Factions def, `count` its pawns, `amount` its raid
+    // points, `cell` where it walked in. SquadChanged: `squad`, `message` the new state ("Advance",
+    // "Hold", "FallBack", "Rout", or "gave up" for a rout because time ran out), `count` its pawns.
+    // AlarmChanged: `message` "on: why" or "off: why". PawnLeftMap: `thing` the pawn, `cell` where
+    // it left, `squad` its raid squad.
+    uint32_t squad = 0;
+    int count = 0;
 };
 
 COLONY_API const char* eventTypeName(EventType type);

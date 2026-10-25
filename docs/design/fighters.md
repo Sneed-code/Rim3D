@@ -10,7 +10,10 @@ of another faction. Every half real second it **re-plans**: it looks for enemies
 scores the cells around it and picks a spot. Every step it **acts** on that plan: walks to the
 spot, crouches there, and when its gun is ready stands up or steps out to shoot, then ducks back.
 Aiming is F2's (warm-up, spread from skill) plus F5's reaction time, leading, reloading in cover and
-sidestepping slow projectiles ([aiming.md](aiming.md)). Squads, morale, raids and the colony alarm are F6.
+sidestepping slow projectiles ([aiming.md](aiming.md)). Squads, morale, raids and the colony alarm are F6
+([raids.md](raids.md)): a raid squad sets its fighters' `advances`, `retreat` (fall back whatever the odds)
+and `goal` (where to head while no enemy is known), routs them into `FightMode::Flee`, and the alarm makes
+colonists fighters with `defending` set, in `Fight` or `Shelter` mode.
 
 ## Sides
 
@@ -159,8 +162,7 @@ steps as cover.md says.
 
 ## Not done yet
 
-- Squads, morale, rout and fleeing, raid plans, the colony alarm and defense roles (F6). Undrafted
-  colonists don't react to enemies yet.
+- Squads, morale, rout and fleeing, raid plans, the colony alarm and defense roles: F6, [raids.md](raids.md).
 - Strafing while shooting, prone, rescuing the downed. (Diving from grenades and throwing them are F9's, [explosives.md](explosives.md).)
 - Melee is F8's ([melee.md](melee.md)): fighters armed for it charge, the others strike back at
   enemies in reach, and a fighter with no gun no longer walks toward its target to get in range.
