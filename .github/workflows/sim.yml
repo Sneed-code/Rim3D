@@ -1,10 +1,8 @@
 name: Sim
 
-# Free-plan budget: 2,000 minutes a month, Windows counts double. So:
+# The repo is public, so Actions minutes are free. To keep runs cheap anyway:
 #  - a newer push cancels the run before it;
-#  - docs-only and picture-only changes skip the run;
-#  - pull requests run Linux only; Windows (and the Linux/Windows replay compare) runs after the
-#    merge on main, or on demand: Actions tab, Sim, Run workflow, on the branch.
+#  - docs-only and picture-only changes skip the run.
 on:
   push:
     branches: [main]
@@ -55,9 +53,8 @@ jobs:
           name: save-Linux
           path: build/straight.save
 
-  # Windows (MSVC): after the merge on main, or on demand. Counts double, so not on every PR push.
+  # Windows (MSVC), same tests as Linux.
   build-and-test-windows:
-    if: github.event_name != 'pull_request'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -84,7 +81,6 @@ jobs:
   # replay recorded on sneed's PC plays the same in the cloud, and the same save file byte for
   # byte, so a save made on the PC loads in the cloud.
   replay-cross-platform:
-    if: github.event_name != 'pull_request'
     needs: [build-and-test, build-and-test-windows]
     runs-on: ubuntu-latest
     steps:
