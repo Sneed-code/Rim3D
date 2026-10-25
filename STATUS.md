@@ -41,7 +41,7 @@ pawn's velocity, ground height and route ahead (`docs/design/movement.md`). Sinc
 time, passes events to `OnSimEvent`, keeps the last two snapshots and blends positions between them
 (`GetBlendedLocation`, the one place sim metres become Unreal centimetres), loads `data/defs`, shows
 sim timings on screen, and has keys: Space pause, 1/2/3 speed, `.` step, F7 saves a replay to
-`Saved/Replays/` (that is the bug-replay key U12 planned; U12 keeps F5/F9 saves and autosave). Since U6 there is an overseer camera (`-Overseer` or console `Overseer.Enter`): WASD pan, Q/E turn, wheel zoom, middle-drag orbit, click to select a pawn, thing or ground cell (picked against the sim, not Unreal collision), with an ImGui speed bar and inspect panel; ImGui is the free VesCodes plugin in `game/Plugins/ImGui/` (not in Git, `assets/manifest.json` says how to get it back) (`docs/design/overseer.md`). **Every task that adds sim state must add it to the
+`Saved/Replays/` (that is the bug-replay key U12 planned; U12 keeps F5/F9 saves and autosave). Since U6 there is an overseer camera (`-Overseer` or console `Overseer.Enter`): WASD pan, Q/E turn, wheel zoom, middle-drag orbit, click to select a pawn, thing or ground cell (picked against the sim, not Unreal collision), with an ImGui speed bar and inspect panel; ImGui is the free VesCodes plugin in `game/Plugins/ImGui/` (not in Git, `assets/manifest.json` says how to get it back) (`docs/design/overseer.md`). Since U5 every sim pawn is drawn as an actor without a movement component that follows the snapshot: the 20 nearest the camera are motion matched (Epic's motion matching run from our own C++, no Animation Blueprint; trajectory from the sim's route), the rest play walk, run and idle loops updated 20 or 8 times a second; the sim's `PawnAction` events (pick up, put down) play a short action animation; `Pawns.MetaHumans 1` draws them as MetaHumans with strand hair only up close (`docs/design/pawns.md`). **Every task that adds sim state must add it to the
 save** (the doc has the steps) and to the save round-trip test.
 
 Since D3 the game has real starting data in `data/defs/`, written by hand with RimWorld's numbers
@@ -61,7 +61,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-13 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6). Tick tasks in `docs/plans/stage-1.md` as they merge.
+14 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -102,8 +102,9 @@ wiki; check them when a task leans on them.
 Wave 5: ~~**S4** smooth movement~~ done (`docs/design/movement.md`; save format 3; the hauling
 placeholder asks for a new path when a pawn gives up a walk; path *choice* still ignores slopes and
 sand, the doc says why). **C1** job system (cloud, Opus high) is open: its work types and skills are
-in `data/defs/`. **U5** pawns with animation by distance (PC Unreal, Opus high) has both its needs
-(U2, S4) and is open; it needs the PC free. ~~**U6** overseer camera and selection~~ done (PC Unreal;
+in `data/defs/`. ~~**U5** pawns with animation by distance~~ done (PC Unreal; smoke test `pawns`;
+`docs/design/pawns.md`; the sim's new `PawnAction` event, which C1's jobs should send for their
+actions too). ~~**U6** overseer camera and selection~~ done (PC Unreal;
 smoke test `overseer`; `docs/design/overseer.md`). **U3** terrain and plants (PC Unreal, Sonnet high)
 needs C2 as well.
 

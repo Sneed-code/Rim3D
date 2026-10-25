@@ -230,6 +230,7 @@ void Sim::updateHauler(Entity pawn) {
             if (pathfinder_.takePath(job.path, mover.path)) {
                 simStartWalk(map_, reg.get<Position>(pawn), mover);
                 things_->despawn(job.item);
+                pawnDid(pawn, PawnAction::PickUp, job.item);
                 reg.emplace<HaulCarriedBy>(job.item, HaulCarriedBy{pawn});
                 job.stage = HaulStage::CarryToStockpile;
             } else {
@@ -251,6 +252,7 @@ void Sim::updateHauler(Entity pawn) {
                 // No way to the stockpile from here: puts the item down where it stands.
                 reg.remove<HaulCarriedBy, HaulReservedBy>(job.item);
                 things_->spawnAt(job.item, cellOf(reg.get<Position>(pawn)));
+                pawnDid(pawn, PawnAction::PutDown, job.item);
                 ++stats_.failedJobs;
                 job.stage = HaulStage::Idle;
                 job.item = kNoEntity;
@@ -266,6 +268,7 @@ void Sim::updateHauler(Entity pawn) {
             } else if (reg.get<Mover>(pawn).arrived()) {
                 reg.remove<HaulCarriedBy, HaulReservedBy>(job.item);
                 things_->spawnAt(job.item, *stockpileCell_);
+                pawnDid(pawn, PawnAction::PutDown, job.item);
                 reg.emplace<HaulStored>(job.item);
                 ++stats_.hauls;
                 job.stage = HaulStage::Idle;
@@ -285,6 +288,16 @@ void Sim::commandFailed(uint64_t id, std::string message) {
     event.type = EventType::CommandFailed;
     event.command = id;
     event.message = std::move(message);
+    events_.push_back(std::move(event));
+}
+
+void Sim::pawnDid(Entity pawn, PawnAction action, Entity target) {
+    Event event;
+    event.type = EventType::PawnAction;
+    event.thing = pawn;
+    event.def = things_->registry().get<Thing>(pawn).def;
+    event.action = action;
+    event.target = target;
     events_.push_back(std::move(event));
 }
 
