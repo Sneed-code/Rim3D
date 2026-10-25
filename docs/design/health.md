@@ -62,10 +62,23 @@ hurts the outside part over it).
   (lost parts) and adds `tendedHealBonusPerDay` to its healing, by quality. Doctors and medicine come
   later (not in Stage 1); until then only the dev command tends.
 
+## Environment hediffs (E2)
+
+`Health::environment` holds severity-based illnesses from the surroundings: a Hediffs def with
+`hediffClass` `Environment` (D7's `Hypothermia`, `Heatstroke`, later `ToxicBuildup`), each with a
+severity above 0, kept in def order. Its `stages` (sorted by `minSeverity`) put `capacityOffsets` and
+`capacityMax` on the capacities exactly as blood loss's stages do, and at the def's `lethalSeverity` the
+pawn dies (`DeathCause::Hypothermia`, `Heatstroke`, else `Environment`). Whoever moves the severity
+calls `HealthSystem::setEnvironmentSeverity` (the temperature system does, see [temperature.md](temperature.md));
+the capacities are worked out again only when the stage changes. A hediff that isn't on the pawn has no
+stage, even if the first stage starts at 0. `HealthSystem::addInjury(pawn, part, hediff, severity)` puts an
+injury on a part with no damage type (frostbite); `partsOfDef(pawnDef, "Finger")` lists parts by their
+body part def. The health report has an `environment` list (name, stage label, severity).
+
 ## Capacities
 
 Each `Capacities` def is worked out from the parts and from the other capacities (the rules are in
-starting-data.md), then blood loss's offsets and caps are applied. The pain factor on Consciousness
+starting-data.md), then blood loss's and the environment hediffs' offsets and caps are applied. The pain factor on Consciousness
 is `min(1, 1.05 - 0.45 x pain)`. Moving and Manipulation use **limbs** (`"limbs": {core, segments,
 digit, digitWeight}`): each leg or arm is its core part's efficiency x each segment's x
 `(1 - digitWeight) + digitWeight x (share of working toes or fingers)`, and the capacity is the mean over

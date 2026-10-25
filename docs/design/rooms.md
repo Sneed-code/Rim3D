@@ -110,8 +110,8 @@ rebuilt from the walls when a game loads (the thick roof from the seed's map). D
 ## Not yet
 
 - **Roof collapse**, roof and no-roof designations, building roofs as work.
-- **Temperature** of a room. Space, beauty, wealth, cleanliness and impressiveness are in
-  [room-stats.md](room-stats.md) (C17).
+- Cleanliness, beauty, space, wealth and impressiveness of a room are in
+  [room-stats.md](room-stats.md) (C17); temperature is built, see [temperature.md](temperature.md).
 - **Room ownership and bedroom assignment** (a bed's owner and the room it is in), prison cells.
 - **Multi-storey**: rooms and roofs are for level 0 (floors above are roofs for the level below).
 - **Mining and terrain edits**: the code that mines rock must call `Regions::markDirty` (it does

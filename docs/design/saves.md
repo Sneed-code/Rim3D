@@ -96,7 +96,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `movement` | 1 | `mover` |
 | `jobs` | 1 | `worker` (the job, its bill picks and ingredients, avoid memory), `work` (Work tab), `carrying` |
 | `colonists` | 1 | `colonist` |
-| `health` | 1 | `health` |
+| `health` | 2 | `health` (version 2: environment hediffs such as hypothermia, E2) |
 | `control` | 1 | `playerControlled`: the ids of controlled pawns |
 | `needs` | 1 | `needs`, `schedule`, `bed` |
 | `bills` | 1 | `bills` on work buildings |
@@ -113,6 +113,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `power` | 1 | `power`: per building with a power part, switched on, powered, battery charge (Wd) and requested draw; nets are made again on loading ([power.md](power.md)) |
 | `recreation` | 1 | `joy`: recreation, comfort and outdoors needs, tolerances, and the activity of a recreation job ([recreation.md](recreation.md)) |
 | `animals` | 1 | `SimSettings::wildAnimals`, the animal system's state (populated, percent, random stream, next herd id, over-density flag, counters) and the `animal` part of every animal ([animal-life.md](animal-life.md)) |
+| `temperature` | 1 | each enclosed room's temperature, by its anchor cell (E2) |
 
 **Commands are saved by name (S7).** The `commands` section starts with the names of the command
 types it uses (`commandNames`); each command then gives its type as a place in that list, and its
@@ -271,6 +272,7 @@ Every section is version 1 at format 20. A task that changes a section adds a li
 "`fighters` 2 (F9): ...". New sections are listed in the table above.
 
 - `roomstats` 1 (C17): floors, filth, carried filth, the filth rng, beauty needs ([room-stats.md](room-stats.md)). Commands `PlaceFloor` and `AddFilth` by name.
+- `health` 2 (E2): each pawn's environment hediffs (hypothermia, heatstroke...), a list of def name and severity before `dead`. Version 1 files load with none.
 
 ## Why the state hash changed in S6
 

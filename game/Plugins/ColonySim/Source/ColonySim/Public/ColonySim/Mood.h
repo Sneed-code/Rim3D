@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace colony {
@@ -14,6 +15,7 @@ struct Event;
 class NeedsSystem;
 class RoomStats;
 class Rooms;
+class TemperatureSystem;
 class Things;
 
 // Mood and thoughts (task C9). See docs/design/mood.md.
@@ -75,6 +77,8 @@ public:
     void setRooms(Rooms* rooms) { rooms_ = rooms; }
     // The room and beauty thoughts (C17, docs/design/room-stats.md) read the room stats and the beauty need.
     void setRoomStats(RoomStats* roomStats) { roomStats_ = roomStats; }
+    // Where the temperature thoughts (Cold, Hot) get the degrees outside a pawn's comfort from.
+    void setTemperature(TemperatureSystem* temperature) { temperature_ = temperature; }
 
     const MoodRules& rules() const { return rules_; }
     // The mood the pawn is heading for (not clamped to the 0 to 100 scale), or its base if it has none.
@@ -127,6 +131,7 @@ private:
     Things& things_;
     Rooms* rooms_ = nullptr;
     RoomStats* roomStats_ = nullptr;
+    TemperatureSystem* temperature_ = nullptr;
     const NeedsSystem& needs_;
     const DefDatabase& defs_;
     MoodRules rules_;

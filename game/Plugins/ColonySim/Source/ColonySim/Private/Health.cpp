@@ -42,6 +42,9 @@ const char* deathCauseName(DeathCause cause) {
         case DeathCause::VitalPartLost: return "a vital part destroyed";
         case DeathCause::VitalCapacity: return "organ failure";
         case DeathCause::Starvation: return "starvation";
+        case DeathCause::Hypothermia: return "hypothermia";
+        case DeathCause::Heatstroke: return "heatstroke";
+        case DeathCause::Environment: return "exposure";
     }
     return "";
 }
@@ -137,6 +140,15 @@ public:
     int consciousnessCapacity = -1;
     std::vector<Stage> bloodStages;
     float bloodLethal = 1.0f;
+    // Environment hediffs (hypothermia...), by DefId value: empty `stages` for any other def.
+    struct EnvironmentDef {
+        bool valid = false;
+        float lethal = 1.0f;
+        DeathCause cause = DeathCause::Environment;
+        std::vector<Stage> stages;  // by minSeverity
+        std::vector<uint8_t> lifeThreatening;
+    };
+    std::vector<EnvironmentDef> environmentDefs;
     DefId missingHediff;
     std::vector<Hediff> hediffs;          // by DefId value
     std::vector<DamageType> damageTypes;  // by DefId value
@@ -163,6 +175,20 @@ public:
         }
         return &kinds[thingDef.value];
     }
+    const EnvironmentDef* environmentOf(DefId hediff) const {
+        return hediff.valid() && hediff.value < environmentDefs.size() && environmentDefs[hediff.value].valid
+                   ? &environmentDefs[hediff.value]
+                   : nullptr;
+    }
+    static int stageIn(const std::vector<Stage>& stages, float severity) {
+        int stage = -1;
+        for (size_t i = 0; i < stages.size(); ++i) {
+            if (severity >= stages[i].minSeverity) {
+                stage = static_cast<int>(i);
+            }
+        }
+        return stage;
+    }
     int stageOf(float bloodLoss) const {
         int stage = -1;
         for (size_t i = 0; i < bloodStages.size(); ++i) {
@@ -175,7 +201,50 @@ public:
 
 private:
     int buildPart(const Def& bodyDef, const std::string& path, int parent, float absCoverage, Body& out);
+    // The `stages` of a hediff def, sorted by minSeverity; `lifeThreatening` (optional) gets each
+    // stage's flag in the same order.
+    static std::vector<Stage> readStages(const Def& def, const std::unordered_map<std::string, int>& capacityOf,
+                                         std::vector<uint8_t>* lifeThreatening);
 };
+
+std::vector<HealthModel::Stage> HealthModel::readStages(const Def& def, const std::unordered_map<std::string, int>& capacityOf,
+                                                         std::vector<uint8_t>* lifeThreatening) {
+    struct Flagged {
+        Stage stage;
+        uint8_t life = 0;
+    };
+    std::vector<Flagged> flagged;
+    for (size_t i = 0, n = def.count("stages"); i < n; ++i) {
+        const std::string at = "stages." + std::to_string(i);
+        Flagged f;
+        Stage& s = f.stage;
+        s.minSeverity = static_cast<float>(def.number((at + ".minSeverity").c_str()));
+        f.life = def.flag((at + ".lifeThreatening").c_str()) ? 1 : 0;
+        for (const std::string& key : def.keys((at + ".capacityOffsets").c_str())) {
+            const auto found = capacityOf.find(key);
+            if (found != capacityOf.end()) {
+                s.offsets.emplace_back(found->second, static_cast<float>(def.number((at + ".capacityOffsets." + key).c_str())));
+            }
+        }
+        for (const std::string& key : def.keys((at + ".capacityMax").c_str())) {
+            const auto found = capacityOf.find(key);
+            if (found != capacityOf.end()) {
+                s.maxima.emplace_back(found->second, static_cast<float>(def.number((at + ".capacityMax." + key).c_str())));
+            }
+        }
+        flagged.push_back(std::move(f));
+    }
+    std::stable_sort(flagged.begin(), flagged.end(),
+                     [](const Flagged& a, const Flagged& b) { return a.stage.minSeverity < b.stage.minSeverity; });
+    std::vector<Stage> out;
+    for (Flagged& f : flagged) {
+        out.push_back(std::move(f.stage));
+        if (lifeThreatening != nullptr) {
+            lifeThreatening->push_back(f.life);
+        }
+    }
+    return out;
+}
 
 int HealthModel::buildPart(const Def& bodyDef, const std::string& path, int parent, float absCoverage, Body& out) {
     const int index = static_cast<int>(out.parts.size());
@@ -294,6 +363,7 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
     // Hediffs and damage types, by def id.
     hediffs.assign(defs.size(), Hediff{});
     damageTypes.assign(defs.size(), DamageType{});
+    environmentDefs.assign(defs.size(), EnvironmentDef{});
     for (const DefId id : defs.idsOfKind(kHealthHediffsKind)) {
         const Def& def = defs.get(id);
         Hediff& h = hediffs[id.value];
@@ -304,28 +374,15 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
             missingHediff = id;
         } else if (def.defName() == "BloodLoss") {
             bloodLethal = static_cast<float>(def.number("lethalSeverity", 1.0));
-            for (size_t i = 0, n = def.count("stages"); i < n; ++i) {
-                const std::string at = "stages." + std::to_string(i);
-                Stage s;
-                s.minSeverity = static_cast<float>(def.number((at + ".minSeverity").c_str()));
-                for (const std::string& key : def.keys((at + ".capacityOffsets").c_str())) {
-                    const auto found = capacityOf.find(key);
-                    if (found != capacityOf.end()) {
-                        s.offsets.emplace_back(found->second,
-                                               static_cast<float>(def.number((at + ".capacityOffsets." + key).c_str())));
-                    }
-                }
-                for (const std::string& key : def.keys((at + ".capacityMax").c_str())) {
-                    const auto found = capacityOf.find(key);
-                    if (found != capacityOf.end()) {
-                        s.maxima.emplace_back(found->second,
-                                              static_cast<float>(def.number((at + ".capacityMax." + key).c_str())));
-                    }
-                }
-                bloodStages.push_back(std::move(s));
-            }
-            std::sort(bloodStages.begin(), bloodStages.end(),
-                      [](const Stage& a, const Stage& b) { return a.minSeverity < b.minSeverity; });
+            bloodStages = readStages(def, capacityOf, nullptr);
+        } else if (def.text("hediffClass") == "Environment") {
+            EnvironmentDef& e = environmentDefs[id.value];
+            e.valid = true;
+            e.lethal = static_cast<float>(def.number("lethalSeverity", 1.0));
+            e.cause = def.defName() == "Hypothermia"  ? DeathCause::Hypothermia
+                      : def.defName() == "Heatstroke" ? DeathCause::Heatstroke
+                                                      : DeathCause::Environment;
+            e.stages = readStages(def, capacityOf, &e.lifeThreatening);
         }
     }
     for (const DefId id : defs.idsOfKind(kHealthDamageTypesKind)) {
@@ -517,6 +574,20 @@ struct HealthEval {
                 v = cap == index ? std::min(v, maximum) : v;
             }
         }
+        for (const EnvironmentHediff& env : health.environment) {
+            const HealthModel::EnvironmentDef* def = model.environmentOf(env.def);
+            const int envStage = def != nullptr ? HealthModel::stageIn(def->stages, env.severity) : -1;
+            if (envStage < 0) {
+                continue;
+            }
+            const HealthModel::Stage& s = def->stages[static_cast<size_t>(envStage)];
+            for (const auto& [cap, offset] : s.offsets) {
+                v += cap == index ? offset : 0.0f;
+            }
+            for (const auto& [cap, maximum] : s.maxima) {
+                v = cap == index ? std::min(v, maximum) : v;
+            }
+        }
         value[i] = std::max(0.0f, v);
         state[i] = 2;
         return value[i];
@@ -676,6 +747,12 @@ void HealthSystem::derive(int bodyIndex, float healthScale, Health& health, Deat
     }
     if (cause == DeathCause::None && health.bloodLoss >= model_->bloodLethal) {
         cause = DeathCause::BloodLoss;
+    }
+    for (const EnvironmentHediff& env : health.environment) {
+        const HealthModel::EnvironmentDef* def = model_->environmentOf(env.def);
+        if (cause == DeathCause::None && def != nullptr && env.severity >= def->lethal) {
+            cause = def->cause;
+        }
     }
     shouldBeDown = health.pain > model_->painShock;
     for (size_t c = 0; c < model_->capacities.size(); ++c) {
@@ -982,6 +1059,97 @@ int HealthSystem::tendAll(Entity pawn, float quality) {
     return tended;
 }
 
+// ---- Environment hediffs and injuries without a damage type ------------------------------------------
+
+float HealthSystem::environmentSeverity(Entity pawn, DefId hediff) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || !reg.all_of<Health>(pawn)) {
+        return 0.0f;
+    }
+    for (const EnvironmentHediff& env : reg.get<Health>(pawn).environment) {
+        if (env.def == hediff) {
+            return env.severity;
+        }
+    }
+    return 0.0f;
+}
+
+float HealthSystem::environmentLethalSeverity(DefId hediff) const {
+    const HealthModel::EnvironmentDef* def = model_->environmentOf(hediff);
+    return def != nullptr ? def->lethal : 0.0f;
+}
+
+bool HealthSystem::setEnvironmentSeverity(Entity pawn, DefId hediff, float severity) {
+    entt::registry& reg = things_.registry();
+    const HealthModel::EnvironmentDef* def = model_->environmentOf(hediff);
+    if (def == nullptr || !tracks(pawn)) {
+        return false;
+    }
+    Health& health = reg.get<Health>(pawn);
+    if (health.dead) {
+        return false;
+    }
+    severity = std::max(0.0f, severity);
+    auto it = std::find_if(health.environment.begin(), health.environment.end(),
+                           [&](const EnvironmentHediff& e) { return e.def == hediff; });
+    const bool had = it != health.environment.end();
+    const float before = had ? it->severity : 0.0f;
+    if (severity == before) {
+        return true;
+    }
+    // A hediff that is not there has no stage, whatever the first stage's minimum.
+    const int stageBefore = had ? HealthModel::stageIn(def->stages, before) : -1;
+    if (severity <= 0.0f) {
+        health.environment.erase(it);
+    } else if (it != health.environment.end()) {
+        it->severity = severity;
+    } else {
+        // Kept in def id order, so the state is the same however it came about.
+        const auto at = std::find_if(health.environment.begin(), health.environment.end(),
+                                     [&](const EnvironmentHediff& e) { return e.def.value > hediff.value; });
+        health.environment.insert(at, EnvironmentHediff{hediff, severity});
+    }
+    // The capacities change only when the stage does, or the hediff becomes deadly.
+    const int stageAfter = severity > 0.0f ? HealthModel::stageIn(def->stages, severity) : -1;
+    if (stageAfter != stageBefore || (severity >= def->lethal) != (before >= def->lethal)) {
+        health.dirty = true;
+    }
+    return true;
+}
+
+bool HealthSystem::addInjury(Entity pawn, int part, DefId hediff, float severity) {
+    entt::registry& reg = things_.registry();
+    const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);
+    if (kind == nullptr || !hediff.valid() || hediff.value >= model_->hediffs.size() || severity <= 0.0f) {
+        return false;
+    }
+    Health& health = reg.get<Health>(pawn);
+    const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+    if (health.dead || part < 0 || static_cast<size_t>(part) >= body.parts.size()) {
+        return false;
+    }
+    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
+    if (eval.gone[static_cast<size_t>(part)] != 0) {
+        return false;
+    }
+    health.injuries.push_back(Injury{static_cast<uint16_t>(part), hediff, severity, -1.0f});
+    recompute(pawn, health, true);
+    return true;
+}
+
+std::vector<int> HealthSystem::partsOfDef(DefId pawnDef, const std::string& partDef) const {
+    std::vector<int> out;
+    if (const HealthModel::Kind* kind = model_->kindOf(pawnDef)) {
+        const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+        for (size_t i = 0; i < body.parts.size(); ++i) {
+            if (body.parts[i].def == partDef) {
+                out.push_back(static_cast<int>(i));
+            }
+        }
+    }
+    return out;
+}
+
 // ---- Each game second -------------------------------------------------------------------------
 
 void HealthSystem::step(int64_t seconds, uint64_t seed) {
@@ -1122,6 +1290,21 @@ bool HealthSystem::report(Entity pawn, HealthReport& out) const {
     }
     for (const MissingPart& missing : health.missing) {
         out.missingParts.push_back(body.parts[missing.part].label);
+    }
+    for (const EnvironmentHediff& env : health.environment) {
+        const HealthModel::EnvironmentDef* def = model_->environmentOf(env.def);
+        if (def == nullptr) {
+            continue;
+        }
+        HealthReport::EnvironmentLine line;
+        line.name = things_.defs().get(env.def).label();
+        line.severity = env.severity;
+        const int stage = HealthModel::stageIn(def->stages, env.severity);
+        if (stage >= 0) {
+            line.stage = things_.defs().get(env.def).text(("stages." + std::to_string(stage) + ".label").c_str());
+            line.lifeThreatening = stage < static_cast<int>(def->lifeThreatening.size()) && def->lifeThreatening[static_cast<size_t>(stage)] != 0;
+        }
+        out.environment.push_back(std::move(line));
     }
     for (size_t i = 0; i < model_->capacities.size() && i < health.capacities.size(); ++i) {
         out.capacities.push_back(HealthReport::CapacityLine{model_->capacities[i].name, health.capacities[i]});
