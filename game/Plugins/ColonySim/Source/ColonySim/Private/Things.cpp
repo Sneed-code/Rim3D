@@ -2,6 +2,7 @@
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Cover.h"
+#include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 
 #include <algorithm>
@@ -34,6 +35,17 @@ bool thingCategoryFromDef(const Def& def, ThingCategory& out) {
 
 Position thingCellCentre(CellPos c) {
     return Position{static_cast<float>(c.x) + 0.5f, static_cast<float>(c.y) + 0.5f, c.level};
+}
+
+uint64_t thingCellKey(CellPos c) {
+    return (static_cast<uint64_t>(static_cast<uint32_t>(c.level)) << 48) |
+           (static_cast<uint64_t>(static_cast<uint32_t>(c.y) & 0xFFFFFFu) << 24) |
+           static_cast<uint64_t>(static_cast<uint32_t>(c.x) & 0xFFFFFFu);
+}
+
+const std::vector<Entity>& thingNoItems() {
+    static const std::vector<Entity> none;
+    return none;
 }
 
 }  // namespace
@@ -93,6 +105,9 @@ Entity Things::make(DefId defId, int stackCount) {
             Mover mover;
             mover.metresPerStep = static_cast<float>(def.number("stats.moveSpeed", fallback));
             registry_.emplace<Mover>(thing, std::move(mover));
+            if (def.has("race.body")) {
+                registry_.emplace<Health>(thing);
+            }
             break;
         }
     }
@@ -120,6 +135,9 @@ bool Things::spawnAt(Entity thing, CellPos cell, Rot4 rot) {
             return false;
         }
         registry_.emplace<Position>(thing, thingCellCentre(cell));
+        if (registry_.all_of<StackCount>(thing)) {
+            indexItem(thing, cell, true);
+        }
         report(EventType::ThingSpawned, thing, cell);
         return true;
     }
@@ -143,12 +161,15 @@ bool Things::spawnAt(Entity thing, CellPos cell, Rot4 rot) {
     return true;
 }
 
-bool Things::relinkBuilding(Entity thing) {
+bool Things::relink(Entity thing) {
     if (!registry_.valid(thing) || !registry_.all_of<Position>(thing)) {
         return false;
     }
     const Footprint* footprint = registry_.try_get<Footprint>(thing);
     if (footprint == nullptr) {
+        if (registry_.all_of<StackCount>(thing)) {
+            indexItem(thing, cellOf(registry_.get<Position>(thing)), true);
+        }
         return true;
     }
     const CellRect rect = footprint->rect();
@@ -176,8 +197,50 @@ void Things::despawn(Entity thing) {
             }
         }
     }
+    if (registry_.all_of<StackCount>(thing)) {
+        indexItem(thing, cellOf(registry_.get<Position>(thing)), false);
+    }
     registry_.remove<Position>(thing);
     report(EventType::ThingDespawned, thing);
+}
+
+void Things::indexItem(Entity thing, CellPos cell, bool add) {
+    const uint64_t key = thingCellKey(cell);
+    if (add) {
+        std::vector<Entity>& list = itemsAt_[key];
+        list.insert(std::lower_bound(list.begin(), list.end(), thing), thing);
+        return;
+    }
+    const auto it = itemsAt_.find(key);
+    if (it == itemsAt_.end()) {
+        return;
+    }
+    std::vector<Entity>& list = it->second;
+    list.erase(std::remove(list.begin(), list.end(), thing), list.end());
+    if (list.empty()) {
+        itemsAt_.erase(it);
+    }
+}
+
+const std::vector<Entity>& Things::itemsAt(CellPos cell) const {
+    const auto it = itemsAt_.find(thingCellKey(cell));
+    return it == itemsAt_.end() ? thingNoItems() : it->second;
+}
+
+Entity Things::splitOff(Entity item, int count) {
+    StackCount* stack = registry_.valid(item) ? registry_.try_get<StackCount>(item) : nullptr;
+    if (stack == nullptr || count <= 0 || count >= stack->count) {
+        return kNoEntity;
+    }
+    const Entity part = make(registry_.get<Thing>(item).def, count);
+    if (part == kNoEntity) {
+        return kNoEntity;
+    }
+    registry_.get<StackCount>(item).count -= count;  // `stack` may have moved: make() added a StackCount
+    if (const HitPoints* hp = registry_.try_get<HitPoints>(item)) {
+        registry_.emplace_or_replace<HitPoints>(part, *hp);
+    }
+    return part;
 }
 
 void Things::destroy(Entity thing) {

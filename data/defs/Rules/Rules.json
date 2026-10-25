@@ -32,7 +32,17 @@
     "bleedRateMinForBloodLoss": 0.1,
     "medicineMaxTendQuality": { "None": 0.7, "Herbal": 0.7, "Medicine": 1.0, "Lumen": 1.3 },
     "protagonistPartHitPointsFactor": 2.0,
-    "unverified": ["bloodLossPerDayPerBleedRate", "bloodLossRecoveryPerDay", "bleedRateMinForBloodLoss"]
+    "innerInjuryAlsoHurtsOuter": true,
+    "unverified": ["bloodLossPerDayPerBleedRate", "bloodLossRecoveryPerDay", "bleedRateMinForBloodLoss", "innerInjuryAlsoHurtsOuter"],
+    "ours": ["protagonistPartHitPointsFactor", "innerInjuryAlsoHurtsOuter"]
+  },
+  {
+    "defName": "JobRules", "source": "Rim3D",
+    "defaultWorkPriority": 3,
+    "idleSeconds": 60,
+    "avoidFailedTargetSeconds": 600,
+    "maxRepaths": 5,
+    "ours": ["idleSeconds", "avoidFailedTargetSeconds", "maxRepaths"]
   },
   {
     "defName": "PawnGenRules", "source": "Rim3D",

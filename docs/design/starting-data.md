@@ -42,7 +42,7 @@ names in lowerCamel (`workSpeedGlobal`), keys that are def names keep their case
 | `Terrain` | soil, rich soil, stony soil (`Gravel`), sand, marshy soil, mud, shallow and deep water, rough stone x5 | C2 | `fertility`, `pathCost` (walk speed = 13 / (13 + pathCost)), `affordances` |
 | `Things` | `Items.json`: steel, wood, silver, component, medicine, berries, survival meal. `Plants.json`: oak, poplar, grass, tall grass, bush, brambles, dandelions, berry bush. `Pawns.json`: Human | C1, C2, C8, F1 | Plants are `category: "Plant"` with a `plant` block. Steel and wood carry `stuffProps` for C4 |
 | `Biomes` | temperate forest | C2 | `plantDensity` and `wildPlants` commonality (only the plants we have; newer expansion plants left out) |
-| `Rules` | `PlantRules`, `SkillRules`, `HealthRules`, `PawnGenRules` | C2, C8, F1 | Numbers RimWorld keeps in its code rather than its defs |
+| `Rules` | `PlantRules`, `SkillRules`, `HealthRules`, `PawnGenRules`, `JobRules` | C2, C8, F1, C1 | Numbers RimWorld keeps in its code rather than its defs (`JobRules`: [jobs.md](jobs.md)) |
 | `Skills` | the 12 skills | C1, C8 | `disablingWorkTags` |
 | `WorkTypes` | the 20 Core work types, in Work tab order | C1 | `relevantSkills`, `workTags`, `alwaysStartActive`, `inPrototype`, `tasks` (our job names, in order) |
 | `Traits` | 27 traits, spectra as `degreeDatas` | C8 | `statOffsets`, `statFactors`, `skillGains`, `conflictingTraits`; mood numbers kept for C9 |
@@ -54,7 +54,7 @@ names in lowerCamel (`workSpeedGlobal`), keys that are def names keep their case
 | `BodyPartGroups` | 12 groups | F1, apparel later | |
 | `Capacities` | consciousness, moving, manipulation, sight, hearing, talking, eating, breathing, blood filtration, blood pumping, digestion | F1 | How parts and other capacities feed each one; downed and lethal thresholds |
 | `Hediffs` | injuries (cut, stab, gunshot, scratch, bite, shredded, crush, bruise, crack, burn), missing part, blood loss | F1 | `injuryProps.painPerSeverity`, `bleedRate`, blood loss stages |
-| `DamageTypes` | bullet, cut, stab, scratch, bite, blunt, crush, burn | F1, F2 | Which injury each damage makes (`hediff`, `hediffSolid` on bones) |
+| `DamageTypes` | bullet, cut, stab, scratch, bite, blunt, crush, burn | F1, F2 | Which injury each damage makes (`hediff`, `hediffSolid` on bones); `reachesInside` (ours: bullet, cut, stab) lets a random hit go in to organs and bones |
 
 ## Rules worth knowing
 
@@ -72,14 +72,19 @@ to 0 to 20. A skill is disabled when a backstory or trait disables one of its `d
 Passions: `passionCount` and `majorPassionChance` are our own guesses (the wiki doesn't give
 RimWorld's rule); give passions to the highest skills first.
 
-**Capacities (F1).** Each capacity is a product of its `parts` factors and `capacityFactors`:
-- `average`: the mean efficiency (HP / max HP; 0 if missing) of all parts of that def. Left and
-  right legs give `(L + R) / 2`.
+**Capacities (F1).** Each capacity is a product of its `parts` factors, its `limbs` factor and its
+`capacityFactors`:
+- `average`: the mean efficiency (HP / max HP; 0 if missing or under a missing part) of all parts of
+  that def. Both kidneys give `(L + R) / 2`.
 - `importance` with `weight` w: `1 + (efficiency - 1) x w`. A missing stomach (w 0.5) halves
   digestion; a missing heart (w 1) zeroes blood pumping.
-- `digits`: sum of the digits' efficiencies x `perDigit` + `base` (10 toes: 10 x 0.04 + 0.6 = 1).
 - `bestWeighted`: best part x `bestWeight` + the mean of the rest x (1 - `bestWeight`); one eye
   gives 75% sight.
+- `limbs` (Moving, Manipulation): per leg or arm, the `core` part's efficiency x each of the
+  `segments` x `(1 - digitWeight) + digitWeight x` the share of working `digit` parts under it (toes
+  0.4, fingers 0.8); the capacity is the mean over the limbs. One lost leg is 50% moving. (F1
+  replaced an earlier `digits` form, `perDigit` x digits + `base`, and the plain product over every
+  limb part, which made one lost leg 6%.)
 - `capacityFactors`: the other capacity's value (capped at `max` if given) through the same
   `importance` formula.
 - Consciousness also multiplies by pain: `min(max, intercept + slope x pain)` = min(1, 1.05 -
@@ -96,7 +101,10 @@ divided by the health scale. An injury bleeds severity x `injuryProps.bleedRate`
 total is under 0.1 (these three blood loss numbers are unverified). A lost part bleeds as if it
 had lost 2 x its max HP. Natural healing is 8 HP per day plus the rest bonus (ground 4, bed 8),
 plus 4 to 12 when tended, applied every 0.24 game hours as rate x 0.01 HP to one random wound.
-The protagonist's parts have 2x hit points (`protagonistPartHitPointsFactor`).
+The protagonist's parts have 2x hit points (`protagonistPartHitPointsFactor`). A lost part that
+is not yet tended also hurts (its hit points x `painPerSeverity`, ours). An injury on an inside part
+also injures the outside part over it (`innerInjuryAlsoHurtsOuter`, unverified). How a hit picks its
+part, and the rest of the rules in code: [health.md](health.md).
 
 ## Adding data
 

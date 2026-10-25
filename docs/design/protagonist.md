@@ -27,10 +27,12 @@ snapshots, plays the same animations (the Game Animation Sample mannequin, or a 
 
 ## The two commands
 
-- `ControlPawnCommand{pawn}`: the player takes over `pawn`. Only a colonist on the map; the
-  hauling placeholder's pawns refuse. Taking a second colonist lets the first go where it stands.
-  `kNoEntity` lets go of whoever is controlled. It marks the pawn with the `PlayerControl`
-  component, clears its path and stops it.
+- `ControlPawnCommand{pawn}`: the player takes over `pawn`. Only a living colonist on the map (one
+  that works, so it has a `Worker`). Its job ends (`JobSystem::interrupt`: reservations let go,
+  what it carries put down, a `JobEnded` event "interrupted: taken over by the player"). Taking a
+  second colonist lets the first go where it stands, and its job system takes over again. `kNoEntity`
+  lets go of whoever is controlled. The pawn gets the `PlayerControl` component, its path is
+  cleared and it stops. A downed or dead colonist can't be taken over.
 - `DirectMoveCommand{pawn, x, y}`: where the body wants to be, in metres. Sent **every sim step**.
   The sim moves the pawn toward it by at most `kDirectMaxStep` (0.5 m a step, 15 m/s at 1x, over
   three times the fastest pawn), tries the whole move, then sliding along one axis, then staying
@@ -39,11 +41,12 @@ snapshots, plays the same animations (the Game Animation Sample mannequin, or a 
   pawn is not the controlled one or the numbers are not numbers.
 
 While a pawn has `PlayerControl`, the movement system skips it (the other pawns still steer around
-it) and C1's job system must too: **when the job system exists, taking a colonist over cancels its
-job and the AI does not run for it until control is let go.**
+it), and so does the job system (`JobSystem::step` skips it; `orderHaul` refuses it). **Any new think-list
+node or system that acts on colonists must skip pawns with `PlayerControl` too.** A controlled colonist who
+goes down or dies (F1) is let go by the sim in that step.
 
 Both are logged like every command, so a session with direct play replays exactly (`simrun
---replay`), saves in format 5 and is part of `stateHash`. A `DirectMove` per step is about 3 MB of
+--replay`), saves in format 7 and is part of `stateHash`. A `DirectMove` per step is about 3 MB of
 command log per game day, as the bridge doc already planned.
 
 ## Unreal side
@@ -128,5 +131,8 @@ to try W A S D, the mouse and Tab once.
   the controlled pawn, its position and the crosshair.
 - **Pawns in the way.** Other pawns steer around the player, but the player walks through them
   (`DirectMove` checks walls only).
-- **Colonists that fall asleep, go down or die while controlled.** Nothing in the sim does that yet.
-  If the controlled thing stops existing, the game goes back to the overseer view.
+- **Injuries do not slow the player.** Pawns slow down when hurt (the Moving capacity), but direct
+  control walks at full speed; the sim only caps a step at 0.5 m. Needs the capacity in the snapshot.
+- **Colonists that fall asleep or are drafted while controlled.** Sleep and drafting don't exist yet
+  (C6, F4). A controlled colonist who goes down or dies is let go by the sim, and the game returns
+  to the overseer view (also if the thing stops existing).

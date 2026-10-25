@@ -1,7 +1,6 @@
 # Saves
 
-Code: `ColonySim/Save.h`, `Private/Save.cpp`, `Private/HaulJob.h` (the hauling placeholder's components,
-moved out of `Sim.cpp` so the save can see them). Tests: `Tests/SaveTests.cpp` and the `save_*` ctest
+Code: `ColonySim/Save.h`, `Private/Save.cpp`. Tests: `Tests/SaveTests.cpp` and the `save_*` ctest
 runs. Task S6.
 
 A save holds the whole game state in one file. Load it, run on, and the game is the same, step for
@@ -23,21 +22,24 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | --- | --- |
 | Settings | seed, map size, hauling-test settings, checkpoint interval |
 | Clock and random stream | game second, the `Rng` state and stream |
-| Every thing | its id, its def **by `defName`**, and every component (position, footprint, stack, hit points, mover and its path, hauling job) |
+| Every thing | its id, its def **by `defName`**, and every component (position, footprint, stack, hit points, mover and its path, worker with its job and avoid memory, Work tab row by work type `defName`, what it carries, health) |
 | Free entity ids | in the order the registry reuses them, so a loaded sim hands out the same ids as the saved one |
 | Command log | every command applied so far, failed ones too |
 | Queued commands | submitted but not yet applied; they apply at the first step after loading |
 | Checkpoints | the state hashes recorded so far |
-| Hauling placeholder | stockpile cell, hauler list, counters, setup errors |
+| Hauling test | its stockpile's middle cell, hauler list, counters, setup errors |
+| Stockpile zones (format 6) | each zone's id, priority, filter by `defName` and cells, and the next zone id |
 | Pawn movement (format 3) | each pawn's velocity, line start, held-up counters (`Mover`), and the repath count |
 | Colonists (format 4) | each colonist's name, age, backstories, traits, skills and the scenario name in the settings ([colonists.md](colonists.md)) |
-| Direct control (format 5) | which colonist the player controls (a flag on the pawn); the `ControlPawn` and `DirectMove` commands in the log ([protagonist.md](protagonist.md)) |
+| Pawn health (format 5) | per pawn: protagonist flag, rest, injuries (part, hediff **by `defName`**, severity, tend quality), lost parts, blood loss, dead and cause. Pain, bleeding, capacities and downed are worked out again on loading ([health.md](health.md)) |
+| Direct control (format 7) | which colonist the player controls (a flag on the pawn); the `ControlPawn` and `DirectMove` commands in the log ([protagonist.md](protagonist.md)) |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
 its hash and loading fails if the generator now gives a different map), the building layer (put back
 from the buildings' footprints), regions, cover and threat maps (caches, see `regions.md` and
-`cover.md`), the pathfinder's scratch buffers and counters (a half-done search is redone on load
+`cover.md`), the job system's reservations (they follow from the jobs, [jobs.md](jobs.md)), the
+items-per-cell index, the pathfinder's scratch buffers and counters (a half-done search is redone on load
 from its request and the work it had done), and the event list (a loaded sim's
 `events()` is empty; Unreal rebuilds its view from a snapshot).
 
@@ -93,7 +95,8 @@ three is a bug the tests are built to catch:
    rebuilt by whatever asks for it, and nothing that changes game state may read it stale.
 7. **Changing the layout of anything already saved**: bump `kSaveFormatVersion`, keep reading the old
    version (the archive's `version()` says which one the file is: `if (ar.version() >= 2) ...`), and
-   write the change here. Old saves keep loading until a decision says otherwise.
+   write the change here. Old saves keep loading until a decision says otherwise (decision 0005
+   dropped formats 1 to 5 for the job system).
 
 Never store a `DefId` (or any number that depends on load order) in a save: use the `defName`.
 The same goes for region ids, which a loaded map numbers afresh: keep a cell, and never let a
@@ -146,11 +149,18 @@ sneed's whole job for a bug is: press F8, then send the folder (zip it, or drop 
 - **3** (S4): a pawn's `Mover` also has its velocity, where its current line started, the held-up
   counters and `gaveUp`; the hauling job's `WaitPathCarrying` stage; `SimStats::repaths`. Older
   files load with pawns at rest.
-
 - **4** (C8): `scenario` in the settings and a `Colonist` component on a pawn. Older files load
   with no scenario and no colonists.
+- **5** (F1): `Health` on pawns (a pawn whose def has `race.body` and whose save has none gets a
+  healthy one). Commands 2 and 3 (`DamagePawn`, `TendPawn`).
+- **6** (C1): the job system. Things have `worker`, `work` and `carrying` instead of the hauling
+  placeholder's components, the zones follow the path queue, and commands 4 to 9 are the work and
+  stockpile commands. **Formats 1 to 5 no longer load** ("made before the job system",
+  [decision 0005](../decisions/0005-saves-before-jobs.md)): the placeholder's state has no
+  counterpart in jobs. The `ar.version() >= 2` to `>= 5` branches stay, so the old layout is still
+  written down in one place.
 
-- **5** (U9): a `playerControlled` flag on a thing, and command types 2 (`ControlPawn`) and 3
+- **7** (U9): a `playerControlled` flag on a thing, and command types 10 (`ControlPawn`) and 11
   (`DirectMove`) in the command log. Older files load with nobody controlled. A file with two
   controlled pawns, or a controlled pawn that isn't a colonist on the map, is refused.
 

@@ -77,7 +77,7 @@ Times are one sitting of thread work. "Needs" lists tasks that must be merged fi
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | C1 | **Job system.** RimWorld-style think list (emergencies, orders, needs, schedule, work), work types and priorities from data, work scanners that weigh distance and skip unreachable targets, reservations, jobs as steps with fail checks. Stockpile zones and hauling move onto it. Doc: `design/jobs.md`. | Cloud | Opus, high | 90 min | S3, D3 |
+| ✓ | C1 | **Job system.** RimWorld-style think list (emergencies, orders, needs, schedule, work), work types and priorities from data, work scanners that weigh distance and skip unreachable targets, reservations, jobs as steps with fail checks. Stockpile zones and hauling move onto it. Doc: `design/jobs.md`. | Cloud | Opus, high | 90 min | S3, D3 |
 | | C2 | **Plants.** Plant grid layer from defs; map generation places trees, berry bushes and grass by fertility; hourly growth. Shows in the simrun picture. | Cloud | Sonnet, medium | 60 min | S1, D3 |
 | | C3 | **Mining, chopping and harvesting.** Designations and jobs: rock cells become rock chunks or ore, trees become wood, bushes give berries. Mining rebuilds regions. Work speed from skill. | Cloud | Sonnet, high | 90 min | C1, C2 |
 | | C4 | **Building.** Blueprints, frames, hauling materials to frames, build jobs, deconstruct. Wall, door, bed, table and stove from defs. Buildings block cells and rebuild regions. Doc: `design/construction.md`. | Cloud | Sonnet, high | 90 min | C1 |
@@ -92,7 +92,7 @@ Times are one sitting of thread work. "Needs" lists tasks that must be merged fi
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | F1 | **Health basics.** Body parts from the Human body defs, hit points per part (2x for the protagonist), injuries with bleeding and pain, downed, death, slow natural healing. Doc: `design/health.md`. | Cloud | Sonnet, high | 90 min | S1, D3 |
+| ✓ | F1 | **Health basics.** Body parts from the Human body defs, hit points per part (2x for the protagonist), injuries with bleeding and pain, downed, death, slow natural healing. Doc: `design/health.md`. | Cloud | Sonnet, high | 90 min | S1, D3 |
 | | F2 | **Guns, projectiles and hitboxes.** Weapon defs, firing with spread and recoil, projectiles with speed and drop, hits against terrain, walls and per-part hitboxes posed for standing, crouching and prone; armor penetration, then injury to the part hit. Doc: `design/combat.md`. | Cloud | Opus, high | 90 min | F1, S4 |
 | ✓ | F3 | **Cover, sight and threat maps.** Cover strength per cell in 8 directions, rebuilt only where something is built or destroyed; line-of-sight queries; a threat map per faction. | Cloud | Sonnet, high | 90 min | S2 |
 | | F4 | **Fighter AI: where to stand.** Re-plan about twice a second by scoring nearby cells (cover from known enemies, sight to a target, weapon range, distance, crowding); crouch and lean at cover; target choice per the design doc; draft, move and attack orders. | Cloud | Opus, high | 120 min | F2, F3, C1 |

@@ -3,6 +3,8 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Events.h"
+#include "ColonySim/Jobs.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
@@ -31,15 +33,20 @@ using namespace colony;
 
 namespace {
 
+// A colonist as the scenario makes one: a pawn with a colonist record that works.
+Entity controlColonist(Sim& sim, CellPos cell) {
+    const Entity pawn = sim.things().spawn("Human", cell);
+    sim.things().registry().emplace<Colonist>(pawn);
+    sim.jobs().addWorker(pawn);
+    return pawn;
+}
+
 // A flat 32 m map with test defs, no hauling test, and one colonist at (10.5, 10.5).
 struct ControlFixture {
     Sim sim{SimSettings{3, 32, 0, 0, true}, testDefs()};
     Entity colonist = kNoEntity;
 
-    ControlFixture() {
-        colonist = sim.things().spawn("Human", CellPos{10, 10, 0});
-        sim.things().registry().emplace<Colonist>(colonist);
-    }
+    ControlFixture() { colonist = controlColonist(sim, CellPos{10, 10, 0}); }
 
     bool failed(uint64_t command) const {
         for (const Event& e : sim.events()) {
@@ -53,6 +60,28 @@ struct ControlFixture {
     const Position& position(Entity pawn) const { return sim.things().registry().get<Position>(pawn); }
     const Mover& mover(Entity pawn) const { return sim.things().registry().get<Mover>(pawn); }
 };
+
+// Steps until the colonist carries something (a haul in progress), at most 3000 steps.
+bool jobsRunUntilCarrying(Sim& sim, Entity pawn) {
+    for (int i = 0; i < 3000; ++i) {
+        if (sim.things().registry().all_of<Carrying>(pawn)) {
+            return true;
+        }
+        sim.step();
+    }
+    return false;
+}
+
+// Steps until the colonist has a job that isn't waiting, at most 3000 steps.
+bool jobsRunUntilWorking(Sim& sim, Entity pawn) {
+    for (int i = 0; i < 3000; ++i) {
+        sim.step();
+        if (sim.things().registry().get<Worker>(pawn).job.type == JobType::HaulToCell) {
+            return true;
+        }
+    }
+    return false;
+}
 
 // The same walk in every test that needs one: a wiggly line east, then north, in 0.2 m strides.
 void controlWalk(Sim& sim, Entity pawn, int64_t from, int64_t to) {
@@ -70,8 +99,7 @@ void controlWalk(Sim& sim, Entity pawn, int64_t from, int64_t to) {
 
 TEST_CASE("Control: only a colonist on the map can be taken over, and taking another lets the first go") {
     ControlFixture f;
-    const Entity second = f.sim.things().spawn("Human", CellPos{14, 14, 0});
-    f.sim.things().registry().emplace<Colonist>(second);
+    const Entity second = controlColonist(f.sim, CellPos{14, 14, 0});
     const Entity item = f.sim.things().spawn("Steel", CellPos{20, 20, 0});
     const Entity plain = f.sim.things().spawn("Human", CellPos{16, 16, 0});  // a pawn, not a colonist
 
@@ -102,19 +130,43 @@ TEST_CASE("Control: only a colonist on the map can be taken over, and taking ano
     CHECK_FALSE(f.controlled(second));
 }
 
-TEST_CASE("Control: a pawn the hauling test uses can't be taken over") {
-    Sim sim(SimSettings{3, 32, 2, 10, true}, testDefs());
-    CONTROL_REQUIRE(sim.haulers().size() == 2);
-    const Entity hauler = sim.haulers()[0];
-    sim.things().registry().emplace<Colonist>(hauler);
-    const uint64_t id = sim.submit(ControlPawnCommand{hauler});
-    sim.step();
-    bool failed = false;
-    for (const Event& e : sim.events()) {
-        failed = failed || (e.type == EventType::CommandFailed && e.command == id);
+TEST_CASE("Control: taking a colonist over ends its job, the job system leaves it alone, and letting go gives it work again") {
+    ControlFixture f;
+    // A stockpile and an item to haul, so the colonist has work to be interrupted in.
+    f.sim.submit(CreateStockpileCommand{CellRect{2, 2, 3, 3, 0}});
+    f.sim.submit(SpawnThingCommand{"Steel", CellPos{20, 20, 0}, 10});
+    CONTROL_REQUIRE(jobsRunUntilCarrying(f.sim, f.colonist));
+    CONTROL_REQUIRE(f.sim.things().registry().get<Worker>(f.colonist).job.type == JobType::HaulToCell);
+
+    // Taking over ends the job (what it carried is put down) and starts no other.
+    f.sim.submit(ControlPawnCommand{f.colonist});
+    f.sim.step();
+    bool ended = false;
+    for (const Event& e : f.sim.events()) {
+        ended = ended || (e.type == EventType::JobEnded && e.thing == f.colonist && e.message.find("taken over") != std::string::npos);
     }
-    CHECK(failed);
-    CHECK_FALSE(sim.things().registry().all_of<PlayerControl>(hauler));
+    CHECK(ended);
+    const float heldX = f.position(f.colonist).x;
+    for (int i = 0; i < 300; ++i) {
+        f.sim.step();
+        CONTROL_REQUIRE(f.sim.things().registry().get<Worker>(f.colonist).job.type == JobType::None);
+    }
+    CHECK(f.position(f.colonist).x == doctest::Approx(heldX));
+    CHECK_FALSE(f.sim.things().registry().all_of<Carrying>(f.colonist));
+
+    // An order is refused while the player has the pawn.
+    CHECK(f.sim.things().registry().view<Thing, StackCount>().size_hint() > 0);
+    Entity steel = kNoEntity;
+    for (const auto [e, thing, stack] : f.sim.things().registry().view<const Thing, const StackCount>().each()) {
+        steel = e;
+    }
+    std::string error;
+    CHECK_FALSE(f.sim.jobs().orderHaul(f.colonist, steel, error));
+    CHECK(error.find("controlling") != std::string::npos);
+
+    // Letting go: the colonist thinks again and takes work.
+    f.sim.submit(ControlPawnCommand{kNoEntity});
+    CHECK(jobsRunUntilWorking(f.sim, f.colonist));
 }
 
 TEST_CASE("Control: DirectMove moves the pawn, at most kDirectMaxStep a step, and sets its velocity") {
@@ -274,8 +326,7 @@ TEST_CASE("Control: being controlled is part of the state hash") {
 TEST_CASE("Control: a save with two controlled pawns, or one that isn't a colonist, is refused") {
     const auto defs = testDefs();
     ControlFixture f;
-    const Entity second = f.sim.things().spawn("Human", CellPos{14, 14, 0});
-    f.sim.things().registry().emplace<Colonist>(second);
+    const Entity second = controlColonist(f.sim, CellPos{14, 14, 0});
     f.sim.submit(ControlPawnCommand{f.colonist});
     f.sim.step();
     // Break the rules from outside, as a damaged file would.
@@ -299,8 +350,7 @@ TEST_CASE("Control: a replay with control and direct moves plays back to the sam
     // sims the same way (a hand-made entity is the first id handed out in a fresh sim).
     const auto makeSim = [&] {
         auto sim = std::make_unique<Sim>(settings, defs);
-        const Entity colonist = sim->things().spawn("Human", CellPos{10, 10, 0});
-        sim->things().registry().emplace<Colonist>(colonist);
+        const Entity colonist = controlColonist(*sim, CellPos{10, 10, 0});
         return std::make_pair(std::move(sim), colonist);
     };
     auto [original, colonist] = makeSim();

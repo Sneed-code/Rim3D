@@ -74,8 +74,8 @@ namespace
 
 	bool ProtagonistIsColonistOnMap(const USimSubsystem& Bridge, colony::Entity Pawn)
 	{
-		return Pawn != colony::kNoEntity && Bridge.GetSim() && Bridge.GetCurrentSnapshot().find(Pawn) != nullptr &&
-			Bridge.GetSim()->colonistOf(Pawn) != nullptr;
+		const colony::ThingView* View = Pawn != colony::kNoEntity && Bridge.GetSim() ? Bridge.GetCurrentSnapshot().find(Pawn) : nullptr;
+		return View != nullptr && !View->downed && !View->dead && Bridge.GetSim()->colonistOf(Pawn) != nullptr;
 	}
 }
 
@@ -370,6 +370,12 @@ void UProtagonistSubsystem::OnBeforeStep()
 
 void UProtagonistSubsystem::OnSimEvent(const colony::Event& Event)
 {
+	// Downed or dead: the sim lets the colonist go in the same step, so the player goes back to the
+	// overseer view (next frame, not in the middle of the sim's step).
+	if (bDirect && Event.thing == Controlled && (Event.type == colony::EventType::PawnDowned || Event.type == colony::EventType::PawnDied))
+	{
+		bExitRequested = true;
+	}
 	// The controlled colonist stops existing (a later task's death): back to the overseer view.
 	if (bDirect && Event.type == colony::EventType::ThingDestroyed && Event.thing == Controlled)
 	{
@@ -411,6 +417,12 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 		return;
 	}
 
+	if (bExitRequested)
+	{
+		bExitRequested = false;
+		UE_LOG(LogProtagonist, Log, TEXT("The controlled colonist went down"));
+		ExitDirectMode();
+	}
 	if (RequestedControl != colony::kNoEntity)
 	{
 		const colony::Entity Pawn = RequestedControl;

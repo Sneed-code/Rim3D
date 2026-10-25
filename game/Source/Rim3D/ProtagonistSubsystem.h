@@ -88,6 +88,7 @@ private:
 
 	colony::Entity Controlled = colony::kNoEntity;
 	colony::Entity RequestedControl = colony::kNoEntity;
+	bool bExitRequested = false;
 	bool bDirect = false;
 	int32 SpeedBeforeDirect = 1;
 	const colony::Sim* LastSim = nullptr;

@@ -7,6 +7,7 @@
 #include "ColonySim/Entity.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Grid.h"
+#include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Pathfinder.h"
 #include "ColonySim/Random.h"
@@ -24,17 +25,19 @@ namespace colony {
 
 class DefDatabase;
 struct Colonist;
+class JobSystem;
 class MovementSystem;
 class Regions;
 class Things;
+class Zones;
 struct Snapshot;
 class SimSaveAccess;
 
 struct SimSettings {
     uint64_t seed = 0;
     int mapSize = 512;  // cells per side
-    int pawns = 0;      // Stage 0 hauling test: pawns start at a stockpile in the middle
-    int items = 0;      // and haul items scattered over the reachable map
+    int pawns = 0;      // Hauling test: pawns start at a stockpile zone in the middle
+    int items = 0;      // and haul items scattered over the reachable map to it
     bool flatMap = false;               // all soil at height 0, for tests
     std::string pawnDef = "Human";      // Things defs the hauling test spawns
     std::string haulItemDef = "Steel";
@@ -64,7 +67,8 @@ class COLONY_API Sim {
 public:
     // A sim with no defs: a map but no things. Enough for terrain work and the Stage 0 tests.
     explicit Sim(const SimSettings& settings);
-    // Things are made from `defs`, which every sim made from it shares.
+    // Things are made from `defs`, which every sim made from it shares. The hauling test needs the
+    // Things defs it names and the WorkTypes def Hauling.
     Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs);
     ~Sim();
     Sim(const Sim&) = delete;
@@ -108,6 +112,12 @@ public:
     // Every pawn, item and building (docs/design/things.md).
     Things& things() { return *things_; }
     const Things& things() const { return *things_; }
+    // Body parts, injuries, bleeding, downed and death (docs/design/health.md). Damage comes in
+    // through `health().applyDamage` from other sim systems, or the DamagePawnCommand.
+    HealthSystem& health() { return *health_; }
+    const HealthSystem& health() const { return *health_; }
+    // What a health panel shows for a pawn; false if it has no body.
+    bool healthReport(Entity pawn, HealthReport& out) const { return health_->report(pawn, out); }
 
     // The colonist the player controls directly (ControlPawnCommand), or kNoEntity.
     Entity controlledPawn() const;
@@ -117,9 +127,16 @@ public:
     // Problems setting up the start (e.g. a def the settings name is missing). Empty when fine.
     const std::vector<std::string>& setupErrors() const { return setupErrors_; }
 
-    // Stage 0 hauling test.
-    const std::optional<CellPos>& stockpileCell() const { return stockpileCell_; }  // empty if no walkable cell
+    // Stockpile zones (docs/design/jobs.md).
+    const Zones& zones() const { return *zones_; }
+    // Work types, the think list, jobs and reservations (docs/design/jobs.md).
+    JobSystem& jobs() { return *jobs_; }
+    const JobSystem& jobs() const { return *jobs_; }
+
+    // Hauling test: the middle of its stockpile zone (empty if no cell is walkable) and its pawns.
+    const std::optional<CellPos>& stockpileCell() const { return stockpileCell_; }
     const std::vector<Entity>& haulers() const { return haulers_; }
+    // Items not in a stockpile that takes them, carried ones included.
     int itemsLeft() const;
     const SimStats& stats() const { return stats_; }
     // Path requests go through its queue, which runs once per step (docs/design/pathfinding.md).
@@ -136,18 +153,17 @@ private:
 
     void applyCommand(const Command& command, uint64_t id);
     void commandFailed(uint64_t id, std::string message);
-    void pawnDid(Entity pawn, PawnAction action, Entity target);
     void placeStockpileAndThings();
     void startScenario();
-    void updateHauler(Entity pawn);
-    void startNextHaul(Entity pawn);
 
     SimSettings settings_;
     std::shared_ptr<const DefDatabase> defs_;
     Map map_;
     Pathfinder pathfinder_;
+    std::unique_ptr<Zones> zones_;
     std::unique_ptr<Things> things_;
     std::unique_ptr<MovementSystem> movement_;
+    std::unique_ptr<HealthSystem> health_;
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
     Rng rng_;
@@ -155,6 +171,7 @@ private:
     std::optional<CellPos> stockpileCell_;
     std::vector<Entity> haulers_;
     SimStats stats_;
+    std::unique_ptr<JobSystem> jobs_;  // after everything it holds a reference to
     std::vector<std::string> setupErrors_;
     std::vector<std::pair<uint64_t, Command>> pending_;  // id, command
     uint64_t submitted_ = 0;

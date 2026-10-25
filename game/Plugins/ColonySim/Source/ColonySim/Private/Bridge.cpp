@@ -16,6 +16,22 @@ const char* commandName(const Command& command) {
                 return "SpawnThing";
             } else if constexpr (std::is_same_v<Type, DestroyThingCommand>) {
                 return "DestroyThing";
+            } else if constexpr (std::is_same_v<Type, DamagePawnCommand>) {
+                return "DamagePawn";
+            } else if constexpr (std::is_same_v<Type, TendPawnCommand>) {
+                return "TendPawn";
+            } else if constexpr (std::is_same_v<Type, SetWorkPriorityCommand>) {
+                return "SetWorkPriority";
+            } else if constexpr (std::is_same_v<Type, CreateStockpileCommand>) {
+                return "CreateStockpile";
+            } else if constexpr (std::is_same_v<Type, RemoveZoneCellsCommand>) {
+                return "RemoveZoneCells";
+            } else if constexpr (std::is_same_v<Type, SetStockpilePriorityCommand>) {
+                return "SetStockpilePriority";
+            } else if constexpr (std::is_same_v<Type, SetStockpileAllowedCommand>) {
+                return "SetStockpileAllowed";
+            } else if constexpr (std::is_same_v<Type, OrderHaulCommand>) {
+                return "OrderHaul";
             } else if constexpr (std::is_same_v<Type, ControlPawnCommand>) {
                 return "ControlPawn";
             } else {
@@ -32,6 +48,13 @@ const char* eventTypeName(EventType type) {
         case EventType::ThingDespawned: return "ThingDespawned";
         case EventType::ThingDestroyed: return "ThingDestroyed";
         case EventType::CommandFailed: return "CommandFailed";
+        case EventType::PawnInjured: return "PawnInjured";
+        case EventType::PawnPartLost: return "PawnPartLost";
+        case EventType::PawnDowned: return "PawnDowned";
+        case EventType::PawnGotUp: return "PawnGotUp";
+        case EventType::PawnDied: return "PawnDied";
+        case EventType::JobStarted: return "JobStarted";
+        case EventType::JobEnded: return "JobEnded";
         case EventType::PawnAction: return "PawnAction";
     }
     return "?";
