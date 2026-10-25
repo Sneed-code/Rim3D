@@ -233,7 +233,7 @@ medicine, animals, melee and grenades, two-storey buildings, the narrator and ev
 traders, protagonist talents and loadout). Its extra rules keep parallel threads from colliding.
 **Wave 1 is open now in the cloud, alongside the rest of Stage 1:** S7 (saves and commands that
 merge in parallel; every sim task that saves state waits for it), E3 light, and the data tasks D4,
-D5, D6, D7, D8, D9, D11. D4 done (crops, three climates, weather kinds: `docs/design/starting-data.md`). S7 done: a save is
+D5, D6, D7, D8, D9, D11. D4 and D6 done (crops, three climates, weather kinds; apparel, textiles and tailor benches: `docs/design/starting-data.md`). S7 done: a save is
 now named sections, each with its own version, and commands are saved by name, so **sim tasks that
 save state can start; none of them bumps the save format number again** (it stays 20; add your own
 section, `docs/design/saves.md` "Adding to the save"; a new system's checklist is in

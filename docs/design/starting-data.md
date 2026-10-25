@@ -63,6 +63,8 @@ names in lowerCamel (`workSpeedGlobal`), keys that are def names keep their case
 | `DamageTypes` | bullet, cut, stab, scratch, bite, blunt, crush, burn | F1, F2 | Which injury each damage makes (`hediff`, `hediffSolid` on bones); `reachesInside` (ours: bullet, cut, stab) lets a random hit go in to organs and bones; `armorCategory` (Sharp, Blunt, Heat) says which armor rating stops it |
 | `Things` (F2) | `Weapons.json`: revolver, autopistol, bolt-action rifle, pump shotgun, assault rifle. `Apparel.json`: flak vest, flak pants, simple helmet (steel) | F2 | `verbs`, accuracy and cooldown stats, `recoilPerShot` (ours); armor ratings, `apparel.bodyPartGroups` and `layers`. See [combat.md](combat.md) |
 | `Things` (D8) | `MeleeWeapons.json`: knife, club, gladius, spear, mace, longsword, breach axe. `Blocks.json`: granite, limestone, sandstone, slate and marble blocks. `Buildings.json`: crafting spot, butcher table, stonecutter's table, fueled and electric smithy, machining table, electric stove | D8, F8, C14 | Melee `tools` (label, `capacities` = damage type, `power`, `cooldownTime` in game seconds = RimWorld seconds x 30, `armorPenetration`, `chanceFactor`); power = wiki normal-quality DPS x cooldown, handles from memory. Benches carry `comps` (`Refuelable`, `Power`) for the power and fuel tasks. Recipes: `Make<Weapon>` (stuff-made, `productStuffFromIngredient`), `MakeBlocks<Stone>` (1 chunk = 20 blocks), `ButcherCorpse` (products come from the race, D5). Everything the wiki page did not give is in `unverified` |
+
+| `Things` (D6) | `Textiles.json`: cloth, synthread, devilstrand, hyperweave. `Clothing.json`: tribalwear, T-shirt, button-down shirt, pants, duster, jacket, parka, cowboy hat, tuque. `Benches.json`: hand and electric tailor bench. `Recipes/Tailoring.json`: one recipe per garment | C14, C15, E2, D12 | See "Apparel and textiles (D6)" below |
 | `Projectiles` | the five guns' bullets | F2 | damage, armor penetration, stopping power, speed (wiki m/s / 30; `tuning.json` multiplies it by 3) |
 | `Hitboxes` | Human (ours) | F2 | Capsules and boxes per stance, by body part label; aim point and muzzle height |
 | `Thoughts` (D9) | 40 more: situations with `stages` (temperature, naked, nudist, tattered and dead man's clothes, beauty, space, impressiveness, cleanliness, comfort, outdoors, recreation, dark, pain, sick) and memories (deaths, social, bonds, catharsis) | D9; read by C15, C17, C18, C19, C20, E2, E3 | Only `situation.need` food/rest and `trigger` are read today; the rest are data until their task. See [thoughts-data.md](thoughts-data.md) |
@@ -148,3 +150,22 @@ season of 15 days, `dailySwing` in degrees, `rainfallMmPerYear`, `growingSeasons
 defines them). Only the temperate forest got wild healroot (0.06), so existing maps change a little.
 Almost every crop and climate number is in `unverified`: the wiki was not read for this task, so
 check the numbers a task leans on (C13 for crops, E1 for climate and weather).
+
+**Apparel and textiles (D6).** Clothes are made of a stuff, as in RimWorld. A garment has no armor
+or insulation of its own: `apparel.stuffEffectMultiplierArmor` times the stuff's armor factor
+(`stuffProps.statFactors.armorRatingSharp/Blunt/Heat`) is its armor (a devilstrand duster: 0.3 x
+1.4 = 42% sharp), and `stuffEffectMultiplierInsulationCold/Heat` times the stuff's insulation
+(`stuffProps.statOffsets.insulationCold/Heat`, degrees C the wearer's comfortable range widens) is
+its insulation (a parka is 2.0 x cloth's 18 = 36 degrees of cold). `stuffCategories` says what it can
+be made of (`Fabric`, `Leathery`; leather comes with D5), `costStuffCount` how many. Layers:
+`OnSkin`, `Middle`, `Shell`, `Overhead` (order in `CombatRules.apparelLayersOuterFirst`), covering
+`BodyPartGroups`. Work is `stats.workToMake` in game seconds (ticks x 1.44). The flak vest, flak
+pants and simple helmet (F2) keep their fixed ratings; they are not made of stuff.
+`researchPrerequisite` names a research project ("ComplexClothing", "Electricity"); D12 defines
+them. Tailor benches carry `stats.workTableWorkSpeedFactor` (hand 0.5, electric 1.0) and the
+electric one `building.powerConsumption` (120 W) and `unpoweredWorkSpeedFactor` (0.5), for C14 and
+E5. A tailoring recipe's ingredient is `{ "stuffCategories": [...], "count": n }`, and
+`productsMadeOfIngredient` means the garment is made of what was used. `QualityRules.levels` has the
+seven levels with their armor, insulation, value, deterioration and beauty factors; the skill-to-quality
+curve is C14's. Fabric names stay RimWorld's (devilstrand, hyperweave) until sneed picks the proposed
+ones in [naming.md](naming.md). Mass and some hit points of garments and fabrics are in `unverified`.
