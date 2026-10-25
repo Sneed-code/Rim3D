@@ -61,6 +61,7 @@ Map::Map(const MapSettings& settings)
       building_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), kNoEntity),
       passage_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), Passage::Open),
       obstacle_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), 0),
+      roof_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), Roof::None),
       regions_(std::make_unique<Regions>(*this)),
       cover_(std::make_unique<Cover>(*this)) {
     if (!settings.flat) {
@@ -80,6 +81,7 @@ Cover& Map::cover() {
 
 void Map::setBuilding(CellPos c, Entity building, Passage passage, uint8_t obstacleDm) {
     const size_t i = static_cast<size_t>(index(c));
+    ++buildingChanges_;
     building_[i] = building;
     if (obstacle_[i] != obstacleDm) {
         obstacle_[i] = obstacleDm;
@@ -118,6 +120,7 @@ void Map::generate() {
                 terrain_[i] = Terrain::Sand;
             } else if (h > kRockAbove) {
                 terrain_[i] = Terrain::Rock;
+                roof_[i] = Roof::Thick;
             } else {
                 terrain_[i] = Terrain::Soil;
             }
@@ -155,6 +158,7 @@ uint64_t Map::contentHash() const {
         mix(static_cast<uint64_t>(entt::to_integral(building_[i])));
         mix(static_cast<uint64_t>(passage_[i]));
         mix(static_cast<uint64_t>(obstacle_[i]));
+        mix(static_cast<uint64_t>(roof_[i]));
     }
     return hash;
 }
