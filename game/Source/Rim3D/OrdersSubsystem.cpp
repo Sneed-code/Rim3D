@@ -17,6 +17,7 @@
 #include "BuildingSubsystem.h"
 #include "OverseerPawn.h"
 #include "OverseerSubsystem.h"
+#include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
 #include "TerrainDraw.h"
 #include "VisualMesh.h"
@@ -456,6 +457,75 @@ bool UOrdersSubsystem::CancelTool()
 	Tool = EOrderTool::None;
 	bDragging = false;
 	return bHadOne;
+}
+
+// ---- Walking the colony ------------------------------------------------------------------------
+
+bool UOrdersSubsystem::IsDirectBuilding() const
+{
+	const UWorld* World = GetWorld();
+	const UProtagonistSubsystem* Protagonist = World ? World->GetSubsystem<UProtagonistSubsystem>() : nullptr;
+	return Tool == EOrderTool::Build && Protagonist && Protagonist->IsDirectMode();
+}
+
+bool UOrdersSubsystem::CycleBuilding(int32 Direction)
+{
+	if (BuildOptions.IsEmpty())
+	{
+		return false;
+	}
+	int32 Index = BuildOptions.IndexOfByPredicate([this](const FBuildOption& Option) { return Option.Def == BuildDef; });
+	Index = Index < 0 ? (Direction >= 0 ? 0 : BuildOptions.Num() - 1) : (Index + (Direction >= 0 ? 1 : -1) + BuildOptions.Num()) % BuildOptions.Num();
+	const USimSubsystem* Bridge = GetBridge();
+	if (!Bridge || !Bridge->GetSim())
+	{
+		return false;
+	}
+	return SelectBuilding(UTF8_TO_TCHAR(Bridge->GetSim()->defs().get(BuildOptions[Index].Def).defName().c_str()));
+}
+
+bool UOrdersSubsystem::CycleStuff()
+{
+	if (Tool != EOrderTool::Build || !BuildDef.valid())
+	{
+		return false;
+	}
+	RefreshStuffOptions();
+	if (StuffOptions.Num() < 2)
+	{
+		return false;
+	}
+	const int32 Index = StuffOptions.IndexOfByPredicate([this](const FStuffOption& Option) { return Option.Def == BuildStuff; });
+	BuildStuff = StuffOptions[(Index + 1 + StuffOptions.Num()) % StuffOptions.Num()].Def;
+	return true;
+}
+
+FString UOrdersSubsystem::GetBuildSummary() const
+{
+	const USimSubsystem* Bridge = GetBridge();
+	if (Tool != EOrderTool::Build || !BuildDef.valid() || !Bridge || !Bridge->GetSim())
+	{
+		return FString();
+	}
+	const colony::DefDatabase& Defs = Bridge->GetSim()->defs();
+	FString Text = OrdCapital(Defs.get(BuildDef).label());
+	if (BuildStuff.valid())
+	{
+		Text += FString::Printf(TEXT(" (%s)"), UTF8_TO_TCHAR(Defs.get(BuildStuff).label().c_str()));
+	}
+	return Text;
+}
+
+bool UOrdersSubsystem::PlaceAtHover()
+{
+	if (Tool != EOrderTool::Build || !bHasHover)
+	{
+		return false;
+	}
+	const int32 SentBefore = CommandsSent;
+	BeginDrag(Hover);
+	EndDrag(Hover);
+	return CommandsSent > SentBefore;
 }
 
 // ---- Mouse and cells ---------------------------------------------------------------------------
@@ -1267,6 +1337,16 @@ void UOrdersSubsystem::Tick(float DeltaTime)
 
 	if (!IsOverseerActive())
 	{
+		// Walking the colony (U10): the Build tool stays, aimed by the crosshair (UHandsOnSubsystem), and draws its outline.
+		if (IsDirectBuilding())
+		{
+			if (Bridge->GetCurrentSnapshot().gameSeconds != StuffOptionsSeconds)
+			{
+				RefreshStuffOptions();
+			}
+			DrawDragOutline(*Bridge);
+			return;
+		}
 		CancelTool();
 		return;
 	}

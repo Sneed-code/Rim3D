@@ -108,7 +108,7 @@ three is a bug the tests are built to catch:
    write the change here. Old saves keep loading until a decision says otherwise (decision 0005
    dropped formats 1 to 5 for the job system). Format 8 (C6) added needs, schedules, bed owners and
    a job's chair; format 9 (C2) added the plant layer; format 10 (C4) added building plans, built-of and deconstruct marks and a job's site and
-   progress. Format 11 (C9) added mood, format 12 (F2) combat, format 13 (C5) door states, format 14 (C3) rock and designations, format 15 (F4) factions and fighters, format 16 (A3) pawn looks, format 17 (F5) magazines and reloading, format 18 (C7) a building's bills and a bill job's bill, picks and used ingredients. Format 6 to 17 saves still load, their pawns without needs, mood or posture, or their buildings without plans, bills, their doors closed.
+   progress. Format 11 (C9) added mood, format 12 (F2) combat, format 13 (C5) door states, format 14 (C3) rock and designations, format 15 (F4) factions and fighters, format 16 (A3) pawn looks, format 17 (F5) magazines and reloading, format 18 (C7) a building's bills and a bill job's bill, picks and used ingredients, format 19 (U10) a job's `handsOn` state. Format 6 to 18 saves still load, their pawns without needs, mood or posture, or their buildings without plans, bills, their doors closed.
 
 Never store a `DefId` (or any number that depends on load order) in a save: use the `defName`.
 The same goes for region ids, which a loaded map numbers afresh: keep a cell, and never let a

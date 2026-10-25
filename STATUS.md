@@ -66,6 +66,8 @@ Since U8 the overseer has colony panels (`docs/design/panels.md`, smoke test `pa
 
 Since U11 fights show on screen (`docs/design/fights.md`, smoke test `fights`; no sim changes): `UFightSubsystem` draws a muzzle flash (blobs, a short light, smoke) at every `ShotFired`, a tracer that flies from the muzzle to where the bullet ended at the bullet's own speed in real time, and an impact when it arrives (dust, sparks and chips, blood); a pawn that is hit flinches (a lean); downed and dead pawns become physics ragdolls on an invisible floor made under them; hits on flesh leave a dark patch on the body at the nearest bone and blood on the ground (**needs `game/Content/Rim3D/Generated/Fights/M_WoundDecal`, made once per machine by the `FightMaterials` commandlet, `assets/manifest.json`**); armed pawns show a placeholder gun floating at the chest (from the weapon def's `visual.parts`); standing pawns that aim face the sim's facing. In direct mode the left mouse button fires at the crosshair through the sim (`ShootCommand` with `player`, aimed by the sim's own `trace`), R reloads, C crouches, Z lies down, E picks up the nearest gun, and a small HUD shows the gun and rounds. `Fight.Hitboxes 1` draws every pawn's hitboxes, and every pawn hit is checked to lie on them (within 5 cm in the smoke test). `Fight.Effects 0` turns the effects off. Not here: a real gun in the hands or aim animations, sounds, first-person gun.
 
+Since U10 the player works with their own hands (`docs/design/handson.md`, smoke test `handson`, tests `HandsOnTests`): in direct mode the crosshair finds a rock, plant, item, building plan or frame (against the sim, not Unreal collision) and **holding F** runs the sim's own job on it in place with the colonist's skill and speed: mine, chop, pick, pick up (at once), put materials into a plan, build a frame; **X** puts down what is carried; **B** takes the architect menu's Build tool in hand with a grid-snapped ghost aimed by the crosshair (wheel picks the building, Q the stuff, R turns, click plans, and the gun stays quiet meanwhile). Sim side: `HandsOnCommand{pawn, mode, thing, cell}` (Work, PutDown, Stop), jobs with a `handsOn` field that skip the walking steps and end as interrupted if the player steps out of reach (**a job on a `PlayerControl` pawn is ticked only if `handsOn`; the think list still skips it**), a made-for-the-job designation that goes again if the work is dropped, `JobSystem::planHandsOn` (the prompt), `jobProgress` (the bar; `ThingView::jobProgress`), save format 19. Letting go of the colonist puts down what it carries. No work animation or sound yet.
+
 Since U3 the game draws the ground and plants (`docs/design/terrain.md`, smoke test `world`): `UTerrainSubsystem` starts
 by itself with any sim and builds one mesh per 32 m chunk (a 1 km map is 32 x 32 chunks, about 220 ms
 to build). The ground has a vertex per cell corner at the sim's height, coloured by terrain type and soil fertility; **rock stands on it as a
@@ -217,7 +219,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-35 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7, U8, U11). Tick tasks in `docs/plans/stage-1.md` as they merge.
+36 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7, U8, U11, U10). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -276,7 +278,7 @@ U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priori
 AI: aiming~~ done (`docs/design/aiming.md`; save format 17), so **F6** raid and defense (cloud, Opus high)
 is open once C8 is in (it is); with U9 and F2 in, ~~**U11** fights on screen~~ is done (PC; smoke test `fights`; `docs/design/fights.md`; it
 binds R to reload; reload and sidestep animations are not drawn yet). ~~**C10** colony scenario test~~ done
-(`docs/design/colony-scenario.md`); open on the PC: **U10** hands-on work (U9 and U7 are in), **A1** placeholder art.
+(`docs/design/colony-scenario.md`); ~~**U10** hands-on work~~ is done (PC; smoke test `handson`; `docs/design/handson.md`); open on the PC: **A1** placeholder art.
 
 ## Waiting on sneed
 

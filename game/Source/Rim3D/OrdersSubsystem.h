@@ -103,6 +103,20 @@ public:
 	/** Stops the tool and any drag. True if there was one. */
 	bool CancelTool();
 
+	// ---- Walking the colony (task U10, docs/design/handson.md) ---------------------------------
+	/** In direct mode the Build tool still works: the crosshair aims the ghost, one click plans it. */
+	bool IsDirectBuilding() const;
+	/** The next (+1) or previous (-1) building in the menu; picks the Build tool if it wasn't. */
+	bool CycleBuilding(int32 Direction);
+	/** The next stuff the chosen building can be made of. */
+	bool CycleStuff();
+	/** "Wall (steel)" for the screen, empty with no building in hand. */
+	FString GetBuildSummary() const;
+	/** No cell under the crosshair: the ghost goes. */
+	void ClearHover() { bHasHover = false; }
+	/** Plans the building at the hovered cell. False if there is none or it can't go there. */
+	bool PlaceAtHover();
+
 	// ---- Mouse (called by the overseer pawn; the test calls the cell versions) ----------------
 	/** Left button down: starts a drag if a tool is in hand. True if it took the click. */
 	bool HandleLeftPressed(const FVector2D& Screen);

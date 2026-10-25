@@ -547,6 +547,7 @@ void UProtagonistSubsystem::DrawHud(USimSubsystem& Bridge)
 	{
 		ImGui::TextUnformatted("WASD walk   Ctrl slow   mouse look");
 		ImGui::TextUnformatted("V first / third person   wheel zoom");
+		ImGui::TextUnformatted("F hold: work / pick up   X put down   B build");
 		ImGui::TextUnformatted("T take over   Tab overseer view");
 	}
 	ImGui::End();

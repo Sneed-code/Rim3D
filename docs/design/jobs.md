@@ -46,6 +46,8 @@ haul") and starts the ordered one at once, marked `forced`. The only order so fa
 `OrderHaulCommand`, RimWorld's "prioritize hauling"; draft, move and attack orders come with F4. A
 forced job ignores work priorities (it is done even with Hauling off), as in RimWorld.
 
+**Hands-on work** (U10, [handson.md](handson.md)) is the other way a player starts a job: the controlled colonist (`PlayerControl`) is skipped by the think list, but a job with `handsOn` set that `HandsOnCommand` started is ticked for it, in place with no walking, ending when the player steps out of reach.
+
 A pawn re-thinks only when its job ends, except that `interruptForNeeds` (C6) checks every step
 whether a pawn on a hauling or waiting job (not a player order) has become hungry or tired enough
 to put it down. Another node that needs to interrupt (an alarm) does the same: it ends the job with

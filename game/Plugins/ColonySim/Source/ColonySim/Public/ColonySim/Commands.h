@@ -276,6 +276,24 @@ struct SetBillCommand {
     bool suspended = false;
 };
 
+// Hands-on work (task U10, docs/design/handson.md): what the controlled colonist does with its
+// hands. Work: start the sim's own job on what the player looks at, in place (no walking): `thing` is
+// a blueprint, a frame or an item, else `cell` is a rock to mine or a plant to chop or pick. The job
+// runs while the player stays within kHandsOnReach and ends when it is done, or on Stop. Picking up
+// is instant. PutDown: set down what the colonist carries on `cell` (else near its feet). Fails if
+// the pawn is not the controlled one, the target is out of reach or taken, or there is nothing to do.
+enum class HandsOnMode : uint8_t { Work, PutDown, Stop };
+
+struct HandsOnCommand {
+    Entity pawn = kNoEntity;
+    HandsOnMode mode = HandsOnMode::Work;
+    Entity thing = kNoEntity;
+    CellPos cell;
+};
+
+// How far from the edge of a rock, plant, frame or item a controlled colonist can work on it, in metres.
+inline constexpr float kHandsOnReach = 2.0f;
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -285,7 +303,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ShootCommand, SetStanceCommand, DesignateCommand, CancelDesignationsCommand,
                              DraftCommand, MoveOrderCommand, AttackOrderCommand, SetFactionCommand, SetLineageCommand,
                              ReloadCommand, AddBillCommand,
-                             RemoveBillCommand, SetBillCommand>;
+                             RemoveBillCommand, SetBillCommand, HandsOnCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

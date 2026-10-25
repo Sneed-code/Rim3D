@@ -47,7 +47,7 @@ constexpr char kSaveMagic[8] = {'R', 'I', 'M', '3', 'D', 'S', 'A', 'V'};
 constexpr size_t kSaveMagicSize = sizeof kSaveMagic;
 // Bump when the layout below changes, and keep reading the old versions (the archive's
 // version() says which one a file is). Changing it needs a line in docs/design/saves.md.
-constexpr uint32_t kSaveFormatVersion = 18;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
+constexpr uint32_t kSaveFormatVersion = 19;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
                                             // 4: C8's scenario and colonists; 5: F1's pawn health; 6: C1's jobs,
                                             // work priorities and zones; 7: U9's direct control; 8: C6's needs,
                                             // schedules, bed owners, the eating job's chair; 9: C2's plants;
@@ -57,7 +57,8 @@ constexpr uint32_t kSaveFormatVersion = 18;  // 2: S3's path queue, pathBudget, 
                                             // 13: C5's door states; 14: C3's rock layer, designations;
                                             // 15: F4's factions and fighters; 16: A3's pawn looks; 17: F5's magazines,
                                             // reloading, a fighter's reaction and dodge times;
-                                            // 18: C7's bills and the bill job
+                                            // 18: C7's bills and the bill job;
+                                            // 19: U10's hands-on jobs
 // Saves from before the job system (formats 1 to 5) can't be read: their hauling placeholder has
 // no counterpart in the job system (docs/design/saves.md).
 constexpr uint32_t kSaveOldestFormat = 6;
@@ -533,7 +534,7 @@ void saveRect(Ar& ar, CellRect& r) {
 
 template <typename Ar>
 void saveCommand(Ar& ar, Command& command) {
-    static_assert(std::variant_size_v<Command> == 31, "save every command type here");
+    static_assert(std::variant_size_v<Command> == 32, "save every command type here");
     uint8_t type = static_cast<uint8_t>(command.index());
     ar.value("type", type);
     if constexpr (Ar::kReading) {
@@ -569,13 +570,14 @@ void saveCommand(Ar& ar, Command& command) {
             case 28: command = AddBillCommand{}; break;
             case 29: command = RemoveBillCommand{}; break;
             case 30: command = SetBillCommand{}; break;
+            case 31: command = HandsOnCommand{}; break;
             default: ar.require(false, "the save file names a command this build doesn't know"); return;
         }
         // A format older than the command that was added in it can't contain it.
         ar.require((type < 10 || ar.version() >= 7) && (type < 12 || ar.version() >= 8) &&
                        (type < 14 || ar.version() >= 10) && (type < 17 || ar.version() >= 12) && (type < 20 || ar.version() >= 14) &&
                        (type < 22 || ar.version() >= 15) && (type < 26 || ar.version() >= 16) &&
-                       (type < 27 || ar.version() >= 17) && (type < 28 || ar.version() >= 18),
+                       (type < 27 || ar.version() >= 17) && (type < 28 || ar.version() >= 18) && (type < 31 || ar.version() >= 19),
                    "the save file names a command this build doesn't know");
     }
     ar.note("name", commandName(command));
@@ -696,6 +698,12 @@ void saveCommand(Ar& ar, Command& command) {
         ar.require(setBill->mode <= BillMode::Forever, "the save file has a bad bill mode");
         ar.value("count", setBill->count);
         ar.value("suspended", setBill->suspended);
+    } else if (auto* hands = std::get_if<HandsOnCommand>(&command)) {
+        ar.value("pawn", hands->pawn);
+        ar.value("mode", hands->mode);
+        ar.require(hands->mode <= HandsOnMode::Stop, "the save file has a bad hands-on mode");
+        ar.value("thing", hands->thing);
+        ar.group("cell", [&] { saveCell(ar, hands->cell); });
     }
 }
 
@@ -853,6 +861,10 @@ void saveEntity(Ar& ar, SaveEntity& e) {
         }
         ar.text("workType", w.workType);
         ar.value("forced", job.forced);
+        if (ar.version() >= 19) {
+            ar.value("handsOn", job.handsOn);
+            ar.require(job.handsOn <= 2, "the save file has a bad hands-on state");
+        }
         ar.value("step", job.step);
         ar.require(job.step < std::max(1, jobStepCount(job.type)), "the save file has a job past its last step");
         ar.value("walk", job.walk);

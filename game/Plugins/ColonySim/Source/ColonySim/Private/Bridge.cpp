@@ -72,9 +72,11 @@ const char* commandName(const Command& command) {
                 return "AddBill";
             } else if constexpr (std::is_same_v<Type, RemoveBillCommand>) {
                 return "RemoveBill";
-            } else {
-                static_assert(std::is_same_v<Type, SetBillCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, SetBillCommand>) {
                 return "SetBill";
+            } else {
+                static_assert(std::is_same_v<Type, HandsOnCommand>, "name every command type");
+                return "HandsOn";
             }
         },
         command);

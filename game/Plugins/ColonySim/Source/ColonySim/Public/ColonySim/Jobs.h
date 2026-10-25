@@ -66,6 +66,9 @@ struct Job {
     std::vector<BillUsed> used;   // DoBill: ingredients delivered so far
     DefId workType;            // the work type whose scanner gave it; none for orders and idling
     bool forced = false;       // a player order (OrderHaulCommand)
+    uint8_t handsOn = 0;       // 1: done by hand by the player's colonist, in place (HandsOnCommand, U10): no walking,
+                               // ends if the player steps out of reach; 2: the same, and the job made the Mine, CutPlant
+                               // or HarvestPlant mark on its cell, which goes again if the job doesn't finish
     uint8_t step = 0;          // which of the job type's steps is running
     uint8_t walk = 0;          // inside a go-to step: 0 not set off, 1 waiting for a path, 2 walking
     uint8_t repaths = 0;       // new paths asked for after giving up a walk
@@ -126,6 +129,17 @@ inline constexpr uint8_t kIngestPickUpStep = 1;
 inline bool jobIsLyingDown(const Job& job) {
     return job.type == JobType::LayDown && job.step >= kLayDownLieStep;
 }
+
+// What the controlled colonist would do with its hands on a target (JobSystem::planHandsOn).
+enum class HandsOnKind : uint8_t { None, Mine, Chop, Cut, Harvest, Build, Deliver, PickUp };
+
+struct HandsOnPlan {
+    HandsOnKind kind = HandsOnKind::None;
+    std::string label;  // "mine granite", "chop poplar", "build wall", "pick up steel"; empty for None
+    bool inReach = false;
+    std::string error;  // why it can't be done now (empty if it can, apart from reach)
+    bool ok() const { return kind != HandsOnKind::None && inReach && error.empty(); }
+};
 
 class BillSystem;
 class Construction;
@@ -199,6 +213,19 @@ public:
     // A player order: haul this item to the best stockpile now, ending the pawn's current job.
     // Refused for the pawn the player controls directly (PlayerControl).
     bool orderHaul(Entity pawn, Entity thing, std::string& error);
+    // Hands-on work (HandsOnCommand, docs/design/handson.md). What the controlled pawn would do with
+    // its hands on this blueprint, frame or item (`thing`), else on the rock or plant in `cell`.
+    HandsOnPlan planHandsOn(Entity pawn, Entity thing, CellPos cell) const;
+    // Starts it (picking up is done at once). Refused with the plan's error, or "too far".
+    bool handsOn(Entity pawn, Entity thing, CellPos cell, std::string& error);
+    // Sets down what the pawn carries on `cell` if that is within reach and has room, else near its feet.
+    bool handsOnPutDown(Entity pawn, CellPos cell, std::string& error);
+    // Ends the pawn's hands-on job, if it has one.
+    void handsOnStop(Entity pawn);
+    // How far along the pawn's job is, 0 to 1 (a swing of the pick, a plant, a frame); 0 with no job.
+    float jobProgress(Entity pawn) const;
+    // Puts down what the pawn carries on the nearest free cell. Used when the player lets a colonist go.
+    void putDown(Entity pawn) { dropCarried(pawn); }
     // Ends the job of any pawn mining, cutting or picking at this cell, as interrupted: the mark was
     // taken off (CancelDesignationsCommand).
     void cancelGatherAt(CellPos cell);
@@ -363,6 +390,12 @@ private:
     void dropNewItems(Entity pawn, DefId def, int count);
     bool retargetStorage(Entity pawn, Job& job);
     void dropCarried(Entity pawn);
+    // Puts what the pawn carries on `cell` if all of it fits there and no other pawn holds the cell.
+    bool placeCarriedAt(Entity pawn, CellPos cell);
+    // Whether a standing point is within kHandsOnReach of the rect; for a job, of what it works on.
+    static bool handsReach(float x, float y, int level, const CellRect& rect);
+    bool handsOnInReach(Entity pawn, const Job& job) const;
+    bool handsOnPickUp(Entity pawn, Entity item, std::string& error);
     void reserve(Entity pawn, const Job& job);
     void release(Entity pawn, const Job& job);
     void jobEvent(Entity pawn, const Job& job, bool started, const std::string& message);
