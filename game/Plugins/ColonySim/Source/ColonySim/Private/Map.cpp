@@ -1,5 +1,6 @@
 #include "ColonySim/Map.h"
 
+#include "ColonySim/Cover.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Regions.h"
 
@@ -58,7 +59,9 @@ Map::Map(const MapSettings& settings)
       terrain_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), Terrain::Soil),
       building_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), kNoEntity),
       passage_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), Passage::Open),
-      regions_(std::make_unique<Regions>(*this)) {
+      obstacle_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), 0),
+      regions_(std::make_unique<Regions>(*this)),
+      cover_(std::make_unique<Cover>(*this)) {
     if (!settings.flat) {
         generate();
     }
@@ -70,9 +73,17 @@ Regions& Map::regions() {
     return *regions_;
 }
 
-void Map::setBuilding(CellPos c, Entity building, Passage passage) {
+Cover& Map::cover() {
+    return *cover_;
+}
+
+void Map::setBuilding(CellPos c, Entity building, Passage passage, uint8_t obstacleDm) {
     const size_t i = static_cast<size_t>(index(c));
     building_[i] = building;
+    if (obstacle_[i] != obstacleDm) {
+        obstacle_[i] = obstacleDm;
+        cover_->markDirty(c);
+    }
     if (passage_[i] != passage) {
         passage_[i] = passage;
         regions_->markDirty(c);
@@ -80,7 +91,7 @@ void Map::setBuilding(CellPos c, Entity building, Passage passage) {
 }
 
 void Map::clearBuilding(CellPos c) {
-    setBuilding(c, kNoEntity, Passage::Open);
+    setBuilding(c, kNoEntity, Passage::Open, 0);
 }
 
 void Map::generate() {
@@ -127,6 +138,7 @@ uint64_t Map::contentHash() const {
         mix(static_cast<uint64_t>(terrain_[i]));
         mix(static_cast<uint64_t>(entt::to_integral(building_[i])));
         mix(static_cast<uint64_t>(passage_[i]));
+        mix(static_cast<uint64_t>(obstacle_[i]));
     }
     return hash;
 }

@@ -42,6 +42,7 @@ target_compile_definitions(colonysim_tests PRIVATE COLONY_DATA_DIR="${CMAKE_CURR
 add_test(NAME unit COMMAND colonysim_tests)
 add_test(NAME simrun_smoke COMMAND simrun --seed 1 --size 64 --days 1 --png ${CMAKE_BINARY_DIR}/smoke.png)
 add_test(NAME simrun_regions COMMAND simrun --seed 1 --size 128 --days 0 --regions ${CMAKE_BINARY_DIR}/regions.png)
+add_test(NAME simrun_sight COMMAND simrun --seed 1 --size 128 --days 0 --sight ${CMAKE_BINARY_DIR}/sight.png)
 
 # Replays: play the scripted scenario and record it, then play the recording and check every
 # state hash matches. CI compares the recordings from Linux and Windows (docs/design/bridge.md).

@@ -122,6 +122,7 @@ KINDS: List[KindSpec] = [
             "Plant_Brambles", "Plant_Dandelion",
             # Buildings.
             "Wall", "Door", "Bed", "SleepingSpot", "Bedroll", "Table*c", "FueledStove",
+            "Sandbags", "Barricade",  # cover: their fillPercent sets how tall they are (docs/design/cover.md)
             # People and guns (and the bullets they fire).
             "Human",
             "Gun_Revolver", "Gun_Autopistol", "Gun_BoltActionRifle", "Gun_PumpShotgun",

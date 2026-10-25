@@ -44,13 +44,14 @@ inline CellPos cellOf(const Position& p) {
 }
 
 // Buildings. Size and blocking come from the def (`size`, `passability`). A door is a def with
-// `thingClass` Building_Door, as in RimWorld, and never blocks movement. Origin and rotation are
-// set while the building is spawned.
+// `thingClass` Building_Door, as in RimWorld, and never blocks movement. `fillPercent` makes it
+// block sight and give cover. Origin and rotation are set while the building is spawned.
 struct Footprint {
     int sizeX = 1;  // as placed facing North
     int sizeY = 1;
     bool blocksMovement = false;
     bool isDoor = false;
+    uint8_t obstacleDm = 0;  // height for sight and cover, from the def's `fillPercent` (Cover.h)
     CellPos origin;
     Rot4 rotation = Rot4::North;
 

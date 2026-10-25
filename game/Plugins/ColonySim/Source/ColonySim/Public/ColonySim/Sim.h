@@ -3,14 +3,17 @@
 #include "ColonySim/Api.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Commands.h"
+#include "ColonySim/Cover.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Pathfinder.h"
 #include "ColonySim/Random.h"
+#include "ColonySim/ThreatMap.h"
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -88,6 +91,10 @@ public:
     const Map& map() const { return map_; }
     // Regions and reachability (docs/design/regions.md). Queries may rebuild, so not const.
     Regions& regions() { return map_.regions(); }
+    // Cover from the eight sides and line of sight (docs/design/cover.md).
+    Cover& cover() { return map_.cover(); }
+    // The threat map of a faction, made empty the first time it is asked for.
+    ThreatMap& threatMap(FactionId faction);
     uint64_t seed() const { return settings_.seed; }
 
     // Every pawn, item and building (docs/design/things.md).
@@ -116,6 +123,7 @@ private:
     Map map_;
     Pathfinder pathfinder_;
     std::unique_ptr<Things> things_;
+    std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
     Rng rng_;
     uint64_t groundHash_;  // map content hash before anything was built
