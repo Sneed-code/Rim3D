@@ -19,6 +19,7 @@
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Recreation.h"
+#include "ColonySim/Research.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/Movement.h"
@@ -128,6 +129,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     movement_->setLights(lights_.get());
     recreation_ = std::make_unique<RecreationSystem>(*things_, *defs_);
     recreation_->setRooms(rooms_.get());
+    research_ = std::make_unique<ResearchSystem>(*things_, *defs_);
     temperature_ = std::make_unique<TemperatureSystem>(map_, *things_, *rooms_, *health_, *defs_,
                                                        splitMix64(settings.seed ^ 0x74656D70ULL));
     temperature_->setOutdoor(outdoorTemperature());
@@ -143,6 +145,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setLights(lights_.get());
     jobs_->setPower(power_.get());
     jobs_->setRooms(rooms_.get());
+    jobs_->setResearch(research_.get());
     jobs_->setFilth(filth_.get());
     jobs_->setSpoilage(spoilage_.get());
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
@@ -440,6 +443,21 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             fighters_->forget(circuit->thing);
             things_->destroy(circuit->thing);
         }
+    } else if (const auto* setResearch = std::get_if<SetResearchCommand>(&command)) {
+        if (!research_->setCurrent(setResearch->project, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* unlockResearch = std::get_if<UnlockResearchCommand>(&command)) {
+        const bool wasDone = research_->isDone(unlockResearch->project);
+        if (!research_->unlock(unlockResearch->project, error)) {
+            commandFailed(id, error);
+        } else if (!wasDone) {
+            Event event;
+            event.type = EventType::ResearchDone;
+            event.def = defs_->idOf("Research", unlockResearch->project);
+            event.message = unlockResearch->project;
+            events_.push_back(std::move(event));
+        }
     } else if (const auto* lineage = std::get_if<SetLineageCommand>(&command)) {
         PawnLooks* looks = things_->exists(lineage->pawn) ? things_->registry().try_get<PawnLooks>(lineage->pawn) : nullptr;
         if (looks == nullptr) {
@@ -496,6 +514,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "no Things def '" + place->def + "'");
         } else if (!place->stuff.empty() && !stuff.valid()) {
             commandFailed(id, "no Things def '" + place->stuff + "'");
+        } else if (!research_->unlocked(defs_->get(def), error)) {
+            commandFailed(id, error);
         } else if (construction_->placeBlueprint(def, stuff, place->cell, place->rot, error) == kNoEntity) {
             commandFailed(id, error);
         }
@@ -596,7 +616,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, error);
         }
     } else if (const auto* addBill = std::get_if<AddBillCommand>(&command)) {
-        if (jobs_->bills().addBill(addBill->building, addBill->recipe, addBill->mode, addBill->count, error) == 0) {
+        const Def* recipeDef = defs_->find("Recipes", addBill->recipe);
+        if (recipeDef != nullptr && !research_->unlocked(*recipeDef, error)) {
+            commandFailed(id, error);
+        } else if (jobs_->bills().addBill(addBill->building, addBill->recipe, addBill->mode, addBill->count, error) == 0) {
             commandFailed(id, error);
         }
     } else if (const auto* removeBill = std::get_if<RemoveBillCommand>(&command)) {
@@ -782,6 +805,17 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.zones.clear();
     out.zoneCells.clear();
     out.looks.clear();
+    out.research.clear();
+    for (const ResearchProject& project : research_->projects()) {
+        ResearchView view;
+        view.project = project.def;
+        view.progress = research_->progress(project.defName);
+        view.cost = research_->cost(project);
+        view.done = research_->isDone(project.defName);
+        view.available = research_->available(project);
+        view.current = research_->current() == project.defName;
+        out.research.push_back(view);
+    }
     out.designations.clear();
     for (const auto& [index, kind] : designations_->all()) {
         out.designations.push_back(DesignationView{map_.cellAt(index), kind});
@@ -1013,6 +1047,7 @@ uint64_t Sim::stateHash() const {
     h.add(plants_->hash());
     h.add(mineables_->hash());
     designations_->hashState(h);
+    research_->hashState(h);
     pathfinder_.hashState(h);
     zones_->hashState(h);
     floors_->hashState(h);

@@ -9,6 +9,7 @@
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Regions.h"
+#include "ColonySim/Research.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Things.h"
 
@@ -407,6 +408,44 @@ private:
     }
 };
 
+// Research (RimWorld's WorkGiver_Researcher): a research bench that can work on the colony's current
+// project, with nobody else at it (docs/design/research.md). The pawn sits at a cell beside the bench.
+class ResearchGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "Research"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        const ResearchSystem* research = jobs.research();
+        if (research == nullptr || research->current().empty()) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        reg.view<const Thing, const Footprint, const Position>().each(
+            [&](Entity bench, const Thing& thing, const Footprint& footprint, const Position& pos) {
+                const ResearchBenchInfo* info = research->benchInfo(thing.def);
+                if (info == nullptr || pos.level != at.level || reg.all_of<ConstructionSite>(bench) ||
+                    reg.all_of<MarkedForDeconstruct>(bench) || !research->benchCanWork(*info) ||
+                    !jobs.buildingRuns(bench)) {
+                    return;
+                }
+                CellPos stand;
+                if (!jobs.construction().workCell(footprint.rect(), cellOf(at), stand)) {
+                    return;
+                }
+                out.push_back(WorkCandidate{JobTarget{bench, CellPos{}}, workGiverDistSq(at, pos), 0, 0, true, stand});
+            });
+    }
+
+    bool makeJob(JobSystem&, Entity, const WorkCandidate& candidate, Job& out) override {
+        out = Job{};
+        out.type = JobType::Research;
+        out.site = candidate.target.thing;
+        out.cell = candidate.reach;
+        return true;
+    }
+};
+
 // Cleaning filth (RimWorld's WorkGiver_CleanFilth, in the Cleaning work type): any cell indoors with
 // filth in it. Outdoor filth waits for the home area, which RimWorld's cleaners are limited to.
 class CleanFilthGiver final : public WorkGiver {
@@ -470,6 +509,7 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<MineGiver>());
     givers.push_back(std::make_unique<CutOrHarvestPlantsGiver>());
     givers.push_back(std::make_unique<DoBillsCookStoveGiver>());
+    givers.push_back(std::make_unique<ResearchGiver>());
     givers.push_back(std::make_unique<CleanFilthGiver>());
     return givers;
 }

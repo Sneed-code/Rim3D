@@ -121,7 +121,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | ✓ | C18 | **Recreation, comfort and outdoors.** The recreation need with kinds and tolerance, recreation jobs (horseshoes, chess, billiards, walking, cloud watching, chatting at a table) in Joy hours; comfort from chairs and beds; the outdoors need; their thoughts. | Cloud | Sonnet, high | 90 min | S7, D9, D11 |
 | | C19 | **Mental breaks.** RimWorld's break chances by mood band; minor (wander sadly, food binge, hide in room), major (tantrum, sad wander, insulting spree) and extreme (berserk, give up and leave, fire-starting spree after E4) breaks; catharsis. | Cloud | Sonnet, high | 90 min | S7, D9 |
 | | C20 | **Social life.** Opinions, interactions at RimWorld's rates, friends, rivals, lovers and spouses as bonds (no sex, no pregnancy), social fights with fists (F8), social thoughts, Social skill XP. | Cloud | Sonnet, high | 90 min | F8, D9 |
-| | C21 | **Research.** Research benches, a current project, the research job (Intellectual), unlocks that gate building plans and bills; commands to pick a project. | Cloud | Sonnet, medium | 60 min | S7, D12 |
+| ✓ | C21 | **Research.** Research benches, a current project, the research job (Intellectual), unlocks that gate building plans and bills; commands to pick a project. | Cloud | Sonnet, medium | 60 min | S7, D12 |
 | | C22 | **Prisoners.** Capture downed enemies to a prison bed; warden feeding, chats and recruiting against resistance as in RimWorld; release; prisoner thoughts; prison-break hook for T3. | Cloud | Sonnet, high | 90 min | H1 |
 | | C23 | **Visitors and traders.** Faction goodwill; visitor groups walk in, stay a while and leave; trader caravans with stock; a trade command with RimWorld's prices (Social skill), silver as money. | Cloud | Sonnet, high | 90 min | T1, D10 |
 | | C24 | **Carry weight and hauling 2.** Item mass, carry capacity, carrying several stacks at once, slower walking when loaded, stacks merging in stockpiles. | Cloud | Sonnet, medium | 60 min | S7 |
@@ -199,7 +199,7 @@ G2, A1 and A2 are Stage 1 tasks.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | A4 | **Animal art.** Free animal packs (Fab) for the D5 animals, retargeted onto a few shared skeletons; logged in `assets/manifest.json`. The thread sends sneed the download steps. | PC Unreal | Sonnet, medium | 90 min | U5, sneed's Fab download |
+| ✓ | A4 | **Animal art.** Free animal packs (Fab) for the D5 animals, retargeted onto a few shared skeletons; logged in `assets/manifest.json`. The thread sends sneed the download steps. | PC Unreal | Sonnet, medium | 90 min | U5, sneed's Fab download |
 | ✓ | A5 | **Clothes art.** Free clothing that fits MetaHuman bodies (MetaHuman's own outfits first) for the D6 apparel, per layer; logged in the manifest. | PC Unreal | Sonnet, high | 90 min | A3, sneed's download if needed |
 | ✓ | A6 | **Placeholder art 2.** Crops, work tables, power and climate buildings, furniture and floors, set in the defs' `visual` fields by an editor script. | PC Unreal | Sonnet, medium | 60 min | A1, D8, D11 |
 

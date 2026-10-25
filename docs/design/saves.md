@@ -112,6 +112,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `mining` | 1 | the rock layer and the designations |
 | `power` | 1 | `power`: per building with a power part, switched on, powered, battery charge (Wd) and requested draw; nets are made again on loading ([power.md](power.md)) |
 | `recreation` | 1 | `joy`: recreation, comfort and outdoors needs, tolerances, and the activity of a recreation job ([recreation.md](recreation.md)) |
+| `research` | 1 | current project, neolithic start flag, finished projects, progress of unfinished ones ([research.md](research.md)) |
 | `animals` | 1 | `SimSettings::wildAnimals`, the animal system's state (populated, percent, random stream, next herd id, over-density flag, counters) and the `animal` part of every animal ([animal-life.md](animal-life.md)) |
 | `temperature` | 1 | each enclosed room's temperature, by its anchor cell (E2) |
 

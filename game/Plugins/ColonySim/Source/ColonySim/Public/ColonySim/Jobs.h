@@ -158,6 +158,7 @@ class Mineables;
 class Pathfinder;
 class Plants;
 class PowerGrid;
+class ResearchSystem;
 class Rooms;
 class Things;
 class WorkGiver;
@@ -253,6 +254,8 @@ public:
     // Whether a cell is indoors decides where a pawn can stroll or watch the clouds (Recreation); without rooms
     // everywhere is outdoors.
     void setRooms(Rooms* rooms) { rooms_ = rooms; }
+    void setResearch(ResearchSystem* research) { research_ = research; }
+    ResearchSystem* research() const { return research_; }
 
     // Call before a thing is destroyed: ends the jobs that carry it or are done by it.
     void forget(Entity thing);
@@ -399,6 +402,10 @@ private:
     bool failCheckRecreate(Entity pawn, Job& job, std::string& why);
     StepResult play(Entity pawn, Job& job, std::string& why);
 
+    // Research (ResearchJobs.cpp, docs/design/research.md). `site` is the bench, `cell` where the pawn sits.
+    bool failCheckResearch(Entity pawn, Job& job, std::string& why);
+    StepResult researchWork(Entity pawn, Job& job, std::string& why);
+
     // Gathering jobs (GatherJobs.cpp).
     bool failCheckGather(Entity pawn, Job& job, std::string& why);
     StepResult goToTouch(Entity pawn, Job& job, std::string& why);
@@ -467,6 +474,7 @@ private:
     std::vector<Event>& events_;
 
     Rooms* rooms_ = nullptr;
+    ResearchSystem* research_ = nullptr;
     RecreationRules recreation_;
     std::unique_ptr<BillSystem> bills_;
     const PowerGrid* power_ = nullptr;

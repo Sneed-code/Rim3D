@@ -4,6 +4,7 @@
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/Random.h"
+#include "ColonySim/Research.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
 
@@ -58,6 +59,15 @@ void Sim::startScenario() {
     if (!scenario->text("lineage").empty() && defs_->find("Lineages", lineage) == nullptr) {
         setupErrors_.push_back("scenario '" + settings_.scenario + "': no Lineages def '" + lineage + "'");
         return;
+    }
+
+    // What the colony knows when it lands (docs/design/research.md).
+    research_->setNeolithicStart(scenario->flag("neolithicStart"));
+    for (size_t i = 0; i < scenario->count("startingResearch"); ++i) {
+        std::string error;
+        if (!research_->unlock(scenario->textAt("startingResearch", i), error)) {
+            setupErrors_.push_back("scenario '" + settings_.scenario + "': " + error);
+        }
     }
 
     const std::vector<CellPos> cells = scenarioNearbyCells(map_, *stockpileCell_, 6000);

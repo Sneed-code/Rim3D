@@ -41,6 +41,7 @@ enum class EventType : uint8_t {
     ShortCircuit,    // a short circuit emptied a net's batteries (docs/design/power.md)
     ItemSpoiled,     // food rotted away or an item wore out in the open (docs/design/spoilage.md)
     PawnPoisoned,    // a pawn ate a poisoned meal and got food poisoning
+    ResearchDone,    // a research project was finished (docs/design/research.md)
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -70,6 +71,7 @@ enum class PawnAction : uint8_t {
     Reload,   // started reloading the gun `target` (docs/design/aiming.md); it is ready again when shotReadyIn is 0
     Dodge,    // sidestepped into `cell` out of the way of the projectile `target`
     Cook,         // started work on a bill at `target`, a work building (once per run of the bill)
+    Research,     // started research at `target`, a research bench (once per job)
     Clean,        // started cleaning the filth in `cell`; a layer comes off every few seconds until its JobEnded
 };
 
@@ -103,6 +105,8 @@ struct Event {
     // bill's last run (a "Do X times" bill that reached 0, which is removed), else empty.
     // PowerChanged: `thing` the building (a generator, consumer or battery; not conduits), `def` its
     // def, `cell` its origin, `message` "on" (in a net that works and switched on) or "off".
+    // ResearchDone: `thing` the pawn who finished it (none if a dev command did), `message` the Research
+    // def's defName, `amount` its cost in points.
     // ShortCircuit: `thing` the building it happened at, `cell` its origin, `amount` the energy
     // released from the net's batteries, Wd.
     // ItemSpoiled: `thing` the item (it is destroyed right after; forget its id), `def` its def, `cell` where it
