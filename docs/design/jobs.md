@@ -59,8 +59,11 @@ gives no work; the tasks with scanners so far:
 | Task | Work type | Scanner |
 | --- | --- | --- |
 | `HaulToStockpile` | Hauling | items outside storage, or in a stockpile worse than one that would take them |
+| `ConstructDeliverResources` | Construction | blueprints and frames that need materials ([construction.md](construction.md)) |
+| `ConstructFinishFrames` | Construction | frames with all their materials |
+| `Deconstruct` | Construction | buildings marked for deconstruction |
 
-C3 adds `Mine` and `CutOrHarvestDesignatedPlants`, C4 the construction ones, C6 `DoBillsCookStove`
+C3 adds `Mine` and `CutOrHarvestDesignatedPlants`, C6 `DoBillsCookStove`
 and so on: a class deriving from `WorkGiver` in `WorkGivers.cpp`, added in `makeWorkGivers`.
 
 A pawn's priority per work type is 0 (doesn't do it) or 1 to 4 (1 first), as RimWorld's manual
@@ -109,6 +112,12 @@ the job of the pawn carrying it, and a destroyed pawn's job ends with what it ca
 heading for a destroyed item fail their next check.
 
 ## Reservations
+
+A reservation is a thing or a cell plus a *purpose*: `Deliver` for the hold a delivery job has on
+its blueprint or frame, `Use` for everything else. A builder holds the frame for `Use`, a deliverer
+holds it for `Deliver`, so a frame being built can still be seen by a deliverer (it needs nothing)
+and two deliveries to one plan never overlap. Which targets each job type holds is
+`JobSystem::reservationsOf`, used for reserving, releasing and rebuilding on load.
 
 A hauling job holds its item and its stockpile cell; no other pawn's scanner or storage search takes
 them. Reservations follow from the jobs (each job type knows what it holds), so they are not saved:

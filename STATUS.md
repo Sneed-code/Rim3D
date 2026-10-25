@@ -70,8 +70,20 @@ terrain fertility, wild plants and the temperate forest, basic items, the Human,
 types, traits, our own backstories and names, the Crashlanded start, the Human body, capacities,
 injuries and blood loss (`docs/design/starting-data.md`). `check_defs.py` now also checks that
 defs name defs that exist. `simrun --pawns/--items` runs on the real data.
-Not written yet: buildings (wall, door, bed, table, stove, sandbags), needs, thoughts, recipes,
-guns and raiders; the tasks that use them (C4, C6, C7, C9, F2, F6) add them the same way.
+Not written yet: sandbags, needs, thoughts, recipes, guns and raiders; the tasks that use them
+(C6, C7, C9, F2, F6) add them the same way. C4 wrote the buildings (wall, door, bed, stool, three tables,
+fueled stove).
+
+Since C4 colonists build (`docs/design/construction.md`): `PlaceBlueprintCommand{def, stuff, cell, rot}`
+plans a building, pawns with Construction work carry the materials to it (the blueprint becomes a frame
+with the first delivery), build it at a speed from their Construction skill and Manipulation, and
+`DeconstructCommand` takes a building down for half its materials back (`CancelBuildCommand` takes back
+a plan and gives every delivered material back). Blueprints and frames are things that block nothing and
+are not on the building layer; a finished building spawns, rebuilds the regions and pushes out pawns and
+items it lands on. Wall, door, bed, stool, three tables and the fueled stove are in
+`data/defs/Things/Buildings.json` (costs, work and hit points from the wiki), numbers in
+`ConstructionRules`. Save format 7 (format 6 still loads); the snapshot has each plan's stage, progress
+and materials. Not built yet: failed builds and skill learning, repair, roofs and rooms (C5).
 
 Since 0004 the game has its own setting (`docs/design/lore.md`: the year 6650, slow star travel,
 the fallen Lattice, magic called resonance) and our own names for RimWorld's proper names
@@ -81,7 +93,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-18 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1). Tick tasks in `docs/plans/stage-1.md` as they merge.
+19 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, C4). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -129,7 +141,8 @@ actions too). ~~**U6** overseer camera and selection~~ done (PC Unreal;
 smoke test `overseer`; `docs/design/overseer.md`). **U3** terrain and plants (PC Unreal, Sonnet high)
 needs C2 as well.
 
-Wave 6, open now that C1 is in: **C4** building (cloud, Sonnet high), **C6** food, rest and
+Wave 6, open now that C1 is in: ~~**C4** building~~ done (`docs/design/construction.md`; save format 7; C5 doors,
+roofs and rooms and C7 bills and cooking can start once C6 is in for C7), **C6** food, rest and
 schedules (cloud, Sonnet high), **F2** guns and hitboxes (cloud, Opus high); **C3** mining, chopping
 and harvesting (cloud, Sonnet high) once C2 is in. On the PC, **U9** and **A3** need only done tasks.
 U6's work tab and U9's colonist panel can now read `sim.jobs()` (work types, priorities).

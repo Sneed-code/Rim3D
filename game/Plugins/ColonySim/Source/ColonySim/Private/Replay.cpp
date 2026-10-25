@@ -93,9 +93,18 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["zone"] = c.zone;
                 j["def"] = c.def;
                 j["allowed"] = c.allowed;
-            } else {
-                static_assert(std::is_same_v<Type, OrderHaulCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, OrderHaulCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
+                j["thing"] = entt::to_integral(c.thing);
+            } else if constexpr (std::is_same_v<Type, PlaceBlueprintCommand>) {
+                j["def"] = c.def;
+                j["stuff"] = c.stuff;
+                j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
+                j["rot"] = kReplayRotNames[static_cast<int>(c.rot)];
+            } else if constexpr (std::is_same_v<Type, CancelBuildCommand>) {
+                j["thing"] = entt::to_integral(c.thing);
+            } else {
+                static_assert(std::is_same_v<Type, DeconstructCommand>, "write every command type");
                 j["thing"] = entt::to_integral(c.thing);
             }
         },
@@ -220,6 +229,26 @@ bool replayReadPriority(ReplayReader& r, const ReplayJson& j, const std::string&
 }
 
 
+bool replayReadCellAndRot(ReplayReader& r, const ReplayJson& j, const std::string& where, CellPos& cellOut, Rot4& rotOut) {
+    std::string rot = kReplayRotNames[0];
+    if (!r.text(j, "rot", rot, where)) {
+        return false;
+    }
+    const auto cell = j.find("cell");
+    if (cell == j.end() || !cell->is_array() || cell->size() != 3 || !(*cell)[0].is_number_integer() ||
+        !(*cell)[1].is_number_integer() || !(*cell)[2].is_number_integer()) {
+        return r.fail(where + ".cell must be [x, y, level]");
+    }
+    cellOut = CellPos{(*cell)[0].get<int>(), (*cell)[1].get<int>(), (*cell)[2].get<int>()};
+    for (int i = 0; i < 4; ++i) {
+        if (rot == kReplayRotNames[i]) {
+            rotOut = static_cast<Rot4>(i);
+            return true;
+        }
+    }
+    return r.fail(where + ".rot must be North, East, South or West");
+}
+
 bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& where, LoggedCommand& out) {
     if (!j.is_object()) {
         return r.fail(where + " must be an object");
@@ -321,6 +350,23 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = OrderHaulCommand{static_cast<Entity>(pawn), static_cast<Entity>(thing)};
+    } else if (type == "PlaceBlueprint") {
+        PlaceBlueprintCommand c;
+        if (!r.text(j, "def", c.def, where) || !r.text(j, "stuff", c.stuff, where) ||
+            !replayReadCellAndRot(r, j, where, c.cell, c.rot)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "CancelBuild" || type == "Deconstruct") {
+        uint32_t thing = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "thing", thing, where)) {
+            return false;
+        }
+        if (type == "CancelBuild") {
+            out.command = CancelBuildCommand{static_cast<Entity>(thing)};
+        } else {
+            out.command = DeconstructCommand{static_cast<Entity>(thing)};
+        }
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");
     }

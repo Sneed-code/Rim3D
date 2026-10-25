@@ -39,8 +39,11 @@ draft, protagonist moved and actions) come with the tasks that build those syste
 | `SetStockpilePriorityCommand{zone, priority}` | | unknown zone; Unstored |
 | `SetStockpileAllowedCommand{zone, def, allowed}` | the zone's filter | unknown zone or def |
 | `OrderHaulCommand{pawn, thing}` | "prioritize hauling": ends the pawn's job, hauls the item | not a working pawn; not an item; held by another pawn; unreachable; no room |
+| `PlaceBlueprintCommand{def, stuff, cell, rot}` | plans a building ([construction.md](construction.md)); `stuff` is "" for a building that takes none | unknown def or stuff; can't be built; the stuff doesn't fit; the footprint is off the map, on water or rock, on a building or on another plan |
+| `CancelBuildCommand{thing}` | takes back a blueprint or frame (what was delivered is put back on the ground), or unmarks a building | `thing` is none of those |
+| `DeconstructCommand{thing}` | marks a finished building to be taken down | not a building; marked already |
 
-In replay files an `area` is `[minX, minY, sizeX, sizeY, level]` and a storage priority its name
+In replay files a `rot` is `"North"`, `"East"`, `"South"` or `"West"` (`"North"` if left out) and an `area` is `[minX, minY, sizeX, sizeY, level]` and a storage priority its name
 (`"Preferred"`; `"Normal"` if left out).
 
 **Speed and pause are not commands.** They decide how often Unreal calls `step()`, not what a step
@@ -65,7 +68,8 @@ starts, so read it after every step. Before the first step it holds what setting
 | `ThingDespawned` | `thing`, `def` | a thing leaves the map but still exists (picked up) |
 | `ThingDestroyed` | `thing`, `def` | a thing stops existing; comes after `ThingDespawned` if it was on the map |
 | `CommandFailed` | `command`, `message` | a command couldn't be applied |
-| `PawnAction` | `thing` (the pawn), `def`, `action`, `target` | a pawn did something Unreal animates: `PickUp`, `PutDown` (U5, [pawns.md](pawns.md)) |
+| `PawnAction` | `thing` (the pawn), `def`, `action`, `target` | a pawn did something Unreal animates: `PickUp`, `PutDown` (U5, [pawns.md](pawns.md)); `Build` and `Deconstruct` (C4) when work on `target` begins |
+| `FrameStarted` | `thing` (the plan), `def` (the building), `cell` | a blueprint got its first materials and is a frame now; the plan itself came with a `ThingSpawned` |
 | `PawnInjured` | `thing`, `def` (the injury), `part`, `amount`, `cell` | a pawn got an injury (F1) |
 | `PawnPartLost` | `thing`, `def` (MissingBodyPart), `part`, `amount`, `cell` | a pawn lost a body part |
 | `PawnDowned`, `PawnGotUp` | `thing`, `cell` | a pawn can no longer act, or can again |
@@ -86,7 +90,10 @@ size for buildings, stack count for items, and hit points. Pawns with a body als
 `dead` (F1); the rest of a pawn's health is read with `Sim::healthReport`. Things off the map (a carried item) are
 not in it. Since S4 it also has the ground height under the thing (`z`), a pawn's velocity (`vx`,
 `vy`, metres per step) and the route still ahead (`waypointCount` points from
-`Snapshot::waypoints[firstWaypoint]`), see [movement.md](movement.md). Later tasks add what they draw
+`Snapshot::waypoints[firstWaypoint]`), see [movement.md](movement.md). Since C4 a `ThingView` also has a
+`stage` (`Built`, `Blueprint` or `Frame`), `stuff`, `buildProgress`, `materialsHave`, `materialsNeeded` and
+`markedForDeconstruct`; blueprints and frames are in the snapshot like buildings, with the size and
+rotation of what they will be ([construction.md](construction.md)). Later tasks add what they draw
 and show: pawn info, the work tab, room stats.
 
 Unreal reads only snapshots and events, never the registry or `Things.h`. That lets the sim move to

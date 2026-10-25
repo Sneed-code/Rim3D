@@ -1,0 +1,67 @@
+[
+  {
+    "defName": "BuildingBase", "abstract": true, "source": "RimWorld wiki",
+    "category": "Building", "passability": "PassThroughOnly", "fillPercent": 0,
+    "unverified": ["fillPercent"]
+  },
+  {
+    "defName": "StuffBuildingBase", "parent": "BuildingBase", "abstract": true,
+    "stuffCategories": ["Metallic", "Woody", "Stony"]
+  },
+  {
+    "defName": "Wall", "parent": "StuffBuildingBase", "label": "wall",
+    "passability": "Impassable", "fillPercent": 1.0, "designationCategory": "Structure",
+    "costStuffCount": 5,
+    "stats": { "maxHitPoints": 300, "workToBuild": 194.4, "flammability": 1.0 }
+  },
+  {
+    "defName": "Door", "parent": "StuffBuildingBase", "label": "door",
+    "thingClass": "Building_Door", "fillPercent": 1.0, "designationCategory": "Structure",
+    "costStuffCount": 25,
+    "stats": { "maxHitPoints": 160, "workToBuild": 1224, "flammability": 1.0 },
+    "unverified": ["fillPercent"]
+  },
+  {
+    "defName": "Bed", "parent": "StuffBuildingBase", "label": "bed",
+    "size": [1, 2], "passability": "Standable", "designationCategory": "Furniture",
+    "costStuffCount": 45,
+    "stats": { "maxHitPoints": 140, "workToBuild": 1152, "flammability": 1.0, "beauty": 1, "comfort": 0.75, "bedRestEffectiveness": 1.0 },
+    "building": { "bed": true, "sleepingSlots": 1 }
+  },
+  {
+    "defName": "Stool", "parent": "StuffBuildingBase", "label": "stool",
+    "passability": "Standable", "designationCategory": "Furniture",
+    "costStuffCount": 25,
+    "stats": { "maxHitPoints": 75, "workToBuild": 648, "flammability": 1.0, "beauty": 0, "comfort": 0.5 },
+    "building": { "isSittable": true }
+  },
+  {
+    "defName": "TableBase", "parent": "StuffBuildingBase", "abstract": true,
+    "fillPercent": 0.4, "designationCategory": "Furniture",
+    "stats": { "flammability": 1.0 },
+    "building": { "isTable": true },
+    "unverified": ["fillPercent"]
+  },
+  {
+    "defName": "Table1x2", "parent": "TableBase", "label": "table (1x2)",
+    "size": [1, 2], "costStuffCount": 28,
+    "stats": { "maxHitPoints": 75, "workToBuild": 1080, "beauty": 0.5 }
+  },
+  {
+    "defName": "Table2x2", "parent": "TableBase", "label": "table (2x2)",
+    "size": [2, 2], "costStuffCount": 50,
+    "stats": { "maxHitPoints": 100, "workToBuild": 2160, "beauty": 1 }
+  },
+  {
+    "defName": "Table2x4", "parent": "TableBase", "label": "table (2x4)",
+    "size": [2, 4], "costStuffCount": 95,
+    "stats": { "maxHitPoints": 150, "workToBuild": 4320, "beauty": 2 }
+  },
+  {
+    "defName": "FueledStove", "parent": "BuildingBase", "label": "fueled stove",
+    "size": [3, 1], "fillPercent": 0.5, "designationCategory": "Production",
+    "costs": { "Steel": 80 },
+    "stats": { "maxHitPoints": 180, "workToBuild": 2880, "flammability": 1.0 },
+    "unverified": ["fillPercent"]
+  }
+]

@@ -31,7 +31,8 @@ layer in step with it; `Sim::things()` gives access. Each thing is made from a d
 | `Building` | `Footprint`, `HitPoints` | `size` `[x, z]` (1x1 if absent), `passability` (`Impassable` blocks movement), `thingClass` (`Building_Door` makes a door), `stats.maxHitPoints` |
 | `Pawn` | `Mover` (speed, route, velocity; [movement.md](movement.md)), `Health` if the def has `race.body` ([health.md](health.md)) | `stats.moveSpeed`, metres per game second (converted from cells per second); 4 m/s at 1x if absent |
 
-Plants are not things: they are a grid layer (task C2), because a 1 km map holds hundreds of
+Blueprints and frames (C4) are things too, of category `Building` with a `ConstructionSite` and no
+`Footprint`, so they are not on the building layer ([construction.md](construction.md)). Plants are not things: they are a grid layer (task C2), because a 1 km map holds hundreds of
 thousands of them. Projectiles come with combat (F2); a dead pawn stays on the map as a pawn with `dead` set (health.md). Any other
 category, or a def of another kind, makes nothing.
 

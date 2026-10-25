@@ -144,6 +144,9 @@ public:
 
     bool incapacitated(Entity pawn) const;
     bool report(Entity pawn, HealthReport& out) const;
+    // A capacity of the pawn (a Capacities defName like "Manipulation") as it is now, 1 for a
+    // pawn with no body or a capacity the data doesn't have. Work speed uses it.
+    float capacityValue(Entity pawn, const std::string& capacity) const;
 
     // Hit points of a part right now (0 if it is missing), and with no damage.
     float partHitPoints(Entity pawn, int part) const;

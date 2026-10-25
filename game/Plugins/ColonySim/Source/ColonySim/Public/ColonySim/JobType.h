@@ -12,6 +12,9 @@ enum class JobType : uint8_t {
     None,        // no job: the pawn thinks at its next step
     Wait,        // stand still until a game second (idle)
     HaulToCell,  // carry an item to a storage cell
+    DeliverResources,  // carry materials to a blueprint or frame (construction.md)
+    BuildFrame,        // work on a frame whose materials are all there
+    Deconstruct,       // take down a building marked for it
 };
 
 COLONY_API const char* jobTypeName(JobType type);

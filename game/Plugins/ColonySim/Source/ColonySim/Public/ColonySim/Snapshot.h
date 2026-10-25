@@ -53,6 +53,17 @@ struct ThingView {
     Entity jobTarget = kNoEntity;
     DefId carriedDef;
     int carriedCount = 0;
+    // Buildings: Built, or a Blueprint or Frame still to be built (docs/design/construction.md). A
+    // site's `def` is the building it will become, `stuff` what it is made of (invalid for none),
+    // `buildProgress` its work done, 0 to 1, and `materialsHave` of `materialsNeeded` delivered.
+    // `markedForDeconstruct` is a built building with the deconstruct designation. Finished
+    // buildings made of something also have `stuff`.
+    ConstructionStage stage = ConstructionStage::Built;
+    DefId stuff;
+    float buildProgress = 0.0f;
+    int materialsHave = 0;
+    int materialsNeeded = 0;
+    bool markedForDeconstruct = false;
 };
 
 // One stockpile zone: `cellCount` cells from Snapshot::zoneCells[firstCell].
