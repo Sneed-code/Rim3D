@@ -2543,6 +2543,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.looks) {
             reg.emplace<PawnLooks>(entity, std::move(*e.looks));
+            sim.giveGenes(entity);  // genes follow the lineage and are not saved (docs/design/genes.md)
         }
         if (e.bills) {
             BillList list;
