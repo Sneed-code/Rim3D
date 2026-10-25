@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ColonySim/Api.h"
+#include "ColonySim/Cover.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/Needs.h"
@@ -154,12 +155,43 @@ struct DeconstructCommand {
     Entity thing = kNoEntity;
 };
 
+// Puts a gun in a pawn's hands or apparel on it (docs/design/combat.md); what it replaces is
+// dropped where the pawn stands. The item may lie on the map. Fails if the pawn has no body, is
+// dead, or the item is neither a gun nor apparel or is someone else's. Later the job system
+// fetches gear itself; this is for the start, tests and dev mode.
+struct EquipCommand {
+    Entity pawn = kNoEntity;
+    Entity item = kNoEntity;
+};
+
+// Shoots. With `target` a pawn on the map, at its chest at each shot; otherwise at the point
+// (x, y, z) in metres (z above sea level, like Snapshot heights). `player` is the protagonist's
+// own trigger: fires at once with the gun's own spread (the player aims). Otherwise the pawn aims
+// for the gun's warm-up and its Shooting skill sets the spread. Fails if the pawn has no gun, is
+// downed, or is mid-burst or cooling down.
+struct ShootCommand {
+    Entity pawn = kNoEntity;
+    Entity target = kNoEntity;
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    bool player = false;
+};
+
+// Stands, crouches or lies down: changes the pawn's hitboxes, muzzle height and what hides it
+// (docs/design/cover.md). Fails if the thing is not a pawn.
+struct SetStanceCommand {
+    Entity pawn = kNoEntity;
+    Stance stance = Stance::Standing;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
                              SetStockpilePriorityCommand, SetStockpileAllowedCommand, OrderHaulCommand,
                              ControlPawnCommand, DirectMoveCommand, SetScheduleCommand, AssignBedCommand,
-                             PlaceBlueprintCommand, CancelBuildCommand, DeconstructCommand>;
+                             PlaceBlueprintCommand, CancelBuildCommand, DeconstructCommand, EquipCommand,
+                             ShootCommand, SetStanceCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

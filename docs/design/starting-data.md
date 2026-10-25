@@ -43,19 +43,22 @@ names in lowerCamel (`workSpeedGlobal`), keys that are def names keep their case
 | `Things` | `Items.json`: steel, wood, silver, component, medicine, berries, survival meal. `Plants.json`: oak, poplar, grass, tall grass, bush, brambles, dandelions, berry bush. `Pawns.json`: Human | C1, C2, C8, F1 | Plants are `category: "Plant"` with a `plant` block. Steel and wood carry `stuffProps` for C4 |
 | `Biomes` | temperate forest | C2 | `plantDensity` and `wildPlants` commonality (only the plants we have; newer expansion plants left out) |
 | `Things` (buildings) | `Buildings.json`: wall, door, bed, stool, three tables, fueled stove | C4 | `costs`, `stuffCategories`, `costStuffCount`, `stats.workToBuild` (game seconds), `size`, `passability`, `building` flags C6 reads ([construction.md](construction.md)) |
-| `Rules` | `PlantRules`, `SkillRules`, `HealthRules`, `PawnGenRules`, `JobRules`, `NeedRules`, `ConstructionRules`, `MoodRules` | C2, C8, F1, C1, C6, C4, C9 | Numbers RimWorld keeps in its code rather than its defs (`JobRules`: [jobs.md](jobs.md); `NeedRules`: [needs.md](needs.md); `ConstructionRules`: [construction.md](construction.md)) |
+| `Rules` | `PlantRules`, `SkillRules`, `HealthRules`, `PawnGenRules`, `JobRules`, `NeedRules`, `ConstructionRules`, `MoodRules`, `CombatRules` | C2, C8, F1, C1, C6, C4, C9, F2 | Numbers RimWorld keeps in its code rather than its defs (`JobRules`: [jobs.md](jobs.md); `NeedRules`: [needs.md](needs.md); `ConstructionRules`: [construction.md](construction.md); `CombatRules`: [combat.md](combat.md)) |
 | `Skills` | the 12 skills | C1, C8 | `disablingWorkTags` |
 | `WorkTypes` | the 20 Core work types, in Work tab order | C1 | `relevantSkills`, `workTags`, `alwaysStartActive`, `inPrototype`, `tasks` (our job names, in order) |
 | `Traits` | 27 traits, spectra as `degreeDatas` | C8 | `statOffsets`, `statFactors`, `skillGains`, `conflictingTraits`; mood numbers used by C9 ([mood.md](mood.md)) |
 | `Backstories` | 14 childhood, 18 adulthood (ours) | C8 | `slot`, `skillGains`, `workDisables` (work tags) |
 | `Names` | first names (two lists), last names, nicknames (ours) | C8 | `names` |
-| `Scenarios` | Crashlanded | C8 | RimWorld's starting items; guns and armour arrive with F2 |
+| `Scenarios` | Crashlanded | C8, F2 | RimWorld's starting items, with the rifle, revolver and flak gear since F2 (the knife waits for melee) |
 | `Bodies` | Human | F1 | Part tree: `def`, `label`, `coverage`, `depth`, `groups`, `parts` |
 | `BodyParts` | 32 part kinds | F1 | `hitPoints`, `bleedRate`, `solid`, `destroyableByDamage`, `lethalIfDestroyed`, scarring flags |
 | `BodyPartGroups` | 12 groups | F1, apparel later | |
 | `Capacities` | consciousness, moving, manipulation, sight, hearing, talking, eating, breathing, blood filtration, blood pumping, digestion | F1 | How parts and other capacities feed each one; downed and lethal thresholds |
 | `Hediffs` | injuries (cut, stab, gunshot, scratch, bite, shredded, crush, bruise, crack, burn), missing part, blood loss | F1 | `injuryProps.painPerSeverity`, `bleedRate`, blood loss stages |
-| `DamageTypes` | bullet, cut, stab, scratch, bite, blunt, crush, burn | F1, F2 | Which injury each damage makes (`hediff`, `hediffSolid` on bones); `reachesInside` (ours: bullet, cut, stab) lets a random hit go in to organs and bones |
+| `DamageTypes` | bullet, cut, stab, scratch, bite, blunt, crush, burn | F1, F2 | Which injury each damage makes (`hediff`, `hediffSolid` on bones); `reachesInside` (ours: bullet, cut, stab) lets a random hit go in to organs and bones; `armorCategory` (Sharp, Blunt, Heat) says which armor rating stops it |
+| `Things` (F2) | `Weapons.json`: revolver, autopistol, bolt-action rifle, pump shotgun, assault rifle. `Apparel.json`: flak vest, flak pants, simple helmet (steel) | F2 | `verbs`, accuracy and cooldown stats, `recoilPerShot` (ours); armor ratings, `apparel.bodyPartGroups` and `layers`. See [combat.md](combat.md) |
+| `Projectiles` | the five guns' bullets | F2 | damage, armor penetration, stopping power, speed (wiki m/s / 30; `tuning.json` multiplies it by 3) |
+| `Hitboxes` | Human (ours) | F2 | Capsules and boxes per stance, by body part label; aim point and muzzle height |
 
 ## Rules worth knowing
 

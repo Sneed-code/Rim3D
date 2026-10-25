@@ -1,0 +1,1280 @@
+#include "ColonySim/Combat.h"
+
+#include "ColonySim/Colonist.h"
+#include "ColonySim/Hash.h"
+#include "ColonySim/Health.h"
+#include "ColonySim/Map.h"
+#include "ColonySim/Things.h"
+
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <string>
+#include <utility>
+
+namespace colony {
+
+// Everything read from the defs once: guns, apparel, projectiles, hitboxes and the rules.
+struct CombatModel {
+    enum class ArmorKind : uint8_t { None, Sharp, Blunt, Heat };
+
+    struct Gun {
+        bool valid = false;
+        DefId projectile;
+        float range = 0.0f;
+        int warmup = 0;    // steps
+        int cooldown = 0;  // steps
+        int burst = 1;
+        int burstGap = 0;  // steps
+        float accuracy[4] = {1.0f, 1.0f, 1.0f, 1.0f};  // touch, short, medium, long
+        float recoil = 0.0f;
+    };
+    struct Apparel {
+        bool valid = false;
+        float armor[4] = {0.0f, 0.0f, 0.0f, 0.0f};  // by ArmorKind
+        std::vector<std::string> groups;
+        std::vector<std::string> layers;
+        int outerness = 0;  // its outermost layer's position in apparelLayersOuterFirst
+    };
+    struct Bullet {
+        bool valid = false;
+        DefId damageType;
+        float damage = 0.0f;
+        float penetration = 0.0f;
+        float speed = 0.0f;  // metres per step, tuning applied
+    };
+    struct Shape {
+        int part = -1;
+        bool box = false;
+        float a[3] = {0.0f, 0.0f, 0.0f};  // capsule end, or box minimum
+        float b[3] = {0.0f, 0.0f, 0.0f};  // capsule end, or box maximum
+        float r = 0.0f;
+    };
+    struct Pose {
+        float aim[3] = {0.0f, 0.0f, 1.0f};
+        float muzzle = 1.0f;
+        float reach = 0.0f;  // furthest any shape gets from the pawn's centre on the ground
+        float top = 0.0f;
+        std::vector<Shape> shapes;
+    };
+    // A pawn def's hitboxes, with part names resolved against its body.
+    struct Kind {
+        bool valid = false;
+        Pose poses[3];  // by Stance
+        // For each part a hitbox names: the part and its outside parts no hitbox names, which a
+        // hit on that hitbox can land on (by their share of the body), e.g. a hand and its fingers.
+        std::vector<std::vector<int>> landsOn;  // by part index
+        std::vector<BodyPartInfo> parts;
+    };
+
+    std::vector<Gun> guns;          // by Things DefId value
+    std::vector<Apparel> apparel;   // by Things DefId value
+    std::vector<Bullet> bullets;    // by Projectiles DefId value
+    std::vector<ArmorKind> armorKind;  // by DamageTypes DefId value
+    std::vector<Kind> kinds;        // by Things DefId value
+    DefId bluntDamage;
+
+    float accuracyBySkill[21] = {};
+    float accuracyDistance[4] = {3.0f, 12.0f, 25.0f, 40.0f};
+    float minHitChance = 0.0201f;
+    int defaultSkill = 4;
+    // How much of a standing man facing the shooter a shot lands on when its direction is picked
+    // evenly in a circle of radius spreadRadius[k] (metres, at the target) around his chest.
+    std::vector<float> spreadRadius;
+    std::vector<float> hitShare;
+    float playerSpreadDistance = 25.0f;
+    float gravity = 0.0109f;
+    float recoilRecovery = 0.002f;
+    float recoilSkillReduction = 0.025f;
+    int maxFlight = 120;
+    std::vector<std::string> layerOrder;
+
+    explicit CombatModel(const DefDatabase& defs, const HealthSystem& health);
+
+    // The spread radius at the target that lands on a standing man with this chance.
+    float radiusFor(float chance) const;
+    void buildHitShares(const Kind& target);
+
+    const Gun* gun(DefId def) const {
+        return def.valid() && def.value < guns.size() && guns[def.value].valid ? &guns[def.value] : nullptr;
+    }
+    const Apparel* wear(DefId def) const {
+        return def.valid() && def.value < apparel.size() && apparel[def.value].valid ? &apparel[def.value] : nullptr;
+    }
+    const Bullet* bullet(DefId def) const {
+        return def.valid() && def.value < bullets.size() && bullets[def.value].valid ? &bullets[def.value] : nullptr;
+    }
+    const Kind* kind(DefId def) const {
+        return def.valid() && def.value < kinds.size() && kinds[def.value].valid ? &kinds[def.value] : nullptr;
+    }
+};
+
+namespace {
+
+constexpr const char* kCombatThingsKind = "Things";
+constexpr const char* kCombatStanceNames[3] = {"Standing", "Crouching", "Prone"};
+
+float combatNum(const Def& def, const std::string& path, double fallback) {
+    return static_cast<float>(def.number(path.c_str(), fallback));
+}
+
+void combatReadPose(const Def& def, const std::string& base, const std::vector<BodyPartInfo>& parts,
+                    CombatModel::Pose& pose) {
+    for (int k = 0; k < 3; ++k) {
+        pose.aim[k] = static_cast<float>(def.numberAt((base + ".aimPoint").c_str(), static_cast<size_t>(k), k == 2 ? 1.0 : 0.0));
+    }
+    pose.muzzle = combatNum(def, base + ".muzzleHeight", 1.0);
+    const std::string shapesPath = base + ".shapes";
+    const size_t n = def.count(shapesPath.c_str());
+    for (size_t i = 0; i < n; ++i) {
+        const std::string sp = shapesPath + "." + std::to_string(i);
+        const std::string label = def.text((sp + ".part").c_str());
+        CombatModel::Shape shape;
+        for (size_t p = 0; p < parts.size(); ++p) {
+            if (parts[p].label == label) {
+                shape.part = static_cast<int>(p);
+                break;
+            }
+        }
+        if (shape.part < 0) {
+            continue;  // a part this body doesn't have
+        }
+        shape.box = def.has((sp + ".box").c_str());
+        const std::string arr = sp + (shape.box ? ".box" : ".capsule");
+        for (int k = 0; k < 3; ++k) {
+            shape.a[k] = static_cast<float>(def.numberAt(arr.c_str(), static_cast<size_t>(k)));
+            shape.b[k] = static_cast<float>(def.numberAt(arr.c_str(), static_cast<size_t>(k + 3)));
+        }
+        shape.r = shape.box ? 0.0f : static_cast<float>(def.numberAt(arr.c_str(), 6));
+        for (const float* pt : {shape.a, shape.b}) {
+            const float reach = std::sqrt(pt[0] * pt[0] + pt[1] * pt[1]) + shape.r;
+            pose.reach = std::max(pose.reach, reach);
+            pose.top = std::max(pose.top, pt[2] + shape.r);
+        }
+        if (shape.box) {
+            // The far corners of a box.
+            const float fx = std::max(std::fabs(shape.a[0]), std::fabs(shape.b[0]));
+            const float fy = std::max(std::fabs(shape.a[1]), std::fabs(shape.b[1]));
+            pose.reach = std::max(pose.reach, std::sqrt(fx * fx + fy * fy));
+        }
+        pose.shapes.push_back(shape);
+    }
+}
+
+}  // namespace
+
+CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
+    guns.resize(defs.size());
+    apparel.resize(defs.size());
+    bullets.resize(defs.size());
+    armorKind.resize(defs.size(), ArmorKind::None);
+    kinds.resize(defs.size());
+
+    if (const Def* rules = defs.find("Rules", "CombatRules")) {
+        for (size_t i = 0; i < 21; ++i) {
+            accuracyBySkill[i] = static_cast<float>(rules->numberAt("shootingAccuracyBySkill", i, 0.95));
+        }
+        const char* names[4] = {"touch", "short", "medium", "long"};
+        for (int i = 0; i < 4; ++i) {
+            accuracyDistance[i] = combatNum(*rules, std::string("accuracyDistances.") + names[i], accuracyDistance[i]);
+        }
+        minHitChance = combatNum(*rules, "minHitChance", minHitChance);
+        defaultSkill = static_cast<int>(rules->integer("defaultShootingSkill", defaultSkill));
+        playerSpreadDistance = combatNum(*rules, "playerSpreadDistance", playerSpreadDistance);
+        gravity = combatNum(*rules, "gravity", gravity);
+        recoilRecovery = combatNum(*rules, "recoilRecoveryPerSecond", recoilRecovery);
+        recoilSkillReduction = combatNum(*rules, "recoilSkillReduction", recoilSkillReduction);
+        maxFlight = static_cast<int>(rules->integer("maxFlightSeconds", maxFlight));
+        for (size_t i = 0; i < rules->count("apparelLayersOuterFirst"); ++i) {
+            layerOrder.push_back(rules->textAt("apparelLayersOuterFirst", i));
+        }
+    } else {
+        for (size_t i = 0; i < 21; ++i) {
+            accuracyBySkill[i] = 0.89f + 0.005f * static_cast<float>(i);
+        }
+    }
+
+    for (const DefId id : defs.idsOfKind("DamageTypes")) {
+        const std::string category = defs.get(id).text("armorCategory");
+        armorKind[id.value] = category == "Sharp"   ? ArmorKind::Sharp
+                              : category == "Blunt" ? ArmorKind::Blunt
+                              : category == "Heat"  ? ArmorKind::Heat
+                                                    : ArmorKind::None;
+    }
+    bluntDamage = defs.idOf("DamageTypes", "Blunt");
+
+    for (const DefId id : defs.idsOfKind("Projectiles")) {
+        const Def& def = defs.get(id);
+        Bullet& b = bullets[id.value];
+        b.damageType = defs.idOf("DamageTypes", def.text("projectile.damageDef"));
+        b.damage = combatNum(def, "projectile.damageAmountBase", 0.0);
+        b.penetration = combatNum(def, "projectile.armorPenetrationBase", 0.0);
+        b.speed = combatNum(def, "projectile.speed", 0.0);
+        b.valid = b.damageType.valid() && b.speed > 0.0f;
+    }
+
+    for (const DefId id : defs.idsOfKind(kCombatThingsKind)) {
+        const Def& def = defs.get(id);
+        if (def.has("verbs.0.defaultProjectile")) {
+            Gun& g = guns[id.value];
+            g.projectile = defs.idOf("Projectiles", def.text("verbs.0.defaultProjectile"));
+            g.range = combatNum(def, "verbs.0.range", 0.0);
+            g.warmup = static_cast<int>(std::lround(def.number("verbs.0.warmupTime")));
+            g.cooldown = static_cast<int>(std::lround(def.number("stats.rangedWeaponCooldown")));
+            g.burst = std::max(1, static_cast<int>(def.integer("verbs.0.burstShotCount", 1)));
+            g.burstGap = static_cast<int>(std::lround(def.number("verbs.0.secondsBetweenBurstShots")));
+            const char* acc[4] = {"stats.accuracyTouch", "stats.accuracyShort", "stats.accuracyMedium", "stats.accuracyLong"};
+            for (int i = 0; i < 4; ++i) {
+                g.accuracy[i] = combatNum(def, acc[i], 1.0);
+            }
+            g.recoil = combatNum(def, "recoilPerShot", 0.0);
+            g.valid = bullet(g.projectile) != nullptr;
+        }
+        if (def.has("apparel")) {
+            Apparel& a = apparel[id.value];
+            a.armor[static_cast<int>(ArmorKind::Sharp)] = combatNum(def, "stats.armorRatingSharp", 0.0);
+            a.armor[static_cast<int>(ArmorKind::Blunt)] = combatNum(def, "stats.armorRatingBlunt", 0.0);
+            a.armor[static_cast<int>(ArmorKind::Heat)] = combatNum(def, "stats.armorRatingHeat", 0.0);
+            for (size_t i = 0; i < def.count("apparel.bodyPartGroups"); ++i) {
+                a.groups.push_back(def.textAt("apparel.bodyPartGroups", i));
+            }
+            a.outerness = static_cast<int>(layerOrder.size());
+            for (size_t i = 0; i < def.count("apparel.layers"); ++i) {
+                a.layers.push_back(def.textAt("apparel.layers", i));
+                const auto at = std::find(layerOrder.begin(), layerOrder.end(), a.layers.back());
+                a.outerness = std::min(a.outerness, static_cast<int>(at - layerOrder.begin()));
+            }
+            a.valid = true;
+        }
+        if (def.has("race.hitboxes")) {
+            const Def* boxes = defs.find("Hitboxes", def.text("race.hitboxes"));
+            Kind& k = kinds[id.value];
+            k.parts = health.bodyParts(id);
+            if (boxes == nullptr || k.parts.empty()) {
+                continue;
+            }
+            for (int s = 0; s < 3; ++s) {
+                combatReadPose(*boxes, std::string("stances.") + kCombatStanceNames[s], k.parts, k.poses[s]);
+            }
+            std::vector<uint8_t> named(k.parts.size(), 0);
+            for (const Pose& pose : k.poses) {
+                for (const Shape& shape : pose.shapes) {
+                    named[static_cast<size_t>(shape.part)] = 1;
+                }
+            }
+            k.landsOn.resize(k.parts.size());
+            for (size_t p = 0; p < k.parts.size(); ++p) {
+                if (named[p] == 0) {
+                    continue;
+                }
+                // The part, then every outside part below it, stopping at parts with their own hitbox.
+                for (size_t q = 0; q < k.parts.size(); ++q) {
+                    if (k.parts[q].inside || (q != p && named[q] != 0)) {
+                        continue;
+                    }
+                    int up = static_cast<int>(q);
+                    while (up >= 0 && static_cast<size_t>(up) != p &&
+                           (up == static_cast<int>(q) || named[static_cast<size_t>(up)] == 0)) {
+                        up = k.parts[static_cast<size_t>(up)].parent;
+                    }
+                    if (up >= 0 && static_cast<size_t>(up) == p) {
+                        k.landsOn[p].push_back(static_cast<int>(q));
+                    }
+                }
+            }
+            k.valid = !k.poses[0].shapes.empty();
+        }
+    }
+
+    std::string standard = "Human";
+    if (const Def* rules = defs.find("Rules", "CombatRules")) {
+        standard = rules->text("standardTarget", standard);
+    }
+    if (const Kind* target = kind(defs.idOf(kCombatThingsKind, standard))) {
+        buildHitShares(*target);
+    }
+}
+
+namespace {
+
+struct CombatVec {
+    float x = 0.0f, y = 0.0f, z = 0.0f;
+};
+
+float combatDot(const CombatVec& a, const CombatVec& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+CombatVec combatSub(const CombatVec& a, const CombatVec& b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
+
+// Earliest t in [0, 1] where p + t * d is inside the box, or -1.
+float combatSegmentBox(const CombatVec& p, const CombatVec& d, const float* lo, const float* hi) {
+    float t0 = 0.0f;
+    float t1 = 1.0f;
+    const float o[3] = {p.x, p.y, p.z};
+    const float v[3] = {d.x, d.y, d.z};
+    for (int k = 0; k < 3; ++k) {
+        if (std::fabs(v[k]) < 1e-9f) {
+            if (o[k] < lo[k] || o[k] > hi[k]) {
+                return -1.0f;
+            }
+            continue;
+        }
+        float a = (lo[k] - o[k]) / v[k];
+        float b = (hi[k] - o[k]) / v[k];
+        if (a > b) {
+            std::swap(a, b);
+        }
+        t0 = std::max(t0, a);
+        t1 = std::min(t1, b);
+        if (t0 > t1) {
+            return -1.0f;
+        }
+    }
+    return t0;
+}
+
+// Earliest distance along the unit ray (o, u) to the sphere (c, r), within [0, len]; -1 if none.
+float combatRaySphere(const CombatVec& o, const CombatVec& u, const CombatVec& c, float r, float len) {
+    const CombatVec oc = combatSub(o, c);
+    const float c2 = combatDot(oc, oc) - r * r;
+    if (c2 <= 0.0f) {
+        return 0.0f;  // starts inside
+    }
+    const float b = combatDot(oc, u);
+    const float h = b * b - c2;
+    if (h < 0.0f || b > 0.0f) {
+        return -1.0f;
+    }
+    const float t = -b - std::sqrt(h);
+    return t <= len ? t : -1.0f;
+}
+
+// Earliest t in [0, 1] where p + t * d touches the capsule (a, b, r), or -1.
+float combatSegmentCapsule(const CombatVec& p, const CombatVec& d, const CombatVec& a, const CombatVec& b, float r) {
+    const float len = std::sqrt(combatDot(d, d));
+    if (len < 1e-9f) {
+        return -1.0f;
+    }
+    const CombatVec u{d.x / len, d.y / len, d.z / len};
+    float best = -1.0f;
+    const auto keep = [&best](float t) {
+        if (t >= 0.0f && (best < 0.0f || t < best)) {
+            best = t;
+        }
+    };
+    keep(combatRaySphere(p, u, a, r, len));
+    keep(combatRaySphere(p, u, b, r, len));
+    const CombatVec ba = combatSub(b, a);
+    const float baba = combatDot(ba, ba);
+    if (baba > 1e-9f) {
+        const CombatVec oa = combatSub(p, a);
+        const float bard = combatDot(ba, u);
+        const float baoa = combatDot(ba, oa);
+        const float rdoa = combatDot(u, oa);
+        const float oaoa = combatDot(oa, oa);
+        const float qa = baba - bard * bard;
+        const float qb = baba * rdoa - baoa * bard;
+        const float qc = baba * oaoa - baoa * baoa - r * r * baba;
+        if (qc <= 0.0f && baoa >= 0.0f && baoa <= baba) {
+            keep(0.0f);  // starts inside the body of the capsule
+        } else if (qa > 1e-9f) {
+            const float h = qb * qb - qa * qc;
+            if (h >= 0.0f) {
+                const float t = (-qb - std::sqrt(h)) / qa;
+                const float y = baoa + t * bard;
+                if (t >= 0.0f && t <= len && y > 0.0f && y < baba) {
+                    keep(t);
+                }
+            }
+        }
+    }
+    return best < 0.0f ? -1.0f : best / len;
+}
+
+// a^d for a fractional distance, without pow (every platform must agree): the whole metres by
+// multiplying, the rest by a straight line.
+float combatPowDistance(float a, float d) {
+    const int whole = static_cast<int>(d);
+    float result = 1.0f;
+    for (int i = 0; i < whole; ++i) {
+        result *= a;
+    }
+    const float rest = d - static_cast<float>(whole);
+    return result * (1.0f - rest * (1.0f - a));
+}
+
+float combatLerp(float a, float b, float t) { return a + (b - a) * t; }
+
+Stance combatStanceOf(const entt::registry& reg, Entity pawn) {
+    const Health* health = reg.try_get<Health>(pawn);
+    if (health != nullptr && health->incapacitated()) {
+        return Stance::Prone;
+    }
+    const Posture* posture = reg.try_get<Posture>(pawn);
+    return posture != nullptr ? posture->stance : Stance::Standing;
+}
+
+}  // namespace
+
+void CombatModel::buildHitShares(const Kind& target) {
+    // Look at the man from the front through a 2 cm grid and note how far from his chest each
+    // point of him is; the share inside a circle is then that area over the circle's.
+    const Pose& pose = target.poses[static_cast<int>(Stance::Standing)];
+    constexpr float kCell = 0.02f;
+    std::vector<float> distances;
+    for (int iz = 0; iz < 110; ++iz) {
+        for (int iy = -40; iy < 40; ++iy) {
+            const float y = (static_cast<float>(iy) + 0.5f) * kCell;
+            const float z = (static_cast<float>(iz) + 0.5f) * kCell;
+            const CombatVec from{-3.0f, y, z};
+            const CombatVec along{6.0f, 0.0f, 0.0f};
+            bool hit = false;
+            for (const Shape& shape : pose.shapes) {
+                const float t = shape.box ? combatSegmentBox(from, along, shape.a, shape.b)
+                                          : combatSegmentCapsule(from, along, CombatVec{shape.a[0], shape.a[1], shape.a[2]},
+                                                                 CombatVec{shape.b[0], shape.b[1], shape.b[2]}, shape.r);
+                hit = hit || t >= 0.0f;
+            }
+            if (hit) {
+                const float dy = y - pose.aim[1];
+                const float dz = z - pose.aim[2];
+                distances.push_back(std::sqrt(dy * dy + dz * dz));
+            }
+        }
+    }
+    std::sort(distances.begin(), distances.end());
+    size_t inside = 0;
+    for (float radius = 0.02f; radius < 40.0f; radius *= 1.06f) {
+        while (inside < distances.size() && distances[inside] <= radius) {
+            ++inside;
+        }
+        const float area = static_cast<float>(inside) * kCell * kCell;
+        spreadRadius.push_back(radius);
+        hitShare.push_back(std::min(1.0f, area / (3.14159265f * radius * radius)));
+    }
+}
+
+float CombatModel::radiusFor(float chance) const {
+    if (spreadRadius.empty()) {
+        return 0.42f / std::sqrt(chance);  // no Human hitboxes: a man as a disc of the same area
+    }
+    for (size_t k = 1; k < spreadRadius.size(); ++k) {
+        if (hitShare[k] < chance) {
+            const float span = hitShare[k - 1] - hitShare[k];
+            const float t = span > 0.0f ? (hitShare[k - 1] - chance) / span : 0.0f;
+            return combatLerp(spreadRadius[k - 1], spreadRadius[k], std::clamp(t, 0.0f, 1.0f));
+        }
+    }
+    return spreadRadius.back();
+}
+
+CombatSystem::CombatSystem(Things& things, Map& map, HealthSystem& health)
+    : things_(things), map_(map), health_(health), model_(std::make_unique<CombatModel>(things.defs(), health)) {}
+
+CombatSystem::~CombatSystem() = default;
+
+int CombatSystem::shootingSkill(Entity pawn) const {
+    if (const Colonist* colonist = things_.registry().try_get<Colonist>(pawn)) {
+        for (const SkillRecord& skill : colonist->skills) {
+            if (skill.def == "Shooting") {
+                return std::clamp(skill.level, 0, 20);
+            }
+        }
+    }
+    return std::clamp(model_->defaultSkill, 0, 20);
+}
+
+float CombatSystem::spread(DefId weapon, int skill, float distance, bool player) const {
+    const CombatModel::Gun* gun = model_->gun(weapon);
+    if (gun == nullptr) {
+        return 0.0f;
+    }
+    const auto gunAccuracy = [&](float d) {
+        const float* at = model_->accuracyDistance;
+        const float* acc = gun->accuracy;
+        if (d <= at[0]) {
+            return acc[0];
+        }
+        for (int i = 1; i < 4; ++i) {
+            if (d <= at[i]) {
+                return combatLerp(acc[i - 1], acc[i], (d - at[i - 1]) / (at[i] - at[i - 1]));
+            }
+        }
+        return acc[3];
+    };
+    if (player) {
+        const float d = model_->playerSpreadDistance;
+        const float hit = std::clamp(gunAccuracy(d), model_->minHitChance, 1.0f);
+        return model_->radiusFor(hit) / d;
+    }
+    const float d = std::max(distance, 1.0f);
+    const float shooter = combatPowDistance(model_->accuracyBySkill[std::clamp(skill, 0, 20)], d);
+    const float hit = std::clamp(shooter * gunAccuracy(d), model_->minHitChance, 1.0f);
+    return model_->radiusFor(hit) / d;
+}
+
+bool CombatSystem::aimPoint(Entity pawn, float& x, float& y, float& z) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || !reg.all_of<Thing, Position, Posture>(pawn)) {
+        return false;
+    }
+    const Position& pos = reg.get<Position>(pawn);
+    const Posture& posture = reg.get<Posture>(pawn);
+    const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(pawn).def);
+    const float ground = map_.heightAt(pos.x, pos.y);
+    if (kind == nullptr) {
+        x = pos.x;
+        y = pos.y;
+        z = ground + eyeHeight(combatStanceOf(reg, pawn)) * 0.7f;
+        return true;
+    }
+    const float* a = kind->poses[static_cast<int>(combatStanceOf(reg, pawn))].aim;
+    x = pos.x + a[0] * posture.facingX - a[1] * posture.facingY;
+    y = pos.y + a[0] * posture.facingY + a[1] * posture.facingX;
+    z = ground + a[2];
+    return true;
+}
+
+bool CombatSystem::hitboxesOf(Entity pawn, std::vector<HitboxView>& out) const {
+    out.clear();
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || !reg.all_of<Thing, Position, Posture>(pawn)) {
+        return false;
+    }
+    const Health* health = reg.try_get<Health>(pawn);
+    const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(pawn).def);
+    if (kind == nullptr || (health != nullptr && health->dead)) {
+        return false;
+    }
+    const Position& pos = reg.get<Position>(pawn);
+    const Posture& posture = reg.get<Posture>(pawn);
+    const float ground = map_.heightAt(pos.x, pos.y);
+    const float fx = posture.facingX;
+    const float fy = posture.facingY;
+    const auto world = [&](const float* l, float& wx, float& wy, float& wz) {
+        wx = pos.x + l[0] * fx - l[1] * fy;
+        wy = pos.y + l[0] * fy + l[1] * fx;
+        wz = ground + l[2];
+    };
+    for (const CombatModel::Shape& shape : kind->poses[static_cast<int>(combatStanceOf(reg, pawn))].shapes) {
+        if (health_.partHitPoints(pawn, shape.part) <= 0.0f) {
+            continue;
+        }
+        HitboxView v;
+        v.part = shape.part;
+        v.box = shape.box;
+        v.forwardX = fx;
+        v.forwardY = fy;
+        if (shape.box) {
+            const float centre[3] = {0.5f * (shape.a[0] + shape.b[0]), 0.5f * (shape.a[1] + shape.b[1]),
+                                     0.5f * (shape.a[2] + shape.b[2])};
+            world(centre, v.ax, v.ay, v.az);
+            v.bx = 0.5f * (shape.b[0] - shape.a[0]);
+            v.by = 0.5f * (shape.b[1] - shape.a[1]);
+            v.bz = 0.5f * (shape.b[2] - shape.a[2]);
+        } else {
+            world(shape.a, v.ax, v.ay, v.az);
+            world(shape.b, v.bx, v.by, v.bz);
+            v.radius = shape.r;
+        }
+        out.push_back(v);
+    }
+    return true;
+}
+
+TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, float bz, int level, Entity skipPawn,
+                             CellPos skipCell) const {
+    TraceHit best;
+    const float dx = bx - ax;
+    const float dy = by - ay;
+    const float dz = bz - az;
+    const auto at = [&](float t, TraceHit& h) {
+        h.t = t;
+        h.x = ax + dx * t;
+        h.y = ay + dy * t;
+        h.z = az + dz * t;
+    };
+
+    // The ground and what stands on it, cell by cell along the line (a grid walk).
+    {
+        int cx = static_cast<int>(std::floor(ax));
+        int cy = static_cast<int>(std::floor(ay));
+        const int stepX = dx > 0.0f ? 1 : -1;
+        const int stepY = dy > 0.0f ? 1 : -1;
+        constexpr float kFar = std::numeric_limits<float>::max();
+        const float deltaX = dx != 0.0f ? 1.0f / std::fabs(dx) : kFar;
+        const float deltaY = dy != 0.0f ? 1.0f / std::fabs(dy) : kFar;
+        float nextX = dx != 0.0f ? (static_cast<float>(cx + (dx > 0.0f ? 1 : 0)) - ax) / dx : kFar;
+        float nextY = dy != 0.0f ? (static_cast<float>(cy + (dy > 0.0f ? 1 : 0)) - ay) / dy : kFar;
+        float tIn = 0.0f;
+        const int cells = static_cast<int>(std::fabs(dx) + std::fabs(dy)) + 3;
+        for (int i = 0; i < cells; ++i) {
+            const CellPos c{cx, cy, level};
+            if (!map_.inBounds(c)) {
+                break;
+            }
+            const float tOut = std::min(std::min(nextX, nextY), 1.0f);
+            const float z0 = az + dz * tIn;
+            const float z1 = az + dz * tOut;
+            const uint8_t obstacle = map_.obstacleDm(c);
+            const bool rock = map_.terrain(c) == Terrain::Rock;
+            if (rock) {
+                at(tIn, best);
+                best.kind = ProjectileHitKind::Rock;
+                break;
+            }
+            if (obstacle > 0 && !(c == skipCell)) {
+                const float top = obstacle == kObstacleTallDm ? kFar : map_.groundHeight(c) + 0.1f * static_cast<float>(obstacle);
+                if (std::min(z0, z1) < top) {
+                    const float t = z0 < top ? tIn : tIn + (tOut - tIn) * (z0 - top) / (z0 - z1);
+                    at(t, best);
+                    best.kind = ProjectileHitKind::Building;
+                    best.thing = map_.buildingAt(c);
+                    break;
+                }
+            }
+            const float g0 = map_.heightAt(ax + dx * tIn, ay + dy * tIn);
+            const float g1 = map_.heightAt(ax + dx * tOut, ay + dy * tOut);
+            if (z1 < g1) {
+                const float above0 = z0 - g0;
+                const float above1 = z1 - g1;
+                const float t = above0 <= 0.0f ? tIn : tIn + (tOut - tIn) * above0 / (above0 - above1);
+                at(t, best);
+                best.kind = ProjectileHitKind::Ground;
+                break;
+            }
+            if (tOut >= 1.0f) {
+                break;
+            }
+            if (nextX < nextY) {
+                cx += stepX;
+                tIn = nextX;
+                nextX += deltaX;
+            } else {
+                cy += stepY;
+                tIn = nextY;
+                nextY += deltaY;
+            }
+        }
+    }
+
+    // Pawns' hitboxes, nearer than whatever the line met above. Ties go to the lower id so the
+    // registry's order can't matter.
+    const entt::registry& reg = things_.registry();
+    const float len2 = dx * dx + dy * dy;
+    for (const auto [pawn, thing, pos, posture] : reg.view<const Thing, const Position, const Posture>().each()) {
+        if (pawn == skipPawn || pos.level != level) {
+            continue;
+        }
+        const Health* health = reg.try_get<Health>(pawn);
+        const CombatModel::Kind* kind = model_->kind(thing.def);
+        if (kind == nullptr || (health != nullptr && health->dead)) {
+            continue;
+        }
+        const CombatModel::Pose& pose = kind->poses[static_cast<int>(combatStanceOf(reg, pawn))];
+        // Quick test: the line's closest approach to the pawn on the ground.
+        const float px = pos.x - ax;
+        const float py = pos.y - ay;
+        float s = len2 > 0.0f ? (px * dx + py * dy) / len2 : 0.0f;
+        s = std::clamp(s, 0.0f, 1.0f);
+        const float ex = ax + dx * s - pos.x;
+        const float ey = ay + dy * s - pos.y;
+        if (ex * ex + ey * ey > pose.reach * pose.reach) {
+            continue;
+        }
+        const float ground = map_.heightAt(pos.x, pos.y);
+        if (std::min(az, bz) > ground + pose.top || std::max(az, bz) < ground) {
+            continue;
+        }
+        // Into the pawn's frame: x forward, y left, z up from the ground under it.
+        const float fx = posture.facingX;
+        const float fy = posture.facingY;
+        const float rx = ax - pos.x;
+        const float ry = ay - pos.y;
+        const CombatVec lp{rx * fx + ry * fy, -rx * fy + ry * fx, az - ground};
+        const CombatVec ld{dx * fx + dy * fy, -dx * fy + dy * fx, dz};
+        for (const CombatModel::Shape& shape : pose.shapes) {
+            float t = -1.0f;
+            if (shape.box) {
+                t = combatSegmentBox(lp, ld, shape.a, shape.b);
+            } else {
+                t = combatSegmentCapsule(lp, ld, CombatVec{shape.a[0], shape.a[1], shape.a[2]},
+                                         CombatVec{shape.b[0], shape.b[1], shape.b[2]}, shape.r);
+            }
+            const bool better = best.kind == ProjectileHitKind::None
+                                    ? t <= best.t
+                                    : (t < best.t || (t == best.t && best.kind == ProjectileHitKind::Pawn && pawn < best.thing));
+            if (t < 0.0f || !better) {
+                continue;
+            }
+            if (health_.partHitPoints(pawn, shape.part) <= 0.0f) {
+                continue;  // that part is gone: nothing there to hit
+            }
+            at(t, best);
+            best.kind = ProjectileHitKind::Pawn;
+            best.thing = pawn;
+            best.part = shape.part;
+        }
+    }
+    return best;
+}
+
+Entity CombatSystem::fire(Entity pawn, float x, float y, float z, float spreadSlope, Rng& rng) {
+    entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || !reg.all_of<Gear, Position, Posture>(pawn)) {
+        return kNoEntity;
+    }
+    const Entity weapon = reg.get<Gear>(pawn).weapon;
+    if (weapon == kNoEntity || !reg.valid(weapon)) {
+        return kNoEntity;
+    }
+    const DefId weaponDef = reg.get<Thing>(weapon).def;
+    const CombatModel::Gun* gun = model_->gun(weaponDef);
+    if (gun == nullptr) {
+        return kNoEntity;
+    }
+    const CombatModel::Bullet& bullet = *model_->bullet(gun->projectile);
+    const Position pos = reg.get<Position>(pawn);
+    Posture& posture = reg.get<Posture>(pawn);
+    const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(pawn).def);
+    const Stance stance = combatStanceOf(reg, pawn);
+    const float muzzle = kind != nullptr ? kind->poses[static_cast<int>(stance)].muzzle : eyeHeight(stance) - 0.15f;
+    const float ox = pos.x;
+    const float oy = pos.y;
+    const float oz = map_.heightAt(pos.x, pos.y) + muzzle;
+
+    float dx = x - ox;
+    float dy = y - oy;
+    const float dz = z - oz;
+    float flat = std::sqrt(dx * dx + dy * dy);
+    if (flat < 0.01f) {
+        dx = posture.facingX;
+        dy = posture.facingY;
+        flat = 1.0f;
+    } else {
+        posture.facingX = dx / flat;
+        posture.facingY = dy / flat;
+    }
+    // Aim above the point so the drop brings the shot onto it (the lower of the two arcs).
+    const float v = bullet.speed;
+    const float g = model_->gravity;
+    const float v2 = v * v;
+    const float disc = v2 * v2 - g * (g * flat * flat + 2.0f * dz * v2);
+    const float slope = disc >= 0.0f ? (v2 - std::sqrt(disc)) / (g * flat) : v2 / (g * flat);
+    CombatVec dir{dx / flat, dy / flat, slope};
+    float n = std::sqrt(combatDot(dir, dir));
+    dir = {dir.x / n, dir.y / n, dir.z / n};
+
+    // Spread: a direction picked evenly in a circle around the aim.
+    if (spreadSlope > 0.0f) {
+        CombatVec right{dir.y, -dir.x, 0.0f};
+        n = std::sqrt(combatDot(right, right));
+        right = n > 1e-6f ? CombatVec{right.x / n, right.y / n, 0.0f} : CombatVec{0.0f, -1.0f, 0.0f};
+        const CombatVec up{right.y * dir.z - right.z * dir.y, right.z * dir.x - right.x * dir.z,
+                           right.x * dir.y - right.y * dir.x};
+        float u = 0.0f;
+        float w = 0.0f;
+        for (int tries = 0; tries < 16; ++tries) {
+            const float cu = 2.0f * rng.unit() - 1.0f;
+            const float cw = 2.0f * rng.unit() - 1.0f;
+            if (cu * cu + cw * cw <= 1.0f) {
+                u = cu;
+                w = cw;
+                break;
+            }
+        }
+        dir = {dir.x + (right.x * u + up.x * w) * spreadSlope, dir.y + (right.y * u + up.y * w) * spreadSlope,
+               dir.z + (right.z * u + up.z * w) * spreadSlope};
+        n = std::sqrt(combatDot(dir, dir));
+        dir = {dir.x / n, dir.y / n, dir.z / n};
+    }
+
+    const Entity shot = reg.create();
+    Projectile p;
+    p.def = gun->projectile;
+    p.weapon = weaponDef;
+    p.launcher = pawn;
+    p.x = ox;
+    p.y = oy;
+    p.z = oz;
+    p.vx = dir.x * v;
+    p.vy = dir.y * v;
+    p.vz = dir.z * v;
+    p.level = pos.level;
+    p.startCell = cellOf(pos);
+    p.seed = (static_cast<uint64_t>(rng.next()) << 32) | rng.next();
+    reg.emplace<Projectile>(shot, p);
+    if (events_ != nullptr) {
+        Event e;
+        e.type = EventType::ShotFired;
+        e.thing = pawn;
+        e.def = weaponDef;
+        e.target = shot;
+        e.x = ox;
+        e.y = oy;
+        e.z = oz;
+        events_->push_back(std::move(e));
+    }
+    return shot;
+}
+
+bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, bool player, std::string* why) {
+    entt::registry& reg = things_.registry();
+    const auto fail = [why](const char* message) {
+        if (why != nullptr) {
+            *why = message;
+        }
+        return false;
+    };
+    if (!things_.spawned(pawn) || !reg.all_of<Posture>(pawn)) {
+        return fail("that is not a pawn on the map");
+    }
+    const Gear* gear = reg.try_get<Gear>(pawn);
+    if (gear == nullptr || gear->weapon == kNoEntity || model_->gun(reg.get<Thing>(gear->weapon).def) == nullptr) {
+        return fail("that pawn has no gun");
+    }
+    if (health_.incapacitated(pawn)) {
+        return fail("that pawn can't shoot (downed or dead)");
+    }
+    if (target != kNoEntity && (target == pawn || !things_.spawned(target) || !reg.all_of<Posture>(target))) {
+        return fail("the target is not a pawn on the map");
+    }
+    Shooter& s = reg.get_or_emplace<Shooter>(pawn);
+    if (s.phase == ShotPhase::Firing || s.phase == ShotPhase::Cooling) {
+        return fail("not ready to fire yet");
+    }
+    const CombatModel::Gun& gun = *model_->gun(reg.get<Thing>(gear->weapon).def);
+    s.target = target;
+    s.aimX = x;
+    s.aimY = y;
+    s.aimZ = z;
+    s.player = player;
+    if (s.phase == ShotPhase::Ready || player) {
+        s.shotsLeft = gun.burst;
+        s.phase = player || gun.warmup <= 0 ? ShotPhase::Firing : ShotPhase::Aiming;
+        s.stepsLeft = player ? 0 : gun.warmup;
+    }
+    return true;
+}
+
+bool CombatSystem::setStance(Entity pawn, Stance stance) {
+    Posture* posture = things_.registry().try_get<Posture>(pawn);
+    if (posture == nullptr) {
+        return false;
+    }
+    posture->stance = stance;
+    return true;
+}
+
+void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
+    entt::registry& reg = things_.registry();
+    s.recoil = std::max(0.0f, s.recoil - model_->recoilRecovery);
+    const Gear* gear = reg.try_get<Gear>(pawn);
+    const CombatModel::Gun* gun =
+        gear != nullptr && gear->weapon != kNoEntity ? model_->gun(reg.get<Thing>(gear->weapon).def) : nullptr;
+    if (s.phase == ShotPhase::Aiming || s.phase == ShotPhase::Firing) {
+        if (gun == nullptr || health_.incapacitated(pawn) || !things_.spawned(pawn)) {
+            s.phase = ShotPhase::Ready;  // the shot is off
+            s.shotsLeft = 0;
+            s.stepsLeft = 0;
+            return;
+        }
+    }
+    switch (s.phase) {
+        case ShotPhase::Ready:
+            return;
+        case ShotPhase::Cooling:
+            if (--s.stepsLeft <= 0) {
+                s.phase = ShotPhase::Ready;
+                s.stepsLeft = 0;
+            }
+            return;
+        case ShotPhase::Aiming:
+            if (--s.stepsLeft > 0) {
+                return;
+            }
+            s.phase = ShotPhase::Firing;
+            s.stepsLeft = 0;
+            break;
+        case ShotPhase::Firing:
+            if (s.stepsLeft > 0 && --s.stepsLeft > 0) {
+                return;
+            }
+            break;
+    }
+    // Fire one shot of the burst, at the target as it stands now if it still can be hit.
+    if (s.target != kNoEntity) {
+        const Health* health = reg.valid(s.target) ? reg.try_get<Health>(s.target) : nullptr;
+        if (health != nullptr && health->dead) {
+            s.target = kNoEntity;
+        } else if (!aimPoint(s.target, s.aimX, s.aimY, s.aimZ)) {
+            s.target = kNoEntity;
+        }
+    }
+    const Position& pos = reg.get<Position>(pawn);
+    const float dx = s.aimX - pos.x;
+    const float dy = s.aimY - pos.y;
+    const float distance = std::sqrt(dx * dx + dy * dy);
+    const int skill = shootingSkill(pawn);
+    const DefId weaponDef = reg.get<Thing>(gear->weapon).def;
+    fire(pawn, s.aimX, s.aimY, s.aimZ, spread(weaponDef, skill, distance, s.player) + s.recoil, rng);
+    s.recoil += gun->recoil * std::max(0.0f, 1.0f - model_->recoilSkillReduction * static_cast<float>(skill));
+    if (--s.shotsLeft > 0) {
+        s.stepsLeft = std::max(1, gun->burstGap);
+        return;
+    }
+    s.phase = gun->cooldown > 0 ? ShotPhase::Cooling : ShotPhase::Ready;
+    s.stepsLeft = gun->cooldown;
+}
+
+int CombatSystem::shotReadyIn(Entity pawn) const {
+    const Shooter* s = things_.registry().try_get<Shooter>(pawn);
+    if (s == nullptr || s->phase == ShotPhase::Ready) {
+        return 0;
+    }
+    if (s->phase == ShotPhase::Cooling) {
+        return s->stepsLeft;
+    }
+    const Gear* gear = things_.registry().try_get<Gear>(pawn);
+    const CombatModel::Gun* gun =
+        gear != nullptr && gear->weapon != kNoEntity ? model_->gun(things_.registry().get<Thing>(gear->weapon).def) : nullptr;
+    if (gun == nullptr) {
+        return s->stepsLeft;
+    }
+    return s->stepsLeft + std::max(0, s->shotsLeft - 1) * std::max(1, gun->burstGap) + gun->cooldown;
+}
+
+void CombatSystem::emitHit(Entity projectile, const Projectile& p, const TraceHit& hit, float amount) {
+    if (events_ == nullptr) {
+        return;
+    }
+    Event e;
+    e.type = EventType::ProjectileHit;
+    e.thing = projectile;
+    e.def = p.def;
+    e.hit = hit.kind;
+    e.target = hit.thing;
+    e.part = hit.part;
+    e.amount = amount;
+    e.x = hit.x;
+    e.y = hit.y;
+    e.z = hit.z;
+    e.cell = CellPos{static_cast<int>(std::floor(hit.x)), static_cast<int>(std::floor(hit.y)), p.level};
+    events_->push_back(std::move(e));
+}
+
+void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit) {
+    entt::registry& reg = things_.registry();
+    const CombatModel::Bullet& bullet = *model_->bullet(p.def);
+    TraceHit h = hit;
+    switch (hit.kind) {
+        case ProjectileHitKind::Building: {
+            HitPoints* hp = reg.valid(hit.thing) ? reg.try_get<HitPoints>(hit.thing) : nullptr;
+            const int damage = hp != nullptr ? std::max(1, static_cast<int>(std::lround(bullet.damage))) : 0;
+            emitHit(projectile, p, h, static_cast<float>(damage));
+            if (hp != nullptr) {
+                hp->current -= damage;
+                if (hp->current <= 0) {
+                    if (beforeDestroy_) {
+                        beforeDestroy_(hit.thing);
+                    }
+                    things_.destroy(hit.thing);
+                }
+            }
+            break;
+        }
+        case ProjectileHitKind::Pawn: {
+            const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(hit.thing).def);
+            Rng rng(p.seed);
+            // Which part under the hitbox: the part or its fingers, toes, eyes... by their share.
+            int part = hit.part;
+            const std::vector<int>& choices = kind->landsOn[static_cast<size_t>(hit.part)];
+            float total = 0.0f;
+            for (const int c : choices) {
+                total += health_.partHitPoints(hit.thing, c) > 0.0f ? kind->parts[static_cast<size_t>(c)].ownOutside : 0.0f;
+            }
+            if (total > 0.0f) {
+                const float roll = rng.unit() * total;
+                float acc = 0.0f;
+                for (const int c : choices) {
+                    if (health_.partHitPoints(hit.thing, c) <= 0.0f || kind->parts[static_cast<size_t>(c)].ownOutside <= 0.0f) {
+                        continue;
+                    }
+                    acc += kind->parts[static_cast<size_t>(c)].ownOutside;
+                    part = c;
+                    if (roll < acc) {
+                        break;
+                    }
+                }
+            }
+            part = health_.goInside(hit.thing, bullet.damageType, part, rng);
+            h.part = part;
+
+            // Armor, outside layer first: RimWorld's rule. Armor less penetration is the share of
+            // hits it changes: half of those bounce off, the rest do half damage as blunt.
+            DefId type = bullet.damageType;
+            float amount = bullet.damage;
+            const CombatModel::ArmorKind armorKind =
+                type.value < model_->armorKind.size() ? model_->armorKind[type.value] : CombatModel::ArmorKind::None;
+            if (const Gear* gear = reg.try_get<Gear>(hit.thing); gear != nullptr && armorKind != CombatModel::ArmorKind::None) {
+                std::vector<std::pair<int, Entity>> layers;
+                for (const Entity worn : gear->apparel) {
+                    const CombatModel::Apparel* a = model_->wear(reg.get<Thing>(worn).def);
+                    if (a == nullptr) {
+                        continue;
+                    }
+                    bool covers = false;
+                    for (const std::string& group : kind->parts[static_cast<size_t>(part)].groups) {
+                        covers = covers || std::find(a->groups.begin(), a->groups.end(), group) != a->groups.end();
+                    }
+                    if (covers) {
+                        layers.emplace_back(a->outerness, worn);
+                    }
+                }
+                std::stable_sort(layers.begin(), layers.end(),
+                                 [](const auto& l, const auto& r) { return l.first < r.first; });
+                for (const auto& [outerness, worn] : layers) {
+                    (void)outerness;
+                    const CombatModel::Apparel& a = *model_->wear(reg.get<Thing>(worn).def);
+                    const float armor = std::max(0.0f, a.armor[static_cast<int>(armorKind)] - bullet.penetration);
+                    const float roll = rng.unit();
+                    if (roll < armor * 0.5f) {
+                        h.kind = ProjectileHitKind::Armor;
+                        emitHit(projectile, p, h, 0.0f);
+                        return;
+                    }
+                    if (roll < armor) {
+                        amount *= 0.5f;
+                        if (armorKind == CombatModel::ArmorKind::Sharp && model_->bluntDamage.valid()) {
+                            type = model_->bluntDamage;
+                        }
+                    }
+                }
+            }
+            emitHit(projectile, p, h, amount);
+            health_.applyHit(hit.thing, type, amount, part);
+            break;
+        }
+        default:
+            emitHit(projectile, p, h, 0.0f);
+            break;
+    }
+}
+
+void CombatSystem::step(Rng& rng) {
+    entt::registry& reg = things_.registry();
+    // Pawns face where they aim, else where they walk.
+    for (const auto [pawn, posture, mover] : reg.view<Posture, const Mover>().each()) {
+        const Shooter* s = reg.try_get<Shooter>(pawn);
+        const Position* pos = reg.try_get<Position>(pawn);
+        if (s != nullptr && pos != nullptr && (s->phase == ShotPhase::Aiming || s->phase == ShotPhase::Firing)) {
+            float ax = s->aimX;
+            float ay = s->aimY;
+            float az = 0.0f;
+            if (s->target != kNoEntity) {
+                aimPoint(s->target, ax, ay, az);
+            }
+            const float dx = ax - pos->x;
+            const float dy = ay - pos->y;
+            const float len = std::sqrt(dx * dx + dy * dy);
+            if (len > 0.01f) {
+                posture.facingX = dx / len;
+                posture.facingY = dy / len;
+            }
+        } else if (!health_.incapacitated(pawn)) {
+            const float speed = std::sqrt(mover.vx * mover.vx + mover.vy * mover.vy);
+            if (speed > 1e-4f) {
+                posture.facingX = mover.vx / speed;
+                posture.facingY = mover.vy / speed;
+            }
+        }
+    }
+
+    // Triggers, in id order: they share the random stream.
+    scratch_.clear();
+    for (const Entity pawn : reg.view<Shooter>()) {
+        scratch_.push_back(pawn);
+    }
+    std::sort(scratch_.begin(), scratch_.end());
+    for (const Entity pawn : scratch_) {
+        updateShooter(pawn, reg.get<Shooter>(pawn), rng);
+    }
+
+    // Projectiles, in id order: one may knock down a wall another would have hit.
+    scratch_.clear();
+    for (const Entity shot : reg.view<Projectile>()) {
+        scratch_.push_back(shot);
+    }
+    std::sort(scratch_.begin(), scratch_.end());
+    const float g = model_->gravity;
+    for (const Entity shot : scratch_) {
+        Projectile& p = reg.get<Projectile>(shot);
+        ++p.age;
+        const float nx = p.x + p.vx;
+        const float ny = p.y + p.vy;
+        const float nz = p.z + p.vz - 0.5f * g;
+        TraceHit hit = trace(p.x, p.y, p.z, nx, ny, nz, p.level, p.launcher, p.startCell);
+        const CellPos next{static_cast<int>(std::floor(nx)), static_cast<int>(std::floor(ny)), p.level};
+        if (hit.kind == ProjectileHitKind::None && (p.age > model_->maxFlight || !map_.inBounds(next))) {
+            hit.kind = ProjectileHitKind::Gone;
+            hit.x = nx;
+            hit.y = ny;
+            hit.z = nz;
+        }
+        if (hit.kind != ProjectileHitKind::None) {
+            impact(shot, p, hit);
+            reg.destroy(shot);
+            continue;
+        }
+        p.x = nx;
+        p.y = ny;
+        p.z = nz;
+        p.vz -= g;
+    }
+}
+
+void CombatSystem::drop(Entity pawn, Entity item) {
+    entt::registry& reg = things_.registry();
+    if (Gear* gear = reg.try_get<Gear>(pawn)) {
+        if (gear->weapon == item) {
+            gear->weapon = kNoEntity;
+        }
+        gear->apparel.erase(std::remove(gear->apparel.begin(), gear->apparel.end(), item), gear->apparel.end());
+    }
+    reg.remove<EquippedBy>(item);
+    const Position* pos = reg.try_get<Position>(pawn);
+    if (pos == nullptr || !things_.spawnAt(item, cellOf(*pos))) {
+        if (beforeDestroy_) {
+            beforeDestroy_(item);
+        }
+        things_.destroy(item);
+    }
+}
+
+void CombatSystem::dropGear(Entity pawn) {
+    entt::registry& reg = things_.registry();
+    const Gear* gear = reg.try_get<Gear>(pawn);
+    if (gear == nullptr) {
+        return;
+    }
+    std::vector<Entity> items = gear->apparel;
+    if (gear->weapon != kNoEntity) {
+        items.insert(items.begin(), gear->weapon);
+    }
+    for (const Entity item : items) {
+        drop(pawn, item);
+    }
+    reg.remove<Gear>(pawn);
+}
+
+bool CombatSystem::equip(Entity pawn, Entity item, std::string* why) {
+    entt::registry& reg = things_.registry();
+    const auto fail = [why](const char* message) {
+        if (why != nullptr) {
+            *why = message;
+        }
+        return false;
+    };
+    if (!health_.tracks(pawn) || reg.get<Health>(pawn).dead) {
+        return fail("that pawn can't hold anything (no body, or dead)");
+    }
+    if (!reg.valid(item) || !reg.all_of<Thing>(item) || reg.get<Thing>(item).category != ThingCategory::Item) {
+        return fail("that is not an item");
+    }
+    if (const EquippedBy* by = reg.try_get<EquippedBy>(item)) {
+        if (by->pawn == pawn) {
+            return true;
+        }
+        return fail("someone else has that");
+    }
+    const DefId def = reg.get<Thing>(item).def;
+    const CombatModel::Apparel* wear = model_->wear(def);
+    if (model_->gun(def) == nullptr && wear == nullptr) {
+        return fail("that is neither a gun nor apparel");
+    }
+    Gear& gear = reg.get_or_emplace<Gear>(pawn);
+    if (model_->gun(def) != nullptr) {
+        if (gear.weapon != kNoEntity) {
+            drop(pawn, gear.weapon);
+        }
+    } else {
+        std::vector<Entity> replaced;
+        for (const Entity worn : gear.apparel) {
+            const CombatModel::Apparel* other = model_->wear(reg.get<Thing>(worn).def);
+            bool clash = false;
+            for (const std::string& layer : wear->layers) {
+                for (const std::string& group : wear->groups) {
+                    clash = clash || (other != nullptr &&
+                                      std::find(other->layers.begin(), other->layers.end(), layer) != other->layers.end() &&
+                                      std::find(other->groups.begin(), other->groups.end(), group) != other->groups.end());
+                }
+            }
+            if (clash) {
+                replaced.push_back(worn);
+            }
+        }
+        for (const Entity worn : replaced) {
+            drop(pawn, worn);
+        }
+    }
+    things_.despawn(item);
+    Gear& after = reg.get<Gear>(pawn);
+    if (model_->gun(def) != nullptr) {
+        after.weapon = item;
+    } else {
+        after.apparel.push_back(item);
+    }
+    reg.emplace<EquippedBy>(item, EquippedBy{pawn});
+    return true;
+}
+
+void CombatSystem::hashThing(Entity e, StateHasher& h) const {
+    const entt::registry& reg = things_.registry();
+    const bool has[] = {reg.all_of<Posture>(e), reg.all_of<Gear>(e), reg.all_of<EquippedBy>(e), reg.all_of<Shooter>(e),
+                        reg.all_of<Projectile>(e)};
+    uint64_t mask = 0;
+    for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
+        mask |= has[bit] ? (uint64_t{1} << bit) : 0;
+    }
+    h.add(mask);
+    if (const Posture* p = reg.try_get<Posture>(e)) {
+        h.add(static_cast<int>(p->stance));
+        h.add(p->facingX);
+        h.add(p->facingY);
+    }
+    if (const Gear* g = reg.try_get<Gear>(e)) {
+        h.add(entt::to_integral(g->weapon));
+        h.add(static_cast<uint64_t>(g->apparel.size()));
+        for (const Entity a : g->apparel) {
+            h.add(entt::to_integral(a));
+        }
+    }
+    if (const EquippedBy* by = reg.try_get<EquippedBy>(e)) {
+        h.add(entt::to_integral(by->pawn));
+    }
+    if (const Shooter* s = reg.try_get<Shooter>(e)) {
+        h.add(static_cast<int>(s->phase));
+        h.add(s->stepsLeft);
+        h.add(s->shotsLeft);
+        h.add(entt::to_integral(s->target));
+        h.add(s->aimX);
+        h.add(s->aimY);
+        h.add(s->aimZ);
+        h.add(s->player);
+        h.add(s->recoil);
+    }
+    if (const Projectile* p = reg.try_get<Projectile>(e)) {
+        h.add(p->def.value);
+        h.add(p->weapon.value);
+        h.add(entt::to_integral(p->launcher));
+        for (const float f : {p->x, p->y, p->z, p->vx, p->vy, p->vz}) {
+            h.add(f);
+        }
+        h.add(p->level);
+        h.add(p->age);
+        h.add(p->startCell.x);
+        h.add(p->startCell.y);
+        h.add(p->startCell.level);
+        h.add(p->seed);
+    }
+}
+
+}  // namespace colony

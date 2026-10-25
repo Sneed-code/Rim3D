@@ -44,9 +44,15 @@ const char* commandName(const Command& command) {
                 return "PlaceBlueprint";
             } else if constexpr (std::is_same_v<Type, CancelBuildCommand>) {
                 return "CancelBuild";
-            } else {
-                static_assert(std::is_same_v<Type, DeconstructCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, DeconstructCommand>) {
                 return "Deconstruct";
+            } else if constexpr (std::is_same_v<Type, EquipCommand>) {
+                return "Equip";
+            } else if constexpr (std::is_same_v<Type, ShootCommand>) {
+                return "Shoot";
+            } else {
+                static_assert(std::is_same_v<Type, SetStanceCommand>, "name every command type");
+                return "SetStance";
             }
         },
         command);
@@ -70,6 +76,8 @@ const char* eventTypeName(EventType type) {
         case EventType::PawnWokeUp: return "PawnWokeUp";
         case EventType::FrameStarted: return "FrameStarted";
         case EventType::PawnMoodBand: return "PawnMoodBand";
+        case EventType::ShotFired: return "ShotFired";
+        case EventType::ProjectileHit: return "ProjectileHit";
     }
     return "?";
 }
@@ -83,6 +91,19 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::GetUp: return "GetUp";
         case PawnAction::Build: return "Build";
         case PawnAction::Deconstruct: return "Deconstruct";
+    }
+    return "?";
+}
+
+const char* projectileHitKindName(ProjectileHitKind kind) {
+    switch (kind) {
+        case ProjectileHitKind::None: return "None";
+        case ProjectileHitKind::Ground: return "Ground";
+        case ProjectileHitKind::Rock: return "Rock";
+        case ProjectileHitKind::Building: return "Building";
+        case ProjectileHitKind::Pawn: return "Pawn";
+        case ProjectileHitKind::Armor: return "Armor";
+        case ProjectileHitKind::Gone: return "Gone";
     }
     return "?";
 }

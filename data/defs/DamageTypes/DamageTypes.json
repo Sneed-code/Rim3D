@@ -1,11 +1,11 @@
 [
-  { "defName": "DamageTypeBase", "abstract": true, "source": "RimWorld wiki", "hediffSolid": "Crack", "ours": ["reachesInside"], "unverified": ["hediffSolid"], "reachesInside": false },
+  { "defName": "DamageTypeBase", "abstract": true, "source": "RimWorld wiki", "hediffSolid": "Crack", "ours": ["reachesInside"], "unverified": ["hediffSolid"], "reachesInside": false, "armorCategory": "Sharp" },
   { "defName": "Bullet", "parent": "DamageTypeBase", "reachesInside": true, "label": "bullet", "hediff": "Gunshot" },
   { "defName": "Cut", "parent": "DamageTypeBase", "reachesInside": true, "label": "cut", "hediff": "Cut" },
   { "defName": "Stab", "parent": "DamageTypeBase", "reachesInside": true, "label": "stab", "hediff": "Stab" },
   { "defName": "Scratch", "parent": "DamageTypeBase", "label": "scratch", "hediff": "Scratch" },
   { "defName": "Bite", "parent": "DamageTypeBase", "label": "bite", "hediff": "Bite" },
-  { "defName": "Blunt", "parent": "DamageTypeBase", "label": "blunt", "hediff": "Bruise" },
-  { "defName": "Crush", "parent": "DamageTypeBase", "label": "crush", "hediff": "Crush" },
-  { "defName": "Burn", "parent": "DamageTypeBase", "label": "burn", "hediff": "Burn", "hediffSolid": "Burn" }
+  { "defName": "Blunt", "parent": "DamageTypeBase", "label": "blunt", "armorCategory": "Blunt", "hediff": "Bruise" },
+  { "defName": "Crush", "parent": "DamageTypeBase", "label": "crush", "armorCategory": "Blunt", "hediff": "Crush" },
+  { "defName": "Burn", "parent": "DamageTypeBase", "label": "burn", "armorCategory": "Heat", "hediff": "Burn", "hediffSolid": "Burn" }
 ]
