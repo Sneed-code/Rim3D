@@ -49,6 +49,7 @@
       "maxHitPoints": 100, "marketValue": 1.2, "mass": 0.027, "flammability": 1.0, "deteriorationRate": 6,
       "nutrition": 0.05
     },
+    "thingCategories": ["FoodRaw", "PlantFoodRaw"],
     "ingestible": { "foodType": "VegetableOrFruit", "preferability": "RawTasty" },
     "comps": [{ "type": "Rottable", "daysToRotStart": 14 }]
   },
@@ -69,5 +70,23 @@
   { "defName": "ChunkLimestone", "visual": {"tint": [1, 1, 0.9]}, "parent": "ChunkBase", "label": "limestone chunk", "stats": { "mass": 22 } },
   { "defName": "ChunkSandstone", "visual": {"tint": [1, 0.9, 0.7]}, "parent": "ChunkBase", "label": "sandstone chunk", "stats": { "mass": 20 } },
   { "defName": "ChunkSlate", "visual": {"tint": [0.6, 0.65, 0.72]}, "parent": "ChunkBase", "label": "slate chunk", "stats": { "mass": 18 } },
-  { "defName": "ChunkMarble", "visual": {"tint": [1, 1, 1]}, "parent": "ChunkBase", "label": "marble chunk", "stats": { "mass": 25 } }
+  { "defName": "ChunkMarble", "visual": {"tint": [1, 1, 1]}, "parent": "ChunkBase", "label": "marble chunk", "stats": { "mass": 25 } },
+  {
+    "defName": "MealBase", "parent": "ItemBase", "abstract": true, "stackLimit": 10,
+    "stats": {
+      "maxHitPoints": 50, "mass": 0.44, "flammability": 1.0, "deteriorationRate": 10, "nutrition": 0.9
+    },
+    "thingCategories": ["Foods", "PreparedFood"],
+    "comps": [{ "type": "Rottable", "daysToRotStart": 4 }]
+  },
+  {
+    "defName": "MealSimple", "parent": "MealBase", "label": "simple meal",
+    "stats": { "marketValue": 15 },
+    "ingestible": { "foodType": "Meal", "preferability": "MealSimple", "maxNumToIngestAtOnce": 1 }
+  },
+  {
+    "defName": "MealFine", "parent": "MealBase", "label": "fine meal",
+    "stats": { "marketValue": 20 },
+    "ingestible": { "foodType": "Meal", "preferability": "MealFine", "maxNumToIngestAtOnce": 1 }
+  }
 ]

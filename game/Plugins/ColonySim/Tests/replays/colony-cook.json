@@ -1,0 +1,21 @@
+{
+  "format": "rim3d-replay",
+  "version": 1,
+  "settings": {"seed": 42, "mapSize": 128, "flatMap": true},
+  "endStep": 6000,
+  "commands": [
+    {"step": 0, "type": "SpawnThing", "def": "Human", "cell": [60, 60, 0]},
+    {"step": 0, "type": "SpawnThing", "def": "Human", "cell": [62, 60, 0]},
+    {"step": 0, "type": "SpawnThing", "def": "FueledStove", "cell": [70, 70, 0]},
+    {"step": 0, "type": "SpawnThing", "def": "RawBerries", "cell": [64, 64, 0], "count": 30},
+    {"step": 0, "type": "SpawnThing", "def": "RawBerries", "cell": [64, 65, 0], "count": 30},
+    {"step": 0, "type": "SpawnThing", "def": "RawBerries", "cell": [66, 64, 0], "count": 12},
+    {"step": 3, "type": "AddBill", "building": 2, "recipe": "CookMealSimple", "mode": "Count", "count": 2},
+    {"step": 3, "type": "AddBill", "building": 2, "recipe": "CookMealSimpleBulk", "mode": "UntilHave", "count": 6},
+    {"step": 3, "type": "AddBill", "building": 2, "recipe": "CookMealFine", "mode": "Forever"},
+    {"step": 3, "type": "AddBill", "building": 2, "recipe": "NoSuchRecipe", "mode": "Count", "count": 1},
+    {"step": 4, "type": "SetBill", "building": 2, "bill": 3, "mode": "Forever", "count": 1, "suspended": true},
+    {"step": 2500, "type": "SetBill", "building": 2, "bill": 2, "mode": "UntilHave", "count": 3, "suspended": false},
+    {"step": 3000, "type": "RemoveBill", "building": 2, "bill": 3}
+  ]
+}

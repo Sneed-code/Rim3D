@@ -28,6 +28,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Queued commands | submitted but not yet applied; they apply at the first step after loading |
 | Checkpoints | the state hashes recorded so far |
 | Hauling test | its stockpile's middle cell, hauler list, counters, setup errors |
+| Bills and the bill job (format 12) | per work building: `nextId` and each bill's id, recipe **by `defName`**, mode, count, suspended; per job: `bill`, `picks` (stack entity and count) and `used` (ingredient **`defName`** and count) ([bills.md](bills.md)) |
 | Building plans, marks and a job's site (format 10) | per plan (a thing with a `site`): stage, stuff **by `defName`**, origin, rotation, size, each material by `defName` with how many are needed and delivered, work total and done; per building: what it was `builtOf`, and `marked` for deconstruction; per job: its `site` and `progress` ([construction.md](construction.md)). The cell index of plans is rebuilt on loading |
 | Stockpile zones (format 6) | each zone's id, priority, filter by `defName` and cells, and the next zone id |
 | Pawn movement (format 3) | each pawn's velocity, line start, held-up counters (`Mover`), and the repath count |
@@ -107,7 +108,7 @@ three is a bug the tests are built to catch:
    write the change here. Old saves keep loading until a decision says otherwise (decision 0005
    dropped formats 1 to 5 for the job system). Format 8 (C6) added needs, schedules, bed owners and
    a job's chair; format 9 (C2) added the plant layer; format 10 (C4) added building plans, built-of and deconstruct marks and a job's site and
-   progress. Format 11 (C9) added mood, format 12 (F2) combat, format 13 (C5) door states, format 14 (C3) rock and designations, format 15 (F4) factions and fighters, format 16 (A3) pawn looks, format 17 (F5) magazines and reloading. Format 6 to 16 saves still load, their pawns without needs, mood or posture, or their buildings without plans, their doors closed.
+   progress. Format 11 (C9) added mood, format 12 (F2) combat, format 13 (C5) door states, format 14 (C3) rock and designations, format 15 (F4) factions and fighters, format 16 (A3) pawn looks, format 17 (F5) magazines and reloading, format 18 (C7) a building's bills and a bill job's bill, picks and used ingredients. Format 6 to 17 saves still load, their pawns without needs, mood or posture, or their buildings without plans, bills, their doors closed.
 
 Never store a `DefId` (or any number that depends on load order) in a save: use the `defName`.
 The same goes for region ids, which a loaded map numbers afresh: keep a cell, and never let a

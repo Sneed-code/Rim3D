@@ -31,6 +31,19 @@ struct JobTarget {
     CellPos cell;
 };
 
+// DoBill: a stack of an ingredient the cook is to fetch, and how many to take from it.
+struct BillPick {
+    Entity item = kNoEntity;
+    int count = 0;
+};
+
+// DoBill: ingredients the cook has brought to the building so far. They are used up when the
+// product is made, and put back on the ground if the job ends before that.
+struct BillUsed {
+    DefId def;
+    int count = 0;
+};
+
 // One job in progress. Which fields a job type uses is in its comment above.
 struct Job {
     JobType type = JobType::None;
@@ -43,10 +56,14 @@ struct Job {
                                // HarvestPlant: the rock or plant's cell
     int count = 0;             // HaulToCell, Ingest, DeliverResources: how many to carry
     Entity chair = kNoEntity;  // Ingest: the chair at a table it eats in, or none (it eats where the food lay)
-    Entity site = kNoEntity;   // DeliverResources: the blueprint or frame it brings materials to
+    Entity site = kNoEntity;   // DeliverResources: the blueprint or frame it brings materials to; DoBill: the
+                               // building that holds the bill
     float progress = 0.0f;     // Deconstruct: work done so far; Mine: work towards the next pick hit; CutPlant,
                                // HarvestPlant: work done on the plant. For the gather jobs both are game seconds
-                               // at 100% work speed (the worker's speed adds to it every second)
+                               // at 100% work speed (the worker's speed adds to it every second); DoBill: work done
+    uint32_t bill = 0;         // DoBill: the bill's id on the building in `site`
+    std::vector<BillPick> picks;  // DoBill: the ingredient stacks still to fetch after `thing`
+    std::vector<BillUsed> used;   // DoBill: ingredients delivered so far
     DefId workType;            // the work type whose scanner gave it; none for orders and idling
     bool forced = false;       // a player order (OrderHaulCommand)
     uint8_t step = 0;          // which of the job type's steps is running
@@ -98,6 +115,11 @@ COLONY_API int jobStepCount(JobType type);
 
 // LayDown has two steps, walking to the bed and lying in it; rest rises during the second.
 inline constexpr uint8_t kLayDownLieStep = 1;
+// DoBill: go to an ingredient, pick it up, carry it beside the building, hand it over (and back to
+// the first step while more are to fetch), work, make the product. The pawn carries an ingredient
+// after the pick-up step until it hands it over.
+inline constexpr uint8_t kDoBillPickUpStep = 1;
+inline constexpr uint8_t kDoBillDepositStep = 3;
 // Ingest has four: go to the food, pick it up, go to the eating spot, eat. The pawn carries the
 // food from the third on.
 inline constexpr uint8_t kIngestPickUpStep = 1;
@@ -105,6 +127,7 @@ inline bool jobIsLyingDown(const Job& job) {
     return job.type == JobType::LayDown && job.step >= kLayDownLieStep;
 }
 
+class BillSystem;
 class Construction;
 class DefDatabase;
 class HealthSystem;
@@ -205,6 +228,8 @@ public:
     Plants& plants() { return plants_; }
     Mineables& mineables() { return mineables_; }
     Designations& designations() { return designations_; }
+    BillSystem& bills() { return *bills_; }
+    const BillSystem& bills() const { return *bills_; }
     const DefDatabase& defs() const { return defs_; }
     int64_t now() const;
 
@@ -252,7 +277,8 @@ public:
     int stackLimit(DefId def) const;
 
 private:
-    enum class StepResult : uint8_t { Running, Next, Failed };
+    // Repeat starts the job's steps again from the first (DoBill: another ingredient to fetch).
+    enum class StepResult : uint8_t { Running, Next, Failed, Repeat };
     enum class JobEnd : uint8_t { Done, Failed, Interrupted };
 
     // `purpose` 1 is a delivery to a site; 0 is everything else.
@@ -271,10 +297,12 @@ private:
         }
     };
     static TargetKey keyOf(const JobTarget& target, uint8_t purpose = 0);
-    // What a job holds while it runs, which no other pawn's scanner takes; up to two. Hauling: its
-    // item and cell. Eating: the food and the chair's cell. Sleeping: the bed's cell. A delivery:
-    // its item and site. Building and taking down: the frame or the building.
-    static int reservationsOf(const Job& job, TargetKey out[2]);
+    // What a job holds while it runs, which no other pawn's scanner takes. Hauling: its item and
+    // cell. Eating: the food and the chair's cell. Sleeping: the bed's cell. A delivery: its item
+    // and site. Building and taking down: the frame or the building. A bill: the building and every
+    // ingredient stack still to be fetched.
+    static constexpr int kMaxReservations = 12;
+    static int reservationsOf(const Job& job, TargetKey out[kMaxReservations]);
 
     // The think list: each node may give a job; the first that does wins (docs/design/jobs.md).
     using ThinkNode = bool (JobSystem::*)(Entity pawn, Job& out);
@@ -324,6 +352,15 @@ private:
     StepResult deliver(Entity pawn, Job& job, std::string& why);
     StepResult buildWork(Entity pawn, Job& job, std::string& why);
     StepResult deconstructWork(Entity pawn, Job& job, std::string& why);
+    // Bills (BillJobs.cpp): bring the ingredients, work, make the product.
+    StepResult depositIngredient(Entity pawn, Job& job, std::string& why);
+    StepResult billWork(Entity pawn, Job& job, std::string& why);
+    StepResult billFinish(Entity pawn, Job& job, std::string& why);
+    bool failCheckDoBill(Entity pawn, Job& job, std::string& why);
+    // Puts the ingredients delivered so far back on the ground near the pawn.
+    void returnIngredients(Entity pawn, const Job& job);
+    // Makes `count` of an item def and puts it down on the nearest free cell near the pawn.
+    void dropNewItems(Entity pawn, DefId def, int count);
     bool retargetStorage(Entity pawn, Job& job);
     void dropCarried(Entity pawn);
     void reserve(Entity pawn, const Job& job);
@@ -347,6 +384,7 @@ private:
     SimStats& stats_;
     std::vector<Event>& events_;
 
+    std::unique_ptr<BillSystem> bills_;
     std::vector<std::unique_ptr<WorkGiver>> givers_;
     std::vector<WorkType> workTypes_;
     std::vector<uint8_t> standable_;  // per def id: a building pawns can stand on (storage allowed)

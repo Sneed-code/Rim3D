@@ -1,0 +1,125 @@
+#pragma once
+
+#include "ColonySim/Api.h"
+#include "ColonySim/BillMode.h"
+#include "ColonySim/Defs.h"
+#include "ColonySim/Entity.h"
+
+#include <cstdint>
+#include <string>
+#include <vector>
+
+namespace colony {
+
+class Things;
+
+// Recipes and bills: what a work building (the stove) is asked to make, and for how long. See
+// docs/design/bills.md.
+//
+// Unreal does not include this header: it reads bills through the snapshot and changes them
+// through commands (docs/design/bridge.md).
+
+// One line on a work building's bill list.
+struct Bill {
+    uint32_t id = 0;  // 1, 2, 3... per building, never reused
+    DefId recipe;
+    BillMode mode = BillMode::Count;
+    int count = 1;  // Count: times left; UntilHave: the stock to reach; Forever: unused
+    bool suspended = false;
+};
+
+// On a building that has had a bill added. Bills are tried in list order: the first that should be
+// done and whose ingredients a cook can bring wins.
+struct BillList {
+    std::vector<Bill> bills;
+    uint32_t nextId = 1;
+};
+
+// One thing a recipe needs: items of any of `items`, `nutrition` worth (of their `stats.nutrition`)
+// or `count` of them.
+struct RecipeIngredient {
+    std::vector<DefId> items;  // every Things item def the filter accepts, sorted
+    bool byNutrition = false;
+    double amount = 0.0;  // nutrition, or a count
+    // The items to fetch to cover `amount` when each unit of `item` is worth `unitNutrition`.
+    int unitsNeeded(double unitNutrition) const;
+};
+
+struct RecipeProduct {
+    DefId item;
+    int count = 1;
+};
+
+// A def of kind Recipes, read once (RimWorld's RecipeDef).
+struct Recipe {
+    DefId def;
+    std::string defName;
+    std::string label;
+    std::vector<DefId> users;  // the building defs that can hold a bill for it
+    float work = 0.0f;         // game seconds of work at cooking speed 1
+    std::string skill;         // the Skills def that speeds it up
+    int minSkill = 0;
+    float skillXp = 0.0f;
+    std::vector<RecipeIngredient> ingredients;
+    std::vector<RecipeProduct> products;
+};
+
+// The numbers in the BillRules def (with these values when the def is missing).
+struct BillNumbers {
+    int maxBillsPerBuilding = 15;
+    int maxBillCount = 9999;
+    double skillSpeedBase = 0.6;  // cooking speed = base + perLevel x skill level
+    double skillSpeedPerLevel = 0.05;
+    int defaultSkillLevel = 8;  // for a worker with no skills (a test pawn)
+    int maxIngredientStacks = 8;
+};
+
+class COLONY_API BillSystem {
+public:
+    BillSystem(Things& things, const DefDatabase& defs);
+
+    const BillNumbers& numbers() const { return numbers_; }
+    const std::vector<Recipe>& recipes() const { return recipes_; }
+    // The recipe of a Recipes def, or null.
+    const Recipe* recipe(DefId def) const;
+
+    // ---- Commands ----------------------------------------------------------------------------
+    // Adds a bill for `recipe` (a Recipes defName) to a finished building that can make it. Returns
+    // its id, or 0 with `error` in plain words. `count` is how many times (Count), the stock to
+    // reach (UntilHave), and ignored for Forever.
+    uint32_t addBill(Entity building, const std::string& recipe, BillMode mode, int count, std::string& error);
+    bool removeBill(Entity building, uint32_t bill, std::string& error);
+    // Changes a bill's mode, count and whether it is suspended (RimWorld's pause).
+    bool setBill(Entity building, uint32_t bill, BillMode mode, int count, bool suspended, std::string& error);
+
+    // ---- Looking up --------------------------------------------------------------------------
+    const BillList* billsOf(Entity building) const;
+    const Bill* find(Entity building, uint32_t bill) const;
+    // True if the building def is one of the recipe's users.
+    bool canMake(DefId buildingDef, const Recipe& recipe) const;
+    // True if the bill is not suspended and still has something to make: Count has times left,
+    // UntilHave has fewer than `count` of the first product on the map, Forever always.
+    bool shouldDo(const Bill& bill) const;
+    // How many of an item def lie on the map (carried and delivered ones are not counted).
+    int stockOf(DefId item) const;
+    // Cooking speed of a pawn for a recipe: (base + perLevel x level of the recipe's skill), 1.0 at
+    // level 8. Without a Colonist the default skill level counts.
+    float workSpeed(Entity pawn, const Recipe& recipe) const;
+    int skillLevel(Entity pawn, const std::string& skill) const;
+
+    // ---- For the job system ------------------------------------------------------------------
+    // A bill's times left or stock target after one more iteration is done: Count goes down by one
+    // and the bill is removed when it reaches 0. Returns true if the bill was removed.
+    bool iterationDone(Entity building, uint32_t bill);
+    // The nutrition of one unit of an item def (0 if it is not food).
+    double nutritionOf(DefId item) const;
+
+private:
+    Things& things_;
+    const DefDatabase& defs_;
+    BillNumbers numbers_;
+    std::vector<Recipe> recipes_;  // in def id order
+    std::vector<double> nutrition_;  // per def id
+};
+
+}  // namespace colony

@@ -35,6 +35,7 @@ jobs:
             build/haul-and-build.recorded.json
             build/colony-build.recorded.json
             build/colony-rooms.recorded.json
+            build/colony-cook.recorded.json
       - uses: actions/upload-artifact@v4
         with:
           name: save-${{ runner.os }}
@@ -60,6 +61,8 @@ jobs:
         run: python3 tools/compare_replays.py replay-Linux/colony-build.recorded.json replay-Windows/colony-build.recorded.json
       - name: Compare Linux and Windows rooms replays
         run: python3 tools/compare_replays.py replay-Linux/colony-rooms.recorded.json replay-Windows/colony-rooms.recorded.json
+      - name: Compare Linux and Windows cooking replays
+        run: python3 tools/compare_replays.py replay-Linux/colony-cook.recorded.json replay-Windows/colony-cook.recorded.json
       - name: Compare Linux and Windows saves
         run: cmp save-Linux/straight.save save-Windows/straight.save && echo "the saves are identical"
 

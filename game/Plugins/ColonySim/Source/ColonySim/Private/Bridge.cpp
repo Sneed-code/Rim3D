@@ -66,9 +66,15 @@ const char* commandName(const Command& command) {
                 return "SetFaction";
             } else if constexpr (std::is_same_v<Type, SetLineageCommand>) {
                 return "SetLineage";
-            } else {
-                static_assert(std::is_same_v<Type, ReloadCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, ReloadCommand>) {
                 return "Reload";
+            } else if constexpr (std::is_same_v<Type, AddBillCommand>) {
+                return "AddBill";
+            } else if constexpr (std::is_same_v<Type, RemoveBillCommand>) {
+                return "RemoveBill";
+            } else {
+                static_assert(std::is_same_v<Type, SetBillCommand>, "name every command type");
+                return "SetBill";
             }
         },
         command);
@@ -98,6 +104,7 @@ const char* eventTypeName(EventType type) {
         case EventType::PawnMoodBand: return "PawnMoodBand";
         case EventType::ShotFired: return "ShotFired";
         case EventType::ProjectileHit: return "ProjectileHit";
+        case EventType::RecipeDone: return "RecipeDone";
     }
     return "?";
 }
@@ -116,6 +123,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Deconstruct: return "Deconstruct";
         case PawnAction::Reload: return "Reload";
         case PawnAction::Dodge: return "Dodge";
+        case PawnAction::Cook: return "Cook";
     }
     return "?";
 }

@@ -77,6 +77,14 @@ add_test(NAME replay_rooms_check COMMAND simrun --replay ${ROOMS_REPLAY_RECORDED
 set_tests_properties(replay_rooms_record PROPERTIES FIXTURES_SETUP rooms_replay_recording)
 set_tests_properties(replay_rooms_check PROPERTIES FIXTURES_REQUIRED rooms_replay_recording)
 
+# And for bills and cooking (C7): a stove with bills in every mode, cooks fetching berries.
+set(COOK_REPLAY_RECORDED ${CMAKE_BINARY_DIR}/colony-cook.recorded.json)
+add_test(NAME replay_cook_record COMMAND simrun
+         --replay ${CMAKE_CURRENT_SOURCE_DIR}/Tests/replays/colony-cook.json --record ${COOK_REPLAY_RECORDED})
+add_test(NAME replay_cook_check COMMAND simrun --replay ${COOK_REPLAY_RECORDED})
+set_tests_properties(replay_cook_record PROPERTIES FIXTURES_SETUP cook_replay_recording)
+set_tests_properties(replay_cook_check PROPERTIES FIXTURES_REQUIRED cook_replay_recording)
+
 # Saves: run 0.05 days and save, then load that and run 0.05 more and save, and compare with a
 # straight run of 0.1 days. The two files must be identical, byte for byte. CI also compares the
 # straight run's save from Linux and Windows (docs/design/saves.md).

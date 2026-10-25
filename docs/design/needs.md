@@ -129,7 +129,7 @@ its food and rest still fall. Let go of it to have it look after itself.
 - Overeating, food poisoning,
   rotting, food policies, baby and animal food.
 - Malnutrition's effect on consciousness; hunger and tiredness slowing work.
-- Cooking (C7), plants to harvest (C3), medical beds, beds for
+- Plants to harvest (C3), medical beds, beds for
   guests and prisoners, sleeping spots, bedrolls, bed quality.
 - Recreation for Joy hours; meditation.
 - Food kept in a pawn's inventory; pawns feeding the downed.
