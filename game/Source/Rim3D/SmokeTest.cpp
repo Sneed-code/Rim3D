@@ -29,6 +29,9 @@
 #include "Serialization/JsonWriter.h"
 #include "UnrealClient.h"
 
+#include "OverseerPawn.h"
+#include "OverseerSubsystem.h"
+#include "SimPicking.h"
 #include "SimSubsystem.h"
 
 #include "ColonySim/Map.h"
@@ -98,6 +101,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	else if (TestName == TEXT("sim"))
 	{
 		BuildSimPhases();
+	}
+	else if (TestName == TEXT("overseer"))
+	{
+		BuildOverseerPhases();
 	}
 	else
 	{
@@ -377,9 +384,15 @@ void USmokeTestSubsystem::BuildTerrainPhases()
 void USmokeTestSubsystem::BuildTerrain()
 {
 	const double BuildStart = FPlatformTime::Seconds();
-	constexpr int32 MapSize = 1024;
+	const colony::Map Map(colony::MapSettings{1024, 1024, colony::splitMix64(42 ^ 0x6D6170ULL)});
+	BuildTerrainMesh(Map, BuildStart);
+}
+
+// A runtime mesh of the map's ground at SmokeOrigin, in chunks of 32 cells (the map size must be a multiple of 32).
+void USmokeTestSubsystem::BuildTerrainMesh(const colony::Map& Map, double BuildStart)
+{
+	const int32 MapSize = Map.width();
 	constexpr int32 Chunk = 32;
-	const colony::Map Map(colony::MapSettings{MapSize, MapSize, colony::splitMix64(42 ^ 0x6D6170ULL)});
 
 	AActor* Terrain = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), SmokeOrigin, FRotator::ZeroRotator);
 	UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(Terrain, TEXT("Terrain"));
@@ -390,7 +403,7 @@ void USmokeTestSubsystem::BuildTerrain()
 	Spawned.Add(Terrain);
 
 	UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineDebugMaterials/VertexColorMaterial.VertexColorMaterial"));
-	const auto HeightAt = [&Map](int32 X, int32 Y)
+	const auto HeightAt = [&Map, MapSize](int32 X, int32 Y)
 	{
 		X = FMath::Clamp(X, 0, MapSize - 1);
 		Y = FMath::Clamp(Y, 0, MapSize - 1);
@@ -866,8 +879,8 @@ void USmokeTestSubsystem::Tick(float DeltaTime)
 	{
 		bScreenshotTaken = true;
 		const FString Path = FPaths::ProjectSavedDir() / TEXT("Smoke") / TestName / (Phase.Name + TEXT(".png"));
-		// The sim test shows the on-screen sim timings, which count as UI.
-		FScreenshotRequest::RequestScreenshot(Path, TestName == TEXT("sim"), false);
+		// The sim tests show the on-screen sim timings and the overseer its ImGui panels, which count as UI.
+		FScreenshotRequest::RequestScreenshot(Path, TestName == TEXT("sim") || TestName == TEXT("overseer"), false);
 	}
 	if (PhaseTime >= Phase.WarmupSeconds + Phase.MeasureSeconds)
 	{
@@ -961,4 +974,352 @@ void USmokeTestSubsystem::Fail(const FString& Message)
 {
 	UE_LOG(LogSmoke, Error, TEXT("%s"), *Message);
 	Errors.AddUnique(Message);
+}
+
+// ---------------------------------------------------------------------------
+// Overseer: the free camera, picking against the sim, selection and the ImGui panels (U6).
+
+namespace
+{
+	struct FOverseerSmokeState
+	{
+		AOverseerPawn* Pawn = nullptr;
+		int32 Middle = 64;
+		colony::CellPos ExpectedCell;
+		colony::Entity ExpectedPawn = colony::kNoEntity;
+		bool bCameraLimitsOk = true;
+		FString CameraProblem;
+	};
+
+	// Where a world point lands on screen, in viewport pixels; false if it is behind the camera or off screen.
+	bool OverseerSmokeProject(UWorld* World, const FVector& Point, FVector2D& OutScreen, float Margin = 0.0f)
+	{
+		APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0);
+		if (!PC || !GEngine || !GEngine->GameViewport || !GEngine->GameViewport->Viewport)
+		{
+			return false;
+		}
+		const FIntPoint Size = GEngine->GameViewport->Viewport->GetSizeXY();
+		if (!PC->ProjectWorldLocationToScreen(Point, OutScreen, false))
+		{
+			return false;
+		}
+		return OutScreen.X >= Margin * Size.X && OutScreen.Y >= Margin * Size.Y && OutScreen.X < (1.0f - Margin) * Size.X && OutScreen.Y < (1.0f - Margin) * Size.Y;
+	}
+
+	// The Index-th cell (in a fixed scan) with open ground around it (no thing within 3 cells) that is visible on screen.
+	bool OverseerSmokeFindEmptyCell(UWorld* World, const USimSubsystem& Bridge, int32 Middle, int32 Index, colony::CellPos& OutCell, FVector2D& OutScreen)
+	{
+		int32 Found = 0;
+		for (int32 Y = Middle - 40; Y <= Middle + 40; Y += 7)
+		{
+			for (int32 X = Middle - 40; X <= Middle + 40; X += 7)
+			{
+				const colony::CellPos Cell{X, Y, 0};
+				if (!Bridge.GetSim()->map().inBounds(Cell))
+				{
+					continue;
+				}
+				bool bClear = true;
+				for (const colony::ThingView& View : Bridge.GetCurrentSnapshot().things)
+				{
+					if (FMath::Abs(View.x - (X + 0.5f)) < 3.0f && FMath::Abs(View.y - (Y + 0.5f)) < 3.0f)
+					{
+						bClear = false;
+						break;
+					}
+				}
+				if (bClear && OverseerSmokeProject(World, Bridge.SimToWorld(X + 0.5f, Y + 0.5f, 0), OutScreen, 0.1f) && Found++ == Index)
+				{
+					OutCell = Cell;
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+}
+
+void USmokeTestSubsystem::BuildOverseerPhases()
+{
+	const TSharedRef<FOverseerSmokeState> State = MakeShared<FOverseerSmokeState>();
+
+	// Phase 1: start a sim with pawns, items and a row of walls on a visible ground mesh, take the
+	// overseer camera, and click (by ray) on the middle of every pawn, item and wall and on empty ground.
+	Phases.Add({TEXT("overseer_picking"), [=, this]()
+	{
+		USimSubsystem* Bridge = GetWorld()->GetSubsystem<USimSubsystem>();
+		UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>();
+		if (!Bridge || !Overseer)
+		{
+			Fail(TEXT("USimSubsystem or UOverseerSubsystem did not start"));
+			return;
+		}
+		FSimStartOptions Options;
+		Options.DataRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("Plugins/ColonySim/Tests/data"));
+		Options.Seed = 42;
+		Options.MapSize = 128;
+		Options.Pawns = 12;
+		Options.Items = 40;
+		Bridge->SetWorldOrigin(SmokeOrigin);
+		if (!Bridge->StartSim(Options))
+		{
+			Fail(TEXT("The test defs did not load"));
+			return;
+		}
+		Bridge->SetSpeed(1);
+		State->Middle = Options.MapSize / 2;
+		int32 Walls = 0;
+		for (int32 X = State->Middle - 12; X < State->Middle + 12 && Walls < 6; ++X)
+		{
+			if (Bridge->GetSim()->map().walkable(colony::CellPos{X, State->Middle + 8, 0}))
+			{
+				Bridge->Submit(colony::SpawnThingCommand{"Wall", colony::CellPos{X, State->Middle + 8, 0}});
+				++Walls;
+			}
+		}
+		BuildTerrainMesh(Bridge->GetSim()->map(), FPlatformTime::Seconds());
+		if (IConsoleVariable* DebugDraw = IConsoleManager::Get().FindConsoleVariable(TEXT("Sim.DebugDraw")))
+		{
+			DebugDraw->Set(1);
+		}
+
+		State->Pawn = Overseer->EnterOverseerMode();
+		APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+		if (!State->Pawn || !PC || PC->GetPawn() != State->Pawn)
+		{
+			Fail(TEXT("The overseer camera pawn did not take over the player controller"));
+			return;
+		}
+		// Zoomed far out so the whole map is on screen.
+		State->Pawn->FocusOn(Bridge->SimToWorld(State->Middle, State->Middle, 0));
+		State->Pawn->Zoom(-8.0f);
+		State->Pawn->SnapCamera();
+	}, 2.0f, 2.0f, [=, this]()
+	{
+		USimSubsystem* Bridge = GetWorld()->GetSubsystem<USimSubsystem>();
+		if (!Bridge || !Bridge->GetSim() || !State->Pawn)
+		{
+			return;
+		}
+		int32 Tested = 0;
+		int32 Exact = 0;
+		int32 Missed = 0;
+		int32 PawnsTested = 0;
+		int32 WallsTested = 0;
+		for (const colony::ThingView& View : Bridge->GetCurrentSnapshot().things)
+		{
+			FBox Box;
+			FVector2D Screen;
+			if (!SimPicking::ThingBox(*Bridge, View, Box) || !OverseerSmokeProject(GetWorld(), Box.GetCenter(), Screen, 0.02f))
+			{
+				continue;
+			}
+			++Tested;
+			PawnsTested += View.category == colony::ThingCategory::Pawn ? 1 : 0;
+			WallsTested += View.category == colony::ThingCategory::Building ? 1 : 0;
+			const FSimPick Pick = State->Pawn->PickAtScreenPosition(Screen);
+			if (Pick.Kind == ESimPickKind::Thing && Pick.Thing == View.id)
+			{
+				++Exact;
+			}
+			else if (Pick.Kind != ESimPickKind::Thing)
+			{
+				++Missed;  // a click on the middle of a thing found only ground or sky
+			}
+			// else: another thing stands in front of it, which is fine
+		}
+		Notes.Add(FString::Printf(TEXT("Picking: %d things on screen (%d pawns, %d walls), %d clicks picked exactly that thing, %d found no thing"), Tested, PawnsTested, WallsTested, Exact, Missed));
+		if (PawnsTested < 3 || WallsTested < 2)
+		{
+			Fail(FString::Printf(TEXT("Too few things on screen to test picking (%d pawns, %d walls)"), PawnsTested, WallsTested));
+		}
+		if (Missed > 0 || Exact * 10 < Tested * 8)
+		{
+			Fail(FString::Printf(TEXT("Clicking a thing's middle picked it %d of %d times (%d found nothing)"), Exact, Tested, Missed));
+		}
+
+		// Empty ground: the cell under the click is the cell asked for.
+		int32 CellsTested = 0;
+		int32 CellsRight = 0;
+		colony::CellPos Cell;
+		FVector2D Screen;
+		for (int32 Index = 0; Index < 8 && OverseerSmokeFindEmptyCell(GetWorld(), *Bridge, State->Middle, Index, Cell, Screen); ++Index)
+		{
+			++CellsTested;
+			const FSimPick Pick = State->Pawn->PickAtScreenPosition(Screen);
+			CellsRight += (Pick.Kind == ESimPickKind::Cell && Pick.Cell == Cell) ? 1 : 0;
+		}
+		Notes.Add(FString::Printf(TEXT("Picking: %d of %d clicks on empty ground gave the right cell"), CellsRight, CellsTested));
+		if (CellsTested < 3 || CellsRight != CellsTested)
+		{
+			Fail(FString::Printf(TEXT("Clicks on empty ground gave the right cell %d of %d times"), CellsRight, CellsTested));
+		}
+
+		// A ray into the sky finds nothing.
+		if (SimPicking::PickFromRay(*Bridge, State->Pawn->GetActorLocation(), FVector::UpVector).IsValid())
+		{
+			Fail(TEXT("A ray pointing at the sky picked something"));
+		}
+	}});
+
+	// Phase 2: the camera methods the keys call (pan, turn, tilt, zoom, limits), then a view to look at.
+	Phases.Add({TEXT("overseer_camera_controls"), [=, this]()
+	{
+		USimSubsystem* Bridge = GetWorld()->GetSubsystem<USimSubsystem>();
+		AOverseerPawn* Pawn = State->Pawn;
+		if (!Bridge || !Bridge->GetSim() || !Pawn)
+		{
+			return;
+		}
+		const auto Problem = [&State](const FString& Text)
+		{
+			State->bCameraLimitsOk = false;
+			State->CameraProblem += Text + TEXT("; ");
+		};
+		Pawn->ResetView();
+		Pawn->FocusOn(Bridge->SimToWorld(State->Middle, State->Middle, 0));
+		Pawn->SnapCamera();
+
+		const FVector Before = Pawn->GetFocus();
+		Pawn->Pan(0.0, 1.0, 0.5f);
+		const FVector Moved = Pawn->GetFocus() - Before;
+		if (Moved.X < 100.0 || FMath::Abs(Moved.Y) > 1.0)
+		{
+			Problem(FString::Printf(TEXT("pan forward at yaw 0 moved (%.0f, %.0f) cm, expected along +X"), Moved.X, Moved.Y));
+		}
+		Pawn->Rotate(90.0f, 0.0f);
+		const FVector BeforeSide = Pawn->GetFocus();
+		Pawn->Pan(0.0, 1.0, 0.5f);
+		const FVector MovedSide = Pawn->GetFocus() - BeforeSide;
+		if (MovedSide.Y < 100.0 || FMath::Abs(MovedSide.X) > 1.0)
+		{
+			Problem(FString::Printf(TEXT("pan forward at yaw 90 moved (%.0f, %.0f) cm, expected along +Y"), MovedSide.X, MovedSide.Y));
+		}
+		Pawn->Rotate(-90.0f, 0.0f);
+
+		Pawn->Rotate(0.0f, 500.0f);
+		if (!FMath::IsNearlyEqual(Pawn->GetTilt(), AOverseerPawn::kMaxTilt))
+		{
+			Problem(FString::Printf(TEXT("tilt %.1f after a big tilt down, expected the limit %.0f"), Pawn->GetTilt(), AOverseerPawn::kMaxTilt));
+		}
+		Pawn->Rotate(0.0f, -500.0f);
+		if (!FMath::IsNearlyEqual(Pawn->GetTilt(), AOverseerPawn::kMinTilt))
+		{
+			Problem(FString::Printf(TEXT("tilt %.1f after a big tilt up, expected the limit %.0f"), Pawn->GetTilt(), AOverseerPawn::kMinTilt));
+		}
+		Pawn->ResetView();
+		Pawn->Zoom(1.0f);
+		const float OneIn = Pawn->GetTargetDistance();
+		Pawn->ResetView();
+		Pawn->Zoom(-1.0f);
+		if (OneIn >= Pawn->GetTargetDistance())
+		{
+			Problem(TEXT("zooming in did not bring the camera closer than zooming out"));
+		}
+		Pawn->Zoom(500.0f);
+		if (!FMath::IsNearlyEqual(Pawn->GetTargetDistance(), AOverseerPawn::kMinDistance))
+		{
+			Problem(FString::Printf(TEXT("zoom in stopped at %.0f cm, expected %.0f"), Pawn->GetTargetDistance(), AOverseerPawn::kMinDistance));
+		}
+		Pawn->Zoom(-500.0f);
+		if (!FMath::IsNearlyEqual(Pawn->GetTargetDistance(), AOverseerPawn::kMaxDistance))
+		{
+			Problem(FString::Printf(TEXT("zoom out stopped at %.0f cm, expected %.0f"), Pawn->GetTargetDistance(), AOverseerPawn::kMaxDistance));
+		}
+
+		// Panning far past the edge keeps the focus on the map.
+		Pawn->Pan(1.0, 1.0, 1000.0f, true);
+		const FVector Local = (Pawn->GetFocus() - Bridge->GetWorldOrigin()) / 100.0;
+		const int32 Size = Bridge->GetSim()->map().width();
+		if (Local.X < 0.0 || Local.Y < 0.0 || Local.X > Size || Local.Y > Size)
+		{
+			Problem(FString::Printf(TEXT("focus left the map: (%.0f, %.0f) m on a %d m map"), Local.X, Local.Y, Size));
+		}
+
+		// A view to look at: closer, turned and tilted.
+		Pawn->ResetView();
+		Pawn->FocusOn(Bridge->SimToWorld(State->Middle, State->Middle + 2, 0));
+		Pawn->Zoom(2.0f);
+		Pawn->Rotate(25.0f, -5.0f);
+		Pawn->SnapCamera();
+		Notes.Add(FString::Printf(TEXT("Camera: yaw %.0f, tilt %.0f, %.0f m from the focus"), Pawn->GetYaw(), Pawn->GetTilt(), Pawn->GetDistance() / 100.0f));
+	}, 1.0f, 2.0f, [=, this]()
+	{
+		if (!State->bCameraLimitsOk)
+		{
+			Fail(FString::Printf(TEXT("Camera: %s"), *State->CameraProblem));
+		}
+	}});
+
+	// Phase 3: select a pawn with a click on screen. The inspect panel and the highlight show.
+	Phases.Add({TEXT("overseer_select_pawn"), [=, this]()
+	{
+		USimSubsystem* Bridge = GetWorld()->GetSubsystem<USimSubsystem>();
+		if (!Bridge || !State->Pawn)
+		{
+			return;
+		}
+		for (const colony::ThingView& View : Bridge->GetCurrentSnapshot().things)
+		{
+			FBox Box;
+			FVector2D Screen;
+			if (View.category == colony::ThingCategory::Pawn && SimPicking::ThingBox(*Bridge, View, Box) && OverseerSmokeProject(GetWorld(), Box.GetCenter(), Screen, 0.25f))
+			{
+				State->Pawn->SelectAtScreenPosition(Screen);
+				State->ExpectedPawn = View.id;
+				break;
+			}
+		}
+		if (State->ExpectedPawn == colony::kNoEntity)
+		{
+			Fail(TEXT("No pawn near the middle of the screen to click on"));
+		}
+	}, 2.0f, 3.0f, [=, this]()
+	{
+		const UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>();
+		if (!Overseer)
+		{
+			return;
+		}
+		const FSimPick& Selection = Overseer->GetSelection();
+		if (State->ExpectedPawn != colony::kNoEntity && (Selection.Kind != ESimPickKind::Thing || Selection.Thing != State->ExpectedPawn))
+		{
+			Fail(TEXT("Clicking a pawn did not select it (or the selection was lost while it walked)"));
+		}
+		Notes.Add(FString::Printf(TEXT("ImGui panels drawn in %d frames"), Overseer->GetPanelFramesDrawn()));
+		if (Overseer->GetPanelFramesDrawn() < 10)
+		{
+			Fail(TEXT("The ImGui panels were not drawn (ImGui context not usable)"));
+		}
+	}});
+
+	// Phase 4: select an empty ground cell.
+	Phases.Add({TEXT("overseer_select_cell"), [=, this]()
+	{
+		USimSubsystem* Bridge = GetWorld()->GetSubsystem<USimSubsystem>();
+		if (!Bridge || !State->Pawn)
+		{
+			return;
+		}
+		FVector2D Screen;
+		if (!OverseerSmokeFindEmptyCell(GetWorld(), *Bridge, State->Middle, 2, State->ExpectedCell, Screen))
+		{
+			Fail(TEXT("No empty ground cell on screen to click on"));
+			return;
+		}
+		State->Pawn->SelectAtScreenPosition(Screen);
+	}, 2.0f, 3.0f, [=, this]()
+	{
+		const UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>();
+		if (!Overseer)
+		{
+			return;
+		}
+		const FSimPick& Selection = Overseer->GetSelection();
+		if (Selection.Kind != ESimPickKind::Cell || !(Selection.Cell == State->ExpectedCell))
+		{
+			Fail(TEXT("Clicking empty ground did not select that cell"));
+		}
+	}});
 }

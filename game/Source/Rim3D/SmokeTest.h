@@ -8,6 +8,7 @@
 class ACameraActor;
 class ACharacter;
 class FJsonValue;
+namespace colony { class Map; }
 
 /**
  * Smoke tests that need the graphics card. Does nothing unless the game is
@@ -16,7 +17,8 @@ class FJsonValue;
  * Saved/Smoke/<name>.json and quits with exit code 0 (pass) or 1 (fail).
  *
  * Tests: load (the level opens and the sim runs), crowd, terrain, sim (the bridge: defs, commands,
- * events, snapshots and blending, speed keys, replay file).
+ * events, snapshots and blending, speed keys, replay file), overseer (the camera, picking, selection
+ * and the ImGui panels).
  * Optional: -SmokeTimeout=<seconds> (default 300) fails a run that hangs.
  * To add a test: write a Build<Name>Phases() and add a branch in OnWorldBeginPlay.
  * Run it with tools/smoke.ps1.
@@ -60,6 +62,7 @@ private:
 	void BuildCrowdPhases();
 	void BuildTerrainPhases();
 	void BuildSimPhases();
+	void BuildOverseerPhases();
 	void StartPhase(int32 Index);
 	void FinishPhase();
 	void WriteResultsAndQuit();
@@ -70,6 +73,7 @@ private:
 	ACharacter* SpawnRunner(const FVector& Location, bool bMetaHuman, int32 Seed);
 	void ApplySeededLook(AActor* MetaHuman, int32 Seed, FString& OutDescription);
 	void BuildTerrain();
+	void BuildTerrainMesh(const colony::Map& Map, double BuildStart);
 
 	FString TestName;
 	TArray<FPhase> Phases;

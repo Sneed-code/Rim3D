@@ -10,7 +10,8 @@ game/Plugins/*/Intermediate/
 .vs/
 .idea/
 
-# Third-party asset packs stay out of Git (see assets/README.md)
+# Third-party asset packs and plugins stay out of Git (see assets/README.md, assets/manifest.json)
+game/Plugins/ImGui/
 game/Content/Megascans/
 game/Content/MetaHumans/
 game/Content/Fab/

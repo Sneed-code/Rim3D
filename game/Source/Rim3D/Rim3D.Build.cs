@@ -12,6 +12,9 @@ public class Rim3D : ModuleRules
 		// The bridge's speed keys (SimSubsystem.cpp).
 		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
 
+		// The overseer's panels (OverseerSubsystem.cpp): Dear ImGui, plugin in game/Plugins/ImGui (assets/manifest.json).
+		PrivateDependencyModuleNames.Add("ImGui");
+
 		// Smoke tests (SmokeTest.cpp).
 		PrivateDependencyModuleNames.AddRange(new string[] { "AIModule", "ProceduralMeshComponent", "Json", "RenderCore", "RHI" });
 	}
