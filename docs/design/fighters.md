@@ -161,7 +161,9 @@ steps as cover.md says.
 
 - Squads, morale, rout and fleeing, raid plans, the colony alarm and defense roles (F6). Undrafted
   colonists don't react to enemies yet.
-- Strafing while shooting, prone, melee, rescuing the downed. (Diving from grenades and throwing them are F9's, [explosives.md](explosives.md).)
+- Strafing while shooting, prone, rescuing the downed. (Diving from grenades and throwing them are F9's, [explosives.md](explosives.md).)
+- Melee is F8's ([melee.md](melee.md)): fighters armed for it charge, the others strike back at
+  enemies in reach, and a fighter with no gun no longer walks toward its target to get in range.
 - Danger in path costs: a fighter walks to its spot by the shortest path, even across open ground.
 - Leaning is a one-cell step: the body is in the open cell while it shoots. Finer lean (part of the
   body out) waits for hitboxes that can lean.

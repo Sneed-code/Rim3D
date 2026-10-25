@@ -149,7 +149,10 @@ Grenades and blasts (F9) are in [explosives.md](explosives.md). They use this fi
 
 ## Not done yet
 
-Melee (Crashlanded's knife), stopping power, apparel damage, aim affected
+Melee is F8's ([melee.md](melee.md)); melee weapons go in `Gear::weapon` through `equip`, and
+strikes land through `hitPawn`, the bullets' own armor and part code.
+
+Stopping power, apparel damage, aim affected
 by sight and manipulation, bullets
 hitting corpses and plants (C2's trees should stop some bullets), shooting through doorways when
 doors open and close (C5).

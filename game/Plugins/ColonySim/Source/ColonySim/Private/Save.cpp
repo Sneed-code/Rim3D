@@ -5,6 +5,7 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Looks.h"
+#include "ColonySim/Melee.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Doors.h"
@@ -260,6 +261,7 @@ struct SaveEntity {
     std::optional<SaveBelt> belt;           // section "explosives"
     std::optional<SaveThrower> thrower;     // section "explosives"
     std::optional<KnockedDown> knocked;     // section "explosives"
+    std::optional<Melee> melee;             // section "melee" (F8)
 };
 
 // A stockpile zone, with its filter by defName.
@@ -977,6 +979,12 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("damage", c.damage);
                 ar.text("damageType", c.damageType);
                 ar.value("penetration", c.penetration);
+            } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
+                auto* melee = &c;
+                ar.value("pawn", melee->pawn);
+                ar.value("target", melee->target);
+                ar.value("mode", melee->mode);
+                ar.require(melee->mode <= MeleeMode::Block, "the save file has a bad melee mode");
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }
@@ -1517,6 +1525,29 @@ void saveFighterPart(Ar& ar, Fighter& f) {
 }
 
 template <typename Ar>
+void saveMeleePart(Ar& ar, Melee& m) {
+    ar.value("phase", m.phase);
+    ar.require(m.phase <= MeleePhase::Recovery, "the save file has a bad melee phase");
+    ar.value("stepsLeft", m.stepsLeft);
+    ar.value("target", m.target);
+    ar.value("tool", m.tool);
+    ar.value("weaponTool", m.weaponTool);
+    ar.value("player", m.player);
+    ar.value("committed", m.committed);
+    ar.value("aimX", m.aimX);
+    ar.value("aimY", m.aimY);
+    ar.value("aimZ", m.aimZ);
+    ar.value("seed", m.seed);
+    ar.value("threat", m.threat);
+    ar.value("defense", m.defense);
+    ar.require(m.defense <= MeleeDefense::Block, "the save file has a bad melee defense");
+    ar.value("reactAt", m.reactAt);
+    ar.value("blockFrom", m.blockFrom);
+    ar.value("blockUntil", m.blockUntil);
+    ar.value("dodged", m.dodged);
+}
+
+template <typename Ar>
 void saveMagazinePart(Ar& ar, Magazine& m) {
     ar.value("rounds", m.rounds);
     ar.require(m.rounds >= 0, "the save file has a magazine with fewer than no rounds");
@@ -1984,6 +2015,9 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "grenade", e, &SaveEntity::grenade, [&](SaveGrenade& g) { saveGrenadePart(ar, g); });
         saveParts(ar, "knockedDown", e, &SaveEntity::knocked, [&](KnockedDown& k) { saveKnockedPart(ar, k); });
     });
+    ar.section("melee", 1, [&] {
+        saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
+    });
     // New sections go here, at the end.
 }
 
@@ -2268,6 +2302,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const Animal* animal = reg.try_get<Animal>(e)) {
             out.animal = *animal;
+        }
+        if (const Melee* melee = reg.try_get<Melee>(e)) {
+            out.melee = *melee;
         }
         if (const Projectile* p = reg.try_get<Projectile>(e)) {
             out.projectile = SaveProjectile{sim.defs_->get(p->def).defName(), sim.defs_->get(p->weapon).defName(), *p};
@@ -2668,6 +2705,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.animal) {
             reg.emplace<Animal>(entity, *e.animal);
+        }
+        if (e.melee) {
+            reg.emplace<Melee>(entity, *e.melee);
         }
     }
     sim.animals_->restore(d.animals);

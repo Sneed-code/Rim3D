@@ -21,6 +21,7 @@ class ExplosiveSystem;
 class HealthSystem;
 class JobSystem;
 class Map;
+class MeleeSystem;
 class StateHasher;
 class Things;
 struct GameTime;
@@ -134,6 +135,9 @@ public:
     void setEventLog(std::vector<Event>* events) { events_ = events; }
     // Grenades (F9): fighters throw the ones on their belts and dive away from ones about to go off.
     void setExplosives(ExplosiveSystem* explosives) { explosives_ = explosives; }
+    // Melee (F8, docs/design/melee.md): fighters armed for it charge, the others strike back at
+    // enemies in reach. Without it nobody fights in melee.
+    void setMelee(MeleeSystem* melee) { melee_ = melee; }
 
     // A pawn's side (kPlayerFaction without a Faction component). Different factions are enemies.
     FactionId factionOf(Entity pawn) const;
@@ -209,6 +213,8 @@ private:
     float weaponRange(Entity pawn) const;
     bool badlyHurt(Entity pawn) const;
     int64_t now() const;
+    void planCharge(Entity pawn, Fighter& f, CellPos goal);
+    bool meleeAct(Entity pawn, Fighter& f);
 
     Things& things_;
     Map& map_;
@@ -229,6 +235,7 @@ private:
     ExplosiveSystem* explosives_ = nullptr;
     std::vector<GrenadeDanger> blasts_;  // scratch: grenades about to go off this step, by id
     std::vector<Event>* events_ = nullptr;
+    MeleeSystem* melee_ = nullptr;
     uint64_t plans_ = 0;
     uint64_t sightChecks_ = 0;
 };

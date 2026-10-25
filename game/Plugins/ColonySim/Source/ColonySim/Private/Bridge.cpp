@@ -93,9 +93,11 @@ const char* commandName(const Command& command) {
                 return "UnlockResearch";
             } else if constexpr (std::is_same_v<Type, ThrowCommand>) {
                 return "Throw";
-            } else {
-                static_assert(std::is_same_v<Type, ExplodeCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, ExplodeCommand>) {
                 return "Explode";
+            } else {
+                static_assert(std::is_same_v<Type, MeleeCommand>, "name every command type");
+                return "Melee";
             }
         },
         command);
@@ -156,6 +158,8 @@ const char* eventTypeName(EventType type) {
         case EventType::GrenadeLanded: return "GrenadeLanded";
         case EventType::Explosion: return "Explosion";
         case EventType::PawnKnockedDown: return "PawnKnockedDown";
+        case EventType::MeleeSwing: return "MeleeSwing";
+        case EventType::MeleeHit: return "MeleeHit";
     }
     return "?";
 }
@@ -179,6 +183,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Clean: return "Clean";
         case PawnAction::Throw: return "Throw";
         case PawnAction::Dive: return "Dive";
+        case PawnAction::Block: return "Block";
     }
     return "?";
 }

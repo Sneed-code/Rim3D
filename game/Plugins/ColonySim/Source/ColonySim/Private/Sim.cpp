@@ -22,6 +22,7 @@
 #include "ColonySim/Research.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Looks.h"
+#include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Power.h"
@@ -155,6 +156,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
                                               splitMix64(settings.seed ^ 0x616E696D616C73ULL), "TemperateForest");
     animals_->setEventLog(&events_);
     combat_->setBeforeDestroy([this](Entity thing) { jobs_->forget(thing); });
+    melee_ = std::make_unique<MeleeSystem>(*things_, map_, *combat_, *health_, *defs_, time_,
+                                           splitMix64(settings.seed ^ 0x6D656C6565ULL));
+    melee_->setEventLog(&events_);
+    fighters_->setMelee(melee_.get());
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -664,6 +669,16 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!jobs_->bills().removeBill(removeBill->building, removeBill->bill, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* melee = std::get_if<MeleeCommand>(&command)) {
+        const bool done = melee->mode == MeleeMode::Block
+                              ? melee_->block(melee->pawn, &error)
+                              : melee_->attack(melee->pawn, melee->target,
+                                               things_->registry().valid(melee->pawn) &&
+                                                   things_->registry().all_of<PlayerControl>(melee->pawn),
+                                               &error);
+        if (!done) {
+            commandFailed(id, error);
+        }
     } else if (const auto* setBill = std::get_if<SetBillCommand>(&command)) {
         if (!jobs_->bills().setBill(setBill->building, setBill->bill, setBill->mode, setBill->count, setBill->suspended,
                                     error)) {
@@ -731,6 +746,7 @@ void Sim::step() {
     animals_->step();
     mood_->step(time_.seconds, events_);
     movement_->step(things_->registry(), map_);
+    melee_->step();
     combat_->step(rng_);
     explosives_->step(rng_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
@@ -1001,6 +1017,12 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.fightTarget = fighter->target;
             view.fightSpot = fighter->hasSpot ? fighter->spot : cellOf(pos);
             view.fallingBack = fighter->fallingBack;
+        }
+        if (const Melee* melee = reg.try_get<Melee>(entity)) {
+            view.meleePhase = melee->phase;
+            view.meleeStepsLeft = melee->stepsLeft;
+            view.meleeTarget = melee->phase == MeleePhase::Windup ? melee->target : kNoEntity;
+            view.blocking = melee_->blocking(entity);
         }
         out.things.push_back(view);
     }
@@ -1356,6 +1378,7 @@ uint64_t Sim::stateHash() const {
         explosives_->hashThing(e, h);
         fighters_->hashThing(e, h);
         animals_->hashThing(e, h);
+        melee_->hashThing(e, h);
     }
     return h.value();
 }
