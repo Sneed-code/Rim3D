@@ -42,7 +42,7 @@ names in lowerCamel (`workSpeedGlobal`), keys that are def names keep their case
 | `Terrain` | soil, rich soil, stony soil (`Gravel`), sand, marshy soil, mud, shallow and deep water, rough stone x5 | C2 | `fertility`, `pathCost` (walk speed = 13 / (13 + pathCost)), `affordances` |
 | `Things` | `Items.json`: steel, wood, silver, component, medicine, berries, survival meal. `Plants.json`: oak, poplar, grass, tall grass, bush, brambles, dandelions, berry bush. `Pawns.json`: Human | C1, C2, C8, F1 | Plants are `category: "Plant"` with a `plant` block. Steel and wood carry `stuffProps` for C4 |
 | `Biomes` | temperate forest | C2 | `plantDensity` and `wildPlants` commonality (only the plants we have; newer expansion plants left out) |
-| `Rules` | `PlantRules`, `SkillRules`, `HealthRules`, `PawnGenRules`, `JobRules` | C2, C8, F1, C1 | Numbers RimWorld keeps in its code rather than its defs (`JobRules`: [jobs.md](jobs.md)) |
+| `Rules` | `PlantRules`, `SkillRules`, `HealthRules`, `PawnGenRules`, `JobRules`, `NeedRules` | C2, C8, F1, C1, C6 | Numbers RimWorld keeps in its code rather than its defs (`JobRules`: [jobs.md](jobs.md)) |
 | `Skills` | the 12 skills | C1, C8 | `disablingWorkTags` |
 | `WorkTypes` | the 20 Core work types, in Work tab order | C1 | `relevantSkills`, `workTags`, `alwaysStartActive`, `inPrototype`, `tasks` (our job names, in order) |
 | `Traits` | 27 traits, spectra as `degreeDatas` | C8 | `statOffsets`, `statFactors`, `skillGains`, `conflictingTraits`; mood numbers kept for C9 |

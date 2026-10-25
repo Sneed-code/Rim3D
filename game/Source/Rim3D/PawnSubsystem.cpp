@@ -149,6 +149,9 @@ UAnimSequence* USimPawnSubsystem::GetActionAnimation(colony::PawnAction Action) 
 	{
 		case colony::PawnAction::PickUp:
 		case colony::PawnAction::PutDown:
+		case colony::PawnAction::Eat:
+		case colony::PawnAction::LieDown:
+		case colony::PawnAction::GetUp:
 			return CrouchPose;
 	}
 	return CrouchPose;
