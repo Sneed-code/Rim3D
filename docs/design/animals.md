@@ -26,7 +26,7 @@ Every animal is a `Things` def (`category: "Pawn"`) inheriting `AnimalBase`.
 | `gestationDays`, `litterSize` | live birth. Chickens lay eggs instead |
 | `lifeStages` | baby, juvenile, adult: `minAgeYears`, `bodySizeFactor`, `healthScaleFactor`, `foodFactor` (ours) |
 | `milk`, `wool`, `eggs` | `thing`, `intervalDays`, `amount`; eggs have `unfertilizedThing`, `fertilizedThing`, `intervalDays`, `count`; the fertilized egg's `hatches` says what it becomes and when |
-| `wildBiomes` | biome def name to commonality. Boreal forest and arid shrubland come from D4; N1 checks they exist. Cow, chicken, husky and cat are domestic (`domestic: true`) and have no wild biome |
+| `wildBiomes` | biome def name to commonality (ours). N1 reads a biome's own `animals` list first (RimWorld's numbers) and uses this only for a biome with no list ([animal-life.md](animal-life.md)). Cow, chicken, husky and cat are domestic (`domestic: true`) and never live wild |
 | `predator`, `manhunterOnDamage`, `rare` | behaviour flags N1 and the incident tasks read |
 
 `tools` are the melee attacks (`power`, `cooldownTime` in game seconds, like the human's fists). The
@@ -44,3 +44,8 @@ The rimworldwiki.com pages weren't read for this task, so the race numbers are f
 RimWorld and every animal def lists `stats`, `race` and `tools` in `unverified`; check them against
 the wiki when a task leans on them. Our own: `lifeStages`, `herd`, `wildBiomes` and the animal body
 trees (`ours`).
+
+## On the map
+
+N1 puts these animals on the map, makes them wander, graze and sleep, and fills and empties the edges:
+[animal-life.md](animal-life.md).
