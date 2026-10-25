@@ -37,6 +37,7 @@ class Designations;
 class FighterSystem;
 class JobSystem;
 class Lights;
+class MeleeSystem;
 class Mineables;
 class MovementSystem;
 class MoodSystem;
@@ -216,6 +217,9 @@ public:
     // Drafted colonists and other factions' pawns: where to stand, whom to shoot (docs/design/fighters.md).
     FighterSystem& fighters() { return *fighters_; }
     const FighterSystem& fighters() const { return *fighters_; }
+    // Melee swings, blocks and dodges (docs/design/melee.md).
+    MeleeSystem& melee() { return *melee_; }
+    const MeleeSystem& melee() const { return *melee_; }
 
     // Wild animals: herds, grazing, sleep, coming and going at the edges (docs/design/animal-life.md).
     AnimalSystem& animals() { return *animals_; }
@@ -298,6 +302,7 @@ private:
     std::vector<LoggedCommand> commandLog_;
     std::vector<Event> events_;
     std::vector<Checkpoint> checkpoints_;
+    std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
 };
 
 }  // namespace colony
