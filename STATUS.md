@@ -237,6 +237,8 @@ Stage 2 done so far: **D7** medicine and disease data (`docs/design/medicine-dat
 `docs/design/starting-data.md`).
 **D5** animal data (15 animals, bodies, meat, leather, milk, eggs, wool: `docs/design/animals.md`).
 
+D9 (thoughts, recreation, mental break and social data) is in: `docs/design/thoughts-data.md`. Data only; C15, C17, C18, C19, C20, E2 and E3 read it.
+
 ## Next
 
 Wave 1:
