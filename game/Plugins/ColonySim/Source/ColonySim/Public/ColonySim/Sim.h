@@ -28,6 +28,7 @@ namespace colony {
 class Construction;
 class DefDatabase;
 struct Colonist;
+struct PawnLooks;
 class Designations;
 class FighterSystem;
 class JobSystem;
@@ -142,6 +143,8 @@ public:
     Entity controlledPawn() const;
     // A pawn's colonist record (name, skills...), or null if it is not a colonist.
     const Colonist* colonistOf(Entity pawn) const;
+    // How a humanlike pawn looks (docs/design/looks.md), or null for other things.
+    const PawnLooks* looksOf(Entity pawn) const;
 
     // The plant layer: wild plants from map generation, growing hourly (docs/design/plants.md).
     Plants& plants() { return *plants_; }
@@ -198,6 +201,8 @@ private:
     void placeStockpileAndThings();
     void pruneDesignations();
     void startScenario();
+    // Gives a new pawn its looks if it is humanlike (its def names no other intelligence).
+    void giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& lineage);
 
     SimSettings settings_;
     std::shared_ptr<const DefDatabase> defs_;

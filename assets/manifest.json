@@ -17,6 +17,15 @@
       "installedTo": "game/Plugins/ImGui/ (not in Git); enabled in game/Rim3D.uproject, used by the Rim3D module (Rim3D.Build.cs)",
       "usedFor": "the overseer's inspect panel and speed controls (U6), later the architect menu and colony panels (U7, U8)",
       "reinstall": "git clone https://github.com/VesCodes/ImGui.git game/Plugins/ImGui, then git -C game/Plugins/ImGui checkout 71f29cf675b7d501af4f8e152fb73145f24a3f58"
+    },
+    {
+      "name": "Pawn looks (generated)",
+      "source": "Made by the PawnLooks commandlet from the Game Animation Sample's Kellan and the MetaHuman body type DNA files in the engine's MetaHumanCharacter plugin",
+      "licence": "Derived from Epic sample content and engine content, usable in Unreal Engine projects",
+      "version": "UE 5.8",
+      "installedTo": "game/Content/Rim3D/Generated/PawnLooks/ (not in Git)",
+      "usedFor": "body shape morphs on Kellan's body and clothes, our skin material, horns (docs/design/looks.md)",
+      "reinstall": "\"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" game\\Rim3D.uproject -run=PawnLooks -unattended -nosplash -nullrhi"
     }
   ]
 }

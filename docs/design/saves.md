@@ -40,6 +40,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Plants (format 9) | every plant as parallel lists: cell index, def, growth, age; fertility is rebuilt from the seed |
 | Fighters (format 15) | per pawn its side if not the player's; for fighters the orders (drafted, anchor, leash, forced target), the plan (target, spot, fire cell and stance, falling back, next plan), the walk and its path ticket, and the enemies it knows (pawn, where and when last seen) ([fighters.md](fighters.md)) |
 | Combat (format 12) | per pawn its posture (stance, facing), gear (gun and apparel ids) and trigger (phase, steps, burst, aim, recoil); `EquippedBy` on gear; every projectile in flight with its defs **by `defName`** ([combat.md](combat.md)) |
+| Pawn looks (format 16) | each humanlike pawn's lineage (by `defName`), gender, body type, weight, height, melanin and colours; `SetLineage` commands in the log ([looks.md](looks.md)). Older files load with pawns that have no looks |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
@@ -188,6 +189,7 @@ sneed's whole job for a bug is: press F8, then send the folder (zip it, or drop 
 - **15** (F4): `Faction` and `Fighter` components (orders, spot, plan, path ticket, the enemies it
   knows) ([fighters.md](fighters.md)). Commands 22 to 25 (`Draft`, `MoveOrder`, `AttackOrder`,
   `SetFaction`). Older files load with everyone on the player's side and nobody drafted.
+- **16** (A3): each humanlike pawn's looks (`docs/design/looks.md`), command 26 (`SetLineage`). Older files load with pawns that have no looks.
 
 ## Why the state hash changed in S6
 

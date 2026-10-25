@@ -233,6 +233,14 @@ struct SetFactionCommand {
     uint32_t faction = 1;
 };
 
+// Dev command: makes a humanlike pawn one of another lineage (a Lineages defName), as a lineage
+// graft will once there are grafts. Only its looks change (docs/design/looks.md). Fails for a
+// pawn without looks or an unknown lineage.
+struct SetLineageCommand {
+    Entity pawn = kNoEntity;
+    std::string lineage;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -240,7 +248,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ControlPawnCommand, DirectMoveCommand, SetScheduleCommand, AssignBedCommand,
                              PlaceBlueprintCommand, CancelBuildCommand, DeconstructCommand, EquipCommand,
                              ShootCommand, SetStanceCommand, DesignateCommand, CancelDesignationsCommand,
-                             DraftCommand, MoveOrderCommand, AttackOrderCommand, SetFactionCommand>;
+                             DraftCommand, MoveOrderCommand, AttackOrderCommand, SetFactionCommand, SetLineageCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

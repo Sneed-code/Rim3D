@@ -2,6 +2,7 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Looks.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
@@ -53,6 +54,12 @@ void Sim::startScenario() {
         return;
     }
 
+    const std::string lineage = scenario->text("lineage", "Baseline");
+    if (!scenario->text("lineage").empty() && defs_->find("Lineages", lineage) == nullptr) {
+        setupErrors_.push_back("scenario '" + settings_.scenario + "': no Lineages def '" + lineage + "'");
+        return;
+    }
+
     const std::vector<CellPos> cells = scenarioNearbyCells(map_, *stockpileCell_, 6000);
     std::set<int> used;
     Rng rng(splitMix64(settings_.seed ^ 0x7363656E6172696FULL), 5);
@@ -70,8 +77,8 @@ void Sim::startScenario() {
         Colonist colonist;
         std::string error;
         const bool protagonist = placed == 0 && scenario->flag("protagonist");
-        if (!generateColonist(*defs_, splitMix64(settings_.seed ^ 0x636F6C6FULL) + static_cast<uint64_t>(placed), protagonist,
-                              colonist, error)) {
+        const uint64_t colonistSeed = splitMix64(settings_.seed ^ 0x636F6C6FULL) + static_cast<uint64_t>(placed);
+        if (!generateColonist(*defs_, colonistSeed, protagonist, colonist, error)) {
             setupErrors_.push_back("scenario '" + settings_.scenario + "': " + error);
             return;
         }
@@ -85,6 +92,7 @@ void Sim::startScenario() {
             health->protagonist = colonist.protagonist;  // 2x part hit points (docs/design/health.md)
         }
         jobs_->addWorker(pawn, colonist.disabledWorkTags);
+        giveLooks(pawn, colonistSeed, colonist.female, lineage);
         things_->registry().emplace<Colonist>(pawn, std::move(colonist));
         used.insert(map_.index(cell));
         ++placed;

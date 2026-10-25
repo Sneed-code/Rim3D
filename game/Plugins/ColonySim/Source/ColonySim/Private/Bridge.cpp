@@ -62,9 +62,11 @@ const char* commandName(const Command& command) {
                 return "MoveOrder";
             } else if constexpr (std::is_same_v<Type, AttackOrderCommand>) {
                 return "AttackOrder";
-            } else {
-                static_assert(std::is_same_v<Type, SetFactionCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, SetFactionCommand>) {
                 return "SetFaction";
+            } else {
+                static_assert(std::is_same_v<Type, SetLineageCommand>, "name every command type");
+                return "SetLineage";
             }
         },
         command);

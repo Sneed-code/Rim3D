@@ -163,5 +163,29 @@
     "unskilledSkillLevel": 8,
     "unverified": ["mining.hitDamage", "mining.hitSeconds", "mining.xpPerSecond", "plants.xpPerSecond", "yieldByLevel", "growthYieldFloor"],
     "ours": ["mining.rockTypesPerMap", "mining.orePerTenThousandRockCells", "unskilledSkillLevel"]
+  },
+  {
+    "defName": "LooksRules", "source": "Rim3D",
+    "comment": "How pawns look; only the drawing reads it (docs/design/looks.md).",
+    "bodyTypeWeights": { "Thin": 25, "Average": 55, "Fat": 12, "Hulk": 8 },
+    "weightRange": { "Thin": [-1.0, -0.55], "Average": [-0.35, 0.35], "Fat": [0.55, 1.0], "Hulk": [0.15, 0.5] },
+    "heightMale": [0.95, 1.05],
+    "heightFemale": [0.88, 0.97],
+    "hulkHeightBonus": 0.04,
+    "melaninRange": [0.0, 1.0],
+    "skinColors": [
+      [0.0, 0.62, 0.48, 0.41], [0.25, 0.52, 0.38, 0.31], [0.5, 0.42, 0.29, 0.22],
+      [0.75, 0.29, 0.19, 0.14], [1.0, 0.16, 0.105, 0.08]
+    ],
+    "hairColors": [
+      { "color": [0.06, 0.05, 0.04], "weight": 30 },
+      { "color": [0.22, 0.14, 0.08], "weight": 30 },
+      { "color": [0.42, 0.27, 0.14], "weight": 15 },
+      { "color": [0.72, 0.55, 0.32], "weight": 10 },
+      { "color": [0.55, 0.22, 0.09], "weight": 8 },
+      { "color": [0.62, 0.60, 0.58], "weight": 7 }
+    ],
+    "ours": ["bodyTypeWeights", "weightRange", "heightMale", "heightFemale", "hulkHeightBonus", "melaninRange",
+             "skinColors", "hairColors"]
   }
 ]

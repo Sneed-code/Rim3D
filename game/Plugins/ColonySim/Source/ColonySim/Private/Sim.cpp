@@ -12,6 +12,7 @@
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Looks.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Regions.h"
@@ -200,7 +201,27 @@ void Sim::placeStockpileAndThings() {
         }
         jobs_->addWorker(pawn, {}, false);  // the benchmark's pawns haul all day: no needs
         haulers_.push_back(pawn);
+        const uint64_t looksSeed = splitMix64(settings_.seed ^ 0x6861756C6572ULL) + static_cast<uint64_t>(i);
+        giveLooks(pawn, looksSeed, (splitMix64(looksSeed) & 1) != 0, "Baseline");
     }
+}
+
+void Sim::giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& lineage) {
+    entt::registry& reg = things_->registry();
+    const Thing* thing = reg.try_get<Thing>(pawn);
+    if (thing == nullptr || thing->category != ThingCategory::Pawn ||
+        defs_->get(thing->def).text("race.intelligence", "Humanlike") != "Humanlike") {
+        return;
+    }
+    PawnLooks looks;
+    std::string error;
+    // Without the looks rules (the test defs) the pawn gets plain looks; that is not an error.
+    generateLooks(*defs_, seed, female, lineage, looks, error);
+    reg.emplace_or_replace<PawnLooks>(pawn, std::move(looks));
+}
+
+const PawnLooks* Sim::looksOf(Entity pawn) const {
+    return things_->exists(pawn) ? things_->registry().try_get<PawnLooks>(pawn) : nullptr;
 }
 
 Entity Sim::controlledPawn() const {
@@ -246,6 +267,9 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "can't put " + spawn->def + " at " + simCellText(spawn->cell));
         } else if (things_->registry().all_of<Mover>(thing)) {
             jobs_->addWorker(thing);  // until factions: every pawn is a colonist
+            const uint64_t looksSeed = splitMix64(settings_.seed ^ 0x7370617776ULL ^ (static_cast<uint64_t>(time_.seconds) << 20) ^
+                                                  entt::to_integral(thing));
+            giveLooks(thing, looksSeed, (splitMix64(looksSeed) & 1) != 0, "Baseline");
         }
     } else if (const auto* destroy = std::get_if<DestroyThingCommand>(&command)) {
         if (!things_->exists(destroy->thing) || !things_->registry().all_of<Thing>(destroy->thing)) {
@@ -334,6 +358,13 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             mover.vy = 0.0f;
             mover.gaveUp = false;
             reg.emplace<PlayerControl>(control->pawn);
+        }
+    } else if (const auto* lineage = std::get_if<SetLineageCommand>(&command)) {
+        PawnLooks* looks = things_->exists(lineage->pawn) ? things_->registry().try_get<PawnLooks>(lineage->pawn) : nullptr;
+        if (looks == nullptr) {
+            commandFailed(id, "that thing has no looks to change");
+        } else if (!setLineage(*defs_, lineage->lineage, *looks, error)) {
+            commandFailed(id, error);
         }
     } else if (const auto* move = std::get_if<DirectMoveCommand>(&command)) {
         entt::registry& reg = things_->registry();
@@ -555,6 +586,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.waypoints.clear();
     out.zones.clear();
     out.zoneCells.clear();
+    out.looks.clear();
     out.designations.clear();
     for (const auto& [index, kind] : designations_->all()) {
         out.designations.push_back(DesignationView{map_.cellAt(index), kind});
@@ -617,6 +649,18 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Health* health = reg.try_get<Health>(entity)) {
             view.downed = health->downed;
             view.dead = health->dead;
+        }
+        if (const PawnLooks* looks = reg.try_get<PawnLooks>(entity)) {
+            PawnLooksView l;
+            l.lineage = defs_->idOf("Lineages", looks->lineage);
+            l.female = looks->female;
+            l.body = looks->body;
+            l.weight = looks->weight;
+            l.height = looks->height;
+            l.skin = looks->skin;
+            l.hair = looks->hair;
+            view.looks = static_cast<int32_t>(out.looks.size());
+            out.looks.push_back(l);
         }
         if (const Worker* worker = reg.try_get<Worker>(entity)) {
             view.job = worker->job.type;
@@ -738,7 +782,8 @@ uint64_t Sim::stateHash() const {
                             reg.all_of<Needs>(e),        reg.all_of<Schedule>(e),     reg.all_of<Bed>(e),
                             reg.all_of<ConstructionSite>(e), reg.all_of<BuiltOf>(e),
                             reg.all_of<MarkedForDeconstruct>(e),
-                            reg.all_of<Mood>(e),         reg.all_of<Door>(e)};
+                            reg.all_of<Mood>(e),         reg.all_of<Door>(e),
+                            reg.all_of<PawnLooks>(e)};
         uint64_t mask = 0;
         for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
             mask |= has[bit] ? (uint64_t{1} << bit) : 0;
@@ -825,6 +870,19 @@ uint64_t Sim::stateHash() const {
         }
         if (const BuiltOf* made = reg.try_get<BuiltOf>(e)) {
             h.add(made->stuff.value);
+        }
+        if (const PawnLooks* looks = reg.try_get<PawnLooks>(e)) {
+            h.add(looks->lineage.data(), looks->lineage.size());
+            h.add(looks->female);
+            h.add(static_cast<int>(looks->body));
+            h.add(looks->weight);
+            h.add(looks->height);
+            h.add(looks->melanin);
+            for (const LooksColor* c : {&looks->naturalHair, &looks->skin, &looks->hair}) {
+                h.add(c->r);
+                h.add(c->g);
+                h.add(c->b);
+            }
         }
         if (const Worker* worker = reg.try_get<Worker>(e)) {
             const Job& job = worker->job;
