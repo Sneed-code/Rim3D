@@ -41,6 +41,7 @@ REFERENCES = [
     ("Hediffs", "addedPart.part", "BodyParts"),
     ("Hediffs", "addedPart.item", "Things"),
     ("Biomes", "wildPlants{}", "Things"),
+    ("Biomes", "weather{}", "Weathers"),
     ("Bodies", "corePart.**.def", "BodyParts"),
     ("Bodies", "corePart.**.groups[]", "BodyPartGroups"),
     ("WorkTypes", "relevantSkills[]", "Skills"),

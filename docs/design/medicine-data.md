@@ -10,13 +10,11 @@ ours are in `ours`.
 
 | Item | Potency | Best tend quality it allows | Notes |
 | --- | --- | --- | --- |
-| `MedicineHerbal` herbal medicine | 0.6 | 0.7 | made at a crafting spot from 3 mendroot leaves; rots fast |
+| `MedicineHerbal` herbal medicine | 0.6 | 0.7 | healroot's yield (D4's `Plant_Healroot`); rots fast |
 | `MedicineIndustrial` medicine | 1.0 | 1.0 | as before, now in the `Medicine` category |
 | `MedicineLumen` lumen medicine | 1.6 | 1.3 | |
 
-`MendrootLeaves` is what the mendroot plant yields (RimWorld's healroot; `naming.md`). **D4 adds the
-plant itself** (`Plant_Mendroot`, `harvestedThingDef: MendrootLeaves`). `HealthRules.medicineMaxTendQuality`
-(F1) holds the same caps by medicine kind.
+`HealthRules.medicineMaxTendQuality` (F1) holds the same caps by medicine kind.
 
 Artificial parts are items in the `BodyPartsArtificial` category: `PegLeg`, `WoodenFoot`, `WoodenHand`,
 `ProstheticArm`, `ProstheticLeg`, `BionicArm`, `BionicLeg`, `BionicEye`, `BionicEar`. Wooden ones can be
@@ -48,7 +46,7 @@ parts: `surgery {part, addsHediff, ingredient, successChance, requiresMissing}` 
 0, prosthetic 4, bionic 8) and `workAmount` in game seconds. `RemoveBodyPart` and `AmputateLimb` have
 `anyPart` and `removes`. Surgery recipes have no `recipeUsers`, so the bill system never offers them at a
 bench; H1 and later read them for the doctor job and the patient's health tab. Craft recipes
-(`MakeMedicineHerbal`, `MakePegLeg`, `MakeWoodenFoot`, `MakeWoodenHand`) use the new `CraftingSpot`
+(`MakePegLeg`, `MakeWoodenFoot`, `MakeWoodenHand`) use the new `CraftingSpot`
 (`Things/Buildings.json`, 1 wood).
 
 ## Hospital bed

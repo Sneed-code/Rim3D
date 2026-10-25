@@ -29,7 +29,6 @@
     "products": { "MealFine": 1 }
   },
   {"defName": "SurgeryBase", "abstract": true, "source": "RimWorld wiki", "workSkill": "Medicine", "recipeUsers": [], "workSkillXp": 0, "surgery": {"needsBed": true, "needsPatientDowned": false}, "ours": ["surgery.needsBed", "surgery.needsPatientDowned"]},
-  {"defName": "MakeMedicineHerbal", "parent": "RecipeBase", "label": "make herbal medicine", "workSkill": "Crafting", "recipeUsers": ["CraftingSpot"], "workAmount": 600, "workSkillXp": 100, "ingredients": [{"items": ["MendrootLeaves"], "count": 3}], "products": {"MedicineHerbal": 1}, "unverified": ["workAmount", "workSkillXp", "ingredients"]},
   {"defName": "MakePegLeg", "parent": "RecipeBase", "label": "make peg leg", "workSkill": "Crafting", "recipeUsers": ["CraftingSpot"], "workAmount": 500, "workSkillXp": 100, "ingredients": [{"items": ["WoodLog"], "count": 10}], "products": {"PegLeg": 1}, "unverified": ["workAmount", "ingredients"]},
   {"defName": "MakeWoodenFoot", "parent": "RecipeBase", "label": "make wooden foot", "workSkill": "Crafting", "recipeUsers": ["CraftingSpot"], "workAmount": 300, "workSkillXp": 60, "ingredients": [{"items": ["WoodLog"], "count": 5}], "products": {"WoodenFoot": 1}, "unverified": ["workAmount", "ingredients"]},
   {"defName": "MakeWoodenHand", "parent": "RecipeBase", "label": "make wooden hand", "workSkill": "Crafting", "recipeUsers": ["CraftingSpot"], "workAmount": 300, "workSkillXp": 60, "ingredients": [{"items": ["WoodLog"], "count": 5}], "products": {"WoodenHand": 1}, "unverified": ["workAmount", "ingredients"]},

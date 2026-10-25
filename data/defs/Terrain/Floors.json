@@ -1,0 +1,120 @@
+[
+ {
+  "defName": "FloorBase",
+  "abstract": true,
+  "parent": "TerrainBase",
+  "source": "RimWorld wiki",
+  "designationCategory": "Floors",
+  "pathCost": 0,
+  "stats": {
+   "beauty": 0,
+   "cleanliness": 0
+  },
+  "affordances": [
+   "Light",
+   "Medium"
+  ],
+  "unverified": [
+   "stats"
+  ]
+ },
+ {
+  "defName": "WoodFloor",
+  "parent": "FloorBase",
+  "label": "wood floor",
+  "costs": {
+   "WoodLog": 4
+  },
+  "stuff": false,
+  "workToBuild": 216.0,
+  "stats": {
+   "beauty": 1,
+   "cleanliness": 0
+  },
+  "unverified": [
+   "costs",
+   "workToBuild",
+   "stats"
+  ]
+ },
+ {
+  "defName": "StoneTile",
+  "parent": "FloorBase",
+  "label": "stone tiles",
+  "costStuffCount": 4,
+  "stuffCategories": [
+   "Stony"
+  ],
+  "workToBuild": 648.0,
+  "stats": {
+   "beauty": 2,
+   "cleanliness": 0.2
+  },
+  "unverified": [
+   "costStuffCount",
+   "workToBuild",
+   "stats"
+  ]
+ },
+ {
+  "defName": "Flagstone",
+  "parent": "FloorBase",
+  "label": "flagstone",
+  "costStuffCount": 2,
+  "stuffCategories": [
+   "Stony"
+  ],
+  "workToBuild": 432.0,
+  "stats": {
+   "beauty": 1,
+   "cleanliness": 0
+  },
+  "unverified": [
+   "costStuffCount",
+   "workToBuild",
+   "stats"
+  ]
+ },
+ {
+  "defName": "Carpet",
+  "parent": "FloorBase",
+  "label": "carpet",
+  "costStuffCount": 4,
+  "stuffCategories": [
+   "Fabric"
+  ],
+  "workToBuild": 288.0,
+  "stats": {
+   "beauty": 2,
+   "cleanliness": -0.5
+  },
+  "unverified": [
+   "costStuffCount",
+   "workToBuild",
+   "stats"
+  ]
+ },
+ {
+  "defName": "SmoothedStone",
+  "parent": "FloorBase",
+  "label": "smoothed stone",
+  "smoothedFromRoughStone": true,
+  "workToBuild": 3744.0,
+  "stats": {
+   "beauty": 2,
+   "cleanliness": 0.2
+  },
+  "affordances": [
+   "Light",
+   "Medium",
+   "Heavy"
+  ],
+  "ours": [
+   "smoothedFromRoughStone"
+  ],
+  "unverified": [
+   "workToBuild",
+   "stats"
+  ]
+ }
+]
