@@ -112,6 +112,15 @@ the size in metres it stands in, which footprint axis its long side takes, the t
 | RawBerries | food_pomegranate_01 |
 | Plant_TreeOak, Plant_TreePoplar | quiver_tree_01, pine_sapling_small (both stretched; the trees are not what the names say) |
 | Plant_Bush, Plant_Berry | shrub_02, wild_rooibos_bush (stretched) |
+| Plant_Rice, Plant_Corn, Plant_Haygrass | grass_medium_02, grass_medium_01 (tall), grass_bermuda_01 (all stretched; A6) |
+| Plant_Potato, Plant_Strawberry, Plant_Cotton, Plant_Healroot, Plant_Devilstrand | weed_plant_02, shrub_sorrel_01, shrub_03, calathea_orbifolia_01, fern_02 (stretched) |
+| TailorBenchHand, TailorBenchElectric, StonecutterTable, ButcherTable | wooden_table_03, wooden_table_01, wooden_table_03, wooden_table_02 (stretched to the footprint) |
+| FueledSmithy, Heater | scandinavian_masonry_heater; ElectricSmithy metal_tool_chest; MachiningTable and Dresser drawer_cabinet (stretched) |
+| ElectricStove, HospitalBed, CraftingSpot, ChessTable, BilliardsTable | electric_stove, old_bed_frame, wooden_cutting_board, wooden_table_01, dining_table |
+| WoodFiredGenerator, Battery, Cooler, Campfire | portable_generator, old_military_crate, exterior_aircon_unit, stone_fire_pit |
+| StandingLamp, SunLamp, TorchLamp | street_lamp_01 (two heights), vintage_oil_lamp |
+| Armchair, EndTable, PlantPot | ArmChair_01, painted_wooden_nightstand, potted_plant_01 |
+| *Still shapes* | walls, PowerConduit, PowerSwitch, SolarGenerator, WindTurbine, Vent, PassiveCooler, Column, HorseshoesPin (no fitting free model), and floors (floors are terrain defs, drawn by the terrain, not as meshes) |
 
 Wall, steel, silver, the survival pack, components, medicine, chunks and guns stay as shapes: Poly Haven has no
 plain wall or ingot, and a box already reads as both.

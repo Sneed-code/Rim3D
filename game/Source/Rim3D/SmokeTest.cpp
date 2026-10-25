@@ -1170,7 +1170,8 @@ void USmokeTestSubsystem::Tick(float DeltaTime)
 	}
 	Samples.Add({DeltaTime * 1000.0f, static_cast<float>(FPlatformTime::ToMilliseconds(GGameThreadTime)),
 		static_cast<float>(FPlatformTime::ToMilliseconds(GRenderThreadTime)), static_cast<float>(FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()))});
-	if (!bScreenshotTaken && PhaseTime >= Phase.WarmupSeconds + 1.0f)
+	// A second into the measuring, or earlier in a phase measured for less than that (the file is written a frame or two later).
+	if (!bScreenshotTaken && PhaseTime >= Phase.WarmupSeconds + FMath::Min(1.0f, Phase.MeasureSeconds * 0.6f))
 	{
 		bScreenshotTaken = true;
 		const FString Path = FPaths::ProjectSavedDir() / TEXT("Smoke") / TestName / (Phase.Name + TEXT(".png"));

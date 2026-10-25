@@ -50,8 +50,8 @@ ctest --test-dir build --output-on-failure
 python3 tools/check_defs.py
 ```
 
-GitHub Actions (`.github/workflows/sim.yml`) runs all of this on Linux for every PR, and on Windows
-(MSVC) plus the Linux/Windows replay compare after the merge on main.
+GitHub Actions (`.github/workflows/sim.yml`) runs all of this on Linux and Windows (MSVC), plus the
+Linux/Windows replay compare, for every PR. The repo is public, so minutes are free.
 Unreal-side code compiles only on sneed's PC, through a Remote Control session.
 
 ## Sim code conventions
@@ -71,12 +71,10 @@ Unreal-side code compiles only on sneed's PC, through a Remote Control session.
 - One task per thread, under about 2 hours. Branch, commit, open a PR.
 - **Merge your own PR once CI is green** (sneed's standing decision), then tell sneed in plain
   words what changed.
-- **CI minutes are scarce** (free plan: 2,000 a month, Windows counts double). Run the full build and
-  tests locally first and push once; don't push to a PR for every small fix, don't re-run green CI, and
-  merge main into your branch only when there is a real conflict. Docs-only PRs skip CI. For a risky
-  change to sim code (hashing, saves, floats, platform code) run Windows on the branch first: Actions
-  tab, Sim, Run workflow. If Actions says minutes are used up, merge on a full local pass (all ctest
-  tests and `check_defs.py`) and write "merged on local test pass, CI out of minutes" in the PR.
+- CI is free (public repo), but still: run the full build and tests locally first and push once; a
+  newer push cancels the older run, docs-only PRs skip CI. If Actions ever says minutes are used up
+  (the repo went private again), merge on a full local pass (all ctest tests and `check_defs.py`) and
+  write "merged on local test pass, CI out of minutes" in the PR.
 - Update `STATUS.md` in the same PR. New ideas from sneed go in `BACKLOG.md`.
 - Routine work: Sonnet, medium effort. Architecture, combat AI, hard bugs: Opus, high effort.
 
