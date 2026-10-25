@@ -1,0 +1,32 @@
+{
+  "source": "Garments are made from Kellan's hoodie and cargo trousers (Game Animation Sample, already morphed by PawnLooks); the cowboy hat is Poly Haven's Fishermans Hat (CC0, 1k glTF); the tuque and helmet are made in code.",
+  "note": "from: SK_Looks_m_med_nrw_<from>. drop: triangles whose vertices all weigh most on a bone with one of these words in its name are cut. inflate: cm along the normals. color: linear RGB of the flat garment material. Props are put on the head bone: size is metres [x, y, z] the mesh is fitted into, sink is cm pushed down into the head, shape cap is a cut ellipsoid with radii in cm, centre above the head's crown in cm.",
+  "armsHands": ["upperarm", "lowerarm", "hand", "thumb", "index", "middle", "ring", "pinky"],
+  "garments": [
+    {"def": "Apparel_Tribalwear", "parts": [
+      {"from": "top_hoodie_nrm_High", "drop": ["upperarm", "lowerarm", "hand", "thumb", "index", "middle", "ring", "pinky", "head"], "inflate": 0.3, "color": [0.20, 0.11, 0.05]},
+      {"from": "btm_cargopants_High", "drop": ["calf", "foot", "ball"], "inflate": 0.3, "color": [0.20, 0.11, 0.05]}]},
+    {"def": "Apparel_TShirt", "parts": [
+      {"from": "top_hoodie_nrm_High", "drop": ["lowerarm", "hand", "thumb", "index", "middle", "ring", "pinky", "head"], "inflate": 0.2, "color": [0.55, 0.55, 0.52]}]},
+    {"def": "Apparel_ButtonShirt", "parts": [
+      {"from": "top_hoodie_nrm_High", "drop": ["hand", "thumb", "index", "middle", "ring", "pinky", "head"], "inflate": 0.3, "color": [0.12, 0.2, 0.38]}]},
+    {"def": "Apparel_Pants", "parts": [
+      {"from": "btm_cargopants_High", "drop": [], "inflate": 0.3, "color": [0.1, 0.12, 0.2]}]},
+    {"def": "Apparel_Duster", "parts": [
+      {"from": "top_hoodie_nrm_High", "drop": ["head", "hand", "thumb", "index", "middle", "ring", "pinky"], "inflate": 1.6, "color": [0.28, 0.18, 0.09]},
+      {"from": "btm_cargopants_High", "drop": [], "inflate": 2.6, "color": [0.28, 0.18, 0.09]}]},
+    {"def": "Apparel_Jacket", "parts": [
+      {"from": "top_hoodie_nrm_High", "drop": ["head", "hand", "thumb", "index", "middle", "ring", "pinky"], "inflate": 1.1, "color": [0.14, 0.09, 0.05]}]},
+    {"def": "Apparel_Parka", "parts": [
+      {"from": "top_hoodie_nrm_High", "drop": [], "inflate": 2.4, "color": [0.1, 0.22, 0.12]}]},
+    {"def": "Apparel_FlakVest", "parts": [
+      {"from": "top_hoodie_nrm_High", "drop": ["upperarm", "lowerarm", "hand", "thumb", "index", "middle", "ring", "pinky", "head"], "inflate": 1.3, "color": [0.12, 0.16, 0.08]}]},
+    {"def": "Apparel_FlakPants", "parts": [
+      {"from": "btm_cargopants_High", "drop": [], "inflate": 1.2, "color": [0.12, 0.16, 0.08]}]}
+  ],
+  "props": [
+    {"def": "Apparel_CowboyHat", "id": "fishermans_hat", "size": [0.4, 0.4, 0.16], "sink": 5, "color": [0.3, 0.2, 0.1]},
+    {"def": "Apparel_Tuque", "shape": "cap", "radii": [9.8, 10.8, 10.5], "centre": -6.0, "cutBelow": -2.0, "color": [0.45, 0.08, 0.06]},
+    {"def": "Apparel_SimpleHelmet", "shape": "cap", "radii": [10.6, 11.8, 11.2], "centre": -5.5, "cutBelow": 0.0, "color": [0.15, 0.17, 0.12]}
+  ]
+}
