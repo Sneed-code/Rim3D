@@ -19,6 +19,7 @@
 #include "ColonySim/Mood.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Research.h"
+#include "ColonySim/Talents.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/Movement.h"
@@ -129,6 +130,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     recreation_ = std::make_unique<RecreationSystem>(*things_, *defs_);
     recreation_->setRooms(rooms_.get());
     research_ = std::make_unique<ResearchSystem>(*things_, *defs_);
+    talents_ = std::make_unique<TalentSystem>(*things_, *defs_);
     temperature_ = std::make_unique<TemperatureSystem>(map_, *things_, *rooms_, *health_, *defs_,
                                                        splitMix64(settings.seed ^ 0x74656D70ULL));
     temperature_->setOutdoor(outdoorTemperature());
@@ -142,9 +144,11 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setPower(power_.get());
     jobs_->setRooms(rooms_.get());
     jobs_->setResearch(research_.get());
+    jobs_->setTalents(talents_.get());
     jobs_->setFilth(filth_.get());
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
+    combat_->setTalents(talents_.get());
     fighters_->setEventLog(&events_);
     // The biome is the one the plants use; both move to the settings together.
     animals_ = std::make_unique<AnimalSystem>(*things_, map_, *plants_, *health_, *defs_, time_,
@@ -453,6 +457,14 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             event.message = unlockResearch->project;
             events_.push_back(std::move(event));
         }
+    } else if (const auto* spendTalent = std::get_if<SpendTalentPointCommand>(&command)) {
+        if (!talents_->spend(spendTalent->pawn, spendTalent->talent, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* talentXp = std::get_if<AddTalentXpCommand>(&command)) {
+        if (!talents_->addXp(talentXp->pawn, talentXp->amount, events_, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* lineage = std::get_if<SetLineageCommand>(&command)) {
         PawnLooks* looks = things_->exists(lineage->pawn) ? things_->registry().try_get<PawnLooks>(lineage->pawn) : nullptr;
         if (looks == nullptr) {
@@ -682,7 +694,13 @@ void Sim::step() {
             }
         }
     }
+    const size_t eventsBefore = events_.size();
     jobs_->step();
+    {
+        std::vector<Event> gained;
+        talents_->awardJobXp(events_, eventsBefore, gained);
+        events_.insert(events_.end(), gained.begin(), gained.end());
+    }
     fighters_->step();
     recreation_->step();
     animals_->step();
@@ -800,6 +818,21 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.zoneCells.clear();
     out.looks.clear();
     out.research.clear();
+    out.talents.clear();
+    for (const auto& [pawn, state] : talents_->states()) {
+        TalentView view;
+        view.pawn = pawn;
+        view.xp = state.xp;
+        const int earned = talents_->pointsEarned(pawn);
+        view.xpForNextPoint = earned < talents_->rules().maxPoints ? talents_->xpForPoints(earned + 1) : 0;
+        view.pointsFree = talents_->pointsFree(pawn);
+        for (const TalentDef& talent : talents_->talents()) {
+            if (const int rank = talents_->rank(pawn, talent.defName)) {
+                view.ranks.push_back(TalentRankView{talent.def, rank});
+            }
+        }
+        out.talents.push_back(std::move(view));
+    }
     for (const ResearchProject& project : research_->projects()) {
         ResearchView view;
         view.project = project.def;
@@ -1039,6 +1072,7 @@ uint64_t Sim::stateHash() const {
     h.add(mineables_->hash());
     designations_->hashState(h);
     research_->hashState(h);
+    talents_->hashState(h);
     pathfinder_.hashState(h);
     zones_->hashState(h);
     floors_->hashState(h);

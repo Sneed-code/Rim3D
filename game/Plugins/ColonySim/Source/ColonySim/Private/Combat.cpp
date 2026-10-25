@@ -4,6 +4,7 @@
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Talents.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -967,7 +968,8 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
             leadPoint(pawn, s.target, lead, fx, fy, fz);
         }
     }
-    fire(pawn, fx, fy, fz, spread(weaponDef, skill, distance, s.player) + s.recoil, rng);
+    const float steady = talents_ != nullptr ? static_cast<float>(talents_->statFactor(pawn, "aimSpread")) : 1.0f;
+    fire(pawn, fx, fy, fz, spread(weaponDef, skill, distance, s.player) * steady + s.recoil, rng);
     s.recoil += gun->recoil * std::max(0.0f, 1.0f - model_->recoilSkillReduction * static_cast<float>(skill));
     if (gun->magazine > 0) {
         Magazine& magazine = reg.get_or_emplace<Magazine>(gear->weapon, Magazine{gun->magazine});

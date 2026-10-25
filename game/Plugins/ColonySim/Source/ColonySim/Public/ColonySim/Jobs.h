@@ -158,6 +158,7 @@ class Pathfinder;
 class Plants;
 class PowerGrid;
 class ResearchSystem;
+class TalentSystem;
 class Rooms;
 class Things;
 class WorkGiver;
@@ -255,6 +256,7 @@ public:
     void setRooms(Rooms* rooms) { rooms_ = rooms; }
     void setResearch(ResearchSystem* research) { research_ = research; }
     ResearchSystem* research() const { return research_; }
+    void setTalents(const TalentSystem* talents) { talents_ = talents; }
 
     // Call before a thing is destroyed: ends the jobs that carry it or are done by it.
     void forget(Entity thing);
@@ -470,6 +472,7 @@ private:
 
     Rooms* rooms_ = nullptr;
     ResearchSystem* research_ = nullptr;
+    const TalentSystem* talents_ = nullptr;  // build speed and carrying capacity (docs/design/talents.md)
     RecreationRules recreation_;
     std::unique_ptr<BillSystem> bills_;
     const PowerGrid* power_ = nullptr;

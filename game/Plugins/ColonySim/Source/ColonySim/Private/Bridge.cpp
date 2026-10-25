@@ -89,9 +89,13 @@ const char* commandName(const Command& command) {
                 return "ShortCircuit";
             } else if constexpr (std::is_same_v<Type, SetResearchCommand>) {
                 return "SetResearch";
-            } else {
-                static_assert(std::is_same_v<Type, UnlockResearchCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, UnlockResearchCommand>) {
                 return "UnlockResearch";
+            } else if constexpr (std::is_same_v<Type, SpendTalentPointCommand>) {
+                return "SpendTalentPoint";
+            } else {
+                static_assert(std::is_same_v<Type, AddTalentXpCommand>, "name every command type");
+                return "AddTalentXp";
             }
         },
         command);
@@ -148,6 +152,7 @@ const char* eventTypeName(EventType type) {
         case EventType::PowerChanged: return "PowerChanged";
         case EventType::ShortCircuit: return "ShortCircuit";
         case EventType::ResearchDone: return "ResearchDone";
+        case EventType::TalentPoint: return "TalentPoint";
     }
     return "?";
 }

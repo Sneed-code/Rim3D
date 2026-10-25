@@ -84,6 +84,7 @@ REFERENCES = [
     ("Bonds", "deathThought", "Thoughts"),
     ("Rules", "catharsisThought", "Thoughts"),
     ("Research", "techLevel", "TechLevels"),
+    ("Talents", "requires{}", "Talents"),
     ("Research", "prerequisites[]", "Research"),
     ("Research", "hiddenPrerequisites[]", "Research"),
     ("Research", "unlocks.Things[]", "Things"),

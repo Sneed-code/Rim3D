@@ -40,6 +40,7 @@ enum class EventType : uint8_t {
     PowerChanged,    // a building gained or lost power (docs/design/power.md)
     ShortCircuit,    // a short circuit emptied a net's batteries (docs/design/power.md)
     ResearchDone,    // a research project was finished (docs/design/research.md)
+    TalentPoint,     // the protagonist earned a talent point (docs/design/talents.md)
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -105,6 +106,7 @@ struct Event {
     // def, `cell` its origin, `message` "on" (in a net that works and switched on) or "off".
     // ResearchDone: `thing` the pawn who finished it (none if a dev command did), `message` the Research
     // def's defName, `amount` its cost in points.
+    // TalentPoint: `thing` the protagonist, `def` its def, `amount` the points it can spend now.
     // ShortCircuit: `thing` the building it happened at, `cell` its origin, `amount` the energy
     // released from the net's batteries, Wd.
     float amount = 0.0f;
