@@ -10,6 +10,7 @@
 
 #include <imgui.h>
 
+#include "OrdersSubsystem.h"
 #include "OverseerPawn.h"
 #include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
@@ -357,6 +358,11 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 										Protagonist->RequestControl(View->id);
 									}
 								}
+								// Draft, stand down and the hint for move and attack orders (U7).
+								if (UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>())
+								{
+									Orders->DrawDraftControls(*View);
+								}
 							}
 							break;
 						}
@@ -403,6 +409,7 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 		ImGui::TextUnformatted("middle-drag orbit   click select");
 		ImGui::TextUnformatted("F centre   Home reset   Esc deselect");
 		ImGui::TextUnformatted("Tab take control of the selected colonist");
+		ImGui::TextUnformatted("R draft colonist / turn building   right click order");
 	}
 	ImGui::End();
 

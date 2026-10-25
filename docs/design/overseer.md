@@ -31,6 +31,7 @@ selection) and later `EnterOverseerMode` again, centred on the colonist that was
 | hold middle button, move | turn and tilt (tilt 25 to 85 degrees) |
 | left click | select the pawn, item or building under the cursor; else the ground cell; else nothing |
 | F | centre on the selection |
+| R, right click, Esc | with U7 ([orders.md](orders.md)): R drafts the selected colonist (or turns a building ghost), right click orders a drafted colonist, Esc puts a tool down before it clears the selection |
 | Home | reset distance, tilt and turn |
 | Esc | clear the selection |
 | Tab | take control of the selected colonist (else the protagonist): direct mode, see [protagonist.md](protagonist.md). The inspect panel has the same as a button |
@@ -59,7 +60,7 @@ bigger box here rather than using Unreal collision.
 ## Selection
 
 One selection at a time: a thing (`FSimPick::Thing`) or a cell (`FSimPick::Cell`).
-`UOverseerSubsystem::Select` and `ClearSelection` change it; U7 (orders) will read it for draft and
+`UOverseerSubsystem::Select` and `ClearSelection` change it; U7 ([orders.md](orders.md)) reads it for draft and
 move orders. A selected thing that leaves the map (picked up, destroyed) clears itself. The
 selection is a white box around a thing (cyan line along a pawn's route ahead) or a yellow outline
 on the ground for a cell, drawn with debug lines until U4 has real highlight materials.

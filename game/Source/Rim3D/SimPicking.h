@@ -50,4 +50,8 @@ namespace SimPicking
 
 	/** The nearest thing along the ray; else the ground cell it lands on; else nothing. */
 	FSimPick PickFromRay(const USimSubsystem& Bridge, const FVector& Origin, const FVector& Direction);
+
+	/** The ground cell the ray lands on, ignoring every thing in the way (a cell for a drag of the architect menu, docs/design/orders.md);
+	 *  a Cell pick with its Location, or none. */
+	FSimPick PickGroundFromRay(const USimSubsystem& Bridge, const FVector& Origin, const FVector& Direction);
 }

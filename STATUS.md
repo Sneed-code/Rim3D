@@ -60,6 +60,8 @@ make them again). Everyone still has Kellan's face and outfit.
 
 Since U4 the game draws buildings and items (`docs/design/building-draw.md`, smoke test `buildings`): `UBuildingSubsystem` reads the snapshot and keeps one instanced mesh component per kind of thing per 32 m chunk, rebuilding only chunks whose things changed. Walls, doors, beds, stools, tables and the stove are boxes and cylinders from each def's `visual.parts`, coloured by their stuff; blueprints are blue see-through ghosts, frames rise inside their ghosts as materials arrive and work is done; a door's leaf slides into the wall as the sim's door opens and shuts; items are little piles that grow with the stack. Pieces of this are shared with the terrain's plants (`VisualMesh.*`). Ghosts use a material the `BuildingMaterials` commandlet makes (`assets/manifest.json`; the engine's own translucent materials draw black on instanced meshes). Picking uses the drawn height of a building. Everything stays on the ordinary static-mesh path, so DLSS stays possible.
 
+Since U7 the player gives orders (`docs/design/orders.md`, smoke test `orders`): `UOrdersSubsystem` holds a tool for the left mouse button. The bottom bar has Orders (Mine, Chop trees, Harvest, Deconstruct, Cancel), Zones (Stockpile, Remove zone) and one button per architect category from the defs' `designationCategory`; a building is chosen with a stuff, shown as a grid-snapped ghost that is green where it can be planned and red where it can't (R turns it; a 1 x 1 building can be dragged out along a line), and everything else is dragged out as a rectangle. The sim's marks are drawn from the snapshot as instanced meshes (orange mine, green cut, yellow harvest, red deconstruct, blue stockpile cells). R drafts the selected colonist, a right click with a drafted colonist selected is a move order (on ground) or an attack order (on a pawn of another side), drafted colonists get a red ring and lines to their spot and target, and the Alarm button drafts everyone (a placeholder until F6's defence plans). Orders given while the game is paused make the sim step once so they show. Esc puts a tool down before it clears the selection. No sim changes.
+
 Since U3 the game draws the ground and plants (`docs/design/terrain.md`, smoke test `world`): `UTerrainSubsystem` starts
 by itself with any sim and builds one mesh per 32 m chunk (a 1 km map is 32 x 32 chunks, about 220 ms
 to build). The ground has a vertex per cell corner at the sim's height, coloured by terrain type and soil fertility; **rock stands on it as a
@@ -201,7 +203,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-32 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, C7). Tick tasks in `docs/plans/stage-1.md` as they merge.
+33 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -249,7 +251,7 @@ sand, the doc says why). ~~**C1** job system~~ done (`docs/design/jobs.md`; save
 actions too). ~~**U6** overseer camera and selection~~ done (PC Unreal;
 smoke test `overseer`; `docs/design/overseer.md`). ~~**U9** protagonist~~ done (PC Unreal; smoke test
 `protagonist`; `docs/design/protagonist.md`; save format 7). ~~**U3** terrain and plants~~ done (PC Unreal; smoke test `world`;
-`docs/design/terrain.md`); ~~**U4** buildings and items~~ done (PC Unreal; smoke test `buildings`; `docs/design/building-draw.md`); **A2** terrain materials (needs sneed's Megascans) is open now.
+`docs/design/terrain.md`); ~~**U4** buildings and items~~ done (PC Unreal; smoke test `buildings`; `docs/design/building-draw.md`); ~~**U7** orders~~ done (PC Unreal; smoke test `orders`; `docs/design/orders.md`); **A2** terrain materials (needs sneed's Megascans) is open now.
 
 Wave 6, open now that C1 is in: ~~**C4** building~~ done (`docs/design/construction.md`; save format 10; ~~**C5** doors,
 roofs and rooms~~ done (`docs/design/rooms.md`; save format 13), ~~**C7** bills and cooking~~ done (`docs/design/bills.md`; save format 18; **U8** colony panels
