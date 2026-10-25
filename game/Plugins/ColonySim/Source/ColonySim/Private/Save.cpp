@@ -9,10 +9,13 @@
 #include "ColonySim/Doors.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Filth.h"
+#include "ColonySim/Floors.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Designations.h"
+#include "ColonySim/RoomStats.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Mineables.h"
@@ -257,6 +260,12 @@ struct SaveDesignations {
     std::vector<uint8_t> kinds;
 };
 
+// A floor laid on a cell (section "roomstats").
+struct SaveFloor {
+    uint32_t cell = 0;
+    std::string def;  // Terrain defName
+};
+
 struct SavePending {
     uint64_t id = 0;
     Command command;
@@ -291,6 +300,11 @@ struct SaveData {
     bool hasRock = false;              // the file has the rock layer (format 12 on); older saves keep the generated one
     SaveMineables mineables;           // format 12 on
     SaveDesignations designations;     // format 12 on
+    // Section "roomstats" (C17): floors, filth, what pawns carry on their shoes, beauty needs.
+    bool hasRoomStats = false;
+    std::vector<SaveFloor> floors;
+    FilthState filth;
+    RoomStatsState roomStats;
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -888,6 +902,15 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.require(setBill->mode <= BillMode::Forever, "the save file has a bad bill mode");
                 ar.value("count", setBill->count);
                 ar.value("suspended", setBill->suspended);
+            } else if constexpr (std::is_same_v<Type, PlaceFloorCommand>) {
+                auto* place = &c;
+                ar.group("area", [&] { saveRect(ar, place->area); });
+                ar.text("floor", place->floor);
+            } else if constexpr (std::is_same_v<Type, AddFilthCommand>) {
+                auto* add = &c;
+                ar.group("cell", [&] { saveCell(ar, add->cell); });
+                ar.text("kind", add->kind);
+                ar.value("layers", add->layers);
             } else if constexpr (std::is_same_v<Type, HandsOnCommand>) {
                 auto* hands = &c;
                 ar.value("pawn", hands->pawn);
@@ -1047,7 +1070,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::Recreate, "the save file has a bad job");
+    ar.require(job.type <= JobType::CleanFilth, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -1493,6 +1516,36 @@ void saveDesignations(Ar& ar, SaveDesignations& d) {
     ar.require(d.cells.size() == d.kinds.size(), "the save file's designation lists don't match");
 }
 
+template <typename Ar>
+void saveRoomStatsSection(Ar& ar, SaveData& d) {
+    d.hasRoomStats = true;
+    ar.list("floors", d.floors, [&](SaveFloor& f) {
+        ar.value("cell", f.cell);
+        ar.text("def", f.def);
+    });
+    ar.list("filth", d.filth.piles, [&](FilthState::Entry& e) {
+        ar.value("cell", e.cell);
+        ar.text("kind", e.kind);
+        ar.value("thickness", e.thickness);
+    });
+    ar.list("carriers", d.filth.carriers, [&](FilthState::Carrier& c) {
+        ar.value("pawn", c.pawn);
+        ar.value("lastCell", c.lastCell);
+        ar.list("carried", c.carried, [&](std::pair<std::string, int>& p) {
+            ar.text("kind", p.first);
+            ar.value("count", p.second);
+        });
+    });
+    ar.value("filthRngState", d.filth.rngState);
+    ar.value("filthRngIncrement", d.filth.rngIncrement);
+    ar.list("beautyNeeds", d.roomStats.needs, [&](RoomStatsState::Need& n) {
+        ar.value("pawn", n.pawn);
+        ar.value("level", n.level);
+        ar.value("perceived", n.perceived);
+        ar.value("sampledAt", n.sampledAt);
+    });
+}
+
 // Formats 6 to 19, read only: one long layout, each format adding to it.
 template <typename Ar>
 void saveLegacyData(Ar& ar, SaveData& d) {
@@ -1749,6 +1802,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("recreation", 1, [&] {
         saveParts(ar, "joy", e, &SaveEntity::joy, [&](SaveJoy& j) { saveJoyPart(ar, j); });
     });
+    ar.section("roomstats", 1, [&] { saveRoomStatsSection(ar, d); });
     // New sections go here, at the end.
 }
 
@@ -2066,6 +2120,12 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         d.designations.cells.push_back(static_cast<uint32_t>(cell));
         d.designations.kinds.push_back(static_cast<uint8_t>(kind));
     }
+    d.hasRoomStats = true;
+    for (const auto& [cell, def] : sim.floors_->all()) {
+        d.floors.push_back(SaveFloor{static_cast<uint32_t>(cell), sim.defs_->get(def).defName()});
+    }
+    d.filth = sim.filth_->state();
+    d.roomStats = sim.roomStats_->state();
     return d;
 }
 
@@ -2516,9 +2576,23 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             setDoorSight(sim.map_, footprint, true);
         }
     }
+    if (d.hasRoomStats) {
+        std::vector<std::pair<int, DefId>> floors;
+        for (const SaveFloor& f : d.floors) {
+            floors.emplace_back(static_cast<int>(f.cell), sim.defs_->idOf("Terrain", f.def));
+        }
+        if (!sim.floors_->restore(floors)) {
+            error = "the save has a floor the data files can't place";
+            return false;
+        }
+        if (!sim.filth_->restore(d.filth, error) || !sim.roomStats_->restore(d.roomStats, error)) {
+            return false;
+        }
+    }
     sim.rooms_->update();
     sim.power_->markDirty();
     sim.power_->update();
+    sim.roomStats_->refresh();
     sim.events_.clear();
     return true;
 }

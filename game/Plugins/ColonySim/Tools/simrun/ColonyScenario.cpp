@@ -5,6 +5,8 @@
 #include "ColonySim/Construction.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Events.h"
+#include "ColonySim/Filth.h"
+#include "ColonySim/Floors.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Mood.h"
@@ -13,6 +15,7 @@
 #include "ColonySim/Plants.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Regions.h"
+#include "ColonySim/RoomStats.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
@@ -184,6 +187,9 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         sim.submit(PlaceBlueprintCommand{p.defName, p.stuff, p.cell, p.rot});
     }
     const CellRect roomRect{origin.x, origin.y, kRoomWidth, kRoomHeight, 0};
+    // A wood floor inside the room (C17): dirt tracked in from the bare ground gets dropped on it,
+    // and the colonists clean it.
+    sim.submit(PlaceFloorCommand{CellRect{origin.x + 1, origin.y + 1, kRoomWidth - 2, kRoomHeight - 2, 0}, "WoodFloor"});
 
     // The marks: the nearest rock, trees and berry bushes the colonists can walk up to.
     struct Candidate {
@@ -255,6 +261,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     uint64_t felled = 0;
     uint64_t picked = 0;
     uint64_t mealsMade = 0;
+    uint64_t cleaned = 0;
     uint64_t commandsFailed = 0;
     uint64_t recreations = 0;  // recreation jobs started
     uint64_t pinGames = 0;     // ... of them at the horseshoes pin
@@ -295,6 +302,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 case EventType::CellMined: ++mined; break;
                 case EventType::PlantRemoved: ++felled; break;
                 case EventType::PlantHarvested: ++picked; break;
+                case EventType::PawnAction: cleaned += e.action == PawnAction::Clean ? 1 : 0; break;
                 case EventType::RecipeDone: mealsMade += static_cast<uint64_t>(std::max(0.0f, e.amount)); break;
                 case EventType::CommandFailed:
                     ++commandsFailed;
@@ -453,6 +461,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         expectedDoors += p.defName == "Door" ? 1 : 0;
     }
 
+    const RoomStatValues* roomStat = sim.roomStats().statsAt(CellPos{origin.x + 2, origin.y + 2, 0});
     std::printf("{\"colony\":{\"seed\":%llu,\"size\":%d,\"days\":%.2f,\"colonists\":%zu,\"died\":%llu,"
                 "\"minFood\":%.3f,\"maxMalnutrition\":%.3f,\"minRest\":%.3f,\"minMood\":%.1f,"
                 "\"stuckMinutesWorst\":%lld,\"idleMinutesWorst\":%lld,"
@@ -462,6 +471,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 "\"planned\":%zu,\"walls\":%d,\"doors\":%d,\"beds\":%d,\"tables\":%d,\"stools\":%d,\"stoves\":%d,\"unfinished\":%d,"
                 "\"allBuiltAtSecond\":%lld,\"stoveBuiltAtSecond\":%lld,\"roomOk\":%s,"
                 "\"mealsCooked\":%llu,\"ate\":%llu,\"atTable\":%llu,\"woke\":%llu,\"wokeInBed\":%llu,"
+                "\"cleaned\":%llu,\"filthLeft\":%zu,\"roomBeauty\":%.2f,\"roomImpressiveness\":%.1f,"
                 "\"commandsFailed\":%llu,\"failedJobs\":%llu,\"stateHash\":\"%016llx\"}}\n",
                 static_cast<unsigned long long>(seed), mapSize, days, colonists.size(), static_cast<unsigned long long>(died),
                 static_cast<double>(minFood), static_cast<double>(maxMalnutrition), static_cast<double>(minRest),
@@ -475,8 +485,10 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 static_cast<long long>(allBuiltAt), static_cast<long long>(stoveBuiltAt), bedroomsRoofed == 1 ? "true" : "false",
                 static_cast<unsigned long long>(mealsMade), static_cast<unsigned long long>(ate),
                 static_cast<unsigned long long>(atTable), static_cast<unsigned long long>(slept),
-                static_cast<unsigned long long>(sleptInBed), static_cast<unsigned long long>(commandsFailed),
-                static_cast<unsigned long long>(sim.stats().failedJobs), static_cast<unsigned long long>(sim.stateHash()));
+                static_cast<unsigned long long>(sleptInBed), static_cast<unsigned long long>(cleaned), sim.filth().totalLayers(),
+                roomStat ? static_cast<double>(roomStat->beauty) : 0.0, roomStat ? static_cast<double>(roomStat->impressiveness) : 0.0,
+                static_cast<unsigned long long>(commandsFailed), static_cast<unsigned long long>(sim.stats().failedJobs),
+                static_cast<unsigned long long>(sim.stateHash()));
 
     // The checks.
     int failures = 0;
@@ -522,6 +534,13 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     if (recreations == 0 || pinGames == 0) {
         fail("colonists started %llu recreation jobs, %llu at the horseshoes pin", static_cast<unsigned long long>(recreations),
              static_cast<unsigned long long>(pinGames));
+    }
+    if (sim.filth().totalLayers() > 12) {
+        fail("%zu layers of filth lie about (cleaned %llu): nobody keeps up with the dirt", sim.filth().totalLayers(),
+             static_cast<unsigned long long>(cleaned));
+    }
+    if (roomStat == nullptr) {
+        fail("%s", "the room has no stats");
     }
     if (commandsFailed > 0 || sim.stats().failedJobs > 0) {
         fail("%llu commands and %llu jobs failed", static_cast<unsigned long long>(commandsFailed),

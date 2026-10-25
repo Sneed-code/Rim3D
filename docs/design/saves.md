@@ -269,6 +269,8 @@ sneed's whole job for a bug is: press F8, then send the folder (zip it, or drop 
 Every section is version 1 at format 20. A task that changes a section adds a line here, e.g.
 "`fighters` 2 (F9): ...". New sections are listed in the table above.
 
+- `roomstats` 1 (C17): floors, filth, carried filth, the filth rng, beauty needs ([room-stats.md](room-stats.md)). Commands `PlaceFloor` and `AddFilth` by name.
+
 ## Why the state hash changed in S6
 
 `Sim::stateHash` used to hash live things in the order the entity registry happened to hold them,

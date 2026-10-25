@@ -291,6 +291,24 @@ struct HandsOnCommand {
     CellPos cell;
 };
 
+// Lays a floor (a Terrain def whose designationCategory is Floors, by defName) on every cell of `area`
+// that can take one (walkable ground), replacing what is there; an empty `floor` takes floors off
+// instead. Instant for now: the architect's floor tool and the work to lay one come later
+// (docs/design/room-stats.md). Fails if no cell changed or the floor is unknown.
+struct PlaceFloorCommand {
+    CellRect area;
+    std::string floor;
+};
+
+// Dev command: adds `layers` of filth (a Filth defName: Dirt, Blood, Ash...) to a cell. Fires, fights
+// and spills make filth through the sim; this is for tests and the console. Fails for an unknown kind
+// or a cell that can't hold filth (rock, water, a wall) or is already as thick as it gets.
+struct AddFilthCommand {
+    CellPos cell;
+    std::string kind;
+    int layers = 1;
+};
+
 // How far from the edge of a rock, plant, frame or item a controlled colonist can work on it, in metres.
 inline constexpr float kHandsOnReach = 2.0f;
 
@@ -316,7 +334,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ShootCommand, SetStanceCommand, DesignateCommand, CancelDesignationsCommand,
                              DraftCommand, MoveOrderCommand, AttackOrderCommand, SetFactionCommand, SetLineageCommand,
                              ReloadCommand, AddBillCommand,
-                             RemoveBillCommand, SetBillCommand, HandsOnCommand, FlickCommand, ShortCircuitCommand>;
+                             RemoveBillCommand, SetBillCommand, HandsOnCommand, FlickCommand, ShortCircuitCommand,
+                             PlaceFloorCommand, AddFilthCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

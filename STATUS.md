@@ -260,6 +260,7 @@ Stage 2 done so far: **D7** medicine and disease data (`docs/design/medicine-dat
 **D12** research data (22 projects, tech levels, two research benches, content gated by `researchPrerequisite`: `docs/design/research-data.md`).
 
 D9 (thoughts, recreation, mental break and social data) is in: `docs/design/thoughts-data.md`. Data only; C15, C17, C18, C19, C20, E2 and E3 read it.
+**C17** room stats, beauty and filth (`docs/design/room-stats.md`): floors and filth layers, a cleaning job (indoors only for now), space, beauty, wealth, cleanliness and impressiveness by RimWorld's formulas, the beauty need and the room thoughts. Floors come only by `PlaceFloor` command: no floor-building job exists in any plan task yet (BACKLOG). Save section `roomstats` 1.
 
 
 ## Next

@@ -59,6 +59,12 @@ says so (`message` the new band, `amount` the mood). Nothing happens yet: mental
 - **Events:** `PawnMoodBand`.
 - **Read:** `sim.mood().thoughts(pawn, seconds)`, `target`, `breakLevels`.
 
+## Staged situations (C17)
+
+A thought with `condition`, `stageThresholds` and `stages` is one thought whose stage follows a value
+from `RoomStats::conditionValue` (beauty need, room space, impressiveness, cleanliness, shared
+bedroom). See [room-stats.md](room-stats.md).
+
 ## Save format 11
 
 `Mood` (level, band, memories by thought `defName` and fade time) is saved per pawn; formats 6 to 10
@@ -75,6 +81,6 @@ list says where each stage ends, and the stage's `moodOffset` counts. A conditio
 
 ## Not yet
 
-Mental breaks, inspirations, ideology and precepts; thoughts from pain, injuries, rooms, beauty,
+Mental breaks, inspirations, ideology and precepts; thoughts from pain, injuries,
 temperature, joy, relationships, other pawns' deaths, passions at work (`SkillRules.passionMood` is read by
 nothing yet); social and mood stacking beyond one of each; thoughts from traits' `moodWithRangedWeapon`.

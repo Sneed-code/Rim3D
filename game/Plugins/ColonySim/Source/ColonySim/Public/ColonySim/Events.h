@@ -68,6 +68,7 @@ enum class PawnAction : uint8_t {
     Reload,   // started reloading the gun `target` (docs/design/aiming.md); it is ready again when shotReadyIn is 0
     Dodge,    // sidestepped into `cell` out of the way of the projectile `target`
     Cook,         // started work on a bill at `target`, a work building (once per run of the bill)
+    Clean,        // started cleaning the filth in `cell`; a layer comes off every few seconds until its JobEnded
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.

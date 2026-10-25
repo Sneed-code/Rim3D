@@ -67,6 +67,7 @@ gives no work; the tasks with scanners so far:
 | `ConstructFinishFrames` | Construction | frames with all their materials |
 | `Deconstruct` | Construction | buildings marked for deconstruction |
 | `DoBillsCookStove` | Cooking | work buildings with a bill to do ([bills.md](bills.md)) |
+| `CleanFilth` | Cleaning | the nearest filthy cell indoors ([room-stats.md](room-stats.md)); job `CleanFilth`, steps GotoCell, CleanWork |
 
 C3 adds `Mine` and `CutOrHarvestDesignatedPlants`
 and so on: a class deriving from `WorkGiver` in `WorkGivers.cpp`, added in `makeWorkGivers`.

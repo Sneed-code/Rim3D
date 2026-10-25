@@ -27,6 +27,9 @@ namespace colony {
 
 class Construction;
 class DefDatabase;
+class Filth;
+class Floors;
+class RoomStats;
 struct Colonist;
 struct PawnLooks;
 class Designations;
@@ -173,6 +176,13 @@ public:
     // Light and darkness (docs/design/light.md). Brought up to date at the end of every step.
     Lights& lights() { return *lights_; }
     const Lights& lights() const { return *lights_; }
+    // Floors, filth, room stats and the beauty need (docs/design/room-stats.md).
+    Floors& floors() { return *floors_; }
+    const Floors& floors() const { return *floors_; }
+    Filth& filth() { return *filth_; }
+    const Filth& filth() const { return *filth_; }
+    RoomStats& roomStats() { return *roomStats_; }
+    const RoomStats& roomStats() const { return *roomStats_; }
 
     // Stockpile zones (docs/design/jobs.md).
     const Zones& zones() const { return *zones_; }
@@ -248,6 +258,9 @@ private:
     std::unique_ptr<Construction> construction_;
     std::unique_ptr<JobSystem> jobs_;  // after everything it holds a reference to
     std::unique_ptr<FighterSystem> fighters_;  // after the job system
+    std::unique_ptr<Floors> floors_;           // C17; filth and room stats read the floors
+    std::unique_ptr<Filth> filth_;
+    std::unique_ptr<RoomStats> roomStats_;
     std::vector<std::string> setupErrors_;
     std::vector<std::pair<uint64_t, Command>> pending_;  // id, command
     uint64_t submitted_ = 0;

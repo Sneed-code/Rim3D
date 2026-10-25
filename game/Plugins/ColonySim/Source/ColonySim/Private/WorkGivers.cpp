@@ -4,10 +4,12 @@
 #include "ColonySim/Bills.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Designations.h"
+#include "ColonySim/Filth.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Regions.h"
+#include "ColonySim/Rooms.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -405,6 +407,42 @@ private:
     }
 };
 
+// Cleaning filth (RimWorld's WorkGiver_CleanFilth, in the Cleaning work type): any cell indoors with
+// filth in it. Outdoor filth waits for the home area, which RimWorld's cleaners are limited to.
+class CleanFilthGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "CleanFilth"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        Filth* filth = jobs.filth();
+        Rooms* rooms = jobs.rooms();
+        if (filth == nullptr || rooms == nullptr || filth->cellCount() == 0 || !jobs.canUseHands(pawn)) {
+            return;
+        }
+        const Position& at = jobs.things().registry().get<Position>(pawn);
+        for (const auto& [index, piles] : filth->all()) {
+            (void)piles;
+            const CellPos cell = jobs.map().cellAt(index);
+            if (cell.level != at.level || !rooms->indoors(cell)) {
+                continue;
+            }
+            const float dx = static_cast<float>(cell.x) + 0.5f - at.x;
+            const float dy = static_cast<float>(cell.y) + 0.5f - at.y;
+            out.push_back(WorkCandidate{JobTarget{kNoEntity, cell}, dx * dx + dy * dy, 0, 0, false, CellPos{}});
+        }
+    }
+
+    bool makeJob(JobSystem& jobs, Entity, const WorkCandidate& candidate, Job& out) override {
+        if (jobs.filth() == nullptr || !jobs.filth()->has(candidate.target.cell)) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::CleanFilth;
+        out.cell = candidate.target.cell;
+        return true;
+    }
+};
+
 }  // namespace
 
 bool makeHaulJob(JobSystem& jobs, Entity pawn, Entity item, Job& out) {
@@ -432,6 +470,7 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<MineGiver>());
     givers.push_back(std::make_unique<CutOrHarvestPlantsGiver>());
     givers.push_back(std::make_unique<DoBillsCookStoveGiver>());
+    givers.push_back(std::make_unique<CleanFilthGiver>());
     return givers;
 }
 

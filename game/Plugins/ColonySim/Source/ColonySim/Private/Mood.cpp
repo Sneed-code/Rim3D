@@ -7,6 +7,7 @@
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Recreation.h"
+#include "ColonySim/RoomStats.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Things.h"
 
@@ -100,6 +101,25 @@ MoodSystem::MoodSystem(Things& things, const NeedsSystem& needs, const DefDataba
         thought.trigger = def.text("trigger");
         thought.need = def.text("situation.need");
         thought.band = def.text("situation.band");
+        thought.condition = def.text("situation.condition");
+        if (!thought.condition.empty()) {
+            for (size_t i = 0; i < def.count("stageThresholds"); ++i) {
+                thought.thresholds.push_back(static_cast<float>(def.numberAt("stageThresholds", i)));
+            }
+            for (size_t i = 0; i < def.count("roomRoles"); ++i) {
+                thought.roomRoles.push_back(def.textAt("roomRoles", i));
+            }
+            for (size_t i = 0; i < def.count("stages"); ++i) {
+                const std::string path = "stages." + std::to_string(i);
+                Thought::Stage stage;
+                stage.offset = moodFloat(def, (path + ".moodOffset").c_str(), 0.0f);
+                stage.label = def.text((path + ".label").c_str());
+                for (size_t r = 0; r < def.count((path + ".roles").c_str()); ++r) {
+                    stage.roles.push_back(def.textAt((path + ".roles").c_str(), r));
+                }
+                thought.stages.push_back(std::move(stage));
+            }
+        }
         thoughts_.push_back(std::move(thought));
 
         StagedThought staged;
@@ -221,6 +241,33 @@ std::vector<ThoughtView> MoodSystem::thoughts(Entity pawn, int64_t now) const {
         const Def& def = defs_.get(staged.def);
         out.push_back(ThoughtView{def.defName(), staged.labels[stage].empty() ? def.label() : staged.labels[stage],
                                   staged.offsets[stage], true, 0});
+    }
+    // Staged situations that read the pawn's room or its beauty need (C17).
+    if (roomStats_ != nullptr) {
+        for (const Thought& thought : thoughts_) {
+            double value = 0.0;
+            RoomRole role = RoomRole::None;
+            if (thought.condition.empty() || thought.stages.empty() || !roomStats_->conditionValue(pawn, thought.condition, value, role)) {
+                continue;
+            }
+            const auto listed = [](const std::vector<std::string>& roles, RoomRole r) {
+                return roles.empty() || std::find(roles.begin(), roles.end(), roomRoleName(r)) != roles.end();
+            };
+            if (!listed(thought.roomRoles, role)) {
+                continue;
+            }
+            size_t stage = 0;
+            while (stage < thought.thresholds.size() && value >= static_cast<double>(thought.thresholds[stage])) {
+                ++stage;
+            }
+            stage = std::min(stage, thought.stages.size() - 1);
+            const Thought::Stage& picked = thought.stages[stage];
+            if (picked.offset == 0.0f || !listed(picked.roles, role)) {
+                continue;
+            }
+            const Def& def = defs_.get(thought.def);
+            out.push_back(ThoughtView{def.defName(), def.label() + ": " + picked.label, picked.offset, true, 0});
+        }
     }
     if (const Mood* mood = reg.try_get<Mood>(pawn)) {
         for (const Memory& memory : mood->memories) {
