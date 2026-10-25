@@ -1,4 +1,4 @@
-﻿{
+{
   "source": "Poly Haven (https://polyhaven.com), CC0, 1k glTF",
   "sizeNote": "size is metres [x, y, z] of the box the mesh is fitted into (same proportions) and stands in; stretch scales each axis on its own. long says which footprint axis the mesh's long side goes along. tris is the triangle count the commandlet reduces it to.",
   "meshes": [

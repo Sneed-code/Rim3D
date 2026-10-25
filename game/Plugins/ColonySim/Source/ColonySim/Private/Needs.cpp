@@ -61,6 +61,10 @@ NeedRules NeedRules::read(const DefDatabase& defs) {
     r.wakeOutsideSleepAt = needsFloat(*def, "rest.wakeOutsideSleepAt", r.wakeOutsideSleepAt);
     r.sleepFromHour = std::clamp(static_cast<int>(def->integer("schedule.sleepFromHour", r.sleepFromHour)), 0, 23);
     r.sleepToHour = std::clamp(static_cast<int>(def->integer("schedule.sleepToHour", r.sleepToHour)), 0, 23);
+    if (const Def* joy = defs.find("Rules", "JoyRules"); joy != nullptr && joy->count("joyHours") >= 2) {
+        r.joyFromHour = std::clamp(static_cast<int>(joy->numberAt("joyHours", 0, -1)), 0, 23);
+        r.joyToHour = std::clamp(static_cast<int>(joy->numberAt("joyHours", 1, -1)), 0, 23);
+    }
     return r;
 }
 
@@ -69,7 +73,9 @@ Schedule NeedRules::standardSchedule() const {
     for (int hour = 0; hour < 24; ++hour) {
         const bool sleeps = sleepFromHour <= sleepToHour ? (hour >= sleepFromHour && hour <= sleepToHour)
                                                          : (hour >= sleepFromHour || hour <= sleepToHour);
-        schedule.hours[static_cast<size_t>(hour)] = sleeps ? ScheduleKind::Sleep : ScheduleKind::Anything;
+        const bool joys = joyFromHour >= 0 && (joyFromHour <= joyToHour ? (hour >= joyFromHour && hour <= joyToHour)
+                                                                        : (hour >= joyFromHour || hour <= joyToHour));
+        schedule.hours[static_cast<size_t>(hour)] = sleeps ? ScheduleKind::Sleep : joys ? ScheduleKind::Joy : ScheduleKind::Anything;
     }
     return schedule;
 }

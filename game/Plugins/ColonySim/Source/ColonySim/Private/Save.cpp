@@ -7,6 +7,7 @@
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Doors.h"
+#include "ColonySim/Power.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
@@ -16,6 +17,7 @@
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
+#include "ColonySim/Recreation.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
 #include "ColonySim/Zones.h"
@@ -180,6 +182,13 @@ struct SaveProjectile {
     Projectile p;
 };
 
+// A colonist's recreation, comfort and outdoors needs, with the activity of its recreation job by
+// defName (section "recreation").
+struct SaveJoy {
+    Joy joy;
+    std::string activity;  // RecreationActivities defName, empty without a recreation job
+};
+
 struct SaveEntity {
     uint32_t id = 0;
     std::optional<SaveThing> thing;
@@ -212,6 +221,8 @@ struct SaveEntity {
     std::optional<PawnLooks> looks;  // format 16 on
     std::optional<Magazine> magazine;  // format 17 on
     std::optional<SaveBillList> bills;      // format 18 on
+    std::optional<PowerPart> power;         // section "power"
+    std::optional<SaveJoy> joy;             // section "recreation"
 };
 
 // A stockpile zone, with its filter by defName.
@@ -884,6 +895,11 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.require(hands->mode <= HandsOnMode::Stop, "the save file has a bad hands-on mode");
                 ar.value("thing", hands->thing);
                 ar.group("cell", [&] { saveCell(ar, hands->cell); });
+            } else if constexpr (std::is_same_v<Type, FlickCommand>) {
+                ar.value("thing", c.thing);
+                ar.value("on", c.on);
+            } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
+                ar.value("thing", c.thing);
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }
@@ -1031,7 +1047,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::DoBill, "the save file has a bad job");
+    ar.require(job.type <= JobType::Recreate, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -1220,6 +1236,22 @@ void saveMoodPart(Ar& ar, Mood& m) {
 }
 
 template <typename Ar>
+void saveJoyPart(Ar& ar, SaveJoy& j) {
+    ar.value("level", j.joy.level);
+    ar.value("comfort", j.joy.comfort);
+    ar.value("outdoors", j.joy.outdoors);
+    ar.require(j.joy.level >= 0.0f && j.joy.level <= 1.0f && j.joy.comfort >= 0.0f && j.joy.comfort <= 1.0f &&
+                   j.joy.outdoors >= 0.0f && j.joy.outdoors <= 1.0f,
+               "the save file has an impossible need");
+    ar.list("tolerance", j.joy.tolerance, [&](JoyTolerance& t) {
+        ar.text("kind", t.kind);
+        ar.value("amount", t.amount);
+        ar.require(t.amount >= 0.0f && t.amount <= 1.0e3f, "the save file has an impossible tolerance");
+    });
+    ar.text("activity", j.activity);
+}
+
+template <typename Ar>
 void savePosturePart(Ar& ar, Posture& p) {
     ar.value("stance", p.stance);
     ar.value("facingX", p.facingX);
@@ -1280,6 +1312,16 @@ void saveDoorPart(Ar& ar, Door& d) {
     ar.value("hold", d.hold);
     ar.value("open", d.open);
 
+}
+
+template <typename Ar>
+void savePowerPart(Ar& ar, PowerPart& part) {
+    ar.value("on", part.on);
+    ar.value("powered", part.powered);
+    ar.value("stored", part.stored);
+    ar.require(part.stored >= 0.0 && part.stored < 1e9, "the save file has a battery with impossible charge");
+    ar.value("draw", part.draw);
+    ar.require(part.draw == part.draw && part.draw < 1e9, "the save file has an impossible power draw");
 }
 
 template <typename Ar>
@@ -1701,6 +1743,12 @@ void saveSections(Ar& ar, SaveData& d) {
         saveMineables(ar, d.mineables);
         saveDesignations(ar, d.designations);
     });
+    ar.section("power", 1, [&] {
+        saveParts(ar, "power", e, &SaveEntity::power, [&](PowerPart& part) { savePowerPart(ar, part); });
+    });
+    ar.section("recreation", 1, [&] {
+        saveParts(ar, "joy", e, &SaveEntity::joy, [&](SaveJoy& j) { saveJoyPart(ar, j); });
+    });
     // New sections go here, at the end.
 }
 
@@ -1866,6 +1914,15 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             w.avoid = worker->avoid;
             out.worker = std::move(w);
         }
+        if (const Joy* joy = reg.try_get<Joy>(e)) {
+            SaveJoy saved;
+            saved.joy = *joy;
+            const Worker* worker = reg.try_get<Worker>(e);
+            if (worker != nullptr && worker->job.activity.valid()) {
+                saved.activity = sim.defs_->get(worker->job.activity).defName();
+            }
+            out.joy = std::move(saved);
+        }
         if (const WorkSettings* work = reg.try_get<WorkSettings>(e)) {
             SaveWorkSettings w;
             for (const WorkPriority& entry : work->entries) {
@@ -1881,6 +1938,11 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const Door* door = reg.try_get<Door>(e)) {
             out.door = *door;
+        }
+        if (const PowerPart* part = reg.try_get<PowerPart>(e)) {
+            out.power = *part;
+            out.power->net = 0;  // worked out again on loading
+            out.power->watts = 0.0;
         }
         if (const Mood* mood = reg.try_get<Mood>(e)) {
             out.mood = *mood;
@@ -2099,6 +2161,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             Worker worker;
             worker.job = e.worker->job;
             worker.job.workType = DefId{};
+            worker.job.activity = DefId{};  // from the recreation section below
             if (!e.worker->workType.empty()) {
                 // A work type the data files dropped leaves the job without one; it runs on.
                 worker.job.workType = sim.defs_->idOf(kSaveWorkTypesKind, e.worker->workType);
@@ -2139,6 +2202,11 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.footprint && e.footprint->isDoor) {
             reg.emplace<Door>(entity, e.door.value_or(Door{}));  // saves before format 12: closed
+        }
+        if (e.power) {
+            reg.emplace<PowerPart>(entity, *e.power);
+        } else if (e.footprint && e.thing && sim.defs_->get(reg.get<Thing>(entity).def).has("power")) {
+            reg.emplace<PowerPart>(entity);  // saves from before the section: switched on, unpowered until the first step
         }
         if (e.schedule) {
             reg.emplace<Schedule>(entity, *e.schedule);
@@ -2275,6 +2343,15 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.magazine) {
             reg.emplace<Magazine>(entity, *e.magazine);
+        }
+        if (e.joy) {
+            reg.emplace<Joy>(entity, e.joy->joy);
+            if (!e.joy->activity.empty()) {
+                // An activity the data files dropped leaves the job without one; it ends at once.
+                if (Worker* worker = reg.try_get<Worker>(entity)) {
+                    worker->job.activity = sim.defs_->idOf("RecreationActivities", e.joy->activity);
+                }
+            }
         }
     }
     sim.health_->refreshAll();
@@ -2440,6 +2517,8 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
     }
     sim.rooms_->update();
+    sim.power_->markDirty();
+    sim.power_->update();
     sim.events_.clear();
     return true;
 }

@@ -65,6 +65,14 @@ says so (`message` the new band, `amount` the mood). Nothing happens yet: mental
 still load (the mood starts fresh). A memory whose def the data no longer has stays in the file and counts
 for nothing.
 
+## Staged situations (C18)
+
+A thought def with `situation.condition` and `stages` (D9's Thoughts2) is a situation that has several
+stages: `MoodSystem::conditionValue` measures a number for the condition (`joyNeed`, `comfortNeed`,
+`outdoorsNeed` so far, [recreation.md](recreation.md)), the def's `<condition without Need>Thresholds`
+list says where each stage ends, and the stage's `moodOffset` counts. A condition nobody measures yet
+(temperature, clothes...) gives nothing. A task that owns a condition adds its case to `conditionValue`.
+
 ## Not yet
 
 Mental breaks, inspirations, ideology and precepts; thoughts from pain, injuries, rooms, beauty,

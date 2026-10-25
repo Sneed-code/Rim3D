@@ -9,6 +9,7 @@
 #include "ColonySim/Grid.h"
 #include "ColonySim/JobType.h"
 #include "ColonySim/Looks.h"
+#include "ColonySim/Power.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Zones.h"
 
@@ -83,6 +84,10 @@ struct ThingView {
     // Mood (docs/design/mood.md): 0 to 100, else -1; the break band as a MoodBand (0 stable to 3 extreme).
     float mood = -1.0f;
     int moodBand = 0;
+    // Recreation, comfort and outdoors needs (docs/design/recreation.md): 0 empty to 1 full, else -1.
+    float joy = -1.0f;
+    float comfort = -1.0f;
+    float outdoors = -1.0f;
     // Pawns: how they hold their body and which way they face (a unit vector; +x east), the gun
     // in their hands (invalid if none) and steps until it can start a new shot (0: ready).
     // Downed pawns lie prone (docs/design/combat.md).
@@ -106,6 +111,13 @@ struct ThingView {
     bool fallingBack = false;
     // Humanlike pawns: their looks, Snapshot::looks[looks]; -1 for other things.
     int32_t looks = -1;
+    // Buildings with a power part (docs/design/power.md): whether they have power, the net they are
+    // in (Snapshot::powerNets[powerNet - 1]; 0 for none), watts now (+ generating, - drawing) and,
+    // for batteries, how full (0 to 1; -1 for other buildings).
+    PowerState power = PowerState::None;
+    uint32_t powerNet = 0;
+    float powerWatts = 0.0f;
+    float batteryFill = -1.0f;
 };
 
 // A bullet in flight (docs/design/combat.md). Unreal draws a tracer along its velocity; it
@@ -190,6 +202,7 @@ struct Snapshot {
     uint64_t roofChanges = 0;
     std::vector<ProjectileView> projectiles;  // sorted by id
     std::vector<PawnLooksView> looks;      // see ThingView::looks
+    std::vector<PowerNetView> powerNets;   // by id - 1, see ThingView::powerNet
 
     // The thing with this id, or null if it is not on the map. Binary search.
     COLONY_API const ThingView* find(Entity id) const;
