@@ -41,7 +41,13 @@ time, passes events to `OnSimEvent`, keeps the last two snapshots and blends pos
 (`GetBlendedLocation`, the one place sim metres become Unreal centimetres), loads `data/defs`, shows
 sim timings on screen, and has keys: Space pause, 1/2/3 speed, `.` step, F7 saves a replay to
 `Saved/Replays/` (the bug-replay key U12 planned). Since U6 there is an overseer camera (`-Overseer` or console `Overseer.Enter`): WASD pan, Q/E turn, wheel zoom, middle-drag orbit, click to select a pawn, thing or ground cell (picked against the sim, not Unreal collision), with an ImGui speed bar and inspect panel; ImGui is the free VesCodes plugin in `game/Plugins/ImGui/` (not in Git, `assets/manifest.json` says how to get it back) (`docs/design/overseer.md`). Since U5 every sim pawn is drawn as an actor without a movement component that follows the snapshot: the 20 nearest the camera are motion matched (Epic's motion matching run from our own C++, no Animation Blueprint; trajectory from the sim's route), the rest play walk, run and idle loops updated 20 or 8 times a second; the sim's `PawnAction` events (pick up, put down) play a short action animation; `Pawns.MetaHumans 1` draws them as MetaHumans with strand hair only up close (`docs/design/pawns.md`). Since U12 the game saves and loads: F5 quicksave, F9 quickload, an autosave every game day (three files in turn) and F8 writes a bug report folder (replay, save, readable dump, notes) to hand to the cloud (`docs/design/saves.md`, smoke test `saves`). **Every task that adds sim state must add it to the
-save** (the doc has the steps) and to the save round-trip test.
+save** (the doc has the steps) and to the save round-trip test. Since U9 you can walk a colonist yourself: Tab switches between the
+overseer view and direct mode on the protagonist (or the selected colonist), in first or third person (V), T takes over the colonist
+under the crosshair. In the sim that is two commands, `ControlPawn` and `DirectMove` (a position every step, kept out of walls); while a colonist
+is controlled its job ends and the job system and movement system leave it alone until control is let go (**a new think-list node or system
+that acts on colonists must skip pawns with `PlayerControl`**); a controlled colonist who goes down or dies is let go. Direct mode holds the game at
+1x or paused. Start it with `-SimScenario=Crashlanded -Direct` (the game's default start still has no colonists); save format 7
+(`docs/design/protagonist.md`, smoke test `protagonist`).
 
 Since F1 every pawn with a body (`race.body`) has per-part health: the Human body's 64 parts, injuries
 with pain and bleeding, blood loss, downed (pain shock, unconscious, can't move) and death, slow natural
@@ -74,7 +80,7 @@ the job down when it gets hungry or tired. Starving kills (`DeathCause::Starvati
 snapshot has `food`, `rest`, `asleep`. Needs exist only where the data has a `NeedRules` def. The Crashlanded
 colonists eat through their starting food in about 5 days and begin to starve around day 8, so **farming (C2, C3) and cooking (C7) are now the way to
 keep them alive**. Beds, tables and chairs are C4's defs: it reads `building.bed`, `building.isTable`,
-`building.isSittable` and `stats.bedRestEffectiveness`. Save format 7 (format 6 still loads).
+`building.isSittable` and `stats.bedRestEffectiveness`. Save format 8 (formats 6 and 7 still load).
 
 Since D3 the game has real starting data in `data/defs/`, written by hand with RimWorld's numbers
 from the RimWorld wiki (there is no RimWorld install to import from; `docs/decisions/0003`):
@@ -93,7 +99,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-19 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, C6). Tick tasks in `docs/plans/stage-1.md` as they merge.
+20 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -138,13 +144,14 @@ sand, the doc says why). ~~**C1** job system~~ done (`docs/design/jobs.md`; save
 `JobType`, their steps and a `WorkGiver`, the doc says how). ~~**U5** pawns with animation by distance~~ done (PC Unreal; smoke test `pawns`;
 `docs/design/pawns.md`; the sim's new `PawnAction` event, which C1's jobs should send for their
 actions too). ~~**U6** overseer camera and selection~~ done (PC Unreal;
-smoke test `overseer`; `docs/design/overseer.md`). **U3** terrain and plants (PC Unreal, Sonnet high)
+smoke test `overseer`; `docs/design/overseer.md`). ~~**U9** protagonist~~ done (PC Unreal; smoke test
+`protagonist`; `docs/design/protagonist.md`; save format 7). **U3** terrain and plants (PC Unreal, Sonnet high)
 needs C2 as well.
 
 Wave 6, open now that C1 is in: **C4** building (cloud, Sonnet high), ~~**C6** food, rest and
-schedules~~ done (`docs/design/needs.md`; save format 7), **F2** guns and hitboxes (cloud, Opus high); **C3** mining, chopping
-and harvesting (cloud, Sonnet high) once C2 is in. On the PC, **U9** and **A3** need only done tasks.
-U6's work tab and U9's colonist panel can now read `sim.jobs()` (work types, priorities).
+schedules~~ done (`docs/design/needs.md`; save format 8), **F2** guns and hitboxes (cloud, Opus high); **C3** mining, chopping
+and harvesting (cloud, Sonnet high) once C2 is in. On the PC, ~~**U9**~~ is done and **A3** needs only done tasks.
+U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priorities).
 
 ## Waiting on sneed
 

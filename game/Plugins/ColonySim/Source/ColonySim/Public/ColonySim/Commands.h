@@ -31,6 +31,29 @@ struct DestroyThingCommand {
     Entity thing = kNoEntity;
 };
 
+// Direct control (task U9, docs/design/protagonist.md): the player takes over one colonist. Its
+// job ends and the job system leaves it alone until control is let go. Only one colonist is
+// controlled at a time: taking a second lets the first go. `pawn` = kNoEntity lets go of whoever is
+// controlled. Fails if the thing is not a living colonist on the map.
+struct ControlPawnCommand {
+    Entity pawn = kNoEntity;
+};
+
+// Where the player's body wants to be (metres, on its level), sent every step while a colonist is
+// controlled. The sim moves the pawn there, at most kDirectMaxStep metres a step, and keeps it
+// out of walls and off ground it can't walk: a blocked move slides along the wall or stops. The
+// pawn's velocity becomes the distance it really moved, which Unreal animates from. Fails if the
+// pawn is not the controlled one or the position is not a number.
+struct DirectMoveCommand {
+    Entity pawn = kNoEntity;
+    float x = 0.0f;
+    float y = 0.0f;
+};
+
+// The farthest a controlled pawn moves in one step: 0.5 m, which is 15 m/s at 1x, over three times
+// the fastest pawn. Longer requests are cut to this.
+inline constexpr float kDirectMaxStep = 0.5f;
+
 // Dev command: hurts a pawn, like RimWorld's dev-mode damage tool. `damageType` is a DamageTypes
 // def ("Bullet", "Cut", "Blunt"...), `amount` hit points of damage, `part` an index into the
 // pawn's body (Bodies def, depth-first, torso 0) or -1 to pick at random as a hit would. Fails if
@@ -107,10 +130,12 @@ struct AssignBedCommand {
     Entity pawn = kNoEntity;
 };
 
+// New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
                              SetStockpilePriorityCommand, SetStockpileAllowedCommand, OrderHaulCommand,
-                             SetScheduleCommand, AssignBedCommand>;
+                             ControlPawnCommand, DirectMoveCommand, SetScheduleCommand,
+                             AssignBedCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

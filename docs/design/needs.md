@@ -116,10 +116,13 @@ looks again a minute later (`Needs::foodSearchAfter`).
   `PawnWokeUp` (`target` the bed or none, `message` "bed" or "ground", `amount` the rest).
 - `JobType::Ingest` and `JobType::LayDown` in `JobStarted`/`JobEnded` and the snapshot.
 
-## Save format 7
+## Save format 8
 
-`Needs`, `Schedule` and `Bed` are saved per thing; a job also saves its `chair`. Saves of format 6
+`Needs`, `Schedule` and `Bed` are saved per thing; a job also saves its `chair`. Saves of format 6 and 7
 still load (their pawns have no needs). Everything is in the state hash.
+
+A pawn the player controls directly (U9) gets no jobs, so it does not eat or sleep by itself;
+its food and rest still fall. Let go of it to have it look after itself.
 
 ## Not yet
 
