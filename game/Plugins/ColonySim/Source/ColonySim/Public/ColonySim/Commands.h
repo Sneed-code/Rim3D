@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <string>
 #include <variant>
+#include <vector>
 
 namespace colony {
 
@@ -384,6 +385,44 @@ struct MeleeCommand {
     MeleeMode mode = MeleeMode::Attack;
 };
 
+// Clothes (task C15, docs/design/apparel.md). A pawn follows an outfit (an id from the snapshot's outfits):
+// it takes off what the outfit doesn't allow and puts on the best clothes it may wear. Fails if the thing
+// isn't a pawn or there is no such outfit.
+struct SetOutfitCommand {
+    Entity pawn = kNoEntity;
+    uint32_t outfit = 1;
+};
+
+// Changes an outfit: the apparel defs it doesn't allow (a Things defName each), the share of its hit
+// points apparel must have (0 to 1) and the quality range (0 awful to 6 legendary). Fails if there is no
+// such outfit or a value is wrong.
+struct EditOutfitCommand {
+    uint32_t outfit = 1;
+    std::vector<std::string> disallowed;
+    float hitPointsMin = 0.0f;
+    float hitPointsMax = 1.0f;
+    int qualityMin = 0;
+    int qualityMax = 6;
+};
+
+// A new outfit with the given name that allows everything. Its id is the next one (the snapshot lists it).
+struct AddOutfitCommand {
+    std::string name;
+};
+
+// Removes an outfit; pawns that followed it go back to the default. Fails for the first outfit.
+struct RemoveOutfitCommand {
+    uint32_t outfit = 0;
+};
+
+// Marks a downed or dead pawn to be stripped of its clothes and weapon by a colonist with Hauling work
+// (`strip` true), or takes the mark off. Fails if it isn't a pawn on the map, isn't downed or dead, or
+// has nothing on it.
+struct StripCommand {
+    Entity thing = kNoEntity;
+    bool strip = true;
+};
+
 // The protagonist's dodge roll (P2, docs/design/shooter-feel.md): a start-up, a roll of a few metres
 // in the direction (dx, dy) (any length; not a number, or zero, is a backstep away from where the
 // pawn faces) in which bullets pass through the pawn for a short window, then a recovery in which it
@@ -409,7 +448,9 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              RemoveBillCommand, SetBillCommand, HandsOnCommand, FlickCommand, ShortCircuitCommand,
                              PlaceFloorCommand, AddFilthCommand,
                              SetResearchCommand, UnlockResearchCommand, StartRaidCommand, SoundAlarmCommand,
-                             SetDefenseRoleCommand, MarkShelterCommand, MeleeCommand, DodgeRollCommand>;
+                             SetDefenseRoleCommand, MarkShelterCommand, MeleeCommand, DodgeRollCommand,
+                             SetOutfitCommand, EditOutfitCommand, AddOutfitCommand, RemoveOutfitCommand,
+                             StripCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

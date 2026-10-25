@@ -56,9 +56,9 @@ add_test(NAME simrun_needs COMMAND simrun --seed 42 --size 128 --days 3 --start 
 # (beaten, routed or gone) within a quarter of a day.
 add_test(NAME simrun_raid COMMAND simrun --seed 1 --size 256 --days 0.25 --start Crashlanded --raid 300 --armed --check)
 
-# Temperature (E2, docs/design/temperature.md): the Crashlanded colonists live two days in -5 degrees weather
-# (just above their safe range) and nobody falls ill or dies.
-add_test(NAME simrun_temperature COMMAND simrun --seed 42 --size 128 --days 2 --start Crashlanded --outdoor -5 --check)
+# Temperature (E2, docs/design/temperature.md): the Crashlanded colonists live two days in 4 degrees weather
+# (just above the safe range their T-shirts and pants give them) and nobody falls ill or dies.
+add_test(NAME simrun_temperature COMMAND simrun --seed 42 --size 128 --days 2 --start Crashlanded --outdoor 4 --check)
 
 # The colony scenario (C10, docs/design/colony-scenario.md): six colonists build a room, mine, chop, pick berries and
 # cook for five days; fails if anyone dies or starves, stands stuck for a game hour, or a mark is left undone.

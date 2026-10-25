@@ -348,17 +348,17 @@ TEST_CASE("Temperature: a colonist outdoors in hard frost gets hypothermia, lose
     float min = 0.0f;
     float max = 0.0f;
     TEMP_REQUIRE(sim->temperature().comfortRange(pawn, min, max));
-    CHECK(min == 4.0f);   // 16 less the stand-in for clothes
-    CHECK(max == 30.0f);  // 26 and the stand-in
-    CHECK(sim->temperature().degreesBelowComfort(pawn) == doctest::Approx(34.0f));
+    CHECK(min == 16.0f);  // no clothes: the def's range
+    CHECK(max == 26.0f);
+    CHECK(sim->temperature().degreesBelowComfort(pawn) == doctest::Approx(46.0f));
     CHECK(sim->temperature().degreesAboveComfort(pawn) == 0.0f);
 
-    sim->stepMany(86400 * 3 / 10);
+    sim->stepMany(86400 / 5);
     HealthReport report = tempReport(*sim, pawn);
     const HealthReport::EnvironmentLine* cold = tempIllness(report, "hypothermia");
     TEMP_REQUIRE(cold != nullptr);
-    // Safe range's low end is 10 degrees under the comfortable one: 24 degrees under it, 0.08 a day each.
-    CHECK(cold->severity == doctest::Approx(24.0f * 0.08f * 0.3f).epsilon(0.02));
+    // Safe range's low end is 10 degrees under the comfortable one: 36 degrees under it, 0.08 a day each.
+    CHECK(cold->severity == doctest::Approx(36.0f * 0.08f * 0.2f).epsilon(0.02));
     CHECK(cold->stage == "major");
     CHECK(tempCapacity(report, "Manipulation") < 0.6f);
     CHECK(tempCapacity(report, "Moving") < 0.8f);
@@ -380,8 +380,8 @@ TEST_CASE("Temperature: heatstroke from heat, and a cold pawn that comes in from
         const HealthReport report = tempReport(*sim, pawn);
         const HealthReport::EnvironmentLine* hot = tempIllness(report, "heatstroke");
         TEMP_REQUIRE(hot != nullptr);
-        // Safe range's high end: 26 + 4 + 10 = 40, so 15 degrees over.
-        CHECK(hot->severity == doctest::Approx(15.0f * 0.08f * 0.5f).epsilon(0.02));
+        // Safe range's high end: 26 + 10 = 36 (no clothes), so 19 degrees over.
+        CHECK(hot->severity == doctest::Approx(19.0f * 0.08f * 0.5f).epsilon(0.02));
         CHECK(tempCapacity(report, "Consciousness") < 1.0f);
         CHECK(tempIllness(report, "hypothermia") == nullptr);
     }
@@ -389,7 +389,7 @@ TEST_CASE("Temperature: heatstroke from heat, and a cold pawn that comes in from
         auto sim = tempSim(-30.0f);
         const Entity pawn = sim->things().spawn("Human", CellPos{24, 24, 0});
         TEMP_REQUIRE(pawn != kNoEntity);
-        sim->stepMany(86400 / 5);
+        sim->stepMany(86400 / 8);
         CHECK(tempIllness(tempReport(*sim, pawn), "hypothermia") != nullptr);
         sim->setOutdoorOverride(15.0f);
         sim->stepMany(86400 / 2);
@@ -516,7 +516,14 @@ TEST_CASE("Temperature: a colonist feels cold or hot by the degrees outside the 
     CHECK(thought("Hot") == nullptr);
     const float comfortable = sim.mood().target(colonist, sim.time().seconds);
 
-    sim.setOutdoorOverride(1.0f);  // 3 under the comfortable 4
+    // The colonist's clothes (T-shirt and pants) widen the range from the def's 16 to 26.
+    float lowest = 0.0f;
+    float highest = 0.0f;
+    TEMP_REQUIRE(sim.temperature().comfortRange(colonist, lowest, highest));
+    CHECK(lowest < 16.0f);
+    CHECK(highest >= 26.0f);
+
+    sim.setOutdoorOverride(lowest - 3.0f);
     const ThoughtView* chilly = thought("Cold");
     TEMP_REQUIRE(chilly != nullptr);
     CHECK(chilly->label == "chilly");
@@ -524,17 +531,17 @@ TEST_CASE("Temperature: a colonist feels cold or hot by the degrees outside the 
     CHECK(chilly->situation);
     CHECK(sim.mood().target(colonist, sim.time().seconds) == doctest::Approx(comfortable - 3.0f));
 
-    sim.setOutdoorOverride(-5.0f);  // 9 under
+    sim.setOutdoorOverride(lowest - 9.0f);
     const ThoughtView* freezing = thought("Cold");
     TEMP_REQUIRE(freezing != nullptr);
     CHECK(freezing->label == "freezing");
     CHECK(freezing->offset == -8.0f);
 
-    sim.setOutdoorOverride(33.0f);  // 3 over the comfortable 30
+    sim.setOutdoorOverride(highest + 3.0f);
     const ThoughtView* warm = thought("Hot");
     TEMP_REQUIRE(warm != nullptr);
     CHECK(warm->label == "warm");
-    sim.setOutdoorOverride(42.0f);
+    sim.setOutdoorOverride(highest + 12.0f);
     const ThoughtView* scorching = thought("Hot");
     TEMP_REQUIRE(scorching != nullptr);
     CHECK(scorching->label == "scorching");

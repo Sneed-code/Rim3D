@@ -53,6 +53,11 @@ rest (place blueprint, designate, draft, actions) come with the tasks that build
 | `ShortCircuitCommand{thing}` | dev command and T3's hook: empties the net's batteries, destroys a conduit or switch | no power part |
 | `PlaceFloorCommand{area, floor}` | lays a floor def over a rectangle at once; an empty `floor` takes floors off ([room-stats.md](room-stats.md)) | unknown or non-floor def; cell not on the map |
 | `AddFilthCommand{cell, kind, layers}` | puts filth down (dev, and the hook for later sources of vomit and ash) | unknown filth kind; cell not on the map |
+| `SetOutfitCommand{pawn, outfit}` | the pawn follows the outfit: it takes off what it disallows and dresses in the best it may wear ([apparel.md](apparel.md)) | not a pawn; no such outfit |
+| `EditOutfitCommand{outfit, disallowed, hitPointsMin, hitPointsMax, qualityMin, qualityMax}` | changes an outfit policy | no such outfit; a bad range or unknown def |
+| `AddOutfitCommand{name}` | a new outfit allowing everything | empty or taken name |
+| `RemoveOutfitCommand{outfit}` | removes it; pawns on it go back to the first | no such outfit; the first one |
+| `StripCommand{thing, strip}` | marks a downed or dead pawn to be stripped of clothes and weapon by a colonist with Hauling work, or takes the mark off | not a pawn on the map; not downed or dead; nothing on it |
 | `SetScheduleCommand{pawn, hour, kind}` | the pawn's schedule for one hour (0 to 23): Anything, Work, Joy or Sleep ([needs.md](needs.md)) | the pawn has no schedule; bad hour |
 | `DesignateCommand{area, kind}` | marks rock (`Mine`), plants (`CutPlant`) or ripe plants (`HarvestPlant`) in the rectangle for work ([mining.md](mining.md)) | `kind` is None; nothing in `area` suits |
 | `CancelDesignationsCommand{area, kind}` | takes marks off, `None` for every kind, and ends the jobs on them | nothing marked in `area` |

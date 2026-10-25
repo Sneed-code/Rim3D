@@ -1,6 +1,7 @@
 #include "ColonySim/Save.h"
 
 #include "ColonySim/Animals.h"
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
@@ -213,6 +214,18 @@ struct SaveJoy {
     std::string activity;  // RecreationActivities defName, empty without a recreation job
 };
 
+// What C15 keeps on a thing (section "apparel"): the stuff an item is made of and its quality, taint, a
+// strip order, and a pawn's outfit.
+struct SaveApparel {
+    std::string stuff;  // Things defName, empty for none
+    int quality = -1;   // -1: none (normal)
+    bool tainted = false;
+    bool stripMark = false;
+    bool hasOutfit = false;
+    uint32_t outfit = 0;
+    int64_t nextCheck = 0;
+};
+
 struct SaveEntity {
     uint32_t id = 0;
     std::optional<SaveThing> thing;
@@ -252,6 +265,7 @@ struct SaveEntity {
     std::optional<Raider> raider;           // section "raids"
     std::optional<SaveSpoilage> spoilage;   // section "spoilage"
     std::optional<Melee> melee;             // section "melee" (F8)
+    std::optional<SaveApparel> apparel;     // section "apparel" (format 20 on)
     std::optional<RecoilKick> kick;         // section "feel"
     std::optional<DodgeRoll> roll;          // section "feel"
 };
@@ -338,6 +352,8 @@ struct SaveData {
     AnimalSaved animals;               // section "animals": the system's own state
     RaidState raids;                   // section "raids" (F6)
     std::vector<RoomTemperature> roomTemperatures;  // section "temperature" (E2)
+    std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
+    uint32_t nextOutfitId = 1;
     SpoilageState spoilageState;                    // section "spoilage" (C16)
 };
 
@@ -979,6 +995,28 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("target", melee->target);
                 ar.value("mode", melee->mode);
                 ar.require(melee->mode <= MeleeMode::Block, "the save file has a bad melee mode");
+            } else if constexpr (std::is_same_v<Type, SetOutfitCommand>) {
+                auto* setOutfit = &c;
+                ar.value("pawn", setOutfit->pawn);
+                ar.value("outfit", setOutfit->outfit);
+            } else if constexpr (std::is_same_v<Type, EditOutfitCommand>) {
+                auto* edit = &c;
+                ar.value("outfit", edit->outfit);
+                ar.list("disallowed", edit->disallowed, [&](std::string& name) { ar.text(nullptr, name); });
+                ar.value("hitPointsMin", edit->hitPointsMin);
+                ar.value("hitPointsMax", edit->hitPointsMax);
+                ar.value("qualityMin", edit->qualityMin);
+                ar.value("qualityMax", edit->qualityMax);
+            } else if constexpr (std::is_same_v<Type, AddOutfitCommand>) {
+                auto* addOutfit = &c;
+                ar.text("name", addOutfit->name);
+            } else if constexpr (std::is_same_v<Type, RemoveOutfitCommand>) {
+                auto* removeOutfit = &c;
+                ar.value("outfit", removeOutfit->outfit);
+            } else if constexpr (std::is_same_v<Type, StripCommand>) {
+                auto* strip = &c;
+                ar.value("thing", strip->thing);
+                ar.value("strip", strip->strip);
             } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
                 ar.value("pawn", c.pawn);
                 ar.value("dx", c.dx);
@@ -1130,7 +1168,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::Research, "the save file has a bad job");
+    ar.require(job.type <= JobType::StripPawn, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -1267,6 +1305,32 @@ template <typename Ar>
 void saveBedPart(Ar& ar, Bed& b) {
     ar.list("owners", b.owners, [&](Entity& owner) { ar.value(nullptr, owner); });
 
+}
+
+template <typename Ar>
+void saveApparelPart(Ar& ar, SaveApparel& a) {
+    ar.text("stuff", a.stuff);
+    ar.value("quality", a.quality);
+    ar.require(a.quality >= -1 && a.quality < 256, "the save file has an impossible quality");
+    ar.value("tainted", a.tainted);
+    ar.value("stripMark", a.stripMark);
+    ar.value("hasOutfit", a.hasOutfit);
+    ar.value("outfit", a.outfit);
+    ar.value("nextCheck", a.nextCheck);
+}
+
+template <typename Ar>
+void saveOutfitPolicy(Ar& ar, OutfitPolicy& o) {
+    ar.value("id", o.id);
+    ar.text("name", o.name);
+    ar.list("disallowed", o.disallowed, [&](std::string& name) { ar.text(nullptr, name); });
+    ar.value("hitPointsMin", o.hitPointsMin);
+    ar.value("hitPointsMax", o.hitPointsMax);
+    ar.value("qualityMin", o.qualityMin);
+    ar.value("qualityMax", o.qualityMax);
+    ar.require(o.id != 0 && o.hitPointsMin >= 0.0f && o.hitPointsMax <= 1.0f && o.hitPointsMin <= o.hitPointsMax &&
+                   o.qualityMin <= o.qualityMax,
+               "the save file has an impossible outfit");
 }
 
 template <typename Ar>
@@ -2057,6 +2121,11 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("melee", 1, [&] {
         saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
     });
+    ar.section("apparel", 1, [&] {
+        saveParts(ar, "apparel", e, &SaveEntity::apparel, [&](SaveApparel& a) { saveApparelPart(ar, a); });
+        ar.value("nextOutfitId", d.nextOutfitId);
+        ar.list("outfits", d.outfits, [&](OutfitPolicy& o) { saveOutfitPolicy(ar, o); });
+    });
     ar.section("feel", 1, [&] {
         saveParts(ar, "kick", e, &SaveEntity::kick, [&](RecoilKick& k) { saveKickPart(ar, k); });
         saveParts(ar, "roll", e, &SaveEntity::roll, [&](DodgeRoll& r) { saveRollPart(ar, r); });
@@ -2188,6 +2257,8 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     }
     d.commandLog = sim.commandLog_;
     d.checkpoints = sim.checkpoints_;
+    d.outfits = sim.apparel_->outfits();
+    d.nextOutfitId = sim.apparel_->nextOutfitId();
 
     const entt::registry& reg = sim.things_->registry();
     const auto* entities = reg.storage<Entity>();
@@ -2306,6 +2377,22 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (reg.all_of<MarkedForDeconstruct>(e)) {
             out.marked = SaveMark{};
+        }
+        {
+            const MadeOf* made = reg.try_get<MadeOf>(e);
+            const Quality* quality = reg.try_get<Quality>(e);
+            const PawnOutfit* outfit = reg.try_get<PawnOutfit>(e);
+            if (made != nullptr || quality != nullptr || outfit != nullptr || reg.all_of<Tainted>(e) || reg.all_of<StripMark>(e)) {
+                SaveApparel a;
+                a.stuff = made != nullptr && made->stuff.valid() ? sim.defs_->get(made->stuff).defName() : std::string();
+                a.quality = quality != nullptr ? static_cast<int>(quality->level) : -1;
+                a.tainted = reg.all_of<Tainted>(e);
+                a.stripMark = reg.all_of<StripMark>(e);
+                a.hasOutfit = outfit != nullptr;
+                a.outfit = outfit != nullptr ? outfit->outfit : 0;
+                a.nextCheck = outfit != nullptr ? outfit->nextCheck : 0;
+                out.apparel = std::move(a);
+            }
         }
         if (const BillList* list = reg.try_get<BillList>(e)) {
             SaveBillList saved;
@@ -2614,6 +2701,29 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.marked) {
             reg.emplace<MarkedForDeconstruct>(entity);
+        }
+        if (e.apparel) {
+            const SaveApparel& a = *e.apparel;
+            if (!a.stuff.empty()) {
+                const DefId stuff = sim.defs_->idOf(kSaveThingsKind, a.stuff);
+                if (!stuff.valid()) {
+                    error = "the save has apparel made of '" + a.stuff + "', which the data files no longer have";
+                    return false;
+                }
+                reg.emplace<MadeOf>(entity, MadeOf{stuff});
+            }
+            if (a.quality >= 0) {
+                reg.emplace<Quality>(entity, Quality{static_cast<uint8_t>(a.quality)});
+            }
+            if (a.tainted) {
+                reg.emplace<Tainted>(entity);
+            }
+            if (a.stripMark) {
+                reg.emplace<StripMark>(entity);
+            }
+            if (a.hasOutfit) {
+                reg.emplace<PawnOutfit>(entity, PawnOutfit{a.outfit, a.nextCheck});
+            }
         }
         if (e.looks) {
             reg.emplace<PawnLooks>(entity, std::move(*e.looks));
@@ -2926,6 +3036,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.raids_->restore(std::move(d.raids), error)) {
         return false;
     }
+    sim.apparel_->restoreOutfits(std::move(d.outfits), d.nextOutfitId);
     sim.time_.seconds = d.seconds;
     sim.rng_.restore(d.rngState, d.rngIncrement);
     sim.stockpileCell_ = d.stockpile;

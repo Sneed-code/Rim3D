@@ -24,6 +24,8 @@ enum class JobType : uint8_t {
     Recreate,          // walk to a place and play, sit or stroll for a while, for joy (recreation.md)
     Research,          // walk to a research bench and add points to the current project (research.md)
     CleanFilth,        // walk to a cell with filth and clean it, a layer at a time (docs/design/room-stats.md)
+    WearApparel,       // walk to clothes lying on the map and put them on, or take off a worn piece (apparel.md)
+    StripPawn,         // walk to a downed or dead pawn marked for it and take its clothes and weapon (apparel.md)
 };
 
 COLONY_API const char* jobTypeName(JobType type);

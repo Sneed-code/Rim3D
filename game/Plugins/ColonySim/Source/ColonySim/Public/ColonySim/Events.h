@@ -48,6 +48,7 @@ enum class EventType : uint8_t {
     PawnLeftMap,     // a pawn walked off the map and is gone (a ThingDestroyed follows)
     MeleeSwing,      // a pawn began a melee swing: the hit comes `amount` steps later (docs/design/melee.md)
     MeleeHit,        // the hit moment of a swing: `message` says "hit", "deflected", "blocked", "dodged" or "missed"
+    ApparelDestroyed,  // a worn piece wore out or was shot to pieces: `thing` the wearer, `def` the piece's def (docs/design/apparel.md)
 };
 
 // What stopped a projectile (ProjectileHit).

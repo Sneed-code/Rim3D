@@ -44,9 +44,6 @@ struct COLONY_API TemperatureNumbers {
     float rock = 0.004f;       // a rock cell round the room, towards the ground temperature
     float safeMarginC = 10.0f; // the safe range is the comfortable range this much wider
     float frostbiteSeverity = 3.0f;
-    // A stand-in for clothes until C15: humanlike pawns' comfortable range is this much wider.
-    float clothesColdC = 12.0f;
-    float clothesHeatC = 4.0f;
 
     static TemperatureNumbers read(const DefDatabase& defs);
 };
