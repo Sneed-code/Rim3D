@@ -231,12 +231,18 @@ medicine, animals, melee and grenades, two-storey buildings, the narrator and ev
 traders, protagonist talents and loadout). Its extra rules keep parallel threads from colliding.
 **Wave 1 is open now in the cloud, alongside the rest of Stage 1:** S7 (saves and commands that
 merge in parallel; every sim task that saves state waits for it), E3 light, and the data tasks D4,
-D5, D6, D7, D8, D9, D11. D4 done (crops, three climates, weather kinds: `docs/design/starting-data.md`). Count in the plan. Tick tasks in `docs/plans/stage-2.md` as they merge.
+D5, D6, D7, D8, D9, D11. D4 done (crops, three climates, weather kinds: `docs/design/starting-data.md`). S7 done: a save is
+now named sections, each with its own version, and commands are saved by name, so **sim tasks that
+save state can start; none of them bumps the save format number again** (it stays 20; add your own
+section, `docs/design/saves.md` "Adding to the save"; a new system's checklist is in
+`docs/design/bridge.md`). Format 6 to 19 saves still load. Count in the plan. Tick tasks in `docs/plans/stage-2.md` as they merge.
 
 Stage 2 done so far: **D7** medicine and disease data (`docs/design/medicine-data.md`), **D11** building data 2 (power, climate, light, floors, furniture;
 `docs/design/starting-data.md`).
 **D5** animal data (15 animals, bodies, meat, leather, milk, eggs, wool: `docs/design/animals.md`).
 **D8** production data (work tables, stone blocks, melee weapons with tools; the meal recipes still list only the fueled stove, C14 adds the electric stove).
+
+D9 (thoughts, recreation, mental break and social data) is in: `docs/design/thoughts-data.md`. Data only; C15, C17, C18, C19, C20, E2 and E3 read it.
 
 ## Next
 
