@@ -30,7 +30,7 @@ target_include_directories(colonysim SYSTEM PUBLIC ThirdParty)
 add_library(colonysim_thirdparty INTERFACE)
 target_include_directories(colonysim_thirdparty SYSTEM INTERFACE ThirdParty)
 
-add_executable(simrun Tools/simrun/main.cpp)
+add_executable(simrun Tools/simrun/main.cpp Tools/simrun/ColonyScenario.cpp)
 target_link_libraries(simrun PRIVATE colonysim colonysim_thirdparty)
 target_compile_definitions(simrun PRIVATE COLONY_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../data")
 
@@ -49,6 +49,12 @@ add_test(NAME simrun_gather COMMAND simrun --seed 42 --size 256 --days 2 --start
          --png ${CMAKE_BINARY_DIR}/gather.png)
 # Food, rest and schedules (C6): the Crashlanded colonists live three days on their starting food, nobody dies.
 add_test(NAME simrun_needs COMMAND simrun --seed 42 --size 128 --days 3 --start Crashlanded --check)
+
+# The colony scenario (C10, docs/design/colony-scenario.md): six colonists build a room, mine, chop, pick berries and
+# cook for five days; fails if anyone dies or starves, stands stuck for a game hour, or a mark is left undone.
+# A second seed, because the first run on seed 7 found a bug seed 42 did not.
+add_test(NAME colony_scenario COMMAND simrun --scenario colony --seed 42)
+add_test(NAME colony_scenario_seed7 COMMAND simrun --scenario colony --seed 7)
 
 # Replays: play the scripted scenario and record it, then play the recording and check every
 # state hash matches. CI compares the recordings from Linux and Windows (docs/design/bridge.md).

@@ -72,9 +72,19 @@ For one pawn:
    meeting them within 30 steps (looking at their current velocity) and the room left after the
    step (it likes 0.35 m to spare); and a small bias to turn right, so two pawns walking at each
    other both pass on the same side. The cheapest wins; ties go to the first tried.
-5. **Held up.** If a pawn wants to walk but gets under 30% of its wanted speed for 45 steps, it
-   walks *through* the other pawns for 30 steps (the way out for two pawns meeting in a one-cell
-   corridor). Walls are never walked through. After 300 held-up steps in a row it gives up (above).
+5. **Held up.** If a pawn wants to walk but gets under 30% of its wanted speed *along the way it
+   wants to go* for 45 steps, it walks *through* the other pawns for 30 steps (the way out for two
+   pawns meeting in a one-cell corridor). Walls are never walked through. After 300 held-up steps in
+   a row it gives up (above). Sliding sideways along a wall does not count as progress: two pawns
+   pushing each other along a wall they could not pass once slid for 65 game hours (found by C10).
+6. **Holding still.** The job system sets `Mover::hold` every step for a pawn at a job step it does
+   standing still (building, deconstructing, mining, cutting, cooking, eating, sleeping). A held pawn
+   stays exactly where it is, nobody pushes it, and others steer round it. Without it a pawn walking
+   past shoved a builder out of its working cell and the job failed ("left its place"). `hold` is not
+   saved: the job system sets it again before the movement system reads it.
+
+A wall that is finished under a walking pawn moves the pawn out and clears its route; that now also
+sets `gaveUp`, so its job asks for a new path instead of taking the empty route for arriving.
 
 All of it is plain float arithmetic (`+ - * /`, `sqrt`, `floor`) and written-out tables: no `sin`,
 `cos`, `exp` or `pow`, so Linux, Windows and the cloud agree to the bit. Unreal builds that

@@ -86,7 +86,7 @@ Times are one sitting of thread work. "Needs" lists tasks that must be merged fi
 | ✓ | C7 | **Bills and cooking.** Minimal bill and recipe system on the stove ("cook simple meal" do-forever and do-X-times), fetching ingredients, cooking skill. Doc: `design/bills.md`. | Cloud | Sonnet, high | 90 min | C4, C6 |
 | ✓ | C8 | **Colonists from a seed.** Name, adult age, backstories, traits, skills with passions and experience, from the defs (`design/starting-data.md`); crashlanded start (protagonist plus 5 colonists, starting gear). The protagonist is flagged for 2x part hit points and the talent tree later. | Cloud | Sonnet, medium | 60 min | S1, D3 |
 | ✓ | C9 | **Mood.** Thoughts (ate without table, slept on the ground, slept outside, hungry, tired, ate raw food, ate a fine meal), mood value, mental break thresholds recorded (breaks themselves come later). | Cloud | Sonnet, medium | 60 min | C6, C8 |
-| | C10 | **Colony scenario test.** `simrun --scenario colony`: 6 colonists on a 512 m map, a script of commands builds a room with beds, a table and a stove, designates mining and chopping, and runs 5 days. Checks: nobody starves, nobody stuck over a game hour, all designations done. Runs in CI. | Cloud | Sonnet, high | 90 min | C3, C5, C7, C9 |
+| ✓ | C10 | **Colony scenario test.** `simrun --scenario colony`: 6 colonists on a 512 m map, a script of commands builds a room with beds, a table and a stove, designates mining and chopping, and runs 5 days. Checks: nobody starves, nobody stuck over a game hour, all designations done. Runs in CI. | Cloud | Sonnet, high | 90 min | C3, C5, C7, C9 |
 
 ### Fighting (F)
 

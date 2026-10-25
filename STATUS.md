@@ -125,6 +125,16 @@ like Nerves) are recorded as `MoodBand` with a `PawnMoodBand` event; **no mental
 starts when a pawn wakes up outdoors (C5). `thoughts()` is what the colonist panel (U8) reads. Thought
 numbers other than Hungry are recalled, not verified. Save format 11.
 
+Since C10 there is one test that runs the whole colony together (`docs/design/colony-scenario.md`,
+`simrun --scenario colony`, in CI on seeds 42 and 7): the six Crashlanded colonists build a walled room with a door,
+six beds, a table with stools and a stove, mine, chop and pick on marks, cook from a bill and sleep in assigned beds for 5 days. It fails
+if anyone dies or starves, stands stuck for a game hour, or a mark or building is left undone. Its first runs found four real
+bugs, now fixed: a wall finished under a walking pawn left the pawn thinking it had arrived; pawns walking past shoved builders and
+cooks out of their working cell (new `Mover::hold`, set by the job system for stand-still steps); two pawns slid along a wall for
+65 game hours without giving up (sliding is no longer progress, so they time out and re-path) and starved; steel lying under a new
+wall was destroyed instead of moved, failing the delivery that was fetching it. **Anything new that colonists do should get a line
+in that script.** No save format change (`Mover::hold` is not saved).
+
 Since F2 pawns can shoot (`docs/design/combat.md`): five guns from the wiki, real bullets that fly
 with speed (RimWorld's x3, `tuning.json`) and drop, a spread cone instead of a hit roll (sized so a
 standing man in the open is hit as often as RimWorld's hit chance; Shooting skill tightens it),
@@ -265,7 +275,8 @@ U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priori
 ~~**F4** fighter AI: where to stand~~ done (`docs/design/fighters.md`; save format 15), ~~**F5** fighter
 AI: aiming~~ done (`docs/design/aiming.md`; save format 17), so **F6** raid and defense (cloud, Opus high)
 is open once C8 is in (it is); with U9 and F2 in, ~~**U11** fights on screen~~ is done (PC; smoke test `fights`; `docs/design/fights.md`; it
-binds R to reload; reload and sidestep animations are not drawn yet).
+binds R to reload; reload and sidestep animations are not drawn yet). ~~**C10** colony scenario test~~ done
+(`docs/design/colony-scenario.md`); open on the PC: **U10** hands-on work (U9 and U7 are in), **A1** placeholder art.
 
 ## Waiting on sneed
 

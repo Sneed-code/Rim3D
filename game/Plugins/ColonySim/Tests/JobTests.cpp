@@ -331,3 +331,21 @@ TEST_CASE("Jobs: the snapshot shows each pawn's job and load, and the stockpiles
     CHECK(snap.find(steel) == nullptr);  // in its hands, off the map
     CHECK(std::string(jobTypeName(view->job)) == "HaulToCell");
 }
+
+TEST_CASE("Jobs: a pawn walking to an item that was moved walks to where it is now") {
+    Sim sim = jobsTestSim();
+    sim.submit(CreateStockpileCommand{CellRect{2, 2, 1, 1, 0}});
+    const Entity pawn = jobsSpawn(sim, "Human", CellPos{10, 10, 0});
+    sim.submit(SetWorkPriorityCommand{pawn, "Hauling", 0});
+    const Entity steel = jobsSpawn(sim, "Steel", CellPos{25, 10, 0}, 5);
+    sim.submit(OrderHaulCommand{pawn, steel});
+    sim.stepMany(40);
+    JOBS_REQUIRE(jobOf(sim, pawn).type == JobType::HaulToCell);
+    // Something (a wall going up) moves the stack while the pawn is on its way.
+    sim.things().despawn(steel);
+    const bool moved = sim.things().spawnAt(steel, CellPos{25, 14, 0});
+    JOBS_REQUIRE(moved);
+    CHECK(jobsRunUntil(sim, 3600, [&] { return sim.itemsLeft() == 0; }));
+    CHECK(sim.stats().failedJobs == 0);
+    CHECK(sim.stats().repaths >= 1);
+}

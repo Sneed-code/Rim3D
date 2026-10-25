@@ -347,6 +347,9 @@ void Construction::clearFootprint(Entity, const CellRect& rect, bool blocksMovem
                     pos.x = static_cast<float>(free->x) + 0.5f;
                     pos.y = static_cast<float>(free->y) + 0.5f;
                     Mover& mover = reg.get<Mover>(pawn);
+                    // A walk cut short is given up, so the job asks for a new path from here instead
+                    // of taking the empty route for arriving.
+                    mover.gaveUp = mover.gaveUp || !mover.arrived();
                     mover.path.clear();
                     mover.next = 0;
                     mover.vx = 0.0f;
@@ -367,11 +370,30 @@ void Construction::clearFootprint(Entity, const CellRect& rect, bool blocksMovem
         }
         std::sort(items.begin(), items.end());
         for (const Entity item : items) {
-            const DefId def = reg.get<Thing>(item).def;
-            const int count = reg.get<StackCount>(item).count;
-            things_.destroy(item);
-            // The same items again, on the nearest free ground outside.
-            dropNear(def, count, rect, true);
+            // The same stack moves to the nearest empty ground outside, so a pawn on its way to it (or
+            // carrying it to a site) still has it; with no empty cell near, it is made again by dropNear.
+            bool moved = false;
+            for (int r = 0; r <= kConstructionDropRadius + std::max(rect.sizeX, rect.sizeY) && !moved; ++r) {
+                constructionRing(cx, cy, r, rect.level, ring);
+                for (const CellPos& c : ring) {
+                    const Entity building = map_.inBounds(c) ? map_.buildingAt(c) : kNoEntity;
+                    if (inside(c) || !map_.walkable(c) || things_.itemsAt(c).size() != 0 ||
+                        (building != kNoEntity && defs_.get(reg.get<Thing>(building).def).text("passability") != "Standable")) {
+                        continue;
+                    }
+                    things_.despawn(item);
+                    moved = things_.spawnAt(item, c);
+                    if (moved) {
+                        break;
+                    }
+                }
+            }
+            if (!moved) {
+                const DefId def = reg.get<Thing>(item).def;
+                const int count = reg.get<StackCount>(item).count;
+                things_.destroy(item);
+                dropNear(def, count, rect, true);
+            }
         }
     }
 }

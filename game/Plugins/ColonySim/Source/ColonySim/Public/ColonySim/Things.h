@@ -94,6 +94,11 @@ struct Mover {
     uint16_t ghostSteps = 0;
     uint16_t heldSteps = 0;
     bool gaveUp = false;
+    // Set by the job system every step for a pawn at a job step it does standing still (building,
+    // mining, cooking, eating, sleeping): the movement system keeps it where it is, so a pawn
+    // walking past can't shove it out of its working cell. Others steer round it. Not saved: the
+    // next step sets it again before anyone moves.
+    bool hold = false;
 
     bool arrived() const { return next >= path.size(); }
     // Sets off along `route` (cells after the one the pawn is in) from where the pawn stands.
