@@ -69,6 +69,16 @@
     "ours": ["food.eatSpotRadius", "food.ingestSeconds", "rest.wakeOutsideSleepAt", "rest.fallAsleepBelow", "rest.wakeAt"]
   },
   {
+    "defName": "MoodRules", "source": "RimWorld wiki",
+    "baseMood": 50,
+    "breakThreshold": { "minor": 0.35, "major": 0.20, "extreme": 0.05 },
+    "risePerHour": 12,
+    "fallPerHour": 8,
+    "memoryDays": 0.6,
+    "unverified": ["memoryDays"],
+    "ours": ["baseMood"]
+  },
+  {
     "defName": "PawnGenRules", "source": "Rim3D",
     "adultAgeMin": 18,
     "ageGenerationCurve": [[14, 0], [16, 100], [50, 100], [60, 30], [70, 18], [80, 10], [90, 3], [100, 0]],

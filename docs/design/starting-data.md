@@ -43,10 +43,10 @@ names in lowerCamel (`workSpeedGlobal`), keys that are def names keep their case
 | `Things` | `Items.json`: steel, wood, silver, component, medicine, berries, survival meal. `Plants.json`: oak, poplar, grass, tall grass, bush, brambles, dandelions, berry bush. `Pawns.json`: Human | C1, C2, C8, F1 | Plants are `category: "Plant"` with a `plant` block. Steel and wood carry `stuffProps` for C4 |
 | `Biomes` | temperate forest | C2 | `plantDensity` and `wildPlants` commonality (only the plants we have; newer expansion plants left out) |
 | `Things` (buildings) | `Buildings.json`: wall, door, bed, stool, three tables, fueled stove | C4 | `costs`, `stuffCategories`, `costStuffCount`, `stats.workToBuild` (game seconds), `size`, `passability`, `building` flags C6 reads ([construction.md](construction.md)) |
-| `Rules` | `PlantRules`, `SkillRules`, `HealthRules`, `PawnGenRules`, `JobRules`, `NeedRules`, `ConstructionRules` | C2, C8, F1, C1, C6, C4 | Numbers RimWorld keeps in its code rather than its defs (`JobRules`: [jobs.md](jobs.md); `NeedRules`: [needs.md](needs.md); `ConstructionRules`: [construction.md](construction.md)) |
+| `Rules` | `PlantRules`, `SkillRules`, `HealthRules`, `PawnGenRules`, `JobRules`, `NeedRules`, `ConstructionRules`, `MoodRules` | C2, C8, F1, C1, C6, C4, C9 | Numbers RimWorld keeps in its code rather than its defs (`JobRules`: [jobs.md](jobs.md); `NeedRules`: [needs.md](needs.md); `ConstructionRules`: [construction.md](construction.md)) |
 | `Skills` | the 12 skills | C1, C8 | `disablingWorkTags` |
 | `WorkTypes` | the 20 Core work types, in Work tab order | C1 | `relevantSkills`, `workTags`, `alwaysStartActive`, `inPrototype`, `tasks` (our job names, in order) |
-| `Traits` | 27 traits, spectra as `degreeDatas` | C8 | `statOffsets`, `statFactors`, `skillGains`, `conflictingTraits`; mood numbers kept for C9 |
+| `Traits` | 27 traits, spectra as `degreeDatas` | C8 | `statOffsets`, `statFactors`, `skillGains`, `conflictingTraits`; mood numbers used by C9 ([mood.md](mood.md)) |
 | `Backstories` | 14 childhood, 18 adulthood (ours) | C8 | `slot`, `skillGains`, `workDisables` (work tags) |
 | `Names` | first names (two lists), last names, nicknames (ours) | C8 | `names` |
 | `Scenarios` | Crashlanded | C8 | RimWorld's starting items; guns and armour arrive with F2 |

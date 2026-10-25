@@ -83,6 +83,7 @@ starts, so read it after every step. Before the first step it holds what setting
 | `JobEnded` | the same, and `message`: "done", "failed: why" or "interrupted: why" | a pawn's job ended |
 | `PawnAte` | `thing`, `def` (the food), `amount`, `cell`, `message` ("table" or "ground") | a pawn finished eating (C6, [needs.md](needs.md)) |
 | `PawnWokeUp` | `thing`, `target` (the bed or none), `amount` (its rest), `message` ("bed" or "ground") | a pawn got up from sleeping |
+| `PawnMoodBand` | `thing`, `amount` (its mood), `message` ("stable", "minor", "major" or "extreme") | a pawn's mood crossed a mental break threshold (C9, [mood.md](mood.md)) |
 
 `Things` reports its own spawns and despawns once the sim points it at the event list
 (`Things::setEventLog`). Later systems add their events (shot fired, wound added, job started,
@@ -94,7 +95,7 @@ letters) here. Events say what changed; positions and states are in the snapshot
 and a `ThingView` per thing on the map, sorted by id (`Snapshot::find` is a binary search).
 A `ThingView` has the id, def, category, position (metres on a level), rotation and footprint
 size for buildings, stack count for items, and hit points. Pawns with needs also have `food`, `rest` and
-`asleep` ([needs.md](needs.md)). Pawns with a body also have `downed` and
+`asleep` ([needs.md](needs.md)), and `mood` and `moodBand` ([mood.md](mood.md)). Pawns with a body also have `downed` and
 `dead` (F1); the rest of a pawn's health is read with `Sim::healthReport`. Things off the map (a carried item) are
 not in it. Since S4 it also has the ground height under the thing (`z`), a pawn's velocity (`vx`,
 `vy`, metres per step) and the route still ahead (`waypointCount` points from
