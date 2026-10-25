@@ -60,6 +60,30 @@ public:
 	void SetBodyHidden(bool bHide);
 	bool IsBodyHidden() const { return IsHidden(); }
 
+	/** A hit (docs/design/fights.md): the pawn flinches, leaning away from the shot for about half a
+	 *  second. `ShotDirection` is the way the bullet was travelling; `Strength` is 0 to 1. Cosmetic. */
+	void PlayHitReaction(const FVector& ShotDirection, float Strength);
+	int32 GetHitReactions() const { return HitReactions; }
+	bool IsReacting() const { return ReactionAge < kHitReactionSeconds; }
+	/** The lean now, in degrees (0 when still). */
+	float GetLeanDegrees() const { return LeanDegrees; }
+
+	/** Downed and dead pawns go limp: the mannequin simulates physics on a floor made under it, and the
+	 *  MetaHuman follows it. `Impulse` is a velocity change in cm/s (the shot that did it). Cosmetic: the
+	 *  sim already has the pawn lying prone where it fell. */
+	void StartRagdoll(const FVector& Impulse);
+	/** Gets up again: the animation takes over. */
+	void StopRagdoll();
+	bool IsRagdoll() const { return bRagdoll; }
+	/** Where the ragdoll's pelvis is now (world cm); false if the pawn is not a ragdoll. */
+	bool GetRagdollPelvis(FVector& OutLocation) const;
+	int32 GetRagdollsStarted() const { return RagdollsStarted; }
+
+	/** The mesh that wears wound decals: the MetaHuman's body if there is one, else the mannequin. */
+	USkeletalMeshComponent* GetDecalMesh() const;
+
+	static constexpr float kHitReactionSeconds = 0.55f;
+
 	colony::Entity GetThing() const { return Thing; }
 	ESimPawnDetail GetDetail() const { return Detail; }
 	USkeletalMeshComponent* GetBody() const { return Body; }
@@ -100,8 +124,22 @@ private:
 	UPROPERTY()
 	TObjectPtr<USkeletalMeshComponent> MetaHumanBody;
 
+	void SpawnRagdollFloor();
+	void ApplyLean(float DeltaTime);
+
+	/** An invisible slab at the ground under a ragdoll (the ground is drawn from the sim and has no collision). */
+	UPROPERTY()
+	TObjectPtr<UStaticMeshComponent> RagdollFloor;
+
 	FSimPawnLooks Looks;
 	bool bHasLooks = false;
+	bool bRagdoll = false;
+	int32 RagdollsStarted = 0;
+	float ReactionAge = kHitReactionSeconds;
+	float ReactionStrength = 0.0f;
+	FVector ReactionDirection = FVector::ForwardVector;
+	float LeanDegrees = 0.0f;
+	int32 HitReactions = 0;
 
 	colony::Entity Thing = colony::kNoEntity;
 	ESimPawnDetail Detail = ESimPawnDetail::Full;

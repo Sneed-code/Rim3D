@@ -114,7 +114,7 @@ Times are one sitting of thread work. "Needs" lists tasks that must be merged fi
 | ✓ | U8 | **Colony panels.** Work tab, schedule tab, stove bills, colonist panel (needs, mood and thoughts, skills, health), message log. All ImGui. | PC Unreal | Sonnet, medium | 90 min | U6, C7, C9 |
 | ✓ | U9 | **Protagonist.** Game Animation Sample character as the protagonist, position sent to the sim each step, 1st/3rd person toggle, one key between direct and overseer mode (the AI takes over), possessing another colonist. | PC Unreal | Sonnet, high | 90 min | U5, U6, C8 |
 | | U10 | **Hands-on work.** Look at a thing and hold interact to get the sim job (chop, mine, build, pick up); in direct mode, a build ghost that snaps to the grid. | PC Unreal | Sonnet, high | 90 min | U9, U7 |
-| | U11 | **Fights on screen and shooting.** Tracers, muzzle flashes, impacts, hit reactions, cosmetic ragdolls, placeholder wound decals; the protagonist aims and fires through the sim; a hitbox debug view to check hits match bodies. | PC Unreal | Sonnet, high | 90 min | U9, F2 |
+| ✓ | U11 | **Fights on screen and shooting.** Tracers, muzzle flashes, impacts, hit reactions, cosmetic ragdolls, placeholder wound decals; the protagonist aims and fires through the sim; a hitbox debug view to check hits match bodies. | PC Unreal | Sonnet, high | 90 min | U9, F2 |
 | ✓ | U12 | **Saves and bug replays in game.** F5 quicksave, F9 quickload, daily autosave; a bug key that writes a replay file I can run in the cloud. | PC Unreal | Sonnet, medium | 60 min | S6, U2 |
 
 ### Art (A)

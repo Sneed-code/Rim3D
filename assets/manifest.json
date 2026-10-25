@@ -35,6 +35,15 @@
       "installedTo": "game/Content/Rim3D/Generated/Buildings/M_BuildingGhost.uasset (not in Git)",
       "usedFor": "blueprints and the whole-building ghost behind frames (docs/design/building-draw.md)",
       "reinstall": "\"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" game\\Rim3D.uproject -run=BuildingMaterials -unattended -nosplash -nullrhi"
+    },
+    {
+      "name": "Wound decal material (generated)",
+      "source": "Made by the FightMaterials commandlet: our own deferred decal with a Color and an Opacity that blends a round soft-edged blob into what it lands on",
+      "licence": "Our own",
+      "version": "UE 5.8",
+      "installedTo": "game/Content/Rim3D/Generated/Fights/M_WoundDecal.uasset (not in Git)",
+      "usedFor": "wounds on bodies and blood on the ground (docs/design/fights.md)",
+      "reinstall": "\"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" game\\Rim3D.uproject -run=FightMaterials -unattended -nosplash -nullrhi"
     }
   ]
 }
