@@ -1,0 +1,20 @@
+[
+  {
+    "defName": "ResearchRules",
+    "source": "RimWorld wiki",
+    "pointsPerTick": 0.00825,
+    "secondsPerTick": 1.44,
+    "skillSpeedBase": 0.2,
+    "skillSpeedPerLevel": 0.1,
+    "defaultSkillLevel": 8,
+    "unverified": [
+      "pointsPerTick"
+    ],
+    "ours": [
+      "secondsPerTick",
+      "skillSpeedBase",
+      "skillSpeedPerLevel",
+      "defaultSkillLevel"
+    ]
+  }
+]

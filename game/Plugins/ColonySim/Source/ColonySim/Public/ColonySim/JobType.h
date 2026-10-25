@@ -22,6 +22,7 @@ enum class JobType : uint8_t {
     HarvestPlant,  // walk to a designated plant and pick what it gives
     DoBill,            // fetch ingredients to a work building, work, make the product (bills.md)
     Recreate,          // walk to a place and play, sit or stroll for a while, for joy (recreation.md)
+    Research,          // walk to a research bench and add points to the current project (research.md)
     CleanFilth,        // walk to a cell with filth and clean it, a layer at a time (docs/design/room-stats.md)
 };
 

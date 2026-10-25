@@ -325,6 +325,18 @@ struct ShortCircuitCommand {
     Entity thing = kNoEntity;
 };
 
+// Research (task C21, docs/design/research.md): picks the project the colony works on; an empty name puts
+// the current one down (its progress is kept). Fails for a project that doesn't exist, is done or has
+// prerequisites missing.
+struct SetResearchCommand {
+    std::string project;
+};
+
+// Dev command: a project is done at once, whatever it needs. Fails for a project that doesn't exist.
+struct UnlockResearchCommand {
+    std::string project;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -335,7 +347,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              DraftCommand, MoveOrderCommand, AttackOrderCommand, SetFactionCommand, SetLineageCommand,
                              ReloadCommand, AddBillCommand,
                              RemoveBillCommand, SetBillCommand, HandsOnCommand, FlickCommand, ShortCircuitCommand,
-                             PlaceFloorCommand, AddFilthCommand>;
+                             PlaceFloorCommand, AddFilthCommand,
+                             SetResearchCommand, UnlockResearchCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.
