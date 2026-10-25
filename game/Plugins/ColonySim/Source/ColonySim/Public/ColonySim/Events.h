@@ -26,6 +26,8 @@ enum class EventType : uint8_t {
     PawnAction,      // a pawn did something with its hands that Unreal animates (picked up, put down)
     JobStarted,      // a pawn took a job (docs/design/jobs.md)
     JobEnded,        // a pawn's job ended: `message` says "done", "failed: why" or "interrupted: why"
+    PawnAte,         // a pawn finished eating (docs/design/needs.md)
+    PawnWokeUp,      // a pawn got up after sleeping
 };
 
 // What a PawnAction event's pawn did. Later jobs add theirs (chop, mine, build, eat); Unreal plays
@@ -33,6 +35,9 @@ enum class EventType : uint8_t {
 enum class PawnAction : uint8_t {
     PickUp,   // took `target` off the map to carry it
     PutDown,  // put the carried `target` down (it gets a ThingSpawned too), or the stack it was added to
+    Eat,      // started eating the carried `target`
+    LieDown,  // lay down to sleep in the bed `target`, or on the ground (no target)
+    GetUp,    // got up from sleeping
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
@@ -50,6 +55,9 @@ struct Event {
     // `thing` is the pawn, `cell` where it stands, `part` the index of the body part in its Bodies
     // def (depth-first, torso 0), `amount` the hit points of damage dealt to it.
     int part = -1;
+    // PawnAte: `thing` the pawn, `def` the food's Things def, `amount` the nutrition gained, `cell`
+    // where it stood and `message` "table" (in a chair at a table) or "ground". PawnWokeUp: `thing`
+    // the pawn, `target` the bed it slept in or none, `message` "bed" or "ground", `amount` its rest.
     float amount = 0.0f;
 };
 

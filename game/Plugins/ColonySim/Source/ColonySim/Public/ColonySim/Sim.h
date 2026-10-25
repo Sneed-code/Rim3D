@@ -26,6 +26,7 @@ namespace colony {
 class DefDatabase;
 class JobSystem;
 class MovementSystem;
+class NeedsSystem;
 class Regions;
 class Things;
 class Zones;
@@ -115,6 +116,9 @@ public:
     // through `health().applyDamage` from other sim systems, or the DamagePawnCommand.
     HealthSystem& health() { return *health_; }
     const HealthSystem& health() const { return *health_; }
+    // Food and rest (docs/design/needs.md). Eating and sleeping are jobs, see jobs().
+    NeedsSystem& needs() { return *needs_; }
+    const NeedsSystem& needs() const { return *needs_; }
     // What a health panel shows for a pawn; false if it has no body.
     bool healthReport(Entity pawn, HealthReport& out) const { return health_->report(pawn, out); }
 
@@ -158,6 +162,7 @@ private:
     std::unique_ptr<Things> things_;
     std::unique_ptr<MovementSystem> movement_;
     std::unique_ptr<HealthSystem> health_;
+    std::unique_ptr<NeedsSystem> needs_;
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
     Rng rng_;

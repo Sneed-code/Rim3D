@@ -3,6 +3,7 @@
 #include "ColonySim/Api.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
+#include "ColonySim/Needs.h"
 #include "ColonySim/Zones.h"
 
 #include <cstdint>
@@ -91,9 +92,25 @@ struct OrderHaulCommand {
     Entity thing = kNoEntity;
 };
 
+// Schedule tab: what a pawn does in one hour of the day (0 to 23). Fails for a pawn with no
+// schedule (it needs food and rest, so the defs must have a NeedRules def) or a bad hour.
+struct SetScheduleCommand {
+    Entity pawn = kNoEntity;
+    int hour = 0;
+    ScheduleKind kind = ScheduleKind::Anything;
+};
+
+// Bed ownership: `pawn` owns `bed` (and gives up any other bed). `pawn` kNoEntity takes every
+// owner off the bed. Fails if the bed is full or either is not what it should be.
+struct AssignBedCommand {
+    Entity bed = kNoEntity;
+    Entity pawn = kNoEntity;
+};
+
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
-                             SetStockpilePriorityCommand, SetStockpileAllowedCommand, OrderHaulCommand>;
+                             SetStockpilePriorityCommand, SetStockpileAllowedCommand, OrderHaulCommand,
+                             SetScheduleCommand, AssignBedCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

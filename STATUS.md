@@ -64,6 +64,18 @@ items stack up to their stack limit. A downed pawn drops its job and what it car
 `JobStarted`/`JobEnded`, and the snapshot shows each pawn's job, load and the zones. Save format 6:
 **saves from before C1 (U12's quicksaves too) no longer load** (`docs/decisions/0005`).
 
+Since C6 colonists have food and rest (`docs/design/needs.md`): food falls 1.6 a day and rest 0.95 a
+day in bands, as the RimWorld wiki says; a hungry pawn picks the tastiest food it can reach, takes it to
+a chair next to a table if there is one (else eats where it lay) and eats; a pawn sleeps in its own bed,
+else the nearest free one (which it then owns), else on the ground; the hourly schedule (Anything, Work,
+Joy, Sleep; standard Sleep 22:00 to 05:59) sends tired pawns to bed, and a pawn hauling or waiting puts
+the job down when it gets hungry or tired. Starving kills (`DeathCause::Starvation`). Commands
+`SetSchedule` and `AssignBed`; events `PawnAte`, `PawnWokeUp`, actions `Eat`, `LieDown`, `GetUp`; the
+snapshot has `food`, `rest`, `asleep`. Needs exist only where the data has a `NeedRules` def. The Crashlanded
+colonists eat through their starting food in about 5 days and begin to starve around day 8, so **farming (C2, C3) and cooking (C7) are now the way to
+keep them alive**. Beds, tables and chairs are C4's defs: it reads `building.bed`, `building.isTable`,
+`building.isSittable` and `stats.bedRestEffectiveness`. Save format 7 (format 6 still loads).
+
 Since D3 the game has real starting data in `data/defs/`, written by hand with RimWorld's numbers
 from the RimWorld wiki (there is no RimWorld install to import from; `docs/decisions/0003`):
 terrain fertility, wild plants and the temperate forest, basic items, the Human, skills, work
@@ -81,7 +93,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-18 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1). Tick tasks in `docs/plans/stage-1.md` as they merge.
+19 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, C6). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -129,8 +141,8 @@ actions too). ~~**U6** overseer camera and selection~~ done (PC Unreal;
 smoke test `overseer`; `docs/design/overseer.md`). **U3** terrain and plants (PC Unreal, Sonnet high)
 needs C2 as well.
 
-Wave 6, open now that C1 is in: **C4** building (cloud, Sonnet high), **C6** food, rest and
-schedules (cloud, Sonnet high), **F2** guns and hitboxes (cloud, Opus high); **C3** mining, chopping
+Wave 6, open now that C1 is in: **C4** building (cloud, Sonnet high), ~~**C6** food, rest and
+schedules~~ done (`docs/design/needs.md`; save format 7), **F2** guns and hitboxes (cloud, Opus high); **C3** mining, chopping
 and harvesting (cloud, Sonnet high) once C2 is in. On the PC, **U9** and **A3** need only done tasks.
 U6's work tab and U9's colonist panel can now read `sim.jobs()` (work types, priorities).
 

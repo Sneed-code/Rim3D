@@ -30,9 +30,13 @@ const char* commandName(const Command& command) {
                 return "SetStockpilePriority";
             } else if constexpr (std::is_same_v<Type, SetStockpileAllowedCommand>) {
                 return "SetStockpileAllowed";
-            } else {
-                static_assert(std::is_same_v<Type, OrderHaulCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, OrderHaulCommand>) {
                 return "OrderHaul";
+            } else if constexpr (std::is_same_v<Type, SetScheduleCommand>) {
+                return "SetSchedule";
+            } else {
+                static_assert(std::is_same_v<Type, AssignBedCommand>, "name every command type");
+                return "AssignBed";
             }
         },
         command);
@@ -52,6 +56,8 @@ const char* eventTypeName(EventType type) {
         case EventType::JobStarted: return "JobStarted";
         case EventType::JobEnded: return "JobEnded";
         case EventType::PawnAction: return "PawnAction";
+        case EventType::PawnAte: return "PawnAte";
+        case EventType::PawnWokeUp: return "PawnWokeUp";
     }
     return "?";
 }
@@ -60,6 +66,9 @@ const char* pawnActionName(PawnAction action) {
     switch (action) {
         case PawnAction::PickUp: return "PickUp";
         case PawnAction::PutDown: return "PutDown";
+        case PawnAction::Eat: return "Eat";
+        case PawnAction::LieDown: return "LieDown";
+        case PawnAction::GetUp: return "GetUp";
     }
     return "?";
 }
