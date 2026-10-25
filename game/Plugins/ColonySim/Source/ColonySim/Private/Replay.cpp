@@ -168,12 +168,17 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["mode"] = billModeName(c.mode);
                 j["count"] = c.count;
                 j["suspended"] = c.suspended;
-            } else {
-                static_assert(std::is_same_v<Type, HandsOnCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, HandsOnCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["mode"] = c.mode == HandsOnMode::Work ? "Work" : (c.mode == HandsOnMode::PutDown ? "PutDown" : "Stop");
                 j["thing"] = entt::to_integral(c.thing);
                 j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
+            } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["breakDef"] = c.breakDef;
+            } else {
+                static_assert(std::is_same_v<Type, EndMentalBreakCommand>, "write every command type");
+                j["pawn"] = entt::to_integral(c.pawn);
             }
         },
         logged.command);
@@ -676,6 +681,20 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         c.thing = static_cast<Entity>(thing);
         c.cell = CellPos{(*cell)[0].get<int>(), (*cell)[1].get<int>(), (*cell)[2].get<int>()};
         out.command = c;
+    } else if (type == "StartMentalBreak") {
+        StartMentalBreakCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "breakDef", c.breakDef, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "EndMentalBreak") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where)) {
+            return false;
+        }
+        out.command = EndMentalBreakCommand{static_cast<Entity>(pawn)};
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");
     }

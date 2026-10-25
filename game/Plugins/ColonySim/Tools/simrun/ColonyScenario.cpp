@@ -254,6 +254,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     uint64_t picked = 0;
     uint64_t mealsMade = 0;
     uint64_t commandsFailed = 0;
+    uint64_t mentalBreaks = 0;
     float minFood = 1.0f;
     float minRest = 1.0f;
     float maxMalnutrition = 0.0f;
@@ -278,6 +279,10 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                         std::fprintf(stderr, "step %lld: %s job failed for a colonist at %d,%d: %s\n", static_cast<long long>(i),
                                      jobTypeName(e.job), e.cell.x, e.cell.y, e.message.c_str());
                     }
+                    break;
+                case EventType::PawnMentalBreak:
+                    ++mentalBreaks;
+                    std::fprintf(stderr, "day %lld: a colonist had a mental break: %s\n", static_cast<long long>(sim.time().day()), e.message.c_str());
                     break;
                 case EventType::CellMined: ++mined; break;
                 case EventType::PlantRemoved: ++felled; break;
@@ -440,7 +445,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 "\"planned\":%zu,\"walls\":%d,\"doors\":%d,\"beds\":%d,\"tables\":%d,\"stools\":%d,\"stoves\":%d,\"unfinished\":%d,"
                 "\"allBuiltAtSecond\":%lld,\"stoveBuiltAtSecond\":%lld,\"roomOk\":%s,"
                 "\"mealsCooked\":%llu,\"ate\":%llu,\"atTable\":%llu,\"woke\":%llu,\"wokeInBed\":%llu,"
-                "\"commandsFailed\":%llu,\"failedJobs\":%llu,\"stateHash\":\"%016llx\"}}\n",
+                "\"commandsFailed\":%llu,\"failedJobs\":%llu,\"mentalBreaks\":%llu,\"stateHash\":\"%016llx\"}}\n",
                 static_cast<unsigned long long>(seed), mapSize, days, colonists.size(), static_cast<unsigned long long>(died),
                 static_cast<double>(minFood), static_cast<double>(maxMalnutrition), static_cast<double>(minRest),
                 static_cast<double>(minMood), static_cast<long long>(worstStuck), static_cast<long long>(worstIdle),
@@ -452,7 +457,8 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 static_cast<unsigned long long>(mealsMade), static_cast<unsigned long long>(ate),
                 static_cast<unsigned long long>(atTable), static_cast<unsigned long long>(slept),
                 static_cast<unsigned long long>(sleptInBed), static_cast<unsigned long long>(commandsFailed),
-                static_cast<unsigned long long>(sim.stats().failedJobs), static_cast<unsigned long long>(sim.stateHash()));
+                static_cast<unsigned long long>(sim.stats().failedJobs), static_cast<unsigned long long>(mentalBreaks),
+                static_cast<unsigned long long>(sim.stateHash()));
 
     // The checks.
     int failures = 0;

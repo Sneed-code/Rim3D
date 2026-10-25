@@ -31,6 +31,7 @@ struct Colonist;
 struct PawnLooks;
 class Designations;
 class FighterSystem;
+class MentalBreakSystem;
 class JobSystem;
 class Lights;
 class Mineables;
@@ -179,6 +180,10 @@ public:
     FighterSystem& fighters() { return *fighters_; }
     const FighterSystem& fighters() const { return *fighters_; }
 
+    // Colonists who snap when their mood is low: wander, binge, tantrum, berserk, leave (docs/design/mental-breaks.md).
+    MentalBreakSystem& mentalBreaks() { return *mentalBreaks_; }
+    const MentalBreakSystem& mentalBreaks() const { return *mentalBreaks_; }
+
     // Blueprints, frames and taking buildings down (docs/design/construction.md).
     Construction& construction() { return *construction_; }
     const Construction& construction() const { return *construction_; }
@@ -236,6 +241,7 @@ private:
     std::unique_ptr<Construction> construction_;
     std::unique_ptr<JobSystem> jobs_;  // after everything it holds a reference to
     std::unique_ptr<FighterSystem> fighters_;  // after the job system
+    std::unique_ptr<MentalBreakSystem> mentalBreaks_;  // after the job and fighter systems
     std::vector<std::string> setupErrors_;
     std::vector<std::pair<uint64_t, Command>> pending_;  // id, command
     uint64_t submitted_ = 0;

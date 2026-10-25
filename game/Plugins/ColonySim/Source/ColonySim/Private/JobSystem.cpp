@@ -8,6 +8,7 @@
 #include "ColonySim/Events.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Sim.h"
@@ -520,6 +521,10 @@ void JobSystem::step() {
             if (reg.get<Worker>(pawn).job.type != JobType::None) {
                 tickJob(pawn);
             }
+            continue;
+        }
+        // It is in a mental break (C19): the break system walks it, until the break is over.
+        if (const MentalBreaker* breaker = reg.try_get<MentalBreaker>(pawn); breaker != nullptr && breaker->active) {
             continue;
         }
         // It fights (drafted, or another faction's: F4): no think, no job, until it is undrafted.

@@ -245,7 +245,9 @@ Stage 2 done so far: **D7** medicine and disease data (`docs/design/medicine-dat
 **E3** light and darkness (`docs/design/light.md`).
 **D8** production data (work tables, stone blocks, melee weapons with tools; the meal recipes still list only the fueled stove, C14 adds the electric stove).
 
-D9 (thoughts, recreation, mental break and social data) is in: `docs/design/thoughts-data.md`. Data only; C15, C17, C18, C19, C20, E2 and E3 read it.
+D9 (thoughts, recreation, mental break and social data) is in: `docs/design/thoughts-data.md`. Data only; C15, C17, C18, C20, E2 and E3 read it.
+
+**C19** mental breaks are in (`docs/design/mental-breaks.md`, tests `MentalBreakTests`): a colonist under a break threshold gets a roll every 216 game seconds at RimWorld's mean waits (4, 1.5 and 0.5 days, shorter as mood sinks); the band picks the break (minor: sad wander, food binge, hide in room; major: tantrum, long wander, insulting spree; extreme: berserk, give up and leave; fire-starting needs E4). While it lasts **the job system skips the colonist** (like a fighter) and `MentalBreakSystem` walks it; it ends when its time is up and the mood is 10 above the threshold, then Catharsis (+40) lifts it. New: events `PawnMentalBreak`, `PawnMentalBreakEnded`, `PawnInsulted`, `PawnLeftColony`, `PawnAction::Punch`, snapshot `mentalBreak`, dev commands `StartMentalBreak` / `EndMentalBreak`, defs `Rules/MentalBreakBehaviour.json` (our numbers), save section `mentalBreaks`. Orders to a colonist in a break are refused. Berserk uses placeholder fists until F8; C20 can turn `PawnInsulted` into a real interaction; E4 calls `mentalBreaks().provide("fire")` and fills in `FireSpree`. The colony scenario prints a `mentalBreaks` count (seed 42 has one minor binge on day 2).
 
 
 ## Next

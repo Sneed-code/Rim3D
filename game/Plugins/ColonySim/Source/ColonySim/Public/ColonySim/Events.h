@@ -37,6 +37,10 @@ enum class EventType : uint8_t {
     ShotFired,       // a pawn fired a projectile (docs/design/combat.md)
     ProjectileHit,   // a projectile stopped: it hit something, or flew off the map or too long
     RecipeDone,      // a pawn finished one run of a bill (docs/design/bills.md)
+    PawnMentalBreak,       // a colonist snapped: a mental break began (docs/design/mental-breaks.md)
+    PawnMentalBreakEnded,  // it ended: `message` says how ("recovered", "downed", "died", "stopped")
+    PawnInsulted,          // a pawn in an insulting spree insulted another
+    PawnLeftColony,        // a pawn gave up and walked off the map for good
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -66,6 +70,7 @@ enum class PawnAction : uint8_t {
     Reload,   // started reloading the gun `target` (docs/design/aiming.md); it is ready again when shotReadyIn is 0
     Dodge,    // sidestepped into `cell` out of the way of the projectile `target`
     Cook,         // started work on a bill at `target`, a work building (once per run of the bill)
+    Punch,        // swung a fist at `target`, a pawn or a thing (a tantrum or berserk break: docs/design/mental-breaks.md)
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
@@ -96,6 +101,11 @@ struct Event {
     // RecipeDone: `thing` the pawn, `def` the Recipes def, `target` the work building, `cell` where the
     // pawn stood, `amount` how many products were made, `message` "bill finished" if that was the
     // bill's last run (a "Do X times" bill that reached 0, which is removed), else empty.
+    // PawnMentalBreak: `thing` the pawn, `message` the MentalBreaks defName, `amount` its mood.
+    // PawnMentalBreakEnded: `thing` the pawn, `message` how it ended, `amount` how many game seconds it lasted.
+    // PawnInsulted: `thing` the one insulting, `target` the one insulted. PawnLeftColony: `thing` the pawn (a
+    // ThingDestroyed for it and what it took comes with the event), `message` the break. PawnAction Punch:
+    // `target` the pawn or thing hit.
     float amount = 0.0f;
     // ShotFired: `thing` the shooter, `def` its gun's Things def, `target` the projectile, (x, y, z)
     // the muzzle. ProjectileHit: `thing` the projectile (forget its id), `def` its Projectiles def,

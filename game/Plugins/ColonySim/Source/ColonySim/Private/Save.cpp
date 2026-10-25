@@ -15,6 +15,7 @@
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Mineables.h"
+#include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
@@ -212,6 +213,7 @@ struct SaveEntity {
     std::optional<PawnLooks> looks;  // format 16 on
     std::optional<Magazine> magazine;  // format 17 on
     std::optional<SaveBillList> bills;      // format 18 on
+    std::optional<MentalBreaker> mentalBreaker;  // section "mentalBreaks" (C19)
 };
 
 // A stockpile zone, with its filter by defName.
@@ -884,6 +886,13 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.require(hands->mode <= HandsOnMode::Stop, "the save file has a bad hands-on mode");
                 ar.value("thing", hands->thing);
                 ar.group("cell", [&] { saveCell(ar, hands->cell); });
+            } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
+                auto* start = &c;
+                ar.value("pawn", start->pawn);
+                ar.text("breakDef", start->breakDef);
+            } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
+                auto* stop = &c;
+                ar.value("pawn", stop->pawn);
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }
@@ -1325,6 +1334,30 @@ void saveFighterPart(Ar& ar, Fighter& f) {
 }
 
 template <typename Ar>
+void saveMentalBreakerPart(Ar& ar, MentalBreaker& b) {
+    ar.value("active", b.active);
+    ar.text("def", b.def);
+    ar.value("state", b.state);
+    ar.require(static_cast<int>(b.state) <= static_cast<int>(BreakState::FireSpree), "the save file has a bad mental break state");
+    ar.value("startedAt", b.startedAt);
+    ar.value("endsAfter", b.endsAfter);
+    ar.value("hardEnd", b.hardEnd);
+    ar.value("recoverLevel", b.recoverLevel);
+    ar.value("lastEnded", b.lastEnded);
+    ar.value("walk", b.walk);
+    ar.value("repaths", b.repaths);
+    ar.value("pathSlot", b.path.slot);
+    ar.value("pathSerial", b.path.serial);
+    ar.value("hasGoal", b.hasGoal);
+    ar.group("goal", [&] { saveCell(ar, b.goal); });
+    ar.value("target", b.target);
+    ar.value("done", b.done);
+    ar.value("nextAct", b.nextAct);
+    ar.value("nextHit", b.nextHit);
+    ar.list("visited", b.visited, [&](Entity& e) { ar.value(nullptr, e); });
+}
+
+template <typename Ar>
 void saveMagazinePart(Ar& ar, Magazine& m) {
     ar.value("rounds", m.rounds);
     ar.require(m.rounds >= 0, "the save file has a magazine with fewer than no rounds");
@@ -1701,6 +1734,9 @@ void saveSections(Ar& ar, SaveData& d) {
         saveMineables(ar, d.mineables);
         saveDesignations(ar, d.designations);
     });
+    ar.section("mentalBreaks", 1, [&] {
+        saveParts(ar, "mentalBreaker", e, &SaveEntity::mentalBreaker, [&](MentalBreaker& b) { saveMentalBreakerPart(ar, b); });
+    });
     // New sections go here, at the end.
 }
 
@@ -1896,6 +1932,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const PawnLooks* looks = reg.try_get<PawnLooks>(e)) {
             out.looks = *looks;
+        }
+        if (const MentalBreaker* breaker = reg.try_get<MentalBreaker>(e)) {
+            out.mentalBreaker = *breaker;
         }
         out.playerControlled = reg.all_of<PlayerControl>(e);
         if (const ConstructionSite* site = reg.try_get<ConstructionSite>(e)) {
@@ -2193,6 +2232,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.looks) {
             reg.emplace<PawnLooks>(entity, std::move(*e.looks));
         }
+        if (e.mentalBreaker) {
+            reg.emplace<MentalBreaker>(entity, std::move(*e.mentalBreaker));
+        }
         if (e.bills) {
             BillList list;
             list.nextId = e.bills->nextId;
@@ -2363,6 +2405,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         return false;
     }
     if (!sim.fighters_->afterLoad(error)) {
+        return false;
+    }
+    if (!sim.mentalBreaks_->afterLoad(error)) {
         return false;
     }
     if (d.stockpile && !sim.map_.inBounds(*d.stockpile)) {

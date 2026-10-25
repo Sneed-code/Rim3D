@@ -106,6 +106,8 @@ struct ThingView {
     bool fallingBack = false;
     // Humanlike pawns: their looks, Snapshot::looks[looks]; -1 for other things.
     int32_t looks = -1;
+    // Pawns in a mental break (docs/design/mental-breaks.md): its MentalBreaks def, invalid when not in one.
+    DefId mentalBreak;
 };
 
 // A bullet in flight (docs/design/combat.md). Unreal draws a tracer along its velocity; it

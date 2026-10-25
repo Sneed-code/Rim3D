@@ -11,6 +11,7 @@
 #include "ColonySim/Hash.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Lights.h"
+#include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Needs.h"
@@ -109,9 +110,15 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
     jobs_->setLights(lights_.get());
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
+    mentalBreaks_ = std::make_unique<MentalBreakSystem>(*things_, map_, *health_, *fighters_, *jobs_, *mood_, *rooms_,
+                                                        pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
     fighters_->setEventLog(&events_);
-    combat_->setBeforeDestroy([this](Entity thing) { jobs_->forget(thing); });
+    mentalBreaks_->setEventLog(&events_);
+    combat_->setBeforeDestroy([this](Entity thing) {
+        jobs_->forget(thing);
+        mentalBreaks_->forget(thing);
+    });
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -265,6 +272,25 @@ void Sim::commandFailed(uint64_t id, std::string message) {
 
 void Sim::applyCommand(const Command& command, uint64_t id) {
     std::string error;
+    // A colonist in a mental break takes no orders: it isn't the player's to command until it is over.
+    Entity ordered = kNoEntity;
+    if (const auto* draft = std::get_if<DraftCommand>(&command)) {
+        ordered = draft->drafted ? draft->pawn : kNoEntity;
+    } else if (const auto* moveOrder = std::get_if<MoveOrderCommand>(&command)) {
+        ordered = moveOrder->pawn;
+    } else if (const auto* attack = std::get_if<AttackOrderCommand>(&command)) {
+        ordered = attack->pawn;
+    } else if (const auto* haul = std::get_if<OrderHaulCommand>(&command)) {
+        ordered = haul->pawn;
+    } else if (const auto* control = std::get_if<ControlPawnCommand>(&command)) {
+        ordered = control->pawn;
+    } else if (const auto* hands = std::get_if<HandsOnCommand>(&command)) {
+        ordered = hands->mode == HandsOnMode::Work ? hands->pawn : kNoEntity;
+    }
+    if (ordered != kNoEntity && mentalBreaks_->active(ordered)) {
+        commandFailed(id, "that colonist is in a mental break");
+        return;
+    }
     if (const auto* spawn = std::get_if<SpawnThingCommand>(&command)) {
         const DefId def = defs_->idOf("Things", spawn->def);
         Entity thing = kNoEntity;
@@ -287,6 +313,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             combat_->dropGear(destroy->thing);
             jobs_->forget(destroy->thing);
             fighters_->forget(destroy->thing);
+            mentalBreaks_->forget(destroy->thing);
             things_->destroy(destroy->thing);
         }
     } else if (const auto* damage = std::get_if<DamagePawnCommand>(&command)) {
@@ -552,6 +579,14 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
                                     error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* startBreak = std::get_if<StartMentalBreakCommand>(&command)) {
+        if (!mentalBreaks_->start(startBreak->pawn, startBreak->breakDef, rng_, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* endBreak = std::get_if<EndMentalBreakCommand>(&command)) {
+        if (!mentalBreaks_->end(endBreak->pawn, error)) {
+            commandFailed(id, error);
+        }
     }
 }
 
@@ -586,6 +621,7 @@ void Sim::step() {
     }
     jobs_->step();
     fighters_->step();
+    mentalBreaks_->step(time_.seconds, rng_);  // before the mood system, which turns its events into memories
     mood_->step(time_.seconds, events_);
     movement_->step(things_->registry(), map_);
     combat_->step(rng_);
@@ -728,6 +764,9 @@ void Sim::writeSnapshot(Snapshot& out) const {
         }
         if (const Worker* worker = reg.try_get<Worker>(entity)) {
             view.asleep = jobIsLyingDown(worker->job);
+        }
+        if (const MentalBreaker* breaker = reg.try_get<MentalBreaker>(entity); breaker != nullptr && breaker->active) {
+            view.mentalBreak = defs_->idOf("MentalBreaks", breaker->def);
         }
         if (const Carrying* carrying = reg.try_get<Carrying>(entity); carrying && reg.valid(carrying->thing)) {
             view.carriedDef = reg.get<Thing>(carrying->thing).def;
@@ -1051,6 +1090,7 @@ uint64_t Sim::stateHash() const {
         }
         combat_->hashThing(e, h);
         fighters_->hashThing(e, h);
+        mentalBreaks_->hashThing(e, h);
     }
     return h.value();
 }

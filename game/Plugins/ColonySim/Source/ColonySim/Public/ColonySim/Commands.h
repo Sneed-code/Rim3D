@@ -294,6 +294,20 @@ struct HandsOnCommand {
 // How far from the edge of a rock, plant, frame or item a controlled colonist can work on it, in metres.
 inline constexpr float kHandsOnReach = 2.0f;
 
+// Dev command: the colonist has a mental break now (a MentalBreaks defName, docs/design/mental-breaks.md),
+// whatever its mood. Fails for a pawn that isn't a colonist on the map, is controlled by the player,
+// downed, dead or in a break already; for a break that needs something the game doesn't have yet
+// (fire); or when the break has nothing to do (a binge with no food).
+struct StartMentalBreakCommand {
+    Entity pawn = kNoEntity;
+    std::string breakDef;
+};
+
+// Dev command: ends the colonist's mental break at once, with no catharsis. Fails if it isn't in one.
+struct EndMentalBreakCommand {
+    Entity pawn = kNoEntity;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -303,7 +317,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ShootCommand, SetStanceCommand, DesignateCommand, CancelDesignationsCommand,
                              DraftCommand, MoveOrderCommand, AttackOrderCommand, SetFactionCommand, SetLineageCommand,
                              ReloadCommand, AddBillCommand,
-                             RemoveBillCommand, SetBillCommand, HandsOnCommand>;
+                             RemoveBillCommand, SetBillCommand, HandsOnCommand,
+                             StartMentalBreakCommand, EndMentalBreakCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

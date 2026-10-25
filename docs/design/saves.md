@@ -110,6 +110,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `zones` | 1 | next zone id, stockpile zones |
 | `plants` | 1 | the plant layer |
 | `mining` | 1 | the rock layer and the designations |
+| `mentalBreaks` | 1 | `mentalBreaker` ([mental-breaks.md](mental-breaks.md)) |
 
 **Commands are saved by name (S7).** The `commands` section starts with the names of the command
 types it uses (`commandNames`); each command then gives its type as a place in that list, and its
