@@ -340,6 +340,9 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
     if (!meleeAble(reg, pawn)) {
         return fail("that pawn can't fight (downed or dead)");
     }
+    if (combat_.rollLocked(pawn)) {
+        return fail("rolling");
+    }
     if (const Shooter* s = reg.try_get<Shooter>(pawn); s != nullptr && (s->phase == ShotPhase::Aiming || s->phase == ShotPhase::Firing)) {
         return fail("busy shooting");
     }
@@ -421,6 +424,9 @@ bool MeleeSystem::block(Entity pawn, std::string* why) {
     }
     if (!meleeAble(reg, pawn)) {
         return fail("that pawn can't fight (downed or dead)");
+    }
+    if (combat_.rollLocked(pawn)) {
+        return fail("rolling");
     }
     bool weapon = false;
     toolsOf(pawn, weapon);

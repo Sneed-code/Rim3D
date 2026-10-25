@@ -39,6 +39,8 @@ enum class EventType : uint8_t {
     RecipeDone,      // a pawn finished one run of a bill (docs/design/bills.md)
     PowerChanged,    // a building gained or lost power (docs/design/power.md)
     ShortCircuit,    // a short circuit emptied a net's batteries (docs/design/power.md)
+    ItemSpoiled,     // food rotted away or an item wore out in the open (docs/design/spoilage.md)
+    PawnPoisoned,    // a pawn ate a poisoned meal and got food poisoning
     ResearchDone,    // a research project was finished (docs/design/research.md)
     MeleeSwing,      // a pawn began a melee swing: the hit comes `amount` steps later (docs/design/melee.md)
     MeleeHit,        // the hit moment of a swing: `message` says "hit", "deflected", "blocked", "dodged" or "missed"
@@ -75,6 +77,7 @@ enum class PawnAction : uint8_t {
     Research,     // started research at `target`, a research bench (once per job)
     Clean,        // started cleaning the filth in `cell`; a layer comes off every few seconds until its JobEnded
     Block,        // raised its melee weapon against the swing of `target` (none: the player's own block)
+    Roll,         // started a dodge roll (P2): `cell` where it began, (x, y) the unit direction, `amount` the steps from start-up to the end of recovery
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
@@ -111,7 +114,11 @@ struct Event {
     // def's defName, `amount` its cost in points.
     // ShortCircuit: `thing` the building it happened at, `cell` its origin, `amount` the energy
     // released from the net's batteries, Wd.
+    // ItemSpoiled: `thing` the item (it is destroyed right after; forget its id), `def` its def, `cell` where it
+    // lay, `message` "rotted" or "weathered". PawnPoisoned: `thing` the pawn, `def` the meal's def, `target` the
+    // meal, `cell` where the pawn stands.
     float amount = 0.0f;
+    // PawnAction Roll: see there.
     // ShotFired: `thing` the shooter, `def` its gun's Things def, `target` the projectile, (x, y, z)
     // the muzzle. ProjectileHit: `thing` the projectile (forget its id), `def` its Projectiles def,
     // `hit` what stopped it, `target` the pawn or building hit, `part` the body part hit (index as
