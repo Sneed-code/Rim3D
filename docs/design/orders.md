@@ -80,10 +80,10 @@ alarm command; until then the button drafts everyone. Swap it for F6's command t
 
 ## Not here yet
 
-- Floor and zone tools beyond the stockpile (growing zone, home area), zone filter and priority panels (U8).
+- Floor and zone tools beyond the stockpile (growing zone, home area), zone filter and priority panels.
 - Dragging a rectangle of walls or floors (lines only), and selecting several colonists at once (the selection is one thing).
 - Right-click menus for jobs on a thing (prioritise, take, haul to a zone): only the commands above.
-- Work-type and stuff preferences per bill (U8, C7).
+- Work-type and stuff preferences per bill (bills themselves are in the U8 panels, [panels.md](panels.md)).
 - The alarm roles of F6, which also decides what a colonist does when the alarm sounds.
 
 ## Smoke test `orders` (about 20 s)
