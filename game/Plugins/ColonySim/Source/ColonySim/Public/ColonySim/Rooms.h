@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace colony {
@@ -86,7 +87,7 @@ public:
     // The room a walkable cell is in; kNoRoom for a door, a wall or a cell with no region.
     RoomId roomAt(CellPos c);
     const Room* roomOf(CellPos c);
-    // The rooms (not outdoors-only ones: all of them, edge and huge too), in id order. Ids are good
+    // Every room, the outdoors (edge and huge ones) included, in id order. Ids are good
     // until the next change, like region ids.
     const std::vector<Room>& rooms() const { return rooms_; }
     const Room& room(RoomId id) const { return rooms_[id]; }

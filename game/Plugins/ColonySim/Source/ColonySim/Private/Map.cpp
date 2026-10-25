@@ -93,6 +93,14 @@ void Map::setBuilding(CellPos c, Entity building, Passage passage, uint8_t obsta
     }
 }
 
+void Map::setObstacle(CellPos c, uint8_t obstacleDm) {
+    const size_t i = static_cast<size_t>(index(c));
+    if (obstacle_[i] != obstacleDm) {
+        obstacle_[i] = obstacleDm;
+        cover_->markDirty(c);
+    }
+}
+
 void Map::clearBuilding(CellPos c) {
     setBuilding(c, kNoEntity, Passage::Open, 0);
 }

@@ -87,6 +87,9 @@ public:
     // building that is neither.
     void setBuilding(CellPos c, Entity building, Passage passage, uint8_t obstacleDm = 0);
     void clearBuilding(CellPos c);
+    // Changes only the height for sight and cover of the building in a cell; a door does it when it
+    // opens (it stops blocking sight) and closes (docs/design/rooms.md).
+    void setObstacle(CellPos c, uint8_t obstacleDm);
     Passage passage(CellPos c) const { return passage_[static_cast<size_t>(index(c))]; }
     // How tall what stands in the cell is for sight and cover, in decimetres above the ground
     // (docs/design/cover.md). Rock is always the tallest value, 255, which blocks everything.

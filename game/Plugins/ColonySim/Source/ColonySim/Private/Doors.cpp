@@ -1,6 +1,8 @@
 #include "ColonySim/Doors.h"
 
 #include "ColonySim/Defs.h"
+#include "ColonySim/Map.h"
+#include "ColonySim/Things.h"
 
 #include <algorithm>
 #include <cmath>
@@ -20,6 +22,15 @@ DoorNumbers DoorNumbers::read(const DefDatabase& defs) {
     n.closeDelaySteps = std::max(1, static_cast<int>(std::ceil(def->number("closeDelayTicks", 110.0) * stepsPerTick)));
     n.pathCost = static_cast<float>(def->number("pathCost", n.pathCost));
     return n;
+}
+
+void setDoorSight(Map& map, const Footprint& footprint, bool open) {
+    const CellRect rect = footprint.rect();
+    for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
+        for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
+            map.setObstacle(CellPos{x, y, rect.level}, open ? uint8_t{0} : footprint.obstacleDm);
+        }
+    }
 }
 
 }  // namespace colony

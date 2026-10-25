@@ -65,6 +65,15 @@ add_test(NAME replay_build_check COMMAND simrun --replay ${BUILD_REPLAY_RECORDED
 set_tests_properties(replay_build_record PROPERTIES FIXTURES_SETUP build_replay_recording)
 set_tests_properties(replay_build_check PROPERTIES FIXTURES_REQUIRED build_replay_recording)
 
+# And for rooms (C5): colonists wall in a room with a door, a bed and a table, walking through the
+# door as they go; the room ends up roofed with a bedroom role.
+set(ROOMS_REPLAY_RECORDED ${CMAKE_BINARY_DIR}/colony-rooms.recorded.json)
+add_test(NAME replay_rooms_record COMMAND simrun
+         --replay ${CMAKE_CURRENT_SOURCE_DIR}/Tests/replays/colony-rooms.json --record ${ROOMS_REPLAY_RECORDED})
+add_test(NAME replay_rooms_check COMMAND simrun --replay ${ROOMS_REPLAY_RECORDED})
+set_tests_properties(replay_rooms_record PROPERTIES FIXTURES_SETUP rooms_replay_recording)
+set_tests_properties(replay_rooms_check PROPERTIES FIXTURES_REQUIRED rooms_replay_recording)
+
 # Saves: run 0.05 days and save, then load that and run 0.05 more and save, and compare with a
 # straight run of 0.1 days. The two files must be identical, byte for byte. CI also compares the
 # straight run's save from Linux and Windows (docs/design/saves.md).

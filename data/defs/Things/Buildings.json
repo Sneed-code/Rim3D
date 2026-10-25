@@ -12,14 +12,18 @@
     "defName": "Wall", "parent": "StuffBuildingBase", "label": "wall",
     "passability": "Impassable", "fillPercent": 1.0, "designationCategory": "Structure",
     "costStuffCount": 5,
-    "stats": { "maxHitPoints": 300, "workToBuild": 194.4, "flammability": 1.0 }
+    "stats": { "maxHitPoints": 300, "workToBuild": 194.4, "flammability": 1.0 },
+    "building": { "holdsRoof": true },
+    "ours": ["building.holdsRoof"]
   },
   {
     "defName": "Door", "parent": "StuffBuildingBase", "label": "door",
     "thingClass": "Building_Door", "fillPercent": 1.0, "designationCategory": "Structure",
     "costStuffCount": 25,
     "stats": { "maxHitPoints": 160, "workToBuild": 1224, "flammability": 1.0 },
-    "unverified": ["fillPercent"]
+    "building": { "holdsRoof": true },
+    "unverified": ["fillPercent"],
+    "ours": ["building.holdsRoof"]
   },
   {
     "defName": "Bed", "parent": "StuffBuildingBase", "label": "bed",
@@ -62,6 +66,8 @@
     "size": [3, 1], "fillPercent": 0.5, "designationCategory": "Production",
     "costs": { "Steel": 80 },
     "stats": { "maxHitPoints": 180, "workToBuild": 2880, "flammability": 1.0 },
-    "unverified": ["fillPercent"]
+    "building": { "isStove": true },
+    "unverified": ["fillPercent"],
+    "ours": ["building.isStove"]
   }
 ]

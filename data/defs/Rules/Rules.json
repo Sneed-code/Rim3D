@@ -102,5 +102,28 @@
     "unverified": ["buildWorkPerSecond", "deconstructWorkPerSecond", "deconstructWorkMin", "deconstructWorkMax",
                    "deconstructRefundFactor", "skillSpeedBase", "skillSpeedPerLevel"],
     "ours": ["defaultSkillLevel"]
+  },
+  {
+    "defName": "DoorRules", "source": "RimWorld wiki",
+    "openTicks": 45,
+    "closeDelayTicks": 110,
+    "stepsPerTick": 0.5,
+    "pathCost": 3.5,
+    "unverified": ["openTicks", "closeDelayTicks"],
+    "ours": ["stepsPerTick", "pathCost"]
+  },
+  {
+    "defName": "RoomRules", "source": "RimWorld wiki",
+    "roofSupportRadius": 6.9,
+    "hugeRoomCells": 2000,
+    "roleOrder": ["Barracks", "Bedroom", "Kitchen", "DiningRoom"],
+    "roles": {
+      "Barracks": { "minBeds": 2 },
+      "Bedroom": { "minBeds": 1 },
+      "Kitchen": { "minStoves": 1 },
+      "DiningRoom": { "minTables": 1 }
+    },
+    "unverified": ["roofSupportRadius"],
+    "ours": ["hugeRoomCells", "roleOrder", "roles"]
   }
 ]

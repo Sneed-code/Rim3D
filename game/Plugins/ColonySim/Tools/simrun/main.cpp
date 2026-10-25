@@ -28,6 +28,7 @@
 #include "ColonySim/Random.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Replay.h"
+#include "ColonySim/Rooms.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/ThreatMap.h"
@@ -179,6 +180,13 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
             pixels[i + 1] = static_cast<unsigned char>(pixels[i + 1] + (g - pixels[i + 1]) * grown);
             pixels[i + 2] = static_cast<unsigned char>(pixels[i + 2] + (b - pixels[i + 2]) * grown);
         }
+    }
+    // Built roofs (rooms.md): the ground under them tinted warm.
+    for (const colony::CellPos& c : sim.rooms().thinRoofCells()) {
+        const size_t i = static_cast<size_t>(map.index(c)) * 3;
+        pixels[i] = static_cast<unsigned char>((pixels[i] + 190) / 2);
+        pixels[i + 1] = static_cast<unsigned char>((pixels[i + 1] + 110) / 2);
+        pixels[i + 2] = static_cast<unsigned char>((pixels[i + 2] + 80) / 2);
     }
     // Buildings dark grey, items yellow, pawns red (drawn last, on top). Ground level only.
     const auto mark = [&](const colony::Position& pos, unsigned char r, unsigned char g, unsigned char b) {
@@ -556,6 +564,25 @@ int main(int argc, char** argv) {
             trees += sim.defs().get(r.def).flag("plant.isTree") ? 1 : 0;
         }
         std::printf("{\"plants\":%zu,\"trees\":%zu,\"maturePlants\":%zu}\n", plants.count(), trees, mature);
+    }
+    {
+        // Enclosed rooms by role, and the built roof (docs/design/rooms.md).
+        int enclosed = 0;
+        int open = 0;
+        int roles[5] = {0, 0, 0, 0, 0};
+        for (const colony::Room& room : sim.rooms().rooms()) {
+            if (!room.enclosed()) {
+                continue;
+            }
+            ++enclosed;
+            open += room.outdoors() ? 1 : 0;
+            ++roles[static_cast<int>(room.role)];
+        }
+        std::printf("{\"rooms\":{\"enclosed\":%d,\"unroofed\":%d,\"bedrooms\":%d,\"barracks\":%d,\"kitchens\":%d,"
+                    "\"diningRooms\":%d,\"thinRoofCells\":%zu}}\n",
+                    enclosed, open, roles[static_cast<int>(colony::RoomRole::Bedroom)],
+                    roles[static_cast<int>(colony::RoomRole::Barracks)], roles[static_cast<int>(colony::RoomRole::Kitchen)],
+                    roles[static_cast<int>(colony::RoomRole::DiningRoom)], sim.rooms().thinRoofCells().size());
     }
 
     if (!options.record.empty()) {

@@ -24,7 +24,7 @@ class Map;
 class MovementSystem {
 public:
     void setDoors(const DoorNumbers& doors) { doors_ = doors; }
-    void step(entt::registry& registry, const Map& map);
+    void step(entt::registry& registry, Map& map);
 
     // Pawns whose walk was held up by other pawns this step, for the stats simrun prints.
     uint64_t pawnsHeldUp() const { return heldUp_; }
@@ -32,7 +32,7 @@ public:
 private:
     void movePawns(entt::registry& registry, const Map& map);
     void requestDoor(Entity door) { doorRequests_.push_back(door); }
-    void updateDoors(entt::registry& registry);
+    void updateDoors(entt::registry& registry, Map& map);
 
     struct Agent {
         Entity entity = kNoEntity;

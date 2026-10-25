@@ -82,16 +82,17 @@ float moveTimeToMeet(float px, float py, float vx, float vy, float reach) {
 
 }  // namespace
 
-void MovementSystem::step(entt::registry& reg, const Map& map) {
+void MovementSystem::step(entt::registry& reg, Map& map) {
     doorRequests_.clear();
     movePawns(reg, map);
-    updateDoors(reg);
+    updateDoors(reg, map);
 }
 
 // Each door opens while some pawn needs it and closes `closeDelaySteps` after the last one did.
-void MovementSystem::updateDoors(entt::registry& reg) {
+void MovementSystem::updateDoors(entt::registry& reg, Map& map) {
     std::sort(doorRequests_.begin(), doorRequests_.end());
     for (const auto [entity, door] : reg.view<Door>().each()) {
+        const bool wasOpen = door.open;
         if (std::binary_search(doorRequests_.begin(), doorRequests_.end(), entity)) {
             if (door.open) {
                 door.hold = static_cast<uint16_t>(doors_.closeDelaySteps);
@@ -109,6 +110,9 @@ void MovementSystem::updateDoors(entt::registry& reg) {
             }
         } else {
             door.progress = 0;
+        }
+        if (door.open != wasOpen) {
+            setDoorSight(map, reg.get<Footprint>(entity), door.open);
         }
     }
 }

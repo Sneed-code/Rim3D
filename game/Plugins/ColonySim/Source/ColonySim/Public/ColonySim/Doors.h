@@ -7,6 +7,8 @@
 namespace colony {
 
 class DefDatabase;
+class Map;
+struct Footprint;
 
 // How doors work, from the DoorRules def (with these values when the def is missing). Opening and
 // closing are part of walking, so they run at RimWorld's walking speed: a RimWorld tick is 1/60 of
@@ -35,5 +37,9 @@ struct Door {
         return n.openSteps > 0 ? static_cast<float>(progress) / static_cast<float>(n.openSteps) : 0.0f;
     }
 };
+
+// An open door stops blocking sight and cover, a closed one blocks them again, as its def's
+// `fillPercent` says (docs/design/cover.md).
+COLONY_API void setDoorSight(Map& map, const Footprint& footprint, bool open);
 
 }  // namespace colony
