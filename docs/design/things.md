@@ -28,7 +28,7 @@ layer in step with it; `Sim::things()` gives access. Each thing is made from a d
 | --- | --- | --- |
 | every thing | `Thing` (def id, category) | `category`: `Item`, `Building` or `Pawn` |
 | `Item` | `StackCount`, `HitPoints` if the def has them | `stackLimit` (1 if absent), `stats.maxHitPoints` |
-| `Building` | `Footprint`, `HitPoints` | `size` `[x, z]` (1x1 if absent), `passability` (`Impassable` blocks movement), `stats.maxHitPoints` |
+| `Building` | `Footprint`, `HitPoints` | `size` `[x, z]` (1x1 if absent), `passability` (`Impassable` blocks movement), `thingClass` (`Building_Door` makes a door), `stats.maxHitPoints` |
 | `Pawn` | `Mover` (speed, path) | `stats.moveSpeed`, metres per game second (the importer converts it); 4 m/s at 1x if absent |
 
 Plants are not things: they are a grid layer (task C2), because a 1 km map holds hundreds of
@@ -50,9 +50,11 @@ being carried.
 
 Anything that fails returns `kNoEntity` (or `false`) and changes nothing.
 
-**Building layer.** `Map::buildingAt(cell)` is the building covering a cell, or `kNoEntity`. A
-building that blocks movement makes its cells unwalkable, so walls block paths and destroying one
-opens them again. Only `Things` calls the setters.
+**Building layer.** `Map::buildingAt(cell)` is the building covering a cell, or `kNoEntity`.
+`Map::passage(cell)` says how that building affects movement: `Open`, `Blocked` (the def's
+`passability` is `Impassable`, so walls block paths and destroying one opens them again) or `Door`
+(the def's `thingClass` is `Building_Door`, as in RimWorld; walkable, but a region of its own, see
+[`regions.md`](regions.md)). Only `Things` calls the setters.
 
 ## Rules for code that uses things
 

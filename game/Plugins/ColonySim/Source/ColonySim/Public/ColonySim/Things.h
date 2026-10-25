@@ -44,12 +44,14 @@ inline CellPos cellOf(const Position& p) {
     return CellPos{static_cast<int>(std::floor(p.x)), static_cast<int>(std::floor(p.y)), p.level};
 }
 
-// Buildings. Size and blocking come from the def (`size`, `passability`); origin and rotation
-// are set while the building is spawned.
+// Buildings. Size and blocking come from the def (`size`, `passability`). A door is a def with
+// `thingClass` Building_Door, as in RimWorld, and never blocks movement. Origin and rotation are
+// set while the building is spawned.
 struct Footprint {
     int sizeX = 1;  // as placed facing North
     int sizeY = 1;
     bool blocksMovement = false;
+    bool isDoor = false;
     CellPos origin;
     Rot4 rotation = Rot4::North;
 

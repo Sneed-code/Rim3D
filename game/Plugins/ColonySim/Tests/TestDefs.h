@@ -17,6 +17,7 @@ inline std::shared_ptr<const DefDatabase> testDefs() {
         {"defName": "Steel", "category": "Item", "stackLimit": 75, "stats": {"maxHitPoints": 100}},
         {"defName": "WoodLog", "category": "Item", "stackLimit": 75},
         {"defName": "Wall", "category": "Building", "passability": "Impassable", "stats": {"maxHitPoints": 300}},
+        {"defName": "Door", "category": "Building", "thingClass": "Building_Door", "passability": "PassThroughOnly"},
         {"defName": "Bed", "category": "Building", "size": [1, 2], "passability": "Standable"},
         {"defName": "FueledStove", "category": "Building", "size": [3, 1], "passability": "PassThroughOnly"},
         {"defName": "Plant_Grass", "category": "Plant"}

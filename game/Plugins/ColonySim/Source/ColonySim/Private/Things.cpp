@@ -81,7 +81,8 @@ Entity Things::make(DefId defId, int stackCount) {
             Footprint footprint;
             footprint.sizeX = std::max(1, static_cast<int>(def.numberAt("size", 0, 1.0)));
             footprint.sizeY = std::max(1, static_cast<int>(def.numberAt("size", 1, 1.0)));
-            footprint.blocksMovement = def.text("passability") == "Impassable";
+            footprint.isDoor = def.text("thingClass") == "Building_Door";
+            footprint.blocksMovement = !footprint.isDoor && def.text("passability") == "Impassable";
             registry_.emplace<Footprint>(thing, footprint);
             break;
         }
@@ -118,9 +119,12 @@ bool Things::spawnAt(Entity thing, CellPos cell, Rot4 rot) {
             }
         }
     }
+    const Passage passage = footprint->blocksMovement ? Passage::Blocked
+                            : footprint->isDoor       ? Passage::Door
+                                                      : Passage::Open;
     for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
         for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
-            map_.setBuilding(CellPos{x, y, rect.level}, thing, footprint->blocksMovement);
+            map_.setBuilding(CellPos{x, y, rect.level}, thing, passage);
         }
     }
     footprint->origin = cell;

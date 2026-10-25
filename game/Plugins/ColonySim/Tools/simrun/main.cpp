@@ -2,9 +2,12 @@
 // top-down PNG of the map.
 //   simrun --seed 42 --size 512 --days 1 --png map.png
 //   simrun --seed 42 --size 1024 --days 1 --pawns 20 --items 300   (Stage 0 sim speed test)
+//   simrun --seed 42 --size 512 --days 0 --regions regions.png   (picture of regions and groups)
 // Defs load from --data (default: the repo's data folder). The hauling test needs the Things defs
 // Human and Steel, which the RimWorld import provides.
 #include "ColonySim/Defs.h"
+#include "ColonySim/Random.h"
+#include "ColonySim/Regions.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
@@ -32,6 +35,7 @@ struct Options {
     int pawns = 0;
     int items = 0;
     std::string png;
+    std::string regionsPng;
 #ifdef COLONY_DATA_DIR
     std::string data = COLONY_DATA_DIR;
 #else
@@ -55,10 +59,12 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.items = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--png") == 0 && hasValue) {
             out.png = argv[++i];
+        } else if (std::strcmp(arg, "--regions") == 0 && hasValue) {
+            out.regionsPng = argv[++i];
         } else if (std::strcmp(arg, "--data") == 0 && hasValue) {
             out.data = argv[++i];
         } else {
-            std::fprintf(stderr, "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] [--png FILE] [--data DIR]\n");
+            std::fprintf(stderr, "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] [--png FILE] [--regions FILE] [--data DIR]\n");
             return false;
         }
     }
@@ -119,6 +125,53 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
                     mark(pos, 230, 20, 20);
                 }
             });
+    }
+    return stbi_write_png(path.c_str(), w, h, 3, pixels.data(), w * 3) != 0;
+}
+
+// Regions picture: each region in its own colour, so the 16 m blocks and the cuts inside them
+// show. Regions outside the biggest reachability group are drawn dark, doors white, and cells
+// with no region (water, rock, walls) in a dim version of their terrain colour.
+bool writeRegionsPng(colony::Sim& sim, const std::string& path) {
+    const colony::Map& map = sim.map();
+    colony::Regions& regions = sim.regions();
+    const int w = map.width();
+    const int h = map.height();
+    uint32_t mainGroup = colony::kNoGroup;
+    int mainCells = 0;
+    for (uint32_t g = 0; g < regions.groupCount(); ++g) {
+        if (regions.groupCellCount(g) > mainCells) {
+            mainCells = regions.groupCellCount(g);
+            mainGroup = g;
+        }
+    }
+    std::vector<unsigned char> pixels(static_cast<size_t>(w) * static_cast<size_t>(h) * 3);
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            const colony::CellPos c{x, y, 0};
+            const size_t i = (static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)) * 3;
+            const colony::RegionId id = regions.regionAt(c);
+            unsigned char rgb[3] = {0, 0, 0};
+            if (id == colony::kNoRegion) {
+                switch (map.terrain(c)) {
+                    case colony::Terrain::Water: rgb[0] = 20; rgb[1] = 35; rgb[2] = 70; break;
+                    case colony::Terrain::Rock: rgb[0] = 45; rgb[1] = 45; rgb[2] = 45; break;
+                    default: rgb[0] = 90; rgb[1] = 20; rgb[2] = 20; break;  // a wall or other blocking building
+                }
+            } else if (regions.region(id).kind == colony::RegionKind::Door) {
+                rgb[0] = rgb[1] = rgb[2] = 255;
+            } else {
+                const uint64_t hash = colony::splitMix64(id);
+                const bool inMain = regions.region(id).group == mainGroup;
+                for (int k = 0; k < 3; ++k) {
+                    const int v = 110 + static_cast<int>((hash >> (k * 8)) & 0x7F);  // 110..237
+                    rgb[k] = static_cast<unsigned char>(inMain ? v : v / 3);
+                }
+            }
+            pixels[i] = rgb[0];
+            pixels[i + 1] = rgb[1];
+            pixels[i + 2] = rgb[2];
+        }
     }
     return stbi_write_png(path.c_str(), w, h, 3, pixels.data(), w * 3) != 0;
 }
@@ -196,6 +249,22 @@ int main(int argc, char** argv) {
                 static_cast<unsigned long long>(sim.pathfinder().cellsExpanded()), avgMs, percentile(0.99),
                 percentile(1.0), msPerFrameAt3x, defs ? defs->size() : static_cast<size_t>(0), sim.things().count());
 
+    if (!options.regionsPng.empty()) {
+        const auto before = Clock::now();
+        const size_t regionCount = sim.regions().regionCount();  // the first query builds every block
+        const auto built = Clock::now();
+        const size_t groups = sim.regions().groupCount();
+        int biggest = 0;
+        for (uint32_t g = 0; g < groups; ++g) {
+            biggest = std::max(biggest, sim.regions().groupCellCount(g));
+        }
+        std::printf("{\"regions\":%zu,\"groups\":%zu,\"biggestGroupCells\":%d,\"regionBuildMs\":%.2f}\n", regionCount,
+                    groups, biggest, ms(before, built));
+        if (!writeRegionsPng(sim, options.regionsPng)) {
+            std::fprintf(stderr, "could not write %s\n", options.regionsPng.c_str());
+            return 1;
+        }
+    }
     if (!options.png.empty() && !writeMapPng(sim, options.png)) {
         std::fprintf(stderr, "could not write %s\n", options.png.c_str());
         return 1;

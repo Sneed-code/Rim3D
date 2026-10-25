@@ -6,12 +6,19 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace colony {
 
+class Regions;
+
 // Placeholder terrain types until terrain defs are loaded from data/defs.
 enum class Terrain : uint8_t { Water, Sand, Soil, Rock };
+
+// How the building in a cell affects movement. A door can be walked through but is a region of
+// its own (docs/design/regions.md).
+enum class Passage : uint8_t { Open, Blocked, Door };
 
 struct MapSettings {
     int width = 512;   // cells, 1 m each
@@ -24,9 +31,15 @@ struct MapSettings {
 //
 // Only the ground level (0) is stored so far. Cells on other levels are out of bounds until
 // upper floors and stairs come (vanilla core); the interfaces already take the level.
+//
+// The map owns its regions and tells them when a cell's passage changes. It can't be copied or
+// moved, because its regions point back at it.
 class COLONY_API Map {
 public:
     explicit Map(const MapSettings& settings);
+    ~Map();
+    Map(const Map&) = delete;
+    Map& operator=(const Map&) = delete;
 
     int width() const { return width_; }
     int height() const { return height_; }
@@ -43,7 +56,11 @@ public:
     }
     // Pawns can stand here: in bounds, walkable ground and no building that blocks movement.
     bool walkable(CellPos c) const {
-        return inBounds(c) && groundWalkable(c) && blocked_[static_cast<size_t>(index(c))] == 0;
+        return inBounds(c) && groundWalkable(c) && passage_[static_cast<size_t>(index(c))] != Passage::Blocked;
+    }
+    // A walkable cell with a door in it.
+    bool isDoor(CellPos c) const {
+        return walkable(c) && passage_[static_cast<size_t>(index(c))] == Passage::Door;
     }
 
     // Ground height in metres. The cell must be in bounds.
@@ -56,8 +73,12 @@ public:
     // Building layer: the building covering each cell, kNoEntity if none. Kept up to date by
     // Things when buildings spawn and despawn; nothing else should call the setters.
     Entity buildingAt(CellPos c) const { return building_[static_cast<size_t>(index(c))]; }
-    void setBuilding(CellPos c, Entity building, bool blocksMovement);
+    void setBuilding(CellPos c, Entity building, Passage passage);
     void clearBuilding(CellPos c);
+    Passage passage(CellPos c) const { return passage_[static_cast<size_t>(index(c))]; }
+
+    // Regions and reachability groups of the walkable cells (docs/design/regions.md).
+    Regions& regions();
 
     // Hash of every layer, for determinism tests.
     uint64_t contentHash() const;
@@ -71,7 +92,8 @@ private:
     std::vector<float> groundHeight_;
     std::vector<Terrain> terrain_;
     std::vector<Entity> building_;
-    std::vector<uint8_t> blocked_;  // 1 where a building blocks movement
+    std::vector<Passage> passage_;
+    std::unique_ptr<Regions> regions_;
 };
 
 }  // namespace colony
