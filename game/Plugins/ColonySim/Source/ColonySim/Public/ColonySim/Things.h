@@ -106,6 +106,10 @@ struct Mover {
     }
 };
 
+// On the one pawn the player controls directly (task U9, docs/design/protagonist.md). The
+// movement system leaves it alone and DirectMoveCommand moves it.
+struct PlayerControl {};
+
 // Owns the registry of every thing and keeps the map's building layer in step with it.
 // The DefDatabase must outlive this object (the sim holds it by shared pointer).
 class Things {

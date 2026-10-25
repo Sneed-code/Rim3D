@@ -14,9 +14,13 @@ const char* commandName(const Command& command) {
             using Type = std::decay_t<decltype(c)>;
             if constexpr (std::is_same_v<Type, SpawnThingCommand>) {
                 return "SpawnThing";
-            } else {
-                static_assert(std::is_same_v<Type, DestroyThingCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, DestroyThingCommand>) {
                 return "DestroyThing";
+            } else if constexpr (std::is_same_v<Type, ControlPawnCommand>) {
+                return "ControlPawn";
+            } else {
+                static_assert(std::is_same_v<Type, DirectMoveCommand>, "name every command type");
+                return "DirectMove";
             }
         },
         command);
