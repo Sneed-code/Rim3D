@@ -1,7 +1,41 @@
 [
-  { "defName": "TerrainBase", "abstract": true, "label": "terrain" },
-  { "defName": "Soil", "parent": "TerrainBase", "label": "soil" },
-  { "defName": "Sand", "parent": "TerrainBase", "label": "sand" },
-  { "defName": "Gravel", "parent": "TerrainBase", "label": "gravel" },
-  { "defName": "WaterShallow", "parent": "TerrainBase", "label": "shallow water" }
+  {
+    "defName": "TerrainBase", "abstract": true, "source": "RimWorld wiki",
+    "label": "terrain", "fertility": 0, "pathCost": 0,
+    "stats": { "beauty": 0, "cleanliness": 0 },
+    "affordances": ["Light", "Medium", "Heavy"]
+  },
+  {
+    "defName": "SoilBase", "abstract": true, "parent": "TerrainBase",
+    "pathCost": 2, "stats": { "beauty": -3, "beautyOutdoors": 0, "cleanliness": -1 }
+  },
+  { "defName": "Soil", "parent": "SoilBase", "label": "soil", "fertility": 1.0 },
+  { "defName": "SoilRich", "parent": "SoilBase", "label": "rich soil", "fertility": 1.4 },
+  { "defName": "Gravel", "parent": "SoilBase", "label": "stony soil", "fertility": 0.7 },
+  { "defName": "Sand", "parent": "SoilBase", "label": "sand", "fertility": 0.1, "pathCost": 4 },
+  {
+    "defName": "MarshyTerrain", "parent": "SoilBase", "label": "marshy soil", "fertility": 1.0,
+    "pathCost": 14, "stats": { "cleanliness": -2 }, "affordances": ["Light"]
+  },
+  {
+    "defName": "Mud", "parent": "SoilBase", "label": "mud", "pathCost": 14,
+    "stats": { "cleanliness": -2 }, "affordances": []
+  },
+  {
+    "defName": "WaterShallow", "parent": "TerrainBase", "label": "shallow water", "pathCost": 30,
+    "affordances": ["ShallowWater"]
+  },
+  {
+    "defName": "WaterDeep", "parent": "TerrainBase", "label": "deep water", "pathCost": 300,
+    "passability": "Impassable", "affordances": []
+  },
+  {
+    "defName": "RoughStoneBase", "abstract": true, "parent": "TerrainBase",
+    "pathCost": 2, "stats": { "beauty": -1 }
+  },
+  { "defName": "Granite_Rough", "parent": "RoughStoneBase", "label": "rough granite" },
+  { "defName": "Limestone_Rough", "parent": "RoughStoneBase", "label": "rough limestone" },
+  { "defName": "Sandstone_Rough", "parent": "RoughStoneBase", "label": "rough sandstone" },
+  { "defName": "Slate_Rough", "parent": "RoughStoneBase", "label": "rough slate" },
+  { "defName": "Marble_Rough", "parent": "RoughStoneBase", "label": "rough marble" }
 ]

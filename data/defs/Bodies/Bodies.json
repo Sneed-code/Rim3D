@@ -1,0 +1,83 @@
+[
+  {"defName": "Human", "source": "RimWorld wiki", "label": "human body", "corePart":
+    {"def": "Torso", "depth": "Outside", "groups": ["Torso"], "parts": [
+      {"def": "Neck", "coverage": 0.075, "depth": "Outside", "groups": ["Neck"], "parts": [
+        {"def": "Head", "coverage": 0.8, "depth": "Outside", "groups": ["UpperHead", "FullHead"], "parts": [
+          {"def": "Skull", "coverage": 0.18, "depth": "Inside", "groups": ["UpperHead", "FullHead"], "parts": [
+            {"def": "Brain", "coverage": 0.8, "depth": "Inside", "groups": ["UpperHead", "FullHead"]}
+          ]},
+          {"def": "Eye", "label": "left eye", "coverage": 0.07, "depth": "Outside", "groups": ["FullHead"]},
+          {"def": "Eye", "label": "right eye", "coverage": 0.07, "depth": "Outside", "groups": ["FullHead"]},
+          {"def": "Ear", "label": "left ear", "coverage": 0.07, "depth": "Outside", "groups": ["UpperHead", "FullHead"]},
+          {"def": "Ear", "label": "right ear", "coverage": 0.07, "depth": "Outside", "groups": ["UpperHead", "FullHead"]},
+          {"def": "Nose", "coverage": 0.1, "depth": "Outside", "groups": ["FullHead"]},
+          {"def": "Jaw", "coverage": 0.15, "depth": "Outside", "groups": ["FullHead"], "parts": [
+            {"def": "Tongue", "coverage": 0.001, "depth": "Inside", "groups": ["FullHead"]}
+          ]}
+        ]}
+      ]},
+      {"def": "Waist", "coverage": 0.0, "depth": "Outside", "groups": ["Waist"]},
+      {"def": "Spine", "coverage": 0.025, "depth": "Inside", "groups": ["Torso"]},
+      {"def": "Ribcage", "coverage": 0.036, "depth": "Inside", "groups": ["Torso"]},
+      {"def": "Sternum", "coverage": 0.015, "depth": "Inside", "groups": ["Torso"]},
+      {"def": "Stomach", "coverage": 0.025, "depth": "Inside", "groups": ["Torso"]},
+      {"def": "Heart", "coverage": 0.02, "depth": "Inside", "groups": ["Torso"]},
+      {"def": "Lung", "label": "left lung", "coverage": 0.025, "depth": "Inside", "groups": ["Torso"]},
+      {"def": "Lung", "label": "right lung", "coverage": 0.025, "depth": "Inside", "groups": ["Torso"]},
+      {"def": "Kidney", "label": "left kidney", "coverage": 0.017, "depth": "Inside", "groups": ["Torso"]},
+      {"def": "Kidney", "label": "right kidney", "coverage": 0.017, "depth": "Inside", "groups": ["Torso"]},
+      {"def": "Liver", "coverage": 0.025, "depth": "Inside", "groups": ["Torso"]},
+      {"def": "Shoulder", "label": "left shoulder", "coverage": 0.12, "depth": "Outside", "groups": ["Shoulders"], "parts": [
+        {"def": "Clavicle", "label": "left clavicle", "coverage": 0.09, "depth": "Inside", "groups": ["Torso"]},
+        {"def": "Arm", "label": "left arm", "coverage": 0.77, "depth": "Outside", "groups": ["Arms"], "parts": [
+          {"def": "Humerus", "label": "left humerus", "coverage": 0.1, "depth": "Inside", "groups": ["Arms"]},
+          {"def": "Radius", "label": "left radius", "coverage": 0.1, "depth": "Inside", "groups": ["Arms"]},
+          {"def": "Hand", "label": "left hand", "coverage": 0.14, "depth": "Outside", "groups": ["Hands"], "parts": [
+            {"def": "Finger", "label": "left pinky", "coverage": 0.06, "depth": "Outside", "groups": ["Hands", "LeftHand"]},
+            {"def": "Finger", "label": "left ring finger", "coverage": 0.07, "depth": "Outside", "groups": ["Hands", "LeftHand"]},
+            {"def": "Finger", "label": "left middle finger", "coverage": 0.08, "depth": "Outside", "groups": ["Hands", "LeftHand"]},
+            {"def": "Finger", "label": "left index finger", "coverage": 0.07, "depth": "Outside", "groups": ["Hands", "LeftHand"]},
+            {"def": "Finger", "label": "left thumb", "coverage": 0.08, "depth": "Outside", "groups": ["Hands", "LeftHand"]}
+          ]}
+        ]}
+      ]},
+      {"def": "Shoulder", "label": "right shoulder", "coverage": 0.12, "depth": "Outside", "groups": ["Shoulders"], "parts": [
+        {"def": "Clavicle", "label": "right clavicle", "coverage": 0.09, "depth": "Inside", "groups": ["Torso"]},
+        {"def": "Arm", "label": "right arm", "coverage": 0.77, "depth": "Outside", "groups": ["Arms"], "parts": [
+          {"def": "Humerus", "label": "right humerus", "coverage": 0.1, "depth": "Inside", "groups": ["Arms"]},
+          {"def": "Radius", "label": "right radius", "coverage": 0.1, "depth": "Inside", "groups": ["Arms"]},
+          {"def": "Hand", "label": "right hand", "coverage": 0.14, "depth": "Outside", "groups": ["Hands"], "parts": [
+            {"def": "Finger", "label": "right pinky", "coverage": 0.06, "depth": "Outside", "groups": ["Hands", "RightHand"]},
+            {"def": "Finger", "label": "right ring finger", "coverage": 0.07, "depth": "Outside", "groups": ["Hands", "RightHand"]},
+            {"def": "Finger", "label": "right middle finger", "coverage": 0.08, "depth": "Outside", "groups": ["Hands", "RightHand"]},
+            {"def": "Finger", "label": "right index finger", "coverage": 0.07, "depth": "Outside", "groups": ["Hands", "RightHand"]},
+            {"def": "Finger", "label": "right thumb", "coverage": 0.08, "depth": "Outside", "groups": ["Hands", "RightHand"]}
+          ]}
+        ]}
+      ]},
+      {"def": "Pelvis", "coverage": 0.025, "depth": "Inside", "groups": ["Torso"]},
+      {"def": "Leg", "label": "left leg", "coverage": 0.14, "depth": "Outside", "groups": ["Legs"], "parts": [
+        {"def": "Femur", "label": "left femur", "coverage": 0.1, "depth": "Inside", "groups": ["Legs"]},
+        {"def": "Tibia", "label": "left tibia", "coverage": 0.1, "depth": "Inside", "groups": ["Legs"]},
+        {"def": "Foot", "label": "left foot", "coverage": 0.1, "depth": "Outside", "groups": ["Feet"], "parts": [
+          {"def": "Toe", "label": "left little toe", "coverage": 0.06, "depth": "Outside", "groups": ["Feet"]},
+          {"def": "Toe", "label": "left fourth toe", "coverage": 0.07, "depth": "Outside", "groups": ["Feet"]},
+          {"def": "Toe", "label": "left middle toe", "coverage": 0.08, "depth": "Outside", "groups": ["Feet"]},
+          {"def": "Toe", "label": "left second toe", "coverage": 0.09, "depth": "Outside", "groups": ["Feet"]},
+          {"def": "Toe", "label": "left big toe", "coverage": 0.09, "depth": "Outside", "groups": ["Feet"]}
+        ]}
+      ]},
+      {"def": "Leg", "label": "right leg", "coverage": 0.14, "depth": "Outside", "groups": ["Legs"], "parts": [
+        {"def": "Femur", "label": "right femur", "coverage": 0.1, "depth": "Inside", "groups": ["Legs"]},
+        {"def": "Tibia", "label": "right tibia", "coverage": 0.1, "depth": "Inside", "groups": ["Legs"]},
+        {"def": "Foot", "label": "right foot", "coverage": 0.1, "depth": "Outside", "groups": ["Feet"], "parts": [
+          {"def": "Toe", "label": "right little toe", "coverage": 0.06, "depth": "Outside", "groups": ["Feet"]},
+          {"def": "Toe", "label": "right fourth toe", "coverage": 0.07, "depth": "Outside", "groups": ["Feet"]},
+          {"def": "Toe", "label": "right middle toe", "coverage": 0.08, "depth": "Outside", "groups": ["Feet"]},
+          {"def": "Toe", "label": "right second toe", "coverage": 0.09, "depth": "Outside", "groups": ["Feet"]},
+          {"def": "Toe", "label": "right big toe", "coverage": 0.09, "depth": "Outside", "groups": ["Feet"]}
+        ]}
+      ]}
+    ]}
+  }
+]

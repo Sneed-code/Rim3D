@@ -1,0 +1,87 @@
+[
+  { "defName": "WorkTypeBase", "abstract": true, "source": "RimWorld wiki", "relevantSkills": [], "workTags": [], "alwaysStartActive": false, "inPrototype": false,
+    "unverified": ["naturalPriority", "alwaysStartActive"] },
+  {
+    "defName": "Firefighter", "parent": "WorkTypeBase", "label": "firefight", "naturalPriority": 1400,
+    "workTags": ["Firefighting"], "alwaysStartActive": true, "tasks": ["ExtinguishFires"]
+  },
+  {
+    "defName": "Patient", "parent": "WorkTypeBase", "label": "patient", "naturalPriority": 1300,
+    "alwaysStartActive": true, "tasks": ["GoToMedicalBed"]
+  },
+  {
+    "defName": "Doctor", "parent": "WorkTypeBase", "label": "doctor", "naturalPriority": 1200,
+    "relevantSkills": ["Medicine"], "workTags": ["Caring"], "tasks": ["TendPatients", "Rescue", "FeedPatients"]
+  },
+  {
+    "defName": "PatientBedRest", "parent": "WorkTypeBase", "label": "bed rest", "naturalPriority": 1150,
+    "alwaysStartActive": true, "tasks": ["RestToHeal"]
+  },
+  {
+    "defName": "BasicWorker", "parent": "WorkTypeBase", "label": "basic", "naturalPriority": 1100,
+    "alwaysStartActive": true, "inPrototype": true, "tasks": ["FlickSwitches", "OpenContainers"]
+  },
+  {
+    "defName": "Warden", "parent": "WorkTypeBase", "label": "warden", "naturalPriority": 1050,
+    "relevantSkills": ["Social"], "workTags": ["Social"], "tasks": ["FeedPrisoners", "ChatWithPrisoners"]
+  },
+  {
+    "defName": "Handling", "parent": "WorkTypeBase", "label": "handle", "naturalPriority": 1000,
+    "relevantSkills": ["Animals"], "workTags": ["Animals"], "tasks": ["Tame", "Train", "Slaughter"]
+  },
+  {
+    "defName": "Cooking", "parent": "WorkTypeBase", "label": "cook", "naturalPriority": 950,
+    "relevantSkills": ["Cooking"], "workTags": ["ManualSkilled", "Cooking"], "inPrototype": true,
+    "tasks": ["DoBillsCookStove", "DoBillsButcher"]
+  },
+  {
+    "defName": "Hunting", "parent": "WorkTypeBase", "label": "hunt", "naturalPriority": 900,
+    "relevantSkills": ["Shooting", "Animals"], "workTags": ["Violent"], "tasks": ["HuntDesignated"]
+  },
+  {
+    "defName": "Construction", "parent": "WorkTypeBase", "label": "construct", "naturalPriority": 800,
+    "relevantSkills": ["Construction"], "workTags": ["ManualSkilled", "Constructing"], "inPrototype": true,
+    "tasks": ["Repair", "BuildRoofs", "RemoveRoofs", "ConstructFinishFrames", "ConstructDeliverResources", "Deconstruct"]
+  },
+  {
+    "defName": "Growing", "parent": "WorkTypeBase", "label": "grow", "naturalPriority": 700,
+    "relevantSkills": ["Plants"], "workTags": ["ManualSkilled", "PlantWork"], "tasks": ["HarvestCrops", "SowCrops"]
+  },
+  {
+    "defName": "Mining", "parent": "WorkTypeBase", "label": "mine", "naturalPriority": 600,
+    "relevantSkills": ["Mining"], "workTags": ["ManualSkilled", "Mining"], "inPrototype": true, "tasks": ["Mine"]
+  },
+  {
+    "defName": "PlantCutting", "parent": "WorkTypeBase", "label": "plant cut", "naturalPriority": 500,
+    "relevantSkills": ["Plants"], "workTags": ["ManualDumb", "PlantWork"], "inPrototype": true,
+    "tasks": ["CutOrHarvestDesignatedPlants"]
+  },
+  {
+    "defName": "Smithing", "parent": "WorkTypeBase", "label": "smith", "naturalPriority": 470,
+    "relevantSkills": ["Crafting"], "workTags": ["ManualSkilled", "Crafting"], "tasks": ["DoBillsSmithy"]
+  },
+  {
+    "defName": "Tailoring", "parent": "WorkTypeBase", "label": "tailor", "naturalPriority": 460,
+    "relevantSkills": ["Crafting"], "workTags": ["ManualSkilled", "Crafting"], "tasks": ["DoBillsTailor"]
+  },
+  {
+    "defName": "Art", "parent": "WorkTypeBase", "label": "art", "naturalPriority": 450,
+    "relevantSkills": ["Artistic"], "workTags": ["Artistic"], "tasks": ["DoBillsSculpt"]
+  },
+  {
+    "defName": "Crafting", "parent": "WorkTypeBase", "label": "craft", "naturalPriority": 400,
+    "relevantSkills": ["Crafting"], "workTags": ["ManualSkilled", "Crafting"], "tasks": ["DoBillsCraftingSpot", "DoBillsStonecut", "DoBillsSmelt"]
+  },
+  {
+    "defName": "Hauling", "parent": "WorkTypeBase", "label": "haul", "naturalPriority": 300,
+    "workTags": ["ManualDumb", "Hauling"], "inPrototype": true, "tasks": ["Refuel", "HaulToStockpile"]
+  },
+  {
+    "defName": "Cleaning", "parent": "WorkTypeBase", "label": "clean", "naturalPriority": 200,
+    "workTags": ["ManualDumb", "Cleaning"], "tasks": ["ClearSnow", "CleanFilth"]
+  },
+  {
+    "defName": "Research", "parent": "WorkTypeBase", "label": "research", "naturalPriority": 100,
+    "relevantSkills": ["Intellectual"], "workTags": ["Intellectual"], "tasks": ["Research"]
+  }
+]

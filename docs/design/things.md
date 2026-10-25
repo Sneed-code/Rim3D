@@ -22,14 +22,14 @@ terrain mesh. Everything else uses `CellPos`.
 Pawns, items and buildings are entities in an [EnTT](https://github.com/skypjack/entt) registry
 (v3.16.0, vendored in `ThirdParty/entt/`). `Things` owns the registry and keeps the map's building
 layer in step with it; `Sim::things()` gives access. Each thing is made from a def of kind
-`Things` (RimWorld's ThingDef, from the import) and its `category` decides what it is:
+`Things` (RimWorld's ThingDef, from `data/defs/Things/`) and its `category` decides what it is:
 
 | Category | Components | From the def |
 | --- | --- | --- |
 | every thing | `Thing` (def id, category) | `category`: `Item`, `Building` or `Pawn` |
 | `Item` | `StackCount`, `HitPoints` if the def has them | `stackLimit` (1 if absent), `stats.maxHitPoints` |
 | `Building` | `Footprint`, `HitPoints` | `size` `[x, z]` (1x1 if absent), `passability` (`Impassable` blocks movement), `thingClass` (`Building_Door` makes a door), `stats.maxHitPoints` |
-| `Pawn` | `Mover` (speed, route, velocity; [movement.md](movement.md)) | `stats.moveSpeed`, metres per game second (the importer converts it); 4 m/s at 1x if absent |
+| `Pawn` | `Mover` (speed, route, velocity; [movement.md](movement.md)) | `stats.moveSpeed`, metres per game second (converted from cells per second); 4 m/s at 1x if absent |
 
 Plants are not things: they are a grid layer (task C2), because a 1 km map holds hundreds of
 thousands of them. Projectiles and corpses come with combat (F2) and health (F1). Any other
@@ -79,7 +79,7 @@ the job system (C1) arrives. It gives the same hauls, path searches and cells ex
 Stage 0 version. Missing defs are listed in `Sim::setupErrors()`.
 
 `simrun` loads defs from `--data` (default: the repo's `data/` folder). Runs with `--pawns` or
-`--items` need `Human` and `Steel` in `data/defs/Things/`, which the RimWorld import (D3) provides.
+`--items` need `Human` and `Steel` in `data/defs/Things/`, which the starting data (D3) has.
 
 ## Not done here
 

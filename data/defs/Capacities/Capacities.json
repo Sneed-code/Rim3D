@@ -1,0 +1,92 @@
+[
+  { "defName": "CapacityBase", "abstract": true, "source": "RimWorld wiki", "lethalAtZero": false, "parts": [], "capacityFactors": [] },
+  {
+    "defName": "Consciousness", "parent": "CapacityBase", "label": "consciousness", "listOrder": 0,
+    "lethalAtZero": true, "downedBelow": 0.3,
+    "parts": [{ "part": "Brain", "combine": "importance", "weight": 1.0 }],
+    "capacityFactors": [
+      { "capacity": "BloodPumping", "weight": 0.2, "max": 1.0 },
+      { "capacity": "Breathing", "weight": 0.2, "max": 1.0 },
+      { "capacity": "BloodFiltration", "weight": 0.1, "max": 1.0 }
+    ],
+    "painFactor": { "slope": -0.45, "intercept": 1.05, "max": 1.0 }
+  },
+  {
+    "defName": "Moving", "parent": "CapacityBase", "label": "moving", "listOrder": 1, "downedAtOrBelow": 0.15,
+    "parts": [
+      { "part": "Leg", "combine": "average" }, { "part": "Femur", "combine": "average" },
+      { "part": "Tibia", "combine": "average" }, { "part": "Foot", "combine": "average" },
+      { "part": "Toe", "combine": "digits", "perDigit": 0.04, "base": 0.6 },
+      { "part": "Pelvis", "combine": "importance", "weight": 1.0 },
+      { "part": "Spine", "combine": "importance", "weight": 1.0 }
+    ],
+    "capacityFactors": [
+      { "capacity": "Consciousness", "weight": 1.0, "max": 1.0 },
+      { "capacity": "BloodPumping", "weight": 0.2 },
+      { "capacity": "Breathing", "weight": 0.2 }
+    ]
+  },
+  {
+    "defName": "Manipulation", "parent": "CapacityBase", "label": "manipulation", "listOrder": 2,
+    "parts": [
+      { "part": "Shoulder", "combine": "average" }, { "part": "Clavicle", "combine": "average" },
+      { "part": "Arm", "combine": "average" }, { "part": "Humerus", "combine": "average" },
+      { "part": "Radius", "combine": "average" }, { "part": "Hand", "combine": "average" },
+      { "part": "Finger", "combine": "digits", "perDigit": 0.08, "base": 0.2 }
+    ],
+    "capacityFactors": [{ "capacity": "Consciousness", "weight": 1.0 }]
+  },
+  {
+    "defName": "Sight", "parent": "CapacityBase", "label": "sight", "listOrder": 3,
+    "parts": [{ "part": "Eye", "combine": "bestWeighted", "bestWeight": 0.75 }]
+  },
+  {
+    "defName": "Hearing", "parent": "CapacityBase", "label": "hearing", "listOrder": 4,
+    "parts": [{ "part": "Ear", "combine": "bestWeighted", "bestWeight": 0.75 }]
+  },
+  {
+    "defName": "Talking", "parent": "CapacityBase", "label": "talking", "listOrder": 5,
+    "parts": [
+      { "part": "Jaw", "combine": "importance", "weight": 1.0 },
+      { "part": "Tongue", "combine": "importance", "weight": 1.0 },
+      { "part": "Neck", "combine": "importance", "weight": 1.0 }
+    ],
+    "capacityFactors": [{ "capacity": "Consciousness", "weight": 1.0 }]
+  },
+  {
+    "defName": "Eating", "parent": "CapacityBase", "label": "eating", "listOrder": 6,
+    "parts": [
+      { "part": "Jaw", "combine": "importance", "weight": 0.9 },
+      { "part": "Tongue", "combine": "importance", "weight": 0.5 },
+      { "part": "Neck", "combine": "importance", "weight": 1.0 }
+    ],
+    "capacityFactors": [{ "capacity": "Consciousness", "weight": 1.0 }]
+  },
+  {
+    "defName": "Breathing", "parent": "CapacityBase", "label": "breathing", "listOrder": 7, "lethalAtZero": true,
+    "parts": [
+      { "part": "Lung", "combine": "average" },
+      { "part": "Neck", "combine": "importance", "weight": 1.0 },
+      { "part": "Ribcage", "combine": "importance", "weight": 1.0 },
+      { "part": "Sternum", "combine": "importance", "weight": 1.0 }
+    ]
+  },
+  {
+    "defName": "BloodFiltration", "parent": "CapacityBase", "label": "blood filtration", "listOrder": 8, "lethalAtZero": true,
+    "parts": [
+      { "part": "Kidney", "combine": "average" },
+      { "part": "Liver", "combine": "importance", "weight": 1.0 }
+    ]
+  },
+  {
+    "defName": "BloodPumping", "parent": "CapacityBase", "label": "blood pumping", "listOrder": 9, "lethalAtZero": true,
+    "parts": [{ "part": "Heart", "combine": "importance", "weight": 1.0 }]
+  },
+  {
+    "defName": "Digestion", "parent": "CapacityBase", "label": "digestion", "listOrder": 10, "lethalAtZero": true,
+    "parts": [
+      { "part": "Stomach", "combine": "importance", "weight": 0.5 },
+      { "part": "Liver", "combine": "importance", "weight": 0.5 }
+    ]
+  }
+]

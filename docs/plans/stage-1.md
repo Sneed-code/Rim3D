@@ -31,8 +31,9 @@ starting gear, mental break behaviour, trade, events other than the one raid, pl
 1. Read `STATUS.md`, your task's row below, the architecture sections it names, and the
    `docs/design/` doc of the system you touch. Nothing else unless you need it.
 2. A task that starts a new system writes its short doc in `docs/design/<system>.md`.
-3. Numbers come from the RimWorld import (task D3). If a number you need isn't imported yet,
-   add its def kind to the importer rather than making one up.
+3. Numbers come from the hand-written defs in `data/defs/` (`docs/design/starting-data.md`). If a
+   def or number you need isn't there yet, add it, with RimWorld's number from the RimWorld wiki
+   (numbers only) rather than making one up; mark recalled numbers `unverified` and our own `ours`.
 4. After S6 (saves), every task that adds sim state adds it to the save and to the save
    round-trip test.
 5. **Unreal tasks** (marked PC Unreal): write the code in the cloud first, then ask sneed
@@ -59,7 +60,7 @@ Times are one sitting of thread work. "Needs" lists tasks that must be merged fi
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | D1 | **Def database.** Vendor nlohmann/json. Load every `data/defs/<Kind>/*.json` at sim start, resolve `parent` and `abstract`, give each def a compact id (saves still use `defName`), apply `data/tuning.json` multipliers. Same rules as `check_defs.py`. | Cloud | Sonnet, medium | 60 min | none |
 | ✓ | D2 | **RimWorld importer.** `tools/rimworld_import.py`: reads RimWorld's Core Defs XML (expansions later) and writes JSON defs plus short summaries in `docs/reference/`. Prototype list: terrain, rock and ore, wood, steel, components, wall, door, bed, table, stove, raw food, berries, simple meal, packaged survival meal, food and rest needs, the thoughts the prototype uses, skills, a set of traits and backstories, the Human body, 3 or 4 guns, the raider pawn kind and faction. Converts ticks to game seconds (`Clock.h`). Tested on small XML samples in `tools/tests/`. | Cloud | Sonnet, high | 90 min | none |
-| | D3 | **Run the import on sneed's PC.** Run D2 against the RimWorld install, commit the JSON and reference summaries (never RimWorld's raw files), fix whatever the real files break. | PC light | Sonnet, medium | 45 min | D2 |
+| ✓ | D3 | **Starting data, written by hand** (replaced "run the import on sneed's PC": no RimWorld install to read, `decisions/0003`). Defs for C1, C2, C8 and F1 with RimWorld's numbers from the RimWorld wiki, converted like D2; our own backstories and names; the data checker also checks references between defs. Doc: `design/starting-data.md`. | Cloud | Opus, high | 90 min | D1 |
 
 ### Sim foundations (S)
 
@@ -83,7 +84,7 @@ Times are one sitting of thread work. "Needs" lists tasks that must be merged fi
 | | C5 | **Doors, roofs and rooms.** Doors open for pawns and cost path time; auto-roof over enclosed areas; rooms from enclosed regions with a role (bedroom, kitchen, dining room) and size. | Cloud | Sonnet, high | 90 min | C4 |
 | | C6 | **Food, rest and schedules.** Food and rest needs at RimWorld rates, eat job (best reachable food, at a table if there is one), sleep job (own bed, else the ground), bed ownership, hourly schedules. Doc: `design/needs.md`. | Cloud | Sonnet, high | 90 min | C1 |
 | | C7 | **Bills and cooking.** Minimal bill and recipe system on the stove ("cook simple meal" do-forever and do-X-times), fetching ingredients, cooking skill. | Cloud | Sonnet, high | 90 min | C4, C6 |
-| | C8 | **Colonists from a seed.** Name, adult age, backstories, traits, skills with passions and experience, from imported defs; crashlanded start (protagonist plus 5 colonists, starting gear). The protagonist is flagged for 2x part hit points and the talent tree later. | Cloud | Sonnet, medium | 60 min | S1, D3 |
+| | C8 | **Colonists from a seed.** Name, adult age, backstories, traits, skills with passions and experience, from the defs (`design/starting-data.md`); crashlanded start (protagonist plus 5 colonists, starting gear). The protagonist is flagged for 2x part hit points and the talent tree later. | Cloud | Sonnet, medium | 60 min | S1, D3 |
 | | C9 | **Mood.** Thoughts (ate without table, slept on the ground, slept outside, hungry, tired, ate raw food, ate a fine meal), mood value, mental break thresholds recorded (breaks themselves come later). | Cloud | Sonnet, medium | 60 min | C6, C8 |
 | | C10 | **Colony scenario test.** `simrun --scenario colony`: 6 colonists on a 512 m map, a script of commands builds a room with beds, a table and a stove, designates mining and chopping, and runs 5 days. Checks: nobody starves, nobody stuck over a game hour, all designations done. Runs in CI. | Cloud | Sonnet, high | 90 min | C3, C5, C7, C9 |
 
@@ -91,7 +92,7 @@ Times are one sitting of thread work. "Needs" lists tasks that must be merged fi
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | F1 | **Health basics.** Body parts from the imported Human body, hit points per part (2x for the protagonist), injuries with bleeding and pain, downed, death, slow natural healing. Doc: `design/health.md`. | Cloud | Sonnet, high | 90 min | S1, D3 |
+| | F1 | **Health basics.** Body parts from the Human body defs, hit points per part (2x for the protagonist), injuries with bleeding and pain, downed, death, slow natural healing. Doc: `design/health.md`. | Cloud | Sonnet, high | 90 min | S1, D3 |
 | | F2 | **Guns, projectiles and hitboxes.** Weapon defs, firing with spread and recoil, projectiles with speed and drop, hits against terrain, walls and per-part hitboxes posed for standing, crouching and prone; armor penetration, then injury to the part hit. Doc: `design/combat.md`. | Cloud | Opus, high | 90 min | F1, S4 |
 | ✓ | F3 | **Cover, sight and threat maps.** Cover strength per cell in 8 directions, rebuilt only where something is built or destroyed; line-of-sight queries; a threat map per faction. | Cloud | Sonnet, high | 90 min | S2 |
 | | F4 | **Fighter AI: where to stand.** Re-plan about twice a second by scoring nearby cells (cover from known enemies, sight to a target, weapon range, distance, crowding); crouch and lean at cover; target choice per the design doc; draft, move and attack orders. | Cloud | Opus, high | 120 min | F2, F3, C1 |
@@ -128,7 +129,7 @@ Times are one sitting of thread work. "Needs" lists tasks that must be merged fi
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | G1 | **Performance check in a packaged build.** 100 animated pawns, and 30 colonists against 40 raiders; record fps, game thread, GPU and sim cost in `docs/decisions/0003`. Fix or plan fixes for any miss. | PC Unreal | Sonnet, high | 90 min | U11, F6, U5 |
+| | G1 | **Performance check in a packaged build.** 100 animated pawns, and 30 colonists against 40 raiders; record fps, game thread, GPU and sim cost in the next free `docs/decisions/` file. Fix or plan fixes for any miss. | PC Unreal | Sonnet, high | 90 min | U11, F6, U5 |
 | | G2 | **Playtest build.** Package the prototype, write `docs/setup/playtest.md` (how to start it, keys), sneed plays; notes go to `BACKLOG.md` and the Stage 2 plan. | PC Unreal | Sonnet, medium | 60 min | everything above it except A2 and A3 |
 
 ## Order
@@ -140,7 +141,7 @@ suggested order; within a wave, start any task whose needs are merged.
 | Wave | Cloud | PC |
 | --- | --- | --- |
 | 1 | D1, D2 | U1 |
-| 2 | S1 | D3 |
+| 2 | S1, D3 | |
 | 3 | S2, S5 | |
 | 4 | S3, S6, C2, C8, F1, F3 | U2 |
 | 5 | S4, C1 | U3, U6 |
@@ -162,7 +163,7 @@ The prototype still plays without them.
 ## What sneed does in Stage 1
 
 - **Say when the PC is free** when a thread asks. Unreal tasks need up to about 45 minutes with no
-  game or local AI running. PC light tasks (only D3) can run while you use the PC.
+  game or local AI running. (No PC light tasks are left: D3 became a cloud task.)
 - **Approve Remote Control** when the prompt appears.
 - **Download the Megascans packs** for A2 when that thread sends the click-by-click steps. It isn't
   needed before wave 10.

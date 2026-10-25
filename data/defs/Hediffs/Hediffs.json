@@ -1,0 +1,60 @@
+[
+  {
+    "defName": "InjuryBase", "abstract": true, "source": "RimWorld wiki", "hediffClass": "Injury",
+    "injuryProps": { "painPerSeverity": 0.0125, "averagePainPerSeverityPermanent": 0.00625, "bleedRate": 0, "canMerge": false }
+  },
+  {
+    "defName": "Cut", "parent": "InjuryBase", "label": "cut", "infectionChance": 0.15,
+    "injuryProps": { "bleedRate": 0.06, "destroyedLabel": "cut off", "destroyedOutLabel": "cut out" }
+  },
+  {
+    "defName": "Stab", "parent": "InjuryBase", "label": "stab", "infectionChance": 0.15,
+    "injuryProps": { "bleedRate": 0.06, "destroyedLabel": "cut off", "destroyedOutLabel": "cut out" }
+  },
+  {
+    "defName": "Gunshot", "parent": "InjuryBase", "label": "gunshot", "infectionChance": 0.15,
+    "injuryProps": { "bleedRate": 0.06, "destroyedLabel": "shot off", "destroyedOutLabel": "shot out" }
+  },
+  {
+    "defName": "Scratch", "parent": "InjuryBase", "label": "scratch", "infectionChance": 0.15,
+    "injuryProps": { "bleedRate": 0.06, "destroyedLabel": "torn off", "destroyedOutLabel": "torn out" }
+  },
+  {
+    "defName": "Bite", "parent": "InjuryBase", "label": "bite", "infectionChance": 0.3,
+    "injuryProps": { "bleedRate": 0.06, "destroyedLabel": "bitten off", "destroyedOutLabel": "bitten out" }
+  },
+  {
+    "defName": "Shredded", "parent": "InjuryBase", "label": "shredded", "infectionChance": 0.2,
+    "injuryProps": { "bleedRate": 0.06, "canMerge": true, "destroyedLabel": "torn off", "destroyedOutLabel": "torn out" }
+  },
+  {
+    "defName": "Crush", "parent": "InjuryBase", "label": "crush", "infectionChance": 0.15,
+    "injuryProps": { "bleedRate": 0.01, "canMerge": true, "destroyedLabel": "crushed" }
+  },
+  {
+    "defName": "Bruise", "parent": "InjuryBase", "label": "bruise", "neverScars": true,
+    "injuryProps": { "destroyedLabel": "destroyed" }
+  },
+  {
+    "defName": "Crack", "parent": "InjuryBase", "label": "crack",
+    "injuryProps": { "painPerSeverity": 0.01, "destroyedLabel": "shattered" }
+  },
+  {
+    "defName": "Burn", "parent": "InjuryBase", "label": "burn", "infectionChance": 0.3,
+    "injuryProps": { "painPerSeverity": 0.01875, "canMerge": true, "destroyedLabel": "burned off", "destroyedOutLabel": "burned out" }
+  },
+  {
+    "defName": "MissingBodyPart", "source": "RimWorld wiki", "hediffClass": "MissingPart", "label": "missing body part",
+    "injuryProps": { "painPerSeverity": 0.0125, "bleedRate": 0.12 }
+  },
+  {
+    "defName": "BloodLoss", "source": "RimWorld wiki", "hediffClass": "BloodLoss", "label": "blood loss",
+    "lethalSeverity": 1.0,
+    "stages": [
+      { "minSeverity": 0.15, "label": "minor", "visible": false, "capacityOffsets": { "Consciousness": -0.1 } },
+      { "minSeverity": 0.3, "label": "moderate", "capacityOffsets": { "Consciousness": -0.2 } },
+      { "minSeverity": 0.45, "label": "severe", "capacityOffsets": { "Consciousness": -0.4 } },
+      { "minSeverity": 0.6, "label": "extreme", "lifeThreatening": true, "capacityOffsets": { "Consciousness": -0.4 }, "capacityMax": { "Consciousness": 0.1 } }
+    ]
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "defName": "TemperateForest", "source": "RimWorld wiki", "label": "temperate forest",
+    "plantDensity": 0.65, "animalDensity": 3.7, "diseaseMtbDays": 50,
+    "wildPlants": {
+      "Plant_Grass": 5, "Plant_TallGrass": 2, "Plant_Brambles": 1, "Plant_Bush": 0.6,
+      "Plant_Dandelion": 0.5, "Plant_TreeOak": 0.5, "Plant_TreePoplar": 0.5, "Plant_Berry": 0.05
+    }
+  }
+]

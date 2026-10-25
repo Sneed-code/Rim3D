@@ -1,0 +1,15 @@
+[
+  { "defName": "SkillBase", "abstract": true, "source": "RimWorld wiki" },
+  { "defName": "Shooting", "parent": "SkillBase", "label": "shooting", "listOrder": 0, "disablingWorkTags": ["Violent"] },
+  { "defName": "Melee", "parent": "SkillBase", "label": "melee", "listOrder": 1, "disablingWorkTags": ["Violent"] },
+  { "defName": "Construction", "parent": "SkillBase", "label": "construction", "listOrder": 2, "disablingWorkTags": ["Constructing"] },
+  { "defName": "Mining", "parent": "SkillBase", "label": "mining", "listOrder": 3, "disablingWorkTags": ["Mining"] },
+  { "defName": "Cooking", "parent": "SkillBase", "label": "cooking", "listOrder": 4, "disablingWorkTags": ["Cooking"] },
+  { "defName": "Plants", "parent": "SkillBase", "label": "plants", "listOrder": 5, "disablingWorkTags": ["PlantWork"] },
+  { "defName": "Animals", "parent": "SkillBase", "label": "animals", "listOrder": 6, "disablingWorkTags": ["Animals"] },
+  { "defName": "Crafting", "parent": "SkillBase", "label": "crafting", "listOrder": 7, "disablingWorkTags": ["Crafting"] },
+  { "defName": "Artistic", "parent": "SkillBase", "label": "artistic", "listOrder": 8, "disablingWorkTags": ["Artistic"] },
+  { "defName": "Medicine", "parent": "SkillBase", "label": "medical", "listOrder": 9, "disablingWorkTags": ["Caring"] },
+  { "defName": "Social", "parent": "SkillBase", "label": "social", "listOrder": 10, "disablingWorkTags": ["Social"] },
+  { "defName": "Intellectual", "parent": "SkillBase", "label": "intellectual", "listOrder": 11, "disablingWorkTags": ["Intellectual"] }
+]

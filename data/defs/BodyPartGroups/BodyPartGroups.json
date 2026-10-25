@@ -1,0 +1,15 @@
+[
+  { "defName": "BodyPartGroupBase", "abstract": true, "source": "RimWorld wiki" },
+  { "defName": "Torso", "parent": "BodyPartGroupBase", "label": "torso" },
+  { "defName": "Neck", "parent": "BodyPartGroupBase", "label": "neck" },
+  { "defName": "UpperHead", "parent": "BodyPartGroupBase", "label": "upper head" },
+  { "defName": "FullHead", "parent": "BodyPartGroupBase", "label": "full head" },
+  { "defName": "Shoulders", "parent": "BodyPartGroupBase", "label": "shoulders" },
+  { "defName": "Arms", "parent": "BodyPartGroupBase", "label": "arms" },
+  { "defName": "Hands", "parent": "BodyPartGroupBase", "label": "hands" },
+  { "defName": "LeftHand", "parent": "BodyPartGroupBase", "label": "left hand" },
+  { "defName": "RightHand", "parent": "BodyPartGroupBase", "label": "right hand" },
+  { "defName": "Legs", "parent": "BodyPartGroupBase", "label": "legs" },
+  { "defName": "Feet", "parent": "BodyPartGroupBase", "label": "feet" },
+  { "defName": "Waist", "parent": "BodyPartGroupBase", "label": "waist" }
+]

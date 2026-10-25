@@ -1,0 +1,63 @@
+[
+  {
+    "defName": "ItemBase", "abstract": true, "source": "RimWorld wiki",
+    "category": "Item", "stackLimit": 75
+  },
+  {
+    "defName": "Steel", "parent": "ItemBase", "label": "steel", "unverified": ["stats.maxHitPoints"],
+    "stats": { "maxHitPoints": 100, "marketValue": 1.9, "mass": 0.5, "beauty": -4 },
+    "stuffProps": {
+      "categories": ["Metallic"],
+      "statFactors": {
+        "maxHitPoints": 1.0, "beauty": 1.0, "flammability": 0.4, "workToBuild": 1.0, "workToMake": 1.0,
+        "armorRatingSharp": 0.9, "armorRatingBlunt": 0.45, "armorRatingHeat": 0.6
+      }
+    }
+  },
+  {
+    "defName": "WoodLog", "parent": "ItemBase", "label": "wood",
+    "stats": { "maxHitPoints": 150, "marketValue": 1.2, "mass": 0.4, "beauty": -4, "deteriorationRate": 0.5 },
+    "stuffProps": {
+      "categories": ["Woody"],
+      "statFactors": {
+        "maxHitPoints": 0.65, "beauty": 1.0, "flammability": 1.0, "workToBuild": 0.7, "workToMake": 0.7,
+        "armorRatingSharp": 0.54, "armorRatingBlunt": 0.54, "meleeSharpDamage": 0.4, "meleeBluntDamage": 0.9
+      }
+    }
+  },
+  {
+    "defName": "Silver", "parent": "ItemBase", "label": "silver", "stackLimit": 500,
+    "stats": { "marketValue": 1.0, "mass": 0.008 }
+  },
+  {
+    "defName": "ComponentIndustrial", "parent": "ItemBase", "label": "component", "stackLimit": 50,
+    "stats": {
+      "maxHitPoints": 70, "marketValue": 32, "mass": 0.6, "flammability": 0.6, "deteriorationRate": 2,
+      "workToMake": 7200
+    }
+  },
+  {
+    "defName": "MedicineIndustrial", "parent": "ItemBase", "label": "medicine", "stackLimit": 25,
+    "stats": {
+      "maxHitPoints": 60, "marketValue": 18, "mass": 0.5, "flammability": 0.7, "deteriorationRate": 2,
+      "medicalPotency": 1.0, "medicalQualityMax": 1.0
+    }
+  },
+  {
+    "defName": "RawBerries", "parent": "ItemBase", "label": "berries",
+    "stats": {
+      "maxHitPoints": 100, "marketValue": 1.2, "mass": 0.027, "flammability": 1.0, "deteriorationRate": 6,
+      "nutrition": 0.05
+    },
+    "ingestible": { "foodType": "VegetableOrFruit", "preferability": "RawTasty" },
+    "comps": [{ "type": "Rottable", "daysToRotStart": 14 }]
+  },
+  {
+    "defName": "MealSurvivalPack", "parent": "ItemBase", "label": "packaged survival meal", "stackLimit": 10,
+    "stats": {
+      "maxHitPoints": 50, "marketValue": 24, "mass": 0.3, "flammability": 1.0, "deteriorationRate": 0.25,
+      "nutrition": 0.9, "workToMake": 648
+    },
+    "ingestible": { "foodType": "Meal", "preferability": "MealSimple", "maxNumToIngestAtOnce": 1 }
+  }
+]

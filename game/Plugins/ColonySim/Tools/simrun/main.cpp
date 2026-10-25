@@ -15,7 +15,7 @@
 // overrides). --record writes what this run did as a replay, with its state hashes.
 // --check makes it exit with 1 if any job or path search failed.
 // Defs load from --data (default: the repo's data folder). The hauling test needs the Things defs
-// Human and Steel, which the RimWorld import provides.
+// Human and Steel, which data/defs/Things provides.
 #include "ColonySim/Cover.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Pathfinder.h"

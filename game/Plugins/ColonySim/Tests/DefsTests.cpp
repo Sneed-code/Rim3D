@@ -152,6 +152,35 @@ TEST_CASE("defs: the real data folder loads") {
     CHECK(db.find("Terrain", "Soil") != nullptr);
     CHECK(db.find("Terrain", "TerrainBase") == nullptr);
 
+    // The hand-written starting data (docs/design/starting-data.md): a few numbers per kind that
+    // C1, C2, C8 and F1 read, checked after inheritance.
+    const Def* human = db.find("Things", "Human");
+    if (human == nullptr) { CHECK(false); return; }
+    CHECK(human->text("category") == "Pawn");
+    CHECK(human->number("stats.moveSpeed") == doctest::Approx(4.6 / 30.0).epsilon(0.001));
+    CHECK(human->text("race.body") == "Human");
+    const Def* oak = db.find("Things", "Plant_TreeOak");
+    if (oak == nullptr) { CHECK(false); return; }
+    CHECK(oak->text("plant.harvestedThingDef") == "WoodLog");     // from TreeBase
+    CHECK(oak->number("plant.harvestWork") == doctest::Approx(1400 * 1.44));  // ticks to game seconds
+    CHECK(oak->number("fillPercent") == doctest::Approx(0.25));
+    const Def* soil = db.find("Terrain", "Soil");
+    CHECK(soil->number("fertility") == doctest::Approx(1.0));
+    CHECK(soil->number("pathCost") == doctest::Approx(2.0));       // from SoilBase
+    CHECK(db.find("Bodies", "Human") != nullptr);
+    CHECK(db.find("BodyParts", "Heart")->number("bleedRate") == doctest::Approx(5.0));
+    CHECK(db.find("BodyParts", "Finger")->integer("hitPoints") == 8);
+    CHECK(db.find("Hediffs", "Gunshot")->number("injuryProps.painPerSeverity") == doctest::Approx(0.0125));
+    CHECK(db.find("Capacities", "Consciousness")->number("downedBelow") == doctest::Approx(0.3));
+    CHECK(db.find("Skills", "Shooting") != nullptr);
+    CHECK(db.idsOfKind("Skills").size() == 12);
+    CHECK(db.find("Traits", "Industriousness")->count("degreeDatas") == 4);
+    CHECK(db.find("Backstories", "Adult_Miner")->number("skillGains.Mining") == doctest::Approx(7));
+    CHECK(db.find("WorkTypes", "Hauling")->flag("inPrototype"));
+    CHECK(db.find("Names", "LastNames")->count("names") >= 50);
+    CHECK(db.find("Rules", "SkillRules")->count("xpToNextLevel") == 21);
+    CHECK(db.find("Scenarios", "Crashlanded")->integer("colonists") == 5);
+
     errors.clear();
     DefDatabase missing;
     CHECK_FALSE(DefDatabase::loadDirectory(COLONY_DATA_DIR "/nope", missing, errors));
