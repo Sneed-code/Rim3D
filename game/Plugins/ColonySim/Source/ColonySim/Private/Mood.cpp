@@ -120,6 +120,8 @@ MoodSystem::MoodSystem(Things& things, const NeedsSystem& needs, const DefDataba
                 }
                 thought.stages.push_back(std::move(stage));
             }
+            thought.trait = def.text("situation.trait");
+            thought.notTrait = def.text("situation.notTrait");
         }
         thoughts_.push_back(std::move(thought));
 
@@ -171,6 +173,19 @@ bool MoodSystem::conditionValue(Entity pawn, const std::string& condition, float
         return value > 0.0f;
     }
     return false;
+}
+
+void MoodSystem::addSituation(const std::string& condition, SituationStage stage) {
+    situations_.push_back(Situation{condition, std::move(stage)});
+}
+
+bool MoodSystem::hasTrait(Entity pawn, const std::string& trait) const {
+    const Colonist* colonist = things_.registry().try_get<Colonist>(pawn);
+    if (colonist == nullptr) {
+        return false;
+    }
+    return std::any_of(colonist->traits.begin(), colonist->traits.end(),
+                       [&](const TraitRecord& record) { return record.def == trait; });
 }
 
 float MoodSystem::traitMoodOffset(Entity pawn) const {
@@ -273,6 +288,27 @@ std::vector<ThoughtView> MoodSystem::thoughts(Entity pawn, int64_t now) const {
             }
             const Def& def = defs_.get(thought.def);
             out.push_back(ThoughtView{def.defName(), def.label() + ": " + picked.label, picked.offset, true, 0});
+        }
+    }
+    // Situations judged by other systems (clothes, and later temperature and light).
+    for (const Thought& thought : thoughts_) {
+        if (thought.condition.empty() || thought.stages.empty()) {
+            continue;
+        }
+        if ((!thought.trait.empty() && !hasTrait(pawn, thought.trait)) ||
+            (!thought.notTrait.empty() && hasTrait(pawn, thought.notTrait))) {
+            continue;
+        }
+        for (const Situation& situation : situations_) {
+            if (situation.condition != thought.condition) {
+                continue;
+            }
+            const int stage = situation.stage(pawn);
+            if (stage >= 0 && static_cast<size_t>(stage) < thought.stages.size()) {
+                const Thought::Stage& s = thought.stages[static_cast<size_t>(stage)];
+                const Def& def = defs_.get(thought.def);
+                out.push_back(ThoughtView{def.defName(), s.label.empty() ? def.label() : s.label, s.offset, true, 0});
+            }
         }
     }
     if (const Mood* mood = reg.try_get<Mood>(pawn)) {

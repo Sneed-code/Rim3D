@@ -8,10 +8,8 @@
     },
     "safeMarginC": 10.0,
     "frostbiteSeverity": 3.0,
-    "clothesColdC": 12.0,
-    "clothesHeatC": 4.0,
-    "note": "clothesColdC and clothesHeatC widen a humanlike pawn's comfortable range until C15 (apparel) gives real insulation; remove them then. How fast heat moves between a room and what is round it. Per game hour, as a share of the temperature difference for each boundary cell, divided by the room's cell count (docs/design/temperature.md). A closed 5 x 5 room with a thin roof loses about 1/18 of the difference an hour.",
+    "note": "A pawn's comfortable range is widened by what it wears (apparel insulation, C15). How fast heat moves between a room and what is round it. Per game hour, as a share of the temperature difference for each boundary cell, divided by the room's cell count (docs/design/temperature.md). A closed 5 x 5 room with a thin roof loses about 1/18 of the difference an hour.",
     "unverified": ["safeMarginC"],
-    "ours": ["intervalSeconds", "conductancePerHour", "frostbiteSeverity", "clothesColdC", "clothesHeatC"]
+    "ours": ["intervalSeconds", "conductancePerHour", "frostbiteSeverity"]
   }
 ]

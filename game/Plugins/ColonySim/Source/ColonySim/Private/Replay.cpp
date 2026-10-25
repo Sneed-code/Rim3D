@@ -189,11 +189,28 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["project"] = c.project;
             } else if constexpr (std::is_same_v<Type, UnlockResearchCommand>) {
                 j["project"] = c.project;
-            } else {
-                static_assert(std::is_same_v<Type, MeleeCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["target"] = entt::to_integral(c.target);
                 j["mode"] = c.mode == MeleeMode::Attack ? "Attack" : "Block";
+            } else if constexpr (std::is_same_v<Type, SetOutfitCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["outfit"] = c.outfit;
+            } else if constexpr (std::is_same_v<Type, EditOutfitCommand>) {
+                j["outfit"] = c.outfit;
+                j["disallowed"] = c.disallowed;
+                j["hitPointsMin"] = c.hitPointsMin;
+                j["hitPointsMax"] = c.hitPointsMax;
+                j["qualityMin"] = c.qualityMin;
+                j["qualityMax"] = c.qualityMax;
+            } else if constexpr (std::is_same_v<Type, AddOutfitCommand>) {
+                j["name"] = c.name;
+            } else if constexpr (std::is_same_v<Type, RemoveOutfitCommand>) {
+                j["outfit"] = c.outfit;
+            } else {
+                static_assert(std::is_same_v<Type, StripCommand>, "write every command type");
+                j["thing"] = entt::to_integral(c.thing);
+                j["strip"] = c.strip;
             }
         },
         logged.command);
@@ -700,6 +717,54 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         uint32_t thing = entt::to_integral(kNoEntity);
         FlickCommand c;
         if (!r.integer(j, "thing", thing, where) || !r.flag(j, "on", c.on, where)) {
+            return false;
+        }
+        c.thing = static_cast<Entity>(thing);
+        out.command = c;
+    } else if (type == "SetOutfit") {
+        SetOutfitCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "outfit", c.outfit, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = c;
+    } else if (type == "EditOutfit") {
+        EditOutfitCommand c;
+        if (!r.integer(j, "outfit", c.outfit, where) || !r.number(j, "hitPointsMin", c.hitPointsMin, where) ||
+            !r.number(j, "hitPointsMax", c.hitPointsMax, where) || !r.integer(j, "qualityMin", c.qualityMin, where) ||
+            !r.integer(j, "qualityMax", c.qualityMax, where)) {
+            return false;
+        }
+        const auto list = j.find("disallowed");
+        if (list != j.end()) {
+            if (!list->is_array()) {
+                return r.fail(where + ".disallowed must be a list of def names");
+            }
+            for (const ReplayJson& name : *list) {
+                if (!name.is_string()) {
+                    return r.fail(where + ".disallowed must be a list of def names");
+                }
+                c.disallowed.push_back(name.get<std::string>());
+            }
+        }
+        out.command = std::move(c);
+    } else if (type == "AddOutfit") {
+        AddOutfitCommand c;
+        if (!r.text(j, "name", c.name, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "RemoveOutfit") {
+        RemoveOutfitCommand c;
+        if (!r.integer(j, "outfit", c.outfit, where)) {
+            return false;
+        }
+        out.command = c;
+    } else if (type == "Strip") {
+        StripCommand c;
+        uint32_t thing = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "thing", thing, where) || !r.flag(j, "strip", c.strip, where)) {
             return false;
         }
         c.thing = static_cast<Entity>(thing);

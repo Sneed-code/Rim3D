@@ -16,6 +16,7 @@
 
 namespace colony {
 
+class ApparelStats;
 class HealthSystem;
 class Map;
 class StateHasher;
@@ -144,6 +145,14 @@ public:
     // The item may be on the map (it is picked up) or not. False, changing nothing, if the pawn
     // has no body, is dead, or the item is neither a gun nor apparel, or is someone else's.
     bool equip(Entity pawn, Entity item, std::string* why = nullptr);
+    // Takes one worn piece (or the gun) off and puts it on the ground where the pawn stands. False if
+    // the pawn doesn't have it.
+    bool unequip(Entity pawn, Entity item);
+    // Takes `hitPoints` off a worn piece of apparel; at none it is destroyed (an ApparelDestroyed
+    // event). Used when armor takes a hit and by wear and tear (C15).
+    void damageApparel(Entity pawn, Entity item, int hitPoints);
+    // What the defs and the item's stuff and quality make of a piece of apparel (Apparel.h).
+    const ApparelStats& apparelStats() const { return *apparelStats_; }
     // Takes all of a pawn's gear off and puts it on the ground where it stands (or destroys it if
     // the pawn is off the map). For pawns about to be destroyed.
     void dropGear(Entity pawn);
@@ -226,6 +235,7 @@ private:
     Map& map_;
     HealthSystem& health_;
     std::unique_ptr<CombatModel> model_;
+    std::unique_ptr<ApparelStats> apparelStats_;
     std::vector<Event>* events_ = nullptr;
     std::function<void(Entity)> beforeDestroy_;
     std::vector<Entity> scratch_;

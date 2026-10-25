@@ -46,8 +46,6 @@ TemperatureNumbers TemperatureNumbers::read(const DefDatabase& defs) {
     n.rock = tempFloat(*def, "conductancePerHour.rock", n.rock);
     n.safeMarginC = tempFloat(*def, "safeMarginC", n.safeMarginC);
     n.frostbiteSeverity = tempFloat(*def, "frostbiteSeverity", n.frostbiteSeverity);
-    n.clothesColdC = tempFloat(*def, "clothesColdC", n.clothesColdC);
-    n.clothesHeatC = tempFloat(*def, "clothesHeatC", n.clothesHeatC);
     return n;
 }
 
@@ -189,10 +187,6 @@ bool TemperatureSystem::comfortRange(Entity pawn, float& min, float& max) const 
     }
     min = tempFloat(def, "stats.comfyTemperatureMin", 16.0f);
     max = tempFloat(def, "stats.comfyTemperatureMax", 26.0f);
-    if (def.text("race.intelligence") == "Humanlike") {
-        min -= numbers_.clothesColdC;
-        max += numbers_.clothesHeatC;
-    }
     if (modifier_) {
         modifier_(pawn, min, max);
     }

@@ -89,6 +89,10 @@ REFERENCES = [
     ("Research", "unlocks.Things[]", "Things"),
     ("Research", "unlocks.Recipes[]", "Recipes"),
     ("Research", "unlocks.Terrain[]", "Terrain"),
+    ("Scenarios", "colonistApparel[].thing", "Things"),
+    ("Scenarios", "colonistApparel[].stuff", "Things"),
+    ("Outfits", "allowed[]", "Things"),
+    ("Outfits", "disallowed[]", "Things"),
 ]
 
 # Kinds whose defs may carry "researchPrerequisite" (a project name or a list of them). Every project

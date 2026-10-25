@@ -26,6 +26,7 @@
 namespace colony {
 
 class AnimalSystem;
+class ApparelSystem;
 class Construction;
 class DefDatabase;
 class Filth;
@@ -155,6 +156,9 @@ public:
     // Guns, projectiles, hitboxes and armor (docs/design/combat.md).
     CombatSystem& combat() { return *combat_; }
     const CombatSystem& combat() const { return *combat_; }
+    // Clothes and armor, outfits, stripping (docs/design/apparel.md).
+    ApparelSystem& apparel() { return *apparel_; }
+    const ApparelSystem& apparel() const { return *apparel_; }
     // What a health panel shows for a pawn; false if it has no body.
     bool healthReport(Entity pawn, HealthReport& out) const { return health_->report(pawn, out); }
 
@@ -282,6 +286,7 @@ private:
     std::unique_ptr<RecreationSystem> recreation_;
     std::unique_ptr<ResearchSystem> research_;
     std::unique_ptr<CombatSystem> combat_;
+    std::unique_ptr<ApparelSystem> apparel_;  // after combat, which it uses
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
     Rng rng_;
