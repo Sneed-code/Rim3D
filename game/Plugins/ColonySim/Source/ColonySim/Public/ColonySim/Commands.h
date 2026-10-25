@@ -337,6 +337,19 @@ struct UnlockResearchCommand {
     std::string project;
 };
 
+// Melee (task F8, docs/design/melee.md). Attack: `pawn` swings at `target`, a pawn within reach;
+// for the colonist the player controls, `target` may be none for a swing straight ahead, and its
+// swings have no spread (the player aims). Block: `pawn` raises its melee weapon for a moment.
+// Fails if the pawn can't swing or block now (downed, mid-shot, still swinging, out of reach, no
+// melee weapon to block with).
+enum class MeleeMode : uint8_t { Attack, Block };
+
+struct MeleeCommand {
+    Entity pawn = kNoEntity;
+    Entity target = kNoEntity;
+    MeleeMode mode = MeleeMode::Attack;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -348,7 +361,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ReloadCommand, AddBillCommand,
                              RemoveBillCommand, SetBillCommand, HandsOnCommand, FlickCommand, ShortCircuitCommand,
                              PlaceFloorCommand, AddFilthCommand,
-                             SetResearchCommand, UnlockResearchCommand>;
+                             SetResearchCommand, UnlockResearchCommand,
+                             MeleeCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.
