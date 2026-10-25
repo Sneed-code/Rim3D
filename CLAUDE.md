@@ -9,6 +9,8 @@ expansions. The owner, sneed, does not program: Claude does all the work, sneed 
 - `docs/game-design.md`: what the game is. `docs/architecture.md`: how it is built.
 - `docs/plans/stage-<N>.md`: the current stage's task list. Read your task's row and its rules.
 - `docs/design/<system>.md`: read only the one your task needs.
+- `docs/design/naming.md`: our names for RimWorld's proper names (setting in `lore.md`). Use them
+  in data, code and docs; plain words like steel or rifle stay.
 - `docs/decisions/`: decisions made after the two main docs; newer ones win.
 
 ## Ground rules

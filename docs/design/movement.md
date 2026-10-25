@@ -107,6 +107,6 @@ and queue round each other at the stockpile.
 - **Stairs and levels**: pawns stay on their level (the movement ignores neighbours on other levels).
 - **Running, sneaking, crawling**: one speed per pawn, from the def. Injury, load and
   apparel slow-downs come with the health and inventory tasks, as a multiplier on `metresPerStep`.
-- **Animals and mechs** use the same system; bigger bodies need a radius per def (`kPawnRadius`
+- **Animals and remnant machines** use the same system; bigger bodies need a radius per def (`kPawnRadius`
   is one number for now).
 - **Doors** are walked through like open ground; a pawn does not slow at a door.
