@@ -149,7 +149,7 @@ G2, A1 and A2 are Stage 1 tasks.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | F8 | **Melee.** Melee weapons and fists from D8 with wind-up, hit moment and recovery in the sim; reach checked against hitboxes; blocks and dodges with timing (Melee skill); the fighter AI charges only when armed for it or the trait says so (Brawler). | Cloud | Opus, high | 90 min | S7, D8 |
+| ✓ | F8 | **Melee.** Melee weapons and fists from D8 with wind-up, hit moment and recovery in the sim; reach checked against hitboxes; blocks and dodges with timing (Melee skill); the fighter AI charges only when armed for it or the trait says so (Brawler). | Cloud | Opus, high | 90 min | S7, D8 |
 | | F9 | **Explosives and grenades.** An explosion system (radius, falloff, damage to pawns and buildings, knock-down); frag grenades thrown as arcing projectiles; fighters throw them at groups in cover and dive away from them (F5's sidestep grown into a dive). Molotovs once E4 is in. | Cloud | Sonnet, high | 90 min | S7 |
 | | F10 | **Medics, firefighters and rescue under fire.** The alarm's Medic and Firefighter roles from `game-design.md`; fighters drag downed friends to safety when the route is reasonably safe; scenario checks in F7's nightly run. | Cloud | Opus, high | 90 min | F6, H1, E4 |
 | | F11 | **Turrets and traps.** Powered mini-turret (F2's guns, auto targeting, blows up when destroyed), spike trap and IED trap; the fighter AI avoids known traps. | Cloud | Sonnet, medium | 60 min | E5, F9 |
@@ -160,7 +160,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
 | | P1 | **Several weapons.** Carry a rifle, a sidearm and a melee weapon; a switch command with a switch time; the fighter AI picks by range; weight counts (C24 if merged). | Cloud | Sonnet, high | 90 min | F8 |
-| | P2 | **Recoil kicks and dodge roll.** Per-weapon recoil kick lists in weapon defs for the player's shots; a dodge-roll command with start-up, a short no-hit window and recovery, moved by the sim (`shooter-feel.md`). | Cloud | Sonnet, high | 60 min | S7 |
+| ✓ | P2 | **Recoil kicks and dodge roll.** Per-weapon recoil kick lists in weapon defs for the player's shots; a dodge-roll command with start-up, a short no-hit window and recovery, moved by the sim (`shooter-feel.md`). | Cloud | Sonnet, high | 60 min | S7 |
 | | P3 | **Talent tree.** Talent XP and points for the protagonist, perks from data (`Talents/`, numbers `ours`: faster building, steadier aim, more carry weight, better trading), applied as stat changes; a spend-point command. | Cloud | Sonnet, medium | 60 min | S7 |
 | | P4 | **Repair and weapon upgrades.** Repair clothes, armor and weapons at a bench; upgrade parts (scope, longer magazine, better barrel; `ours`) fitted by recipe and changing the weapon's stats. | Cloud | Sonnet, high | 90 min | C14, C15 |
 | | P5 | **Night skip and fast travel.** Skip to morning when everyone off night shift is asleep and no threat is active, moving needs, growth and healing forward in one go and holding the narrator; fast travel to visited places when no threat. Same seed and commands still give the same game. | Cloud | Opus, high | 90 min | T1, E1 |
@@ -177,7 +177,7 @@ G2, A1 and A2 are Stage 1 tasks.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | X1 | **Genes and lineages.** Genes as defs with stat effects; Emberkin, Frostkin, Warbred, Ashborn and Delver as gene sets; starting colonists can roll a lineage; looks (A3) read the genes. | Cloud | Sonnet, high | 90 min | S7 |
+| ✓ | X1 | **Genes and lineages.** Genes as defs with stat effects; Emberkin, Frostkin, Warbred, Ashborn and Delver as gene sets; starting colonists can roll a lineage; looks (A3) read the genes. | Cloud | Sonnet, high | 90 min | S7 |
 | | X2 | **Resonance, first powers.** Attunement levels, resonance strain and focus (names added to `naming.md`), four powers from Royalty's first level (stun, painblock, burden, short jump) through the sim's commands and the fighter AI. | Cloud | Opus, high | 90 min | S7, F9 |
 
 ### Unreal side (U)
@@ -199,7 +199,7 @@ G2, A1 and A2 are Stage 1 tasks.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | A4 | **Animal art.** Free animal packs (Fab) for the D5 animals, retargeted onto a few shared skeletons; logged in `assets/manifest.json`. The thread sends sneed the download steps. | PC Unreal | Sonnet, medium | 90 min | U5, sneed's Fab download |
+| ✓ | A4 | **Animal art.** Free animal packs (Fab) for the D5 animals, retargeted onto a few shared skeletons; logged in `assets/manifest.json`. The thread sends sneed the download steps. | PC Unreal | Sonnet, medium | 90 min | U5, sneed's Fab download |
 | ✓ | A5 | **Clothes art.** Free clothing that fits MetaHuman bodies (MetaHuman's own outfits first) for the D6 apparel, per layer; logged in the manifest. | PC Unreal | Sonnet, high | 90 min | A3, sneed's download if needed |
 | ✓ | A6 | **Placeholder art 2.** Crops, work tables, power and climate buildings, furniture and floors, set in the defs' `visual` fields by an editor script. | PC Unreal | Sonnet, medium | 60 min | A1, D8, D11 |
 

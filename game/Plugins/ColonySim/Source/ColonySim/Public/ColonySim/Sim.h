@@ -33,10 +33,12 @@ class Floors;
 class RoomStats;
 struct Colonist;
 struct PawnLooks;
+struct PawnGenes;
 class Designations;
 class FighterSystem;
 class JobSystem;
 class Lights;
+class MeleeSystem;
 class Mineables;
 class MovementSystem;
 class MoodSystem;
@@ -164,6 +166,8 @@ public:
     const Colonist* colonistOf(Entity pawn) const;
     // How a humanlike pawn looks (docs/design/looks.md), or null for other things.
     const PawnLooks* looksOf(Entity pawn) const;
+    // A humanlike pawn's genes, made from its lineage (docs/design/genes.md), or null for other things.
+    const PawnGenes* genesOf(Entity pawn) const;
 
     // The plant layer: wild plants from map generation, growing hourly (docs/design/plants.md).
     Plants& plants() { return *plants_; }
@@ -221,6 +225,9 @@ public:
     // Drafted colonists and other factions' pawns: where to stand, whom to shoot (docs/design/fighters.md).
     FighterSystem& fighters() { return *fighters_; }
     const FighterSystem& fighters() const { return *fighters_; }
+    // Melee swings, blocks and dodges (docs/design/melee.md).
+    MeleeSystem& melee() { return *melee_; }
+    const MeleeSystem& melee() const { return *melee_; }
 
     // Wild animals: herds, grazing, sleep, coming and going at the edges (docs/design/animal-life.md).
     AnimalSystem& animals() { return *animals_; }
@@ -260,6 +267,8 @@ private:
     void startScenario();
     // Gives a new pawn its looks if it is humanlike (its def names no other intelligence).
     void giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& lineage);
+    // Makes (again) the genes of a pawn that has looks, from its lineage.
+    void giveGenes(Entity pawn);
 
     SimSettings settings_;
     std::shared_ptr<const DefDatabase> defs_;
@@ -304,6 +313,7 @@ private:
     std::vector<LoggedCommand> commandLog_;
     std::vector<Event> events_;
     std::vector<Checkpoint> checkpoints_;
+    std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
 };
 
 }  // namespace colony

@@ -78,6 +78,37 @@ struct Magazine {
     int rounds = 0;
 };
 
+// The player's gun kick (P2, docs/design/shooter-feel.md): the shots just fired lift the aim by
+// the weapon's list of kicks, shot by shot; it wears off by itself. Added to a pawn the first time
+// its player trigger fires a gun that has a kick list, and kept. Degrees: `up` raises the aim,
+// `side` turns it to the right (left when negative). Only player shots follow it; fighters get
+// their spread from skill.
+struct RecoilKick {
+    float up = 0.0f;
+    float side = 0.0f;
+    int shots = 0;      // shots in the current spray: the next one reads this place in the kick list
+    int sinceShot = 0;  // steps since the last shot; the kick holds, then wears off, and the spray restarts
+};
+
+// A dodge roll (P2): start-up, a roll in which bullets pass through the pawn for a short window,
+// recovery, then a wait before the next. Added by the first DodgeRollCommand and kept.
+enum class RollPhase : uint8_t {
+    Idle,
+    StartUp,   // crouching into it: not moving yet, can be hit
+    Rolling,   // moving; hit-proof for the first part of it
+    Recovery,  // getting up: not moving, can be hit
+};
+
+struct DodgeRoll {
+    RollPhase phase = RollPhase::Idle;
+    int stepsLeft = 0;   // of the phase
+    int rolled = 0;      // steps rolled so far, while Rolling
+    float dirX = 1.0f;   // unit vector on the ground
+    float dirY = 0.0f;
+    int cooldown = 0;    // Idle: steps before the next roll may start
+    bool proof = false;  // bullets passed through the pawn in the step just run
+};
+
 // A bullet in flight. Not a Thing: it has no def of kind Things and is not in the snapshot's
 // things, but in Snapshot::projectiles. Destroyed when it hits something or flies out.
 struct Projectile {
@@ -117,6 +148,15 @@ struct TraceHit {
     int part = -1;             // the body part whose hitbox was hit (outside part)
 };
 
+// What a hit on a pawn came to (CombatSystem::hitPawn): the part it lands on, and the damage left
+// after armor (none if the armor deflected it).
+struct PawnHitResult {
+    bool deflected = false;
+    int part = -1;     // -1: the pawn has no hitboxes, so the caller lets health pick a part
+    DefId damageType;  // Blunt if armor turned a sharp hit blunt
+    float amount = 0.0f;
+};
+
 struct CombatModel;
 
 class COLONY_API CombatSystem {
@@ -130,7 +170,7 @@ public:
     // Called before combat destroys a thing (a building shot to pieces), so jobs can let go of it.
     void setBeforeDestroy(std::function<void(Entity)> hook) { beforeDestroy_ = std::move(hook); }
 
-    // Puts a gun in the pawn's hands (the one held before is dropped where the pawn stands) or
+    // Puts a weapon (a gun, or a melee weapon since F8) in the pawn's hands (the one held before is dropped where the pawn stands) or
     // apparel on its body (one piece per layer and body part group: what it replaces is dropped).
     // The item may be on the map (it is picked up) or not. False, changing nothing, if the pawn
     // has no body, is dead, or the item is neither a gun nor apparel, or is someone else's.
@@ -183,8 +223,29 @@ public:
     int shootingSkill(Entity pawn) const;
 
     // Fires one projectile from the pawn's muzzle toward (x, y, z) with this spread. Returns it,
-    // or kNoEntity if the pawn has no gun. The ShotFired event comes with it.
-    Entity fire(Entity pawn, float x, float y, float z, float spreadSlope, Rng& rng);
+    // or kNoEntity if the pawn has no gun. The ShotFired event comes with it. `kickUp` and `kickSide`
+    // (slopes) turn the shot up and to the right of the aim, the player's gun kick.
+    Entity fire(Entity pawn, float x, float y, float z, float spreadSlope, Rng& rng, float kickUp = 0.0f,
+                float kickSide = 0.0f);
+
+    // Gun kick (P2): where the player's shots are going above and to the right of the aim now, in
+    // degrees. Zero for a pawn that has not fired a gun with a kick list.
+    void kickOf(Entity pawn, float& up, float& side) const;
+
+    // Dodge roll (P2, docs/design/shooter-feel.md). Starts a roll of the pawn in the direction
+    // (dx, dy): a start-up, then a roll in which bullets pass through it, then a recovery. Not a
+    // number or zero means a backstep away from where it faces. Fails, changing nothing, if the pawn
+    // isn't a colonist under direct control, is downed, lies prone, or is rolling or waiting out
+    // the last roll. A roll ends a shot being aimed or fired (a reload goes on). While it lasts the
+    // pawn can't shoot or reload, and the sim moves it: DirectMove is ignored (rollLocked).
+    bool dodgeRoll(Entity pawn, float dx, float dy, std::string* why = nullptr);
+    RollPhase rollPhase(Entity pawn) const;
+    // True from the command to the end of the recovery: the pawn is not its player's to move.
+    bool rollLocked(Entity pawn) const { return rollPhase(pawn) != RollPhase::Idle; }
+    int rollStepsLeft(Entity pawn) const;
+    // Whether bullets pass through the pawn right now.
+    bool hitProof(Entity pawn) const;
+    bool rollDirection(Entity pawn, float& x, float& y) const;
 
     // What the straight stretch from a to b meets first: ground, rock, a building (not in
     // `skipCell`'s cell) or a pawn's hitbox (not `skipPawn`). Kind None if nothing.
@@ -198,6 +259,19 @@ public:
 
     // Hashes the combat components of one thing (Sim::stateHash calls it for every thing).
     void hashThing(Entity e, StateHasher& h) const;
+
+    // A hit on the hitbox of `hitboxPart`: picks the part under it (a hand or a finger...), goes in
+    // to an organ or bone if the damage type reaches inside, then through the pawn's armor, outside
+    // layer first (RimWorld's rule). Every random choice comes from `seed`. Doesn't apply the damage:
+    // the caller does (HealthSystem::applyHit), so bullets and melee strikes land the same way (F8).
+    PawnHitResult hitPawn(Entity pawn, int hitboxPart, DefId damageType, float amount, float penetration,
+                          uint64_t seed) const;
+    // The radius around a standing man's chest, seen from the front, in which a point picked evenly
+    // lands on him with this chance (the table aimed shots use). Melee strikes use it too (F8).
+    float spreadRadiusFor(float chance) const;
+    // Things defs that go in a pawn's hands: a melee weapon (an item with `tools`, F8) or a gun.
+    bool isMeleeWeapon(DefId def) const;
+    bool isGun(DefId def) const;
 
 private:
     Things& things_;
@@ -213,6 +287,8 @@ private:
     void updateShooter(Entity pawn, Shooter& s, Rng& rng);
     void startReload(Entity pawn, Shooter& s, Entity weapon, int extraSteps);
     void drop(Entity pawn, Entity item);
+    void stepRolls();
+    void stepKicks();
 };
 
 }  // namespace colony

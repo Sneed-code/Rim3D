@@ -1,6 +1,6 @@
 # Shooter feel: recoil, shake, blur, explosions, dodge roll
 
-Research note, 2026-10-25. Nothing here is built. It says what exists, what to use and what to watch for.
+Research note, 2026-10-25. The sim half (gun kick and dodge roll) is built by P2, see "Built (P2)" at the end; the Unreal half (shake, blur, camera blend, animation, effects) is U21. The rest says what exists, what to use and what to watch for.
 Fit with the rules: the sim decides what happens, Unreal shows it.
 
 ## What is already planned
@@ -48,3 +48,67 @@ Pitfall: weapon trace in Unreal must not decide hits; the sim checks reach and h
 ## Suggested work (not scheduled)
 One cloud task (recoil kicks, dodge-roll command and sim tests, after F2), one PC task (shake, blur,
 roll animation and effects, after U11).
+
+## Built (P2)
+
+Code: `ColonySim/Combat.h` (`RecoilKick`, `DodgeRoll`, `CombatSystem::dodgeRoll`, `kickOf`),
+`Private/Combat.cpp`, `DodgeRollCommand` in `Commands.h`. Tests: `Tests/ShooterFeelTests.cpp`. Data: `recoilKicks` on each gun
+in `Things/Weapons.json`, the kick and `dodgeRoll` numbers in `Rules/CombatRules`. All numbers are ours (RimWorld has neither).
+
+### Gun kick
+
+A gun's `recoilKicks` is a list of `{up, side}` in degrees, one per shot of a spray (`side` positive is to the
+right); a shot past the end of the list repeats the last. It only matters for the player's shots (`ShootCommand` with
+`player`): fighters' aim comes from skill (F5) and ignores it. Each player shot flies where the shots before it have
+lifted the aim (added on top of the player's aim point and the spread, before the drop is aimed for), then the shot's
+own entry is added for the next one, less 2.5% a Shooting level like the spread recoil. The kick **holds** for
+`recoilKickHoldSteps` (5) after a shot, then **wears off** straight toward the aim by `recoilKickRecoveryPerStep` (0.2
+degrees a step); the spray restarts at the first entry after `recoilKickResetSteps` (15) without a shot; the kick
+never passes `recoilKickMaxDegrees` (10). So a single shot from the revolver or bolt rifle has fully worn off before the
+next can be fired (the kick is then a camera effect only), while the assault rifle's burst of three climbs about 0.7,
+1.5 and 2.4 degrees and the next burst starts again. Same inputs give the same shots: the kick is plain arithmetic, no
+trigonometry.
+
+| Gun | First kick up, side (degrees) |
+| --- | --- |
+| revolver | 2.8, 0.3 |
+| autopistol | 1.2, 0.1 |
+| bolt-action rifle | 3.0, 0.2 |
+| pump shotgun | 4.0, 0.3 |
+| assault rifle | 0.7, 0.05; the list has six entries, 0.7 to 0.9 up, the side kick swinging right and left in turn |
+
+For the camera: the snapshot has `kickUp` and `kickSide` (degrees, the offset now). Unreal shows the same offset as a
+visual-only lift of the view and still sends the point the player aims at **without** it, so the crosshair on screen
+is where the bullet goes and the player pulls the mouse down to cancel the kick.
+
+### Dodge roll
+
+`DodgeRollCommand{pawn, dx, dy}` for a colonist under direct control. Steps (one step is a game second, 30 a real
+second):
+
+| Phase | Steps | What happens |
+| --- | --- | --- |
+| Start-up | 3 | stands where it is, facing the roll, can be hit |
+| Rolling | 15 | moves 4 m (0.27 m a step, sliding along walls and stopping at the map edge); **bullets pass through the pawn for the first 12 steps** |
+| Recovery | 9 | stands still, can be hit |
+| Wait | 6 | the next roll is refused until it is over |
+
+That is 27 steps (0.9 s) from the key to being free, and a pawn can be shot for the 12 steps around the hit-proof
+window. The direction is any length; zero or not a number is a backstep away from where it faces. A roll is refused for
+a pawn that isn't under direct control, is downed, is prone, or is rolling or waiting. The roll cancels a shot being
+aimed or fired (not a reload), and `Shoot` and `Reload` are refused while it lasts. A pawn knocked down mid-roll ends
+the roll where it lies. **The sim moves the pawn:** `DirectMoveCommand` is ignored (no failure) from the command to the
+end of recovery, so Unreal must follow the snapshot's position then and not keep its own. Hit-proof is a `CombatSystem::trace` test (it skips the pawn), so bullets and F8's melee swings (which trace
+too) pass through it; `Melee` attacks and blocks are refused while it lasts. Other damage that arrives later (fire, blasts)
+should check `CombatSystem::hitProof(pawn)`.
+
+The snapshot has `rollPhase` (0 none, 1 start-up, 2 rolling, 3 recovery), `rollStepsLeft`, `rollDirX/Y` and `hitProof`;
+`PawnAction::Roll` goes out when it starts with the cell, the direction and the total steps (27), so the animation can
+be stretched to fit the sim's timing and played as a montage over the motion-matched body (pitfall 3 above).
+
+### Not done (U21 and later)
+
+The key and the controls (a roll key in direct mode that sends the direction of the movement keys), the roll animation,
+the camera kick from the snapshot, shake, blur and the aim-hold camera blend. Stamina for rolls (none: the wait is the
+limit), stance effects on the kick (crouching and prone could steady it), recoil kicks for a held full-auto gun with
+its own list longer than a burst (no such gun yet), and the talent tree's "steadier aim" (P3) as a factor on the kick.

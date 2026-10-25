@@ -9,6 +9,7 @@
 #include "ColonySim/Grid.h"
 #include "ColonySim/JobType.h"
 #include "ColonySim/Looks.h"
+#include "ColonySim/Melee.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Zones.h"
@@ -101,6 +102,18 @@ struct ThingView {
     int rounds = 0;
     int magazineSize = 0;
     bool reloading = false;
+    // The player's gun kick (P2, docs/design/shooter-feel.md): where the shots are going above and to
+    // the right of where the player aims, in degrees, from the last shots; it wears off by itself. The
+    // camera shows the same offset. Zero for everyone else.
+    float kickUp = 0.0f;
+    float kickSide = 0.0f;
+    // A dodge roll in progress (P2): 0 none, 1 start-up, 2 rolling (hitProof says whether bullets pass
+    // through it), 3 recovery; the steps left in that phase and its direction (unit vector).
+    uint8_t rollPhase = 0;
+    int rollStepsLeft = 0;
+    float rollDirX = 0.0f;
+    float rollDirY = 0.0f;
+    bool hitProof = false;
     // Pawns: their side (1 is the player's), and for fighters (docs/design/fighters.md) whether the
     // player drafted them, whom they shoot at, the cell they hold and whether they are falling back.
     uint32_t faction = 1;
@@ -125,6 +138,12 @@ struct ThingView {
     // `asleep` and `faction` (100 for wild) are filled for them too.
     int lifeStage = -1;
     float bodySize = 0.0f;
+    // Pawns in melee (docs/design/melee.md): winding up a swing at meleeTarget (the hit comes in
+    // meleeStepsLeft steps) or recovering from one, and whether their weapon is raised to block.
+    MeleePhase meleePhase = MeleePhase::Ready;
+    int meleeStepsLeft = 0;
+    Entity meleeTarget = kNoEntity;
+    bool blocking = false;
 };
 
 // A bullet in flight (docs/design/combat.md). Unreal draws a tracer along its velocity; it

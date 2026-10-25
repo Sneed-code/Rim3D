@@ -5,6 +5,7 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Looks.h"
+#include "ColonySim/Melee.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Doors.h"
@@ -29,6 +30,7 @@
 #include "ColonySim/Zones.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -236,6 +238,9 @@ struct SaveEntity {
     std::optional<PowerPart> power;         // section "power"
     std::optional<SaveJoy> joy;             // section "recreation"
     std::optional<Animal> animal;           // section "animals"
+    std::optional<Melee> melee;             // section "melee" (F8)
+    std::optional<RecoilKick> kick;         // section "feel"
+    std::optional<DodgeRoll> roll;          // section "feel"
 };
 
 // A stockpile zone, with its filter by defName.
@@ -940,6 +945,16 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("thing", c.thing);
             } else if constexpr (std::is_same_v<Type, SetResearchCommand> || std::is_same_v<Type, UnlockResearchCommand>) {
                 ar.text("project", c.project);
+            } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
+                auto* melee = &c;
+                ar.value("pawn", melee->pawn);
+                ar.value("target", melee->target);
+                ar.value("mode", melee->mode);
+                ar.require(melee->mode <= MeleeMode::Block, "the save file has a bad melee mode");
+            } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.value("dx", c.dx);
+                ar.value("dy", c.dy);
             } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
                 ar.group("area", [&] { saveRect(ar, c.area); });
                 ar.value("remove", c.remove);
@@ -1359,6 +1374,30 @@ void saveShooterPart(Ar& ar, Shooter& sh) {
 }
 
 template <typename Ar>
+void saveKickPart(Ar& ar, RecoilKick& k) {
+    ar.value("up", k.up);
+    ar.value("side", k.side);
+    ar.value("shots", k.shots);
+    ar.value("sinceShot", k.sinceShot);
+    ar.require(std::isfinite(k.up) && std::isfinite(k.side) && k.shots >= 0 && k.sinceShot >= 0,
+               "the save file has a bad gun kick");
+}
+
+template <typename Ar>
+void saveRollPart(Ar& ar, DodgeRoll& r) {
+    ar.value("phase", r.phase);
+    ar.require(static_cast<int>(r.phase) <= static_cast<int>(RollPhase::Recovery), "the save file has a bad dodge roll phase");
+    ar.value("stepsLeft", r.stepsLeft);
+    ar.value("rolled", r.rolled);
+    ar.value("dirX", r.dirX);
+    ar.value("dirY", r.dirY);
+    ar.value("cooldown", r.cooldown);
+    ar.value("proof", r.proof);
+    ar.require(r.stepsLeft >= 0 && r.rolled >= 0 && r.cooldown >= 0 && std::isfinite(r.dirX) && std::isfinite(r.dirY),
+               "the save file has a bad dodge roll");
+}
+
+template <typename Ar>
 void saveProjectilePart(Ar& ar, SaveProjectile& sp) {
     ar.text("def", sp.def);
     ar.text("weapon", sp.weapon);
@@ -1434,6 +1473,29 @@ void saveFighterPart(Ar& ar, Fighter& f) {
         ar.value("dodgeUntil", f.dodgeUntil);
     }
 
+}
+
+template <typename Ar>
+void saveMeleePart(Ar& ar, Melee& m) {
+    ar.value("phase", m.phase);
+    ar.require(m.phase <= MeleePhase::Recovery, "the save file has a bad melee phase");
+    ar.value("stepsLeft", m.stepsLeft);
+    ar.value("target", m.target);
+    ar.value("tool", m.tool);
+    ar.value("weaponTool", m.weaponTool);
+    ar.value("player", m.player);
+    ar.value("committed", m.committed);
+    ar.value("aimX", m.aimX);
+    ar.value("aimY", m.aimY);
+    ar.value("aimZ", m.aimZ);
+    ar.value("seed", m.seed);
+    ar.value("threat", m.threat);
+    ar.value("defense", m.defense);
+    ar.require(m.defense <= MeleeDefense::Block, "the save file has a bad melee defense");
+    ar.value("reactAt", m.reactAt);
+    ar.value("blockFrom", m.blockFrom);
+    ar.value("blockUntil", m.blockUntil);
+    ar.value("dodged", m.dodged);
 }
 
 template <typename Ar>
@@ -1898,6 +1960,13 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(t.celsius > -500.0f && t.celsius < 1000.0f, "the save file has an impossible room temperature");
         });
     });
+    ar.section("melee", 1, [&] {
+        saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
+    });
+    ar.section("feel", 1, [&] {
+        saveParts(ar, "kick", e, &SaveEntity::kick, [&](RecoilKick& k) { saveKickPart(ar, k); });
+        saveParts(ar, "roll", e, &SaveEntity::roll, [&](DodgeRoll& r) { saveRollPart(ar, r); });
+    });
     ar.section("levels", 1, [&] {
         ar.list("upperFloors", d.upperFloors, [&](CellPos& c) {
             saveCell(ar, c);
@@ -2186,8 +2255,17 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const Magazine* magazine = reg.try_get<Magazine>(e)) {
             out.magazine = *magazine;
         }
+        if (const RecoilKick* kick = reg.try_get<RecoilKick>(e)) {
+            out.kick = *kick;
+        }
+        if (const DodgeRoll* roll = reg.try_get<DodgeRoll>(e)) {
+            out.roll = *roll;
+        }
         if (const Animal* animal = reg.try_get<Animal>(e)) {
             out.animal = *animal;
+        }
+        if (const Melee* melee = reg.try_get<Melee>(e)) {
+            out.melee = *melee;
         }
         if (const Projectile* p = reg.try_get<Projectile>(e)) {
             out.projectile = SaveProjectile{sim.defs_->get(p->def).defName(), sim.defs_->get(p->weapon).defName(), *p};
@@ -2434,6 +2512,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.looks) {
             reg.emplace<PawnLooks>(entity, std::move(*e.looks));
+            sim.giveGenes(entity);  // genes follow the lineage and are not saved (docs/design/genes.md)
         }
         if (e.bills) {
             BillList list;
@@ -2528,6 +2607,12 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.magazine) {
             reg.emplace<Magazine>(entity, *e.magazine);
         }
+        if (e.kick) {
+            reg.emplace<RecoilKick>(entity, *e.kick);
+        }
+        if (e.roll) {
+            reg.emplace<DodgeRoll>(entity, *e.roll);
+        }
         if (e.joy) {
             reg.emplace<Joy>(entity, e.joy->joy);
             if (!e.joy->activity.empty()) {
@@ -2539,6 +2624,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.animal) {
             reg.emplace<Animal>(entity, *e.animal);
+        }
+        if (e.melee) {
+            reg.emplace<Melee>(entity, *e.melee);
         }
     }
     sim.animals_->restore(d.animals);
