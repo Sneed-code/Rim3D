@@ -60,8 +60,8 @@ Anything that fails returns `kNoEntity` (or `false`) and changes nothing.
 
 - **Determinism.** Entity ids come out of EnTT in a fixed order, so the same commands give the same
   ids. Don't depend on the order a view iterates: break ties by entity id (as the hauling
-  placeholder does), or keep your own ordered list (as `Sim::haulers()`). Saves (S6) must restore
-  the same ids.
+  placeholder does), or keep your own ordered list (as `Sim::haulers()`). Saves (`saves.md`) restore
+  the same ids, including the order destroyed ids are reused in.
 - **Don't add or remove components on other entities while iterating a view of those
   components.** Collect first, then change.
 - **Unreal doesn't include `Things.h`.** `Sim.h` only forward-declares `Things`, and Unreal will
