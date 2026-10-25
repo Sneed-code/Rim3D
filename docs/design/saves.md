@@ -179,6 +179,11 @@ sneed's whole job for a bug is: press F8, then send the folder (zip it, or drop 
   pawns without a mood.
 - **12** (F2): `Posture`, `Gear`, `EquippedBy`, `Shooter` and `Projectile` components (a pawn saved
   without a posture stands facing east). Commands 17 to 19 (`Equip`, `Shoot`, `SetStance`).
+- **13** (C5): a `Door` component (progress, hold, open) on doors ([rooms.md](rooms.md)). Older files load with closed doors.
+- **14** (C3): the rock layer and the designations after the plants, job types `Mine`, `CutPlant`
+  and `HarvestPlant`, commands 20 (`Designate`) and 21 (`CancelDesignations`)
+  (`docs/design/mining.md`). Cells of rock in the generated ground with no record in the file were
+  mined and load as rough stone. Older files load with the generated rock layer and no marks.
 
 ## Why the state hash changed in S6
 

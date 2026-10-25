@@ -30,6 +30,10 @@ enum class EventType : uint8_t {
     PawnWokeUp,      // a pawn got up after sleeping
     FrameStarted,    // a blueprint got its first materials and is a frame now (docs/design/construction.md)
     PawnMoodBand,    // a pawn's mood crossed a mental break threshold (docs/design/mood.md)
+    CellMined,       // a rock or ore cell was dug out (docs/design/mining.md)
+    PlantRemoved,    // a plant was felled or cut down
+    PlantHarvested,  // a plant was picked and stays, grown back to a lower stage
+    DesignationsChanged,  // marks were added, removed or finished: read the snapshot's designations
     ShotFired,       // a pawn fired a projectile (docs/design/combat.md)
     ProjectileHit,   // a projectile stopped: it hit something, or flew off the map or too long
 };
@@ -55,6 +59,9 @@ enum class PawnAction : uint8_t {
     GetUp,    // got up from sleeping
     Build,    // started work on `target`, a frame (once per job; the work itself takes game seconds)
     Deconstruct,  // started taking down `target`, a building
+    Mine,     // swung the pick at the rock in `cell`: once for every hit, for sounds and dust
+    Cut,      // started cutting down or felling the plant in `cell`; the work goes on until its JobEnded
+    Harvest,  // started picking from the plant in `cell`
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
@@ -77,6 +84,11 @@ struct Event {
     // the pawn, `target` the bed it slept in or none, `message` "bed" or "ground", `amount` its rest.
     // PawnMoodBand: `thing` the pawn, `message` the new band ("stable", "minor", "major", "extreme"),
     // `amount` its mood.
+    // CellMined: `cell` the cell, `def` the rock or ore's Things def, `amount` its hit points. The
+    // chunk or ore it left comes as a ThingSpawned. PlantRemoved, PlantHarvested: `cell`, `def` the
+    // plant's Things def, `amount` how many items it gave (they come as a ThingSpawned); `message`
+    // "felled" (a tree) or "cut" for removed, "picked" for harvested. PawnAction Mine, Cut, Harvest:
+    // `thing` the pawn, `cell` the cell worked on, `def` the pawn's def.
     float amount = 0.0f;
     // ShotFired: `thing` the shooter, `def` its gun's Things def, `target` the projectile, (x, y, z)
     // the muzzle. ProjectileHit: `thing` the projectile (forget its id), `def` its Projectiles def,

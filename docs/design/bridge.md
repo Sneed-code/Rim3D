@@ -46,6 +46,8 @@ rest (place blueprint, designate, draft, actions) come with the tasks that build
 | `CancelBuildCommand{thing}` | takes back a blueprint or frame (what was delivered is put back on the ground), or unmarks a building | `thing` is none of those |
 | `DeconstructCommand{thing}` | marks a finished building to be taken down | not a building; marked already |
 | `SetScheduleCommand{pawn, hour, kind}` | the pawn's schedule for one hour (0 to 23): Anything, Work, Joy or Sleep ([needs.md](needs.md)) | the pawn has no schedule; bad hour |
+| `DesignateCommand{area, kind}` | marks rock (`Mine`), plants (`CutPlant`) or ripe plants (`HarvestPlant`) in the rectangle for work ([mining.md](mining.md)) | `kind` is None; nothing in `area` suits |
+| `CancelDesignationsCommand{area, kind}` | takes marks off, `None` for every kind, and ends the jobs on them | nothing marked in `area` |
 | `AssignBedCommand{bed, pawn}` | the pawn owns the bed (and gives up its old one); `pawn` none empties the bed | not a bed; not a pawn with needs; the bed is full |
 | `EquipCommand{pawn, item}` | `CombatSystem::equip`: a gun in the hands or apparel on the body ([combat.md](combat.md)) | no body or dead; not a gun or apparel; someone else's; a job holds it |
 | `ShootCommand{pawn, target, x, y, z, player}` | `CombatSystem::shoot`: aimed (warm-up, skill spread) or the player's trigger (at once, gun spread) | no gun; downed; mid-burst or cooling down; target not a pawn on the map |
@@ -86,6 +88,10 @@ starts, so read it after every step. Before the first step it holds what setting
 | `JobEnded` | the same, and `message`: "done", "failed: why" or "interrupted: why" | a pawn's job ended |
 | `PawnAte` | `thing`, `def` (the food), `amount`, `cell`, `message` ("table" or "ground") | a pawn finished eating (C6, [needs.md](needs.md)) |
 | `PawnWokeUp` | `thing`, `target` (the bed or none), `amount` (its rest), `message` ("bed" or "ground") | a pawn got up from sleeping |
+| `CellMined` | `cell`, `def` (the rock), `amount` (its full hit points) | a rock or ore cell was dug out and is now rough stone (C3, [mining.md](mining.md)) |
+| `PlantRemoved` | `cell`, `def`, `amount` (items left), `message` ("felled" or "cut") | a plant was taken away |
+| `PlantHarvested` | `cell`, `def`, `amount` (items left), `message` ("picked") | a bush was picked and goes on growing |
+| `DesignationsChanged` | none | the marks changed; read `snapshot.designations` again |
 | `PawnMoodBand` | `thing`, `amount` (its mood), `message` ("stable", "minor", "major" or "extreme") | a pawn's mood crossed a mental break threshold (C9, [mood.md](mood.md)) |
 | `ShotFired` | `thing` (shooter), `def` (gun), `target` (projectile), `x, y, z` (muzzle) | a pawn fired (F2, [combat.md](combat.md)) |
 | `ProjectileHit` | `thing` (projectile), `def` (Projectiles def), `hit`, `target`, `part`, `amount`, `x, y, z`, `cell` | a projectile stopped: ground, rock, building, pawn, armor, or gone |
@@ -112,7 +118,8 @@ Since F2 pawns also have
 `stance` (prone when downed or dead), `facingX`/`facingY`, the `weapon` in their hands and
 `shotReadyIn`, and `Snapshot::projectiles` lists every bullet in flight ([combat.md](combat.md)).
 Since C5 a door's `ThingView` has `doorOpen` (0 to 1) and the snapshot has `rooms` (the enclosed rooms with role and
-size), `roofCells` (the thin roof) and `roofChanges` ([rooms.md](rooms.md)).
+size), `roofCells` (the thin roof) and `roofChanges` ([rooms.md](rooms.md)). Since C3 the snapshot lists the `designations`
+(cell and kind of every mine, cut and harvest mark; [mining.md](mining.md)).
 Later tasks add what they draw and show: pawn info, the work tab.
 
 Unreal reads only snapshots and events, never the registry or `Things.h`. That lets the sim move to

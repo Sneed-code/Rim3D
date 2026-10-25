@@ -28,7 +28,9 @@ namespace colony {
 class Construction;
 class DefDatabase;
 struct Colonist;
+class Designations;
 class JobSystem;
+class Mineables;
 class MovementSystem;
 class MoodSystem;
 class NeedsSystem;
@@ -144,6 +146,13 @@ public:
     Plants& plants() { return *plants_; }
     const Plants& plants() const { return *plants_; }
 
+    // The rock and ore layer, mined down by jobs (docs/design/mining.md), and the marks the player
+    // has put on rock and plants for colonists to work on.
+    Mineables& mineables() { return *mineables_; }
+    const Mineables& mineables() const { return *mineables_; }
+    Designations& designations() { return *designations_; }
+    const Designations& designations() const { return *designations_; }
+
     // Problems setting up the start (e.g. a def the settings name is missing). Empty when fine.
     const std::vector<std::string>& setupErrors() const { return setupErrors_; }
 
@@ -182,6 +191,7 @@ private:
     void applyCommand(const Command& command, uint64_t id);
     void commandFailed(uint64_t id, std::string message);
     void placeStockpileAndThings();
+    void pruneDesignations();
     void startScenario();
 
     SimSettings settings_;
@@ -191,6 +201,8 @@ private:
     std::unique_ptr<Zones> zones_;
     std::unique_ptr<Things> things_;
     std::unique_ptr<Plants> plants_;
+    std::unique_ptr<Mineables> mineables_;
+    std::unique_ptr<Designations> designations_;
     std::unique_ptr<MovementSystem> movement_;
     std::unique_ptr<Rooms> rooms_;
     DoorNumbers doorNumbers_;  // for the snapshot's door animation

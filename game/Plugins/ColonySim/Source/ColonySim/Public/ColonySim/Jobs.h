@@ -2,6 +2,7 @@
 
 #include "ColonySim/Api.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Designations.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Grid.h"
@@ -38,11 +39,14 @@ struct Job {
                                // frame; Deconstruct: the building
     CellPos cell;              // HaulToCell: the storage cell; Ingest: where it eats (a chair, else where
                                // the food lay); LayDown: the bed's cell for this pawn, or where it lies;
-                               // the construction jobs: where the pawn stands to work
+                               // the construction jobs: where the pawn stands to work; Mine, CutPlant,
+                               // HarvestPlant: the rock or plant's cell
     int count = 0;             // HaulToCell, Ingest, DeliverResources: how many to carry
     Entity chair = kNoEntity;  // Ingest: the chair at a table it eats in, or none (it eats where the food lay)
     Entity site = kNoEntity;   // DeliverResources: the blueprint or frame it brings materials to
-    float progress = 0.0f;     // Deconstruct: work done so far
+    float progress = 0.0f;     // Deconstruct: work done so far; Mine: work towards the next pick hit; CutPlant,
+                               // HarvestPlant: work done on the plant. For the gather jobs both are game seconds
+                               // at 100% work speed (the worker's speed adds to it every second)
     DefId workType;            // the work type whose scanner gave it; none for orders and idling
     bool forced = false;       // a player order (OrderHaulCommand)
     uint8_t step = 0;          // which of the job type's steps is running
@@ -84,6 +88,11 @@ struct Carrying {
     Entity thing = kNoEntity;
 };
 
+// True for the jobs that work on a designated cell (rock or plant) and hold that cell.
+inline bool jobIsGather(JobType type) {
+    return type == JobType::Mine || type == JobType::CutPlant || type == JobType::HarvestPlant;
+}
+
 // How many steps a job type has (for save checks).
 COLONY_API int jobStepCount(JobType type);
 
@@ -100,7 +109,9 @@ class Construction;
 class DefDatabase;
 class HealthSystem;
 class Map;
+class Mineables;
 class Pathfinder;
+class Plants;
 class Things;
 class WorkGiver;
 struct GameTime;
@@ -137,8 +148,8 @@ public:
     };
 
     JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zones, Construction& construction,
-              const DefDatabase& defs, const HealthSystem& health, const NeedsSystem& needs, const GameTime& time,
-              SimStats& stats,
+              Plants& plants, Mineables& mineables, Designations& designations, const DefDatabase& defs,
+              const HealthSystem& health, const NeedsSystem& needs, const GameTime& time, SimStats& stats,
               std::vector<Event>& events);
     ~JobSystem();
     JobSystem(const JobSystem&) = delete;
@@ -165,6 +176,9 @@ public:
     // A player order: haul this item to the best stockpile now, ending the pawn's current job.
     // Refused for the pawn the player controls directly (PlayerControl).
     bool orderHaul(Entity pawn, Entity thing, std::string& error);
+    // Ends the job of any pawn mining, cutting or picking at this cell, as interrupted: the mark was
+    // taken off (CancelDesignationsCommand).
+    void cancelGatherAt(CellPos cell);
     // Ends the pawn's job, if it has one, as interrupted for `why`: reservations let go, what it
     // carried put down. Used when the player takes the pawn over (ControlPawnCommand).
     void interrupt(Entity pawn, const std::string& why);
@@ -188,6 +202,9 @@ public:
     Map& map() { return map_; }
     Zones& zones() { return zones_; }
     Construction& construction() { return construction_; }
+    Plants& plants() { return plants_; }
+    Mineables& mineables() { return mineables_; }
+    Designations& designations() { return designations_; }
     const DefDatabase& defs() const { return defs_; }
     int64_t now() const;
 
@@ -200,6 +217,23 @@ public:
     float constructionSpeed(Entity pawn) const;
     bool avoiding(Entity pawn, const JobTarget& target) const;
     bool canReach(CellPos from, CellPos to) const;
+
+    // Gathering (GatherJobs.cpp, docs/design/mining.md). Whether a pawn can use its hands for
+    // mining and cutting: its Manipulation capacity is above 0.
+    bool canUseHands(Entity pawn) const;
+    // Whether a designated plant can be harvested now: its def gives something and it has grown
+    // to `plant.harvestMinGrowth`.
+    bool harvestableNow(CellPos cell) const;
+    // Where `pawn` would stand to work on `target`: a walkable cell next to it that `from` can
+    // reach (the nearest, `from` itself if it is one), else the target itself if it is walkable and
+    // reachable. False if there is none.
+    bool touchCell(CellPos from, CellPos target, CellPos& out) const;
+    // How fast `pawn` mines (1 is 100%): 4% plus 12% per Mining level, times its Manipulation.
+    double miningSpeed(Entity pawn) const;
+    // How fast it cuts and picks: 8% plus 11.5% per Plants level, times Manipulation, at least 10%.
+    double plantWorkSpeed(Entity pawn) const;
+    // A skill level of a pawn: from its Colonist record, `unskilledLevel` for a pawn with none.
+    int skillLevel(Entity pawn, const char* skill) const;
 
     // How well an item is stored where it lies: its stockpile's priority if that stockpile takes
     // it, else Unstored. Unstored for an item off the map.
@@ -249,7 +283,7 @@ private:
     bool thinkWork(Entity pawn, Job& out);
     bool thinkIdle(Entity pawn, Job& out);
 
-    // Needs (NeedJobs.cpp). A pawn on a job it may drop (hauling, waiting) is checked every step:
+    // Needs (NeedJobs.cpp). A pawn on a job it may drop (hauling, waiting, mining, cutting) is checked every step:
     // when it is hungry enough to eat or tired enough to sleep, the need job replaces its own.
     void interruptForNeeds(Entity pawn);
     ScheduleKind scheduleNow(Entity pawn) const;
@@ -266,6 +300,18 @@ private:
     bool failCheckIngest(Entity pawn, Job& job, std::string& why);
     bool failCheckLayDown(Entity pawn, Job& job, std::string& why);
     void wakeUp(Entity pawn, const Job& job);
+
+    // Gathering jobs (GatherJobs.cpp).
+    bool failCheckGather(Entity pawn, Job& job, std::string& why);
+    StepResult goToTouch(Entity pawn, Job& job, std::string& why);
+    StepResult mineRock(Entity pawn, Job& job, std::string& why);
+    StepResult plantWork(Entity pawn, Job& job, std::string& why);
+    void learnSkill(Entity pawn, const char* skill, double xp);
+    double yieldFactor(int level) const;
+    int plantYield(Entity pawn, CellPos cell) const;
+    void dropItems(DefId def, int count, CellPos cell);
+    void gatherEvent(Entity pawn, PawnAction action, CellPos cell);
+    void loadGatherRules();
 
     void startJob(Entity pawn, Job job);
     void tickJob(Entity pawn);
@@ -290,6 +336,9 @@ private:
     Pathfinder& pathfinder_;
     Zones& zones_;
     Construction& construction_;
+    Plants& plants_;
+    Mineables& mineables_;
+    Designations& designations_;
     const DefDatabase& defs_;
     const HealthSystem& health_;
     const NeedsSystem& needs_;
@@ -311,6 +360,23 @@ private:
     std::vector<uint8_t> isBed_;
     std::vector<uint8_t> isTable_;
     std::vector<uint8_t> isChair_;
+    // WorkRules and SkillRules (GatherJobs.cpp), with RimWorld's numbers when the defs are missing.
+    struct GatherRules {
+        double miningSpeedBase = 0.04;
+        double miningSpeedPerLevel = 0.12;
+        double hitDamage = 80.0;
+        double hitSeconds = 144.0;
+        double miningXpPerSecond = 0.048611;
+        double plantSpeedBase = 0.08;
+        double plantSpeedPerLevel = 0.115;
+        double plantXpPerSecond = 0.059028;
+        double growthYieldFloor = 0.5;
+        int unskilledLevel = 8;
+        std::vector<double> yieldByLevel;
+        std::vector<double> xpToNextLevel;
+        double passionLearn[3] = {0.35, 1.0, 1.5};
+    } gather_;
+    int manipulationIndex_ = -1;  // position of the Manipulation capacity in Health::capacities, or -1
     std::map<TargetKey, Entity> reservations_;  // follows from the jobs; rebuilt on load
     int64_t idleSeconds_ = 0;
     int64_t avoidSeconds_ = 0;

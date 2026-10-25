@@ -50,9 +50,13 @@ const char* commandName(const Command& command) {
                 return "Equip";
             } else if constexpr (std::is_same_v<Type, ShootCommand>) {
                 return "Shoot";
-            } else {
-                static_assert(std::is_same_v<Type, SetStanceCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, SetStanceCommand>) {
                 return "SetStance";
+            } else if constexpr (std::is_same_v<Type, DesignateCommand>) {
+                return "Designate";
+            } else {
+                static_assert(std::is_same_v<Type, CancelDesignationsCommand>, "name every command type");
+                return "CancelDesignations";
             }
         },
         command);
@@ -74,6 +78,10 @@ const char* eventTypeName(EventType type) {
         case EventType::PawnAction: return "PawnAction";
         case EventType::PawnAte: return "PawnAte";
         case EventType::PawnWokeUp: return "PawnWokeUp";
+        case EventType::CellMined: return "CellMined";
+        case EventType::PlantRemoved: return "PlantRemoved";
+        case EventType::PlantHarvested: return "PlantHarvested";
+        case EventType::DesignationsChanged: return "DesignationsChanged";
         case EventType::FrameStarted: return "FrameStarted";
         case EventType::PawnMoodBand: return "PawnMoodBand";
         case EventType::ShotFired: return "ShotFired";
@@ -89,6 +97,9 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Eat: return "Eat";
         case PawnAction::LieDown: return "LieDown";
         case PawnAction::GetUp: return "GetUp";
+        case PawnAction::Mine: return "Mine";
+        case PawnAction::Cut: return "Cut";
+        case PawnAction::Harvest: return "Harvest";
         case PawnAction::Build: return "Build";
         case PawnAction::Deconstruct: return "Deconstruct";
     }

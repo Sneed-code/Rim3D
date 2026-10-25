@@ -37,7 +37,10 @@ enum class JobStepKind : uint8_t {
     GotoCell,     // walk to the job's cell
     Deliver,
     BuildWork,
-    DeconstructWork
+    DeconstructWork,
+    GotoTouch,   // walk to a cell beside the job's rock
+    MineWork,
+    PlantWork
 };
 
 constexpr JobStepKind kJobsWaitSteps[] = {JobStepKind::Wait};
@@ -46,6 +49,8 @@ constexpr JobStepKind kJobsHaulSteps[] = {JobStepKind::GotoThing, JobStepKind::P
 constexpr JobStepKind kJobsIngestSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::WalkToSpot,
                                             JobStepKind::Eat};
 constexpr JobStepKind kJobsLayDownSteps[] = {JobStepKind::WalkToSpot, JobStepKind::Lie};
+constexpr JobStepKind kJobsMineSteps[] = {JobStepKind::GotoTouch, JobStepKind::MineWork};
+constexpr JobStepKind kJobsPlantSteps[] = {JobStepKind::GotoTouch, JobStepKind::PlantWork};
 constexpr uint8_t kJobsHaulPickUpStep = 1;
 constexpr uint8_t kJobsHaulCarryStep = 2;
 constexpr JobStepKind kJobsDeliverSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::CarryToCell,
@@ -82,6 +87,9 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::DeliverResources: return {kJobsDeliverSteps, static_cast<int>(std::size(kJobsDeliverSteps))};
         case JobType::BuildFrame: return {kJobsBuildSteps, static_cast<int>(std::size(kJobsBuildSteps))};
         case JobType::Deconstruct: return {kJobsDeconstructSteps, static_cast<int>(std::size(kJobsDeconstructSteps))};
+        case JobType::Mine: return {kJobsMineSteps, static_cast<int>(std::size(kJobsMineSteps))};
+        case JobType::CutPlant:
+        case JobType::HarvestPlant: return {kJobsPlantSteps, static_cast<int>(std::size(kJobsPlantSteps))};
     }
     return {nullptr, 0};
 }
@@ -122,6 +130,9 @@ const char* jobTypeName(JobType type) {
         case JobType::DeliverResources: return "DeliverResources";
         case JobType::BuildFrame: return "BuildFrame";
         case JobType::Deconstruct: return "Deconstruct";
+        case JobType::Mine: return "Mine";
+        case JobType::CutPlant: return "CutPlant";
+        case JobType::HarvestPlant: return "HarvestPlant";
     }
     return "?";
 }
@@ -131,14 +142,17 @@ int jobStepCount(JobType type) {
 }
 
 JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zones, Construction& construction,
-                     const DefDatabase& defs, const HealthSystem& health, const NeedsSystem& needs, const GameTime& time,
-                     SimStats& stats,
+                     Plants& plants, Mineables& mineables, Designations& designations, const DefDatabase& defs,
+                     const HealthSystem& health, const NeedsSystem& needs, const GameTime& time, SimStats& stats,
                      std::vector<Event>& events)
     : map_(map),
       things_(things),
       pathfinder_(pathfinder),
       zones_(zones),
       construction_(construction),
+      plants_(plants),
+      mineables_(mineables),
+      designations_(designations),
       defs_(defs),
       health_(health),
       needs_(needs),
@@ -215,6 +229,7 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
     maxRepaths_ = static_cast<int>(rules ? rules->integer("maxRepaths", kJobsMaxRepaths) : kJobsMaxRepaths);
     defaultPriority_ = static_cast<uint8_t>(std::clamp(
         static_cast<int>(rules ? rules->integer("defaultWorkPriority", kDefaultPriority) : kDefaultPriority), 1, kMaxPriority));
+    loadGatherRules();
 }
 
 JobSystem::~JobSystem() = default;
@@ -313,6 +328,11 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[2]) {
         case JobType::BuildFrame:
         case JobType::Deconstruct:
             out[0] = keyOf(JobTarget{job.thing, CellPos{}});
+            return 1;
+        case JobType::Mine:
+        case JobType::CutPlant:
+        case JobType::HarvestPlant:
+            out[0] = keyOf(JobTarget{kNoEntity, job.cell});
             return 1;
         case JobType::None:
         case JobType::Wait:
@@ -516,7 +536,9 @@ bool JobSystem::thinkWork(Entity pawn, Job& out) {
             const CellPos targetCell = c.hasReach ? c.reach
                                        : c.target.thing != kNoEntity ? cellOf(reg.get<Position>(c.target.thing))
                                                                      : c.target.cell;
-            if (!canReach(at, targetCell)) {
+            // Rock can't be walked into: the pawn works from a cell next to it.
+            CellPos stand;
+            if (map_.walkable(targetCell) ? !canReach(at, targetCell) : !touchCell(at, targetCell, stand)) {
                 continue;
             }
             Job job;
@@ -580,6 +602,9 @@ void JobSystem::tickJob(Entity pawn) {
 }
 
 bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
+    if (jobIsGather(job.type)) {
+        return failCheckGather(pawn, job, why);
+    }
     if (job.type == JobType::Ingest) {
         return failCheckIngest(pawn, job, why);
     }
@@ -690,6 +715,12 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return buildWork(pawn, job, why);
         case JobStepKind::DeconstructWork:
             return deconstructWork(pawn, job, why);
+        case JobStepKind::GotoTouch:
+            return goToTouch(pawn, job, why);
+        case JobStepKind::MineWork:
+            return mineRock(pawn, job, why);
+        case JobStepKind::PlantWork:
+            return plantWork(pawn, job, why);
     }
     return StepResult::Failed;
 }
@@ -966,6 +997,12 @@ void JobSystem::endJob(Entity pawn, JobEnd end, const std::string& why) {
                 if (worker.avoid.size() > kMaxAvoid) {
                     worker.avoid.erase(worker.avoid.begin());
                 }
+            }
+        }
+        if (jobIsGather(job.type)) {
+            worker.avoid.push_back(AvoidTarget{JobTarget{kNoEntity, job.cell}, now() + avoidSeconds_});
+            if (worker.avoid.size() > kMaxAvoid) {
+                worker.avoid.erase(worker.avoid.begin());
             }
         }
     }

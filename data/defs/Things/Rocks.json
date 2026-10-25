@@ -1,0 +1,29 @@
+[
+  {
+    "defName": "MineableBase", "abstract": true, "source": "RimWorld wiki",
+    "category": "Mineable", "passability": "Impassable", "fillPercent": 1.0,
+    "mineable": { "hitPoints": 500, "dropCount": 1, "dropChance": 1.0 }
+  },
+  {
+    "defName": "RockBase", "abstract": true, "parent": "MineableBase",
+    "unverified": ["mineable.dropChance"],
+    "mineable": { "dropCount": 1, "dropChance": 0.25, "isOre": false, "commonality": 1.0 }
+  },
+  { "defName": "Rock_Granite", "parent": "RockBase", "label": "granite", "mineable": { "hitPoints": 900, "dropDef": "ChunkGranite" } },
+  { "defName": "Rock_Limestone", "parent": "RockBase", "label": "limestone", "mineable": { "hitPoints": 700, "dropDef": "ChunkLimestone" } },
+  { "defName": "Rock_Sandstone", "parent": "RockBase", "label": "sandstone", "mineable": { "hitPoints": 400, "dropDef": "ChunkSandstone" } },
+  { "defName": "Rock_Slate", "parent": "RockBase", "label": "slate", "mineable": { "hitPoints": 500, "dropDef": "ChunkSlate" } },
+  { "defName": "Rock_Marble", "parent": "RockBase", "label": "marble", "mineable": { "hitPoints": 450, "dropDef": "ChunkMarble" } },
+  {
+    "defName": "OreBase", "abstract": true, "parent": "MineableBase",
+    "unverified": ["mineable.lumpSize"],
+    "ours": ["mineable.commonality"],
+    "mineable": { "isOre": true, "dropCount": 40, "dropChance": 1.0, "lumpSize": [20, 40], "commonality": 1.0 }
+  },
+  { "defName": "Ore_Steel", "parent": "OreBase", "label": "compacted steel", "mineable": { "hitPoints": 1500, "dropDef": "Steel" } },
+  { "defName": "Ore_Silver", "parent": "OreBase", "label": "silver ore", "mineable": { "hitPoints": 1500, "dropDef": "Silver" } },
+  {
+    "defName": "Ore_Components", "parent": "OreBase", "label": "compacted machinery",
+    "mineable": { "hitPoints": 2000, "dropDef": "ComponentIndustrial", "dropCount": 2, "lumpSize": [3, 6] }
+  }
+]

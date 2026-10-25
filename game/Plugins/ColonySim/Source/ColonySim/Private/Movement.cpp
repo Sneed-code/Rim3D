@@ -30,6 +30,7 @@ constexpr float kMoveEffortSlack = 1.001f;      // a shortcut may cost this much
 float terrainPathCost(Terrain t) {
     switch (t) {
         case Terrain::Soil:
+        case Terrain::RoughStone:  // mined rock floor, as the Terrain defs: the same path cost as soil
             return 2.0f;
         case Terrain::Sand:
             return 4.0f;

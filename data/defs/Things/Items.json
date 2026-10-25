@@ -59,5 +59,15 @@
       "nutrition": 0.9, "workToMake": 648
     },
     "ingestible": { "foodType": "Meal", "preferability": "MealSimple", "maxNumToIngestAtOnce": 1 }
-  }
+  },
+  {
+    "defName": "ChunkBase", "parent": "ItemBase", "abstract": true, "stackLimit": 1,
+    "unverified": ["stats.marketValue", "stats.flammability"],
+    "stats": { "maxHitPoints": 300, "marketValue": 0, "mass": 20, "flammability": 0 }
+  },
+  { "defName": "ChunkGranite", "parent": "ChunkBase", "label": "granite chunk", "stats": { "mass": 25 } },
+  { "defName": "ChunkLimestone", "parent": "ChunkBase", "label": "limestone chunk", "stats": { "mass": 22 } },
+  { "defName": "ChunkSandstone", "parent": "ChunkBase", "label": "sandstone chunk", "stats": { "mass": 20 } },
+  { "defName": "ChunkSlate", "parent": "ChunkBase", "label": "slate chunk", "stats": { "mass": 18 } },
+  { "defName": "ChunkMarble", "parent": "ChunkBase", "label": "marble chunk", "stats": { "mass": 25 } }
 ]

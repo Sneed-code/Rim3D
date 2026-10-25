@@ -2,7 +2,10 @@
 #include "ColonySim/Jobs.h"
 
 #include "ColonySim/Construction.h"
+#include "ColonySim/Designations.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Mineables.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Things.h"
 
@@ -204,6 +207,77 @@ public:
     }
 };
 
+// Mining (RimWorld's WorkGiver_Miner): designated rock and ore. The target is the rock cell; the pawn
+// works from a cell next to it, which the job system checks it can reach.
+class MineGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "Mine"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        if (!jobs.canUseHands(pawn)) {
+            return;
+        }
+        const Position& at = jobs.things().registry().get<Position>(pawn);
+        for (const auto& [index, kind] : jobs.designations().all()) {
+            if (kind != DesignationKind::Mine) {
+                continue;
+            }
+            const CellPos cell = jobs.map().cellAt(index);
+            if (cell.level != at.level || !jobs.mineables().has(cell)) {
+                continue;
+            }
+            const float dx = static_cast<float>(cell.x) + 0.5f - at.x;
+            const float dy = static_cast<float>(cell.y) + 0.5f - at.y;
+            out.push_back(WorkCandidate{JobTarget{kNoEntity, cell}, dx * dx + dy * dy, 0, 0, false, CellPos{}});
+        }
+    }
+
+    bool makeJob(JobSystem&, Entity, const WorkCandidate& candidate, Job& out) override {
+        out = Job{};
+        out.type = JobType::Mine;
+        out.cell = candidate.target.cell;
+        return true;
+    }
+};
+
+// Cutting and picking designated plants (RimWorld's WorkGiver_PlantsCut and Harvest, in the
+// Plant cut work type). A harvest mark waits until the plant has grown enough.
+class CutOrHarvestPlantsGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "CutOrHarvestDesignatedPlants"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        if (!jobs.canUseHands(pawn)) {
+            return;
+        }
+        const Position& at = jobs.things().registry().get<Position>(pawn);
+        for (const auto& [index, kind] : jobs.designations().all()) {
+            if (kind != DesignationKind::CutPlant && kind != DesignationKind::HarvestPlant) {
+                continue;
+            }
+            const CellPos cell = jobs.map().cellAt(index);
+            if (cell.level != at.level || !jobs.plants().has(cell) ||
+                (kind == DesignationKind::HarvestPlant && !jobs.harvestableNow(cell))) {
+                continue;
+            }
+            const float dx = static_cast<float>(cell.x) + 0.5f - at.x;
+            const float dy = static_cast<float>(cell.y) + 0.5f - at.y;
+            out.push_back(WorkCandidate{JobTarget{kNoEntity, cell}, dx * dx + dy * dy, 0, 0, false, CellPos{}});
+        }
+    }
+
+    bool makeJob(JobSystem& jobs, Entity, const WorkCandidate& candidate, Job& out) override {
+        const DesignationKind kind = jobs.designations().at(candidate.target.cell);
+        if (kind != DesignationKind::CutPlant && kind != DesignationKind::HarvestPlant) {
+            return false;
+        }
+        out = Job{};
+        out.type = kind == DesignationKind::CutPlant ? JobType::CutPlant : JobType::HarvestPlant;
+        out.cell = candidate.target.cell;
+        return true;
+    }
+};
+
 }  // namespace
 
 bool makeHaulJob(JobSystem& jobs, Entity pawn, Entity item, Job& out) {
@@ -228,6 +302,8 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<ConstructDeliverGiver>());
     givers.push_back(std::make_unique<ConstructFinishGiver>());
     givers.push_back(std::make_unique<DeconstructGiver>());
+    givers.push_back(std::make_unique<MineGiver>());
+    givers.push_back(std::make_unique<CutOrHarvestPlantsGiver>());
     return givers;
 }
 

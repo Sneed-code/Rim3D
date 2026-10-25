@@ -128,10 +128,16 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["target"] = entt::to_integral(c.target);
                 j["point"] = {static_cast<double>(c.x), static_cast<double>(c.y), static_cast<double>(c.z)};
                 j["player"] = c.player;
-            } else {
-                static_assert(std::is_same_v<Type, SetStanceCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, SetStanceCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["stance"] = kReplayStanceNames[static_cast<int>(c.stance)];
+            } else if constexpr (std::is_same_v<Type, DesignateCommand>) {
+                j["area"] = replayRectJson(c.area);
+                j["kind"] = designationKindName(c.kind);
+            } else {
+                static_assert(std::is_same_v<Type, CancelDesignationsCommand>, "write every command type");
+                j["area"] = replayRectJson(c.area);
+                j["kind"] = designationKindName(c.kind);
             }
         },
         logged.command);
@@ -254,6 +260,21 @@ bool replayReadPriority(ReplayReader& r, const ReplayJson& j, const std::string&
     return r.fail(where + ".priority must be Low, Normal, Preferred, Important or Critical");
 }
 
+
+// "kind": "Mine", "CutPlant" or "HarvestPlant"; "None" (cancelling only) means every kind.
+bool replayReadDesignation(ReplayReader& r, const ReplayJson& j, const std::string& where, DesignationKind& out) {
+    std::string name = designationKindName(out);
+    if (!r.text(j, "kind", name, where)) {
+        return false;
+    }
+    for (const DesignationKind k : {DesignationKind::None, DesignationKind::Mine, DesignationKind::CutPlant, DesignationKind::HarvestPlant}) {
+        if (name == designationKindName(k)) {
+            out = k;
+            return true;
+        }
+    }
+    return r.fail(where + ".kind must be None, Mine, CutPlant or HarvestPlant");
+}
 
 bool replayReadCellAndRot(ReplayReader& r, const ReplayJson& j, const std::string& where, CellPos& cellOut, Rot4& rotOut) {
     std::string rot = kReplayRotNames[0];
@@ -485,6 +506,21 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         if (!found) {
             return r.fail(where + ".stance must be Standing, Crouching or Prone");
+        }
+        out.command = c;
+    } else if (type == "Designate") {
+        DesignateCommand c;
+        if (!replayReadRect(r, j, where, c.area) || !replayReadDesignation(r, j, where, c.kind)) {
+            return false;
+        }
+        if (c.kind == DesignationKind::None) {
+            return r.fail(where + ".kind must be Mine, CutPlant or HarvestPlant");
+        }
+        out.command = c;
+    } else if (type == "CancelDesignations") {
+        CancelDesignationsCommand c;
+        if (!replayReadRect(r, j, where, c.area) || !replayReadDesignation(r, j, where, c.kind)) {
+            return false;
         }
         out.command = c;
     } else {
