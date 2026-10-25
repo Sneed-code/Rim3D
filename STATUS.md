@@ -34,12 +34,16 @@ sim can say how hidden a pawn is from each of eight sides (`Map::cover()`), whet
 another (`lineOfSight`, with standing, crouching and prone) and which ground a faction's enemies
 can shoot at (`Sim::threatMap`); `docs/design/cover.md`. Since S6 the whole game state saves to
 one binary file and loads back to exactly the same game (`saveSim` / `loadSim`, `simrun --save`,
-`--load`, `--save-json`; `docs/design/saves.md`). **Every task that adds sim state must add it to the
+`--load`, `--save-json`; `docs/design/saves.md`). Since U2 `USimSubsystem` steps the sim one second at a
+time, passes events to `OnSimEvent`, keeps the last two snapshots and blends positions between them
+(`GetBlendedLocation`, the one place sim metres become Unreal centimetres), loads `data/defs`, shows
+sim timings on screen, and has keys: Space pause, 1/2/3 speed, `.` step, F7 saves a replay to
+`Saved/Replays/` (that is the bug-replay key U12 planned; U12 keeps F5/F9 saves and autosave). **Every task that adds sim state must add it to the
 save** (the doc has the steps) and to the save round-trip test.
 
 ## Stage 1 progress
 
-9 of 43 tasks done (D1, D2, U1, S1, S2, S5, S6, F3, S3). Tick tasks in `docs/plans/stage-1.md` as they merge.
+10 of 43 tasks done (D1, D2, U1, S1, S2, S5, S6, F3, S3, U2). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -70,10 +74,10 @@ the 1 km, 100 pawn check as `simrun_paths`; the path queue is in the save, save 
 the entity-registry hash order changed, so replays recorded before S6 have different hash values),
 ~~**F3** cover, sight and threat maps~~ done (`docs/design/cover.md`; `simrun --sight
 FILE` draws what a pawn sees; sandbags and barricades were added to the importer list, and
-trees and rocks get their height from `fillPercent` when C2 adds plants) and **U2** bridge v2 (PC
-Unreal, Sonnet high; the first Unreal compile of EnTT and the S5 bridge, plus a dev key that saves
-a replay to `Saved/Replays/`). C2, C8 and F1 in wave 4 also wait for **D3** (the RimWorld import
-on sneed's PC).
+trees and rocks get their height from `fillPercent` when C2 adds plants) and ~~**U2** bridge v2~~
+done (PC Unreal; `docs/design/bridge.md`, smoke test `sim`; the first Unreal compile of EnTT and the
+S5 bridge, so S1's include path is confirmed). C2, C8 and F1 in wave 4 also wait for **D3** (the
+RimWorld import on sneed's PC).
 
 Wave 5: **S4** smooth movement (cloud, Sonnet high) is open now that S3 is in. **C1** job system
 (cloud, Opus high) waits for D3.
