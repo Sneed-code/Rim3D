@@ -38,7 +38,7 @@
   ]
  },
  {
-  "defName": "StoneTile",
+  "defName": "StoneTile", "researchPrerequisite": "Stonecutting",
   "parent": "FloorBase",
   "label": "stone tiles",
   "costStuffCount": 4,
@@ -57,7 +57,7 @@
   ]
  },
  {
-  "defName": "Flagstone",
+  "defName": "Flagstone", "researchPrerequisite": "Stonecutting",
   "parent": "FloorBase",
   "label": "flagstone",
   "costStuffCount": 2,
@@ -76,7 +76,7 @@
   ]
  },
  {
-  "defName": "Carpet",
+  "defName": "Carpet", "researchPrerequisite": "CarpetMaking",
   "parent": "FloorBase",
   "label": "carpet",
   "costStuffCount": 4,
