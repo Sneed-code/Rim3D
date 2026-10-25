@@ -9,12 +9,16 @@
 #include "HAL/FileManager.h"
 #include "InputCoreTypes.h"
 #include "Misc/CommandLine.h"
+#include "Misc/App.h"
 #include "Misc/DateTime.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 
 #include "ColonySim/Map.h"
 #include "ColonySim/Replay.h"
+#include "ColonySim/Save.h"
+#include "ColonySim/Version.h"
 
 #include <string>
 #include <vector>
@@ -129,6 +133,50 @@ namespace
 			Bridge->Submit(Command);
 		}));
 
+	// Slot names become file names: letters, digits, '-' and '_' only.
+	FString SimBridgeCleanSlot(const FString& Slot)
+	{
+		FString Clean;
+		for (const TCHAR Letter : Slot)
+		{
+			if (FChar::IsAlnum(Letter) || Letter == TEXT('-') || Letter == TEXT('_'))
+			{
+				Clean.AppendChar(Letter);
+			}
+		}
+		return Clean;
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GSimBridgeSaveCommand(
+		TEXT("Sim.Save"), TEXT("Sim.Save [slot]: saves the game to Saved/Saves/<slot>.save (default quicksave)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (USimSubsystem* Bridge = SimBridgeForWorld(World))
+			{
+				Bridge->SaveGame(Args.Num() > 0 ? Args[0] : TEXT("quicksave"));
+			}
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs GSimBridgeLoadCommand(
+		TEXT("Sim.Load"), TEXT("Sim.Load [slot]: loads Saved/Saves/<slot>.save (default quicksave)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (USimSubsystem* Bridge = SimBridgeForWorld(World))
+			{
+				Bridge->LoadGame(Args.Num() > 0 ? Args[0] : TEXT("quicksave"));
+			}
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs GSimBridgeBugReportCommand(
+		TEXT("Sim.BugReport"), TEXT("Writes a bug report folder (replay, save, readable dump) in Saved/BugReports/."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+		{
+			if (USimSubsystem* Bridge = SimBridgeForWorld(World))
+			{
+				Bridge->WriteBugReport();
+			}
+		}));
+
 	FAutoConsoleCommandWithWorldAndArgs GSimBridgeReplayCommand(
 		TEXT("Sim.SaveReplay"), TEXT("Writes the session so far as a replay file in Saved/Replays/."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
@@ -240,21 +288,28 @@ bool USimSubsystem::StartSim(const FSimStartOptions& Options)
 		UE_LOG(LogColonySim, Warning, TEXT("Sim setup: %s"), UTF8_TO_TCHAR(Problem.c_str()));
 	}
 
-	// Both snapshots start as the opening state, so nothing blends from an empty map.
+	ResetAfterSimChange();
+
+	UE_LOG(LogColonySim, Log, TEXT("Colony sim started: seed %llu, %d m map, %d defs from %s"),
+		static_cast<unsigned long long>(Settings.seed), Settings.mapSize, GetDefCount(), *DataRoot);
+	return bDefsOk;
+}
+
+void USimSubsystem::ResetAfterSimChange()
+{
+	// Both snapshots start as the current state, so nothing blends from an empty map.
 	Sim->writeSnapshot(Current);
 	Previous = Current;
 	BlendAlpha = 0.0f;
 	StepAccumulator = 0.0;
 	LastLoggedHour = -1;
 	EventCount = 0;
+	AutosaveCount = 0;
+	LastAutosaveBucket = AutosaveInterval > 0 ? Sim->time().seconds / AutosaveInterval : 0;
 	Timings = FSimTimings();
 	WindowSeconds = 0.0;
 	WindowFrames = WindowSteps = 0;
 	WindowFrameMs = WindowMaxFrameMs = WindowSnapshotMs = WindowMaxStepMs = WindowStepMs = 0.0;
-
-	UE_LOG(LogColonySim, Log, TEXT("Colony sim started: seed %llu, %d m map, %d defs from %s"),
-		static_cast<unsigned long long>(Settings.seed), Settings.mapSize, GetDefCount(), *DataRoot);
-	return bDefsOk;
 }
 
 void USimSubsystem::Tick(float DeltaTime)
@@ -338,6 +393,7 @@ void USimSubsystem::RunSteps(int64 Steps)
 		LastLoggedHour = Hour;
 		UE_LOG(LogColonySim, Log, TEXT("Day %lld, %02d:00"), static_cast<long long>(Sim->time().day()), Sim->time().hourOfDay());
 	}
+	MaybeAutosave();
 }
 
 void USimSubsystem::HandleEvents()
@@ -482,6 +538,149 @@ FString USimSubsystem::SaveReplay()
 	return Path;
 }
 
+FString USimSubsystem::GetSaveDirectory()
+{
+	return FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Saves"));
+}
+
+FString USimSubsystem::SaveGame(const FString& Slot)
+{
+	const FString Clean = SimBridgeCleanSlot(Slot);
+	if (!Sim || Clean.IsEmpty())
+	{
+		return FString();
+	}
+	const FString Directory = GetSaveDirectory();
+	IFileManager::Get().MakeDirectory(*Directory, true);
+	const FString Path = Directory / (Clean + TEXT(".save"));
+	// Write beside the old file and swap, so a crash or full disk never leaves half a save.
+	const FString TempPath = Path + TEXT(".tmp");
+	const double Start = FPlatformTime::Seconds();
+	const std::vector<uint8_t> Bytes = colony::saveSim(*Sim);
+	std::string Error;
+	if (!colony::writeSaveFile(SimBridgeUtf8(TempPath), Bytes, Error) || !IFileManager::Get().Move(*Path, *TempPath, true))
+	{
+		IFileManager::Get().Delete(*TempPath);
+		UE_LOG(LogColonySim, Error, TEXT("Could not save %s: %s"), *Path, UTF8_TO_TCHAR(Error.c_str()));
+		SimBridgeScreenMessage(11, 6.0f, FColor::Red, FString::Printf(TEXT("Save failed (%s), see the log"), *Clean));
+		return FString();
+	}
+	UE_LOG(LogColonySim, Display, TEXT("Saved %s (%d KB, %.1f ms, day %lld)"), *Path, static_cast<int32>(Bytes.size() / 1024),
+		(FPlatformTime::Seconds() - Start) * 1000.0, static_cast<long long>(Sim->time().day() + 1));
+	SimBridgeScreenMessage(11, 3.0f, FColor::Green, FString::Printf(TEXT("Saved: %s"), *Clean));
+	return Path;
+}
+
+bool USimSubsystem::LoadGame(const FString& Slot)
+{
+	const FString Clean = SimBridgeCleanSlot(Slot);
+	const FString Path = GetSaveDirectory() / (Clean + TEXT(".save"));
+	const auto Refuse = [&](const FString& Why)
+	{
+		UE_LOG(LogColonySim, Warning, TEXT("Could not load %s: %s"), *Path, *Why);
+		SimBridgeScreenMessage(11, 6.0f, FColor::Red, FString::Printf(TEXT("Load failed (%s): %s"), *Clean, *Why));
+		return false;
+	};
+	if (Clean.IsEmpty() || !IFileManager::Get().FileExists(*Path))
+	{
+		return Refuse(TEXT("there is no such save"));
+	}
+	if (!Defs)
+	{
+		return Refuse(TEXT("the game has no defs loaded"));
+	}
+	std::vector<uint8_t> Bytes;
+	std::string Error;
+	if (!colony::readSaveFile(SimBridgeUtf8(Path), Bytes, Error))
+	{
+		return Refuse(UTF8_TO_TCHAR(Error.c_str()));
+	}
+	colony::SaveLoadResult Result = colony::loadSim(Bytes, Defs);
+	if (!Result.sim)
+	{
+		return Refuse(UTF8_TO_TCHAR(Result.error.c_str()));
+	}
+	for (const std::string& Warning : Result.warnings)
+	{
+		UE_LOG(LogColonySim, Warning, TEXT("Load %s: %s"), *Clean, UTF8_TO_TCHAR(Warning.c_str()));
+	}
+
+	// The old sim goes only after the new one exists. The new one lives at another address, which
+	// is how the pawn actors notice the sim changed and rebuild themselves from the snapshot.
+	Sim = std::move(Result.sim);
+	const colony::SimSettings& Settings = Sim->settings();
+	StartOptions.Seed = Settings.seed;
+	StartOptions.MapSize = Settings.mapSize;
+	StartOptions.Pawns = Settings.pawns;
+	StartOptions.Items = Settings.items;
+	StartOptions.bFlatMap = Settings.flatMap;
+	ResetAfterSimChange();
+	UE_LOG(LogColonySim, Display, TEXT("Loaded %s: day %lld, %d things"), *Path, static_cast<long long>(Sim->time().day() + 1), static_cast<int32>(Current.things.size()));
+	SimBridgeScreenMessage(11, 3.0f, FColor::Green, FString::Printf(TEXT("Loaded: %s"), *Clean));
+	return true;
+}
+
+void USimSubsystem::SetAutosaveInterval(int64 GameSeconds)
+{
+	AutosaveInterval = FMath::Max<int64>(GameSeconds, 0);
+	LastAutosaveBucket = (Sim && AutosaveInterval > 0) ? Sim->time().seconds / AutosaveInterval : 0;
+}
+
+void USimSubsystem::MaybeAutosave()
+{
+	if (!Sim || AutosaveInterval <= 0)
+	{
+		return;
+	}
+	const int64 Bucket = Sim->time().seconds / AutosaveInterval;
+	if (Bucket == LastAutosaveBucket)
+	{
+		return;
+	}
+	LastAutosaveBucket = Bucket;
+	// Three files in turn, so a bad autosave never costs the two before it.
+	if (!SaveGame(FString::Printf(TEXT("autosave-%d"), static_cast<int32>(Bucket % 3) + 1)).IsEmpty())
+	{
+		++AutosaveCount;
+	}
+}
+
+FString USimSubsystem::WriteBugReport()
+{
+	if (!Sim)
+	{
+		return FString();
+	}
+	const FString Folder = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("BugReports")
+		/ FString::Printf(TEXT("%s-day%lld"), *FDateTime::Now().ToString(TEXT("%Y%m%d-%H%M%S")), static_cast<long long>(Sim->time().day() + 1)));
+	IFileManager::Get().MakeDirectory(*Folder, true);
+
+	std::string Error;
+	const colony::Replay Replay = colony::recordReplay(*Sim);
+	bool bOk = colony::saveReplayFile(SimBridgeUtf8(Folder / TEXT("replay.json")), Replay, Error);
+	bOk = bOk && colony::writeSaveFile(SimBridgeUtf8(Folder / TEXT("state.save")), colony::saveSim(*Sim), Error);
+	bOk = bOk && FFileHelper::SaveStringToFile(UTF8_TO_TCHAR(colony::saveToJson(*Sim).c_str()), *(Folder / TEXT("state.json")), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	if (!bOk)
+	{
+		UE_LOG(LogColonySim, Error, TEXT("Could not write the bug report in %s: %s"), *Folder, UTF8_TO_TCHAR(Error.c_str()));
+		SimBridgeScreenMessage(12, 6.0f, FColor::Red, TEXT("Bug report not written, see the log"));
+		return FString();
+	}
+
+	const FString Note = FString::Printf(TEXT("Rim3D bug report\nWritten: %s\nSim version: %s\nSeed: %llu, map %d m, scenario '%s'\nGame second: %lld (day %lld)\nState hash: %llu\nCommands so far: %d\n\n")
+		TEXT("Run it in the cloud:  simrun --replay replay.json\nOr continue from the save:  simrun --load state.save --days 1\nstate.json is the same save in readable form; unreal.log is the game's log if it could be copied.\n"),
+		*FDateTime::Now().ToString(), UTF8_TO_TCHAR(colony::kSimVersion), static_cast<unsigned long long>(Sim->seed()), Sim->settings().mapSize,
+		UTF8_TO_TCHAR(Sim->settings().scenario.c_str()), static_cast<long long>(Sim->time().seconds), static_cast<long long>(Sim->time().day() + 1),
+		static_cast<unsigned long long>(Sim->stateHash()), static_cast<int32>(Sim->commandLog().size()));
+	FFileHelper::SaveStringToFile(Note, *(Folder / TEXT("notes.txt")), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	// Best effort: the log may be locked or missing.
+	IFileManager::Get().Copy(*(Folder / TEXT("unreal.log")), *(FPaths::ProjectLogDir() / (FString(FApp::GetProjectName()) + TEXT(".log"))));
+
+	UE_LOG(LogColonySim, Display, TEXT("Bug report written: %s"), *Folder);
+	SimBridgeScreenMessage(12, 10.0f, FColor::Green, FString::Printf(TEXT("Bug report written: %s"), *Folder));
+	return Folder;
+}
+
 bool USimSubsystem::HandleKey(const FKey& Key)
 {
 	if (Key == EKeys::SpaceBar)
@@ -510,6 +709,18 @@ bool USimSubsystem::HandleKey(const FKey& Key)
 	else if (Key == EKeys::F7)
 	{
 		SaveReplay();
+	}
+	else if (Key == EKeys::F5)
+	{
+		QuickSave();
+	}
+	else if (Key == EKeys::F9)
+	{
+		QuickLoad();
+	}
+	else if (Key == EKeys::F8)
+	{
+		WriteBugReport();
 	}
 	else
 	{

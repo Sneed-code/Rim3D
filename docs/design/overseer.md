@@ -31,7 +31,7 @@ possess the protagonist again.
 | F | centre on the selection |
 | Home | reset distance, tilt and turn |
 | Esc | clear the selection |
-| Space, 1, 2, 3, `.`, F7 | the bridge's keys (`USimSubsystem`), unchanged |
+| Space, 1, 2, 3, `.`, F5, F7, F8, F9 | the bridge's keys (`USimSubsystem`), unchanged; F5 and F9 quicksave and quickload, F8 writes a bug report (`saves.md`) |
 
 The camera methods behind the keys (`Pan`, `Rotate`, `Zoom`, `FocusOn`, `ResetView`) are public,
 which is how the smoke test drives them.

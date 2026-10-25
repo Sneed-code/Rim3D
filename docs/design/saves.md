@@ -99,6 +99,44 @@ Never store a `DefId` (or any number that depends on load order) in a save: use 
 The same goes for region ids, which a loaded map numbers afresh: keep a cell, and never let a
 region id decide anything (the pathfinder breaks ties by a region's anchor cell for this reason).
 
+## Saving and loading in the game (task U12)
+
+Code: `USimSubsystem` (`SimSubsystem.h/.cpp`). Smoke test: `saves`.
+
+| Key | Console | What it does |
+| --- | --- | --- |
+| F5 | `Sim.Save [slot]` | Saves to `game/Saved/Saves/<slot>.save` (default slot `quicksave`). |
+| F9 | `Sim.Load [slot]` | Replaces the running game with that save. |
+| F8 | `Sim.BugReport` | Writes a folder in `game/Saved/BugReports/` (below). |
+| F7 | `Sim.SaveReplay` | Just the replay file, in `game/Saved/Replays/` (U2). |
+
+- **Autosave** happens once a game day, at midnight (day 2 starts, day 3 starts...), into
+  `autosave-1.save`, `autosave-2.save`, `autosave-3.save` in turn, so a bad autosave never costs the two
+  before it. A loaded game does not autosave until the next midnight. `SetAutosaveInterval` shortens it
+  for tests; 0 turns it off. A save takes a few milliseconds for a small colony, done on the game thread.
+- **A save never replaces a good file with half a file**: it is written beside the old one and swapped in.
+- **Loading is all or nothing.** The new sim is made first; only if that works does it replace the
+  running one. A missing, damaged or newer-format file, or a def the data no longer has, leaves the game
+  running as it was and shows the reason in red on screen and in the log. A different sim version or
+  different data files only warn in the log.
+- **After a load** the bridge takes a fresh snapshot, so the next frame draws the loaded game. The pawn
+  actors notice the sim is a new object and rebuild themselves. Speed and pause stay as they were.
+  Anything else that keeps a thing's id between frames (the overseer's selection) drops it when that
+  id is no longer in the snapshot.
+- **Slot names** are cleaned to letters, digits, `-` and `_`.
+
+**The bug report** (F8) is a folder `game/Saved/BugReports/<date-time>-day<N>/`:
+
+| File | Use |
+| --- | --- |
+| `replay.json` | `simrun --replay replay.json` in the cloud plays the whole session from step 0 and says if the hashes match |
+| `state.save` | `simrun --load state.save --days 1` continues from the exact moment |
+| `state.json` | the same save as text, for reading |
+| `notes.txt` | sim version, seed, game second, state hash, how to run the other files |
+| `unreal.log` | the game's log, copied if it was not locked |
+
+sneed's whole job for a bug is: press F8, then send the folder (zip it, or drop the files into the thread).
+
 ## Format versions
 
 - **1** (S6): first version.
@@ -130,4 +168,4 @@ Same game, same hash; only recordings made before S6 have different hash values.
 - Only ground level (0) is stored, like the rest of the sim.
 - Saves are not compressed. The map ground is not in the file, so a save is mostly things (about 200
   bytes each; a hauling run with 10 pawns and 100 items is 21 KB) plus the command log.
-- Quicksave, quickload and autosave keys belong to U12 (Unreal side).
+- Quicksave, quickload, autosave and the bug report key are in the game since U12 (next section).
