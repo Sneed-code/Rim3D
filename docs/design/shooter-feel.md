@@ -9,6 +9,18 @@ gore, fighters dodging grenades (`game-design.md` combat; F2, F5, U11). Recoil a
 F2's weapon rows. Not planned anywhere: camera shake, motion blur, recoil patterns for the player's
 own gun, explosion screen effects, and a protagonist dodge roll.
 
+## Camera rule (sneed, 2026-10-25)
+Third person by default. Holding aim switches to an aimed view (first person or over-the-shoulder,
+to be tried both ways); letting go returns to third person. V still forces first or third. The
+camera code from U9 has both views; this needs an aim-hold trigger and a smooth blend.
+
+## Melee feel
+Same idea as guns: the sim decides, Unreal shows. Swings, blocks and dodges are timed in the sim
+(wind-up, hit moment, recovery). Unreal adds a hit-stop (a 50 to 100 ms freeze of the picture),
+camera shake, a small body flinch on the target (additive hit-react animation, or ragdoll for big
+hits), blood and sparks. Free melee animation packs are on Mixamo and Fab; retarget like the roll.
+Pitfall: weapon trace in Unreal must not decide hits; the sim checks reach and hitboxes.
+
 ## Tools (all free)
 | Need | Use | Effort |
 | --- | --- | --- |
