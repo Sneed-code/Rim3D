@@ -20,7 +20,7 @@ class Things;
 //
 // Every cell has a light level from 0 (pitch dark) to 1 (full light): the larger of the sun's and the
 // lamps'. The sun lights every cell with no roof (thin or thick) by the time of day (`LightRules`
-// `skyGlowByHour`). A building with `building.light` (radius in metres, glow 0 to 1) lights the cells
+// `skyGlowByHour`). A building with `glower` (`radius` in metres, optional `glow` 0 to 1, default 1) lights the cells
 // round it, falling off in a straight line to 0 at the radius and stopped by tall things (walls, rock)
 // in the way. The lamp layer is rebuilt when a building or a roof changes; it is derived, not saved
 // and not in the state hash. Dark cells slow work and walking (`workSpeedByGlow`, `moveSpeedByGlow`).
@@ -84,7 +84,7 @@ private:
     const Rooms& rooms_;
     const GameTime& time_;
     LightNumbers numbers_;
-    std::vector<uint8_t> lightDef_;  // per def id: 1 if it has building.light
+    std::vector<uint8_t> lightDef_;  // per def id: 1 if it has glower
     std::vector<float> lamp_;        // per cell
     std::vector<int> touched_;       // cells lamp_ is non-zero in, to clear
     std::vector<LightSource> sources_;

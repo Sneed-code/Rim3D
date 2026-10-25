@@ -69,23 +69,5 @@
     "building": { "isStove": true },
     "unverified": ["fillPercent"],
     "ours": ["building.isStove"]
-  },
-  {
-    "defName": "TorchLamp", "parent": "BuildingBase", "label": "torch lamp",
-    "visual": {"parts": [{"shape": "cylinder", "radius": 0.05, "height": 1.2, "color": [0.4, 0.28, 0.16]}, {"shape": "cylinder", "radius": 0.1, "height": 0.12, "at": [0, 0, 1.2], "color": [0.95, 0.55, 0.15]}]},
-    "size": [1, 1], "passability": "Standable", "designationCategory": "Furniture",
-    "costs": { "WoodLog": 20 },
-    "stats": { "maxHitPoints": 100, "workToBuild": 150, "flammability": 1.0 },
-    "building": { "light": { "radius": 10, "glow": 1.0 } },
-    "unverified": ["costs", "stats.workToBuild", "building.light"]
-  },
-  {
-    "defName": "Campfire", "parent": "BuildingBase", "label": "campfire",
-    "visual": {"parts": [{"shape": "cylinder", "radius": 0.45, "height": 0.12, "color": [0.3, 0.28, 0.26]}, {"shape": "cylinder", "radius": 0.18, "height": 0.35, "at": [0, 0, 0.12], "color": [0.95, 0.5, 0.12]}]},
-    "size": [1, 1], "passability": "Standable", "designationCategory": "Furniture",
-    "costs": { "WoodLog": 10 },
-    "stats": { "maxHitPoints": 100, "workToBuild": 120, "flammability": 0.0 },
-    "building": { "light": { "radius": 6, "glow": 0.9 } },
-    "unverified": ["costs", "stats.workToBuild", "building.light"]
   }
 ]

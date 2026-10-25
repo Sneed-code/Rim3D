@@ -217,7 +217,7 @@ the fallen Lattice, magic called resonance) and our own names for RimWorld's pro
 storytellers are narrators named Orrin, Maren and Jinx). **Use those names in new data, code and
 docs**; plain words like steel and rifle stay. Item words like plasteel are only proposed so far.
 
-Since E3 every cell has a light level (`docs/design/light.md`, tests `LightTests`, `simrun --light FILE --hour H`): the sun by the hour of the day on cells with no roof, plus lamps (`building.light`, with new `TorchLamp` and `Campfire` defs) falling off to their radius and stopped by walls; `sim.lights().lightAt(cell)`. Dark cells slow work (mining, plants, building, cooking) to 70% and walking to 85% at full dark. Rebuilt on change, not saved (no save format change). **The sim starts at midnight, so a test with the real defs that counts work steps needs a lamp beside the worker**; the tests' own small defs have no `LightRules` and no night.
+Since E3 every cell has a light level (`docs/design/light.md`, tests `LightTests`, `simrun --light FILE --hour H`): the sun by the hour of the day on cells with no roof, plus lamps (`glower`, with new `TorchLamp` and `Campfire` defs) falling off to their radius and stopped by walls; `sim.lights().lightAt(cell)`. Dark cells slow work (mining, plants, building, cooking) to 70% and walking to 85% at full dark. Rebuilt on change, not saved (no save format change). **The sim starts at midnight, so a test with the real defs that counts work steps needs a lamp beside the worker**; the tests' own small defs have no `LightRules` and no night.
 
 ## Stage 1 progress
 
@@ -231,7 +231,10 @@ medicine, animals, melee and grenades, two-storey buildings, the narrator and ev
 traders, protagonist talents and loadout). Its extra rules keep parallel threads from colliding.
 **Wave 1 is open now in the cloud, alongside the rest of Stage 1:** S7 (saves and commands that
 merge in parallel; every sim task that saves state waits for it), E3 light, and the data tasks D4,
-D5, D6, D7, D8, D9, D11. 1 of 74 done (E3). Tick tasks in `docs/plans/stage-2.md` as they merge.
+D5, D6, D7, D8, D9, D11. D4 done (crops, three climates, weather kinds: `docs/design/starting-data.md`). Count in the plan. Tick tasks in `docs/plans/stage-2.md` as they merge.
+
+Stage 2 done so far: **D11** building data 2 (power, climate, light, floors, furniture;
+`docs/design/starting-data.md`), **E3** light and darkness (`docs/design/light.md`).
 
 ## Next
 

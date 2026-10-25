@@ -74,7 +74,7 @@ Lights::Lights(Map& map, Things& things, const Rooms& rooms, const DefDatabase& 
     lightDef_.assign(defs.size(), 0);
     for (uint32_t i = 0; i < defs.size(); ++i) {
         const Def& d = defs.get(DefId{i});
-        if (d.kind() == "Things" && d.text("category") == "Building" && d.number("building.light.radius") > 0.0) {
+        if (d.kind() == "Things" && d.text("category") == "Building" && d.number("glower.radius") > 0.0) {
             lightDef_[i] = 1;
         }
     }
@@ -143,8 +143,8 @@ void Lights::rebuild() {
         LightSource source;
         source.building = building;
         source.cell = cellOf(position);
-        source.radius = static_cast<float>(def.number("building.light.radius"));
-        source.glow = static_cast<float>(def.number("building.light.glow", 1.0));
+        source.radius = static_cast<float>(def.number("glower.radius"));
+        source.glow = static_cast<float>(def.number("glower.glow", 1.0));
         sources_.push_back(source);
     }
     std::sort(sources_.begin(), sources_.end(),

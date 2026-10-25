@@ -2,7 +2,7 @@
 
 Code: `ColonySim/Lights.h`, `Private/Lights.cpp`; the effects are in `Private/MovementSystem.cpp`
 (walking) and `JobSystem::lightWorkFactor` (work). Defs: `LightRules` in `data/defs/Rules/Rules.json`,
-`building.light` on buildings (`TorchLamp`, `Campfire` in `Buildings.json`). Tests:
+`glower` on buildings (D11's `TorchLamp`, `StandingLamp`, `SunLamp`, `Campfire` in `BuildingsPowerClimate.json`). Tests:
 `Tests/LightTests.cpp`. Picture: `simrun --size 128 --days 0 --light light.png --hour 22`. Task E3.
 Builds on [rooms](rooms.md) (the roof).
 
@@ -15,7 +15,7 @@ the lamps' light. `sim.lights().lightAt(cell)` is the one call others use.
   down to 0 at 19:00 (`LightRules.skyGlowByHour`, our shape; no seasons or weather yet, E1 can scale
   it). It lights only cells with no roof, thin or thick (`underOpenSky`), so a built room and a mined
   tunnel are dark inside whatever the hour.
-- **Lamps.** A building def with `building.light: { radius, glow }` lights the cells round its
+- **Lamps.** A building def with `glower: { radius, glow }` lights the cells round its
   position: `glow` at the source, falling in a straight line to 0 at `radius` metres. Something at
   least `blockingHeightDm` tall (1.5 m: walls and rock; sandbags are lower) between the lamp and the cell casts a shadow
   (a straight line of cells from the lamp; doors don't block). Blueprints and frames give no light.
