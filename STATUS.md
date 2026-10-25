@@ -231,6 +231,9 @@ traders, protagonist talents and loadout). Its extra rules keep parallel threads
 merge in parallel; every sim task that saves state waits for it), E3 light, and the data tasks D4,
 D5, D6, D7, D8, D9, D11. D4 done (crops, three climates, weather kinds: `docs/design/starting-data.md`). Count in the plan. Tick tasks in `docs/plans/stage-2.md` as they merge.
 
+Stage 2 done so far: **D11** building data 2 (power, climate, light, floors, furniture;
+`docs/design/starting-data.md`).
+
 ## Next
 
 Wave 1:
