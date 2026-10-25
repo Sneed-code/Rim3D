@@ -94,8 +94,8 @@ the entity-registry hash order changed, so replays recorded before S6 have diffe
 FILE` draws what a pawn sees; sandbags and barricades were added to the importer list, and
 trees and rocks get their height from `fillPercent` when C2 adds plants) and ~~**U2** bridge v2~~
 done (PC Unreal; `docs/design/bridge.md`, smoke test `sim`; the first Unreal compile of EnTT and the
-S5 bridge, so S1's include path is confirmed). **C2** plants (cloud, Sonnet medium), **C8** colonists
-from a seed (cloud, Sonnet medium) and **F1** health basics (cloud, Sonnet high) are now unblocked;
+S5 bridge, so S1's include path is confirmed). **C2** plants (cloud, Sonnet medium), ~~**C8** colonists
+from a seed~~ done (`docs/design/colonists.md`; `simrun --start Crashlanded` lists the six; save format 4) and **F1** health basics (cloud, Sonnet high) are now unblocked;
 their defs are in `data/defs/`. Numbers marked `unverified` in a def were recalled, not read from the
 wiki; check them when a task leans on them.
 
