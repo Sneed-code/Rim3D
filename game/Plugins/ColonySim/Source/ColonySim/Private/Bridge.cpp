@@ -212,6 +212,11 @@ const char* eventTypeName(EventType type) {
         case EventType::WeatherChanged: return "WeatherChanged";
         case EventType::SeasonChanged: return "SeasonChanged";
         case EventType::TalentPoint: return "TalentPoint";
+        case EventType::AnimalMated: return "AnimalMated";
+        case EventType::AnimalBorn: return "AnimalBorn";
+        case EventType::EggLaid: return "EggLaid";
+        case EventType::EggHatched: return "EggHatched";
+        case EventType::AnimalGathered: return "AnimalGathered";
     }
     return "?";
 }

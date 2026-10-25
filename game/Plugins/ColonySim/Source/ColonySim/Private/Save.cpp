@@ -1,6 +1,7 @@
 #include "ColonySim/Save.h"
 
 #include "ColonySim/Animals.h"
+#include "ColonySim/Breeding.h"
 #include "ColonySim/Apparel.h"
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Bills.h"
@@ -287,6 +288,8 @@ struct SaveEntity {
     std::optional<DefensePlan> defense;     // section "raids"
     std::optional<Raider> raider;           // section "raids"
     std::optional<AnimalCare> care;         // section "husbandry"
+    std::optional<AnimalBreed> breed;       // section "breeding" (N4)
+    std::optional<Hatching> hatching;       // section "breeding" (N4)
     std::optional<SaveSpoilage> spoilage;   // section "spoilage"
     std::optional<SaveGrenade> grenade;     // section "explosives"
     std::optional<SaveBelt> belt;           // section "explosives"
@@ -398,6 +401,7 @@ struct SaveData {
     AnimalSaved animals;               // section "animals": the system's own state
     RaidState raids;                   // section "raids" (F6)
     HusbandrySaved husbandry;          // section "husbandry": animal zones and counters
+    BreedingStats breeding;            // section "breeding": the counters (N4)
     std::vector<RoomTemperature> roomTemperatures;  // section "temperature" (E2)
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
     uint32_t nextOutfitId = 1;
@@ -1254,7 +1258,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::StripPawn, "the save file has a bad job");
+    ar.require(job.type <= JobType::GatherAnimal, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -1544,6 +1548,24 @@ void saveCarePart(Ar& ar, AnimalCare& c) {
     ar.group("pathGoal", [&] { saveCell(ar, c.pathGoal); });
     ar.value("pathMode", c.pathMode);
     ar.require(static_cast<int>(c.pathMode) <= static_cast<int>(AnimalMode::EatItem), "the save file has a bad animal path mode");
+}
+
+template <typename Ar>
+void saveBreedPart(Ar& ar, AnimalBreed& b) {
+    ar.value("pregnantUntil", b.pregnantUntil);
+    ar.value("litter", b.litter);
+    ar.value("fertilized", b.fertilized);
+    ar.value("nextMateAt", b.nextMateAt);
+    ar.value("milkSince", b.milkSince);
+    ar.value("woolSince", b.woolSince);
+    ar.value("eggSince", b.eggSince);
+    ar.value("courting", b.courting);
+    ar.value("courtUntil", b.courtUntil);
+}
+
+template <typename Ar>
+void saveHatchingPart(Ar& ar, Hatching& h) {
+    ar.value("hatchAt", h.hatchAt);
 }
 
 template <typename Ar>
@@ -2345,6 +2367,17 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "grenade", e, &SaveEntity::grenade, [&](SaveGrenade& g) { saveGrenadePart(ar, g); });
         saveParts(ar, "knockedDown", e, &SaveEntity::knocked, [&](KnockedDown& k) { saveKnockedPart(ar, k); });
     });
+    ar.section("breeding", 1, [&] {
+        ar.value("matings", d.breeding.matings);
+        ar.value("pregnancies", d.breeding.pregnancies);
+        ar.value("born", d.breeding.born);
+        ar.value("eggsLaid", d.breeding.eggsLaid);
+        ar.value("hatched", d.breeding.hatched);
+        ar.value("milked", d.breeding.milked);
+        ar.value("sheared", d.breeding.sheared);
+        saveParts(ar, "breed", e, &SaveEntity::breed, [&](AnimalBreed& b) { saveBreedPart(ar, b); });
+        saveParts(ar, "hatching", e, &SaveEntity::hatching, [&](Hatching& h) { saveHatchingPart(ar, h); });
+    });
     // New sections go here, at the end.
 }
 
@@ -2455,6 +2488,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.wildAnimals = sim.settings_.wildAnimals;
     d.animals = sim.animals_->saved();
     d.husbandry = sim.husbandry_->saved();
+    d.breeding = sim.breeding_->saved();
     d.seconds = sim.time_.seconds;
     d.rngState = sim.rng_.state();
     d.rngIncrement = sim.rng_.increment();
@@ -2673,6 +2707,12 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const AnimalCare* care = reg.try_get<AnimalCare>(e)) {
             out.care = *care;
+        }
+        if (const AnimalBreed* breed = reg.try_get<AnimalBreed>(e)) {
+            out.breed = *breed;
+        }
+        if (const Hatching* hatching = reg.try_get<Hatching>(e)) {
+            out.hatching = *hatching;
         }
         if (const Melee* melee = reg.try_get<Melee>(e)) {
             out.melee = *melee;
@@ -3142,6 +3182,12 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.care) {
             reg.emplace<AnimalCare>(entity, *e.care);
         }
+        if (e.breed) {
+            reg.emplace<AnimalBreed>(entity, *e.breed);
+        }
+        if (e.hatching) {
+            reg.emplace<Hatching>(entity, *e.hatching);
+        }
         if (e.spoilage) {
             Spoilage spoilage;
             spoilage.rot = e.spoilage->rot;
@@ -3167,6 +3213,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.husbandry_->restore(d.husbandry, error)) {
         return false;
     }
+    sim.breeding_->restore(d.breeding);
     sim.health_->refreshAll();
     for (const SaveEntity& e : d.entities) {
         if (e.position && !things.relink(static_cast<Entity>(e.id))) {

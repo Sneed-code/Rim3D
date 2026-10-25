@@ -30,6 +30,7 @@ enum class JobType : uint8_t {
     TrainAnimal,       // the same for one training attempt on a tame animal
     SlaughterAnimal,   // walk to a marked tame animal and kill it
     FeedAnimal,        // fetch animal food and carry it to a hungry tame animal
+    GatherAnimal,      // walk to a tame animal with full milk or wool and milk or shear it (docs/design/breeding.md)
 };
 
 COLONY_API const char* jobTypeName(JobType type);

@@ -1,6 +1,7 @@
 #include "ColonySim/Sim.h"
 
 #include "ColonySim/Animals.h"
+#include "ColonySim/Breeding.h"
 #include "ColonySim/Apparel.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Colonist.h"
@@ -189,6 +190,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     animals_->setEventLog(&events_);
     husbandry_ = std::make_unique<Husbandry>(*things_, map_, *animals_, *health_, *defs_, time_, settings.seed);
     husbandry_->setEventLog(&events_);
+    breeding_ = std::make_unique<Breeding>(*things_, map_, *animals_, *husbandry_, *defs_, time_, settings.seed);
+    breeding_->setEventLog(&events_);
+    jobs_->setBreeding(breeding_.get());
     animals_->setHusbandry(husbandry_.get());
     animals_->setPathfinder(&pathfinder_);
     jobs_->setHusbandry(husbandry_.get());
@@ -910,6 +914,7 @@ void Sim::step() {
     recreation_->step();
     animals_->step();
     husbandry_->step();
+    breeding_->step();
     mood_->step(time_.seconds, events_);
     movement_->step(things_->registry(), map_);
     melee_->step();
@@ -1205,6 +1210,10 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 view.learnedTricks = husbandry_->learnedMask(entity);
                 view.wantedTricks = husbandry_->wantedMask(entity);
             }
+            view.sex = static_cast<int>(breeding_->sexOf(entity));
+            view.pregnant = breeding_->pregnant(entity);
+            view.milkFullness = breeding_->fullness(entity, AnimalProduct::Milk);
+            view.woolFullness = breeding_->fullness(entity, AnimalProduct::Wool);
         }
         if (const Fighter* fighter = reg.try_get<Fighter>(entity)) {
             view.drafted = fighter->drafted;
@@ -1351,6 +1360,7 @@ uint64_t Sim::stateHash() const {
     roomStats_->hashState(h);
     animals_->hashState(h);
     husbandry_->hashState(h);
+    breeding_->hashState(h);
     temperature_->hashState(h);
     spoilage_->hashState(h);
 
@@ -1624,6 +1634,7 @@ uint64_t Sim::stateHash() const {
         animals_->hashThing(e, h);
         raids_->hashThing(e, h);
         husbandry_->hashThing(e, h);
+        breeding_->hashThing(e, h);
         melee_->hashThing(e, h);
         apparel_->hashThing(e, h);
     }

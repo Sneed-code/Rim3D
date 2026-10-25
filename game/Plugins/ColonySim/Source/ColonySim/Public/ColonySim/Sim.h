@@ -26,6 +26,7 @@
 namespace colony {
 
 class AnimalSystem;
+class Breeding;
 class ApparelSystem;
 class Construction;
 class DefDatabase;
@@ -255,6 +256,8 @@ public:
 
     // Taming, training, animal zones and pens (docs/design/husbandry.md).
     Husbandry& husbandry() { return *husbandry_; }
+    Breeding& breeding() { return *breeding_; }
+    const Breeding& breeding() const { return *breeding_; }
     const Husbandry& husbandry() const { return *husbandry_; }
 
     // Blueprints, frames and taking buildings down (docs/design/construction.md).
@@ -337,6 +340,7 @@ private:
     std::unique_ptr<AnimalSystem> animals_;
     std::unique_ptr<RaidSystem> raids_;        // after the fighters
     std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system
+    std::unique_ptr<Breeding> breeding_;    // after husbandry_
     std::vector<std::string> setupErrors_;
     std::vector<std::pair<uint64_t, Command>> pending_;  // id, command
     uint64_t submitted_ = 0;
