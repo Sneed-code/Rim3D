@@ -71,7 +71,8 @@
     "idleSeconds": 60,
     "avoidFailedTargetSeconds": 600,
     "maxRepaths": 5,
-    "ours": ["idleSeconds", "avoidFailedTargetSeconds", "maxRepaths"]
+    "carrySlowdown": 0.25,
+    "ours": ["idleSeconds", "avoidFailedTargetSeconds", "maxRepaths", "carrySlowdown"]
   },
   {
     "defName": "NeedRules", "source": "RimWorld wiki",
