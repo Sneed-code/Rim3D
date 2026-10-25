@@ -1,6 +1,7 @@
 // Smoke test `buildings` (task U4): the sim's buildings, blueprints, frames, doors and items drawn by UBuildingSubsystem, in the game, offscreen.
 #include "SmokeTest.h"
 
+#include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
 
@@ -241,6 +242,30 @@ void USmokeTestSubsystem::BuildBuildingsPhases()
 	Items.Verify = [=, this]()
 	{
 		CheckMatches(TEXT("buildings_items"));
+		// A1: every def that names a mesh (visual.mesh) has it made; the PlaceholderArt commandlet makes them (assets/manifest.json).
+		if (const colony::Sim* Core = SimOf())
+		{
+			int32 Named = 0;
+			TArray<FString> Missing;
+			const colony::DefDatabase& Defs = Core->defs();
+			for (const colony::DefId Id : Defs.idsOfKind("Things"))
+			{
+				const std::string MeshPath = Defs.get(Id).text("visual.mesh");
+				if (!MeshPath.empty())
+				{
+					++Named;
+					if (!StaticLoadObject(UStaticMesh::StaticClass(), nullptr, UTF8_TO_TCHAR(MeshPath.c_str())))
+					{
+						Missing.Add(UTF8_TO_TCHAR(Defs.get(Id).defName().c_str()));
+					}
+				}
+			}
+			Notes.Add(FString::Printf(TEXT("buildings_items: %d defs name a mesh, %d found"), Named, Named - Missing.Num()));
+			if (!Missing.IsEmpty())
+			{
+				Fail(FString::Printf(TEXT("buildings_items: no mesh for %s: run python tools/placeholder_art.py, then the PlaceholderArt commandlet (assets/manifest.json)"), *FString::Join(Missing, TEXT(", "))));
+			}
+		}
 		UBuildingSubsystem* Buildings = Drawn();
 		if (Buildings && Buildings->IsBuilt())
 		{

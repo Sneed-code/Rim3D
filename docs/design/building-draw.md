@@ -84,8 +84,51 @@ the origin the middle of its footprint (the `size` of its def, 1 x 1 for an item
 | `pieces`, `layer` (on `visual`) | items: pieces in a full pile, and the height of one layer of the pile |
 
 A def with no `visual` is drawn as a grey block (a metre high for a building, a hand's breadth for an item),
-so a new def always shows. A def's `visual.mesh` for real meshes is A1's job and will be read here the way
-the plants read it.
+so a new def always shows. A def's `visual.mesh` is a real mesh (below).
+
+### Real meshes (A1)
+
+A def can name a static mesh, `"visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Bed.SM_Bed", ... }`. The mesh is
+already sized and stood on the ground (middle of its footprint at x = y = 0, bottom at z = 0, facing north), so it
+is drawn as it is, the way the plants' meshes are. It replaces the parts for the finished building or the item; a
+**door's** mesh is its sliding leaf (the frame and lintel stay as shapes). Frames and ghosts keep the plain shapes,
+because the ghost material replaces only the first material of a mesh. The stuff colour does not tint a mesh. If a
+mesh does not load, a warning is logged and the parts are drawn, so a fresh clone still shows everything; the
+`buildings` smoke test fails if a named mesh is missing.
+
+The meshes are free CC0 models from Poly Haven (1k glTF), listed in `assets/placeholder_art.json` (def, Poly Haven id,
+the size in metres it stands in, which footprint axis its long side takes, the triangle count to cut it down to):
+
+| Def | Mesh |
+| --- | --- |
+| Door | rollershutter_door (stretched to the leaf) |
+| Bed | vintage_day_bed |
+| Stool | wooden_stool_01 |
+| Table1x2, Table2x2 | wooden_table_02 (stretched to the footprint) |
+| Table2x4 | dining_table (stretched) |
+| FueledStove | barrel_stove (one barrel in the middle of its 3 x 1) |
+| WoodLog | dead_quiver_trunk, lying down |
+| MealSimple, MealFine | wooden_bowl_02, wooden_bowl_01 |
+| RawBerries | food_pomegranate_01 |
+| Plant_TreeOak, Plant_TreePoplar | quiver_tree_01, pine_sapling_small (both stretched; the trees are not what the names say) |
+| Plant_Bush, Plant_Berry | shrub_02, wild_rooibos_bush (stretched) |
+
+Wall, steel, silver, the survival pack, components, medicine, chunks and guns stay as shapes: Poly Haven has no
+plain wall or ingot, and a box already reads as both.
+
+To make them (not in Git, like the other generated assets; run again after a fresh clone):
+
+```
+python tools/placeholder_art.py          # downloads the glTF files to game/Content/ThirdParty/PlaceholderArt/ and sets visual.mesh in the defs
+UnrealEditor-Cmd.exe C:\Dev\Rim3D\game\Rim3D.uproject -run=PlaceholderArt -unattended -nosplash -nullrhi
+```
+
+The `PlaceholderArt` commandlet (`game/Source/Rim3DEditor/PlaceholderArtCommandlet.*`) imports each file, turns it,
+scales it, cuts it down with the engine's mesh reduction and saves `SM_<def>`. The glTF materials are instances of
+the engine's glTF material, which instanced meshes cannot draw (the engine shows its dark default instead), so it
+also makes `M_ArtLit` and `M_ArtLitMasked` (our own, colour texture only, marked for instanced meshes, two-sided;
+masked for leaves) and an instance of one of them per mesh and material slot. Normal maps are not used. To use
+another mesh, change `id` and `size` in the list and run both steps again.
 
 Building heights are what picking uses (`UBuildingSubsystem::GetDrawnHeightCm`), so a click lands on what
 you see. Walls are 3 m, the height of the thin roof ([terrain.md](terrain.md)); a door has a 0.8 m lintel
@@ -98,7 +141,7 @@ footprint's middle.
 ## Not here yet
 
 - Floors, wall connections (a wall is a box; neighbours just touch), damage and fire, minified furniture.
-- Real art (A1). Everything above is boxes, cylinders and spheres, so it can be swapped for meshes per def.
+- Real art beyond A1's placeholders; walls and steel are still boxes, and wall connections come with the real wall art.
 - Stockpile zone markings (the cells' tint). The items show where a stockpile is for now.
 - Beds don't show who owns them; stoves don't show a flame; doors have no sound or frame animation.
 - Ghosts and frames are one blue and one height rule for every def.

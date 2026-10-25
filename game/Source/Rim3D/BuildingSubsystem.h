@@ -109,6 +109,8 @@ private:
 		float LayerCm = 10.0f;
 		int32 StackLimit = 1;
 		float HeightCm = 0.0f;
+		/** The def's own mesh (visual.mesh, A1), already sized and stood on the ground; null draws the parts. A door's is its leaf. */
+		UStaticMesh* ArtMesh = nullptr;
 	};
 
 	/** One def made of one stuff: its meshes. */

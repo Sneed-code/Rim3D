@@ -36,5 +36,6 @@
   { "defName": "Femur", "parent": "BoneBase", "label": "femur", "hitPoints": 25, "neverScars": true },
   { "defName": "Tibia", "parent": "BoneBase", "label": "tibia", "hitPoints": 25, "neverScars": true },
   { "defName": "Foot", "parent": "BodyPartBase", "label": "foot", "hitPoints": 25 },
-  { "defName": "Toe", "parent": "BodyPartBase", "label": "toe", "hitPoints": 8 }
+  { "defName": "Toe", "parent": "BodyPartBase", "label": "toe", "hitPoints": 8 },
+  {"defName": "Wing", "parent": "BodyPartBase", "label": "wing", "hitPoints": 20, "unverified": ["hitPoints"]}
 ]

@@ -68,6 +68,8 @@ Since U11 fights show on screen (`docs/design/fights.md`, smoke test `fights`; n
 
 Since U10 the player works with their own hands (`docs/design/handson.md`, smoke test `handson`, tests `HandsOnTests`): in direct mode the crosshair finds a rock, plant, item, building plan or frame (against the sim, not Unreal collision) and **holding F** runs the sim's own job on it in place with the colonist's skill and speed: mine, chop, pick, pick up (at once), put materials into a plan, build a frame; **X** puts down what is carried; **B** takes the architect menu's Build tool in hand with a grid-snapped ghost aimed by the crosshair (wheel picks the building, Q the stuff, R turns, click plans, and the gun stays quiet meanwhile). Sim side: `HandsOnCommand{pawn, mode, thing, cell}` (Work, PutDown, Stop), jobs with a `handsOn` field that skip the walking steps and end as interrupted if the player steps out of reach (**a job on a `PlayerControl` pawn is ticked only if `handsOn`; the think list still skips it**), a made-for-the-job designation that goes again if the work is dropped, `JobSystem::planHandsOn` (the prompt), `jobProgress` (the bar; `ThingView::jobProgress`), save format 19. Letting go of the colonist puts down what it carries. No work animation or sound yet.
 
+Since D7 the data for medicine and disease is in `data/defs` (`docs/design/medicine-data.md`, test "medicine and disease data"): herbal, ordinary and lumen medicine with their potencies, diseases and sicknesses (infection, flu, plague, malaria, sleeping sickness, gut worms, muscle parasites, food poisoning, hypothermia, heatstroke, frostbite, toxic buildup), scars, nine artificial parts with install surgeries, the hospital bed and a crafting spot, and `MedicineRules`. Nothing in the sim reads most of it yet (H1 and E2 do).
+
 Since U3 the game draws the ground and plants (`docs/design/terrain.md`, smoke test `world`): `UTerrainSubsystem` starts
 by itself with any sim and builds one mesh per 32 m chunk (a 1 km map is 32 x 32 chunks, about 220 ms
 to build). The ground has a vertex per cell corner at the sim's height, coloured by terrain type and soil fertility; **rock stands on it as a
@@ -231,9 +233,10 @@ traders, protagonist talents and loadout). Its extra rules keep parallel threads
 merge in parallel; every sim task that saves state waits for it), E3 light, and the data tasks D4,
 D5, D6, D7, D8, D9, D11. D4 done (crops, three climates, weather kinds: `docs/design/starting-data.md`). Count in the plan. Tick tasks in `docs/plans/stage-2.md` as they merge.
 
-Stage 2 done so far: **D11** building data 2 (power, climate, light, floors, furniture;
-`docs/design/starting-data.md`). **D8** production data (work tables, stone blocks, melee weapons
-with tools; the meal recipes still list only the fueled stove, C14 adds the electric stove).
+Stage 2 done so far: **D7** medicine and disease data (`docs/design/medicine-data.md`), **D11** building data 2 (power, climate, light, floors, furniture;
+`docs/design/starting-data.md`).
+**D5** animal data (15 animals, bodies, meat, leather, milk, eggs, wool: `docs/design/animals.md`).
+**D8** production data (work tables, stone blocks, melee weapons with tools; the meal recipes still list only the fueled stove, C14 adds the electric stove).
 
 ## Next
 
@@ -292,7 +295,7 @@ U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priori
 AI: aiming~~ done (`docs/design/aiming.md`; save format 17), so **F6** raid and defense (cloud, Opus high)
 is open once C8 is in (it is); with U9 and F2 in, ~~**U11** fights on screen~~ is done (PC; smoke test `fights`; `docs/design/fights.md`; it
 binds R to reload; reload and sidestep animations are not drawn yet). ~~**C10** colony scenario test~~ done
-(`docs/design/colony-scenario.md`); ~~**U10** hands-on work~~ is done (PC; smoke test `handson`; `docs/design/handson.md`); open on the PC: **A1** placeholder art.
+(`docs/design/colony-scenario.md`); ~~**U10** hands-on work~~ is done (PC; smoke test `handson`; `docs/design/handson.md`); ~~**A1** placeholder art~~ is done (PC; free Poly Haven meshes on the bed, door, table, stool, stove, logs, meals, berries, trees and bushes; `docs/design/building-draw.md`, `python tools/placeholder_art.py` then the `PlaceholderArt` commandlet). **A2** terrain materials (needs sneed's Megascans) and **G1** are what is left on the PC.
 
 ## Waiting on sneed
 
