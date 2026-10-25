@@ -240,6 +240,7 @@ section, `docs/design/saves.md` "Adding to the save"; a new system's checklist i
 Stage 2 done so far: **D7** medicine and disease data (`docs/design/medicine-data.md`), **D11** building data 2 (power, climate, light, floors, furniture;
 `docs/design/starting-data.md`).
 **D5** animal data (15 animals, bodies, meat, leather, milk, eggs, wool: `docs/design/animals.md`).
+**D8** production data (work tables, stone blocks, melee weapons with tools; the meal recipes still list only the fueled stove, C14 adds the electric stove).
 
 D9 (thoughts, recreation, mental break and social data) is in: `docs/design/thoughts-data.md`. Data only; C15, C17, C18, C19, C20, E2 and E3 read it.
 
