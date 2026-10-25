@@ -20,6 +20,7 @@
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Mineables.h"
+#include "ColonySim/Spoilage.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Recreation.h"
@@ -125,6 +126,14 @@ struct SaveHealth {
     std::vector<SaveEnvironmentHediff> environment;  // health section 2 on
     bool dead = false;
     DeathCause cause = DeathCause::None;
+};
+
+// An item's rot and wear and what a meal was cooked from, by defName (section "spoilage").
+struct SaveSpoilage {
+    float rot = 0.0f;
+    float decay = 0.0f;
+    bool poisoned = false;
+    std::vector<std::string> ingredients;  // Things defNames
 };
 
 // A bill job's delivered ingredients, by defName.
@@ -235,6 +244,7 @@ struct SaveEntity {
     std::optional<PowerPart> power;         // section "power"
     std::optional<SaveJoy> joy;             // section "recreation"
     std::optional<Animal> animal;           // section "animals"
+    std::optional<SaveSpoilage> spoilage;   // section "spoilage"
 };
 
 // A stockpile zone, with its filter by defName.
@@ -317,6 +327,7 @@ struct SaveData {
     int wildAnimals = 0;               // section "animals": SimSettings::wildAnimals
     AnimalSaved animals;               // section "animals": the system's own state
     std::vector<RoomTemperature> roomTemperatures;  // section "temperature" (E2)
+    SpoilageState spoilageState;                    // section "spoilage" (C16)
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -1864,6 +1875,17 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(t.celsius > -500.0f && t.celsius < 1000.0f, "the save file has an impossible room temperature");
         });
     });
+    ar.section("spoilage", 1, [&] {
+        ar.value("rngState", d.spoilageState.rngState);
+        ar.value("rngIncrement", d.spoilageState.rngIncrement);
+        saveParts(ar, "spoilage", e, &SaveEntity::spoilage, [&](SaveSpoilage& s) {
+            ar.value("rot", s.rot);
+            ar.value("decay", s.decay);
+            ar.value("poisoned", s.poisoned);
+            ar.list("ingredients", s.ingredients, [&](std::string& name) { ar.text(nullptr, name); });
+            ar.require(s.rot >= 0.0f && s.rot < 1.0f && s.decay >= 0.0f && s.decay < 1.0f, "the save file has an impossible rot or wear");
+        });
+    });
     // New sections go here, at the end.
 }
 
@@ -2033,6 +2055,16 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             w.avoid = worker->avoid;
             out.worker = std::move(w);
         }
+        if (const Spoilage* spoilage = reg.try_get<Spoilage>(e)) {
+            SaveSpoilage saved;
+            saved.rot = spoilage->rot;
+            saved.decay = spoilage->decay;
+            saved.poisoned = spoilage->poisoned;
+            for (const DefId ingredient : spoilage->ingredients) {
+                saved.ingredients.push_back(sim.defs_->get(ingredient).defName());
+            }
+            out.spoilage = std::move(saved);
+        }
         if (const Joy* joy = reg.try_get<Joy>(e)) {
             SaveJoy saved;
             saved.joy = *joy;
@@ -2198,6 +2230,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.filth = sim.filth_->state();
     d.roomStats = sim.roomStats_->state();
     d.roomTemperatures = sim.temperature_->roomTemperatures();
+    d.spoilageState = sim.spoilage_->state();
     return d;
 }
 
@@ -2498,6 +2531,23 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.animal) {
             reg.emplace<Animal>(entity, *e.animal);
         }
+        if (e.spoilage) {
+            Spoilage spoilage;
+            spoilage.rot = e.spoilage->rot;
+            spoilage.decay = e.spoilage->decay;
+            spoilage.poisoned = e.spoilage->poisoned;
+            for (const std::string& name : e.spoilage->ingredients) {
+                const DefId ingredient = sim.defs_->idOf(kSaveThingsKind, name);
+                if (ingredient.valid()) {  // an ingredient the data files dropped is forgotten
+                    spoilage.ingredients.push_back(ingredient);
+                }
+            }
+            std::sort(spoilage.ingredients.begin(), spoilage.ingredients.end(),
+                      [](DefId a, DefId b) { return a.value < b.value; });
+            reg.emplace_or_replace<Spoilage>(entity, std::move(spoilage));
+        } else if (e.thing && e.thing->category == ThingCategory::Item && thingHasSpoilage(sim.defs_->get(reg.get<Thing>(entity).def))) {
+            reg.emplace<Spoilage>(entity);  // saved before items could spoil
+        }
     }
     sim.animals_->restore(d.animals);
     sim.health_->refreshAll();
@@ -2681,6 +2731,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     sim.roomStats_->refresh();
     sim.temperature_->setOutdoor(sim.outdoorTemperature());
     sim.temperature_->restore(d.roomTemperatures);
+    sim.spoilage_->restore(d.spoilageState);
     sim.events_.clear();
     return true;
 }

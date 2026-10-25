@@ -48,6 +48,7 @@ struct ThingView {
     int sizeX = 1;                // buildings: footprint as placed (rotation already applied)
     int sizeY = 1;
     int stackCount = 0;  // items
+    float rot = 0.0f;       // items that rot: 0 fresh to 1 rotted away (docs/design/spoilage.md)
     int hitPoints = 0;   // 0 and 0 when the thing has no hit points
     int maxHitPoints = 0;
     // Pawns with a body: can't act (pain shock, unconscious, can't move), and dead. A dead pawn
