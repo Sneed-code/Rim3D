@@ -11,6 +11,7 @@
 #include "ColonySim/Filth.h"
 #include "ColonySim/Floors.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Temperature.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Lights.h"
@@ -128,6 +129,13 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     recreation_ = std::make_unique<RecreationSystem>(*things_, *defs_);
     recreation_->setRooms(rooms_.get());
     research_ = std::make_unique<ResearchSystem>(*things_, *defs_);
+    temperature_ = std::make_unique<TemperatureSystem>(map_, *things_, *rooms_, *health_, *defs_,
+                                                       splitMix64(settings.seed ^ 0x74656D70ULL));
+    temperature_->setOutdoor(outdoorTemperature());
+    temperature_->setGround(groundTemperature());
+    mood_->setTemperature(temperature_.get());
+    // A heater or cooler that draws power pushes heat only while it has it (E5); a campfire has no power part.
+    temperature_->setSourceRunning([this](Entity building) { return power_->running(building); });
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
     jobs_->setLights(lights_.get());
@@ -661,6 +669,7 @@ void Sim::step() {
     applying.clear();
     pending_.swap(applying);
 
+    temperature_->setOutdoor(outdoorTemperature());
     health_->step(time_.seconds, settings_.seed);
     needs_->step();
     // A controlled colonist who goes down or dies is let go: the player can't walk it any more.
@@ -686,6 +695,7 @@ void Sim::step() {
     lights_->update();
     filth_->step();
     roomStats_->step(time_.seconds);
+    temperature_->step(time_.seconds);
     time_.seconds += 1;
     if (time_.seconds % kSecondsPerHour == 0) {
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
@@ -694,6 +704,70 @@ void Sim::step() {
     if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
         checkpoints_.push_back(Checkpoint{time_.seconds, stateHash()});
     }
+}
+
+namespace {
+
+// Smooth 0 to 1 between two edges, with no library maths so every platform agrees to the bit.
+float simSmooth(float x) {
+    x = x < 0.0f ? 0.0f : (x > 1.0f ? 1.0f : x);
+    return x * x * (3.0f - 2.0f * x);
+}
+
+constexpr const char* kSimClimateBiome = "TemperateForest";
+constexpr const char* kSimSeasonNames[4] = {"spring", "summer", "fall", "winter"};
+
+float simSeasonMean(const Def& biome, int season) {
+    return static_cast<float>(biome.number((std::string("climate.seasonMeanTemperature.") + kSimSeasonNames[season & 3]).c_str(), 10.0));
+}
+
+}  // namespace
+
+// E2's stand-in for E1: the biome's mean for the season (joined smoothly from the middle of one
+// season to the middle of the next) plus a daily swing that is coldest at 05:00 and warmest at 15:00.
+float Sim::outdoorTemperature() const {
+    return outdoorOverride_ ? *outdoorOverride_ : outdoorTemperatureAt(time_.seconds);
+}
+
+float Sim::outdoorTemperatureAt(int64_t gameSeconds) const {
+    const Def* biome = defs_->find("Biomes", kSimClimateBiome);
+    if (biome == nullptr) {
+        return 15.0f;
+    }
+    const GameTime time{gameSeconds};
+    const int64_t day = time.dayOfYear();
+    const int64_t secondOfDay = gameSeconds % kSecondsPerDay;
+    // Position along the year in seasons, measured from the middle of spring.
+    const float inSeason = (static_cast<float>(day % kDaysPerSeason) + static_cast<float>(secondOfDay) / static_cast<float>(kSecondsPerDay) -
+                            static_cast<float>(kDaysPerSeason) * 0.5f) / static_cast<float>(kDaysPerSeason);
+    const int season = time.season();
+    const int from = inSeason < 0.0f ? season + 3 : season;
+    const int to = inSeason < 0.0f ? season : season + 1;
+    const float along = inSeason < 0.0f ? inSeason + 1.0f : inSeason;
+    const float seasonal = simSeasonMean(*biome, from) + (simSeasonMean(*biome, to) - simSeasonMean(*biome, from)) * along;
+    const float swing = static_cast<float>(biome->number("climate.dailySwing", 14.0));
+    const float hour = static_cast<float>(secondOfDay) / static_cast<float>(kSecondsPerHour);
+    // -1 at 05:00 up to +1 at 15:00, then back down by 05:00 the next day.
+    const float shape = hour >= 5.0f && hour < 15.0f ? -1.0f + 2.0f * simSmooth((hour - 5.0f) / 10.0f)
+                                                      : 1.0f - 2.0f * simSmooth((hour < 5.0f ? hour + 24.0f - 15.0f : hour - 15.0f) / 14.0f);
+    return seasonal + swing * 0.5f * shape;
+}
+
+void Sim::setOutdoorOverride(std::optional<float> celsius) {
+    outdoorOverride_ = celsius;
+    temperature_->setOutdoor(outdoorTemperature());
+    temperature_->setGround(groundTemperature());
+}
+
+float Sim::groundTemperature() const {
+    if (outdoorOverride_) {
+        return *outdoorOverride_;
+    }
+    const Def* biome = defs_->find("Biomes", kSimClimateBiome);
+    if (biome == nullptr) {
+        return 15.0f;
+    }
+    return (simSeasonMean(*biome, 0) + simSeasonMean(*biome, 1) + simSeasonMean(*biome, 2) + simSeasonMean(*biome, 3)) * 0.25f;
 }
 
 // Marks whose rock or plant is gone (it died of old age): taken off, so they don't pile up.
@@ -910,9 +984,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.cleanliness = stats->cleanliness;
             view.impressiveness = stats->impressiveness;
         }
+        view.temperature = temperature_->roomTemperature(room.id);
         out.rooms.push_back(view);
     }
     out.powerNets = power_->nets();
+    out.outdoorTemperature = temperature_->outdoor();
     if (out.floorChanges != floors_->changes()) {
         out.floorChanges = floors_->changes();
         out.floors.clear();
@@ -969,6 +1045,7 @@ uint64_t Sim::stateHash() const {
     filth_->hashState(h);
     roomStats_->hashState(h);
     animals_->hashState(h);
+    temperature_->hashState(h);
 
     // The entity ids the registry has handed out: the free list in reuse order (it decides the
     // next ids), then every live thing in id order with its components. The registry's own

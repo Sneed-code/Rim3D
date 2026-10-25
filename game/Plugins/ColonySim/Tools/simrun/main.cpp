@@ -44,6 +44,7 @@
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Temperature.h"
 #include "ColonySim/ThreatMap.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
@@ -93,6 +94,8 @@ struct Options {
     std::string load;
     std::string save;
     std::string saveJson;
+    bool hasOutdoor = false;  // --outdoor C: hold the outdoor temperature fixed (docs/design/temperature.md)
+    double outdoor = 0.0;
 #ifdef COLONY_DATA_DIR
     std::string data = COLONY_DATA_DIR;
 #else
@@ -155,11 +158,14 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.save = argv[++i];
         } else if (std::strcmp(arg, "--save-json") == 0 && hasValue) {
             out.saveJson = argv[++i];
+        } else if (std::strcmp(arg, "--outdoor") == 0 && hasValue) {
+            out.hasOutdoor = true;
+            out.outdoor = std::atof(argv[++i]);
         } else {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
                          "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--scenario colony [--verbose]] [--power] [--check] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
-                         "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE]\n");
+                         "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS]\n");
             return false;
         }
     }
@@ -641,6 +647,9 @@ int main(int argc, char** argv) {
         simOwner = std::make_unique<colony::Sim>(settings, defs);
     }
     colony::Sim& sim = *simOwner;
+    if (options.hasOutdoor) {
+        sim.setOutdoorOverride(static_cast<float>(options.outdoor));
+    }
     const auto generated = Clock::now();
     if (!sim.setupErrors().empty()) {
         for (const std::string& e : sim.setupErrors()) {
@@ -793,6 +802,39 @@ int main(int argc, char** argv) {
                 static_cast<unsigned long long>(paths.regionsExpanded),
                 static_cast<unsigned long long>(paths.cellsExpanded),
                 static_cast<unsigned long long>(paths.maxWorkInStep), paths.maxQueue, paths.maxWaitSteps);
+
+    // Temperature (docs/design/temperature.md): the outdoor temperature, the enclosed rooms' range, and how
+    // sick the pawns are from cold or heat.
+    {
+        float coldest = 1000.0f;
+        float warmest = -1000.0f;
+        int rooms = 0;
+        for (const colony::Room& room : sim.rooms().rooms()) {
+            if (room.enclosed() && !room.outdoors()) {
+                const float t = sim.temperature().roomTemperature(room.id);
+                coldest = std::min(coldest, t);
+                warmest = std::max(warmest, t);
+                ++rooms;
+            }
+        }
+        float worstCold = 0.0f;
+        float worstHeat = 0.0f;
+        int sick = 0;
+        for (const auto [pawn, health] : sim.things().registry().view<const colony::Health>().each()) {
+            bool isSick = false;
+            for (const colony::EnvironmentHediff& env : health.environment) {
+                const std::string& name = sim.defs().get(env.def).defName();
+                (name == "Hypothermia" ? worstCold : worstHeat) = std::max(name == "Hypothermia" ? worstCold : worstHeat, env.severity);
+                isSick = true;
+            }
+            sick += isSick ? 1 : 0;
+        }
+        std::printf("{\"temperature\":{\"outdoor\":%.1f,\"rooms\":%d,\"coldestRoom\":%.1f,\"warmestRoom\":%.1f,"
+                    "\"pawnsSick\":%d,\"worstHypothermia\":%.3f,\"worstHeatstroke\":%.3f}}\n",
+                    static_cast<double>(sim.temperature().outdoor()), rooms, static_cast<double>(rooms > 0 ? coldest : 0.0f),
+                    static_cast<double>(rooms > 0 ? warmest : 0.0f), sick, static_cast<double>(worstCold),
+                    static_cast<double>(worstHeat));
+    }
 
     // Needs (docs/design/needs.md): only when some pawn has food and rest.
     {

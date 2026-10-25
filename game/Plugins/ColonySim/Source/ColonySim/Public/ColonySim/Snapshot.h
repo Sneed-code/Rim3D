@@ -191,6 +191,7 @@ struct RoomView {
     float wealth = 0.0f;
     float cleanliness = 0.0f;
     float impressiveness = 0.0f;
+    float temperature = 0.0f;  // degrees Celsius (docs/design/temperature.md)
 };
 
 // A floor laid on a cell, and a pile of filth on one (docs/design/room-stats.md).
@@ -232,6 +233,7 @@ struct Snapshot {
     std::vector<CellPos> zoneCells;        // the zones' cells, see ZoneView
     std::vector<DesignationView> designations;  // every mark, in cell order
     std::vector<RoomView> rooms;           // enclosed rooms, by id
+    float outdoorTemperature = 0.0f;       // degrees Celsius
     // The cells with a thin (built) roof, in cell order; `roofChanges` goes up when the set
     // changes, so Unreal rebuilds the roof only then. The mountain's thick roof is the rock itself
     // (`Map::roof` says which).

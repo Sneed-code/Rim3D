@@ -31,7 +31,10 @@ enum class DeathCause : uint8_t {
     BloodLoss,      // blood loss reached its lethal severity
     VitalPartLost,  // a part with `lethalIfDestroyed` was destroyed (torso, head, brain, heart...)
     VitalCapacity,  // a capacity with `lethalAtZero` fell to zero (breathing, blood pumping...)
-    Starvation      // malnutrition reached its lethal severity (Needs.h)
+    Starvation,     // malnutrition reached its lethal severity (Needs.h)
+    Hypothermia,    // an Environment hediff reached its lethal severity (Temperature.h)
+    Heatstroke,
+    Environment     // any other Environment hediff
 };
 
 COLONY_API const char* deathCauseName(DeathCause cause);
@@ -44,6 +47,14 @@ struct Injury {
     float severity = 0.0f;    // hit points lost on the part
     float tendQuality = -1.0f;  // below 0: untended. A tended injury stops bleeding and heals faster
     bool tended() const { return tendQuality >= 0.0f; }
+};
+
+// A severity-based illness from the surroundings (hypothermia, heatstroke...): a Hediffs def of class
+// Environment, which has stages with capacity offsets like blood loss. TemperatureSystem moves the
+// severity (docs/design/temperature.md); the stage shows in the capacities.
+struct EnvironmentHediff {
+    DefId def;
+    float severity = 0.0f;
 };
 
 // A destroyed body part. Its children are gone with it (they are not listed).
@@ -62,6 +73,7 @@ struct Health {
     std::vector<Injury> injuries;    // in the order they happened
     std::vector<MissingPart> missing;  // in the order they were lost
     float bloodLoss = 0.0f;          // severity of the BloodLoss hediff, 0 to 1 (1 is death)
+    std::vector<EnvironmentHediff> environment;  // by def id, only those above 0
     bool dead = false;
     DeathCause cause = DeathCause::None;
 
@@ -89,6 +101,12 @@ struct HealthReport {
         std::string name;  // def name, "Consciousness"
         float value = 1.0f;
     };
+    struct EnvironmentLine {
+        std::string name;   // "hypothermia"
+        std::string stage;  // "shivering", "extreme"...
+        float severity = 0.0f;
+        bool lifeThreatening = false;
+    };
     bool dead = false;
     bool downed = false;
     DeathCause cause = DeathCause::None;
@@ -98,6 +116,7 @@ struct HealthReport {
     float bloodLoss = 0.0f;
     std::vector<InjuryLine> injuries;
     std::vector<std::string> missingParts;  // "left hand"
+    std::vector<EnvironmentLine> environment;
     std::vector<CapacityLine> capacities;
 };
 
@@ -170,6 +189,23 @@ public:
     // A capacity of the pawn (a Capacities defName like "Manipulation") as it is now, 1 for a
     // pawn with no body or a capacity the data doesn't have. Work speed uses it.
     float capacityValue(Entity pawn, const std::string& capacity) const;
+
+    // Environment hediffs (hypothermia...): the severity of a Hediffs def of class Environment on a
+    // pawn (0 if it has none), and setting it (clamped to 0 and up; at 0 the hediff goes). A change
+    // of stage works the capacities out again. Returns false, and changes nothing, if the pawn has no
+    // tracked health, is dead, or the def is not an Environment hediff.
+    float environmentSeverity(Entity pawn, DefId hediff) const;
+    bool setEnvironmentSeverity(Entity pawn, DefId hediff, float severity);
+    // The severity at which the hediff kills (its `lethalSeverity`, 1 by default), 0 if the def is not one.
+    float environmentLethalSeverity(DefId hediff) const;
+
+    // Puts an injury of `hediff` (a Hediffs def of class Injury) on a body part without a damage type,
+    // for things like frostbite. Returns false if the pawn has no tracked health, is dead, or the
+    // part is missing or doesn't exist.
+    bool addInjury(Entity pawn, int part, DefId hediff, float severity);
+    // The parts of a pawn's body in a body part group (e.g. "Fingers", "Toes" when the data has
+    // them), by part index, in body order.
+    std::vector<int> partsOfDef(DefId pawnDef, const std::string& partDef) const;
 
     // Hit points of a part right now (0 if it is missing), and with no damage.
     float partHitPoints(Entity pawn, int part) const;
