@@ -12,6 +12,7 @@ namespace colony {
 
 struct Event;
 class NeedsSystem;
+class RoomStats;
 class Rooms;
 class Things;
 
@@ -72,6 +73,8 @@ public:
 
     // Where a pawn slept decides "slept outside" (docs/design/rooms.md); without rooms nothing is outside.
     void setRooms(Rooms* rooms) { rooms_ = rooms; }
+    // The room and beauty thoughts (C17, docs/design/room-stats.md) read the room stats and the beauty need.
+    void setRoomStats(RoomStats* roomStats) { roomStats_ = roomStats; }
 
     const MoodRules& rules() const { return rules_; }
     // The mood the pawn is heading for (not clamped to the 0 to 100 scale), or its base if it has none.
@@ -92,6 +95,19 @@ private:
         std::string trigger;    // memories: what starts it (see Mood.cpp)
         std::string need;       // situations: "food" or "rest"
         std::string band;       // situations: the band name
+        // Situations with stages (D9): `condition` names a state RoomStats knows, `thresholds` are
+        // the values each stage ends at (one fewer than the stages), `stages` their offsets and labels
+        // (and the room roles a stage counts in, none: any), `roomRoles` the roles the thought is
+        // about at all (none: any).
+        struct Stage {
+            float offset = 0.0f;
+            std::string label;
+            std::vector<std::string> roles;
+        };
+        std::string condition;
+        std::vector<float> thresholds;
+        std::vector<Stage> stages;
+        std::vector<std::string> roomRoles;
     };
     // A situation with stages (`situation.condition` and `stages` in the def): which stage holds is
     // decided by a measured number against the def's thresholds (Mood.cpp, `conditionValue`).
@@ -110,6 +126,7 @@ private:
 
     Things& things_;
     Rooms* rooms_ = nullptr;
+    RoomStats* roomStats_ = nullptr;
     const NeedsSystem& needs_;
     const DefDatabase& defs_;
     MoodRules rules_;

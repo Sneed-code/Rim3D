@@ -21,7 +21,11 @@ The Crashlanded start (protagonist and 5 colonists, 50 survival meals, steel and
 | Cooking | once the stove stands (checked every game hour): `AddBill` "simple meal, until 8 on the map" |
 | Beds | once all six stand: `AssignBed`, one each |
 
-Everything is built by the colonists themselves from the starting steel and wood. The script
+C17 adds a wood floor over the room's inside (placed by command at step 0). Colonists then clean the
+dirt they walk in. The summary prints `cleaned`, `filthLeft`, `roomBeauty` and `roomImpressiveness`;
+the run fails if more than 12 layers of filth are left or the room has no stats.
+
+Everything else is built by the colonists themselves from the starting steel and wood. The script
 never touches a pawn or an item.
 
 ## The checks

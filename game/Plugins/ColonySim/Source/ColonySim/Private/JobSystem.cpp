@@ -47,7 +47,8 @@ enum class JobStepKind : uint8_t {
     BillWork,
     BillFinish,
     Play,  // recreation: stay for the activity's time (RecreationJobs.cpp)
-    ResearchWork  // research: add points to the current project (ResearchJobs.cpp)
+    ResearchWork,  // research: add points to the current project (ResearchJobs.cpp)
+    CleanWork
 };
 
 constexpr JobStepKind kJobsWaitSteps[] = {JobStepKind::Wait};
@@ -58,6 +59,7 @@ constexpr JobStepKind kJobsIngestSteps[] = {JobStepKind::GotoThing, JobStepKind:
 constexpr JobStepKind kJobsLayDownSteps[] = {JobStepKind::WalkToSpot, JobStepKind::Lie};
 constexpr JobStepKind kJobsMineSteps[] = {JobStepKind::GotoTouch, JobStepKind::MineWork};
 constexpr JobStepKind kJobsPlantSteps[] = {JobStepKind::GotoTouch, JobStepKind::PlantWork};
+constexpr JobStepKind kJobsCleanSteps[] = {JobStepKind::GotoCell, JobStepKind::CleanWork};
 constexpr uint8_t kJobsHaulPickUpStep = 1;
 constexpr uint8_t kJobsHaulCarryStep = 2;
 constexpr JobStepKind kJobsDeliverSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::CarryToCell,
@@ -106,6 +108,7 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::DoBill: return {kJobsDoBillSteps, static_cast<int>(std::size(kJobsDoBillSteps))};
         case JobType::Recreate: return {kJobsRecreateSteps, static_cast<int>(std::size(kJobsRecreateSteps))};
         case JobType::Research: return {kJobsResearchSteps, static_cast<int>(std::size(kJobsResearchSteps))};
+        case JobType::CleanFilth: return {kJobsCleanSteps, static_cast<int>(std::size(kJobsCleanSteps))};
     }
     return {nullptr, 0};
 }
@@ -123,6 +126,7 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::PlantWork:
         case JobStepKind::BillWork:
         case JobStepKind::ResearchWork:
+        case JobStepKind::CleanWork:
         case JobStepKind::Eat:
         case JobStepKind::Lie:
             return true;
@@ -175,6 +179,7 @@ const char* jobTypeName(JobType type) {
         case JobType::DoBill: return "DoBill";
         case JobType::Recreate: return "Recreate";
         case JobType::Research: return "Research";
+        case JobType::CleanFilth: return "CleanFilth";
     }
     return "?";
 }
@@ -377,6 +382,7 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
         case JobType::Mine:
         case JobType::CutPlant:
         case JobType::HarvestPlant:
+        case JobType::CleanFilth:
             out[0] = keyOf(JobTarget{kNoEntity, job.cell});
             return 1;
         case JobType::DoBill: {
@@ -712,6 +718,9 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::Research) {
         return failCheckResearch(pawn, job, why);
     }
+    if (job.type == JobType::CleanFilth) {
+        return failCheckClean(pawn, job, why);
+    }
     entt::registry& reg = things_.registry();
     if (job.type == JobType::DeliverResources) {
         const ConstructionSite* site = reg.valid(job.site) ? reg.try_get<ConstructionSite>(job.site) : nullptr;
@@ -832,6 +841,8 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return play(pawn, job, why);
         case JobStepKind::ResearchWork:
             return researchWork(pawn, job, why);
+        case JobStepKind::CleanWork:
+            return cleanWork(pawn, job, why);
     }
     return StepResult::Failed;
 }

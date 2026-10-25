@@ -118,6 +118,8 @@ struct ThingView {
     uint32_t powerNet = 0;
     float powerWatts = 0.0f;
     float batteryFill = -1.0f;
+    // Pawns with needs: the beauty need (docs/design/room-stats.md), 0 to 1 with 35% to 65% neutral; else -1.
+    float beautyNeed = -1.0f;
 };
 
 // A bullet in flight (docs/design/combat.md). Unreal draws a tracer along its velocity; it
@@ -176,6 +178,26 @@ struct RoomView {
     int tables = 0;
     int chairs = 0;
     int stoves = 0;
+    // Room stats (docs/design/room-stats.md); all 0 for a room without stats (open to the sky).
+    // The names of their stages come from beautyLabel(), spaceLabel() and the like (RoomStats.h).
+    bool hasStats = false;
+    float beauty = 0.0f;
+    float space = 0.0f;
+    float wealth = 0.0f;
+    float cleanliness = 0.0f;
+    float impressiveness = 0.0f;
+};
+
+// A floor laid on a cell, and a pile of filth on one (docs/design/room-stats.md).
+struct FloorView {
+    CellPos cell;
+    DefId def;  // a Terrain def
+};
+
+struct FilthView {
+    CellPos cell;
+    DefId def;  // a Filth def
+    int thickness = 1;
 };
 
 // One mark on a cell: mine here, cut this plant, harvest it (docs/design/mining.md).
@@ -214,6 +236,11 @@ struct Snapshot {
     std::vector<PawnLooksView> looks;      // see ThingView::looks
     std::vector<PowerNetView> powerNets;   // by id - 1, see ThingView::powerNet
     std::vector<ResearchView> research;    // every project, in def order
+    // Floors and filth, in cell order. Rewritten only when `floorChanges` / `filthChanges` goes up.
+    std::vector<FloorView> floors;
+    uint64_t floorChanges = ~0ULL;
+    std::vector<FilthView> filth;
+    uint64_t filthChanges = ~0ULL;
 
     // The thing with this id, or null if it is not on the map. Binary search.
     COLONY_API const ThingView* find(Entity id) const;

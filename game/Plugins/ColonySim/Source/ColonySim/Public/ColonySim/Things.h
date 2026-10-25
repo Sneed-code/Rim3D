@@ -151,6 +151,9 @@ public:
     // Items lying in a cell, in entity id order. Usually none or one (one stack per cell is the
     // storage rule), but spawning can put more in one cell.
     const std::vector<Entity>& itemsAt(CellPos cell) const;
+    // Goes up whenever an item is put on the map or taken off it, so a system that reads what lies
+    // in cells can tell its picture is stale (RoomStats).
+    uint64_t itemChanges() const { return itemChanges_; }
 
     // Splits `count` off an item stack: a new item of the same def, off the map, with `count`,
     // and the stack keeps the rest. Returns kNoEntity if `count` isn't less than the stack.
@@ -179,6 +182,7 @@ private:
     std::vector<Event>* events_ = nullptr;
     // Items per cell, by packed cell key. Looked up only, never iterated (its order is not fixed).
     std::unordered_map<uint64_t, std::vector<Entity>> itemsAt_;
+    uint64_t itemChanges_ = 0;
 
     void indexItem(Entity thing, CellPos cell, bool add);
     void placeFootprint(Entity thing, const CellRect& rect, const Footprint& footprint);

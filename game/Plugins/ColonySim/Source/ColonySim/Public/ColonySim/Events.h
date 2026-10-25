@@ -70,6 +70,7 @@ enum class PawnAction : uint8_t {
     Dodge,    // sidestepped into `cell` out of the way of the projectile `target`
     Cook,         // started work on a bill at `target`, a work building (once per run of the bill)
     Research,     // started research at `target`, a research bench (once per job)
+    Clean,        // started cleaning the filth in `cell`; a layer comes off every few seconds until its JobEnded
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.

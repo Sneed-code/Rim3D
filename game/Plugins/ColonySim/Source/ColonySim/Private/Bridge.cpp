@@ -81,6 +81,10 @@ const char* commandName(const Command& command) {
                 return "HandsOn";
             } else if constexpr (std::is_same_v<Type, FlickCommand>) {
                 return "Flick";
+            } else if constexpr (std::is_same_v<Type, PlaceFloorCommand>) {
+                return "PlaceFloor";
+            } else if constexpr (std::is_same_v<Type, AddFilthCommand>) {
+                return "AddFilth";
             } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
                 return "ShortCircuit";
             } else if constexpr (std::is_same_v<Type, SetResearchCommand>) {
@@ -164,6 +168,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Dodge: return "Dodge";
         case PawnAction::Cook: return "Cook";
         case PawnAction::Research: return "Research";
+        case PawnAction::Clean: return "Clean";
     }
     return "?";
 }

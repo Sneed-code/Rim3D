@@ -149,6 +149,7 @@ struct HandsOnPlan {
 class BillSystem;
 class Construction;
 class DefDatabase;
+class Filth;
 class HealthSystem;
 class Lights;
 class Map;
@@ -260,6 +261,14 @@ public:
     // After loading a save: rebuilds the reservations from the jobs. Returns false, with
     // `error`, if two jobs hold the same target or a job waits for a path nobody looks for.
     bool afterLoad(std::string& error);
+
+    // The filth layer, for the cleaning job (CleanJobs.cpp, docs/design/room-stats.md); it also needs
+    // `setRooms`. Without them nobody cleans. Cleaning is limited to indoor cells until the home area exists.
+    void setFilth(Filth* filth) { filth_ = filth; }
+    Filth* filth() const { return filth_; }
+    Rooms* rooms() const { return rooms_; }
+    // How fast a pawn cleans (1 is 100%): FilthRules.cleaningSpeed times its Manipulation.
+    double cleaningSpeed(Entity pawn) const;
 
     // ---- For scanners and tests -----------------------------------------------------------
     Things& things() { return things_; }
@@ -405,6 +414,10 @@ private:
     void gatherEvent(Entity pawn, PawnAction action, CellPos cell);
     void loadGatherRules();
 
+    // Cleaning (CleanJobs.cpp).
+    bool failCheckClean(Entity pawn, Job& job, std::string& why);
+    StepResult cleanWork(Entity pawn, Job& job, std::string& why);
+
     void startJob(Entity pawn, Job job);
     void tickJob(Entity pawn);
     void endJob(Entity pawn, JobEnd end, const std::string& why);
@@ -495,6 +508,7 @@ private:
     int64_t avoidSeconds_ = 0;
     int maxRepaths_ = 0;
     uint8_t defaultPriority_ = kDefaultPriority;
+    Filth* filth_ = nullptr;
     std::vector<Entity> order_;              // scratch: workers this step
     std::vector<WorkCandidate> candidates_;  // scratch: one think
 };
