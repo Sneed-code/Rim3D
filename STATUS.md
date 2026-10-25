@@ -91,6 +91,13 @@ colonists eat through their starting food in about 5 days and begin to starve ar
 keep them alive**. Beds, tables and chairs are C4's defs: it reads `building.bed`, `building.isTable`,
 `building.isSittable` and `stats.bedRestEffectiveness`. Save format 8 (formats 6 and 7 still load).
 
+Since C3 colonists mine, chop and harvest on the player's marks (`docs/design/mining.md`): the map has a rock layer
+(`sim.mineables()`: 2 or 3 rock types in patches and ore lumps inside them, each cell with hit points), `DesignateCommand` and
+`CancelDesignationsCommand` mark rock, trees and bushes, and the Mining and Plant cutting work types dig, fell and pick. Mined rock
+leaves chunks (or steel, silver, components) and the cell becomes rough stone, so regions and paths open up. Speed and yield follow the
+Mining and Plants skills, which also gain XP. Events `CellMined`, `PlantRemoved`, `PlantHarvested`, `DesignationsChanged`; the
+snapshot lists the marks; save format 14. `simrun --gather RADIUS` marks everything near the colonists and reports what got done.
+
 Since C9 colonists have a mood, 0 to 100 (`docs/design/mood.md`): base 50 plus trait offsets plus thoughts, the
 level following at 12 an hour up and 8 down and standing still asleep. Situations (hungry, ravenous, starving;
 drowsy, tired, exhausted) count while they hold; memories (ate without a table, ate raw food, ate a fine or
@@ -148,7 +155,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-26 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, A3). Tick tasks in `docs/plans/stage-1.md` as they merge.
+27 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, A3). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -200,8 +207,8 @@ has C2 now, so it is open.
 
 Wave 6, open now that C1 is in: ~~**C4** building~~ done (`docs/design/construction.md`; save format 10; ~~**C5** doors,
 roofs and rooms~~ done (`docs/design/rooms.md`; save format 13), C7 bills and cooking can start now), ~~**C6** food, rest and
-schedules~~ done (`docs/design/needs.md`; save format 8), ~~**F2** guns and hitboxes~~ done; **C3** mining, chopping
-and harvesting (cloud, Sonnet high) is open now that C2 is in. On the PC, ~~**U9**~~ and ~~**A3** seeded looks~~ are done (smoke test `looks`).
+schedules~~ done (`docs/design/needs.md`; save format 8), ~~**F2** guns and hitboxes~~ done; ~~**C3** mining, chopping
+and harvesting~~ done (`docs/design/mining.md`; save format 14). On the PC, ~~**U9**~~ and ~~**A3** seeded looks~~ are done (smoke test `looks`; save format 15).
 U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priorities).
 With F2, F3 and C1 in, **F4** fighter AI: where to stand (cloud, Opus high) is open, and with U9 and
 F2 in, **U11** fights on screen (PC) is too.

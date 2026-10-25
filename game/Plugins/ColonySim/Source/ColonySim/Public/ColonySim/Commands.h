@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ColonySim/Api.h"
+#include "ColonySim/Designations.h"
 #include "ColonySim/Cover.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
@@ -185,6 +186,22 @@ struct SetStanceCommand {
     Stance stance = Stance::Standing;
 };
 
+// Marks the cells in `area` for work (task C3, docs/design/mining.md): Mine marks rock and ore,
+// CutPlant any plant, HarvestPlant plants that give something. Cells that don't suit the kind are
+// left out; a cell already marked changes to this kind. Fails if no cell qualified. The designation
+// is the player's order: any colonist with the work type switched on takes it, nearest first.
+struct DesignateCommand {
+    CellRect area;
+    DesignationKind kind = DesignationKind::Mine;
+};
+
+// Takes the marks off the cells in `area`; with a kind, only marks of that kind. Fails if there
+// was none. A colonist working on a cancelled mark stops.
+struct CancelDesignationsCommand {
+    CellRect area;
+    DesignationKind kind = DesignationKind::None;  // None: every kind
+};
+
 // Dev command: makes a humanlike pawn one of another lineage (a Lineages defName), as a lineage
 // graft will once there are grafts. Only its looks change (docs/design/looks.md). Fails for a
 // pawn without looks or an unknown lineage.
@@ -199,7 +216,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SetStockpilePriorityCommand, SetStockpileAllowedCommand, OrderHaulCommand,
                              ControlPawnCommand, DirectMoveCommand, SetScheduleCommand, AssignBedCommand,
                              PlaceBlueprintCommand, CancelBuildCommand, DeconstructCommand, EquipCommand,
-                             ShootCommand, SetStanceCommand, SetLineageCommand>;
+                             ShootCommand, SetStanceCommand, DesignateCommand, CancelDesignationsCommand,
+                             SetLineageCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

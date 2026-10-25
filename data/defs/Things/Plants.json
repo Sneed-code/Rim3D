@@ -2,7 +2,8 @@
   {
     "defName": "PlantBase", "abstract": true, "source": "RimWorld wiki",
     "category": "Plant", "passability": "Standable",
-    "plant": { "growMinGlow": 0.51, "lifespanDaysPerGrowDays": 8 }
+    "plant": { "growMinGlow": 0.51, "lifespanDaysPerGrowDays": 8, "harvestMinGrowth": 0.65 },
+    "unverified": ["plant.harvestMinGrowth"]
   },
   {
     "defName": "TreeBase", "abstract": true, "parent": "PlantBase",

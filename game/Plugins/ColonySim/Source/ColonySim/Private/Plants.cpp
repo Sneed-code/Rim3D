@@ -102,7 +102,8 @@ Plants::Plants(const Map& map, const DefDatabase& defs, uint64_t seed, const std
                     break;
                 }
                 case Terrain::Water:
-                case Terrain::Rock: break;
+                case Terrain::Rock:
+                case Terrain::RoughStone: break;
             }
             fertility_[static_cast<size_t>(map.index(c))] = static_cast<float>(f);
         }

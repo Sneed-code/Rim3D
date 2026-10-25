@@ -39,7 +39,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Direct control (format 7) | which colonist the player controls (a flag on the pawn); the `ControlPawn` and `DirectMove` commands in the log ([protagonist.md](protagonist.md)) |
 | Plants (format 9) | every plant as parallel lists: cell index, def, growth, age; fertility is rebuilt from the seed |
 | Combat (format 12) | per pawn its posture (stance, facing), gear (gun and apparel ids) and trigger (phase, steps, burst, aim, recoil); `EquippedBy` on gear; every projectile in flight with its defs **by `defName`** ([combat.md](combat.md)) |
-| Pawn looks (format 14) | each humanlike pawn's lineage (by `defName`), gender, body type, weight, height, melanin and colours; `SetLineage` commands in the log ([looks.md](looks.md)). Older files load with pawns that have no looks |
+| Pawn looks (format 15) | each humanlike pawn's lineage (by `defName`), gender, body type, weight, height, melanin and colours; `SetLineage` commands in the log ([looks.md](looks.md)). Older files load with pawns that have no looks |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
@@ -180,6 +180,12 @@ sneed's whole job for a bug is: press F8, then send the folder (zip it, or drop 
   pawns without a mood.
 - **12** (F2): `Posture`, `Gear`, `EquippedBy`, `Shooter` and `Projectile` components (a pawn saved
   without a posture stands facing east). Commands 17 to 19 (`Equip`, `Shoot`, `SetStance`).
+- **13** (C5): a `Door` component (progress, hold, open) on doors ([rooms.md](rooms.md)). Older files load with closed doors.
+- **14** (C3): the rock layer and the designations after the plants, job types `Mine`, `CutPlant`
+  and `HarvestPlant`, commands 20 (`Designate`) and 21 (`CancelDesignations`)
+  (`docs/design/mining.md`). Cells of rock in the generated ground with no record in the file were
+  mined and load as rough stone. Older files load with the generated rock layer and no marks.
+- **15** (A3): each humanlike pawn's looks (`docs/design/looks.md`), command 22 (`SetLineage`). Older files load with pawns that have no looks.
 
 ## Why the state hash changed in S6
 

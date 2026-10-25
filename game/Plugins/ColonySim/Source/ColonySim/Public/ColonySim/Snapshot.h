@@ -3,6 +3,7 @@
 #include "ColonySim/Api.h"
 #include "ColonySim/Cover.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Designations.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/JobType.h"
@@ -138,6 +139,12 @@ struct RoomView {
     int stoves = 0;
 };
 
+// One mark on a cell: mine here, cut this plant, harvest it (docs/design/mining.md).
+struct DesignationView {
+    CellPos cell;
+    DesignationKind kind = DesignationKind::None;
+};
+
 struct Snapshot {
     int64_t gameSeconds = 0;  // Sim::time().seconds when it was written
     int mapWidth = 0;
@@ -146,6 +153,7 @@ struct Snapshot {
     std::vector<PathPointView> waypoints;  // the pawns' routes, see ThingView
     std::vector<ZoneView> zones;           // by id
     std::vector<CellPos> zoneCells;        // the zones' cells, see ZoneView
+    std::vector<DesignationView> designations;  // every mark, in cell order
     std::vector<RoomView> rooms;           // enclosed rooms, by id
     // The cells with a thin (built) roof, in cell order; `roofChanges` goes up when the set
     // changes, so Unreal rebuilds the roof only then. The mountain's thick roof is the rock itself

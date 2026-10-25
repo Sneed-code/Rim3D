@@ -145,6 +145,26 @@
     "ours": ["hugeRoomCells", "roleOrder", "roles"]
   },
   {
+    "defName": "WorkRules", "source": "RimWorld wiki",
+    "mining": {
+      "speedBase": 0.04, "speedPerLevel": 0.12,
+      "hitDamage": 80, "hitSeconds": 144,
+      "xpPerSecond": 0.048611,
+      "rockTypesPerMap": [2, 3],
+      "orePerTenThousandRockCells": 6
+    },
+    "plants": {
+      "speedBase": 0.08, "speedPerLevel": 0.115,
+      "xpPerSecond": 0.059028
+    },
+    "yieldByLevel": [0.6, 0.7, 0.8, 0.85, 0.9, 0.925, 0.95, 0.975, 1.0, 1.01, 1.02,
+                     1.03, 1.04, 1.05, 1.06, 1.07, 1.08, 1.09, 1.1, 1.12, 1.13],
+    "growthYieldFloor": 0.5,
+    "unskilledSkillLevel": 8,
+    "unverified": ["mining.hitDamage", "mining.hitSeconds", "mining.xpPerSecond", "plants.xpPerSecond", "yieldByLevel", "growthYieldFloor"],
+    "ours": ["mining.rockTypesPerMap", "mining.orePerTenThousandRockCells", "unskilledSkillLevel"]
+  },
+  {
     "defName": "LooksRules", "source": "Rim3D",
     "comment": "How pawns look; only the drawing reads it (docs/design/looks.md).",
     "bodyTypeWeights": { "Thin": 25, "Average": 55, "Fat": 12, "Hulk": 8 },

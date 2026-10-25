@@ -96,7 +96,7 @@ bool JobSystem::thinkSchedule(Entity pawn, Job& out) {
 void JobSystem::interruptForNeeds(Entity pawn) {
     entt::registry& reg = things_.registry();
     const Job& current = reg.get<Worker>(pawn).job;
-    if (current.forced || (current.type != JobType::Wait && current.type != JobType::HaulToCell)) {
+    if (current.forced || (current.type != JobType::Wait && current.type != JobType::HaulToCell && !jobIsGather(current.type))) {
         return;
     }
     const Needs* needs = reg.try_get<Needs>(pawn);

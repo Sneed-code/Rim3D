@@ -69,6 +69,13 @@ plants change) which `Sim::stateHash` includes; asking costs nothing.
 Save format 9: the plants as parallel lists (def names used, then per plant its cell index, def, growth
 and age), after the zones. Older saves load with no plants. See `saves.md`.
 
+## Cutting and picking (C3)
+
+Colonists fell trees and pick berries on the player's marks (`docs/design/mining.md`). A harvest
+mark waits until the plant is 65% grown (`plant.harvestMinGrowth`, unverified). Picking a bush sets
+it back to `harvestAfterGrowth`; felling a tree removes it and leaves wood. The sim reads the plant
+layer through `setGrowth` and `remove`, which keep the running hash right.
+
 ## For Unreal (U3)
 
 Read the layer through `sim.plants()` (`records()` lists every plant in cell order). It is not in the
