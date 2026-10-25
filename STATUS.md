@@ -323,6 +323,12 @@ must skip `Animal`**.
 
 **X1** genes and lineages (`docs/design/genes.md`, tests `GenesTests`): 55 genes as defs (`data/defs/Genes`) with stat offsets and factors, skill aptitudes and looks; Emberkin, Frostkin, Warbred, Ashborn and Delver as gene sets (wiki totals for metabolism and complexity; most single-gene numbers are recalled and marked `unverified`). `PawnGenes` on every humanlike pawn is made from its lineage (not saved; rebuilt on creation, `SetLineage` and load). Read today: walking speed, comfortable temperature range, hunger rate, mood, damage taken, wound healing, mining and plant speed, skill levels; every other stat is summed and available through `geneStat`. Looks take skin, hair and horns from genes (the lineage's own `visual` block is gone). Scenario `lineageWeights` rolls colonists' lineages (never the protagonist's); `CrashlandedMixed` does, `Crashlanded` is unchanged. **A new rule that a gene should change reads `geneStat(*sim.genesOf(pawn), "stat", base)`**; Unreal's horn lookup changed in `PawnSubsystem.cpp` (uncompiled until the PC builds).
 
+
+**N3** taming, training and pens (`docs/design/husbandry.md`, tests `HusbandryTests`): a `MarkAnimal` Tame mark makes a Handling colonist fetch hay (or whatever the animal eats), walk to it and roll
+`(0.5 + 0.05 x Animals) x (1 - wildness)`; a failed try keeps the mark. Tame animals join side 1, eat hay, kibble, meat and plants (walking round walls by path tickets), are hand-fed under 25% food and starve after 5 days.
+Training (Obedience, Release, Rescue, Haul: 10/5/20/30 steps, one try per 6 h, fades over 6 days) is by `SetTraining`; **Haul makes the animal a Hauling-only worker**. Animal zones and pens (`isPen`: no walkable way out except doors), `AssignAnimalZone`, `Release`, slaughter (corpse only; butchering is N2).
+Save section `husbandry` 1, five new commands (`MarkAnimal`, `SetTraining`, `CreateAnimalZone`, `RemoveAnimalZoneCells`, `AssignAnimalZone`). **Obedience, Release and Rescue only count steps; their effects wait for later tasks.** Animals walk through doors (only the pen test treats them as barriers). Not done: names for tamed animals, manhunters on a failed try (N5), a taming line in the colony scenario (C25 can add it).
+
 ## Next
 
 Wave 1:

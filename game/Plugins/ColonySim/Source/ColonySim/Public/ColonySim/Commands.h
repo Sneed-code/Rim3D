@@ -398,6 +398,39 @@ struct MarkShelterCommand {
     bool clear = false;
 };
 
+// Taming, training and pens (task N3, docs/design/husbandry.md). `mark` is "Tame" (a wild animal, to be tamed by a colonist
+// with the Handling work), "Slaughter" (a tame one, to be killed) or "Release" (a tame one goes wild at once; `on` is
+// ignored). `on` false takes a mark off. Fails for a thing that is no animal, a dead one, or one of the wrong kind.
+struct MarkAnimalCommand {
+    Entity animal = kNoEntity;
+    std::string mark;
+    bool on = true;
+};
+
+// A tame animal is (or is no longer) to be taught a trick: `trainable` is "Obedience", "Release", "Rescue" or "Haul".
+// Fails if the animal is wild or can't learn it.
+struct SetTrainingCommand {
+    Entity animal = kNoEntity;
+    std::string trainable;
+    bool wanted = true;
+};
+
+// Paints an animal zone over the walkable cells of `area` that are in no animal zone. Fails if there are none.
+struct CreateAnimalZoneCommand {
+    CellRect area;
+};
+
+// Takes the cells of `area` out of their animal zones; an emptied zone is deleted, and animals that had it roam freely.
+struct RemoveAnimalZoneCellsCommand {
+    CellRect area;
+};
+
+// A tame animal stays in this animal zone; zone 0 lets it roam near home again.
+struct AssignAnimalZoneCommand {
+    Entity animal = kNoEntity;
+    uint32_t zone = 0;
+};
+
 // Melee (task F8, docs/design/melee.md). Attack: `pawn` swings at `target`, a pawn within reach;
 // for the colonist the player controls, `target` may be none for a swing straight ahead, and its
 // swings have no spread (the player aims). Block: `pawn` raises its melee weapon for a moment.
@@ -485,7 +518,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SetDefenseRoleCommand, MarkShelterCommand, ThrowCommand, ExplodeCommand,
                              MeleeCommand, DodgeRollCommand,
                              SetOutfitCommand, EditOutfitCommand, AddOutfitCommand, RemoveOutfitCommand,
-                             StripCommand, SetWeatherCommand>;
+                             StripCommand, SetWeatherCommand, MarkAnimalCommand, SetTrainingCommand,
+                             CreateAnimalZoneCommand, RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

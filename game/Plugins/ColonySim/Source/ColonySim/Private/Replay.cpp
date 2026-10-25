@@ -215,6 +215,19 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, MarkShelterCommand>) {
                 j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
                 j["clear"] = c.clear;
+            } else if constexpr (std::is_same_v<Type, MarkAnimalCommand>) {
+                j["animal"] = entt::to_integral(c.animal);
+                j["mark"] = c.mark;
+                j["on"] = c.on;
+            } else if constexpr (std::is_same_v<Type, SetTrainingCommand>) {
+                j["animal"] = entt::to_integral(c.animal);
+                j["trainable"] = c.trainable;
+                j["wanted"] = c.wanted;
+            } else if constexpr (std::is_same_v<Type, CreateAnimalZoneCommand> || std::is_same_v<Type, RemoveAnimalZoneCellsCommand>) {
+                j["area"] = replayRectJson(c.area);
+            } else if constexpr (std::is_same_v<Type, AssignAnimalZoneCommand>) {
+                j["animal"] = entt::to_integral(c.animal);
+                j["zone"] = c.zone;
             } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["target"] = entt::to_integral(c.target);
@@ -879,6 +892,43 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         } else {
             out.command = UnlockResearchCommand{project};
         }
+    } else if (type == "MarkAnimal") {
+        MarkAnimalCommand c;
+        uint32_t animal = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "animal", animal, where) || !r.text(j, "mark", c.mark, where) || !r.flag(j, "on", c.on, where)) {
+            return false;
+        }
+        c.animal = static_cast<Entity>(animal);
+        out.command = std::move(c);
+    } else if (type == "SetTraining") {
+        SetTrainingCommand c;
+        uint32_t animal = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "animal", animal, where) || !r.text(j, "trainable", c.trainable, where) ||
+            !r.flag(j, "wanted", c.wanted, where)) {
+            return false;
+        }
+        c.animal = static_cast<Entity>(animal);
+        out.command = std::move(c);
+    } else if (type == "CreateAnimalZone") {
+        CreateAnimalZoneCommand c;
+        if (!replayReadRect(r, j, where, c.area)) {
+            return false;
+        }
+        out.command = c;
+    } else if (type == "RemoveAnimalZoneCells") {
+        RemoveAnimalZoneCellsCommand c;
+        if (!replayReadRect(r, j, where, c.area)) {
+            return false;
+        }
+        out.command = c;
+    } else if (type == "AssignAnimalZone") {
+        AssignAnimalZoneCommand c;
+        uint32_t animal = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "animal", animal, where) || !r.integer(j, "zone", c.zone, where)) {
+            return false;
+        }
+        c.animal = static_cast<Entity>(animal);
+        out.command = c;
     } else if (type == "PlaceFloor") {
         PlaceFloorCommand c;
         if (!replayReadRect(r, j, where, c.area) || !r.text(j, "floor", c.floor, where)) {

@@ -105,3 +105,7 @@ step even when it stands still. S9 (sim cost at Stage 2 size) should look there:
 idle pawns when no one is near. At 3x that is about 3% of one core.
 `simrun --animals --animal-percent 300 --check` gives a bigger herd; `--check` fails if no animal was
 placed, one stands on ground it can't walk, or the herd is under half its density.
+
+## Tame animals
+
+Taming, training, zones, pens, feeding and slaughter (N3) are in [husbandry.md](husbandry.md). A tame animal is still an `Animal`; its modes `WaitPath`, `GoToItem` and `EatItem` are used only by tame animals, and its walking and eating are in `AnimalCare.cpp`.

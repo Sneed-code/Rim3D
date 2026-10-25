@@ -1,5 +1,6 @@
 #include "ColonySim/Jobs.h"
 
+#include "ColonySim/Animals.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Construction.h"
@@ -51,7 +52,9 @@ enum class JobStepKind : uint8_t {
     CleanWork,
     ApparelGoto,  // walk to the clothes (none to take off a worn piece)
     ApparelWork,  // put on or take off
-    StripWork     // take the clothes and weapon off a downed or dead pawn
+    StripWork,    // take the clothes and weapon off a downed or dead pawn
+    ApproachAnimal,  // walk up to the job's animal (HusbandryJobs.cpp)
+    HandleWork       // tame, train, kill or feed it, standing beside it
 };
 
 constexpr JobStepKind kJobsWaitSteps[] = {JobStepKind::Wait};
@@ -78,6 +81,9 @@ constexpr JobStepKind kJobsRecreateSteps[] = {JobStepKind::WalkToSpot, JobStepKi
 constexpr JobStepKind kJobsResearchSteps[] = {JobStepKind::GotoCell, JobStepKind::ResearchWork};
 constexpr JobStepKind kJobsWearSteps[] = {JobStepKind::ApparelGoto, JobStepKind::ApparelWork};
 constexpr JobStepKind kJobsStripSteps[] = {JobStepKind::GotoThing, JobStepKind::StripWork};
+constexpr JobStepKind kJobsHandleFoodSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::ApproachAnimal,
+                                                JobStepKind::HandleWork};
+constexpr JobStepKind kJobsHandleSteps[] = {JobStepKind::ApproachAnimal, JobStepKind::HandleWork};
 
 // The most steps one pawn's job may run in one game second (guards against a loop of steps that
 // all end at once).
@@ -118,6 +124,10 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::CleanFilth: return {kJobsCleanSteps, static_cast<int>(std::size(kJobsCleanSteps))};
         case JobType::WearApparel: return {kJobsWearSteps, static_cast<int>(std::size(kJobsWearSteps))};
         case JobType::StripPawn: return {kJobsStripSteps, static_cast<int>(std::size(kJobsStripSteps))};
+        case JobType::TameAnimal:
+        case JobType::TrainAnimal:
+        case JobType::FeedAnimal: return {kJobsHandleFoodSteps, static_cast<int>(std::size(kJobsHandleFoodSteps))};
+        case JobType::SlaughterAnimal: return {kJobsHandleSteps, static_cast<int>(std::size(kJobsHandleSteps))};
     }
     return {nullptr, 0};
 }
@@ -138,6 +148,7 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::CleanWork:
         case JobStepKind::ApparelWork:
         case JobStepKind::StripWork:
+        case JobStepKind::HandleWork:
         case JobStepKind::Eat:
         case JobStepKind::Lie:
             return true;
@@ -193,6 +204,10 @@ const char* jobTypeName(JobType type) {
         case JobType::CleanFilth: return "CleanFilth";
         case JobType::WearApparel: return "WearApparel";
         case JobType::StripPawn: return "StripPawn";
+        case JobType::TameAnimal: return "TameAnimal";
+        case JobType::TrainAnimal: return "TrainAnimal";
+        case JobType::SlaughterAnimal: return "SlaughterAnimal";
+        case JobType::FeedAnimal: return "FeedAnimal";
     }
     return "?";
 }
@@ -435,6 +450,18 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
         case JobType::StripPawn:
             out[0] = keyOf(JobTarget{job.thing, CellPos{}});
             return 1;
+        case JobType::TameAnimal:
+        case JobType::TrainAnimal:
+        case JobType::SlaughterAnimal:
+        case JobType::FeedAnimal: {
+            // The animal, and the food being fetched or carried to it.
+            int n = 0;
+            out[n++] = keyOf(JobTarget{job.site, CellPos{}});
+            if (job.thing != kNoEntity) {
+                out[n++] = keyOf(JobTarget{job.thing, CellPos{}});
+            }
+            return n;
+        }
         case JobType::None:
         case JobType::Wait:
             return 0;
@@ -647,6 +674,13 @@ void JobSystem::step() {
             dropCarried(pawn);  // the player's colonist may carry something with no job (U10)
             continue;
         }
+        // An animal that hauls works only while it is awake, fed and unhurt.
+        if (animalGate_ && reg.all_of<Animal>(pawn) && !animalGate_(pawn)) {
+            if (reg.get<Worker>(pawn).job.type != JobType::None) {
+                endJob(pawn, JobEnd::Interrupted, "it can't work now");
+            }
+            continue;
+        }
         Worker& worker = reg.get<Worker>(pawn);
         const int64_t t = now();
         worker.avoid.erase(std::remove_if(worker.avoid.begin(), worker.avoid.end(),
@@ -808,6 +842,9 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::WearApparel || job.type == JobType::StripPawn) {
         return failCheckApparel(pawn, job, why);
     }
+    if (jobIsHandling(job.type)) {
+        return failCheckHandle(pawn, job, why);
+    }
     entt::registry& reg = things_.registry();
     if (job.type == JobType::DeliverResources) {
         const ConstructionSite* site = reg.valid(job.site) ? reg.try_get<ConstructionSite>(job.site) : nullptr;
@@ -936,6 +973,10 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return apparelWork(pawn, job, why);
         case JobStepKind::StripWork:
             return stripWork(pawn, job, why);
+        case JobStepKind::ApproachAnimal:
+            return approachAnimal(pawn, job, why);
+        case JobStepKind::HandleWork:
+            return handleWork(pawn, job, why);
     }
     return StepResult::Failed;
 }
@@ -1269,7 +1310,7 @@ void JobSystem::jobEvent(Entity pawn, const Job& job, bool started, const std::s
     event.thing = pawn;
     event.def = things_.registry().get<Thing>(pawn).def;
     event.job = job.type;
-    event.target = job.thing;
+    event.target = jobIsHandling(job.type) ? job.site : job.thing;
     event.cell = job.cell;
     event.message = message;
     events_.push_back(std::move(event));
