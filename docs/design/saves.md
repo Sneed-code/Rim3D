@@ -118,6 +118,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `temperature` | 1 | each enclosed room's temperature, by its anchor cell (E2) |
 | `raids` | 1 | the raid state (factions met, squads, the alarm, threat and home points, the shelter mark), then the `defense` and `raider` parts ([raids.md](raids.md), F6) |
 | `melee` | 1 | `melee`: each pawn's swing, its defense against one, its block (F8, [melee.md](melee.md)) |
+| `feel` | 1 | `kick` (the player's gun kick and its spray) and `roll` (a dodge roll's phase, steps, direction, wait) ([shooter-feel.md](shooter-feel.md)) |
 
 **Commands are saved by name (S7).** The `commands` section starts with the names of the command
 types it uses (`commandNames`); each command then gives its type as a place in that list, and its

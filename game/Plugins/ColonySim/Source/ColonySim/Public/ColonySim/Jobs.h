@@ -150,6 +150,7 @@ class BillSystem;
 class Construction;
 class DefDatabase;
 class Filth;
+class SpoilageSystem;
 class HealthSystem;
 class Lights;
 class Map;
@@ -265,6 +266,9 @@ public:
     // The filth layer, for the cleaning job (CleanJobs.cpp, docs/design/room-stats.md); it also needs
     // `setRooms`. Without them nobody cleans. Cleaning is limited to indoor cells until the home area exists.
     void setFilth(Filth* filth) { filth_ = filth; }
+    // Meals made by a bill remember their ingredients and may be poisoned; eating a poisoned meal may
+    // give food poisoning (Spoilage.h). Without it neither happens.
+    void setSpoilage(SpoilageSystem* spoilage) { spoilage_ = spoilage; }
     Filth* filth() const { return filth_; }
     Rooms* rooms() const { return rooms_; }
     // How fast a pawn cleans (1 is 100%): FilthRules.cleaningSpeed times its Manipulation.
@@ -437,7 +441,8 @@ private:
     // Puts the ingredients delivered so far back on the ground near the pawn.
     void returnIngredients(Entity pawn, const Job& job);
     // Makes `count` of an item def and puts it down on the nearest free cell near the pawn.
-    void dropNewItems(Entity pawn, DefId def, int count);
+    // `madeFrom` is set for a bill's products: the spoilage system notes the ingredients on each new stack.
+    void dropNewItems(Entity pawn, DefId def, int count, const std::vector<BillUsed>* madeFrom = nullptr);
     bool retargetStorage(Entity pawn, Job& job);
     void dropCarried(Entity pawn);
     // Puts what the pawn carries on `cell` if all of it fits there and no other pawn holds the cell.
@@ -509,6 +514,7 @@ private:
     int maxRepaths_ = 0;
     uint8_t defaultPriority_ = kDefaultPriority;
     Filth* filth_ = nullptr;
+    SpoilageSystem* spoilage_ = nullptr;
     std::vector<Entity> order_;              // scratch: workers this step
     std::vector<WorkCandidate> candidates_;  // scratch: one think
 };
