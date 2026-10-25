@@ -34,6 +34,7 @@ class RoomStats;
 struct Colonist;
 struct PawnLooks;
 class Designations;
+class ExplosiveSystem;
 class FighterSystem;
 class JobSystem;
 class Lights;
@@ -154,6 +155,9 @@ public:
     // Guns, projectiles, hitboxes and armor (docs/design/combat.md).
     CombatSystem& combat() { return *combat_; }
     const CombatSystem& combat() const { return *combat_; }
+    // Grenades: belts, throwing, fuses (docs/design/explosives.md). Blasts are `combat().explode`.
+    ExplosiveSystem& explosives() { return *explosives_; }
+    const ExplosiveSystem& explosives() const { return *explosives_; }
     // What a health panel shows for a pawn; false if it has no body.
     bool healthReport(Entity pawn, HealthReport& out) const { return health_->report(pawn, out); }
 
@@ -278,6 +282,7 @@ private:
     std::unique_ptr<RecreationSystem> recreation_;
     std::unique_ptr<ResearchSystem> research_;
     std::unique_ptr<CombatSystem> combat_;
+    std::unique_ptr<ExplosiveSystem> explosives_;  // after combat_ and health_
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
     Rng rng_;

@@ -40,6 +40,10 @@ enum class EventType : uint8_t {
     PowerChanged,    // a building gained or lost power (docs/design/power.md)
     ShortCircuit,    // a short circuit emptied a net's batteries (docs/design/power.md)
     ResearchDone,    // a research project was finished (docs/design/research.md)
+    GrenadeThrown,   // a pawn released a grenade (docs/design/explosives.md)
+    GrenadeLanded,   // a thrown grenade came to rest; its fuse is running
+    Explosion,       // a blast went off
+    PawnKnockedDown, // a blast threw a pawn to the ground
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -71,6 +75,8 @@ enum class PawnAction : uint8_t {
     Cook,         // started work on a bill at `target`, a work building (once per run of the bill)
     Research,     // started research at `target`, a research bench (once per job)
     Clean,        // started cleaning the filth in `cell`; a layer comes off every few seconds until its JobEnded
+    Throw,        // started winding up a throw (docs/design/explosives.md); the release is a GrenadeThrown event
+    Dive,         // ran or dived toward `cell` to get away from the grenade `target`
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
@@ -108,6 +114,13 @@ struct Event {
     // ShortCircuit: `thing` the building it happened at, `cell` its origin, `amount` the energy
     // released from the net's batteries, Wd.
     float amount = 0.0f;
+    // GrenadeThrown: `thing` the thrower, `def` the grenade's Things def, `target` the grenade entity
+    // (it is in the snapshot's projectiles), (x, y, z) where it left the hand, `amount` the steps until
+    // it lands. GrenadeLanded: `thing` the grenade entity, `def` its Projectiles def, (x, y, z) where it
+    // lies, `amount` the fuse in steps. Explosion: `thing` the grenade entity (none for a dev blast),
+    // `target` who threw it, `def` the damage type's DamageTypes def, `amount` the radius, (x, y, z) the
+    // centre, `cell` its cell; hurt pawns and destroyed buildings follow as their own events.
+    // PawnKnockedDown: `thing` the pawn, `amount` the steps it stays down, (x, y, z) where it landed.
     // ShotFired: `thing` the shooter, `def` its gun's Things def, `target` the projectile, (x, y, z)
     // the muzzle. ProjectileHit: `thing` the projectile (forget its id), `def` its Projectiles def,
     // `hit` what stopped it, `target` the pawn or building hit, `part` the body part hit (index as

@@ -7,5 +7,7 @@
   { "defName": "Bite", "parent": "DamageTypeBase", "label": "bite", "hediff": "Bite" },
   { "defName": "Blunt", "parent": "DamageTypeBase", "label": "blunt", "armorCategory": "Blunt", "hediff": "Bruise" },
   { "defName": "Crush", "parent": "DamageTypeBase", "label": "crush", "armorCategory": "Blunt", "hediff": "Crush" },
+  { "defName": "Bomb", "parent": "DamageTypeBase", "label": "bomb", "hediff": "Shredded", "source": "RimWorld wiki",
+    "explosion": { "buildingFactor": 2, "impassableFactor": 2, "wallFactor": 2, "fragmentsMin": 2, "fragmentsMax": 4, "fragmentMinDamage": 15 } },
   { "defName": "Burn", "parent": "DamageTypeBase", "label": "burn", "armorCategory": "Heat", "hediff": "Burn", "hediffSolid": "Burn" }
 ]

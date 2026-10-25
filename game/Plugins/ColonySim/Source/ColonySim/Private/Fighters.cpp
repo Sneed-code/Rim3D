@@ -4,6 +4,7 @@
 #include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Explosives.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
@@ -94,6 +95,14 @@ void fightReadRules(const DefDatabase& defs, FighterRules& r) {
     num("dodgeRadius", r.dodgeRadius);
     num("dodgeClearance", r.dodgeClearance);
     whole("dodgeHoldSteps", r.dodgeHoldSteps);
+    num("diveMargin", r.diveMargin);
+    num("diveSafe", r.diveSafe);
+    whole("throwEvery", r.throwEvery);
+    whole("throwMinEnemies", r.throwMinEnemies);
+    whole("throwMemory", r.throwMemory);
+    num("throwSelfMargin", r.throwSelfMargin);
+    num("throwFriendMargin", r.throwFriendMargin);
+    r.throwEvery = std::max(1, r.throwEvery);
     r.planEvery = std::max(1, r.planEvery);
     r.threats = std::clamp(r.threats, 1, kFightMaxThreats);
     r.refine = std::max(1, r.refine);
@@ -309,6 +318,10 @@ void FighterSystem::step() {
         incoming_.push_back(Incoming{shot, p.launcher, p.x, p.y, p.z, p.vx, p.vy, p.vz, p.level, p.age});
     }
     std::sort(incoming_.begin(), incoming_.end(), [](const Incoming& a, const Incoming& b) { return a.shot < b.shot; });
+    blasts_.clear();
+    if (explosives_ != nullptr) {
+        explosives_->dangers(blasts_);
+    }
 
     order_.clear();
     for (const Entity pawn : reg.view<Fighter>()) {
@@ -325,16 +338,24 @@ void FighterSystem::step() {
             }
             continue;
         }
+        // Thrown to the ground by a blast: nothing until it is up.
+        if (reg.all_of<KnockedDown>(pawn)) {
+            if (f.walk != 0) {
+                stop(pawn, f);
+            }
+            continue;
+        }
         if (now() < f.dodgeUntil) {
             continue;  // out of the way of a shot: the plan waits until it has passed
         }
-        if (dodge(pawn, f)) {
+        if (dive(pawn, f) || dodge(pawn, f)) {
             continue;
         }
         if (now() >= f.nextPlan) {
             f.nextPlan = now() + rules_.planEvery;
             plan(pawn, f);
         }
+        considerThrow(pawn, f);
         act(pawn, f);
     }
 }
@@ -735,6 +756,9 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
     if (phase == ShotPhase::Aiming || phase == ShotPhase::Firing) {
         return;  // holds still and exposed until the burst is out, even if the plan has moved on
     }
+    if (explosives_ != nullptr && explosives_->throwing(pawn)) {
+        return;  // and the same through a throw's wind-up
+    }
 
     // Walking to the spot: upright, not shooting.
     if (f.walk == 1) {
@@ -927,6 +951,209 @@ bool FighterSystem::dodge(Entity pawn, Fighter& f) {
             events_->push_back(std::move(e));
         }
         return true;
+    }
+    return false;
+}
+
+namespace {
+
+// Sixteen directions, evenly round: the dive looks for a safe place along each.
+constexpr float kFightRing[16][2] = {{1.0f, 0.0f},         {0.9239f, 0.3827f},   {0.7071f, 0.7071f},   {0.3827f, 0.9239f},
+                                     {0.0f, 1.0f},         {-0.3827f, 0.9239f},  {-0.7071f, 0.7071f},  {-0.9239f, 0.3827f},
+                                     {-1.0f, 0.0f},        {-0.9239f, -0.3827f}, {-0.7071f, -0.7071f}, {-0.3827f, -0.9239f},
+                                     {0.0f, -1.0f},        {0.3827f, -0.9239f},  {0.7071f, -0.7071f},  {0.9239f, -0.3827f}};
+
+}  // namespace
+
+// A grenade about to go off close by, noticed in time (its reaction time after the throw): run to
+// the nearest place outside the blast, or behind a wall the blast can't see through, that it can
+// reach before the fuse is out; with none, lie flat. F5's sidestep grown into a dive.
+bool FighterSystem::dive(Entity pawn, Fighter& f) {
+    if (blasts_.empty() || (explosives_ != nullptr && explosives_->throwing(pawn))) {
+        return false;
+    }
+    entt::registry& reg = things_.registry();
+    const Shooter* shooter = reg.try_get<Shooter>(pawn);
+    if (shooter != nullptr && shooter->phase == ShotPhase::Firing) {
+        return false;  // mid-burst
+    }
+    const Position pos = reg.get<Position>(pawn);
+    const int reaction = combat_.reactionSteps(pawn);
+    const GrenadeDanger* threat = nullptr;
+    for (const GrenadeDanger& b : blasts_) {
+        if (b.level != pos.level || b.age < reaction || b.stepsToBlast < 1) {
+            continue;
+        }
+        if (fightDist(pos.x, pos.y, b.x, b.y) >= b.radius + rules_.diveMargin) {
+            continue;
+        }
+        if (threat == nullptr || b.stepsToBlast < threat->stepsToBlast) {
+            threat = &b;
+        }
+    }
+    if (threat == nullptr) {
+        return false;
+    }
+    const float ground = map_.heightAt(pos.x, pos.y);
+    // Cover from this blast already: a wall between it and the pawn's chest.
+    const auto shielded = [&](float px, float py, const GrenadeDanger& b) {
+        const TraceHit hit = combat_.trace(b.x, b.y, b.z + 0.3f, px, py, map_.heightAt(px, py) + 1.0f, pos.level, kNoEntity,
+                                           CellPos{-100000, -100000, pos.level}, false);
+        return hit.kind != ProjectileHitKind::None && hit.t < 0.97f;
+    };
+    if (shielded(pos.x, pos.y, *threat)) {
+        return false;
+    }
+    (void)ground;
+    Mover& mover = reg.get<Mover>(pawn);
+    const Health* health = reg.try_get<Health>(pawn);
+    const float speed = mover.metresPerStep * (health != nullptr ? health->movingFactor : 1.0f);
+    const CellPos here = cellOf(pos);
+    CellPos best = here;
+    float bestDistance = 1e30f;
+    if (speed > 0.0f) {
+        for (const float extra : {rules_.diveSafe + 0.3f, rules_.diveSafe + 1.5f, rules_.diveSafe + 3.0f}) {
+            for (const auto& dir : kFightRing) {
+                const float r = threat->radius + extra;
+                const CellPos c{static_cast<int>(std::floor(threat->x + dir[0] * r)), static_cast<int>(std::floor(threat->y + dir[1] * r)),
+                                pos.level};
+                if (!map_.walkable(c) || map_.obstacleDm(c) > 0 || map_.isDoor(c)) {
+                    continue;
+                }
+                const float cx = fightCentre(c.x);
+                const float cy = fightCentre(c.y);
+                const float distance = fightDist(pos.x, pos.y, cx, cy);
+                if (distance >= bestDistance || distance / speed > static_cast<float>(threat->stepsToBlast - 1) ||
+                    !straightWalkIsClear(map_, pos.x, pos.y, cx, cy, kPawnRadius, pos.level)) {
+                    continue;
+                }
+                // Safe from every grenade about to go off: outside its radius or behind a wall.
+                bool safe = true;
+                for (const GrenadeDanger& b : blasts_) {
+                    safe = safe && b.level == pos.level &&
+                           (fightDist(cx, cy, b.x, b.y) >= b.radius + rules_.diveSafe || shielded(cx, cy, b));
+                }
+                if (safe) {
+                    best = c;
+                    bestDistance = distance;
+                }
+            }
+            if (bestDistance < 1e29f) {
+                break;  // the nearest ring that has a way out
+            }
+        }
+    }
+    stop(pawn, f);
+    combat_.cancelAim(pawn);
+    if (bestDistance < 1e29f) {
+        // A straight run: the cells along the line.
+        std::vector<CellPos> route;
+        const float tx = fightCentre(best.x);
+        const float ty = fightCentre(best.y);
+        const int pieces = std::max(1, static_cast<int>(std::ceil(bestDistance * 2.0f)));
+        for (int i = 1; i <= pieces; ++i) {
+            const float t = static_cast<float>(i) / static_cast<float>(pieces);
+            const CellPos c{static_cast<int>(std::floor(pos.x + (tx - pos.x) * t)), static_cast<int>(std::floor(pos.y + (ty - pos.y) * t)),
+                            pos.level};
+            if (route.empty() ? !(c == here) : !(c == route.back())) {
+                route.push_back(c);
+            }
+        }
+        if (route.empty() || !(route.back() == best)) {
+            route.push_back(best);
+        }
+        combat_.setStance(pawn, Stance::Standing);
+        mover.walkTo(pos.x, pos.y, std::move(route));
+    } else {
+        combat_.setStance(pawn, Stance::Prone);  // nowhere to go: lie flat and take it
+    }
+    f.dodgeUntil = now() + threat->stepsToBlast + rules_.dodgeHoldSteps;
+    f.nextPlan = std::min(f.nextPlan, f.dodgeUntil);
+    if (events_ != nullptr) {
+        Event e;
+        e.type = EventType::PawnAction;
+        e.action = PawnAction::Dive;
+        e.thing = pawn;
+        e.def = reg.get<Thing>(pawn).def;
+        e.target = threat->grenade;
+        e.cell = best;
+        events_->push_back(std::move(e));
+    }
+    return true;
+}
+
+// A grenadier's look for a place to throw: at a group of enemies it knows (or at one it has no shot
+// at), no closer to itself than the blast reaches, with no friend in it, and only where the arc
+// really lands. The throw itself is the explosive system's (wind-up, release, flight).
+bool FighterSystem::considerThrow(Entity pawn, const Fighter& f) {
+    if (explosives_ == nullptr || f.known.empty() || (now() + static_cast<int64_t>(entt::to_integral(pawn))) % rules_.throwEvery != 0) {
+        return false;
+    }
+    if (explosives_->count(pawn) <= 0 || explosives_->throwReadyIn(pawn) > 0) {
+        return false;
+    }
+    const Shooter* shooter = things_.registry().try_get<Shooter>(pawn);
+    if (shooter != nullptr && (shooter->phase == ShotPhase::Aiming || shooter->phase == ShotPhase::Firing)) {
+        return false;
+    }
+    const PawnInfo* self = info(pawn);
+    if (self == nullptr) {
+        return false;
+    }
+    const DefId item = explosives_->firstItem(pawn);
+    const float range = explosives_->throwRange(item);
+    const float radius = explosives_->blastRadius(item);
+    if (range <= 0.0f || radius <= 0.0f) {
+        return false;
+    }
+    struct Spot {
+        Entity centre;
+        float x, y;
+        int enemies;
+        float distance;
+    };
+    std::vector<Spot> spots;
+    for (const KnownEnemy& k : f.known) {
+        const PawnInfo* p = info(k.pawn);
+        if (p == nullptr || !p->able || p->animal || p->level != self->level || now() - k.seenAt > rules_.throwMemory) {
+            continue;
+        }
+        const float distance = fightDist(self->x, self->y, p->x, p->y);
+        if (distance > range * 0.95f || distance < radius + rules_.throwSelfMargin) {
+            continue;
+        }
+        int enemies = 0;
+        for (const KnownEnemy& other : f.known) {
+            const PawnInfo* q = info(other.pawn);
+            if (q != nullptr && q->able && !q->animal && q->level == self->level && now() - other.seenAt <= rules_.throwMemory &&
+                fightDist(q->x, q->y, p->x, p->y) <= radius * 0.9f) {
+                ++enemies;
+            }
+        }
+        if (enemies < rules_.throwMinEnemies && !(enemies >= 1 && !f.canFire)) {
+            continue;
+        }
+        bool friendly = false;
+        for (const PawnInfo& r : pawns_) {
+            friendly = friendly || (r.faction == self->faction && !r.animal && r.level == self->level &&
+                                    fightDist(r.x, r.y, p->x, p->y) < radius + rules_.throwFriendMargin);
+        }
+        if (!friendly) {
+            spots.push_back(Spot{k.pawn, p->x, p->y, enemies, distance});
+        }
+    }
+    std::sort(spots.begin(), spots.end(), [](const Spot& a, const Spot& b) {
+        return a.enemies != b.enemies ? a.enemies > b.enemies : (a.distance != b.distance ? a.distance < b.distance : a.centre < b.centre);
+    });
+    int tried = 0;
+    for (const Spot& s : spots) {
+        if (++tried > 3) {
+            break;
+        }
+        ThrowPlan plan;
+        if (explosives_->planThrow(pawn, item, s.x, s.y, plan) && plan.reaches) {
+            return explosives_->throwAt(pawn, item, s.centre, s.x, s.y, false);
+        }
     }
     return false;
 }

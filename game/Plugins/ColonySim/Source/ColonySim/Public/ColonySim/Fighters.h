@@ -4,6 +4,7 @@
 #include "ColonySim/Cover.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Events.h"
+#include "ColonySim/Explosives.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/Pathfinder.h"
 #include "ColonySim/ThreatMap.h"
@@ -16,6 +17,7 @@ namespace colony {
 
 class CombatSystem;
 class DefDatabase;
+class ExplosiveSystem;
 class HealthSystem;
 class JobSystem;
 class Map;
@@ -110,6 +112,14 @@ struct FighterRules {
     float dodgeRadius = 0.6f;       // a projectile passing closer than this to the pawn's centre would hit it
     float dodgeClearance = 0.9f;    // how far from the projectile's line a sidestep has to take it
     int dodgeHoldSteps = 3;         // steps it stays out of the way after the projectile has passed
+    // F9 (docs/design/explosives.md): diving away from grenades and throwing them.
+    float diveMargin = 0.6f;        // it runs when closer than the blast radius plus this
+    float diveSafe = 0.4f;          // and wants to end this far beyond the radius (or behind cover)
+    int throwEvery = 15;            // game seconds between looks for a place to throw (staggered by pawn id)
+    int throwMinEnemies = 2;        // throws at a group of at least this many known enemies...
+    int throwMemory = 150;          // ...seen this recently (steps), or at one it has no shot at
+    float throwSelfMargin = 1.5f;   // never throws closer to itself than the radius plus this
+    float throwFriendMargin = 0.5f; // nor with a friend within the radius plus this
 };
 
 class COLONY_API FighterSystem {
@@ -122,6 +132,8 @@ public:
 
     const FighterRules& rules() const { return rules_; }
     void setEventLog(std::vector<Event>* events) { events_ = events; }
+    // Grenades (F9): fighters throw the ones on their belts and dive away from ones about to go off.
+    void setExplosives(ExplosiveSystem* explosives) { explosives_ = explosives; }
 
     // A pawn's side (kPlayerFaction without a Faction component). Different factions are enemies.
     FactionId factionOf(Entity pawn) const;
@@ -182,6 +194,8 @@ private:
 
     void plan(Entity pawn, Fighter& f);
     bool dodge(Entity pawn, Fighter& f);
+    bool dive(Entity pawn, Fighter& f);
+    bool considerThrow(Entity pawn, const Fighter& f);
     void tacticalReload(Entity pawn, const Fighter& f, bool canShoot);
     void act(Entity pawn, Fighter& f);
     void see(Entity pawn, Fighter& f, const PawnInfo& self);
@@ -212,6 +226,8 @@ private:
     std::vector<KnownEnemy> merged_;     // scratch for sharing what friends know
     std::vector<Entity> order_;
     std::vector<Incoming> incoming_;     // scratch: projectiles in flight this step, by id
+    ExplosiveSystem* explosives_ = nullptr;
+    std::vector<GrenadeDanger> blasts_;  // scratch: grenades about to go off this step, by id
     std::vector<Event>* events_ = nullptr;
     uint64_t plans_ = 0;
     uint64_t sightChecks_ = 0;

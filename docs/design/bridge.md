@@ -50,6 +50,8 @@ rest (place blueprint, designate, draft, actions) come with the tasks that build
 | `RemoveBillCommand{building, bill}` | takes a bill off | no such bill |
 | `SetBillCommand{building, bill, mode, count, suspended}` | changes a bill or pauses it | no such bill; bad count |
 | `FlickCommand{thing, on}` | opens or closes a power switch, or switches a consumer or generator on or off ([power.md](power.md)) | the building has no power part; a conduit or battery |
+| `ThrowCommand{pawn, item, target, x, y, player}` | the pawn winds up and throws a grenade from its belt at the ground under `target` or at `(x, y)` ([explosives.md](explosives.md)); `item` "" is the first kind on the belt; `player` skips the wind-up | no such grenade; downed, knocked down, mid-shot or cooling down |
+| `ExplodeCommand{x, y, radius, damage, damageType, penetration}` | dev command: a blast now ([explosives.md](explosives.md)) | unknown damage type; off the map; radius or damage not above 0 |
 | `ShortCircuitCommand{thing}` | dev command and T3's hook: empties the net's batteries, destroys a conduit or switch | no power part |
 | `PlaceFloorCommand{area, floor}` | lays a floor def over a rectangle at once; an empty `floor` takes floors off ([room-stats.md](room-stats.md)) | unknown or non-floor def; cell not on the map |
 | `AddFilthCommand{cell, kind, layers}` | puts filth down (dev, and the hook for later sources of vomit and ash) | unknown filth kind; cell not on the map |
@@ -57,7 +59,7 @@ rest (place blueprint, designate, draft, actions) come with the tasks that build
 | `DesignateCommand{area, kind}` | marks rock (`Mine`), plants (`CutPlant`) or ripe plants (`HarvestPlant`) in the rectangle for work ([mining.md](mining.md)) | `kind` is None; nothing in `area` suits |
 | `CancelDesignationsCommand{area, kind}` | takes marks off, `None` for every kind, and ends the jobs on them | nothing marked in `area` |
 | `AssignBedCommand{bed, pawn}` | the pawn owns the bed (and gives up its old one); `pawn` none empties the bed | not a bed; not a pawn with needs; the bed is full |
-| `EquipCommand{pawn, item}` | `CombatSystem::equip`: a gun in the hands or apparel on the body ([combat.md](combat.md)) | no body or dead; not a gun or apparel; someone else's; a job holds it |
+| `EquipCommand{pawn, item}` | `CombatSystem::equip`: a gun in the hands or apparel on the body ([combat.md](combat.md)); a grenade stack goes on the belt as far as it fits ([explosives.md](explosives.md)) | no body or dead; not a gun or apparel; someone else's; a job holds it |
 | `ShootCommand{pawn, target, x, y, z, player}` | `CombatSystem::shoot`: aimed (warm-up, skill spread) or the player's trigger (at once, gun spread) | no gun; downed; mid-burst or cooling down; target not a pawn on the map |
 | `SetStanceCommand{pawn, stance}` | standing, crouching or prone | not a pawn |
 | `DraftCommand{pawn, drafted}` | drafts one of the player's pawns (its job ends, the fighter AI takes it, [fighters.md](fighters.md)) or sends it back to work | not the player's pawn on the map; downed; drafted (undrafted) already |
@@ -99,7 +101,7 @@ starts, so read it after every step. Before the first step it holds what setting
 | `ThingDespawned` | `thing`, `def` | a thing leaves the map but still exists (picked up) |
 | `ThingDestroyed` | `thing`, `def` | a thing stops existing; comes after `ThingDespawned` if it was on the map |
 | `CommandFailed` | `command`, `message` | a command couldn't be applied |
-| `PawnAction` | `thing` (the pawn), `def`, `action`, `target` | a pawn did something Unreal animates: `PickUp`, `PutDown` (U5, [pawns.md](pawns.md)), `Eat`, `LieDown`, `GetUp` (C6); `Build` and `Deconstruct` (C4) when work on `target` begins; `Cook` (C7) when a run of a bill begins at the stove `target`; `Clean` (C17) when a layer of filth at `target`'s cell starts to be cleaned; `Reload` (`target` the gun) and `Dodge` (`target` the projectile, `cell` where it steps) (F5) |
+| `PawnAction` | `thing` (the pawn), `def`, `action`, `target` | a pawn did something Unreal animates: `PickUp`, `PutDown` (U5, [pawns.md](pawns.md)), `Eat`, `LieDown`, `GetUp` (C6); `Build` and `Deconstruct` (C4) when work on `target` begins; `Cook` (C7) when a run of a bill begins at the stove `target`; `Clean` (C17) when a layer of filth at `target`'s cell starts to be cleaned; `Reload` (`target` the gun) and `Dodge` (`target` the projectile, `cell` where it steps) (F5); `Throw` (a grenade wind-up begins) and `Dive` (`target` the grenade, `cell` where the pawn runs) (F9) |
 | `FrameStarted` | `thing` (the plan), `def` (the building), `cell` | a blueprint got its first materials and is a frame now; the plan itself came with a `ThingSpawned` |
 | `RecipeDone` | `thing` (the cook), `def` (the Recipes def), `target` (the stove), `cell`, `amount` (products made), `message` | one run of a bill is done; `message` is "bill finished" when a "do X times" bill reached 0 and went ([bills.md](bills.md)) |
 | `PawnInjured` | `thing`, `def` (the injury), `part`, `amount`, `cell` | a pawn got an injury (F1) |
@@ -118,6 +120,10 @@ starts, so read it after every step. Before the first step it holds what setting
 | `ShotFired` | `thing` (shooter), `def` (gun), `target` (projectile), `x, y, z` (muzzle) | a pawn fired (F2, [combat.md](combat.md)) |
 | `PowerChanged` | `thing`, `def`, `cell`, `message` ("on" or "off") | a generator, consumer or battery gained or lost power (E5, [power.md](power.md)); conduits are not announced |
 | `ShortCircuit` | `thing`, `def`, `cell`, `amount` (Wd released) | a short circuit emptied a net's batteries (E5) |
+| `GrenadeThrown` | `thing` (thrower), `def` (the grenade item), `target` (the grenade entity), `x, y, z` (release), `amount` (steps of flight) | a pawn released a grenade (F9, [explosives.md](explosives.md)); it is in `projectiles` from now |
+| `GrenadeLanded` | `thing` (grenade entity), `def` (Projectiles def), `x, y, z`, `amount` (fuse steps) | it came to rest |
+| `Explosion` | `thing` (grenade entity or none), `target` (who threw it), `def` (damage type), `amount` (radius), `x, y, z`, `cell` | a blast; the hurt pawns and broken buildings follow as their own events |
+| `PawnKnockedDown` | `thing`, `amount` (steps down), `x, y, z` | a blast threw a pawn to the ground |
 | `ProjectileHit` | `thing` (projectile), `def` (Projectiles def), `hit`, `target`, `part`, `amount`, `x, y, z`, `cell` | a projectile stopped: ground, rock, building, pawn, armor, or gone |
 
 `Things` reports its own spawns and despawns once the sim points it at the event list

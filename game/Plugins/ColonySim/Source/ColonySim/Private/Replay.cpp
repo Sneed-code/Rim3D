@@ -187,9 +187,21 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["thing"] = entt::to_integral(c.thing);
             } else if constexpr (std::is_same_v<Type, SetResearchCommand>) {
                 j["project"] = c.project;
-            } else {
-                static_assert(std::is_same_v<Type, UnlockResearchCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, UnlockResearchCommand>) {
                 j["project"] = c.project;
+            } else if constexpr (std::is_same_v<Type, ThrowCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["item"] = c.item;
+                j["target"] = entt::to_integral(c.target);
+                j["point"] = {static_cast<double>(c.x), static_cast<double>(c.y)};
+                j["player"] = c.player;
+            } else {
+                static_assert(std::is_same_v<Type, ExplodeCommand>, "write every command type");
+                j["point"] = {static_cast<double>(c.x), static_cast<double>(c.y)};
+                j["radius"] = static_cast<double>(c.radius);
+                j["damage"] = static_cast<double>(c.damage);
+                j["damageType"] = c.damageType;
+                j["penetration"] = static_cast<double>(c.penetration);
             }
         },
         logged.command);
@@ -706,6 +718,38 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = ShortCircuitCommand{static_cast<Entity>(thing)};
+    } else if (type == "Throw") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        uint32_t target = entt::to_integral(kNoEntity);
+        ThrowCommand c;
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "item", c.item, where) || !r.integer(j, "target", target, where) ||
+            !r.flag(j, "player", c.player, where)) {
+            return false;
+        }
+        const auto point = j.find("point");
+        if (point != j.end()) {
+            if (!point->is_array() || point->size() != 2 || !(*point)[0].is_number() || !(*point)[1].is_number()) {
+                return r.fail(where + ".point must be [x, y]");
+            }
+            c.x = (*point)[0].get<float>();
+            c.y = (*point)[1].get<float>();
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        c.target = static_cast<Entity>(target);
+        out.command = c;
+    } else if (type == "Explode") {
+        ExplodeCommand c;
+        if (!r.number(j, "radius", c.radius, where) || !r.number(j, "damage", c.damage, where) ||
+            !r.text(j, "damageType", c.damageType, where) || !r.number(j, "penetration", c.penetration, where)) {
+            return false;
+        }
+        const auto point = j.find("point");
+        if (point == j.end() || !point->is_array() || point->size() != 2 || !(*point)[0].is_number() || !(*point)[1].is_number()) {
+            return r.fail(where + ".point must be [x, y]");
+        }
+        c.x = (*point)[0].get<float>();
+        c.y = (*point)[1].get<float>();
+        out.command = c;
     } else if (type == "SetResearch" || type == "UnlockResearch") {
         std::string project;
         if (!r.text(j, "project", project, where)) {

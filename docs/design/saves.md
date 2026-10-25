@@ -114,6 +114,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `recreation` | 1 | `joy`: recreation, comfort and outdoors needs, tolerances, and the activity of a recreation job ([recreation.md](recreation.md)) |
 | `research` | 1 | current project, neolithic start flag, finished projects, progress of unfinished ones ([research.md](research.md)) |
 | `animals` | 1 | `SimSettings::wildAnimals`, the animal system's state (populated, percent, random stream, next herd id, over-density flag, counters) and the `animal` part of every animal ([animal-life.md](animal-life.md)) |
+| `explosives` | 1 | `belt`, `thrower`, `grenade` (a thrown grenade in flight or waiting out its fuse; an entity with no `Thing`), `knockedDown` ([explosives.md](explosives.md)) |
 | `temperature` | 1 | each enclosed room's temperature, by its anchor cell (E2) |
 
 **Commands are saved by name (S7).** The `commands` section starts with the names of the command

@@ -78,6 +78,36 @@ struct Magazine {
     int rounds = 0;
 };
 
+// On a pawn thrown to the ground by a blast (F9): prone and unable to act or walk until the steps run
+// out, then it gets back to the stance it had.
+struct KnockedDown {
+    int stepsLeft = 0;
+    Stance before = Stance::Standing;
+};
+
+// An explosion (CombatSystem::explode): a blast of `damage` that falls off to `edgeFactor` of it at
+// `radius`, is stopped by walls and cover, and reaches pawns as 2 to 4 fragments each.
+struct Explosion {
+    float x = 0.0f;  // metres; z above sea level
+    float y = 0.0f;
+    float z = 0.0f;
+    int level = 0;
+    float radius = 0.0f;
+    float damage = 0.0f;
+    DefId damageType;           // a DamageTypes def, normally Bomb
+    float penetration = 0.0f;   // armor penetration of each fragment
+    Entity source = kNoEntity;      // the grenade entity, for the event
+    Entity instigator = kNoEntity;  // who threw or planted it
+    uint64_t seed = 0;          // where its random choices come from
+};
+
+struct ExplosionResult {
+    int pawnsHurt = 0;
+    int pawnsKnocked = 0;
+    int buildingsHit = 0;
+    int buildingsDestroyed = 0;
+};
+
 // A bullet in flight. Not a Thing: it has no def of kind Things and is not in the snapshot's
 // things, but in Snapshot::projectiles. Destroyed when it hits something or flies out.
 struct Projectile {
@@ -188,13 +218,23 @@ public:
 
     // What the straight stretch from a to b meets first: ground, rock, a building (not in
     // `skipCell`'s cell) or a pawn's hitbox (not `skipPawn`). Kind None if nothing.
+    // With `pawns` false only the ground, rock and buildings count (blast lines of sight).
     TraceHit trace(float ax, float ay, float az, float bx, float by, float bz, int level, Entity skipPawn,
-                   CellPos skipCell) const;
+                   CellPos skipCell, bool pawns = true) const;
     // The point other pawns aim at on this pawn (its chest), world metres. False if not a pawn
     // on the map.
     bool aimPoint(Entity pawn, float& x, float& y, float& z) const;
     // The pawn's hitboxes as they stand now; false if it has none (no Hitboxes def, dead).
     bool hitboxesOf(Entity pawn, std::vector<HitboxView>& out) const;
+
+    // An explosion (F9, docs/design/explosives.md). Every living pawn in the radius is hurt by the share of
+    // its body the blast can see (ground, rock and buildings stop it), less with distance and for a
+    // pawn that crouches or lies, in 2 to 4 fragments that go through armor like bullets; a hard
+    // enough hit knocks the pawn down and pushes it away; buildings in the radius lose hit points
+    // (walls the most). Events: PawnInjured... and one Explosion.
+    ExplosionResult explode(const Explosion& explosion);
+    // Steps left of a pawn's knock-down (0: not knocked down).
+    int knockedDownFor(Entity pawn) const;
 
     // Hashes the combat components of one thing (Sim::stateHash calls it for every thing).
     void hashThing(Entity e, StateHasher& h) const;
@@ -213,6 +253,10 @@ private:
     void updateShooter(Entity pawn, Shooter& s, Rng& rng);
     void startReload(Entity pawn, Shooter& s, Entity weapon, int extraSteps);
     void drop(Entity pawn, Entity item);
+    // The armor rolls of a hit on `part` (shared by bullets and fragments): the damage left, 0 if
+    // the armor turned it away, and the damage type (sharp may become blunt). Uses `rng`.
+    float armorPass(Entity pawn, int part, DefId& type, float damage, float penetration, Rng& rng) const;
+    int pickOutsidePart(Entity pawn, Rng& rng) const;
 };
 
 }  // namespace colony
