@@ -85,6 +85,14 @@ struct ThingView {
     float facingY = 0.0f;
     DefId weapon;
     int shotReadyIn = 0;
+    // Pawns: their side (1 is the player's), and for fighters (docs/design/fighters.md) whether the
+    // player drafted them, whom they shoot at, the cell they hold and whether they are falling back.
+    uint32_t faction = 1;
+    bool drafted = false;
+    bool fighting = false;
+    Entity fightTarget = kNoEntity;
+    CellPos fightSpot;
+    bool fallingBack = false;
 };
 
 // A bullet in flight (docs/design/combat.md). Unreal draws a tracer along its velocity; it

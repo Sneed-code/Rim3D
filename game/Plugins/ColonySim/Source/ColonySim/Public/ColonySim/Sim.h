@@ -29,6 +29,7 @@ class Construction;
 class DefDatabase;
 struct Colonist;
 class Designations;
+class FighterSystem;
 class JobSystem;
 class Mineables;
 class MovementSystem;
@@ -166,6 +167,10 @@ public:
     JobSystem& jobs() { return *jobs_; }
     const JobSystem& jobs() const { return *jobs_; }
 
+    // Drafted colonists and other factions' pawns: where to stand, whom to shoot (docs/design/fighters.md).
+    FighterSystem& fighters() { return *fighters_; }
+    const FighterSystem& fighters() const { return *fighters_; }
+
     // Blueprints, frames and taking buildings down (docs/design/construction.md).
     Construction& construction() { return *construction_; }
     const Construction& construction() const { return *construction_; }
@@ -219,6 +224,7 @@ private:
     SimStats stats_;
     std::unique_ptr<Construction> construction_;
     std::unique_ptr<JobSystem> jobs_;  // after everything it holds a reference to
+    std::unique_ptr<FighterSystem> fighters_;  // after the job system
     std::vector<std::string> setupErrors_;
     std::vector<std::pair<uint64_t, Command>> pending_;  // id, command
     uint64_t submitted_ = 0;
