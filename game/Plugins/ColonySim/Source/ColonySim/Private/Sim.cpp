@@ -616,6 +616,14 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!defense_->rearm(rearm->trap, &error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* carry = std::get_if<CarryWeaponCommand>(&command)) {
+        if (!combat_->carryWeapon(carry->pawn, carry->item, &error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* switchWeapon = std::get_if<SwitchWeaponCommand>(&command)) {
+        if (!combat_->switchWeapon(switchWeapon->pawn, switchWeapon->slot, &error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* talentXp = std::get_if<AddTalentXpCommand>(&command)) {
         if (!talents_->addXp(talentXp->pawn, talentXp->amount, events_, error)) {
             commandFailed(id, error);
@@ -1178,6 +1186,19 @@ void Sim::writeSnapshot(Snapshot& out) const {
         }
         if (const Gear* gear = reg.try_get<Gear>(entity); gear != nullptr && gear->weapon != kNoEntity) {
             view.weapon = reg.get<Thing>(gear->weapon).def;
+        }
+        if (const Gear* gear = reg.try_get<Gear>(entity); gear != nullptr && !(gear->weapon == kNoEntity && gear->stowed.empty())) {
+            for (int slot = 0; slot < kWeaponSlotCount; ++slot) {
+                const Entity item = combat_->weaponIn(entity, static_cast<WeaponSlot>(slot));
+                if (item != kNoEntity) {
+                    view.carried[slot] = reg.get<Thing>(item).def;
+                }
+            }
+            WeaponSlot target = WeaponSlot::Primary;
+            if (combat_->switchTarget(entity, target)) {
+                view.switchSlot = static_cast<uint8_t>(target);
+                view.switchStepsLeft = combat_->switchStepsLeft(entity);
+            }
         }
         if (const Gear* gear = reg.try_get<Gear>(entity)) {
             view.firstApparel = static_cast<uint32_t>(out.apparel.size());

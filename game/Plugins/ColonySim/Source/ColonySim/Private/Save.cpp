@@ -297,6 +297,8 @@ struct SaveEntity {
     std::optional<SaveApparel> apparel;     // section "apparel" (format 20 on)
     std::optional<RecoilKick> kick;         // section "feel"
     std::optional<DodgeRoll> roll;          // section "feel"
+    std::optional<std::vector<Entity>> stowed;  // section "weapons" (P1): Gear::stowed
+    std::optional<WeaponSwitch> weaponSwitch;   // section "weapons"
     std::optional<Turret> turret;           // section "defense" (F11)
     std::optional<Trap> trap;               // section "defense" (F11)
 };
@@ -1112,6 +1114,13 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("amount", c.amount);
             } else if constexpr (std::is_same_v<Type, RearmTrapCommand>) {
                 ar.value("trap", c.trap);
+            } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.value("item", c.item);
+            } else if constexpr (std::is_same_v<Type, SwitchWeaponCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.value("slot", c.slot);
+                ar.require(static_cast<int>(c.slot) < kWeaponSlotCount, "the save file has a bad weapon slot");
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }
@@ -1587,6 +1596,18 @@ void saveKickPart(Ar& ar, RecoilKick& k) {
     ar.value("sinceShot", k.sinceShot);
     ar.require(std::isfinite(k.up) && std::isfinite(k.side) && k.shots >= 0 && k.sinceShot >= 0,
                "the save file has a bad gun kick");
+}
+
+template <typename Ar>
+void saveStowedPart(Ar& ar, std::vector<Entity>& items) {
+    ar.list("items", items, [&](Entity& item) { ar.value(nullptr, item); });
+}
+
+template <typename Ar>
+void saveWeaponSwitchPart(Ar& ar, WeaponSwitch& w) {
+    ar.value("to", w.to);
+    ar.value("stepsLeft", w.stepsLeft);
+    ar.require(w.stepsLeft >= 0 && (w.stepsLeft == 0 || w.to != kNoEntity), "the save file has a bad weapon switch");
 }
 
 template <typename Ar>
@@ -2355,6 +2376,10 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("nextOutfitId", d.nextOutfitId);
         ar.list("outfits", d.outfits, [&](OutfitPolicy& o) { saveOutfitPolicy(ar, o); });
     });
+    ar.section("weapons", 1, [&] {
+        saveParts(ar, "stowed", e, &SaveEntity::stowed, [&](std::vector<Entity>& items) { saveStowedPart(ar, items); });
+        saveParts(ar, "switch", e, &SaveEntity::weaponSwitch, [&](WeaponSwitch& w) { saveWeaponSwitchPart(ar, w); });
+    });
     ar.section("feel", 1, [&] {
         saveParts(ar, "kick", e, &SaveEntity::kick, [&](RecoilKick& k) { saveKickPart(ar, k); });
         saveParts(ar, "roll", e, &SaveEntity::roll, [&](DodgeRoll& r) { saveRollPart(ar, r); });
@@ -2695,6 +2720,12 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const DodgeRoll* roll = reg.try_get<DodgeRoll>(e)) {
             out.roll = *roll;
+        }
+        if (const Gear* gear = reg.try_get<Gear>(e); gear != nullptr && !gear->stowed.empty()) {
+            out.stowed = gear->stowed;
+        }
+        if (const WeaponSwitch* change = reg.try_get<WeaponSwitch>(e)) {
+            out.weaponSwitch = *change;
         }
         if (const Animal* animal = reg.try_get<Animal>(e)) {
             out.animal = *animal;
@@ -3155,6 +3186,16 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.roll) {
             reg.emplace<DodgeRoll>(entity, *e.roll);
         }
+        if (e.stowed) {
+            if (!reg.all_of<Gear>(entity)) {
+                error = "the save has carried weapons on a pawn without gear";
+                return false;
+            }
+            reg.get<Gear>(entity).stowed = *e.stowed;
+        }
+        if (e.weaponSwitch) {
+            reg.emplace<WeaponSwitch>(entity, *e.weaponSwitch);
+        }
         if (e.joy) {
             reg.emplace<Joy>(entity, e.joy->joy);
             if (!e.joy->activity.empty()) {
@@ -3227,6 +3268,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             const Gear& gear = reg.get<Gear>(static_cast<Entity>(e.id));
             gearExists = exists(gear.weapon);
             for (const Entity a : gear.apparel) {
+                gearExists = gearExists && a != kNoEntity && reg.valid(a);
+            }
+            for (const Entity a : gear.stowed) {
                 gearExists = gearExists && a != kNoEntity && reg.valid(a);
             }
         }

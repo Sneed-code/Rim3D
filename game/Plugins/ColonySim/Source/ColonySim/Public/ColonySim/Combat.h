@@ -6,6 +6,7 @@
 #include "ColonySim/Entity.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Random.h"
+#include "ColonySim/WeaponSlot.h"
 
 #include <cstdint>
 #include <functional>
@@ -45,8 +46,19 @@ struct Posture {
 // What a pawn carries and wears: things that are off the map (no Position), each with an
 // EquippedBy naming the pawn.
 struct Gear {
-    Entity weapon = kNoEntity;
+    Entity weapon = kNoEntity;    // in the hands
     std::vector<Entity> apparel;  // in the order put on
+    // Weapons carried on the body but not in the hands (P1): at most one per slot, counting the one in
+    // the hands, so at most two here. They add to the load the pawn carries.
+    std::vector<Entity> stowed;
+};
+
+// On a pawn switching weapons (P1): the weapon in `to` (a stowed one) comes to the hands when the steps run out,
+// and the one in the hands goes to the belt. Until then it can't shoot, reload or swing. Added by the first
+// switch and kept.
+struct WeaponSwitch {
+    Entity to = kNoEntity;
+    int stepsLeft = 0;  // 0: not switching
 };
 
 struct EquippedBy {
@@ -225,9 +237,28 @@ public:
     // The item may be on the map (it is picked up) or not. False, changing nothing, if the pawn
     // has no body, is dead, or the item is neither a gun nor apparel, or is someone else's.
     bool equip(Entity pawn, Entity item, std::string* why = nullptr);
-    // Takes one worn piece (or the gun) off and puts it on the ground where the pawn stands. False if
-    // the pawn doesn't have it.
+    // Takes one worn piece (or a carried weapon) off and puts it on the ground where the pawn stands.
+    // False if the pawn doesn't have it.
     bool unequip(Entity pawn, Entity item);
+
+    // Several weapons (P1, docs/design/weapons.md). The slot a weapon def goes in; false if it is no weapon.
+    bool weaponSlot(DefId def, WeaponSlot& out) const;
+    // Adds a weapon to what the pawn carries: into the hands if they are empty, else on the body. The
+    // weapon already carried in its slot (hands or body) is dropped where the pawn stands. The item may lie on the
+    // map. False, changing nothing, if the pawn has no body or is dead, or the item is no weapon or is someone else's.
+    bool carryWeapon(Entity pawn, Entity item, std::string* why = nullptr);
+    // Starts a switch to the weapon in `slot`: a time that depends on the slot (CombatRules `weaponSwitchSteps`)
+    // in which the pawn can't shoot, reload or swing. False, changing nothing, if the pawn carries nothing in
+    // that slot, has it in the hands already, is downed, rolling or knocked down, is mid-shot or reloading, or is
+    // switching already.
+    bool switchWeapon(Entity pawn, WeaponSlot slot, std::string* why = nullptr);
+    bool switching(Entity pawn) const;
+    int switchStepsLeft(Entity pawn) const;
+    // The weapon in a slot, in the hands or on the body (kNoEntity if none), and which slot the hands hold.
+    Entity weaponIn(Entity pawn, WeaponSlot slot) const;
+    bool handsSlot(Entity pawn, WeaponSlot& out) const;
+    // The slot a switch is going to (false if the pawn is not switching).
+    bool switchTarget(Entity pawn, WeaponSlot& out) const;
     // Takes `hitPoints` off a worn piece of apparel; at none it is destroyed (an ApparelDestroyed
     // event). Used when armor takes a hit and by wear and tear (C15).
     void damageApparel(Entity pawn, Entity item, int hitPoints);
@@ -381,6 +412,7 @@ private:
                   float y, float z, float spreadSlope, Rng& rng, float kickUp, float kickSide, Posture* posture);
     void stepRolls();
     void stepKicks();
+    void stepSwitches();
 };
 
 }  // namespace colony

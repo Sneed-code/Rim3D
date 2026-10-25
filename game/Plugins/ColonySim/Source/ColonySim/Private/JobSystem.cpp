@@ -3,6 +3,7 @@
 #include "ColonySim/Animals.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Clock.h"
+#include "ColonySim/Combat.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Fighters.h"
@@ -525,19 +526,37 @@ double JobSystem::massOf(DefId def) const {
     return def.valid() && def.value < masses_.size() ? masses_[def.value] : 1.0;
 }
 
-// The mass of the pawn's hands: its capacity decides how many fit, whole stacks or not.
+// The mass of the weapons a pawn carries on its body besides the one in its hands (P1). They take
+// room in the load, so a pawn with a rifle and a sidearm on it hauls a little less and walks a little slower.
+double JobSystem::bodyWeaponMass(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Gear* gear = reg.try_get<Gear>(pawn);
+    double mass = 0.0;
+    if (gear != nullptr) {
+        for (const Entity item : gear->stowed) {
+            mass += reg.valid(item) && reg.all_of<Thing>(item) ? massOf(reg.get<Thing>(item).def) : 0.0;
+        }
+    }
+    return mass;
+}
+
+// The mass of the pawn's hands: its capacity less the weapons on its body decides how many fit, whole stacks or not.
 int JobSystem::carryLimit(Entity pawn, DefId def) const {
     const double mass = std::max(massOf(def), 1e-6);
-    return std::max(1, static_cast<int>(std::floor(carryCapacity(pawn) / mass + 1e-9)));
+    const double room = std::max(carryCapacity(pawn) - bodyWeaponMass(pawn), 0.0);
+    return std::max(1, static_cast<int>(std::floor(room / mass + 1e-9)));
 }
 
 float JobSystem::loadSpeedFactor(Entity pawn) const {
     const entt::registry& reg = things_.registry();
+    double mass = bodyWeaponMass(pawn);
     const Carrying* carrying = reg.try_get<Carrying>(pawn);
-    if (carrying == nullptr || !reg.valid(carrying->thing) || !reg.all_of<StackCount, Thing>(carrying->thing)) {
+    if (carrying != nullptr && reg.valid(carrying->thing) && reg.all_of<StackCount, Thing>(carrying->thing)) {
+        mass += reg.get<StackCount>(carrying->thing).count * massOf(reg.get<Thing>(carrying->thing).def);
+    }
+    if (mass <= 0.0) {
         return 1.0f;
     }
-    const double mass = reg.get<StackCount>(carrying->thing).count * massOf(reg.get<Thing>(carrying->thing).def);
     const double fraction = std::clamp(mass / std::max(carryCapacity(pawn), 1e-6), 0.0, 1.0);
     return static_cast<float>(1.0 - carrySlowdown_ * fraction);
 }

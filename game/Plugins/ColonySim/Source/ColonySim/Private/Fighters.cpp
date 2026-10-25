@@ -106,6 +106,9 @@ void fightReadRules(const DefDatabase& defs, FighterRules& r) {
     whole("throwMemory", r.throwMemory);
     num("throwSelfMargin", r.throwSelfMargin);
     num("throwFriendMargin", r.throwFriendMargin);
+    num("switchMeleeRange", r.switchMeleeRange);
+    num("switchSidearmRange", r.switchSidearmRange);
+    num("switchMargin", r.switchMargin);
     r.throwEvery = std::max(1, r.throwEvery);
     r.planEvery = std::max(1, r.planEvery);
     r.threats = std::clamp(r.threats, 1, kFightMaxThreats);
@@ -888,6 +891,68 @@ void FighterSystem::planGoal(Entity pawn, Fighter& f, const PawnInfo& self) {
     }
 }
 
+// Several weapons (P1): a fighter with more than one picks by the distance to its target: a melee weapon
+// when it is at arm's length, a sidearm in the middle distance, the rifle beyond. The weapon in its hands
+// keeps its band a little longer (switchMargin) so a target on the edge does not make it flip back and forth,
+// and a gun that can't reach is passed over. A switch takes a while (CombatRules weaponSwitchSteps), in which it
+// neither shoots nor swings.
+void FighterSystem::chooseWeapon(Entity pawn, const Fighter& f) {
+    entt::registry& reg = things_.registry();
+    const Gear* gear = reg.try_get<Gear>(pawn);
+    if (gear == nullptr || gear->stowed.empty() || combat_.switching(pawn)) {
+        return;
+    }
+    const PawnInfo* self = info(pawn);
+    const PawnInfo* target = info(f.target);
+    if (self == nullptr || target == nullptr || !target->able || target->level != self->level) {
+        return;
+    }
+    const float d = fightDist(self->x, self->y, target->x, target->y);
+    WeaponSlot hands = WeaponSlot::Primary;
+    const bool armed = combat_.handsSlot(pawn, hands);
+    const float meleeBand = rules_.switchMeleeRange + (armed && hands == WeaponSlot::Melee ? rules_.switchMargin : 0.0f);
+    const float sidearmBand = rules_.switchSidearmRange + (armed && hands == WeaponSlot::Sidearm ? rules_.switchMargin : 0.0f);
+    static constexpr WeaponSlot kClose[kWeaponSlotCount] = {WeaponSlot::Melee, WeaponSlot::Sidearm, WeaponSlot::Primary};
+    static constexpr WeaponSlot kMiddle[kWeaponSlotCount] = {WeaponSlot::Sidearm, WeaponSlot::Primary, WeaponSlot::Melee};
+    static constexpr WeaponSlot kFar[kWeaponSlotCount] = {WeaponSlot::Primary, WeaponSlot::Sidearm, WeaponSlot::Melee};
+    const WeaponSlot* order = d <= meleeBand ? kClose : d <= sidearmBand ? kMiddle : kFar;
+
+    const auto reach = [&](Entity item) {
+        const DefId def = reg.get<Thing>(item).def;
+        return def.value < range_.size() ? range_[def.value] : 0.0f;
+    };
+    bool found = false;
+    WeaponSlot pick = WeaponSlot::Primary;
+    for (int i = 0; i < kWeaponSlotCount && !found; ++i) {
+        const Entity item = combat_.weaponIn(pawn, order[i]);
+        if (item != kNoEntity && (order[i] == WeaponSlot::Melee || reach(item) >= d)) {
+            pick = order[i];
+            found = true;
+        }
+    }
+    if (!found) {
+        // Nothing reaches: keep a gun already in the hands, else take the one that reaches furthest.
+        if (armed && hands != WeaponSlot::Melee) {
+            return;
+        }
+        float best = 0.0f;
+        for (int i = 0; i < kWeaponSlotCount; ++i) {
+            const Entity item = combat_.weaponIn(pawn, order[i]);
+            if (item != kNoEntity && order[i] != WeaponSlot::Melee && reach(item) > best) {
+                best = reach(item);
+                pick = order[i];
+                found = true;
+            }
+        }
+        if (!found) {
+            return;
+        }
+    }
+    if (!armed || hands != pick) {
+        combat_.switchWeapon(pawn, pick);
+    }
+}
+
 void FighterSystem::act(Entity pawn, Fighter& f) {
     entt::registry& reg = things_.registry();
     Mover& mover = reg.get<Mover>(pawn);
@@ -901,6 +966,7 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
     if (explosives_ != nullptr && explosives_->throwing(pawn)) {
         return;  // and the same through a throw's wind-up
     }
+    chooseWeapon(pawn, f);
     if (meleeAct(pawn, f)) {
         return;  // swinging, or an enemy in reach to swing at (F8)
     }

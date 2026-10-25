@@ -261,10 +261,16 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["talent"] = c.talent;
             } else if constexpr (std::is_same_v<Type, RearmTrapCommand>) {
                 j["trap"] = entt::to_integral(c.trap);
-            } else {
-                static_assert(std::is_same_v<Type, AddTalentXpCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, AddTalentXpCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["amount"] = c.amount;
+            } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["item"] = entt::to_integral(c.item);
+            } else {
+                static_assert(std::is_same_v<Type, SwitchWeaponCommand>, "write every command type");
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["slot"] = static_cast<int>(c.slot);
             }
         },
         logged.command);
@@ -952,6 +958,29 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         c.trap = static_cast<Entity>(trap);
+        out.command = std::move(c);
+    } else if (type == "CarryWeapon") {
+        CarryWeaponCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        uint32_t item = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "item", item, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        c.item = static_cast<Entity>(item);
+        out.command = std::move(c);
+    } else if (type == "SwitchWeapon") {
+        SwitchWeaponCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        uint32_t slot = 0;
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "slot", slot, where)) {
+            return false;
+        }
+        if (slot >= static_cast<uint32_t>(kWeaponSlotCount)) {
+            return r.fail(where + ".slot must be 0 (Primary), 1 (Sidearm) or 2 (Melee)");
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        c.slot = static_cast<WeaponSlot>(slot);
         out.command = std::move(c);
     } else if (type == "AddTalentXp") {
         AddTalentXpCommand c;

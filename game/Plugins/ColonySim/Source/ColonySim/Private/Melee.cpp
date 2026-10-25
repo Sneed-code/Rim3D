@@ -311,7 +311,7 @@ bool MeleeSystem::ready(Entity pawn) const {
         return false;
     }
     const Melee* m = reg.try_get<Melee>(pawn);
-    return m == nullptr || m->phase == MeleePhase::Ready;
+    return (m == nullptr || m->phase == MeleePhase::Ready) && !combat_.switching(pawn);
 }
 
 bool MeleeSystem::winding(Entity pawn) const {
@@ -342,6 +342,9 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
     }
     if (combat_.rollLocked(pawn)) {
         return fail("rolling");
+    }
+    if (combat_.switching(pawn)) {
+        return fail("switching weapons");
     }
     if (const Shooter* s = reg.try_get<Shooter>(pawn); s != nullptr && (s->phase == ShotPhase::Aiming || s->phase == ShotPhase::Firing)) {
         return fail("busy shooting");

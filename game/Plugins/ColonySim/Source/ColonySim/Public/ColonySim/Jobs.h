@@ -368,6 +368,8 @@ public:
     double massOf(DefId def) const;
     // 1 with empty hands, down to 1 - `carrySlowdown` at a full load: what the pawn's walking speed is multiplied by.
     float loadSpeedFactor(Entity pawn) const;
+    // The mass of the weapons the pawn carries on its body (P1); it counts in the load.
+    double bodyWeaponMass(Entity pawn) const;
     int stackLimit(DefId def) const;
 
 private:
