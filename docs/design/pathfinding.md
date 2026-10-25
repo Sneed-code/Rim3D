@@ -93,7 +93,8 @@ wait in steps.
 
 ## Not done here
 
-- **Costs.** Every walkable cell costs the same. Doors and known danger go into the cell cost and
+- **Costs.** Every walkable cell costs the same, except a door cell (+3.5 m, `DoorRules.pathCost`, in the region
+  route and the cell search; [rooms.md](rooms.md)). Known danger goes into the cell cost and
   the region hop cost later (the raid tasks for danger). Terrain speed and slope slow the walk
   (S4) but do not shape the route yet; [movement.md](movement.md) says why.
 - **Smoothing and local avoidance** are S4: [movement.md](movement.md). The pawn takes a path

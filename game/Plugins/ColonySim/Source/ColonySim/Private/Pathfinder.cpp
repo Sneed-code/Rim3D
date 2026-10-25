@@ -466,7 +466,8 @@ Pathfinder::Outcome Pathfinder::runRoute(int64_t& work, int64_t budget) {
         }
         for (const RegionLink& link : regions.region(node).links) {
             if (rClosed_[link.other] != gen) {
-                pushRegion(link.other, node, g + pathOctile(link.x - px, link.y - py), link.x, link.y,
+                const float enter = regions.region(link.other).kind == RegionKind::Door ? doorCost_ : 0.0f;
+                pushRegion(link.other, node, g + pathOctile(link.x - px, link.y - py) + enter, link.x, link.y,
                            pathOctile(gx - link.x, gy - link.y), gen);
             }
         }
@@ -550,6 +551,7 @@ Pathfinder::Outcome Pathfinder::runCells(int64_t& work, int64_t budget) {
     const int h = map_.height();
     const int goal = map_.index(goal_);
     const RegionId* regionOf = map_.regions().regionIdsOnLevel(goal_.level);  // kNoRegion: can't be walked
+    const Passage* passage = map_.passageOnLevel(goal_.level);
     const auto at = [](auto& v, int i) -> auto& { return v[static_cast<size_t>(i)]; };
 
     static constexpr int kDx[8] = {1, -1, 0, 0, 1, 1, -1, -1};
@@ -592,7 +594,7 @@ Pathfinder::Outcome Pathfinder::runCells(int64_t& work, int64_t budget) {
             if (at(closed_, n) == gen) {
                 continue;
             }
-            const float ng = at(g_, c) + (diagonal ? kPathDiagonalCost : 1.0f);
+            const float ng = at(g_, c) + (diagonal ? kPathDiagonalCost : 1.0f) + (passage[n] == Passage::Door ? doorCost_ : 0.0f);
             if (at(seen_, n) != gen || ng < at(g_, n)) {
                 at(seen_, n) = gen;
                 at(g_, n) = ng;

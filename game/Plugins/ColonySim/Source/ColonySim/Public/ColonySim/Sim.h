@@ -5,6 +5,7 @@
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Cover.h"
+#include "ColonySim/Doors.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Grid.h"
@@ -33,6 +34,7 @@ class MoodSystem;
 class NeedsSystem;
 class Plants;
 class Regions;
+class Rooms;
 class Things;
 class Zones;
 struct Snapshot;
@@ -145,6 +147,10 @@ public:
     // Problems setting up the start (e.g. a def the settings name is missing). Empty when fine.
     const std::vector<std::string>& setupErrors() const { return setupErrors_; }
 
+    // Rooms, roofs and roles (docs/design/rooms.md). Brought up to date at the end of every step.
+    Rooms& rooms() { return *rooms_; }
+    const Rooms& rooms() const { return *rooms_; }
+
     // Stockpile zones (docs/design/jobs.md).
     const Zones& zones() const { return *zones_; }
     // Work types, the think list, jobs and reservations (docs/design/jobs.md).
@@ -186,6 +192,8 @@ private:
     std::unique_ptr<Things> things_;
     std::unique_ptr<Plants> plants_;
     std::unique_ptr<MovementSystem> movement_;
+    std::unique_ptr<Rooms> rooms_;
+    DoorNumbers doorNumbers_;  // for the snapshot's door animation
     std::unique_ptr<HealthSystem> health_;
     std::unique_ptr<NeedsSystem> needs_;
     std::unique_ptr<MoodSystem> mood_;

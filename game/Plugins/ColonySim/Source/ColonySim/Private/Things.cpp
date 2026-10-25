@@ -3,6 +3,7 @@
 #include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Cover.h"
+#include "ColonySim/Doors.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Needs.h"
@@ -100,6 +101,9 @@ Entity Things::make(DefId defId, int stackCount) {
             footprint.blocksMovement = !footprint.isDoor && def.text("passability") == "Impassable";
             footprint.obstacleDm = obstacleFromFill(def.number("fillPercent"));
             registry_.emplace<Footprint>(thing, footprint);
+            if (footprint.isDoor) {
+                registry_.emplace<Door>(thing);  // closed (Doors.h)
+            }
             if (def.flag("building.bed")) {
                 registry_.emplace<Bed>(thing);  // who sleeps in it (Needs.h)
             }

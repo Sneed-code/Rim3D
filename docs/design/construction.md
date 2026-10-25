@@ -126,7 +126,8 @@ others. All of it is in `Sim::stateHash`. Saves of formats 6 and 7 still load.
 
 - Failed construction. RimWorld lets low skill ruin a build (`ConstructSuccessChance`); we have no
   failures, and builders don't gain Construction XP yet (no skill learning in the sim at all).
-- Repair, roofs and rooms (C5), replacing a building with a better stuff, minifying and moving furniture.
+- Repair, replacing a building with a better stuff, minifying and moving furniture. Roofs and rooms are not
+  built: they follow from the walls ([rooms.md](rooms.md)).
 - Walls over water, terrain affordances and floors; blueprint rules like "doors only between walls".
 - Materials come from any free stack on the map, as RimWorld's do; forbidden items, "build from
   stockpile only" and small-volume stuffs (x10 counts) are not here.

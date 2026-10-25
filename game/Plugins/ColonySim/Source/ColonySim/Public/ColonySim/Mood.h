@@ -12,6 +12,7 @@ namespace colony {
 
 struct Event;
 class NeedsSystem;
+class Rooms;
 class Things;
 
 // Mood and thoughts (task C9). See docs/design/mood.md.
@@ -69,6 +70,9 @@ class COLONY_API MoodSystem {
 public:
     MoodSystem(Things& things, const NeedsSystem& needs, const DefDatabase& defs);
 
+    // Where a pawn slept decides "slept outside" (docs/design/rooms.md); without rooms nothing is outside.
+    void setRooms(Rooms* rooms) { rooms_ = rooms; }
+
     const MoodRules& rules() const { return rules_; }
     // The mood the pawn is heading for (not clamped to the 0 to 100 scale), or its base if it has none.
     float target(Entity pawn, int64_t now) const;
@@ -94,6 +98,7 @@ private:
     void addMemory(Mood& mood, const std::string& trigger, int64_t now);
 
     Things& things_;
+    Rooms* rooms_ = nullptr;
     const NeedsSystem& needs_;
     const DefDatabase& defs_;
     MoodRules rules_;

@@ -111,8 +111,9 @@ rotation of what they will be ([construction.md](construction.md)).
 Since F2 pawns also have
 `stance` (prone when downed or dead), `facingX`/`facingY`, the `weapon` in their hands and
 `shotReadyIn`, and `Snapshot::projectiles` lists every bullet in flight ([combat.md](combat.md)).
-Later tasks add what they draw
-and show: pawn info, the work tab, room stats.
+Since C5 a door's `ThingView` has `doorOpen` (0 to 1) and the snapshot has `rooms` (the enclosed rooms with role and
+size), `roofCells` (the thin roof) and `roofChanges` ([rooms.md](rooms.md)).
+Later tasks add what they draw and show: pawn info, the work tab.
 
 Unreal reads only snapshots and events, never the registry or `Things.h`. That lets the sim move to
 its own thread later: it will write snapshots into a buffer that Unreal swaps, with no change to
