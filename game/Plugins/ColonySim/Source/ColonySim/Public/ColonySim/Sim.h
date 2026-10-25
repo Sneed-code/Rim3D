@@ -17,6 +17,7 @@
 namespace colony {
 
 class DefDatabase;
+class Regions;
 class Things;
 
 struct SimSettings {
@@ -52,6 +53,8 @@ public:
 
     const GameTime& time() const { return time_; }
     const Map& map() const { return map_; }
+    // Regions and reachability (docs/design/regions.md). Queries may rebuild, so not const.
+    Regions& regions() { return map_.regions(); }
     uint64_t seed() const { return settings_.seed; }
 
     // Every pawn, item and building (docs/design/things.md).

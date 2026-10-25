@@ -1,6 +1,6 @@
 # Status
 
-Updated 2026-10-24.
+Updated 2026-10-25.
 
 ## Where we are
 
@@ -20,12 +20,14 @@ Stage 0 in short:
   game thread through Stage 1). Stage 1 is planned as 43 one-sitting tasks in
   `docs/plans/stage-1.md`.
 
-Things (pawns, items, buildings) are EnTT entities made from defs since S1. The Stage 0 hauling
-job (now in `Sim.cpp`) and cell A* (`Pathfinder`) are still placeholders; C1 and S3 replace them.
+Things (pawns, items, buildings) are EnTT entities made from defs since S1. Since S2 the map has
+regions (16 m blocks, doors as their own regions, links, reachability groups; `Map::regions()`).
+The Stage 0 hauling job (now in `Sim.cpp`) and cell A* (`Pathfinder`) are still placeholders; C1
+and S3 replace them.
 
 ## Stage 1 progress
 
-4 of 43 tasks done (D1, D2, U1, S1). Tick tasks in `docs/plans/stage-1.md` as they merge.
+5 of 43 tasks done (D1, D2, U1, S1, S2). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -42,8 +44,14 @@ Wave 2:
 - **D3** (PC light, Sonnet medium): runs the importer on sneed's PC. `simrun --pawns/--items`
   needs its `Human` and `Steel` Things defs.
 
-Wave 3, both cloud, can run at once now that S1 is merged: **S2** regions and reachability (Opus
-high) and **S5** commands, events, snapshot and replays (Opus high).
+Wave 3, both cloud:
+- ~~**S2** regions and reachability~~ done: `docs/design/regions.md`. A door is a Things def with
+  `thingClass` `Building_Door`. `simrun --regions FILE` draws the regions.
+- **S5** commands, events, snapshot and replays (Opus high).
+
+Wave 4, now open (all cloud): **S3** hierarchical pathfinding (Opus high, needs S2), **F3** cover,
+sight and threat maps (Sonnet high, needs S2), and once S5 is merged **S6** save and load (Sonnet
+high). C2, C8 and F1 in wave 4 also wait for **D3** (the RimWorld import on sneed's PC).
 
 ## Waiting on sneed
 

@@ -1,6 +1,7 @@
 #include "ColonySim/Map.h"
 
 #include "ColonySim/Random.h"
+#include "ColonySim/Regions.h"
 
 #include <cmath>
 
@@ -56,20 +57,30 @@ Map::Map(const MapSettings& settings)
       groundHeight_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), 0.0f),
       terrain_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), Terrain::Soil),
       building_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), kNoEntity),
-      blocked_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), 0) {
+      passage_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), Passage::Open),
+      regions_(std::make_unique<Regions>(*this)) {
     if (!settings.flat) {
         generate();
     }
 }
 
-void Map::setBuilding(CellPos c, Entity building, bool blocksMovement) {
+Map::~Map() = default;
+
+Regions& Map::regions() {
+    return *regions_;
+}
+
+void Map::setBuilding(CellPos c, Entity building, Passage passage) {
     const size_t i = static_cast<size_t>(index(c));
     building_[i] = building;
-    blocked_[i] = blocksMovement ? 1 : 0;
+    if (passage_[i] != passage) {
+        passage_[i] = passage;
+        regions_->markDirty(c);
+    }
 }
 
 void Map::clearBuilding(CellPos c) {
-    setBuilding(c, kNoEntity, false);
+    setBuilding(c, kNoEntity, Passage::Open);
 }
 
 void Map::generate() {
@@ -115,7 +126,7 @@ uint64_t Map::contentHash() const {
         mix(static_cast<uint64_t>(static_cast<int64_t>(std::lround(groundHeight_[i] * 100.0f))));
         mix(static_cast<uint64_t>(terrain_[i]));
         mix(static_cast<uint64_t>(entt::to_integral(building_[i])));
-        mix(static_cast<uint64_t>(blocked_[i]));
+        mix(static_cast<uint64_t>(passage_[i]));
     }
     return hash;
 }

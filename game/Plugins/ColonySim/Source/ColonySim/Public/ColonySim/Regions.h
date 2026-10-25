@@ -1,0 +1,120 @@
+#pragma once
+
+#include "ColonySim/Api.h"
+#include "ColonySim/Grid.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <vector>
+
+namespace colony {
+
+class Map;
+
+// Regions and reachability, as RimWorld's regions. See docs/design/regions.md.
+//
+// Walkable cells are grouped into regions: 4-connected areas that never cross a 16 m block, so a
+// changed cell rebuilds only its own block. A door cell is a region of its own. Regions that touch
+// are linked, and linked regions share a reachability group, which answers "can a pawn walk from
+// here to there?" with two lookups.
+
+using RegionId = uint32_t;
+inline constexpr RegionId kNoRegion = 0xFFFFFFFFu;
+inline constexpr uint32_t kNoGroup = 0xFFFFFFFFu;
+
+enum class RegionKind : uint8_t { Normal, Door };
+
+// Two regions that share a border. Both regions hold a link to each other with the same numbers.
+struct RegionLink {
+    RegionId other = kNoRegion;
+    int faces = 0;     // cell sides the two regions share
+    float x = 0.0f;    // middle of the shared border, metres
+    float y = 0.0f;
+};
+
+struct Region {
+    RegionKind kind = RegionKind::Normal;
+    bool alive = false;  // false for a free id
+    int cellCount = 0;
+    CellRect bounds;     // smallest rectangle around the region's cells, on its level
+    CellPos anchor;      // the region's first cell in row order; always one of its cells
+    uint32_t group = kNoGroup;
+    std::vector<RegionLink> links;  // sorted by `other`
+};
+
+class COLONY_API Regions {
+public:
+    static constexpr int kBlockSize = 16;  // metres; a region never crosses a block boundary
+
+    // Nothing is built until the first query, so maps used only for terrain cost nothing.
+    explicit Regions(const Map& map);
+
+    // Queries rebuild dirty blocks first, so they always see the map as it is now.
+
+    // The region a cell belongs to; kNoRegion if the cell is off the map or can't be walked.
+    RegionId regionAt(CellPos c);
+    // The reachability group of a cell; kNoGroup if it has no region.
+    uint32_t groupAt(CellPos c);
+    // True if a pawn can walk from `from` to `to`: both have regions in the same group.
+    bool canReach(CellPos from, CellPos to);
+
+    // A region by id, from a query since the last change. Does not rebuild, so the reference
+    // stays valid until the map changes and something queries again.
+    const Region& region(RegionId id) const { return regions_[id]; }
+    // Live regions in one block, in id order.
+    const std::vector<RegionId>& regionsInBlock(int blockX, int blockY, int level);
+    size_t regionCount();
+    size_t groupCount();
+    // Walkable cells in a group.
+    int groupCellCount(uint32_t group);
+
+    int blocksX() const { return blocksX_; }
+    int blocksY() const { return blocksY_; }
+
+    // The map calls this when a cell changes between walkable, door and blocked.
+    void markDirty(CellPos c);
+    // Rebuilds dirty blocks now. Queries do this themselves.
+    void update();
+
+    // Counters for tests and simrun.
+    uint64_t blocksRebuilt() const { return blocksRebuilt_; }
+    uint64_t groupRelabels() const { return groupRelabels_; }
+
+private:
+    int blockOf(int x, int y, int level) const { return (level * blocksY_ + y / kBlockSize) * blocksX_ + x / kBlockSize; }
+    size_t cellSlot(CellPos c) const;
+    void rebuildBlocks();
+    void removeRegion(RegionId id);
+    RegionId newRegion();
+    void floodBlock(int block);
+    void linkBlock(int block);
+    void relabelGroups();
+
+    const Map& map_;
+    int blocksX_ = 0;
+    int blocksY_ = 0;
+    int blocks_ = 0;
+    bool built_ = false;
+    std::vector<RegionId> regionOf_;            // per cell, all levels
+    std::vector<Region> regions_;               // indexed by RegionId
+    std::vector<RegionId> freeIds_;
+    std::vector<std::vector<RegionId>> blockRegions_;
+    std::vector<uint8_t> blockDirty_;
+    std::vector<int> dirtyBlocks_;
+    std::vector<int> groupCells_;               // walkable cells per group
+    size_t liveRegions_ = 0;
+    uint64_t blocksRebuilt_ = 0;
+    uint64_t groupRelabels_ = 0;
+
+    // Scratch, kept between rebuilds to avoid allocations.
+    std::vector<int> floodQueue_;
+    struct PendingLink {
+        RegionId a;
+        RegionId b;
+        float x;
+        float y;
+    };
+    std::vector<PendingLink> pendingLinks_;
+};
+
+}  // namespace colony
