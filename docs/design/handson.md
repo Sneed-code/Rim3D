@@ -85,6 +85,6 @@ the bottom. Messages from the sim (a refused command) near the top of the crossh
   it works.
 - **Deconstruct, bills (cooking), sowing, hauling to a stockpile by hand.** Pick up and put down on the ground only.
 - **Only one thing at a time in the hands**, and 75 units at most (the colonist's carrying capacity).
-- **Game speed.** Direct mode holds the game at 1x, so a granite block takes about 1.7 minutes of real time at
-  skill 8; the damage stays on the rock between visits.
+- **Game speed.** Direct mode holds the game at 1x (30 steps a second), so work takes real time: a granite block about
+  1.7 minutes at Mining 8, an oak (2016 work) about a minute at Plants 12; the damage stays on a rock between visits.
 - **No skill gain message**; XP is gained as for a colonist (Mining, Plants).

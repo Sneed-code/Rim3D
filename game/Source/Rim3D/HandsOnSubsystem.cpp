@@ -120,6 +120,8 @@ FHandsOnTarget UHandsOnSubsystem::FindTarget(const USimSubsystem& Bridge, const 
 	double GroundT = 0.0;
 	const bool bGround = SimPicking::RayHitGround(Bridge, Origin, Direction, GroundT);
 	const double End = bGround ? FMath::Min(GroundT, Start + HandsLookCm) : Start + HandsLookCm;
+	// The ray meets a rock block at the edge of its cell: look a little past the ground hit so the march gets inside it.
+	const double MarchEnd = End + 20.0;
 
 	// The ground cell the ray ends on: somewhere to put something down.
 	if (bGround)
@@ -136,7 +138,7 @@ FHandsOnTarget UHandsOnSubsystem::FindTarget(const USimSubsystem& Bridge, const 
 	// Rocks and plants: march along the ray, a cell column at a time, until it is inside one.
 	double BestT = TNumericLimits<double>::Max();
 	colony::CellPos Found;
-	for (double T = Start; T < End; T += 10.0)
+	for (double T = Start; T < MarchEnd; T += 10.0)
 	{
 		const FVector Point = Origin + Direction * T;
 		const FVector Local = (Point - Bridge.GetWorldOrigin()) / 100.0;

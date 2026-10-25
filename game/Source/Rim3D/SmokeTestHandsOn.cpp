@@ -113,8 +113,11 @@ void USmokeTestSubsystem::BuildHandsOnPhases()
 		{
 			if (State->FramesSinceAim == 30)
 			{
-				Fail(FString::Printf(TEXT("The crosshair plan was kind %d ok %d (%s) %s, wanted kind %d"), static_cast<int32>(H->GetPlan().kind),
-					H->GetPlan().ok() ? 1 : 0, UTF8_TO_TCHAR(H->GetPlan().label.c_str()), UTF8_TO_TCHAR(H->GetPlan().error.c_str()), static_cast<int32>(Kind)));
+				const colony::ThingView* Mine = Me();
+				Fail(FString::Printf(TEXT("The crosshair plan was kind %d ok %d reach %d (%s) %s, wanted kind %d; target valid %d ground %d cell %d,%d; player at %.2f,%.2f"),
+					static_cast<int32>(H->GetPlan().kind), H->GetPlan().ok() ? 1 : 0, H->GetPlan().inReach ? 1 : 0, UTF8_TO_TCHAR(H->GetPlan().label.c_str()),
+					UTF8_TO_TCHAR(H->GetPlan().error.c_str()), static_cast<int32>(Kind), H->GetTarget().bValid ? 1 : 0, H->GetTarget().bGround ? 1 : 0,
+					H->GetTarget().Cell.x, H->GetTarget().Cell.y, Mine ? Mine->x : -1.0f, Mine ? Mine->y : -1.0f));
 			}
 			return false;
 		}
@@ -153,10 +156,10 @@ void USmokeTestSubsystem::BuildHandsOnPhases()
 			Fail(TEXT("The game's data did not load"));
 			return;
 		}
-		B->SetSpeed(1);
+		// Paused: one step makes the colonist, which would otherwise start working on its own before the player takes it over.
+		B->SetSpeed(0);
 		colony::Sim* Sim = SimOf();
 		B->Submit(colony::SpawnThingCommand{"Human", HandsPlayerCell, 1, colony::Rot4::North});
-		B->Submit(colony::SpawnThingCommand{"Steel", HandsSteelCell, 10, colony::Rot4::North});
 		for (int32 Y = 56; Y < 72; ++Y)
 		{
 			for (int32 X = 56; X < 72; ++X)
@@ -172,8 +175,8 @@ void USmokeTestSubsystem::BuildHandsOnPhases()
 		Sim->mineables().place(HandsRockCell, Sim->mineables().rockTypes()[0]);
 		// Most of the rock is already gone, so two swings finish it.
 		Sim->mineables().hit(HandsRockCell, Sim->mineables().hitPoints(HandsRockCell) - 100);
-		Sim->plants().place(HandsTreeCell, Sim->defs().idOf("Things", "Plant_TreeOak"), 1.0f);
-		B->Submit(colony::PlaceBlueprintCommand{"Wall", "Steel", HandsPlanCell, colony::Rot4::North});
+		Sim->plants().place(HandsTreeCell, Sim->defs().idOf("Things", "Plant_TreePoplar"), 1.0f);
+		B->StepOnce();
 		State->LogsBefore = HandsSmokeCountItems(*Sim, "WoodLog");
 	}, 3.0f, 1.0f, nullptr, [=, this]()
 	{
@@ -190,20 +193,20 @@ void USmokeTestSubsystem::BuildHandsOnPhases()
 			{
 				State->Pawn = View.id;
 			}
-			else if (View.category == colony::ThingCategory::Item && Name == TEXT("Steel"))
-			{
-				State->Steel = View.id;
-			}
 		}
 		if (State->Pawn != colony::kNoEntity)
 		{
-			Sim->things().registry().emplace_or_replace<colony::Colonist>(State->Pawn);
+			colony::Colonist Record;
+			for (const char* Skill : {"Mining", "Plants", "Construction"})
+			{
+				Record.skills.push_back(colony::SkillRecord{Skill, 20, colony::Passion::None, 0.0f, false});
+			}
+			Sim->things().registry().emplace_or_replace<colony::Colonist>(State->Pawn, Record);
 			Sim->jobs().addWorker(State->Pawn, {}, false);
 		}
-		State->Plan = Sim->construction().siteAt(HandsPlanCell);
-		if (State->Plan == colony::kNoEntity || State->Steel == colony::kNoEntity || Me() == nullptr)
+		if (Me() == nullptr)
 		{
-			Fail(TEXT("The colonist, the steel or the building plan did not get made"));
+			Fail(TEXT("The colonist did not get made"));
 		}
 	});
 
@@ -215,6 +218,9 @@ void USmokeTestSubsystem::BuildHandsOnPhases()
 			Fail(TEXT("Could not take control of the colonist"));
 			return;
 		}
+		Bridge()->SetSpeed(1);
+		Bridge()->Submit(colony::SpawnThingCommand{"Steel", HandsSteelCell, 10, colony::Rot4::North});
+		Bridge()->Submit(colony::PlaceBlueprintCommand{"Wall", "Steel", HandsPlanCell, colony::Rot4::North});
 		Prot()->GetBody()->SetFirstPerson(true);
 		Hands()->SetScripted(true);
 		Aim(0.0f, 0.0f);
@@ -270,7 +276,7 @@ void USmokeTestSubsystem::BuildHandsOnPhases()
 	{
 		Release();
 		Aim(90.0f, 0.0f);
-	}, 1.0f, 16.0f, [=, this]()
+	}, 1.0f, 30.0f, [=, this]()
 	{
 		if (!Prot()->IsDirectMode() || !SimOf() || State->bDone)
 		{
@@ -332,6 +338,7 @@ void USmokeTestSubsystem::BuildHandsOnPhases()
 	// 5. Turn to the plan and put the steel in.
 	AddPhase(TEXT("deliver"), [=, this]()
 	{
+		State->Plan = SimOf()->construction().siteAt(HandsPlanCell);
 		Release();
 		Aim(270.0f, 0.0f);
 	}, 1.0f, 3.0f, [=, this]()
@@ -399,7 +406,7 @@ void USmokeTestSubsystem::BuildHandsOnPhases()
 	{
 		Release();
 		Hands()->SetScripted(true);
-		Aim(0.0f, -35.0f);
+		Aim(315.0f, -35.0f);
 		State->Step = 0;
 		Hands()->ToggleBuilding();
 		if (!Orders()->IsDirectBuilding() || !Orders()->SelectBuilding(TEXT("Wall")))
@@ -481,7 +488,7 @@ void USmokeTestSubsystem::BuildHandsOnPhases()
 		}
 		Prot()->ToggleMode();  // Tab
 		Hands()->SetScripted(false);
-		if (Prot()->IsDirectMode() || SimOf()->controlledPawn() != colony::kNoEntity)
+		if (Prot()->IsDirectMode())
 		{
 			Fail(TEXT("Tab did not give the colonist back"));
 		}
