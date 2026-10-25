@@ -28,6 +28,7 @@ class DefDatabase;
 struct Colonist;
 class JobSystem;
 class MovementSystem;
+class NeedsSystem;
 class Regions;
 class Things;
 class Zones;
@@ -117,6 +118,9 @@ public:
     // through `health().applyDamage` from other sim systems, or the DamagePawnCommand.
     HealthSystem& health() { return *health_; }
     const HealthSystem& health() const { return *health_; }
+    // Food and rest (docs/design/needs.md). Eating and sleeping are jobs, see jobs().
+    NeedsSystem& needs() { return *needs_; }
+    const NeedsSystem& needs() const { return *needs_; }
     // Guns, projectiles, hitboxes and armor (docs/design/combat.md).
     CombatSystem& combat() { return *combat_; }
     const CombatSystem& combat() const { return *combat_; }
@@ -168,6 +172,7 @@ private:
     std::unique_ptr<Things> things_;
     std::unique_ptr<MovementSystem> movement_;
     std::unique_ptr<HealthSystem> health_;
+    std::unique_ptr<NeedsSystem> needs_;
     std::unique_ptr<CombatSystem> combat_;
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;

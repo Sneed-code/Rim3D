@@ -18,6 +18,8 @@
 // Human and Steel and the WorkTypes def Hauling, which data/defs provides. Its pawns haul items
 // scattered over the map to a stockpile zone in the middle through the job system (C1).
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Jobs.h"
+#include "ColonySim/Needs.h"
 #include "ColonySim/Cover.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Pathfinder.h"
@@ -456,6 +458,9 @@ int main(int argc, char** argv) {
     colony::ReplayFeeder feeder(replay);
     uint64_t events = 0;
     uint64_t commandsFailed = 0;
+    uint64_t ate = 0;     // PawnAte events
+    uint64_t wokeUp = 0;  // PawnWokeUp events
+    uint64_t died = 0;    // PawnDied events
     std::vector<float> stepMs(static_cast<size_t>(steps));
     for (int64_t i = 0; i < steps; ++i) {
         feeder.submitDue(sim);
@@ -464,6 +469,9 @@ int main(int argc, char** argv) {
         stepMs[static_cast<size_t>(i)] = static_cast<float>(ms(before, Clock::now()));
         events += sim.events().size();
         for (const colony::Event& e : sim.events()) {
+            ate += e.type == colony::EventType::PawnAte ? 1 : 0;
+            wokeUp += e.type == colony::EventType::PawnWokeUp ? 1 : 0;
+            died += e.type == colony::EventType::PawnDied ? 1 : 0;
             if (e.type == colony::EventType::CommandFailed) {
                 ++commandsFailed;
                 std::fprintf(stderr, "step %lld: command %llu failed: %s\n", static_cast<long long>(i),
@@ -526,6 +534,31 @@ int main(int argc, char** argv) {
                 static_cast<unsigned long long>(paths.regionsExpanded),
                 static_cast<unsigned long long>(paths.cellsExpanded),
                 static_cast<unsigned long long>(paths.maxWorkInStep), paths.maxQueue, paths.maxWaitSteps);
+
+    // Needs (docs/design/needs.md): only when some pawn has food and rest.
+    {
+        int withNeeds = 0;
+        int asleep = 0;
+        float minFood = 1.0f;
+        float minRest = 1.0f;
+        for (const auto [pawn, needs] : sim.things().registry().view<const colony::Needs>().each()) {
+            ++withNeeds;
+            minFood = std::min(minFood, needs.food);
+            minRest = std::min(minRest, needs.rest);
+            const colony::Worker* worker = sim.things().registry().try_get<colony::Worker>(pawn);
+            asleep += worker != nullptr && colony::jobIsLyingDown(worker->job) ? 1 : 0;
+        }
+        if (withNeeds > 0) {
+            std::printf("{\"needs\":{\"pawns\":%d,\"ate\":%llu,\"wokeUp\":%llu,\"died\":%llu,\"asleepNow\":%d,"
+                        "\"minFood\":%.3f,\"minRest\":%.3f}}\n",
+                        withNeeds, static_cast<unsigned long long>(ate), static_cast<unsigned long long>(wokeUp),
+                        static_cast<unsigned long long>(died), asleep, static_cast<double>(minFood), static_cast<double>(minRest));
+        }
+        if (options.check && died > 0) {
+            std::fprintf(stderr, "check failed: %llu pawn(s) died\n", static_cast<unsigned long long>(died));
+            return 1;
+        }
+    }
 
     // Movement (docs/design/movement.md): walks that were given up and asked for again.
     std::printf("{\"repaths\":%llu,\"hauls\":%llu}\n", static_cast<unsigned long long>(sim.stats().repaths),

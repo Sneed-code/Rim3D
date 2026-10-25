@@ -12,6 +12,8 @@ enum class JobType : uint8_t {
     None,        // no job: the pawn thinks at its next step
     Wait,        // stand still until a game second (idle)
     HaulToCell,  // carry an item to a storage cell
+    Ingest,      // fetch food, take it to a chair at a table (or eat where it lies) and eat it
+    LayDown,     // go to a bed (or lie on the ground) and sleep
 };
 
 COLONY_API const char* jobTypeName(JobType type);

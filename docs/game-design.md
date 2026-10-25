@@ -32,7 +32,7 @@ You switch freely between two modes with one key. The colony keeps running eithe
 
 **Hands-on work, Palworld style.** Look at a tree and hold the interact key to chop it; look at a wall blueprint to build it. You work at your own skill speed. Building uses a 3D ghost that snaps to the grid, so placing a room by hand is as quick as in the overseer view.
 
-**Fighting.** In direct mode you aim and shoot or swing yourself, third-person-shooter style. Your hits go through the same damage rules as everyone else's: body parts, armor, bleeding.
+**Fighting.** In direct mode you aim and shoot or swing yourself, third-person-shooter style: the camera is third person and switches to an aimed view while you hold aim (`design/shooter-feel.md`). Your hits go through the same damage rules as everyone else's: body parts, armor, bleeding.
 
 **Taking over another colonist.** You can possess any colonist and play as them. The one you left goes back to their AI.
 

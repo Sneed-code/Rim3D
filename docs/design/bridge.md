@@ -42,6 +42,8 @@ rest (place blueprint, designate, draft, actions) come with the tasks that build
 | `OrderHaulCommand{pawn, thing}` | "prioritize hauling": ends the pawn's job, hauls the item | not a working pawn; not an item; held by another pawn; unreachable; no room; the player is controlling the pawn |
 | `ControlPawnCommand{pawn}` | the player takes over one colonist (the previous one is let go, its job ends); `kNoEntity` lets go ([protagonist.md](protagonist.md)) | not a living colonist on the map |
 | `DirectMoveCommand{pawn, x, y}` | moves the controlled pawn toward (x, y) metres, at most 0.5 m a step, out of walls | not the controlled pawn; downed or dead; x or y is not a number |
+| `SetScheduleCommand{pawn, hour, kind}` | the pawn's schedule for one hour (0 to 23): Anything, Work, Joy or Sleep ([needs.md](needs.md)) | the pawn has no schedule; bad hour |
+| `AssignBedCommand{bed, pawn}` | the pawn owns the bed (and gives up its old one); `pawn` none empties the bed | not a bed; not a pawn with needs; the bed is full |
 | `EquipCommand{pawn, item}` | `CombatSystem::equip`: a gun in the hands or apparel on the body ([combat.md](combat.md)) | no body or dead; not a gun or apparel; someone else's; a job holds it |
 | `ShootCommand{pawn, target, x, y, z, player}` | `CombatSystem::shoot`: aimed (warm-up, skill spread) or the player's trigger (at once, gun spread) | no gun; downed; mid-burst or cooling down; target not a pawn on the map |
 | `SetStanceCommand{pawn, stance}` | standing, crouching or prone | not a pawn |
@@ -71,13 +73,15 @@ starts, so read it after every step. Before the first step it holds what setting
 | `ThingDespawned` | `thing`, `def` | a thing leaves the map but still exists (picked up) |
 | `ThingDestroyed` | `thing`, `def` | a thing stops existing; comes after `ThingDespawned` if it was on the map |
 | `CommandFailed` | `command`, `message` | a command couldn't be applied |
-| `PawnAction` | `thing` (the pawn), `def`, `action`, `target` | a pawn did something Unreal animates: `PickUp`, `PutDown` (U5, [pawns.md](pawns.md)) |
+| `PawnAction` | `thing` (the pawn), `def`, `action`, `target` | a pawn did something Unreal animates: `PickUp`, `PutDown` (U5, [pawns.md](pawns.md)), `Eat`, `LieDown`, `GetUp` (C6) |
 | `PawnInjured` | `thing`, `def` (the injury), `part`, `amount`, `cell` | a pawn got an injury (F1) |
 | `PawnPartLost` | `thing`, `def` (MissingBodyPart), `part`, `amount`, `cell` | a pawn lost a body part |
 | `PawnDowned`, `PawnGotUp` | `thing`, `cell` | a pawn can no longer act, or can again |
 | `PawnDied` | `thing`, `message` (the cause), `cell` | a pawn died; it stays on the map with `dead` set |
 | `JobStarted` | `thing` (the pawn), `def`, `job`, `target`, `cell` | a pawn took a job ([jobs.md](jobs.md)) |
 | `JobEnded` | the same, and `message`: "done", "failed: why" or "interrupted: why" | a pawn's job ended |
+| `PawnAte` | `thing`, `def` (the food), `amount`, `cell`, `message` ("table" or "ground") | a pawn finished eating (C6, [needs.md](needs.md)) |
+| `PawnWokeUp` | `thing`, `target` (the bed or none), `amount` (its rest), `message` ("bed" or "ground") | a pawn got up from sleeping |
 | `ShotFired` | `thing` (shooter), `def` (gun), `target` (projectile), `x, y, z` (muzzle) | a pawn fired (F2, [combat.md](combat.md)) |
 | `ProjectileHit` | `thing` (projectile), `def` (Projectiles def), `hit`, `target`, `part`, `amount`, `x, y, z`, `cell` | a projectile stopped: ground, rock, building, pawn, armor, or gone |
 
@@ -90,7 +94,8 @@ letters) here. Events say what changed; positions and states are in the snapshot
 `Sim::writeSnapshot(out)` fills a `Snapshot` (reusing its memory): the game time, the map size
 and a `ThingView` per thing on the map, sorted by id (`Snapshot::find` is a binary search).
 A `ThingView` has the id, def, category, position (metres on a level), rotation and footprint
-size for buildings, stack count for items, and hit points. Pawns with a body also have `downed` and
+size for buildings, stack count for items, and hit points. Pawns with needs also have `food`, `rest` and
+`asleep` ([needs.md](needs.md)). Pawns with a body also have `downed` and
 `dead` (F1); the rest of a pawn's health is read with `Sim::healthReport`. Things off the map (a carried item) are
 not in it. Since S4 it also has the ground height under the thing (`z`), a pawn's velocity (`vx`,
 `vy`, metres per step) and the route still ahead (`waypointCount` points from

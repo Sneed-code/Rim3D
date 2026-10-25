@@ -104,6 +104,13 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 // A float is written as the double that holds it exactly, so it reads back the same.
                 j["x"] = static_cast<double>(c.x);
                 j["y"] = static_cast<double>(c.y);
+            } else if constexpr (std::is_same_v<Type, SetScheduleCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["hour"] = c.hour;
+                j["kind"] = scheduleKindName(c.kind);
+            } else if constexpr (std::is_same_v<Type, AssignBedCommand>) {
+                j["bed"] = entt::to_integral(c.bed);
+                j["pawn"] = entt::to_integral(c.pawn);
             } else if constexpr (std::is_same_v<Type, EquipCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["item"] = entt::to_integral(c.item);
@@ -361,6 +368,32 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = OrderHaulCommand{static_cast<Entity>(pawn), static_cast<Entity>(thing)};
+    } else if (type == "SetSchedule") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        SetScheduleCommand c;
+        std::string kind = scheduleKindName(c.kind);
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "hour", c.hour, where) || !r.text(j, "kind", kind, where)) {
+            return false;
+        }
+        bool known = false;
+        for (const ScheduleKind k : {ScheduleKind::Anything, ScheduleKind::Work, ScheduleKind::Joy, ScheduleKind::Sleep}) {
+            if (kind == scheduleKindName(k)) {
+                c.kind = k;
+                known = true;
+            }
+        }
+        if (!known) {
+            return r.fail(where + ".kind must be Anything, Work, Joy or Sleep");
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = c;
+    } else if (type == "AssignBed") {
+        uint32_t bed = entt::to_integral(kNoEntity);
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "bed", bed, where) || !r.integer(j, "pawn", pawn, where)) {
+            return false;
+        }
+        out.command = AssignBedCommand{static_cast<Entity>(bed), static_cast<Entity>(pawn)};
     } else if (type == "Equip") {
         uint32_t pawn = entt::to_integral(kNoEntity);
         uint32_t item = entt::to_integral(kNoEntity);

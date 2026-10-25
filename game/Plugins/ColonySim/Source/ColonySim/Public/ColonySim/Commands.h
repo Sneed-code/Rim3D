@@ -4,6 +4,7 @@
 #include "ColonySim/Cover.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
+#include "ColonySim/Needs.h"
 #include "ColonySim/Zones.h"
 
 #include <cstdint>
@@ -115,6 +116,21 @@ struct OrderHaulCommand {
     Entity thing = kNoEntity;
 };
 
+// Schedule tab: what a pawn does in one hour of the day (0 to 23). Fails for a pawn with no
+// schedule (it needs food and rest, so the defs must have a NeedRules def) or a bad hour.
+struct SetScheduleCommand {
+    Entity pawn = kNoEntity;
+    int hour = 0;
+    ScheduleKind kind = ScheduleKind::Anything;
+};
+
+// Bed ownership: `pawn` owns `bed` (and gives up any other bed). `pawn` kNoEntity takes every
+// owner off the bed. Fails if the bed is full or either is not what it should be.
+struct AssignBedCommand {
+    Entity bed = kNoEntity;
+    Entity pawn = kNoEntity;
+};
+
 // Puts a gun in a pawn's hands or apparel on it (docs/design/combat.md); what it replaces is
 // dropped where the pawn stands. The item may lie on the map. Fails if the pawn has no body, is
 // dead, or the item is neither a gun nor apparel or is someone else's. Later the job system
@@ -149,7 +165,8 @@ struct SetStanceCommand {
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
                              SetStockpilePriorityCommand, SetStockpileAllowedCommand, OrderHaulCommand,
-                             ControlPawnCommand, DirectMoveCommand, EquipCommand, ShootCommand, SetStanceCommand>;
+                             ControlPawnCommand, DirectMoveCommand, SetScheduleCommand, AssignBedCommand,
+                             EquipCommand, ShootCommand, SetStanceCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

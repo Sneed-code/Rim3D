@@ -5,6 +5,7 @@
 #include "ColonySim/Cover.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Needs.h"
 
 #include <algorithm>
 #include <utility>
@@ -99,6 +100,9 @@ Entity Things::make(DefId defId, int stackCount) {
             footprint.blocksMovement = !footprint.isDoor && def.text("passability") == "Impassable";
             footprint.obstacleDm = obstacleFromFill(def.number("fillPercent"));
             registry_.emplace<Footprint>(thing, footprint);
+            if (def.flag("building.bed")) {
+                registry_.emplace<Bed>(thing);  // who sleeps in it (Needs.h)
+            }
             break;
         }
         case ThingCategory::Pawn: {

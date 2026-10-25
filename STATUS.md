@@ -70,6 +70,18 @@ items stack up to their stack limit. A downed pawn drops its job and what it car
 `JobStarted`/`JobEnded`, and the snapshot shows each pawn's job, load and the zones. Save format 6:
 **saves from before C1 (U12's quicksaves too) no longer load** (`docs/decisions/0005`).
 
+Since C6 colonists have food and rest (`docs/design/needs.md`): food falls 1.6 a day and rest 0.95 a
+day in bands, as the RimWorld wiki says; a hungry pawn picks the tastiest food it can reach, takes it to
+a chair next to a table if there is one (else eats where it lay) and eats; a pawn sleeps in its own bed,
+else the nearest free one (which it then owns), else on the ground; the hourly schedule (Anything, Work,
+Joy, Sleep; standard Sleep 22:00 to 05:59) sends tired pawns to bed, and a pawn hauling or waiting puts
+the job down when it gets hungry or tired. Starving kills (`DeathCause::Starvation`). Commands
+`SetSchedule` and `AssignBed`; events `PawnAte`, `PawnWokeUp`, actions `Eat`, `LieDown`, `GetUp`; the
+snapshot has `food`, `rest`, `asleep`. Needs exist only where the data has a `NeedRules` def. The Crashlanded
+colonists eat through their starting food in about 5 days and begin to starve around day 8, so **farming (C2, C3) and cooking (C7) are now the way to
+keep them alive**. Beds, tables and chairs are C4's defs: it reads `building.bed`, `building.isTable`,
+`building.isSittable` and `stats.bedRestEffectiveness`. Save format 8 (formats 6 and 7 still load).
+
 Since F2 pawns can shoot (`docs/design/combat.md`): five guns from the wiki, real bullets that fly
 with speed (RimWorld's x3, `tuning.json`) and drop, a spread cone instead of a hit roll (sized so a
 standing man in the open is hit as often as RimWorld's hit chance; Shooting skill tightens it),
@@ -77,7 +89,7 @@ recoil, warm-up, bursts and cooldown. Bullets stop at the ground, rock, walls an
 lose hit points and break) and pawn hitboxes for standing, crouching and prone (downed pawns lie
 prone); armor (flak vest, flak pants, helmet) deflects or softens hits by RimWorld's rule, then the
 part hit is injured. Commands `Equip`, `Shoot` (aimed, or the player's trigger) and `SetStance`;
-events `ShotFired` and `ProjectileHit`; snapshot projectiles, stance, facing and gun; save format 8.
+events `ShotFired` and `ProjectileHit`; snapshot projectiles, stance, facing and gun; save format 9.
 No fighter AI yet (F4, F5): pawns shoot only when told to.
 
 Since D3 the game has real starting data in `data/defs/`, written by hand with RimWorld's numbers
@@ -98,7 +110,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-20 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, F2). Tick tasks in `docs/plans/stage-1.md` as they merge.
+21 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, F2). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -134,7 +146,7 @@ done (PC Unreal; `docs/design/bridge.md`, smoke test `sim`; the first Unreal com
 S5 bridge, so S1's include path is confirmed). **C2** plants (cloud, Sonnet medium), ~~**C8** colonists
 from a seed~~ done (`docs/design/colonists.md`; `simrun --start Crashlanded` lists the six; save format 4) and
 ~~**F1** health basics~~ done (`docs/design/health.md`; save format 5) and ~~**F2** guns, projectiles
-and hitboxes~~ done (`docs/design/combat.md`; save format 8; U11 can now draw tracers and hits);
+and hitboxes~~ done (`docs/design/combat.md`; save format 9; U11 can now draw tracers and hits);
 their defs are in `data/defs/`. Numbers marked `unverified` in a def were recalled, not read from the
 wiki; check them when a task leans on them.
 
@@ -148,8 +160,8 @@ smoke test `overseer`; `docs/design/overseer.md`). ~~**U9** protagonist~~ done (
 `protagonist`; `docs/design/protagonist.md`; save format 7). **U3** terrain and plants (PC Unreal, Sonnet high)
 needs C2 as well.
 
-Wave 6, open now that C1 is in: **C4** building (cloud, Sonnet high), **C6** food, rest and
-schedules (cloud, Sonnet high), ~~**F2** guns and hitboxes~~ done; **C3** mining, chopping
+Wave 6, open now that C1 is in: **C4** building (cloud, Sonnet high), ~~**C6** food, rest and
+schedules~~ done (`docs/design/needs.md`; save format 8), ~~**F2** guns and hitboxes~~ done; **C3** mining, chopping
 and harvesting (cloud, Sonnet high) once C2 is in. On the PC, ~~**U9**~~ is done and **A3** needs only done tasks.
 U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priorities).
 With F2, F3 and C1 in, **F4** fighter AI: where to stand (cloud, Opus high) is open, and with U9 and

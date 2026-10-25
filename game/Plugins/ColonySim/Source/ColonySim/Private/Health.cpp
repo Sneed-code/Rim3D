@@ -41,6 +41,7 @@ const char* deathCauseName(DeathCause cause) {
         case DeathCause::BloodLoss: return "blood loss";
         case DeathCause::VitalPartLost: return "a vital part destroyed";
         case DeathCause::VitalCapacity: return "organ failure";
+        case DeathCause::Starvation: return "starvation";
     }
     return "";
 }
@@ -594,6 +595,15 @@ DefId HealthSystem::damageTypeId(const std::string& name) const {
 bool HealthSystem::incapacitated(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     return reg.valid(pawn) && reg.all_of<Health>(pawn) && reg.get<Health>(pawn).incapacitated();
+}
+
+bool HealthSystem::kill(Entity pawn, DeathCause cause) {
+    entt::registry& reg = things_.registry();
+    if (!tracks(pawn) || !reg.all_of<Health>(pawn) || reg.get<Health>(pawn).dead) {
+        return false;
+    }
+    die(pawn, reg.get<Health>(pawn), cause, true);
+    return true;
 }
 
 void HealthSystem::emit(EventType type, Entity pawn, DefId def, int part, float amount, const char* message) {

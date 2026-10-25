@@ -54,6 +54,11 @@ struct ThingView {
     Entity jobTarget = kNoEntity;
     DefId carriedDef;
     int carriedCount = 0;
+    // Pawns with needs (docs/design/needs.md): food and rest, 1 full to 0 empty, else -1; asleep
+    // while lying down in a bed or on the ground.
+    float food = -1.0f;
+    float rest = -1.0f;
+    bool asleep = false;
     // Pawns: how they hold their body and which way they face (a unit vector; +x east), the gun
     // in their hands (invalid if none) and steps until it can start a new shot (0: ready).
     // Downed pawns lie prone (docs/design/combat.md).
