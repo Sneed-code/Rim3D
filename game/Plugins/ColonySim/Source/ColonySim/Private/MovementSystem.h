@@ -6,6 +6,8 @@
 #include <entt/entity/fwd.hpp>
 
 #include <cstdint>
+#include <functional>
+#include <utility>
 #include <vector>
 
 namespace colony {
@@ -27,6 +29,8 @@ public:
     void setDoors(const DoorNumbers& doors) { doors_ = doors; }
     // Walking slows in the dark (docs/design/light.md); null: it doesn't.
     void setLights(const Lights* lights) { lights_ = lights; }
+    // A load slows walking: the factor for a pawn, 1 if none set.
+    void setSpeedFactor(std::function<float(Entity)> factor) { speedFactor_ = std::move(factor); }
     void step(entt::registry& registry, Map& map);
 
     // Pawns whose walk was held up by other pawns this step, for the stats simrun prints.
@@ -55,6 +59,7 @@ private:
     uint64_t heldUp_ = 0;
     DoorNumbers doors_;
     const Lights* lights_ = nullptr;
+    std::function<float(Entity)> speedFactor_;
     std::vector<Entity> doorRequests_;  // doors a pawn is in, waiting at or about to walk into this step
 };
 

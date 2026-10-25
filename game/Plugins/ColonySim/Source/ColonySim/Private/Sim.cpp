@@ -138,6 +138,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     temperature_->setSourceRunning([this](Entity building) { return power_->running(building); });
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
+    movement_->setSpeedFactor([this](Entity pawn) { return jobs_->loadSpeedFactor(pawn); });
     jobs_->setLights(lights_.get());
     jobs_->setPower(power_.get());
     jobs_->setRooms(rooms_.get());

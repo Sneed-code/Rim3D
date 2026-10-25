@@ -179,7 +179,8 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
         // Injuries slow a pawn down (its Moving capacity); a downed or dead one doesn't walk.
         const Health* health = reg.try_get<Health>(a.entity);
         const float lightFactor = lights_ != nullptr ? lights_->moveSpeedAt(here) : 1.0f;
-        const float base = mover.metresPerStep * (health != nullptr ? health->movingFactor : 1.0f) * lightFactor;
+        const float base = mover.metresPerStep * (health != nullptr ? health->movingFactor : 1.0f) * lightFactor *
+                           (speedFactor_ ? speedFactor_(a.entity) : 1.0f);
         if (base <= 0.0f || mover.hold) {
             // Downed or dead, or working standing still: it stays where it is. Others still steer around it.
             a.newVx = 0.0f;

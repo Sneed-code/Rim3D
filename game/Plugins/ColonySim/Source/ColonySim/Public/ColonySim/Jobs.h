@@ -329,9 +329,13 @@ public:
     // `better`, then the nearest, that takes the def, has room, isn't held by another pawn and
     // can be reached from `from`. False if there is none.
     bool findStorageCell(DefId def, CellPos from, StoragePriority better, Entity pawn, CellPos& out) const;
-    // How many of an item def a pawn can carry at once: RimWorld's `carryingCapacity` (75 when the
-    // pawn def has none), never more than a stack.
+    // How many of an item def a pawn can carry at once: its `carryingCapacity` (RimWorld's 75 kg when
+    // the pawn def has none) over the def's `stats.mass`, at least 1. It may be more than one stack.
     int carryLimit(Entity pawn, DefId def) const;
+    double carryCapacity(Entity pawn) const;
+    double massOf(DefId def) const;
+    // 1 with empty hands, down to 1 - `carrySlowdown` at a full load: what the pawn's walking speed is multiplied by.
+    float loadSpeedFactor(Entity pawn) const;
     int stackLimit(DefId def) const;
 
 private:
@@ -447,6 +451,7 @@ private:
     bool handsOnInReach(Entity pawn, const Job& job) const;
     bool handsOnPickUp(Entity pawn, Entity item, std::string& error);
     void reserve(Entity pawn, const Job& job);
+    void gatherBeside(Entity pawn, Job& job, Entity carried);
     void release(Entity pawn, const Job& job);
     void jobEvent(Entity pawn, const Job& job, bool started, const std::string& message);
     void pawnDid(Entity pawn, PawnAction action, Entity target);
@@ -477,6 +482,8 @@ private:
     std::vector<WorkType> workTypes_;
     std::vector<uint8_t> standable_;  // per def id: a building pawns can stand on (storage allowed)
     std::vector<int> stackLimits_;    // per def id
+    std::vector<double> masses_;      // per def id, `stats.mass` (1 if it has none)
+    double carrySlowdown_ = 0.25;
     // Per def id, from the Things defs (NeedJobs.cpp): food tiers (-1 not food), nutrition and how
     // long a sitting takes; the kinds of building.
     std::vector<int8_t> foodTier_;
