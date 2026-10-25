@@ -56,7 +56,7 @@
   {
     "defName": "SleptOutside", "label": "slept outside", "source": "RimWorld",
     "moodOffset": -6, "durationDays": 0.6, "trigger": "SleptOutside",
-    "note": "Not started by anything yet: needs roofs and rooms (C5).",
+    "note": "Started when a pawn wakes up in a place that is not indoors (docs/design/rooms.md).",
     "unverified": ["moodOffset", "durationDays"]
   }
 ]

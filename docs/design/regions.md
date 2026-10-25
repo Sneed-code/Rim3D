@@ -10,8 +10,8 @@ As in RimWorld, walkable cells are grouped into **regions**:
 - A region is a 4-connected patch of walkable cells inside one **16 m block** (`Regions::kBlockSize`).
   It never crosses a block boundary, so a 1 km map has at most 4,096 blocks and a changed cell
   rebuilds only the regions of its own block.
-- A **door** cell is a region of its own (`RegionKind::Door`), one cell each. Doors are what rooms
-  (task C5) will stop at.
+- A **door** cell is a region of its own (`RegionKind::Door`), one cell each. Doors are where rooms
+  stop ([rooms.md](rooms.md)).
 - Cells that can't be walked (water, rock, walls) have no region.
 
 Regions that share at least one cell side are **linked**. A `RegionLink` holds the other region,
@@ -82,10 +82,10 @@ every run (`simrun_regions` test).
 
 ## Not done here
 
-- **Who may pass a door.** Every pawn can pass every door for now. Raiders can't open colony doors
+- **Who may pass a door.** Every pawn can pass every door for now (they open and cost time, [rooms.md](rooms.md)). Raiders can't open colony doors
   in RimWorld (they bash them), and forbidden doors stop colonists; that becomes per-faction
   reachability when the raid comes (F6).
-- **Rooms** (C5): enclosed regions joined into rooms with temperature, roof and role.
+- **Rooms** (C5) are built on regions and live in [rooms.md](rooms.md): regions joined across every border except doors, with a roof and a role.
 - **Cover and danger** don't live here; the cover map (F3) has its own dirty tracking.
 - Terrain that changes (mining, building floors over water) must call `Regions::markDirty`; the
   map does it for buildings now and will for terrain when terrain can change.

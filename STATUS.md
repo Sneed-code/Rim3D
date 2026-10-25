@@ -87,7 +87,7 @@ level following at 12 an hour up and 8 down and standing still asleep. Situation
 drowsy, tired, exhausted) count while they hold; memories (ate without a table, ate raw food, ate a fine or
 lavish meal, slept on the ground) last 0.6 days. The three break thresholds (35%, 20%, 5%, moved by traits
 like Nerves) are recorded as `MoodBand` with a `PawnMoodBand` event; **no mental breaks yet**. "Slept outside"
-is defined but waits for roofs and rooms (C5). `thoughts()` is what the colonist panel (U8) reads. Thought
+starts when a pawn wakes up outdoors (C5). `thoughts()` is what the colonist panel (U8) reads. Thought
 numbers other than Hungry are recalled, not verified. Save format 11.
 
 Since D3 the game has real starting data in `data/defs/`, written by hand with RimWorld's numbers
@@ -109,7 +109,17 @@ are not on the building layer; a finished building spawns, rebuilds the regions 
 items it lands on. Wall, door, bed, stool, three tables and the fueled stove are in
 `data/defs/Things/Buildings.json` (costs, work and hit points from the wiki), numbers in
 `ConstructionRules`. Save format 10 (formats 6 to 9 still load); the snapshot has each plan's stage, progress
-and materials. Not built yet: failed builds and skill learning, repair, roofs and rooms (C5).
+and materials. Not built yet: failed builds and skill learning, repair.
+
+Since C5 doors open and cost time, enclosed rooms get a roof, and rooms have roles (`docs/design/rooms.md`). A pawn
+can't walk into a closed door's cell: it waits at the edge while the door opens (23 steps) and the door stays open
+55 steps after the last pawn; paths count a door as 3.5 m extra; an open door stops blocking sight. A room is
+the regions joined across every border except doors; a room that reaches the map edge or is over 2,000 cells is the
+outdoors; any other room gets a thin roof by itself (cells within 6.9 m of a wall, door or rock) and a role from what is
+in it (2 beds Barracks, 1 Bedroom, a stove Kitchen, a table DiningRoom). `sim.rooms()` answers `roomAt`, `roleAt`,
+`indoors`; the snapshot has the rooms, the roof cells and each door's openness; "slept outside" now starts. Rooms and
+roofs are rebuilt from the walls, not saved; save format 12 adds door states. Not built yet: roof collapse, room
+temperature, cleanliness and beauty, locked and per-faction doors, owner-assigned bedrooms.
 
 Since 0004 the game has its own setting (`docs/design/lore.md`: the year 6650, slow star travel,
 the fallen Lattice, magic called resonance) and our own names for RimWorld's proper names
@@ -119,7 +129,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-22 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C4, C9). Tick tasks in `docs/plans/stage-1.md` as they merge.
+23 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C4, C9, C5). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -168,8 +178,8 @@ smoke test `overseer`; `docs/design/overseer.md`). ~~**U9** protagonist~~ done (
 `protagonist`; `docs/design/protagonist.md`; save format 7). **U3** terrain and plants (PC Unreal, Sonnet high)
 has C2 now, so it is open.
 
-Wave 6, open now that C1 is in: ~~**C4** building~~ done (`docs/design/construction.md`; save format 10; C5 doors,
-roofs and rooms and C7 bills and cooking can start now), ~~**C6** food, rest and
+Wave 6, open now that C1 is in: ~~**C4** building~~ done (`docs/design/construction.md`; save format 10; ~~**C5** doors,
+roofs and rooms~~ done (`docs/design/rooms.md`; save format 12), C7 bills and cooking can start now), ~~**C6** food, rest and
 schedules~~ done (`docs/design/needs.md`; save format 8), **F2** guns and hitboxes (cloud, Opus high); **C3** mining, chopping
 and harvesting (cloud, Sonnet high) once C2 is in. On the PC, ~~**U9**~~ is done and **A3** needs only done tasks.
 U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priorities).

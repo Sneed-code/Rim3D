@@ -6,6 +6,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Rooms.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -252,8 +253,13 @@ void MoodSystem::step(int64_t now, std::vector<Event>& events) {
             if (preferability == "MealLavish") {
                 addMemory(*mood, "AteLavishMeal", now);
             }
-        } else if (event.message == "ground") {
-            addMemory(*mood, "SleptOnGround", now);
+        } else {
+            if (event.message == "ground") {
+                addMemory(*mood, "SleptOnGround", now);
+            }
+            if (rooms_ != nullptr && !rooms_->indoors(event.cell)) {
+                addMemory(*mood, "SleptOutside", now);
+            }
         }
     }
 

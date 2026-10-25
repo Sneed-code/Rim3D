@@ -78,6 +78,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     movement_->setDoors(doorNumbers_);
     pathfinder_.setDoorCost(doorNumbers_.pathCost);
     rooms_ = std::make_unique<Rooms>(map_, *things_, *defs_);
+    mood_->setRooms(rooms_.get());
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *defs_, *health_, *needs_,
                                         time_, stats_, events_);
     map_.regions().update();  // build every region now, not in the first step

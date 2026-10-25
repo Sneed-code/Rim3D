@@ -109,4 +109,5 @@ and queue round each other at the stockpile.
   apparel slow-downs come with the health and inventory tasks, as a multiplier on `metresPerStep`.
 - **Animals and remnant machines** use the same system; bigger bodies need a radius per def (`kPawnRadius`
   is one number for now).
-- **Doors** are walked through like open ground; a pawn does not slow at a door.
+- **Doors** are in the movement system since C5: a pawn waits at the edge of a closed door's cell until
+  it has opened (23 steps), and an open door is walked through like open ground ([rooms.md](rooms.md)).

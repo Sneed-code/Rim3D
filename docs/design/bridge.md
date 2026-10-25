@@ -102,8 +102,9 @@ not in it. Since S4 it also has the ground height under the thing (`z`), a pawn'
 `Snapshot::waypoints[firstWaypoint]`), see [movement.md](movement.md). Since C4 a `ThingView` also has a
 `stage` (`Built`, `Blueprint` or `Frame`), `stuff`, `buildProgress`, `materialsHave`, `materialsNeeded` and
 `markedForDeconstruct`; blueprints and frames are in the snapshot like buildings, with the size and
-rotation of what they will be ([construction.md](construction.md)). Later tasks add what they draw
-and show: pawn info, the work tab, room stats.
+rotation of what they will be ([construction.md](construction.md)). Since C5 a door's `ThingView` has `doorOpen`
+(0 to 1) and the snapshot has `rooms` (the enclosed rooms with role and size), `roofCells` (the thin roof) and
+`roofChanges` ([rooms.md](rooms.md)). Later tasks add what they draw and show: pawn info, the work tab.
 
 Unreal reads only snapshots and events, never the registry or `Things.h`. That lets the sim move to
 its own thread later: it will write snapshots into a buffer that Unreal swaps, with no change to

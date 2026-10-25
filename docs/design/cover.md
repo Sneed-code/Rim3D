@@ -26,8 +26,9 @@ a standing one does not. `Things` turns it into `Footprint::obstacleDm` and give
 `Map::obstacleDm`). Rock terrain always reads as the tallest value. A building with no `fillPercent`
 (a bed, a stove) has none. Ground height counts too: a ridge hides what is behind it.
 
-A door is as tall as its def says (1.0 in RimWorld), so a door always blocks sight for now. Open and
-closed doors come with rooms (C5); then an open door will stop blocking.
+A closed door is as tall as its def says (1.0 in RimWorld) and blocks sight. An **open** door stops
+blocking: the door system sets its obstacle height to 0 while it is open and back when it closes
+(`setDoorSight`, [rooms.md](rooms.md)); the cover map follows.
 
 Plants are not in the layer yet. When C2 adds trees, rocks and bushes it passes their `fillPercent`
 the same way (the layer then holds the taller of building and plant).
@@ -116,5 +117,5 @@ for hidden ground. It also prints the cover build time and the 40-source threat 
 
 - Per-part hitboxes and bullet-versus-wall hits (F2); choosing where to stand (F4).
 - Lean, peek and prone transitions as movement; this only prices them.
-- Open and closed doors, plants and loose items as cover (C5, C2).
+- Plants and loose items as cover (C2). Open and closed doors are done (C5).
 - Upper levels (stairs, floors).

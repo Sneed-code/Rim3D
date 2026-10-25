@@ -33,6 +33,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Pawn movement (format 3) | each pawn's velocity, line start, held-up counters (`Mover`), and the repath count |
 | Colonists (format 4) | each colonist's name, age, backstories, traits, skills and the scenario name in the settings ([colonists.md](colonists.md)) |
 | Needs, schedules and beds (format 8) | per pawn: food, rest, malnutrition, the next food search, the 24 schedule hours; per bed: its owners; per job: the chair it eats at ([needs.md](needs.md)) |
+| Doors (format 12) | per door: opening progress, steps before it closes, open. Rooms and roofs are rebuilt from the walls ([rooms.md](rooms.md)) |
 | Mood (format 11) | per pawn: level, break band, memories (thought **by `defName`**, fade time) ([mood.md](mood.md)) |
 | Pawn health (format 5) | per pawn: protagonist flag, rest, injuries (part, hediff **by `defName`**, severity, tend quality), lost parts, blood loss, dead and cause. Pain, bleeding, capacities and downed are worked out again on loading ([health.md](health.md)) |
 | Direct control (format 7) | which colonist the player controls (a flag on the pawn); the `ControlPawn` and `DirectMove` commands in the log ([protagonist.md](protagonist.md)) |
@@ -102,7 +103,7 @@ three is a bug the tests are built to catch:
    write the change here. Old saves keep loading until a decision says otherwise (decision 0005
    dropped formats 1 to 5 for the job system). Format 8 (C6) added needs, schedules, bed owners and
    a job's chair; format 9 (C2) added the plant layer; format 10 (C4) added building plans, built-of and deconstruct marks and a job's site and
-   progress. Format 11 (C9) added mood. Format 6 to 10 saves still load, their pawns without needs, mood or their buildings without plans.
+   progress. Format 11 (C9) added mood; format 12 (C5) door states. Format 6 to 11 saves still load, their pawns without needs, mood or their buildings without plans, their doors closed.
 
 Never store a `DefId` (or any number that depends on load order) in a save: use the `defName`.
 The same goes for region ids, which a loaded map numbers afresh: keep a cell, and never let a

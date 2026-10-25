@@ -4,6 +4,7 @@
 #include "ColonySim/Doors.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Mood.h"
 #include "ColonySim/Pathfinder.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Rooms.h"
@@ -506,4 +507,35 @@ TEST_CASE("Doors: an open door lets a pawn see through, a closed one blocks sigh
     loaded.sim->stepMany(100);
     CHECK_FALSE(loaded.sim->cover().lineOfSight(north, south));
     CHECK(loaded.sim->stateHash() == sim.stateHash());
+}
+
+TEST_CASE("Rooms: waking up outside starts the slept outside thought, indoors does not") {
+    SimSettings settings{3, 96, 0, 0, true};
+    settings.scenario = "Crashlanded";
+    Sim sim(settings, roomsDefs());
+    sim.step();  // the colonists get their mood
+    Entity pawn = kNoEntity;
+    for (const auto [entity, mood] : sim.things().registry().view<const Mood>().each()) {
+        pawn = entity;
+        break;
+    }
+    ROOMS_REQUIRE(pawn != kNoEntity);
+    roomsRing(sim, 10, 10, 16, 16);
+    const auto sleptOutside = [&](CellPos cell) {
+        Event woke;
+        woke.type = EventType::PawnWokeUp;
+        woke.thing = pawn;
+        woke.cell = cell;
+        woke.message = "bed";
+        std::vector<Event> events{woke};
+        sim.mood().step(sim.time().seconds, events);
+        for (const ThoughtView& t : sim.mood().thoughts(pawn, sim.time().seconds)) {
+            if (t.label == "slept outside") {
+                return true;
+            }
+        }
+        return false;
+    };
+    CHECK_FALSE(sleptOutside(CellPos{13, 13, 0}));
+    CHECK(sleptOutside(CellPos{5, 5, 0}));
 }
