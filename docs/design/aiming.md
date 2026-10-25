@@ -101,7 +101,7 @@ back to its spot.
 
 Bullets are never dodged: a rifle bullet at 210 m/s is 35 m further on after even a skill 20
 pawn's reaction time, so it would have to be fired from beyond any gun's range. Thrown and slow
-things (grenades, arrows, rockets, none written yet) will be. The test uses a made-up 18 m/s
+things (grenades, arrows, rockets) are: grenades make a fighter dive instead ([explosives.md](explosives.md)). The test uses a made-up 18 m/s
 projectile fired straight at a drafted colonist from 18 m: it steps aside, the shot misses, and
 it walks back; the same with a rifle bullet hits it.
 
@@ -122,7 +122,7 @@ within the noise of the machine).
 - Players' sway, and the talent tree's "steadier aim" (the protagonist's skill already reduces
   recoil and speeds reloads through the same curves).
 - Ammunition as items: magazines refill from nowhere.
-- Diving away from grenades and blast radius (grenades aren't in yet); dodging by going prone.
+- Diving away from grenades is F9's ([explosives.md](explosives.md)); dodging bullets by going prone is not.
 - Reacting to a target that pops up from cover: the fighter AI shoots at where an enemy will
   show itself (fighters.md), so it has no separate "it just appeared" moment yet.
 - Unreal: a reload animation and sound for `Reload`, a sidestep for `Dodge`, the reload key (U11).

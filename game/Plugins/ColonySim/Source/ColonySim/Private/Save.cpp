@@ -11,6 +11,7 @@
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Doors.h"
+#include "ColonySim/Explosives.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Raids.h"
@@ -210,6 +211,25 @@ struct SaveProjectile {
     Projectile p;
 };
 
+// F9's explosives (section "explosives"): a grenade in flight or lying with its fuse, a pawn's belt
+// and throwing arm, and a pawn knocked down by a blast. Defs by name.
+struct SaveGrenade {
+    std::string def;   // Projectiles def
+    std::string item;  // Things def it was thrown as, empty if none
+    Grenade g;
+};
+struct SaveBeltStack {
+    std::string item;  // Things def
+    int count = 0;
+};
+struct SaveBelt {
+    std::vector<SaveBeltStack> stacks;
+};
+struct SaveThrower {
+    std::string item;  // Things def, empty if none
+    Thrower t;
+};
+
 // A colonist's recreation, comfort and outdoors needs, with the activity of its recreation job by
 // defName (section "recreation").
 struct SaveJoy {
@@ -268,6 +288,10 @@ struct SaveEntity {
     std::optional<Raider> raider;           // section "raids"
     std::optional<AnimalCare> care;         // section "husbandry"
     std::optional<SaveSpoilage> spoilage;   // section "spoilage"
+    std::optional<SaveGrenade> grenade;     // section "explosives"
+    std::optional<SaveBelt> belt;           // section "explosives"
+    std::optional<SaveThrower> thrower;     // section "explosives"
+    std::optional<KnockedDown> knocked;     // section "explosives"
     std::optional<Melee> melee;             // section "melee" (F8)
     std::optional<SaveApparel> apparel;     // section "apparel" (format 20 on)
     std::optional<RecoilKick> kick;         // section "feel"
@@ -1000,6 +1024,20 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("thing", c.thing);
             } else if constexpr (std::is_same_v<Type, SetResearchCommand> || std::is_same_v<Type, UnlockResearchCommand>) {
                 ar.text("project", c.project);
+            } else if constexpr (std::is_same_v<Type, ThrowCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.text("item", c.item);
+                ar.value("target", c.target);
+                ar.value("x", c.x);
+                ar.value("y", c.y);
+                ar.value("player", c.player);
+            } else if constexpr (std::is_same_v<Type, ExplodeCommand>) {
+                ar.value("x", c.x);
+                ar.value("y", c.y);
+                ar.value("radius", c.radius);
+                ar.value("damage", c.damage);
+                ar.text("damageType", c.damageType);
+                ar.value("penetration", c.penetration);
             } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
                 ar.text("faction", c.faction);
                 ar.value("points", c.points);
@@ -1576,6 +1614,52 @@ void saveProjectilePart(Ar& ar, SaveProjectile& sp) {
     ar.group("startCell", [&] { saveCell(ar, sp.p.startCell); });
     ar.value("seed", sp.p.seed);
 
+}
+
+template <typename Ar>
+void saveGrenadePart(Ar& ar, SaveGrenade& sg) {
+    ar.text("def", sg.def);
+    ar.text("item", sg.item);
+    ar.value("thrower", sg.g.thrower);
+    ar.value("x", sg.g.x);
+    ar.value("y", sg.g.y);
+    ar.value("z", sg.g.z);
+    ar.value("vx", sg.g.vx);
+    ar.value("vy", sg.g.vy);
+    ar.value("vz", sg.g.vz);
+    ar.value("level", sg.g.level);
+    ar.value("age", sg.g.age);
+    ar.value("fuse", sg.g.fuse);
+    ar.group("startCell", [&] { saveCell(ar, sg.g.startCell); });
+    ar.value("seed", sg.g.seed);
+}
+
+template <typename Ar>
+void saveBeltPart(Ar& ar, SaveBelt& belt) {
+    ar.list("stacks", belt.stacks, [&](SaveBeltStack& s) {
+        ar.text("item", s.item);
+        ar.value("count", s.count);
+        ar.require(s.count > 0, "the save file has an empty stack of grenades on a belt");
+    });
+}
+
+template <typename Ar>
+void saveThrowerPart(Ar& ar, SaveThrower& st) {
+    ar.value("phase", st.t.phase);
+    ar.require(static_cast<int>(st.t.phase) <= static_cast<int>(ThrowPhase::Cooling), "the save file has a bad throwing phase");
+    ar.value("stepsLeft", st.t.stepsLeft);
+    ar.text("item", st.item);
+    ar.value("target", st.t.target);
+    ar.value("aimX", st.t.aimX);
+    ar.value("aimY", st.t.aimY);
+    ar.value("player", st.t.player);
+}
+
+template <typename Ar>
+void saveKnockedPart(Ar& ar, KnockedDown& k) {
+    ar.value("stepsLeft", k.stepsLeft);
+    ar.value("before", k.before);
+    ar.require(static_cast<int>(k.before) <= static_cast<int>(Stance::Prone), "the save file has a bad stance");
 }
 
 template <typename Ar>
@@ -2255,6 +2339,12 @@ void saveSections(Ar& ar, SaveData& d) {
         d.hasWeather = true;
         saveWeather(ar, d.weather);
     });
+    ar.section("explosives", 1, [&] {
+        saveParts(ar, "belt", e, &SaveEntity::belt, [&](SaveBelt& b) { saveBeltPart(ar, b); });
+        saveParts(ar, "thrower", e, &SaveEntity::thrower, [&](SaveThrower& t) { saveThrowerPart(ar, t); });
+        saveParts(ar, "grenade", e, &SaveEntity::grenade, [&](SaveGrenade& g) { saveGrenadePart(ar, g); });
+        saveParts(ar, "knockedDown", e, &SaveEntity::knocked, [&](KnockedDown& k) { saveKnockedPart(ar, k); });
+    });
     // New sections go here, at the end.
 }
 
@@ -2589,6 +2679,22 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const Projectile* p = reg.try_get<Projectile>(e)) {
             out.projectile = SaveProjectile{sim.defs_->get(p->def).defName(), sim.defs_->get(p->weapon).defName(), *p};
+        }
+        if (const Grenade* g = reg.try_get<Grenade>(e)) {
+            out.grenade = SaveGrenade{sim.defs_->get(g->def).defName(), g->item.valid() ? sim.defs_->get(g->item).defName() : std::string(), *g};
+        }
+        if (const Belt* belt = reg.try_get<Belt>(e)) {
+            SaveBelt saved;
+            for (const BeltStack& s : belt->stacks) {
+                saved.stacks.push_back(SaveBeltStack{sim.defs_->get(s.item).defName(), s.count});
+            }
+            out.belt = std::move(saved);
+        }
+        if (const Thrower* t = reg.try_get<Thrower>(e)) {
+            out.thrower = SaveThrower{t->item.valid() ? sim.defs_->get(t->item).defName() : std::string(), *t};
+        }
+        if (const KnockedDown* k = reg.try_get<KnockedDown>(e)) {
+            out.knocked = *k;
         }
         d.entities.push_back(std::move(out));
     }
@@ -2965,6 +3071,40 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                 return false;
             }
             reg.emplace<Projectile>(entity, p);
+        }
+        if (e.grenade) {
+            Grenade g = e.grenade->g;
+            g.def = sim.defs_->idOf("Projectiles", e.grenade->def);
+            g.item = e.grenade->item.empty() ? DefId{} : sim.defs_->idOf(kSaveThingsKind, e.grenade->item);
+            if (!g.def.valid() || (!e.grenade->item.empty() && !g.item.valid())) {
+                error = "the save has a grenade of '" + e.grenade->def + "', which the data files no longer have";
+                return false;
+            }
+            reg.emplace<Grenade>(entity, g);
+        }
+        if (e.belt) {
+            Belt belt;
+            for (const SaveBeltStack& s : e.belt->stacks) {
+                const DefId item = sim.defs_->idOf(kSaveThingsKind, s.item);
+                if (!item.valid()) {
+                    error = "the save has a grenade '" + s.item + "' on a belt, which the data files no longer have";
+                    return false;
+                }
+                belt.stacks.push_back(BeltStack{item, s.count});
+            }
+            reg.emplace<Belt>(entity, std::move(belt));
+        }
+        if (e.thrower) {
+            Thrower t = e.thrower->t;
+            t.item = e.thrower->item.empty() ? DefId{} : sim.defs_->idOf(kSaveThingsKind, e.thrower->item);
+            if (!e.thrower->item.empty() && !t.item.valid()) {
+                error = "the save has a throw of '" + e.thrower->item + "', which the data files no longer have";
+                return false;
+            }
+            reg.emplace<Thrower>(entity, t);
+        }
+        if (e.knocked) {
+            reg.emplace<KnockedDown>(entity, *e.knocked);
         }
         if (e.faction) {
             reg.emplace<Faction>(entity, *e.faction);

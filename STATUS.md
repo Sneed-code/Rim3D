@@ -297,6 +297,19 @@ length. `MeleeCommand` (Attack, Block) for the player and dev use, events `Melee
 `Block`, snapshot `meleePhase`, `meleeStepsLeft`, `meleeTarget`, `blocking`, save section `melee`. **C20's
 social fights and N5's animal fights start swings with `MeleeSystem::attack`.**
 
+**F9** explosives and grenades are in (`docs/design/explosives.md`, tests `ExplosiveTests`): `CombatSystem::explode`
+is the one blast (radius, falloff to 40% at the edge, three sample points per pawn traced from just above the
+ground so cover and walls shield, a prone pawn takes less, 2 to 4 fragments each through `armorPass`, a knock-down
+for a big hit, and buildings take x2/x4/x8 by material with walls between shielding). A frag grenade (50 damage,
+radius 1.9 m) is a Things item on a pawn's belt (`Belt`, 10 per pawn, `ExplosiveSystem::take`/`give`); `ThrowCommand`
+winds up (none for the player), throws it in a flat or steep arc planned against walls and cover, and it explodes
+50 steps after landing. A grenade is a `Grenade` entity (no `Thing`) in the snapshot's `projectiles`. Fighters
+**dive** from a grenade they see (run out of the radius, or lie prone if there is no room; F5's `dodgeUntil`) and
+**throw** at two or more enemies together or at one they cannot shoot, never with friends in the radius.
+`ExplodeCommand` is the dev/player blast. Events `GrenadeThrown`, `GrenadeLanded`, `Explosion`, `PawnKnockedDown`,
+`PawnAction` `Throw` and `Dive`; save section `explosives` 1. **Molotovs wait for E4 (fire); F11's IED trap, F12's
+sappers and U21's effects call `CombatSystem::explode`.**
+
 D9 (thoughts, recreation, mental break and social data) is in: `docs/design/thoughts-data.md`. Data only; C15, C17, C18, C19, C20, E2 and E3 read it.
 **C15** apparel (`docs/design/apparel.md`): clothes worn in layers with armor and insulation per piece (stuff times quality), wear and tear (absorbed damage and 0.4 HP a day), tattered, naked, nudist and dead man's clothes thoughts, outfit policies (`SetOutfit`, `EditOutfit`, `AddOutfit`, `RemoveOutfit`), a change-clothes think node and a strip job for the downed and dead (`Strip`). Colonists start dressed. Insulation widens the comfortable temperature range (see E2). The starting T-shirt and pants hold a colonist to about 4 degrees outdoors; parkas (C14 tailoring) are what winter needs. Save section `apparel` 1.
 **C17** room stats, beauty and filth (`docs/design/room-stats.md`): floors and filth layers, a cleaning job (indoors only for now), space, beauty, wealth, cleanliness and impressiveness by RimWorld's formulas, the beauty need and the room thoughts. Floors come only by `PlaceFloor` command: no floor-building job exists in any plan task yet (BACKLOG). Save section `roomstats` 1.

@@ -32,10 +32,18 @@
     "dodgeRadius": 0.6,
     "dodgeClearance": 0.9,
     "dodgeHoldSteps": 3,
+    "diveMargin": 0.6,
+    "diveSafe": 0.4,
+    "throwEvery": 15,
+    "throwMinEnemies": 2,
+    "throwMemory": 150,
+    "throwSelfMargin": 1.5,
+    "throwFriendMargin": 0.5,
     "ours": ["planEvery", "searchRadius", "draftLeash", "holdRadius", "sightRange", "memorySeconds", "threats",
              "refine", "coverWeight", "exposedWeight", "noShotWeight", "travelWeight", "rangeWeight", "tooClose",
              "crowdRadius", "crowdWeight", "stayBonus", "advanceWeight", "fallBackWeight", "standPenalty",
              "stepOutPenalty", "outnumberedRatio", "countRadius", "hurtPain", "hurtBloodLoss", "hurtMoving",
-             "stepBackBelow", "reloadBelow", "dodgeRadius", "dodgeClearance", "dodgeHoldSteps"]
+             "stepBackBelow", "reloadBelow", "dodgeRadius", "dodgeClearance", "dodgeHoldSteps",
+             "diveMargin", "diveSafe", "throwEvery", "throwMinEnemies", "throwMemory", "throwSelfMargin", "throwFriendMargin"]
   }
 ]
