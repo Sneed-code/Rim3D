@@ -158,7 +158,8 @@ recording and checks every hash). CI uploads the recording from Linux and Window
 `tools/compare_replays.py` checks they match hash for hash.
 
 **Bug reports from sneed's PC.** F7 in the game (U2) writes `recordReplay` to
-`Saved/Replays/`. The file plus the commit it was made on reproduces the session in the cloud
+`Saved/Replays/`; F8 (U12) writes a whole bug report folder (replay, save, readable dump, notes; see
+`saves.md`). The file plus the commit it was made on reproduces the session in the cloud
 with `simrun --replay`; `firstMismatch` and the checkpoints narrow down when things went wrong.
 
 ## Unreal side (task U2)
