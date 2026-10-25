@@ -843,31 +843,40 @@ Entity CombatSystem::fire(Entity pawn, float x, float y, float z, float spreadSl
         return kNoEntity;
     }
     const DefId weaponDef = reg.get<Thing>(weapon).def;
+    const Position pos = reg.get<Position>(pawn);
+    const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(pawn).def);
+    const Stance stance = combatStanceOf(reg, pawn);
+    const float muzzle = kind != nullptr ? kind->poses[static_cast<int>(stance)].muzzle : eyeHeight(stance) - 0.15f;
+    return launch(pawn, weaponDef, pos.x, pos.y, map_.heightAt(pos.x, pos.y) + muzzle, pos.level, cellOf(pos), x, y, z,
+                  spreadSlope, rng, kickUp, kickSide, &reg.get<Posture>(pawn));
+}
+
+Entity CombatSystem::fireFrom(Entity launcher, DefId weapon, float ox, float oy, float oz, int level, CellPos startCell,
+                              float x, float y, float z, float spreadSlope, Rng& rng) {
+    return launch(launcher, weapon, ox, oy, oz, level, startCell, x, y, z, spreadSlope, rng, 0.0f, 0.0f, nullptr);
+}
+
+Entity CombatSystem::launch(Entity pawn, DefId weaponDef, float ox, float oy, float oz, int level, CellPos startCell,
+                            float x, float y, float z, float spreadSlope, Rng& rng, float kickUp, float kickSide,
+                            Posture* posture) {
+    entt::registry& reg = things_.registry();
     const CombatModel::Gun* gun = model_->gun(weaponDef);
     if (gun == nullptr) {
         return kNoEntity;
     }
     const CombatModel::Bullet& bullet = *model_->bullet(gun->projectile);
-    const Position pos = reg.get<Position>(pawn);
-    Posture& posture = reg.get<Posture>(pawn);
-    const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(pawn).def);
-    const Stance stance = combatStanceOf(reg, pawn);
-    const float muzzle = kind != nullptr ? kind->poses[static_cast<int>(stance)].muzzle : eyeHeight(stance) - 0.15f;
-    const float ox = pos.x;
-    const float oy = pos.y;
-    const float oz = map_.heightAt(pos.x, pos.y) + muzzle;
 
     float dx = x - ox;
     float dy = y - oy;
     const float dz = z - oz;
     float flat = std::sqrt(dx * dx + dy * dy);
     if (flat < 0.01f) {
-        dx = posture.facingX;
-        dy = posture.facingY;
+        dx = posture != nullptr ? posture->facingX : 1.0f;
+        dy = posture != nullptr ? posture->facingY : 0.0f;
         flat = 1.0f;
-    } else {
-        posture.facingX = dx / flat;
-        posture.facingY = dy / flat;
+    } else if (posture != nullptr) {
+        posture->facingX = dx / flat;
+        posture->facingY = dy / flat;
     }
     // Aim above the point so the drop brings the shot onto it (the lower of the two arcs).
     const float v = bullet.speed;
@@ -921,8 +930,8 @@ Entity CombatSystem::fire(Entity pawn, float x, float y, float z, float spreadSl
     p.vx = dir.x * v;
     p.vy = dir.y * v;
     p.vz = dir.z * v;
-    p.level = pos.level;
-    p.startCell = cellOf(pos);
+    p.level = level;
+    p.startCell = startCell;
     p.seed = (static_cast<uint64_t>(rng.next()) << 32) | rng.next();
     reg.emplace<Projectile>(shot, p);
     if (events_ != nullptr) {
@@ -1221,11 +1230,24 @@ float CombatSystem::gravity() const {
 
 bool CombatSystem::leadPoint(Entity shooter, Entity target, float lead, float& x, float& y, float& z) const {
     const entt::registry& reg = things_.registry();
-    if (!aimPoint(target, x, y, z) || !reg.all_of<Position, Gear>(shooter)) {
+    if (!reg.all_of<Position, Gear>(shooter)) {
         return false;
     }
     const Entity weapon = reg.get<Gear>(shooter).weapon;
-    const CombatModel::Gun* gun = weapon != kNoEntity ? model_->gun(reg.get<Thing>(weapon).def) : nullptr;
+    if (weapon == kNoEntity) {
+        return false;
+    }
+    const Position& from = reg.get<Position>(shooter);
+    return leadPointFrom(from.x, from.y, reg.get<Thing>(weapon).def, target, lead, x, y, z);
+}
+
+bool CombatSystem::leadPointFrom(float fromX, float fromY, DefId weapon, Entity target, float lead, float& x, float& y,
+                                 float& z) const {
+    const entt::registry& reg = things_.registry();
+    if (!aimPoint(target, x, y, z)) {
+        return false;
+    }
+    const CombatModel::Gun* gun = model_->gun(weapon);
     if (gun == nullptr) {
         return false;
     }
@@ -1236,19 +1258,31 @@ bool CombatSystem::leadPoint(Entity shooter, Entity target, float lead, float& x
     // The bullet flies its first step in the step it is fired and the target moves at the start of
     // each step after, so it meets the target about half a step short of distance / speed. Twice
     // round, since the lead changes the distance.
-    const Position& from = reg.get<Position>(shooter);
     const float speed = model_->bullet(gun->projectile)->speed;
     const float x0 = x;
     const float y0 = y;
     const float ground0 = map_.heightAt(x0, y0);
     for (int i = 0; i < 2; ++i) {
-        const float dx = x - from.x;
-        const float dy = y - from.y;
+        const float dx = x - fromX;
+        const float dy = y - fromY;
         const float t = std::max(0.0f, std::sqrt(dx * dx + dy * dy) / speed - 0.5f);
         x = x0 + mover->vx * t * lead;
         y = y0 + mover->vy * t * lead;
     }
     z += map_.heightAt(x, y) - ground0;
+    return true;
+}
+
+bool CombatSystem::gunStats(DefId weapon, GunStats& out) const {
+    const CombatModel::Gun* gun = model_->gun(weapon);
+    if (gun == nullptr) {
+        return false;
+    }
+    out.range = gun->range;
+    out.warmup = gun->warmup;
+    out.cooldown = gun->cooldown;
+    out.burst = gun->burst;
+    out.burstGap = gun->burstGap;
     return true;
 }
 

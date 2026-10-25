@@ -67,6 +67,8 @@ enum class EventType : uint8_t {
     EggLaid,         // a hen laid an egg
     EggHatched,      // a fertilized egg hatched into a young animal
     AnimalGathered,  // a colonist milked or sheared an animal
+    TrapSprung,      // a pawn set off a trap (docs/design/defense.md)
+    TrapRearmed,     // a sprung trap was set again
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -147,6 +149,9 @@ struct Event {
     // when it hatched), `amount` the litter size. EggLaid: `thing` the egg item (the stack it joined), `target` the hen, `def` the
     // egg, `message` "fertilized" or empty, `amount` the eggs laid. EggHatched: `thing` the young animal, `def` the egg's def.
     // AnimalGathered: `thing` the animal, `target` the colonist, `def` the product, `amount` how many, `message` "milk" or "wool".
+    // TrapSprung: `thing` the trap (it may be gone: an IED always is), `def` its def, `target` the pawn that set it off,
+    // `cell` its cell, (x, y, z) where. The hurt come as PawnInjured and the blast as Explosion. TrapRearmed: `thing`,
+    // `def`, `cell`. A turret's shots are ShotFired with `thing` the turret and `def` its gun's Things def.
     // TalentPoint: `thing` the protagonist, `def` its def, `amount` the points it can spend now.
     // ShortCircuit: `thing` the building it happened at, `cell` its origin, `amount` the energy
     // released from the net's batteries, Wd.

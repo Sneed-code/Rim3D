@@ -259,6 +259,8 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, SpendTalentPointCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["talent"] = c.talent;
+            } else if constexpr (std::is_same_v<Type, RearmTrapCommand>) {
+                j["trap"] = entt::to_integral(c.trap);
             } else {
                 static_assert(std::is_same_v<Type, AddTalentXpCommand>, "write every command type");
                 j["pawn"] = entt::to_integral(c.pawn);
@@ -942,6 +944,14 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "RearmTrap") {
+        RearmTrapCommand c;
+        uint32_t trap = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "trap", trap, where)) {
+            return false;
+        }
+        c.trap = static_cast<Entity>(trap);
         out.command = std::move(c);
     } else if (type == "AddTalentXp") {
         AddTalentXpCommand c;
