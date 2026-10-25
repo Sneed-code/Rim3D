@@ -149,6 +149,9 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, SetFactionCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["faction"] = c.faction;
+            } else if constexpr (std::is_same_v<Type, SetLineageCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["lineage"] = c.lineage;
             } else {
                 static_assert(std::is_same_v<Type, ReloadCommand>, "write every command type");
                 j["pawn"] = entt::to_integral(c.pawn);
@@ -374,6 +377,14 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             *field = static_cast<float>(it->get<double>());
         }
         out.command = c;
+    } else if (type == "SetLineage") {
+        SetLineageCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "lineage", c.lineage, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
     } else if (type == "DamagePawn") {
         uint32_t pawn = entt::to_integral(kNoEntity);
         DamagePawnCommand c;

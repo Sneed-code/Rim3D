@@ -33,6 +33,7 @@ expansions. The owner, sneed, does not program: Claude does all the work, sneed 
 ```
 game/Rim3D.uproject            Unreal project
 game/Source/Rim3D/             Unreal-side C++ (USimSubsystem bridge, rendering, UI, input)
+game/Source/Rim3DEditor/       editor-only commandlets that make generated assets (not in Git)
 game/Plugins/ColonySim/        the sim: Source/ (plugin module), Tests/, Tools/simrun/, ThirdParty/
 data/defs/<Kind>/*.json        content defs, one folder per def kind
 tools/                         Python: check_defs.py, the unused RimWorld importer, later editor scripts

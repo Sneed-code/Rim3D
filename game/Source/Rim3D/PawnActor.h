@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 
 #include "PawnAnimInstance.h"
+#include "PawnSubsystem.h"
 
 #include "ColonySim/Entity.h"
 #include "ColonySim/Events.h"
@@ -13,6 +14,7 @@
 class USimPawnSubsystem;
 class USimSubsystem;
 class USkeletalMeshComponent;
+class UStaticMeshComponent;
 namespace colony { struct ThingView; }
 
 /**
@@ -44,6 +46,16 @@ public:
 	/** Plays the short animation for what the pawn did (picked up, put down). */
 	void PlayAction(colony::PawnAction Action);
 
+	/** Gives the pawn its seeded looks (docs/design/looks.md): height, and with the MetaHuman its body
+	 *  shape, skin and hair colour; horns for lineages that have them. Does nothing if they are unchanged. */
+	void ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& InLooks);
+	bool HasLooks() const { return bHasLooks; }
+	const FSimPawnLooks& GetLooks() const { return Looks; }
+	/** The MetaHuman's meshes that carry the body shape morphs, and its skin meshes (body, face). */
+	const TArray<TObjectPtr<USkeletalMeshComponent>>& GetShapedMeshes() const { return ShapedMeshes; }
+	const TArray<TObjectPtr<USkeletalMeshComponent>>& GetSkinMeshes() const { return SkinMeshes; }
+	const TArray<TObjectPtr<UStaticMeshComponent>>& GetHorns() const { return Horns; }
+
 	/** Hides or shows the whole pawn, MetaHuman included (first person view hides the player's own body). */
 	void SetBodyHidden(bool bHide);
 	bool IsBodyHidden() const { return IsHidden(); }
@@ -74,6 +86,22 @@ private:
 
 	UPROPERTY()
 	TArray<TObjectPtr<USceneComponent>> Grooms;
+
+	UPROPERTY()
+	TArray<TObjectPtr<USkeletalMeshComponent>> ShapedMeshes;
+
+	UPROPERTY()
+	TArray<TObjectPtr<USkeletalMeshComponent>> SkinMeshes;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> Horns;
+
+	/** The MetaHuman's own body (leader of its clothes), where horns go. */
+	UPROPERTY()
+	TObjectPtr<USkeletalMeshComponent> MetaHumanBody;
+
+	FSimPawnLooks Looks;
+	bool bHasLooks = false;
 
 	colony::Entity Thing = colony::kNoEntity;
 	ESimPawnDetail Detail = ESimPawnDetail::Full;

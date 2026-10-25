@@ -94,7 +94,8 @@ walking underneath because locomotion keeps updating.
 `Pawns.MetaHumans 1` draws every pawn as the sample's MetaHuman (`BP_Kellan`), as in the Stage 0
 test: the mannequin is hidden but keeps animating, and the MetaHuman's body copies its pose
 (leader pose). Strand hair (`GroomComponent`, found by class name) is shown only at full detail.
-Seeded looks (body types, skin tint, lineage parts) are task A3. The default is mannequins.
+Seeded looks (body shapes, skin colour, height, lineage parts such as horns) come from the sim
+since A3 ([looks.md](looks.md)). The default is mannequins.
 
 ## Cost, measured (smoke test, editor build, offscreen 888x500)
 

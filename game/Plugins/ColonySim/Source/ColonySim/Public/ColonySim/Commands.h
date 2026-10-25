@@ -233,6 +233,14 @@ struct SetFactionCommand {
     uint32_t faction = 1;
 };
 
+// Dev command: makes a humanlike pawn one of another lineage (a Lineages defName), as a lineage
+// graft will once there are grafts. Only its looks change (docs/design/looks.md). Fails for a
+// pawn without looks or an unknown lineage.
+struct SetLineageCommand {
+    Entity pawn = kNoEntity;
+    std::string lineage;
+};
+
 // Reloads the pawn's gun now rather than when it runs dry (F5, docs/design/aiming.md): the
 // protagonist's reload key, or a tactical reload. Fails if the pawn has no gun with a magazine, the
 // magazine is full, or the pawn is downed, mid-shot or reloading already.
@@ -247,7 +255,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ControlPawnCommand, DirectMoveCommand, SetScheduleCommand, AssignBedCommand,
                              PlaceBlueprintCommand, CancelBuildCommand, DeconstructCommand, EquipCommand,
                              ShootCommand, SetStanceCommand, DesignateCommand, CancelDesignationsCommand,
-                             DraftCommand, MoveOrderCommand, AttackOrderCommand, SetFactionCommand, ReloadCommand>;
+                             DraftCommand, MoveOrderCommand, AttackOrderCommand, SetFactionCommand, SetLineageCommand,
+                             ReloadCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

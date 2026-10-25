@@ -173,9 +173,21 @@ void USmokeTestSubsystem::BuildProtagonistPhases()
 			Fail(FString::Printf(TEXT("Could not copy %s to %s"), *Source, *Dest));
 			return;
 		}
-		FFileHelper::SaveStringToFile(
-			TEXT("[{\"defName\": \"Wall\", \"label\": \"wall\", \"category\": \"Building\", \"passability\": \"Impassable\", \"fillPercent\": 1.0}]"),
-			*(Dest / TEXT("defs/Things/ProtagonistSmokeWall.json")));
+		// Since C4 the game's data has a wall of its own; add one only if it doesn't.
+		bool bHasWall = false;
+		TArray<FString> ThingFiles;
+		IFileManager::Get().FindFiles(ThingFiles, *(Dest / TEXT("defs/Things/*.json")), true, false);
+		for (const FString& File : ThingFiles)
+		{
+			FString Text;
+			bHasWall = bHasWall || (FFileHelper::LoadFileToString(Text, *(Dest / TEXT("defs/Things") / File)) && Text.Contains(TEXT("\"defName\": \"Wall\"")));
+		}
+		if (!bHasWall)
+		{
+			FFileHelper::SaveStringToFile(
+				TEXT("[{\"defName\": \"Wall\", \"label\": \"wall\", \"category\": \"Building\", \"passability\": \"Impassable\", \"fillPercent\": 1.0}]"),
+				*(Dest / TEXT("defs/Things/ProtagonistSmokeWall.json")));
+		}
 
 		FSimStartOptions Options;
 		Options.DataRoot = Dest;

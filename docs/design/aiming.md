@@ -107,8 +107,8 @@ it walks back; the same with a rifle bullet hits it.
 
 ## Saves, hash, replays
 
-Save format 16: the `Magazine` component, the `Reloading` phase, `Fighter::reactUntil` and
-`dodgeUntil`, and command 26 (`Reload`) ([saves.md](saves.md)). Older saves load with full guns. All
+Save format 17: the `Magazine` component, the `Reloading` phase, `Fighter::reactUntil` and
+`dodgeUntil`, and command 27 (`Reload`) ([saves.md](saves.md)). Older saves load with full guns. All
 of it is in `Sim::stateHash`; `Reload` is in replay files.
 
 ## Cost

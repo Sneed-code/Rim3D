@@ -16,6 +16,8 @@ game/Content/Megascans/
 game/Content/MetaHumans/
 game/Content/Fab/
 game/Content/ThirdParty/
+# Made from the sample by commandlets (docs/design/looks.md)
+game/Content/Rim3D/Generated/
 # Epic's Game Animation Sample, copied in with its /Game paths unchanged (see assets/manifest.json)
 game/Content/Audio/
 game/Content/Blueprints/

@@ -49,6 +49,15 @@ that acts on colonists must skip pawns with `PlayerControl`**); a controlled col
 1x or paused. Start it with `-SimScenario=Crashlanded -Direct` (the game's default start still has no colonists); save format 7
 (`docs/design/protagonist.md`, smoke test `protagonist`).
 
+Since A3 pawns have seeded looks (`docs/design/looks.md`, smoke test `looks`): every humanlike pawn
+gets a lineage, body type, weight, height, skin and hair colour from a seed (`PawnLooks`, save format 14;
+`data/defs/Lineages`, `LooksRules`; dev command `SetLineage`). As MetaHumans they get real body shapes
+(thin, heavy, female, from the engine's MetaHuman body type files) as morph targets on the body *and*
+the clothes, our own skin material coloured per pawn, their height as scale, and Emberkin get red skin
+and horns. The shapes and materials are made by the `PawnLooks` commandlet (new editor module
+`Rim3DEditor`) into `game/Content/Rim3D/Generated/` (not in Git; `assets/manifest.json` says how to
+make them again). Everyone still has Kellan's face and outfit.
+
 Since F1 every pawn with a body (`race.body`) has per-part health: the Human body's 64 parts, injuries
 with pain and bleeding, blood loss, downed (pain shock, unconscious, can't move) and death, slow natural
 healing and tending (`sim.health().applyDamage`, the dev commands `DamagePawn` and `TendPawn`, events
@@ -128,7 +137,7 @@ and reload speed. Guns have magazines (revolver 6, assault rifle 30...; ours) th
 when empty, `ReloadCommand` reloads early, and fighters top up in cover when they have no shot.
 Fighters sidestep slow projectiles they see coming in time (bullets are far too fast; for grenades
 and arrows later). Events `PawnAction` `Reload` and `Dodge`; snapshot `rounds`, `magazineSize`,
-`reloading`; save format 16.
+`reloading`; save format 17.
 
 Since D3 the game has real starting data in `data/defs/`, written by hand with RimWorld's numbers
 from the RimWorld wiki (there is no RimWorld install to import from; `docs/decisions/0003`):
@@ -169,7 +178,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-28 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, F5). Tick tasks in `docs/plans/stage-1.md` as they merge.
+29 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -222,10 +231,10 @@ has C2 now, so it is open.
 Wave 6, open now that C1 is in: ~~**C4** building~~ done (`docs/design/construction.md`; save format 10; ~~**C5** doors,
 roofs and rooms~~ done (`docs/design/rooms.md`; save format 13), C7 bills and cooking can start now), ~~**C6** food, rest and
 schedules~~ done (`docs/design/needs.md`; save format 8), ~~**F2** guns and hitboxes~~ done; ~~**C3** mining, chopping
-and harvesting~~ done (`docs/design/mining.md`; save format 14). On the PC, ~~**U9**~~ is done and **A3** needs only done tasks.
+and harvesting~~ done (`docs/design/mining.md`; save format 14). On the PC, ~~**U9**~~ and ~~**A3** seeded looks~~ are done (smoke test `looks`; save format 16).
 U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priorities).
 ~~**F4** fighter AI: where to stand~~ done (`docs/design/fighters.md`; save format 15), ~~**F5** fighter
-AI: aiming~~ done (`docs/design/aiming.md`; save format 16), so **F6** raid and defense (cloud, Opus high)
+AI: aiming~~ done (`docs/design/aiming.md`; save format 17), so **F6** raid and defense (cloud, Opus high)
 is open once C8 is in (it is); with U9 and F2 in, **U11** fights on screen (PC) is too, and can now show
 reloads and sidesteps and bind a reload key.
 

@@ -2,10 +2,17 @@
 
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimSequence.h"
+#include "AnimationRuntime.h"
+#include "Components/MeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 
+#include "PawnLooks.h"
 #include "PawnSubsystem.h"
 #include "SimSubsystem.h"
 
@@ -24,6 +31,14 @@ namespace
 	constexpr float PawnActionBlendIn = 0.25f;
 	constexpr float PawnActionHold = 0.35f;
 	constexpr float PawnActionBlendOut = 0.35f;
+	// Where horns grow, in the MetaHuman's mesh space (cm; +Y forward, +Z up): the top of the
+	// forehead, measured on Kellan's head (its mesh spans z 135 to 173, y -10 to 14).
+	constexpr float PawnHornForward = 6.5f;
+	constexpr float PawnHornUp = 166.0f;
+	// Horns lean outwards by this much (degrees).
+	constexpr float PawnHornTilt = 22.0f;
+	// The horn mesh is 1 cm long with a 0.1 cm base radius (the PawnLooks commandlet makes it).
+	constexpr float PawnHornMeshRadius = 0.1f;
 }
 
 ASimPawnActor::ASimPawnActor()
@@ -71,9 +86,43 @@ void ASimPawnActor::Setup(USimPawnSubsystem& Pawns, colony::Entity InThing, floa
 		MetaHuman->GetComponents(Components);
 		for (USceneComponent* Component : Components)
 		{
-			if (USkeletalMeshComponent* Mesh = Cast<USkeletalMeshComponent>(Component); Mesh && Mesh->GetName() == TEXT("Body"))
+			if (USkeletalMeshComponent* Mesh = Cast<USkeletalMeshComponent>(Component))
 			{
-				Mesh->SetLeaderPoseComponent(Body);
+				if (Mesh->GetName() == TEXT("Body"))
+				{
+					Mesh->SetLeaderPoseComponent(Body);
+					MetaHumanBody = Mesh;
+				}
+				// Seeded looks: the copy of each mesh with the body shape morphs, and our skin
+				// material on the skin slots (docs/design/looks.md).
+				if (USkeletalMesh* Shaped = Pawns.GetMorphMesh(Mesh->GetSkeletalMeshAsset()))
+				{
+					Mesh->SetSkeletalMeshAsset(Shaped);
+					ShapedMeshes.Add(Mesh);
+				}
+				bool bSkin = false;
+				for (int32 Slot = 0; Slot < Mesh->GetNumMaterials(); ++Slot)
+				{
+					// The MetaHuman Blueprint gives the face dynamic instances; ours replace what they were made from.
+					UMaterialInterface* Current = Mesh->GetMaterial(Slot);
+					if (const UMaterialInstanceDynamic* Dynamic = Cast<UMaterialInstanceDynamic>(Current))
+					{
+						Current = Dynamic->Parent;
+					}
+					if (UMaterialInterface* Skin = Pawns.GetSkinMaterial(Current))
+					{
+						Mesh->SetMaterial(Slot, Skin);
+						bSkin = true;
+					}
+					else if (UMaterialInterface* Cloth = Pawns.GetClothMaterial(Current))
+					{
+						Mesh->SetMaterial(Slot, Cloth);
+					}
+				}
+				if (bSkin)
+				{
+					SkinMeshes.Add(Mesh);
+				}
 			}
 			// Strand hair (HairStrands plugin), found by class name so the module needn't be linked.
 			if (Component->GetClass()->GetName() == TEXT("GroomComponent"))
@@ -176,6 +225,78 @@ void ASimPawnActor::PlayAction(colony::PawnAction Action)
 	{
 		ActionEndSeconds = PawnActionBlendIn + PawnActionHold;
 		++ActionsPlayed;
+	}
+}
+
+void ASimPawnActor::ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& InLooks)
+{
+	if (bHasLooks && Looks == InLooks)
+	{
+		return;
+	}
+	Looks = InLooks;
+	bHasLooks = true;
+
+	// Height: the whole pawn, MetaHuman and horns included, scales with the mannequin.
+	Body->SetRelativeScale3D(FVector(Looks.Height));
+
+	for (USkeletalMeshComponent* Mesh : ShapedMeshes)
+	{
+		for (const TPair<FName, float>& Morph : Looks.MorphWeights())
+		{
+			Mesh->SetMorphTarget(Morph.Key, Morph.Value);
+		}
+	}
+	const FVector Skin(Looks.Skin.R, Looks.Skin.G, Looks.Skin.B);
+	for (USkeletalMeshComponent* Mesh : SkinMeshes)
+	{
+		Mesh->SetCustomPrimitiveDataVector3(PawnLooksSkinDataIndex, Skin);
+	}
+	// Strand hair, eyebrows and beards: the MetaHuman hair material is coloured by melanin and redness.
+	const float Lightness = Looks.Hair.GetLuminance();
+	const float Melanin = FMath::Clamp(1.0f - FMath::Sqrt(Lightness) * 1.6f, 0.0f, 1.0f);
+	const float Redness = FMath::Clamp((Looks.Hair.R - Looks.Hair.B) / FMath::Max(Looks.Hair.R, 0.01f), 0.0f, 1.0f) * 0.8f;
+	for (USceneComponent* Groom : Grooms)
+	{
+		if (UMeshComponent* Mesh = Cast<UMeshComponent>(Groom); Mesh && Groom->GetName() != TEXT("Fuzz") && Groom->GetName() != TEXT("Eyelashes"))
+		{
+			Mesh->SetScalarParameterValueOnMaterials(TEXT("HairMelanin"), Melanin);
+			Mesh->SetScalarParameterValueOnMaterials(TEXT("HairRedness"), Redness);
+		}
+	}
+
+	// Horns on the head bone of whichever body shows, placed in its reference pose.
+	for (UStaticMeshComponent* Horn : Horns)
+	{
+		if (Horn)
+		{
+			Horn->DestroyComponent();
+		}
+	}
+	Horns.Reset();
+	UStaticMesh* HornMesh = Looks.HornLength > 0.0f ? Pawns.GetHornMesh() : nullptr;
+	USkeletalMeshComponent* Head = MetaHumanBody ? MetaHumanBody.Get() : Body.Get();
+	const USkeletalMesh* HeadMesh = Head ? Head->GetSkeletalMeshAsset() : nullptr;
+	const int32 HeadBone = HeadMesh ? HeadMesh->GetRefSkeleton().FindBoneIndex(TEXT("head")) : INDEX_NONE;
+	if (HornMesh && HeadBone != INDEX_NONE)
+	{
+		const FTransform HeadRef = FAnimationRuntime::GetComponentSpaceTransformRefPose(HeadMesh->GetRefSkeleton(), HeadBone);
+		const float Thickness = Looks.HornRadius / PawnHornMeshRadius;
+		for (const float Side : {-1.0f, 1.0f})
+		{
+			UStaticMeshComponent* Horn = NewObject<UStaticMeshComponent>(this);
+			Horn->SetStaticMesh(HornMesh);
+			Horn->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Horn->SetCanEverAffectNavigation(false);
+			Horn->SetCastShadow(true);
+			const FTransform InMesh(FRotator(-Side * PawnHornTilt, 0.0, 0.0), FVector(Side * Looks.HornSpread, PawnHornForward, PawnHornUp),
+				FVector(Thickness, Thickness, Looks.HornLength));
+			Horn->SetupAttachment(Head, TEXT("head"));
+			Horn->SetRelativeTransform(InMesh.GetRelativeTransform(HeadRef));
+			Horn->RegisterComponent();
+			Horn->SetCustomPrimitiveDataVector3(PawnLooksSkinDataIndex, FVector(Looks.HornColor.R, Looks.HornColor.G, Looks.HornColor.B));
+			Horns.Add(Horn);
+		}
 	}
 }
 

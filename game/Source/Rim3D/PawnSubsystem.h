@@ -12,10 +12,38 @@
 
 class ASimPawnActor;
 class UAnimSequence;
+class UMaterialInterface;
 class UPoseSearchDatabase;
+class UStaticMesh;
 class USimSubsystem;
 class USkeletalMesh;
-namespace colony { class Sim; }
+namespace colony { class DefDatabase; class Sim; struct PawnLooksView; }
+
+/**
+ * How a pawn looks, from the sim's PawnLooksView and its lineage's def, in Unreal's terms
+ * (docs/design/looks.md). Colours are linear.
+ */
+struct FSimPawnLooks
+{
+	float Height = 1.0f;  // scale of the whole body
+	float Weight = 0.0f;  // -1 thin to 1 heavy
+	bool bFemale = false;
+	FLinearColor Skin = FLinearColor(0.15f, 0.08f, 0.06f);
+	FLinearColor Hair = FLinearColor(0.02f, 0.015f, 0.01f);
+	float HornLength = 0.0f;  // cm; 0 for no horns
+	float HornRadius = 0.0f;  // cm, at the base
+	float HornSpread = 0.0f;  // cm from the middle of the forehead
+	FLinearColor HornColor = FLinearColor::Black;
+
+	bool operator==(const FSimPawnLooks& Other) const
+	{
+		return Height == Other.Height && Weight == Other.Weight && bFemale == Other.bFemale && Skin == Other.Skin && Hair == Other.Hair
+			&& HornLength == Other.HornLength && HornRadius == Other.HornRadius && HornSpread == Other.HornSpread && HornColor == Other.HornColor;
+	}
+
+	/** The body shape morphs' weights (PawnLooks.h names) for this weight and gender. */
+	TArray<TPair<FName, float>> MorphWeights() const;
+};
 
 /** Pawns at each detail level this frame (USimPawnSubsystem). */
 struct FSimPawnDetailCounts
@@ -69,6 +97,15 @@ public:
 	UAnimSequence* GetActionAnimation(colony::PawnAction Action) const;
 	UClass* GetMetaHumanClass() const { return MetaHumanClass; }
 
+	/** Looks assets from the PawnLooks commandlet (docs/design/looks.md); null if it hasn't been run. */
+	USkeletalMesh* GetMorphMesh(const USkeletalMesh* Original);
+	UMaterialInterface* GetSkinMaterial(const UMaterialInterface* Original);
+	/** Clothes materials that may be used with the body shape morphs. */
+	UMaterialInterface* GetClothMaterial(const UMaterialInterface* Original);
+	UStaticMesh* GetHornMesh();
+	/** The looks a pawn's sim looks and lineage add up to. */
+	static FSimPawnLooks MakeLooks(const colony::PawnLooksView& View, const colony::DefDatabase* Defs);
+
 protected:
 	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
 
@@ -100,6 +137,22 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UClass> MetaHumanClass;
+
+	/** Looks assets by the name of the sample asset they replace; null where there is none. */
+	UPROPERTY()
+	TMap<FName, TObjectPtr<USkeletalMesh>> MorphMeshes;
+
+	UPROPERTY()
+	TMap<FName, TObjectPtr<UMaterialInterface>> SkinMaterials;
+
+	UPROPERTY()
+	TMap<FName, TObjectPtr<UMaterialInterface>> ClothMaterials;
+
+	UPROPERTY()
+	TObjectPtr<UStaticMesh> HornMesh;
+
+	bool bHornTried = false;
+	bool bLooksMissingLogged = false;
 
 	float WalkLoopSpeed = 150.0f;
 	float RunLoopSpeed = 400.0f;
