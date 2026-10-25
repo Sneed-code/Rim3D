@@ -91,6 +91,14 @@ const char* commandName(const Command& command) {
                 return "SetResearch";
             } else if constexpr (std::is_same_v<Type, UnlockResearchCommand>) {
                 return "UnlockResearch";
+            } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
+                return "StartRaid";
+            } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
+                return "SoundAlarm";
+            } else if constexpr (std::is_same_v<Type, SetDefenseRoleCommand>) {
+                return "SetDefenseRole";
+            } else if constexpr (std::is_same_v<Type, MarkShelterCommand>) {
+                return "MarkShelter";
             } else if constexpr (std::is_same_v<Type, MarkAnimalCommand>) {
                 return "MarkAnimal";
             } else if constexpr (std::is_same_v<Type, SetTrainingCommand>) {
@@ -113,9 +121,11 @@ const char* commandName(const Command& command) {
                 return "AddOutfit";
             } else if constexpr (std::is_same_v<Type, RemoveOutfitCommand>) {
                 return "RemoveOutfit";
-            } else {
-                static_assert(std::is_same_v<Type, StripCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, StripCommand>) {
                 return "Strip";
+            } else {
+                static_assert(std::is_same_v<Type, SetWeatherCommand>, "name every command type");
+                return "SetWeather";
             }
         },
         command);
@@ -174,6 +184,10 @@ const char* eventTypeName(EventType type) {
         case EventType::ItemSpoiled: return "ItemSpoiled";
         case EventType::PawnPoisoned: return "PawnPoisoned";
         case EventType::ResearchDone: return "ResearchDone";
+        case EventType::RaidArrived: return "RaidArrived";
+        case EventType::SquadChanged: return "SquadChanged";
+        case EventType::AlarmChanged: return "AlarmChanged";
+        case EventType::PawnLeftMap: return "PawnLeftMap";
         case EventType::AnimalTamed: return "AnimalTamed";
         case EventType::AnimalReleased: return "AnimalReleased";
         case EventType::AnimalTrained: return "AnimalTrained";
@@ -183,6 +197,8 @@ const char* eventTypeName(EventType type) {
         case EventType::MeleeSwing: return "MeleeSwing";
         case EventType::MeleeHit: return "MeleeHit";
         case EventType::ApparelDestroyed: return "ApparelDestroyed";
+        case EventType::WeatherChanged: return "WeatherChanged";
+        case EventType::SeasonChanged: return "SeasonChanged";
     }
     return "?";
 }

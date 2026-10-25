@@ -338,6 +338,40 @@ struct UnlockResearchCommand {
     std::string project;
 };
 
+// Raids (F6, docs/design/raids.md). Dev command until the narrator sends raids: a raid of
+// `faction` (a Factions defName) worth `points` raid points (0: what the colony is worth now, by
+// RimWorld's rule) walks in at `edge` (0 north, 1 east, 2 south, 3 west, -1 any) and attacks.
+// Fails for an unknown faction or edge, or when there is no way in from that edge.
+struct StartRaidCommand {
+    std::string faction = "Pirate";
+    float points = 0.0f;
+    int edge = -1;
+};
+
+// The colony alarm: on calls every colonist to its defense role, off sends them back to work. It
+// also sounds by itself when a colonist spots an enemy, and stops when the enemies are gone or
+// fleeing; one the player sounded stays on until the player stops it. Fails if it already is.
+struct SoundAlarmCommand {
+    bool on = true;
+};
+
+// What a colonist does when the alarm sounds: 0 Defender, 1 Shelter, 2 Keep working (DefenseRole
+// in Raids.h). A Defender can have a defense spot it holds. Fails for a pawn that isn't the
+// colony's, a spot for another role, or a spot nobody can stand on.
+struct SetDefenseRoleCommand {
+    Entity pawn = kNoEntity;
+    uint8_t role = 0;
+    bool hasSpot = false;
+    CellPos spot;
+};
+
+// Marks the room at `cell` as the shelter for Shelter colonists, or with `clear` takes the mark off.
+// Fails if the cell is not in a room under a roof.
+struct MarkShelterCommand {
+    CellPos cell;
+    bool clear = false;
+};
+
 // Taming, training and pens (task N3, docs/design/husbandry.md). `mark` is "Tame" (a wild animal, to be tamed by a colonist
 // with the Handling work), "Slaughter" (a tame one, to be killed) or "Release" (a tame one goes wild at once; `on` is
 // ignored). `on` false takes a mark off. Fails for a thing that is no animal, a dead one, or one of the wrong kind.
@@ -435,6 +469,14 @@ struct DodgeRollCommand {
     float dy = 0.0f;
 };
 
+// Dev command: the weather becomes this Weathers def now (by defName, e.g. "Rain") and lasts `hours`
+// game hours (0: its usual length), then the next is chosen as usual (docs/design/weather.md).
+// Fails if no Weathers def has the name.
+struct SetWeatherCommand {
+    std::string weather;
+    float hours = 0.0f;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -446,11 +488,11 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ReloadCommand, AddBillCommand,
                              RemoveBillCommand, SetBillCommand, HandsOnCommand, FlickCommand, ShortCircuitCommand,
                              PlaceFloorCommand, AddFilthCommand,
-                             SetResearchCommand, UnlockResearchCommand,
-                             MeleeCommand, DodgeRollCommand,
+                             SetResearchCommand, UnlockResearchCommand, StartRaidCommand, SoundAlarmCommand,
+                             SetDefenseRoleCommand, MarkShelterCommand, MeleeCommand, DodgeRollCommand,
                              SetOutfitCommand, EditOutfitCommand, AddOutfitCommand, RemoveOutfitCommand,
-                             StripCommand, MarkAnimalCommand, SetTrainingCommand, CreateAnimalZoneCommand,
-                             RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand>;
+                             StripCommand, SetWeatherCommand, MarkAnimalCommand, SetTrainingCommand,
+                             CreateAnimalZoneCommand, RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.
