@@ -21,7 +21,8 @@ namespace colony { class Map; }
  * and the ImGui panels), pawns (pawn actors, animation detail by distance, actions, MetaHumans),
  * saves (autosave, F5 quicksave, F9 quickload, F8 bug report), protagonist (direct control of a
  * colonist: Tab, first and third person, taking over another colonist, walls, pause, saves), looks
- * (seeded pawn looks on MetaHumans: body shapes, skin colour, height, Emberkin horns).
+ * (seeded pawn looks on MetaHumans: body shapes, skin colour, height, Emberkin horns), world (the ground,
+ * rock, roofs and plants drawn from the sim, rebuilt when rock is mined or a tree felled).
  * Optional: -SmokeTimeout=<seconds> (default 300) fails a run that hangs.
  * To add a test: write a Build<Name>Phases() and add a branch in OnWorldBeginPlay.
  * Run it with tools/smoke.ps1.
@@ -70,6 +71,7 @@ private:
 	void BuildSavesPhases();
 	void BuildProtagonistPhases();  // SmokeTestProtagonist.cpp
 	void BuildLooksPhases();        // SmokeTestLooks.cpp
+	void BuildWorldPhases();        // SmokeTestWorld.cpp
 	void StartPhase(int32 Index);
 	void FinishPhase();
 	void WriteResultsAndQuit();

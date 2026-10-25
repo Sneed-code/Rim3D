@@ -58,6 +58,17 @@ and horns. The shapes and materials are made by the `PawnLooks` commandlet (new 
 `Rim3DEditor`) into `game/Content/Rim3D/Generated/` (not in Git; `assets/manifest.json` says how to
 make them again). Everyone still has Kellan's face and outfit.
 
+Since U3 the game draws the ground and plants (`docs/design/terrain.md`, smoke test `world`): `UTerrainSubsystem` starts
+by itself with any sim and builds one mesh per 32 m chunk (a 1 km map is 32 x 32 chunks, about 220 ms
+to build). The ground has a vertex per cell corner at the sim's height, coloured by terrain type and soil fertility; **rock stands on it as a
+solid 4 m block** (`TerrainDraw::RockHeightM`, picking and the overseer camera know), and a mined cell becomes a rough stone floor, with the mountain's thick
+roof still over it. The thin roof of C5's rooms is a second section of the chunk; **roofs are hidden in the overseer view and shown in direct mode**
+(`Terrain.Roofs` overrides). Mining rebuilds only that chunk (about 0.1 ms). Plants are instanced low-poly meshes made at start from
+each plant def's new `visual` field (stem and crown shapes with colours; A1 can set `visual.mesh` instead), one component per chunk and kind, with cull
+distances for grass; the sim's plant events and a rotating scan of chunk plant sizes keep them current, no snapshot copy. Looks are placeholders
+(flat colours, engine vertex-colour material) until A2. The old Stage 0 terrain test is still the `terrain` smoke test; the other smoke tests now
+get their ground from this subsystem. No sim changes except `USimSubsystem::GetSimGeneration`.
+
 Since F1 every pawn with a body (`race.body`) has per-part health: the Human body's 64 parts, injuries
 with pain and bleeding, blood loss, downed (pain shock, unconscious, can't move) and death, slow natural
 healing and tending (`sim.health().applyDamage`, the dev commands `DamagePawn` and `TendPawn`, events
@@ -178,7 +189,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-29 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5). Tick tasks in `docs/plans/stage-1.md` as they merge.
+30 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -225,8 +236,8 @@ sand, the doc says why). ~~**C1** job system~~ done (`docs/design/jobs.md`; save
 `docs/design/pawns.md`; the sim's new `PawnAction` event, which C1's jobs should send for their
 actions too). ~~**U6** overseer camera and selection~~ done (PC Unreal;
 smoke test `overseer`; `docs/design/overseer.md`). ~~**U9** protagonist~~ done (PC Unreal; smoke test
-`protagonist`; `docs/design/protagonist.md`; save format 7). **U3** terrain and plants (PC Unreal, Sonnet high)
-has C2 now, so it is open.
+`protagonist`; `docs/design/protagonist.md`; save format 7). ~~**U3** terrain and plants~~ done (PC Unreal; smoke test `world`;
+`docs/design/terrain.md`); **U4** buildings and items and **A2** terrain materials (needs sneed's Megascans) are open now.
 
 Wave 6, open now that C1 is in: ~~**C4** building~~ done (`docs/design/construction.md`; save format 10; ~~**C5** doors,
 roofs and rooms~~ done (`docs/design/rooms.md`; save format 13), C7 bills and cooking can start now), ~~**C6** food, rest and

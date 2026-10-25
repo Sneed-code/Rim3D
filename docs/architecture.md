@@ -109,7 +109,7 @@ Unreal builds the 3D world from the sim's snapshot and events. We use the latest
 
 | Part | How it's drawn |
 | --- | --- |
-| Terrain and mountains | Chunk meshes (32 m) built at runtime from the sim's height and rock layers, with Megascans materials. Mining a rock cell rebuilds one chunk. Not Unreal's Landscape, which can't be generated or dug into at runtime. Stage 0 built a 1 km map in 155 ms and drew it in about 4 ms of GPU time; how it looks with Megascans materials is still to be judged. |
+| Terrain and mountains | Chunk meshes (32 m) built at runtime from the sim's height and rock layers, with Megascans materials. Mining a rock cell rebuilds one chunk. Not Unreal's Landscape, which can't be generated or dug into at runtime. Stage 0 built a 1 km map in 155 ms and drew it in about 4 ms of GPU time; how it looks with Megascans materials is still to be judged. Built in U3 as `UTerrainSubsystem` (`docs/design/terrain.md`): 32 m chunk meshes, rock as 4 m blocks, roofs as a second section, plants as instances. |
 | Buildings, walls, furniture | Instanced static meshes per mesh type per chunk, Nanite where possible. Damage swaps to a worn variant at hit-point thresholds. |
 | Destruction | When the sim destroys a building, Unreal spawns a pre-fractured Chaos version that collapses into debris. Debris is cosmetic; the sim places rubble. |
 | Plants | Instanced meshes from the sim's plant layer. Felled trees topple with physics. Grass, pebbles and other clutter that don't matter to the game come from Unreal's PCG tools. |

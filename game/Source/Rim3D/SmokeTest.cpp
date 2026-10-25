@@ -128,6 +128,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildLooksPhases();
 	}
+	else if (TestName == TEXT("world"))
+	{
+		BuildWorldPhases();
+	}
 	else
 	{
 		Fail(FString::Printf(TEXT("Unknown smoke test '%s'"), *TestName));
@@ -1348,7 +1352,6 @@ void USmokeTestSubsystem::BuildOverseerPhases()
 				++Walls;
 			}
 		}
-		BuildTerrainMesh(Bridge->GetSim()->map(), FPlatformTime::Seconds());
 		if (IConsoleVariable* DebugDraw = IConsoleManager::Get().FindConsoleVariable(TEXT("Sim.DebugDraw")))
 		{
 			DebugDraw->Set(1);
@@ -1927,7 +1930,6 @@ void USmokeTestSubsystem::BuildPawnsPhases()
 			return;
 		}
 		Bridge->SetSpeed(1);
-		BuildTerrainMesh(Bridge->GetSim()->map(), FPlatformTime::Seconds());
 		OverseerView();
 		StartPhaseCounters();
 	}, Warmup, 10.0f, [=, this]()
