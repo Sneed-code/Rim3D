@@ -1,0 +1,484 @@
+[
+ {
+  "defName": "PowerBase",
+  "parent": "BuildingBase",
+  "abstract": true,
+  "source": "RimWorld wiki",
+  "costs": {},
+  "designationCategory": "Power",
+  "passability": "PassThroughOnly",
+  "fillPercent": 0.5,
+  "stats": {
+   "flammability": 0.5
+  },
+  "unverified": [
+   "fillPercent",
+   "stats.flammability"
+  ]
+ },
+ {
+  "defName": "PowerConduit",
+  "parent": "PowerBase",
+  "label": "power conduit",
+  "size": [
+   1,
+   1
+  ],
+  "costs": {
+   "Steel": 1
+  },
+  "fillPercent": 0,
+  "stats": {
+   "maxHitPoints": 80,
+   "workToBuild": 100.8
+  },
+  "power": {
+   "transmitter": true
+  },
+  "passability": "Standable",
+  "unverified": [
+   "costs",
+   "stats.workToBuild",
+   "stats.maxHitPoints"
+  ]
+ },
+ {
+  "defName": "PowerSwitch",
+  "parent": "PowerBase",
+  "label": "power switch",
+  "size": [
+   1,
+   1
+  ],
+  "costs": {
+   "Steel": 1,
+   "ComponentIndustrial": 1
+  },
+  "fillPercent": 0,
+  "stats": {
+   "maxHitPoints": 80,
+   "workToBuild": 144.0
+  },
+  "power": {
+   "transmitter": true,
+   "switchable": true
+  },
+  "unverified": [
+   "costs",
+   "stats.workToBuild"
+  ]
+ },
+ {
+  "defName": "WoodFiredGenerator",
+  "parent": "PowerBase",
+  "label": "wood-fired generator",
+  "size": [
+   2,
+   2
+  ],
+  "costs": {
+   "Steel": 100,
+   "ComponentIndustrial": 2
+  },
+  "fillPercent": 0.5,
+  "stats": {
+   "maxHitPoints": 100,
+   "workToBuild": 5760.0
+  },
+  "power": {
+   "output": 1000
+  },
+  "fuel": {
+   "item": "WoodLog",
+   "capacity": 150,
+   "perDay": 63.0
+  },
+  "unverified": [
+   "costs",
+   "stats.workToBuild",
+   "power",
+   "fuel"
+  ]
+ },
+ {
+  "defName": "SolarGenerator",
+  "parent": "PowerBase",
+  "label": "solar generator",
+  "size": [
+   4,
+   4
+  ],
+  "costs": {
+   "Steel": 100,
+   "ComponentIndustrial": 3
+  },
+  "fillPercent": 0.5,
+  "stats": {
+   "maxHitPoints": 100,
+   "workToBuild": 9360.0
+  },
+  "power": {
+   "output": 1700,
+   "scalesWithSun": true
+  },
+  "unverified": [
+   "costs",
+   "stats.workToBuild",
+   "power"
+  ]
+ },
+ {
+  "defName": "WindTurbine",
+  "parent": "PowerBase",
+  "label": "wind turbine",
+  "size": [
+   5,
+   2
+  ],
+  "costs": {
+   "Steel": 100,
+   "ComponentIndustrial": 3
+  },
+  "fillPercent": 0.5,
+  "stats": {
+   "maxHitPoints": 100,
+   "workToBuild": 9360.0
+  },
+  "power": {
+   "output": 1700,
+   "scalesWithWind": true
+  },
+  "windBlockRadius": 4,
+  "unverified": [
+   "costs",
+   "stats.workToBuild",
+   "power",
+   "windBlockRadius"
+  ]
+ },
+ {
+  "defName": "Battery",
+  "parent": "PowerBase",
+  "label": "battery",
+  "size": [
+   1,
+   2
+  ],
+  "costs": {
+   "Steel": 70,
+   "ComponentIndustrial": 2
+  },
+  "fillPercent": 0.5,
+  "stats": {
+   "maxHitPoints": 150,
+   "workToBuild": 4320.0
+  },
+  "power": {
+   "battery": 1000,
+   "idleDrain": 5.0
+  },
+  "unverified": [
+   "costs",
+   "stats.workToBuild",
+   "power"
+  ]
+ },
+ {
+  "defName": "ClimateBase",
+  "parent": "BuildingBase",
+  "abstract": true,
+  "source": "RimWorld wiki",
+  "designationCategory": "Temperature",
+  "fillPercent": 0.4,
+  "stats": {
+   "flammability": 0.5
+  },
+  "unverified": [
+   "fillPercent",
+   "stats.flammability"
+  ]
+ },
+ {
+  "defName": "Heater",
+  "parent": "ClimateBase",
+  "label": "heater",
+  "size": [
+   1,
+   1
+  ],
+  "costs": {
+   "Steel": 50
+  },
+  "fillPercent": 0.5,
+  "stats": {
+   "maxHitPoints": 100,
+   "workToBuild": 720.0
+  },
+  "power": {
+   "consumption": 175
+  },
+  "heatPusher": {
+   "heatPerSecond": 21,
+   "maxTemp": 21,
+   "switchesOffAbove": true
+  },
+  "unverified": [
+   "costs",
+   "stats.workToBuild",
+   "power",
+   "heatPusher"
+  ]
+ },
+ {
+  "defName": "Cooler",
+  "parent": "ClimateBase",
+  "label": "cooler",
+  "size": [
+   2,
+   1
+  ],
+  "costs": {
+   "Steel": 100,
+   "ComponentIndustrial": 1
+  },
+  "fillPercent": 0.5,
+  "stats": {
+   "maxHitPoints": 100,
+   "workToBuild": 1728.0
+  },
+  "power": {
+   "consumption": 200
+  },
+  "heatPusher": {
+   "heatPerSecond": -21,
+   "minTemp": 10
+  },
+  "unverified": [
+   "costs",
+   "stats.workToBuild",
+   "power",
+   "heatPusher"
+  ]
+ },
+ {
+  "defName": "Vent",
+  "parent": "ClimateBase",
+  "label": "vent",
+  "size": [
+   1,
+   1
+  ],
+  "costs": {
+   "Steel": 30
+  },
+  "fillPercent": 1.0,
+  "stats": {
+   "maxHitPoints": 50,
+   "workToBuild": 288.0
+  },
+  "passability": "Impassable",
+  "building": {
+   "holdsRoof": true,
+   "vent": true
+  },
+  "unverified": [
+   "costs",
+   "stats.workToBuild",
+   "building.vent"
+  ]
+ },
+ {
+  "defName": "PassiveCooler",
+  "parent": "ClimateBase",
+  "label": "passive cooler",
+  "size": [
+   1,
+   1
+  ],
+  "costs": {
+   "Steel": 20
+  },
+  "fillPercent": 0.5,
+  "stats": {
+   "maxHitPoints": 80,
+   "workToBuild": 576.0
+  },
+  "heatPusher": {
+   "heatPerSecond": -1.3,
+   "minTemp": 9,
+   "passive": true
+  },
+  "unverified": [
+   "costs",
+   "stats.workToBuild",
+   "power",
+   "heatPusher"
+  ]
+ },
+ {
+  "defName": "Campfire",
+  "parent": "ClimateBase",
+  "label": "campfire",
+  "size": [
+   1,
+   1
+  ],
+  "costs": {
+   "WoodLog": 20
+  },
+  "fillPercent": 0,
+  "stats": {
+   "maxHitPoints": 60,
+   "workToBuild": 288.0
+  },
+  "heatPusher": {
+   "heatPerSecond": 4.4,
+   "maxTemp": 28
+  },
+  "fuel": {
+   "item": "WoodLog",
+   "capacity": 500,
+   "perDay": 0.0,
+   "burnHoursPerWood": 2.0
+  },
+  "glower": {
+   "radius": 10.0,
+   "color": [
+    1.0,
+    0.65,
+    0.3
+   ]
+  },
+  "designationCategory": "Temperature",
+  "building": {
+   "burnsOutdoorsOnly": false
+  },
+  "unverified": [
+   "costs",
+   "stats.workToBuild",
+   "heatPusher",
+   "fuel",
+   "glower"
+  ]
+ },
+ {
+  "defName": "LampBase",
+  "parent": "BuildingBase",
+  "abstract": true,
+  "source": "RimWorld wiki",
+  "designationCategory": "Furniture",
+  "fillPercent": 0.15,
+  "stats": {
+   "flammability": 0.5
+  },
+  "unverified": [
+   "fillPercent",
+   "stats.flammability"
+  ]
+ },
+ {
+  "defName": "StandingLamp",
+  "parent": "LampBase",
+  "label": "standing lamp",
+  "size": [
+   1,
+   1
+  ],
+  "costs": {
+   "Steel": 20,
+   "ComponentIndustrial": 1
+  },
+  "stats": {
+   "maxHitPoints": 50,
+   "workToBuild": 720.0
+  },
+  "glower": {
+   "radius": 10.0,
+   "color": [
+    0.84,
+    0.84,
+    0.65
+   ]
+  },
+  "power": {
+   "consumption": 30
+  },
+  "unverified": [
+   "costs",
+   "stats.workToBuild",
+   "power",
+   "glower"
+  ]
+ },
+ {
+  "defName": "SunLamp",
+  "parent": "LampBase",
+  "label": "sun lamp",
+  "size": [
+   1,
+   1
+  ],
+  "costs": {
+   "Steel": 100,
+   "ComponentIndustrial": 2
+  },
+  "stats": {
+   "maxHitPoints": 80,
+   "workToBuild": 1440.0
+  },
+  "glower": {
+   "radius": 10.0,
+   "color": [
+    0.8,
+    0.8,
+    0.6
+   ],
+   "growsPlants": true,
+   "plantLightRadius": 5.0
+  },
+  "power": {
+   "consumption": 2900
+  },
+  "unverified": [
+   "costs",
+   "stats.workToBuild",
+   "power",
+   "glower"
+  ]
+ },
+ {
+  "defName": "TorchLamp",
+  "parent": "LampBase",
+  "label": "torch lamp",
+  "size": [
+   1,
+   1
+  ],
+  "costs": {
+   "WoodLog": 20
+  },
+  "stats": {
+   "maxHitPoints": 40,
+   "workToBuild": 172.8
+  },
+  "glower": {
+   "radius": 10.0,
+   "color": [
+    0.8,
+    0.55,
+    0.25
+   ]
+  },
+  "fuel": {
+   "item": "WoodLog",
+   "capacity": 75,
+   "perDay": 7.5
+  },
+  "unverified": [
+   "costs",
+   "stats.workToBuild",
+   "power",
+   "glower"
+  ]
+ }
+]

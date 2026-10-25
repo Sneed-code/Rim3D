@@ -164,6 +164,31 @@ TEST_CASE("defs: the real data folder loads") {
     CHECK(oak->text("plant.harvestedThingDef") == "WoodLog");     // from TreeBase
     CHECK(oak->number("plant.harvestWork") == doctest::Approx(1400 * 1.44));  // ticks to game seconds
     CHECK(oak->number("fillPercent") == doctest::Approx(0.25));
+    // D4: crops, climates and weather.
+    const char* const crops[] = {"Plant_Rice", "Plant_Potato", "Plant_Corn", "Plant_Strawberry",
+                                 "Plant_Haygrass", "Plant_Cotton", "Plant_Healroot", "Plant_Devilstrand"};
+    for (const char* name : crops) {
+        const Def* crop = db.find("Things", name);
+        if (crop == nullptr) { CHECK(false); continue; }
+        CHECK(crop->flag("plant.isCrop"));
+        CHECK(crop->number("plant.growDays") > 0.0);
+        CHECK(crop->number("plant.growOptimalMinTemperature") == doctest::Approx(6.0));   // from CropBase
+        CHECK(db.find("Things", crop->text("plant.harvestedThingDef")) != nullptr);
+    }
+    CHECK(db.find("Things", "Plant_Potato")->number("plant.growDays") == doctest::Approx(7.6));
+    for (const char* name : {"TemperateForest", "BorealForest", "AridShrubland"}) {
+        const Def* biome = db.find("Biomes", name);
+        if (biome == nullptr) { CHECK(false); continue; }
+        CHECK(biome->number("climate.dailySwing") > 0.0);
+        CHECK(biome->number("climate.seasonMeanTemperature.winter") < biome->number("climate.seasonMeanTemperature.summer"));
+        CHECK(biome->number("weather.Clear") > 0.0);
+    }
+    const Def* snow = db.find("Weathers", "SnowHard");
+    if (snow == nullptr) { CHECK(false); return; }
+    CHECK(snow->number("skyGlow") < 1.0);
+    CHECK(snow->number("accuracyFactor") < 1.0);
+    CHECK(snow->number("moveSpeedFactor") == doctest::Approx(0.9));
+    CHECK(db.find("Weathers", "WeatherBase") == nullptr);
     const Def* soil = db.find("Terrain", "Soil");
     CHECK(soil->number("fertility") == doctest::Approx(1.0));
     CHECK(soil->number("pathCost") == doctest::Approx(2.0));       // from SoilBase
