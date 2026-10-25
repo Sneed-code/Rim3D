@@ -58,6 +58,7 @@ names in lowerCamel (`workSpeedGlobal`), keys that are def names keep their case
 | `Hediffs` | injuries (cut, stab, gunshot, scratch, bite, shredded, crush, bruise, crack, burn), missing part, blood loss | F1 | `injuryProps.painPerSeverity`, `bleedRate`, blood loss stages |
 | `DamageTypes` | bullet, cut, stab, scratch, bite, blunt, crush, burn | F1, F2 | Which injury each damage makes (`hediff`, `hediffSolid` on bones); `reachesInside` (ours: bullet, cut, stab) lets a random hit go in to organs and bones; `armorCategory` (Sharp, Blunt, Heat) says which armor rating stops it |
 | `Things` (F2) | `Weapons.json`: revolver, autopistol, bolt-action rifle, pump shotgun, assault rifle. `Apparel.json`: flak vest, flak pants, simple helmet (steel) | F2 | `verbs`, accuracy and cooldown stats, `recoilPerShot` (ours); armor ratings, `apparel.bodyPartGroups` and `layers`. See [combat.md](combat.md) |
+| `Things` (D6) | `Textiles.json`: cloth, synthread, devilstrand, hyperweave. `Clothing.json`: tribalwear, T-shirt, button-down shirt, pants, duster, jacket, parka, cowboy hat, tuque. `Benches.json`: hand and electric tailor bench. `Recipes/Tailoring.json`: one recipe per garment | C14, C15, E2, D12 | See "Apparel and textiles (D6)" below |
 | `Projectiles` | the five guns' bullets | F2 | damage, armor penetration, stopping power, speed (wiki m/s / 30; `tuning.json` multiplies it by 3) |
 | `Hitboxes` | Human (ours) | F2 | Capsules and boxes per stance, by body part label; aim point and muzzle height |
 
@@ -123,3 +124,22 @@ Add or change a def in the right kind folder, using the conventions above. Take 
 wiki where it has them; where it doesn't, write our own and list the field in `ours`, or list it
 in `unverified` if it is recalled. If a new field names other defs, add it to `REFERENCES` in
 `tools/check_defs.py`. Run `python3 tools/check_defs.py`.
+
+**Apparel and textiles (D6).** Clothes are made of a stuff, as in RimWorld. A garment has no armor
+or insulation of its own: `apparel.stuffEffectMultiplierArmor` times the stuff's armor factor
+(`stuffProps.statFactors.armorRatingSharp/Blunt/Heat`) is its armor (a devilstrand duster: 0.3 x
+1.4 = 42% sharp), and `stuffEffectMultiplierInsulationCold/Heat` times the stuff's insulation
+(`stuffProps.statOffsets.insulationCold/Heat`, degrees C the wearer's comfortable range widens) is
+its insulation (a parka is 2.0 x cloth's 18 = 36 degrees of cold). `stuffCategories` says what it can
+be made of (`Fabric`, `Leathery`; leather comes with D5), `costStuffCount` how many. Layers:
+`OnSkin`, `Middle`, `Shell`, `Overhead` (order in `CombatRules.apparelLayersOuterFirst`), covering
+`BodyPartGroups`. Work is `stats.workToMake` in game seconds (ticks x 1.44). The flak vest, flak
+pants and simple helmet (F2) keep their fixed ratings; they are not made of stuff.
+`researchPrerequisite` names a research project ("ComplexClothing", "Electricity"); D12 defines
+them. Tailor benches carry `stats.workTableWorkSpeedFactor` (hand 0.5, electric 1.0) and the
+electric one `building.powerConsumption` (120 W) and `unpoweredWorkSpeedFactor` (0.5), for C14 and
+E5. A tailoring recipe's ingredient is `{ "stuffCategories": [...], "count": n }`, and
+`productsMadeOfIngredient` means the garment is made of what was used. `QualityRules.levels` has the
+seven levels with their armor, insulation, value, deterioration and beauty factors; the skill-to-quality
+curve is C14's. Fabric names stay RimWorld's (devilstrand, hyperweave) until sneed picks the proposed
+ones in [naming.md](naming.md). Mass and some hit points of garments and fabrics are in `unverified`.
