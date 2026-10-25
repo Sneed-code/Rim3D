@@ -82,14 +82,34 @@ colonists eat through their starting food in about 5 days and begin to starve ar
 keep them alive**. Beds, tables and chairs are C4's defs: it reads `building.bed`, `building.isTable`,
 `building.isSittable` and `stats.bedRestEffectiveness`. Save format 8 (formats 6 and 7 still load).
 
+Since C9 colonists have a mood, 0 to 100 (`docs/design/mood.md`): base 50 plus trait offsets plus thoughts, the
+level following at 12 an hour up and 8 down and standing still asleep. Situations (hungry, ravenous, starving;
+drowsy, tired, exhausted) count while they hold; memories (ate without a table, ate raw food, ate a fine or
+lavish meal, slept on the ground) last 0.6 days. The three break thresholds (35%, 20%, 5%, moved by traits
+like Nerves) are recorded as `MoodBand` with a `PawnMoodBand` event; **no mental breaks yet**. "Slept outside"
+is defined but waits for roofs and rooms (C5). `thoughts()` is what the colonist panel (U8) reads. Thought
+numbers other than Hungry are recalled, not verified. Save format 11.
+
 Since D3 the game has real starting data in `data/defs/`, written by hand with RimWorld's numbers
 from the RimWorld wiki (there is no RimWorld install to import from; `docs/decisions/0003`):
 terrain fertility, wild plants and the temperate forest, basic items, the Human, skills, work
 types, traits, our own backstories and names, the Crashlanded start, the Human body, capacities,
 injuries and blood loss (`docs/design/starting-data.md`). `check_defs.py` now also checks that
 defs name defs that exist. `simrun --pawns/--items` runs on the real data.
-Not written yet: buildings (wall, door, bed, table, stove, sandbags), needs, thoughts, recipes,
-guns and raiders; the tasks that use them (C4, C6, C7, C9, F2, F6) add them the same way.
+Not written yet: sandbags, needs, thoughts, recipes, guns and raiders; the tasks that use them
+(C6, C7, C9, F2, F6) add them the same way. C4 wrote the buildings (wall, door, bed, stool, three tables,
+fueled stove).
+
+Since C4 colonists build (`docs/design/construction.md`): `PlaceBlueprintCommand{def, stuff, cell, rot}`
+plans a building, pawns with Construction work carry the materials to it (the blueprint becomes a frame
+with the first delivery), build it at a speed from their Construction skill and Manipulation, and
+`DeconstructCommand` takes a building down for half its materials back (`CancelBuildCommand` takes back
+a plan and gives every delivered material back). Blueprints and frames are things that block nothing and
+are not on the building layer; a finished building spawns, rebuilds the regions and pushes out pawns and
+items it lands on. Wall, door, bed, stool, three tables and the fueled stove are in
+`data/defs/Things/Buildings.json` (costs, work and hit points from the wiki), numbers in
+`ConstructionRules`. Save format 10 (formats 6 to 9 still load); the snapshot has each plan's stage, progress
+and materials. Not built yet: failed builds and skill learning, repair, roofs and rooms (C5).
 
 Since 0004 the game has its own setting (`docs/design/lore.md`: the year 6650, slow star travel,
 the fallen Lattice, magic called resonance) and our own names for RimWorld's proper names
@@ -99,7 +119,7 @@ docs**; plain words like steel and rifle stay. Item words like plasteel are only
 
 ## Stage 1 progress
 
-20 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6). Tick tasks in `docs/plans/stage-1.md` as they merge.
+22 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C4, C9). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Next
 
@@ -148,7 +168,8 @@ smoke test `overseer`; `docs/design/overseer.md`). ~~**U9** protagonist~~ done (
 `protagonist`; `docs/design/protagonist.md`; save format 7). **U3** terrain and plants (PC Unreal, Sonnet high)
 has C2 now, so it is open.
 
-Wave 6, open now that C1 is in: **C4** building (cloud, Sonnet high), ~~**C6** food, rest and
+Wave 6, open now that C1 is in: ~~**C4** building~~ done (`docs/design/construction.md`; save format 10; C5 doors,
+roofs and rooms and C7 bills and cooking can start now), ~~**C6** food, rest and
 schedules~~ done (`docs/design/needs.md`; save format 8), **F2** guns and hitboxes (cloud, Opus high); **C3** mining, chopping
 and harvesting (cloud, Sonnet high) once C2 is in. On the PC, ~~**U9**~~ is done and **A3** needs only done tasks.
 U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priorities).

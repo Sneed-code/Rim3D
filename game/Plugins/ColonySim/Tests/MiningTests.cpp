@@ -539,7 +539,7 @@ TEST_CASE("Mining: designations, rock and a half-done pick come back from a save
     MINING_REQUIRE(miningRunUntil(original, log, 600, [&] { return log.actions(PawnAction::Mine) >= 1; }));
     original.stepMany(40);
     CHECK(original.mineables().hitPoints(CellPos{12, 8, 0}) == 80);
-    CHECK(original.things().registry().get<Worker>(pawn).job.work > 0.0f);
+    CHECK(original.things().registry().get<Worker>(pawn).job.progress > 0.0f);
 
     SaveLoadResult loaded = loadSim(saveSim(original), defs);
     MINING_REQUIRE(loaded.sim != nullptr);

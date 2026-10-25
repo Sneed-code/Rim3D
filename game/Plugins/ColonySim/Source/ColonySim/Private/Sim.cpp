@@ -1,12 +1,14 @@
 #include "ColonySim/Sim.h"
 
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Construction.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Mineables.h"
+#include "ColonySim/Mood.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Plants.h"
@@ -70,9 +72,11 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       groundHash_(map_.contentHash()) {
     things_->setEventLog(&events_);
     health_->setEventLog(&events_);
+    construction_ = std::make_unique<Construction>(map_, *things_, *plants_, *defs_, rng_, events_);
     needs_ = std::make_unique<NeedsSystem>(*things_, *health_, *defs_);
-    jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *plants_, *mineables_, *designations_, *defs_,
-                                        *health_, *needs_, time_, stats_, events_);
+    mood_ = std::make_unique<MoodSystem>(*things_, *needs_, *defs_);
+    jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
+                                        *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -342,6 +346,24 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!jobs_->assignBed(assign->bed, assign->pawn, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* place = std::get_if<PlaceBlueprintCommand>(&command)) {
+        const DefId def = defs_->idOf("Things", place->def);
+        const DefId stuff = place->stuff.empty() ? DefId{} : defs_->idOf("Things", place->stuff);
+        if (!def.valid()) {
+            commandFailed(id, "no Things def '" + place->def + "'");
+        } else if (!place->stuff.empty() && !stuff.valid()) {
+            commandFailed(id, "no Things def '" + place->stuff + "'");
+        } else if (construction_->placeBlueprint(def, stuff, place->cell, place->rot, error) == kNoEntity) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* cancel = std::get_if<CancelBuildCommand>(&command)) {
+        if (!construction_->cancel(cancel->thing, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* deconstruct = std::get_if<DeconstructCommand>(&command)) {
+        if (!construction_->markDeconstruct(deconstruct->thing, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* designate = std::get_if<DesignateCommand>(&command)) {
         const DesignationKind kind = designate->kind;
         const CellRect& area = designate->area;
@@ -377,10 +399,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             changed.type = EventType::DesignationsChanged;
             events_.push_back(std::move(changed));
         }
-    } else if (const auto* cancel = std::get_if<CancelDesignationsCommand>(&command)) {
+    } else if (const auto* cancelMarks = std::get_if<CancelDesignationsCommand>(&command)) {
         std::vector<int> cells;
         for (const auto& [index, kind] : designations_->all()) {
-            if ((cancel->kind == DesignationKind::None || cancel->kind == kind) && cancel->area.contains(map_.cellAt(index))) {
+            if ((cancelMarks->kind == DesignationKind::None || cancelMarks->kind == kind) && cancelMarks->area.contains(map_.cellAt(index))) {
                 cells.push_back(index);
             }
         }
@@ -428,6 +450,7 @@ void Sim::step() {
         }
     }
     jobs_->step();
+    mood_->step(time_.seconds, events_);
     movement_->step(things_->registry(), map_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     time_.seconds += 1;
@@ -501,6 +524,20 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.rotation = footprint->rotation;
             view.sizeX = rect.sizeX;
             view.sizeY = rect.sizeY;
+            view.markedForDeconstruct = reg.all_of<MarkedForDeconstruct>(entity);
+        }
+        if (const ConstructionSite* site = reg.try_get<ConstructionSite>(entity)) {
+            const CellRect rect = site->rect();
+            view.rotation = site->rotation;
+            view.sizeX = rect.sizeX;
+            view.sizeY = rect.sizeY;
+            view.stage = site->stage;
+            view.stuff = site->stuff;
+            view.buildProgress = site->workTotal > 0.0f ? std::min(1.0f, site->workDone / site->workTotal) : 0.0f;
+            view.materialsHave = site->materialsHave();
+            view.materialsNeeded = site->materialsNeeded();
+        } else if (const BuiltOf* made = reg.try_get<BuiltOf>(entity)) {
+            view.stuff = made->stuff;
         }
         if (const StackCount* stack = reg.try_get<StackCount>(entity)) {
             view.stackCount = stack->count;
@@ -520,6 +557,10 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Needs* needs = reg.try_get<Needs>(entity)) {
             view.food = needs->food;
             view.rest = needs->rest;
+        }
+        if (const Mood* mood = reg.try_get<Mood>(entity)) {
+            view.mood = mood->level;
+            view.moodBand = static_cast<int>(mood->band);
         }
         if (const Worker* worker = reg.try_get<Worker>(entity)) {
             view.asleep = jobIsLyingDown(worker->job);
@@ -580,7 +621,10 @@ uint64_t Sim::stateHash() const {
                             reg.all_of<StackCount>(e),   reg.all_of<HitPoints>(e),    reg.all_of<Mover>(e),
                             reg.all_of<Worker>(e),       reg.all_of<WorkSettings>(e), reg.all_of<Carrying>(e),
                             reg.all_of<Colonist>(e),     reg.all_of<Health>(e),       reg.all_of<PlayerControl>(e),
-                            reg.all_of<Needs>(e),        reg.all_of<Schedule>(e),     reg.all_of<Bed>(e)};
+                            reg.all_of<Needs>(e),        reg.all_of<Schedule>(e),     reg.all_of<Bed>(e),
+                            reg.all_of<ConstructionSite>(e), reg.all_of<BuiltOf>(e),
+                            reg.all_of<MarkedForDeconstruct>(e),
+                            reg.all_of<Mood>(e)};
         uint64_t mask = 0;
         for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
             mask |= has[bit] ? (uint64_t{1} << bit) : 0;
@@ -649,6 +693,25 @@ uint64_t Sim::stateHash() const {
                 h.add(tag.data(), tag.size());
             }
         }
+        if (const ConstructionSite* site = reg.try_get<ConstructionSite>(e)) {
+            h.add(static_cast<int>(site->stage));
+            h.add(site->stuff.value);
+            simHashCell(h, site->origin);
+            h.add(static_cast<int>(site->rotation));
+            h.add(site->sizeX);
+            h.add(site->sizeY);
+            h.add(static_cast<uint64_t>(site->materials.size()));
+            for (const MaterialCount& m : site->materials) {
+                h.add(m.item.value);
+                h.add(m.needed);
+                h.add(m.have);
+            }
+            h.add(site->workTotal);
+            h.add(site->workDone);
+        }
+        if (const BuiltOf* made = reg.try_get<BuiltOf>(e)) {
+            h.add(made->stuff.value);
+        }
         if (const Worker* worker = reg.try_get<Worker>(e)) {
             const Job& job = worker->job;
             h.add(static_cast<int>(job.type));
@@ -656,6 +719,8 @@ uint64_t Sim::stateHash() const {
             simHashCell(h, job.cell);
             h.add(job.count);
             h.add(entt::to_integral(job.chair));
+            h.add(entt::to_integral(job.site));
+            h.add(job.progress);
             h.add(job.workType.value);
             h.add(job.forced);
             h.add(static_cast<int>(job.step));
@@ -663,7 +728,6 @@ uint64_t Sim::stateHash() const {
             h.add(static_cast<int>(job.repaths));
             h.add(job.startedAt);
             h.add(job.until);
-            h.add(job.work);
             h.add(job.path.slot);
             h.add(job.path.serial);
             h.add(static_cast<uint64_t>(worker->avoid.size()));
@@ -689,6 +753,15 @@ uint64_t Sim::stateHash() const {
             h.add(needs->rest);
             h.add(needs->malnutrition);
             h.add(needs->foodSearchAfter);
+        }
+        if (const Mood* mood = reg.try_get<Mood>(e)) {
+            h.add(mood->level);
+            h.add(static_cast<int>(mood->band));
+            h.add(static_cast<uint64_t>(mood->memories.size()));
+            for (const Memory& memory : mood->memories) {
+                h.add(memory.def.data(), memory.def.size());
+                h.add(memory.expires);
+            }
         }
         if (const Schedule* schedule = reg.try_get<Schedule>(e)) {
             for (const ScheduleKind kind : schedule->hours) {

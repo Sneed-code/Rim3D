@@ -131,6 +131,30 @@ struct AssignBedCommand {
     Entity pawn = kNoEntity;
 };
 
+// Plans a building (RimWorld's blueprint): `def` is a Things building, `stuff` the Things item it is
+// made of ("" for a building that takes no stuff, like the stove), `cell` where its footprint starts
+// (lowest x and y), `rot` which way it faces. Pawns with Construction work bring the materials and
+// build it (docs/design/construction.md). Fails for an unknown def or stuff, a stuff that doesn't
+// fit, or a footprint that is off the map, on water or rock, on a building or on another plan.
+struct PlaceBlueprintCommand {
+    std::string def;
+    std::string stuff;
+    CellPos cell;
+    Rot4 rot = Rot4::North;
+};
+
+// Takes back a plan: a blueprint or a frame goes away and what was delivered to it is put on the
+// ground; a building marked for deconstruction is unmarked. Fails if `thing` is none of those.
+struct CancelBuildCommand {
+    Entity thing = kNoEntity;
+};
+
+// Marks a finished building to be taken down; a pawn with Construction work does it and the
+// materials come back (half of them). Fails if `thing` isn't a building, or is marked already.
+struct DeconstructCommand {
+    Entity thing = kNoEntity;
+};
+
 // Marks the cells in `area` for work (task C3, docs/design/mining.md): Mine marks rock and ore,
 // CutPlant any plant, HarvestPlant plants that give something. Cells that don't suit the kind are
 // left out; a cell already marked changes to this kind. Fails if no cell qualified. The designation
@@ -151,8 +175,9 @@ struct CancelDesignationsCommand {
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
                              SetStockpilePriorityCommand, SetStockpileAllowedCommand, OrderHaulCommand,
-                             ControlPawnCommand, DirectMoveCommand, SetScheduleCommand,
-                             AssignBedCommand, DesignateCommand, CancelDesignationsCommand>;
+                             ControlPawnCommand, DirectMoveCommand, SetScheduleCommand, AssignBedCommand,
+                             PlaceBlueprintCommand, CancelBuildCommand, DeconstructCommand, DesignateCommand,
+                             CancelDesignationsCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

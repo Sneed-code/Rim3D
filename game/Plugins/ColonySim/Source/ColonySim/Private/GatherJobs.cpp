@@ -293,12 +293,12 @@ JobSystem::StepResult JobSystem::mineRock(Entity pawn, Job& job, std::string& wh
         why = "it can't use its hands";
         return StepResult::Failed;
     }
-    job.work += static_cast<float>(speed);
+    job.progress += static_cast<float>(speed);
     learnSkill(pawn, "Mining", gather_.miningXpPerSecond);
-    if (static_cast<double>(job.work) < gather_.hitSeconds) {
+    if (static_cast<double>(job.progress) < gather_.hitSeconds) {
         return StepResult::Running;
     }
-    job.work -= static_cast<float>(gather_.hitSeconds);
+    job.progress -= static_cast<float>(gather_.hitSeconds);
     gatherEvent(pawn, PawnAction::Mine, job.cell);
 
     const DefId rock = mineables_.defAt(job.cell);
@@ -341,11 +341,11 @@ JobSystem::StepResult JobSystem::plantWork(Entity pawn, Job& job, std::string& w
         job.walk = 2;  // work steps don't walk: this marks that the animation event went out
         gatherEvent(pawn, harvest ? PawnAction::Harvest : PawnAction::Cut, job.cell);
     }
-    job.work += static_cast<float>(speed);
+    job.progress += static_cast<float>(speed);
     learnSkill(pawn, "Plants", gather_.plantXpPerSecond);
     const DefId plant = plants_.defAt(job.cell);
     const Def& def = defs_.get(plant);
-    if (static_cast<double>(job.work) < def.number("plant.harvestWork", 1.0)) {
+    if (static_cast<double>(job.progress) < def.number("plant.harvestWork", 1.0)) {
         return StepResult::Running;
     }
 

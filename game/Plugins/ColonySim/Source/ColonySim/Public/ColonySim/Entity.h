@@ -18,4 +18,9 @@ inline constexpr Entity kNoEntity = entt::null;
 // registry.
 enum class ThingCategory : uint8_t { Item, Building, Pawn };
 
+// A building that is not built yet (docs/design/construction.md): a blueprint is the plan, a frame
+// has its first materials and is being built. Both are things of category Building that stand on
+// the map layer's side, not in it: they block nothing. `Built` is every other building.
+enum class ConstructionStage : uint8_t { Built, Blueprint, Frame };
+
 }  // namespace colony

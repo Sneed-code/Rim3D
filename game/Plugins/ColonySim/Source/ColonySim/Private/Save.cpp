@@ -1,6 +1,7 @@
 #include "ColonySim/Save.h"
 
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Construction.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Health.h"
@@ -9,6 +10,7 @@
 #include "ColonySim/Designations.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Mineables.h"
+#include "ColonySim/Mood.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
 #include "ColonySim/Zones.h"
@@ -40,11 +42,13 @@ constexpr char kSaveMagic[8] = {'R', 'I', 'M', '3', 'D', 'S', 'A', 'V'};
 constexpr size_t kSaveMagicSize = sizeof kSaveMagic;
 // Bump when the layout below changes, and keep reading the old versions (the archive's
 // version() says which one a file is). Changing it needs a line in docs/design/saves.md.
-constexpr uint32_t kSaveFormatVersion = 10;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
+constexpr uint32_t kSaveFormatVersion = 12;  // 2: S3's path queue, pathBudget, a hauler's path ticket; 3: S4's pawn velocity;
                                             // 4: C8's scenario and colonists; 5: F1's pawn health; 6: C1's jobs,
                                             // work priorities and zones; 7: U9's direct control; 8: C6's needs,
                                             // schedules, bed owners, the eating job's chair; 9: C2's plants;
-                                            // 10: C3's rock layer, designations, a job's work done
+                                            // 10: C4's building plans, frames and deconstruct marks, a job's
+                                            // site and progress;
+                                            // 11: C9's mood; 12: C3's rock layer, designations
 // Saves from before the job system (formats 1 to 5) can't be read: their hauling placeholder has
 // no counterpart in the job system (docs/design/saves.md).
 constexpr uint32_t kSaveOldestFormat = 6;
@@ -115,6 +119,27 @@ struct SaveWorkSettings {
     std::vector<SaveWorkPriority> entries;
 };
 
+// A blueprint or frame, with its stuff and materials by defName.
+struct SaveMaterial {
+    std::string item;  // Things defName
+    int needed = 0;
+    int have = 0;
+};
+
+struct SaveSite {
+    ConstructionStage stage = ConstructionStage::Blueprint;
+    std::string stuff;  // Things defName, empty for none
+    CellPos origin;
+    Rot4 rotation = Rot4::North;
+    int sizeX = 1;
+    int sizeY = 1;
+    std::vector<SaveMaterial> materials;
+    float workTotal = 0.0f;
+    float workDone = 0.0f;
+};
+
+struct SaveMark {};  // a building marked for deconstruction
+
 struct SaveEntity {
     uint32_t id = 0;
     std::optional<SaveThing> thing;
@@ -132,6 +157,10 @@ struct SaveEntity {
     std::optional<Needs> needs;        // format 8 on
     std::optional<Schedule> schedule;  // format 8 on
     std::optional<Bed> bed;            // format 8 on
+    std::optional<SaveSite> site;           // format 10 on
+    std::optional<std::string> builtOf;     // format 10 on: the stuff a building was made of
+    std::optional<SaveMark> marked;         // format 10 on
+    std::optional<Mood> mood;          // format 11 on
 };
 
 // A stockpile zone, with its filter by defName.
@@ -196,10 +225,10 @@ struct SaveData {
     PathSavedState paths;              // the path queue (format 2 on)
     uint32_t nextZoneId = 1;           // format 4 on
     std::vector<SaveZone> zones;
-    SavePlants plants;                 // format 9 on
-    bool hasRock = false;              // the file has the rock layer (format 10 on); older saves keep the generated one
-    SaveMineables mineables;           // format 10 on
-    SaveDesignations designations;     // format 10 on
+    SavePlants plants;                 // format 10 on
+    bool hasRock = false;              // the file has the rock layer (format 12 on); older saves keep the generated one
+    SaveMineables mineables;           // format 12 on
+    SaveDesignations designations;     // format 12 on
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -456,7 +485,7 @@ void saveRect(Ar& ar, CellRect& r) {
 
 template <typename Ar>
 void saveCommand(Ar& ar, Command& command) {
-    static_assert(std::variant_size_v<Command> == 16, "save every command type here");
+    static_assert(std::variant_size_v<Command> == 19, "save every command type here");
     uint8_t type = static_cast<uint8_t>(command.index());
     ar.value("type", type);
     if constexpr (Ar::kReading) {
@@ -475,12 +504,16 @@ void saveCommand(Ar& ar, Command& command) {
             case 11: command = DirectMoveCommand{}; break;
             case 12: command = SetScheduleCommand{}; break;
             case 13: command = AssignBedCommand{}; break;
-            case 14: command = DesignateCommand{}; break;
-            case 15: command = CancelDesignationsCommand{}; break;
+            case 14: command = PlaceBlueprintCommand{}; break;
+            case 15: command = CancelBuildCommand{}; break;
+            case 16: command = DeconstructCommand{}; break;
+            case 17: command = DesignateCommand{}; break;
+            case 18: command = CancelDesignationsCommand{}; break;
             default: ar.require(false, "the save file names a command this build doesn't know"); return;
         }
         // A format older than the command that was added in it can't contain it.
-        ar.require((type < 10 || ar.version() >= 7) && (type < 12 || ar.version() >= 8) && (type < 14 || ar.version() >= 10),
+        ar.require((type < 10 || ar.version() >= 7) && (type < 12 || ar.version() >= 8) &&
+                       (type < 14 || ar.version() >= 10) && (type < 17 || ar.version() >= 12),
                    "the save file names a command this build doesn't know");
     }
     ar.note("name", commandName(command));
@@ -535,15 +568,25 @@ void saveCommand(Ar& ar, Command& command) {
     } else if (auto* assign = std::get_if<AssignBedCommand>(&command)) {
         ar.value("bed", assign->bed);
         ar.value("pawn", assign->pawn);
+    } else if (auto* place = std::get_if<PlaceBlueprintCommand>(&command)) {
+        ar.text("def", place->def);
+        ar.text("stuff", place->stuff);
+        ar.group("cell", [&] { saveCell(ar, place->cell); });
+        ar.value("rot", place->rot);
+        ar.require(static_cast<int>(place->rot) <= static_cast<int>(Rot4::West), "the save file has a bad rotation");
+    } else if (auto* cancel = std::get_if<CancelBuildCommand>(&command)) {
+        ar.value("thing", cancel->thing);
+    } else if (auto* deconstruct = std::get_if<DeconstructCommand>(&command)) {
+        ar.value("thing", deconstruct->thing);
     } else if (auto* designate = std::get_if<DesignateCommand>(&command)) {
         ar.group("area", [&] { saveRect(ar, designate->area); });
         ar.value("kind", designate->kind);
         ar.require(designate->kind >= DesignationKind::Mine && designate->kind <= DesignationKind::HarvestPlant,
                    "the save file has a bad designation kind");
-    } else if (auto* cancel = std::get_if<CancelDesignationsCommand>(&command)) {
-        ar.group("area", [&] { saveRect(ar, cancel->area); });
-        ar.value("kind", cancel->kind);
-        ar.require(cancel->kind <= DesignationKind::HarvestPlant, "the save file has a bad designation kind");
+    } else if (auto* cancelMarks = std::get_if<CancelDesignationsCommand>(&command)) {
+        ar.group("area", [&] { saveRect(ar, cancelMarks->area); });
+        ar.value("kind", cancelMarks->kind);
+        ar.require(cancelMarks->kind <= DesignationKind::HarvestPlant, "the save file has a bad designation kind");
     }
 }
 
@@ -648,11 +691,17 @@ void saveEntity(Ar& ar, SaveEntity& e) {
         ar.value("job", job.type);
         ar.require(job.type <= JobType::HarvestPlant, "the save file has a bad job");
         ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
+        ar.require(job.type <= JobType::Deconstruct || ar.version() >= 12, "the save file has a bad job");
         ar.value("thing", job.thing);
         ar.group("cell", [&] { saveCell(ar, job.cell); });
         ar.value("count", job.count);
         if (ar.version() >= 8) {
             ar.value("chair", job.chair);
+        }
+        if (ar.version() >= 10) {
+            ar.value("site", job.site);
+            ar.value("progress", job.progress);
+            ar.require(job.progress >= 0.0f && job.progress < 1.0e9f, "the save file has an impossible job progress");
         }
         ar.text("workType", w.workType);
         ar.value("forced", job.forced);
@@ -663,9 +712,6 @@ void saveEntity(Ar& ar, SaveEntity& e) {
         ar.value("repaths", job.repaths);
         ar.value("startedAt", job.startedAt);
         ar.value("until", job.until);
-        if (ar.version() >= 10) {
-            ar.value("work", job.work);
-        }
         ar.value("pathSlot", job.path.slot);
         ar.value("pathSerial", job.path.serial);
         ar.list("avoid", w.avoid, [&](AvoidTarget& a) {
@@ -738,6 +784,44 @@ void saveEntity(Ar& ar, SaveEntity& e) {
         });
         ar.optional("bed", e.bed, [&](Bed& b) {
             ar.list("owners", b.owners, [&](Entity& owner) { ar.value(nullptr, owner); });
+        });
+    }
+    if (ar.version() >= 10) {
+        ar.optional("site", e.site, [&](SaveSite& s) {
+            ar.value("stage", s.stage);
+            ar.require(s.stage == ConstructionStage::Blueprint || s.stage == ConstructionStage::Frame,
+                       "the save file has a bad building stage");
+            ar.text("stuff", s.stuff);
+            ar.group("origin", [&] { saveCell(ar, s.origin); });
+            ar.value("rotation", s.rotation);
+            ar.require(static_cast<int>(s.rotation) <= static_cast<int>(Rot4::West), "the save file has a bad rotation");
+            ar.value("sizeX", s.sizeX);
+            ar.value("sizeY", s.sizeY);
+            ar.require(s.sizeX >= 1 && s.sizeX <= 256 && s.sizeY >= 1 && s.sizeY <= 256,
+                       "the save file has a building plan of impossible size");
+            ar.list("materials", s.materials, [&](SaveMaterial& m) {
+                ar.text("item", m.item);
+                ar.value("needed", m.needed);
+                ar.value("have", m.have);
+                ar.require(m.needed >= 0 && m.needed < 1000000 && m.have >= 0 && m.have < 1000000,
+                           "the save file has an impossible material count");
+            });
+            ar.value("workTotal", s.workTotal);
+            ar.value("workDone", s.workDone);
+            ar.require(s.workTotal >= 0.0f && s.workTotal < 1.0e9f && s.workDone >= 0.0f && s.workDone < 1.0e9f,
+                       "the save file has impossible building work");
+        });
+        ar.optional("builtOf", e.builtOf, [&](std::string& stuff) { ar.text("stuff", stuff); });
+        ar.optional("marked", e.marked, [&](SaveMark&) {});
+        ar.optional("mood", e.mood, [&](Mood& m) {
+            ar.value("level", m.level);
+            ar.value("band", m.band);
+            ar.require(m.level >= 0.0f && m.level <= 100.0f, "the save file has an impossible mood");
+            ar.require(m.band <= MoodBand::Extreme, "the save file has a bad mood band");
+            ar.list("memories", m.memories, [&](Memory& memory) {
+                ar.text("def", memory.def);
+                ar.value("expires", memory.expires);
+            });
         });
     }
 }
@@ -838,7 +922,7 @@ void saveData(Ar& ar, SaveData& d) {
     if (ar.version() >= 9) {
         ar.group("plants", [&] { savePlants(ar, d.plants); });
     }
-    if (ar.version() >= 10) {
+    if (ar.version() >= 12) {
         d.hasRock = true;
         ar.group("mineables", [&] { saveMineables(ar, d.mineables); });
         ar.group("designations", [&] { saveDesignations(ar, d.designations); });
@@ -1006,6 +1090,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const Needs* needs = reg.try_get<Needs>(e)) {
             out.needs = *needs;
         }
+        if (const Mood* mood = reg.try_get<Mood>(e)) {
+            out.mood = *mood;
+        }
         if (const Schedule* schedule = reg.try_get<Schedule>(e)) {
             out.schedule = *schedule;
         }
@@ -1016,6 +1103,27 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             out.colonist = *colonist;
         }
         out.playerControlled = reg.all_of<PlayerControl>(e);
+        if (const ConstructionSite* site = reg.try_get<ConstructionSite>(e)) {
+            SaveSite s;
+            s.stage = site->stage;
+            s.stuff = site->stuff.valid() ? sim.defs_->get(site->stuff).defName() : std::string();
+            s.origin = site->origin;
+            s.rotation = site->rotation;
+            s.sizeX = site->sizeX;
+            s.sizeY = site->sizeY;
+            for (const MaterialCount& m : site->materials) {
+                s.materials.push_back(SaveMaterial{sim.defs_->get(m.item).defName(), m.needed, m.have});
+            }
+            s.workTotal = site->workTotal;
+            s.workDone = site->workDone;
+            out.site = std::move(s);
+        }
+        if (const BuiltOf* made = reg.try_get<BuiltOf>(e)) {
+            out.builtOf = sim.defs_->get(made->stuff).defName();
+        }
+        if (reg.all_of<MarkedForDeconstruct>(e)) {
+            out.marked = SaveMark{};
+        }
         if (const Health* health = reg.try_get<Health>(e)) {
             SaveHealth saved;
             saved.protagonist = health->protagonist;
@@ -1191,6 +1299,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.needs) {
             reg.emplace<Needs>(entity, *e.needs);
         }
+        if (e.mood) {
+            reg.emplace<Mood>(entity, *e.mood);
+        }
         if (e.schedule) {
             reg.emplace<Schedule>(entity, *e.schedule);
         }
@@ -1199,6 +1310,47 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.colonist) {
             reg.emplace<Colonist>(entity, std::move(*e.colonist));
+        }
+        if (e.site) {
+            ConstructionSite site;
+            site.stage = e.site->stage;
+            if (!e.site->stuff.empty()) {
+                site.stuff = sim.defs_->idOf(kSaveThingsKind, e.site->stuff);
+                if (!site.stuff.valid()) {
+                    error = "the save has a building plan made of '" + e.site->stuff + "', which the data files no longer have";
+                    return false;
+                }
+            }
+            site.origin = e.site->origin;
+            site.rotation = e.site->rotation;
+            site.sizeX = e.site->sizeX;
+            site.sizeY = e.site->sizeY;
+            for (const SaveMaterial& m : e.site->materials) {
+                const DefId item = sim.defs_->idOf(kSaveThingsKind, m.item);
+                if (!item.valid()) {
+                    error = "the save has a building plan that needs '" + m.item + "', which the data files no longer have";
+                    return false;
+                }
+                site.materials.push_back(MaterialCount{item, m.needed, m.have});
+            }
+            site.workTotal = e.site->workTotal;
+            site.workDone = e.site->workDone;
+            if (!e.thing || !e.position || e.thing->category != ThingCategory::Building) {
+                error = "the save has a building plan that isn't a building on the map";
+                return false;
+            }
+            reg.emplace<ConstructionSite>(entity, std::move(site));
+        }
+        if (e.builtOf) {
+            const DefId stuff = sim.defs_->idOf(kSaveThingsKind, *e.builtOf);
+            if (!stuff.valid()) {
+                error = "the save has a building made of '" + *e.builtOf + "', which the data files no longer have";
+                return false;
+            }
+            reg.emplace<BuiltOf>(entity, BuiltOf{stuff});
+        }
+        if (e.marked) {
+            reg.emplace<MarkedForDeconstruct>(entity);
         }
         if (e.health) {
             Health health;
@@ -1249,7 +1401,8 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     // Everything a thing names must exist.
     const auto exists = [&](Entity e) { return e == kNoEntity || reg.valid(e); };
     for (const SaveEntity& e : d.entities) {
-        if ((e.worker && (!exists(e.worker->job.thing) || !exists(e.worker->job.chair))) ||
+        if ((e.worker && (!exists(e.worker->job.thing) || !exists(e.worker->job.chair) ||
+                          !exists(e.worker->job.site))) ||
             (e.carrying && !exists(e.carrying->thing))) {
             error = "the save has a thing that names another thing that doesn't exist";
             return false;
@@ -1306,6 +1459,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         return false;
     }
     if (!sim.pathfinder_.loadState(std::move(d.paths), error)) {
+        return false;
+    }
+    if (!sim.construction_->afterLoad(error)) {
         return false;
     }
     if (!sim.jobs_->afterLoad(error)) {

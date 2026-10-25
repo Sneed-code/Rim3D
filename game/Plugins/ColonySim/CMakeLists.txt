@@ -60,6 +60,14 @@ add_test(NAME replay_check COMMAND simrun --data ${REPLAY_TEST_DATA} --replay ${
 set_tests_properties(replay_record PROPERTIES FIXTURES_SETUP replay_recording)
 set_tests_properties(replay_check PROPERTIES FIXTURES_REQUIRED replay_recording)
 
+# The same for building (C4), on the game's real data: blueprints, deliveries, frames, a deconstruct.
+set(BUILD_REPLAY_RECORDED ${CMAKE_BINARY_DIR}/colony-build.recorded.json)
+add_test(NAME replay_build_record COMMAND simrun
+         --replay ${CMAKE_CURRENT_SOURCE_DIR}/Tests/replays/colony-build.json --record ${BUILD_REPLAY_RECORDED})
+add_test(NAME replay_build_check COMMAND simrun --replay ${BUILD_REPLAY_RECORDED})
+set_tests_properties(replay_build_record PROPERTIES FIXTURES_SETUP build_replay_recording)
+set_tests_properties(replay_build_check PROPERTIES FIXTURES_REQUIRED build_replay_recording)
+
 # Saves: run 0.05 days and save, then load that and run 0.05 more and save, and compare with a
 # straight run of 0.1 days. The two files must be identical, byte for byte. CI also compares the
 # straight run's save from Linux and Windows (docs/design/saves.md).

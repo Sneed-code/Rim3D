@@ -61,8 +61,11 @@ gives no work; the tasks with scanners so far:
 | Task | Work type | Scanner |
 | --- | --- | --- |
 | `HaulToStockpile` | Hauling | items outside storage, or in a stockpile worse than one that would take them |
+| `ConstructDeliverResources` | Construction | blueprints and frames that need materials ([construction.md](construction.md)) |
+| `ConstructFinishFrames` | Construction | frames with all their materials |
+| `Deconstruct` | Construction | buildings marked for deconstruction |
 
-C3 adds `Mine` and `CutOrHarvestDesignatedPlants`, C4 the construction ones, C6 `DoBillsCookStove`
+C3 adds `Mine` and `CutOrHarvestDesignatedPlants`, C6 `DoBillsCookStove`
 and so on: a class deriving from `WorkGiver` in `WorkGivers.cpp`, added in `makeWorkGivers`.
 
 A pawn's priority per work type is 0 (doesn't do it) or 1 to 4 (1 first), as RimWorld's manual
@@ -94,6 +97,9 @@ state inside a go-to step. Each job type has a fixed list of steps (RimWorld's t
 | `HaulToCell` | go to the item, pick it up, carry it to the cell, put it down |
 | `Ingest` | go to the food, pick it up, walk to the eating spot (none if it is already there), eat |
 | `LayDown` | walk to the bed (none if the pawn lies on the ground where it is), lie until rested |
+| `DeliverResources` | go to the materials, pick them up, carry them next to the site, hand them over |
+| `BuildFrame` | walk next to the frame, build until the work is done |
+| `Deconstruct` | walk next to the building, take it down |
 
 A step that ends at once (picking up, putting down) lets the next start in the same game second. A
 go-to step asks the pathfinder for a path (an answer the next step at the earliest), walks it, and if
@@ -113,6 +119,12 @@ the job of the pawn carrying it, and a destroyed pawn's job ends with what it ca
 heading for a destroyed item fail their next check.
 
 ## Reservations
+
+A reservation is a thing or a cell plus a *purpose*: `Deliver` for the hold a delivery job has on
+its blueprint or frame, `Use` for everything else. A builder holds the frame for `Use`, a deliverer
+holds it for `Deliver`, so a frame being built can still be seen by a deliverer (it needs nothing)
+and two deliveries to one plan never overlap. Which targets each job type holds is
+`JobSystem::reservationsOf`, used for reserving, releasing and rebuilding on load.
 
 A hauling job holds its item and its stockpile cell; no other pawn's scanner or storage search takes
 them. An eating job holds the food and, if it eats in a chair, the chair's cell; a sleeping job holds

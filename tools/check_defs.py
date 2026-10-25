@@ -25,6 +25,7 @@ REFERENCES = [
     ("Things", "plant.harvestedThingDef", "Things"),
     ("Things", "mineable.dropDef", "Things"),
     ("Things", "race.body", "Bodies"),
+    ("Things", "costs{}", "Things"),
     ("Biomes", "wildPlants{}", "Things"),
     ("Bodies", "corePart.**.def", "BodyParts"),
     ("Bodies", "corePart.**.groups[]", "BodyPartGroups"),

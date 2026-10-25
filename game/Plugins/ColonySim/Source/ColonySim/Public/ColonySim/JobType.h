@@ -14,6 +14,9 @@ enum class JobType : uint8_t {
     HaulToCell,  // carry an item to a storage cell
     Ingest,      // fetch food, take it to a chair at a table (or eat where it lies) and eat it
     LayDown,     // go to a bed (or lie on the ground) and sleep
+    DeliverResources,  // carry materials to a blueprint or frame (construction.md)
+    BuildFrame,        // work on a frame whose materials are all there
+    Deconstruct,       // take down a building marked for it
     Mine,          // walk next to a designated rock or ore cell and dig it out (docs/design/mining.md)
     CutPlant,      // walk to a designated plant and cut it down (a tree gives wood)
     HarvestPlant,  // walk to a designated plant and pick what it gives
