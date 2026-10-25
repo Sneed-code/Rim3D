@@ -435,3 +435,15 @@ TEST_CASE("Feel: the player's recoil and roll change the state hash") {
     CHECK(a->stateHash() != b->stateHash());
     (void)pb;
 }
+
+TEST_CASE("Feel: a rolling pawn can't swing or block in melee") {
+    auto sim = feelSim();
+    const Entity pawn = feelPlayer(*sim, 40, 40);
+    sim->submit(DodgeRollCommand{pawn, 1.0f, 0.0f});
+    sim->step();
+    const uint64_t swing = sim->submit(MeleeCommand{pawn, kNoEntity, MeleeMode::Attack});
+    const uint64_t block = sim->submit(MeleeCommand{pawn, kNoEntity, MeleeMode::Block});
+    sim->step();
+    CHECK(feelFailed(*sim, swing));
+    CHECK(feelFailed(*sim, block));
+}

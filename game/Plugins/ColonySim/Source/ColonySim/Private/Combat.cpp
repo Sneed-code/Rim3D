@@ -78,6 +78,7 @@ struct CombatModel {
     std::vector<Bullet> bullets;    // by Projectiles DefId value
     std::vector<ArmorKind> armorKind;  // by DamageTypes DefId value
     std::vector<Kind> kinds;        // by Things DefId value
+    std::vector<uint8_t> melee;     // by Things DefId value: 1 for a melee weapon (an item with `tools`, F8)
     DefId bluntDamage;
 
     float accuracyBySkill[21] = {};
@@ -193,6 +194,7 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
     bullets.resize(defs.size());
     armorKind.resize(defs.size(), ArmorKind::None);
     kinds.resize(defs.size());
+    melee.resize(defs.size(), 0);
 
     if (const Def* rules = defs.find("Rules", "CombatRules")) {
         for (size_t i = 0; i < 21; ++i) {
@@ -278,6 +280,9 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
                 g.kicks.emplace_back(combatNum(def, at + ".up", 0.0), combatNum(def, at + ".side", 0.0));
             }
             g.valid = bullet(g.projectile) != nullptr;
+        }
+        if (def.has("tools") && !def.has("race") && !def.has("verbs.0.defaultProjectile")) {
+            melee[id.value] = 1;
         }
         if (def.has("apparel")) {
             Apparel& a = apparel[id.value];
@@ -1244,81 +1249,128 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
             break;
         }
         case ProjectileHitKind::Pawn: {
-            const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(hit.thing).def);
-            Rng rng(p.seed);
-            // Which part under the hitbox: the part or its fingers, toes, eyes... by their share.
-            int part = hit.part;
-            const std::vector<int>& choices = kind->landsOn[static_cast<size_t>(hit.part)];
-            float total = 0.0f;
-            for (const int c : choices) {
-                total += health_.partHitPoints(hit.thing, c) > 0.0f ? kind->parts[static_cast<size_t>(c)].ownOutside : 0.0f;
+            const PawnHitResult result = hitPawn(hit.thing, hit.part, bullet.damageType, bullet.damage, bullet.penetration, p.seed);
+            h.part = result.part;
+            if (result.deflected) {
+                h.kind = ProjectileHitKind::Armor;
+                emitHit(projectile, p, h, 0.0f);
+                return;
             }
-            if (total > 0.0f) {
-                const float roll = rng.unit() * total;
-                float acc = 0.0f;
-                for (const int c : choices) {
-                    if (health_.partHitPoints(hit.thing, c) <= 0.0f || kind->parts[static_cast<size_t>(c)].ownOutside <= 0.0f) {
-                        continue;
-                    }
-                    acc += kind->parts[static_cast<size_t>(c)].ownOutside;
-                    part = c;
-                    if (roll < acc) {
-                        break;
-                    }
-                }
-            }
-            part = health_.goInside(hit.thing, bullet.damageType, part, rng);
-            h.part = part;
-
-            // Armor, outside layer first: RimWorld's rule. Armor less penetration is the share of
-            // hits it changes: half of those bounce off, the rest do half damage as blunt.
-            DefId type = bullet.damageType;
-            float amount = bullet.damage;
-            const CombatModel::ArmorKind armorKind =
-                type.value < model_->armorKind.size() ? model_->armorKind[type.value] : CombatModel::ArmorKind::None;
-            if (const Gear* gear = reg.try_get<Gear>(hit.thing); gear != nullptr && armorKind != CombatModel::ArmorKind::None) {
-                std::vector<std::pair<int, Entity>> layers;
-                for (const Entity worn : gear->apparel) {
-                    const CombatModel::Apparel* a = model_->wear(reg.get<Thing>(worn).def);
-                    if (a == nullptr) {
-                        continue;
-                    }
-                    bool covers = false;
-                    for (const std::string& group : kind->parts[static_cast<size_t>(part)].groups) {
-                        covers = covers || std::find(a->groups.begin(), a->groups.end(), group) != a->groups.end();
-                    }
-                    if (covers) {
-                        layers.emplace_back(a->outerness, worn);
-                    }
-                }
-                std::stable_sort(layers.begin(), layers.end(),
-                                 [](const auto& l, const auto& r) { return l.first < r.first; });
-                for (const auto& [outerness, worn] : layers) {
-                    (void)outerness;
-                    const CombatModel::Apparel& a = *model_->wear(reg.get<Thing>(worn).def);
-                    const float armor = std::max(0.0f, a.armor[static_cast<int>(armorKind)] - bullet.penetration);
-                    const float roll = rng.unit();
-                    if (roll < armor * 0.5f) {
-                        h.kind = ProjectileHitKind::Armor;
-                        emitHit(projectile, p, h, 0.0f);
-                        return;
-                    }
-                    if (roll < armor) {
-                        amount *= 0.5f;
-                        if (armorKind == CombatModel::ArmorKind::Sharp && model_->bluntDamage.valid()) {
-                            type = model_->bluntDamage;
-                        }
-                    }
-                }
-            }
-            emitHit(projectile, p, h, amount);
-            health_.applyHit(hit.thing, type, amount, part);
+            emitHit(projectile, p, h, result.amount);
+            health_.applyHit(hit.thing, result.damageType, result.amount, result.part);
             break;
         }
         default:
             emitHit(projectile, p, h, 0.0f);
             break;
     }
+}
+
+PawnHitResult CombatSystem::hitPawn(Entity pawn, int hitboxPart, DefId damageType, float amount, float penetration,
+                                    uint64_t seed) const {
+    const entt::registry& reg = things_.registry();
+    PawnHitResult result;
+    result.damageType = damageType;
+    result.amount = amount;
+    const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(pawn).def);
+    if (kind == nullptr || hitboxPart < 0) {
+        return result;  // no hitboxes: the caller picks the part (HealthSystem::applyDamage)
+    }
+    Rng rng(seed);
+    // Which part under the hitbox: the part or its fingers, toes, eyes... by their share.
+    int part = hitboxPart;
+    const std::vector<int>& choices = kind->landsOn[static_cast<size_t>(hitboxPart)];
+    float total = 0.0f;
+    for (const int c : choices) {
+        total += health_.partHitPoints(pawn, c) > 0.0f ? kind->parts[static_cast<size_t>(c)].ownOutside : 0.0f;
+    }
+    if (total > 0.0f) {
+        const float roll = rng.unit() * total;
+        float acc = 0.0f;
+        for (const int c : choices) {
+            if (health_.partHitPoints(pawn, c) <= 0.0f || kind->parts[static_cast<size_t>(c)].ownOutside <= 0.0f) {
+                continue;
+            }
+            acc += kind->parts[static_cast<size_t>(c)].ownOutside;
+            part = c;
+            if (roll < acc) {
+                break;
+            }
+        }
+    }
+    part = health_.goInside(pawn, damageType, part, rng);
+    result.part = part;
+
+    // Armor, outside layer first: RimWorld's rule. Armor less penetration is the share of
+    // hits it changes: half of those bounce off, the rest do half damage as blunt.
+    const CombatModel::ArmorKind armorKind =
+        damageType.value < model_->armorKind.size() ? model_->armorKind[damageType.value] : CombatModel::ArmorKind::None;
+    const Gear* gear = reg.try_get<Gear>(pawn);
+    if (gear == nullptr || armorKind == CombatModel::ArmorKind::None) {
+        return result;
+    }
+    std::vector<std::pair<int, Entity>> layers;
+    for (const Entity worn : gear->apparel) {
+        const CombatModel::Apparel* a = model_->wear(reg.get<Thing>(worn).def);
+        if (a == nullptr) {
+            continue;
+        }
+        bool covers = false;
+        for (const std::string& group : kind->parts[static_cast<size_t>(part)].groups) {
+            covers = covers || std::find(a->groups.begin(), a->groups.end(), group) != a->groups.end();
+        }
+        if (covers) {
+            layers.emplace_back(a->outerness, worn);
+        }
+    }
+    std::stable_sort(layers.begin(), layers.end(), [](const auto& l, const auto& r) { return l.first < r.first; });
+    for (const auto& [outerness, worn] : layers) {
+        (void)outerness;
+        const CombatModel::Apparel& a = *model_->wear(reg.get<Thing>(worn).def);
+        const float armor = std::max(0.0f, a.armor[static_cast<int>(armorKind)] - penetration);
+        const float roll = rng.unit();
+        if (roll < armor * 0.5f) {
+            result.deflected = true;
+            result.amount = 0.0f;
+            return result;
+        }
+        if (roll < armor) {
+            result.amount *= 0.5f;
+            if (armorKind == CombatModel::ArmorKind::Sharp && model_->bluntDamage.valid()) {
+                result.damageType = model_->bluntDamage;
+            }
+        }
+    }
+    return result;
+}
+
+float CombatSystem::spreadRadiusFor(float chance) const {
+    // From the large end: below a few centimetres the 2 cm grid makes the share jump about, which
+    // the long-range chances aimed shots ask for never reach but melee's high ones do.
+    const std::vector<float>& r = model_->spreadRadius;
+    const std::vector<float>& share = model_->hitShare;
+    if (r.empty()) {
+        return model_->radiusFor(std::clamp(chance, 0.0001f, 1.0f));
+    }
+    if (share.back() >= chance) {
+        return r.back();
+    }
+    for (size_t k = r.size() - 1; k > 0; --k) {
+        if (share[k - 1] >= chance) {
+            const float span = share[k - 1] - share[k];
+            const float t = span > 0.0f ? (share[k - 1] - chance) / span : 0.0f;
+            return r[k - 1] + (r[k] - r[k - 1]) * std::clamp(t, 0.0f, 1.0f);
+        }
+    }
+    return r.front();
+}
+
+bool CombatSystem::isMeleeWeapon(DefId def) const {
+    return def.valid() && def.value < model_->melee.size() && model_->melee[def.value] != 0;
+}
+
+bool CombatSystem::isGun(DefId def) const {
+    return model_->gun(def) != nullptr;
 }
 
 void CombatSystem::step(Rng& rng) {
@@ -1451,11 +1503,12 @@ bool CombatSystem::equip(Entity pawn, Entity item, std::string* why) {
     }
     const DefId def = reg.get<Thing>(item).def;
     const CombatModel::Apparel* wear = model_->wear(def);
-    if (model_->gun(def) == nullptr && wear == nullptr) {
-        return fail("that is neither a gun nor apparel");
+    const bool weapon = model_->gun(def) != nullptr || isMeleeWeapon(def);
+    if (!weapon && wear == nullptr) {
+        return fail("that is neither a weapon nor apparel");
     }
     Gear& gear = reg.get_or_emplace<Gear>(pawn);
-    if (model_->gun(def) != nullptr) {
+    if (weapon) {
         if (gear.weapon != kNoEntity) {
             drop(pawn, gear.weapon);
         }
@@ -1481,7 +1534,7 @@ bool CombatSystem::equip(Entity pawn, Entity item, std::string* why) {
     }
     things_.despawn(item);
     Gear& after = reg.get<Gear>(pawn);
-    if (model_->gun(def) != nullptr) {
+    if (weapon) {
         after.weapon = item;
     } else {
         after.apparel.push_back(item);

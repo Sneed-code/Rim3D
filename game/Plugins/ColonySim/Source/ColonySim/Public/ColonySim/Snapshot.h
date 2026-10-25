@@ -9,6 +9,7 @@
 #include "ColonySim/Grid.h"
 #include "ColonySim/JobType.h"
 #include "ColonySim/Looks.h"
+#include "ColonySim/Melee.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Zones.h"
@@ -137,6 +138,12 @@ struct ThingView {
     // `asleep` and `faction` (100 for wild) are filled for them too.
     int lifeStage = -1;
     float bodySize = 0.0f;
+    // Pawns in melee (docs/design/melee.md): winding up a swing at meleeTarget (the hit comes in
+    // meleeStepsLeft steps) or recovering from one, and whether their weapon is raised to block.
+    MeleePhase meleePhase = MeleePhase::Ready;
+    int meleeStepsLeft = 0;
+    Entity meleeTarget = kNoEntity;
+    bool blocking = false;
 };
 
 // A bullet in flight (docs/design/combat.md). Unreal draws a tracer along its velocity; it

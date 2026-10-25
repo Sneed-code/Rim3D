@@ -98,9 +98,9 @@ window. The direction is any length; zero or not a number is a backstep away fro
 a pawn that isn't under direct control, is downed, is prone, or is rolling or waiting. The roll cancels a shot being
 aimed or fired (not a reload), and `Shoot` and `Reload` are refused while it lasts. A pawn knocked down mid-roll ends
 the roll where it lies. **The sim moves the pawn:** `DirectMoveCommand` is ignored (no failure) from the command to the
-end of recovery, so Unreal must follow the snapshot's position then and not keep its own. Hit-proof is a projectile
-test (`CombatSystem::trace` skips the pawn); other damage that arrives later (fire, melee, blasts) should check
-`CombatSystem::hitProof(pawn)` too.
+end of recovery, so Unreal must follow the snapshot's position then and not keep its own. Hit-proof is a `CombatSystem::trace` test (it skips the pawn), so bullets and F8's melee swings (which trace
+too) pass through it; `Melee` attacks and blocks are refused while it lasts. Other damage that arrives later (fire, blasts)
+should check `CombatSystem::hitProof(pawn)`.
 
 The snapshot has `rollPhase` (0 none, 1 start-up, 2 rolling, 3 recovery), `rollStepsLeft`, `rollDirX/Y` and `hitProof`;
 `PawnAction::Roll` goes out when it starts with the cell, the direction and the total steps (27), so the animation can
