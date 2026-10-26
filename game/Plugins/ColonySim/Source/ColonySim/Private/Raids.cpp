@@ -598,6 +598,7 @@ void RaidSystem::thinkSquad(Squad& squad) {
         return;
     }
     int able = 0;
+    float fit = 0.0f;  // the able members' fitness to fight, 1 for each unhurt one
     float own = 0.0f;
     float cx = 0.0f;
     float cy = 0.0f;
@@ -608,6 +609,8 @@ void RaidSystem::thinkSquad(Squad& squad) {
         }
         ++able;
         own += strength(m);
+        const Health* hurt = reg.try_get<Health>(m);
+        fit += hurt != nullptr ? std::clamp((1.0f - hurt->pain) * std::min(1.0f, hurt->movingFactor), 0.0f, 1.0f) : 1.0f;
         const Position& p = reg.get<Position>(m);
         cx += p.x;
         cy += p.y;
@@ -634,8 +637,10 @@ void RaidSystem::thinkSquad(Squad& squad) {
     // RimWorld's rule: a raid that has lost enough of its pawns flees; one that has been at it too
     // long gives up. Otherwise morale follows the strength it sees against it.
     SquadState next = squad.state;
-    const int lost = squad.started - able;
-    if (static_cast<float>(lost) >= rules_.fleeLostFraction * static_cast<float>(squad.started) && lost > 0) {
+    // The wounded count as part lost (ours): a squad whose able members are so hurt that they add up to less than half of what
+    // came runs too, or two sides that are all hurt and none down would trade shots until the give-up time.
+    const float lost = std::max(static_cast<float>(squad.started - able), static_cast<float>(squad.started) - fit);
+    if (lost >= rules_.fleeLostFraction * static_cast<float>(squad.started) && lost > 0.0f) {
         next = SquadState::Rout;
     } else if (now() >= squad.giveUpAt) {
         next = SquadState::Rout;

@@ -1,0 +1,24 @@
+[
+ {
+  "defName": "ShipRules",
+  "source": "RimWorld wiki",
+  "activationDays": 15,
+  "waveFirstHours": 6,
+  "waveIntervalHours": 36,
+  "wavePointsFactor": 1.0,
+  "waveFactions": [
+   "Pirate",
+   "Remnant"
+  ],
+  "enginesNeeded": 3,
+  "unverified": [
+   "wavePointsFactor"
+  ],
+  "ours": [
+   "waveFirstHours",
+   "waveIntervalHours",
+   "waveFactions"
+  ],
+  "notes": "The wiki: activation takes 15 days and brings constant raiders, human and mechanoid; a ship needs three engines and one of every other part; launch needs an occupied cryptosleep casket. The wave timing and size are ours."
+ }
+]

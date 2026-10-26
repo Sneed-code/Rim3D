@@ -149,6 +149,8 @@ starts, so read it after every step. Before the first step it holds what setting
 | `PawnMentalBreak` | `thing`, `message` (the MentalBreaks defName), `amount` (its mood) | a colonist snapped (C19, [mental-breaks.md](mental-breaks.md)) |
 | `PawnMentalBreakEnded` | `thing`, `message` ("recovered", "downed", "died" or "stopped"), `amount` (seconds it lasted) | the break is over |
 | `PawnInsulted` | `thing` (the one insulting), `target` | an insulting spree insulted someone |
+| `InspirationStarted` | `thing`, `message` (the def), `amount` (days) | a colonist became inspired ([inspirations.md](inspirations.md)) |
+| `InspirationEnded` | `thing`, `message` (`why:def`), `amount` (seconds it lasted) | it was used, expired or dismissed |
 | `PawnLeftColony` | `thing`, `message` (the break) | a colonist gave up and walked off the map; a `ThingDestroyed` follows for it and what it took |
 | `ShotFired` | `thing` (shooter), `def` (gun), `target` (projectile), `x, y, z` (muzzle) | a pawn fired (F2, [combat.md](combat.md)) |
 | `PowerChanged` | `thing`, `def`, `cell`, `message` ("on" or "off") | a generator, consumer or battery gained or lost power (E5, [power.md](power.md)); conduits are not announced |
