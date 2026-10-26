@@ -7,8 +7,10 @@
 #include "ColonySim/Designations.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Farming.h"
+#include "ColonySim/Colonist.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Fire.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Medicine.h"
 #include "ColonySim/Needs.h"
@@ -747,6 +749,76 @@ public:
     }
 };
 
+// Firefighting (RimWorld's WorkGiver_FightFires, in the Firefighter work type): a fire inside the home area, or one under
+// a burning colonist wherever it is. Colonists don't reserve fires, so several beat one out together.
+class ExtinguishFiresGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "ExtinguishFires"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        Fire* fire = jobs.fire();
+        if (fire == nullptr || fire->count() == 0 || !jobs.canUseHands(pawn)) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Map& map = jobs.map();
+        const Position& at = reg.get<Position>(pawn);
+        rescue_.clear();
+        for (const auto [burning, burn, pos, colonist] : reg.view<const Burning, const Position, const Colonist>().each()) {
+            (void)burn;
+            (void)colonist;
+            if (burning != pawn) {
+                rescue_.push_back(map.index(cellOf(pos)));
+            }
+        }
+        for (const auto& [index, state] : fire->all()) {
+            (void)state;
+            const CellPos cell = map.cellAt(index);
+            if (cell.level != at.level) {
+                continue;
+            }
+            if (!fire->home(cell) && std::find(rescue_.begin(), rescue_.end(), index) == rescue_.end()) {
+                continue;
+            }
+            WorkCandidate candidate{JobTarget{kNoEntity, cell}, 0.0f, 0, 0, false, CellPos{}};
+            const float dx = static_cast<float>(cell.x) + 0.5f - at.x;
+            const float dy = static_cast<float>(cell.y) + 0.5f - at.y;
+            candidate.distSq = dx * dx + dy * dy;
+            if (!map.walkable(cell)) {
+                // A burning wall or table: the pawn works from a cell beside it.
+                const CellPos around[4] = {{cell.x, cell.y - 1, cell.level}, {cell.x + 1, cell.y, cell.level},
+                                           {cell.x, cell.y + 1, cell.level}, {cell.x - 1, cell.y, cell.level}};
+                bool found = false;
+                for (const CellPos& n : around) {
+                    if (map.walkable(n)) {
+                        candidate.hasReach = true;
+                        candidate.reach = n;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    continue;
+                }
+            }
+            out.push_back(candidate);
+        }
+    }
+
+    bool makeJob(JobSystem& jobs, Entity, const WorkCandidate& candidate, Job& out) override {
+        if (jobs.fire() == nullptr || !jobs.fire()->burning(candidate.target.cell)) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::ExtinguishFire;
+        out.cell = candidate.target.cell;
+        return true;
+    }
+
+private:
+    std::vector<int> rescue_;
+};
+
 }  // namespace
 
 bool makeHaulJob(JobSystem& jobs, Entity pawn, Entity item, Job& out) {
@@ -782,6 +854,7 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<RescueGiver>());
     givers.push_back(std::make_unique<GoToMedicalBedGiver>());
     givers.push_back(std::make_unique<RestToHealGiver>());
+    givers.push_back(std::make_unique<ExtinguishFiresGiver>());
     givers.push_back(std::make_unique<StripGiver>());
     addHusbandryWorkGivers(givers);
     return givers;

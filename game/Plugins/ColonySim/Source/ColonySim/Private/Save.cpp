@@ -19,6 +19,7 @@
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Filth.h"
+#include "ColonySim/Fire.h"
 #include "ColonySim/Floors.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Hash.h"
@@ -294,6 +295,7 @@ struct SaveEntity {
     std::optional<AnimalCare> care;         // section "husbandry"
     std::optional<AnimalBreed> breed;       // section "breeding" (N4)
     std::optional<Hatching> hatching;       // section "breeding" (N4)
+    std::optional<Burning> burning;         // section "fire" (E4)
     std::optional<SaveSpoilage> spoilage;   // section "spoilage"
     std::optional<SaveGrenade> grenade;     // section "explosives"
     std::optional<SaveBelt> belt;           // section "explosives"
@@ -411,6 +413,7 @@ struct SaveData {
     RaidState raids;                   // section "raids" (F6)
     HusbandrySaved husbandry;          // section "husbandry": animal zones and counters
     BreedingStats breeding;            // section "breeding": the counters (N4)
+    FireSaved fire;                    // section "fire": fires, burnt ground, the home area (E4)
     std::vector<RoomTemperature> roomTemperatures;  // section "temperature" (E2)
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
     uint32_t nextOutfitId = 1;
@@ -1141,6 +1144,14 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
             } else if constexpr (std::is_same_v<Type, SetGrowingZoneCropCommand>) {
                 ar.value("zone", c.zone);
                 ar.text("crop", c.crop);
+            } else if constexpr (std::is_same_v<Type, IgniteCommand>) {
+                ar.group("cell", [&] { saveCell(ar, c.cell); });
+                ar.value("size", c.size);
+                ar.value("pawn", c.pawn);
+                ar.value("force", c.force);
+            } else if constexpr (std::is_same_v<Type, SetHomeAreaCommand>) {
+                ar.group("area", [&] { saveRect(ar, c.area); });
+                ar.value("add", c.add);
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }
@@ -2484,6 +2495,26 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "turret", e, &SaveEntity::turret, [&](Turret& t) { saveTurretPart(ar, t); });
         saveParts(ar, "trap", e, &SaveEntity::trap, [&](Trap& t) { saveTrapPart(ar, t); });
     });
+    ar.section("fire", 1, [&] {
+        ar.value("started", d.fire.started);
+        ar.value("burntUp", d.fire.burntUp);
+        ar.value("pawnsBurnt", d.fire.pawnsBurnt);
+        ar.value("autoHome", d.fire.autoHome);
+        ar.value("homeStarted", d.fire.homeStarted);
+        ar.list("fires", d.fire.fires, [&](FireRecord& r) {
+            ar.value("cell", r.cell);
+            ar.value("size", r.fire.size);
+            ar.value("age", r.fire.age);
+            ar.value("plantDamage", r.fire.plantDamage);
+            ar.require(r.fire.size > 0.0f && r.fire.size < 100.0f, "the save file has an impossible fire");
+        });
+        ar.list("burnt", d.fire.burnt, [&](BurntRecord& r) {
+            ar.value("cell", r.cell);
+            ar.value("at", r.at);
+        });
+        ar.list("home", d.fire.home, [&](int& cell) { ar.value("cell", cell); });
+        saveParts(ar, "burning", e, &SaveEntity::burning, [&](Burning& b) { ar.value("until", b.until); });
+    });
     // New sections go here, at the end.
 }
 
@@ -2596,6 +2627,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.husbandry = sim.husbandry_->saved();
     d.farming = sim.farming_->saved();
     d.breeding = sim.breeding_->saved();
+    d.fire = sim.fire_->saved();
     d.seconds = sim.time_.seconds;
     d.rngState = sim.rng_.state();
     d.rngIncrement = sim.rng_.increment();
@@ -2829,6 +2861,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const Hatching* hatching = reg.try_get<Hatching>(e)) {
             out.hatching = *hatching;
+        }
+        if (const Burning* burning = reg.try_get<Burning>(e)) {
+            out.burning = *burning;
         }
         if (const Turret* turret = reg.try_get<Turret>(e)) {
             out.turret = *turret;
@@ -3323,6 +3358,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.hatching) {
             reg.emplace<Hatching>(entity, *e.hatching);
         }
+        if (e.burning) {
+            reg.emplace<Burning>(entity, *e.burning);
+        }
         if (e.spoilage) {
             Spoilage spoilage;
             spoilage.rot = e.spoilage->rot;
@@ -3617,6 +3655,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     sim.temperature_->setOutdoor(sim.outdoorTemperature());
     sim.temperature_->restore(d.roomTemperatures);
     sim.spoilage_->restore(d.spoilageState);
+    if (!sim.fire_->restore(d.fire, error)) {
+        return false;
+    }
     sim.events_.clear();
     return true;
 }
