@@ -218,6 +218,25 @@ float TemperatureSystem::degreesAboveComfort(Entity pawn) {
 
 // ---- Each game second -----------------------------------------------------------------------------
 
+void TemperatureSystem::addHeat(CellPos cell, double heatPerSecond, double seconds, float maxTemp) {
+    syncRooms();
+    const Room* room = rooms_.roomOf(cell);
+    if (room == nullptr || !usesRoomTemperature(*room) || room->id >= roomTemp_.size()) {
+        return;
+    }
+    float& t = roomTemp_[room->id];
+    if (t >= maxTemp) {
+        return;
+    }
+    const float dt = static_cast<float>(heatPerSecond * kTempEnergyPerGameSecond * seconds / static_cast<double>(room->cellCount));
+    t = std::min(maxTemp, t + dt);
+    if (!cellTemp_.empty()) {
+        for (const CellPos& c : rooms_.cellsOf(*room)) {
+            cellTemp_[static_cast<size_t>(map_.index(c))] = t;
+        }
+    }
+}
+
 void TemperatureSystem::step(int64_t now) {
     syncRooms();
     if (now % numbers_.intervalSeconds != 0) {
