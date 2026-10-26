@@ -25,6 +25,8 @@ C17 adds a wood floor over the room's inside (placed by command at step 0). Colo
 dirt they walk in. The summary prints `cleaned`, `filthLeft`, `roomBeauty` and `roomImpressiveness`;
 the run fails if more than 12 layers of filth are left or the room has no stats.
 
+C20 adds social life: the summary prints `talks`, `fights`, `friendPairs` and `rivalPairs`, and the run fails if the six never talked.
+
 Everything else is built by the colonists themselves from the starting steel and wood. The script
 never touches a pawn or an item.
 

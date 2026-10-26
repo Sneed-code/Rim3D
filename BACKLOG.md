@@ -2,6 +2,7 @@
 
 Ideas parked for later. Newest first. Move an item into a stage plan when it's picked up.
 
+- Social life (found in C20): sexual orientations and attractiveness for romance (now anyone may love anyone), cheating and jealousy, a wedding party, the Social skill raising the opinion a chat gives and the chance of romance, the colonist panel's relations tab, and mood effects of seeing a friend die in front of you.
 - Breeding (found in N4): an "allow breeding" switch per animal or zone, so the player can keep a pen from growing; young animals following their mother; health that grows with the life stages (`healthScaleFactor` is in the defs, unused); hatching and gestation needing warmth (E2's room temperatures); a hatchery for the fertilized eggs; tailoring from wool (C14 bills); milk pasteurizing is not in RimWorld either.
 - Names for tamed animals (RimWorld lets you name them); shown in the animals tab (U19). Found in N3.
 - Effects of the trained tricks: Obedience (come when called, follow when drafted), Release (go wild on a command), Rescue (carry a downed colonist to a bed). N3 only counts the steps.
@@ -19,4 +20,5 @@ Ideas parked for later. Newest first. Move an item into a stage plan when it's p
 - Children and sexual content: out of scope for now; sneed may revisit.
 - Rearm job for sprung spike traps (a Construction-style colonist job; F11 has only `RearmTrapCommand`) and a "rearm all" button (U19 panels).
 - Raiders shooting back at turrets (the fighter AI targets pawns only); armor for spike-trap stabs; the other turrets (sentry, autocannon) and trap kinds (found in F11).
+- Fix what the F7 raid soak found (`docs/design/raid-soak.md`): fighters stuck while walking to their spot (about 0.4 per seed in raids), fighters waiting in the open 13.6% of the time against the 10% rule, and some raids still going after a quarter game day. Then tighten the soak's limits.
 - Fire (found in E4): firefoam and a foam turret, a burning pawn running in panic or to water, heat armor of apparel against Burn damage, an allowed area per colonist (the home area is one shared area), a home-area overlay and painting tool (U19), burnt ground slowing plant regrowth, wood-fired buildings (stoves, generators, campfires) catching fire from their fuel, a "fire danger" thought for sleeping next to fuel. Tune `spreadPerTick`, `plantDamageFactor` and `beatPerTick` in a playtest (`data/defs/Rules/FireRules.json`).

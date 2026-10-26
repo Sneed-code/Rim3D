@@ -172,9 +172,9 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		const float Wanted = Velocity.Rotation().Yaw;
 		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * Speed);
 	}
-	else if ((Now.shotReadyIn > 0 || Now.fighting) && FMath::Abs(Now.facingX) + FMath::Abs(Now.facingY) > 0.1f)
+	else if ((Now.shotReadyIn > 0 || Now.fighting || Now.meleePhase != colony::MeleePhase::Ready || Now.blocking) && FMath::Abs(Now.facingX) + FMath::Abs(Now.facingY) > 0.1f)
 	{
-		// Standing and shooting: face where the sim says the pawn aims (docs/design/fights.md).
+		// Standing and shooting or swinging: face where the sim says the pawn aims (docs/design/fights.md).
 		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
 		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
 	}
@@ -183,10 +183,32 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	{
 		return;  // the physics body is on its own until the pawn gets up
 	}
-	ApplyLean(DeltaTime * Speed);
+	StanceHeight = Now.stance == colony::Stance::Crouching ? 0.66f : (Now.stance == colony::Stance::Prone ? 0.24f : 1.0f);
 
-	// Animation runs at the game's speed and stops while paused.
-	Body->GlobalAnimRateScale = static_cast<float>(Speed);
+	// The hit-stop holds the swing, the flinch and the animation for a moment of real time.
+	float GameDelta = DeltaTime * Speed;
+	if (HitStopLeft > 0.0f)
+	{
+		HitStopLeft = FMath::Max(0.0f, HitStopLeft - (Speed > 0 ? DeltaTime : 0.0f));
+		GameDelta = 0.0f;
+	}
+	// A swing on screen that the sim no longer has (the attacker went down, lost its weapon): recover.
+	if (Swing.IsWinding() && Now.meleePhase != colony::MeleePhase::Windup)
+	{
+		SwingMismatch += DeltaTime;
+		if (SwingMismatch > 0.25f)
+		{
+			Swing.Abort();
+		}
+	}
+	else
+	{
+		SwingMismatch = 0.0f;
+	}
+	ApplyBodyPose(GameDelta, Now.blocking && !Now.downed && !Now.dead);
+
+	// Animation runs at the game's speed and stops while paused (and during a hit-stop).
+	Body->GlobalAnimRateScale = HitStopLeft > 0.0f ? 0.0f : static_cast<float>(Speed);
 	if (USimPawnAnimInstance* Anim = GetAnim())
 	{
 		FSimPawnAnimInputs& In = Anim->Inputs;
@@ -335,27 +357,120 @@ void ASimPawnActor::PlayHitReaction(const FVector& ShotDirection, float Strength
 	++HitReactions;
 }
 
-void ASimPawnActor::ApplyLean(float DeltaTime)
+void ASimPawnActor::BeginMeleeSwing(EMeleeStyle Style, float StepsToHit)
 {
-	if (ReactionAge >= kHitReactionSeconds)
+	Swing.Begin(Style, StepsToHit, StanceHeight);
+	SwingMismatch = 0.0f;
+}
+
+void ASimPawnActor::MeleeHitMoment()
+{
+	Swing.HitMoment();
+}
+
+void ASimPawnActor::PlayDodge(const FVector& TowardWorld)
+{
+	const FVector Delta = TowardWorld - GetActorLocation();
+	DodgeSide = FVector::DotProduct(Delta, GetActorRightVector()) >= 0.0 ? 1.0f : -1.0f;
+	DodgeAge = 0.0f;
+	++DodgesPlayed;
+}
+
+void ASimPawnActor::HitStop(float Seconds)
+{
+	HitStopLeft = FMath::Max(HitStopLeft, Seconds);
+	++HitStops;
+}
+
+FMeleePose ASimPawnActor::ComputeMeleePose() const
+{
+	FMeleePose Pose = MeleePose::Rest(StanceHeight);
+	if (Swing.IsActive())
 	{
-		if (LeanDegrees != 0.0f)
+		Pose = Swing.Current;
+	}
+	else if (BlockBlend > 0.0f)
+	{
+		Pose = FMeleePose::Lerp(Pose, MeleePose::Block(StanceHeight), MeleePose::EaseInOut(BlockBlend));
+	}
+	if (DodgeAge < kDodgeSeconds)
+	{
+		// Up and over in a third of a second: the body drops and tips into the step.
+		const float Envelope = FMath::Sin(PI * DodgeAge / kDodgeSeconds);
+		Pose.Tilt += DodgeSide * 16.0f * Envelope;
+		Pose.Dip += 9.0f * Envelope;
+		Pose.Lean += 6.0f * Envelope;
+		Pose.WeaponLocation.Y += DodgeSide * 10.0 * Envelope;
+	}
+	return Pose;
+}
+
+void ASimPawnActor::GetMeleeWeaponPose(FVector& OutLocation, FRotator& OutRotation) const
+{
+	const FMeleePose Pose = ComputeMeleePose();
+	// The weapon goes with the body: twisted about the feet, carried forward and down with it.
+	const FQuat Twist(FVector::ZAxisVector, FMath::DegreesToRadians(Pose.Twist));
+	OutLocation = Twist.RotateVector(Pose.WeaponLocation) + FVector(Pose.Lunge, 0.0, -Pose.Dip);
+	OutRotation = (Twist * Pose.WeaponRotation.Quaternion()).Rotator();
+}
+
+float ASimPawnActor::GetMeleeBodyDegrees() const
+{
+	const FMeleePose Pose = ComputeMeleePose();
+	return FMath::Abs(Pose.Lean) + FMath::Abs(Pose.Tilt) + FMath::Abs(Pose.Twist);
+}
+
+void ASimPawnActor::ApplyBodyPose(float GameDelta, bool bBlocking)
+{
+	BlockBlend = FMath::FInterpConstantTo(BlockBlend, bBlocking ? 1.0f : 0.0f, GameDelta, 8.0f);
+	Swing.Advance(GameDelta * colony::kStepsPerRealSecondAt1x);
+	if (DodgeAge < kDodgeSeconds)
+	{
+		DodgeAge = FMath::Min(kDodgeSeconds, DodgeAge + GameDelta);
+	}
+	const bool bReacting = ReactionAge < kHitReactionSeconds;
+	const bool bMelee = Swing.IsActive() || BlockBlend > 0.0f || DodgeAge < kDodgeSeconds;
+	if (!bReacting && !bMelee)
+	{
+		if (bBodyPosed)
 		{
+			bBodyPosed = false;
 			LeanDegrees = 0.0f;
-			Body->SetRelativeRotation(PawnBodyRelativeRotation);
+			Body->SetRelativeLocationAndRotation(FVector::ZeroVector, PawnBodyRelativeRotation);
 		}
 		return;
 	}
-	ReactionAge += DeltaTime;
-	const float T = FMath::Clamp(ReactionAge / kHitReactionSeconds, 0.0f, 1.0f);
-	// Snaps over in the first 15%, then settles back.
-	const float Envelope = T < 0.15f ? T / 0.15f : FMath::Square(1.0f - (T - 0.15f) / 0.85f);
-	LeanDegrees = PawnHitLeanDegrees * ReactionStrength * Envelope;
-	// The top of the body goes along the shot: turn about up x direction.
-	const FVector Axis = FVector::CrossProduct(FVector::UpVector, ReactionDirection).GetSafeNormal();
-	const FQuat LeanWorld(Axis, FMath::DegreesToRadians(LeanDegrees));
+	bBodyPosed = true;
+
+	FQuat LeanWorld = FQuat::Identity;
+	if (bReacting)
+	{
+		ReactionAge += GameDelta;
+		const float T = FMath::Clamp(ReactionAge / kHitReactionSeconds, 0.0f, 1.0f);
+		// Snaps over in the first 15%, then settles back.
+		const float Envelope = T < 0.15f ? T / 0.15f : FMath::Square(1.0f - (T - 0.15f) / 0.85f);
+		LeanDegrees = PawnHitLeanDegrees * ReactionStrength * Envelope;
+		// The top of the body goes along the shot: turn about up x direction.
+		const FVector Axis = FVector::CrossProduct(FVector::UpVector, ReactionDirection).GetSafeNormal();
+		LeanWorld = FQuat(Axis, FMath::DegreesToRadians(LeanDegrees));
+	}
+	else
+	{
+		LeanDegrees = 0.0f;
+	}
+
+	FQuat MeleeLocal = FQuat::Identity;
+	FVector Offset = FVector::ZeroVector;
+	if (bMelee)
+	{
+		const FMeleePose Pose = ComputeMeleePose();
+		// Twist about up, lean forward about y (z toward x), tip to the right about -x (z toward y).
+		MeleeLocal = FQuat(FVector::ZAxisVector, FMath::DegreesToRadians(Pose.Twist)) * FQuat(FVector::YAxisVector, FMath::DegreesToRadians(Pose.Lean)) *
+			FQuat(FVector::XAxisVector, -FMath::DegreesToRadians(Pose.Tilt));
+		Offset = FVector(Pose.Lunge, 0.0, -Pose.Dip);
+	}
 	const FQuat RootQuat = GetActorQuat();
-	Body->SetRelativeRotation(RootQuat.Inverse() * LeanWorld * RootQuat * PawnBodyRelativeRotation.Quaternion());
+	Body->SetRelativeLocationAndRotation(Offset, RootQuat.Inverse() * LeanWorld * RootQuat * MeleeLocal * PawnBodyRelativeRotation.Quaternion());
 }
 
 void ASimPawnActor::SpawnRagdollFloor()
@@ -414,7 +529,12 @@ void ASimPawnActor::StartRagdoll(const FVector& Impulse)
 	++RagdollsStarted;
 	ReactionAge = kHitReactionSeconds;
 	LeanDegrees = 0.0f;
-	Body->SetRelativeRotation(PawnBodyRelativeRotation);
+	Swing.Reset();
+	BlockBlend = 0.0f;
+	DodgeAge = kDodgeSeconds;
+	HitStopLeft = 0.0f;
+	bBodyPosed = false;
+	Body->SetRelativeLocationAndRotation(FVector::ZeroVector, PawnBodyRelativeRotation);
 	Body->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	Body->SetCollisionProfileName(TEXT("Ragdoll"));
 	Body->SetAllBodiesSimulatePhysics(true);
