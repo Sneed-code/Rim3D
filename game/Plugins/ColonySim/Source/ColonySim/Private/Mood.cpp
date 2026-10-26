@@ -91,6 +91,8 @@ MoodRules MoodRules::read(const DefDatabase& defs) {
     r.risePerHour = moodFloat(*def, "risePerHour", r.risePerHour);
     r.fallPerHour = moodFloat(*def, "fallPerHour", r.fallPerHour);
     r.memoryDays = def->number("memoryDays", r.memoryDays);
+    r.nightFromHour = std::clamp(static_cast<int>(def->integer("nightHours.from", r.nightFromHour)), 0, 23);
+    r.nightToHour = std::clamp(static_cast<int>(def->integer("nightHours.to", r.nightToHour)), 0, 23);
     return r;
 }
 
