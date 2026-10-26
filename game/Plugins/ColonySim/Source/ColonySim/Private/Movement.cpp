@@ -118,7 +118,56 @@ bool straightWalkIsClear(const Map& map, float x0, float y0, float x1, float y1,
     return true;
 }
 
-void smoothPath(const Map& map, float startX, float startY, std::vector<CellPos>& path) {
+namespace {
+
+void moveSmoothLevel(const Map& map, float startX, float startY, std::vector<CellPos>& path);
+
+}  // namespace
+
+void smoothPath(const Map& map, float startX, float startY, std::vector<CellPos>& path, int startLevel) {
+    if (path.empty()) {
+        return;
+    }
+    if (startLevel < 0) {
+        startLevel = path[0].level;
+    }
+    // A path that climbs stairs or a ladder is straightened a level at a time: the cell in front of
+    // a climb and the cell it comes out at are always kept (MovementSystem climbs between them).
+    size_t end = 0;
+    while (end < path.size() && path[end].level == startLevel) {
+        ++end;
+    }
+    if (end == path.size()) {
+        moveSmoothLevel(map, startX, startY, path);
+        return;
+    }
+    std::vector<CellPos> out;
+    size_t begin = 0;
+    float x = startX;
+    float y = startY;
+    while (begin < path.size()) {
+        end = begin;
+        while (end < path.size() && path[end].level == path[begin].level) {
+            ++end;
+        }
+        // The first cell after a climb stays: the pawn arrives there by climbing.
+        if (path[begin].level != (begin == 0 ? startLevel : path[begin - 1].level)) {
+            out.push_back(path[begin]);
+            x = static_cast<float>(path[begin].x) + 0.5f;
+            y = static_cast<float>(path[begin].y) + 0.5f;
+            ++begin;
+        }
+        std::vector<CellPos> part(path.begin() + static_cast<std::ptrdiff_t>(begin), path.begin() + static_cast<std::ptrdiff_t>(end));
+        moveSmoothLevel(map, x, y, part);
+        out.insert(out.end(), part.begin(), part.end());
+        begin = end;
+    }
+    path.swap(out);
+}
+
+namespace {
+
+void moveSmoothLevel(const Map& map, float startX, float startY, std::vector<CellPos>& path) {
     const int n = static_cast<int>(path.size());
     if (n <= 1) {
         return;
@@ -185,5 +234,7 @@ void smoothPath(const Map& map, float startX, float startY, std::vector<CellPos>
     }
     path.swap(out);
 }
+
+}  // namespace
 
 }  // namespace colony

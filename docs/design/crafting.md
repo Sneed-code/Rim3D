@@ -18,7 +18,7 @@ A building def names the work giver that offers its bills with `workGiver`. The 
 | Work giver | Work type | Benches | Makes |
 | --- | --- | --- | --- |
 | `DoBillsCookStove` | Cooking | fueled stove, electric stove | meals, kibble |
-| `DoBillsButcher` | Cooking | butcher table | (butchering waits for N2, below) |
+| `DoBillsButcher` | Cooking | butcher table | meat and leather from corpses ([hunting.md](hunting.md), N2) |
 | `DoBillsSmithy` | Smithing | fueled smithy, electric smithy, machining table | knife, club, gladius, spear, mace, longsword, breach axe |
 | `DoBillsTailor` | Tailoring | hand tailor bench, electric tailor bench | clothes |
 | `DoBillsCraftingSpot` | Crafting | crafting spot | prosthetics (wood), knife, club, spear |
@@ -94,12 +94,14 @@ stream and the `StoreIn` marks.
 
 ## Not yet
 
-- **Butchering.** The butcher table, its `ButcherCorpse` recipe and the Cooking-type giver `DoBillsButcher`
-  exist, but a corpse is not an ingredient yet: carrying one to the table and turning the race's meat and
-  leather into items is N2 ("Hunting and butchering", which needs this task), together with the hunt.
+- Butchering was left to N2 and is done: [hunting.md](hunting.md).
 - Skill experience from crafting (`workSkillXp` is read and unused, as for cooking).
 - Inspirations (quality shift), art, sculpting, smelting, the machining table's other recipes.
 - Damage and hit points of melee weapons from their stuff and quality (P4).
 - "Count only what lies in this stockpile", "take from this stockpile only" and a per-bill ingredient quality
   filter (the bill's `disallowed` list is by item def).
 - The electric tailor bench's `unpoweredWorkSpeedFactor` (an unpowered bench does nothing).
+
+## Fuel per run and long-lasting foods
+
+A stove burns `fuel.perUse` wood per product, unless the recipe has `fuelUses`: then the run burns that many uses. `MakeKibble` (50 kibble), `MakePemmican` (16) and `CookMealSurvival` (1) have `fuelUses: 1`. Pemmican keeps 150 days, the packaged survival meal 60, kibble 50 (simple meal 4); rot follows `docs/design/spoilage.md`. `Pemmican` research unlocks its recipe.

@@ -1,12 +1,14 @@
 #include "ColonySim/Needs.h"
 
 #include "ColonySim/Clock.h"
+#include "ColonySim/Colonist.h"
 #include "ColonySim/Genes.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
+#include <string>
 
 namespace colony {
 
@@ -16,6 +18,31 @@ namespace {
 
 float needsFloat(const Def& def, const char* path, float fallback) {
     return static_cast<float>(def.number(path, fallback));
+}
+
+// A trait stat for a pawn: `base` times the `statFactors.<stat>` and plus the `statOffsets.<stat>` of each of the
+// pawn's trait degrees (Gourmand's hunger factor, Quick sleeper's rest offset).
+float needsTraitStat(const DefDatabase& defs, const entt::registry& reg, Entity pawn, const char* stat, float base) {
+    const Colonist* colonist = reg.try_get<Colonist>(pawn);
+    if (colonist == nullptr) {
+        return base;
+    }
+    float factor = 1.0f;
+    float offset = 0.0f;
+    for (const TraitRecord& record : colonist->traits) {
+        const Def* trait = defs.find("Traits", record.def);
+        if (trait == nullptr) {
+            continue;
+        }
+        for (size_t i = 0; i < trait->count("degreeDatas"); ++i) {
+            const std::string path = "degreeDatas." + std::to_string(i);
+            if (trait->integer((path + ".degree").c_str(), 0) == record.degree) {
+                factor *= static_cast<float>(trait->number((path + ".statFactors." + stat).c_str(), 1.0));
+                offset += static_cast<float>(trait->number((path + ".statOffsets." + stat).c_str(), 0.0));
+            }
+        }
+    }
+    return base * factor + offset;
 }
 
 }  // namespace
@@ -132,6 +159,8 @@ void NeedsSystem::step() {
         if (const PawnGenes* genes = reg.try_get<PawnGenes>(pawn)) {
             perDay *= genes->effects.foodRate;
         }
+        perDay *= health_.foodRateFactor(pawn);  // gut worms
+        perDay *= needsTraitStat(defs_, reg, pawn, "hungerRateMultiplier", 1.0f);
         switch (foodBandOf(rules_, needs.food)) {
             case FoodBand::Fed: perDay *= rules_.foodFallFactorFed; break;
             case FoodBand::Hungry: perDay *= rules_.foodFallFactorHungry; break;
@@ -148,7 +177,9 @@ void NeedsSystem::step() {
         // Rest rises while lying down and falls otherwise, by band.
         const Worker* worker = reg.try_get<Worker>(pawn);
         if (worker != nullptr && jobIsLyingDown(worker->job)) {
-            needs.rest = std::min(1.0f, needs.rest + restGainPerDay(worker->job.thing) * kPerSecond);
+            // Quick sleeper: `restRateMultiplier` +0.5 rests half as fast again.
+            const float restRate = std::max(0.0f, needsTraitStat(defs_, reg, pawn, "restRateMultiplier", 1.0f));
+            needs.rest = std::min(1.0f, needs.rest + restGainPerDay(worker->job.thing) * restRate * kPerSecond);
         } else {
             float fall = 0.0f;
             switch (restBandOf(rules_, needs.rest)) {
@@ -157,7 +188,7 @@ void NeedsSystem::step() {
                 case RestBand::Tired: fall = rules_.restFallPerDayTired; break;
                 case RestBand::Exhausted: fall = rules_.restFallPerDayExhausted; break;
             }
-            needs.rest = std::max(0.0f, needs.rest - fall * kPerSecond);
+            needs.rest = std::max(0.0f, needs.rest - fall * health_.restFallFactor(pawn) * kPerSecond);  // sleeping sickness
         }
 
         if (needs.malnutrition >= 1.0f) {

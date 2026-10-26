@@ -110,7 +110,7 @@ it), +4 to +12 when tended. Which injury is chosen comes from a hash of the game
 the game second, not the shared random stream, so the order pawns are visited in can't matter. An
 injury at 0 is gone. Lost parts never come back on their own (prosthetics and bionics are fitted by surgery, [surgery.md](surgery.md)). An injury that
 heals completely may leave a scar or old wound, which never heals and is never picked to heal ([medicine.md](medicine.md)).
-**Not built yet:** infections and diseases, immunity.
+Infections, diseases and immunity are in [diseases.md](diseases.md) (H2).
 
 ## Using it
 

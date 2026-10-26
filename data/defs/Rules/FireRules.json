@@ -31,11 +31,13 @@
     "burntFadeDays": 6,
     "autoHomeRadius": 5,
     "startHomeRadius": 12,
+    "foamFadeHours": 12,
+    "waterRunRadius": 12,
     "panic": true,
     "unverified": ["maxSize", "growthPerTick", "damageBase", "damagePerSize", "damageMax", "pawnFlammability", "autoIgniteC",
                    "pawnDamagePerTick", "pawnBurnTicks"],
     "ours": ["passSeconds", "startSize", "shrinkPerTick", "plantDamageFactor", "spreadPerTick", "emberFactor", "emberMinSize",
              "catchPerTick", "rainOutPerTick", "snowBlocksAt", "hotRoomIgniteChance", "hotPawnIgniteChance", "blastIgniteChance", "heatPerSecond",
-             "heatMaxC", "beatPerTick", "floorBurnPasses", "burntFadeDays", "autoHomeRadius", "startHomeRadius", "panic"]
+             "heatMaxC", "beatPerTick", "floorBurnPasses", "burntFadeDays", "autoHomeRadius", "startHomeRadius", "panic", "foamFadeHours", "waterRunRadius"]
   }
 ]

@@ -100,11 +100,15 @@ cook makes a simple meal in 432 game seconds, 7.2 game minutes, plus the walking
 - Save format 18: a building's bills (`recipe` by defName), a job's `bill`, `picks` and `used`
   (by defName). Format 6 to 17 saves still load.
 
+## Experience
+
+Every second of bill work teaches the recipe's `workSkill` `workSkillXp / work` XP ([skills.md](skills.md)).
+
 ## Not yet
 
 - ~~Fuel~~ done (C11, [fuel.md](fuel.md)): the stove holds 50 wood, burns one per meal made and is
   stopped when it is out; the Refuel job under Hauling brings wood. A new stove starts empty.
-- Skill learning (XP is in the recipe, no sim system gives it), food poisoning, meals remembering
+- Food poisoning, meals remembering
   their ingredients (mood from human or insect meat), rot.
 - ~~Bill details~~ done (C14, [crafting.md](crafting.md)): reordering, the ingredient radius, allowed skill
   range, "store products in", the ingredient filter, "pause when satisfied, unpause at".

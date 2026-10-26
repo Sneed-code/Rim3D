@@ -74,7 +74,7 @@
   },
   {
     "defName": "Hauling", "parent": "WorkTypeBase", "label": "haul", "naturalPriority": 300,
-    "workTags": ["ManualDumb", "Hauling"], "inPrototype": true, "tasks": ["Refuel", "Strip", "HaulToStockpile"]
+    "workTags": ["ManualDumb", "Hauling"], "inPrototype": true, "tasks": ["Refuel", "Strip", "HaulToStockpile", "HaulCorpses"]
   },
   {
     "defName": "Cleaning", "parent": "WorkTypeBase", "label": "clean", "naturalPriority": 200,

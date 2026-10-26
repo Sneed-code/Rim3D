@@ -1,11 +1,13 @@
 #include "ColonySim/Farming.h"
 
+#include "ColonySim/Clock.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Lights.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Temperature.h"
+#include "ColonySim/Things.h"
 #include "ColonySim/Zones.h"
 
 #include <algorithm>
@@ -51,6 +53,8 @@ Farming::Farming(const Map& map, Plants& plants, const Zones& stockpiles, const 
     if (const Def* rules = defs.find("Rules", "PlantRules")) {
         frostKillPerDegree_ = rules->number("killChancePerDegree", frostKillPerDegree_);
         minGlow_ = rules->number("growthNeedsLight", minGlow_);
+        sowGrowthMargin_ = rules->number("sowGrowthMargin", sowGrowthMargin_);
+        sowSlackHours_ = static_cast<int64_t>(rules->number("sowHarvestSlackHours", static_cast<double>(sowSlackHours_)));
     }
 }
 
@@ -85,7 +89,7 @@ GrowingZoneId Farming::createZone(const CellRect& area, DefId crop, std::string&
     for (int y = area.minY; y < area.minY + area.sizeY; ++y) {
         for (int x = area.minX; x < area.minX + area.sizeX; ++x) {
             const CellPos c{x, y, 0};
-            if (area.level == 0 && map_.onGround(c) && map_.walkable(c) && map_.buildingAt(c) == kNoEntity &&
+            if (area.level == 0 && map_.onGround(c) && map_.walkable(c) && (map_.buildingAt(c) == kNoEntity || spotFertility(slot(c)) > 0.0f) &&
                 zoneOf_[slot(c)] == kNoGrowingZone && stockpiles_.zoneAt(c) == kNoZone && plants_.fertility(c) > 0.0f) {
                 zone.cells.push_back(c);
             }
@@ -167,6 +171,57 @@ float Farming::temperatureOf(CellPos c) const {
     return temperature_ != nullptr ? temperature_->temperatureAt(c) : 20.0f;
 }
 
+float Farming::spotFertility(size_t cellIndex) const {
+    if (things_ == nullptr) {
+        return -1.0f;
+    }
+    const Entity building = map_.buildingAt(map_.cellAt(static_cast<int>(cellIndex)));
+    if (building == kNoEntity) {
+        return -1.0f;
+    }
+    const Thing& thing = things_->registry().get<Thing>(building);
+    return static_cast<float>(defs_.get(thing.def).number("plantSpot.fertility", -1.0));
+}
+
+bool Farming::spotUnpowered(CellPos c) const {
+    if (things_ == nullptr) {
+        return false;
+    }
+    const Entity building = map_.buildingAt(c);
+    if (building == kNoEntity) {
+        return false;
+    }
+    const Thing& thing = things_->registry().get<Thing>(building);
+    return defs_.get(thing.def).flag("plantSpot.needsPower") && spotRunning_ && !spotRunning_(building);
+}
+
+bool Farming::sunLampLit(size_t cellIndex) const {
+    if (lights_ == nullptr || things_ == nullptr) {
+        return false;
+    }
+    const CellPos c = map_.cellAt(static_cast<int>(cellIndex));
+    const double glowNeeded = minGlow_;
+    if (static_cast<double>(lights_->lampLightAt(c)) < glowNeeded) {
+        return false;
+    }
+    for (const LightSource& source : lights_->sources()) {
+        if (source.cell.level != c.level) {
+            continue;
+        }
+        const Def& def = defs_.get(things_->registry().get<Thing>(source.building).def);
+        if (!def.flag("glower.growsPlants")) {
+            continue;
+        }
+        const double radius = def.number("glower.plantLightRadius", 0.0);
+        const double dx = static_cast<double>(source.cell.x - c.x);
+        const double dy = static_cast<double>(source.cell.y - c.y);
+        if (dx * dx + dy * dy <= radius * radius) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::string Farming::sowBlocker(CellPos c) const {
     const DefId crop = cropAt(c);
     if (!crop.valid()) {
@@ -185,10 +240,66 @@ std::string Farming::sowBlocker(CellPos c) const {
     if (plants_.fertility(c) < static_cast<float>(def.number("plant.fertilityMin", 0.0)) || plants_.fertility(c) <= 0.0f) {
         return "the soil is too poor";
     }
+    if (spotUnpowered(c)) {
+        return "its basin has no power";
+    }
     if (farmingTemperatureFactor(def, temperatureOf(c)) <= 0.0) {
         return "the weather is wrong for it";
     }
+    if (!ripensBeforeFrost(c, crop)) {
+        return "it would not ripen before the frost";
+    }
     return std::string();
+}
+
+// The crop grows `1 / (growDays x 24)` of its full size an hour in the growing hours, times the soil's rate and the
+// temperature curve (Plants::growHour, Farming::growthFactor); frost kills it. Walks the hours ahead on the forecast
+// until it is grown (then true) or the temperature falls under `coldDamageBelow` (then false). Only the hours the sun is bright
+// enough count (clear sky; clouds are left to the margin).
+bool Farming::ripensBeforeFrost(CellPos c, DefId cropId) const {
+    constexpr int64_t kHorizonHours = 24 * 40;
+    if (!forecast_ || !clock_ || map_.roof(c) != Roof::None) {
+        return true;
+    }
+    const Def& crop = defs_.get(cropId);
+    const int64_t now = clock_();
+    const int64_t hourNow = now / kSecondsPerHour;
+    if (hourNow != ripenHour_) {
+        ripenHour_ = hourNow;
+        ripenCache_.clear();
+    }
+    const double rate = std::max(0.0, 1.0 + (static_cast<double>(plants_.fertility(c)) - 1.0) * crop.number("plant.fertilitySensitivity", 0.0));
+    const std::pair<uint32_t, int> key{cropId.value, static_cast<int>(std::lround(rate * 1000.0))};
+    if (const auto found = ripenCache_.find(key); found != ripenCache_.end()) {
+        return found->second;
+    }
+    const double perHour = rate * sowGrowthMargin_ * plants_.growthTuning() / (crop.number("plant.growDays", 1.0) * 24.0);
+    const double cold = crop.number("plant.coldDamageBelow", 0.0);
+    bool ripe = false;
+    double grown = 0.0;
+    int64_t ripeAt = -1;
+    for (int64_t h = 0; h < kHorizonHours; ++h) {
+        const int64_t at = (hourNow + h) * kSecondsPerHour;
+        const double t = static_cast<double>(forecast_(std::max(at, now)));
+        if (t < cold) {
+            break;
+        }
+        const int hourOfDay = static_cast<int>((at / kSecondsPerHour) % 24);
+        // The crop grows in the growing hours that end in enough light (Farming::growthFactor); clouds are left to the margin.
+        const bool bright = lights_ == nullptr || static_cast<double>(lights_->clearSkyGlowAtHour(static_cast<float>(hourOfDay + 1))) >= crop.number("plant.growMinGlow", minGlow_);
+        if (ripeAt < 0 && bright && plants_.growsAtHour(hourOfDay)) {
+            grown += perHour * farmingTemperatureFactor(crop, t);
+            if (grown >= 1.0) {
+                ripeAt = h;
+            }
+        }
+        if (ripeAt >= 0 && h >= ripeAt + sowSlackHours_) {
+            ripe = true;
+            break;
+        }
+    }
+    ripenCache_[key] = ripe;
+    return ripe;
 }
 
 bool Farming::readyToHarvest(CellPos c) const {
@@ -205,6 +316,9 @@ double Farming::growthFactor(size_t cellIndex) const {
     const CellPos c = map_.cellAt(static_cast<int>(cellIndex));
     if (zone == nullptr || !plants_.has(c) || plants_.defAt(c) != zone->crop) {
         return 1.0;
+    }
+    if (spotUnpowered(c)) {
+        return 0.0;
     }
     const Def& def = defs_.get(zone->crop);
     const double glowNeeded = def.number("plant.growMinGlow", minGlow_);

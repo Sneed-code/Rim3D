@@ -67,11 +67,13 @@ BillSystem::BillSystem(Things& things, const DefDatabase& defs) : things_(things
     }
 
     nutrition_.assign(defs_.size(), 0.0);
+    rawMeat_.assign(defs_.size(), 0);
     std::vector<DefId> items;
     for (uint32_t i = 0; i < defs_.size(); ++i) {
         const Def& def = defs_.get(DefId{i});
         if (def.kind() == "Things" && def.text("category") == "Item") {
             nutrition_[i] = def.number("stats.nutrition", 0.0);
+            rawMeat_[i] = billsHasCategory(def, "MeatRaw") ? 1 : 0;
             items.push_back(def.id());
         }
     }
@@ -120,6 +122,8 @@ BillSystem::BillSystem(Things& things, const DefDatabase& defs) : things_(things
             }
             recipe.ingredients.push_back(std::move(ingredient));
         }
+        recipe.butcher = def.has("butcher");
+        recipe.fuelUsesSet = static_cast<int>(def.integer("fuelUses", 0));
         recipe.stuffFromIngredient = def.flag("productsMadeOfIngredient") || def.flag("productStuffFromIngredient");
         for (const std::string& name : def.keys("products")) {
             const DefId item = defs_.idOf("Things", name);
@@ -321,10 +325,10 @@ void BillSystem::step() {
                 continue;
             }
             const Recipe* r = recipe(bill.recipe);
-            if (r == nullptr || r->products.empty()) {
+            int stock = 0;
+            if (r == nullptr || !stockFor(*r, stock)) {
                 continue;
             }
-            const int stock = stockOf(r->products.front().item);
             if (stock >= bill.count) {
                 bill.satisfied = true;
             } else if (stock < bill.unpauseAt) {
@@ -341,6 +345,22 @@ int BillSystem::stockOf(DefId item) const {
     return total;
 }
 
+bool BillSystem::stockFor(const Recipe& recipe, int& stock) const {
+    if (recipe.butcher) {
+        stock = 0;
+        things_.registry().view<const Thing, const StackCount, const Position>().each(
+            [&](const Thing& thing, const StackCount& count, const Position&) {
+                stock += thing.def.value < rawMeat_.size() && rawMeat_[thing.def.value] != 0 ? count.count : 0;
+            });
+        return true;
+    }
+    if (recipe.products.empty()) {
+        return false;
+    }
+    stock = stockOf(recipe.products.front().item);
+    return true;
+}
+
 bool BillSystem::shouldDo(const Bill& bill) const {
     if (bill.suspended) {
         return false;
@@ -353,7 +373,8 @@ bool BillSystem::shouldDo(const Bill& bill) const {
                 return false;
             }
             const Recipe* r = recipe(bill.recipe);
-            return r != nullptr && !r->products.empty() && stockOf(r->products.front().item) < bill.count;
+            int stock = 0;
+            return r != nullptr && stockFor(*r, stock) && stock < bill.count;
         }
     }
     return false;

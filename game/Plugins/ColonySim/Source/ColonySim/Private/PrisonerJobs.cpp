@@ -330,6 +330,7 @@ JobSystem::StepResult JobSystem::feedPrisonerWork(Entity pawn, Job& job, std::st
     const float before = needs.food;
     needs.food = std::min(1.0f, needs.food + nutrition_[def.value] * static_cast<float>(count));
     reg.remove<Carrying>(pawn);
+    const bool humanIngredient = spoilage_ != nullptr && spoilage_->humanlikeIngredient(food);
     if (spoilage_ != nullptr) {
         spoilage_->eaten(prisoner, food);
     }
@@ -342,6 +343,7 @@ JobSystem::StepResult JobSystem::feedPrisonerWork(Entity pawn, Job& job, std::st
     event.cell = cellOf(reg.get<Position>(prisoner));
     event.amount = needs.food - before;
     event.message = "fed";
+    event.part = humanIngredient ? 1 : -1;
     events_.push_back(std::move(event));
     return StepResult::Next;
 }

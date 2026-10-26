@@ -26,7 +26,7 @@ enum class EventType : uint8_t {
     PawnAction,      // a pawn did something with its hands that Unreal animates (picked up, put down)
     JobStarted,      // a pawn took a job (docs/design/jobs.md)
     JobEnded,        // a pawn's job ended: `message` says "done", "failed: why" or "interrupted: why"
-    PawnAte,         // a pawn finished eating (docs/design/needs.md)
+    PawnAte,         // a pawn finished eating (docs/design/needs.md); `part` 1 if the meal had human flesh in it
     PawnWokeUp,      // a pawn got up after sleeping
     FrameStarted,    // a blueprint got its first materials and is a frame now (docs/design/construction.md)
     PawnMoodBand,    // a pawn's mood crossed a mental break threshold (docs/design/mood.md)
@@ -60,6 +60,8 @@ enum class EventType : uint8_t {
     MeleeHit,        // the hit moment of a swing: `message` says "hit", "deflected", "blocked", "dodged" or "missed"
     PawnTended,      // a doctor finished tending a patient (docs/design/medicine.md)
     PawnScarred,     // a healed injury left a scar or an old wound (docs/design/medicine.md)
+    PawnSick,        // a pawn caught a disease, or a wound turned infected (docs/design/diseases.md)
+    PawnRecovered,   // a pawn's disease ran its course (docs/design/diseases.md)
     ApparelDestroyed,  // a worn piece wore out or was shot to pieces: `thing` the wearer, `def` the piece's def (docs/design/apparel.md)
     WeatherChanged,  // the weather began to change into another kind (docs/design/weather.md)
     SeasonChanged,   // a new season began
@@ -73,6 +75,9 @@ enum class EventType : uint8_t {
     TrapRearmed,     // a sprung trap was set again
     WeaponSwitched,  // a pawn finished switching weapons (P1, docs/design/weapons.md): `thing` the pawn, `def` the weapon now in its hands, `target` that weapon
     PlantSown,       // a colonist sowed a crop in a growing zone: `cell`, `def` the crop (docs/design/farming.md)
+    Letter,          // the narrator sent an incident (docs/design/narrator.md): `def` the Incidents def, `message` the
+                     // letter's text, `count` its LetterKind, `amount` its threat points, `cell` where (if it has a
+                     // place), `squad` a raid's squad
     FireStarted,     // a fire began in a cell (docs/design/fire.md)
     FireOut,         // a fire went out: burnt out, rained out or beaten out
     PawnCaughtFire,  // a pawn is on fire
@@ -87,7 +92,14 @@ enum class EventType : uint8_t {
     PrisonBreak,        // prisoners broke out (the hook for T3): `count` how many, `message` the cause
     OutOfFuel,       // a building's fuel ran out (docs/design/fuel.md)
     Refueled,        // a pawn put fuel into a building
+    RoofCollapsed,   // a roof or an upper floor fell (M3, docs/design/roofs.md): `cell`, `message` "roof" (a built roof), "mountain" (the thick roof of a mined-out cell) or "floor" (an upper floor), `count` how many things and pawns it hit
     FirefoamPopped,     // a firefoam popper went off (docs/design/fire.md): `thing` the popper (destroyed right after), `def` its def, `cell` its cell, `amount` the foam radius
+    AnimalHunted,       // a hunter's target died (docs/design/hunting.md): `thing` the animal (a corpse now), `target` the hunter, `cell` where
+    AnimalButchered,    // a corpse was cut up (docs/design/hunting.md): `thing` the butcher, `def` the animal's def, `target` the table, `cell` where, `amount` the meat, `part` the leather
+    PawnMentalBreak,       // a colonist snapped: a mental break began (docs/design/mental-breaks.md)
+    PawnMentalBreakEnded,  // it ended: `message` says how ("recovered", "downed", "died", "stopped")
+    PawnInsulted,          // a pawn in an insulting spree insulted another
+    PawnLeftColony,        // a pawn gave up and walked off the map for good
     OperationDone,      // a doctor finished an operation (H3, docs/design/surgery.md): `thing` the doctor, `target` the patient, `def` the Recipes def, `part` the body part, `amount` the success chance, `message` "success", "failed" or "the patient died"
 };
 
@@ -134,6 +146,9 @@ enum class PawnAction : uint8_t {
     Chat,         // started talking to `target`, a prisoner (once per job; the talk takes game seconds)
     FeedPawn,     // started handing food to `target`, a prisoner
     Refuel,       // started putting fuel into `target`, a building (once per refuel job; the work goes on until its JobEnded)
+    Butcher,      // started cutting up `target`, a corpse (once per job; the work goes on until its JobEnded)
+    DropCorpse,   // put the carried `target`, a corpse, down in `cell`
+    Punch,        // swung a fist at `target`, a pawn or a thing (a tantrum or berserk break: docs/design/mental-breaks.md)
     Operate,      // started an operation on `target`, a patient in bed (once per job; the work goes on until its JobEnded)
 };
 
@@ -172,6 +187,8 @@ struct Event {
     // PawnTended: `thing` the doctor, `target` the patient, `def` the medicine used (none if there was none),
     // `amount` the tend quality (0 to 1.3), `message` "medicine" or "no medicine", "self" if the doctor tended itself.
     // PawnScarred: `thing` the pawn, `def` the Scar or OldWound hediff, `part` the body part, `amount` its severity.
+    // PawnSick: `thing` the pawn, `def` the Disease hediff, `part` the wound's body part for an infection (-1 otherwise),
+    // `amount` its severity. PawnRecovered: `thing` the pawn, `def` the disease, `part` as above.
     // AnimalTamed, AnimalReleased, AnimalSlaughtered, AnimalStarved: `thing` the animal, `target` the colonist
     // (none for a release or a starving), `cell` where. AnimalTrained: also `message` the trick (Trainable name),
     // `amount` the steps it has now and `part` the steps it needs. AnimalAttemptFailed: `message` "tame" or the
@@ -197,6 +214,11 @@ struct Event {
     // SeasonChanged: `message` the season's name, `amount` its number (0 spring to 3 winter).
     // OutOfFuel: `thing` the building, `def` its Things def, `cell` the cell of its position. Refueled: the same, and
     // `amount` how many items went in. PawnAction Refuel: `thing` the pawn, `target` the building.
+    // PawnMentalBreak: `thing` the pawn, `message` the MentalBreaks defName, `amount` its mood.
+    // PawnMentalBreakEnded: `thing` the pawn, `message` how it ended, `amount` how many game seconds it lasted.
+    // PawnInsulted: `thing` the one insulting, `target` the one insulted. PawnLeftColony: `thing` the pawn (a
+    // ThingDestroyed for it and what it took comes with the event), `message` the break. PawnAction Punch:
+    // `target` the pawn or thing hit.
     float amount = 0.0f;
     // PawnAction Roll: see there.
     // GrenadeThrown: `thing` the thrower, `def` the grenade's Things def, `target` the grenade entity
