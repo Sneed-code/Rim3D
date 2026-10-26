@@ -2,6 +2,7 @@
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Genes.h"
+#include "ColonySim/Mood.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -47,6 +48,7 @@ const char* deathCauseName(DeathCause cause) {
         case DeathCause::Heatstroke: return "heatstroke";
         case DeathCause::Environment: return "exposure";
         case DeathCause::Slaughtered: return "slaughtered";
+        case DeathCause::Disease: return "illness";
     }
     return "";
 }
@@ -113,6 +115,8 @@ public:
     };
     struct Stage {
         float minSeverity = 0.0f;
+        float painOffset = 0.0f;  // added to the pawn's pain (a disease's stage)
+        bool visible = true;      // false while a disease is too early to notice
         std::vector<std::pair<int, float>> offsets;  // capacity, amount
         std::vector<std::pair<int, float>> maxima;
     };
@@ -123,6 +127,27 @@ public:
         bool permanent = false;   // a scar or old wound: never heals
         bool tendable = true;     // a doctor can tend it (a bruise can't be)
         bool neverScars = false;
+        float infectionChance = 0.0f;  // chance a fresh wound of this kind turns infected (H2)
+    };
+    // A disease def (class Disease) by DefId value (H2).
+    struct DiseaseDef {
+        bool valid = false;
+        float lethal = 1.0f;  // 0: it never kills
+        float initialSeverity = 0.001f;
+        float gainPerDaySick = 0.0f;
+        float notImmunePerDay = 0.0f;
+        float immunePerDay = 0.0f;
+        float tendPerDayAtQuality1 = 0.0f;
+        float tendDurationDays = 1.0f;
+        float cureAtTotalQuality = 0.0f;  // above 0: tends add up and cure it at this total
+        bool tendable = true;
+        bool keepsImmunity = true;
+        bool wound = false;  // caused by a wound (infection)
+        float restFallFactor = 1.0f;
+        float hungerRateFactor = 1.0f;
+        bool makesSickThought = true;
+        std::vector<Stage> stages;  // by minSeverity
+        std::vector<uint8_t> lifeThreatening;
     };
     struct DamageType {
         bool valid = false;
@@ -154,6 +179,9 @@ public:
         std::vector<uint8_t> lifeThreatening;
     };
     std::vector<EnvironmentDef> environmentDefs;
+    std::vector<DiseaseDef> diseaseDefs;
+    std::vector<std::pair<DefId, float>> onsetMtbDays;  // MedicineRules.diseaseOnsetMtbDays
+    int bloodFiltrationCapacity = -1;
     DefId missingHediff;
     std::vector<Hediff> hediffs;          // by DefId value
     std::vector<DamageType> damageTypes;  // by DefId value
@@ -181,6 +209,18 @@ public:
     float oldWoundFromHp = 14.0f;
     DefId scarHediff;
     DefId oldWoundHediff;
+    // Diseases (H2): the infection of a wound and the rest of MedicineRules that applies.
+    DefId infectionHediff;
+    int64_t diseaseUpdate = 60;
+    int64_t infectDelayMin = 12 * kSecondsPerHour;
+    int64_t infectDelayMax = 24 * kSecondsPerHour;
+    float tendedInfectionFactor0 = 0.85f;  // a tended wound's chance is this at tend quality 0 ...
+    float tendedInfectionFactor1 = 0.05f;  // ... falling to this at quality 1
+    float infectionCleanlinessSlope = -0.25f;
+    float infectionFactorMin = 0.5f;
+    float infectionFactorMax = 2.0f;
+    float immunityGainByRest[3] = {1.0f, 1.0f, 1.07f};  // by RestKind
+    float immunityGainWhenTended = 1.0f;
 
     const Kind* kindOf(DefId thingDef) const {
         if (!thingDef.valid() || thingDef.value >= kinds.size() || kinds[thingDef.value].body < 0) {
@@ -192,6 +232,10 @@ public:
         return hediff.valid() && hediff.value < environmentDefs.size() && environmentDefs[hediff.value].valid
                    ? &environmentDefs[hediff.value]
                    : nullptr;
+    }
+    const DiseaseDef* diseaseOf(DefId hediff) const {
+        return hediff.valid() && hediff.value < diseaseDefs.size() && diseaseDefs[hediff.value].valid ? &diseaseDefs[hediff.value]
+                                                                                                        : nullptr;
     }
     static int stageIn(const std::vector<Stage>& stages, float severity) {
         int stage = -1;
@@ -232,6 +276,8 @@ std::vector<HealthModel::Stage> HealthModel::readStages(const Def& def, const st
         Flagged f;
         Stage& s = f.stage;
         s.minSeverity = static_cast<float>(def.number((at + ".minSeverity").c_str()));
+        s.painOffset = static_cast<float>(def.number((at + ".painOffset").c_str()));
+        s.visible = def.flag((at + ".visible").c_str(), true);
         f.life = def.flag((at + ".lifeThreatening").c_str()) ? 1 : 0;
         for (const std::string& key : def.keys((at + ".capacityOffsets").c_str())) {
             const auto found = capacityOf.find(key);
@@ -377,6 +423,10 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
     hediffs.assign(defs.size(), Hediff{});
     damageTypes.assign(defs.size(), DamageType{});
     environmentDefs.assign(defs.size(), EnvironmentDef{});
+    diseaseDefs.assign(defs.size(), DiseaseDef{});
+    if (const auto found = capacityOf.find("BloodFiltration"); found != capacityOf.end()) {
+        bloodFiltrationCapacity = found->second;
+    }
     for (const DefId id : defs.idsOfKind(kHealthHediffsKind)) {
         const Def& def = defs.get(id);
         Hediff& h = hediffs[id.value];
@@ -386,6 +436,7 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
         h.permanent = def.flag("permanent");
         h.tendable = def.flag("tendable", true);
         h.neverScars = def.flag("neverScars");
+        h.infectionChance = static_cast<float>(def.number("infectionChance"));
         if (def.defName() == "Scar") {
             scarHediff = id;
         } else if (def.defName() == "OldWound") {
@@ -404,6 +455,27 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
                       : def.defName() == "Heatstroke" ? DeathCause::Heatstroke
                                                       : DeathCause::Environment;
             e.stages = readStages(def, capacityOf, &e.lifeThreatening);
+        } else if (def.text("hediffClass") == "Disease") {
+            DiseaseDef& d = diseaseDefs[id.value];
+            d.valid = true;
+            d.lethal = static_cast<float>(def.number("lethalSeverity", 1.0));
+            d.initialSeverity = static_cast<float>(def.number("initialSeverity", d.initialSeverity));
+            d.gainPerDaySick = static_cast<float>(def.number("immunity.gainPerDaySick"));
+            d.notImmunePerDay = static_cast<float>(def.number("immunity.severityPerDayNotImmune"));
+            d.immunePerDay = static_cast<float>(def.number("immunity.severityPerDayImmune"));
+            d.tendPerDayAtQuality1 = static_cast<float>(def.number("tend.severityPerDayAtQuality1"));
+            d.tendDurationDays = std::max(0.01f, static_cast<float>(def.number("tend.durationDays", 1.0)));
+            d.cureAtTotalQuality = static_cast<float>(def.number("tend.cureAtTotalQuality"));
+            d.tendable = def.flag("tendable", true);
+            d.keepsImmunity = def.flag("keepsImmunity", true);
+            d.wound = def.text("caused") == "wound";
+            d.restFallFactor = static_cast<float>(def.number("restFallFactor", 1.0));
+            d.hungerRateFactor = static_cast<float>(def.number("hungerRateFactor", 1.0));
+            d.makesSickThought = def.flag("makesSickThought", true);
+            d.stages = readStages(def, capacityOf, &d.lifeThreatening);
+            if (def.defName() == "Infection") {
+                infectionHediff = id;
+            }
         }
     }
     for (const DefId id : defs.idsOfKind(kHealthDamageTypesKind)) {
@@ -449,6 +521,26 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
         scarFullHp = static_cast<float>(rules->number("scarChance.fullAtHpLost", scarFullHp));
         scarSeverity = static_cast<float>(rules->number("scarSeverity", scarSeverity));
         oldWoundFromHp = static_cast<float>(rules->number("oldWoundFromHpLost", oldWoundFromHp));
+    }
+    if (const Def* rules = defs.find(kHealthRulesKind, "MedicineRules")) {
+        diseaseUpdate = std::max<int64_t>(1, rules->integer("diseaseUpdateSeconds", diseaseUpdate));
+        infectDelayMin = static_cast<int64_t>(std::llround(rules->number("infection.delayHoursMin", 12.0) * static_cast<double>(kSecondsPerHour)));
+        infectDelayMax = std::max(infectDelayMin, static_cast<int64_t>(std::llround(rules->number("infection.delayHoursMax", 24.0) * static_cast<double>(kSecondsPerHour))));
+        tendedInfectionFactor0 = static_cast<float>(rules->number("infection.tendedChanceFactorAtQuality0", tendedInfectionFactor0));
+        tendedInfectionFactor1 = static_cast<float>(rules->number("infection.tendedChanceFactorAtQuality1", tendedInfectionFactor1));
+        infectionCleanlinessSlope = static_cast<float>(rules->number("infection.cleanlinessSlope", infectionCleanlinessSlope));
+        infectionFactorMin = static_cast<float>(rules->number("infection.chanceFactorMin", infectionFactorMin));
+        infectionFactorMax = static_cast<float>(rules->number("infection.chanceFactorMax", infectionFactorMax));
+        immunityGainByRest[0] = static_cast<float>(rules->number("immunityGainSpeedByRest.Ground", immunityGainByRest[0]));
+        immunityGainByRest[1] = static_cast<float>(rules->number("immunityGainSpeedByRest.Bed", immunityGainByRest[1]));
+        immunityGainByRest[2] = static_cast<float>(rules->number("immunityGainSpeedByRest.HospitalBed", immunityGainByRest[2]));
+        immunityGainWhenTended = static_cast<float>(rules->number("immunityGainPerDayMultiplierWhenTended", immunityGainWhenTended));
+        for (const std::string& key : rules->keys("diseaseOnsetMtbDays")) {
+            const DefId disease = defs.idOf(kHealthHediffsKind, key);
+            if (disease.valid()) {
+                onsetMtbDays.emplace_back(disease, static_cast<float>(rules->number(("diseaseOnsetMtbDays." + key).c_str())));
+            }
+        }
     }
 }
 
@@ -614,6 +706,20 @@ struct HealthEval {
                 v = cap == index ? std::min(v, maximum) : v;
             }
         }
+        for (const Disease& disease : health.diseases) {
+            const HealthModel::DiseaseDef* def = model.diseaseOf(disease.def);
+            const int diseaseStage = def != nullptr ? HealthModel::stageIn(def->stages, disease.severity) : -1;
+            if (diseaseStage < 0) {
+                continue;
+            }
+            const HealthModel::Stage& s = def->stages[static_cast<size_t>(diseaseStage)];
+            for (const auto& [cap, offset] : s.offsets) {
+                v += cap == index ? offset : 0.0f;
+            }
+            for (const auto& [cap, maximum] : s.maxima) {
+                v = cap == index ? std::min(v, maximum) : v;
+            }
+        }
         value[i] = std::max(0.0f, v);
         state[i] = 2;
         return value[i];
@@ -664,6 +770,19 @@ const HealthModel::Kind* healthKindOf(const HealthModel& model, const entt::regi
 
 float healthHpFactor(const HealthModel& model, const Health& health) {
     return (health.protagonist ? model.protagonistFactor : 1.0f) * health.stageHp;
+}
+
+// Whether a disease has reached a stage the pawn would notice.
+bool healthDiseaseVisible(const HealthModel& model, const Disease& disease) {
+    const HealthModel::DiseaseDef* def = model.diseaseOf(disease.def);
+    const int stage = def != nullptr ? HealthModel::stageIn(def->stages, disease.severity) : -1;
+    return stage >= 0 && def->stages[static_cast<size_t>(stage)].visible;
+}
+
+// A doctor can tend it now: it can be tended, shows, and no tend is still working.
+bool healthDiseaseNeedsTending(const HealthModel& model, const Disease& disease, int64_t now) {
+    const HealthModel::DiseaseDef* def = model.diseaseOf(disease.def);
+    return def != nullptr && def->tendable && healthDiseaseVisible(model, disease) && disease.tendedUntil <= now;
 }
 
 }  // namespace
@@ -751,6 +870,13 @@ void HealthSystem::derive(int bodyIndex, float healthScale, Health& health, Deat
     HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
     eval.workOutPainAndBleeding();
     health.pain = eval.pain / healthScale;
+    for (const Disease& disease : health.diseases) {
+        const HealthModel::DiseaseDef* def = model_->diseaseOf(disease.def);
+        const int stage = def != nullptr ? HealthModel::stageIn(def->stages, disease.severity) : -1;
+        if (stage >= 0) {
+            health.pain += def->stages[static_cast<size_t>(stage)].painOffset;
+        }
+    }
     health.bleedPerDay = eval.bleedPerDay;
     health.bloodStage = model_->stageOf(health.bloodLoss);
     // Pain feeds the capacities, so they get the divided value.
@@ -778,6 +904,12 @@ void HealthSystem::derive(int bodyIndex, float healthScale, Health& health, Deat
         const HealthModel::EnvironmentDef* def = model_->environmentOf(env.def);
         if (cause == DeathCause::None && def != nullptr && env.severity >= def->lethal) {
             cause = def->cause;
+        }
+    }
+    for (const Disease& disease : health.diseases) {
+        const HealthModel::DiseaseDef* def = model_->diseaseOf(disease.def);
+        if (cause == DeathCause::None && def != nullptr && def->lethal > 0.0f && disease.severity >= def->lethal) {
+            cause = DeathCause::Disease;
         }
     }
     shouldBeDown = health.pain > model_->painShock;
@@ -1035,6 +1167,7 @@ bool HealthSystem::damagePart(Entity pawn, Health& health, int part, DefId hedif
         injury.hediff = hediff;
         injury.severity = amount;
         health.injuries.push_back(injury);
+        rollInfection(pawn, health, health.injuries.back());
     }
     health.dirty = true;
     emit(EventType::PawnInjured, pawn, hediff, part, amount);
@@ -1052,6 +1185,9 @@ void HealthSystem::destroyPart(Entity pawn, Health& health, int part, float amou
     health.missing.erase(std::remove_if(health.missing.begin(), health.missing.end(),
                                         [&](const MissingPart& m) { return inside(m.part); }),
                          health.missing.end());
+    health.diseases.erase(std::remove_if(health.diseases.begin(), health.diseases.end(),
+                                         [&](const Disease& d) { return d.part >= 0 && inside(d.part); }),
+                          health.diseases.end());
     MissingPart lost;
     lost.part = static_cast<uint16_t>(part);
     health.missing.push_back(lost);
@@ -1070,11 +1206,40 @@ int HealthSystem::tendAll(Entity pawn, float quality) {
     }
     quality = std::max(0.0f, quality);
     int tended = 0;
-    for (Injury& injury : health.injuries) {
+    const int64_t now = clock_ != nullptr ? *clock_ : 0;
+    for (size_t i = 0; i < health.injuries.size(); ++i) {
+        Injury& injury = health.injuries[i];
         if (!injury.tended() && !model_->hediffs[injury.hediff.value].permanent) {
             injury.tendQuality = quality;
             ++tended;
+            // A wound that was going to turn infected may be cleaned in time: the chance falls by the tend quality.
+            if (injury.infectAt >= 0) {
+                Rng rng(splitMix64(seed_ ^ (static_cast<uint64_t>(entt::to_integral(pawn)) * 0x9E3779B97F4A7C15ULL) ^
+                                   (static_cast<uint64_t>(i) << 40) ^ static_cast<uint64_t>(now) ^ 0x7E4D0A11ULL));
+                const float q = std::min(1.0f, quality);
+                const float stillInfected = model_->tendedInfectionFactor0 + (model_->tendedInfectionFactor1 - model_->tendedInfectionFactor0) * q;
+                if (rng.unit() >= stillInfected) {
+                    injury.infectAt = -1;
+                }
+            }
         }
+    }
+    for (size_t i = 0; i < health.diseases.size();) {
+        Disease& disease = health.diseases[i];
+        if (!healthDiseaseNeedsTending(*model_, disease, now)) {
+            ++i;
+            continue;
+        }
+        const HealthModel::DiseaseDef* def = model_->diseaseOf(disease.def);
+        disease.tendQuality = quality;
+        disease.tendedUntil = now + static_cast<int64_t>(std::llround(static_cast<double>(def->tendDurationDays) * static_cast<double>(kSecondsPerDay)));
+        disease.tendTotal += quality;
+        ++tended;
+        if (def->cureAtTotalQuality > 0.0f && disease.tendTotal >= def->cureAtTotalQuality) {
+            cureDisease(pawn, health, i);  // the next one is at i now
+            continue;
+        }
+        ++i;
     }
     for (MissingPart& missing : health.missing) {
         if (!missing.tended()) {
@@ -1100,7 +1265,12 @@ bool HealthSystem::needsTending(Entity pawn) const {
             return true;
         }
     }
-    return std::any_of(health->missing.begin(), health->missing.end(), [](const MissingPart& m) { return !m.tended(); });
+    if (std::any_of(health->missing.begin(), health->missing.end(), [](const MissingPart& m) { return !m.tended(); })) {
+        return true;
+    }
+    const int64_t now = clock_ != nullptr ? *clock_ : 0;
+    return std::any_of(health->diseases.begin(), health->diseases.end(),
+                       [&](const Disease& d) { return healthDiseaseNeedsTending(*model_, d, now); });
 }
 
 bool HealthSystem::needsRest(Entity pawn) const {
@@ -1112,6 +1282,9 @@ bool HealthSystem::needsRest(Entity pawn) const {
     if (health->bleedPerDay > 0.0f) {
         return true;
     }
+    if (std::any_of(health->diseases.begin(), health->diseases.end(), [&](const Disease& d) { return healthDiseaseVisible(*model_, d); })) {
+        return true;
+    }
     return std::any_of(health->injuries.begin(), health->injuries.end(), [&](const Injury& injury) {
         return injury.tended() && !model_->hediffs[injury.hediff.value].permanent;
     });
@@ -1119,7 +1292,20 @@ bool HealthSystem::needsRest(Entity pawn) const {
 
 bool HealthSystem::urgentlyNeedsTending(Entity pawn) const {
     const Health* health = things_.registry().valid(pawn) ? things_.registry().try_get<Health>(pawn) : nullptr;
-    return health != nullptr && health->bleedPerDay > 0.0f && needsTending(pawn);
+    if (health == nullptr || !needsTending(pawn)) {
+        return false;
+    }
+    if (health->bleedPerDay > 0.0f) {
+        return true;
+    }
+    // A disease at a life-threatening stage that nobody is tending counts as urgent too.
+    const int64_t now = clock_ != nullptr ? *clock_ : 0;
+    return std::any_of(health->diseases.begin(), health->diseases.end(), [&](const Disease& d) {
+        const HealthModel::DiseaseDef* def = model_->diseaseOf(d.def);
+        const int stage = def != nullptr ? HealthModel::stageIn(def->stages, d.severity) : -1;
+        return stage >= 0 && static_cast<size_t>(stage) < def->lifeThreatening.size() &&
+               def->lifeThreatening[static_cast<size_t>(stage)] != 0 && healthDiseaseNeedsTending(*model_, d, now);
+    });
 }
 
 // ---- Environment hediffs and injuries without a damage type ------------------------------------------
@@ -1236,13 +1422,310 @@ void HealthSystem::leaveScar(Entity pawn, Health& health, const Injury& healed, 
     emit(EventType::PawnScarred, pawn, def, healed.part, scar.severity);
 }
 
+// ---- Infections and diseases (H2) --------------------------------------------------------------------
+
+namespace {
+
+// The pawn's immunity record for a disease def, made (at 0) if it has none. Kept sorted by def id.
+Immunity& healthImmunityOf(Health& health, DefId disease) {
+    const auto at = std::lower_bound(health.immunities.begin(), health.immunities.end(), disease,
+                                     [](const Immunity& i, DefId d) { return i.def.value < d.value; });
+    if (at != health.immunities.end() && at->def == disease) {
+        return *at;
+    }
+    return *health.immunities.insert(at, Immunity{disease, 0.0f});
+}
+
+const Immunity* healthImmunityFind(const Health& health, DefId disease) {
+    const auto at = std::lower_bound(health.immunities.begin(), health.immunities.end(), disease,
+                                     [](const Immunity& i, DefId d) { return i.def.value < d.value; });
+    return at != health.immunities.end() && at->def == disease ? &*at : nullptr;
+}
+
+}  // namespace
+
+void HealthSystem::rollInfection(Entity pawn, Health& health, Injury& injury) {
+    if (clock_ == nullptr || !model_->infectionHediff.valid()) {
+        return;
+    }
+    const HealthModel::Hediff& h = model_->hediffs[injury.hediff.value];
+    if (h.infectionChance <= 0.0f || h.permanent) {
+        return;
+    }
+    float factor = 1.0f;
+    if (cleanliness_) {
+        factor = std::clamp(1.0f + model_->infectionCleanlinessSlope * cleanliness_(pawn), model_->infectionFactorMin,
+                            model_->infectionFactorMax);
+    }
+    // The roll comes from the seed, the pawn, the second and the wound, not from the shared stream.
+    Rng rng(splitMix64(seed_ ^ (static_cast<uint64_t>(entt::to_integral(pawn)) * 0x9E3779B97F4A7C15ULL) ^
+                       static_cast<uint64_t>(*clock_) ^ (static_cast<uint64_t>(injury.part) << 48) ^
+                       (static_cast<uint64_t>(health.injuries.size()) << 32) ^ 0x1FEC7104ULL));
+    if (rng.unit() >= h.infectionChance * factor) {
+        return;
+    }
+    const uint32_t span = static_cast<uint32_t>(model_->infectDelayMax - model_->infectDelayMin);
+    injury.infectAt = *clock_ + model_->infectDelayMin + static_cast<int64_t>(span > 0 ? rng.below(span + 1) : 0);
+}
+
+void HealthSystem::updateDiseases(Entity pawn, Health& health, int64_t now) {
+    // Wounds that were going to turn infected, and haven't been cleaned, do now.
+    for (size_t i = 0; i < health.injuries.size(); ++i) {
+        if (health.injuries[i].infectAt >= 0 && now >= health.injuries[i].infectAt) {
+            const int part = health.injuries[i].part;
+            health.injuries[i].infectAt = -1;
+            contract(pawn, model_->infectionHediff, -1.0f, part);
+            if (health.dead) {
+                return;
+            }
+        }
+    }
+    if (health.diseases.empty()) {
+        return;
+    }
+
+    const float dt = static_cast<float>(model_->diseaseUpdate) / static_cast<float>(kSecondsPerDay);
+    float gainSpeed = model_->immunityGainByRest[static_cast<size_t>(health.rest)];
+    if (model_->bloodFiltrationCapacity >= 0 && static_cast<size_t>(model_->bloodFiltrationCapacity) < health.capacities.size()) {
+        gainSpeed *= health.capacities[static_cast<size_t>(model_->bloodFiltrationCapacity)];
+    }
+    bool changed = false;
+    std::vector<DefId> gained;  // the defs whose immunity has risen this update: it rises once, however many wounds
+    for (size_t i = 0; i < health.diseases.size();) {
+        Disease& disease = health.diseases[i];
+        const HealthModel::DiseaseDef* def = model_->diseaseOf(disease.def);
+        if (def == nullptr) {
+            health.diseases.erase(health.diseases.begin() + static_cast<std::ptrdiff_t>(i));
+            changed = true;
+            continue;
+        }
+        const bool tended = disease.tendedUntil > now && disease.tendQuality >= 0.0f;
+        if (!tended) {
+            disease.tendQuality = -1.0f;
+        }
+        Immunity& record = healthImmunityOf(health, disease.def);
+        if (std::find(gained.begin(), gained.end(), disease.def) == gained.end()) {
+            gained.push_back(disease.def);
+            record.level = std::min(1.0f, record.level + def->gainPerDaySick * gainSpeed * dt * (tended ? model_->immunityGainWhenTended : 1.0f));
+        }
+        float rate = record.level >= 1.0f ? def->immunePerDay : def->notImmunePerDay;
+        if (tended) {
+            rate += def->tendPerDayAtQuality1 * std::min(disease.tendQuality, 1.3f);
+        }
+        const int before = HealthModel::stageIn(def->stages, disease.severity);
+        disease.severity = std::min(1.0f, disease.severity + rate * dt);
+        if (disease.severity <= 0.0f) {
+            cureDisease(pawn, health, i);
+            changed = true;
+            continue;
+        }
+        changed = changed || before != HealthModel::stageIn(def->stages, disease.severity) ||
+                  (def->lethal > 0.0f && disease.severity >= def->lethal);
+        ++i;
+    }
+    if (changed) {
+        recompute(pawn, health, true);
+    }
+}
+
+void HealthSystem::cureDisease(Entity pawn, Health& health, size_t index) {
+    const DefId cured = health.diseases[index].def;
+    const int part = health.diseases[index].part;
+    const HealthModel::DiseaseDef* def = model_->diseaseOf(cured);
+    health.diseases.erase(health.diseases.begin() + static_cast<std::ptrdiff_t>(index));
+    const bool another = std::any_of(health.diseases.begin(), health.diseases.end(), [&](const Disease& d) { return d.def == cured; });
+    if (!another) {
+        const auto at = std::find_if(health.immunities.begin(), health.immunities.end(), [&](const Immunity& m) { return m.def == cured; });
+        if (at != health.immunities.end() && (def == nullptr || !def->keepsImmunity || at->level <= 0.0f)) {
+            health.immunities.erase(at);
+        }
+    }
+    emit(EventType::PawnRecovered, pawn, cured, part);
+    health.dirty = true;
+}
+
+bool HealthSystem::contract(Entity pawn, DefId disease, float severity, int part) {
+    entt::registry& reg = things_.registry();
+    const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);
+    const HealthModel::DiseaseDef* def = model_->diseaseOf(disease);
+    if (kind == nullptr || def == nullptr) {
+        return false;
+    }
+    Health& health = reg.get<Health>(pawn);
+    if (health.dead) {
+        return false;
+    }
+    const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+    if (def->wound) {
+        if (part < 0 || static_cast<size_t>(part) >= body.parts.size()) {
+            return false;
+        }
+        for (const MissingPart& missing : health.missing) {
+            if (part >= missing.part && part < body.parts[missing.part].end) {
+                return false;  // nothing there to infect
+            }
+        }
+    } else {
+        part = -1;
+    }
+    if (const Immunity* record = healthImmunityFind(health, disease); record != nullptr && record->level >= 1.0f) {
+        return false;
+    }
+    if (std::any_of(health.diseases.begin(), health.diseases.end(), [&](const Disease& d) { return d.def == disease && d.part == part; })) {
+        return false;
+    }
+    const float start = severity < 0.0f ? def->initialSeverity : std::min(severity, 1.0f);
+    if (start <= 0.0f) {
+        return false;
+    }
+    Disease sickness;
+    sickness.def = disease;
+    sickness.severity = start;
+    sickness.part = part;
+    const auto at = std::find_if(health.diseases.begin(), health.diseases.end(), [&](const Disease& d) {
+        return d.def.value > disease.value || (d.def == disease && d.part > part);
+    });
+    health.diseases.insert(at, sickness);
+    healthImmunityOf(health, disease);
+    emit(EventType::PawnSick, pawn, disease, part, start);
+    health.dirty = true;
+    recompute(pawn, health, true);
+    return true;
+}
+
+std::vector<Entity> HealthSystem::outbreak(DefId disease, std::vector<Entity> candidates, int victims, Rng& rng) {
+    std::vector<Entity> caught;
+    const entt::registry& reg = things_.registry();
+    candidates.erase(std::remove_if(candidates.begin(), candidates.end(),
+                                    [&](Entity pawn) {
+                                        const Health* health = reg.valid(pawn) ? reg.try_get<Health>(pawn) : nullptr;
+                                        return health == nullptr || health->dead || !tracks(pawn) || immunity(pawn, disease) >= 1.0f ||
+                                               diseaseSeverity(pawn, disease) > 0.0f;
+                                    }),
+                     candidates.end());
+    std::sort(candidates.begin(), candidates.end());
+    candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
+    for (size_t i = 0; i < candidates.size() && static_cast<int>(caught.size()) < victims; ++i) {
+        std::swap(candidates[i], candidates[i + rng.below(static_cast<uint32_t>(candidates.size() - i))]);
+        if (contract(candidates[i], disease)) {
+            caught.push_back(candidates[i]);
+        }
+    }
+    return caught;
+}
+
+DefId HealthSystem::diseaseId(const std::string& name) const {
+    const DefId id = things_.defs().idOf(kHealthHediffsKind, name);
+    return model_->diseaseOf(id) != nullptr ? id : DefId{};
+}
+
+bool HealthSystem::isDisease(DefId hediff) const { return model_->diseaseOf(hediff) != nullptr; }
+
+float HealthSystem::diseaseSeverity(Entity pawn, DefId disease) const {
+    const entt::registry& reg = things_.registry();
+    const Health* health = reg.valid(pawn) ? reg.try_get<Health>(pawn) : nullptr;
+    float worst = 0.0f;
+    if (health != nullptr) {
+        for (const Disease& d : health->diseases) {
+            if (d.def == disease) {
+                worst = std::max(worst, d.severity);
+            }
+        }
+    }
+    return worst;
+}
+
+float HealthSystem::immunity(Entity pawn, DefId disease) const {
+    const entt::registry& reg = things_.registry();
+    const Health* health = reg.valid(pawn) ? reg.try_get<Health>(pawn) : nullptr;
+    const Immunity* record = health != nullptr ? healthImmunityFind(*health, disease) : nullptr;
+    return record != nullptr ? record->level : 0.0f;
+}
+
+bool HealthSystem::setImmunity(Entity pawn, DefId disease, float level) {
+    entt::registry& reg = things_.registry();
+    if (!tracks(pawn) || model_->diseaseOf(disease) == nullptr) {
+        return false;
+    }
+    Health& health = reg.get<Health>(pawn);
+    level = std::clamp(level, 0.0f, 1.0f);
+    if (level <= 0.0f && !std::any_of(health.diseases.begin(), health.diseases.end(), [&](const Disease& d) { return d.def == disease; })) {
+        health.immunities.erase(std::remove_if(health.immunities.begin(), health.immunities.end(),
+                                               [&](const Immunity& m) { return m.def == disease; }),
+                                health.immunities.end());
+        return true;
+    }
+    healthImmunityOf(health, disease).level = level;
+    return true;
+}
+
+bool HealthSystem::sick(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Health* health = reg.valid(pawn) ? reg.try_get<Health>(pawn) : nullptr;
+    return health != nullptr && !health->dead &&
+           std::any_of(health->diseases.begin(), health->diseases.end(), [&](const Disease& d) { return healthDiseaseVisible(*model_, d); });
+}
+
+float HealthSystem::foodRateFactor(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Health* health = reg.valid(pawn) ? reg.try_get<Health>(pawn) : nullptr;
+    float factor = 1.0f;
+    if (health != nullptr) {
+        for (const Disease& d : health->diseases) {
+            const HealthModel::DiseaseDef* def = model_->diseaseOf(d.def);
+            factor *= def != nullptr && healthDiseaseVisible(*model_, d) ? def->hungerRateFactor : 1.0f;
+        }
+    }
+    return factor;
+}
+
+float HealthSystem::restFallFactor(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Health* health = reg.valid(pawn) ? reg.try_get<Health>(pawn) : nullptr;
+    float factor = 1.0f;
+    if (health != nullptr) {
+        for (const Disease& d : health->diseases) {
+            const HealthModel::DiseaseDef* def = model_->diseaseOf(d.def);
+            factor *= def != nullptr && healthDiseaseVisible(*model_, d) ? def->restFallFactor : 1.0f;
+        }
+    }
+    return factor;
+}
+
+float HealthSystem::onsetMtbDays(DefId disease) const {
+    for (const auto& [def, days] : model_->onsetMtbDays) {
+        if (def == disease) {
+            return days;
+        }
+    }
+    return 0.0f;
+}
+
+void HealthSystem::registerSituations(MoodSystem& mood) const {
+    mood.addSituation("illness", [this](Entity pawn) {
+        const entt::registry& reg = things_.registry();
+        const Health* health = reg.valid(pawn) ? reg.try_get<Health>(pawn) : nullptr;
+        if (health == nullptr || health->dead) {
+            return -1;
+        }
+        for (const Disease& d : health->diseases) {
+            const HealthModel::DiseaseDef* def = model_->diseaseOf(d.def);
+            if (def != nullptr && def->makesSickThought && healthDiseaseVisible(*model_, d)) {
+                return 0;
+            }
+        }
+        return -1;
+    });
+}
+
 // ---- Each game second -------------------------------------------------------------------------
 
 void HealthSystem::step(int64_t seconds, uint64_t seed) {
     entt::registry& reg = things_.registry();
     active_.clear();
     for (const auto [entity, health] : reg.view<Health>().each()) {
-        if (!health.dead && (health.dirty || !health.injuries.empty() || !health.missing.empty() || health.bloodLoss > 0.0f)) {
+        if (!health.dead && (health.dirty || !health.injuries.empty() || !health.missing.empty() || health.bloodLoss > 0.0f ||
+                             !health.diseases.empty())) {
             active_.push_back(entity);
         }
     }
@@ -1268,6 +1751,15 @@ void HealthSystem::step(int64_t seconds, uint64_t seed) {
         }
         if (model_->stageOf(health.bloodLoss) != health.bloodStage || health.bloodLoss >= model_->bloodLethal) {
             recompute(pawn, health, true);
+            if (health.dead) {
+                continue;
+            }
+        }
+
+        // Wounds turning infected and diseases moving on, once an update interval (each pawn at its own offset).
+        if ((!health.diseases.empty() || !health.injuries.empty()) &&
+            (seconds + static_cast<int64_t>(entt::to_integral(pawn))) % model_->diseaseUpdate == 0) {
+            updateDiseases(pawn, health, seconds);
             if (health.dead) {
                 continue;
             }
@@ -1406,6 +1898,30 @@ bool HealthSystem::report(Entity pawn, HealthReport& out) const {
             line.lifeThreatening = stage < static_cast<int>(def->lifeThreatening.size()) && def->lifeThreatening[static_cast<size_t>(stage)] != 0;
         }
         out.environment.push_back(std::move(line));
+    }
+    const int64_t reportNow = clock_ != nullptr ? *clock_ : 0;
+    for (const Disease& disease : health.diseases) {
+        const HealthModel::DiseaseDef* def = model_->diseaseOf(disease.def);
+        if (def == nullptr) {
+            continue;
+        }
+        HealthReport::DiseaseLine line;
+        line.name = things_.defs().get(disease.def).label();
+        if (disease.part >= 0 && static_cast<size_t>(disease.part) < body.parts.size()) {
+            line.part = body.parts[static_cast<size_t>(disease.part)].label;
+        }
+        line.severity = disease.severity;
+        line.immunity = immunity(pawn, disease.def);
+        line.tended = disease.tendedUntil > reportNow && disease.tendQuality >= 0.0f;
+        const int stage = HealthModel::stageIn(def->stages, disease.severity);
+        if (stage >= 0) {
+            line.stage = things_.defs().get(disease.def).text(("stages." + std::to_string(stage) + ".label").c_str());
+            line.lifeThreatening = static_cast<size_t>(stage) < def->lifeThreatening.size() && def->lifeThreatening[static_cast<size_t>(stage)] != 0;
+            line.visible = def->stages[static_cast<size_t>(stage)].visible;
+        } else {
+            line.visible = false;
+        }
+        out.diseases.push_back(std::move(line));
     }
     for (size_t i = 0; i < model_->capacities.size() && i < health.capacities.size(); ++i) {
         out.capacities.push_back(HealthReport::CapacityLine{model_->capacities[i].name, health.capacities[i]});
