@@ -398,7 +398,7 @@ public:
     // The factor on a pawn's work speed from the light where it stands (1 in daylight).
     float lightWorkFactor(Entity pawn) const;
     // How fast a pawn builds and takes down: its Construction skill's speed times its Manipulation.
-    float constructionSpeed(Entity pawn) const;
+    float constructionSpeed(Entity pawn, const char* skillName = "Construction") const;
     bool avoiding(Entity pawn, const JobTarget& target) const;
     bool canReach(CellPos from, CellPos to) const;
 

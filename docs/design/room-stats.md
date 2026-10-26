@@ -101,6 +101,10 @@ thought whose stage follows the value; a stage with offset 0 shows nothing.
 Section `roomstats` version 1: floors, filth piles, the carried filth per pawn, the filth `Rng`, the
 beauty needs. In the state hash. The stats themselves are recomputed.
 
+## Art
+
+Sculptures, whose quality scales their beauty and value, are in [art](art.md).
+
 ## Not yet
 
 A floor-building job and architect tool; a home area (cleaning and filth outdoors); vomit, ash and
