@@ -109,7 +109,11 @@ Extras after C20 (numbers are ours, in `SocialRules`).
   "Cheated" (`thing` the cheater, `target` the betrayed).
 - **Wedding party.** When a proposal works, the couple get *my wedding party* (on top of *got married*) and every
   other colonist awake and free to talk gets *attended a wedding* (`stats.weddingGuests`; event `Interaction`
-  "WeddingParty", `count` the guests). Guests do not walk to a spot: a party job and spot are later work.
+  "WeddingParty", `count` the guests). Every free colonist
+  within 80 m on the same level also gets a `Party` job (`JobSystem::startParty`, `PartyJobs.cpp`): it drops its
+  work, walks to its own cell round the couple, stands there for an hour (`partyMinutes`) gaining 0.4 recreation an
+  hour (`partyJoyPerHour`), chatting with whoever is in earshot, and hunger or tiredness wait until it is over
+  (`stats.partyGuests`). Ours; rules in `SocialRules`.
 
 ## Not yet
 
