@@ -130,6 +130,7 @@ struct ThingView {
     // Pawns: their side (1 is the player's), and for fighters (docs/design/fighters.md) whether the
     // player drafted them, whom they shoot at, the cell they hold and whether they are falling back.
     uint32_t faction = 1;
+    bool onFire = false;  // burning (docs/design/fire.md)
     bool drafted = false;
     bool fighting = false;
     Entity fightTarget = kNoEntity;
@@ -326,6 +327,12 @@ struct FilthView {
     int thickness = 1;
 };
 
+// A fire in a cell, its size 0 to 1.75 (docs/design/fire.md).
+struct FireView {
+    CellPos cell;
+    float size = 0.0f;
+};
+
 // One mark on a cell: mine here, cut this plant, harvest it (docs/design/mining.md).
 struct DesignationView {
     CellPos cell;
@@ -406,6 +413,14 @@ struct Snapshot {
     uint64_t floorChanges = ~0ULL;
     std::vector<FilthView> filth;
     uint64_t filthChanges = ~0ULL;
+    // Fire (docs/design/fire.md): the burning cells, the burnt ground and the home area, in cell order. Each is rewritten only
+    // when its counter goes up (the fires' counter goes up every pass while any burn, as their sizes change).
+    std::vector<FireView> fires;
+    uint64_t fireChanges = ~0ULL;
+    std::vector<CellPos> burnt;
+    uint64_t burntChanges = ~0ULL;
+    std::vector<CellPos> homeArea;
+    uint64_t homeChanges = ~0ULL;
     // The colony alarm (docs/design/raids.md): on, and whether the player sounded it (only the
     // player stops that one); the raid squads on the map.
     bool alarm = false;

@@ -79,9 +79,8 @@ nothing. Animals are visited in entity id order anyway, because two may want the
 ## Not here
 
 Hunting and the corpse as an item (N2), taming, training, pens (N3, done: [husbandry.md](husbandry.md)), breeding, young growing up,
-milk, wool, eggs (N4, done: [breeding.md](breeding.md)), animals drawn on screen
-(U15; until then Unreal does not turn `wildAnimals` on, because the pawn drawing would show every
-animal as a person). Animal temperature comfort, the weather and seasons (E tasks) and old age.
+milk, wool, eggs (N4, done: [breeding.md](breeding.md)), animals drawn on screen (U15, done: see
+"On screen" below). Animal temperature comfort, the weather and seasons (E tasks) and old age.
 
 ## Fighters and animals
 
@@ -110,3 +109,16 @@ placed, one stands on ground it can't walk, or the herd is under half its densit
 ## Tame animals
 
 Taming, training, zones, pens, feeding and slaughter (N3) are in [husbandry.md](husbandry.md). A tame animal is still an `Animal`; its modes `WaitPath`, `GoToItem` and `EatItem` are used only by tame animals, and its walking and eating are in `AnimalCare.cpp`.
+
+## On screen (U15)
+
+`USimAnimalSubsystem` (`AnimalSubsystem.h`) draws every pawn whose snapshot `lifeStage` is 0 to 2 as an
+`ASimAnimalActor`; `USimPawnSubsystem` skips those, so animals never show as people. The model and
+size per def come from `assets/animal_art.json` (A4: Quaternius skeletal meshes, each with its own
+skeleton, so no retargeting; a def not in the table is drawn as a Husky). The actor plays the model's
+idle, walk, gallop, eating and death clips as a single-node animation (no Animation Blueprint), chosen
+from the snapshot: dead, `asleep`, speed (gallop above 2.8 m/s), food rising while standing (eating).
+Size is the table's scale times 0.5 / 0.75 / 1 for baby / juvenile / adult.
+Animation cost goes by distance to the camera: every frame within `Animals.NearDistance` (40 m), 8 times
+a second within `Animals.MidDistance` (120 m), a frozen pose (no skeleton update) within
+`Animals.HideDistance` (400 m), not drawn beyond. Smoke test `animals` (`tools\smoke.ps1 -Test animals`).

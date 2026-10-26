@@ -130,6 +130,9 @@ add_test(NAME simrun_animals COMMAND simrun --seed 42 --size 512 --days 2 --anim
 # (`--farm 500 --days 3` is the nightly one; 100 chickens over a day and a half keep CI quick.)
 add_test(NAME simrun_farm COMMAND simrun --seed 42 --size 128 --days 1.6 --farm 100 --check)
 
+# Fire (E4, docs/design/fire.md): a grass fire lit near the Crashlanded colonists is beaten out, nobody dies.
+add_test(NAME simrun_fire COMMAND simrun --seed 42 --size 256 --days 1 --start Crashlanded --fire --check)
+
 # Pathfinding load test (S3): 100 pawns hauling on a 1 km map for a day, no failed job or search.
 add_test(NAME simrun_paths COMMAND simrun --seed 42 --size 1024 --days 1 --pawns 100 --items 2000 --check
          --data ${CMAKE_CURRENT_SOURCE_DIR}/Tests/data)

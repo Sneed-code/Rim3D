@@ -350,7 +350,8 @@ void USimPawnSubsystem::Tick(float DeltaTime)
 	TSet<uint32> Seen;
 	for (const colony::ThingView& View : Now.things)
 	{
-		if (View.category != colony::ThingCategory::Pawn)
+		// Animals (life stage 0 to 2) are drawn by USimAnimalSubsystem.
+		if (View.category != colony::ThingCategory::Pawn || View.lifeStage >= 0)
 		{
 			continue;
 		}
