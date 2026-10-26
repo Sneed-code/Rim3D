@@ -1,4 +1,5 @@
 // The work scanners, one per task name in the WorkTypes defs (docs/design/jobs.md).
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Jobs.h"
 
 #include "ColonySim/Apparel.h"
@@ -9,6 +10,7 @@
 #include "ColonySim/Farming.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Filth.h"
+#include "ColonySim/Fuel.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Fire.h"
 #include "ColonySim/Map.h"
@@ -414,6 +416,7 @@ public:
 // time (docs/design/bills.md).
 class DoBillsCookStoveGiver final : public WorkGiver {
 public:
+
     const char* task() const override { return "DoBillsCookStove"; }
 
     void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
@@ -433,7 +436,9 @@ public:
                     return !bill.suspended && (bill.mode != BillMode::Count || bill.count > 0);
                 });
                 CellPos stand;
-                if (!any || !jobs.construction().workCell(footprint.rect(), cellOf(at), stand)) {
+                // A stove with less fuel than one use takes is stopped until it is refuelled.
+                if (!any || !jobs.fuel().canUse(building, jobs.fuel().specOf(building).perUse) ||
+                    !jobs.construction().workCell(footprint.rect(), cellOf(at), stand)) {
                     return;
                 }
                 out.push_back(WorkCandidate{JobTarget{building, CellPos{}}, workGiverDistSq(at, pos), 0, 0, true, stand});
@@ -447,11 +452,13 @@ public:
         if (list == nullptr) {
             return false;
         }
+        const float fuelPerProduct = jobs.fuel().specOf(building).perUse;
         const BillSystem& bills = jobs.bills();
         for (const Bill& bill : list->bills) {
             const Recipe* recipe = bills.recipe(bill.recipe);
             if (recipe == nullptr || recipe->work <= 0.0f || !bills.shouldDo(bill) ||
-                bills.skillLevel(pawn, recipe->skill) < recipe->minSkill) {
+                bills.skillLevel(pawn, recipe->skill) < recipe->minSkill ||
+                !jobs.fuel().canUse(building, fuelPerProduct * static_cast<float>(recipe->productCount()))) {
                 continue;
             }
             std::vector<BillPick> picks;
@@ -580,7 +587,7 @@ bool medicalColonist(const entt::registry& reg, Entity pawn) {
         return false;
     }
     const Faction* faction = reg.try_get<Faction>(pawn);
-    return faction == nullptr || faction->id == kPlayerFaction;
+    return faction == nullptr || faction->id == kPlayerFaction || reg.all_of<Prisoner>(pawn);  // doctors tend prisoners too
 }
 
 // TendPatients (WorkGiver_Tend): a patient with an injury or lost part nobody has tended, the pawn itself too, as
@@ -819,6 +826,75 @@ private:
     std::vector<int> rescue_;
 };
 
+// Fuel for buildings (RimWorld's WorkGiver_Refuel): a building that burns fuel and is low on it (or the
+// player ordered a fill) gets the nearest stack of its fuel item, carried to a cell beside it
+// (docs/design/fuel.md). One refueller at a time per building.
+class RefuelGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "Refuel"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        if (!jobs.canUseHands(pawn)) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        reg.view<const Fuel, const Footprint, const Position>().each(
+            [&](Entity building, const Fuel&, const Footprint& footprint, const Position& pos) {
+                if (pos.level != at.level || reg.all_of<ConstructionSite>(building) ||
+                    reg.all_of<MarkedForDeconstruct>(building) || !jobs.fuel().wantsFuel(building) ||
+                    jobs.deliveryReservedByOther(building, pawn)) {
+                    return;
+                }
+                CellPos stand;
+                if (!jobs.construction().workCell(footprint.rect(), cellOf(at), stand)) {
+                    return;
+                }
+                out.push_back(WorkCandidate{JobTarget{building, CellPos{}}, workGiverDistSq(at, pos), 0, 0, true, stand});
+            });
+    }
+
+    bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
+        const entt::registry& reg = jobs.things().registry();
+        const Entity building = candidate.target.thing;
+        const DefId item = jobs.fuel().specOf(building).item;
+        const int room = jobs.fuel().roomFor(building);
+        if (!item.valid() || room < 1 || jobs.deliveryReservedByOther(building, pawn)) {
+            return false;
+        }
+        const Position& at = reg.get<Position>(pawn);
+        const CellPos from = cellOf(at);
+        Entity best = kNoEntity;
+        float bestDist = 0.0f;
+        reg.view<const Thing, const Position, const StackCount>().each(
+            [&](Entity stack, const Thing& thing, const Position& pos, const StackCount&) {
+                if (thing.def != item || pos.level != at.level) {
+                    return;
+                }
+                const float dist = workGiverDistSq(at, pos);
+                if (best != kNoEntity && (dist > bestDist || (dist == bestDist && stack > best))) {
+                    return;
+                }
+                const JobTarget target{stack, CellPos{}};
+                if (jobs.reservedByOther(target, pawn) || jobs.avoiding(pawn, target) || !jobs.canReach(from, cellOf(pos))) {
+                    return;
+                }
+                best = stack;
+                bestDist = dist;
+            });
+        if (best == kNoEntity) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::Refuel;
+        out.thing = best;
+        out.site = building;
+        out.cell = candidate.reach;
+        out.count = std::min({room, jobs.carryLimit(pawn, item), reg.get<StackCount>(best).count});
+        return out.count > 0;
+    }
+};
+
 }  // namespace
 
 bool makeHaulJob(JobSystem& jobs, Entity pawn, Entity item, Job& out) {
@@ -857,6 +933,8 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<ExtinguishFiresGiver>());
     givers.push_back(std::make_unique<StripGiver>());
     addHusbandryWorkGivers(givers);
+    addPrisonerWorkGivers(givers);
+    givers.push_back(std::make_unique<RefuelGiver>());
     return givers;
 }
 

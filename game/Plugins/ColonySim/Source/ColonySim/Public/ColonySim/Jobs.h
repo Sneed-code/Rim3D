@@ -62,6 +62,7 @@ struct Job {
     Entity site = kNoEntity;   // DeliverResources: the blueprint or frame it brings materials to; DoBill: the
                                // building that holds the bill; TameAnimal, TrainAnimal, SlaughterAnimal, FeedAnimal, GatherAnimal:
                                // the animal (`thing` is the food it fetches, none for slaughter)
+                               // (Refuel: the building to put fuel in)
     float progress = 0.0f;     // Deconstruct: work done so far; Mine: work towards the next pick hit; CutPlant,
                                // HarvestPlant: work done on the plant. For the gather jobs both are game seconds
                                // at 100% work speed (the worker's speed adds to it every second); DoBill: work done
@@ -139,6 +140,9 @@ inline constexpr uint8_t kLayDownLieStep = 1;
 // after the pick-up step until it hands it over.
 inline constexpr uint8_t kDoBillPickUpStep = 1;
 inline constexpr uint8_t kDoBillDepositStep = 3;
+// Refuel has four: go to the fuel, pick it up, carry it beside the building, put it in (the work
+// takes FuelSystem::kRefuelWorkSeconds). The pawn carries the fuel from the third on.
+inline constexpr uint8_t kRefuelPickUpStep = 1;
 // Ingest has four: go to the food, pick it up, go to the eating spot, eat. The pawn carries the
 // food from the third on.
 inline constexpr uint8_t kIngestPickUpStep = 1;
@@ -164,6 +168,7 @@ class ApparelSystem;
 class BillSystem;
 class Breeding;
 class Construction;
+class FuelSystem;
 class DefDatabase;
 class Farming;
 class Filth;
@@ -171,6 +176,7 @@ class Fire;
 class SpoilageSystem;
 class HealthSystem;
 class MedicineSystem;
+class PrisonerSystem;
 class Husbandry;
 class Lights;
 class Map;
@@ -291,6 +297,10 @@ public:
     void setMedicine(MedicineSystem* medicine) { medicine_ = medicine; }
     MedicineSystem* medicine() const { return medicine_; }
     void setTalents(const TalentSystem* talents) { talents_ = talents; }
+    // Prisoners (PrisonerJobs.cpp, docs/design/prisoners.md); without it nobody captures, feeds or talks to prisoners, and prison
+    // beds are ordinary beds.
+    void setPrisoners(PrisonerSystem* prisoners) { prisoners_ = prisoners; }
+    PrisonerSystem* prisoners() const { return prisoners_; }
 
     // Call before a thing is destroyed: ends the jobs that carry it or are done by it.
     void forget(Entity thing);
@@ -330,8 +340,11 @@ public:
     // The bed building under a pawn standing in its cell, or kNoEntity.
     Entity bedUnder(Entity pawn) const;
     bool isMedicalBed(Entity bed) const;
-    // A downed colonist on its own side that no bed holds.
+    // A downed colonist on its own side, or a downed prisoner, that no bed holds.
     bool needsRescue(Entity pawn) const;
+    // The food a warden should carry to a hungry prisoner: the best the prisoner may eat, the nearest of that kind, with how
+    // many to bring. Fills `out` as a FeedPrisoner job; false if there is none.
+    bool findFoodForPrisoner(Entity warden, Entity prisoner, Job& out);
 
     // ---- For scanners and tests -----------------------------------------------------------
     Things& things() { return things_; }
@@ -343,6 +356,9 @@ public:
     Designations& designations() { return designations_; }
     BillSystem& bills() { return *bills_; }
     const BillSystem& bills() const { return *bills_; }
+    // Fuel in buildings: burning, counting, refilling (Fuel.h, docs/design/fuel.md).
+    FuelSystem& fuel() { return *fuel_; }
+    const FuelSystem& fuel() const { return *fuel_; }
     const DefDatabase& defs() const { return defs_; }
     // Buildings that draw power only work while they have it (docs/design/power.md). Until a grid is
     // set (some tests) nothing needs power.
@@ -497,6 +513,15 @@ private:
     StepResult carryPawn(Entity pawn, Job& job, std::string& why);
     StepResult layPawn(Entity pawn, Job& job, std::string& why);
     StepResult bedRest(Entity pawn, Job& job, std::string& why);
+    // Prisoners (PrisonerJobs.cpp). CapturePrisoner: `thing` the downed enemy, `chair` the prison bed, `cell` its cell (the Rescue
+    // steps). FeedPrisoner: `thing` the food, `site` the prisoner. WardenInteract: `site` the prisoner.
+    bool failCheckPrisoner(Entity pawn, Job& job, std::string& why);
+    StepResult approachPrisoner(Entity pawn, Job& job, std::string& why);
+    StepResult feedPrisonerWork(Entity pawn, Job& job, std::string& why);
+    StepResult chatWork(Entity pawn, Job& job, std::string& why);
+    // A prisoner's thinking: sleep in its prison bed when tired, rest there when hurt, else stand about. It never works or looks for
+    // food. The job is ticked by step().
+    void stepPrisoner(Entity pawn);
     void restUnderPawn(Entity pawn);
     // Husbandry jobs (HusbandryJobs.cpp): fetch food (TameAnimal, TrainAnimal, FeedAnimal), walk up to the animal, then
     // work with it until the time is up; the animal is held still while the pawn is near.
@@ -547,6 +572,9 @@ private:
     StepResult apparelWork(Entity pawn, Job& job, std::string& why);
     StepResult stripWork(Entity pawn, Job& job, std::string& why);
     bool failCheckApparel(Entity pawn, Job& job, std::string& why);
+    // Refuel (FuelJobs.cpp, docs/design/fuel.md): fetch fuel, carry it to the building, put it in.
+    StepResult refuelWork(Entity pawn, Job& job, std::string& why);
+    bool failCheckRefuel(Entity pawn, Job& job, std::string& why);
     // Puts the ingredients delivered so far back on the ground near the pawn.
     void returnIngredients(Entity pawn, const Job& job);
     // Makes `count` of an item def and puts it down on the nearest free cell near the pawn.
@@ -587,6 +615,7 @@ private:
     Rooms* rooms_ = nullptr;
     ResearchSystem* research_ = nullptr;
     MedicineSystem* medicine_ = nullptr;
+    PrisonerSystem* prisoners_ = nullptr;
     Husbandry* husbandry_ = nullptr;
     Breeding* breeding_ = nullptr;
     std::function<bool(Entity)> animalGate_;
@@ -594,6 +623,7 @@ private:
     RecreationRules recreation_;
     std::unique_ptr<BillSystem> bills_;
     const PowerGrid* power_ = nullptr;
+    std::unique_ptr<FuelSystem> fuel_;
     std::vector<std::unique_ptr<WorkGiver>> givers_;
     std::vector<WorkType> workTypes_;
     std::vector<uint8_t> standable_;  // per def id: a building pawns can stand on (storage allowed)
@@ -658,6 +688,8 @@ public:
 std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers();
 // The scanners for taming, training, slaughtering and feeding animals (HusbandryJobs.cpp).
 void addHusbandryWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers);
+// The scanners for the Warden work type: capturing, feeding and talking to prisoners (PrisonerJobs.cpp).
+void addPrisonerWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers);
 // Haul jobs, shared by the hauling scanner and the haul order: the job to store `item`, or false.
 bool makeHaulJob(JobSystem& jobs, Entity pawn, Entity item, Job& out);
 

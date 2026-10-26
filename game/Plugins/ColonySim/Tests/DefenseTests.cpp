@@ -3,6 +3,7 @@
 #include "ColonySim/Defense.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Fighters.h"
+#include "FuelTestHelper.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Replay.h"
@@ -63,7 +64,7 @@ Entity defnHostile(Sim& sim, int x, int y, uint32_t faction = 2) {
 
 // A generator at (10,10), a wire along row 10 and a mini-turret at (15,10).
 Entity defnPoweredTurret(Sim& sim) {
-    sim.things().spawn("WoodFiredGenerator", CellPos{10, 10, 0});
+    testFueled(sim, sim.things().spawn("WoodFiredGenerator", CellPos{10, 10, 0}));
     for (int x = 12; x <= 14; ++x) {
         sim.things().spawn("PowerConduit", CellPos{x, 10, 0});
     }

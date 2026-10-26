@@ -6,6 +6,7 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "MeshDescription.h"
 #include "ProceduralMeshComponent.h"
@@ -85,7 +86,9 @@ namespace
 			case colony::Terrain::Sand: return TerrSandColor;
 			case colony::Terrain::RoughStone: return TerrRoughStoneColor;
 			case colony::Terrain::Rock: return TerrRockTopColor;
-			case colony::Terrain::Soil: break;
+			case colony::Terrain::Soil:
+			case colony::Terrain::Air:  // upper levels only (levels.md); this is the ground
+			case colony::Terrain::UpperFloor: break;
 		}
 		const float Fertility = Plants.fertility(Cell);
 		const FLinearColor Gravel(120.0f, 122.0f, 84.0f);
@@ -127,7 +130,9 @@ namespace
 			case colony::Terrain::Sand: return FTerrLook(FLinearColor(1.15f, 1.0f, 0.75f), 1.0f, 0.0f, 0.0f, 0.0f);
 			case colony::Terrain::RoughStone: return FTerrLook(FLinearColor::White, 0.0f, 0.0f, 1.0f, 0.0f);
 			case colony::Terrain::Rock: return FTerrLook(FLinearColor::White, 0.0f, 1.0f, 0.0f, 0.0f);
-			case colony::Terrain::Soil: break;
+			case colony::Terrain::Soil:
+			case colony::Terrain::Air:  // upper levels only (levels.md); this is the ground
+			case colony::Terrain::UpperFloor: break;
 		}
 		const float Fertility = Plants.fertility(Cell);
 		// The grass texture is dull on its own; these push it toward green (dry ground yellower, rich ground darker).
@@ -627,6 +632,15 @@ void UTerrainSubsystem::ReadThinRoof(bool& bOutChanged)
 	bOutChanged = true;
 }
 
+void UTerrainSubsystem::SetGroundWetness(float Wetness)
+{
+	GroundWetness = FMath::Clamp(Wetness, 0.0f, 1.0f);
+	if (GroundDynamic)
+	{
+		GroundDynamic->SetScalarParameterValue(TEXT("Wetness"), GroundWetness);
+	}
+}
+
 bool UTerrainSubsystem::WantRoofs() const
 {
 	const int32 Mode = GTerrainRoofs.GetValueOnGameThread();
@@ -892,9 +906,17 @@ void UTerrainSubsystem::RebuildAll()
 	// The terrain material if it was made and wanted, else the flat vertex colours.
 	GroundMaterial = GTerrainTextured.GetValueOnGameThread() != 0 ? LoadObject<UMaterialInterface>(nullptr, TerrTexturedMaterialPath) : nullptr;
 	bTextured = GroundMaterial != nullptr;
+	GroundDynamic = nullptr;
 	if (!GroundMaterial)
 	{
 		GroundMaterial = LoadObject<UMaterialInterface>(nullptr, TerrMaterialPath);
+	}
+	else
+	{
+		// One instance for the whole ground, so the sky can make it wet (SetGroundWetness).
+		GroundDynamic = UMaterialInstanceDynamic::Create(GroundMaterial, this);
+		GroundDynamic->SetScalarParameterValue(TEXT("Wetness"), GroundWetness);
+		GroundMaterial = GroundDynamic;
 	}
 	LoadPlantVisuals(Core);
 	bool bUnused = false;

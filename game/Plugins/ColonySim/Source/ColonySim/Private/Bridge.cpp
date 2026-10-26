@@ -85,6 +85,8 @@ const char* commandName(const Command& command) {
                 return "PlaceFloor";
             } else if constexpr (std::is_same_v<Type, AddFilthCommand>) {
                 return "AddFilth";
+            } else if constexpr (std::is_same_v<Type, SetRefuelCommand>) {
+                return "SetRefuel";
             } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
                 return "ShortCircuit";
             } else if constexpr (std::is_same_v<Type, SetResearchCommand>) {
@@ -151,9 +153,15 @@ const char* commandName(const Command& command) {
                 return "Ignite";
             } else if constexpr (std::is_same_v<Type, SetHomeAreaCommand>) {
                 return "SetHomeArea";
-            } else {
-                static_assert(std::is_same_v<Type, SetMedicalCareCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, SetMedicalCareCommand>) {
                 return "SetMedicalCare";
+            } else if constexpr (std::is_same_v<Type, SetPrisonerModeCommand>) {
+                return "SetPrisonerMode";
+            } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
+                return "SetPrisonBed";
+            } else {
+                static_assert(std::is_same_v<Type, PlaceUpperFloorCommand>, "name every command type");
+                return "PlaceUpperFloor";
             }
         },
         command);
@@ -247,9 +255,16 @@ const char* eventTypeName(EventType type) {
         case EventType::FireOut: return "FireOut";
         case EventType::PawnCaughtFire: return "PawnCaughtFire";
         case EventType::PawnFireOut: return "PawnFireOut";
+        case EventType::PrisonerCaptured: return "PrisonerCaptured";
+        case EventType::PrisonerChatted: return "PrisonerChatted";
+        case EventType::PrisonerRecruited: return "PrisonerRecruited";
+        case EventType::PrisonerReleased: return "PrisonerReleased";
+        case EventType::PrisonBreak: return "PrisonBreak";
         case EventType::Interaction: return "Interaction";
         case EventType::BondChanged: return "BondChanged";
         case EventType::SocialFight: return "SocialFight";
+        case EventType::OutOfFuel: return "OutOfFuel";
+        case EventType::Refueled: return "Refueled";
     }
     return "?";
 }
@@ -282,6 +297,9 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Tend: return "Tend";
         case PawnAction::LiftPawn: return "LiftPawn";
         case PawnAction::LayPawn: return "LayPawn";
+        case PawnAction::Chat: return "Chat";
+        case PawnAction::FeedPawn: return "FeedPawn";
+        case PawnAction::Refuel: return "Refuel";
     }
     return "?";
 }

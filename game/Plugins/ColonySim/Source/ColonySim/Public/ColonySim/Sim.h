@@ -58,10 +58,12 @@ class RaidSystem;
 class Plants;
 class PowerGrid;
 class Regions;
+class PrisonerSystem;
 class Rooms;
 class TemperatureSystem;
 class SpoilageSystem;
 class Things;
+class UpperFloors;
 class Weather;
 class Zones;
 class Farming;
@@ -247,6 +249,10 @@ public:
     // a loaded game goes back to the biome's own. Pass nullopt to let the biome decide again.
     void setOutdoorOverride(std::optional<float> celsius);
 
+    // Upper floors and the rules for laying them (docs/design/levels.md).
+    UpperFloors& upperFloors() { return *upperFloors_; }
+    const UpperFloors& upperFloors() const { return *upperFloors_; }
+
     // Stockpile zones (docs/design/jobs.md).
     const Zones& zones() const { return *zones_; }
     // Work types, the think list, jobs and reservations (docs/design/jobs.md).
@@ -270,6 +276,10 @@ public:
     // Raids, raid squads and the colony alarm with its defense roles (docs/design/raids.md).
     RaidSystem& raids() { return *raids_; }
     const RaidSystem& raids() const { return *raids_; }
+
+    // Prisoners: capture, feeding, warden talks, recruiting and release (docs/design/prisoners.md).
+    PrisonerSystem& prisoners() { return *prisoners_; }
+    const PrisonerSystem& prisoners() const { return *prisoners_; }
 
     // Taming, training, animal zones and pens (docs/design/husbandry.md).
     Husbandry& husbandry() { return *husbandry_; }
@@ -360,7 +370,9 @@ private:
     std::unique_ptr<Filth> filth_;
     std::unique_ptr<RoomStats> roomStats_;
     std::unique_ptr<AnimalSystem> animals_;
+    std::unique_ptr<UpperFloors> upperFloors_;  // M1
     std::unique_ptr<RaidSystem> raids_;        // after the fighters
+    std::unique_ptr<PrisonerSystem> prisoners_;  // after the raids
     std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system
     std::unique_ptr<Breeding> breeding_;    // after husbandry_
     std::unique_ptr<Fire> fire_;            // after the weather, temperature, rooms, floors, filth, plants and health

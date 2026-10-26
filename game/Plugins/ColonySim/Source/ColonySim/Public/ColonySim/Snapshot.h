@@ -79,6 +79,12 @@ struct ThingView {
     // Work buildings with bills (docs/design/bills.md): `billCount` bills from Snapshot::bills[firstBill].
     uint32_t firstBill = 0;
     uint32_t billCount = 0;
+    // Buildings that burn fuel (docs/design/fuel.md): items of fuel in it of `fuelCapacity` (0 for a
+    // building with none), whether colonists refuel it by themselves, and a fill order from the player.
+    float fuel = 0.0f;
+    float fuelCapacity = 0.0f;
+    bool autoRefuel = false;
+    bool fillOrdered = false;
     // Pawns with needs (docs/design/needs.md): food and rest, 1 full to 0 empty, else -1; asleep
     // while lying down in a bed or on the ground.
     float food = -1.0f;
@@ -148,6 +154,12 @@ struct ThingView {
     bool sheltering = false;
     bool fleeing = false;
     uint32_t squad = 0;
+    // Prisoners (docs/design/prisoners.md): held in a prison bed, what wardens do with it (a PrisonerMode number) and its
+    // resistance; a bed marked for prisoners.
+    bool prisoner = false;
+    uint8_t prisonerMode = 0;
+    float resistance = 0.0f;
+    bool prisonBed = false;
     // Humanlike pawns: their looks, Snapshot::looks[looks]; -1 for other things.
     int32_t looks = -1;
     // Buildings with a power part (docs/design/power.md): whether they have power, the net they are

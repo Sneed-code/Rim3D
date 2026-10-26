@@ -6,6 +6,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Spoilage.h"
 #include "ColonySim/Things.h"
 
@@ -336,6 +337,10 @@ bool JobSystem::findBed(Entity pawn, Entity& bed, CellPos& cell) {
         if (static_cast<int>(owners.owners.size()) >= slots || !things_.spawned(candidate) || isMedical_[thing.def.value] != 0) {
             continue;
         }
+        // Prison beds are for prisoners and nobody else.
+        if (reg.all_of<PrisonBed>(candidate) != reg.all_of<Prisoner>(pawn)) {
+            continue;
+        }
         const CellRect rect = footprint.rect();
         const int index = static_cast<int>(owners.owners.size());
         if (index >= rect.sizeX * rect.sizeY) {
@@ -465,6 +470,10 @@ bool JobSystem::assignBed(Entity bed, Entity pawn, std::string& error) {
     }
     if (!reg.valid(pawn) || !reg.all_of<Needs>(pawn)) {
         error = "that pawn doesn't sleep";
+        return false;
+    }
+    if (reg.all_of<PrisonBed>(bed) != reg.all_of<Prisoner>(pawn)) {
+        error = reg.all_of<PrisonBed>(bed) ? "that is a prison bed, for prisoners only" : "a prisoner sleeps only in a prison bed";
         return false;
     }
     if (std::find(owned.owners.begin(), owned.owners.end(), pawn) != owned.owners.end()) {

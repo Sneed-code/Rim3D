@@ -80,6 +80,13 @@ enum class EventType : uint8_t {
     Interaction,     // one colonist talked to another (C20, docs/design/social.md): `thing` the talker, `target` the one spoken to, `message` the Interactions def, `count` 1 if it worked, 0 if refused, `amount` the listener's opinion of the talker after
     BondChanged,     // a stored bond formed or ended: `thing` and `target` the two, `message` the bond kind ("Lover", "Spouse", "ExLover", "ExSpouse"), `count` 1 formed, 0 ended
     SocialFight,     // a fight with fists began or ended: `thing` and `target` the two, `message` "started" or "ended: why"
+    PrisonerCaptured,   // a downed enemy was laid in a prison bed: `thing` the prisoner, `target` the warden (docs/design/prisoners.md)
+    PrisonerChatted,    // a warden finished a talk with a prisoner: `thing` the warden, `target` the prisoner, `amount` its resistance now, `message` "reduced", "recruit failed" or "no change"
+    PrisonerRecruited,  // a prisoner joined the colony: `thing` the new colonist, `target` the warden
+    PrisonerReleased,   // a prisoner was set free and walks off the map: `thing` the pawn, `target` the warden (none for a dev command)
+    PrisonBreak,        // prisoners broke out (the hook for T3): `count` how many, `message` the cause
+    OutOfFuel,       // a building's fuel ran out (docs/design/fuel.md)
+    Refueled,        // a pawn put fuel into a building
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -122,6 +129,9 @@ enum class PawnAction : uint8_t {
     Tend,         // started tending `target`, a patient (once per job; the work takes game seconds)
     LiftPawn,     // lifted `target`, a downed pawn, to carry it (its position follows this pawn's until LayPawn)
     LayPawn,      // laid the carried `target` down in a bed (or where it stood, if the bed was lost)
+    Chat,         // started talking to `target`, a prisoner (once per job; the talk takes game seconds)
+    FeedPawn,     // started handing food to `target`, a prisoner
+    Refuel,       // started putting fuel into `target`, a building (once per refuel job; the work goes on until its JobEnded)
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
@@ -182,6 +192,8 @@ struct Event {
     // meal, `cell` where the pawn stands.
     // WeatherChanged: `def` the new Weathers def, `message` its label, `amount` the outdoor temperature.
     // SeasonChanged: `message` the season's name, `amount` its number (0 spring to 3 winter).
+    // OutOfFuel: `thing` the building, `def` its Things def, `cell` the cell of its position. Refueled: the same, and
+    // `amount` how many items went in. PawnAction Refuel: `thing` the pawn, `target` the building.
     float amount = 0.0f;
     // PawnAction Roll: see there.
     // GrenadeThrown: `thing` the thrower, `def` the grenade's Things def, `target` the grenade entity
