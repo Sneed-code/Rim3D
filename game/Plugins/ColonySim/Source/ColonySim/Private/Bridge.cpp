@@ -149,9 +149,11 @@ const char* commandName(const Command& command) {
                 return "SwitchWeapon";
             } else if constexpr (std::is_same_v<Type, IgniteCommand>) {
                 return "Ignite";
-            } else {
-                static_assert(std::is_same_v<Type, SetHomeAreaCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, SetHomeAreaCommand>) {
                 return "SetHomeArea";
+            } else {
+                static_assert(std::is_same_v<Type, SetMedicalCareCommand>, "name every command type");
+                return "SetMedicalCare";
             }
         },
         command);
@@ -226,6 +228,8 @@ const char* eventTypeName(EventType type) {
         case EventType::AnimalStarved: return "AnimalStarved";
         case EventType::MeleeSwing: return "MeleeSwing";
         case EventType::MeleeHit: return "MeleeHit";
+        case EventType::PawnTended: return "PawnTended";
+        case EventType::PawnScarred: return "PawnScarred";
         case EventType::ApparelDestroyed: return "ApparelDestroyed";
         case EventType::WeatherChanged: return "WeatherChanged";
         case EventType::SeasonChanged: return "SeasonChanged";
@@ -275,6 +279,9 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Handle: return "Handle";
         case PawnAction::Slaughter: return "Slaughter";
         case PawnAction::Block: return "Block";
+        case PawnAction::Tend: return "Tend";
+        case PawnAction::LiftPawn: return "LiftPawn";
+        case PawnAction::LayPawn: return "LayPawn";
     }
     return "?";
 }
