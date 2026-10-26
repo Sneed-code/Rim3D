@@ -123,6 +123,12 @@ MoodSystem::MoodSystem(Things& things, const NeedsSystem& needs, const DefDataba
             }
             thought.trait = def.text("situation.trait");
             thought.notTrait = def.text("situation.notTrait");
+            for (size_t i = 0; i < def.count("situation.notTraits"); ++i) {
+                thought.notTraits.push_back(def.textAt("situation.notTraits", i));
+            }
+            for (size_t i = 0; i < def.count("situation.anyTraits"); ++i) {
+                thought.anyTraits.push_back(def.textAt("situation.anyTraits", i));
+            }
         }
         thought.passion = def.text("situation.passion");
         if (!thought.passion.empty()) {
@@ -309,6 +315,11 @@ std::vector<ThoughtView> MoodSystem::thoughts(Entity pawn, int64_t now) const {
             (!thought.notTrait.empty() && hasTrait(pawn, thought.notTrait))) {
             continue;
         }
+        const auto has = [&](const std::string& trait) { return hasTrait(pawn, trait); };
+        if (std::any_of(thought.notTraits.begin(), thought.notTraits.end(), has) ||
+            (!thought.anyTraits.empty() && std::none_of(thought.anyTraits.begin(), thought.anyTraits.end(), has))) {
+            continue;
+        }
         for (const Situation& situation : situations_) {
             if (situation.condition != thought.condition) {
                 continue;
@@ -419,6 +430,14 @@ void MoodSystem::step(int64_t now, std::vector<Event>& events) {
             }
             continue;
         }
+        if (event.type == EventType::AnimalButchered) {
+            // Cutting up a person: only the cold-hearted and the cannibals do not mind.
+            Mood* butcher = reg.valid(event.thing) ? reg.try_get<Mood>(event.thing) : nullptr;
+            if (butcher != nullptr && defs_.get(event.def).text("race.intelligence") == "Humanlike" && !eatsPeople(event.thing)) {
+                addMemory(*butcher, "ButcheredHumanlikeCorpse", now);
+            }
+            continue;
+        }
         Mood* mood = (event.type == EventType::PawnAte || event.type == EventType::PawnWokeUp || event.type == EventType::PrisonerCaptured ||
                       event.type == EventType::PrisonerChatted) &&
                              reg.valid(event.type == EventType::PrisonerChatted ? event.target : event.thing)
@@ -433,6 +452,14 @@ void MoodSystem::step(int64_t now, std::vector<Event>& events) {
             addMemory(*mood, "PrisonerChatted", now);
         } else if (event.type == EventType::PawnAte) {
             const std::string preferability = defs_.get(event.def).text("ingestible.preferability");
+            // Human flesh, raw or as an ingredient (`part` 1): a horror to most, a treat to a cannibal, nothing to a psychopath.
+            const bool rawHumanFlesh = defs_.get(event.def).flag("humanlike");
+            if ((rawHumanFlesh || event.part == 1) && !hasTrait(event.thing, "Psychopath")) {
+                const bool cannibal = hasTrait(event.thing, "Cannibal");
+                addMemory(*mood, rawHumanFlesh ? (cannibal ? "AteHumanlikeMeatCannibal" : "AteHumanlikeMeat")
+                                               : (cannibal ? "AteHumanlikeMeatAsIngredientCannibal" : "AteHumanlikeMeatAsIngredient"),
+                          now);
+            }
             if (preferability == "RawBad") {
                 addMemory(*mood, "AteRawFood", now);
             }
