@@ -167,6 +167,7 @@ class Construction;
 class DefDatabase;
 class Farming;
 class Filth;
+class Fire;
 class SpoilageSystem;
 class HealthSystem;
 class Husbandry;
@@ -302,6 +303,9 @@ public:
     void setFarming(Farming* farming) { farming_ = farming; }
     Farming* farming() const { return farming_; }
     Filth* filth() const { return filth_; }
+    // The fire layer, for the Firefighter work type's job (FireJobs.cpp, docs/design/fire.md). Without it nobody fights fires.
+    void setFire(Fire* fire) { fire_ = fire; }
+    Fire* fire() const { return fire_; }
     Rooms* rooms() const { return rooms_; }
     // How fast a pawn cleans (1 is 100%): FilthRules.cleaningSpeed times its Manipulation.
     double cleaningSpeed(Entity pawn) const;
@@ -474,6 +478,10 @@ private:
     bool failCheckClean(Entity pawn, Job& job, std::string& why);
     StepResult cleanWork(Entity pawn, Job& job, std::string& why);
 
+    // Firefighting (FireJobs.cpp).
+    bool failCheckExtinguish(Entity pawn, Job& job, std::string& why);
+    StepResult extinguishWork(Entity pawn, Job& job, std::string& why);
+
     void startJob(Entity pawn, Job job);
     void tickJob(Entity pawn);
     void endJob(Entity pawn, JobEnd end, const std::string& why);
@@ -580,6 +588,7 @@ private:
     int maxRepaths_ = 0;
     uint8_t defaultPriority_ = kDefaultPriority;
     Filth* filth_ = nullptr;
+    Fire* fire_ = nullptr;
     SpoilageSystem* spoilage_ = nullptr;
     Farming* farming_ = nullptr;
     std::vector<Entity> order_;              // scratch: workers this step

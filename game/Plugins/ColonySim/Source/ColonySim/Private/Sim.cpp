@@ -14,6 +14,7 @@
 #include "ColonySim/Farming.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Filth.h"
+#include "ColonySim/Fire.h"
 #include "ColonySim/Floors.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Health.h"
@@ -185,6 +186,15 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setApparel(apparel_.get());
     jobs_->setSpoilage(spoilage_.get());
     jobs_->setFarming(farming_.get());
+    fire_ = std::make_unique<Fire>(map_, *things_, *plants_, *floors_, *filth_, *rooms_, *temperature_, *health_, *weather_, *defs_,
+                                   settings.seed);
+    fire_->setEventLog(&events_);
+    // Fire-resistant skin (a gene's flammability factor) keeps a pawn from catching fire.
+    fire_->setPawnFactor([this](Entity pawn) {
+        const PawnGenes* genes = genesOf(pawn);
+        return genes != nullptr ? geneStat(*genes, "flammability", 1.0f) : 1.0f;
+    });
+    jobs_->setFire(fire_.get());
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     explosives_ = std::make_unique<ExplosiveSystem>(*things_, map_, *combat_, *health_, *defs_);
     fighters_->setExplosives(explosives_.get());
@@ -641,6 +651,18 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!talents_->spend(spendTalent->pawn, spendTalent->talent, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* ignite = std::get_if<IgniteCommand>(&command)) {
+        if (ignite->pawn != kNoEntity) {
+            if (!fire_->setPawnAlight(ignite->pawn, time_.seconds, ignite->force)) {
+                commandFailed(id, "that pawn can't catch fire");
+            }
+        } else if (!fire_->ignite(ignite->cell, ignite->size, ignite->force)) {
+            commandFailed(id, "nothing there can burn");
+        }
+    } else if (const auto* home = std::get_if<SetHomeAreaCommand>(&command)) {
+        if (fire_->setHome(home->area, home->add) == 0) {
+            commandFailed(id, "the home area is already so there");
+        }
     } else if (const auto* rearm = std::get_if<RearmTrapCommand>(&command)) {
         if (!defense_->rearm(rearm->trap, &error)) {
             commandFailed(id, error);
@@ -974,6 +996,15 @@ void Sim::step() {
     explosives_->step(rng_);
     animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
     defense_->step(rng_);
+    {
+        // Blasts of Burn damage start fires; a pawn that catches fire stops what it was doing.
+        fire_->step(time_.seconds, 0);
+        for (size_t i = 0; i < events_.size(); ++i) {
+            if (events_[i].type == EventType::PawnCaughtFire) {
+                jobs_->interrupt(events_[i].thing, "it caught fire");
+            }
+        }
+    }
     apparel_->step(time_.seconds, rng_, events_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     rooms_->update();
@@ -1296,6 +1327,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.milkFullness = breeding_->fullness(entity, AnimalProduct::Milk);
             view.woolFullness = breeding_->fullness(entity, AnimalProduct::Wool);
         }
+        view.onFire = reg.all_of<Burning>(entity);
         if (const Fighter* fighter = reg.try_get<Fighter>(entity)) {
             view.drafted = fighter->drafted;
             view.fighting = true;
@@ -1383,6 +1415,28 @@ void Sim::writeSnapshot(Snapshot& out) const {
             }
         }
     }
+    if (out.fireChanges != fire_->changes()) {
+        out.fireChanges = fire_->changes();
+        out.fires.clear();
+        for (const auto& [index, fire] : fire_->all()) {
+            out.fires.push_back(FireView{map_.cellAt(index), fire.size});
+        }
+    }
+    if (out.burntChanges != fire_->burntChanges()) {
+        out.burntChanges = fire_->burntChanges();
+        out.burnt.clear();
+        for (const auto& [index, at] : fire_->burntCells()) {
+            (void)at;
+            out.burnt.push_back(map_.cellAt(index));
+        }
+    }
+    if (out.homeChanges != fire_->homeChanges()) {
+        out.homeChanges = fire_->homeChanges();
+        out.homeArea.clear();
+        for (const int index : fire_->homeCells()) {
+            out.homeArea.push_back(map_.cellAt(index));
+        }
+    }
     out.roofCells = rooms_->thinRoofCells();
     out.roofChanges = rooms_->roofChanges();
     {
@@ -1449,6 +1503,7 @@ uint64_t Sim::stateHash() const {
     animals_->hashState(h);
     husbandry_->hashState(h);
     breeding_->hashState(h);
+    fire_->hashState(h);
     temperature_->hashState(h);
     spoilage_->hashState(h);
     farming_->hashState(h);
@@ -1724,6 +1779,7 @@ uint64_t Sim::stateHash() const {
         raids_->hashThing(e, h);
         husbandry_->hashThing(e, h);
         breeding_->hashThing(e, h);
+        fire_->hashThing(e, h);
         melee_->hashThing(e, h);
         social_->hashThing(e, h);
         defense_->hashThing(e, h);

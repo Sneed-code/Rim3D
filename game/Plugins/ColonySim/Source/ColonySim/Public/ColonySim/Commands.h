@@ -571,6 +571,23 @@ struct SetGrowingZoneCropCommand {
     std::string crop;
 };
 
+// Fire (task E4, docs/design/fire.md). Dev command: starts a fire of `size` (the start size if 0) in a cell, or sets `pawn`
+// alight if it names one. Fails if nothing could burn: no fuel, wet ground, water or rock, a fire already there, a pawn
+// that is dead or fire-resistant. `force` lights even a cell with nothing to burn (it dies away in a moment).
+struct IgniteCommand {
+    CellPos cell;
+    float size = 0.0f;
+    Entity pawn = kNoEntity;
+    bool force = false;
+};
+
+// Paints the home area, where colonists with the Firefighter work type put fires out: adds the rectangle (or takes it
+// off). The first use turns the automatic growth round new buildings off. Fails if no cell changed.
+struct SetHomeAreaCommand {
+    CellRect area;
+    bool add = true;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -590,7 +607,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              CreateAnimalZoneCommand, RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand,
                              SpendTalentPointCommand, AddTalentXpCommand, RearmTrapCommand,
                              CarryWeaponCommand, SwitchWeaponCommand, CreateGrowingZoneCommand,
-                             RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, InteractCommand>;
+                             RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
+                             SetHomeAreaCommand, InteractCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

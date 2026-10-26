@@ -58,6 +58,9 @@ beside it. **Power (E5) decides which pushers run**: `Sim` installs
 cooler warms only while its net runs it, and a campfire (no power part) always does. Fuel (C11)
 will add its test the same way.
 
+**Fire** (E4) pushes heat with `TemperatureSystem::addHeat(cell, heatPerSecond, seconds, maxTemp)`: the same formula as a
+pusher, once per fire pass, into the enclosed room the cell is in ([fire.md](fire.md)).
+
 **Rooms change.** A new room starts at the mean temperature its cells had (cells that were
 outdoors count as the outdoor temperature then), so joining two rooms mixes their heat by size and
 splitting one gives each half the temperature it had. `cellTemp_` (one number per map cell, set

@@ -145,9 +145,13 @@ const char* commandName(const Command& command) {
                 return "AddTalentXp";
             } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
                 return "CarryWeapon";
-            } else {
-                static_assert(std::is_same_v<Type, SwitchWeaponCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, SwitchWeaponCommand>) {
                 return "SwitchWeapon";
+            } else if constexpr (std::is_same_v<Type, IgniteCommand>) {
+                return "Ignite";
+            } else {
+                static_assert(std::is_same_v<Type, SetHomeAreaCommand>, "name every command type");
+                return "SetHomeArea";
             }
         },
         command);
@@ -235,6 +239,10 @@ const char* eventTypeName(EventType type) {
         case EventType::TrapRearmed: return "TrapRearmed";
         case EventType::WeaponSwitched: return "WeaponSwitched";
         case EventType::PlantSown: return "PlantSown";
+        case EventType::FireStarted: return "FireStarted";
+        case EventType::FireOut: return "FireOut";
+        case EventType::PawnCaughtFire: return "PawnCaughtFire";
+        case EventType::PawnFireOut: return "PawnFireOut";
         case EventType::Interaction: return "Interaction";
         case EventType::BondChanged: return "BondChanged";
         case EventType::SocialFight: return "SocialFight";
@@ -258,6 +266,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Dodge: return "Dodge";
         case PawnAction::Roll: return "Roll";
         case PawnAction::Switch: return "Switch";
+        case PawnAction::Extinguish: return "Extinguish";
         case PawnAction::Cook: return "Cook";
         case PawnAction::Research: return "Research";
         case PawnAction::Clean: return "Clean";
