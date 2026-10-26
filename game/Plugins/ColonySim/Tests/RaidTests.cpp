@@ -138,11 +138,15 @@ TEST_CASE("Raids: raid points follow RimWorld's wealth and colonist curves") {
     auto sim = raidTestSim();
     RAID_REQUIRE(sim->setupErrors().empty());
     const float wealth = sim->raids().colonyWealth();
-    // Crashlanded: silver, steel, wood, components, medicine and meals, well under 10,000.
-    CHECK(wealth > 4000.0f);
-    CHECK(wealth < 10000.0f);
-    // Six colonists at 15 points each (wealth under 10,000), day 0 (x0.7), adaptation 0.8.
-    CHECK(sim->raids().threatPoints() == doctest::Approx(6 * 15 * 0.7 * 0.8).epsilon(0.001));
+    // Crashlanded: silver, steel, wood, components, medicine and meals, plus the six colonists at
+    // 1,750 each (T1: the wiki counts creatures): a little over 14,000, where wealth points start.
+    CHECK(wealth > 4000.0f + 6 * 1750.0f);
+    CHECK(wealth < 20000.0f);
+    // The wiki's curves: wealth points from 0 at 14,000 to 2,400 at 400,000; 15 points a colonist
+    // up to 10,000, rising to 140 at 400,000. Then day 0 (x0.7) and adaptation 0.8.
+    const float wealthPoints = std::max(0.0f, (wealth - 14000.0f) / 386000.0f * 2400.0f);
+    const float perColonist = 15.0f + (wealth - 10000.0f) / 390000.0f * 125.0f;
+    CHECK(sim->raids().threatPoints() == doctest::Approx((wealthPoints + 6 * perColonist) * 0.7 * 0.8).epsilon(0.001));
 
     // Rich colony, later: 400,000 wealth gives 2,400 points plus 140 a colonist.
     SimSettings settings;
