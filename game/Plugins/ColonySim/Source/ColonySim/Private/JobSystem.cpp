@@ -56,7 +56,8 @@ enum class JobStepKind : uint8_t {
     ApparelWork,  // put on or take off
     StripWork,    // take the clothes and weapon off a downed or dead pawn
     ApproachAnimal,  // walk up to the job's animal (HusbandryJobs.cpp)
-    HandleWork       // tame, train, kill or feed it, standing beside it
+    HandleWork,      // tame, train, kill or feed it, standing beside it
+    ExtinguishWork   // beat the fire in the job's cell out (FireJobs.cpp)
 };
 
 constexpr JobStepKind kJobsWaitSteps[] = {JobStepKind::Wait};
@@ -86,6 +87,7 @@ constexpr JobStepKind kJobsStripSteps[] = {JobStepKind::GotoThing, JobStepKind::
 constexpr JobStepKind kJobsHandleFoodSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::ApproachAnimal,
                                                 JobStepKind::HandleWork};
 constexpr JobStepKind kJobsHandleSteps[] = {JobStepKind::ApproachAnimal, JobStepKind::HandleWork};
+constexpr JobStepKind kJobsExtinguishSteps[] = {JobStepKind::GotoTouch, JobStepKind::ExtinguishWork};
 
 // The most steps one pawn's job may run in one game second (guards against a loop of steps that
 // all end at once).
@@ -132,6 +134,7 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::FeedAnimal: return {kJobsHandleFoodSteps, static_cast<int>(std::size(kJobsHandleFoodSteps))};
         case JobType::SlaughterAnimal:
         case JobType::GatherAnimal: return {kJobsHandleSteps, static_cast<int>(std::size(kJobsHandleSteps))};
+        case JobType::ExtinguishFire: return {kJobsExtinguishSteps, static_cast<int>(std::size(kJobsExtinguishSteps))};
     }
     return {nullptr, 0};
 }
@@ -214,6 +217,7 @@ const char* jobTypeName(JobType type) {
         case JobType::FeedAnimal: return "FeedAnimal";
         case JobType::GatherAnimal: return "GatherAnimal";
         case JobType::SowCrop: return "SowCrop";
+        case JobType::ExtinguishFire: return "ExtinguishFire";
     }
     return "?";
 }
@@ -472,6 +476,7 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
         }
         case JobType::None:
         case JobType::Wait:
+        case JobType::ExtinguishFire:  // colonists fight a fire together: nothing is reserved
             return 0;
     }
     return 0;
@@ -872,6 +877,9 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::CleanFilth) {
         return failCheckClean(pawn, job, why);
     }
+    if (job.type == JobType::ExtinguishFire) {
+        return failCheckExtinguish(pawn, job, why);
+    }
     if (job.type == JobType::WearApparel || job.type == JobType::StripPawn) {
         return failCheckApparel(pawn, job, why);
     }
@@ -1010,6 +1018,8 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return approachAnimal(pawn, job, why);
         case JobStepKind::HandleWork:
             return handleWork(pawn, job, why);
+        case JobStepKind::ExtinguishWork:
+            return extinguishWork(pawn, job, why);
     }
     return StepResult::Failed;
 }

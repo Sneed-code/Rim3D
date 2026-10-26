@@ -89,6 +89,11 @@ public:
     float degreesBelowComfort(Entity pawn);
     float degreesAboveComfort(Entity pawn);
 
+    // Pushes heat into the enclosed room a cell is in, as a heat pusher would: `heatPerSecond` RimWorld heat units
+    // a second for `seconds` game seconds, shared by the room's cells, never taking the room past `maxTemp`.
+    // Heat pushed into the open air is lost. Fires use it (docs/design/fire.md).
+    void addHeat(CellPos cell, double heatPerSecond, double seconds, float maxTemp);
+
     // One game second, after the rooms are brought up to date. `now` is the game second.
     void step(int64_t now);
 

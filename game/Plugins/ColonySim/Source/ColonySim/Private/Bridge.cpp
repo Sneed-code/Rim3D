@@ -143,15 +143,19 @@ const char* commandName(const Command& command) {
                 return "AddTalentXp";
             } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
                 return "CarryWeapon";
+            } else if constexpr (std::is_same_v<Type, SwitchWeaponCommand>) {
+                return "SwitchWeapon";
+            } else if constexpr (std::is_same_v<Type, IgniteCommand>) {
+                return "Ignite";
+            } else if constexpr (std::is_same_v<Type, SetHomeAreaCommand>) {
+                return "SetHomeArea";
             } else if constexpr (std::is_same_v<Type, AttuneCommand>) {
                 return "Attune";
             } else if constexpr (std::is_same_v<Type, LearnPowerCommand>) {
                 return "LearnPower";
-            } else if constexpr (std::is_same_v<Type, CastPowerCommand>) {
-                return "CastPower";
             } else {
-                static_assert(std::is_same_v<Type, SwitchWeaponCommand>, "name every command type");
-                return "SwitchWeapon";
+                static_assert(std::is_same_v<Type, CastPowerCommand>, "name every command type");
+                return "CastPower";
             }
         },
         command);
@@ -239,6 +243,10 @@ const char* eventTypeName(EventType type) {
         case EventType::TrapRearmed: return "TrapRearmed";
         case EventType::WeaponSwitched: return "WeaponSwitched";
         case EventType::PlantSown: return "PlantSown";
+        case EventType::FireStarted: return "FireStarted";
+        case EventType::FireOut: return "FireOut";
+        case EventType::PawnCaughtFire: return "PawnCaughtFire";
+        case EventType::PawnFireOut: return "PawnFireOut";
         case EventType::PowerCast: return "PowerCast";
     }
     return "?";
@@ -261,6 +269,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Roll: return "Roll";
         case PawnAction::Cast: return "Cast";
         case PawnAction::Switch: return "Switch";
+        case PawnAction::Extinguish: return "Extinguish";
         case PawnAction::Cook: return "Cook";
         case PawnAction::Research: return "Research";
         case PawnAction::Clean: return "Clean";

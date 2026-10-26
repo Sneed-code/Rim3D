@@ -71,6 +71,10 @@ enum class EventType : uint8_t {
     TrapRearmed,     // a sprung trap was set again
     WeaponSwitched,  // a pawn finished switching weapons (P1, docs/design/weapons.md): `thing` the pawn, `def` the weapon now in its hands, `target` that weapon
     PlantSown,       // a colonist sowed a crop in a growing zone: `cell`, `def` the crop (docs/design/farming.md)
+    FireStarted,     // a fire began in a cell (docs/design/fire.md)
+    FireOut,         // a fire went out: burnt out, rained out or beaten out
+    PawnCaughtFire,  // a pawn is on fire
+    PawnFireOut,     // a pawn is no longer on fire
     PowerCast,       // a resonance power went off (docs/design/resonance.md): `thing` the caster, `def` the Powers def, `target` the pawn it
                      // was used on, `cell` where a jump took it, (x, y, z) where the target is now, `amount` the caster's strain now,
                      // `count` the steps the effect lasts (0 for a jump)
@@ -112,6 +116,7 @@ enum class PawnAction : uint8_t {
     Block,        // raised its melee weapon against the swing of `target` (none: the player's own block)
     Switch,       // started switching weapons (P1): `target` the weapon coming to the hands, `amount` the steps it takes
     Roll,         // started a dodge roll (P2): `cell` where it began, (x, y) the unit direction, `amount` the steps from start-up to the end of recovery
+    Extinguish,   // started beating out the fire in `cell`; goes on until its JobEnded (docs/design/fire.md)
     Cast,         // started the warm-up of a resonance power (X2) at `target` (a jump: to `cell`); `amount` the steps until it goes off
 };
 
@@ -159,6 +164,9 @@ struct Event {
     // TrapSprung: `thing` the trap (it may be gone: an IED always is), `def` its def, `target` the pawn that set it off,
     // `cell` its cell, (x, y, z) where. The hurt come as PawnInjured and the blast as Explosion. TrapRearmed: `thing`,
     // `def`, `cell`. A turret's shots are ShotFired with `thing` the turret and `def` its gun's Things def.
+    // FireStarted: `cell`, `amount` its size. FireOut: `cell`, `message` "burnt out" (nothing left) or "beaten" (a colonist put
+    // it out); rain and snow end fires as "burnt out". PawnCaughtFire, PawnFireOut: `thing` the pawn, `cell` where it stands.
+    // Things the fire destroys come as ThingDestroyed, a plant as PlantRemoved with `message` "burnt".
     // TalentPoint: `thing` the protagonist, `def` its def, `amount` the points it can spend now.
     // ShortCircuit: `thing` the building it happened at, `cell` its origin, `amount` the energy
     // released from the net's batteries, Wd.

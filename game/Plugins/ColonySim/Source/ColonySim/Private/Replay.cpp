@@ -275,22 +275,30 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["item"] = entt::to_integral(c.item);
+            } else if constexpr (std::is_same_v<Type, SwitchWeaponCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["slot"] = static_cast<int>(c.slot);
+            } else if constexpr (std::is_same_v<Type, IgniteCommand>) {
+                j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
+                j["size"] = c.size;
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["force"] = c.force;
+            } else if constexpr (std::is_same_v<Type, SetHomeAreaCommand>) {
+                j["area"] = replayRectJson(c.area);
+                j["add"] = c.add;
             } else if constexpr (std::is_same_v<Type, AttuneCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["level"] = c.level;
             } else if constexpr (std::is_same_v<Type, LearnPowerCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["power"] = c.power;
-            } else if constexpr (std::is_same_v<Type, CastPowerCommand>) {
+            } else {
+                static_assert(std::is_same_v<Type, CastPowerCommand>, "write every command type");
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["power"] = c.power;
                 j["target"] = entt::to_integral(c.target);
                 j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
                 j["player"] = c.player;
-            } else {
-                static_assert(std::is_same_v<Type, SwitchWeaponCommand>, "write every command type");
-                j["pawn"] = entt::to_integral(c.pawn);
-                j["slot"] = static_cast<int>(c.slot);
             }
         },
         logged.command);
@@ -1072,6 +1080,26 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return r.fail(where + ".cell must be [x, y, level]");
         }
         c.cell = CellPos{(*cell)[0].get<int>(), (*cell)[1].get<int>(), (*cell)[2].get<int>()};
+        out.command = std::move(c);
+    } else if (type == "Ignite") {
+        IgniteCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.number(j, "size", c.size, where) || !r.integer(j, "pawn", pawn, where) || !r.flag(j, "force", c.force, where)) {
+            return false;
+        }
+        const auto cell = j.find("cell");
+        if (cell == j.end() || !cell->is_array() || cell->size() != 3 || !(*cell)[0].is_number_integer() ||
+            !(*cell)[1].is_number_integer() || !(*cell)[2].is_number_integer()) {
+            return r.fail(where + ".cell must be [x, y, level]");
+        }
+        c.cell = CellPos{(*cell)[0].get<int>(), (*cell)[1].get<int>(), (*cell)[2].get<int>()};
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "SetHomeArea") {
+        SetHomeAreaCommand c;
+        if (!replayReadRect(r, j, where, c.area) || !r.flag(j, "add", c.add, where)) {
+            return false;
+        }
         out.command = std::move(c);
     } else if (type == "StartRaid") {
         StartRaidCommand c;
