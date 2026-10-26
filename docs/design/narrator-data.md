@@ -10,8 +10,8 @@ ours ([naming.md](naming.md)).
 
 | Narrator | Style | Big threat | First threat |
 | --- | --- | --- | --- |
-| Orrin | steady build-up | one every ~6 days (1.5 on, 4.6 off) | day 5 |
-| Maren | long quiet spells | one every ~9 days (1.0 on, 8.0 off) | day 8 |
+| Orrin | steady build-up | one or two every ~10.6 days (4.6 on, 6.0 off) | day 11 |
+| Maren | long quiet spells | one every 16 days (8 on, 8 off) | day 13 |
 | Jinx | anything goes | each incident rolls alone (`mtbDays`), points x 0.5 to 1.5 | none |
 
 `mtbDays` is the mean days between incidents per category. Maren scales points by 0.85.
