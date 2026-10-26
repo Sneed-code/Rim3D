@@ -433,6 +433,8 @@ only while switched on); **new fuel buildings start empty, so tests about someth
 
 **C12** skill learning (`docs/design/skills.md`): every job that uses a skill teaches it (mining, plants, building, taking down, every bill's recipe), with passion factors, the 4,000 XP daily soft cap, the slow loss above level 10 at midnight, and a mood lift (+8 minor, +14 major) while working at a passion. **A new job that uses a skill calls `JobSystem::learnSkill` each working second and is listed in `JobSystem::activeSkill`.** Save: `colonists` section version 2.
 
+**Biomes (all 12 vanilla)** are in `data/defs/Biomes/Biomes.json`: temperate forest, boreal forest, arid shrubland (the savanna-like one), tundra, ice sheet, sea ice, cold bog, temperate swamp, tropical rainforest, tropical swamp, desert, extreme desert. Each has season temperatures, daily swing, rainfall, growing seasons (none on ice), a weather table (no snow in the tropics, almost no rain in deserts), wild plant mix, wild animals with commonalities and a `terrain` mix for S8's map generation. New data: 14 animals (caribou, muskox, arctic fox, arctic wolf, polar bear, dromedary, gazelle, ostrich, rhinoceros, elephant, lion, monkey, capybara, iguana, with meat), 9 plants (pine, willow, palm, cecropia, teak, bamboo, saguaro, agave, moss) and ice terrain. Numbers are recalled wiki values (listed as `unverified`). **`Sim` is still fixed to the temperate forest; S8 adds the choice and reads each biome's `terrain`.** Test `BiomeTests`.
+
 ## Next
 
 Wave 1:
