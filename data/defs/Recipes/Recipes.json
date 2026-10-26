@@ -28,6 +28,30 @@
     ],
     "products": { "MealFine": 1 }
   },
+  {
+    "defName": "MakePemmican", "parent": "RecipeBase", "label": "make pemmican", "researchPrerequisite": "Pemmican",
+    "recipeUsers": ["FueledStove", "ElectricStove"],
+    "workAmount": 450, "workSkillXp": 60, "fuelUses": 1,
+    "ingredients": [
+      { "categories": ["MeatRaw"], "nutrition": 0.4 },
+      { "categories": ["PlantFoodRaw"], "nutrition": 0.4 }
+    ],
+    "products": { "Pemmican": 16 },
+    "ours": ["fuelUses"],
+    "unverified": ["workAmount", "workSkillXp", "ingredients", "products"]
+  },
+  {
+    "defName": "CookMealSurvival", "parent": "RecipeBase", "label": "cook packaged survival meal",
+    "recipeUsers": ["FueledStove", "ElectricStove"],
+    "workAmount": 648, "workSkillXp": 100, "minSkill": 7, "fuelUses": 1,
+    "ingredients": [
+      { "categories": ["MeatRaw"], "nutrition": 0.25 },
+      { "categories": ["PlantFoodRaw"], "nutrition": 0.25 }
+    ],
+    "products": { "MealSurvivalPack": 1 },
+    "ours": ["fuelUses"],
+    "unverified": ["workAmount", "workSkillXp", "minSkill", "ingredients"]
+  },
   {"defName": "SurgeryBase", "abstract": true, "source": "RimWorld wiki", "workSkill": "Medicine", "recipeUsers": [], "workSkillXp": 0, "surgery": {"needsBed": true, "needsPatientDowned": false}, "ours": ["surgery.needsBed", "surgery.needsPatientDowned"]},
   {"defName": "MakePegLeg", "parent": "RecipeBase", "label": "make peg leg", "workSkill": "Crafting", "recipeUsers": ["CraftingSpot"], "workAmount": 500, "workSkillXp": 100, "ingredients": [{"items": ["WoodLog"], "count": 10}], "products": {"PegLeg": 1}, "unverified": ["workAmount", "ingredients"]},
   {"defName": "MakeWoodenFoot", "parent": "RecipeBase", "label": "make wooden foot", "workSkill": "Crafting", "recipeUsers": ["CraftingSpot"], "workAmount": 300, "workSkillXp": 60, "ingredients": [{"items": ["WoodLog"], "count": 5}], "products": {"WoodenFoot": 1}, "unverified": ["workAmount", "ingredients"]},

@@ -397,3 +397,28 @@ TEST_CASE("Animal fights: saving in the middle of a hunt and loading plays on th
     CHECK(loaded.sim->stateHash() == sim->stateHash());
     CHECK(loaded.sim->animals().stats().meals == sim->animals().stats().meals);
 }
+
+TEST_CASE("Animal fights: an armed colonist stands and shoots a wolf at arm's length, and an unarmed one runs for shelter") {
+    const auto defs = fightTestDefs();
+    auto sim = fightSim(defs);
+    const Entity wolf = fightSpawn(*sim, "TimberWolf", 44, 40);
+    const Entity armed = fightColonist(*sim, 40, 40, "Gun_AssaultRifle");
+    const Entity bare = fightColonist(*sim, 30, 50);
+    FIGHT_REQUIRE((wolf != kNoEntity && armed != kNoEntity && bare != kNoEntity));
+    sim->things().registry().emplace<Colonist>(armed);  // the alarm calls up colonists
+    sim->things().registry().emplace<Colonist>(bare);
+    fightSettle(*sim);
+    sim->animals().enrage(wolf, AnimalTemper::Hunting, armed);
+    sim->stepMany(150);
+    CHECK(sim->raids().state().alarm);
+    // The unarmed colonist is called up as a Shelter; the armed one as a Defender.
+    const Fighter* bareFighter = sim->things().registry().try_get<Fighter>(bare);
+    FIGHT_REQUIRE(bareFighter != nullptr);
+    CHECK(bareFighter->mode == FightMode::Shelter);
+    const Fighter* armedFighter = sim->things().registry().try_get<Fighter>(armed);
+    FIGHT_REQUIRE(armedFighter != nullptr);
+    CHECK(armedFighter->mode == FightMode::Fight);
+    sim->stepMany(1500);
+    CHECK(fightOut(*sim, wolf));
+    CHECK_FALSE(fightDead(*sim, armed));
+}
