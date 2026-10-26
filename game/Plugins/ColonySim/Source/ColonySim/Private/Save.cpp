@@ -330,6 +330,7 @@ struct SaveEntity {
     std::optional<Prisoner> prisoner;       // section "prisoners" (C22)
     std::optional<PrisonBed> prisonBed;     // section "prisoners" (C22)
     std::optional<Fuel> fuel;               // "fuel" section (C11)
+    std::optional<Thermostat> thermostat;   // "thermostat" section
     std::optional<StoreIn> storeIn;         // "crafting" section (C14)
     std::optional<MentalBreaker> mentalBreaker;  // section "mentalBreaks" (C19)
 };
@@ -1077,6 +1078,9 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("building", c.building);
                 ar.value("bill", c.bill);
                 ar.value("index", c.index);
+            } else if constexpr (std::is_same_v<Type, SetThermostatCommand>) {
+                ar.value("building", c.building);
+                ar.value("celsius", c.celsius);
             } else if constexpr (std::is_same_v<Type, SetRefuelCommand>) {
                 auto* refuel = &c;
                 ar.value("building", refuel->building);
@@ -1373,7 +1377,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::Butcher, "the save file has a bad job");
+    ar.require(job.type <= JobType::SeekTemperature, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -2696,6 +2700,12 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("fuel", 1, [&] {
         saveParts(ar, "fuel", e, &SaveEntity::fuel, [&](Fuel& f) { saveFuelPart(ar, f); });
     });
+    ar.section("thermostat", 1, [&] {
+        saveParts(ar, "thermostat", e, &SaveEntity::thermostat, [&](Thermostat& t) {
+            ar.value("target", t.target);
+            ar.require(t.target >= -50.0f && t.target <= 60.0f, "the save file has an impossible thermostat target");
+        });
+    });
     ar.section("roofs", 1, [&] {
         ar.value("collapses", d.roofs.collapses);
         ar.list("thin", d.roofs.thin, [&](CellPos& c) { saveCell(ar, c); });
@@ -3006,6 +3016,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const Fuel* fuel = reg.try_get<Fuel>(e)) {
             out.fuel = *fuel;
+        }
+        if (const Thermostat* thermostat = reg.try_get<Thermostat>(e)) {
+            out.thermostat = *thermostat;
         }
         if (const StoreIn* store = reg.try_get<StoreIn>(e)) {
             out.storeIn = *store;
@@ -3468,6 +3481,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             if (fuelSpec.present) {
                 reg.emplace<Fuel>(entity, Fuel{fuelSpec.capacity});
             }
+        }
+        if (e.thermostat) {
+            reg.emplace<Thermostat>(entity, *e.thermostat);
         }
         if (e.health) {
             Health health;

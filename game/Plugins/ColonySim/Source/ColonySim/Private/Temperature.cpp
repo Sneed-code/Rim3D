@@ -1,6 +1,7 @@
 #include "ColonySim/Temperature.h"
 
 #include "ColonySim/Clock.h"
+#include "ColonySim/Construction.h"
 #include "ColonySim/Doors.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Genes.h"
@@ -67,6 +68,8 @@ TemperatureSystem::TemperatureSystem(Map& map, Things& things, Rooms& rooms, Hea
         s.maxTemp = tempFloat(d, "heatPusher.maxTemp", 0.0f);
         s.hasMin = d.has("heatPusher.minTemp");
         s.minTemp = tempFloat(d, "heatPusher.minTemp", 0.0f);
+        s.thermostat = s.pusher && !d.flag("heatPusher.passive") && d.has("power.consumption") &&
+                       (s.hasMax || s.hasMin);
         s.isWall = d.flag("building.holdsRoof");
         s.isVent = d.flag("building.vent");
     }
@@ -379,25 +382,64 @@ void TemperatureSystem::exchange() {
             continue;  // heat pushed outdoors is lost
         }
         float& t = now[id];
+        float maxTemp = s.maxTemp;
+        float minTemp = s.minTemp;
+        if (const Thermostat* thermostat = reg.try_get<Thermostat>(source); thermostat != nullptr && s.thermostat) {
+            maxTemp = minTemp = thermostat->target;
+        }
         const float dt = static_cast<float>(static_cast<double>(s.heatPerSecond) * kTempEnergyPerGameSecond *
                                             static_cast<double>(numbers_.intervalSeconds) /
                                             static_cast<double>(list[id].cellCount));
         if (s.heatPerSecond > 0.0f) {
             if (!s.hasMax) {
                 t += dt;
-            } else if (t < s.maxTemp) {
-                t = std::min(s.maxTemp, t + dt);
+            } else if (t < maxTemp) {
+                t = std::min(maxTemp, t + dt);
             }
         } else if (s.heatPerSecond < 0.0f) {
             if (!s.hasMin) {
                 t += dt;
-            } else if (t > s.minTemp) {
-                t = std::max(s.minTemp, t + dt);
+            } else if (t > minTemp) {
+                t = std::max(minTemp, t + dt);
             }
         }
     }
     roomTemp_ = std::move(now);
     storeCells();
+}
+
+bool TemperatureSystem::hasThermostat(Entity building) const {
+    const entt::registry& reg = things_.registry();
+    const Thing* thing = reg.valid(building) ? reg.try_get<Thing>(building) : nullptr;
+    return thing != nullptr && thing->category == ThingCategory::Building && !reg.all_of<ConstructionSite>(building) &&
+           sourceDefs_[thing->def.value].thermostat;
+}
+
+bool TemperatureSystem::targetOf(Entity building, float& celsius) const {
+    if (!hasThermostat(building)) {
+        return false;
+    }
+    const entt::registry& reg = things_.registry();
+    if (const Thermostat* thermostat = reg.try_get<Thermostat>(building)) {
+        celsius = thermostat->target;
+        return true;
+    }
+    const SourceDef& s = sourceDefs_[reg.get<Thing>(building).def.value];
+    celsius = s.heatPerSecond > 0.0f ? s.maxTemp : s.minTemp;
+    return true;
+}
+
+bool TemperatureSystem::setTarget(Entity building, float celsius, std::string& error) {
+    if (!hasThermostat(building)) {
+        error = "that building has no thermostat";
+        return false;
+    }
+    if (!(celsius >= -50.0f && celsius <= 60.0f)) {
+        error = "the target temperature must be between -50 and 60 degrees";
+        return false;
+    }
+    things_.registry().emplace_or_replace<Thermostat>(building, Thermostat{celsius});
+    return true;
 }
 
 // The enclosed room a heat source is in: the room of one of its cells, else of a cell next to it.

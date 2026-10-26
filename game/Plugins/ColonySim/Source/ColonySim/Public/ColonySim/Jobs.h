@@ -176,6 +176,7 @@ class Farming;
 class Filth;
 class Fire;
 class SpoilageSystem;
+class TemperatureSystem;
 class CraftingSystem;
 struct Bill;
 struct Recipe;
@@ -337,6 +338,8 @@ public:
     Filth* filth() const { return filth_; }
     // The fire layer, for the Firefighter work type's job (FireJobs.cpp, docs/design/fire.md). Without it nobody fights fires.
     void setFire(Fire* fire) { fire_ = fire; }
+    // Lets colonists seek a safe temperature (TemperatureJobs.cpp, docs/design/temperature.md).
+    void setTemperature(TemperatureSystem* temperature) { temperature_ = temperature; }
     Fire* fire() const { return fire_; }
     Rooms* rooms() const { return rooms_; }
     // How fast a pawn cleans (1 is 100%): FilthRules.cleaningSpeed times its Manipulation.
@@ -382,6 +385,11 @@ public:
     // set (some tests) nothing needs power.
     void setPower(const PowerGrid* power) { power_ = power; }
     bool buildingRuns(Entity building) const;
+    // A work building's speed without power, as a share of its normal speed: its `building.unpoweredWorkSpeedFactor`
+    // (the electric tailor bench's 0.5), 0 for a building that does nothing unpowered.
+    float unpoweredFactor(Entity building) const;
+    // True if bills can be worked at the building now: it runs, or works slowly without power.
+    bool buildingWorks(Entity building) const { return buildingRuns(building) || unpoweredFactor(building) > 0.0f; }
     int64_t now() const;
 
     // The pawn holding a target, or kNoEntity.
@@ -476,6 +484,11 @@ private:
 
     // The think list: each node may give a job; the first that does wins (docs/design/jobs.md).
     using ThinkNode = bool (JobSystem::*)(Entity pawn, Job& out);
+    // Weather (TemperatureJobs.cpp): a pawn outside its safe temperature range walks to the nearest cell in its comfortable
+    // range (a room, a heated room) and stays there a while, before anything else but emergencies. Without a temperature
+    // system nobody does.
+    bool thinkTemperature(Entity pawn, Job& out);
+    void interruptForTemperature(Entity pawn);
     bool thinkNeeds(Entity pawn, Job& out);
     bool thinkSchedule(Entity pawn, Job& out);
     bool thinkApparel(Entity pawn, Job& out);
@@ -703,6 +716,7 @@ private:
     uint8_t defaultPriority_ = kDefaultPriority;
     Filth* filth_ = nullptr;
     Fire* fire_ = nullptr;
+    TemperatureSystem* temperature_ = nullptr;
     SpoilageSystem* spoilage_ = nullptr;
     CraftingSystem* crafting_ = nullptr;
     Farming* farming_ = nullptr;

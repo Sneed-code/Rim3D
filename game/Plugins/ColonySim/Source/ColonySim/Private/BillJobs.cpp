@@ -19,6 +19,15 @@ bool JobSystem::buildingRuns(Entity building) const {
     return power_ == nullptr || power_->running(building);
 }
 
+float JobSystem::unpoweredFactor(Entity building) const {
+    const entt::registry& reg = things_.registry();
+    const Thing* thing = reg.valid(building) ? reg.try_get<Thing>(building) : nullptr;
+    if (thing == nullptr) {
+        return 0.0f;
+    }
+    return static_cast<float>(std::max(0.0, defs_.get(thing->def).number("building.unpoweredWorkSpeedFactor", 0.0)));
+}
+
 bool JobSystem::failCheckDoBill(Entity pawn, Job& job, std::string& why) {
     const entt::registry& reg = things_.registry();
     if (!canUseHands(pawn)) {
@@ -29,7 +38,7 @@ bool JobSystem::failCheckDoBill(Entity pawn, Job& job, std::string& why) {
         why = "the work building is gone";
         return false;
     }
-    if (!buildingRuns(job.site)) {
+    if (!buildingWorks(job.site)) {
         why = "the work building has no power";
         return false;
     }
@@ -123,6 +132,9 @@ JobSystem::StepResult JobSystem::billWork(Entity pawn, Job& job, std::string& wh
     float stuffFactor = 1.0f;
     if (crafting_ != nullptr) {
         benchFactor = crafting_->benchSpeed(reg.get<Thing>(job.site).def);
+        if (!buildingRuns(job.site)) {
+            benchFactor *= unpoweredFactor(job.site);  // checked above: this bench works, slowly, without power
+        }
         if (recipe->stuffFromIngredient && !recipe->products.empty()) {
             stuffFactor = crafting_->stuffWorkFactor(crafting_->dominantStuff(recipe->products.front().item, job.used));
         }

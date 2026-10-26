@@ -98,6 +98,24 @@ RimWorld's, recalled).
 
 Animals and any pawn def with `comfyTemperatureMin/Max` get the same, without the clothes stand-in.
 
+## Seeking a safe temperature
+
+`TemperatureJobs.cpp`, job `SeekTemperature` (steps: walk, then wait). First in the think list, a colonist
+whose cell is outside its **safe** range (comfortable range widened by `safeMarginC`) looks, at most every
+30 game seconds (spread by pawn), through the 61 x 61 cells round it for the nearest walkable non-door cell whose
+temperature is inside its **comfortable** range and that it can reach (nearest 8 tried for a path). It walks there and stays
+15 game minutes (ours), then thinks again. A colonist idling, hauling, at joy, researching, cleaning or gathering
+drops that job for the same walk. Hard work, medicine and player orders are not interrupted. No such cell
+in reach (a frost over the whole map, a sealed room outside): it carries on and gets sick as before.
+
+## Thermostats
+
+A powered heater or cooler (a def with `heatPusher` and a `Power` comp, not the passive cooler or campfire)
+has a target temperature: `SetThermostatCommand{building, celsius}` (-50 to 60) puts a `Thermostat` on it; the heater
+warms its room only up to it, the cooler cools only down to it. Without one the def's `maxTemp` / `minTemp` hold.
+`TemperatureSystem::targetOf` reads it, `ThingView::hasThermostat` / `thermostat` carry it to Unreal. Save
+section `thermostat` 1; in the state hash. The panel is U19's.
+
 ## Unreal sees
 
 `Snapshot::outdoorTemperature` and `RoomView::temperature` (degrees Celsius). Health reports show
@@ -113,11 +131,8 @@ or answers, so a save made between steps loads back the same.
 
 ## Not yet
 
-- **A pawn that seeks a safe place**: RimWorld's colonists go indoors or toward warmth when they
-  are outside their safe range; ours don't (BACKLOG). Colonists outdoors in hard frost just get sick.
 - **Heat from fire, sunlight on rooms, cold from rain and snow**: E4 and E1. A building's own
   insulation (stone walls hold better than wood) isn't separate from the wall conductance.
 - **Food rot, crops, plants dying of frost and heat stroke in animals' habits** read the room
   temperature or `outdoor()` in their own tasks (C16, D4's crop numbers).
-- **Thermostat settings**: heaters and coolers use their def's limit; a per-building target is for
-  the panels (U19).
+- **Thermostat panel**: the sim side is done (below); the buttons are U19's.

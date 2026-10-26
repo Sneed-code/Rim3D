@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <string>
 #include <vector>
 
 namespace colony {
@@ -46,6 +47,13 @@ struct COLONY_API TemperatureNumbers {
     float frostbiteSeverity = 3.0f;
 
     static TemperatureNumbers read(const DefDatabase& defs);
+};
+
+// A heater's or cooler's own target temperature (RimWorld's thermostat): put on the building by
+// SetThermostatCommand. A heater warms its room only up to it, a cooler cools only down to it.
+// Buildings without one use their def's limit.
+struct Thermostat {
+    float target = 21.0f;
 };
 
 // An enclosed room's temperature as saved: the room is named by its anchor cell.
@@ -94,6 +102,15 @@ public:
     // Heat pushed into the open air is lost. Fires use it (docs/design/fire.md).
     void addHeat(CellPos cell, double heatPerSecond, double seconds, float maxTemp);
 
+    // True if the building is a powered heater or cooler (a def with a heat pusher and a power draw, not
+    // a passive cooler or a campfire): the kind a thermostat can be set on.
+    bool hasThermostat(Entity building) const;
+    // The temperature a heater or cooler holds its room at: its thermostat's, else its def's limit; false
+    // for any other building.
+    bool targetOf(Entity building, float& celsius) const;
+    // SetThermostatCommand. Fails for a building without a thermostat or a target outside -50 to 60.
+    bool setTarget(Entity building, float celsius, std::string& error);
+
     // One game second, after the rooms are brought up to date. `now` is the game second.
     void step(int64_t now);
 
@@ -114,6 +131,7 @@ private:
         float minTemp = 0.0f;
         bool isWall = false;
         bool isVent = false;
+        bool thermostat = false;
     };
 
     void syncRooms();

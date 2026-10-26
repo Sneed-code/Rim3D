@@ -1,6 +1,7 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Doors.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Needs.h"
@@ -547,9 +548,7 @@ TEST_CASE("Temperature: a colonist feels cold or hot by the degrees outside the 
 
 TEST_CASE("Temperature: three days of deep winter, a heated room keeps its people well and the open ground does not") {
     auto sim = tempSim(-18.0f);
-    const CellPos doorCell{13, 10, 0};
-    tempRing(*sim, 10, 10, 16, 16, {doorCell});
-    sim->things().spawn("Door", doorCell);
+    tempRing(*sim, 10, 10, 16, 16);  // sealed: the one outside has nowhere to go (a door would let it in)
     sim->things().spawn("Heater", CellPos{12, 12, 0});
     std::vector<Entity> inside;
     for (const CellPos& c : {CellPos{12, 14, 0}, CellPos{14, 14, 0}, CellPos{14, 12, 0}}) {
@@ -567,4 +566,83 @@ TEST_CASE("Temperature: three days of deep winter, a heated room keeps its peopl
     const HealthReport frozen = tempReport(*sim, outside);
     CHECK(frozen.dead);
     CHECK(frozen.cause == DeathCause::Hypothermia);
+}
+
+TEST_CASE("Temperature: a heater or cooler holds the target its thermostat is set to") {
+    auto sim = tempSim(0.0f);
+    tempRing(*sim, 10, 10, 16, 16);
+    tempRing(*sim, 20, 10, 26, 16);
+    const Entity heater = sim->things().spawn("Heater", CellPos{12, 12, 0});
+    const Entity cooler = sim->things().spawn("Cooler", CellPos{22, 12, 0});
+    const Entity campfire = sim->things().spawn("Campfire", CellPos{30, 30, 0});
+    TEMP_REQUIRE(heater != kNoEntity && cooler != kNoEntity && campfire != kNoEntity);
+    float target = 0.0f;
+    CHECK(sim->temperature().targetOf(heater, target));
+    CHECK(target == 21.0f);  // the def's limit until it is set
+    CHECK(sim->temperature().targetOf(cooler, target));
+    CHECK(target == 10.0f);
+    CHECK_FALSE(sim->temperature().targetOf(campfire, target));
+
+    // Commands: only heaters and coolers, and a sane number.
+    sim->submit(SetThermostatCommand{heater, 15.0f});
+    sim->submit(SetThermostatCommand{campfire, 15.0f});
+    sim->submit(SetThermostatCommand{heater, 200.0f});
+    sim->submit(SetThermostatCommand{cooler, 30.0f});
+    sim->step();
+    int failed = 0;
+    for (const Event& e : sim->events()) {
+        failed += e.type == EventType::CommandFailed ? 1 : 0;
+    }
+    CHECK(failed == 2);
+    CHECK(sim->temperature().targetOf(heater, target));
+    CHECK(target == 15.0f);
+
+    // Winter room warms to 15 and stays there; the summer room with a cooler set to 30 stays at 30.
+    sim->setOutdoorOverride(0.0f);
+    tempClock = 0;
+    tempHours(*sim, 48.0);
+    CHECK(tempAt(*sim, 13, 13) == doctest::Approx(15.0f).epsilon(0.002));
+    sim->setOutdoorOverride(40.0f);
+    tempHours(*sim, 48.0);
+    CHECK(tempAt(*sim, 23, 13) == doctest::Approx(30.0f).epsilon(0.002));
+
+    // The snapshot carries it, and a save loads back with it.
+    Snapshot snap;
+    sim->writeSnapshot(snap);
+    bool seen = false;
+    for (const ThingView& v : snap.things) {
+        if (v.hasThermostat && v.thermostat == 15.0f) {
+            seen = true;
+        }
+    }
+    CHECK(seen);
+    const std::vector<uint8_t> bytes = saveSim(*sim);
+    SaveLoadResult loaded = loadSim(bytes, tempDefs());
+    TEMP_REQUIRE(loaded.error.empty());
+    CHECK(loaded.sim->temperature().targetOf(heater, target));
+    CHECK(target == 15.0f);
+    CHECK(saveSim(*loaded.sim) == bytes);
+    tempClock = 0;
+}
+
+TEST_CASE("Temperature: a colonist caught in the frost walks into a heated room and stays well") {
+    auto sim = tempSim(-25.0f);
+    const CellPos doorCell{13, 10, 0};
+    tempRing(*sim, 10, 10, 16, 16, {doorCell});
+    sim->things().spawn("Door", doorCell);
+    sim->things().spawn("Heater", CellPos{12, 12, 0});
+    const Entity outside = sim->things().spawn("Human", CellPos{30, 30, 0});
+    TEMP_REQUIRE(outside != kNoEntity);
+    sim->jobs().addWorker(outside, {}, false);
+    sim->stepMany(6 * 3600);  // let the room warm
+    // A colonist outside walks in and out of the room's reach on its own: after a day it is well.
+    sim->stepMany(86400);
+    const HealthReport report = tempReport(*sim, outside);
+    CHECK_FALSE(report.dead);
+    CHECK(sim->temperature().ambientOf(outside) > 10.0f);
+    const Position& at = sim->things().registry().get<Position>(outside);
+    CHECK(at.x > 10.0f);
+    CHECK(at.x < 17.0f);
+    CHECK(at.y > 10.0f);
+    CHECK(at.y < 17.0f);
 }

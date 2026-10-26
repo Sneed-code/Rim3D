@@ -675,6 +675,14 @@ struct EndMentalBreakCommand {
     Entity pawn = kNoEntity;
 };
 
+// Sets the target temperature of a powered heater or cooler (RimWorld's thermostat, docs/design/temperature.md):
+// the heater warms its room only up to it, the cooler cools only down to it. Fails if the thing is not a finished
+// heater or cooler, or the target is outside -50 to 60 degrees Celsius.
+struct SetThermostatCommand {
+    Entity building = kNoEntity;
+    float celsius = 21.0f;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -697,7 +705,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
                              SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand, SetPrisonerModeCommand,
                              SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
-                             MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand>;
+                             MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand,
+                             SetThermostatCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

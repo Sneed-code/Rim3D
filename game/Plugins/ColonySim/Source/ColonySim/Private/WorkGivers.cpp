@@ -437,7 +437,7 @@ public:
         const Position& at = reg.get<Position>(pawn);
         reg.view<const BillList, const Footprint, const Position, const Thing>().each(
             [&](Entity building, const BillList& list, const Footprint& footprint, const Position& pos, const Thing& thing) {
-                if (pos.level != at.level || reg.all_of<MarkedForDeconstruct>(building) || !jobs.buildingRuns(building) ||
+                if (pos.level != at.level || reg.all_of<MarkedForDeconstruct>(building) || !jobs.buildingWorks(building) ||
                     !mine(jobs, thing.def)) {
                     return;
                 }

@@ -125,6 +125,7 @@ constexpr JobStepKind kJobsChatSteps[] = {JobStepKind::ApproachPrisoner, JobStep
 constexpr JobStepKind kJobsRefuelSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::CarryToCell,
                                             JobStepKind::RefuelWork};
 static_assert(kRefuelPickUpStep == 1, "the Refuel steps moved");
+constexpr JobStepKind kJobsSeekTemperatureSteps[] = {JobStepKind::GotoCell, JobStepKind::Wait};
 constexpr JobStepKind kJobsHuntSteps[] = {JobStepKind::HuntWork};
 constexpr JobStepKind kJobsHaulCorpseSteps[] = {JobStepKind::TendGotoPatient, JobStepKind::LiftPawn, JobStepKind::CarryPawn,
                                                 JobStepKind::DropCorpse};
@@ -187,6 +188,7 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::Hunt: return {kJobsHuntSteps, static_cast<int>(std::size(kJobsHuntSteps))};
         case JobType::HaulCorpse: return {kJobsHaulCorpseSteps, static_cast<int>(std::size(kJobsHaulCorpseSteps))};
         case JobType::Butcher: return {kJobsButcherSteps, static_cast<int>(std::size(kJobsButcherSteps))};
+        case JobType::SeekTemperature: return {kJobsSeekTemperatureSteps, static_cast<int>(std::size(kJobsSeekTemperatureSteps))};
     }
     return {nullptr, 0};
 }
@@ -284,6 +286,7 @@ const char* jobTypeName(JobType type) {
         case JobType::Hunt: return "Hunt";
         case JobType::HaulCorpse: return "HaulCorpse";
         case JobType::Butcher: return "Butcher";
+        case JobType::SeekTemperature: return "SeekTemperature";
     }
     return "?";
 }
@@ -588,6 +591,7 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
             return 2;
         case JobType::None:
         case JobType::Wait:
+        case JobType::SeekTemperature:
         case JobType::ExtinguishFire:  // colonists fight a fire together: nothing is reserved
             return 0;
     }
@@ -816,7 +820,7 @@ void JobSystem::step() {
     // The think list, in order. Later tasks put theirs in place: emergencies first (downed, on
     // fire: F1 and later), then the defense plan (F6), urgent needs and the schedule (C6), work
     // and finally idling. Player orders don't wait for a think: the command starts them.
-    static constexpr ThinkNode kThinkList[] = {&JobSystem::thinkNeeds, &JobSystem::thinkSchedule, &JobSystem::thinkApparel,
+    static constexpr ThinkNode kThinkList[] = {&JobSystem::thinkTemperature, &JobSystem::thinkNeeds, &JobSystem::thinkSchedule, &JobSystem::thinkApparel,
                                                &JobSystem::thinkWork, &JobSystem::thinkJoy, &JobSystem::thinkIdle};
 
     for (const Entity pawn : order_) {
@@ -889,6 +893,7 @@ void JobSystem::step() {
         if (worker.job.type != JobType::None) {
             interruptForNeeds(pawn);
             interruptForEmergency(pawn);
+            interruptForTemperature(pawn);
         }
         if (reg.get<Worker>(pawn).job.type == JobType::None) {
             for (const ThinkNode node : kThinkList) {

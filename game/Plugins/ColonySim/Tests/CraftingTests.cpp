@@ -314,6 +314,41 @@ TEST_CASE("Crafting: the hand tailor bench is half as fast as a bench at full sp
     CHECK(hand < 4200);
 }
 
+TEST_CASE("Crafting: an electric tailor bench without power works at half speed instead of stopping") {
+    const auto timeAt = [](const char* bench) {
+        Sim sim = craftSim();
+        const Entity table = craftSpawn(sim, bench, CellPos{20, 20, 0});
+        craftSpawn(sim, "TorchLamp", CellPos{17, 17, 0});
+        craftSpawn(sim, "Cloth", CellPos{19, 19, 0}, 40);
+        craftCrafter(sim, CellPos{18, 18, 0}, 8);
+        sim.submit(UnlockResearchCommand{"ComplexClothing"});
+        sim.submit(UnlockResearchCommand{"Electricity"});
+        if (table == kNoEntity || craftAdd(sim, table, "Make_Apparel_Tuque", BillMode::Count, 1) == 0) {
+            return -1;
+        }
+        sim.step();  // the power grid finds the bench has no net
+        const bool electricBench = std::string(bench) == "TailorBenchElectric";
+        if (electricBench) {
+            CHECK_FALSE(sim.jobs().buildingRuns(table));
+        }
+        CHECK(sim.jobs().buildingWorks(table));
+        return craftRunUntil(sim, 30000, [&] { return craftOnMap(sim, "Apparel_Tuque") == 1; });
+    };
+    const int handTime = timeAt("TailorBenchHand");
+    const int electric = timeAt("TailorBenchElectric");
+    CHECK(handTime > 0);
+    CHECK(electric > 0);
+    CHECK(electric == doctest::Approx(handTime).epsilon(0.1));  // both at 0.5, one for want of power
+
+    // A bench with no unpowered speed does nothing without power: the factor is 0 for it.
+    Sim sim = craftSim();
+    const Entity hand = craftSpawn(sim, "TailorBenchHand", CellPos{20, 20, 0});
+    CHECK(sim.jobs().unpoweredFactor(hand) == 0.0f);
+    CHECK(sim.jobs().buildingWorks(hand));  // it needs no power
+    const Entity tailor = craftSpawn(sim, "TailorBenchElectric", CellPos{30, 20, 0});
+    CHECK(sim.jobs().unpoweredFactor(tailor) == doctest::Approx(0.5f));
+}
+
 TEST_CASE("Crafting: the stonecutter turns a chunk into blocks") {
     Sim sim = craftSim();
     sim.submit(UnlockResearchCommand{"Stonecutting"});

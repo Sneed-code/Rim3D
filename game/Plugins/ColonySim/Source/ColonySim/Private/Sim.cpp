@@ -209,6 +209,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         return genes != nullptr ? geneStat(*genes, "flammability", 1.0f) : 1.0f;
     });
     jobs_->setFire(fire_.get());
+    jobs_->setTemperature(temperature_.get());
     jobs_->fuel().setLights(lights_.get());
     // A wood-fired generator makes power only with fuel, and burns it only while it makes power.
     power_->setFuel([this](Entity building) { return jobs_->fuel().lit(building); });
@@ -1068,6 +1069,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!jobs_->fuel().setRefuel(refuel->building, refuel->autoRefuel, refuel->fillNow, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* thermostat = std::get_if<SetThermostatCommand>(&command)) {
+        if (!temperature_->setTarget(thermostat->building, thermostat->celsius, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* startBreak = std::get_if<StartMentalBreakCommand>(&command)) {
         if (!mentalBreaks_->start(startBreak->pawn, startBreak->breakDef, rng_, error)) {
             commandFailed(id, error);
@@ -1353,6 +1358,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.autoRefuel = fuel->autoRefuel;
             view.fillOrdered = fuel->fillOrdered;
         }
+        view.hasThermostat = temperature_->targetOf(entity, view.thermostat);
         if (const StackCount* stack = reg.try_get<StackCount>(entity)) {
             view.stackCount = stack->count;
         }
@@ -1862,6 +1868,9 @@ uint64_t Sim::stateHash() const {
             h.add(fuel->amount);
             h.add(fuel->autoRefuel);
             h.add(fuel->fillOrdered);
+        }
+        if (const Thermostat* thermostat = reg.try_get<Thermostat>(e)) {
+            h.add(thermostat->target);
         }
         if (const Worker* worker = reg.try_get<Worker>(e)) {
             const Job& job = worker->job;

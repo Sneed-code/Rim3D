@@ -29,7 +29,7 @@ A new bench needs only its `workGiver` and its recipes. The check `Tests/Craftin
 bench of a recipe names no giver or a giver no work type lists.
 
 - **Research:** a bill can only be added when the recipe's `researchPrerequisite` is done (unchanged from C7).
-- **Power:** a bench with a power part does nothing while unpowered (unchanged from E5).
+- **Power:** a bench with a power part does nothing while unpowered (E5), unless its def has `building.unpoweredWorkSpeedFactor`: the electric tailor bench (now on the grid, 120 W) then works at that share (0.5).
 - **Fuel:** the fueled smithy has a `fuel` field like the stove: 50 wood, one burnt per product (ours: RimWorld
   burns it by the time worked). A bench without fuel is never out of it.
 - **Bench speed:** `stats.workTableWorkSpeedFactor` multiplies the work done each second (hand tailor bench
@@ -100,4 +100,3 @@ stream and the `StoreIn` marks.
 - Damage and hit points of melee weapons from their stuff and quality (P4).
 - "Count only what lies in this stockpile", "take from this stockpile only" and a per-bill ingredient quality
   filter (the bill's `disallowed` list is by item def).
-- The electric tailor bench's `unpoweredWorkSpeedFactor` (an unpowered bench does nothing).

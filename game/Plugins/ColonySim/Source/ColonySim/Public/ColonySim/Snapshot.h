@@ -88,6 +88,10 @@ struct ThingView {
     float fuelCapacity = 0.0f;
     bool autoRefuel = false;
     bool fillOrdered = false;
+    // Powered heaters and coolers (docs/design/temperature.md): the temperature the building holds its room
+    // at, set with SetThermostatCommand.
+    bool hasThermostat = false;
+    float thermostat = 0.0f;
     // Pawns with needs (docs/design/needs.md): food and rest, 1 full to 0 empty, else -1; asleep
     // while lying down in a bed or on the ground.
     float food = -1.0f;

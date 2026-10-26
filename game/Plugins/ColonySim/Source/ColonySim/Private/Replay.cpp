@@ -183,6 +183,9 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
                 j["kind"] = c.kind;
                 j["layers"] = c.layers;
+            } else if constexpr (std::is_same_v<Type, SetThermostatCommand>) {
+                j["building"] = entt::to_integral(c.building);
+                j["celsius"] = c.celsius;
             } else if constexpr (std::is_same_v<Type, SetRefuelCommand>) {
                 j["building"] = entt::to_integral(c.building);
                 j["autoRefuel"] = c.autoRefuel;
@@ -848,6 +851,14 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         uint32_t building = entt::to_integral(kNoEntity);
         if (!r.integer(j, "building", building, where) || !r.integer(j, "bill", c.bill, where) ||
             !r.integer(j, "index", c.index, where)) {
+            return false;
+        }
+        c.building = static_cast<Entity>(building);
+        out.command = c;
+    } else if (type == "SetThermostat") {
+        SetThermostatCommand c;
+        uint32_t building = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "building", building, where) || !r.number(j, "celsius", c.celsius, where)) {
             return false;
         }
         c.building = static_cast<Entity>(building);
