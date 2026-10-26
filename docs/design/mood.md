@@ -62,6 +62,13 @@ A thought def with `situation.condition` `coldBelowComfort` or `hotAboveComfort`
 counts while the pawn is outside its comfortable temperature range; its `stages` are picked by the degrees
 outside it ([temperature.md](temperature.md)). The thought's label in the panel is the stage's (`chilly`,
 `freezing`, `warm`, `scorching`). Like the food and rest situations it exists only while it holds.
+## Trait situations
+
+Three staged thoughts in `Thoughts3.json` are limited to a trait (`situation.trait`) and judged in `Sim.cpp`:
+`NightOwlAwakeAtNight` (+16) and `NightOwlAwakeInDay` (-10) count while a Night owl is awake (not lying down), by
+`MoodRules.nightHours` (ours, 21:00 to 04:59); `GreedyNoBedroom` (-8) counts while a Greedy colonist owns no bed in a
+room with the Bedroom role. The numbers are the traits' `moodAwakeAtNight`, `moodAwakeInDay` and `moodWithoutBedroom`.
+
 ## Passion at work
 
 Two more situations, `PassionMinorWork` (+8) and `PassionMajorWork` (+14, from `SkillRules.passionMood`),
