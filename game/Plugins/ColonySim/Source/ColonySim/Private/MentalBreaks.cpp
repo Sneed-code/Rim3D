@@ -2,6 +2,7 @@
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Protagonist.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Events.h"
@@ -222,7 +223,7 @@ DefId MentalBreakSystem::breakOf(Entity pawn) const {
 bool MentalBreakSystem::eligible(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     return reg.valid(pawn) && reg.all_of<Thing, Position, Mover, Worker>(pawn) && !reg.all_of<PlayerControl>(pawn) &&
-           fighters_.factionOf(pawn) == kPlayerFaction && !health_.incapacitated(pawn);
+           !mindIsPlayersOwn(reg, pawn) && fighters_.factionOf(pawn) == kPlayerFaction && !health_.incapacitated(pawn);
 }
 
 bool MentalBreakSystem::feasible(Entity pawn, const Kind& kind, Rng& rng) {
@@ -322,6 +323,10 @@ bool MentalBreakSystem::start(Entity pawn, const std::string& breakDef, Rng& rng
     const entt::registry& reg = things_.registry();
     if (!reg.valid(pawn) || !reg.all_of<Thing, Position, Mover, Worker>(pawn)) {
         error = "that isn't a colonist on the map";
+        return false;
+    }
+    if (mindIsPlayersOwn(reg, pawn)) {
+        error = "the protagonist's mind is the player's own";
         return false;
     }
     if (reg.all_of<PlayerControl>(pawn)) {

@@ -613,3 +613,14 @@ TEST_CASE("Fire: a burning colonist runs to water and jumps in") {
     CHECK(!f.fire().pawnBurning(pawn));
     CHECK(cellOf(f.reg().get<Position>(pawn)).x >= 34);  // it ran east, to the water
 }
+
+TEST_CASE("Fire: a burning protagonist does not panic") {
+    FireFixture f;
+    const Entity pawn = f.colonist(CellPos{30, 30, 0});
+    f.reg().get<Colonist>(pawn).protagonist = true;
+    f.fire().setPawnAlight(pawn, f.sim.time().seconds, true);
+    FIRE_REQUIRE(f.fire().pawnBurning(pawn));
+    const CellPos start = cellOf(f.reg().get<Position>(pawn));
+    f.run(10);
+    CHECK(cellOf(f.reg().get<Position>(pawn)) == start);
+}

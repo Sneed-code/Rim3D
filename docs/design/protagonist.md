@@ -136,3 +136,23 @@ to try W A S D, the mouse and Tab once.
 - **Colonists that fall asleep or are drafted while controlled.** Sleep and drafting don't exist yet
   (C6, F4). A controlled colonist who goes down or dies is let go by the sim, and the game returns
   to the overseer view (also if the thing stops existing).
+
+## Mind rules: mood never takes the protagonist from the player
+
+The protagonist is *your* character; colonists and other pawns are people with minds of their own.
+Mood is still tracked and shown for the protagonist (it is part of survival), but it never takes
+control away. Today that means:
+
+- no mental breaks (C19): the natural roll skips them and `StartMentalBreakCommand` fails;
+- no social fights: an insult or a jealous rage never starts a fistfight with them;
+- no panic when burning: they stay under the player's hand (the player puts themself out);
+- no refusing orders and no AI-driven behaviour overrides (none exist for colonists today; any new
+  one must ask the rule below).
+
+All of it is one function, `mindIsPlayersOwn(registry, pawn)` in `ColonySim/Protagonist.h`
+(true for a `Colonist` with `protagonist` set). Any new system that could override a pawn's
+choices (berserk, fire-starting spree, jealousy, prisoner-style behaviour) must ask it first. To
+change the rule later, for example "exempt only while the player is steering" (`PlayerControl`),
+change that function.
+
+Protagonist death is still game over (reload the last save); this does not change.

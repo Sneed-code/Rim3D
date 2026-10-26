@@ -2,6 +2,7 @@
 #include "ColonySim/Fire.h"
 
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Protagonist.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Floors.h"
@@ -780,7 +781,7 @@ void Fire::onDestroy(Entity building) {
 
 bool Fire::panicStep(Entity pawn, int64_t now) {
     entt::registry& reg = things_.registry();
-    if (!numbers_.panic || !reg.valid(pawn) || !reg.all_of<Burning, Position, Mover>(pawn)) {
+    if (!numbers_.panic || !reg.valid(pawn) || !reg.all_of<Burning, Position, Mover>(pawn) || mindIsPlayersOwn(reg, pawn)) {
         return false;
     }
     // A colonist who isn't alight and is within arm's reach beats the flames out as the pawn runs past.
