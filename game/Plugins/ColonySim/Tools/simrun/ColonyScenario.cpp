@@ -298,6 +298,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     float minJoy = 1.0f;
     float minComfort = 1.0f;
     float minOutdoors = 1.0f;
+    uint64_t mentalBreaks = 0;
     float minFood = 1.0f;
     float minRest = 1.0f;
     float maxMalnutrition = 0.0f;
@@ -334,6 +335,10 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     }
                     break;
                 case EventType::WeatherChanged: ++weatherChanges; break;
+                case EventType::PawnMentalBreak:
+                    ++mentalBreaks;
+                    std::fprintf(stderr, "day %lld: a colonist had a mental break: %s\n", static_cast<long long>(sim.time().day()), e.message.c_str());
+                    break;
                 case EventType::CellMined: ++mined; break;
                 case EventType::PlantRemoved: ++felled; break;
                 case EventType::PlantHarvested: ++picked; break;
@@ -537,7 +542,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 "\"allBuiltAtSecond\":%lld,\"stoveBuiltAtSecond\":%lld,\"roomOk\":%s,"
                 "\"skillXpGained\":%.0f,\"woodIn\":%llu,\"outOfFuel\":%llu,\"mealsCooked\":%llu,\"clubsMade\":%llu,\"ate\":%llu,\"atTable\":%llu,\"woke\":%llu,\"wokeInBed\":%llu,"
                 "\"cleaned\":%llu,\"filthLeft\":%zu,\"roomBeauty\":%.2f,\"roomImpressiveness\":%.1f,"
-                "\"weatherChanges\":%llu,\"commandsFailed\":%llu,\"failedJobs\":%llu,\"stateHash\":\"%016llx\"}}\n",
+                "\"weatherChanges\":%llu,\"commandsFailed\":%llu,\"failedJobs\":%llu,\"mentalBreaks\":%llu,\"stateHash\":\"%016llx\"}}\n",
                 static_cast<unsigned long long>(seed), mapSize, days, colonists.size(), static_cast<unsigned long long>(died),
                 static_cast<double>(minFood), static_cast<double>(maxMalnutrition), static_cast<double>(minRest),
                 static_cast<double>(minMood), static_cast<long long>(worstStuck), static_cast<long long>(worstIdle),
@@ -556,6 +561,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 static_cast<unsigned long long>(sleptInBed), static_cast<unsigned long long>(cleaned), sim.filth().totalLayers(),
                 roomStat ? static_cast<double>(roomStat->beauty) : 0.0, roomStat ? static_cast<double>(roomStat->impressiveness) : 0.0,
                 static_cast<unsigned long long>(weatherChanges), static_cast<unsigned long long>(commandsFailed), static_cast<unsigned long long>(sim.stats().failedJobs),
+                static_cast<unsigned long long>(mentalBreaks),
                 static_cast<unsigned long long>(sim.stateHash()));
 
     // The checks.

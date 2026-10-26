@@ -2,7 +2,7 @@
 
 Code: `ColonySim/Animals.h`, `Private/Animals.cpp`. Tests: `Tests/AnimalTests.cpp`, the ctest
 `simrun_animals`. Rules: `data/defs/Rules/AnimalRules.json` (all ours). Stage 2 task N1. The animal
-data is [animals.md](animals.md) (D5); hunting, taming, breeding and fighting are N2 to N5.
+data is [animals.md](animals.md) (D5); hunting and butchering are [hunting.md](hunting.md) (N2); taming, breeding and fighting are N3 to N5.
 
 ## What an animal is
 
@@ -50,8 +50,8 @@ the seed, the animal and the second (`animalRngFor`), so the order animals are v
 nothing. Animals are visited in entity id order anyway, because two may want the same plant.
 
 1. **The dead** lie where they fell. The system sees the death within the animal's next look, and the
-   corpse is removed `corpseDays` (15) game days later (`stats.cleared`). Hunting (N2) will carry
-   corpses off and rot (E-tasks) will take over this timer.
+   corpse is removed `corpseDays` (15) game days later (`stats.cleared`). Hunters, haulers and the butcher table
+   (N2, [hunting.md](hunting.md)) carry corpses off and cut them up; rot (E-tasks) will take over this timer.
 2. **Downed** animals do nothing.
 3. **Sleep.** Diurnal animals sleep 21:00 to 05:00, nocturnal ones (the wolf and the cougar, listed
    in the rules) 07:00 to 17:00, each animal's hours shifted 0 to 2 hours later so a herd doesn't
@@ -78,7 +78,7 @@ nothing. Animals are visited in entity id order anyway, because two may want the
 
 ## Not here
 
-Hunting and the corpse as an item (N2), taming, training, pens (N3, done: [husbandry.md](husbandry.md)), breeding, young growing up,
+Hunting and butchering (N2, done: [hunting.md](hunting.md)), taming, training, pens (N3, done: [husbandry.md](husbandry.md)), breeding, young growing up,
 milk, wool, eggs (N4, done: [breeding.md](breeding.md)), animals drawn on screen (U15, done: see
 "On screen" below). Animal temperature comfort, the weather and seasons (E tasks) and old age.
 

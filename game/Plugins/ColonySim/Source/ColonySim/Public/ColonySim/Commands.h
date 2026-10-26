@@ -400,7 +400,8 @@ struct MarkShelterCommand {
 };
 
 // Taming, training and pens (task N3, docs/design/husbandry.md). `mark` is "Tame" (a wild animal, to be tamed by a colonist
-// with the Handling work), "Slaughter" (a tame one, to be killed) or "Release" (a tame one goes wild at once; `on` is
+// with the Handling work), "Hunt" (a wild one, to be shot by a colonist with the Hunting work and a gun; N2,
+// docs/design/hunting.md), "Slaughter" (a tame one, to be killed) or "Release" (a tame one goes wild at once; `on` is
 // ignored). `on` false takes a mark off. Fails for a thing that is no animal, a dead one, or one of the wrong kind.
 struct MarkAnimalCommand {
     Entity animal = kNoEntity;
@@ -660,6 +661,20 @@ struct MoveBillCommand {
     int index = 0;
 };
 
+// Dev command: the colonist has a mental break now (a MentalBreaks defName, docs/design/mental-breaks.md),
+// whatever its mood. Fails for a pawn that isn't a colonist on the map, is controlled by the player,
+// downed, dead or in a break already; for a break that needs something the game doesn't have yet
+// (fire); or when the break has nothing to do (a binge with no food).
+struct StartMentalBreakCommand {
+    Entity pawn = kNoEntity;
+    std::string breakDef;
+};
+
+// Dev command: ends the colonist's mental break at once, with no catharsis. Fails if it isn't in one.
+struct EndMentalBreakCommand {
+    Entity pawn = kNoEntity;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -682,7 +697,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
                              SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand, SetPrisonerModeCommand,
                              SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
-                             MoveBillCommand>;
+                             MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

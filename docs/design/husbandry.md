@@ -12,6 +12,7 @@ tame animal does by itself). Tests: `Tests/HusbandryTests.cpp`. Numbers: `data/d
 | --- | --- |
 | `MarkAnimal` `Tame` | A wild animal is marked to be tamed. `on` false takes the mark off. |
 | `MarkAnimal` `Slaughter` | A tame animal is marked to be killed. |
+| `MarkAnimal` `Hunt` | A wild animal is marked to be shot by a colonist with a gun and the Hunting work ([hunting.md](hunting.md), N2). |
 | `MarkAnimal` `Release` | A tame animal goes wild at once. |
 | `SetTraining` | A tame animal is to learn Obedience, Release, Rescue or Haul. Wanting one wants what it needs first. |
 | `CreateAnimalZone` | Paints an animal zone over the walkable cells of a rectangle that are in no animal zone. |
@@ -76,8 +77,8 @@ A command that can't be done fails with a reason in plain words (a `CommandFaile
 ## Slaughter
 
 A Handling colonist walks to a tame animal marked `Slaughter`, works 259 s and kills it
-(`AnimalSlaughtered`). The corpse lies where it fell like any animal corpse; butchering it for meat and
-leather is N2's job.
+(`AnimalSlaughtered`). The corpse is marked to be collected: haulers carry it to a stockpile and the butcher table cuts it up
+for meat and leather ([hunting.md](hunting.md), N2).
 
 ## Saves
 

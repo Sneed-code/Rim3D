@@ -26,6 +26,7 @@
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Lights.h"
+#include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Recreation.h"
@@ -216,6 +217,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     explosives_ = std::make_unique<ExplosiveSystem>(*things_, map_, *combat_, *health_, *defs_);
     fighters_->setExplosives(explosives_.get());
+    mentalBreaks_ = std::make_unique<MentalBreakSystem>(*things_, map_, *health_, *fighters_, *jobs_, *mood_, *rooms_,
+                                                        pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
     combat_->setTalents(talents_.get());
     explosives_->setEventLog(&events_);
@@ -234,6 +237,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     animals_->setPathfinder(&pathfinder_);
     combat_->setHurtHook([this](Entity victim, Entity attacker) { animals_->hurt(victim, attacker); });
     jobs_->setHusbandry(husbandry_.get());
+    jobs_->setCombat(combat_.get());
     husbandry_->setHaulerHook([this](Entity animal, bool on) { jobs_->setAnimalHauler(animal, on); });
     jobs_->setAnimalWorkGate([this](Entity animal) { return animals_->mayWork(animal); });
     raids_ = std::make_unique<RaidSystem>(*things_, map_, *rooms_, *combat_, *health_, *jobs_, *fighters_, *defs_, time_, rng_);
@@ -247,6 +251,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         jobs_->forget(thing);
         raids_->forget(thing);
         defense_->onDestroy(thing);
+        mentalBreaks_->forget(thing);
     });
     fighters_->setWeather(weather_.get());
     melee_ = std::make_unique<MeleeSystem>(*things_, map_, *combat_, *health_, *defs_, time_,
@@ -264,12 +269,16 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     defense_->setBeforeDestroy([this](Entity thing) {
         jobs_->forget(thing);
         raids_->forget(thing);
+        mentalBreaks_->forget(thing);
     });
     defense_->setOnLearn([this](Entity pawn) { fighters_->replan(pawn); });
     fighters_->setDefense(defense_.get());
     social_ = std::make_unique<SocialSystem>(*things_, *rooms_, *health_, *melee_, *mood_, *jobs_, *defs_, time_,
                                              splitMix64(settings.seed ^ 0x736F6369616CULL));
     social_->setEventLog(&events_);
+    mentalBreaks_->setEventLog(&events_);
+    mentalBreaks_->setMelee(melee_.get());
+    mentalBreaks_->setFire(fire_.get());
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -441,6 +450,25 @@ void Sim::commandFailed(uint64_t id, std::string message) {
 
 void Sim::applyCommand(const Command& command, uint64_t id) {
     std::string error;
+    // A colonist in a mental break takes no orders: it isn't the player's to command until it is over.
+    Entity ordered = kNoEntity;
+    if (const auto* draft = std::get_if<DraftCommand>(&command)) {
+        ordered = draft->drafted ? draft->pawn : kNoEntity;
+    } else if (const auto* moveOrder = std::get_if<MoveOrderCommand>(&command)) {
+        ordered = moveOrder->pawn;
+    } else if (const auto* attack = std::get_if<AttackOrderCommand>(&command)) {
+        ordered = attack->pawn;
+    } else if (const auto* haul = std::get_if<OrderHaulCommand>(&command)) {
+        ordered = haul->pawn;
+    } else if (const auto* control = std::get_if<ControlPawnCommand>(&command)) {
+        ordered = control->pawn;
+    } else if (const auto* hands = std::get_if<HandsOnCommand>(&command)) {
+        ordered = hands->mode == HandsOnMode::Work ? hands->pawn : kNoEntity;
+    }
+    if (ordered != kNoEntity && mentalBreaks_->active(ordered)) {
+        commandFailed(id, "that colonist is in a mental break");
+        return;
+    }
     if (const auto* spawn = std::get_if<SpawnThingCommand>(&command)) {
         const DefId def = defs_->idOf("Things", spawn->def);
         Entity thing = kNoEntity;
@@ -465,6 +493,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             jobs_->forget(destroy->thing);
             fighters_->forget(destroy->thing);
             raids_->forget(destroy->thing);
+            mentalBreaks_->forget(destroy->thing);
             things_->destroy(destroy->thing);
         }
     } else if (const auto* damage = std::get_if<DamagePawnCommand>(&command)) {
@@ -657,10 +686,12 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             ok = husbandry_->markTame(mark->animal, mark->on, error);
         } else if (mark->mark == "Slaughter") {
             ok = husbandry_->markSlaughter(mark->animal, mark->on, error);
+        } else if (mark->mark == "Hunt") {
+            ok = husbandry_->markHunt(mark->animal, mark->on, error);
         } else if (mark->mark == "Release") {
             ok = husbandry_->release(mark->animal, error);
         } else {
-            error = "a mark is Tame, Slaughter or Release";
+            error = "a mark is Tame, Slaughter, Hunt or Release";
         }
         if (!ok) {
             commandFailed(id, error);
@@ -1035,6 +1066,14 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!jobs_->fuel().setRefuel(refuel->building, refuel->autoRefuel, refuel->fillNow, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* startBreak = std::get_if<StartMentalBreakCommand>(&command)) {
+        if (!mentalBreaks_->start(startBreak->pawn, startBreak->breakDef, rng_, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* endBreak = std::get_if<EndMentalBreakCommand>(&command)) {
+        if (!mentalBreaks_->end(endBreak->pawn, error)) {
+            commandFailed(id, error);
+        }
     }
 }
 
@@ -1084,6 +1123,7 @@ void Sim::step() {
     husbandry_->step();
     breeding_->step();
     social_->step(time_.seconds);
+    mentalBreaks_->step(time_.seconds, rng_);  // before the mood system, which turns its events into memories
     mood_->step(time_.seconds, events_);
     movement_->step(things_->registry(), map_);
     melee_->step();
@@ -1365,6 +1405,9 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Worker* worker = reg.try_get<Worker>(entity)) {
             view.asleep = jobIsLyingDown(worker->job);
         }
+        if (const MentalBreaker* breaker = reg.try_get<MentalBreaker>(entity); breaker != nullptr && breaker->active) {
+            view.mentalBreak = defs_->idOf("MentalBreaks", breaker->def);
+        }
         if (const Carrying* carrying = reg.try_get<Carrying>(entity); carrying && reg.valid(carrying->thing)) {
             view.carriedDef = reg.get<Thing>(carrying->thing).def;
             view.carriedCount = reg.get<StackCount>(carrying->thing).count;
@@ -1449,6 +1492,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             if (const AnimalCare* care = husbandry_->care(entity)) {
                 view.markTame = care->markTame;
                 view.markSlaughter = care->markSlaughter;
+                view.markHunt = care->markHunt;
                 view.animalZone = care->zone;
                 view.learnedTricks = husbandry_->learnedMask(entity);
                 view.wantedTricks = husbandry_->wantedMask(entity);
@@ -1949,6 +1993,7 @@ uint64_t Sim::stateHash() const {
         social_->hashThing(e, h);
         defense_->hashThing(e, h);
         apparel_->hashThing(e, h);
+        mentalBreaks_->hashThing(e, h);
     }
     apparel_->hashState(h);
     return h.value();

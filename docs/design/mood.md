@@ -47,13 +47,14 @@ needs.md), a memory if it has `trigger` (the names the table says). The trigger 
 `MoodSystem::thoughts(pawn, now)` lists what counts now for the colonist panel (U8): label, offset, whether
 it is a situation, when a memory fades; strongest first.
 
-## Mental break thresholds (recorded, no breaks yet)
+## Mental break thresholds (the breaks themselves are [mental-breaks.md](mental-breaks.md), C19)
 
 `MoodBand`: Stable, Minor, Major, Extreme (break risk). The mood is **under** a threshold's level
 (35%, 20%, 5% of the scale, `MoodRules.breakThreshold`) when in that band; the worst band wins. A trait's
 `statOffsets.mentalBreakThreshold` (Nerves: volatile +0.15, iron-willed -0.18) moves all three
 (`MoodSystem::breakLevels`). `Mood::band` is kept up to date; when it changes a **`PawnMoodBand`** event
-says so (`message` the new band, `amount` the mood). Nothing happens yet: mental breaks come later.
+says so (`message` the new band, `amount` the mood). The mental break system (C19) rolls for a break from the band; a
+break that ends calm raises the `Catharsis` memory (trigger `MentalBreakEnded`) and an insult the `Insulted` one.
 
 ## Temperature thoughts (E2)
 
@@ -97,3 +98,6 @@ list says where each stage ends, and the stage's `moodOffset` counts. A conditio
 
 Mental breaks, inspirations, ideology and precepts; thoughts from pain, injuries,
 joy, relationships, other pawns' deaths; social and mood stacking beyond one of each; thoughts from traits' `moodWithRangedWeapon`.
+Inspirations, ideology and precepts; thoughts from pain, injuries, rooms, beauty,
+temperature, joy, relationships, other pawns' deaths, passions at work (`SkillRules.passionMood` is read by
+nothing yet); social and mood stacking beyond one of each; thoughts from traits' `moodWithRangedWeapon`.

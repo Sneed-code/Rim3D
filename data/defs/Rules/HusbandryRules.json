@@ -21,6 +21,15 @@
     "slaughterXp": 50,
     "feedXp": 20,
     "repathSeconds": 600,
+    "huntRangeShare": 0.8,
+    "huntMinRange": 3,
+    "huntMaxSeconds": 900,
+    "huntRepathSeconds": 3,
+    "butcherEfficiencyBase": 0.75,
+    "butcherEfficiencyPerLevel": 0.025,
+    "butcherManipulationImportance": 0.9,
+    "butcherMaxEfficiency": 1.5,
+    "butcherXp": 30,
     "dietFoods": {
       "Herbivore": ["Plant"],
       "Carnivore": ["Meat", "Kibble"],
@@ -33,8 +42,9 @@
       {"name": "Haul", "trainability": "Advanced", "steps": 30, "prerequisite": "Obedience"}
     ],
     "unverified": ["interactSeconds", "slaughterSeconds", "feedNutritionPerBodySize", "attemptIntervalSeconds", "decayDays",
-                   "trainables", "tameXp", "trainXp", "slaughterXp"],
+                   "trainables", "tameXp", "trainXp", "slaughterXp", "butcherXp"],
     "ours": ["feedSeconds", "skillChanceBase", "skillChancePerLevel", "handReach", "holdRadius", "starveDays", "handFeedBelow",
-             "workMinFood", "homeRadius", "itemRadius", "feedXp", "repathSeconds", "dietFoods"]
+             "workMinFood", "homeRadius", "itemRadius", "feedXp", "repathSeconds", "dietFoods", "huntRangeShare", "huntMinRange",
+             "huntMaxSeconds", "huntRepathSeconds"]
   }
 ]
