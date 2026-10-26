@@ -265,6 +265,7 @@ const char* eventTypeName(EventType type) {
         case EventType::SocialFight: return "SocialFight";
         case EventType::OutOfFuel: return "OutOfFuel";
         case EventType::Refueled: return "Refueled";
+        case EventType::FirefoamPopped: return "FirefoamPopped";
     }
     return "?";
 }

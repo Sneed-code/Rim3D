@@ -7,6 +7,7 @@
 #include "ColonySim/Construction.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Fire.h"
 #include "ColonySim/Social.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Fuel.h"
@@ -795,6 +796,13 @@ void JobSystem::step() {
             }
             dropCarried(pawn);  // the player's colonist may carry something with no job (U10)
             restUnderPawn(pawn);
+            continue;
+        }
+        // On fire: it runs about in panic, thinking of nothing else (docs/design/fire.md). A pawn who can't (no panic) thinks as usual.
+        if (fire_ != nullptr && reg.all_of<Burning>(pawn) && fire_->panicStep(pawn, time_.seconds)) {
+            if (reg.get<Worker>(pawn).job.type != JobType::None) {
+                endJob(pawn, JobEnd::Interrupted, "it is on fire");
+            }
             continue;
         }
         if (Health* health = reg.try_get<Health>(pawn)) {
