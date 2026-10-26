@@ -301,7 +301,14 @@ TEST_CASE("Rooms: colonists build a walled room with a door and it is roofed whe
     int steps = 0;
     for (; steps < 12000 && !ringDone(); ++steps) {
         sim.step();
-        roofedEarly = roofedEarly || (!ringDone() && sim.map().roof(CellPos{22, 22, 0}) != Roof::None);
+        // The corner walls don't close the room (cells are 4-connected), so a roof may come before the last corner.
+        bool sidesDone = true;
+        for (int i = 21; i <= 23; ++i) {
+            for (const CellPos c : {CellPos{i, 20, 0}, CellPos{i, 24, 0}, CellPos{20, i, 0}, CellPos{24, i, 0}}) {
+                sidesDone = sidesDone && sim.map().buildingAt(c) != kNoEntity;
+            }
+        }
+        roofedEarly = roofedEarly || (!sidesDone && sim.map().roof(CellPos{22, 22, 0}) != Roof::None);
     }
     const Room* room = roomsAt(sim, 22, 22);
     ROOMS_REQUIRE(room != nullptr);

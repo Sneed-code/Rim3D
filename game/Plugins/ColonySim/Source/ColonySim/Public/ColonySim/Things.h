@@ -1,9 +1,11 @@
 #pragma once
 
+#include "ColonySim/Api.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Grid.h"
+#include "ColonySim/Map.h"
 
 #include <entt/entity/registry.hpp>
 
@@ -72,6 +74,23 @@ struct HitPoints {
     int max = 0;
 };
 
+// Items that rot, wear out in the open, or remember how they were made (task C16,
+// docs/design/spoilage.md). Made with the item when its def has a `Rottable` comp, a
+// `stats.deteriorationRate`, or is a meal. `rot` goes from 0 (fresh) to 1 (rotted away); `decay` is
+// the part of a hit point worn off but not yet taken off HitPoints (always under 1). A meal lists
+// the defs of what it was cooked from (sorted by def id) and may be `poisoned`.
+struct Spoilage {
+    float rot = 0.0f;
+    float decay = 0.0f;
+    bool poisoned = false;
+    std::vector<DefId> ingredients;
+};
+
+// Whether a Things def makes items with a Spoilage component.
+bool thingHasSpoilage(const Def& def);
+// Days an item takes to rot (its Rottable comp's `daysToRotStart`); 0 if it doesn't rot.
+double thingRotDays(const Def& def);
+
 // Pawns. `metresPerStep` is the def's `stats.moveSpeed` (metres per game second, converted by the
 // importer): the speed on flat ground with no path cost. `path` is the route being walked, the
 // waypoints left after `smoothPath`; `next` the index of the waypoint being walked to, and
@@ -99,8 +118,14 @@ struct Mover {
     // walking past can't shove it out of its working cell. Others steer round it. Not saved: the
     // next step sets it again before anyone moves.
     bool hold = false;
+    // Metres up (or down) the stairs or ladder the pawn is on (docs/design/levels.md): while the
+    // next waypoint is on another level, the pawn stays in the cell in front of the climb and this
+    // counts up to the climb's length; then it stands in the cell at the other end. 0 otherwise.
+    float climbed = 0.0f;
 
     bool arrived() const { return next >= path.size(); }
+    // True while the pawn is going up or down stairs or a ladder.
+    bool climbing(int level) const { return !arrived() && path[next].level != level; }
     // Sets off along `route` (cells after the one the pawn is in) from where the pawn stands.
     void walkTo(float x, float y, std::vector<CellPos> route) {
         path = std::move(route);
@@ -110,8 +135,16 @@ struct Mover {
         blockedSteps = 0;
         heldSteps = 0;
         gaveUp = false;
+        climbed = 0.0f;
     }
 };
+
+// The links between levels of stairs or a ladder (task M2, docs/design/levels.md): a building whose
+// def has `building.climb`, covering `rect` and facing `rot`, is climbed towards its facing (North
+// is +y), one link per cell of its width. Each runs from the cell in front of its foot, on the
+// building's level, to the cell beyond its head one level up. Its length is the flat distance
+// between the two cells' middles and the rise of one level. Empty for a link that would leave the map's levels.
+COLONY_API std::vector<LevelLink> levelLinksOf(const CellRect& rect, Rot4 rot, Entity building, float speedFactor);
 
 // On the one pawn the player controls directly (task U9, docs/design/protagonist.md). The
 // movement system leaves it alone and DirectMoveCommand moves it.
@@ -151,6 +184,13 @@ public:
     // Items lying in a cell, in entity id order. Usually none or one (one stack per cell is the
     // storage rule), but spawning can put more in one cell.
     const std::vector<Entity>& itemsAt(CellPos cell) const;
+    // Goes up whenever an item is put on the map or taken off it, so a system that reads what lies
+    // in cells can tell its picture is stale (RoomStats).
+    uint64_t itemChanges() const { return itemChanges_; }
+
+    // Adds `count` of `from` to the stack `into` (the caller destroys `from` or lowers its count): the
+    // rot of the two is averaged by count, ingredients are joined, and one poisoned part poisons the stack.
+    void addToStack(Entity into, Entity from, int count);
 
     // Splits `count` off an item stack: a new item of the same def, off the map, with `count`,
     // and the stack keeps the rest. Returns kNoEntity if `count` isn't less than the stack.
@@ -173,12 +213,16 @@ public:
     size_t count() const;
 
 private:
+    // Adds the level links of stairs or a ladder that was just put on the map.
+    void linkLevels(Entity thing);
+
     Map& map_;
     std::shared_ptr<const DefDatabase> defs_;
     entt::registry registry_;
     std::vector<Event>* events_ = nullptr;
     // Items per cell, by packed cell key. Looked up only, never iterated (its order is not fixed).
     std::unordered_map<uint64_t, std::vector<Entity>> itemsAt_;
+    uint64_t itemChanges_ = 0;
 
     void indexItem(Entity thing, CellPos cell, bool add);
     void placeFootprint(Entity thing, const CellRect& rect, const Footprint& footprint);

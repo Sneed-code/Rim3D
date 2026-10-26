@@ -1,0 +1,41 @@
+[
+  {
+    "defName": "PrisonerRules",
+    "source": "RimWorld wiki (Prisoner, Recruit)",
+    "initialResistance": [5, 9],
+    "resistancePerChat": 1.0,
+    "moodFactor": [[0, 0.2], [50, 1.0], [100, 1.5]],
+    "negotiationBase": 0.5,
+    "negotiationPerLevel": 0.05,
+    "defaultSkillLevel": 8,
+    "chatIntervalSeconds": 21600,
+    "chatWorkSeconds": 360,
+    "feedWorkSeconds": 120,
+    "chatXp": 100,
+    "recruitChanceBase": 0.5,
+    "recruitChanceMin": 0.05,
+    "recruitChanceMax": 0.95,
+    "captureSafeRadius": 25,
+    "feedBelow": 0.3,
+    "edgeSearch": 40,
+    "unverified": [
+      "initialResistance"
+    ],
+    "ours": [
+      "negotiationBase",
+      "negotiationPerLevel",
+      "chatIntervalSeconds",
+      "chatWorkSeconds",
+      "feedWorkSeconds",
+      "chatXp",
+      "recruitChanceBase",
+      "recruitChanceMin",
+      "recruitChanceMax",
+      "captureSafeRadius",
+      "feedBelow",
+      "edgeSearch",
+      "defaultSkillLevel"
+    ],
+    "notes": "initialResistance is the range of the wiki's Warrior example (a raider kind's own range is not on the wiki page). resistancePerChat and moodFactor are the wiki's: reduction = 1.0 x opinion factor (C20) x mood factor x negotiation ability. The wiki gives no interval ('every several hours'), no recruit chance and no negotiation formula: those are ours."
+  }
+]

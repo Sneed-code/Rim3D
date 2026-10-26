@@ -109,6 +109,8 @@ public:
 
     const MentalBreakRules& rules() const { return rules_; }
     void setEventLog(std::vector<Event>* events) { events_ = events; }
+    // Whether colonists snap by themselves (default yes). Off for tests of something else that run for days.
+    void setNatural(bool natural) { natural_ = natural; }
 
     // A feature a break can need (a MentalBreaks def's `requires`): "fire" once E4 is in. A break
     // that needs one nothing provides never starts.
@@ -200,6 +202,7 @@ private:
     std::vector<std::string> features_;
     std::vector<float> nutrition_;  // by Things def: what one of it feeds, 0 for anything that isn't food
     std::vector<Event>* events_ = nullptr;
+    bool natural_ = true;
 };
 
 }  // namespace colony

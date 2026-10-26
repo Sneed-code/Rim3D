@@ -40,12 +40,25 @@ bool StockpileZone::allows(DefId def) const {
 Zones::Zones(const Map& map)
     : map_(map), zoneOf_(static_cast<size_t>(map.width()) * static_cast<size_t>(map.height()), kNoZone) {}
 
+// Level after level; upper levels are added to zoneOf_ the first time a zone is made on them.
 size_t Zones::slot(CellPos c) const {
-    return static_cast<size_t>(map_.index(c));
+    return static_cast<size_t>(c.level) * static_cast<size_t>(map_.width()) * static_cast<size_t>(map_.height()) +
+           static_cast<size_t>(map_.index(c));
+}
+
+void Zones::sizeFor(int level) {
+    const size_t cells = static_cast<size_t>(level + 1) * static_cast<size_t>(map_.width()) * static_cast<size_t>(map_.height());
+    if (zoneOf_.size() < cells) {
+        zoneOf_.resize(cells, kNoZone);
+    }
 }
 
 ZoneId Zones::zoneAt(CellPos c) const {
-    return map_.inBounds(c) ? zoneOf_[slot(c)] : kNoZone;
+    if (!map_.inBounds(c)) {
+        return kNoZone;
+    }
+    const size_t i = slot(c);
+    return i < zoneOf_.size() ? zoneOf_[i] : kNoZone;
 }
 
 const StockpileZone* Zones::find(ZoneId id) const {
@@ -66,10 +79,14 @@ const StockpileZone* Zones::stockpileAt(CellPos c) const {
 ZoneId Zones::createStockpile(const CellRect& area, StoragePriority priority) {
     StockpileZone zone;
     zone.priority = priority == StoragePriority::Unstored ? StoragePriority::Low : priority;
+    if (area.level < 0 || area.level >= map_.levels()) {
+        return kNoZone;
+    }
+    sizeFor(area.level);
     for (int y = area.minY; y < area.minY + area.sizeY; ++y) {
         for (int x = area.minX; x < area.minX + area.sizeX; ++x) {
             const CellPos c{x, y, area.level};
-            if (map_.walkable(c) && zoneOf_[slot(c)] == kNoZone) {
+            if (map_.walkable(c) && zoneOf_[slot(c)] == kNoZone && !(taken_ && taken_(c))) {
                 zone.cells.push_back(c);
             }
         }
@@ -148,7 +165,12 @@ bool Zones::restore(std::vector<StockpileZone> stockpiles, ZoneId nextId, std::s
         std::sort(zone.disallowed.begin(), zone.disallowed.end(), zonesDefBefore);
         std::sort(zone.cells.begin(), zone.cells.end(), zonesCellBefore);
         for (const CellPos& c : zone.cells) {
-            if (!map_.inBounds(c) || zoneOf_[slot(c)] != kNoZone) {
+            if (!map_.inBounds(c)) {
+                error = "the save has a stockpile zone outside the map or on top of another";
+                return false;
+            }
+            sizeFor(c.level);
+            if (zoneOf_[slot(c)] != kNoZone) {
                 error = "the save has a stockpile zone outside the map or on top of another";
                 return false;
             }

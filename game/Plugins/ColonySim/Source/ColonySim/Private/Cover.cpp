@@ -16,7 +16,7 @@ constexpr float kCoverFar = 1.0e30f;
 Cover::Cover(const Map& map) : map_(map) {}
 
 void Cover::markDirty(CellPos c) {
-    if (built_ && map_.inBounds(c)) {
+    if (built_ && map_.onGround(c)) {
         dirty_.push_back(c);
     }
 }
@@ -28,7 +28,7 @@ void Cover::computeCell(int index) {
         const Dir8Step step = dir8Step(static_cast<Dir8>(d));
         const CellPos n{c.x + step.dx, c.y + step.dy, c.level};
         uint8_t dm = 0;
-        if (map_.inBounds(n)) {
+        if (map_.onGround(n)) {
             const uint8_t obstacle = map_.obstacleDm(n);
             if (obstacle == kObstacleTallDm) {
                 dm = kObstacleTallDm;
@@ -64,7 +64,7 @@ void Cover::update() {
         for (int dy = -1; dy <= 1; ++dy) {
             for (int dx = -1; dx <= 1; ++dx) {
                 const CellPos n{c.x + dx, c.y + dy, c.level};
-                if (map_.inBounds(n)) {
+                if (map_.onGround(n)) {
                     scratch_.push_back(map_.index(n));
                 }
             }
@@ -80,7 +80,7 @@ void Cover::update() {
 
 float Cover::coverHeight(CellPos c, Dir8 d) {
     update();
-    if (!map_.inBounds(c)) {
+    if (!map_.onGround(c)) {
         return 0.0f;
     }
     return static_cast<float>(coverDm_[static_cast<size_t>(map_.index(c)) * kDir8Count + static_cast<size_t>(d)]) * 0.1f;
@@ -104,7 +104,7 @@ float Cover::coverAgainst(CellPos c, Stance stance, float fromX, float fromY) {
 // of the two.
 bool Cover::cellBlocks(int x, int y, float heightA, float heightB) const {
     const CellPos c{x, y, 0};
-    if (!map_.inBounds(c)) {
+    if (!map_.onGround(c)) {
         return true;
     }
     const uint8_t obstacle = map_.obstacleDm(c);
@@ -119,7 +119,7 @@ bool Cover::lineOfSight(const Viewpoint& from, const Viewpoint& to) const {
     ++sightQueries_;
     const CellPos a{static_cast<int>(std::floor(from.x)), static_cast<int>(std::floor(from.y)), from.level};
     const CellPos b{static_cast<int>(std::floor(to.x)), static_cast<int>(std::floor(to.y)), to.level};
-    if (!map_.inBounds(a) || !map_.inBounds(b)) {
+    if (!map_.onGround(a) || !map_.onGround(b)) {
         return false;
     }
     if (a == b) {

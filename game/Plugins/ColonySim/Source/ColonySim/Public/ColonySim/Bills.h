@@ -26,6 +26,14 @@ struct Bill {
     BillMode mode = BillMode::Count;
     int count = 1;  // Count: times left; UntilHave: the stock to reach; Forever: unused
     bool suspended = false;
+    // The details RimWorld's bill dialog adds (task C14, docs/design/crafting.md).
+    int skillMin = 0;        // only a worker whose skill in the recipe's skill is within [skillMin, skillMax] takes it
+    int skillMax = 20;
+    float radius = 0.0f;     // ingredients are taken from within this many metres of the building; 0 is anywhere
+    uint32_t storeZone = 0;  // 0: products stay where the crafter made them; else haulers take them to this stockpile
+    int unpauseAt = 0;       // UntilHave: once `count` is reached the bill waits until the stock is under this (0: restarts under `count`)
+    bool satisfied = false;  // UntilHave with `unpauseAt`: the stock reached `count` and has not fallen under `unpauseAt` since
+    std::vector<DefId> disallowed;  // item defs the bill may not use as ingredients, sorted by value
 };
 
 // On a building that has had a bill added. Bills are tried in list order: the first that should be
@@ -62,6 +70,15 @@ struct Recipe {
     float skillXp = 0.0f;
     std::vector<RecipeIngredient> ingredients;
     std::vector<RecipeProduct> products;
+    bool stuffFromIngredient = false;  // the product is made of the stuff the ingredients are (clothes, weapons)
+    // How many things one run makes. A building that burns fuel per product burns this many times its `fuel.perUse`.
+    int productCount() const {
+        int made = 0;
+        for (const RecipeProduct& product : products) {
+            made += product.count;
+        }
+        return made;
+    }
 };
 
 // The numbers in the BillRules def (with these values when the def is missing).
@@ -92,6 +109,21 @@ public:
     // Changes a bill's mode, count and whether it is suspended (RimWorld's pause).
     bool setBill(Entity building, uint32_t bill, BillMode mode, int count, bool suspended, std::string& error);
 
+    // The bill's details (everything but mode, count and suspended). `skillMin` to `skillMax` is 0 to 20 at the
+    // widest; `radius` is 0 or more metres; `storeZone` is 0 or a stockpile (the caller checks it exists);
+    // `disallowed` are Things item defNames, unknown names fail.
+    struct Options {
+        int skillMin = 0;
+        int skillMax = 20;
+        float radius = 0.0f;
+        uint32_t storeZone = 0;
+        int unpauseAt = 0;
+        std::vector<std::string> disallowed;
+    };
+    bool setOptions(Entity building, uint32_t bill, const Options& options, std::string& error);
+    // Moves a bill to place `index` in the building's list (0 is tried first; past the end is the last place).
+    bool moveBill(Entity building, uint32_t bill, int index, std::string& error);
+
     // ---- Looking up --------------------------------------------------------------------------
     const BillList* billsOf(Entity building) const;
     const Bill* find(Entity building, uint32_t bill) const;
@@ -100,6 +132,11 @@ public:
     // True if the bill is not suspended and still has something to make: Count has times left,
     // UntilHave has fewer than `count` of the first product on the map, Forever always.
     bool shouldDo(const Bill& bill) const;
+    // True if the bill's ingredient filter lets the item def through.
+    static bool allowsIngredient(const Bill& bill, DefId item);
+    // One game minute of upkeep: "until you have" bills with an `unpauseAt` pause at their stock and wake
+    // when it falls.
+    void step();
     // How many of an item def lie on the map (carried and delivered ones are not counted).
     int stockOf(DefId item) const;
     // Cooking speed of a pawn for a recipe: (base + perLevel x level of the recipe's skill), 1.0 at

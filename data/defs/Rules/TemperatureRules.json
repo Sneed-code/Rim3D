@@ -1,0 +1,15 @@
+[
+  {
+    "defName": "TemperatureRules", "source": "Rim3D",
+    "intervalSeconds": 60,
+    "conductancePerHour": {
+      "wall": 0.04, "doorClosed": 0.06, "doorOpen": 6.0, "vent": 3.0,
+      "roofThin": 0.024, "roofThick": 0.004, "rock": 0.004
+    },
+    "safeMarginC": 10.0,
+    "frostbiteSeverity": 3.0,
+    "note": "A pawn's comfortable range is widened by what it wears (apparel insulation, C15). How fast heat moves between a room and what is round it. Per game hour, as a share of the temperature difference for each boundary cell, divided by the room's cell count (docs/design/temperature.md). A closed 5 x 5 room with a thin roof loses about 1/18 of the difference an hour.",
+    "unverified": ["safeMarginC"],
+    "ours": ["intervalSeconds", "conductancePerHour", "frostbiteSeverity"]
+  }
+]

@@ -404,7 +404,7 @@ void MentalBreakSystem::step(int64_t now, Rng& rng) {
             tick(pawn, reg.get<MentalBreaker>(pawn), now, rng);
         }
     }
-    if (!rules_.present || kinds_.empty()) {
+    if (!natural_ || !rules_.present || kinds_.empty()) {
         return;
     }
     std::vector<Entity> pawns;

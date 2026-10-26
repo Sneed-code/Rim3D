@@ -74,7 +74,7 @@ Mineables::Mineables(Map& map, const DefDatabase& defs, uint64_t seed)
 }
 
 bool Mineables::map_inBounds(CellPos c) const {
-    return map_.inBounds(c);
+    return map_.onGround(c);
 }
 
 size_t Mineables::indexOf(CellPos c) const {
@@ -242,7 +242,7 @@ void Mineables::generate(const DefDatabase& defs) {
                 const CellPos c = map_.cellAt(i);
                 const CellPos around[4] = {{c.x + 1, c.y, 0}, {c.x - 1, c.y, 0}, {c.x, c.y + 1, 0}, {c.x, c.y - 1, 0}};
                 for (const CellPos& n : around) {
-                    if (map_.inBounds(n) && kind_[indexOf(n)] != 0 && !kinds_[static_cast<size_t>(kind_[indexOf(n)]) - 1].isOre) {
+                    if (map_.onGround(n) && kind_[indexOf(n)] != 0 && !kinds_[static_cast<size_t>(kind_[indexOf(n)]) - 1].isOre) {
                         frontier.push_back(static_cast<int>(indexOf(n)));
                     }
                 }

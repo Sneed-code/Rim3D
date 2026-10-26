@@ -6,6 +6,7 @@
 #include "ColonySim/Grid.h"
 
 #include <cstdint>
+#include <functional>
 #include <utility>
 #include <vector>
 
@@ -15,6 +16,7 @@ class DefDatabase;
 class Map;
 class Rooms;
 class Things;
+class Weather;
 
 // Light and darkness. See docs/design/light.md.
 //
@@ -59,7 +61,14 @@ public:
     // that is not a building change (power, fuel, fire).
     void markDirty() { dirty_ = true; }
 
-    // The sun's glow now, from the time of day. 0 at night, 1 by day.
+    // A building with `glower` shines only while this says it is active (power: a lamp with no power is
+    // dark). Unset: every light shines. Call markDirty when an answer changes.
+    void setActive(std::function<bool(Entity)> active) { active_ = std::move(active); }
+
+    // Cloud, rain and fog dim the sun by the weather's `skyGlow` (docs/design/weather.md); null: they don't.
+    void setWeather(const Weather* weather) { weather_ = weather; }
+
+    // The sun's glow now, from the time of day and the weather. 0 at night, 1 on a clear day.
     float skyGlow() const;
     // Light at a cell, 0 to 1; 0 outside the map. The cell's roof decides whether the sun reaches it.
     float lightAt(CellPos c) const;
@@ -83,7 +92,9 @@ private:
     Things& things_;
     const Rooms& rooms_;
     const GameTime& time_;
+    const Weather* weather_ = nullptr;
     LightNumbers numbers_;
+    std::function<bool(Entity)> active_;
     std::vector<uint8_t> lightDef_;  // per def id: 1 if it has glower
     std::vector<float> lamp_;        // per cell
     std::vector<int> touched_;       // cells lamp_ is non-zero in, to clear

@@ -1,0 +1,49 @@
+[
+  {
+    "defName": "Gun_MiniTurret", "label": "mini-turret gun", "source": "RimWorld wiki",
+    "category": "Item", "stackLimit": 1, "turretGun": true,
+    "visual": {"parts": [{"shape": "box", "size": [0.5, 0.06, 0.06], "at": [0.1, 0, 0.04], "color": [0.2, 0.2, 0.22]}]},
+    "stats": { "maxHitPoints": 100, "rangedWeaponCooldown": 144, "accuracyTouch": 0.85, "accuracyShort": 0.8, "accuracyMedium": 0.7, "accuracyLong": 0.6 },
+    "verbs": [ { "range": 28.9, "warmupTime": 30, "burstShotCount": 3, "secondsBetweenBurstShots": 5, "defaultProjectile": "Bullet_MiniTurret" } ],
+    "unverified": ["stats", "verbs"],
+    "ours": ["turretGun", "visual"]
+  },
+  {
+    "defName": "Turret_Mini", "parent": "BuildingBase", "label": "mini-turret", "source": "RimWorld wiki",
+    "researchPrerequisite": "GunTurrets",
+    "size": [1, 1], "passability": "Impassable", "fillPercent": 0.4, "designationCategory": "Security",
+    "costs": { "Steel": 100, "ComponentIndustrial": 2 },
+    "visual": { "parts": [{"shape": "box", "size": [0.7, 0.7, 0.35], "color": [0.32, 0.34, 0.36]}, {"shape": "cylinder", "radius": 0.2, "height": 0.2, "at": [0, 0, 0.35], "color": [0.22, 0.24, 0.26]}, {"shape": "box", "size": [0.12, 0.7, 0.12], "at": [0, 0.25, 0.45], "color": [0.14, 0.14, 0.16]}] },
+    "stats": { "maxHitPoints": 100, "workToBuild": 1200, "flammability": 0.5 },
+    "power": { "consumption": 100 },
+    "turret": { "gun": "Gun_MiniTurret", "shootingSkill": 8, "muzzleHeight": 0.8 },
+    "explosion": { "damageDef": "Bomb", "damage": 25, "armorPenetration": 0.1, "radius": 2.9 },
+    "explodeWhenDestroyed": true,
+    "unverified": ["costs", "stats", "power", "fillPercent", "researchPrerequisite"],
+    "ours": ["turret", "explosion", "explodeWhenDestroyed", "visual"]
+  },
+  {
+    "defName": "TrapSpike", "parent": "BuildingBase", "label": "spike trap", "source": "RimWorld wiki",
+    "size": [1, 1], "designationCategory": "Security",
+    "costs": { "Steel": 25 },
+    "visual": { "parts": [{"shape": "box", "size": [0.9, 0.9, 0.05], "color": [0.3, 0.3, 0.32]}, {"shape": "cylinder", "radius": 0.04, "height": 0.2, "at": [-0.25, -0.25, 0.05], "color": [0.55, 0.55, 0.58]}, {"shape": "cylinder", "radius": 0.04, "height": 0.2, "at": [0.25, 0.25, 0.05], "color": [0.55, 0.55, 0.58]}, {"shape": "cylinder", "radius": 0.04, "height": 0.2, "at": [-0.25, 0.25, 0.05], "color": [0.55, 0.55, 0.58]}, {"shape": "cylinder", "radius": 0.04, "height": 0.2, "at": [0.25, -0.25, 0.05], "color": [0.55, 0.55, 0.58]}] },
+    "stats": { "maxHitPoints": 40, "workToBuild": 900, "flammability": 1.0 },
+    "trap": { "hits": 5, "damage": 100, "damageDef": "Stab", "damageFactorLow": 0.7, "damageFactorHigh": 1.3, "destroyChance": 0.1, "rearmable": true },
+    "unverified": ["costs", "stats", "trap.hits", "trap.damage", "trap.damageFactorLow", "trap.damageFactorHigh"],
+    "ours": ["trap.destroyChance", "visual"]
+  },
+  {
+    "defName": "TrapIEDExplosive", "parent": "BuildingBase", "label": "IED trap", "source": "RimWorld wiki",
+    "researchPrerequisite": "Machining",
+    "size": [1, 1], "designationCategory": "Security",
+    "costs": { "Steel": 7 },
+    "visual": { "parts": [{"shape": "cylinder", "radius": 0.25, "height": 0.12, "color": [0.35, 0.3, 0.2]}, {"shape": "box", "size": [0.12, 0.12, 0.05], "at": [0, 0, 0.12], "color": [0.7, 0.15, 0.1]}] },
+    "stats": { "maxHitPoints": 40, "workToBuild": 900, "flammability": 1.0 },
+    "trap": { "explodes": true },
+    "explosion": { "damageDef": "Bomb", "damage": 45, "armorPenetration": 0.1, "radius": 3.9 },
+    "explodeWhenDestroyed": true,
+    "unverified": ["costs", "stats", "explosion", "researchPrerequisite"],
+    "ours": ["trap", "explodeWhenDestroyed", "visual"]
+  },
+  {"defName": "FirefoamPopper", "parent": "BuildingBase", "label": "firefoam popper", "source": "RimWorld wiki", "researchPrerequisite": "Firefoam", "size": [1, 1], "designationCategory": "Security", "costs": {"Steel": 30}, "visual": {"parts": [{"shape": "cylinder", "radius": 0.3, "height": 0.55, "color": [0.75, 0.15, 0.12]}, {"shape": "cylinder", "radius": 0.1, "height": 0.12, "at": [0, 0, 0.55], "color": [0.85, 0.85, 0.88]}]}, "stats": {"maxHitPoints": 80, "workToBuild": 600, "flammability": 0.0}, "firefoam": {"radius": 9.0, "triggerRadius": 3.0}, "unverified": ["costs", "stats", "firefoam.radius", "researchPrerequisite"], "ours": ["firefoam.triggerRadius", "visual"]}
+]

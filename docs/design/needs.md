@@ -131,5 +131,5 @@ its food and rest still fall. Let go of it to have it look after itself.
 - Malnutrition's effect on consciousness; hunger and tiredness slowing work.
 - Plants to harvest (C3), medical beds, beds for
   guests and prisoners, sleeping spots, bedrolls, bed quality.
-- Recreation for Joy hours; meditation.
+- Meditation. (Recreation for Joy hours is C18: [recreation.md](recreation.md); the standard schedule now has Joy from 19:00 to 21:59.)
 - Food kept in a pawn's inventory; pawns feeding the downed.

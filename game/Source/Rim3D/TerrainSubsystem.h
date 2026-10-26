@@ -10,6 +10,7 @@
 
 class AActor;
 class UInstancedStaticMeshComponent;
+class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UProceduralMeshComponent;
 class USimSubsystem;
@@ -77,6 +78,11 @@ public:
 
 	bool IsBuilt() const { return bBuilt; }
 	bool IsTextured() const { return bTextured; }
+
+	/** How wet the ground looks, 0 dry to 1 soaked (darker and shinier; only the terrain material has it, and only once the
+	 *  TerrainMaterials commandlet has been run again since U13). The sky subsystem sets it from the rain. */
+	void SetGroundWetness(float Wetness);
+	float GetGroundWetness() const { return GroundWetness; }
 	const FTerrainStats& GetStats() const { return Stats; }
 
 	/** Chunk numbers of a cell. */
@@ -137,6 +143,12 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> PlantMaterial;
+
+	/** The terrain material as an instance of its own (null without the terrain material); GroundMaterial points at it. */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> GroundDynamic;
+
+	float GroundWetness = 0.0f;
 
 	TArray<FChunk> Chunks;
 	TArray<FPlantVisual> PlantVisuals;

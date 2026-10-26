@@ -1,11 +1,15 @@
 #include "MovementSystem.h"
 
+#include "ColonySim/Clock.h"
+#include "ColonySim/Combat.h"
+#include "ColonySim/Genes.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Lights.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Weather.h"
 
 #include <algorithm>
 #include <cmath>
@@ -179,19 +183,25 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
         // Injuries slow a pawn down (its Moving capacity); a downed or dead one doesn't walk.
         const Health* health = reg.try_get<Health>(a.entity);
         const float lightFactor = lights_ != nullptr ? lights_->moveSpeedAt(here) : 1.0f;
-        const float base = mover.metresPerStep * (health != nullptr ? health->movingFactor : 1.0f) * lightFactor;
-        if (base <= 0.0f || mover.hold) {
-            // Downed or dead, or working standing still: it stays where it is. Others still steer around it.
+        const float weatherFactor = weather_ != nullptr ? weather_->moveFactorAt(here) : 1.0f;
+        const PawnGenes* genes = reg.try_get<PawnGenes>(a.entity);
+        const float geneSpeed = genes != nullptr ? genes->effects.moveSpeed / static_cast<float>(kStepsPerRealSecondAt1x) : 0.0f;
+        const float base = std::max(0.0f, mover.metresPerStep + geneSpeed) * (health != nullptr ? health->movingFactor : 1.0f) *
+                           lightFactor * weatherFactor * (speedFactor_ ? speedFactor_(a.entity) : 1.0f);
+        if (base <= 0.0f || mover.hold || reg.all_of<KnockedDown>(a.entity)) {
+            // Downed or dead, knocked down by a blast, or working standing still: it stays where it is. Others still steer around it.
             a.newVx = 0.0f;
             a.newVy = 0.0f;
             mover.blockedSteps = 0;
             mover.heldSteps = 0;
+            mover.climbed = 0.0f;  // still in the cell in front of the climb: it starts again
             continue;
         }
         const float accel = base * kMoveAccelFraction;
 
-        // Where to: skip the waypoints already reached.
-        while (!mover.arrived()) {
+        // Where to: skip the waypoints already reached (a waypoint on another level is reached by
+        // climbing, below).
+        while (!mover.arrived() && !mover.climbing(a.level)) {
             const CellPos wp = mover.path[mover.next];
             const float dx = static_cast<float>(wp.x) + 0.5f - a.x;
             const float dy = static_cast<float>(wp.y) + 0.5f - a.y;
@@ -210,6 +220,38 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
             ++mover.next;
             mover.blockedSteps = 0;
         }
+
+        // Up or down stairs or a ladder: the pawn stays in the cell in front of it, out of everyone's
+        // way, while `climbed` counts up the climb's length; then it stands at the other end.
+        if (mover.climbing(a.level)) {
+            a.newVx = 0.0f;
+            a.newVy = 0.0f;
+            const CellPos to = mover.path[mover.next];
+            const LevelLink* link = map.levelLinkBetween(here, to);
+            if (link == nullptr) {
+                // The stairs are gone: the walk is given up and the job thinks again.
+                mover.path.clear();
+                mover.next = 0;
+                mover.gaveUp = true;
+                mover.climbed = 0.0f;
+                continue;
+            }
+            mover.climbed += base * link->speedFactor;
+            if (mover.climbed >= link->length) {
+                a.climbed = true;
+                a.toX = static_cast<float>(to.x) + 0.5f;
+                a.toY = static_cast<float>(to.y) + 0.5f;
+                a.toLevel = to.level;
+                mover.fromX = a.toX;
+                mover.fromY = a.toY;
+                ++mover.next;
+                mover.climbed = 0.0f;
+                mover.blockedSteps = 0;
+                mover.heldSteps = 0;
+            }
+            continue;
+        }
+        mover.climbed = 0.0f;
 
         // The velocity it wants and the fastest it may go.
         float wantX = 0.0f;
@@ -488,8 +530,14 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
         }
         Position& pos = reg.get<Position>(a.entity);
         Mover& mover = reg.get<Mover>(a.entity);
-        pos.x = a.x + a.newVx;
-        pos.y = a.y + a.newVy;
+        if (a.climbed) {
+            pos.x = a.toX;
+            pos.y = a.toY;
+            pos.level = a.toLevel;
+        } else {
+            pos.x = a.x + a.newVx;
+            pos.y = a.y + a.newVy;
+        }
         mover.vx = a.newVx;
         mover.vy = a.newVy;
     }

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <tuple>
 
 namespace colony {
 
@@ -62,6 +63,8 @@ Map::Map(const MapSettings& settings)
       passage_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), Passage::Open),
       obstacle_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), 0),
       roof_(static_cast<size_t>(settings.width) * static_cast<size_t>(settings.height), Roof::None),
+      chunksX_((settings.width + kUpperChunk - 1) / kUpperChunk),
+      chunksY_((settings.height + kUpperChunk - 1) / kUpperChunk),
       regions_(std::make_unique<Regions>(*this)),
       cover_(std::make_unique<Cover>(*this)) {
     if (!settings.flat) {
@@ -79,9 +82,35 @@ Cover& Map::cover() {
     return *cover_;
 }
 
+Map::UpperChunk& Map::upperChunkFor(CellPos c) {
+    if (upper_.empty()) {
+        upper_.resize(static_cast<size_t>(kLevels - 1) * static_cast<size_t>(chunksX_) * static_cast<size_t>(chunksY_));
+    }
+    std::unique_ptr<UpperChunk>& chunk = upper_[upperChunkIndex(c)];
+    if (!chunk) {
+        chunk = std::make_unique<UpperChunk>();
+    }
+    return *chunk;
+}
+
+Roof& Map::roofSlot(CellPos c) {
+    return c.level == 0 ? roof_[static_cast<size_t>(index(c))] : upperChunkFor(c).roof[upperSlot(c)];
+}
+
 void Map::setBuilding(CellPos c, Entity building, Passage passage, uint8_t obstacleDm) {
-    const size_t i = static_cast<size_t>(index(c));
     ++buildingChanges_;
+    if (c.level != 0) {
+        UpperChunk& chunk = upperChunkFor(c);
+        const size_t i = upperSlot(c);
+        chunk.building[i] = building;
+        chunk.obstacle[i] = obstacleDm;  // cover is worked out for the ground only so far
+        if (chunk.passage[i] != passage) {
+            chunk.passage[i] = passage;
+            regions_->markDirty(c);
+        }
+        return;
+    }
+    const size_t i = static_cast<size_t>(index(c));
     building_[i] = building;
     if (obstacle_[i] != obstacleDm) {
         obstacle_[i] = obstacleDm;
@@ -94,6 +123,10 @@ void Map::setBuilding(CellPos c, Entity building, Passage passage, uint8_t obsta
 }
 
 void Map::setObstacle(CellPos c, uint8_t obstacleDm) {
+    if (c.level != 0) {
+        upperChunkFor(c).obstacle[upperSlot(c)] = obstacleDm;
+        return;
+    }
     const size_t i = static_cast<size_t>(index(c));
     if (obstacle_[i] != obstacleDm) {
         obstacle_[i] = obstacleDm;
@@ -101,11 +134,45 @@ void Map::setObstacle(CellPos c, uint8_t obstacleDm) {
     }
 }
 
+void Map::addLevelLink(const LevelLink& link) {
+    const auto before = [](const LevelLink& a, const LevelLink& b) {
+        const auto key = [](CellPos c) { return std::make_tuple(c.level, c.y, c.x); };
+        return key(a.low) != key(b.low) ? key(a.low) < key(b.low) : key(a.high) < key(b.high);
+    };
+    levelLinks_.insert(std::upper_bound(levelLinks_.begin(), levelLinks_.end(), link, before), link);
+    regions_->markDirty(link.low);
+    regions_->markDirty(link.high);
+}
+
+void Map::removeLevelLinks(Entity building) {
+    for (auto it = levelLinks_.begin(); it != levelLinks_.end();) {
+        if (it->building == building) {
+            regions_->markDirty(it->low);
+            regions_->markDirty(it->high);
+            it = levelLinks_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+const LevelLink* Map::levelLinkBetween(CellPos a, CellPos b) const {
+    for (const LevelLink& link : levelLinks_) {
+        if ((link.low == a && link.high == b) || (link.low == b && link.high == a)) {
+            return &link;
+        }
+    }
+    return nullptr;
+}
+
 void Map::clearBuilding(CellPos c) {
     setBuilding(c, kNoEntity, Passage::Open, 0);
 }
 
 void Map::setTerrain(CellPos c, Terrain terrain) {
+    if (c.level != 0 || terrain == Terrain::Air || terrain == Terrain::UpperFloor) {
+        return;  // upper floors are laid with setUpperFloor
+    }
     const size_t i = static_cast<size_t>(index(c));
     if (terrain_[i] == terrain) {
         return;
@@ -119,6 +186,61 @@ void Map::setTerrain(CellPos c, Terrain terrain) {
     if (obstacleDm(c) != obstacleBefore) {
         cover_->markDirty(c);
     }
+}
+
+bool Map::setUpperFloor(CellPos c, bool floor) {
+    if (c.level < 1 || !inBounds(c)) {
+        return false;
+    }
+    if (upperFloor(c) == floor) {
+        return true;
+    }
+    upperChunkFor(c).floor[upperSlot(c)] = floor ? 1 : 0;
+    ++upperFloorChanges_;
+    regions_->markDirty(c);
+    // The cell below gained or lost its roof; rooms below see it through buildingChanges.
+    ++buildingChanges_;
+    return true;
+}
+
+std::vector<CellPos> Map::upperFloorCells() const {
+    std::vector<CellPos> out;
+    for (size_t k = 0; k < upper_.size(); ++k) {
+        const UpperChunk* chunk = upper_[k].get();
+        if (chunk == nullptr) {
+            continue;
+        }
+        const int perLevel = chunksX_ * chunksY_;
+        const int level = static_cast<int>(k) / perLevel + 1;
+        const int x0 = static_cast<int>(k) % perLevel % chunksX_ * kUpperChunk;
+        const int y0 = static_cast<int>(k) % perLevel / chunksX_ * kUpperChunk;
+        for (int i = 0; i < UpperChunk::kCells; ++i) {
+            if (chunk->floor[static_cast<size_t>(i)] != 0) {
+                out.push_back(CellPos{x0 + i % kUpperChunk, y0 + i / kUpperChunk, level});
+            }
+        }
+    }
+    std::sort(out.begin(), out.end(), [](const CellPos& a, const CellPos& b) {
+        return a.level != b.level ? a.level < b.level : (a.y != b.y ? a.y < b.y : a.x < b.x);
+    });
+    return out;
+}
+
+uint64_t Map::upperFloorHash() const {
+    uint64_t hash = 0xCBF29CE484222325ULL;
+    for (size_t k = 0; k < upper_.size(); ++k) {
+        const UpperChunk* chunk = upper_[k].get();
+        if (chunk == nullptr) {
+            continue;
+        }
+        for (int i = 0; i < UpperChunk::kCells; ++i) {
+            if (chunk->floor[static_cast<size_t>(i)] != 0) {
+                hash ^= static_cast<uint64_t>(k) * static_cast<uint64_t>(UpperChunk::kCells) + static_cast<uint64_t>(i);
+                hash *= 0x100000001B3ULL;
+            }
+        }
+    }
+    return hash;
 }
 
 void Map::generate() {
@@ -152,7 +274,7 @@ void Map::generate() {
     }
 }
 
-float Map::heightAt(float x, float y) const {
+float Map::heightAt(float x, float y, int level) const {
     x = std::clamp(x, 0.0f, static_cast<float>(width_ - 1));
     y = std::clamp(y, 0.0f, static_cast<float>(height_ - 1));
     const int x0 = static_cast<int>(x);
@@ -164,7 +286,7 @@ float Map::heightAt(float x, float y) const {
     const auto h = [this](int cx, int cy) { return groundHeight_[static_cast<size_t>(cy * width_ + cx)]; };
     const float top = h(x0, y0) + (h(x1, y0) - h(x0, y0)) * fx;
     const float bottom = h(x0, y1) + (h(x1, y1) - h(x0, y1)) * fx;
-    return top + (bottom - top) * fy;
+    return top + (bottom - top) * fy + static_cast<float>(level) * kLevelHeightM;
 }
 
 uint64_t Map::contentHash() const {

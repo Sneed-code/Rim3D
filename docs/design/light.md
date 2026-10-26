@@ -12,8 +12,8 @@ Every cell has a light level, 0 (pitch dark) to 1 (full light): the larger of th
 the lamps' light. `sim.lights().lightAt(cell)` is the one call others use.
 
 - **Sun.** `skyGlow()` follows the hour of the day: 0 until 05:00, up to 1 at 07:00, 1 until 17:00,
-  down to 0 at 19:00 (`LightRules.skyGlowByHour`, our shape; no seasons or weather yet, E1 can scale
-  it). It lights only cells with no roof, thin or thick (`underOpenSky`), so a built room and a mined
+  down to 0 at 19:00 (`LightRules.skyGlowByHour`, our shape), times the weather's `skyGlow` since E1 (a
+  thunderstorm lets 45% through, fog 85%; [weather.md](weather.md)). It lights only cells with no roof, thin or thick (`underOpenSky`), so a built room and a mined
   tunnel are dark inside whatever the hour.
 - **Lamps.** A building def with `glower: { radius, glow }` lights the cells round its
   position: `glow` at the source, falling in a straight line to 0 at `radius` metres. Something at
@@ -43,8 +43,10 @@ steps puts a lamp beside the worker.
 
 ## For later tasks
 
-- **E5 power:** a lamp that is off should not shine. Take it out of the source scan (a `lit` check in
-  `Lights::rebuild`) and call `lights().markDirty()` when power changes.
+- **C11 fuel (done):** a lamp whose building has a `Fuel` part with nothing in it is left out of
+  the source scan, and `FuelSystem` calls `lights().markDirty()` when fuel runs out or comes back.
+- **E5 power:** a lamp that is off should not shine. Add a power check next to the fuel one in
+  `Lights::rebuild` and call `lights().markDirty()` when power changes.
 - **E4 fire, U14:** `lights().sources()` lists the lamps (building, cell, radius, glow); fire can add
   its own. U14 draws a real light for each.
 - **D9 thoughts:** "dark" and "in the light" can read `lightAt(pawn cell)`.

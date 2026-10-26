@@ -1,9 +1,11 @@
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/Random.h"
+#include "ColonySim/Research.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
 
@@ -33,6 +35,33 @@ std::vector<CellPos> scenarioNearbyCells(const Map& map, CellPos from, size_t li
     return cells;
 }
 
+// The lineage of a colonist who rolls one: a draw from the scenario's `lineageWeights` with its own
+// stream from the colonist's seed (so nothing else in the sim moves), or the scenario's `lineage`
+// when it has no weights. Whole-number weights, keys in name order: the same draw everywhere.
+std::string scenarioRollLineage(const Def& scenario, uint64_t colonistSeed, const std::string& fallback) {
+    std::vector<std::string> names = scenario.keys("lineageWeights");
+    std::sort(names.begin(), names.end());
+    std::vector<uint32_t> weights;
+    uint32_t total = 0;
+    for (const std::string& name : names) {
+        const double w = std::max(0.0, scenario.number(("lineageWeights." + name).c_str(), 0.0));
+        weights.push_back(static_cast<uint32_t>(w * 100.0 + 0.5));
+        total += weights.back();
+    }
+    if (total == 0) {
+        return fallback;
+    }
+    Rng rng(splitMix64(colonistSeed ^ 0x6C696E6561676573ULL), 11);
+    uint32_t pick = rng.below(total);
+    for (size_t i = 0; i < names.size(); ++i) {
+        if (pick < weights[i]) {
+            return names[i];
+        }
+        pick -= weights[i];
+    }
+    return fallback;
+}
+
 }  // namespace
 
 // Starts the scenario named in the settings (docs/design/colonists.md): the protagonist and the
@@ -58,6 +87,22 @@ void Sim::startScenario() {
     if (!scenario->text("lineage").empty() && defs_->find("Lineages", lineage) == nullptr) {
         setupErrors_.push_back("scenario '" + settings_.scenario + "': no Lineages def '" + lineage + "'");
         return;
+    }
+
+    for (const std::string& name : scenario->keys("lineageWeights")) {
+        if (defs_->find("Lineages", name) == nullptr) {
+            setupErrors_.push_back("scenario '" + settings_.scenario + "': no Lineages def '" + name + "'");
+            return;
+        }
+    }
+
+    // What the colony knows when it lands (docs/design/research.md).
+    research_->setNeolithicStart(scenario->flag("neolithicStart"));
+    for (size_t i = 0; i < scenario->count("startingResearch"); ++i) {
+        std::string error;
+        if (!research_->unlock(scenario->textAt("startingResearch", i), error)) {
+            setupErrors_.push_back("scenario '" + settings_.scenario + "': " + error);
+        }
     }
 
     const std::vector<CellPos> cells = scenarioNearbyCells(map_, *stockpileCell_, 6000);
@@ -92,8 +137,25 @@ void Sim::startScenario() {
             health->protagonist = colonist.protagonist;  // 2x part hit points (docs/design/health.md)
         }
         jobs_->addWorker(pawn, colonist.disabledWorkTags);
-        giveLooks(pawn, colonistSeed, colonist.female, lineage);
+        giveLooks(pawn, colonistSeed, colonist.female,
+                  protagonist ? lineage : scenarioRollLineage(*scenario, colonistSeed, lineage));
         things_->registry().emplace<Colonist>(pawn, std::move(colonist));
+        // They land dressed, as RimWorld's colonists are (nudists excepted).
+        const Colonist& made = things_->registry().get<Colonist>(pawn);
+        const bool nudist = std::any_of(made.traits.begin(), made.traits.end(),
+                                        [](const TraitRecord& trait) { return trait.def == "Nudist"; });
+        for (size_t i = 0; !nudist && i < scenario->count("colonistApparel"); ++i) {
+            const std::string base = "colonistApparel." + std::to_string(i);
+            const DefId piece = defs_->idOf("Things", scenario->text((base + ".thing").c_str()));
+            const DefId stuff = defs_->idOf("Things", scenario->text((base + ".stuff").c_str()));
+            std::string why;
+            const Entity item = piece.valid() ? apparel_->make(piece, stuff, -1, cell, &why) : kNoEntity;
+            if (item == kNoEntity || !apparel_->putOn(pawn, item, why)) {
+                setupErrors_.push_back("scenario '" + settings_.scenario + "': can't dress a colonist in '" +
+                                       scenario->text((base + ".thing").c_str()) + "'" + (why.empty() ? "" : ": " + why));
+                return;
+            }
+        }
         used.insert(map_.index(cell));
         ++placed;
     }

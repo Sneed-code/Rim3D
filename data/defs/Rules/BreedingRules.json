@@ -1,0 +1,23 @@
+[
+  {
+    "defName": "BreedingRules", "source": "Rim3D",
+    "passSeconds": 60,
+    "mateMeanHours": 12,
+    "mateChance": 0.5,
+    "mateRadius": 12,
+    "mateSearchRadius": 40,
+    "courtSeconds": 900,
+    "mateHoldSeconds": 6,
+    "mateCooldownHours": 12,
+    "birthCooldownDays": 2,
+    "minFood": 0.3,
+    "milkWorkSeconds": 6.7,
+    "woolWorkSeconds": 28.3,
+    "gatherXp": 75,
+    "birthSpread": 1.5,
+    "hatchMinTemp": 0,
+    "hatchMaxTemp": 50,
+    "unverified": ["mateChance", "milkWorkSeconds", "woolWorkSeconds", "gatherXp"],
+    "ours": ["passSeconds", "mateMeanHours", "mateRadius", "mateSearchRadius", "courtSeconds", "mateHoldSeconds", "mateCooldownHours", "birthCooldownDays", "minFood", "birthSpread", "hatchMinTemp", "hatchMaxTemp"]
+  }
+]

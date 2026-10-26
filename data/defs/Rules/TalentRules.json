@@ -1,0 +1,28 @@
+[
+  {
+    "defName": "TalentRules",
+    "source": "ours",
+    "xpFirstPoint": 100,
+    "xpGrowthPerPoint": 25,
+    "maxPoints": 40,
+    "minFactor": 0.1,
+    "jobXp": {
+      "HaulToCell": 1,
+      "DeliverResources": 1,
+      "BuildFrame": 6,
+      "Deconstruct": 3,
+      "Mine": 3,
+      "CutPlant": 2,
+      "HarvestPlant": 2,
+      "DoBill": 5,
+      "Research": 12
+    },
+    "ours": [
+      "xpFirstPoint",
+      "xpGrowthPerPoint",
+      "maxPoints",
+      "minFactor",
+      "jobXp"
+    ]
+  }
+]

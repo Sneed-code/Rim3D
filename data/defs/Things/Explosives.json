@@ -1,0 +1,11 @@
+[
+  {
+    "defName": "Grenade_Frag", "researchPrerequisite": "Machining", "parent": "ItemBase", "label": "frag grenade", "source": "RimWorld wiki",
+    "visual": { "pieces": 3, "layer": 0.08, "parts": [{ "shape": "sphere", "radius": 0.035, "height": 0.07, "color": [0.25, 0.3, 0.2] }, { "shape": "box", "size": [0.025, 0.012, 0.03], "at": [0, 0, 0.07], "color": [0.55, 0.55, 0.5] }] },
+    "stackLimit": 10,
+    "stats": { "maxHitPoints": 50, "marketValue": 265, "mass": 1, "flammability": 0.5, "deteriorationRate": 1 },
+    "thrown": { "projectile": "Proj_GrenadeFrag", "range": 12.9, "warmupTime": 45, "cooldown": 80, "missRadius": 1.9 },
+    "unverified": ["stats.maxHitPoints", "stats.flammability", "stats.deteriorationRate", "thrown.missRadius"],
+    "ours": ["stackLimit", "visual", "thrown.warmupTime"]
+  }
+]

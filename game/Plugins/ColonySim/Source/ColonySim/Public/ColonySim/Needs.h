@@ -22,7 +22,7 @@ class Things;
 enum class ScheduleKind : uint8_t {
     Anything,  // work, and sleep when tired
     Work,      // work; sleeps only when very tired
-    Joy,       // recreation: no work (there is no recreation yet, so the pawn idles)
+    Joy,       // recreation: no work; the pawn plays, sits or strolls (Recreation.h)
     Sleep,     // go to bed when rested less than NeedRules.rest.fallAsleepBelow
 };
 
@@ -84,6 +84,9 @@ struct COLONY_API NeedRules {
     // The default schedule: Sleep from `sleepFromHour` through `sleepToHour` (wrapping midnight).
     int sleepFromHour = 22;
     int sleepToHour = 5;
+    // ... and Joy from `joyFromHour` through `joyToHour` (-1: none), read from JoyRules (Recreation.h).
+    int joyFromHour = -1;
+    int joyToHour = -1;
 
     static NeedRules read(const DefDatabase& defs);
     Schedule standardSchedule() const;

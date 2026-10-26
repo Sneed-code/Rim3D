@@ -1,6 +1,7 @@
 #include "ColonySim/Needs.h"
 
 #include "ColonySim/Clock.h"
+#include "ColonySim/Genes.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Things.h"
@@ -61,6 +62,10 @@ NeedRules NeedRules::read(const DefDatabase& defs) {
     r.wakeOutsideSleepAt = needsFloat(*def, "rest.wakeOutsideSleepAt", r.wakeOutsideSleepAt);
     r.sleepFromHour = std::clamp(static_cast<int>(def->integer("schedule.sleepFromHour", r.sleepFromHour)), 0, 23);
     r.sleepToHour = std::clamp(static_cast<int>(def->integer("schedule.sleepToHour", r.sleepToHour)), 0, 23);
+    if (const Def* joy = defs.find("Rules", "JoyRules"); joy != nullptr && joy->count("joyHours") >= 2) {
+        r.joyFromHour = std::clamp(static_cast<int>(joy->numberAt("joyHours", 0, -1)), 0, 23);
+        r.joyToHour = std::clamp(static_cast<int>(joy->numberAt("joyHours", 1, -1)), 0, 23);
+    }
     return r;
 }
 
@@ -69,7 +74,9 @@ Schedule NeedRules::standardSchedule() const {
     for (int hour = 0; hour < 24; ++hour) {
         const bool sleeps = sleepFromHour <= sleepToHour ? (hour >= sleepFromHour && hour <= sleepToHour)
                                                          : (hour >= sleepFromHour || hour <= sleepToHour);
-        schedule.hours[static_cast<size_t>(hour)] = sleeps ? ScheduleKind::Sleep : ScheduleKind::Anything;
+        const bool joys = joyFromHour >= 0 && (joyFromHour <= joyToHour ? (hour >= joyFromHour && hour <= joyToHour)
+                                                                        : (hour >= joyFromHour || hour <= joyToHour));
+        schedule.hours[static_cast<size_t>(hour)] = sleeps ? ScheduleKind::Sleep : joys ? ScheduleKind::Joy : ScheduleKind::Anything;
     }
     return schedule;
 }
@@ -121,6 +128,9 @@ void NeedsSystem::step() {
         float perDay = rules_.defaultFoodPerDay;
         if (const Thing* thing = reg.try_get<Thing>(pawn)) {
             perDay = static_cast<float>(defs_.get(thing->def).number("race.foodPerDay", perDay));
+        }
+        if (const PawnGenes* genes = reg.try_get<PawnGenes>(pawn)) {
+            perDay *= genes->effects.foodRate;
         }
         switch (foodBandOf(rules_, needs.food)) {
             case FoodBand::Fed: perDay *= rules_.foodFallFactorFed; break;

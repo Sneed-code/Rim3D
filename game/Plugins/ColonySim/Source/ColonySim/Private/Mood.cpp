@@ -3,9 +3,13 @@
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Events.h"
+#include "ColonySim/Temperature.h"
+#include "ColonySim/Genes.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Recreation.h"
+#include "ColonySim/RoomStats.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Things.h"
 
@@ -99,13 +103,104 @@ MoodSystem::MoodSystem(Things& things, const NeedsSystem& needs, const DefDataba
         thought.trigger = def.text("trigger");
         thought.need = def.text("situation.need");
         thought.band = def.text("situation.band");
+        thought.condition = def.text("situation.condition");
+        if (!thought.condition.empty()) {
+            for (size_t i = 0; i < def.count("stageThresholds"); ++i) {
+                thought.thresholds.push_back(static_cast<float>(def.numberAt("stageThresholds", i)));
+            }
+            for (size_t i = 0; i < def.count("roomRoles"); ++i) {
+                thought.roomRoles.push_back(def.textAt("roomRoles", i));
+            }
+            for (size_t i = 0; i < def.count("stages"); ++i) {
+                const std::string path = "stages." + std::to_string(i);
+                Thought::Stage stage;
+                stage.offset = moodFloat(def, (path + ".moodOffset").c_str(), 0.0f);
+                stage.label = def.text((path + ".label").c_str());
+                for (size_t r = 0; r < def.count((path + ".roles").c_str()); ++r) {
+                    stage.roles.push_back(def.textAt((path + ".roles").c_str(), r));
+                }
+                thought.stages.push_back(std::move(stage));
+            }
+            thought.trait = def.text("situation.trait");
+            thought.notTrait = def.text("situation.notTrait");
+        }
+        thought.passion = def.text("situation.passion");
+        if (!thought.passion.empty()) {
+            // The size of the lift is SkillRules.passionMood, not a number of the thought's own.
+            const SkillRules skills = SkillRules::read(defs);
+            thought.offset = static_cast<float>(skills.passionMood[thought.passion == "Major" ? 2 : 1]);
+        }
         thoughts_.push_back(std::move(thought));
+
+        StagedThought staged;
+        staged.def = id;
+        staged.condition = def.text("situation.condition");
+        const size_t stages = def.count("stages");
+        if (staged.condition.empty() || stages == 0) {
+            continue;
+        }
+        // The thresholds sit in a list named after the condition: "joyNeed" has "joyThresholds".
+        std::string key = staged.condition;
+        if (key.size() > 4 && key.compare(key.size() - 4, 4, "Need") == 0) {
+            key.resize(key.size() - 4);
+        }
+        key += "Thresholds";
+        for (size_t i = 0; i < def.count(key.c_str()); ++i) {
+            staged.thresholds.push_back(static_cast<float>(def.numberAt(key.c_str(), i)));
+        }
+        for (size_t i = 0; i < stages; ++i) {
+            const std::string path = "stages." + std::to_string(i);
+            staged.labels.push_back(def.text((path + ".label").c_str()));
+            staged.offsets.push_back(moodFloat(def, (path + ".moodOffset").c_str(), 0.0f));
+        }
+        staged_.push_back(std::move(staged));
     }
+}
+
+// What each staged condition measures. A task that adds a condition adds its case here.
+bool MoodSystem::conditionValue(Entity pawn, const std::string& condition, float& value) const {
+    const entt::registry& reg = things_.registry();
+    if (const Joy* joy = reg.try_get<Joy>(pawn)) {
+        if (condition == "joyNeed") {
+            value = joy->level;
+            return true;
+        }
+        if (condition == "comfortNeed") {
+            value = joy->comfort;
+            return true;
+        }
+        if (condition == "outdoorsNeed") {
+            value = joy->outdoors;
+            return true;
+        }
+    }
+    if (temperature_ != nullptr && (condition == "coldBelowComfort" || condition == "hotAboveComfort")) {
+        value = condition == "coldBelowComfort" ? temperature_->degreesBelowComfort(pawn)
+                                                : temperature_->degreesAboveComfort(pawn);
+        return value > 0.0f;
+    }
+    return false;
+}
+
+void MoodSystem::addSituation(const std::string& condition, SituationStage stage) {
+    situations_.push_back(Situation{condition, std::move(stage)});
+}
+
+bool MoodSystem::hasTrait(Entity pawn, const std::string& trait) const {
+    const Colonist* colonist = things_.registry().try_get<Colonist>(pawn);
+    if (colonist == nullptr) {
+        return false;
+    }
+    return std::any_of(colonist->traits.begin(), colonist->traits.end(),
+                       [&](const TraitRecord& record) { return record.def == trait; });
 }
 
 float MoodSystem::traitMoodOffset(Entity pawn) const {
     const Colonist* colonist = things_.registry().try_get<Colonist>(pawn);
     float total = 0.0f;
+    if (const PawnGenes* genes = things_.registry().try_get<PawnGenes>(pawn)) {
+        total += genes->effects.moodOffset;
+    }
     if (colonist == nullptr) {
         return total;
     }
@@ -165,6 +260,80 @@ std::vector<ThoughtView> MoodSystem::thoughts(Entity pawn, int64_t now) const {
             }
         }
     }
+    for (const StagedThought& staged : staged_) {
+        float value = 0.0f;
+        if (!conditionValue(pawn, staged.condition, value)) {
+            continue;
+        }
+        size_t stage = 0;
+        while (stage < staged.thresholds.size() && stage + 1 < staged.offsets.size() && value >= staged.thresholds[stage]) {
+            ++stage;
+        }
+        const Def& def = defs_.get(staged.def);
+        out.push_back(ThoughtView{def.defName(), staged.labels[stage].empty() ? def.label() : staged.labels[stage],
+                                  staged.offsets[stage], true, 0});
+    }
+    // Staged situations that read the pawn's room or its beauty need (C17).
+    if (roomStats_ != nullptr) {
+        for (const Thought& thought : thoughts_) {
+            double value = 0.0;
+            RoomRole role = RoomRole::None;
+            if (thought.condition.empty() || thought.stages.empty() || !roomStats_->conditionValue(pawn, thought.condition, value, role)) {
+                continue;
+            }
+            const auto listed = [](const std::vector<std::string>& roles, RoomRole r) {
+                return roles.empty() || std::find(roles.begin(), roles.end(), roomRoleName(r)) != roles.end();
+            };
+            if (!listed(thought.roomRoles, role)) {
+                continue;
+            }
+            size_t stage = 0;
+            while (stage < thought.thresholds.size() && value >= static_cast<double>(thought.thresholds[stage])) {
+                ++stage;
+            }
+            stage = std::min(stage, thought.stages.size() - 1);
+            const Thought::Stage& picked = thought.stages[stage];
+            if (picked.offset == 0.0f || !listed(picked.roles, role)) {
+                continue;
+            }
+            const Def& def = defs_.get(thought.def);
+            out.push_back(ThoughtView{def.defName(), def.label() + ": " + picked.label, picked.offset, true, 0});
+        }
+    }
+    // Situations judged by other systems (clothes, and later temperature and light).
+    for (const Thought& thought : thoughts_) {
+        if (thought.condition.empty() || thought.stages.empty()) {
+            continue;
+        }
+        if ((!thought.trait.empty() && !hasTrait(pawn, thought.trait)) ||
+            (!thought.notTrait.empty() && hasTrait(pawn, thought.notTrait))) {
+            continue;
+        }
+        for (const Situation& situation : situations_) {
+            if (situation.condition != thought.condition) {
+                continue;
+            }
+            const int stage = situation.stage(pawn);
+            if (stage >= 0 && static_cast<size_t>(stage) < thought.stages.size()) {
+                const Thought::Stage& s = thought.stages[static_cast<size_t>(stage)];
+                const Def& def = defs_.get(thought.def);
+                out.push_back(ThoughtView{def.defName(), s.label.empty() ? def.label() : s.label, s.offset, true, 0});
+            }
+        }
+    }
+    // Working at a skill the pawn is passionate about.
+    const Colonist* colonist = activeSkill_ ? reg.try_get<Colonist>(pawn) : nullptr;
+    const std::string skill = colonist != nullptr ? activeSkill_(pawn) : std::string();
+    const SkillRecord* record = skill.empty() ? nullptr : colonist->skill(skill);
+    if (record != nullptr && !record->disabled && record->passion != Passion::None) {
+        const char* passion = record->passion == Passion::Major ? "Major" : "Minor";
+        for (const Thought& thought : thoughts_) {
+            if (thought.passion == passion) {
+                const Def& def = defs_.get(thought.def);
+                out.push_back(ThoughtView{def.defName(), def.label(), thought.offset, true, 0});
+            }
+        }
+    }
     if (const Mood* mood = reg.try_get<Mood>(pawn)) {
         for (const Memory& memory : mood->memories) {
             if (memory.expires <= now) {
@@ -209,6 +378,13 @@ void MoodSystem::addMemory(Mood& mood, const std::string& trigger, int64_t now) 
     }
 }
 
+void MoodSystem::remember(Entity pawn, const std::string& trigger, int64_t now) {
+    entt::registry& reg = things_.registry();
+    if (Mood* mood = reg.valid(pawn) ? reg.try_get<Mood>(pawn) : nullptr) {
+        addMemory(*mood, trigger, now);
+    }
+}
+
 void MoodSystem::step(int64_t now, std::vector<Event>& events) {
     if (!rules_.present) {
         return;
@@ -243,13 +419,19 @@ void MoodSystem::step(int64_t now, std::vector<Event>& events) {
             }
             continue;
         }
-        Mood* mood = (event.type == EventType::PawnAte || event.type == EventType::PawnWokeUp) && reg.valid(event.thing)
-                         ? reg.try_get<Mood>(event.thing)
+        Mood* mood = (event.type == EventType::PawnAte || event.type == EventType::PawnWokeUp || event.type == EventType::PrisonerCaptured ||
+                      event.type == EventType::PrisonerChatted) &&
+                             reg.valid(event.type == EventType::PrisonerChatted ? event.target : event.thing)
+                         ? reg.try_get<Mood>(event.type == EventType::PrisonerChatted ? event.target : event.thing)
                          : nullptr;
         if (mood == nullptr) {
             continue;
         }
-        if (event.type == EventType::PawnAte) {
+        if (event.type == EventType::PrisonerCaptured) {
+            addMemory(*mood, "PrisonerCaptured", now);
+        } else if (event.type == EventType::PrisonerChatted) {
+            addMemory(*mood, "PrisonerChatted", now);
+        } else if (event.type == EventType::PawnAte) {
             const std::string preferability = defs_.get(event.def).text("ingestible.preferability");
             if (preferability == "RawBad") {
                 addMemory(*mood, "AteRawFood", now);
