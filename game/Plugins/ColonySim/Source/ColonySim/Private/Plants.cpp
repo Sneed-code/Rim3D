@@ -89,6 +89,7 @@ Plants::Plants(const Map& map, const DefDatabase& defs, uint64_t seed, const std
     const double gravel = plantsTerrainFertility(defs, "Gravel");
     const double rich = plantsTerrainFertility(defs, "SoilRich");
     const double sand = plantsTerrainFertility(defs, "Sand");
+    const double marsh = plantsTerrainFertility(defs, "MarshyTerrain");
     const uint64_t soilSeed = splitMix64(seed ^ 0x736F696CULL);
     for (int y = 0; y < map.height(); ++y) {
         for (int x = 0; x < map.width(); ++x) {
@@ -101,7 +102,10 @@ Plants::Plants(const Map& map, const DefDatabase& defs, uint64_t seed, const std
                     f = n < kPlantsGravelBelow ? gravel : (n > kPlantsRichAbove ? rich : soil);
                     break;
                 }
+                case Terrain::Marsh: f = marsh; break;
                 case Terrain::Water:
+                case Terrain::ShallowWater:
+                case Terrain::Mud:
                 case Terrain::Rock:
                 case Terrain::RoughStone: break;
             }

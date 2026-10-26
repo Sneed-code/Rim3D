@@ -81,6 +81,9 @@ struct SimSettings {
     // Wild animals when the map is made (docs/design/animal-life.md): 0 for none, else the biome's
     // animal density in percent (100 = as the biome says). Needs the Biomes and animal defs.
     int wildAnimals = 0;
+    // The Biomes def the map, plants, weather and animals follow (docs/design/mapgen.md). Saved in the
+    // `world` section; a save from before it is a temperate forest.
+    std::string biome = "TemperateForest";
 };
 
 struct SimStats {

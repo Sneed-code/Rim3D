@@ -30,6 +30,7 @@
 #include "ColonySim/Needs.h"
 #include "ColonySim/Genes.h"
 #include "ColonySim/Looks.h"
+#include "ColonySim/MapFeatures.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Plants.h"
@@ -75,6 +76,16 @@ bool simJobUses(const JobSystem& jobs, const entt::registry& reg, Entity thing) 
     return false;
 }
 
+// The map's size and seed, and how wet the biome makes it (`mapGen` in the Biomes def).
+MapSettings simMapSettings(const SimSettings& settings, const DefDatabase& defs) {
+    MapSettings map{settings.mapSize, settings.mapSize, splitMix64(settings.seed ^ 0x6D6170ULL), settings.flatMap};
+    if (const Def* biome = defs.find("Biomes", settings.biome)) {
+        map.river = static_cast<float>(biome->number("mapGen.river", 1.0));
+        map.marsh = static_cast<float>(biome->number("mapGen.marsh", 1.0));
+    }
+    return map;
+}
+
 void simHashCell(StateHasher& h, CellPos c) {
     h.add(c.x);
     h.add(c.y);
@@ -87,6 +98,9 @@ Sim::Sim(const SimSettings& settings) : Sim(settings, nullptr) {}
 
 Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
     : Sim(settings, std::move(defs), EmptyStart{}) {
+    if (!settings_.flatMap) {
+        placeMapFeatures(map_, *things_, splitMix64(settings_.seed ^ 0x66656174ULL));
+    }
     placeStockpileAndThings();
     if (!settings_.scenario.empty()) {
         startScenario();
@@ -102,11 +116,11 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     : settings_(settings),
       // No defs: share a static empty database, owned by nobody.
       defs_(defs ? std::move(defs) : std::shared_ptr<const DefDatabase>(std::shared_ptr<const DefDatabase>(), &simEmptyDefs())),
-      map_(MapSettings{settings.mapSize, settings.mapSize, splitMix64(settings.seed ^ 0x6D6170ULL), settings.flatMap}),
+      map_(simMapSettings(settings, *defs_)),
       pathfinder_(map_),
       zones_(std::make_unique<Zones>(map_)),
       things_(std::make_unique<Things>(map_, defs_)),
-      plants_(std::make_unique<Plants>(map_, *defs_, splitMix64(settings.seed ^ 0x706C616E74ULL), "TemperateForest")),
+      plants_(std::make_unique<Plants>(map_, *defs_, splitMix64(settings.seed ^ 0x706C616E74ULL), settings.biome)),
       mineables_(std::make_unique<Mineables>(map_, *defs_, splitMix64(settings.seed ^ 0x6D696E65ULL))),
       designations_(std::make_unique<Designations>(map_)),
       movement_(std::make_unique<MovementSystem>()),
@@ -117,7 +131,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       groundHash_(map_.contentHash()) {
     things_->setEventLog(&events_);
     health_->setEventLog(&events_);
-    weather_ = std::make_unique<Weather>(map_, *defs_, splitMix64(settings.seed ^ 0x636C696D617465ULL), "TemperateForest");
+    weather_ = std::make_unique<Weather>(map_, *defs_, splitMix64(settings.seed ^ 0x636C696D617465ULL), settings.biome);
     weather_->setEventLog(&events_);
     movement_->setWeather(weather_.get());
     combat_->setWeather(weather_.get());
@@ -187,7 +201,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     fighters_->setEventLog(&events_);
     // The biome is the one the plants use; both move to the settings together.
     animals_ = std::make_unique<AnimalSystem>(*things_, map_, *plants_, *health_, *defs_, time_,
-                                              splitMix64(settings.seed ^ 0x616E696D616C73ULL), "TemperateForest");
+                                              splitMix64(settings.seed ^ 0x616E696D616C73ULL), settings.biome);
     animals_->setEventLog(&events_);
     husbandry_ = std::make_unique<Husbandry>(*things_, map_, *animals_, *health_, *defs_, time_, settings.seed);
     husbandry_->setEventLog(&events_);

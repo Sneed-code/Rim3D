@@ -2,6 +2,7 @@
 
 Updated 2026-10-25.
 
+Stage 2 S8 done: rivers with fords, shallow water, marsh and mud, old ruins and steam geysers; new games are 1,024 m; saves from before on maps of 192 m or more no longer load (`docs/design/mapgen.md`).
 Stage 2 P1 done: a pawn carries a rifle, a sidearm and a melee weapon (`docs/design/weapons.md`).
 Stage 2 N4 done: tame animals mate and bear young, hens lay eggs, calves and chicks grow up, colonists milk and shear (`docs/design/breeding.md`).
 Stage 2 F11 done: turrets and traps (`docs/design/defense.md`).

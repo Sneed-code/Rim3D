@@ -172,7 +172,7 @@ private:
     // and whether a building can be stood on.
     std::vector<float> beautyIndoors_, beautyOutdoors_, cleanliness_, baseValue_, stuffBeauty_, stuffCount_;
     std::vector<uint8_t> standable_, impassable_;
-    DefId groundDef_[5];  // by Terrain
+    DefId groundDef_[kTerrainCount];  // by Terrain
     std::vector<std::pair<int, int>> sightOffsets_;  // within the sight radius, row order
     std::vector<RoomStatValues> stats_;              // by room id
     std::vector<uint8_t> hasStats_;                  // by room id

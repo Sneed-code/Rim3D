@@ -365,7 +365,7 @@ float Weather::snowSpeedFactor(float depthPercent) const {
 
 bool Weather::holdsSnow(int index) const {
     const CellPos c = map_.cellAt(index);
-    return map_.terrain(c) != Terrain::Water && map_.roof(c) == Roof::None;
+    return map_.terrain(c) != Terrain::Water && map_.terrain(c) != Terrain::ShallowWater && map_.roof(c) == Roof::None;
 }
 
 void Weather::updateSnow() {

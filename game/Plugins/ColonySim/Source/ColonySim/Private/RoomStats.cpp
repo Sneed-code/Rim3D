@@ -195,7 +195,10 @@ RoomStats::RoomStats(Map& map, Things& things, Rooms& rooms, const Floors& floor
             baseValue_[i] = value;
         }
     }
-    groundDef_[static_cast<size_t>(Terrain::Water)] = defs.idOf("Terrain", "WaterShallow");
+    groundDef_[static_cast<size_t>(Terrain::Water)] = defs.idOf("Terrain", "WaterDeep");
+    groundDef_[static_cast<size_t>(Terrain::ShallowWater)] = defs.idOf("Terrain", "WaterShallow");
+    groundDef_[static_cast<size_t>(Terrain::Marsh)] = defs.idOf("Terrain", "MarshyTerrain");
+    groundDef_[static_cast<size_t>(Terrain::Mud)] = defs.idOf("Terrain", "Mud");
     groundDef_[static_cast<size_t>(Terrain::Sand)] = defs.idOf("Terrain", "Sand");
     groundDef_[static_cast<size_t>(Terrain::Soil)] = defs.idOf("Terrain", "Soil");
     groundDef_[static_cast<size_t>(Terrain::Rock)] = DefId{};

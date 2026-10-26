@@ -488,6 +488,9 @@ void USmokeTestSubsystem::BuildTerrainMesh(const colony::Map& Map, double BuildS
 						case colony::Terrain::Soil: Color = FColor(90, 130, 60); break;
 						case colony::Terrain::Rock: Color = FColor(120, 115, 110); break;
 						case colony::Terrain::RoughStone: Color = FColor(150, 140, 125); break;
+						case colony::Terrain::ShallowWater: Color = FColor(90, 150, 205); break;
+						case colony::Terrain::Marsh: Color = FColor(70, 110, 80); break;
+						case colony::Terrain::Mud: Color = FColor(105, 85, 55); break;
 					}
 					Colors.Add(Color);
 				}

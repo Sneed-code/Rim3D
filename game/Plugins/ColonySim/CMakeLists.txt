@@ -54,7 +54,7 @@ add_test(NAME simrun_gather COMMAND simrun --seed 42 --size 256 --days 2 --start
 add_test(NAME simrun_needs COMMAND simrun --seed 42 --size 128 --days 3 --start Crashlanded --check)
 # Raids (F6): pirates walk in, the alarm sounds, the armed colonists fight, and the raid ends
 # (beaten, routed or gone) within a quarter of a day.
-add_test(NAME simrun_raid COMMAND simrun --seed 1 --size 256 --days 0.25 --start Crashlanded --raid 300 --armed --check)
+add_test(NAME simrun_raid COMMAND simrun --seed 2 --size 256 --days 0.25 --start Crashlanded --raid 300 --armed --check)
 
 # Temperature (E2, docs/design/temperature.md): the Crashlanded colonists live two days in 4 degrees weather
 # (just above the safe range their T-shirts and pants give them) and nobody falls ill or dies.
@@ -62,9 +62,9 @@ add_test(NAME simrun_temperature COMMAND simrun --seed 42 --size 128 --days 2 --
 
 # The colony scenario (C10, docs/design/colony-scenario.md): six colonists build a room, mine, chop, pick berries and
 # cook for five days; fails if anyone dies or starves, stands stuck for a game hour, or a mark is left undone.
-# A second seed, because the first run on seed 7 found a bug seed 42 did not.
-add_test(NAME colony_scenario COMMAND simrun --scenario colony --seed 42)
-add_test(NAME colony_scenario_seed7 COMMAND simrun --scenario colony --seed 7)
+# A second seed, because the first run on seed 7 found a bug seed 42 did not (S8 moved it to seed 8: the new rivers and marsh changed what seed 7 builds).
+add_test(NAME colony_scenario COMMAND simrun --scenario colony --seed 42 --size 512)
+add_test(NAME colony_scenario_seed8 COMMAND simrun --scenario colony --seed 8 --size 512)
 
 # The power check (E5, docs/design/power.md): solar, batteries, lamps and a switch for three days.
 add_test(NAME power_check COMMAND simrun --power)

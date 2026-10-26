@@ -455,6 +455,32 @@ TEST_CASE("Save: format 19 files, from before the sections, still load and play 
     }
 }
 
+TEST_CASE("Save: the biome is saved, and a save whose map the generator no longer makes is refused with a reason") {
+    const auto defs = saveTestGameDefs();
+    SimSettings settings;
+    settings.seed = 4;
+    settings.mapSize = 256;
+    settings.biome = "AridShrubland";
+    Sim original(settings, defs);
+    const std::vector<uint8_t> good = saveSim(original);
+    SaveLoadResult back = loadSim(good, defs);
+    SAVE_REQUIRE(back.sim != nullptr);
+    CHECK(back.sim->settings().biome == "AridShrubland");
+    CHECK(back.sim->stateHash() == original.stateHash());
+
+    // A save made when the generator gave another map (here: the biome's name changed to one with no
+    // def, so the map comes out wetter) says so plainly.
+    const size_t at = saveTestFindText(good, "AridShrubland");
+    SAVE_REQUIRE(at != std::string::npos);
+    std::vector<uint8_t> other = good;
+    other[at + 4 + 9] = 'X';
+    saveTestReseal(other);
+    const SaveLoadResult r = loadSim(other, defs);
+    CHECK(r.sim == nullptr);
+    CHECK(r.error.find("different map") != std::string::npos);
+    CHECK(r.error.find("no longer be loaded") != std::string::npos);
+}
+
 TEST_CASE("Save: commands are saved by the name of their type") {
     const auto defs = testDefs();
     Sim original(saveTestSettings(), defs);

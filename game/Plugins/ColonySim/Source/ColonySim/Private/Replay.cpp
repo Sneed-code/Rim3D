@@ -1099,6 +1099,9 @@ std::string writeReplay(const Replay& replay) {
     if (s.wildAnimals != 0) {
         settings["wildAnimals"] = s.wildAnimals;
     }
+    if (s.biome != "TemperateForest") {
+        settings["biome"] = s.biome;
+    }
 
     // One command and one checkpoint per line, so files diff and read well.
     std::string out = "{\n";
@@ -1165,7 +1168,7 @@ bool readReplay(const std::string& text, Replay& out, std::string& error) {
         !r.text(*settings, "haulItemDef", s.haulItemDef, where) ||
         !r.integer(*settings, "checkpointEvery", s.checkpointEvery, where) ||
         !r.integer(*settings, "pathBudget", s.pathBudget, where) || !r.text(*settings, "scenario", s.scenario, where) ||
-        !r.integer(*settings, "wildAnimals", s.wildAnimals, where)) {
+        !r.integer(*settings, "wildAnimals", s.wildAnimals, where) || !r.text(*settings, "biome", s.biome, where)) {
         return false;
     }
     if (s.mapSize <= 0 || s.mapSize > 4096 || s.pawns < 0 || s.items < 0 || s.checkpointEvery < 0 ||

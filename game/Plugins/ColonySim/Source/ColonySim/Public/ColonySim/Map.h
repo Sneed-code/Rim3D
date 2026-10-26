@@ -17,8 +17,11 @@ class Rooms;
 
 // Placeholder terrain types until terrain defs are loaded from data/defs. Rock is solid until
 // it is mined (docs/design/mining.md), and leaves RoughStone: walkable, nothing grows on it.
-// New values go at the end.
-enum class Terrain : uint8_t { Water, Sand, Soil, Rock, RoughStone };
+// New values go at the end. `Water` is deep water (nobody crosses it). Shallow water, marsh and mud
+// can be walked but slowly; `Terrain` defs of the same names carry their path costs
+// (docs/design/mapgen.md).
+enum class Terrain : uint8_t { Water, Sand, Soil, Rock, RoughStone, ShallowWater, Marsh, Mud };
+constexpr int kTerrainCount = 8;
 
 // How the building in a cell affects movement. A door can be walked through but is a region of
 // its own (docs/design/regions.md).
@@ -33,6 +36,9 @@ struct MapSettings {
     int height = 512;  // cells, 1 m each
     uint64_t seed = 0;
     bool flat = false;  // every cell soil at height 0, for tests
+    // How much river and how much marsh the biome gets, as multiples of the usual (0: none).
+    float river = 1.0f;
+    float marsh = 1.0f;
 };
 
 // The map grid: one flat array per layer, generated from a seed.
@@ -125,6 +131,8 @@ private:
     friend class Rooms;  // the only writer of the thin roof
 
     void generate();
+    void carveRivers();
+    void addWetlands();
 
     int width_;
     int height_;
@@ -138,6 +146,8 @@ private:
     uint64_t buildingChanges_ = 0;
     std::unique_ptr<Regions> regions_;
     std::unique_ptr<Cover> cover_;
+    float river_;
+    float marsh_;
 };
 
 }  // namespace colony

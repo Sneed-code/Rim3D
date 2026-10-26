@@ -82,6 +82,9 @@ namespace
 		switch (Map.terrain(Cell))
 		{
 			case colony::Terrain::Water: return TerrWaterColor;
+			case colony::Terrain::ShallowWater: return FColor(90, 150, 205);
+			case colony::Terrain::Marsh: return FColor(70, 110, 80);
+			case colony::Terrain::Mud: return FColor(105, 85, 55);
 			case colony::Terrain::Sand: return TerrSandColor;
 			case colony::Terrain::RoughStone: return TerrRoughStoneColor;
 			case colony::Terrain::Rock: return TerrRockTopColor;
@@ -124,6 +127,9 @@ namespace
 		switch (Map.terrain(Cell))
 		{
 			case colony::Terrain::Water: return FTerrLook(FLinearColor::White, 0.0f, 0.0f, 0.0f, 1.0f);
+			case colony::Terrain::ShallowWater: return FTerrLook(FLinearColor(1.1f, 1.1f, 1.1f), 0.5f, 0.0f, 0.0f, 0.7f);
+			case colony::Terrain::Marsh: return FTerrLook(FLinearColor(0.55f, 0.65f, 0.5f), 0.0f, 0.0f, 0.0f, 0.0f);
+			case colony::Terrain::Mud: return FTerrLook(FLinearColor(0.5f, 0.38f, 0.25f), 0.0f, 0.0f, 0.5f, 0.0f);
 			case colony::Terrain::Sand: return FTerrLook(FLinearColor(1.15f, 1.0f, 0.75f), 1.0f, 0.0f, 0.0f, 0.0f);
 			case colony::Terrain::RoughStone: return FTerrLook(FLinearColor::White, 0.0f, 0.0f, 1.0f, 0.0f);
 			case colony::Terrain::Rock: return FTerrLook(FLinearColor::White, 0.0f, 1.0f, 0.0f, 0.0f);

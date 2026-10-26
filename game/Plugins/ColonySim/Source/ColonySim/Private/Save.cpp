@@ -402,6 +402,7 @@ struct SaveData {
     std::vector<SaveFloor> floors;
     FilthState filth;
     RoomStatsState roomStats;
+    std::string biome = "TemperateForest";  // section "world": SimSettings::biome
     int wildAnimals = 0;               // section "animals": SimSettings::wildAnimals
     AnimalSaved animals;               // section "animals": the system's own state
     RaidState raids;                   // section "raids" (F6)
@@ -2431,6 +2432,10 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "turret", e, &SaveEntity::turret, [&](Turret& t) { saveTurretPart(ar, t); });
         saveParts(ar, "trap", e, &SaveEntity::trap, [&](Trap& t) { saveTrapPart(ar, t); });
     });
+    ar.section("world", 1, [&] {
+        ar.text("biome", d.biome);
+        ar.require(!d.biome.empty() && d.biome.size() < 64, "the save file has a bad biome name");
+    });
     // New sections go here, at the end.
 }
 
@@ -2525,9 +2530,10 @@ std::unique_ptr<Sim> SimSaveAccess::makeEmpty(const SaveData& data, std::shared_
                                               std::string& error) {
     SimSettings settings = data.settings;
     settings.wildAnimals = data.wildAnimals;  // saved in the animals section, not the sim section
+    settings.biome = data.biome;              // and the biome in the world section
     auto sim = std::unique_ptr<Sim>(new Sim(settings, std::move(defs), Sim::EmptyStart{}));
     if (sim->groundHash_ != data.groundHash) {
-        error = "the map generator gives a different map for this seed than when the save was made";
+        error = "the map generator gives a different map for this seed than when the save was made (the world generator changed in Stage 2, task S8), so this save can no longer be loaded";
         return nullptr;
     }
     return sim;
@@ -2539,6 +2545,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.defsHash = sim.defs_->contentHash();
     d.settings = sim.settings_;
     d.wildAnimals = sim.settings_.wildAnimals;
+    d.biome = sim.settings_.biome;
     d.animals = sim.animals_->saved();
     d.husbandry = sim.husbandry_->saved();
     d.breeding = sim.breeding_->saved();

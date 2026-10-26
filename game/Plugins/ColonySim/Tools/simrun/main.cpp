@@ -81,7 +81,7 @@ namespace {
 
 struct Options {
     uint64_t seed = 42;
-    int size = 512;
+    int size = 1024;
     double days = 1.0;
     bool daysGiven = false;
     int pawns = 0;
@@ -97,6 +97,7 @@ struct Options {
     int animals = 0;     // wild animals as a percent of the biome's density (0: none; --animals alone means 100)
     int farm = 0;        // --farm N: N tame chickens, fed every hour (N4)
     double raid = -1.0;  // start a pirate raid of this many points at the first step (0: the colony's threat points)
+    std::string biome = "TemperateForest";  // --biome: a Biomes def
     bool armed = false;  // give every colonist an assault rifle first (not a command: not in replays)
     std::string png;
     std::string regionsPng;
@@ -125,6 +126,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.seed = std::strtoull(argv[++i], nullptr, 10);
         } else if (std::strcmp(arg, "--size") == 0 && hasValue) {
             out.size = std::atoi(argv[++i]);
+        } else if (std::strcmp(arg, "--biome") == 0 && hasValue) {
+            out.biome = argv[++i];
         } else if (std::strcmp(arg, "--days") == 0 && hasValue) {
             out.days = std::atof(argv[++i]);
             out.daysGiven = true;
@@ -210,6 +213,9 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
                 case colony::Terrain::Soil: r = 90; g = 130; b = 60; break;
                 case colony::Terrain::Rock: r = 120; g = 115; b = 110; break;
                 case colony::Terrain::RoughStone: r = 150; g = 140; b = 125; break;
+                case colony::Terrain::ShallowWater: r = 90; g = 150; b = 205; break;
+                case colony::Terrain::Marsh: r = 70; g = 110; b = 80; break;
+                case colony::Terrain::Mud: r = 105; g = 85; b = 55; break;
             }
             // Ore shows brighter than the rock round it: steel blue, silver white, components orange.
             const colony::DefId rock = sim.mineables().defAt(colony::CellPos{x, y, 0});
@@ -615,6 +621,7 @@ int main(int argc, char** argv) {
     // A replay brings its own settings and commands; otherwise they come from the options.
     colony::Replay replay;
     colony::SimSettings settings{options.seed, options.size, options.pawns, options.items};
+    settings.biome = options.biome;
     settings.pathBudget = options.pathBudget;
     settings.scenario = options.start;
     settings.wildAnimals = options.animals;
