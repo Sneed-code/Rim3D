@@ -4,6 +4,7 @@
 #include "ColonySim/BillMode.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Entity.h"
+#include "ColonySim/Grid.h"
 
 #include <cstdint>
 #include <string>
@@ -12,6 +13,7 @@
 namespace colony {
 
 class Things;
+class Zones;
 
 // Recipes and bills: what a work building (the stove) is asked to make, and for how long. See
 // docs/design/bills.md.
@@ -31,6 +33,7 @@ struct Bill {
     int skillMax = 20;
     float radius = 0.0f;     // ingredients are taken from within this many metres of the building; 0 is anywhere
     uint32_t storeZone = 0;  // 0: products stay where the crafter made them; else haulers take them to this stockpile
+    uint32_t countZone = 0;  // 0: "until you have" counts the stock on the whole map; else only what lies in this stockpile
     int unpauseAt = 0;       // UntilHave: once `count` is reached the bill waits until the stock is under this (0: restarts under `count`)
     bool satisfied = false;  // UntilHave with `unpauseAt`: the stock reached `count` and has not fallen under `unpauseAt` since
     std::vector<DefId> disallowed;  // item defs the bill may not use as ingredients, sorted by value
@@ -98,6 +101,8 @@ class COLONY_API BillSystem {
 public:
     BillSystem(Things& things, const DefDatabase& defs);
 
+    // The zones a bill's `countZone` is looked up in; without them every stock is the whole map's.
+    void setZones(const Zones* zones) { zones_ = zones; }
     const BillNumbers& numbers() const { return numbers_; }
     const std::vector<Recipe>& recipes() const { return recipes_; }
     // The recipe of a Recipes def, or null.
@@ -114,12 +119,14 @@ public:
 
     // The bill's details (everything but mode, count and suspended). `skillMin` to `skillMax` is 0 to 20 at the
     // widest; `radius` is 0 or more metres; `storeZone` is 0 or a stockpile (the caller checks it exists);
+    // `countZone` is 0 or a stockpile an "until you have" bill counts its stock in (the caller checks it exists);
     // `disallowed` are Things item defNames, unknown names fail.
     struct Options {
         int skillMin = 0;
         int skillMax = 20;
         float radius = 0.0f;
         uint32_t storeZone = 0;
+        uint32_t countZone = 0;
         int unpauseAt = 0;
         std::vector<std::string> disallowed;
     };
@@ -141,10 +148,11 @@ public:
     // when it falls.
     void step();
     // How many of an item def lie on the map (carried and delivered ones are not counted).
-    int stockOf(DefId item) const;
+    // With `zone` set only the items lying in that stockpile count (the bill's `countZone`).
+    int stockOf(DefId item, uint32_t zone = 0) const;
     // The stock an "until you have" bill of the recipe counts: its first product, or for butchering all raw meat.
     // False if the recipe makes nothing countable.
-    bool stockFor(const Recipe& recipe, int& stock) const;
+    bool stockFor(const Recipe& recipe, int& stock, uint32_t zone = 0) const;
     // Cooking speed of a pawn for a recipe: (base + perLevel x level of the recipe's skill), 1.0 at
     // level 8. Without a Colonist the default skill level counts.
     float workSpeed(Entity pawn, const Recipe& recipe) const;
@@ -158,8 +166,10 @@ public:
     double nutritionOf(DefId item) const;
 
 private:
+    bool inCountZone(CellPos cell, uint32_t zone) const;
     Things& things_;
     const DefDatabase& defs_;
+    const Zones* zones_ = nullptr;
     BillNumbers numbers_;
     std::vector<Recipe> recipes_;  // in def id order
     std::vector<double> nutrition_;  // per def id

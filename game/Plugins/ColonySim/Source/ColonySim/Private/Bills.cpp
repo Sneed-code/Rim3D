@@ -4,6 +4,7 @@
 #include "ColonySim/Construction.h"
 #include "ColonySim/Genes.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Zones.h"
 
 #include <algorithm>
 #include <cmath>
@@ -287,6 +288,7 @@ bool BillSystem::setOptions(Entity building, uint32_t billId, const Options& opt
     bill->skillMax = options.skillMax;
     bill->radius = options.radius;
     bill->storeZone = options.storeZone;
+    bill->countZone = options.countZone;
     bill->unpauseAt = options.unpauseAt;
     bill->satisfied = false;
     bill->disallowed = std::move(disallowed);
@@ -325,7 +327,7 @@ void BillSystem::step() {
             }
             const Recipe* r = recipe(bill.recipe);
             int stock = 0;
-            if (r == nullptr || !stockFor(*r, stock)) {
+            if (r == nullptr || !stockFor(*r, stock, bill.countZone)) {
                 continue;
             }
             if (stock >= bill.count) {
@@ -337,26 +339,36 @@ void BillSystem::step() {
     }
 }
 
-int BillSystem::stockOf(DefId item) const {
+int BillSystem::stockOf(DefId item, uint32_t zone) const {
     int total = 0;
     things_.registry().view<const Thing, const StackCount, const Position>().each(
-        [&](const Thing& thing, const StackCount& stack, const Position&) { total += thing.def == item ? stack.count : 0; });
+        [&](const Thing& thing, const StackCount& stack, const Position& pos) {
+            if (thing.def == item && inCountZone(cellOf(pos), zone)) {
+                total += stack.count;
+            }
+        });
     return total;
 }
 
-bool BillSystem::stockFor(const Recipe& recipe, int& stock) const {
+bool BillSystem::inCountZone(CellPos cell, uint32_t zone) const {
+    return zone == 0 || zones_ == nullptr || zones_->stockpileAt(cell) == zones_->find(zone);
+}
+
+bool BillSystem::stockFor(const Recipe& recipe, int& stock, uint32_t zone) const {
     if (recipe.butcher) {
         stock = 0;
         things_.registry().view<const Thing, const StackCount, const Position>().each(
-            [&](const Thing& thing, const StackCount& count, const Position&) {
-                stock += thing.def.value < rawMeat_.size() && rawMeat_[thing.def.value] != 0 ? count.count : 0;
+            [&](const Thing& thing, const StackCount& count, const Position& pos) {
+                if (thing.def.value < rawMeat_.size() && rawMeat_[thing.def.value] != 0 && inCountZone(cellOf(pos), zone)) {
+                    stock += count.count;
+                }
             });
         return true;
     }
     if (recipe.products.empty()) {
         return false;
     }
-    stock = stockOf(recipe.products.front().item);
+    stock = stockOf(recipe.products.front().item, zone);
     return true;
 }
 
@@ -373,7 +385,7 @@ bool BillSystem::shouldDo(const Bill& bill) const {
             }
             const Recipe* r = recipe(bill.recipe);
             int stock = 0;
-            return r != nullptr && stockFor(*r, stock) && stock < bill.count;
+            return r != nullptr && stockFor(*r, stock, bill.countZone) && stock < bill.count;
         }
     }
     return false;

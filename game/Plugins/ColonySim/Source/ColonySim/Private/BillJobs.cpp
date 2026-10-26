@@ -16,7 +16,16 @@
 namespace colony {
 
 bool JobSystem::buildingRuns(Entity building) const {
-    return power_ == nullptr || power_->running(building);
+    return power_ == nullptr || power_->running(building) || unpoweredSpeed(building) > 0.0f;
+}
+
+// A bench that can still be worked at a slower pace without power (the electric tailor bench's
+// `building.unpoweredWorkSpeedFactor`); 0 for every other building.
+float JobSystem::unpoweredSpeed(Entity building) const {
+    if (!things_.registry().all_of<Thing>(building)) {
+        return 0.0f;
+    }
+    return static_cast<float>(defs_.get(things_.registry().get<Thing>(building).def).number("building.unpoweredWorkSpeedFactor", 0.0));
 }
 
 bool JobSystem::failCheckDoBill(Entity pawn, Job& job, std::string& why) {
@@ -123,6 +132,9 @@ JobSystem::StepResult JobSystem::billWork(Entity pawn, Job& job, std::string& wh
     float stuffFactor = 1.0f;
     if (crafting_ != nullptr) {
         benchFactor = crafting_->benchSpeed(reg.get<Thing>(job.site).def);
+        if (power_ != nullptr && !power_->running(job.site)) {
+            benchFactor *= unpoweredSpeed(job.site);
+        }
         if (recipe->stuffFromIngredient && !recipe->products.empty()) {
             stuffFactor = crafting_->stuffWorkFactor(crafting_->dominantStuff(recipe->products.front().item, job.used));
         }
@@ -152,6 +164,9 @@ void JobSystem::dropNewItems(Entity pawn, DefId def, int count, const std::vecto
         if (recipe != nullptr && crafting_ != nullptr) {
             crafting_->finishProduct(item, *recipe, bills_->skillLevel(pawn, recipe->skill), madeFrom != nullptr ? *madeFrom : std::vector<BillUsed>{},
                                      storeZone);
+        }
+        if (recipe == nullptr && storeZone != 0) {
+            reg.emplace_or_replace<StoreIn>(item, StoreIn{storeZone});  // butchered meat and leather
         }
         reg.emplace_or_replace<Carrying>(pawn, Carrying{item});
         dropCarried(pawn);

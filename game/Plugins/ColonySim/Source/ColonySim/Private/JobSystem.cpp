@@ -314,6 +314,7 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
       bills_(std::make_unique<BillSystem>(things, defs)),
       fuel_(std::make_unique<FuelSystem>(things, defs, events)),
       givers_(makeWorkGivers()) {
+    bills_->setZones(&zones_);
     for (const DefId id : defs_.idsOfKind("WorkTypes")) {
         const Def& def = defs_.get(id);
         WorkType type;

@@ -29,7 +29,8 @@ A new bench needs only its `workGiver` and its recipes. The check `Tests/Craftin
 bench of a recipe names no giver or a giver no work type lists.
 
 - **Research:** a bill can only be added when the recipe's `researchPrerequisite` is done (unchanged from C7).
-- **Power:** a bench with a power part does nothing while unpowered (unchanged from E5).
+- **Power:** a bench with a power part does nothing while unpowered (unchanged from E5), except one whose def has
+  `building.unpoweredWorkSpeedFactor` (the electric tailor bench, 0.5): it is worked at that share of its speed.
 - **Fuel:** the fueled smithy has a `fuel` field like the stove: 50 wood, one burnt per product (ours: RimWorld
   burns it by the time worked). A bench without fuel is never out of it.
 - **Bench speed:** `stats.workTableWorkSpeedFactor` multiplies the work done each second (hand tailor bench
@@ -77,6 +78,7 @@ Each bill has (RimWorld's bill dialog; defaults in brackets):
 | `skillMin`, `skillMax` [0, 20] | only a worker whose skill is in the range takes the bill (with the recipe's own `minSkill`) |
 | `radius` [0 = anywhere] | ingredients are taken only from within this many metres of the building |
 | `storeZone` [0 = none] | the stockpile the products go to |
+| `countZone` [0 = whole map] | "until you have" bills count only the stock lying in this stockpile |
 | `unpauseAt` [0] | "until you have" bills: once the stock reaches the count the bill waits until the stock is *under* this number. 0 starts again as soon as it is under the count |
 | `disallowed` [none] | item defs the bill may not use as ingredients (the ingredient filter) |
 
@@ -85,11 +87,11 @@ sets or clears their `satisfied` flag; `shouldDo` is false while it is set.
 
 | Command | Does | Fails when |
 | --- | --- | --- |
-| `SetBillOptionsCommand{building, bill, skillMin, skillMax, radius, storeZone, unpauseAt, disallowed}` | replaces all the details | no such bill; skills not 0 to 20 with min <= max; radius under 0 or over 2000; `unpauseAt` out of range; no such stockpile; a name that is not an item |
+| `SetBillOptionsCommand{building, bill, skillMin, skillMax, radius, storeZone, countZone, unpauseAt, disallowed}` | replaces all the details | no such bill; skills not 0 to 20 with min <= max; radius under 0 or over 2000; `unpauseAt` out of range; no such stockpile; a name that is not an item |
 | `MoveBillCommand{building, bill, index}` | moves a bill to that place in the list (0 first, past the end last) | no such bill |
 
 The snapshot's `BillView` shows all of them. Setting the details clears `satisfied`; so does `SetBill`.
-Saves: section `bills` 2 has the details (old saves load with the defaults), section `crafting` 1 the random
+Saves: section `bills` 3 has the details (3 added `countZone`; the `commands` section 2 saves it too) (old saves load with the defaults), section `crafting` 1 the random
 stream and the `StoreIn` marks.
 
 ## Not yet
@@ -98,6 +100,5 @@ stream and the `StoreIn` marks.
 - Skill experience from crafting (`workSkillXp` is read and unused, as for cooking).
 - Inspirations (quality shift), art, sculpting, smelting, the machining table's other recipes.
 - Damage and hit points of melee weapons from their stuff and quality (P4).
-- "Count only what lies in this stockpile", "take from this stockpile only" and a per-bill ingredient quality
+- "Take from this stockpile only" and a per-bill ingredient quality
   filter (the bill's `disallowed` list is by item def).
-- The electric tailor bench's `unpoweredWorkSpeedFactor` (an unpowered bench does nothing).

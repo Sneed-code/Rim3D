@@ -293,6 +293,7 @@ struct BillView {
     int skillMax = 20;
     float radius = 0.0f;     // metres from the building ingredients are taken from; 0 anywhere
     uint32_t storeZone = 0;  // the stockpile the products go to; 0 none
+    uint32_t countZone = 0;  // the stockpile an "until you have" bill counts in; 0 the whole map
     int unpauseAt = 0;
     bool satisfied = false;  // an "until you have" bill waiting for the stock to fall to `unpauseAt`
     std::vector<DefId> disallowed;  // ingredient item defs it may not use

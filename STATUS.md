@@ -2,6 +2,8 @@
 
 Updated 2026-10-26.
 
+Stage 2 items and crafting follow-ups done: tailoring now teaches Crafting, the electric tailor bench works at half speed with no power, an "until you have" bill can count only the stock in one stockpile (`countZone`, `SetBillOptions`), and a butcher table's "store in this stockpile" takes the meat and leather there (`docs/design/crafting.md`). Saves: `bills` 3, `commands` 2.
+
 Stage 2 U14 done: lamps, fires and burnt ground are on screen. Every lamp the sim has lit (campfire, torch, standing and sun lamps) is a real warm light that goes out when its fuel or power does; campfires and torches have flames and embers; each burning cell has flames, embers and smoke in proportion to its size, with an orange light per 4 m block of fire; burning pawns have flames and a light; burnt ground is a charcoal skin and ash a grey patch, exactly the sim's cells (`docs/design/fire-draw.md`, smoke test `fire`; `UFireSubsystem`; defs got `glower.lift` and `visual.flame`; no sim changes). Particles are instanced meshes like the fight effects (the engine's unlit material does not work on instances), so flames are lit; real Niagara fire is later.
 
 Stage 2 N2 done: a hunt mark on a wild animal sends a colonist with a gun and the Hunting work to shoot it dead (it follows a runner, and a hurt animal may turn on the hunter through N5), haulers carry hunted and slaughtered animals' corpses to a stockpile, and a butcher table's bill carries a corpse to the table and cuts it up into meat and leather by RimWorld's butchery efficiency (75% plus 2.5% per Cooking level), so the fine meal can now be cooked from hunted meat (`docs/design/hunting.md`, tests `HuntingTests`). Save section `husbandry` 2.
