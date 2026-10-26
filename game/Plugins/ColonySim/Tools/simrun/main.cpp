@@ -130,6 +130,7 @@ struct Options {
     std::string saveJson;
     bool hasOutdoor = false;  // --outdoor C: hold the outdoor temperature fixed (docs/design/temperature.md)
     double outdoor = 0.0;
+    int64_t roundtrip = 0;  // --roundtrip N: every N game seconds save, load, compare, and run both 600 steps on
 #ifdef COLONY_DATA_DIR
     std::string data = COLONY_DATA_DIR;
 #else
@@ -216,6 +217,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.save = argv[++i];
         } else if (std::strcmp(arg, "--save-json") == 0 && hasValue) {
             out.saveJson = argv[++i];
+        } else if (std::strcmp(arg, "--roundtrip") == 0 && hasValue) {
+            out.roundtrip = std::atoll(argv[++i]);
         } else if (std::strcmp(arg, "--outdoor") == 0 && hasValue) {
             out.hasOutdoor = true;
             out.outdoor = std::atof(argv[++i]);
@@ -224,7 +227,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
                          "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--scenario colony [--verbose]] [--power] [--raid POINTS [--raid-strategy NAME]] [--armed] [--narrator NAME [--difficulty NAME]] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house [--verbose]] [--power] [--world FILE [--world-size WxH]] [--raid POINTS [--raid-strategy NAME]] [--armed] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
-                         "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS]\n");
+                         "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS] [--roundtrip SECONDS]\n");
             return false;
         }
     }
@@ -854,6 +857,8 @@ int main(int argc, char** argv) {
     uint64_t fireBurntOut = 0;
     uint64_t pawnsCaught = 0;
     uint64_t fireLit = 0;
+    int roundtripChecks = 0;
+    int roundtripFails = 0;
     for (int64_t i = 0; i < steps; ++i) {
         feeder.submitDue(sim);
         if (options.fire && sim.time().seconds == 600) {
@@ -891,6 +896,46 @@ int main(int argc, char** argv) {
             for (const auto [pawn, needs] : sim.things().registry().view<colony::Needs>().each()) {
                 needs.food = 1.0f;
                 needs.malnutrition = 0.0f;
+            }
+        }
+        // --roundtrip: a copy made by saving and loading must be the same game: same hash and file now, and the
+        // same hash after both run on (600 steps, no scripted commands), or something is not saved.
+        if (options.roundtrip > 0 && sim.time().seconds > 0 && sim.time().seconds % options.roundtrip == 0) {
+            colony::SaveLoadResult copy = colony::loadSim(colony::saveSim(sim), defs);
+            if (!copy.sim) {
+                std::printf("ROUNDTRIP FAIL at %lld: load refused: %s\n", static_cast<long long>(sim.time().seconds), copy.error.c_str());
+                roundtripFails += 1;
+            } else {
+                const int64_t at = sim.time().seconds;
+                if (copy.sim->stateHash() != sim.stateHash()) {
+                    std::printf("ROUNDTRIP FAIL at %lld: hash differs right after loading\n", static_cast<long long>(at));
+                    if (std::getenv("RT_DUMP") && roundtripFails == 0) {
+                        std::ofstream(std::string(std::getenv("RT_DUMP")) + ".a.json") << colony::saveToJson(sim);
+                        std::ofstream(std::string(std::getenv("RT_DUMP")) + ".b.json") << colony::saveToJson(*copy.sim);
+                        std::string js, er;
+                        colony::saveFileToJson(colony::saveSim(sim), js, er);
+                        std::ofstream(std::string(std::getenv("RT_DUMP")) + ".c.json") << js;
+                    }
+                    roundtripFails += 1;
+                } else if (colony::saveSim(*copy.sim) != colony::saveSim(sim)) {
+                    std::printf("ROUNDTRIP FAIL at %lld: saving the loaded copy gives another file\n", static_cast<long long>(at));
+                    roundtripFails += 1;
+                } else {
+                    for (int k = 0; k < 600; ++k) {
+                        sim.step();
+                        copy.sim->step();
+                        if (sim.stateHash() != copy.sim->stateHash()) {
+                            std::printf("ROUNDTRIP FAIL at %lld: the copy went its own way %d steps later\n", static_cast<long long>(at), k + 1);
+                            roundtripFails += 1;
+                            if (std::getenv("RT_DUMP") && roundtripFails == 1) {
+                                std::ofstream(std::string(std::getenv("RT_DUMP")) + ".a.json") << colony::saveToJson(sim);
+                                std::ofstream(std::string(std::getenv("RT_DUMP")) + ".b.json") << colony::saveToJson(*copy.sim);
+                            }
+                            break;
+                        }
+                    }
+                }
+                roundtripChecks += 1;
             }
         }
         const bool passStep = options.farm > 0 && sim.time().seconds > 0 && sim.time().seconds % sim.breeding().rules().passSeconds == 0;
@@ -985,6 +1030,12 @@ int main(int argc, char** argv) {
         }
     }
     const auto finished = Clock::now();
+    if (options.roundtrip > 0) {
+        std::printf("{\"roundtrip\":{\"checks\":%d,\"failed\":%d}}\n", roundtripChecks, roundtripFails);
+        if (roundtripFails > 0 || roundtripChecks == 0) {
+            return 1;
+        }
+    }
 
     double totalMs = 0.0;
     for (const float v : stepMs) {

@@ -57,6 +57,12 @@ add_test(NAME simrun_needs COMMAND simrun --seed 42 --size 128 --days 3 --start 
 # (beaten, routed or gone) within a quarter of a day.
 add_test(NAME simrun_raid COMMAND simrun --seed 1 --size 256 --days 0.25 --start Crashlanded --raid 300 --armed --check)
 # Orrin's first big threat, a raid, comes between day 11 and 15.6 of a new colony (T1, docs/design/narrator.md).
+# Save round trips in a busy game (docs/design/saves.md): every 3 game hours simrun saves, loads a copy, checks the
+# hash and the file, and runs both 600 steps on; the copy must never go its own way.
+add_test(NAME simrun_roundtrip COMMAND simrun --seed 4 --size 256 --days 2.2 --start Crashlanded --animals --armed
+         --narrator Maren --difficulty Rough --roundtrip 10800)
+add_test(NAME simrun_roundtrip_rain COMMAND simrun --seed 1 --size 256 --days 1.8 --start Crashlanded --animals --armed
+         --narrator Orrin --difficulty Rough --roundtrip 10800)
 add_test(NAME simrun_narrator COMMAND simrun --seed 42 --size 128 --days 15.7 --start Crashlanded --narrator Orrin --armed --check)
 # Raid soak (F7, docs/design/raid-soak.md): firefights and raids over a few seeds. The nightly workflow runs many more.
 add_test(NAME simrun_raid_soak COMMAND simrun --seed 1 --raid-soak 3)

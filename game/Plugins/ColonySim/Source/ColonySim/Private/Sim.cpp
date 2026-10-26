@@ -1251,6 +1251,7 @@ void Sim::step() {
     filth_->step();
     roomStats_->step(time_.seconds);
     temperature_->step(time_.seconds);
+    spoilage_->setOutdoorFactor(weather_->deteriorationFactor());  // here, not after the weather step: a loaded save has no factor set yet
     spoilage_->step(time_.seconds);
     if (time_.seconds % kBillUpkeepSeconds == 0) {
         jobs_->bills().step();
@@ -1258,7 +1259,6 @@ void Sim::step() {
     }
     time_.seconds += 1;
     weather_->step(time_.seconds);
-    spoilage_->setOutdoorFactor(weather_->deteriorationFactor());
     if (time_.seconds % kSecondsPerDay == 0) {
         jobs_->skillsNewDay();
     }

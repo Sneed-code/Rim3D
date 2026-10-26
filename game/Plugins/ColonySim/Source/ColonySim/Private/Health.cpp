@@ -960,8 +960,19 @@ void HealthSystem::refresh(Entity pawn) {
 
 void HealthSystem::refreshAll() {
     entt::registry& reg = things_.registry();
+    // After a load: derived values come back, but a wound still waiting to be worked out (`dirty`, saved) keeps
+    // its saved downed flag and stays pending, so the next step downs, stops and announces it as it would have.
     for (const auto [entity, health] : reg.view<Health>().each()) {
+        const bool pending = health.dirty;
+        const bool downed = health.downed;
+        if (pending) {
+            health.downed = true;  // so recompute does not stop the walk of a pawn that is only now found down
+        }
         recompute(entity, health, false);
+        if (pending) {
+            health.downed = downed;
+            health.dirty = true;
+        }
     }
 }
 

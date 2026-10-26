@@ -168,6 +168,8 @@ struct SaveHealth {
     std::vector<SaveImmunity> immunities;            // health section 4 on
     bool dead = false;
     DeathCause cause = DeathCause::None;
+    bool downed = false;  // health section 5 on: with `dirty`, so a wound not yet worked out is still pending after a load
+    bool dirty = false;
 };
 
 // An item's rot and wear and what a meal was cooked from, by defName (section "spoilage").
@@ -1540,7 +1542,10 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
     ar.value("dead", h.dead);
     ar.value("cause", h.cause);
     ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Disease), "the save file has a bad cause of death");
-
+    if (ar.sectionVersion() >= 5) {
+        ar.value("downed", h.downed);
+        ar.value("dirty", h.dirty);
+    }
 }
 
 template <typename Ar>
@@ -2553,7 +2558,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("colonists", 2, [&] {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
-    ar.section("health", 4, [&] {
+    ar.section("health", 5, [&] {
         saveParts(ar, "health", e, &SaveEntity::health, [&](SaveHealth& h) { saveHealthPart(ar, h); });
     });
     ar.section("control", 1, [&] {
@@ -3178,6 +3183,8 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             }
             saved.dead = health->dead;
             saved.cause = health->cause;
+            saved.downed = health->downed;
+            saved.dirty = health->dirty;
             out.health = std::move(saved);
         }
         if (const Posture* posture = reg.try_get<Posture>(e)) {
@@ -3676,6 +3683,8 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                       [](const EnvironmentHediff& a, const EnvironmentHediff& b) { return a.def.value < b.def.value; });
             health.dead = e.health->dead;
             health.cause = e.health->cause;
+            health.downed = e.health->downed;  // with `dirty`: a wound not yet worked out stays pending (refreshAll)
+            health.dirty = e.health->dirty;
             const int parts = e.thing ? sim.health_->partCount(reg.get<Thing>(entity).def) : 0;
             for (const Injury& injury : health.injuries) {
                 if (injury.part >= parts) {
