@@ -71,6 +71,9 @@ struct Recipe {
     std::vector<RecipeIngredient> ingredients;
     std::vector<RecipeProduct> products;
     bool stuffFromIngredient = false;  // the product is made of the stuff the ingredients are (clothes, weapons)
+    // Cuts up a corpse (N2, docs/design/hunting.md): the ingredient is a dead animal, not a stack of items, and the products
+    // (meat and leather) come from the animal's def. "Until you have" counts the raw meat on the map.
+    bool butcher = false;
     // How many things one run makes. A building that burns fuel per product burns this many times its `fuel.perUse`.
     int productCount() const {
         int made = 0;
@@ -139,6 +142,9 @@ public:
     void step();
     // How many of an item def lie on the map (carried and delivered ones are not counted).
     int stockOf(DefId item) const;
+    // The stock an "until you have" bill of the recipe counts: its first product, or for butchering all raw meat.
+    // False if the recipe makes nothing countable.
+    bool stockFor(const Recipe& recipe, int& stock) const;
     // Cooking speed of a pawn for a recipe: (base + perLevel x level of the recipe's skill), 1.0 at
     // level 8. Without a Colonist the default skill level counts.
     float workSpeed(Entity pawn, const Recipe& recipe) const;
@@ -157,6 +163,7 @@ private:
     BillNumbers numbers_;
     std::vector<Recipe> recipes_;  // in def id order
     std::vector<double> nutrition_;  // per def id
+    std::vector<uint8_t> rawMeat_;   // per def id: an item in the MeatRaw category
 };
 
 }  // namespace colony

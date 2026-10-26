@@ -125,6 +125,11 @@ public:
 	const FMeleeSwingTrack& GetSwing() const { return Swing; }
 	/** 0 to 1: how far the weapon has come up to block. */
 	float GetBlockBlend() const { return BlockBlend; }
+	/** The dodge roll's somersault (U21): 0 when not rolling, then how far through the sim's 27 steps the roll is, and the angle the
+	 *  body has turned over its way, 0 to 360 (docs/design/shooter-feel-draw.md). The sim moves the body; this only turns it. */
+	float GetRollProgress() const { return RollProgress; }
+	float GetRollAngle() const { return RollAngle; }
+	int32 GetRollsSeen() const { return RollsSeen; }
 	/** 1 standing, 0.66 crouching, 0.24 lying: what weapon heights are scaled by. */
 	float GetStanceHeight() const { return StanceHeight; }
 	/** Where the held melee weapon is now, in this actor's space (cm, degrees): the swing or the block,
@@ -233,6 +238,10 @@ private:
 	/** Real seconds the sim has disagreed with the swing on screen (a swing the sim called off). */
 	float SwingMismatch = 0.0f;
 	bool bBodyPosed = false;
+	float RollProgress = 0.0f;
+	float RollAngle = 0.0f;
+	FVector RollDirection = FVector::ForwardVector;
+	int32 RollsSeen = 0;
 	int32 DodgesPlayed = 0;
 	int32 HitStops = 0;
 

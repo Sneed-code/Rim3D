@@ -113,6 +113,12 @@ public:
 	bool ToggleProne();
 	/** Picks up the nearest gun lying within 8 m. False if there is none or one is in hand. */
 	bool EquipNearest();
+	/** Dodge roll (P2): sends DodgeRollCommand in the direction of `Input` (x right, y forward, both -1 to 1, relative to
+	 *  where the view looks; zero is a backstep). False (and nothing sent) if not in direct mode, the pawn can't roll now or
+	 *  an order went out this step. */
+	bool Roll(const FVector2D& Input);
+	/** Throws the first grenade on the belt at the crosshair's point (F9's ThrowCommand with `player`). */
+	bool ThrowGrenade();
 	/** Where the crosshair points, in Unreal world units: the sim's trace from the view along the look
 	 *  direction (ground, rock, building or pawn hitbox), else a point 150 m out. False if not in direct mode. */
 	bool ComputeAimPoint(FVector& OutWorldPoint, colony::Entity* OutPawnHit = nullptr) const;

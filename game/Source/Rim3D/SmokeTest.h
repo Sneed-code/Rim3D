@@ -34,6 +34,7 @@ namespace colony { class Map; }
  * melee (carried and holstered weapons, the weapon switch key, melee swings timed to the sim, blocks, dodges and hit-stop),
  * clothes (worn apparel drawn on MetaHumans over a skin layer: stuff tint, torn look, hats and hair, taking off and stripping),
  * levels (upper floors, stairs and ladders drawn, the overseer's Page Up / Page Down cutaway and picking, climbing stairs in direct mode).
+ * fire (the sim's lamps and fires as lights, flames, embers and smoke; burning pawns; burnt ground and ash).
  * Optional: -SmokeTimeout=<seconds> (default 300) fails a run that hangs.
  * To add a test: write a Build<Name>Phases() and add a branch in OnWorldBeginPlay.
  * Run it with tools/smoke.ps1.
@@ -93,6 +94,8 @@ private:
 	void BuildMeleePhases();        // SmokeTestMelee.cpp
 	void BuildClothesPhases();      // SmokeTestClothes.cpp
 	void BuildLevelsPhases();       // SmokeTestLevels.cpp
+	void BuildFeelPhases();         // SmokeTestFeel.cpp
+	void BuildFirePhases();         // SmokeTestFire.cpp
 	void StartPhase(int32 Index);
 	void FinishPhase();
 	void WriteResultsAndQuit();
