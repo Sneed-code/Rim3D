@@ -473,7 +473,13 @@ public:
             }
             const int skill = bills.skillLevel(pawn, recipe->skill);
             if (skill < recipe->minSkill || skill < bill.skillMin || skill > bill.skillMax ||
-                !jobs.fuel().canUse(building, fuelPerProduct * static_cast<float>(recipe->productCount()))) {
+                !jobs.fuel().canUse(building, fuelPerProduct * static_cast<float>(recipe->fuelUses()))) {
+                continue;
+            }
+            if (recipe->butcher) {
+                if (makeButcherJob(jobs, pawn, building, bill, candidate.reach, out)) {
+                    return true;
+                }
                 continue;
             }
             std::vector<BillPick> picks;
@@ -1131,6 +1137,7 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<ExtinguishFiresGiver>());
     givers.push_back(std::make_unique<StripGiver>());
     addHusbandryWorkGivers(givers);
+    addHuntWorkGivers(givers);
     addPrisonerWorkGivers(givers);
     givers.push_back(std::make_unique<RefuelGiver>());
     givers.push_back(std::make_unique<RepairGearGiver>("RepairWeapons", "Weapons"));

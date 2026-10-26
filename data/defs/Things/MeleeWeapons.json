@@ -1,6 +1,6 @@
 [
  {
-  "defName": "MeleeWeaponBase",
+  "defName": "MeleeWeaponBase", "visual": {"sound": {"swing": "Swing_Blade", "hit": "Flesh_Cut"}},
   "abstract": true,
   "parent": "ItemBase",
   "source": "RimWorld wiki",
@@ -45,7 +45,7 @@
   "stats": {
    "mass": 0.5,
    "marketValue": 64,
-   "workToMake": 864.0
+   "workToMake": 2592
   },
   "tools": [
    {
@@ -71,7 +71,6 @@
   "unverified": [
    "tools",
    "costStuffCount",
-   "stats.workToMake",
    "stats.mass",
    "stats.marketValue"
   ]
@@ -80,7 +79,7 @@
   "defName": "Melee_Club",
   "parent": "MeleeWeaponBase",
   "label": "club",
-  "visual": {"parts": [{"shape": "box", "size": [0.60, 0.05, 0.05], "at": [0.20, 0, -0.025], "color": [0.36, 0.23, 0.12]}, {"shape": "box", "size": [0.24, 0.09, 0.09], "at": [0.45, 0, -0.045], "color": [0.36, 0.23, 0.12]}]},
+  "visual": {"sound": {"swing": "Swing_Blunt", "hit": "Flesh_Blunt"},"parts": [{"shape": "box", "size": [0.60, 0.05, 0.05], "at": [0.20, 0, -0.025], "color": [0.36, 0.23, 0.12]}, {"shape": "box", "size": [0.24, 0.09, 0.09], "at": [0.45, 0, -0.045], "color": [0.36, 0.23, 0.12]}]},
   "stuffCategories": [
    "Woody"
   ],
@@ -129,9 +128,9 @@
   ],
   "costStuffCount": 40,
   "stats": {
-   "mass": 1.0,
+   "mass": 0.85,
    "marketValue": 138,
-   "workToMake": 1728.0
+   "workToMake": 17280
   },
   "tools": [
    {
@@ -157,8 +156,6 @@
   "unverified": [
    "tools",
    "costStuffCount",
-   "stats.workToMake",
-   "stats.mass",
    "stats.marketValue"
   ]
  },
@@ -166,15 +163,15 @@
   "defName": "Melee_Spear",
   "parent": "MeleeWeaponBase",
   "label": "spear",
-  "visual": {"parts": [{"shape": "box", "size": [1.60, 0.03, 0.03], "at": [0.30, 0, -0.015], "color": [0.36, 0.23, 0.12]}, {"shape": "box", "size": [0.22, 0.014, 0.05], "at": [1.21, 0, -0.025], "color": [0.72, 0.74, 0.78]}]},
+  "visual": {"sound": {"swing": "Swing_Spear", "hit": "Flesh_Stab"},"parts": [{"shape": "box", "size": [1.60, 0.03, 0.03], "at": [0.30, 0, -0.015], "color": [0.36, 0.23, 0.12]}, {"shape": "box", "size": [0.22, 0.014, 0.05], "at": [1.21, 0, -0.025], "color": [0.72, 0.74, 0.78]}]},
   "stuffCategories": [
    "Metallic"
   ],
   "costStuffCount": 50,
   "stats": {
-   "mass": 1.8,
+   "mass": 2,
    "marketValue": 186,
-   "workToMake": 1440.0
+   "workToMake": 17280
   },
   "tools": [
    {
@@ -200,8 +197,6 @@
   "unverified": [
    "tools",
    "costStuffCount",
-   "stats.workToMake",
-   "stats.mass",
    "stats.marketValue"
   ]
  },
@@ -209,15 +204,15 @@
   "defName": "Melee_Mace",
   "parent": "MeleeWeaponBase",
   "label": "mace",
-  "visual": {"parts": [{"shape": "box", "size": [0.62, 0.04, 0.04], "at": [0.21, 0, -0.02], "color": [0.36, 0.23, 0.12]}, {"shape": "sphere", "size": [0.08, 0.08, 0.16], "at": [0.58, 0, -0.08], "color": [0.30, 0.31, 0.34]}]},
+  "visual": {"sound": {"swing": "Swing_Blunt", "hit": "Flesh_Blunt"},"parts": [{"shape": "box", "size": [0.62, 0.04, 0.04], "at": [0.21, 0, -0.02], "color": [0.36, 0.23, 0.12]}, {"shape": "sphere", "size": [0.08, 0.08, 0.16], "at": [0.58, 0, -0.08], "color": [0.30, 0.31, 0.34]}]},
   "stuffCategories": [
    "Metallic"
   ],
   "costStuffCount": 40,
   "stats": {
-   "mass": 1.8,
+   "mass": 1.25,
    "marketValue": 117,
-   "workToMake": 1440.0
+   "workToMake": 8640
   },
   "tools": [
    {
@@ -243,8 +238,6 @@
   "unverified": [
    "tools",
    "costStuffCount",
-   "stats.workToMake",
-   "stats.mass",
    "stats.marketValue"
   ]
  },
@@ -258,7 +251,7 @@
   ],
   "costStuffCount": 100,
   "stats": {
-   "mass": 1.5,
+   "mass": 2,
    "marketValue": 255,
    "workToMake": 2880.0
   },
@@ -287,7 +280,6 @@
    "tools",
    "costStuffCount",
    "stats.workToMake",
-   "stats.mass",
    "stats.marketValue"
   ]
  },

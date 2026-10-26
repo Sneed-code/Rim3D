@@ -1531,6 +1531,20 @@ PawnHitResult CombatSystem::hitPawn(Entity pawn, int hitboxPart, DefId damageTyp
     return armorPass(pawn, part, damageType, amount, penetration, rng);
 }
 
+bool CombatSystem::hurtPawn(Entity pawn, DefId damageType, float amount, Rng& rng) {
+    const int part = pickOutsidePart(pawn, rng);
+    if (part < 0) {
+        return false;
+    }
+    const PawnHitResult hit = armorPass(pawn, part, damageType, amount, 0.0f, rng);
+    bool alive = true;
+    if (!hit.deflected && hit.amount > 0.0f) {
+        alive = health_.applyHit(pawn, hit.damageType, hit.amount, part);
+    }
+    wearApparel(pawn, hit);
+    return alive;
+}
+
 float CombatSystem::spreadRadiusFor(float chance) const {
     // From the large end: below a few centimetres the 2 cm grid makes the share jump about, which
     // the long-range chances aimed shots ask for never reach but melee's high ones do.

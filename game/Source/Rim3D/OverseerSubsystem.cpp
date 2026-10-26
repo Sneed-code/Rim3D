@@ -13,6 +13,7 @@
 #include "OrdersSubsystem.h"
 #include "OverseerPawn.h"
 #include "ProtagonistSubsystem.h"
+#include "ShooterFeelSubsystem.h"
 #include "SimSubsystem.h"
 #include "SkySubsystem.h"
 
@@ -417,6 +418,12 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 		ImGui::TextUnformatted("R draft colonist / turn building   right click order");
 	}
 	ImGui::End();
+
+	// The settings for the shooter feel (shake, blur, kick, aim view), kept folded under the alarm button (U21).
+	if (UShooterFeelSubsystem* Feel = GetWorld()->GetSubsystem<UShooterFeelSubsystem>())
+	{
+		Feel->DrawSettingsPanel(Viewport->Pos.x + Viewport->Size.x, Scale);
+	}
 
 	++PanelFramesDrawn;
 }

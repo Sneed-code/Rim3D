@@ -41,6 +41,10 @@ enum class JobType : uint8_t {
     WardenInteract,    // walk to a prisoner and talk to it: resistance, recruiting or release
     Refuel,            // carry fuel to a building and put it in (fuel.md)
     RepairGear,        // carry a marked piece of gear to a bench and mend it, or fit an upgrade part to a gun (repair.md)
+    Hunt,              // walk up to a wild animal marked for the hunt and shoot it dead (docs/design/hunting.md)
+    HaulCorpse,        // carry a hunted or slaughtered animal's corpse to a stockpile (docs/design/hunting.md)
+    Butcher,           // carry a corpse to a butcher table and cut it up into meat and leather (docs/design/hunting.md)
+    SeekShelter,       // walk to a place with a safe temperature and stay a while (docs/design/temperature.md)
 };
 
 COLONY_API const char* jobTypeName(JobType type);

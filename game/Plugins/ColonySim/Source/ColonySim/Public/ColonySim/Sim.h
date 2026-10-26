@@ -42,6 +42,7 @@ class Designations;
 class ExplosiveSystem;
 class FighterSystem;
 class Husbandry;
+class MentalBreakSystem;
 class JobSystem;
 class Lights;
 class MeleeSystem;
@@ -66,9 +67,11 @@ class CraftingSystem;
 class RepairSystem;
 class Things;
 class UpperFloors;
+class RoofCollapse;
 class Weather;
 class Zones;
 class Farming;
+class NarratorSystem;
 struct Snapshot;
 class SimSaveAccess;
 
@@ -260,6 +263,8 @@ public:
     // Upper floors and the rules for laying them (docs/design/levels.md).
     UpperFloors& upperFloors() { return *upperFloors_; }
     const UpperFloors& upperFloors() const { return *upperFloors_; }
+    RoofCollapse& roofCollapse() { return *roofCollapse_; }
+    const RoofCollapse& roofCollapse() const { return *roofCollapse_; }
 
     // Stockpile zones (docs/design/jobs.md).
     const Zones& zones() const { return *zones_; }
@@ -285,6 +290,9 @@ public:
     RaidSystem& raids() { return *raids_; }
     const RaidSystem& raids() const { return *raids_; }
 
+    // The narrator, incidents and threat points (docs/design/narrator.md).
+    NarratorSystem& narrator() { return *narrator_; }
+    const NarratorSystem& narrator() const { return *narrator_; }
     // Prisoners: capture, feeding, warden talks, recruiting and release (docs/design/prisoners.md).
     PrisonerSystem& prisoners() { return *prisoners_; }
     const PrisonerSystem& prisoners() const { return *prisoners_; }
@@ -297,6 +305,10 @@ public:
     Breeding& breeding() { return *breeding_; }
     const Breeding& breeding() const { return *breeding_; }
     const Husbandry& husbandry() const { return *husbandry_; }
+
+    // Colonists who snap when their mood is low: wander, binge, tantrum, berserk, leave (docs/design/mental-breaks.md).
+    MentalBreakSystem& mentalBreaks() { return *mentalBreaks_; }
+    const MentalBreakSystem& mentalBreaks() const { return *mentalBreaks_; }
 
     // Blueprints, frames and taking buildings down (docs/design/construction.md).
     Construction& construction() { return *construction_; }
@@ -381,11 +393,13 @@ private:
     std::unique_ptr<RoomStats> roomStats_;
     std::unique_ptr<AnimalSystem> animals_;
     std::unique_ptr<UpperFloors> upperFloors_;  // M1
+    std::unique_ptr<RoofCollapse> roofCollapse_;  // M3, after the rooms and the job system
     std::unique_ptr<RaidSystem> raids_;        // after the fighters
     std::unique_ptr<PrisonerSystem> prisoners_;  // after the raids
     std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system
     std::unique_ptr<Breeding> breeding_;    // after husbandry_
     std::unique_ptr<Fire> fire_;            // after the weather, temperature, rooms, floors, filth, plants and health
+    std::unique_ptr<MentalBreakSystem> mentalBreaks_;  // after the job and fighter systems
     std::vector<std::string> setupErrors_;
     std::vector<std::pair<uint64_t, Command>> pending_;  // id, command
     uint64_t submitted_ = 0;
@@ -394,6 +408,7 @@ private:
     std::vector<Checkpoint> checkpoints_;
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
+    std::unique_ptr<NarratorSystem> narrator_;  // after raids_
     std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
 };
 

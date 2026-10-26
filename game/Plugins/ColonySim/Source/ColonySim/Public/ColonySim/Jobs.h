@@ -9,6 +9,7 @@
 #include "ColonySim/JobType.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Pathfinder.h"
+#include "ColonySim/Skills.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Zones.h"
 
@@ -170,6 +171,8 @@ struct HandsOnPlan {
 class ApparelSystem;
 class BillSystem;
 class Breeding;
+class CombatSystem;
+class TemperatureSystem;
 class Construction;
 class FuelSystem;
 class DefDatabase;
@@ -179,6 +182,7 @@ class Filth;
 class Fire;
 class SpoilageSystem;
 class CraftingSystem;
+struct Bill;
 struct Recipe;
 class HealthSystem;
 class MedicineSystem;
@@ -276,6 +280,14 @@ public:
     // Ends the pawn's job, if it has one, as interrupted for `why`: reservations let go, what it
     // carried put down. Used when the player takes the pawn over (ControlPawnCommand).
     void interrupt(Entity pawn, const std::string& why);
+
+    // Skill learning (docs/design/skills.md). Every job that uses a skill calls `learnSkill` each
+    // second it works; `skillsNewDay` is Sim's midnight (daily XP total starts over, high skills decay).
+    const SkillRules& skillRules() const { return skillRules_; }
+    void skillsNewDay();
+    // The skill the pawn's current job uses (a Skills `defName`), or empty for a job that uses none
+    // (hauling, eating, sleeping...). The whole job counts, the walk to the work too.
+    std::string activeSkill(Entity pawn) const;
     // Schedule: what a pawn does in an hour of the day (0 to 23).
     bool setSchedule(Entity pawn, int hour, ScheduleKind kind, std::string& error);
     // Bed ownership. `pawn` becomes an owner of `bed` (and stops owning any other bed); kNoEntity
@@ -294,6 +306,11 @@ public:
     // Milking and shearing (Breeding.h); without it nobody gathers from animals.
     void setBreeding(Breeding* breeding) { breeding_ = breeding; }
     Breeding* breeding() const { return breeding_; }
+    // Hunting (HuntJobs.cpp, docs/design/hunting.md): hunters shoot through the combat system. Without it nobody hunts.
+    void setCombat(CombatSystem* combat) { combat_ = combat; }
+    // Where pawns that stand outside their safe temperature look for shelter (docs/design/temperature.md).
+    void setTemperature(TemperatureSystem* temperature) { temperature_ = temperature; }
+    CombatSystem* combat() const { return combat_; }
     // An animal that has learned to haul works through the job system with only the Hauling work type on. `on` false
     // takes it off again (ending its job). The gate says whether it may work now (awake, fed, unhurt).
     void setAnimalHauler(Entity animal, bool on);
@@ -469,6 +486,9 @@ private:
     // The think list: each node may give a job; the first that does wins (docs/design/jobs.md).
     using ThinkNode = bool (JobSystem::*)(Entity pawn, Job& out);
     bool thinkNeeds(Entity pawn, Job& out);
+    // A SeekShelter job for a pawn outside its safe temperature: to the nearest reachable cell inside its comfortable
+    // range (else its safe range). False if it is safe, or nowhere is.
+    bool makeShelterJob(Entity pawn, Job& out);
     bool thinkSchedule(Entity pawn, Job& out);
     bool thinkApparel(Entity pawn, Job& out);
     bool thinkWork(Entity pawn, Job& out);
@@ -541,6 +561,20 @@ private:
     bool failCheckHandle(Entity pawn, Job& job, std::string& why);
     StepResult approachAnimal(Entity pawn, Job& job, std::string& why);
     StepResult handleWork(Entity pawn, Job& job, std::string& why);
+
+    // Hunting (HuntJobs.cpp, docs/design/hunting.md). Hunt: `site` the animal. HaulCorpse: `thing` the corpse, `cell` where to put it
+    // down (it follows the pawn's position while carried, as in a rescue). Butcher: `thing` the corpse, `site` the butcher table,
+    // `bill` its bill, `cell` the cell beside the table where the pawn works.
+    bool failCheckHunt(Entity pawn, Job& job, std::string& why);
+    StepResult huntWork(Entity pawn, Job& job, std::string& why);
+    bool failCheckHaulCorpse(Entity pawn, Job& job, std::string& why);
+    StepResult dropCorpse(Entity pawn, Job& job, std::string& why);
+    bool failCheckButcher(Entity pawn, Job& job, std::string& why);
+    StepResult butcherWork(Entity pawn, Job& job, std::string& why);
+    StepResult butcherFinish(Entity pawn, Job& job, std::string& why);
+    // The share of the meat and leather a butcher gets out of a corpse: RimWorld's butchery efficiency, 75% plus 2.5% per Cooking level,
+    // times the Manipulation factor, within the rules' limits.
+    double butcherEfficiency(Entity pawn) const;
 
     // Gathering jobs (GatherJobs.cpp).
     bool failCheckGather(Entity pawn, Job& job, std::string& why);
@@ -637,6 +671,8 @@ private:
     PrisonerSystem* prisoners_ = nullptr;
     Husbandry* husbandry_ = nullptr;
     Breeding* breeding_ = nullptr;
+    CombatSystem* combat_ = nullptr;
+    TemperatureSystem* temperature_ = nullptr;
     std::function<bool(Entity)> animalGate_;
     const TalentSystem* talents_ = nullptr;  // build speed and carrying capacity (docs/design/talents.md)
     RecreationRules recreation_;
@@ -669,12 +705,12 @@ private:
         double plantSpeedBase = 0.08;
         double plantSpeedPerLevel = 0.115;
         double plantXpPerSecond = 0.059028;
+        double constructionXpPerSecond = 0.173611;
         double growthYieldFloor = 0.5;
         int unskilledLevel = 8;
         std::vector<double> yieldByLevel;
-        std::vector<double> xpToNextLevel;
-        double passionLearn[3] = {0.35, 1.0, 1.5};
     } gather_;
+    SkillRules skillRules_;
     int manipulationIndex_ = -1;  // position of the Manipulation capacity in Health::capacities, or -1
     std::map<TargetKey, Entity> reservations_;  // follows from the jobs; rebuilt on load
     int64_t idleSeconds_ = 0;
@@ -711,6 +747,10 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers();
 void addHusbandryWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers);
 // The scanners for the Warden work type: capturing, feeding and talking to prisoners (PrisonerJobs.cpp).
 void addPrisonerWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers);
+// The scanners for hunting a marked wild animal and carrying its corpse to a stockpile (HuntJobs.cpp).
+void addHuntWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers);
+// A butcher bill's job: the nearest corpse the bill may use (within its radius), carried to the table's `stand` cell. False if there is none.
+bool makeButcherJob(JobSystem& jobs, Entity pawn, Entity building, const Bill& bill, CellPos stand, Job& out);
 // Haul jobs, shared by the hauling scanner and the haul order: the job to store `item`, or false.
 bool makeHaulJob(JobSystem& jobs, Entity pawn, Entity item, Job& out);
 

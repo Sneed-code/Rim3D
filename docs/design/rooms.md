@@ -57,8 +57,8 @@ has `ThingView::doorOpen`, 0 closed to 1 open, for Unreal).
   mined out (C3: a mined tunnel is roofed, so it is indoors).
 - **Thin** is the built roof. There is no roof designation and no roofing job: **a roof appears
   by itself over an enclosed room** (task C5's "auto-roof"), at the end of the step the last wall
-  stands, and goes the moment a wall is taken down (RimWorld's would collapse and hurt; that comes
-  with combat damage). It is not saved: it follows from the walls and is rebuilt on loading.
+  stands. Since M3 it **stays while a roof holder is in reach**, even if the room is opened, as in
+  RimWorld, and falls when the last holder goes ([roofs.md](roofs.md)). It is saved (section `roofs`).
 
 A cell of an enclosed room gets a thin roof if a **roof holder** is within **6.9 m**
 (`RoomRules.roofSupportRadius`, RimWorld's roof support span, recalled): rock terrain, or a building
@@ -103,17 +103,17 @@ the roof mesh is rebuilt only then. The thick roof is `Map::roof` over rock. `Th
 
 ## Saves and hashes
 
-Save format 13: each door has `progress`, `hold`, `open`. Roofs and rooms are not saved; they are
-rebuilt from the walls when a game loads (the thick roof from the seed's map). Door state is in
-`Sim::stateHash`; rooms and thin roofs are not, because they are a function of what is.
+Save format 13: each door has `progress`, `hold`, `open`. Rooms are not saved; they are
+rebuilt from the walls when a game loads (the thick roof from the seed's map; the thin roof is saved since M3). Door state is in
+`Sim::stateHash`; rooms are not, because they are a function of what is.
 
 ## Not yet
 
-- **Roof collapse**, roof and no-roof designations, building roofs as work.
+- Roof and no-roof designations, building roofs as work. (Roof collapse is M3, [roofs.md](roofs.md).)
 - Cleanliness, beauty, space, wealth and impressiveness of a room are in
   [room-stats.md](room-stats.md) (C17); temperature is built, see [temperature.md](temperature.md).
 - **Room ownership and bedroom assignment** (a bed's owner and the room it is in), prison cells.
 - **Multi-storey**: since M1 rooms and roofs are made on every level, and an upper floor is the roof
-  of the cell below ([levels.md](levels.md)); roof collapse is M3.
+  of the cell below ([levels.md](levels.md)); roof collapse is M3 ([roofs.md](roofs.md)).
 - **Mining and terrain edits**: the code that mines rock must call `Regions::markDirty` (it does
   already for the regions), and leaves `Roof::Thick` alone.

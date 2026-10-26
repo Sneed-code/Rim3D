@@ -687,6 +687,35 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
         return;
     }
 
+    // A shooter with an enemy at arm's length that is as fast as it is stands where it is and shoots: running to a better
+    // spot with a wolf on its heels only gets it bitten in the back (found by the year run, docs/design/colony-scenario.md).
+    // A slower enemy (a boar) is still kited from spot to spot.
+    const auto runSpeed = [&](Entity e) {
+        const Thing* thing = reg.try_get<Thing>(e);
+        return thing != nullptr ? things_.defs().get(thing->def).number("stats.moveSpeed", 0.0) : 0.0;
+    };
+    if (melee_ != nullptr && targetInfo != nullptr && range > 0.0f && threatCount > 0 &&
+        threats[0].d <= melee_->reach(pawn) + melee_->rules().standGround && runSpeed(threats[0].pawn) >= runSpeed(pawn)) {
+        Candidate here;
+        here.cell = at;
+        here.fireCell = at;
+        if (fireOption(at, *targetInfo, range, tx, ty, here)) {
+            const bool moved = !f.hasSpot || f.spot != at;
+            f.hasSpot = true;
+            f.spot = at;
+            f.fireCell = here.fireCell;
+            f.fireStance = here.fireStance;
+            f.canFire = here.canFire;
+            if (moved && f.walk != 0) {
+                stop(pawn, f);
+            }
+            if (cellOf(reg.get<Position>(pawn)) != f.spot && !(fightAdjacent(cellOf(reg.get<Position>(pawn)), f.spot) && cellOf(reg.get<Position>(pawn)) == f.fireCell)) {
+                walkToSpot(pawn, f);
+            }
+            return;
+        }
+    }
+
     // Where to look: around the pawn, or around the anchor when it is held there and far from it.
     const bool leashed = f.leash > 0.0f;
     CellPos centre = at;
