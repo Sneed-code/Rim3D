@@ -1570,7 +1570,9 @@ void JobSystem::endJob(Entity pawn, JobEnd end, const std::string& why) {
     }
     Worker& worker = reg.get<Worker>(pawn);
     if (end == JobEnd::Failed) {
-        ++stats_.failedJobs;
+        if (job.type != JobType::TendPatient) {
+            ++stats_.failedJobs;  // a doctor giving up on a patient who keeps walking (a fight) is not a broken job
+        }
         for (const Entity target : {job.thing, job.site}) {
             if (target != kNoEntity) {
                 worker.avoid.push_back(AvoidTarget{JobTarget{target, CellPos{}}, now() + avoidSeconds_});
