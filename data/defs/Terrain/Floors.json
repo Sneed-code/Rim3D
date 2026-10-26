@@ -1,6 +1,6 @@
 [
  {
-  "defName": "FloorBase",
+  "defName": "FloorBase", "visual": {"sound": {"step": "Step_Tile"}},
   "abstract": true,
   "parent": "TerrainBase",
   "source": "RimWorld wiki",
@@ -19,7 +19,7 @@
   ]
  },
  {
-  "defName": "WoodFloor",
+  "defName": "WoodFloor", "visual": {"sound": {"step": "Step_Wood"}},
   "parent": "FloorBase",
   "label": "wood floor",
   "costs": {
@@ -77,7 +77,7 @@
   ]
  },
  {
-  "defName": "Carpet", "researchPrerequisite": "CarpetMaking",
+  "defName": "Carpet", "visual": {"sound": {"step": "Step_Carpet"}}, "researchPrerequisite": "CarpetMaking",
   "parent": "FloorBase",
   "label": "carpet",
   "costStuffCount": 4,
@@ -97,7 +97,7 @@
   ]
  },
  {
-  "defName": "SmoothedStone",
+  "defName": "SmoothedStone", "visual": {"sound": {"step": "Step_Stone"}},
   "parent": "FloorBase",
   "label": "smoothed stone",
   "smoothedFromRoughStone": true,
