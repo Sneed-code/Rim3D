@@ -20,6 +20,7 @@
 #include "ColonySim/Raids.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Spoilage.h"
+#include "ColonySim/Crafting.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Husbandry.h"
@@ -58,6 +59,8 @@
 namespace colony {
 
 namespace {
+
+constexpr int64_t kBillUpkeepSeconds = 60;  // "until you have" bills with a restart stock look at their stock this often
 
 const DefDatabase& simEmptyDefs() {
     static const DefDatabase empty;
@@ -192,6 +195,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setFilth(filth_.get());
     jobs_->setApparel(apparel_.get());
     jobs_->setSpoilage(spoilage_.get());
+    crafting_ = std::make_unique<CraftingSystem>(*things_, *apparel_, *zones_, *defs_, settings.seed);
+    jobs_->setCrafting(crafting_.get());
     jobs_->setFarming(farming_.get());
     fire_ = std::make_unique<Fire>(map_, *things_, *plants_, *floors_, *filth_, *rooms_, *temperature_, *health_, *weather_, *defs_,
                                    settings.seed);
@@ -909,6 +914,23 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!done) {
             commandFailed(id, error);
         }
+    } else if (const auto* billOptions = std::get_if<SetBillOptionsCommand>(&command)) {
+        BillSystem::Options options;
+        options.skillMin = billOptions->skillMin;
+        options.skillMax = billOptions->skillMax;
+        options.radius = billOptions->radius;
+        options.storeZone = billOptions->storeZone;
+        options.unpauseAt = billOptions->unpauseAt;
+        options.disallowed = billOptions->disallowed;
+        if (billOptions->storeZone != 0 && zones_->find(billOptions->storeZone) == nullptr) {
+            commandFailed(id, "there is no stockpile " + std::to_string(billOptions->storeZone));
+        } else if (!jobs_->bills().setOptions(billOptions->building, billOptions->bill, options, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* moveBill = std::get_if<MoveBillCommand>(&command)) {
+        if (!jobs_->bills().moveBill(moveBill->building, moveBill->bill, moveBill->index, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* setBill = std::get_if<SetBillCommand>(&command)) {
         if (!jobs_->bills().setBill(setBill->building, setBill->bill, setBill->mode, setBill->count, setBill->suspended,
                                     error)) {
@@ -1074,6 +1096,10 @@ void Sim::step() {
     roomStats_->step(time_.seconds);
     temperature_->step(time_.seconds);
     spoilage_->step(time_.seconds);
+    if (time_.seconds % kBillUpkeepSeconds == 0) {
+        jobs_->bills().step();
+        crafting_->step();
+    }
     time_.seconds += 1;
     weather_->step(time_.seconds);
     spoilage_->setOutdoorFactor(weather_->deteriorationFactor());
@@ -1242,7 +1268,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const BillList* list = reg.try_get<BillList>(entity)) {
             view.firstBill = static_cast<uint32_t>(out.bills.size());
             for (const Bill& bill : list->bills) {
-                out.bills.push_back(BillView{bill.id, bill.recipe, bill.mode, bill.count, bill.suspended});
+                out.bills.push_back(BillView{bill.id, bill.recipe, bill.mode, bill.count, bill.suspended, bill.skillMin, bill.skillMax,
+                                             bill.radius, bill.storeZone, bill.unpauseAt, bill.satisfied, bill.disallowed});
             }
             view.billCount = static_cast<uint32_t>(out.bills.size()) - view.firstBill;
         }
@@ -1371,6 +1398,12 @@ void Sim::writeSnapshot(Snapshot& out) const {
             }
             view.quality = apparel_->stats().qualityOf(reg, entity);
             view.tainted = reg.all_of<Tainted>(entity);
+        } else if (view.category == ThingCategory::Item && crafting_->hasQuality(thing.def)) {
+            // Weapons and other crafted things with a quality: made of a stuff and of a quality like clothes.
+            if (const MadeOf* made = reg.try_get<MadeOf>(entity)) {
+                view.stuff = made->stuff;
+            }
+            view.quality = apparel_->stats().qualityOf(reg, entity);
         }
         if (view.category == ThingCategory::Pawn) {
             view.faction = fighters_->factionOf(entity);
@@ -1580,6 +1613,7 @@ uint64_t Sim::stateHash() const {
     temperature_->hashState(h);
     h.add(map_.upperFloorHash());
     spoilage_->hashState(h);
+    crafting_->hashState(h);
     farming_->hashState(h);
 
     // The entity ids the registry has handed out: the free list in reuse order (it decides the
@@ -1727,7 +1761,19 @@ uint64_t Sim::stateHash() const {
                 h.add(static_cast<int>(bill.mode));
                 h.add(bill.count);
                 h.add(bill.suspended);
+                h.add(bill.skillMin);
+                h.add(bill.skillMax);
+                h.add(bill.radius);
+                h.add(bill.storeZone);
+                h.add(bill.unpauseAt);
+                h.add(bill.satisfied);
+                for (const DefId def : bill.disallowed) {
+                    h.add(def.value);
+                }
             }
+        }
+        if (const StoreIn* store = reg.try_get<StoreIn>(e)) {
+            h.add(store->zone);
         }
         if (const Fuel* fuel = reg.try_get<Fuel>(e)) {
             h.add(fuel->amount);

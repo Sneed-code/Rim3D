@@ -630,6 +630,29 @@ struct SetRefuelCommand {
     bool fillNow = false;
 };
 
+// Changes the details of a bill (task C14, docs/design/crafting.md): the least and most skill a worker may
+// have in the recipe's skill, how far from the building ingredients are taken (metres, 0 anywhere), a stockpile
+// the products are taken to (0: none), the stock an "until you have" bill waits to fall under before it starts
+// again (0: as soon as it is under its count) and the item defNames the bill may not use. Replaces all of them.
+// Fails if there is no such bill, a number is out of range, the stockpile does not exist or a name is not an item.
+struct SetBillOptionsCommand {
+    Entity building = kNoEntity;
+    uint32_t bill = 0;
+    int skillMin = 0;
+    int skillMax = 20;
+    float radius = 0.0f;
+    uint32_t storeZone = 0;
+    int unpauseAt = 0;
+    std::vector<std::string> disallowed;
+};
+
+// Moves a bill to a place in the building's list (0 first, tried first). Fails if there is no such bill.
+struct MoveBillCommand {
+    Entity building = kNoEntity;
+    uint32_t bill = 0;
+    int index = 0;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -651,7 +674,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              CarryWeaponCommand, SwitchWeaponCommand, CreateGrowingZoneCommand,
                              RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
                              SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand, SetPrisonerModeCommand,
-                             SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand>;
+                             SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
+                             MoveBillCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

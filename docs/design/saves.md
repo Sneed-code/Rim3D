@@ -103,7 +103,8 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `health` | 3 | `health` (version 2: environment hediffs such as hypothermia, E2; version 3: each injury's `peak`, for scars, H1) |
 | `control` | 1 | `playerControlled`: the ids of controlled pawns |
 | `needs` | 1 | `needs`, `schedule`, `bed` |
-| `bills` | 1 | `bills` on work buildings |
+| `bills` | 2 | `bills` on work buildings. Version 2 (C14) adds each bill's skill range, ingredient radius, store stockpile, restart stock, satisfied flag and ingredient filter; version 1 loads with the defaults |
+| `crafting` | 1 | the quality random stream and `storeIn` marks on products bound for a stockpile ([crafting.md](crafting.md)) |
 | `fuel` | 1 | `fuel` on buildings that burn it ([fuel.md](fuel.md)); a building with a fuel part and none saved loads full |
 | `construction` | 1 | `site`, `builtOf`, `marked` |
 | `mood` | 1 | `mood` |

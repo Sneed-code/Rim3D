@@ -21,6 +21,8 @@ The Crashlanded start (protagonist and 5 colonists, 50 survival meals, steel and
 | Cooking | once the stove stands (checked every game hour): `AddBill` "simple meal, until 8 on the map" |
 | Beds | once all six stand: `AssignBed`, one each |
 
+C14 adds a crafting spot in the room (a wood club bill, "make club once", added when the spot stands): the run fails unless exactly one club is made, and the summary prints `clubsMade` (`mealsCooked` counts food only).
+
 C17 adds a wood floor over the room's inside (placed by command at step 0). Colonists then clean the
 dirt they walk in. The summary prints `cleaned`, `filthLeft`, `roomBeauty` and `roomImpressiveness`;
 the run fails if more than 12 layers of filth are left or the room has no stats.

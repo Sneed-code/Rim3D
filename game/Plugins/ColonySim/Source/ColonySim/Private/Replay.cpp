@@ -187,6 +187,19 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["building"] = entt::to_integral(c.building);
                 j["autoRefuel"] = c.autoRefuel;
                 j["fillNow"] = c.fillNow;
+            } else if constexpr (std::is_same_v<Type, SetBillOptionsCommand>) {
+                j["building"] = entt::to_integral(c.building);
+                j["bill"] = c.bill;
+                j["skillMin"] = c.skillMin;
+                j["skillMax"] = c.skillMax;
+                j["radius"] = c.radius;
+                j["storeZone"] = c.storeZone;
+                j["unpauseAt"] = c.unpauseAt;
+                j["disallowed"] = c.disallowed;
+            } else if constexpr (std::is_same_v<Type, MoveBillCommand>) {
+                j["building"] = entt::to_integral(c.building);
+                j["bill"] = c.bill;
+                j["index"] = c.index;
             } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
                 j["thing"] = entt::to_integral(c.thing);
             } else if constexpr (std::is_same_v<Type, SetResearchCommand>) {
@@ -794,6 +807,38 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         if (!r.integer(j, "building", building, where) || !r.integer(j, "bill", c.bill, where) ||
             !replayReadBillMode(r, j, where, c.mode) || !r.integer(j, "count", c.count, where) ||
             !r.flag(j, "suspended", c.suspended, where)) {
+            return false;
+        }
+        c.building = static_cast<Entity>(building);
+        out.command = c;
+    } else if (type == "SetBillOptions") {
+        SetBillOptionsCommand c;
+        uint32_t building = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "building", building, where) || !r.integer(j, "bill", c.bill, where) ||
+            !r.integer(j, "skillMin", c.skillMin, where) || !r.integer(j, "skillMax", c.skillMax, where) ||
+            !r.number(j, "radius", c.radius, where) || !r.integer(j, "storeZone", c.storeZone, where) ||
+            !r.integer(j, "unpauseAt", c.unpauseAt, where)) {
+            return false;
+        }
+        const auto list = j.find("disallowed");
+        if (list != j.end()) {
+            if (!list->is_array()) {
+                return r.fail(where + ".disallowed must be a list of def names");
+            }
+            for (const ReplayJson& name : *list) {
+                if (!name.is_string()) {
+                    return r.fail(where + ".disallowed must be a list of def names");
+                }
+                c.disallowed.push_back(name.get<std::string>());
+            }
+        }
+        c.building = static_cast<Entity>(building);
+        out.command = std::move(c);
+    } else if (type == "MoveBill") {
+        MoveBillCommand c;
+        uint32_t building = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "building", building, where) || !r.integer(j, "bill", c.bill, where) ||
+            !r.integer(j, "index", c.index, where)) {
             return false;
         }
         c.building = static_cast<Entity>(building);

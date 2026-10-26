@@ -2,6 +2,7 @@
 
 Ideas parked for later. Newest first. Move an item into a stage plan when it's picked up.
 
+- Crafting (found in C14): skill experience from bills (`workSkillXp` is read and unused, so skills never rise from crafting or cooking), inspirations that shift quality up, melee weapon damage and hit points from stuff and quality (P4 repair and upgrades fit), sculpting and smelting benches, "count only what lies in this stockpile" for "until you have" bills, the electric tailor bench's half speed without power, and the fuel rule: a stove burns `fuel.perUse` per product, so one batch of 50 kibble would burn 50 wood (RimWorld burns by time worked; found in C11, still open).
 - Social life (found in C20): sexual orientations and attractiveness for romance (now anyone may love anyone), cheating and jealousy, a wedding party, the Social skill raising the opinion a chat gives and the chance of romance, the colonist panel's relations tab, and mood effects of seeing a friend die in front of you.
 - Breeding (found in N4): an "allow breeding" switch per animal or zone, so the player can keep a pen from growing; young animals following their mother; health that grows with the life stages (`healthScaleFactor` is in the defs, unused); hatching and gestation needing warmth (E2's room temperatures); a hatchery for the fertilized eggs; tailoring from wool (C14 bills); milk pasteurizing is not in RimWorld either.
 - Names for tamed animals (RimWorld lets you name them); shown in the animals tab (U19). Found in N3.
