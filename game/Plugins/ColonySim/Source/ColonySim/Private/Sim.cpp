@@ -26,6 +26,7 @@
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Lights.h"
+#include "ColonySim/Inspirations.h"
 #include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
@@ -130,6 +131,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       groundHash_(map_.contentHash()) {
     things_->setEventLog(&events_);
     health_->setEventLog(&events_);
+    health_->setWorld(&time_.seconds, settings.seed);
     weather_ = std::make_unique<Weather>(map_, *defs_, splitMix64(settings.seed ^ 0x636C696D617465ULL), "TemperateForest");
     weather_->setEventLog(&events_);
     movement_->setWeather(weather_.get());
@@ -139,6 +141,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     mood_ = std::make_unique<MoodSystem>(*things_, *needs_, *defs_);
     apparel_ = std::make_unique<ApparelSystem>(*things_, *combat_, *health_, *defs_);
     apparel_->registerSituations(*mood_);
+    health_->registerSituations(*mood_);
     doorNumbers_ = DoorNumbers::read(*defs_);
     movement_->setDoors(doorNumbers_);
     pathfinder_.setDoorCost(doorNumbers_.pathCost);
@@ -181,6 +184,13 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     spoilage_ = std::make_unique<SpoilageSystem>(map_, *things_, *temperature_, *roomStats_, *defs_,
                                                  splitMix64(settings.seed ^ 0x73706F696CULL));
     spoilage_->setEventLog(&events_);
+    // Eating a poisoned meal gives the FoodPoisoning disease (H2); a fresh wound's chance of infection follows how
+    // clean the room it was taken in is.
+    spoilage_->setPoisonHandler([this](Entity pawn) { health_->contract(pawn, health_->diseaseId("FoodPoisoning")); });
+    health_->setCleanliness([this](Entity pawn) {
+        const Position* pos = things_->registry().try_get<Position>(pawn);
+        return pos != nullptr ? roomStats_->cellCleanliness(cellOf(*pos)) : 0.0f;
+    });
     farming_ = std::make_unique<Farming>(map_, *plants_, *zones_, *defs_, events_);
     farming_->setClimate(temperature_.get(), lights_.get());
     farming_->setForecast(
@@ -309,6 +319,11 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     mentalBreaks_->setEventLog(&events_);
     mentalBreaks_->setMelee(melee_.get());
     mentalBreaks_->setFire(fire_.get());
+    inspirations_ = std::make_unique<InspirationSystem>(*things_, *health_, *defs_, time_);
+    inspirations_->setEventLog(&events_);
+    jobs_->setInspirations(inspirations_.get());
+    combat_->setInspirations(inspirations_.get());
+    prisoners_->setInspirations(inspirations_.get());
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -636,6 +651,15 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             jobs_->forget(circuit->thing);
             fighters_->forget(circuit->thing);
             things_->destroy(circuit->thing);
+        }
+    } else if (const auto* contract = std::get_if<ContractDiseaseCommand>(&command)) {
+        const DefId disease = health_->diseaseId(contract->disease);
+        if (!things_->exists(contract->pawn) || !health_->tracks(contract->pawn)) {
+            commandFailed(id, "that thing has no body to fall ill");
+        } else if (!disease.valid()) {
+            commandFailed(id, "there is no disease '" + contract->disease + "'");
+        } else if (!health_->contract(contract->pawn, disease, contract->severity, contract->part)) {
+            commandFailed(id, "that pawn can't catch " + contract->disease + " now");
         }
     } else if (const auto* medical = std::get_if<SetMedicalCareCommand>(&command)) {
         MedicalCare care = MedicalCare::Best;
@@ -1171,6 +1195,7 @@ void Sim::step() {
     social_->step(time_.seconds);
     mentalBreaks_->step(time_.seconds, rng_);  // before the mood system, which turns its events into memories
     mood_->step(time_.seconds, events_);
+    inspirations_->step(time_.seconds);
     movement_->step(things_->registry(), map_);
     melee_->step();
     combat_->step(rng_);
@@ -2028,6 +2053,21 @@ uint64_t Sim::stateHash() const {
                 h.add(injury.severity);
                 h.add(injury.tendQuality);
                 h.add(injury.peak);
+                h.add(injury.infectAt);
+            }
+            h.add(static_cast<uint64_t>(health->diseases.size()));
+            for (const Disease& disease : health->diseases) {
+                h.add(disease.def.value);
+                h.add(disease.severity);
+                h.add(disease.tendQuality);
+                h.add(disease.tendedUntil);
+                h.add(disease.tendTotal);
+                h.add(static_cast<int>(disease.part));
+            }
+            h.add(static_cast<uint64_t>(health->immunities.size()));
+            for (const Immunity& immunity : health->immunities) {
+                h.add(immunity.def.value);
+                h.add(immunity.level);
             }
             h.add(static_cast<uint64_t>(health->missing.size()));
             for (const MissingPart& missing : health->missing) {
@@ -2053,6 +2093,7 @@ uint64_t Sim::stateHash() const {
         defense_->hashThing(e, h);
         apparel_->hashThing(e, h);
         mentalBreaks_->hashThing(e, h);
+        inspirations_->hashThing(e, h);
     }
     apparel_->hashState(h);
     return h.value();
