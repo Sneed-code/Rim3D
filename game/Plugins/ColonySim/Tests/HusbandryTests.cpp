@@ -553,3 +553,80 @@ TEST_CASE("Husbandry: a game that never touches animal care hashes the same with
     CHECK(f.hu().zones().empty());
     CHECK(f.hu().stats().tamed == 0);
 }
+
+TEST_CASE("Husbandry: a tame animal can be named, and the name is saved and replays") {
+    HusbFixture f;
+    f.addColonist(CellPos{10, 10, 0}, 10);
+    const Entity cow = f.animal("Cow", CellPos{22, 10, 0});
+    const Entity wild = f.animal("Muffalo", CellPos{30, 30, 0});
+    HUSB_REQUIRE(f.tameNow(cow));
+    std::string error;
+    CHECK_FALSE(f.hu().setName(wild, "Bessie", error));  // wild
+    CHECK_FALSE(f.hu().setName(cow, std::string(25, 'x'), error));
+    HUSB_REQUIRE(f.hu().setName(cow, "Bessie", error));
+    f.sim.step();
+    Snapshot snap;
+    f.sim.writeSnapshot(snap);
+    const ThingView* view = snap.find(cow);
+    HUSB_REQUIRE(view != nullptr);
+    CHECK(view->animalName == "Bessie");
+    CHECK(f.hu().setName(cow, "", error));
+    CHECK(f.hu().care(cow)->name.empty());
+
+    f.sim.submit(SetAnimalNameCommand{cow, "Daisy"});
+    f.sim.submit(SetAnimalNameCommand{wild, "Nope"});
+    f.sim.step();
+    CHECK(f.hu().care(cow)->name == "Daisy");
+    CHECK(f.sawEvent(EventType::CommandFailed));
+}
+
+TEST_CASE("Husbandry: one command marks every wild animal in an area") {
+    HusbFixture f;
+    const Entity a = f.animal("Muffalo", CellPos{20, 20, 0});
+    const Entity b = f.animal("Muffalo", CellPos{22, 21, 0});
+    const Entity far = f.animal("Muffalo", CellPos{50, 50, 0});
+    const Entity cow = f.animal("Cow", CellPos{21, 22, 0});
+    HUSB_REQUIRE(f.tameNow(cow));
+    f.sim.submit(MarkAnimalsInAreaCommand{CellRect{15, 15, 12, 12}, "Tame", true});
+    f.sim.step();
+    CHECK(f.hu().care(a)->markTame);
+    CHECK(f.hu().care(b)->markTame);
+    CHECK(f.hu().care(far) == nullptr);
+    CHECK_FALSE(f.hu().care(cow)->markTame);  // already tame
+    f.sim.submit(MarkAnimalsInAreaCommand{CellRect{15, 15, 12, 12}, "Tame", false});
+    f.sim.submit(MarkAnimalsInAreaCommand{CellRect{45, 45, 2, 2}, "Tame", true});  // nothing there
+    f.sim.submit(MarkAnimalsInAreaCommand{CellRect{15, 15, 12, 12}, "Fly", true});
+    f.sim.step();
+    CHECK_FALSE(f.hu().care(a)->markTame);
+    CHECK(f.sawEvent(EventType::CommandFailed));
+    f.sim.submit(MarkAnimalsInAreaCommand{CellRect{15, 15, 12, 12}, "Slaughter", true});
+    f.sim.step();
+    CHECK(f.hu().care(cow)->markSlaughter);
+    CHECK_FALSE(f.hu().care(a)->markSlaughter);
+}
+
+TEST_CASE("Husbandry: a door is a gate to a tame animal") {
+    HusbFixture f;
+    f.addColonist(CellPos{5, 5, 0}, 10);
+    for (int y = 0; y < f.sim.map().height(); ++y) {
+        if (y != 30) {
+            f.sim.things().spawn("Wall", CellPos{33, y, 0});
+        }
+    }
+    f.sim.things().spawn("Door", CellPos{33, 30, 0});
+    f.sim.stepMany(5);
+    HUSB_REQUIRE(f.sim.map().isDoor(CellPos{33, 30, 0}));
+    const AnimalZoneId zone = f.hu().createZone(CellRect{40, 28, 6, 6});
+    HUSB_REQUIRE(zone != kNoAnimalZone);
+    const Entity cow = f.animal("Cow", CellPos{25, 30, 0});
+    HUSB_REQUIRE(f.tameNow(cow));
+    std::string error;
+    HUSB_REQUIRE(f.hu().assignZone(cow, zone, error));
+    int crossed = 0;
+    for (int i = 0; i < 3000; ++i) {
+        f.sim.animals().addFood(cow, 0.01f);
+        f.sim.step();
+        crossed += f.cellOfThing(cow).x >= 33 ? 1 : 0;
+    }
+    CHECK(crossed == 0);
+}
