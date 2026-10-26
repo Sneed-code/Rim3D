@@ -65,6 +65,39 @@ class ReferenceTests(unittest.TestCase):
             write_defs(root, {"Things/Things.json": [{"defName": "Human", "race": {"body": "Human"}}]})
             self.assertEqual(run_checker(root).returncode, 0)
 
+    def test_research_unlocks_must_match_prerequisites(self):
+        base = {
+            "Research/Research.json": [
+                {"defName": "Smithing", "unlocks": {"Things": ["Smithy"]}},
+                {"defName": "Machining", "prerequisites": ["Smithing"], "unlocks": {}},
+            ],
+            "Things/Things.json": [
+                {"defName": "Smithy", "researchPrerequisite": "Smithing"},
+                {"defName": "Table", "researchPrerequisite": "Machining"},
+            ],
+        }
+        with tempfile.TemporaryDirectory() as root:
+            write_defs(root, base)
+            result = run_checker(root)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("'Table' needs 'Machining' but it is not in that project's unlocks", result.stdout)
+        base["Research/Research.json"][1]["unlocks"] = {"Things": ["Table"]}
+        base["Things/Things.json"][0]["researchPrerequisite"] = ["Smithing", "Gone"]
+        with tempfile.TemporaryDirectory() as root:
+            write_defs(root, base)
+            self.assertIn("unknown Research def 'Gone'", run_checker(root).stdout)
+
+    def test_research_prerequisite_is_inherited(self):
+        with tempfile.TemporaryDirectory() as root:
+            write_defs(root, {
+                "Research/Research.json": [{"defName": "Smithing", "unlocks": {"Things": ["Smithy"]}}],
+                "Things/Things.json": [
+                    {"defName": "Base", "abstract": True, "researchPrerequisite": "Smithing"},
+                    {"defName": "Smithy", "parent": "Base"},
+                ],
+            })
+            self.assertEqual(run_checker(root).returncode, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

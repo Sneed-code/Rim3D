@@ -1,6 +1,7 @@
 #include "ColonySim/Construction.h"
 
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Genes.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Random.h"
@@ -556,6 +557,9 @@ float Construction::skillSpeed(Entity pawn) const {
         if (const SkillRecord* skill = colonist->skill(kConstructionSkill)) {
             level = skill->level;
         }
+    }
+    if (const PawnGenes* genes = things_.registry().try_get<PawnGenes>(pawn)) {
+        level = std::max(0, level + geneAptitude(*genes, kConstructionSkill));
     }
     return static_cast<float>(std::max(0.0, numbers_.skillSpeedBase + numbers_.skillSpeedPerLevel * level));
 }

@@ -45,7 +45,7 @@ size_t Zones::slot(CellPos c) const {
 }
 
 ZoneId Zones::zoneAt(CellPos c) const {
-    return map_.inBounds(c) ? zoneOf_[slot(c)] : kNoZone;
+    return map_.onGround(c) ? zoneOf_[slot(c)] : kNoZone;
 }
 
 const StockpileZone* Zones::find(ZoneId id) const {
@@ -69,7 +69,7 @@ ZoneId Zones::createStockpile(const CellRect& area, StoragePriority priority) {
     for (int y = area.minY; y < area.minY + area.sizeY; ++y) {
         for (int x = area.minX; x < area.minX + area.sizeX; ++x) {
             const CellPos c{x, y, area.level};
-            if (map_.walkable(c) && zoneOf_[slot(c)] == kNoZone) {
+            if (map_.onGround(c) && map_.walkable(c) && zoneOf_[slot(c)] == kNoZone && !(taken_ && taken_(c))) {
                 zone.cells.push_back(c);
             }
         }
@@ -148,7 +148,7 @@ bool Zones::restore(std::vector<StockpileZone> stockpiles, ZoneId nextId, std::s
         std::sort(zone.disallowed.begin(), zone.disallowed.end(), zonesDefBefore);
         std::sort(zone.cells.begin(), zone.cells.end(), zonesCellBefore);
         for (const CellPos& c : zone.cells) {
-            if (!map_.inBounds(c) || zoneOf_[slot(c)] != kNoZone) {
+            if (!map_.onGround(c) || zoneOf_[slot(c)] != kNoZone) {
                 error = "the save has a stockpile zone outside the map or on top of another";
                 return false;
             }

@@ -1,0 +1,17 @@
+[
+  {
+    "defName": "TradeRules", "source": "RimWorld wiki",
+    "colonySellsAt": 0.6, "colonyBuysAt": 1.4,
+    "settlementDiscount": 0.02,
+    "sellCategoryFactors": { "Furniture": 0.7, "Sculptures": 1.1, "Weapons": 0.2, "Techprints": 0.1 },
+    "alwaysAccepted": ["Silver", "ComponentIndustrial", "MealSurvivalPack"],
+    "orbitalStayHours": 16,
+    "orbitalEveryDays": 15,
+    "caravan": { "datesPerYear": 5, "minDaysBetween": 6, "acceptedPerYear": [3, 5] },
+    "visitorSilver": [0, 150],
+    "priceImprovementBySocial": [[0, 0.0], [20, 0.4]],
+    "unverified": ["colonySellsAt", "colonyBuysAt", "visitorSilver", "priceImprovementBySocial", "sellCategoryFactors"],
+    "ours": ["visitorSilver", "priceImprovementBySocial"],
+    "notes": "Price rules from the wiki's Trade and Traders pages: a trader pays 60% of market value and charges 140% (an educated reading of the page, which also says the difficulty's trade price disadvantage adds to buy and cuts sell prices; see Difficulties). The Social skill improves both sides through the TradePriceImprovement stat; the wiki gives no formula, so the straight line 0 at Social 0 to 40% at Social 20 is ours for now. Orbital traders: one chance every 15 days, staying 40,000 RimWorld ticks (16 game hours). Caravans: five possible dates per 60-day year, at least six days apart, about three to five accepted. A trader with less silver than a deal costs takes the surplus goods free (C23). silver is the money: Silver, market value 1."
+  }
+]

@@ -34,8 +34,11 @@ float terrainPathCost(Terrain t) {
             return 2.0f;
         case Terrain::Sand:
             return 4.0f;
+        case Terrain::UpperFloor:  // a built floor: no path cost, like RimWorld's constructed floors
+            return 0.0f;
         case Terrain::Water:
         case Terrain::Rock:
+        case Terrain::Air:
             break;  // can't be walked
     }
     return 0.0f;

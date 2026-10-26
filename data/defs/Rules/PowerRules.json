@@ -1,0 +1,23 @@
+[
+  {
+    "defName": "PowerRules",
+    "source": "RimWorld wiki",
+    "batteryEfficiency": 0.5,
+    "restartReserveSeconds": 60,
+    "sun": {
+      "sunrise": 5.0,
+      "fullFrom": 8.0,
+      "fullTo": 16.0,
+      "sunset": 19.0
+    },
+    "windDefault": 1.0,
+    "unverified": [
+      "batteryEfficiency"
+    ],
+    "ours": [
+      "restartReserveSeconds",
+      "sun",
+      "windDefault"
+    ]
+  }
+]

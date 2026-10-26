@@ -187,7 +187,15 @@ TEST_CASE("defs: the real data folder loads") {
     if (snow == nullptr) { CHECK(false); return; }
     CHECK(snow->number("skyGlow") < 1.0);
     CHECK(snow->number("accuracyFactor") < 1.0);
-    CHECK(snow->number("moveSpeedFactor") == doctest::Approx(0.9));
+    CHECK(snow->number("moveSpeedFactor") == doctest::Approx(0.8));  // wiki: heavy snow 80%
+    CHECK(snow->number("snowRate") == doctest::Approx(1.2));
+    CHECK(snow->numberAt("temperatureRange", 1) == doctest::Approx(-0.5));
+    for (const char* name : {"TemperateForest", "BorealForest", "AridShrubland"}) {
+        // Wiki: the three biomes share one weather table (snow is held back by the temperature).
+        CHECK(db.find("Biomes", name)->number("weather.Clear") == doctest::Approx(18));
+        CHECK(db.find("Biomes", name)->number("weather.SnowGentle") == doctest::Approx(4));
+    }
+    CHECK(db.find("Rules", "ClimateRules") != nullptr);
     CHECK(db.find("Weathers", "WeatherBase") == nullptr);
     const Def* soil = db.find("Terrain", "Soil");
     CHECK(soil->number("fertility") == doctest::Approx(1.0));
@@ -205,6 +213,19 @@ TEST_CASE("defs: the real data folder loads") {
     CHECK(db.find("Names", "LastNames")->count("names") >= 50);
     CHECK(db.find("Rules", "SkillRules")->count("xpToNextLevel") == 21);
     CHECK(db.find("Scenarios", "Crashlanded")->integer("colonists") == 5);
+    // D6: clothing, textiles, tailor benches, quality.
+    const Def* duster = db.find("Things", "Apparel_Duster");
+    CHECK(duster->number("stats.workToMake") == doctest::Approx(10000 * 1.44));
+    CHECK(duster->number("apparel.stuffEffectMultiplierArmor") == doctest::Approx(0.3));  // x devilstrand 1.4 = 42%
+    CHECK(duster->integer("costStuffCount") == 80);
+    CHECK(db.find("Things", "Apparel_Parka")->number("apparel.stuffEffectMultiplierInsulationCold") == doctest::Approx(2.0));
+    CHECK(db.find("Things", "DevilstrandCloth")->number("stuffProps.statFactors.armorRatingSharp") == doctest::Approx(1.4));
+    CHECK(db.find("Things", "Hyperweave")->number("stuffProps.statOffsets.insulationCold") == doctest::Approx(26));
+    CHECK(db.find("Things", "TailorBenchHand")->number("stats.workTableWorkSpeedFactor") == doctest::Approx(0.5));
+    CHECK(db.find("Things", "TailorBenchElectric")->integer("costs.ComponentIndustrial") == 2);
+    CHECK(db.find("Recipes", "Make_Apparel_Parka")->number("workAmount") == doctest::Approx(8000 * 1.44));
+    CHECK(db.find("Rules", "QualityRules")->count("levels") == 7);
+    CHECK(db.find("Rules", "QualityRules")->number("levels.6.armorFactor") == doctest::Approx(1.8));
 
     // Animals (D5, docs/design/animals.md): the 15 races, their bodies, and what they leave behind.
     const char* const animals[] = {"Hare", "Squirrel", "Deer", "WildBoar", "Muffalo", "Alpaca", "Cow", "Chicken",

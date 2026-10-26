@@ -12,9 +12,11 @@
 #include "ColonySim/Plants.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
+#include "FuelTestHelper.h"
 
 #include <doctest.h>
 
@@ -57,6 +59,8 @@ SimSettings handSettings() {
 // the map around it cleared of plants.
 Entity handColonist(Sim& sim, CellPos cell) {
     const Entity pawn = sim.things().spawn("Human", cell);
+    std::string why;  // a parka, so the weather doesn't hurt the hands (C15)
+    sim.apparel().putOn(pawn, sim.apparel().make(sim.defs().idOf("Things", "Apparel_Parka"), sim.defs().idOf("Things", "Cloth"), -1, cell, &why), why);
     sim.things().registry().emplace<Colonist>(pawn);
     sim.jobs().addWorker(pawn, {}, false);
     for (int y = 4; y < 24; ++y) {
@@ -194,6 +198,8 @@ TEST_CASE("Hands-on: letting go stops the job, takes the mark with it, and the r
     HandFixture f;
     const CellPos rock{12, 10, 0};
     f.sim.mineables().place(rock, f.def("Rock_Sandstone"));
+    testFueled(f.sim, f.sim.things().spawn("TorchLamp", CellPos{11, 9, 0}));  // the sim starts at midnight; the swing counts at full speed
+    f.sim.step();
     const int full = f.sim.mineables().hitPoints(rock);
     CHECK(f.work(rock).empty());
     for (int i = 0; i < 200; ++i) {

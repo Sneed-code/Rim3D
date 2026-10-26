@@ -8,9 +8,8 @@ building layer in `ColonySim/Map.h`. Tests: `Tests/ThingsTests.cpp`, `Tests/Haul
 
 `CellPos{x, y, level}` names one 1 m cell. Level 0 is the ground; levels stack about 3 m apart.
 Every grid and path function takes a `CellPos` (`Map::inBounds`, `walkable`, `terrain`,
-`groundHeight`, `buildingAt`, `Pathfinder::findPath`). Only level 0 is stored so far: any other
-level is out of bounds and not walkable, and a path to another level fails. Upper floors and stairs
-(vanilla core) fill this in without changing the interfaces.
+`groundHeight`, `buildingAt`, `Pathfinder::findPath`). Since M1 the map has upper levels with upper
+floors ([levels.md](levels.md)); a path to another level fails until M2's stairs.
 
 `Map::groundHeight(x, y)` and `terrain(x, y)` stay as ground-surface shorthands for the Unreal
 terrain mesh. Everything else uses `CellPos`.

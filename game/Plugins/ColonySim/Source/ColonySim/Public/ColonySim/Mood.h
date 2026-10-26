@@ -7,13 +7,16 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace colony {
 
 struct Event;
 class NeedsSystem;
+class RoomStats;
 class Rooms;
+class TemperatureSystem;
 class Things;
 
 // Mood and thoughts (task C9). See docs/design/mood.md.
@@ -71,8 +74,19 @@ class COLONY_API MoodSystem {
 public:
     MoodSystem(Things& things, const NeedsSystem& needs, const DefDatabase& defs);
 
+    // A condition other systems evaluate (task C15 on): a Thoughts def whose `situation.condition` is
+    // `condition` counts for a pawn while `stage` gives a stage number of the def's `stages` (0 first), and
+    // not at all for a negative number. `situation.trait` and `situation.notTrait` limit a thought to
+    // pawns with, or without, a trait.
+    using SituationStage = std::function<int(Entity pawn)>;
+    void addSituation(const std::string& condition, SituationStage stage);
+
     // Where a pawn slept decides "slept outside" (docs/design/rooms.md); without rooms nothing is outside.
     void setRooms(Rooms* rooms) { rooms_ = rooms; }
+    // The room and beauty thoughts (C17, docs/design/room-stats.md) read the room stats and the beauty need.
+    void setRoomStats(RoomStats* roomStats) { roomStats_ = roomStats; }
+    // Where the temperature thoughts (Cold, Hot) get the degrees outside a pawn's comfort from.
+    void setTemperature(TemperatureSystem* temperature) { temperature_ = temperature; }
 
     // Which skill a pawn's job is using right now (Skills `defName`), or empty: passion for it
     // lifts the mood while the work goes on (docs/design/skills.md). Without one, no work thoughts.
@@ -86,6 +100,10 @@ public:
     // The three thresholds as mood levels (0 to 100) for this pawn: its traits move them.
     void breakLevels(Entity pawn, float& minor, float& major, float& extreme) const;
 
+    // Starts the memories whose thought def has this `trigger` (docs/design/mood.md): another system
+    // raises one, like the social system's (C20). Nothing happens to a pawn with no mood yet.
+    void remember(Entity pawn, const std::string& trigger, int64_t now);
+
     // `events` are the step's events; `now` the game second the step ran in.
     void step(int64_t now, std::vector<Event>& events);
 
@@ -98,18 +116,57 @@ private:
         std::string need;       // situations: "food" or "rest"
         std::string band;       // situations: the band name
         std::string passion;    // situations: "Minor" or "Major", while working at a skill with that passion
+        // Situations with stages (D9): `condition` names a state RoomStats knows, `thresholds` are
+        // the values each stage ends at (one fewer than the stages), `stages` their offsets and labels
+        // (and the room roles a stage counts in, none: any), `roomRoles` the roles the thought is
+        // about at all (none: any).
+        struct Stage {
+            float offset = 0.0f;
+            std::string label;
+            std::vector<std::string> roles;
+        };
+        std::string condition;
+        std::vector<float> thresholds;
+        std::vector<Stage> stages;
+        std::vector<std::string> roomRoles;
+        std::string trait;      // staged by another system (addSituation): only for pawns with this trait
+        std::string notTrait;   // ...and not for pawns with this one
     };
+    // A situation with stages (`situation.condition` and `stages` in the def): which stage holds is
+    // decided by a measured number against the def's thresholds (Mood.cpp, `conditionValue`).
+    struct StagedThought {
+        DefId def;
+        std::string condition;
+        std::vector<float> thresholds;  // upper bounds of every stage but the last
+        std::vector<std::string> labels;
+        std::vector<float> offsets;
+    };
+    // The number a staged thought's condition measures for this pawn, or false if it has none now.
+    bool conditionValue(Entity pawn, const std::string& condition, float& value) const;
+    // A condition other systems evaluate (task C15 on): a Thoughts def whose `situation.condition` is
+    // `condition` counts for a pawn while `stage` gives a stage number of the def's `stages` (0 first), and
+    // not at all for a negative number. `situation.trait` and `situation.notTrait` limit a thought to
+    // pawns with, or without, a trait.
+    struct Situation {
+        std::string condition;
+        SituationStage stage;
+    };
+    bool hasTrait(Entity pawn, const std::string& trait) const;
     float traitMoodOffset(Entity pawn) const;
     float traitBreakOffset(Entity pawn) const;
     void addMemory(Mood& mood, const std::string& trigger, int64_t now);
 
     Things& things_;
     Rooms* rooms_ = nullptr;
+    RoomStats* roomStats_ = nullptr;
+    TemperatureSystem* temperature_ = nullptr;
     const NeedsSystem& needs_;
     const DefDatabase& defs_;
     MoodRules rules_;
     std::vector<Thought> thoughts_;
     std::function<std::string(Entity)> activeSkill_;
+    std::vector<StagedThought> staged_;
+    std::vector<Situation> situations_;
 };
 
 }  // namespace colony

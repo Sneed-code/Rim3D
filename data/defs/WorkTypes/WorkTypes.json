@@ -23,11 +23,11 @@
   },
   {
     "defName": "Warden", "parent": "WorkTypeBase", "label": "warden", "naturalPriority": 1050,
-    "relevantSkills": ["Social"], "workTags": ["Social"], "tasks": ["FeedPrisoners", "ChatWithPrisoners"]
+    "relevantSkills": ["Social"], "workTags": ["Social"], "tasks": ["CapturePrisoners", "FeedPrisoners", "ChatWithPrisoners"]
   },
   {
     "defName": "Handling", "parent": "WorkTypeBase", "label": "handle", "naturalPriority": 1000,
-    "relevantSkills": ["Animals"], "workTags": ["Animals"], "tasks": ["Tame", "Train", "Slaughter"]
+    "relevantSkills": ["Animals"], "workTags": ["Animals"], "tasks": ["Tame", "Train", "Slaughter", "FeedAnimals", "Milk", "Shear"]
   },
   {
     "defName": "Cooking", "parent": "WorkTypeBase", "label": "cook", "naturalPriority": 950,
@@ -74,7 +74,7 @@
   },
   {
     "defName": "Hauling", "parent": "WorkTypeBase", "label": "haul", "naturalPriority": 300,
-    "workTags": ["ManualDumb", "Hauling"], "inPrototype": true, "tasks": ["Refuel", "HaulToStockpile"]
+    "workTags": ["ManualDumb", "Hauling"], "inPrototype": true, "tasks": ["Refuel", "Strip", "HaulToStockpile"]
   },
   {
     "defName": "Cleaning", "parent": "WorkTypeBase", "label": "clean", "naturalPriority": 200,

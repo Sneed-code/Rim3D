@@ -29,7 +29,8 @@
   "workToBuild": 216.0,
   "stats": {
    "beauty": 1,
-   "cleanliness": 0
+   "cleanliness": 0,
+   "flammability": 1.0
   },
   "unverified": [
    "costs",
@@ -38,7 +39,7 @@
   ]
  },
  {
-  "defName": "StoneTile",
+  "defName": "StoneTile", "researchPrerequisite": "Stonecutting",
   "parent": "FloorBase",
   "label": "stone tiles",
   "costStuffCount": 4,
@@ -57,7 +58,7 @@
   ]
  },
  {
-  "defName": "Flagstone",
+  "defName": "Flagstone", "researchPrerequisite": "Stonecutting",
   "parent": "FloorBase",
   "label": "flagstone",
   "costStuffCount": 2,
@@ -76,7 +77,7 @@
   ]
  },
  {
-  "defName": "Carpet",
+  "defName": "Carpet", "researchPrerequisite": "CarpetMaking",
   "parent": "FloorBase",
   "label": "carpet",
   "costStuffCount": 4,
@@ -86,7 +87,8 @@
   "workToBuild": 288.0,
   "stats": {
    "beauty": 2,
-   "cleanliness": -0.5
+   "cleanliness": -0.5,
+   "flammability": 1.0
   },
   "unverified": [
    "costStuffCount",

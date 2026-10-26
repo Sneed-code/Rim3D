@@ -1,0 +1,14 @@
+[
+  {
+    "defName": "DefenseRules", "source": "Rim3D",
+    "scanEvery": 10,
+    "lead": 1.0,
+    "noticeEvery": 15,
+    "noticeRadius": 4.0,
+    "noticeChance": 0.35,
+    "knownSpringChance": 0.0,
+    "avoidMargin": 0.15,
+    "detourTries": 4,
+    "ours": ["scanEvery", "lead", "noticeEvery", "noticeRadius", "noticeChance", "knownSpringChance", "avoidMargin", "detourTries"]
+  }
+]

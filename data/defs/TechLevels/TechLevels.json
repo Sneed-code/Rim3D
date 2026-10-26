@@ -1,0 +1,6 @@
+[
+  {"defName": "Neolithic", "label": "neolithic", "order": 1, "costFactorForNeolithicStart": 1.0, "source": "RimWorld wiki"},
+  {"defName": "Medieval", "label": "medieval", "order": 2, "costFactorForNeolithicStart": 1.5, "source": "RimWorld wiki"},
+  {"defName": "Industrial", "label": "industrial", "order": 3, "costFactorForNeolithicStart": 2.0, "source": "RimWorld wiki"},
+  {"defName": "Spacer", "label": "spacer", "order": 4, "costFactorForNeolithicStart": 2.0, "source": "RimWorld wiki", "unverified": ["costFactorForNeolithicStart"]}
+]

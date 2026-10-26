@@ -5,15 +5,20 @@
 #include "ColonySim/Construction.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Events.h"
+#include "ColonySim/Filth.h"
+#include "ColonySim/Floors.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Plants.h"
+#include "ColonySim/Recreation.h"
 #include "ColonySim/Regions.h"
+#include "ColonySim/RoomStats.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Social.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
 
@@ -178,10 +183,14 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     plan("Stool", "WoodLog", 2, 3);
     plan("Stool", "WoodLog", 4, 3);
     plan("FueledStove", "", 4, 1);
+    plan("HorseshoesPin", "WoodLog", 6, 3);  // something to do in the evening hours (C18)
     for (const Plan& p : plans) {
         sim.submit(PlaceBlueprintCommand{p.defName, p.stuff, p.cell, p.rot});
     }
     const CellRect roomRect{origin.x, origin.y, kRoomWidth, kRoomHeight, 0};
+    // A wood floor inside the room (C17): dirt tracked in from the bare ground gets dropped on it,
+    // and the colonists clean it.
+    sim.submit(PlaceFloorCommand{CellRect{origin.x + 1, origin.y + 1, kRoomWidth - 2, kRoomHeight - 2, 0}, "WoodFloor"});
 
     // The marks: the nearest rock, trees and berry bushes the colonists can walk up to.
     struct Candidate {
@@ -276,7 +285,18 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     uint64_t felled = 0;
     uint64_t picked = 0;
     uint64_t mealsMade = 0;
+    uint64_t cleaned = 0;
+    uint64_t woodIn = 0;     // wood colonists put into buildings (Refueled events)
+    uint64_t outOfFuel = 0;  // times a building ran out
+    uint64_t weatherChanges = 0;  // WeatherChanged events (E1): the colony works through rain, fog and cold
     uint64_t commandsFailed = 0;
+    uint64_t recreations = 0;  // recreation jobs started
+    uint64_t pinGames = 0;     // ... of them at the horseshoes pin
+    uint64_t talks = 0;        // interactions between colonists (C20)
+    uint64_t fights = 0;       // fights with fists begun
+    float minJoy = 1.0f;
+    float minComfort = 1.0f;
+    float minOutdoors = 1.0f;
     float minFood = 1.0f;
     float minRest = 1.0f;
     float maxMalnutrition = 0.0f;
@@ -296,16 +316,28 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 case EventType::PawnDied: ++died; std::fprintf(stderr, "day %lld: a colonist died: %s\n", static_cast<long long>(sim.time().day()), e.message.c_str()); break;
                 case EventType::PawnAte: ++ate; atTable += e.message == "table" ? 1 : 0; break;
                 case EventType::PawnWokeUp: ++slept; sleptInBed += e.message == "bed" ? 1 : 0; break;
+                case EventType::Interaction: ++talks; break;
+                case EventType::SocialFight: fights += e.message == "started" ? 1 : 0; break;
+                case EventType::JobStarted:
+                    if (e.job == JobType::Recreate) {
+                        ++recreations;
+                        pinGames += e.target != kNoEntity ? 1 : 0;
+                    }
+                    break;
                 case EventType::JobEnded:
                     if (e.message.rfind("failed", 0) == 0) {
                         std::fprintf(stderr, "step %lld: %s job failed for a colonist at %d,%d: %s\n", static_cast<long long>(i),
                                      jobTypeName(e.job), e.cell.x, e.cell.y, e.message.c_str());
                     }
                     break;
+                case EventType::WeatherChanged: ++weatherChanges; break;
                 case EventType::CellMined: ++mined; break;
                 case EventType::PlantRemoved: ++felled; break;
                 case EventType::PlantHarvested: ++picked; break;
+                case EventType::PawnAction: cleaned += e.action == PawnAction::Clean ? 1 : 0; break;
                 case EventType::RecipeDone: mealsMade += static_cast<uint64_t>(std::max(0.0f, e.amount)); break;
+                case EventType::Refueled: woodIn += static_cast<uint64_t>(std::max(0.0f, e.amount)); break;
+                case EventType::OutOfFuel: ++outOfFuel; break;
                 case EventType::CommandFailed:
                     ++commandsFailed;
                     std::fprintf(stderr, "step %lld: command %llu failed: %s\n", static_cast<long long>(i),
@@ -336,7 +368,9 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     const ConstructionSite* site = sim.things().registry().valid(job.thing) ? sim.things().registry().try_get<ConstructionSite>(job.thing) : nullptr;
                     fp = mix(fp, site != nullptr ? floatBits(site->workDone) : 0);
                 }
-                const bool working = job.type != JobType::None && job.type != JobType::Wait && !jobIsLyingDown(job);
+                // Lying down and playing (sitting, watching the clouds) are meant to be still.
+                const bool working = job.type != JobType::None && job.type != JobType::Wait && !jobIsLyingDown(job) &&
+                                     !(job.type == JobType::Recreate && job.step > 0);
                 if (working && fp == s.fingerprint) {
                     ++s.samples;
                     if (s.samples > s.worst) {
@@ -362,6 +396,12 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 minFood = std::min(minFood, needs.food);
                 minRest = std::min(minRest, needs.rest);
                 maxMalnutrition = std::max(maxMalnutrition, needs.malnutrition);
+            }
+            for (const auto [pawn, joy] : sim.things().registry().view<const Joy>().each()) {
+                (void)pawn;
+                minJoy = std::min(minJoy, joy.level);
+                minComfort = std::min(minComfort, joy.comfort);
+                minOutdoors = std::min(minOutdoors, joy.outdoors);
             }
             for (const auto [pawn, mood] : sim.things().registry().view<const Mood>().each()) {
                 (void)pawn;
@@ -456,27 +496,49 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     }
 
     const double skillXpGained = skillXpTotal() - skillXpStart;
+    int friendPairs = 0;
+    int rivalPairs = 0;
+    for (size_t i = 0; i < colonists.size(); ++i) {
+        for (size_t j = 0; j < colonists.size(); ++j) {
+            if (i < j && sim.social().friends(colonists[i], colonists[j])) {
+                ++friendPairs;
+            }
+            if (i != j && sim.social().rival(colonists[i], colonists[j])) {
+                ++rivalPairs;
+            }
+        }
+    }
+
+    const RoomStatValues* roomStat = sim.roomStats().statsAt(CellPos{origin.x + 2, origin.y + 2, 0});
     std::printf("{\"colony\":{\"seed\":%llu,\"size\":%d,\"days\":%.2f,\"colonists\":%zu,\"died\":%llu,"
                 "\"minFood\":%.3f,\"maxMalnutrition\":%.3f,\"minRest\":%.3f,\"minMood\":%.1f,"
                 "\"stuckMinutesWorst\":%lld,\"idleMinutesWorst\":%lld,"
+                "\"minJoy\":%.3f,\"minComfort\":%.3f,\"minOutdoors\":%.3f,\"recreations\":%llu,\"pinGames\":%llu,\"talks\":%llu,\"fights\":%llu,\"friendPairs\":%d,\"rivalPairs\":%d,"
                 "\"marked\":{\"rock\":%zu,\"trees\":%zu,\"bushes\":%zu},\"marksLeft\":%zu,\"marksDoneAtSecond\":%lld,"
                 "\"mined\":%llu,\"felled\":%llu,\"picked\":%llu,"
                 "\"planned\":%zu,\"walls\":%d,\"doors\":%d,\"beds\":%d,\"tables\":%d,\"stools\":%d,\"stoves\":%d,\"unfinished\":%d,"
                 "\"allBuiltAtSecond\":%lld,\"stoveBuiltAtSecond\":%lld,\"roomOk\":%s,"
-                "\"skillXpGained\":%.0f,\"mealsCooked\":%llu,\"ate\":%llu,\"atTable\":%llu,\"woke\":%llu,\"wokeInBed\":%llu,"
-                "\"commandsFailed\":%llu,\"failedJobs\":%llu,\"stateHash\":\"%016llx\"}}\n",
+                "\"skillXpGained\":%.0f,\"woodIn\":%llu,\"outOfFuel\":%llu,\"mealsCooked\":%llu,\"ate\":%llu,\"atTable\":%llu,\"woke\":%llu,\"wokeInBed\":%llu,"
+                "\"cleaned\":%llu,\"filthLeft\":%zu,\"roomBeauty\":%.2f,\"roomImpressiveness\":%.1f,"
+                "\"weatherChanges\":%llu,\"commandsFailed\":%llu,\"failedJobs\":%llu,\"stateHash\":\"%016llx\"}}\n",
                 static_cast<unsigned long long>(seed), mapSize, days, colonists.size(), static_cast<unsigned long long>(died),
                 static_cast<double>(minFood), static_cast<double>(maxMalnutrition), static_cast<double>(minRest),
                 static_cast<double>(minMood), static_cast<long long>(worstStuck), static_cast<long long>(worstIdle),
+                static_cast<double>(minJoy), static_cast<double>(minComfort), static_cast<double>(minOutdoors),
+                static_cast<unsigned long long>(recreations), static_cast<unsigned long long>(pinGames),
+                static_cast<unsigned long long>(talks), static_cast<unsigned long long>(fights), friendPairs, rivalPairs,
                 markedRock, markedTrees, markedBushes, sim.designations().count(),
                 static_cast<long long>(designationsDoneAt), static_cast<unsigned long long>(mined),
                 static_cast<unsigned long long>(felled), static_cast<unsigned long long>(picked), plans.size(),
                 builtBy["Wall"], builtBy["Door"], builtBy["Bed"], builtBy["Table1x2"], builtBy["Stool"], builtBy["FueledStove"], unfinished,
                 static_cast<long long>(allBuiltAt), static_cast<long long>(stoveBuiltAt), bedroomsRoofed == 1 ? "true" : "false",
-                skillXpGained, static_cast<unsigned long long>(mealsMade), static_cast<unsigned long long>(ate),
+                skillXpGained, static_cast<unsigned long long>(woodIn), static_cast<unsigned long long>(outOfFuel),
+                static_cast<unsigned long long>(mealsMade), static_cast<unsigned long long>(ate),
                 static_cast<unsigned long long>(atTable), static_cast<unsigned long long>(slept),
-                static_cast<unsigned long long>(sleptInBed), static_cast<unsigned long long>(commandsFailed),
-                static_cast<unsigned long long>(sim.stats().failedJobs), static_cast<unsigned long long>(sim.stateHash()));
+                static_cast<unsigned long long>(sleptInBed), static_cast<unsigned long long>(cleaned), sim.filth().totalLayers(),
+                roomStat ? static_cast<double>(roomStat->beauty) : 0.0, roomStat ? static_cast<double>(roomStat->impressiveness) : 0.0,
+                static_cast<unsigned long long>(weatherChanges), static_cast<unsigned long long>(commandsFailed), static_cast<unsigned long long>(sim.stats().failedJobs),
+                static_cast<unsigned long long>(sim.stateHash()));
 
     // The checks.
     int failures = 0;
@@ -504,10 +566,10 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         fail("%zu of %zu marks still not worked off", sim.designations().count(), markedRock + markedTrees + markedBushes);
     }
     if (unfinished > 0 || builtBy["Wall"] != expectedWalls || builtBy["Door"] != expectedDoors || builtBy["Bed"] != kBeds ||
-        builtBy["Table1x2"] != 1 || builtBy["Stool"] != 3 || builtBy["FueledStove"] != 1) {
-        fail("the building is not finished (walls %d/%d, doors %d/%d, beds %d/%d, table %d/1, stools %d/3, stove %d/1, %d sites left)",
+        builtBy["Table1x2"] != 1 || builtBy["Stool"] != 3 || builtBy["FueledStove"] != 1 || builtBy["HorseshoesPin"] != 1) {
+        fail("the building is not finished (walls %d/%d, doors %d/%d, beds %d/%d, table %d/1, stools %d/3, stove %d/1, pin %d/1, %d sites left)",
              builtBy["Wall"], expectedWalls, builtBy["Door"], expectedDoors, builtBy["Bed"], kBeds, builtBy["Table1x2"], builtBy["Stool"],
-             builtBy["FueledStove"], unfinished);
+             builtBy["FueledStove"], builtBy["HorseshoesPin"], unfinished);
     }
     if (bedroomsRoofed != 1) {
         fail("no roofed room with %d beds, a table and a stove", kBeds);
@@ -515,9 +577,29 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     if (sleptInBed == 0) {
         fail("nobody slept in a bed (%llu times asleep)", static_cast<unsigned long long>(slept));
     }
+    if (weatherChanges == 0) {
+        fail("the weather never changed in %.1f days", days);
+    }
     if (mealsMade == 0 || ate == 0) {
         fail("the stove made %llu meals and colonists ate %llu times", static_cast<unsigned long long>(mealsMade),
              static_cast<unsigned long long>(ate));
+    }
+    if (recreations == 0 || pinGames == 0) {
+        fail("colonists started %llu recreation jobs, %llu at the horseshoes pin", static_cast<unsigned long long>(recreations),
+             static_cast<unsigned long long>(pinGames));
+    }
+    if (talks == 0) {
+        fail("%s", "the colonists never talked to each other");
+    }
+    if (sim.filth().totalLayers() > 12) {
+        fail("%zu layers of filth lie about (cleaned %llu): nobody keeps up with the dirt", sim.filth().totalLayers(),
+             static_cast<unsigned long long>(cleaned));
+    }
+    if (roomStat == nullptr) {
+        fail("%s", "the room has no stats");
+    }
+    if (woodIn == 0) {
+        fail("%s", "nobody put wood into the stove");
     }
     if (!(skillXpGained > 0.0)) {
         fail("the work taught nobody anything (%.1f experience gained)", skillXpGained);

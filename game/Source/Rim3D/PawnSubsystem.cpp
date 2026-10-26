@@ -18,6 +18,7 @@
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Genes.h"
 #include "ColonySim/Snapshot.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSimPawns, Log, All);
@@ -186,14 +187,16 @@ FSimPawnLooks USimPawnSubsystem::MakeLooks(const colony::PawnLooksView& View, co
 	Looks.Hair = PawnLinear(View.hair);
 	if (Defs && View.lineage.valid())
 	{
+		// Horns are a gene of the lineage (X1): the last of its genes that has them.
 		const colony::Def& Lineage = Defs->get(View.lineage);
-		Looks.HornLength = static_cast<float>(Lineage.number("visual.horns.length", 0.0) * 100.0);
-		if (Looks.HornLength > 0.0f)
+		const colony::Def* HornGene = colony::lineageGeneWith(*Defs, Lineage, "visual.horns.length");
+		Looks.HornLength = HornGene ? static_cast<float>(HornGene->number("visual.horns.length", 0.0) * 100.0) : 0.0f;
+		if (HornGene && Looks.HornLength > 0.0f)
 		{
-			Looks.HornRadius = static_cast<float>(Lineage.number("visual.horns.radius", 0.03) * 100.0);
-			Looks.HornSpread = static_cast<float>(Lineage.number("visual.horns.spread", 0.05) * 100.0);
-			Looks.HornColor = PawnLinear(colony::LooksColor{static_cast<float>(Lineage.numberAt("visual.horns.color", 0, 0.1)),
-				static_cast<float>(Lineage.numberAt("visual.horns.color", 1, 0.08)), static_cast<float>(Lineage.numberAt("visual.horns.color", 2, 0.07))});
+			Looks.HornRadius = static_cast<float>(HornGene->number("visual.horns.radius", 0.03) * 100.0);
+			Looks.HornSpread = static_cast<float>(HornGene->number("visual.horns.spread", 0.05) * 100.0);
+			Looks.HornColor = PawnLinear(colony::LooksColor{static_cast<float>(HornGene->numberAt("visual.horns.color", 0, 0.1)),
+				static_cast<float>(HornGene->numberAt("visual.horns.color", 1, 0.08)), static_cast<float>(HornGene->numberAt("visual.horns.color", 2, 0.07))});
 		}
 	}
 	return Looks;
@@ -347,7 +350,8 @@ void USimPawnSubsystem::Tick(float DeltaTime)
 	TSet<uint32> Seen;
 	for (const colony::ThingView& View : Now.things)
 	{
-		if (View.category != colony::ThingCategory::Pawn)
+		// Animals (life stage 0 to 2) are drawn by USimAnimalSubsystem.
+		if (View.category != colony::ThingCategory::Pawn || View.lifeStage >= 0)
 		{
 			continue;
 		}

@@ -12,7 +12,8 @@ Same two kinds as [mood.md](mood.md). New fields:
   (`coldBelowComfort`, `noApparel`, `roomBeauty`, `painLevel`...); `stages` is a list of
   `{label, moodOffset}`, worst first, and the def's `...Thresholds` list says where one stage ends
   and the next begins (the owning task decides what the number measures; the `note` says). The mood
-  system reads only `situation.need` food or rest today, so these do nothing until their task.
+  system reads `situation.need` food or rest, and since C17 the five room and beauty conditions
+  (`beautyNeed`, `roomSpace`, `roomImpressiveness`, `roomCleanliness`, `sleepSharedRoom`: [room-stats.md](room-stats.md)); the rest do nothing until their task.
 - **Memories** use `trigger`, `moodOffset`, `durationDays` as before. A trigger is an event name the
   owning task raises (`KnowColonistDied`, `MentalBreakEnded`...).
 
@@ -20,6 +21,8 @@ Covered: temperature (E2), clothes and nudity (C15), beauty, space, impressivene
 barracks (C17), comfort, outdoors, recreation (C18), darkness (E3), pain, sickness, deaths and
 corpses, social memories and bond deaths (C20), catharsis (+40 for 2.5 days after a break, C19).
 Nudity is thoughts only, no sexual content.
+
+Since C20 the social memories and bond deaths are raised by the social system ([social.md](social.md)); `opinionOfMe` on traits and the extra `SocialRules` numbers are its.
 
 ## Recreation
 

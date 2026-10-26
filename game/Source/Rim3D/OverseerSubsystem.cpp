@@ -14,6 +14,7 @@
 #include "OverseerPawn.h"
 #include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
+#include "SkySubsystem.h"
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Map.h"
@@ -63,6 +64,8 @@ namespace
 			case colony::Terrain::Soil: return TEXT("Soil");
 			case colony::Terrain::Rock: return TEXT("Rock");
 			case colony::Terrain::RoughStone: return TEXT("Rough stone");
+			case colony::Terrain::Air: return TEXT("Air");
+			case colony::Terrain::UpperFloor: return TEXT("Upper floor");
 		}
 		return TEXT("?");
 	}
@@ -314,6 +317,8 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 				Bridge.StepOnce();
 			}
 		}
+		// The date, the season's temperature and the weather (U13).
+		OverseerText(USkySubsystem::DescribeDate(Sim) + TEXT("   ") + USkySubsystem::DescribeClimate(Sim));
 	}
 	ImGui::End();
 

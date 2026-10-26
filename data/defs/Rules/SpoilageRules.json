@@ -1,0 +1,16 @@
+[
+  {
+    "defName": "SpoilageRules", "source": "Rim3D",
+    "intervalSeconds": 60,
+    "rot": { "stopsBelowC": 0, "fullSpeedAboveC": 10 },
+    "outdoorDeteriorationFactor": 1.0,
+    "poison": {
+      "onIngestChance": 0.35,
+      "dirtyKitchenChance": 0.15, "cleanAtLeast": 0.4, "dirtiestAt": -1.1,
+      "unskilledChance": 0.04, "skillSafeAt": 8
+    },
+    "note": "Rot speed is 0 at or below stopsBelowC, 1 at or above fullSpeedAboveC, linear between, by the temperature of the cell an item lies in (docs/design/spoilage.md). Items with stats.deteriorationRate (hit points a game day) lose it under the open sky, times outdoorDeteriorationFactor (E1 raises it in rain). A meal is poisoned by chance when it is cooked: dirtyKitchenChance in a kitchen at dirtiestAt or worse (nothing at cleanAtLeast or better, linear between) plus unskilledChance for a cook of skill 0 (nothing from skillSafeAt up); eating a poisoned meal gives food poisoning with onIngestChance.",
+    "unverified": ["rot.stopsBelowC", "rot.fullSpeedAboveC", "poison.onIngestChance"],
+    "ours": ["intervalSeconds", "outdoorDeteriorationFactor", "poison.dirtyKitchenChance", "poison.cleanAtLeast", "poison.dirtiestAt", "poison.unskilledChance", "poison.skillSafeAt"]
+  }
+]

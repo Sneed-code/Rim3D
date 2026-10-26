@@ -1,3 +1,4 @@
+#include "FuelTestHelper.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
@@ -203,7 +204,8 @@ TEST_CASE("Skills: building a wall teaches Construction, more with passion") {
 TEST_CASE("Skills: cooking teaches Cooking in proportion to the recipe's experience, whatever the speed") {
     const auto xpAfterRun = [](int level) {
         Sim sim = skillsSim();
-        const Entity stove = skillsSpawn(sim, "FueledStove", CellPos{20, 20, 0});
+        const Entity stove = testFueled(sim, skillsSpawn(sim, "FueledStove", CellPos{20, 20, 0}));
+        testFueled(sim, skillsSpawn(sim, "TorchLamp", CellPos{19, 22, 0}));  // the sim starts at midnight; cook at full speed
         const Entity cook = skillsColonist(sim, CellPos{10, 10, 0}, "Cooking", level, Passion::Minor);
         skillsSpawn(sim, "RawBerries", CellPos{12, 12, 0}, 25);
         sim.submit(AddBillCommand{stove, "CookMealSimple", BillMode::Count, 1});
@@ -221,7 +223,7 @@ TEST_CASE("Skills: cooking teaches Cooking in proportion to the recipe's experie
 
 TEST_CASE("Skills: a passionate colonist is happier while the work goes on") {
     Sim sim = skillsSim();
-    const Entity stove = skillsSpawn(sim, "FueledStove", CellPos{20, 20, 0});
+    const Entity stove = testFueled(sim, skillsSpawn(sim, "FueledStove", CellPos{20, 20, 0}));
     const Entity cook = skillsColonist(sim, CellPos{10, 10, 0}, "Cooking", 8, Passion::Major);
     const Entity plain = skillsColonist(sim, CellPos{30, 30, 0}, "Cooking", 8, Passion::None);
     skillsSpawn(sim, "RawBerries", CellPos{12, 12, 0}, 25);

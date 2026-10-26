@@ -62,6 +62,7 @@ public:
     // pathfinder) that call update() first. kNoRegion off the map or on a cell that can't be walked.
     RegionId regionAtNow(CellPos c) const;
     // The same for a whole level at once, indexed by Map::index; for the pathfinder's inner loop.
+    // Null for an upper level that has never had anything built on it (no cell there has a region).
     const RegionId* regionIdsOnLevel(int level) const;
     // One more than the highest region id ever used; arrays indexed by region id need this size.
     size_t idLimit() const { return regions_.size(); }
@@ -92,7 +93,14 @@ public:
 
 private:
     int blockOf(int x, int y, int level) const { return (level * blocksY_ + y / kBlockSize) * blocksX_ + x / kBlockSize; }
-    size_t cellSlot(CellPos c) const;
+    // The region of an in-bounds cell, kNoRegion on an upper level with nothing stored yet.
+    RegionId regionOfCell(CellPos c) const {
+        const std::vector<RegionId>& level = regionOf_[static_cast<size_t>(c.level)];
+        return level.empty() ? kNoRegion : level[static_cast<size_t>(cellIndex(c))];
+    }
+    // The slot of an in-bounds cell, making its level's layer first if it has none.
+    RegionId& regionSlot(CellPos c);
+    int cellIndex(CellPos c) const;
     void rebuildBlocks();
     void removeRegion(RegionId id);
     RegionId newRegion();
@@ -105,7 +113,8 @@ private:
     int blocksY_ = 0;
     int blocks_ = 0;
     bool built_ = false;
-    std::vector<RegionId> regionOf_;            // per cell, all levels
+    // Per level, per cell; level 0 from the start, an upper level once something is built on it.
+    std::vector<std::vector<RegionId>> regionOf_;
     std::vector<Region> regions_;               // indexed by RegionId
     std::vector<RegionId> freeIds_;
     std::vector<std::vector<RegionId>> blockRegions_;

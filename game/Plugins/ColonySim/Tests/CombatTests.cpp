@@ -298,6 +298,9 @@ TEST_CASE("Combat: armor stops or softens hits on the parts it covers") {
             }
         }
         combatTestHeal(*sim, target);
+        // The vest wears out under fire (apparel.md); this test is about the armor roll, so mend it.
+        HitPoints& vestHp = sim->things().registry().get<HitPoints>(vest);
+        vestHp.current = vestHp.max;
     }
     // Flak vest 100% sharp less the revolver's 18% penetration: 41% bounce off, 41% half damage.
     COMBAT_REQUIRE(torso > 200);

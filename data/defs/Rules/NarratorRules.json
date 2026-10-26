@@ -1,0 +1,16 @@
+[
+  {
+    "defName": "NarratorRules", "source": "RimWorld wiki",
+    "defaultNarrator": "Orrin", "defaultDifficulty": "StriveToSurvive",
+    "populationIntent": [[0, 8.0], [1, 2.0], [5, 1.0], [9, 0.4], [12, 0.0], [20, -1.0]],
+    "populationIntentByDay": [[0, 0.0], [10, 1.0]],
+    "minIncidentChanceFactor": 0.05,
+    "minIncidentChanceFactorByNarrator": { "Jinx": 0.2 },
+    "yearsUntilMaxThreat": 12,
+    "adaptationStart": 0.8,
+    "letterKinds": ["ThreatBig", "NegativeEvent", "NeutralEvent", "PositiveEvent"],
+    "unverified": ["minIncidentChanceFactor", "adaptationStart"],
+    "ours": ["defaultNarrator", "defaultDifficulty", "letterKinds"],
+    "notes": "How the narrator picks. populationIntent is the wiki's curve of colonists to a push (positive: more good news, wanderers; negative: more trouble), fading in over the first ten days. Threat points come from wealth and colonists as in RaidRules (F6); T1 multiplies them by the difficulty's threatScale, the narrator's pointsFactor and the adaptation factor. Jinx's floor 0.20 is the wiki's; 0.05 for the others is its stated default. yearsUntilMaxThreat 12 is the wiki's Peaceful-column figure."
+  }
+]

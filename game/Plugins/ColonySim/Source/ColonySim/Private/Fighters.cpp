@@ -1,15 +1,22 @@
 #include "ColonySim/Fighters.h"
 
+#include "ColonySim/Animals.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
+#include "ColonySim/Defense.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Explosives.h"
+#include "ColonySim/Genes.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Prisoners.h"
+#include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Weather.h"
 
 #include <algorithm>
 #include <cmath>
@@ -93,6 +100,17 @@ void fightReadRules(const DefDatabase& defs, FighterRules& r) {
     num("dodgeRadius", r.dodgeRadius);
     num("dodgeClearance", r.dodgeClearance);
     whole("dodgeHoldSteps", r.dodgeHoldSteps);
+    num("diveMargin", r.diveMargin);
+    num("diveSafe", r.diveSafe);
+    whole("throwEvery", r.throwEvery);
+    whole("throwMinEnemies", r.throwMinEnemies);
+    whole("throwMemory", r.throwMemory);
+    num("throwSelfMargin", r.throwSelfMargin);
+    num("throwFriendMargin", r.throwFriendMargin);
+    num("switchMeleeRange", r.switchMeleeRange);
+    num("switchSidearmRange", r.switchSidearmRange);
+    num("switchMargin", r.switchMargin);
+    r.throwEvery = std::max(1, r.throwEvery);
     r.planEvery = std::max(1, r.planEvery);
     r.threats = std::clamp(r.threats, 1, kFightMaxThreats);
     r.refine = std::max(1, r.refine);
@@ -168,6 +186,21 @@ bool FighterSystem::draft(Entity pawn, bool drafted, std::string& error) {
     }
     Fighter* existing = reg.try_get<Fighter>(pawn);
     if (drafted) {
+        if (existing != nullptr && !existing->drafted && existing->defending) {
+            // Called up by the alarm: the player takes it over where it stands.
+            stop(pawn, *existing);
+            existing->drafted = true;
+            existing->defending = false;
+            existing->mode = FightMode::Fight;
+            existing->hasGoal = false;
+            existing->moveOrdered = false;
+            existing->retreat = false;
+            existing->hasSpot = false;
+            existing->anchor = cellOf(reg.get<Position>(pawn));
+            existing->leash = rules_.draftLeash;
+            existing->nextPlan = now();
+            return true;
+        }
         if (existing != nullptr) {
             error = "that pawn is drafted already";
             return false;
@@ -185,7 +218,7 @@ bool FighterSystem::draft(Entity pawn, bool drafted, std::string& error) {
         reg.emplace<Fighter>(pawn, std::move(f));
         return true;
     }
-    if (existing == nullptr) {
+    if (existing == nullptr || !existing->drafted) {
         error = "that pawn isn't drafted";
         return false;
     }
@@ -273,6 +306,38 @@ bool FighterSystem::setFaction(Entity pawn, FactionId faction, std::string& erro
     return true;
 }
 
+Fighter& FighterSystem::enlist(Entity pawn, const char* why) {
+    entt::registry& reg = things_.registry();
+    if (Fighter* f = reg.try_get<Fighter>(pawn)) {
+        return *f;
+    }
+    jobs_.interrupt(pawn, why);
+    Fighter f;
+    f.anchor = things_.spawned(pawn) ? cellOf(reg.get<Position>(pawn)) : CellPos{};
+    f.nextPlan = now() + fightStagger(pawn, rules_.planEvery);
+    return reg.emplace<Fighter>(pawn, std::move(f));
+}
+
+void FighterSystem::standDown(Entity pawn) {
+    entt::registry& reg = things_.registry();
+    if (Fighter* f = reg.valid(pawn) ? reg.try_get<Fighter>(pawn) : nullptr) {
+        stop(pawn, *f);
+        reg.remove<Fighter>(pawn);
+        if (things_.spawned(pawn)) {
+            combat_.setStance(pawn, Stance::Standing);
+        }
+    }
+}
+
+void FighterSystem::replan(Entity pawn) {
+    entt::registry& reg = things_.registry();
+    if (Fighter* f = reg.valid(pawn) ? reg.try_get<Fighter>(pawn) : nullptr) {
+        stop(pawn, *f);
+        f->hasSpot = false;
+        f->nextPlan = std::min(f->nextPlan, now());
+    }
+}
+
 // ---- Each step ------------------------------------------------------------------------------
 
 void FighterSystem::step() {
@@ -297,6 +362,9 @@ void FighterSystem::step() {
         p.level = pos.level;
         p.able = h == nullptr || !h->downed;
         p.fighter = reg.all_of<Fighter>(e);
+        const Animal* wildLife = reg.try_get<Animal>(e);
+        // A hunting, manhunting or avenging animal is an enemy (N5); a prisoner is nobody's target (C22).
+        p.animal = (wildLife != nullptr && wildLife->temper == AnimalTemper::Calm) || reg.all_of<Prisoner>(e);
         p.stance = p.able ? posture.stance : Stance::Prone;
         pawns_.push_back(p);
     }
@@ -307,6 +375,10 @@ void FighterSystem::step() {
         incoming_.push_back(Incoming{shot, p.launcher, p.x, p.y, p.z, p.vx, p.vy, p.vz, p.level, p.age});
     }
     std::sort(incoming_.begin(), incoming_.end(), [](const Incoming& a, const Incoming& b) { return a.shot < b.shot; });
+    blasts_.clear();
+    if (explosives_ != nullptr) {
+        explosives_->dangers(blasts_);
+    }
 
     order_.clear();
     for (const Entity pawn : reg.view<Fighter>()) {
@@ -323,16 +395,24 @@ void FighterSystem::step() {
             }
             continue;
         }
+        // Thrown to the ground by a blast: nothing until it is up.
+        if (reg.all_of<KnockedDown>(pawn)) {
+            if (f.walk != 0) {
+                stop(pawn, f);
+            }
+            continue;
+        }
         if (now() < f.dodgeUntil) {
             continue;  // out of the way of a shot: the plan waits until it has passed
         }
-        if (dodge(pawn, f)) {
+        if (dive(pawn, f) || dodge(pawn, f)) {
             continue;
         }
         if (now() >= f.nextPlan) {
             f.nextPlan = now() + rules_.planEvery;
             plan(pawn, f);
         }
+        considerThrow(pawn, f);
         act(pawn, f);
     }
 }
@@ -384,11 +464,13 @@ void FighterSystem::see(Entity pawn, Fighter& f, const PawnInfo& self) {
         }
         merge(reg.get<Fighter>(p.pawn).known);
     }
-    const float range2 = rules_.sightRange * rules_.sightRange;
+    const float sightRange =
+        rules_.sightRange * (weather_ != nullptr ? weather_->sightAt(CellPos{static_cast<int>(std::floor(self.x)), static_cast<int>(std::floor(self.y)), self.level}) : 1.0f);
+    const float range2 = sightRange * sightRange;
     const Viewpoint eye{self.x, self.y, self.level, Stance::Standing};
     size_t next = 0;  // walks f.known alongside pawns_, both in id order
     for (const PawnInfo& p : pawns_) {
-        if (p.faction == self.faction || p.level != self.level) {
+        if (p.faction == self.faction || p.animal || p.level != self.level) {
             continue;
         }
         const float dx = p.x - self.x;
@@ -496,6 +578,10 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
         return;
     }
     const PawnInfo self = *selfInfo;
+    if (f.mode != FightMode::Fight) {
+        planGoal(pawn, f, self);
+        return;
+    }
     see(pawn, f, self);
     const Entity previous = f.target;
     f.target = chooseTarget(pawn, f, self);
@@ -556,14 +642,36 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
             ++friendsNear;
         }
     }
-    f.fallingBack = enemiesNear > 0 && (static_cast<float>(enemiesNear) >= rules_.outnumberedRatio * static_cast<float>(friendsNear) ||
-                                        badlyHurt(pawn));
+    f.fallingBack = f.retreat ||
+                    (enemiesNear > 0 && (static_cast<float>(enemiesNear) >= rules_.outnumberedRatio * static_cast<float>(friendsNear) ||
+                                         badlyHurt(pawn)));
+    // With an enemy already at arm's length there is no getting away on foot: it stands and fights (F8).
+    if (f.fallingBack && melee_ != nullptr && threatCount > 0 && threats[0].d <= melee_->reach(pawn) + melee_->rules().standGround) {
+        f.fallingBack = false;
+    }
+
+    // Armed for melee, or a Brawler: it runs at its target instead of taking cover (F8). A drafted
+    // one only as far as its leash allows, unless the player ordered the attack.
+    if (melee_ != nullptr && targetInfo != nullptr && !f.fallingBack && melee_->charges(pawn)) {
+        const CellPos goal = cellOf(Position{tx, ty, targetInfo->level});
+        if (f.leash <= 0.0f || f.forcedTarget == f.target ||
+            fightDist(fightCentre(goal.x), fightCentre(goal.y), fightCentre(f.anchor.x), fightCentre(f.anchor.y)) <=
+                f.leash + melee_->reach(pawn) + 1.0f) {
+            planCharge(pawn, f, goal);
+            return;
+        }
+    }
 
     // Nothing to fear and nobody to shoot: stay put.
     const CellPos at = cellOf(Position{self.x, self.y, self.level});
     if (threatCount == 0 && targetInfo == nullptr) {
-        if (!f.hasSpot || f.moveOrdered) {
-            const CellPos goal = f.moveOrdered ? f.anchor : at;
+        // A raider heads for its squad's target (F6); everyone else stays put or keeps to its order.
+        const bool heads = f.moveOrdered || f.hasGoal;
+        if (!f.hasSpot || heads) {
+            const CellPos goal = f.moveOrdered ? f.anchor : f.hasGoal ? f.goal : at;
+            if (f.hasSpot && f.spot == goal && (f.walk != 0 || at == goal)) {
+                return;  // on its way there already, or there
+            }
             f.hasSpot = true;
             f.spot = goal;
             f.fireCell = goal;
@@ -612,6 +720,9 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
             if (!map_.walkable(c) || map_.obstacleDm(c) > 0 || map_.isDoor(c)) {
                 continue;
             }
+            if (defense_ != nullptr && defense_->avoidsCell(self.faction, c)) {
+                continue;  // a trap it knows of
+            }
             const float cx = fightCentre(c.x);
             const float cy = fightCentre(c.y);
             if (leashed && fightDist(cx, cy, fightCentre(f.anchor.x), fightCentre(f.anchor.y)) > f.leash) {
@@ -646,7 +757,7 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
             }
             s -= rules_.travelWeight * fightDist(cx, cy, self.x, self.y);
             s -= rules_.crowdWeight * crowd;
-            if (targetInfo != nullptr) {
+            if (targetInfo != nullptr && range > 0.0f) {  // without a gun there is no range to get into (F8)
                 const float dt = fightDist(cx, cy, tx, ty);
                 if (dt > range) {
                     s -= rules_.rangeWeight * (dt - range);
@@ -723,6 +834,128 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
     }
 }
 
+// Shelter and Flee (F6): no enemies, no shots, just the nearest free cell to the goal (a shelter
+// room, the way off the map).
+void FighterSystem::planGoal(Entity pawn, Fighter& f, const PawnInfo& self) {
+    f.known.clear();
+    f.target = kNoEntity;
+    f.forcedTarget = kNoEntity;
+    f.canFire = false;
+    f.fallingBack = false;
+    const CellPos at = cellOf(Position{self.x, self.y, self.level});
+    const CellPos goal = f.hasGoal ? f.goal : at;
+    const auto nearGoal = [&](CellPos c) { return c.level == goal.level && std::abs(c.x - goal.x) <= 3 && std::abs(c.y - goal.y) <= 3; };
+    if (f.hasSpot && nearGoal(f.spot) && (f.walk != 0 || at == f.spot)) {
+        return;
+    }
+    entt::registry& reg = things_.registry();
+    friendSpots_.clear();
+    for (const PawnInfo& p : pawns_) {
+        if (p.fighter && p.pawn != pawn && p.faction == self.faction) {
+            const Fighter& other = reg.get<Fighter>(p.pawn);
+            if (other.hasSpot && nearGoal(other.spot)) {
+                friendSpots_.push_back(other.spot);
+            }
+        }
+    }
+    // Rings out from the goal: the first free cell it can reach.
+    Regions& regions = map_.regions();
+    bool found = false;
+    CellPos best = goal;
+    for (int r = 0; r <= 3 && !found; ++r) {
+        for (int dy = -r; dy <= r && !found; ++dy) {
+            for (int dx = -r; dx <= r; ++dx) {
+                if (std::max(std::abs(dx), std::abs(dy)) != r) {
+                    continue;
+                }
+                const CellPos c{goal.x + dx, goal.y + dy, goal.level};
+                if (!map_.walkable(c) || map_.obstacleDm(c) > 0 || map_.isDoor(c) ||
+                    std::find(friendSpots_.begin(), friendSpots_.end(), c) != friendSpots_.end() || !regions.canReach(at, c) ||
+                    (defense_ != nullptr && defense_->avoidsCell(self.faction, c))) {
+                    continue;
+                }
+                best = c;
+                found = true;
+                break;
+            }
+        }
+    }
+    if (!found) {
+        return;  // nowhere free: keep the old plan, try again next time
+    }
+    if (f.walk != 0) {
+        stop(pawn, f);
+    }
+    f.hasSpot = true;
+    f.spot = best;
+    f.fireCell = best;
+    if (best != at) {
+        walkToSpot(pawn, f);
+    }
+}
+
+// Several weapons (P1): a fighter with more than one picks by the distance to its target: a melee weapon
+// when it is at arm's length, a sidearm in the middle distance, the rifle beyond. The weapon in its hands
+// keeps its band a little longer (switchMargin) so a target on the edge does not make it flip back and forth,
+// and a gun that can't reach is passed over. A switch takes a while (CombatRules weaponSwitchSteps), in which it
+// neither shoots nor swings.
+void FighterSystem::chooseWeapon(Entity pawn, const Fighter& f) {
+    entt::registry& reg = things_.registry();
+    const Gear* gear = reg.try_get<Gear>(pawn);
+    if (gear == nullptr || gear->stowed.empty() || combat_.switching(pawn)) {
+        return;
+    }
+    const PawnInfo* self = info(pawn);
+    const PawnInfo* target = info(f.target);
+    if (self == nullptr || target == nullptr || !target->able || target->level != self->level) {
+        return;
+    }
+    const float d = fightDist(self->x, self->y, target->x, target->y);
+    WeaponSlot hands = WeaponSlot::Primary;
+    const bool armed = combat_.handsSlot(pawn, hands);
+    const float meleeBand = rules_.switchMeleeRange + (armed && hands == WeaponSlot::Melee ? rules_.switchMargin : 0.0f);
+    const float sidearmBand = rules_.switchSidearmRange + (armed && hands == WeaponSlot::Sidearm ? rules_.switchMargin : 0.0f);
+    static constexpr WeaponSlot kClose[kWeaponSlotCount] = {WeaponSlot::Melee, WeaponSlot::Sidearm, WeaponSlot::Primary};
+    static constexpr WeaponSlot kMiddle[kWeaponSlotCount] = {WeaponSlot::Sidearm, WeaponSlot::Primary, WeaponSlot::Melee};
+    static constexpr WeaponSlot kFar[kWeaponSlotCount] = {WeaponSlot::Primary, WeaponSlot::Sidearm, WeaponSlot::Melee};
+    const WeaponSlot* order = d <= meleeBand ? kClose : d <= sidearmBand ? kMiddle : kFar;
+
+    const auto reach = [&](Entity item) {
+        const DefId def = reg.get<Thing>(item).def;
+        return def.value < range_.size() ? range_[def.value] : 0.0f;
+    };
+    bool found = false;
+    WeaponSlot pick = WeaponSlot::Primary;
+    for (int i = 0; i < kWeaponSlotCount && !found; ++i) {
+        const Entity item = combat_.weaponIn(pawn, order[i]);
+        if (item != kNoEntity && (order[i] == WeaponSlot::Melee || reach(item) >= d)) {
+            pick = order[i];
+            found = true;
+        }
+    }
+    if (!found) {
+        // Nothing reaches: keep a gun already in the hands, else take the one that reaches furthest.
+        if (armed && hands != WeaponSlot::Melee) {
+            return;
+        }
+        float best = 0.0f;
+        for (int i = 0; i < kWeaponSlotCount; ++i) {
+            const Entity item = combat_.weaponIn(pawn, order[i]);
+            if (item != kNoEntity && order[i] != WeaponSlot::Melee && reach(item) > best) {
+                best = reach(item);
+                pick = order[i];
+                found = true;
+            }
+        }
+        if (!found) {
+            return;
+        }
+    }
+    if (!armed || hands != pick) {
+        combat_.switchWeapon(pawn, pick);
+    }
+}
+
 void FighterSystem::act(Entity pawn, Fighter& f) {
     entt::registry& reg = things_.registry();
     Mover& mover = reg.get<Mover>(pawn);
@@ -732,6 +965,13 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
     const ShotPhase phase = shooter != nullptr ? shooter->phase : ShotPhase::Ready;
     if (phase == ShotPhase::Aiming || phase == ShotPhase::Firing) {
         return;  // holds still and exposed until the burst is out, even if the plan has moved on
+    }
+    if (explosives_ != nullptr && explosives_->throwing(pawn)) {
+        return;  // and the same through a throw's wind-up
+    }
+    chooseWeapon(pawn, f);
+    if (meleeAct(pawn, f)) {
+        return;  // swinging, or an enemy in reach to swing at (F8)
     }
 
     // Walking to the spot: upright, not shooting.
@@ -750,6 +990,9 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
             return;
         }
         smoothPath(map_, pos.x, pos.y, route);
+        if (defense_ != nullptr) {
+            defense_->detour(factionOf(pawn), pos.x, pos.y, route);
+        }
         mover.walkTo(pos.x, pos.y, std::move(route));
         f.walk = 2;
         combat_.setStance(pawn, Stance::Standing);
@@ -814,6 +1057,85 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
     }
 }
 
+// A charge (F8): the spot is the cell the target was last seen in, walked to by the usual path. Once
+// the target is in reach meleeAct takes over.
+void FighterSystem::planCharge(Entity pawn, Fighter& f, CellPos goal) {
+    f.canFire = false;
+    f.fireStance = Stance::Standing;
+    const bool moved = !f.hasSpot || f.spot != goal;
+    f.hasSpot = true;
+    f.spot = goal;
+    f.fireCell = goal;
+    if (!moved) {
+        return;
+    }
+    if (f.walk != 0) {
+        // Keeps running along the old route while the pathfinder works out the new one, so a chase
+        // doesn't stop each time the target moves.
+        if (f.walk == 1) {
+            pathfinder_.cancel(f.path);
+        }
+        f.path = pathfinder_.request(cellOf(things_.registry().get<Position>(pawn)), goal);
+        f.walk = 1;
+        f.repaths = 0;
+        return;
+    }
+    walkToSpot(pawn, f);
+}
+
+// Melee (F8). Winding up a swing it holds still. Without a gun, with its target or another able enemy
+// in reach, it stops, stands and swings whenever it is ready. A pawn with a gun shoots instead, even
+// point blank.
+bool FighterSystem::meleeAct(Entity pawn, Fighter& f) {
+    if (melee_ == nullptr) {
+        return false;
+    }
+    if (melee_->winding(pawn)) {
+        return true;
+    }
+    if (weaponRange(pawn) > 0.0f) {
+        return false;
+    }
+    Entity victim = kNoEntity;
+    if (info(f.target) != nullptr && melee_->inReach(pawn, f.target)) {
+        victim = f.target;
+    } else {
+        const PawnInfo* self = info(pawn);
+        float best = 0.0f;
+        for (const PawnInfo& p : pawns_) {
+            if (self == nullptr || p.faction == self->faction || !p.able || p.level != self->level ||
+                !melee_->inReach(pawn, p.pawn)) {
+                continue;
+            }
+            const float d = fightDist(p.x, p.y, self->x, self->y);
+            if (victim == kNoEntity || d < best) {
+                victim = p.pawn;
+                best = d;
+            }
+        }
+    }
+    if (victim == kNoEntity) {
+        return false;
+    }
+    if (victim == f.target && f.walk != 0 && melee_->charges(pawn)) {
+        // A charge walks on until the target is well inside its reach, not just at the edge of it.
+        const Position& a = things_.registry().get<Position>(pawn);
+        const Position& b = things_.registry().get<Position>(victim);
+        const float close = std::max(0.7f, melee_->reach(pawn) - melee_->rules().closeIn);
+        if (fightDist(a.x, a.y, b.x, b.y) > close) {
+            return false;
+        }
+    }
+    if (f.walk != 0) {
+        stop(pawn, f);
+    }
+    combat_.setStance(pawn, Stance::Standing);
+    if (melee_->ready(pawn)) {
+        melee_->attack(pawn, victim, false);
+    }
+    return true;
+}
+
 // In cover with nothing to shoot just now: top the magazine up rather than run dry mid-fight.
 void FighterSystem::tacticalReload(Entity pawn, const Fighter& f, bool canShoot) {
     const int size = combat_.magazineSize(pawn);
@@ -842,7 +1164,9 @@ bool FighterSystem::dodge(Entity pawn, Fighter& f) {
     const Position pos = reg.get<Position>(pawn);
     Mover& mover = reg.get<Mover>(pawn);
     const Health* health = reg.try_get<Health>(pawn);
-    const float speed = mover.metresPerStep * (health != nullptr ? health->movingFactor : 1.0f);
+    const PawnGenes* genes = reg.try_get<PawnGenes>(pawn);
+    const float geneSpeed = genes != nullptr ? genes->effects.moveSpeed / static_cast<float>(kStepsPerRealSecondAt1x) : 0.0f;
+    const float speed = std::max(0.0f, mover.metresPerStep + geneSpeed) * (health != nullptr ? health->movingFactor : 1.0f);
     if (speed <= 0.0f) {
         return false;
     }
@@ -925,6 +1249,209 @@ bool FighterSystem::dodge(Entity pawn, Fighter& f) {
             events_->push_back(std::move(e));
         }
         return true;
+    }
+    return false;
+}
+
+namespace {
+
+// Sixteen directions, evenly round: the dive looks for a safe place along each.
+constexpr float kFightRing[16][2] = {{1.0f, 0.0f},         {0.9239f, 0.3827f},   {0.7071f, 0.7071f},   {0.3827f, 0.9239f},
+                                     {0.0f, 1.0f},         {-0.3827f, 0.9239f},  {-0.7071f, 0.7071f},  {-0.9239f, 0.3827f},
+                                     {-1.0f, 0.0f},        {-0.9239f, -0.3827f}, {-0.7071f, -0.7071f}, {-0.3827f, -0.9239f},
+                                     {0.0f, -1.0f},        {0.3827f, -0.9239f},  {0.7071f, -0.7071f},  {0.9239f, -0.3827f}};
+
+}  // namespace
+
+// A grenade about to go off close by, noticed in time (its reaction time after the throw): run to
+// the nearest place outside the blast, or behind a wall the blast can't see through, that it can
+// reach before the fuse is out; with none, lie flat. F5's sidestep grown into a dive.
+bool FighterSystem::dive(Entity pawn, Fighter& f) {
+    if (blasts_.empty() || (explosives_ != nullptr && explosives_->throwing(pawn))) {
+        return false;
+    }
+    entt::registry& reg = things_.registry();
+    const Shooter* shooter = reg.try_get<Shooter>(pawn);
+    if (shooter != nullptr && shooter->phase == ShotPhase::Firing) {
+        return false;  // mid-burst
+    }
+    const Position pos = reg.get<Position>(pawn);
+    const int reaction = combat_.reactionSteps(pawn);
+    const GrenadeDanger* threat = nullptr;
+    for (const GrenadeDanger& b : blasts_) {
+        if (b.level != pos.level || b.age < reaction || b.stepsToBlast < 1) {
+            continue;
+        }
+        if (fightDist(pos.x, pos.y, b.x, b.y) >= b.radius + rules_.diveMargin) {
+            continue;
+        }
+        if (threat == nullptr || b.stepsToBlast < threat->stepsToBlast) {
+            threat = &b;
+        }
+    }
+    if (threat == nullptr) {
+        return false;
+    }
+    const float ground = map_.heightAt(pos.x, pos.y);
+    // Cover from this blast already: a wall between it and the pawn's chest.
+    const auto shielded = [&](float px, float py, const GrenadeDanger& b) {
+        const TraceHit hit = combat_.trace(b.x, b.y, b.z + 0.3f, px, py, map_.heightAt(px, py) + 1.0f, pos.level, kNoEntity,
+                                           CellPos{-100000, -100000, pos.level}, false);
+        return hit.kind != ProjectileHitKind::None && hit.t < 0.97f;
+    };
+    if (shielded(pos.x, pos.y, *threat)) {
+        return false;
+    }
+    (void)ground;
+    Mover& mover = reg.get<Mover>(pawn);
+    const Health* health = reg.try_get<Health>(pawn);
+    const float speed = mover.metresPerStep * (health != nullptr ? health->movingFactor : 1.0f);
+    const CellPos here = cellOf(pos);
+    CellPos best = here;
+    float bestDistance = 1e30f;
+    if (speed > 0.0f) {
+        for (const float extra : {rules_.diveSafe + 0.3f, rules_.diveSafe + 1.5f, rules_.diveSafe + 3.0f}) {
+            for (const auto& dir : kFightRing) {
+                const float r = threat->radius + extra;
+                const CellPos c{static_cast<int>(std::floor(threat->x + dir[0] * r)), static_cast<int>(std::floor(threat->y + dir[1] * r)),
+                                pos.level};
+                if (!map_.walkable(c) || map_.obstacleDm(c) > 0 || map_.isDoor(c)) {
+                    continue;
+                }
+                const float cx = fightCentre(c.x);
+                const float cy = fightCentre(c.y);
+                const float distance = fightDist(pos.x, pos.y, cx, cy);
+                if (distance >= bestDistance || distance / speed > static_cast<float>(threat->stepsToBlast - 1) ||
+                    !straightWalkIsClear(map_, pos.x, pos.y, cx, cy, kPawnRadius, pos.level)) {
+                    continue;
+                }
+                // Safe from every grenade about to go off: outside its radius or behind a wall.
+                bool safe = true;
+                for (const GrenadeDanger& b : blasts_) {
+                    safe = safe && b.level == pos.level &&
+                           (fightDist(cx, cy, b.x, b.y) >= b.radius + rules_.diveSafe || shielded(cx, cy, b));
+                }
+                if (safe) {
+                    best = c;
+                    bestDistance = distance;
+                }
+            }
+            if (bestDistance < 1e29f) {
+                break;  // the nearest ring that has a way out
+            }
+        }
+    }
+    stop(pawn, f);
+    combat_.cancelAim(pawn);
+    if (bestDistance < 1e29f) {
+        // A straight run: the cells along the line.
+        std::vector<CellPos> route;
+        const float tx = fightCentre(best.x);
+        const float ty = fightCentre(best.y);
+        const int pieces = std::max(1, static_cast<int>(std::ceil(bestDistance * 2.0f)));
+        for (int i = 1; i <= pieces; ++i) {
+            const float t = static_cast<float>(i) / static_cast<float>(pieces);
+            const CellPos c{static_cast<int>(std::floor(pos.x + (tx - pos.x) * t)), static_cast<int>(std::floor(pos.y + (ty - pos.y) * t)),
+                            pos.level};
+            if (route.empty() ? !(c == here) : !(c == route.back())) {
+                route.push_back(c);
+            }
+        }
+        if (route.empty() || !(route.back() == best)) {
+            route.push_back(best);
+        }
+        combat_.setStance(pawn, Stance::Standing);
+        mover.walkTo(pos.x, pos.y, std::move(route));
+    } else {
+        combat_.setStance(pawn, Stance::Prone);  // nowhere to go: lie flat and take it
+    }
+    f.dodgeUntil = now() + threat->stepsToBlast + rules_.dodgeHoldSteps;
+    f.nextPlan = std::min(f.nextPlan, f.dodgeUntil);
+    if (events_ != nullptr) {
+        Event e;
+        e.type = EventType::PawnAction;
+        e.action = PawnAction::Dive;
+        e.thing = pawn;
+        e.def = reg.get<Thing>(pawn).def;
+        e.target = threat->grenade;
+        e.cell = best;
+        events_->push_back(std::move(e));
+    }
+    return true;
+}
+
+// A grenadier's look for a place to throw: at a group of enemies it knows (or at one it has no shot
+// at), no closer to itself than the blast reaches, with no friend in it, and only where the arc
+// really lands. The throw itself is the explosive system's (wind-up, release, flight).
+bool FighterSystem::considerThrow(Entity pawn, const Fighter& f) {
+    if (explosives_ == nullptr || f.known.empty() || (now() + static_cast<int64_t>(entt::to_integral(pawn))) % rules_.throwEvery != 0) {
+        return false;
+    }
+    if (explosives_->count(pawn) <= 0 || explosives_->throwReadyIn(pawn) > 0) {
+        return false;
+    }
+    const Shooter* shooter = things_.registry().try_get<Shooter>(pawn);
+    if (shooter != nullptr && (shooter->phase == ShotPhase::Aiming || shooter->phase == ShotPhase::Firing)) {
+        return false;
+    }
+    const PawnInfo* self = info(pawn);
+    if (self == nullptr) {
+        return false;
+    }
+    const DefId item = explosives_->firstItem(pawn);
+    const float range = explosives_->throwRange(item);
+    const float radius = explosives_->blastRadius(item);
+    if (range <= 0.0f || radius <= 0.0f) {
+        return false;
+    }
+    struct Spot {
+        Entity centre;
+        float x, y;
+        int enemies;
+        float distance;
+    };
+    std::vector<Spot> spots;
+    for (const KnownEnemy& k : f.known) {
+        const PawnInfo* p = info(k.pawn);
+        if (p == nullptr || !p->able || p->animal || p->level != self->level || now() - k.seenAt > rules_.throwMemory) {
+            continue;
+        }
+        const float distance = fightDist(self->x, self->y, p->x, p->y);
+        if (distance > range * 0.95f || distance < radius + rules_.throwSelfMargin) {
+            continue;
+        }
+        int enemies = 0;
+        for (const KnownEnemy& other : f.known) {
+            const PawnInfo* q = info(other.pawn);
+            if (q != nullptr && q->able && !q->animal && q->level == self->level && now() - other.seenAt <= rules_.throwMemory &&
+                fightDist(q->x, q->y, p->x, p->y) <= radius * 0.9f) {
+                ++enemies;
+            }
+        }
+        if (enemies < rules_.throwMinEnemies && !(enemies >= 1 && !f.canFire)) {
+            continue;
+        }
+        bool friendly = false;
+        for (const PawnInfo& r : pawns_) {
+            friendly = friendly || (r.faction == self->faction && !r.animal && r.level == self->level &&
+                                    fightDist(r.x, r.y, p->x, p->y) < radius + rules_.throwFriendMargin);
+        }
+        if (!friendly) {
+            spots.push_back(Spot{k.pawn, p->x, p->y, enemies, distance});
+        }
+    }
+    std::sort(spots.begin(), spots.end(), [](const Spot& a, const Spot& b) {
+        return a.enemies != b.enemies ? a.enemies > b.enemies : (a.distance != b.distance ? a.distance < b.distance : a.centre < b.centre);
+    });
+    int tried = 0;
+    for (const Spot& s : spots) {
+        if (++tried > 3) {
+            break;
+        }
+        ThrowPlan plan;
+        if (explosives_->planThrow(pawn, item, s.x, s.y, plan) && plan.reaches) {
+            return explosives_->throwAt(pawn, item, s.centre, s.x, s.y, false);
+        }
     }
     return false;
 }
@@ -1027,6 +1554,12 @@ void FighterSystem::hashThing(Entity e, StateHasher& h) const {
         }
         h.add(f->reactUntil);
         h.add(f->dodgeUntil);
+        h.add(static_cast<int>(f->mode));
+        h.add(f->defending);
+        h.add(f->squad);
+        h.add(f->hasGoal);
+        cell(f->goal);
+        h.add(f->retreat);
     }
 }
 

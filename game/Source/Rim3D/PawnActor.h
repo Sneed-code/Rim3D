@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 
+#include "MeleePose.h"
 #include "PawnAnimInstance.h"
 #include "PawnSubsystem.h"
 
@@ -84,6 +85,33 @@ public:
 
 	static constexpr float kHitReactionSeconds = 0.55f;
 
+	// --- Melee on screen (docs/design/melee-draw.md). All cosmetic: the sim decides who is hit. ---
+
+	/** The sim began a swing; the hit moment comes `StepsToHit` sim steps later. The body draws back and
+	 *  strikes so that the blow lands on that step. */
+	void BeginMeleeSwing(EMeleeStyle Style, float StepsToHit);
+	/** The sim's MeleeHit: the blow lands now (if it has not on screen yet) and the follow-through starts. */
+	void MeleeHitMoment();
+	/** A sidestep toward the world point: the body dips and tips that way for a third of a second. */
+	void PlayDodge(const FVector& TowardWorld);
+	/** Freezes the swing, the animation and the flinch for `Seconds` of real time (the hit-stop). */
+	void HitStop(float Seconds);
+	bool IsHitStopped() const { return HitStopLeft > 0.0f; }
+	const FMeleeSwingTrack& GetSwing() const { return Swing; }
+	/** 0 to 1: how far the weapon has come up to block. */
+	float GetBlockBlend() const { return BlockBlend; }
+	/** 1 standing, 0.66 crouching, 0.24 lying: what weapon heights are scaled by. */
+	float GetStanceHeight() const { return StanceHeight; }
+	/** Where the held melee weapon is now, in this actor's space (cm, degrees): the swing or the block,
+	 *  the dodge and the body's twist and lunge together. */
+	void GetMeleeWeaponPose(FVector& OutLocation, FRotator& OutRotation) const;
+	/** How far the body is bent by melee now (lean and tilt together, degrees), for tests. */
+	float GetMeleeBodyDegrees() const;
+	int32 GetDodgesPlayed() const { return DodgesPlayed; }
+	int32 GetHitStops() const { return HitStops; }
+	bool IsDodging() const { return DodgeAge < kDodgeSeconds; }
+	static constexpr float kDodgeSeconds = 0.35f;
+
 	colony::Entity GetThing() const { return Thing; }
 	ESimPawnDetail GetDetail() const { return Detail; }
 	USkeletalMeshComponent* GetBody() const { return Body; }
@@ -125,7 +153,10 @@ private:
 	TObjectPtr<USkeletalMeshComponent> MetaHumanBody;
 
 	void SpawnRagdollFloor();
-	void ApplyLean(float DeltaTime);
+	/** The hit reaction's lean and the melee pose, applied to the body together. */
+	void ApplyBodyPose(float GameDelta, bool bBlocking);
+	/** The swing or block, plus the dodge: what the body and the weapon do now. */
+	FMeleePose ComputeMeleePose() const;
 
 	/** An invisible slab at the ground under a ragdoll (the ground is drawn from the sim and has no collision). */
 	UPROPERTY()
@@ -140,6 +171,18 @@ private:
 	FVector ReactionDirection = FVector::ForwardVector;
 	float LeanDegrees = 0.0f;
 	int32 HitReactions = 0;
+
+	FMeleeSwingTrack Swing;
+	float BlockBlend = 0.0f;
+	float StanceHeight = 1.0f;
+	float DodgeAge = kDodgeSeconds;
+	float DodgeSide = 1.0f;
+	float HitStopLeft = 0.0f;
+	/** Real seconds the sim has disagreed with the swing on screen (a swing the sim called off). */
+	float SwingMismatch = 0.0f;
+	bool bBodyPosed = false;
+	int32 DodgesPlayed = 0;
+	int32 HitStops = 0;
 
 	colony::Entity Thing = colony::kNoEntity;
 	ESimPawnDetail Detail = ESimPawnDetail::Full;

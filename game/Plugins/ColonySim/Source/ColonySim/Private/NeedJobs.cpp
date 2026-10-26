@@ -6,6 +6,8 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Prisoners.h"
+#include "ColonySim/Spoilage.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -71,7 +73,8 @@ bool JobSystem::thinkNeeds(Entity pawn, Job& out) {
 }
 
 // The schedule: a Sleep hour sends a pawn that isn't well rested to bed; a Joy hour keeps it from
-// working (there is no recreation yet, so it waits about).
+// working and sends it to play, sit or stroll until its recreation is full (RecreationJobs.cpp),
+// else it waits about.
 bool JobSystem::thinkSchedule(Entity pawn, Job& out) {
     const Needs* needs = things_.registry().try_get<Needs>(pawn);
     if (needs == nullptr) {
@@ -81,6 +84,9 @@ bool JobSystem::thinkSchedule(Entity pawn, Job& out) {
         case ScheduleKind::Sleep:
             return needs->rest < rules_.fallAsleepBelow && makeSleepJob(pawn, out);
         case ScheduleKind::Joy:
+            if (makeRecreationJob(pawn, out, recreation_.joyHoursUntil)) {
+                return true;
+            }
             out = Job{};
             out.type = JobType::Wait;
             out.until = now() + idleSeconds_;
@@ -96,7 +102,13 @@ bool JobSystem::thinkSchedule(Entity pawn, Job& out) {
 void JobSystem::interruptForNeeds(Entity pawn) {
     entt::registry& reg = things_.registry();
     const Job& current = reg.get<Worker>(pawn).job;
-    if (current.forced || (current.type != JobType::Wait && current.type != JobType::HaulToCell && !jobIsGather(current.type))) {
+    if (current.type == JobType::Recreate && scheduleNow(pawn) == ScheduleKind::Work) {
+        endJob(pawn, JobEnd::Interrupted, "time to work");
+        return;
+    }
+    if (current.forced || (current.type != JobType::Wait && current.type != JobType::HaulToCell &&
+                           current.type != JobType::Recreate && current.type != JobType::BedRest &&
+                           !jobIsGather(current.type))) {
         return;
     }
     const Needs* needs = reg.try_get<Needs>(pawn);
@@ -104,7 +116,8 @@ void JobSystem::interruptForNeeds(Entity pawn) {
         return;
     }
     const bool hungry = needs->food < rules_.foodSeekBelow && now() >= needs->foodSearchAfter;
-    const bool sleepy = needs->rest < sleepBelow(scheduleNow(pawn));
+    // A patient resting in bed gets up to eat but not to sleep: it is in bed already.
+    const bool sleepy = current.type != JobType::BedRest && needs->rest < sleepBelow(scheduleNow(pawn));
     if (!hungry && !sleepy) {
         return;
     }
@@ -247,6 +260,9 @@ JobSystem::StepResult JobSystem::eat(Entity pawn, Job& job, std::string&) {
     const float before = needs.food;
     needs.food = std::min(1.0f, needs.food + nutrition_[def.value] * static_cast<float>(count));
     reg.remove<Carrying>(pawn);
+    if (spoilage_ != nullptr) {
+        spoilage_->eaten(pawn, food);
+    }
     things_.destroy(food);
     Event event;
     event.type = EventType::PawnAte;
@@ -317,7 +333,12 @@ bool JobSystem::findBed(Entity pawn, Entity& bed, CellPos& cell) {
     float bestDist = 0.0f;
     for (const auto [candidate, thing, owners, footprint] : reg.view<const Thing, const Bed, const Footprint>().each()) {
         const int slots = std::max(1, static_cast<int>(defs_.get(thing.def).integer("building.sleepingSlots", 1)));
-        if (static_cast<int>(owners.owners.size()) >= slots || !things_.spawned(candidate)) {
+        // A medical bed is for patients: nobody claims one to sleep in (RimWorld's rule).
+        if (static_cast<int>(owners.owners.size()) >= slots || !things_.spawned(candidate) || isMedical_[thing.def.value] != 0) {
+            continue;
+        }
+        // Prison beds are for prisoners and nobody else.
+        if (reg.all_of<PrisonBed>(candidate) != reg.all_of<Prisoner>(pawn)) {
             continue;
         }
         const CellRect rect = footprint.rect();
@@ -449,6 +470,10 @@ bool JobSystem::assignBed(Entity bed, Entity pawn, std::string& error) {
     }
     if (!reg.valid(pawn) || !reg.all_of<Needs>(pawn)) {
         error = "that pawn doesn't sleep";
+        return false;
+    }
+    if (reg.all_of<PrisonBed>(bed) != reg.all_of<Prisoner>(pawn)) {
+        error = reg.all_of<PrisonBed>(bed) ? "that is a prison bed, for prisoners only" : "a prisoner sleeps only in a prison bed";
         return false;
     }
     if (std::find(owned.owners.begin(), owned.owners.end(), pawn) != owned.owners.end()) {
