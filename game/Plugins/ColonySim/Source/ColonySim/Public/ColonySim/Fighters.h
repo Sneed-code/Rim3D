@@ -138,6 +138,10 @@ struct FighterRules {
     float switchMeleeRange = 2.5f;    // metres: closer than this to its target it takes up a melee weapon...
     float switchSidearmRange = 9.0f;  // ...closer than this a sidearm, and further off the rifle
     float switchMargin = 2.0f;        // the weapon in the hands is kept this much past its band, so a target on the edge does not flip it
+    // F7 soak (docs/design/raid-soak.md): the walk to a spot counts what it costs this pawn, up a slope or hurt.
+    float walkStayBonus = 3.0f;       // on top of stayBonus while walking to the spot: a pawn on its way doesn't change its mind for a small gain
+    float rangeMargin = 1.0f;         // a spot has to be this far inside the gun's range to count as one it can shoot from
+    float minWalkShare = 0.25f;       // a hurt pawn's walk costs at most this many times more (its Moving capacity, but never under this)
 };
 
 class COLONY_API FighterSystem {
@@ -228,6 +232,7 @@ private:
 
     void plan(Entity pawn, Fighter& f);
     void planGoal(Entity pawn, Fighter& f, const PawnInfo& self);
+    void setCourse(Entity pawn, Fighter& f, CellPos at, CellPos goal);
     bool dodge(Entity pawn, Fighter& f);
     bool dive(Entity pawn, Fighter& f);
     bool considerThrow(Entity pawn, const Fighter& f);

@@ -298,6 +298,8 @@ const char* eventTypeName(EventType type) {
         case EventType::PawnMentalBreakEnded: return "PawnMentalBreakEnded";
         case EventType::PawnInsulted: return "PawnInsulted";
         case EventType::PawnLeftColony: return "PawnLeftColony";
+        case EventType::InspirationStarted: return "InspirationStarted";
+        case EventType::InspirationEnded: return "InspirationEnded";
         case EventType::ShipReactorStarted: return "ShipReactorStarted";
         case EventType::ShipWave: return "ShipWave";
         case EventType::ShipReactorReady: return "ShipReactorReady";

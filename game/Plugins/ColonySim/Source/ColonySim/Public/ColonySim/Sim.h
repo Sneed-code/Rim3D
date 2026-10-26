@@ -42,6 +42,7 @@ class Designations;
 class ExplosiveSystem;
 class FighterSystem;
 class Husbandry;
+class InspirationSystem;
 class MentalBreakSystem;
 class JobSystem;
 class Lights;
@@ -310,6 +311,10 @@ public:
     MentalBreakSystem& mentalBreaks() { return *mentalBreaks_; }
     const MentalBreakSystem& mentalBreaks() const { return *mentalBreaks_; }
 
+    // Good-mood colonists get inspired: a legendary craft, a recruitment, a shooting frenzy (docs/design/inspirations.md).
+    InspirationSystem& inspirations() { return *inspirations_; }
+    const InspirationSystem& inspirations() const { return *inspirations_; }
+
     // Blueprints, frames and taking buildings down (docs/design/construction.md).
     Construction& construction() { return *construction_; }
     const Construction& construction() const { return *construction_; }
@@ -400,6 +405,7 @@ private:
     std::unique_ptr<Breeding> breeding_;    // after husbandry_
     std::unique_ptr<Fire> fire_;            // after the weather, temperature, rooms, floors, filth, plants and health
     std::unique_ptr<MentalBreakSystem> mentalBreaks_;  // after the job and fighter systems
+    std::unique_ptr<InspirationSystem> inspirations_;  // after the mood system
     std::vector<std::string> setupErrors_;
     std::vector<std::pair<uint64_t, Command>> pending_;  // id, command
     uint64_t submitted_ = 0;

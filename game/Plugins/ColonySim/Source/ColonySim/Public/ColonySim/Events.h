@@ -100,6 +100,8 @@ enum class EventType : uint8_t {
     PawnMentalBreakEnded,  // it ended: `message` says how ("recovered", "downed", "died", "stopped")
     PawnInsulted,          // a pawn in an insulting spree insulted another
     PawnLeftColony,        // a pawn gave up and walked off the map for good
+    InspirationStarted,    // a colonist became inspired (docs/design/inspirations.md): `thing` the pawn, `message` the Inspirations defName, `amount` its days
+    InspirationEnded,      // it ended: `message` "why:defName" (used, expired, dismissed), `amount` how many game seconds it lasted
     ShipReactorStarted,    // the ship reactor began its activation (docs/design/ship.md): `thing` the reactor, `amount` days it takes
     ShipWave,              // a wave of raiders came because of the reactor: `amount` the wave number (the raid's own events follow)
     ShipReactorReady,      // the activation finished: the ship can launch
