@@ -177,6 +177,8 @@ const char* commandName(const Command& command) {
                 return "PlaceUpperFloor";
             } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
                 return "StartMentalBreak";
+            } else if constexpr (std::is_same_v<Type, ContractDiseaseCommand>) {
+                return "ContractDisease";
             } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
                 return "EndMentalBreak";
             } else {
@@ -259,6 +261,8 @@ const char* eventTypeName(EventType type) {
         case EventType::MeleeHit: return "MeleeHit";
         case EventType::PawnTended: return "PawnTended";
         case EventType::PawnScarred: return "PawnScarred";
+        case EventType::PawnSick: return "PawnSick";
+        case EventType::PawnRecovered: return "PawnRecovered";
         case EventType::ApparelDestroyed: return "ApparelDestroyed";
         case EventType::WeatherChanged: return "WeatherChanged";
         case EventType::SeasonChanged: return "SeasonChanged";

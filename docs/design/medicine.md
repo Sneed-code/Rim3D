@@ -91,6 +91,6 @@ type (it stopped at `Research`, so a save made while someone was cleaning filth 
 
 ## Not here
 
-Infections, diseases and immunity (H2), surgery and prosthetics (H3, which would let a patient with a lost leg stand
+Infections, diseases and immunity are built ([diseases.md](diseases.md)). Not here: surgery and prosthetics (H3, which would let a patient with a lost leg stand
 again), feeding patients, medicine stock policy, the health tab's care setting and bed buttons (U8 follow-up), a
 carried pawn shown in a rescuer's arms (Unreal draws it where the sim puts it), self-tend toggle, tending animals.
