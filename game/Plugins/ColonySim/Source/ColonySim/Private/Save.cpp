@@ -345,6 +345,7 @@ struct SaveEntity {
     std::optional<Animal> animal;           // section "animals"
     std::optional<DefensePlan> defense;     // section "raids"
     std::optional<Raider> raider;           // section "raids"
+    std::optional<Kidnapped> kidnapped;     // section "raids" 2 (F12)
     std::optional<AnimalCare> care;         // section "husbandry"
     std::optional<AnimalBreed> breed;       // section "breeding" (N4)
     std::optional<Hatching> hatching;       // section "breeding" (N4)
@@ -904,6 +905,12 @@ void saveCommandTail(Ar& ar, Type& c) {
     } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
         auto* stop = &c;
         ar.value("pawn", stop->pawn);
+    } else if constexpr (std::is_same_v<Type, StartStrategyRaidCommand>) {
+        ar.text("faction", c.faction);
+        ar.value("points", c.points);
+        ar.value("edge", c.edge);
+        ar.text("strategy", c.strategy);
+        ar.value("hour", c.hour);
     } else if constexpr (std::is_same_v<Type, ShipCommand>) {
         ar.text("action", c.action);
         ar.value("thing", c.thing);
@@ -2019,7 +2026,7 @@ void saveFighterPart(Ar& ar, Fighter& f) {
     }
     if (ar.sectionVersion() >= 2) {  // F6: what the alarm or a raid has it do
         ar.value("mode", f.mode);
-        ar.require(static_cast<int>(f.mode) <= static_cast<int>(FightMode::Flee), "the save file has a bad fighter mode");
+        ar.require(static_cast<int>(f.mode) <= static_cast<int>(FightMode::Seize), "the save file has a bad fighter mode");
         ar.value("defending", f.defending);
         ar.value("squad", f.squad);
         ar.value("hasGoal", f.hasGoal);
@@ -2410,6 +2417,13 @@ void saveRaids(Ar& ar, RaidState& r) {
         ar.value("giveUpAt", s.giveUpAt);
         ar.value("state", s.state);
         ar.require(static_cast<int>(s.state) <= static_cast<int>(SquadState::Rout), "the save file has a bad squad state");
+        if (ar.sectionVersion() >= 2) {  // F12
+            ar.value("strategy", s.strategy);
+            ar.require(static_cast<int>(s.strategy) < kRaidStrategyCount, "the save file has a bad raid strategy");
+            ar.value("hasBreach", s.hasBreach);
+            ar.group("breach", [&] { saveCell(ar, s.breach); });
+            ar.group("breachFrom", [&] { saveCell(ar, s.breachFrom); });
+        }
         ar.value("gaveUp", s.gaveUp);
         ar.group("entry", [&] { saveCell(ar, s.entry); });
         ar.value("hasTarget", s.hasTarget);
@@ -2418,6 +2432,16 @@ void saveRaids(Ar& ar, RaidState& r) {
         ar.list("members", s.members, [&](Entity& m) { ar.value(nullptr, m); });
     });
     ar.value("nextSquad", r.nextSquad);
+    if (ar.sectionVersion() >= 2) {  // F12: raids waiting for their hour
+        ar.list("pending", r.pending, [&](PendingRaid& p) {
+            ar.text("faction", p.faction);
+            ar.value("points", p.points);
+            ar.value("edge", p.edge);
+            ar.value("strategy", p.strategy);
+            ar.require(static_cast<int>(p.strategy) < kRaidStrategyCount, "the save file has a bad raid strategy");
+            ar.value("at", p.at);
+        });
+    }
     ar.value("alarm", r.alarm);
     ar.value("manual", r.manual);
     ar.value("suppressed", r.suppressed);
@@ -2725,7 +2749,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(t.celsius > -500.0f && t.celsius < 1000.0f, "the save file has an impossible room temperature");
         });
     });
-    ar.section("raids", 1, [&] {
+    ar.section("raids", 2, [&] {
         saveRaids(ar, d.raids);
         saveParts(ar, "defense", e, &SaveEntity::defense, [&](DefensePlan& p) {
             ar.value("role", p.role);
@@ -2736,7 +2760,15 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "raider", e, &SaveEntity::raider, [&](Raider& r) {
             ar.value("squad", r.squad);
             ar.text("kind", r.kind);
+            if (ar.sectionVersion() >= 2) {  // F12
+                ar.value("goalThing", r.goalThing);
+                ar.value("loot", r.loot);
+                ar.value("sparesDowned", r.sparesDowned);
+            }
         });
+        if (ar.sectionVersion() >= 2) {
+            saveParts(ar, "kidnapped", e, &SaveEntity::kidnapped, [&](Kidnapped& k) { ar.value("by", k.by); });
+        }
     });
     ar.section("spoilage", 1, [&] {
         ar.value("rngState", d.spoilageState.rngState);
@@ -3228,6 +3260,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const Raider* raider = reg.try_get<Raider>(e)) {
             out.raider = *raider;
+        }
+        if (const Kidnapped* kidnapped = reg.try_get<Kidnapped>(e)) {
+            out.kidnapped = *kidnapped;
         }
         if (const RecoilKick* kick = reg.try_get<RecoilKick>(e)) {
             out.kick = *kick;
@@ -3872,6 +3907,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.defense) {
             reg.emplace<DefensePlan>(entity, *e.defense);
         }
+        if (e.kidnapped) {
+            reg.emplace<Kidnapped>(entity, *e.kidnapped);
+        }
         if (e.raider) {
             reg.emplace<Raider>(entity, *e.raider);
         }
@@ -4112,6 +4150,11 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         for (const Entity m : squad.members) {
             if (!reg.valid(m) || !reg.all_of<Raider>(m)) {
                 error = "the save has a raid squad with a pawn that isn't there";
+                return false;
+            }
+            const Raider& raider = reg.get<Raider>(m);
+            if ((raider.loot != kNoEntity && !reg.valid(raider.loot)) || (raider.goalThing != kNoEntity && !reg.valid(raider.goalThing))) {
+                error = "the save has a raider after something that isn't there";
                 return false;
             }
         }
