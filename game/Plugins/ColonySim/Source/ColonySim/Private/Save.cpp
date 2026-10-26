@@ -33,6 +33,7 @@
 #include "ColonySim/Spoilage.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Mood.h"
+#include "ColonySim/Medicine.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Talents.h"
@@ -123,6 +124,7 @@ struct SaveInjury {
     std::string hediff;  // defName of a Hediffs def
     float severity = 0.0f;
     float tendQuality = -1.0f;
+    float peak = 0.0f;  // health section 3 on
 };
 
 struct SaveEnvironmentHediff {
@@ -303,6 +305,7 @@ struct SaveEntity {
     std::optional<SaveApparel> apparel;     // section "apparel" (format 20 on)
     std::optional<RecoilKick> kick;         // section "feel"
     std::optional<DodgeRoll> roll;          // section "feel"
+    std::optional<MedicalSettings> medical;  // section "medicine"
     std::optional<std::vector<Entity>> stowed;  // section "weapons" (P1): Gear::stowed
     std::optional<WeaponSwitch> weaponSwitch;   // section "weapons"
     std::optional<Turret> turret;           // section "defense" (F11)
@@ -1111,6 +1114,9 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("pawn", c.pawn);
                 ar.value("dx", c.dx);
                 ar.value("dy", c.dy);
+            } else if constexpr (std::is_same_v<Type, SetMedicalCareCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.text("care", c.care);
             } else if constexpr (std::is_same_v<Type, SetWeatherCommand>) {
                 auto* setWeather = &c;
                 ar.text("weather", setWeather->weather);
@@ -1293,7 +1299,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::ExtinguishFire, "the save file has a bad job");
+    ar.require(job.type <= JobType::Rescue, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -1361,6 +1367,10 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
         ar.text("hediff", i.hediff);
         ar.value("severity", i.severity);
         ar.value("tendQuality", i.tendQuality);
+        if (ar.sectionVersion() >= 3) {
+            ar.value("peak", i.peak);
+            ar.require(i.peak >= 0.0f && i.peak < 1.0e6f, "the save file has an impossible injury");
+        }
         ar.require(i.severity >= 0.0f && i.severity < 1.0e6f, "the save file has an impossible injury");
         ar.require(i.tendQuality >= -1.0f && i.tendQuality < 1.0e3f, "the save file has an impossible tend quality");
     });
@@ -2282,7 +2292,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("colonists", 1, [&] {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
-    ar.section("health", 2, [&] {
+    ar.section("health", 3, [&] {
         saveParts(ar, "health", e, &SaveEntity::health, [&](SaveHealth& h) { saveHealthPart(ar, h); });
     });
     ar.section("control", 1, [&] {
@@ -2355,6 +2365,12 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "joy", e, &SaveEntity::joy, [&](SaveJoy& j) { saveJoyPart(ar, j); });
     });
     ar.section("research", 1, [&] { saveResearch(ar, d.research); });
+    ar.section("medicine", 1, [&] {
+        saveParts(ar, "medical", e, &SaveEntity::medical, [&](MedicalSettings& m) {
+            ar.value("care", m.care);
+            ar.require(static_cast<int>(m.care) <= static_cast<int>(MedicalCare::Best), "the save file has a bad medical care setting");
+        });
+    });
     ar.section("talents", 1, [&] { saveTalents(ar, d); });
     ar.section("roomstats", 1, [&] { saveRoomStatsSection(ar, d); });
     ar.section("animals", 2, [&] {
@@ -2781,7 +2797,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             saved.rest = health->rest;
             for (const Injury& injury : health->injuries) {
                 saved.injuries.push_back(SaveInjury{injury.part, sim.defs_->get(injury.hediff).defName(), injury.severity,
-                                                    injury.tendQuality});
+                                                    injury.tendQuality, injury.peak});
             }
             saved.missing = health->missing;
             saved.bloodLoss = health->bloodLoss;
@@ -2833,6 +2849,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const Animal* animal = reg.try_get<Animal>(e)) {
             out.animal = *animal;
+        }
+        if (const MedicalSettings* medical = reg.try_get<MedicalSettings>(e)) {
+            out.medical = *medical;
         }
         if (const AnimalCare* care = reg.try_get<AnimalCare>(e)) {
             out.care = *care;
@@ -3189,7 +3208,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                     error = "the save has an injury of '" + injury.hediff + "', which the data files no longer have";
                     return false;
                 }
-                health.injuries.push_back(Injury{injury.part, hediff->id(), injury.severity, injury.tendQuality});
+                health.injuries.push_back(Injury{injury.part, hediff->id(), injury.severity, injury.tendQuality, injury.peak});
             }
             health.missing = e.health->missing;
             health.bloodLoss = e.health->bloodLoss;
@@ -3320,6 +3339,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.animal) {
             reg.emplace<Animal>(entity, *e.animal);
+        }
+        if (e.medical) {
+            reg.emplace<MedicalSettings>(entity, *e.medical);
         }
         if (e.defense) {
             reg.emplace<DefensePlan>(entity, *e.defense);

@@ -47,6 +47,7 @@ struct Injury {
     DefId hediff;             // Hediffs def: Cut, Gunshot, Bruise...
     float severity = 0.0f;    // hit points lost on the part
     float tendQuality = -1.0f;  // below 0: untended. A tended injury stops bleeding and heals faster
+    float peak = 0.0f;          // the most severity it has had; set when healing starts (H1: scars)
     bool tended() const { return tendQuality >= 0.0f; }
 };
 
@@ -97,6 +98,8 @@ struct HealthReport {
         std::string injury;  // "gunshot"
         float severity = 0.0f;
         bool tended = false;
+        float tendQuality = -1.0f;  // below 0 while untended
+        bool permanent = false;     // a scar or old wound: it never heals
     };
     struct CapacityLine {
         std::string name;  // def name, "Consciousness"
@@ -171,6 +174,13 @@ public:
     // Tends every untended injury and lost part with this quality (0 is a rag, 1 is good
     // medicine), so they stop bleeding and heal faster. Returns how many it tended.
     int tendAll(Entity pawn, float quality);
+    // What doctors and patients ask (task H1, docs/design/medicine.md). `needsTending`: an injury that
+    // can be tended (its Hediffs def's `tendable`, not a scar) and isn't, or a lost part that isn't.
+    // `needsRest`: a tended injury still healing, or any bleeding: the pawn belongs in a bed.
+    // `urgentlyNeedsTending`: it needs tending and bleeds (so is losing blood).
+    bool needsTending(Entity pawn) const;
+    bool needsRest(Entity pawn) const;
+    bool urgentlyNeedsTending(Entity pawn) const;
 
     // One game second: bleeding, blood loss, natural healing, death and downing. `seed` is the
     // game's seed, which healing's choices are made from (not the shared random stream, so the
@@ -217,6 +227,7 @@ private:
     std::unique_ptr<HealthModel> model_;
     std::vector<Event>* events_ = nullptr;
     std::vector<Entity> active_;  // scratch for step
+    std::vector<size_t> healable_;  // scratch for step: the injuries that can heal
 
     // Works out pain, bleeding, capacities and what they mean (the death cause and whether the
     // pawn should be downed) into `health`'s derived fields. Changes nothing else.
@@ -229,6 +240,7 @@ private:
     bool hitPart(Entity pawn, DefId damageType, float amount, int target, bool hurtOuter);
     bool damagePart(Entity pawn, Health& health, int part, DefId hediff, float amount);
     void destroyPart(Entity pawn, Health& health, int part, float amount);
+    void leaveScar(Entity pawn, Health& health, const Injury& healed, Rng& rng);
 };
 
 }  // namespace colony

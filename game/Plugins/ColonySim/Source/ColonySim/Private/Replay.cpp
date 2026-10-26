@@ -283,10 +283,13 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["size"] = c.size;
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["force"] = c.force;
-            } else {
-                static_assert(std::is_same_v<Type, SetHomeAreaCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, SetHomeAreaCommand>) {
                 j["area"] = replayRectJson(c.area);
                 j["add"] = c.add;
+            } else {
+                static_assert(std::is_same_v<Type, SetMedicalCareCommand>, "write every command type");
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["care"] = c.care;
             }
         },
         logged.command);
@@ -1020,6 +1023,14 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         AddTalentXpCommand c;
         uint32_t pawn = entt::to_integral(kNoEntity);
         if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "amount", c.amount, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "SetMedicalCare") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        SetMedicalCareCommand c;
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "care", c.care, where)) {
             return false;
         }
         c.pawn = static_cast<Entity>(pawn);
