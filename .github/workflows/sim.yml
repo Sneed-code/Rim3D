@@ -30,6 +30,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Configure
         run: cmake -S game/Plugins/ColonySim -B build -DCMAKE_BUILD_TYPE=Release
+      # Four jobs at a time: with a bare --parallel make starts one compiler per source file, the 16 GB runner
+      # runs out of memory and GitHub kills it ("the runner has received a shutdown signal").
       - name: Build
         run: cmake --build build --config Release --parallel 4
       - name: Test
