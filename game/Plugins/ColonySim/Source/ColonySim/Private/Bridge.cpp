@@ -143,6 +143,10 @@ const char* commandName(const Command& command) {
                 return "AddTalentXp";
             } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
                 return "CarryWeapon";
+            } else if constexpr (std::is_same_v<Type, SetNarratorCommand>) {
+                return "SetNarrator";
+            } else if constexpr (std::is_same_v<Type, FireIncidentCommand>) {
+                return "FireIncident";
             } else {
                 static_assert(std::is_same_v<Type, SwitchWeaponCommand>, "name every command type");
                 return "SwitchWeapon";
@@ -233,6 +237,7 @@ const char* eventTypeName(EventType type) {
         case EventType::TrapRearmed: return "TrapRearmed";
         case EventType::WeaponSwitched: return "WeaponSwitched";
         case EventType::PlantSown: return "PlantSown";
+        case EventType::Letter: return "Letter";
     }
     return "?";
 }

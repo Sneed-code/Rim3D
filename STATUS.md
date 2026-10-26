@@ -1,7 +1,8 @@
 # Status
 
-Updated 2026-10-25.
+Updated 2026-10-26.
 
+Stage 2 T1 done: the narrator (Orrin, Maren, Jinx) sends incidents by RimWorld's rules (threat cycle, mean days between, weights, earliest days, cooldowns) with threat points from wealth, colonists, difficulty and narrator; the raid is the first incident; letters are `Letter` events (`docs/design/narrator.md`). **The narrator is off until a `SetNarratorCommand`: U20 sends it at game start. Event tasks add a worker per incident (`sim.narrator().setWorker`).**
 Stage 2 P1 done: a pawn carries a rifle, a sidearm and a melee weapon (`docs/design/weapons.md`).
 Stage 2 N4 done: tame animals mate and bear young, hens lay eggs, calves and chicks grow up, colonists milk and shear (`docs/design/breeding.md`).
 Stage 2 D10 done: narrators (Orrin, Maren, Jinx), difficulty levels, 30 incidents, ten factions with goodwill, visitor, trader and guard pawn kinds, trader kinds and price rules (`docs/design/narrator-data.md`).

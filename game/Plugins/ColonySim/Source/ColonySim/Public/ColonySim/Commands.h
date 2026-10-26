@@ -559,6 +559,21 @@ struct SetGrowingZoneCropCommand {
     std::string crop;
 };
 
+// Picks the narrator (a Narrators defName: "Orrin", "Maren", "Jinx"; "" turns the narrator off) and
+// the difficulty (a Difficulties defName; "" keeps it). The narrator is off until this is sent: the
+// game sends it at the start (docs/design/narrator.md). Fails for an unknown name.
+struct SetNarratorCommand {
+    std::string narrator = "Orrin";
+    std::string difficulty;
+};
+
+// A dev command: makes an incident (an Incidents defName, like "RaidEnemy") happen now, whatever its
+// timing, with `points` threat points (0: the colony's). Fails if it is unknown or can't happen now.
+struct FireIncidentCommand {
+    std::string incident;
+    float points = 0.0f;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -578,7 +593,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              CreateAnimalZoneCommand, RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand,
                              SpendTalentPointCommand, AddTalentXpCommand, RearmTrapCommand,
                              CarryWeaponCommand, SwitchWeaponCommand, CreateGrowingZoneCommand,
-                             RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand>;
+                             RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand,
+                             SetNarratorCommand, FireIncidentCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

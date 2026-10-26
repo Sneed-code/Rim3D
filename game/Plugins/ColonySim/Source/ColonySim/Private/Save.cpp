@@ -16,6 +16,7 @@
 #include "ColonySim/Explosives.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Farming.h"
+#include "ColonySim/Narrator.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Filth.h"
@@ -415,6 +416,8 @@ struct SaveData {
     FarmingSaved farming;                           // section "farming" (C13)
     bool hasWeather = false;           // the file has the weather section; older saves start it fresh
     SaveWeather weather;
+    bool hasNarrator = false;          // section "narrator" (T1); older saves keep the narrator off
+    NarratorState narrator;
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -1135,6 +1138,12 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
             } else if constexpr (std::is_same_v<Type, SetGrowingZoneCropCommand>) {
                 ar.value("zone", c.zone);
                 ar.text("crop", c.crop);
+            } else if constexpr (std::is_same_v<Type, SetNarratorCommand>) {
+                ar.text("narrator", c.narrator);
+                ar.text("difficulty", c.difficulty);
+            } else if constexpr (std::is_same_v<Type, FireIncidentCommand>) {
+                ar.text("incident", c.incident);
+                ar.value("points", c.points);
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }
@@ -2468,6 +2477,23 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "turret", e, &SaveEntity::turret, [&](Turret& t) { saveTurretPart(ar, t); });
         saveParts(ar, "trap", e, &SaveEntity::trap, [&](Trap& t) { saveTrapPart(ar, t); });
     });
+    ar.section("narrator", 1, [&] {
+        d.hasNarrator = true;
+        NarratorState& n = d.narrator;
+        ar.text("narrator", n.narrator);
+        ar.text("difficulty", n.difficulty);
+        ar.value("rngState", n.rngState);
+        ar.value("rngIncrement", n.rngIncrement);
+        ar.value("cycleStart", n.cycleStart);
+        ar.list("threats", n.threats, [&](int64_t& t) { ar.value(nullptr, t); });
+        ar.list("fired", n.fired, [&](IncidentFired& f) {
+            ar.text("incident", f.incident);
+            ar.value("at", f.at);
+        });
+        ar.value("incidents", n.incidents);
+        ar.value("wealth", n.wealth);
+        ar.value("points", n.points);
+    });
     // New sections go here, at the end.
 }
 
@@ -2580,6 +2606,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.husbandry = sim.husbandry_->saved();
     d.farming = sim.farming_->saved();
     d.breeding = sim.breeding_->saved();
+    d.narrator = sim.narrator_->state();
     d.seconds = sim.time_.seconds;
     d.rngState = sim.rng_.state();
     d.rngIncrement = sim.rng_.increment();
@@ -3337,6 +3364,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         return false;
     }
     sim.breeding_->restore(d.breeding);
+    if (d.hasNarrator && !sim.narrator_->restore(d.narrator, error)) {
+        return false;
+    }
     if (!sim.farming_->restore(d.farming, error)) {
         return false;
     }

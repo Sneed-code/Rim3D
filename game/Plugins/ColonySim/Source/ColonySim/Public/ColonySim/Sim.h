@@ -62,6 +62,7 @@ class Things;
 class Weather;
 class Zones;
 class Farming;
+class NarratorSystem;
 struct Snapshot;
 class SimSaveAccess;
 
@@ -261,6 +262,10 @@ public:
     RaidSystem& raids() { return *raids_; }
     const RaidSystem& raids() const { return *raids_; }
 
+    // The narrator, incidents and threat points (docs/design/narrator.md).
+    NarratorSystem& narrator() { return *narrator_; }
+    const NarratorSystem& narrator() const { return *narrator_; }
+
     // Taming, training, animal zones and pens (docs/design/husbandry.md).
     Husbandry& husbandry() { return *husbandry_; }
     Breeding& breeding() { return *breeding_; }
@@ -357,6 +362,7 @@ private:
     std::vector<Checkpoint> checkpoints_;
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
+    std::unique_ptr<NarratorSystem> narrator_;  // after raids_
 };
 
 }  // namespace colony

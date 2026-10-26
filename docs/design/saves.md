@@ -126,6 +126,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `feel` | 1 | `kick` (the player's gun kick and its spray) and `roll` (a dodge roll's phase, steps, direction, wait) ([shooter-feel.md](shooter-feel.md)) |
 | `weapons` | 1 | `stowed` (the weapons a pawn carries on its body besides the one in its hands) and `switch` (a weapon switch under way) ([weapons.md](weapons.md)) |
 | `weather` | 1 | the current and previous weather by `defName`, when it began and ends, its random stream, the snow depth of each cell with snow ([weather.md](weather.md)) |
+| `narrator` | 1 | the narrator and difficulty by `defName`, its random stream, the threat cycle's start and planned threats, when each incident last happened, the count, the last wealth and points ([narrator.md](narrator.md), T1) |
 | `breeding` | 1 | the counters, then `breed` (an animal's pregnancy, mating wait, milk, wool and egg timers, the female a male is courting) and `hatching` (a fertilized egg's hatch time) ([breeding.md](breeding.md), N4) |
 
 **Commands are saved by name (S7).** The `commands` section starts with the names of the command
