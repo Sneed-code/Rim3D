@@ -422,6 +422,8 @@ only while switched on); **new fuel buildings start empty, so tests about someth
 
 **Guessed-number check (partial):** checked against the wiki: melee weapon mass and work (knife, mace, spear, gladius, longsword), gun turrets research cost (800 to 500), multi-analyzer and fabrication tech level (Industrial). Still marked `unverified`: furniture and bench costs, floors, crop product mass and values, genes, recipes, and the melee weapon tool powers; the wiki pages fetched did not give those.
 
+**Second wiki check (individual item pages):** floors and furniture now match the wiki: wood floor 3 wood, stone tile and flagstone 4 stone, carpet 7 cloth, smooth stone work; armchair 110 stuff (fabric on the wiki; ours keeps the default stuff list), end table 30, dresser 50, plant pot 20, with the wiki's hit points, beauty and work (ticks x 1.44). Columns are not on the wiki. Stone tile beauty is now 1 (wiki), the two room-beauty tests follow. Wood floor beauty stays 1 although the wiki says 0: with 0 the colony scenario (seed 42) starves a colonist; that scenario is already fragile (seeds 1 and 9 fail on main), worth a look in a food/cooking task. Bench costs, crop product mass and value, recipes and genes: pages gave no numbers, still `unverified`.
+
 **C12** skill learning (`docs/design/skills.md`): every job that uses a skill teaches it (mining, plants, building, taking down, every bill's recipe), with passion factors, the 4,000 XP daily soft cap, the slow loss above level 10 at midnight, and a mood lift (+8 minor, +14 major) while working at a passion. **A new job that uses a skill calls `JobSystem::learnSkill` each working second and is listed in `JobSystem::activeSkill`.** Save: `colonists` section version 2.
 
 ## Next

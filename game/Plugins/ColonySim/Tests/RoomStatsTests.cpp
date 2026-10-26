@@ -129,7 +129,7 @@ TEST_CASE("Room stats: floors raise beauty, cleanliness and wealth") {
     const RoomStatValues* after = rsStats(sim, 13, 13);
     RS_REQUIRE(after != nullptr);
     CHECK(sim.floors().count() == 25);
-    CHECK(after->beauty == doctest::Approx(50.0f / 32.5f));  // 2 a cell
+    CHECK(after->beauty == doctest::Approx(25.0f / 32.5f));  // 1 a cell
     CHECK(after->cleanliness == doctest::Approx(0.2f));
     CHECK(after->wealth > before.wealth);
     CHECK(after->impressiveness > before.impressiveness);
@@ -282,8 +282,8 @@ TEST_CASE("Beauty need: a colonist starts at what it sees, and filth drags it do
     sim.stepMany(2);
     const BeautyNeed* need = sim.roomStats().beautyNeed(pawn);
     RS_REQUIRE(need != nullptr);
-    // Stone floors (2) in the room and walls round it: it sees a pretty place.
-    CHECK(need->perceived > 1.0f);
+    // Stone floors (1) in the room and walls round it: it sees a nice place.
+    CHECK(need->perceived > 0.5f);
     CHECK(need->level > 0.55f);
     const float start = need->level;
     // The same room under blood and dirt is ugly; the need falls, but no faster than 4% an hour.
