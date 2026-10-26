@@ -409,6 +409,20 @@ struct MarkAnimalCommand {
     bool on = true;
 };
 
+// Marks every animal in `area` that can take the mark (a wild one for "Tame" or "Hunt", a tame one for "Slaughter"); the
+// others are skipped. Fails if there is none.
+struct MarkAnimalsInAreaCommand {
+    CellRect area;
+    std::string mark;
+    bool on = true;
+};
+
+// Names a tame animal (up to 24 characters; an empty name takes the name off). Fails for a wild or dead animal.
+struct SetAnimalNameCommand {
+    Entity animal = kNoEntity;
+    std::string name;
+};
+
 // A tame animal is (or is no longer) to be taught a trick: `trainable` is "Obedience", "Release", "Rescue" or "Haul".
 // Fails if the animal is wild or can't learn it.
 struct SetTrainingCommand {
@@ -691,6 +705,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              MeleeCommand, DodgeRollCommand,
                              SetOutfitCommand, EditOutfitCommand, AddOutfitCommand, RemoveOutfitCommand,
                              StripCommand, SetWeatherCommand, MarkAnimalCommand, SetTrainingCommand,
+                             MarkAnimalsInAreaCommand, SetAnimalNameCommand,
                              CreateAnimalZoneCommand, RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand, SetBreedingCommand,
                              SpendTalentPointCommand, AddTalentXpCommand, RearmTrapCommand,
                              CarryWeaponCommand, SwitchWeaponCommand, CreateGrowingZoneCommand,

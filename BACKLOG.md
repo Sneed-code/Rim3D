@@ -5,10 +5,9 @@ Ideas parked for later. Newest first. Move an item into a stage plan when it's p
 - Crafting (found in C14): skill experience from bills (`workSkillXp` is read and unused, so skills never rise from crafting or cooking), inspirations that shift quality up, melee weapon damage and hit points from stuff and quality (P4 repair and upgrades fit), sculpting and smelting benches, "count only what lies in this stockpile" for "until you have" bills, the electric tailor bench's half speed without power, and the fuel rule: a stove burns `fuel.perUse` per product, so one batch of 50 kibble would burn 50 wood (RimWorld burns by time worked; found in C11, still open).
 - Social life (found in C20; cheating, jealousy, wedding thoughts and Social skill effects done): orientations and attractiveness for romance (now anyone may love anyone), a wedding party job where guests walk to a spot, the colonist panel's relations tab, and mood effects of seeing a friend die in front of you.
 - Breeding (found in N4; switch, young health and egg warmth are done): young animals following their mother; gestation needing warmth; a hatchery for the fertilized eggs; tailoring from wool (C14 bills); milk pasteurizing is not in RimWorld either.
-- Names for tamed animals (RimWorld lets you name them); shown in the animals tab (U19). Found in N3.
+- Show animal names in the animals tab (U19): the sim has `SetAnimalName` and `ThingView::animalName`.
 - Effects of the trained tricks: Obedience (come when called, follow when drafted), Release (go wild on a command), Rescue (carry a downed colonist to a bed). N3 only counts the steps.
-- Animals and doors: tame animals walk through doors now; RimWorld's animals can't open them, so a door is a gate. Needs a door check in the animal's path (N3 only treats doors as walls in the pen test).
-- Lead a tamed animal home by rope, and a "tame all marked animals nearby" button.
+- Lead a tamed animal home by rope. (The "tame all nearby" button: the sim has `MarkAnimalsInArea`; the button is U19.)
 - Floor-building job and architect tool (floors are placed by `PlaceFloor` command only; found in C17, no plan task covers it). Needs a Construction-style job: pick floor, mark area, colonists lay it.
 - Cleaning outdoors needs the home area (C17 cleans indoors only); vomit, ash and animal filth have no sources yet (E4 fire, animals).
 - Per-building thermostat targets for heaters and coolers (U19 panels).

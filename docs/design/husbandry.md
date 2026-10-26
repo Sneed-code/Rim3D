@@ -14,6 +14,8 @@ tame animal does by itself). Tests: `Tests/HusbandryTests.cpp`. Numbers: `data/d
 | `MarkAnimal` `Slaughter` | A tame animal is marked to be killed. |
 | `MarkAnimal` `Hunt` | A wild animal is marked to be shot by a colonist with a gun and the Hunting work ([hunting.md](hunting.md), N2). |
 | `MarkAnimal` `Release` | A tame animal goes wild at once. |
+| `MarkAnimalsInArea` | Marks every animal in a rectangle that can take the mark (`Tame` or `Hunt`: wild ones; `Slaughter`: tame ones): the "tame all nearby" button. Fails if none. |
+| `SetAnimalName` | Names a tame animal (24 characters at most, empty takes it off). Saved on the animal (section `husbandry` 3) and in the snapshot as `animalName`. |
 | `SetTraining` | A tame animal is to learn Obedience, Release, Rescue or Haul. Wanting one wants what it needs first. |
 | `CreateAnimalZone` | Paints an animal zone over the walkable cells of a rectangle that are in no animal zone. |
 | `RemoveAnimalZoneCells` | Takes cells out of their zones; an emptied zone is deleted and its animals roam free again. |
@@ -60,8 +62,8 @@ A command that can't be done fails with a reason in plain words (a `CommandFaile
   by asking the pathfinder for a path (it can't be away from the zone for long). With no zone it stays
   within 40 m of its home.
 - A zone is a **pen** (`Husbandry::isPen`) when every cell just outside it that is next to it is not
-  walkable, apart from doors: nothing joined to the zone gets out. Doors count as walls for this test
-  (animals can still walk through a door in play; BACKLOG).
+  walkable, apart from doors: nothing joined to the zone gets out. Doors count as walls for this test,
+  and they are walls to animals: an animal's walk never crosses a door and a path through one is dropped (RimWorld's animals can't open doors).
 - Animals in a pen eat hay and kibble that lies in it (and hand-feeding reaches them there).
 
 ## Feeding
