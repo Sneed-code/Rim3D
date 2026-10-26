@@ -47,7 +47,7 @@ struct MedicineKind {
 // The numbers from MedicineRules (with RimWorld's values when the def is missing).
 struct COLONY_API MedicineRules {
     bool present = false;
-    std::vector<std::pair<float, float>> tendQualityBySkill = {{0, 0.2f}, {5, 0.5f}, {10, 0.8f}, {15, 1.0f}, {20, 1.2f}};
+    std::vector<std::pair<float, float>> tendQualityBySkill = {{0.0f, 0.2f}, {5.0f, 0.5f}, {10.0f, 0.8f}, {15.0f, 1.0f}, {20.0f, 1.2f}};
     float randomLow = 0.7f;
     float randomHigh = 1.3f;
     float noMedicineFactor = 0.7f;
