@@ -395,6 +395,51 @@ TEST_CASE("Raids: a squad that loses half its pawns routs and runs off the map")
     }
 }
 
+TEST_CASE("Raids: a squad whose members are all badly hurt runs, though none is down") {
+    SimSettings settings;
+    settings.seed = 43;
+    settings.mapSize = 96;
+    settings.flatMap = true;
+    Sim sim(settings, raidTestDefs());
+    sim.submit(StartRaidCommand{"Pirate", 400.0f, 2});
+    sim.step();
+    const std::vector<Entity> raiders = raidTestRaiders(sim);
+    RAID_REQUIRE(raiders.size() >= 4);
+    sim.stepMany(60);
+    RAID_REQUIRE(sim.raids().state().squads.size() == 1);
+    CHECK(sim.raids().state().squads[0].state == SquadState::Advance);
+    // Everyone is hurt but on their feet: pain and a limp, nobody downed.
+    bool routed = false;
+    for (int i = 0; i < 90 && !routed; ++i) {
+        for (const Entity r : raiders) {
+            Health& h = sim.things().registry().get<Health>(r);
+            h.pain = 0.5f;
+            h.movingFactor = 0.5f;
+        }
+        sim.step();
+        if (const Event* e = raidTestEvent(sim, EventType::SquadChanged)) {
+            routed = e->message == "Rout";
+        }
+    }
+    CHECK(routed);
+    for (const Entity r : raiders) {
+        CHECK_FALSE(sim.health().incapacitated(r));
+    }
+}
+
+TEST_CASE("Raids: a squad of unhurt pawns doesn't run") {
+    SimSettings settings;
+    settings.seed = 43;
+    settings.mapSize = 96;
+    settings.flatMap = true;
+    Sim sim(settings, raidTestDefs());
+    sim.submit(StartRaidCommand{"Pirate", 400.0f, 2});
+    sim.step();
+    sim.stepMany(150);
+    RAID_REQUIRE(sim.raids().state().squads.size() == 1);
+    CHECK(sim.raids().state().squads[0].state != SquadState::Rout);
+}
+
 TEST_CASE("Raids: a lone raider facing a stronger colony falls back") {
     auto sim = raidTestSim(51, 128);
     const std::vector<Entity> colonists = raidTestColonists(*sim);

@@ -2,6 +2,7 @@
 
 Updated 2026-10-26.
 
+Stage 2 F7 fix done: the raid soak's findings are fixed. Fighters pick spots by the real effort of the walk (slopes, hurt pawns), keep their spot when held up in a crowd, don't plan shots at the very edge of their gun's range, advancing raiders follow the squad's route when no spot gives a shot, and a squad of hurt-but-up pawns routs. Over 80 seeds the open share is 6 to 9% (was 13.6), raids still on after a quarter day 0 to 4 (was 4 of 37) and stuck fighters 1 to 2 (was 18 of 40 seeds); the soak's limits are now the 10% rule and one seed in 20 (`docs/design/raid-soak.md`).
 Stage 2 C20 done: colonists talk (chitchat, deep talk, kind words, slights, insults, romance, proposals, breakups), hold opinions of each other, become friends, rivals, lovers and spouses, and an insult can start a fistfight (`docs/design/social.md`).
 Stage 2 P1 done: a pawn carries a rifle, a sidearm and a melee weapon (`docs/design/weapons.md`).
 Stage 2 E4 done: fire spreads over flammable ground, burns things to ash, heats rooms, sets pawns alight and is put out by rain, snow and colonists with the Firefighter work type in the home area (`docs/design/fire.md`).
