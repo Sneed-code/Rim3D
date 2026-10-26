@@ -19,7 +19,9 @@ The snapshot's `ThingView::markHunt` shows the mark.
 
 - Who: a colonist with the **Hunting** work type, **a gun in the hands** (a melee weapon is no hunting weapon) and working
   hands. The work type is Violent, so a colonist who can't do violence is never sent. The scanner (`HuntDesignated`) lists marked,
-  living, wild animals on the colonist's level, nearest first.
+  living, wild animals on the colonist's level, nearest first. **Dangerous animals are skipped:** one that turns manhunter when hurt
+  at a chance of `huntAvoidManhunterChance` (10%, ours) or more, which is every predator (bear, wolf, cougar: 20%) and tusker (boar, thrumbo: 50%).
+  The mark stays on, so the player sees the colonists leave it; take it off or hunt it by hand with a draft.
 - The `Hunt` job is one long step. The hunter walks at the animal (a new path every `huntRepathSeconds`, 3 s, or when the animal
   has moved three cells) until it is within **80% of the gun's range** (`huntRangeShare`, at least 3 m: ours) with a clear line of sight, then
   stands still and shoots (`CombatSystem::shoot`, an aimed shot: the gun's warm-up and its spread by the hunter's Shooting skill).
@@ -50,7 +52,14 @@ The job `HaulCorpse` is the rescue job's steps (walk up, lift, carry: the corpse
   `butcher` field; `Recipe::butcher` is set, and the bill giver makes a `Butcher` job instead of fetching item stacks.
 - **Which corpse:** the nearest to the table of the dead animals that `isCorpse`, that the bill's radius allows (0: anywhere), that
   nobody else holds, that the colonist hasn't just failed on and can reach. Any dead animal will do, not only hunted ones.
-  Human corpses can't be butchered yet.
+  A dead person (`Human`, `race.meatDef` `Meat_Human`, `Leather_Human`) is cut up the same way, a full body's yield.
+- **People as meat and leather (moods, `Mood.cpp`):** items and stuffs of human origin carry `humanlike: true` (`Meat_Human`,
+  `Leather_Human`). The butcher of a corpse whose race is `Humanlike` gets `ButcheredHumanlikeCorpse` (-15, 6 days). Eating
+  raw human meat gives `AteHumanlikeMeat` (-20, 2 days); eating a meal cooked from it (`PawnAte.part` 1, read from the meal's
+  ingredients) gives `AteHumanlikeMeatAsIngredient` (-10, 2 days). Wearing a piece made of human leather gives
+  `HumanLeatherApparelSad` (-4, a situation, `apparelHumanLeather`). **Cannibals** do not mind the butchering, like eating
+  (+20 raw, +10 in a meal) and like the leather (+4); **psychopaths** feel nothing for butchering or eating and like the leather
+  (+4). Situations may now list `notTraits` and `anyTraits`. All the numbers are unverified (ours until checked).
 - **The job** (`Butcher`): walk to the corpse, lift it, carry it to the cell beside the table, work, finish. The work is
   **648 seconds** (RimWorld: 450 ticks, wiki; 1.44 seconds a tick), done at the colonist's Manipulation times the light.
   *Not* by body size and not by Cooking skill: skill decides the yield.
@@ -71,8 +80,7 @@ files load with none). The state hash adds them only when set, so older recordin
 ## Not done
 
 - No skill experience for hunting itself (Shooting xp for the shots is up to the combat system), no hunting with melee weapons.
-- The butcher spot (70% yield) and tool cabinets next to the table, the -6 mood for butchering people, human corpses, damaged
+- The butcher spot (70% yield) and tool cabinets next to the table, the mood effects of butchering and eating people, damaged
   corpses giving less (the wiki says 66%, marked "fact check") and rotting corpses.
 - A bill's "store in this stockpile" doesn't move meat and leather: they are carried like any item.
 - A hunted animal that drifts off the map edge stays marked; the hunter gives up after 15 minutes.
-- Hunters don't weigh the danger: a marked bear gets shot at like a marked hare (BACKLOG: skip dangerous animals).
