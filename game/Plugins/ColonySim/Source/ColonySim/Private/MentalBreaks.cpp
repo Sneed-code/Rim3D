@@ -6,10 +6,12 @@
 #include "ColonySim/Construction.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Fire.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Melee.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Needs.h"
@@ -110,6 +112,8 @@ MentalBreakRules MentalBreakRules::read(const DefDatabase& defs) {
         r.berserkRadius = whole("berserkRadius", r.berserkRadius);
         r.reach = static_cast<float>(how->number("reachMetres", r.reach));
         r.talkReach = static_cast<float>(how->number("talkReachMetres", r.talkReach));
+        r.fireRadius = whole("fireRadius", r.fireRadius);
+        r.fireEvery = std::max(1, whole("fireEverySeconds", r.fireEvery));
         r.punchEvery = std::max(1, whole("punchEverySeconds", r.punchEvery));
         r.punchDamage = static_cast<float>(how->number("punchDamage", r.punchDamage));
         r.punchDamageType = how->text("punchDamageType", r.punchDamageType);
@@ -170,6 +174,13 @@ MentalBreakSystem::MentalBreakSystem(Things& things, Map& map, HealthSystem& hea
     }
 }
 
+void MentalBreakSystem::setFire(Fire* fire) {
+    fire_ = fire;
+    if (fire != nullptr) {
+        provide("fire");
+    }
+}
+
 void MentalBreakSystem::provide(const std::string& feature) {
     if (std::find(features_.begin(), features_.end(), feature) == features_.end()) {
         features_.push_back(feature);
@@ -214,13 +225,16 @@ bool MentalBreakSystem::eligible(Entity pawn) const {
            fighters_.factionOf(pawn) == kPlayerFaction && !health_.incapacitated(pawn);
 }
 
-bool MentalBreakSystem::feasible(Entity pawn, const Kind& kind, Rng&) {
+bool MentalBreakSystem::feasible(Entity pawn, const Kind& kind, Rng& rng) {
     const MentalBreaker none;
     switch (kind.state) {
         case BreakState::Wander:
         case BreakState::Berserk:
-        case BreakState::FireSpree:
             return true;
+        case BreakState::FireSpree: {
+            CellPos cell, stand;
+            return fireGoal(pawn, rng, cell, stand);
+        }
         case BreakState::Binge: return findFood(pawn, none) != kNoEntity;
         case BreakState::HideInRoom: {
             CellPos spot;
@@ -435,7 +449,11 @@ void MentalBreakSystem::tick(Entity pawn, MentalBreaker& b, int64_t now, Rng& rn
         finish(pawn, b, now, "stopped");
         return;
     }
-    switch (b.state) {
+    // A pawn that is on fire runs about, whatever its break was doing.
+    if (fire_ != nullptr && reg.all_of<Burning>(pawn) && fire_->panicStep(pawn, now)) {
+        stopWalk(pawn, b);
+        b.target = kNoEntity;
+    } else switch (b.state) {
         case BreakState::Wander: tickWander(pawn, b, now, rng); break;
         case BreakState::HideInRoom: tickHide(pawn, b, now, rng); break;
         case BreakState::Binge: tickBinge(pawn, b, now, rng); break;
@@ -443,7 +461,7 @@ void MentalBreakSystem::tick(Entity pawn, MentalBreaker& b, int64_t now, Rng& rn
         case BreakState::Berserk: tickAttack(pawn, b, now, rng, true); break;
         case BreakState::InsultSpree: tickInsult(pawn, b, now, rng); break;
         case BreakState::LeaveColony: tickLeave(pawn, b, now, rng); break;
-        case BreakState::FireSpree: break;  // E4 fills this in; until then the break only waits it out
+        case BreakState::FireSpree: tickFireSpree(pawn, b, now, rng); break;
     }
     if (!reg.valid(pawn) || !b.active) {
         return;  // (a pawn that left the colony has no break component to look at)
@@ -887,6 +905,16 @@ void MentalBreakSystem::tickAttack(Entity pawn, MentalBreaker& b, int64_t now, R
         b.target = target;
         b.nextAct = now;
     }
+    if (melee_ != nullptr && reg.all_of<Mover, Posture>(b.target)) {
+        if (!chase(pawn, b, b.target, now)) {
+            return;
+        }
+        std::string why;
+        if (melee_->ready(pawn)) {
+            melee_->attack(pawn, b.target, false, &why);
+        }
+        return;
+    }
     if (!approach(pawn, b, b.target, rules_.reach, now) || now < b.nextHit) {
         return;
     }
@@ -911,6 +939,150 @@ void MentalBreakSystem::tickAttack(Entity pawn, MentalBreaker& b, int64_t now, R
             finish(pawn, b, now, "recovered");
         }
     }
+}
+
+// Walks at a pawn it means to hit, planning again as it moves, until a swing would reach it. Holds still
+// once there, so the wind-up isn't spent walking. A target it can't get to is dropped.
+bool MentalBreakSystem::chase(Entity pawn, MentalBreaker& b, Entity target, int64_t now) {
+    entt::registry& reg = things_.registry();
+    if (melee_->inReach(pawn, target)) {
+        if (b.walk != 0) {
+            stopWalk(pawn, b);
+        }
+        return true;
+    }
+    if (melee_->winding(pawn)) {
+        return false;  // mid-swing: let it finish
+    }
+    if (b.walk != 0) {
+        if (walkStep(pawn, b) == Walk::Failed) {
+            b.visited.push_back(target);
+            b.target = kNoEntity;
+            b.nextAct = now + rules_.searchEvery;
+            return false;
+        }
+        if (now < b.nextAct) {
+            return false;
+        }
+    }
+    beginWalk(pawn, b, cellOf(reg.get<Position>(target)));
+    b.nextAct = now + rules_.repathEvery;
+    return false;
+}
+
+// ---- Fire-starting spree --------------------------------------------------------------------------------
+
+// Something near that would burn and isn't burning yet, picked among the nearest few (so a cell that
+// won't take a flame, wet ground say, is not tried for ever), and a cell to light it from.
+bool MentalBreakSystem::fireGoal(Entity pawn, Rng& rng, CellPos& cell, CellPos& stand) const {
+    if (fire_ == nullptr) {
+        return false;
+    }
+    const entt::registry& reg = things_.registry();
+    const CellPos here = cellOf(reg.get<Position>(pawn));
+    std::vector<std::pair<float, CellPos>> near;
+    for (int dy = -rules_.fireRadius; dy <= rules_.fireRadius; ++dy) {
+        for (int dx = -rules_.fireRadius; dx <= rules_.fireRadius; ++dx) {
+            const CellPos c{here.x + dx, here.y + dy, here.level};
+            const float d = mentalCellDistSq(here, c);
+            if (d > static_cast<float>(rules_.fireRadius * rules_.fireRadius) || !map_.inBounds(c) || fire_->burning(c) ||
+                fire_->flammabilityAt(c) <= 0.0f) {
+                continue;
+            }
+            near.emplace_back(d, c);
+        }
+    }
+    std::sort(near.begin(), near.end(), [](const auto& a, const auto& b) {
+        return a.first != b.first ? a.first < b.first : (a.second.y != b.second.y ? a.second.y < b.second.y : a.second.x < b.second.x);
+    });
+    std::vector<CellPos> options, stands;
+    for (size_t i = 0; i < near.size() && options.size() < 5 && i < kMentalReachTries * 4; ++i) {
+        // Stand in the cell itself, else in a walkable one beside it.
+        const CellPos c = near[i].second;
+        CellPos best;
+        bool found = false;
+        float bestD = 0.0f;
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                const CellPos s{c.x + dx, c.y + dy, c.level};
+                const float d = mentalCellDistSq(here, s);
+                if ((found && d >= bestD) || !map_.inBounds(s) || !map_.walkable(s) || !jobs_.canReach(here, s)) {
+                    continue;
+                }
+                found = true;
+                bestD = d;
+                best = s;
+            }
+        }
+        if (found) {
+            options.push_back(c);
+            stands.push_back(best);
+        }
+    }
+    if (options.empty()) {
+        return false;
+    }
+    const size_t pick = rng.below(static_cast<uint32_t>(options.size()));
+    cell = options[pick];
+    stand = stands[pick];
+    return true;
+}
+
+void MentalBreakSystem::tickFireSpree(Entity pawn, MentalBreaker& b, int64_t now, Rng& rng) {
+    if (fire_ == nullptr) {
+        return;
+    }
+    if (b.hasGoal && b.walk != 0) {
+        const Walk w = walkStep(pawn, b);
+        if (w == Walk::Going) {
+            return;
+        }
+        if (w == Walk::Failed) {
+            b.hasGoal = false;
+            b.nextAct = now + rules_.searchEvery;
+            return;
+        }
+    }
+    if (b.hasGoal) {
+        // Arrived: light the cell the goal was picked for (the neighbours of the stand cell include it).
+        if (now < b.nextHit) {
+            return;
+        }
+        b.hasGoal = false;
+        b.nextHit = now + rules_.fireEvery;
+        const CellPos here = cellOf(things_.registry().get<Position>(pawn));
+        // The cell to light is stored in the target's place as nothing: find the nearest flammable one in reach.
+        CellPos best;
+        bool found = false;
+        float bestD = 0.0f;
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                const CellPos c{here.x + dx, here.y + dy, here.level};
+                const float d = mentalCellDistSq(here, c);
+                if ((found && d >= bestD) || !map_.inBounds(c) || fire_->burning(c) || fire_->flammabilityAt(c) <= 0.0f) {
+                    continue;
+                }
+                found = true;
+                bestD = d;
+                best = c;
+            }
+        }
+        if (found && fire_->ignite(best)) {
+            ++b.done;
+        }
+        b.nextAct = now + rules_.fireEvery;
+        return;
+    }
+    if (now < b.nextAct) {
+        return;
+    }
+    CellPos cell, stand;
+    if (!fireGoal(pawn, rng, cell, stand)) {
+        b.nextAct = now + rules_.searchEvery;
+        return;
+    }
+    beginWalk(pawn, b, stand);
+    b.nextHit = now;
 }
 
 // ---- Insulting spree ------------------------------------------------------------------------------------

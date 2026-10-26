@@ -46,13 +46,13 @@ threshold. Not when ended by the dev command, and not for dying or leaving.
 | `HideInRoom` | minor | Walks to its own bed, else the nearest roofed reachable cell within 40 m, and stays |
 | `Tantrum` | major | Walks to the nearest thing within 15 m (items and furniture, **not** walls, doors or building plans) and hits it every 2 seconds for 8 hit points; after 3 things destroyed it is over |
 | `InsultingSpree` | major | Walks up to the nearest colonist it hasn't insulted, insults them (`PawnInsulted`), and on to the next; 3, then over |
-| `Berserk` | extreme | Goes for the nearest living pawn within 25 m (anyone, any side), else something to smash, and punches every 2 seconds (6 blunt damage, a random part). Placeholder until F8 gives pawns real melee |
+| `Berserk` | extreme | Goes for the nearest living pawn within 25 m (anyone, any side), else something to smash, and fights it with F8's melee: walks up until a swing reaches, then swings with the weapon in its hands or its fists (real wind-up, dodges, blocks and armour). Things that aren't pawns are still hit for 8 hit points every 2 seconds. Without the melee system it punches every 2 seconds (6 blunt damage) |
 | `GiveUp` | extreme | Walks to the nearest reachable edge of the map and leaves for good with what it carries, wears and holds; its bed is freed. `PawnLeftColony`, then the pawn is destroyed |
-| `FireSpree` | extreme | Not possible until E4 (fire). The state exists and only waits |
+| `FireSpree` | extreme | Picks one of the five nearest cells within 20 m that would burn and aren't alight, walks beside it, lights it (`Fire::ignite`), waits 5 seconds, and goes on. A burning pawn runs about (`panicStep`) as in the job system. Needs fire: `Sim` calls `setFire`, which provides the `fire` feature |
 
 All the 15 m, 25 m, 2 second and damage numbers are ours (`MentalBreakBehaviour`); RimWorld's break
 numbers (rates, curve, lengths) are the D9 data. The tantrum's three-thing limit and the placeholder
-fists are the two choices to revisit.
+fists (kept only for things that aren't pawns) are the two choices to revisit.
 
 ## Orders and other systems
 
@@ -85,7 +85,7 @@ goal, target, counters, visited targets). A save from before has none and loads 
 
 - Social interactions beyond the insult event: the opinion drop and the "insulted" bond effects are C20
   (it can turn `PawnInsulted` into a real interaction); the target already gets the `Insulted` memory.
-- Real fighting for berserk (F8), fire-starting (E4), the other breaks of RimWorld's DLCs, inspirations,
+- The other breaks of RimWorld's DLCs, inspirations,
   and drug-induced states.
 - Animations and sounds for the break states; U-tasks read the events and the snapshot.
 - Other colonists reacting to a berserker (the defence plan, F6, treats everyone of the player's side

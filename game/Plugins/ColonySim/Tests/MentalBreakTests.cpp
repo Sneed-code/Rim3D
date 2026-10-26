@@ -4,6 +4,8 @@
 #include "ColonySim/Combat.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Fire.h"
+#include "ColonySim/Melee.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/MentalBreaks.h"
@@ -359,21 +361,27 @@ TEST_CASE("Mental breaks: an insulting spree insults three colonists in turn and
     CHECK(log.first(EventType::PawnMentalBreakEnded)->message == "recovered");
 }
 
-TEST_CASE("Mental breaks: berserk hurts the nearest pawn until it is ended") {
+TEST_CASE("Mental breaks: berserk swings at the nearest pawn with melee until it is ended") {
     Sim sim = breakSim();
     const Entity pawn = breakColonist(sim, CellPos{20, 24, 0});
     const Entity victim = breakColonist(sim, CellPos{28, 24, 0});
+    sim.things().registry().emplace_or_replace<Posture>(pawn);
+    sim.things().registry().emplace_or_replace<Posture>(victim);
     sim.step();
     CHECK(breakStart(sim, pawn, "Berserk"));
     BreakLog log;
     breakMood(sim, pawn).level = 5.0f;  // stays in the break
-    breakRun(sim, log, 120);
+    breakRun(sim, log, 600);
     CHECK(sim.mentalBreaks().active(pawn));
-    CHECK_FALSE(sim.things().registry().get<Health>(victim).injuries.empty());
-    CHECK(sim.things().registry().get<Health>(pawn).injuries.empty());
+    CHECK(sim.melee().swings() > 0);
+    CHECK(std::count_if(log.events.begin(), log.events.end(), [&](const Event& e) {
+              return e.type == EventType::MeleeSwing && e.thing == pawn;
+          }) > 0);
+    // Real melee: no placeholder punches against a pawn.
     CHECK(std::count_if(log.events.begin(), log.events.end(), [&](const Event& e) {
               return e.type == EventType::PawnAction && e.action == PawnAction::Punch && e.target == victim;
-          }) > 0);
+          }) == 0);
+    CHECK(sim.things().registry().get<Health>(pawn).injuries.empty());
     // Ended by hand: no catharsis for that.
     sim.submit(EndMentalBreakCommand{pawn});
     breakRun(sim, log, 2);
@@ -408,19 +416,19 @@ TEST_CASE("Mental breaks: giving up walks to the map edge and leaves for good") 
     CHECK(sim.mentalBreaks().active(pawn) == false);
 }
 
-TEST_CASE("Mental breaks: fire-starting needs fire, which the game doesn't have yet") {
+TEST_CASE("Mental breaks: a fire-starting spree lights fires near flammable things") {
     Sim sim = breakSim();
     const Entity pawn = breakColonist(sim, CellPos{24, 24, 0});
+    sim.things().spawn("Table", CellPos{28, 24, 0});  // something wooden to light
     sim.step();
     std::string error;
-    CHECK_FALSE(breakStart(sim, pawn, "FireSpree", &error));
-    CHECK(error.find("needs fire") != std::string::npos);
-    sim.mentalBreaks().provide("fire");
-    CHECK(breakStart(sim, pawn, "FireSpree"));
+    CHECK(sim.fire().count() == 0);
+    CHECK(breakStart(sim, pawn, "FireSpree", &error));
     BreakLog log;
-    breakMood(sim, pawn).level = 90.0f;
-    breakRun(sim, log, 200);
-    CHECK(sim.mentalBreaks().active(pawn));  // E4 gives it something to do; until then it waits it out
+    breakMood(sim, pawn).level = 5.0f;
+    BREAK_REQUIRE(breakRunUntil(sim, log, 600, [&] { return sim.fire().started() > 0; }));
+    CHECK(log.count(EventType::FireStarted) > 0);
+    CHECK(sim.mentalBreaks().active(pawn));
     CHECK_FALSE(breakStart(sim, pawn, "NoSuchBreak", &error));
 }
 

@@ -15,7 +15,7 @@ Ideas parked for later. Newest first. Move an item into a stage plan when it's p
 - Per-building thermostat targets for heaters and coolers (U19 panels).
 
 - Cooking leftovers and shooter feel: picked up in `docs/plans/stage-2.md` (C11 fuel done, C14 bills, C16 food poisoning; P2 and U21 shooter feel).
-- Show mental breaks on screen (a U task): log lines for `PawnMentalBreak`, `PawnMentalBreakEnded`, `PawnInsulted`, `PawnLeftColony`; a ring or icon from `ThingView::mentalBreak`; a punch animation for `PawnAction::Punch`. The sim side is done (C19).
+- Show mental breaks on screen (a U task): log lines for `PawnMentalBreak`, `PawnMentalBreakEnded`, `PawnInsulted`, `PawnLeftColony`; a ring or icon from `ThingView::mentalBreak`; a punch animation for `PawnAction::Punch` (now only for smashing things) and the melee swing animation for berserk. The sim side is done (C19).
 - Protagonist needs sleep or not (open question in `docs/game-design.md`).
 - Elevators for multi-storey buildings (after stairs and ladders).
 - Carry on as another colonist after the protagonist dies (currently game over).
