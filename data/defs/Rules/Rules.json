@@ -171,6 +171,16 @@
     "ours": ["hugeRoomCells", "roleOrder", "roles"]
   },
   {
+    "defName": "RoofRules", "source": "RimWorld wiki",
+    "thinPawnHits": 2, "thinPawnDamage": 25,
+    "thickPawnHits": 4, "thickPawnDamage": 50,
+    "thinThingDamage": 100, "thickThingDamage": 100000,
+    "fallPawnHits": 2, "fallPawnDamage": 20,
+    "fallSearchRadius": 3,
+    "unverified": ["thinPawnHits", "thinPawnDamage", "thickPawnHits", "thickPawnDamage", "thinThingDamage", "thickThingDamage"],
+    "ours": ["fallPawnHits", "fallPawnDamage", "fallSearchRadius"]
+  },
+  {
     "defName": "WorkRules", "source": "RimWorld wiki",
     "mining": {
       "speedBase": 0.04, "speedPerLevel": 0.12,

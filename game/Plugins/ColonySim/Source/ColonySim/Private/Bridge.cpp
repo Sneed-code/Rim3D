@@ -228,6 +228,7 @@ const char* eventTypeName(EventType type) {
         case EventType::SquadChanged: return "SquadChanged";
         case EventType::AlarmChanged: return "AlarmChanged";
         case EventType::PawnLeftMap: return "PawnLeftMap";
+        case EventType::RoofCollapsed: return "RoofCollapsed";
         case EventType::AnimalTamed: return "AnimalTamed";
         case EventType::AnimalReleased: return "AnimalReleased";
         case EventType::AnimalTrained: return "AnimalTrained";

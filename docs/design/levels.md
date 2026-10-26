@@ -41,7 +41,7 @@ An upper floor is the floor of a cell on level 1 or above. It is laid with `Uppe
 - **Taking one up** (`UpperFloors::remove`, the command with `remove`) is refused while a building, an
   item or a pawn is on it.
 - **Instant for now**, like the floors of C17. Building one with work and materials comes with M2
-  (pawns need stairs to get up there); floors that fall when the walls under them go come with M3.
+  (pawns need stairs to get up there); floors that fall when the walls under them go are M3's ([roofs](roofs.md)).
 
 ## Regions, rooms and temperature per level
 
@@ -83,5 +83,4 @@ again on load.
 
 - Stairs and ladders, region links across levels, climbing (M2).
 - Laying an upper floor with work and materials (M2).
-- Roof collapse and floors falling when their support goes (M3).
 - Upper levels on screen (U17).
