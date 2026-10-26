@@ -19,3 +19,4 @@ Ideas parked for later. Newest first. Move an item into a stage plan when it's p
 - Children and sexual content: out of scope for now; sneed may revisit.
 - Rearm job for sprung spike traps (a Construction-style colonist job; F11 has only `RearmTrapCommand`) and a "rearm all" button (U19 panels).
 - Raiders shooting back at turrets (the fighter AI targets pawns only); armor for spike-trap stabs; the other turrets (sentry, autocannon) and trap kinds (found in F11).
+- Fix what the F7 raid soak found (`docs/design/raid-soak.md`): fighters stuck while walking to their spot (about 0.4 per seed in raids), fighters waiting in the open 13.6% of the time against the 10% rule, and some raids still going after a quarter game day. Then tighten the soak's limits.
