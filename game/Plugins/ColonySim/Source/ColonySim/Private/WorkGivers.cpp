@@ -1,4 +1,5 @@
 // The work scanners, one per task name in the WorkTypes defs (docs/design/jobs.md).
+#include "ColonySim/Animals.h"
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Jobs.h"
 
@@ -679,8 +680,8 @@ public:
     const char* task() const override { return "TendPatients"; }
 
     void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
-        if (jobs.medicine() == nullptr || !jobs.canUseHands(pawn)) {
-            return;
+        if (jobs.medicine() == nullptr || !jobs.canUseHands(pawn) || jobs.things().registry().all_of<Animal>(pawn)) {
+            return;  // a rescuing animal carries the downed to bed but cannot tend
         }
         const entt::registry& reg = jobs.things().registry();
         const Position& at = reg.get<Position>(pawn);

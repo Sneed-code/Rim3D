@@ -2,6 +2,8 @@
 
 Updated 2026-10-26.
 
+Stage 2 animal training effects done: an animal that has learned Obedience keeps close to the nearest drafted colonist, and one that has learned Rescue carries a downed colonist to a free bed (it never tends); Haul, decay and the trainer's Animals skill were already in (`docs/design/husbandry.md`, tests `HusbandryTests`). The Release trick still only counts steps. Sim only, no save change.
+
 Stage 2 animal extras done: tame animals can be named (`SetAnimalName`), one command marks every wild animal in a rectangle to tame or hunt, or every tame one to slaughter (`MarkAnimalsInArea`), and doors are gates to animals: they never walk through one (`docs/design/husbandry.md`, tests `HusbandryTests`). Save section `husbandry` 3. Sim only.
 
 Stage 2 hydroponics done: a powered hydroponics basin (new research `Hydroponics`, 70 steel, 70 W) gives its cell fertility 2.8 and takes a growing zone, plant pots count as fertility 1.0 spots, and a powered sun lamp within 5 m lets a lit crop grow through the night as well, so a heated, roofed room with basins and a sun lamp feeds the colony through winter (`docs/design/farming.md`, tests `HydroponicsTests`). Sim only.

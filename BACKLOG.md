@@ -6,7 +6,7 @@ Ideas parked for later. Newest first. Move an item into a stage plan when it's p
 - Social life (found in C20; cheating, jealousy, wedding thoughts and Social skill effects done): orientations and attractiveness for romance (now anyone may love anyone), a wedding party job where guests walk to a spot, the colonist panel's relations tab, and mood effects of seeing a friend die in front of you.
 - Breeding (found in N4; switch, young health and egg warmth are done): young animals following their mother; gestation needing warmth; a hatchery for the fertilized eggs; tailoring from wool (C14 bills); milk pasteurizing is not in RimWorld either.
 - Show animal names in the animals tab (U19): the sim has `SetAnimalName` and `ThingView::animalName`.
-- Effects of the trained tricks: Obedience (come when called, follow when drafted), Release (go wild on a command), Rescue (carry a downed colonist to a bed). N3 only counts the steps.
+- Trained tricks (Obedience following drafted colonists and Rescue done): "come when called" with a command, a master per animal, and a use for the Release trick (the release command works without it).
 - Lead a tamed animal home by rope. (The "tame all nearby" button: the sim has `MarkAnimalsInArea`; the button is U19.)
 - Floor-building job and architect tool (floors are placed by `PlaceFloor` command only; found in C17, no plan task covers it). Needs a Construction-style job: pick floor, mark area, colonists lay it.
 - Cleaning outdoors needs the home area (C17 cleans indoors only); vomit, ash and animal filth have no sources yet (E4 fire, animals).
