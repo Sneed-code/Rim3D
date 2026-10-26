@@ -97,6 +97,7 @@ struct Options {
     int pathBudget = colony::Pathfinder::kDefaultBudget;
     std::string start;  // a Scenarios def; prints the colonists it makes
     std::string scenario;  // "colony": the scripted colony test (C10)
+    bool year = false;     // --year: the colony scenario with animals and a farm, for long runs
     bool verbose = false;  // --scenario, --power: an hourly line on stderr
     bool power = false;    // --power: the power check (E5)
     bool check = false;  // exit 1 if a job or a path search failed
@@ -156,6 +157,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.verbose = true;
         } else if (std::strcmp(arg, "--gather") == 0 && hasValue) {
             out.gather = std::atoi(argv[++i]);
+        } else if (std::strcmp(arg, "--year") == 0) {
+            out.year = true;
         } else if (std::strcmp(arg, "--animals") == 0) {
             out.animals = std::max(out.animals, 100);
         } else if (std::strcmp(arg, "--fire") == 0) {
@@ -651,7 +654,7 @@ int main(int argc, char** argv) {
             }
             return housescenario::run(options.seed, options.size, options.daysGiven ? options.days : 3.0, defs, options.verbose, pngBase);
         }
-        return colonyscenario::run(options.seed, options.size, options.daysGiven ? options.days : 5.0, defs, options.verbose);
+        return colonyscenario::run(options.seed, options.size, options.daysGiven ? options.days : 5.0, defs, options.verbose, options.year);
     }
 
     // A replay brings its own settings and commands; otherwise they come from the options.
@@ -1310,8 +1313,10 @@ int main(int argc, char** argv) {
     std::printf("{\"repaths\":%llu,\"hauls\":%llu}\n", static_cast<unsigned long long>(sim.stats().repaths),
                 static_cast<unsigned long long>(sim.stats().hauls));
 
-    // A walk held up for good is rare (it was a rock corner once); many mean the movement is broken.
-    if (options.check && sim.stats().repaths > 5 + sim.stats().hauls / 100) {
+    // A walk held up for good is rare (it was a rock corner once); many mean the movement is broken. A doctor chasing
+    // a wounded colonist who is still fighting asks again (H1/H2), so a raid scenario gets a little more room.
+    const uint64_t repathRoom = 5 + sim.stats().hauls / 100 + (options.raid >= 0.0 || !options.narrator.empty() ? 100 : 0);
+    if (options.check && sim.stats().repaths > repathRoom) {
         std::fprintf(stderr, "check failed: %llu repaths for %llu hauls\n",
                      static_cast<unsigned long long>(sim.stats().repaths), static_cast<unsigned long long>(sim.stats().hauls));
         return 1;

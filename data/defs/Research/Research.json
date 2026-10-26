@@ -1,5 +1,6 @@
 [
   {"defName": "PassiveCooler", "label": "passive cooler", "techLevel": "Neolithic", "baseCost": 400, "prerequisites": [], "benchTier": 1, "unlocks": {"Things": ["PassiveCooler"]}},
+  {"defName": "Pemmican", "label": "pemmican", "techLevel": "Neolithic", "baseCost": 300, "prerequisites": [], "benchTier": 1, "unlocks": {"Recipes": ["MakePemmican"]}, "unverified": ["baseCost"]},
   {"defName": "Devilstrand", "label": "devilstrand", "techLevel": "Neolithic", "baseCost": 800, "prerequisites": [], "benchTier": 1, "unlocks": {"Things": ["Plant_Devilstrand"]}},
   {"defName": "ComplexClothing", "label": "complex clothing", "techLevel": "Medieval", "baseCost": 600, "prerequisites": [], "benchTier": 1, "unlocks": {"Things": ["TailorBenchHand", "TailorBenchElectric", "Apparel_TShirt", "Apparel_ButtonShirt", "Apparel_Pants", "Apparel_Duster", "Apparel_Jacket", "Apparel_Parka", "Apparel_CowboyHat", "Apparel_Tuque"], "Recipes": ["Make_Apparel_TShirt", "Make_Apparel_ButtonShirt", "Make_Apparel_Pants", "Make_Apparel_Duster", "Make_Apparel_Jacket", "Make_Apparel_Parka", "Make_Apparel_CowboyHat", "Make_Apparel_Tuque"]}},
   {"defName": "ComplexFurniture", "label": "complex furniture", "techLevel": "Medieval", "baseCost": 300, "prerequisites": [], "benchTier": 1, "unlocks": {"Things": ["Armchair", "EndTable", "Dresser", "Vent", "BilliardsTable"]}},

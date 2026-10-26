@@ -101,7 +101,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `movement` | 2 | `mover` |
 | `jobs` | 1 | `worker` (the job, its bill picks and ingredients, avoid memory), `work` (Work tab), `carrying` |
 | `colonists` | 2 | `colonist` (2: each skill's `xpToday`, C12) |
-| `health` | 3 | `health` (version 2: environment hediffs such as hypothermia, E2; version 3: each injury's `peak`, for scars, H1) |
+| `health` | 4 | `health` (version 2: environment hediffs such as hypothermia, E2; version 3: each injury's `peak`, for scars, H1; version 4: `infectAt`, `diseases` and `immunities`, H2) |
 | `control` | 1 | `playerControlled`: the ids of controlled pawns |
 | `needs` | 1 | `needs`, `schedule`, `bed` |
 | `bills` | 2 | `bills` on work buildings. Version 2 (C14) adds each bill's skill range, ingredient radius, store stockpile, restart stock, satisfied flag and ingredient filter; version 1 loads with the defaults |
