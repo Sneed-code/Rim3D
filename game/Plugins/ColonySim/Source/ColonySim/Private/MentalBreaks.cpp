@@ -18,6 +18,7 @@
 #include "ColonySim/Random.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Rooms.h"
+#include "ColonySim/Social.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -1113,6 +1114,11 @@ void MentalBreakSystem::tickInsult(Entity pawn, MentalBreaker& b, int64_t now, R
     }
     if (!approach(pawn, b, b.target, rules_.talkReach, now)) {
         return;
+    }
+    if (social_ != nullptr) {
+        // The insult lands like any other (opinion, mood); if the two can't talk it is only the event below.
+        std::string ignored;
+        social_->interact(pawn, b.target, "Insult", -1, ignored);
     }
     if (events_ != nullptr) {
         Event event;

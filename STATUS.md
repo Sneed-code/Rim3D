@@ -2,6 +2,8 @@
 
 Updated 2026-10-26.
 
+Stage 2 social extras 2 done: every colonist has a fixed orientation (straight, gay, bisexual or asexual, from the world seed) and romance needs it both ways; seeing a spouse, lover or friend die in the same room or within 12 m is an extra bad thought; an insulting mental break now insults for real (opinion drop, maybe a fistfight) (`docs/design/social.md`, tests `SocialTests`, `MentalBreakTests`). Sim only.
+
 Stage 2 heat armour done: a burning pawn's flames now go through the heat armour of the clothes over the part they hit (bounce, half damage, wear on the piece), so a hyperweave duster and hat save most of the burns; clothes already carried the heat stat from RimWorld's numbers (`docs/design/fire.md`, test in `FireTests`). Sim only.
 
 Stage 2 U14 done: lamps, fires and burnt ground are on screen. Every lamp the sim has lit (campfire, torch, standing and sun lamps) is a real warm light that goes out when its fuel or power does; campfires and torches have flames and embers; each burning cell has flames, embers and smoke in proportion to its size, with an orange light per 4 m block of fire; burning pawns have flames and a light; burnt ground is a charcoal skin and ash a grey patch, exactly the sim's cells (`docs/design/fire-draw.md`, smoke test `fire`; `UFireSubsystem`; defs got `glower.lift` and `visual.flame`; no sim changes). Particles are instanced meshes like the fight effects (the engine's unlit material does not work on instances), so flames are lit; real Niagara fire is later.

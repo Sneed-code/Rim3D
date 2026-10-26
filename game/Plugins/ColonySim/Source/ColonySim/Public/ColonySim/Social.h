@@ -76,6 +76,9 @@ struct OpinionLine {
     float offset = 0.0f;
 };
 
+// Who a pawn may fall in love with (ours): Straight likes the other gender, Gay the same, Bisexual either, Asexual nobody.
+enum class Orientation : uint8_t { Straight, Gay, Bisexual, Asexual };
+
 // An interaction def (Interactions) as the system reads it.
 struct SocialInteraction {
     DefId def;
@@ -141,6 +144,12 @@ struct COLONY_API SocialRules {
     float jealousFightChance = 0.25f;    // the betrayed one fights the new lover (not a Wimp or a Kind one)
     std::string cheatedThought;          // mood thought triggers; empty for none
     std::string weddingGuestThought, weddingPartyThought;
+    // Orientation (ours), a share of pawns each, by Orientation; pawns without a gender (no Colonist record) like anybody.
+    float orientationWeights[4] = {0.7f, 0.1f, 0.15f, 0.05f};
+    // Seeing a loved one or a friend die (ours): whoever stands within this many metres in the same room, or both out in the open,
+    // gets this thought on top of the loss.
+    float witnessRadius = 12.0f;
+    std::string witnessThought;
     float fightOffset = -20.0f;          // each one's opinion of the other afterwards...
     float fightDays = 30.0f;             // ...for this long
     std::vector<SocialInteraction> interactions;
@@ -156,6 +165,7 @@ public:
                  JobSystem& jobs, const DefDatabase& defs, const GameTime& time, uint64_t seed);
 
     const SocialRules& rules() const { return rules_; }
+    SocialRules& rules() { return rules_; }  // tests turn rules off or on
 
     // What `pawn` thinks of `other`, -100 to 100: compatibility, traits, bonds and memories. 0 for
     // pawns that take no part in social life.
@@ -171,6 +181,11 @@ public:
     // The pawn's spouse, else its lover, else none.
     Entity partner(Entity pawn) const;
     bool fighting(Entity pawn) const;
+    // The pawn's orientation: from a hash of the pawn and the world seed, so it never changes and needs no saving.
+    Orientation orientationOf(Entity pawn) const;
+    // Whether `pawn` could fall in love with `other` (their genders against `pawn`'s orientation). One-sided; a romance
+    // needs it both ways.
+    bool attractedTo(Entity pawn, Entity other) const;
 
     // Starts `interaction` (an Interactions defName) from `initiator` to `recipient` now, as the dev
     // command and tests do. The opinion limits are ignored; what the interaction requires (a lover,
@@ -216,7 +231,7 @@ private:
 
     bool takesPart(Entity pawn) const;
     bool canTalk(Entity pawn) const;
-    bool inEarshot(Entity a, Entity b);
+    bool inEarshot(Entity a, Entity b, float radius = -1.0f);
     float compatibility(Entity a, Entity b) const;
     float traitOpinion(Entity of) const;
     float traitWeight(Entity pawn, const std::string& interaction) const;

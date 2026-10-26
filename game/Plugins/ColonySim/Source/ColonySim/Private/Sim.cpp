@@ -282,6 +282,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     mentalBreaks_->setEventLog(&events_);
     mentalBreaks_->setMelee(melee_.get());
     mentalBreaks_->setFire(fire_.get());
+    mentalBreaks_->setSocial(social_.get());
     map_.regions().update();  // build every region now, not in the first step
 }
 

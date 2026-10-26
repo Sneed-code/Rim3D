@@ -62,6 +62,8 @@ uint64_t socId(Entity e) {
 
 }  // namespace
 
+const char* const kSocOrientationNames[4] = {"straight", "gay", "bisexual", "asexual"};
+
 const char* bondKindName(BondKind kind) {
     switch (kind) {
         case BondKind::Lover: return "Lover";
@@ -114,6 +116,12 @@ SocialRules SocialRules::read(const DefDatabase& defs) {
     r.cheatedThought = socTrigger(defs, rules->text("cheatedThought"));
     r.weddingGuestThought = socTrigger(defs, rules->text("weddingGuestThought"));
     r.weddingPartyThought = socTrigger(defs, rules->text("weddingPartyThought"));
+    r.witnessRadius = socFloat(*rules, "witnessRadius", r.witnessRadius);
+    r.witnessThought = socTrigger(defs, rules->text("witnessThought"));
+    for (int i = 0; i < 4; ++i) {
+        const std::string key = std::string("orientation.") + kSocOrientationNames[i];
+        r.orientationWeights[i] = std::max(0.0f, socFloat(*rules, key.c_str(), r.orientationWeights[i]));
+    }
     r.fightLabel = rules->text("fight.label", r.fightLabel);
     r.fightOffset = socFloat(*rules, "fight.offset", r.fightOffset);
     r.fightDays = socFloat(*rules, "fight.days", r.fightDays);
@@ -369,7 +377,10 @@ bool SocialSystem::canTalk(Entity pawn) const {
 }
 
 // Close enough to hear, and in the same room (or both out in the open).
-bool SocialSystem::inEarshot(Entity a, Entity b) {
+bool SocialSystem::inEarshot(Entity a, Entity b, float radius) {
+    if (radius < 0.0f) {
+        radius = rules_.maxDistance;
+    }
     const entt::registry& reg = things_.registry();
     if (!things_.spawned(a) || !things_.spawned(b)) {
         return false;
@@ -378,11 +389,41 @@ bool SocialSystem::inEarshot(Entity a, Entity b) {
     const Position& pb = reg.get<Position>(b);
     const float dx = pa.x - pb.x;
     const float dy = pa.y - pb.y;
-    if (pa.level != pb.level || dx * dx + dy * dy > rules_.maxDistance * rules_.maxDistance) {
+    if (pa.level != pb.level || dx * dx + dy * dy > radius * radius) {
         return false;
     }
     const RoomId roomA = rooms_.roomAt(cellOf(pa));
     return roomA != kNoRoom && roomA == rooms_.roomAt(cellOf(pb));
+}
+
+Orientation SocialSystem::orientationOf(Entity pawn) const {
+    float total = 0.0f;
+    for (const float w : rules_.orientationWeights) {
+        total += w;
+    }
+    // No game time in the hash: a pawn's orientation never changes.
+    float pick = static_cast<float>(socUnit(seed_ ^ (socId(pawn) * 0xC2B2AE3D27D4EB4FULL) ^ (91 * 0x165667B19E3779F9ULL))) * total;
+    for (int i = 0; i < 4; ++i) {
+        pick -= rules_.orientationWeights[i];
+        if (pick < 0.0f) {
+            return static_cast<Orientation>(i);
+        }
+    }
+    return Orientation::Straight;
+}
+
+bool SocialSystem::attractedTo(Entity pawn, Entity other) const {
+    const entt::registry& reg = things_.registry();
+    const Orientation orientation = orientationOf(pawn);
+    if (orientation == Orientation::Asexual) {
+        return false;
+    }
+    const Colonist* a = reg.try_get<Colonist>(pawn);
+    const Colonist* b = reg.try_get<Colonist>(other);
+    if (orientation == Orientation::Bisexual || a == nullptr || b == nullptr) {
+        return true;
+    }
+    return (a->female != b->female) == (orientation == Orientation::Straight);
 }
 
 // ---- Interactions ---------------------------------------------------------------------------
@@ -406,6 +447,9 @@ bool SocialSystem::eligible(Entity initiator, Entity recipient, const SocialInte
                 return false;
             }
         }
+    }
+    if (interaction.bond == "Lover" && !(attractedTo(initiator, recipient) && attractedTo(recipient, initiator))) {
+        return false;
     }
     if (interaction.requiresAdult && (!isAdult(initiator) || !isAdult(recipient))) {
         return false;
@@ -778,6 +822,10 @@ void SocialSystem::mourn(Entity dead) {
             trigger = rules_.rivalDeath;
         }
         thought(pawn, trigger);
+        // Seeing it happen is worse (a rival's death is not).
+        if (!trigger.empty() && trigger != rules_.rivalDeath && inEarshot(pawn, dead, rules_.witnessRadius)) {
+            thought(pawn, rules_.witnessThought);
+        }
         // A widow or a bereaved lover is free to love again.
         dropBond(pawn, dead, BondKind::Lover);
         dropBond(pawn, dead, BondKind::Spouse);
