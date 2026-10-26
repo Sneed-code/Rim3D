@@ -68,6 +68,12 @@ public:
     // Scales a plant's growth in a cell (by the cell's index) by a factor of 0 to 1; farming uses it for
     // the light and temperature of sown crops. Not saved: whoever installs it does so again on loading.
     void setGrowthModifier(std::function<double(size_t)> modifier) { modifier_ = std::move(modifier); }
+    // Plants in a cell for which this says true grow in every hour, not only the growing hours (a crop under a
+    // sun lamp). Not saved.
+    void setGrowsAnytime(std::function<bool(size_t)> anytime) { anytime_ = std::move(anytime); }
+    // A cell whose fertility is not the ground's: a plant pot or hydroponics basin gives its own. The function
+    // takes the cell's index and returns the fertility, or a negative number for none. Not saved.
+    void setFertilityOverride(std::function<float(size_t)> override) { fertilityOverride_ = std::move(override); }
 
     size_t count() const { return count_; }
     size_t countOf(DefId def) const;
@@ -92,6 +98,7 @@ private:
     };
 
     size_t indexOf(CellPos c) const;
+    float fertilityAtIndex(size_t i) const;
     int kindOfDef(DefId def) const;
     uint64_t cellHash(size_t i) const;
     void set(size_t i, uint16_t kind, uint32_t growth, uint32_t age);
@@ -110,6 +117,8 @@ private:
     size_t count_ = 0;
     uint64_t hash_ = 0;
     std::function<double(size_t)> modifier_;
+    std::function<bool(size_t)> anytime_;
+    std::function<float(size_t)> fertilityOverride_;
 };
 
 }  // namespace colony

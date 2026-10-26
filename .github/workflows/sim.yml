@@ -31,7 +31,7 @@ jobs:
       - name: Configure
         run: cmake -S game/Plugins/ColonySim -B build -DCMAKE_BUILD_TYPE=Release
       - name: Build
-        run: cmake --build build --config Release --parallel
+        run: cmake --build build --config Release --parallel 4
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
       - name: Map picture
