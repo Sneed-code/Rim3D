@@ -159,7 +159,7 @@ G2, A1 and A2 are Stage 1 tasks.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | P1 | **Several weapons.** Carry a rifle, a sidearm and a melee weapon; a switch command with a switch time; the fighter AI picks by range; weight counts (C24 if merged). | Cloud | Sonnet, high | 90 min | F8 |
+| ✓ | P1 | **Several weapons.** Carry a rifle, a sidearm and a melee weapon; a switch command with a switch time; the fighter AI picks by range; weight counts (C24 if merged). | Cloud | Sonnet, high | 90 min | F8 |
 | ✓ | P2 | **Recoil kicks and dodge roll.** Per-weapon recoil kick lists in weapon defs for the player's shots; a dodge-roll command with start-up, a short no-hit window and recovery, moved by the sim (`shooter-feel.md`). | Cloud | Sonnet, high | 60 min | S7 |
 | ✓ | P3 | **Talent tree.** Talent XP and points for the protagonist, perks from data (`Talents/`, numbers `ours`: faster building, steadier aim, more carry weight, better trading), applied as stat changes; a spend-point command. | Cloud | Sonnet, medium | 60 min | S7 |
 | | P4 | **Repair and weapon upgrades.** Repair clothes, armor and weapons at a bench; upgrade parts (scope, longer magazine, better barrel; `ours`) fitted by recipe and changing the weapon's stats. | Cloud | Sonnet, high | 90 min | C14, C15 |

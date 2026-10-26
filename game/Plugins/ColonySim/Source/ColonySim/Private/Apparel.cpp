@@ -598,7 +598,7 @@ bool ApparelSystem::takeOff(Entity pawn, Entity item, std::string& error) {
 bool ApparelSystem::hasGear(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     const Gear* gear = reg.valid(pawn) ? reg.try_get<Gear>(pawn) : nullptr;
-    return gear != nullptr && (gear->weapon != kNoEntity || !gear->apparel.empty());
+    return gear != nullptr && (gear->weapon != kNoEntity || !gear->apparel.empty() || !gear->stowed.empty());
 }
 
 bool ApparelSystem::strip(Entity pawn) {

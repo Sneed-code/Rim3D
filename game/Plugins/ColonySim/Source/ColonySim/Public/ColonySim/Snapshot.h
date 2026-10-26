@@ -116,6 +116,12 @@ struct ThingView {
     float rollDirX = 0.0f;
     float rollDirY = 0.0f;
     bool hitProof = false;
+    // Several weapons (P1, docs/design/weapons.md): the weapon def carried in each slot (Primary, Sidearm, Melee;
+    // invalid for none), in the hands or on the body, and while the pawn switches the slot it switches to and
+    // the steps left (255 and 0 when it does not).
+    DefId carried[3];
+    uint8_t switchSlot = 255;
+    int switchStepsLeft = 0;
     // Pawns (docs/design/explosives.md): grenades on the belt, steps until the next throw can start
     // (0: ready), and whether a blast has thrown the pawn to the ground (it lies prone meanwhile).
     int grenades = 0;

@@ -134,6 +134,10 @@ struct FighterRules {
     int throwMemory = 150;          // ...seen this recently (steps), or at one it has no shot at
     float throwSelfMargin = 1.5f;   // never throws closer to itself than the radius plus this
     float throwFriendMargin = 0.5f; // nor with a friend within the radius plus this
+    // P1 (docs/design/weapons.md): a fighter who carries several weapons takes the one that suits the distance.
+    float switchMeleeRange = 2.5f;    // metres: closer than this to its target it takes up a melee weapon...
+    float switchSidearmRange = 9.0f;  // ...closer than this a sidearm, and further off the rifle
+    float switchMargin = 2.0f;        // the weapon in the hands is kept this much past its band, so a target on the edge does not flip it
 };
 
 class COLONY_API FighterSystem {
@@ -229,6 +233,7 @@ private:
     bool considerThrow(Entity pawn, const Fighter& f);
     void tacticalReload(Entity pawn, const Fighter& f, bool canShoot);
     void act(Entity pawn, Fighter& f);
+    void chooseWeapon(Entity pawn, const Fighter& f);
     void see(Entity pawn, Fighter& f, const PawnInfo& self);
     Entity chooseTarget(Entity pawn, const Fighter& f, const PawnInfo& self) const;
     bool fireOption(CellPos cell, const PawnInfo& target, float range, float tx, float ty, Candidate& c);

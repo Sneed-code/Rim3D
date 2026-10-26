@@ -21,12 +21,13 @@
     "recoilKickResetSteps": 15,
     "recoilKickRecoveryPerStep": 0.2,
     "recoilKickMaxDegrees": 10,
+    "weaponSwitchSteps": { "Primary": 36, "Sidearm": 18, "Melee": 27 },
     "dodgeRoll": { "startUpSteps": 3, "rollSteps": 15, "hitProofSteps": 12, "recoverySteps": 9, "cooldownSteps": 6, "distance": 4.0 },
     "unverified": ["accuracyDistances", "minHitChance"],
     "ours": ["defaultShootingSkill", "standardTarget", "playerSpreadDistance", "gravity", "recoilRecoveryPerSecond",
              "recoilSkillReduction", "maxFlightSeconds", "reactionStepsBySkill", "leadBySkill", "leadErrorBySkill",
              "reloadTimeFactorBySkill", "recoilKickHoldSteps", "recoilKickResetSteps", "recoilKickRecoveryPerStep",
-             "recoilKickMaxDegrees", "dodgeRoll"]
+             "recoilKickMaxDegrees", "dodgeRoll", "weaponSwitchSteps"]
   },
   {
     "defName": "PlantRules", "source": "RimWorld wiki",

@@ -5,6 +5,7 @@
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Talents.h"
 #include "ColonySim/Things.h"
@@ -81,6 +82,8 @@ struct CombatModel {
     std::vector<ArmorKind> armorKind;  // by DamageTypes DefId value
     std::vector<Kind> kinds;        // by Things DefId value
     std::vector<uint8_t> melee;     // by Things DefId value: 1 for a melee weapon (an item with `tools`, F8)
+    std::vector<uint8_t> slot;      // by Things DefId value: the WeaponSlot of a weapon, 255 for none (P1)
+    int switchSteps[kWeaponSlotCount] = {36, 18, 27};  // CombatRules weaponSwitchSteps, by the slot switched to
     DefId bluntDamage;
 
     float accuracyBySkill[21] = {};
@@ -217,6 +220,7 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
     kinds.resize(defs.size());
     blast.resize(defs.size());
     melee.resize(defs.size(), 0);
+    slot.resize(defs.size(), 255);
 
     if (const Def* rules = defs.find("Rules", "ExplosiveRules")) {
         edgeFactor = combatNum(*rules, "edgeFactor", edgeFactor);
@@ -268,6 +272,11 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
         rollRecovery = std::max(0, static_cast<int>(rules->integer("dodgeRoll.recoverySteps", rollRecovery)));
         rollCooldown = std::max(0, static_cast<int>(rules->integer("dodgeRoll.cooldownSteps", rollCooldown)));
         rollDistance = std::max(0.0f, combatNum(*rules, "dodgeRoll.distance", rollDistance));
+        const char* slotNames[kWeaponSlotCount] = {"Primary", "Sidearm", "Melee"};
+        for (int i = 0; i < kWeaponSlotCount; ++i) {
+            switchSteps[i] = std::max(
+                1, static_cast<int>(rules->integer((std::string("weaponSwitchSteps.") + slotNames[i]).c_str(), switchSteps[i])));
+        }
     } else {
         for (size_t i = 0; i < 21; ++i) {
             accuracyBySkill[i] = 0.89f + 0.005f * static_cast<float>(i);
@@ -332,9 +341,14 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
                 g.kicks.emplace_back(combatNum(def, at + ".up", 0.0), combatNum(def, at + ".side", 0.0));
             }
             g.valid = bullet(g.projectile) != nullptr;
+            if (g.valid) {
+                slot[id.value] = static_cast<uint8_t>(def.text("weaponSlot", "Primary") == "Sidearm" ? WeaponSlot::Sidearm
+                                                                                                      : WeaponSlot::Primary);
+            }
         }
         if (def.has("tools") && !def.has("race") && !def.has("verbs.0.defaultProjectile")) {
             melee[id.value] = 1;
+            slot[id.value] = static_cast<uint8_t>(WeaponSlot::Melee);
         }
         if (def.has("apparel")) {
             Apparel& a = apparel[id.value];
@@ -975,6 +989,9 @@ bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, 
     if (rollLocked(pawn)) {
         return fail("rolling");
     }
+    if (switching(pawn)) {
+        return fail("switching weapons");
+    }
     Shooter& s = reg.get_or_emplace<Shooter>(pawn);
     if (s.phase == ShotPhase::Reloading) {
         return fail("reloading");
@@ -1173,6 +1190,9 @@ bool CombatSystem::reload(Entity pawn, std::string* why) {
     }
     if (rollLocked(pawn)) {
         return fail("rolling");
+    }
+    if (switching(pawn)) {
+        return fail("switching weapons");
     }
     Shooter& s = reg.get_or_emplace<Shooter>(pawn);
     if (s.phase == ShotPhase::Aiming || s.phase == ShotPhase::Firing || s.phase == ShotPhase::Reloading) {
@@ -1501,6 +1521,7 @@ void CombatSystem::step(Rng& rng) {
     entt::registry& reg = things_.registry();
     stepRolls();
     stepKicks();
+    stepSwitches();
     // Pawns face where they aim, else where they walk.
     for (const auto [pawn, posture, mover] : reg.view<Posture, const Mover>().each()) {
         const Shooter* s = reg.try_get<Shooter>(pawn);
@@ -1876,6 +1897,15 @@ void CombatSystem::drop(Entity pawn, Entity item) {
             gear->weapon = kNoEntity;
         }
         gear->apparel.erase(std::remove(gear->apparel.begin(), gear->apparel.end(), item), gear->apparel.end());
+        gear->stowed.erase(std::remove(gear->stowed.begin(), gear->stowed.end(), item), gear->stowed.end());
+    }
+    if (WeaponSwitch* change = reg.try_get<WeaponSwitch>(pawn); change != nullptr && change->stepsLeft > 0) {
+        // Dropping the weapon switched to, or the one in the hands, ends the switch: nothing is left to swap.
+        const Gear* gear = reg.try_get<Gear>(pawn);
+        if (change->to == item || gear == nullptr || gear->weapon == kNoEntity) {
+            change->to = kNoEntity;
+            change->stepsLeft = 0;
+        }
     }
     reg.remove<EquippedBy>(item);
     const Position* pos = reg.try_get<Position>(pawn);
@@ -1891,7 +1921,8 @@ bool CombatSystem::unequip(Entity pawn, Entity item) {
     entt::registry& reg = things_.registry();
     const Gear* gear = reg.valid(pawn) ? reg.try_get<Gear>(pawn) : nullptr;
     if (gear == nullptr || !reg.valid(item) ||
-        (gear->weapon != item && std::find(gear->apparel.begin(), gear->apparel.end(), item) == gear->apparel.end())) {
+        (gear->weapon != item && std::find(gear->apparel.begin(), gear->apparel.end(), item) == gear->apparel.end() &&
+         std::find(gear->stowed.begin(), gear->stowed.end(), item) == gear->stowed.end())) {
         return false;
     }
     drop(pawn, item);
@@ -1939,6 +1970,7 @@ void CombatSystem::dropGear(Entity pawn) {
         return;
     }
     std::vector<Entity> items = gear->apparel;
+    items.insert(items.begin(), gear->stowed.begin(), gear->stowed.end());
     if (gear->weapon != kNoEntity) {
         items.insert(items.begin(), gear->weapon);
     }
@@ -1979,6 +2011,15 @@ bool CombatSystem::equip(Entity pawn, Entity item, std::string* why) {
         if (gear.weapon != kNoEntity) {
             drop(pawn, gear.weapon);
         }
+        WeaponSlot slot = WeaponSlot::Primary;
+        weaponSlot(def, slot);
+        const std::vector<Entity> stowed = reg.get<Gear>(pawn).stowed;
+        for (const Entity other : stowed) {
+            WeaponSlot otherSlot = WeaponSlot::Primary;
+            if (weaponSlot(reg.get<Thing>(other).def, otherSlot) && otherSlot == slot) {
+                drop(pawn, other);  // one weapon to a slot
+            }
+        }
     } else {
         std::vector<Entity> replaced;
         for (const Entity worn : gear.apparel) {
@@ -2010,11 +2051,200 @@ bool CombatSystem::equip(Entity pawn, Entity item, std::string* why) {
     return true;
 }
 
+// ---- Several weapons (P1) ---------------------------------------------------------------------
+
+bool CombatSystem::weaponSlot(DefId def, WeaponSlot& out) const {
+    if (!def.valid() || def.value >= model_->slot.size() || model_->slot[def.value] == 255) {
+        return false;
+    }
+    out = static_cast<WeaponSlot>(model_->slot[def.value]);
+    return true;
+}
+
+bool CombatSystem::carryWeapon(Entity pawn, Entity item, std::string* why) {
+    entt::registry& reg = things_.registry();
+    const auto fail = [why](const char* message) {
+        if (why != nullptr) {
+            *why = message;
+        }
+        return false;
+    };
+    if (!health_.tracks(pawn) || reg.get<Health>(pawn).dead) {
+        return fail("that pawn can't hold anything (no body, or dead)");
+    }
+    if (!reg.valid(item) || !reg.all_of<Thing>(item) || reg.get<Thing>(item).category != ThingCategory::Item) {
+        return fail("that is not an item");
+    }
+    if (const EquippedBy* by = reg.try_get<EquippedBy>(item)) {
+        return by->pawn == pawn ? true : fail("someone else has that");
+    }
+    WeaponSlot slot = WeaponSlot::Primary;
+    if (!weaponSlot(reg.get<Thing>(item).def, slot)) {
+        return fail("that is not a weapon");
+    }
+    Gear& gear = reg.get_or_emplace<Gear>(pawn);
+    // One weapon to a slot: the one carried there goes to the ground.
+    const auto sameSlot = [&](Entity other) {
+        WeaponSlot otherSlot = WeaponSlot::Primary;
+        return weaponSlot(reg.get<Thing>(other).def, otherSlot) && otherSlot == slot;
+    };
+    if (gear.weapon != kNoEntity && sameSlot(gear.weapon)) {
+        drop(pawn, gear.weapon);
+    }
+    const std::vector<Entity> stowed = reg.get<Gear>(pawn).stowed;
+    for (const Entity other : stowed) {
+        if (sameSlot(other)) {
+            drop(pawn, other);
+        }
+    }
+    things_.despawn(item);
+    Gear& after = reg.get<Gear>(pawn);
+    if (after.weapon == kNoEntity) {
+        after.weapon = item;
+    } else {
+        after.stowed.push_back(item);
+    }
+    reg.emplace<EquippedBy>(item, EquippedBy{pawn});
+    return true;
+}
+
+Entity CombatSystem::weaponIn(Entity pawn, WeaponSlot slot) const {
+    const entt::registry& reg = things_.registry();
+    const Gear* gear = reg.valid(pawn) ? reg.try_get<Gear>(pawn) : nullptr;
+    if (gear == nullptr) {
+        return kNoEntity;
+    }
+    const auto in = [&](Entity item) {
+        WeaponSlot found = WeaponSlot::Primary;
+        return item != kNoEntity && reg.valid(item) && weaponSlot(reg.get<Thing>(item).def, found) && found == slot;
+    };
+    if (in(gear->weapon)) {
+        return gear->weapon;
+    }
+    for (const Entity item : gear->stowed) {
+        if (in(item)) {
+            return item;
+        }
+    }
+    return kNoEntity;
+}
+
+bool CombatSystem::handsSlot(Entity pawn, WeaponSlot& out) const {
+    const entt::registry& reg = things_.registry();
+    const Gear* gear = reg.valid(pawn) ? reg.try_get<Gear>(pawn) : nullptr;
+    return gear != nullptr && gear->weapon != kNoEntity && reg.valid(gear->weapon) &&
+           weaponSlot(reg.get<Thing>(gear->weapon).def, out);
+}
+
+bool CombatSystem::switching(Entity pawn) const {
+    return switchStepsLeft(pawn) > 0;
+}
+
+int CombatSystem::switchStepsLeft(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const WeaponSwitch* change = reg.valid(pawn) ? reg.try_get<WeaponSwitch>(pawn) : nullptr;
+    return change != nullptr ? change->stepsLeft : 0;
+}
+
+bool CombatSystem::switchTarget(Entity pawn, WeaponSlot& out) const {
+    const entt::registry& reg = things_.registry();
+    const WeaponSwitch* change = reg.valid(pawn) ? reg.try_get<WeaponSwitch>(pawn) : nullptr;
+    return change != nullptr && change->stepsLeft > 0 && reg.valid(change->to) && weaponSlot(reg.get<Thing>(change->to).def, out);
+}
+
+bool CombatSystem::switchWeapon(Entity pawn, WeaponSlot slot, std::string* why) {
+    entt::registry& reg = things_.registry();
+    const auto fail = [why](const char* message) {
+        if (why != nullptr) {
+            *why = message;
+        }
+        return false;
+    };
+    if (!things_.spawned(pawn) || !reg.all_of<Posture>(pawn)) {
+        return fail("that is not a pawn on the map");
+    }
+    if (health_.incapacitated(pawn)) {
+        return fail("that pawn can't switch weapons (downed or dead)");
+    }
+    if (reg.all_of<KnockedDown>(pawn)) {
+        return fail("that pawn is knocked down");
+    }
+    if (rollLocked(pawn)) {
+        return fail("rolling");
+    }
+    if (switching(pawn)) {
+        return fail("switching already");
+    }
+    const Entity item = weaponIn(pawn, slot);
+    if (item == kNoEntity) {
+        return fail("that pawn carries nothing in that slot");
+    }
+    if (reg.get<Gear>(pawn).weapon == item) {
+        return fail("that weapon is in the hands already");
+    }
+    if (const Shooter* s = reg.try_get<Shooter>(pawn);
+        s != nullptr && (s->phase == ShotPhase::Aiming || s->phase == ShotPhase::Firing || s->phase == ShotPhase::Reloading)) {
+        return fail("busy shooting");
+    }
+    if (const Melee* m = reg.try_get<Melee>(pawn); m != nullptr && m->phase != MeleePhase::Ready) {
+        return fail("busy swinging");
+    }
+    WeaponSwitch& change = reg.get_or_emplace<WeaponSwitch>(pawn);
+    change.to = item;
+    change.stepsLeft = model_->switchSteps[static_cast<int>(slot)];
+    if (events_ != nullptr) {
+        Event e;
+        e.type = EventType::PawnAction;
+        e.action = PawnAction::Switch;
+        e.thing = pawn;
+        e.def = reg.get<Thing>(pawn).def;
+        e.target = item;
+        e.cell = cellOf(reg.get<Position>(pawn));
+        e.amount = static_cast<float>(change.stepsLeft);
+        events_->push_back(std::move(e));
+    }
+    return true;
+}
+
+void CombatSystem::stepSwitches() {
+    entt::registry& reg = things_.registry();
+    for (const auto [pawn, change] : reg.view<WeaponSwitch>().each()) {
+        if (change.stepsLeft <= 0) {
+            continue;
+        }
+        Gear* gear = reg.try_get<Gear>(pawn);
+        if (gear == nullptr || std::find(gear->stowed.begin(), gear->stowed.end(), change.to) == gear->stowed.end() ||
+            health_.incapacitated(pawn)) {
+            change.to = kNoEntity;  // the weapon is gone, or the pawn can't go on
+            change.stepsLeft = 0;
+            continue;
+        }
+        if (--change.stepsLeft > 0) {
+            continue;
+        }
+        const Entity to = change.to;
+        gear->stowed.erase(std::find(gear->stowed.begin(), gear->stowed.end(), to));
+        if (gear->weapon != kNoEntity) {
+            gear->stowed.push_back(gear->weapon);
+        }
+        gear->weapon = to;
+        change.to = kNoEntity;
+        if (events_ != nullptr) {
+            Event e;
+            e.type = EventType::WeaponSwitched;
+            e.thing = pawn;
+            e.def = reg.get<Thing>(to).def;
+            e.target = to;
+            events_->push_back(std::move(e));
+        }
+    }
+}
+
 void CombatSystem::hashThing(Entity e, StateHasher& h) const {
     const entt::registry& reg = things_.registry();
     const bool has[] = {reg.all_of<Posture>(e), reg.all_of<Gear>(e), reg.all_of<EquippedBy>(e), reg.all_of<Shooter>(e),
                         reg.all_of<Projectile>(e), reg.all_of<Magazine>(e), reg.all_of<RecoilKick>(e),
-                        reg.all_of<DodgeRoll>(e), reg.all_of<KnockedDown>(e)};
+                        reg.all_of<DodgeRoll>(e), reg.all_of<KnockedDown>(e), reg.all_of<WeaponSwitch>(e)};
     uint64_t mask = 0;
     for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
         mask |= has[bit] ? (uint64_t{1} << bit) : 0;
@@ -2031,6 +2261,14 @@ void CombatSystem::hashThing(Entity e, StateHasher& h) const {
         for (const Entity a : g->apparel) {
             h.add(entt::to_integral(a));
         }
+        h.add(static_cast<uint64_t>(g->stowed.size()));
+        for (const Entity a : g->stowed) {
+            h.add(entt::to_integral(a));
+        }
+    }
+    if (const WeaponSwitch* change = reg.try_get<WeaponSwitch>(e)) {
+        h.add(entt::to_integral(change->to));
+        h.add(change->stepsLeft);
     }
     if (const EquippedBy* by = reg.try_get<EquippedBy>(e)) {
         h.add(entt::to_integral(by->pawn));

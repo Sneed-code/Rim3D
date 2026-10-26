@@ -119,7 +119,7 @@ JobSystem::StepResult JobSystem::stripWork(Entity pawn, Job& job, std::string& w
         return StepResult::Failed;
     }
     const Gear* gear = reg.try_get<Gear>(job.thing);
-    const size_t pieces = gear == nullptr ? 0 : gear->apparel.size() + (gear->weapon != kNoEntity ? 1 : 0);
+    const size_t pieces = gear == nullptr ? 0 : gear->apparel.size() + gear->stowed.size() + (gear->weapon != kNoEntity ? 1 : 0);
     job.progress += 1.0f;
     if (job.progress < static_cast<float>(pieces) * static_cast<float>(apparel_->rules().stripStepsPerPiece)) {
         return StepResult::Running;

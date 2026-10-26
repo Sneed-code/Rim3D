@@ -764,6 +764,7 @@ void RaidSystem::leaveMap(Entity pawn) {
     }
     if (const Gear* gear = reg.try_get<Gear>(pawn)) {
         std::vector<Entity> carried = gear->apparel;
+        carried.insert(carried.end(), gear->stowed.begin(), gear->stowed.end());
         if (gear->weapon != kNoEntity) {
             carried.push_back(gear->weapon);
         }

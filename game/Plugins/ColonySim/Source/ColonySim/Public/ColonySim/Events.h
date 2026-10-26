@@ -69,6 +69,7 @@ enum class EventType : uint8_t {
     AnimalGathered,  // a colonist milked or sheared an animal
     TrapSprung,      // a pawn set off a trap (docs/design/defense.md)
     TrapRearmed,     // a sprung trap was set again
+    WeaponSwitched,  // a pawn finished switching weapons (P1, docs/design/weapons.md): `thing` the pawn, `def` the weapon now in its hands, `target` that weapon
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -105,6 +106,7 @@ enum class PawnAction : uint8_t {
     Handle,       // started taming, training or feeding `target`, an animal; goes on until its JobEnded
     Slaughter,    // started to kill `target`, a tame animal
     Block,        // raised its melee weapon against the swing of `target` (none: the player's own block)
+    Switch,       // started switching weapons (P1): `target` the weapon coming to the hands, `amount` the steps it takes
     Roll,         // started a dodge roll (P2): `cell` where it began, (x, y) the unit direction, `amount` the steps from start-up to the end of recovery
 };
 
