@@ -84,6 +84,7 @@ struct PowerInfo {
     bool sun = false;          // output follows the sun, and the share of its roof that is open
     bool wind = false;         // output follows the wind and what stands in its way
     int windBlockRadius = 0;
+    bool geyser = false;       // output needs a steam geyser under the footprint (`power.needsGeyser`)
     bool fuelled = false;      // a generator that needs fuel (`fuel` object): see PowerGrid::setFuel
     double consumption = 0.0;  // W of a consumer
     double battery = 0.0;      // Wd capacity

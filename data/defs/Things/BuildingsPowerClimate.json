@@ -101,6 +101,30 @@
   ]
  },
  {
+  "defName": "ChemfuelGenerator", "visual": {"sound": {"loop": "Hum_Generator"}}, "researchPrerequisite": "Electricity",
+  "parent": "PowerBase",
+  "label": "chemfuel generator",
+  "size": [2, 2],
+  "costs": {"Steel": 100, "ComponentIndustrial": 2},
+  "fillPercent": 0.5,
+  "stats": {"maxHitPoints": 100, "workToBuild": 5760.0},
+  "power": {"output": 1000},
+  "fuel": {"item": "Chemfuel", "capacity": 75, "perDay": 4.5},
+  "unverified": ["costs", "stats.workToBuild", "power", "fuel"]
+ },
+ {
+  "defName": "GeothermalGenerator", "visual": {"sound": {"loop": "Hum_Generator"}}, "researchPrerequisite": "Geothermal",
+  "parent": "PowerBase",
+  "label": "geothermal generator",
+  "size": [2, 2],
+  "costs": {"Steel": 100, "ComponentIndustrial": 3},
+  "fillPercent": 0.5,
+  "stats": {"maxHitPoints": 100, "workToBuild": 9360.0},
+  "power": {"output": 3600, "needsGeyser": true},
+  "unverified": ["costs", "stats.workToBuild", "power"],
+  "ours": ["power.needsGeyser"]
+ },
+ {
   "defName": "SolarGenerator", "researchPrerequisite": "SolarPanel",
   "parent": "PowerBase",
   "label": "solar generator",

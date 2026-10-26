@@ -145,6 +145,8 @@ public:
     const DefDatabase& defs() const { return *defs_; }
     const GameTime& time() const { return time_; }
     const Map& map() const { return map_; }
+    // For map generation and tests that set the world up; the game changes the map through commands.
+    Map& editMap() { return map_; }
     // Regions and reachability (docs/design/regions.md). Queries may rebuild, so not const.
     Regions& regions() { return map_.regions(); }
     // Cover from the eight sides and line of sight (docs/design/cover.md).
