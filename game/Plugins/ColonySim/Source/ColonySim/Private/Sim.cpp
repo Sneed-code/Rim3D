@@ -183,6 +183,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     farming_ = std::make_unique<Farming>(map_, *plants_, *zones_, *defs_, events_);
     farming_->setClimate(temperature_.get(), lights_.get());
     plants_->setGrowthModifier([this](size_t cell) { return farming_->growthFactor(cell); });
+    farming_->setPlantSpots(things_.get(), [this](Entity building) { return power_->running(building); });
+    plants_->setFertilityOverride([this](size_t cell) { return farming_->spotFertility(cell); });
+    plants_->setGrowsAnytime([this](size_t cell) { return farming_->sunLampLit(cell); });
     zones_->setCellTaken([this](CellPos c) { return farming_->zoneAt(c) != kNoGrowingZone; });
     lights_->setWeather(weather_.get());
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
