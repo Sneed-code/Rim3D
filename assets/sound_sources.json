@@ -1,0 +1,46 @@
+{
+  "note": "V21. Free sound sources and which cues each one feeds. Files are downloaded by tools/sound_assets.py into game/Content/ThirdParty/Sounds/<id>/ (not in Git). 'verified' = licence and link read on the page on 2026-10-26; the cloud container cannot reach these sites, so nothing was downloaded or listened to yet.",
+  "sources": [
+    {"id": "kenney-impact", "name": "Kenney Impact Sounds", "page": "https://kenney.nl/assets/impact-sounds", "download": "scrape:https://kenney.nl/assets/impact-sounds", "licence": "CC0", "verified": true, "attribution": false, "size": "130 files", "covers": "hits, thuds, metal and wood impacts, footsteps on several floors"},
+    {"id": "kenney-rpg", "name": "Kenney RPG Audio", "page": "https://kenney.nl/assets/rpg-audio", "download": "scrape:https://kenney.nl/assets/rpg-audio", "licence": "CC0", "verified": true, "attribution": false, "size": "50 files", "covers": "doors, cloth, knife and blade swings, metal, item pick up and put down, coins"},
+    {"id": "kenney-interface", "name": "Kenney Interface Sounds", "page": "https://kenney.nl/assets/interface-sounds", "download": "scrape:https://kenney.nl/assets/interface-sounds", "licence": "CC0", "verified": false, "attribution": false, "size": "100 files", "covers": "chimes for Research_Done, switches for Power_On/Off"},
+    {"id": "kenney-jingles", "name": "Kenney Music Jingles", "page": "https://kenney.nl/assets/music-jingles", "download": "scrape:https://kenney.nl/assets/music-jingles", "licence": "CC0", "verified": false, "attribution": false, "size": "85 files", "covers": "short stingers for letters, Research_Done"},
+    {"id": "oga-firearms", "name": "The Free Firearm Sound Library", "page": "https://opengameart.org/content/the-free-firearm-sound-library", "download": "https://opengameart.org/sites/default/files/Prepared%20SFX%20Library.7z", "licence": "CC0", "verified": true, "attribution": false, "size": "194 MB (.7z, needs 7-Zip)", "covers": "rifle, automatic, shotgun, pistol, revolver, carbine shots"},
+    {"id": "oga-gunshots", "name": "Gunshot Sounds (Tabasco)", "page": "https://opengameart.org/content/gunshot-sounds", "download": "https://opengameart.org/sites/default/files/sounds.zip", "licence": "CC0", "verified": true, "attribution": false, "size": "5.5 MB", "covers": "fallback for pistol, rifle, shotgun (poor levels, still usable)"},
+    {"id": "oga-footsteps", "name": "Footsteps on different surfaces (congusbongus)", "page": "https://opengameart.org/content/footsteps-on-different-surfaces", "download": "https://opengameart.org/sites/default/files/footsteps_0.zip", "licence": "CC-BY 3.0", "verified": true, "attribution": true, "credit": "congusbongus, via OpenGameArt (footsteps on different surfaces)", "size": "415 KB", "covers": "grass/dirt, gravel, tile, wood, water and puddle steps"},
+    {"id": "oga-rain", "name": "rain and thunders (kindland)", "page": "https://opengameart.org/content/rain-and-thunders", "download": "https://opengameart.org/sites/default/files/Dark_Rainy_Night%28ambience%29.ogg", "licence": "CC0", "verified": true, "attribution": false, "size": "6.8 MB", "covers": "rain and thunder bed (Weather_Rain, Weather_Thunder)"},
+    {"id": "oga-dungeon", "name": "Loopable Dungeon Ambience (JaggedStone)", "page": "https://opengameart.org/content/loopable-dungeon-ambience", "download": "https://opengameart.org/sites/default/files/dungeon_ambient_1_0.ogg", "licence": "CC0", "verified": true, "attribution": false, "size": "1.6 MB", "covers": "Amb_Cave (low wind, drips)"},
+    {"id": "oga-indie-meditations", "name": "Indie Meditations music pack (YannZ)", "page": "https://opengameart.org/content/indie-meditations-free-music-pack", "download": "page:https://opengameart.org/content/indie-meditations-free-music-pack", "licence": "CC-BY 4.0", "verified": true, "attribution": true, "credit": "YannZ (Yanni Ziangos), Indie Meditations, via OpenGameArt, CC-BY 4.0", "size": "10 loopable ogg tracks, 1:28 each", "covers": "calm colony music"},
+    {"id": "sonniss-gdc", "name": "Sonniss GameAudioGDC bundles", "page": "https://sonniss.com/gameaudiogdc", "download": "manual", "licence": "Sonniss royalty-free licence (free for any game, no credit; not CC0, do not redistribute the files)", "verified": true, "attribution": false, "size": "many GB per year; take one pack at a time", "covers": "the big gaps: weather, wind, fire, machine hums, explosions, ambience beds, animal calls"},
+    {"id": "freesound-cc0", "name": "Freesound, CC0 filter only", "page": "https://freesound.org/search/?f=license%3A%22Creative+Commons+0%22", "download": "manual", "licence": "CC0 per sound (check each one)", "verified": true, "attribution": false, "size": "single files", "covers": "animal idle, hurt and death calls (no pack found; search per animal)"}
+  ],
+  "cueMap": [
+    {"cues": "^Shot_(Revolver|Pistol)$", "from": ["oga-firearms", "oga-gunshots"], "pick": "revolver and handgun shots"},
+    {"cues": "^Shot_(Rifle|AssaultRifle)$", "from": ["oga-firearms", "oga-gunshots"], "pick": "rifle, carbine and automatic shots"},
+    {"cues": "^Shot_Shotgun$", "from": ["oga-firearms", "oga-gunshots"], "pick": "shotgun, pump action"},
+    {"cues": "^Shot_(Turret|Foam)$", "from": ["oga-firearms", "kenney-impact"], "pick": "turret: automatic shot; foam: a hiss or thump (sonniss-gdc if nothing fits)"},
+    {"cues": "^Gun_(Reload|Switch)$", "from": ["oga-firearms", "kenney-rpg"], "pick": "bolt, slide and metal click"},
+    {"cues": "^Impact_", "from": ["kenney-impact"], "pick": "metal (Armor), wood (Building), dirt thud (Ground), stone (Rock)"},
+    {"cues": "^Flesh_|^Punch$|^Pawn_Hurt$", "from": ["kenney-impact", "kenney-rpg"], "pick": "soft and punch impacts, knife slice (Cut, Stab), bite from sonniss-gdc"},
+    {"cues": "^Swing_|^Melee_|^Dodge$", "from": ["kenney-rpg", "kenney-impact"], "pick": "blade whoosh, metal clang, cloth for Dodge"},
+    {"cues": "^Explosion_|^Grenade_|^Trap_|^Short_Circuit$|^Roof_Collapse$", "from": ["sonniss-gdc", "kenney-impact"], "pick": "explosions, rubble, sparks, spring and snap"},
+    {"cues": "^Step_(Grass|Dirt|Sand|Mud|Water|Tile|Wood)$", "from": ["oga-footsteps", "kenney-impact"], "pick": "one short step clip per surface, several variants"},
+    {"cues": "^Step_(Stone|Carpet)$", "from": ["kenney-impact", "kenney-rpg", "sonniss-gdc"], "pick": "hard stone step; soft cloth step"},
+    {"cues": "^Work_", "from": ["kenney-impact", "kenney-rpg", "sonniss-gdc"], "pick": "pick on rock (Mine), axe (Chop), hammer (Build, Smith), sizzle (Cook), pen and paper (Research), cloth (Tailor)"},
+    {"cues": "^Item_|^Door_", "from": ["kenney-rpg"], "pick": "cloth and metal handling, door open and close"},
+    {"cues": "^Power_|^Research_Done$", "from": ["kenney-interface", "kenney-jingles"], "pick": "switch click, short chime"},
+    {"cues": "^Hum_|^Alarm$|^Raid_Horn$", "from": ["sonniss-gdc"], "pick": "generator, heater, turbine loops, siren, war horn"},
+    {"cues": "^Fire_|^Pawn_Burning$", "from": ["sonniss-gdc"], "pick": "crackling fire loops, ignite whoosh, hiss"},
+    {"cues": "^Pawn_(Death|Downed)$", "from": ["sonniss-gdc", "freesound-cc0"], "pick": "grunt, groan, fall"},
+    {"cues": "^Animal_", "from": ["sonniss-gdc", "freesound-cc0"], "pick": "GAP: no verified free pack found; search each animal on freesound (CC0 only) or in the Sonniss packs. Missing ones keep the placeholder tone"},
+    {"cues": "^Weather_(Rain|RainHeavy|Thunder)$", "from": ["oga-rain", "sonniss-gdc"], "pick": "rain loops, thunder claps"},
+    {"cues": "^Weather_(Wind|Blizzard)$", "from": ["sonniss-gdc"], "pick": "wind and howling snow loops"},
+    {"cues": "^Amb_Cave$", "from": ["oga-dungeon"], "pick": "the whole file as a loop"},
+    {"cues": "^Amb_(Temperate|Boreal|Arid)_|^Amb_Indoor$", "from": ["sonniss-gdc", "freesound-cc0"], "pick": "birds and wind by day, crickets and wind by night, room tone indoors"}
+  ],
+  "music": [
+    {"use": "colony calm tracks (play in a rotation, quiet during raids)", "from": ["oga-indie-meditations"], "note": "CC-BY: keep the credit in the credits screen"},
+    {"use": "stingers: letter, quest, research", "from": ["kenney-jingles"], "note": "CC0"},
+    {"use": "danger and raid tracks", "from": [], "note": "GAP: pick CC0 tracks on OpenGameArt (licence shown per item; the OwlishMedia 'CC0 Music' collection is unverified) or Sonniss music"}
+  ]
+}
