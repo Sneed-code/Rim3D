@@ -127,6 +127,8 @@ const char* commandName(const Command& command) {
                 return "RemoveOutfit";
             } else if constexpr (std::is_same_v<Type, StripCommand>) {
                 return "Strip";
+            } else if constexpr (std::is_same_v<Type, InteractCommand>) {
+                return "Interact";
             } else if constexpr (std::is_same_v<Type, SetWeatherCommand>) {
                 return "SetWeather";
             } else if constexpr (std::is_same_v<Type, SpendTalentPointCommand>) {
@@ -254,6 +256,9 @@ const char* eventTypeName(EventType type) {
         case EventType::PrisonerRecruited: return "PrisonerRecruited";
         case EventType::PrisonerReleased: return "PrisonerReleased";
         case EventType::PrisonBreak: return "PrisonBreak";
+        case EventType::Interaction: return "Interaction";
+        case EventType::BondChanged: return "BondChanged";
+        case EventType::SocialFight: return "SocialFight";
     }
     return "?";
 }

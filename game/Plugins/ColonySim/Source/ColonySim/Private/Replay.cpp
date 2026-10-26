@@ -253,6 +253,11 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, StripCommand>) {
                 j["thing"] = entt::to_integral(c.thing);
                 j["strip"] = c.strip;
+            } else if constexpr (std::is_same_v<Type, InteractCommand>) {
+                j["initiator"] = entt::to_integral(c.initiator);
+                j["recipient"] = entt::to_integral(c.recipient);
+                j["interaction"] = c.interaction;
+                j["outcome"] = c.outcome;
             } else if constexpr (std::is_same_v<Type, SetWeatherCommand>) {
                 j["weather"] = c.weather;
                 j["hours"] = c.hours;
@@ -868,6 +873,19 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.thing = static_cast<Entity>(thing);
         out.command = c;
+    } else if (type == "Interact") {
+        InteractCommand c;
+        uint32_t initiator = entt::to_integral(kNoEntity);
+        uint32_t recipient = entt::to_integral(kNoEntity);
+        int64_t outcome = -1;
+        if (!r.integer(j, "initiator", initiator, where) || !r.integer(j, "recipient", recipient, where) ||
+            !r.text(j, "interaction", c.interaction, where) || !r.integer(j, "outcome", outcome, where)) {
+            return false;
+        }
+        c.initiator = static_cast<Entity>(initiator);
+        c.recipient = static_cast<Entity>(recipient);
+        c.outcome = static_cast<int>(outcome);
+        out.command = std::move(c);
     } else if (type == "ShortCircuit") {
         uint32_t thing = entt::to_integral(kNoEntity);
         if (!r.integer(j, "thing", thing, where)) {

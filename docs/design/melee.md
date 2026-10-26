@@ -140,7 +140,7 @@ Hooks in `FighterSystem` (`setMelee`):
 | Snapshot | `meleePhase` (Ready, Windup, Recovery), `meleeStepsLeft`, `meleeTarget` (while winding up) and `blocking` on each `ThingView` |
 | Save | section `melee` (version 1): the `Melee` component of each pawn that has swung or been swung at |
 
-U22 draws it: a swing animation stretched over the wind-up so the blow lands on the `MeleeHit`
+U22 draws it ([melee-draw.md](melee-draw.md)): a swing animation stretched over the wind-up so the blow lands on the `MeleeHit`
 step, a hit-stop and flinch on "hit", the raised weapon while `blocking`, the sidestep on `Dodge`.
 
 ## Not done yet
