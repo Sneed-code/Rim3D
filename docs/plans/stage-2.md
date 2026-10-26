@@ -185,7 +185,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | U13 | **Sky, seasons and weather.** Sun and moon from the sim clock, sky, fog and clouds; rain and snow effects; snow on the ground; wet look; a date, season and temperature readout. | PC Unreal | Sonnet, high | 90 min | E1 |
-| | U14 | **Light and fire on screen.** Lamps, torches and campfires as real lights from the sim's light sources; Niagara fire, smoke and embers from the fire layer; burnt ground and ash. | PC Unreal | Sonnet, high | 90 min | E3, E4 |
+| ✓ | U14 | **Light and fire on screen.** Lamps, torches and campfires as real lights from the sim's light sources; Niagara fire, smoke and embers from the fire layer; burnt ground and ash. | PC Unreal | Sonnet, high | 90 min | E3, E4 |
 | ✓ | U15 | **Animals on screen.** Animal actors on shared skeletons with animation by distance (as U5); far herds as cheap instanced meshes with baked animation. | PC Unreal | Sonnet, high | 90 min | N1, A4 |
 | ✓ | U16 | **Clothes on pawns.** Each worn layer drawn on the MetaHuman body with the body-type shapes, torn look from hit points, clothes that come off when destroyed. | PC Unreal | Sonnet, high | 90 min | C15, A5 |
 | | U17 | **Upper floors on screen.** Upper levels, stairs and ladders drawn; the overseer view cuts away levels above the chosen one (Page Up and Page Down); direct mode climbs stairs and ladders through the sim. | PC Unreal | Opus, high | 90 min | M2, M3 |

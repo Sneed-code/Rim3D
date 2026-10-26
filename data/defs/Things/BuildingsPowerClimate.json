@@ -316,7 +316,7 @@
   ]
  },
  {
-  "defName": "Campfire", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Campfire.SM_Campfire" },
+  "defName": "Campfire", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Campfire.SM_Campfire", "flame": { "lift": 0.18, "size": 0.45 } },
   "parent": "ClimateBase",
   "label": "campfire",
   "size": [
@@ -343,6 +343,7 @@
   },
   "glower": {
    "radius": 10.0,
+   "lift": 0.3,
    "color": [
     1.0,
     0.65,
@@ -394,6 +395,7 @@
   },
   "glower": {
    "radius": 10.0,
+   "lift": 1.4,
    "color": [
     0.84,
     0.84,
@@ -428,6 +430,7 @@
   },
   "glower": {
    "radius": 10.0,
+   "lift": 2.1,
    "color": [
     0.8,
     0.8,
@@ -447,7 +450,7 @@
   ]
  },
  {
-  "defName": "TorchLamp", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_TorchLamp.SM_TorchLamp" },
+  "defName": "TorchLamp", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_TorchLamp.SM_TorchLamp", "flame": { "lift": 0.34, "size": 0.14 } },
   "parent": "LampBase",
   "label": "torch lamp",
   "size": [
@@ -463,6 +466,7 @@
   },
   "glower": {
    "radius": 10.0,
+   "lift": 0.35,
    "color": [
     0.8,
     0.55,
