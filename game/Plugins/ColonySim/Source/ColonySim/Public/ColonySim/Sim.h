@@ -58,6 +58,7 @@ class RaidSystem;
 class Plants;
 class PowerGrid;
 class Regions;
+class PrisonerSystem;
 class Rooms;
 class TemperatureSystem;
 class SpoilageSystem;
@@ -276,6 +277,10 @@ public:
     RaidSystem& raids() { return *raids_; }
     const RaidSystem& raids() const { return *raids_; }
 
+    // Prisoners: capture, feeding, warden talks, recruiting and release (docs/design/prisoners.md).
+    PrisonerSystem& prisoners() { return *prisoners_; }
+    const PrisonerSystem& prisoners() const { return *prisoners_; }
+
     // Taming, training, animal zones and pens (docs/design/husbandry.md).
     Husbandry& husbandry() { return *husbandry_; }
     // Fire, burning pawns, burnt ground and the home area (docs/design/fire.md).
@@ -367,6 +372,7 @@ private:
     std::unique_ptr<AnimalSystem> animals_;
     std::unique_ptr<UpperFloors> upperFloors_;  // M1
     std::unique_ptr<RaidSystem> raids_;        // after the fighters
+    std::unique_ptr<PrisonerSystem> prisoners_;  // after the raids
     std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system
     std::unique_ptr<Breeding> breeding_;    // after husbandry_
     std::unique_ptr<Fire> fire_;            // after the weather, temperature, rooms, floors, filth, plants and health

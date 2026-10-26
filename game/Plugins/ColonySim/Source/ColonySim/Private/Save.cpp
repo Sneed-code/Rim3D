@@ -34,6 +34,7 @@
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Medicine.h"
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Social.h"
 #include "ColonySim/Research.h"
@@ -313,6 +314,8 @@ struct SaveEntity {
     std::optional<WeaponSwitch> weaponSwitch;   // section "weapons"
     std::optional<Turret> turret;           // section "defense" (F11)
     std::optional<Trap> trap;               // section "defense" (F11)
+    std::optional<Prisoner> prisoner;       // section "prisoners" (C22)
+    std::optional<PrisonBed> prisonBed;     // section "prisoners" (C22)
 };
 
 // A stockpile zone, with its filter by defName.
@@ -1161,6 +1164,12 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
             } else if constexpr (std::is_same_v<Type, SetHomeAreaCommand>) {
                 ar.group("area", [&] { saveRect(ar, c.area); });
                 ar.value("add", c.add);
+            } else if constexpr (std::is_same_v<Type, SetPrisonerModeCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.text("mode", c.mode);
+            } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
+                ar.value("bed", c.bed);
+                ar.value("on", c.on);
             } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
                 ar.group("area", [&] { saveRect(ar, c.area); });
                 ar.value("remove", c.remove);
@@ -1311,7 +1320,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::Rescue, "the save file has a bad job");
+    ar.require(job.type <= JobType::WardenInteract, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -2558,6 +2567,16 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.list("home", d.fire.home, [&](int& cell) { ar.value("cell", cell); });
         saveParts(ar, "burning", e, &SaveEntity::burning, [&](Burning& b) { ar.value("until", b.until); });
     });
+    ar.section("prisoners", 1, [&] {
+        saveParts(ar, "prisoner", e, &SaveEntity::prisoner, [&](Prisoner& p) {
+            ar.value("mode", p.mode);
+            ar.value("resistance", p.resistance);
+            ar.value("capturedAt", p.capturedAt);
+            ar.value("nextChat", p.nextChat);
+            ar.require(static_cast<int>(p.mode) <= static_cast<int>(PrisonerMode::Release), "the save file has a bad prisoner mode");
+        });
+        saveParts(ar, "prisonBed", e, &SaveEntity::prisonBed, [&](PrisonBed& b) { ar.value("marked", b.marked); });
+    });
     ar.section("levels", 1, [&] {
         ar.list("upperFloors", d.upperFloors, [&](CellPos& c) {
             saveCell(ar, c);
@@ -2898,6 +2917,12 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const Animal* animal = reg.try_get<Animal>(e)) {
             out.animal = *animal;
+        }
+        if (const Prisoner* prisoner = reg.try_get<Prisoner>(e)) {
+            out.prisoner = *prisoner;
+        }
+        if (const PrisonBed* prisonBed = reg.try_get<PrisonBed>(e)) {
+            out.prisonBed = *prisonBed;
         }
         if (const MedicalSettings* medical = reg.try_get<MedicalSettings>(e)) {
             out.medical = *medical;
@@ -3398,6 +3423,12 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.medical) {
             reg.emplace<MedicalSettings>(entity, *e.medical);
+        }
+        if (e.prisoner) {
+            reg.emplace<Prisoner>(entity, *e.prisoner);
+        }
+        if (e.prisonBed) {
+            reg.emplace<PrisonBed>(entity, *e.prisonBed);
         }
         if (e.defense) {
             reg.emplace<DefensePlan>(entity, *e.defense);
