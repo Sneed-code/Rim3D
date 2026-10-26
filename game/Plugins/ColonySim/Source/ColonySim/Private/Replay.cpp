@@ -237,6 +237,13 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["animal"] = entt::to_integral(c.animal);
                 j["mark"] = c.mark;
                 j["on"] = c.on;
+            } else if constexpr (std::is_same_v<Type, MarkAnimalsInAreaCommand>) {
+                j["area"] = replayRectJson(c.area);
+                j["mark"] = c.mark;
+                j["on"] = c.on;
+            } else if constexpr (std::is_same_v<Type, SetAnimalNameCommand>) {
+                j["animal"] = entt::to_integral(c.animal);
+                j["name"] = c.name;
             } else if constexpr (std::is_same_v<Type, SetTrainingCommand>) {
                 j["animal"] = entt::to_integral(c.animal);
                 j["trainable"] = c.trainable;
@@ -1033,6 +1040,20 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         uint32_t animal = entt::to_integral(kNoEntity);
         if (!r.integer(j, "animal", animal, where) || !r.text(j, "trainable", c.trainable, where) ||
             !r.flag(j, "wanted", c.wanted, where)) {
+            return false;
+        }
+        c.animal = static_cast<Entity>(animal);
+        out.command = std::move(c);
+    } else if (type == "MarkAnimalsInArea") {
+        MarkAnimalsInAreaCommand c;
+        if (!replayReadRect(r, j, where, c.area) || !r.text(j, "mark", c.mark, where) || !r.flag(j, "on", c.on, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "SetAnimalName") {
+        SetAnimalNameCommand c;
+        uint32_t animal = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "animal", animal, where) || !r.text(j, "name", c.name, where)) {
             return false;
         }
         c.animal = static_cast<Entity>(animal);

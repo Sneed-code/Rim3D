@@ -3,6 +3,7 @@
 Updated 2026-10-26.
 
 Stage 2 items and crafting follow-ups done: tailoring now teaches Crafting, the electric tailor bench works at half speed with no power, an "until you have" bill can count only the stock in one stockpile (`countZone`, `SetBillOptions`), and a butcher table's "store in this stockpile" takes the meat and leather there (`docs/design/crafting.md`). Saves: `bills` 3, `commands` 2.
+Stage 2 animal extras done: tame animals can be named (`SetAnimalName`), one command marks every wild animal in a rectangle to tame or hunt, or every tame one to slaughter (`MarkAnimalsInArea`), and doors are gates to animals: they never walk through one (`docs/design/husbandry.md`, tests `HusbandryTests`). Save section `husbandry` 3. Sim only.
 
 Stage 2 hydroponics done: a powered hydroponics basin (new research `Hydroponics`, 70 steel, 70 W) gives its cell fertility 2.8 and takes a growing zone, plant pots count as fertility 1.0 spots, and a powered sun lamp within 5 m lets a lit crop grow through the night as well, so a heated, roofed room with basins and a sun lamp feeds the colony through winter (`docs/design/farming.md`, tests `HydroponicsTests`). Sim only.
 Art stage planned: `docs/plans/art-stage.md` (26 tasks V1 to V26: faces and hair, body hair, anatomy, jiggle, wounds, dismemberment, destructible clothes, real animation, Niagara fire, real buildings and items, destruction, sound, styled UI). Docs only.
