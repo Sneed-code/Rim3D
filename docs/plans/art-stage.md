@@ -17,7 +17,7 @@ names, adults only, nudity yes and sex no (`game-design.md` "Content rules")._
 | Body hair, scars, tattoos | Written in the design, not built | **V3** |
 | True nudity with anatomy parts (adult, non-sexual) | Planned "Stage 4", no task | Skin layer under clothes exists (U16). Anatomy: **V4, V5** |
 | Jiggle physics | Planned "Stage 4", no task | **V6** |
-| Wounds that show on the body | Blood and decals done (U11, U22). Per-part wounds, bandages: **V7** |
+| Wounds that show on the body | Partly done | Blood and decals done (U11, U22). Per-part wounds, bandages: **V7** |
 | Gore and dismemberment | Planned "Stage 4", no task | The sim already loses body parts (`PawnPartLost`). Drawing it: **V8, V9** |
 | Corpses that rot | Sim rots them; the look is not drawn | **V9** |
 | Destructible clothes | Half done | U16: torn look and gone when worn out. Shredding where hit, loose pieces: **V10** |
