@@ -52,6 +52,14 @@ enum class JobStepKind : uint8_t {
     Play,  // recreation: stay for the activity's time (RecreationJobs.cpp)
     ResearchWork,  // research: add points to the current project (ResearchJobs.cpp)
     CleanWork,
+    TendMedicine,      // medicine jobs (MedicineJobs.cpp)
+    TendPickUp,
+    TendGotoPatient,
+    TendWork,
+    LiftPawn,
+    CarryPawn,
+    LayPawn,
+    BedRestLie,
     ApparelGoto,  // walk to the clothes (none to take off a worn piece)
     ApparelWork,  // put on or take off
     StripWork,    // take the clothes and weapon off a downed or dead pawn
@@ -82,6 +90,16 @@ constexpr JobStepKind kJobsDoBillSteps[] = {JobStepKind::GotoThing, JobStepKind:
 static_assert(kDoBillPickUpStep == 1 && kDoBillDepositStep == 3, "the DoBill steps moved");
 constexpr JobStepKind kJobsRecreateSteps[] = {JobStepKind::WalkToSpot, JobStepKind::Play};
 constexpr JobStepKind kJobsResearchSteps[] = {JobStepKind::GotoCell, JobStepKind::ResearchWork};
+constexpr JobStepKind kJobsBedRestSteps[] = {JobStepKind::WalkToSpot, JobStepKind::BedRestLie};
+constexpr JobStepKind kJobsTendSteps[] = {JobStepKind::TendMedicine, JobStepKind::TendPickUp, JobStepKind::TendGotoPatient,
+                                          JobStepKind::TendWork};
+constexpr JobStepKind kJobsRescueSteps[] = {JobStepKind::TendGotoPatient, JobStepKind::LiftPawn, JobStepKind::CarryPawn,
+                                            JobStepKind::LayPawn};
+
+// Work types with a natural priority from here up are the emergency ones (firefight, patient, doctor, bed rest): at one
+// priority level their scanners are asked before the others, whatever the distance (RimWorld asks work types in
+// order; the rest of ours go nearest first). Ours.
+constexpr int kJobsUrgentWorkFrom = 1100;
 constexpr JobStepKind kJobsWearSteps[] = {JobStepKind::ApparelGoto, JobStepKind::ApparelWork};
 constexpr JobStepKind kJobsStripSteps[] = {JobStepKind::GotoThing, JobStepKind::StripWork};
 constexpr JobStepKind kJobsHandleFoodSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::ApproachAnimal,
@@ -127,6 +145,9 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::Recreate: return {kJobsRecreateSteps, static_cast<int>(std::size(kJobsRecreateSteps))};
         case JobType::Research: return {kJobsResearchSteps, static_cast<int>(std::size(kJobsResearchSteps))};
         case JobType::CleanFilth: return {kJobsCleanSteps, static_cast<int>(std::size(kJobsCleanSteps))};
+        case JobType::BedRest: return {kJobsBedRestSteps, static_cast<int>(std::size(kJobsBedRestSteps))};
+        case JobType::TendPatient: return {kJobsTendSteps, static_cast<int>(std::size(kJobsTendSteps))};
+        case JobType::Rescue: return {kJobsRescueSteps, static_cast<int>(std::size(kJobsRescueSteps))};
         case JobType::WearApparel: return {kJobsWearSteps, static_cast<int>(std::size(kJobsWearSteps))};
         case JobType::StripPawn: return {kJobsStripSteps, static_cast<int>(std::size(kJobsStripSteps))};
         case JobType::TameAnimal:
@@ -158,6 +179,8 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::HandleWork:
         case JobStepKind::Eat:
         case JobStepKind::Lie:
+        case JobStepKind::BedRestLie:
+        case JobStepKind::TendWork:
             return true;
         case JobStepKind::Play:
             return job.count == 0;  // a stroll walks about
@@ -209,6 +232,9 @@ const char* jobTypeName(JobType type) {
         case JobType::Recreate: return "Recreate";
         case JobType::Research: return "Research";
         case JobType::CleanFilth: return "CleanFilth";
+        case JobType::BedRest: return "BedRest";
+        case JobType::TendPatient: return "TendPatient";
+        case JobType::Rescue: return "Rescue";
         case JobType::WearApparel: return "WearApparel";
         case JobType::StripPawn: return "StripPawn";
         case JobType::TameAnimal: return "TameAnimal";
@@ -228,7 +254,7 @@ int jobStepCount(JobType type) {
 
 JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zones, Construction& construction,
                      Plants& plants, Mineables& mineables, Designations& designations, const DefDatabase& defs,
-                     const HealthSystem& health, const NeedsSystem& needs, const GameTime& time, SimStats& stats,
+                     HealthSystem& health, const NeedsSystem& needs, const GameTime& time, SimStats& stats,
                      std::vector<Event>& events)
     : map_(map),
       things_(things),
@@ -278,6 +304,7 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
     maxIngest_.assign(defs_.size(), 1);
     ingestSeconds_.assign(defs_.size(), 0.0f);
     isBed_.assign(defs_.size(), 0);
+    isMedical_.assign(defs_.size(), 0);
     isTable_.assign(defs_.size(), 0);
     isChair_.assign(defs_.size(), 0);
     for (uint32_t i = 0; i < defs_.size(); ++i) {
@@ -289,6 +316,7 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
         stackLimits_[i] = std::max(1, static_cast<int>(def.integer("stackLimit", 1)));
         masses_[i] = def.number("stats.mass", 1.0);
         isBed_[i] = def.flag("building.bed") ? 1 : 0;
+        isMedical_[i] = def.flag("building.bed") && def.flag("building.medical") ? 1 : 0;
         isTable_[i] = def.flag("building.isTable") ? 1 : 0;
         isChair_[i] = def.flag("building.isSittable") ? 1 : 0;
         if (def.has("ingestible") && def.number("stats.nutrition") > 0.0) {
@@ -452,6 +480,24 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
         case JobType::Research:
             out[0] = keyOf(JobTarget{job.site, CellPos{}});
             return 1;
+        case JobType::BedRest:
+            if (job.thing == kNoEntity) {
+                return 0;
+            }
+            out[0] = keyOf(JobTarget{kNoEntity, job.cell});
+            return 1;
+        case JobType::TendPatient: {
+            int n = 0;
+            out[n++] = keyOf(JobTarget{job.thing, CellPos{}});
+            if (job.site != kNoEntity) {
+                out[n++] = keyOf(JobTarget{job.site, CellPos{}});
+            }
+            return n;
+        }
+        case JobType::Rescue:
+            out[0] = keyOf(JobTarget{job.thing, CellPos{}});
+            out[1] = keyOf(JobTarget{kNoEntity, job.cell});
+            return 2;
         case JobType::WearApparel:
             if (job.count != 0) {
                 return 0;  // taking a worn piece off holds nothing
@@ -705,7 +751,16 @@ void JobSystem::step() {
                 endJob(pawn, JobEnd::Interrupted, reg.get<Health>(pawn).dead ? "died" : "downed");
             }
             dropCarried(pawn);  // the player's colonist may carry something with no job (U10)
+            restUnderPawn(pawn);
             continue;
+        }
+        if (Health* health = reg.try_get<Health>(pawn)) {
+            // Only lying in a bed heals faster: a pawn that got up, or was downed in one, goes back to the ground.
+            const Job& lying = reg.get<Worker>(pawn).job;
+            if (health->rest != RestKind::Ground && !jobIsLyingDown(lying) &&
+                !(lying.type == JobType::BedRest && lying.step >= 1)) {
+                health->rest = RestKind::Ground;
+            }
         }
         // Stunned or winding up a power (X2): the job waits where it is.
         if (pauseGate_ && pauseGate_(pawn)) {
@@ -726,6 +781,7 @@ void JobSystem::step() {
                            worker.avoid.end());
         if (worker.job.type != JobType::None) {
             interruptForNeeds(pawn);
+            interruptForEmergency(pawn);
         }
         if (reg.get<Worker>(pawn).job.type == JobType::None) {
             for (const ThinkNode node : kThinkList) {
@@ -744,6 +800,10 @@ void JobSystem::step() {
 }
 
 bool JobSystem::thinkWork(Entity pawn, Job& out) {
+    return thinkWorkPass(pawn, out, false);
+}
+
+bool JobSystem::thinkWorkPass(Entity pawn, Job& out, bool urgentOnly) {
     entt::registry& reg = things_.registry();
     const WorkSettings* settings = reg.try_get<WorkSettings>(pawn);
     if (settings == nullptr) {
@@ -752,44 +812,48 @@ bool JobSystem::thinkWork(Entity pawn, Job& out) {
     const CellPos at = cellOf(reg.get<Position>(pawn));
     for (int priority = 1; priority <= kMaxPriority; ++priority) {
         // Every scanner of every work type at this priority offers its targets; the nearest wins,
-        // whichever work type it is (game design doc: within a priority, closer jobs first).
-        candidates_.clear();
-        for (size_t w = 0; w < settings->entries.size() && w < workTypes_.size(); ++w) {
-            const WorkPriority& entry = settings->entries[w];
-            if (entry.disabled || entry.priority != priority) {
-                continue;
-            }
-            for (size_t g = 0; g < workTypes_[w].givers.size(); ++g) {
-                const size_t first = candidates_.size();
-                workTypes_[w].givers[g]->scan(*this, pawn, candidates_);
-                for (size_t i = first; i < candidates_.size(); ++i) {
-                    candidates_[i].workType = static_cast<uint16_t>(w);
-                    candidates_[i].giver = static_cast<uint16_t>(g);
+        // whichever work type it is (game design doc: within a priority, closer jobs first), except that
+        // the emergency work types (doctor, patient...) are asked first.
+        for (int pass = 0; pass < (urgentOnly ? 1 : 2); ++pass) {
+            candidates_.clear();
+            for (size_t w = 0; w < settings->entries.size() && w < workTypes_.size(); ++w) {
+                const WorkPriority& entry = settings->entries[w];
+                if (entry.disabled || entry.priority != priority ||
+                    (workTypes_[w].naturalPriority >= kJobsUrgentWorkFrom) != (pass == 0)) {
+                    continue;
+                }
+                for (size_t g = 0; g < workTypes_[w].givers.size(); ++g) {
+                    const size_t first = candidates_.size();
+                    workTypes_[w].givers[g]->scan(*this, pawn, candidates_);
+                    for (size_t i = first; i < candidates_.size(); ++i) {
+                        candidates_[i].workType = static_cast<uint16_t>(w);
+                        candidates_[i].giver = static_cast<uint16_t>(g);
+                    }
                 }
             }
-        }
-        std::make_heap(candidates_.begin(), candidates_.end(), jobsCandidateAfter);
-        while (!candidates_.empty()) {
-            std::pop_heap(candidates_.begin(), candidates_.end(), jobsCandidateAfter);
-            const WorkCandidate c = candidates_.back();
-            candidates_.pop_back();
-            if (reservedByOther(c.target, pawn) || avoiding(pawn, c.target)) {
-                continue;
-            }
-            const CellPos targetCell = c.hasReach ? c.reach
-                                       : c.target.thing != kNoEntity ? cellOf(reg.get<Position>(c.target.thing))
-                                                                     : c.target.cell;
-            // Rock can't be walked into: the pawn works from a cell next to it.
-            CellPos stand;
-            if (map_.walkable(targetCell) ? !canReach(at, targetCell) : !touchCell(at, targetCell, stand)) {
-                continue;
-            }
-            Job job;
-            if (workTypes_[c.workType].givers[c.giver]->makeJob(*this, pawn, c, job)) {
-                job.workType = workTypes_[c.workType].def;
-                out = std::move(job);
-                candidates_.clear();
-                return true;
+            std::make_heap(candidates_.begin(), candidates_.end(), jobsCandidateAfter);
+            while (!candidates_.empty()) {
+                std::pop_heap(candidates_.begin(), candidates_.end(), jobsCandidateAfter);
+                const WorkCandidate c = candidates_.back();
+                candidates_.pop_back();
+                if (reservedByOther(c.target, pawn) || avoiding(pawn, c.target)) {
+                    continue;
+                }
+                const CellPos targetCell = c.hasReach ? c.reach
+                                           : c.target.thing != kNoEntity ? cellOf(reg.get<Position>(c.target.thing))
+                                                                         : c.target.cell;
+                // Rock can't be walked into: the pawn works from a cell next to it.
+                CellPos stand;
+                if (map_.walkable(targetCell) ? !canReach(at, targetCell) : !touchCell(at, targetCell, stand)) {
+                    continue;
+                }
+                Job job;
+                if (workTypes_[c.workType].givers[c.giver]->makeJob(*this, pawn, c, job)) {
+                    job.workType = workTypes_[c.workType].def;
+                    out = std::move(job);
+                    candidates_.clear();
+                    return true;
+                }
             }
         }
     }
@@ -876,6 +940,15 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     }
     if (job.type == JobType::CleanFilth) {
         return failCheckClean(pawn, job, why);
+    }
+    if (job.type == JobType::TendPatient) {
+        return failCheckTend(pawn, job, why);
+    }
+    if (job.type == JobType::Rescue) {
+        return failCheckRescue(pawn, job, why);
+    }
+    if (job.type == JobType::BedRest) {
+        return failCheckBedRest(pawn, job, why);
     }
     if (job.type == JobType::ExtinguishFire) {
         return failCheckExtinguish(pawn, job, why);
@@ -1008,6 +1081,22 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return researchWork(pawn, job, why);
         case JobStepKind::CleanWork:
             return cleanWork(pawn, job, why);
+        case JobStepKind::TendMedicine:
+            return walkToMedicine(pawn, job, why);
+        case JobStepKind::TendPickUp:
+            return pickUpMedicine(pawn, job, why);
+        case JobStepKind::TendGotoPatient:
+            return walkToPatient(pawn, job, why);
+        case JobStepKind::TendWork:
+            return tendWork(pawn, job, why);
+        case JobStepKind::LiftPawn:
+            return liftPawn(pawn, job, why);
+        case JobStepKind::CarryPawn:
+            return carryPawn(pawn, job, why);
+        case JobStepKind::LayPawn:
+            return layPawn(pawn, job, why);
+        case JobStepKind::BedRestLie:
+            return bedRest(pawn, job, why);
         case JobStepKind::ApparelGoto:
             return apparelGoto(pawn, job, why);
         case JobStepKind::ApparelWork:
@@ -1321,7 +1410,7 @@ void JobSystem::endJob(Entity pawn, JobEnd end, const std::string& why) {
     if (job.type == JobType::DoBill && end != JobEnd::Done) {
         returnIngredients(pawn, job);
     }
-    if (jobIsLyingDown(job)) {
+    if (jobIsLyingDown(job) || job.type == JobType::BedRest) {
         wakeUp(pawn, job);
     }
     Worker& worker = reg.get<Worker>(pawn);

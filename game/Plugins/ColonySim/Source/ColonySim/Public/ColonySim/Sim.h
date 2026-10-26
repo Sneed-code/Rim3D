@@ -48,6 +48,7 @@ class MeleeSystem;
 class Mineables;
 class MovementSystem;
 class MoodSystem;
+class MedicineSystem;
 class RecreationSystem;
 class ResearchSystem;
 class ResonanceSystem;
@@ -165,6 +166,9 @@ public:
     // Research projects and what they unlock (docs/design/research.md).
     ResearchSystem& research() { return *research_; }
     const ResearchSystem& research() const { return *research_; }
+    // Medicine: tend quality, medical care settings (docs/design/medicine.md).
+    MedicineSystem& medicine() { return *medicine_; }
+    const MedicineSystem& medicine() const { return *medicine_; }
     // The protagonist's talent XP, points and ranks (docs/design/talents.md).
     TalentSystem& talents() { return *talents_; }
     const TalentSystem& talents() const { return *talents_; }
@@ -337,6 +341,7 @@ private:
     std::unique_ptr<MoodSystem> mood_;
     std::unique_ptr<RecreationSystem> recreation_;
     std::unique_ptr<ResearchSystem> research_;
+    std::unique_ptr<MedicineSystem> medicine_;
     std::unique_ptr<TalentSystem> talents_;
     std::unique_ptr<CombatSystem> combat_;
     std::unique_ptr<ExplosiveSystem> explosives_;  // after combat_ and health_

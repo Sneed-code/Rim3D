@@ -131,7 +131,7 @@ G2, A1 and A2 are Stage 1 tasks.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | H1 | **Doctors, medicine and rescue.** Medicine items; the Doctor job tends patients in bed, quality from Medicine skill, medicine and bed; patient and bed-rest work; medical beds; rescuing downed colonists to a bed; scars from healed wounds. | Cloud | Sonnet, high | 90 min | S7, D7 |
+| ✓ | H1 | **Doctors, medicine and rescue.** Medicine items; the Doctor job tends patients in bed, quality from Medicine skill, medicine and bed; patient and bed-rest work; medical beds; rescuing downed colonists to a bed; scars from healed wounds. | Cloud | Sonnet, high | 90 min | S7, D7 |
 | | H2 | **Infections and diseases.** Infection chance from wound tending; RimWorld's immunity race (immunity against severity); flu, plague, malaria, sleeping sickness, gut worms, muscle parasites, food poisoning; a hook for T3's outbreaks. | Cloud | Sonnet, high | 90 min | H1 |
 | | H3 | **Surgery and prosthetics.** Operation bills on a pawn (amputate, install or remove a part); success chance by RimWorld's rule (skill, bed, medicine, cleanliness); body parts as items; prosthetics and bionics change capacities. | Cloud | Sonnet, high | 90 min | H1, C14 |
 
@@ -193,7 +193,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | | U19 | **Panels 3.** Animals tab, outfits, trade window, power, temperature and beauty overlays. | PC Unreal | Sonnet, medium | 90 min | N3, C15, C23, E5, E2 |
 | | U20 | **Letters and the narrator.** Letters (raids, events) with a jump-to button, an alert list, choosing the narrator and difficulty at game start. | PC Unreal | Sonnet, medium | 60 min | T1 |
 | | U21 | **Shooter feel on screen.** Aim-hold camera blend, recoil camera kick, camera shake and motion blur from sim events (with settings sliders), dodge-roll animation, grenade and explosion effects with Chaos debris (`shooter-feel.md`). | PC Unreal | Sonnet, high | 90 min | P2, F9 |
-| | U22 | **Melee and weapon switching on screen.** Swing, block and dodge animations timed to the sim, hit-stop and flinch, the protagonist's melee input, weapon switch key and holstered weapons. | PC Unreal | Sonnet, high | 60 min | F8, P1 |
+| ✓ | U22 | **Melee and weapon switching on screen.** Swing, block and dodge animations timed to the sim, hit-stop and flinch, the protagonist's melee input, weapon switch key and holstered weapons. | PC Unreal | Sonnet, high | 60 min | F8, P1 |
 
 ### Art (A)
 

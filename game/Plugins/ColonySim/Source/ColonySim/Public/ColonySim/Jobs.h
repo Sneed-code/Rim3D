@@ -170,6 +170,7 @@ class Filth;
 class Fire;
 class SpoilageSystem;
 class HealthSystem;
+class MedicineSystem;
 class Husbandry;
 class Lights;
 class Map;
@@ -217,7 +218,7 @@ public:
 
     JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zones, Construction& construction,
               Plants& plants, Mineables& mineables, Designations& designations, const DefDatabase& defs,
-              const HealthSystem& health, const NeedsSystem& needs, const GameTime& time, SimStats& stats,
+              HealthSystem& health, const NeedsSystem& needs, const GameTime& time, SimStats& stats,
               std::vector<Event>& events);
     ~JobSystem();
     JobSystem(const JobSystem&) = delete;
@@ -289,6 +290,9 @@ public:
     void setAnimalHauler(Entity animal, bool on);
     void setAnimalWorkGate(std::function<bool(Entity)> gate) { animalGate_ = std::move(gate); }
     ResearchSystem* research() const { return research_; }
+    // Medicine and medical care (MedicineJobs.cpp, docs/design/medicine.md); without it nobody tends or rescues.
+    void setMedicine(MedicineSystem* medicine) { medicine_ = medicine; }
+    MedicineSystem* medicine() const { return medicine_; }
     void setTalents(const TalentSystem* talents) { talents_ = talents; }
 
     // Call before a thing is destroyed: ends the jobs that carry it or are done by it.
@@ -312,6 +316,25 @@ public:
     Rooms* rooms() const { return rooms_; }
     // How fast a pawn cleans (1 is 100%): FilthRules.cleaningSpeed times its Manipulation.
     double cleaningSpeed(Entity pawn) const;
+
+    HealthSystem& health() { return health_; }
+    const HealthSystem& health() const { return health_; }
+
+    // ---- Medicine (MedicineJobs.cpp), for the doctor, patient and rescue scanners and tests -----
+    // The medicine a patient's care setting allows, for `doctor` to fetch: the strongest, then the nearest, that no
+    // other pawn holds and the doctor can reach. kNoEntity if there is none.
+    Entity findMedicine(Entity doctor, Entity patient) const;
+    // A bed slot `patient` can lie in, as seen by `helper` (who must be able to reach it): medical beds first, then
+    // the patient's own bed, then a free unowned one; the nearest to the patient within each. `medicalOnly` leaves
+    // out the rest. Beds nobody owns that aren't medical are not claimed.
+    bool findPatientBed(Entity patient, Entity helper, bool medicalOnly, Entity& bed, CellPos& cell) const;
+    // Whether a pawn other than `except` lies (downed, or in bed) in the cell.
+    bool bedOccupied(CellPos cell, Entity except) const;
+    // The bed building under a pawn standing in its cell, or kNoEntity.
+    Entity bedUnder(Entity pawn) const;
+    bool isMedicalBed(Entity bed) const;
+    // A downed colonist on its own side that no bed holds.
+    bool needsRescue(Entity pawn) const;
 
     // ---- For scanners and tests -----------------------------------------------------------
     Things& things() { return things_; }
@@ -421,6 +444,11 @@ private:
     bool thinkSchedule(Entity pawn, Job& out);
     bool thinkApparel(Entity pawn, Job& out);
     bool thinkWork(Entity pawn, Job& out);
+    // thinkWork's scan; `urgentOnly` asks only the emergency work types (doctor, patient...).
+    bool thinkWorkPass(Entity pawn, Job& out, bool urgentOnly);
+    // Every few seconds a pawn on a job it may drop (idling, hauling, cleaning, mining...) looks for emergency work:
+    // a patient to tend, a downed colonist to carry to a bed.
+    void interruptForEmergency(Entity pawn);
     bool thinkIdle(Entity pawn, Job& out);
 
     // Needs (NeedJobs.cpp). A pawn on a job it may drop (hauling, waiting, mining, cutting) is checked every step:
@@ -456,6 +484,21 @@ private:
     bool failCheckResearch(Entity pawn, Job& job, std::string& why);
     StepResult researchWork(Entity pawn, Job& job, std::string& why);
 
+    // Medicine jobs (MedicineJobs.cpp, docs/design/medicine.md). TendPatient: `thing` the patient, `site` the medicine
+    // (the stack, then the carried part). Rescue: `thing` the downed patient, `chair` the bed and `cell` the bed's
+    // cell. BedRest: `thing` the bed, `cell` its cell.
+    bool failCheckTend(Entity pawn, Job& job, std::string& why);
+    bool failCheckRescue(Entity pawn, Job& job, std::string& why);
+    bool failCheckBedRest(Entity pawn, Job& job, std::string& why);
+    StepResult walkToMedicine(Entity pawn, Job& job, std::string& why);
+    StepResult pickUpMedicine(Entity pawn, Job& job, std::string& why);
+    StepResult walkToPatient(Entity pawn, Job& job, std::string& why);
+    StepResult tendWork(Entity pawn, Job& job, std::string& why);
+    StepResult liftPawn(Entity pawn, Job& job, std::string& why);
+    StepResult carryPawn(Entity pawn, Job& job, std::string& why);
+    StepResult layPawn(Entity pawn, Job& job, std::string& why);
+    StepResult bedRest(Entity pawn, Job& job, std::string& why);
+    void restUnderPawn(Entity pawn);
     // Husbandry jobs (HusbandryJobs.cpp): fetch food (TameAnimal, TrainAnimal, FeedAnimal), walk up to the animal, then
     // work with it until the time is up; the animal is held still while the pawn is near.
     bool failCheckHandle(Entity pawn, Job& job, std::string& why);
@@ -533,7 +576,7 @@ private:
     Mineables& mineables_;
     Designations& designations_;
     const DefDatabase& defs_;
-    const HealthSystem& health_;
+    HealthSystem& health_;
     const NeedsSystem& needs_;
     const NeedRules& rules_;
     const GameTime& time_;
@@ -544,6 +587,7 @@ private:
 
     Rooms* rooms_ = nullptr;
     ResearchSystem* research_ = nullptr;
+    MedicineSystem* medicine_ = nullptr;
     Husbandry* husbandry_ = nullptr;
     Breeding* breeding_ = nullptr;
     std::function<bool(Entity)> animalGate_;
@@ -565,6 +609,7 @@ private:
     std::vector<uint16_t> maxIngest_;
     std::vector<float> ingestSeconds_;
     std::vector<uint8_t> isBed_;
+    std::vector<uint8_t> isMedical_;  // per def id: a bed with `building.medical`
     std::vector<uint8_t> isTable_;
     std::vector<uint8_t> isChair_;
     // WorkRules and SkillRules (GatherJobs.cpp), with RimWorld's numbers when the defs are missing.

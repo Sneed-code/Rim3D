@@ -58,6 +58,8 @@ enum class EventType : uint8_t {
     AnimalStarved,        // a tame animal died of hunger
     MeleeSwing,      // a pawn began a melee swing: the hit comes `amount` steps later (docs/design/melee.md)
     MeleeHit,        // the hit moment of a swing: `message` says "hit", "deflected", "blocked", "dodged" or "missed"
+    PawnTended,      // a doctor finished tending a patient (docs/design/medicine.md)
+    PawnScarred,     // a healed injury left a scar or an old wound (docs/design/medicine.md)
     ApparelDestroyed,  // a worn piece wore out or was shot to pieces: `thing` the wearer, `def` the piece's def (docs/design/apparel.md)
     WeatherChanged,  // the weather began to change into another kind (docs/design/weather.md)
     SeasonChanged,   // a new season began
@@ -117,6 +119,9 @@ enum class PawnAction : uint8_t {
     Switch,       // started switching weapons (P1): `target` the weapon coming to the hands, `amount` the steps it takes
     Roll,         // started a dodge roll (P2): `cell` where it began, (x, y) the unit direction, `amount` the steps from start-up to the end of recovery
     Extinguish,   // started beating out the fire in `cell`; goes on until its JobEnded (docs/design/fire.md)
+    Tend,         // started tending `target`, a patient (once per job; the work takes game seconds)
+    LiftPawn,     // lifted `target`, a downed pawn, to carry it (its position follows this pawn's until LayPawn)
+    LayPawn,      // laid the carried `target` down in a bed (or where it stood, if the bed was lost)
     Cast,         // started the warm-up of a resonance power (X2) at `target` (a jump: to `cell`); `amount` the steps until it goes off
 };
 
@@ -152,6 +157,9 @@ struct Event {
     // def, `cell` its origin, `message` "on" (in a net that works and switched on) or "off".
     // ResearchDone: `thing` the pawn who finished it (none if a dev command did), `message` the Research
     // def's defName, `amount` its cost in points.
+    // PawnTended: `thing` the doctor, `target` the patient, `def` the medicine used (none if there was none),
+    // `amount` the tend quality (0 to 1.3), `message` "medicine" or "no medicine", "self" if the doctor tended itself.
+    // PawnScarred: `thing` the pawn, `def` the Scar or OldWound hediff, `part` the body part, `amount` its severity.
     // AnimalTamed, AnimalReleased, AnimalSlaughtered, AnimalStarved: `thing` the animal, `target` the colonist
     // (none for a release or a starving), `cell` where. AnimalTrained: also `message` the trick (Trainable name),
     // `amount` the steps it has now and `part` the steps it needs. AnimalAttemptFailed: `message` "tame" or the

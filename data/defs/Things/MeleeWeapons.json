@@ -36,6 +36,7 @@
   "defName": "Melee_Knife",
   "parent": "MeleeWeaponBase",
   "label": "knife",
+  "visual": {"parts": [{"shape": "box", "size": [0.10, 0.025, 0.025], "at": [-0.05, 0, -0.0125], "color": [0.36, 0.23, 0.12]}, {"shape": "box", "size": [0.19, 0.012, 0.04], "at": [0.095, 0, -0.02], "color": [0.72, 0.74, 0.78]}]},
   "stuffCategories": [
    "Metallic",
    "Woody"
@@ -79,6 +80,7 @@
   "defName": "Melee_Club",
   "parent": "MeleeWeaponBase",
   "label": "club",
+  "visual": {"parts": [{"shape": "box", "size": [0.60, 0.05, 0.05], "at": [0.20, 0, -0.025], "color": [0.36, 0.23, 0.12]}, {"shape": "box", "size": [0.24, 0.09, 0.09], "at": [0.45, 0, -0.045], "color": [0.36, 0.23, 0.12]}]},
   "stuffCategories": [
    "Woody"
   ],
@@ -121,6 +123,7 @@
   "defName": "Melee_Gladius",
   "parent": "MeleeWeaponBase",
   "label": "gladius",
+  "visual": {"parts": [{"shape": "box", "size": [0.12, 0.03, 0.03], "at": [-0.06, 0, -0.015], "color": [0.36, 0.23, 0.12]}, {"shape": "box", "size": [0.02, 0.10, 0.03], "at": [0.01, 0, -0.015], "color": [0.30, 0.31, 0.34]}, {"shape": "box", "size": [0.50, 0.012, 0.06], "at": [0.27, 0, -0.03], "color": [0.72, 0.74, 0.78]}]},
   "stuffCategories": [
    "Metallic"
   ],
@@ -163,6 +166,7 @@
   "defName": "Melee_Spear",
   "parent": "MeleeWeaponBase",
   "label": "spear",
+  "visual": {"parts": [{"shape": "box", "size": [1.60, 0.03, 0.03], "at": [0.30, 0, -0.015], "color": [0.36, 0.23, 0.12]}, {"shape": "box", "size": [0.22, 0.014, 0.05], "at": [1.21, 0, -0.025], "color": [0.72, 0.74, 0.78]}]},
   "stuffCategories": [
    "Metallic"
   ],
@@ -205,6 +209,7 @@
   "defName": "Melee_Mace",
   "parent": "MeleeWeaponBase",
   "label": "mace",
+  "visual": {"parts": [{"shape": "box", "size": [0.62, 0.04, 0.04], "at": [0.21, 0, -0.02], "color": [0.36, 0.23, 0.12]}, {"shape": "sphere", "size": [0.08, 0.08, 0.16], "at": [0.58, 0, -0.08], "color": [0.30, 0.31, 0.34]}]},
   "stuffCategories": [
    "Metallic"
   ],
@@ -247,6 +252,7 @@
   "defName": "Melee_Longsword",
   "parent": "MeleeWeaponBase",
   "label": "longsword",
+  "visual": {"parts": [{"shape": "box", "size": [0.18, 0.03, 0.03], "at": [-0.09, 0, -0.015], "color": [0.36, 0.23, 0.12]}, {"shape": "box", "size": [0.02, 0.20, 0.03], "at": [0.01, 0, -0.015], "color": [0.30, 0.31, 0.34]}, {"shape": "box", "size": [0.95, 0.014, 0.06], "at": [0.49, 0, -0.03], "color": [0.72, 0.74, 0.78]}]},
   "stuffCategories": [
    "Metallic"
   ],
@@ -289,6 +295,7 @@
   "defName": "Melee_BreachAxe",
   "parent": "MeleeWeaponBase",
   "label": "breach axe",
+  "visual": {"parts": [{"shape": "box", "size": [1.10, 0.04, 0.04], "at": [0.25, 0, -0.02], "color": [0.36, 0.23, 0.12]}, {"shape": "box", "size": [0.14, 0.03, 0.22], "at": [0.76, 0, -0.11], "color": [0.30, 0.31, 0.34]}]},
   "stuffCategories": [
    "Metallic"
   ],

@@ -496,6 +496,14 @@ struct DodgeRollCommand {
     float dy = 0.0f;
 };
 
+// Medicine (task H1, docs/design/medicine.md): how far a colonist's medicine may go. `care` is a name from
+// medicalCareName: NoCare, NoMedicine, Herbal, Normal or Best. Fails for a pawn without a body or a name that
+// isn't one.
+struct SetMedicalCareCommand {
+    Entity pawn = kNoEntity;
+    std::string care;
+};
+
 // Dev command: the weather becomes this Weathers def now (by defName, e.g. "Rain") and lasts `hours`
 // game hours (0: its usual length), then the next is chosen as usual (docs/design/weather.md).
 // Fails if no Weathers def has the name.
@@ -620,7 +628,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SpendTalentPointCommand, AddTalentXpCommand, RearmTrapCommand,
                              CarryWeaponCommand, SwitchWeaponCommand, CreateGrowingZoneCommand,
                              RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
-                             SetHomeAreaCommand, AttuneCommand, LearnPowerCommand, CastPowerCommand>;
+                             SetHomeAreaCommand, SetMedicalCareCommand, AttuneCommand, LearnPowerCommand,
+                             CastPowerCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.
