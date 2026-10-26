@@ -100,6 +100,8 @@ enum class EventType : uint8_t {
     PawnMentalBreakEnded,  // it ended: `message` says how ("recovered", "downed", "died", "stopped")
     PawnInsulted,          // a pawn in an insulting spree insulted another
     PawnLeftColony,        // a pawn gave up and walked off the map for good
+    InspirationStarted,    // a colonist became inspired (docs/design/inspirations.md): `thing` the pawn, `message` the Inspirations defName, `amount` its days
+    InspirationEnded,      // it ended: `message` "why:defName" (used, expired, dismissed), `amount` how many game seconds it lasted
     OperationDone,      // a doctor finished an operation (H3, docs/design/surgery.md): `thing` the doctor, `target` the patient, `def` the Recipes def, `part` the body part, `amount` the success chance, `message` "success", "failed" or "the patient died"
 };
 
