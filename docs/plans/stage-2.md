@@ -193,7 +193,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | | U19 | **Panels 3.** Animals tab, outfits, trade window, power, temperature and beauty overlays. | PC Unreal | Sonnet, medium | 90 min | N3, C15, C23, E5, E2 |
 | | U20 | **Letters and the narrator.** Letters (raids, events) with a jump-to button, an alert list, choosing the narrator and difficulty at game start. | PC Unreal | Sonnet, medium | 60 min | T1 |
 | | U21 | **Shooter feel on screen.** Aim-hold camera blend, recoil camera kick, camera shake and motion blur from sim events (with settings sliders), dodge-roll animation, grenade and explosion effects with Chaos debris (`shooter-feel.md`). | PC Unreal | Sonnet, high | 90 min | P2, F9 |
-| | U22 | **Melee and weapon switching on screen.** Swing, block and dodge animations timed to the sim, hit-stop and flinch, the protagonist's melee input, weapon switch key and holstered weapons. | PC Unreal | Sonnet, high | 60 min | F8, P1 |
+| ✓ | U22 | **Melee and weapon switching on screen.** Swing, block and dodge animations timed to the sim, hit-stop and flinch, the protagonist's melee input, weapon switch key and holstered weapons. | PC Unreal | Sonnet, high | 60 min | F8, P1 |
 
 ### Art (A)
 

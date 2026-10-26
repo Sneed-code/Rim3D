@@ -73,7 +73,7 @@ axe on a 35 kg pawn: 3.9 kg, about a 3% slowdown.
 `ThingView::carried[3]` is the weapon def in each slot (hands or body; invalid for none), `switchSlot` (255 when
 not switching) and `switchStepsLeft` say what Unreal shows during a switch, and `weapon` is still what is in the
 hands. `PawnAction::Switch` (`target` the weapon coming to the hands, `amount` the steps) starts the animation
-and `WeaponSwitched` (`thing`, `def`, `target`) ends it. Unreal's weapon-switch key and holster models are U22.
+and `WeaponSwitched` (`thing`, `def`, `target`) ends it. Unreal's weapon-switch key (Q) and the holstered weapons are U22 ([melee-draw.md](melee-draw.md)).
 
 ## Save
 
