@@ -30,7 +30,7 @@ Stage 2 is done when sneed can play this in a packaged build:
 **Not in Stage 2** (Stage 3 and later): the world map, caravans, quests and other maps; orbital
 trade; drugs and addiction; sieges and mortars; Remnant clusters, chitinid brood mounds and binders;
 creeds, the Black Spires and skyhulls; leaving the planet; art objects; the styled UI (panels stay
-ImGui); sound; dismemberment visuals and full anatomy (Stage 4). Animals are the 15 in D5.
+ImGui); sound; dismemberment visuals and full anatomy (all in `art-stage.md`). Animals are the 15 in D5.
 
 ## Rules for every Stage 2 task
 
@@ -169,7 +169,7 @@ G2, A1 and A2 are Stage 1 tasks.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | T1 | **Narrator, incidents and threat points.** Colony wealth; threat points from wealth and colonists by RimWorld's curves; an incident system (weights, cooldowns, earliest day); Orrin, Maren and Jinx as RimWorld's three storytellers; letters as events; F6's raid becomes the first incident. | Cloud | Opus, high | 90 min | F6, D10 |
+| ✓ | T1 | **Narrator, incidents and threat points.** Colony wealth; threat points from wealth and colonists by RimWorld's curves; an incident system (weights, cooldowns, earliest day); Orrin, Maren and Jinx as RimWorld's three storytellers; letters as events; F6's raid becomes the first incident. | Cloud | Opus, high | 90 min | F6, D10 |
 | | T2 | **Events: nature and good news.** Wanderer joins, cargo pods, crashed pod with a downed survivor, herd migration, animal joins, cold snap, heat wave, eclipse, aurora, berry or healroot bloom. | Cloud | Sonnet, medium | 90 min | T1, E1, E3, N1 |
 | | T3 | **Events: trouble.** Manhunter pack, mad animal, disease outbreaks, blight, short circuit, solar flare, lightning fires, toxic fallout, resonance drone, prison break. | Cloud | Sonnet, medium | 90 min | T1, N5, H2, E4, E5, C13 |
 
@@ -185,14 +185,14 @@ G2, A1 and A2 are Stage 1 tasks.
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | U13 | **Sky, seasons and weather.** Sun and moon from the sim clock, sky, fog and clouds; rain and snow effects; snow on the ground; wet look; a date, season and temperature readout. | PC Unreal | Sonnet, high | 90 min | E1 |
-| | U14 | **Light and fire on screen.** Lamps, torches and campfires as real lights from the sim's light sources; Niagara fire, smoke and embers from the fire layer; burnt ground and ash. | PC Unreal | Sonnet, high | 90 min | E3, E4 |
+| ✓ | U14 | **Light and fire on screen.** Lamps, torches and campfires as real lights from the sim's light sources; Niagara fire, smoke and embers from the fire layer; burnt ground and ash. | PC Unreal | Sonnet, high | 90 min | E3, E4 |
 | ✓ | U15 | **Animals on screen.** Animal actors on shared skeletons with animation by distance (as U5); far herds as cheap instanced meshes with baked animation. | PC Unreal | Sonnet, high | 90 min | N1, A4 |
 | ✓ | U16 | **Clothes on pawns.** Each worn layer drawn on the MetaHuman body with the body-type shapes, torn look from hit points, clothes that come off when destroyed. | PC Unreal | Sonnet, high | 90 min | C15, A5 |
 | | U17 | **Upper floors on screen.** Upper levels, stairs and ladders drawn; the overseer view cuts away levels above the chosen one (Page Up and Page Down); direct mode climbs stairs and ladders through the sim. | PC Unreal | Opus, high | 90 min | M2, M3 |
 | | U18 | **Panels 2.** Health tab with operations, research tab, room stats in the inspect panel, prisoner tab, growing zone and home area tools. | PC Unreal | Sonnet, medium | 90 min | H3, C21, C17, C22, C13 |
 | | U19 | **Panels 3.** Animals tab, outfits, trade window, power, temperature and beauty overlays. | PC Unreal | Sonnet, medium | 90 min | N3, C15, C23, E5, E2 |
 | | U20 | **Letters and the narrator.** Letters (raids, events) with a jump-to button, an alert list, choosing the narrator and difficulty at game start. | PC Unreal | Sonnet, medium | 60 min | T1 |
-| | U21 | **Shooter feel on screen.** Aim-hold camera blend, recoil camera kick, camera shake and motion blur from sim events (with settings sliders), dodge-roll animation, grenade and explosion effects with Chaos debris (`shooter-feel.md`). | PC Unreal | Sonnet, high | 90 min | P2, F9 |
+| ✓ | U21 | **Shooter feel on screen.** Aim-hold camera blend, recoil camera kick, camera shake and motion blur from sim events (with settings sliders), dodge-roll animation, grenade and explosion effects with Chaos debris (`shooter-feel.md`). | PC Unreal | Sonnet, high | 90 min | P2, F9 |
 | ✓ | U22 | **Melee and weapon switching on screen.** Swing, block and dodge animations timed to the sim, hit-stop and flinch, the protagonist's melee input, weapon switch key and holstered weapons. | PC Unreal | Sonnet, high | 60 min | F8, P1 |
 
 ### Art (A)

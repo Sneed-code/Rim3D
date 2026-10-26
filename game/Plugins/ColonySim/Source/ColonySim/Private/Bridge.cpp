@@ -111,6 +111,10 @@ const char* commandName(const Command& command) {
                 return "MarkShelter";
             } else if constexpr (std::is_same_v<Type, MarkAnimalCommand>) {
                 return "MarkAnimal";
+            } else if constexpr (std::is_same_v<Type, MarkAnimalsInAreaCommand>) {
+                return "MarkAnimalsInArea";
+            } else if constexpr (std::is_same_v<Type, SetAnimalNameCommand>) {
+                return "SetAnimalName";
             } else if constexpr (std::is_same_v<Type, SetTrainingCommand>) {
                 return "SetTraining";
             } else if constexpr (std::is_same_v<Type, CreateAnimalZoneCommand>) {
@@ -153,6 +157,10 @@ const char* commandName(const Command& command) {
                 return "AddTalentXp";
             } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
                 return "CarryWeapon";
+            } else if constexpr (std::is_same_v<Type, SetNarratorCommand>) {
+                return "SetNarrator";
+            } else if constexpr (std::is_same_v<Type, FireIncidentCommand>) {
+                return "FireIncident";
             } else if constexpr (std::is_same_v<Type, SwitchWeaponCommand>) {
                 return "SwitchWeapon";
             } else if constexpr (std::is_same_v<Type, IgniteCommand>) {
@@ -262,6 +270,7 @@ const char* eventTypeName(EventType type) {
         case EventType::TrapRearmed: return "TrapRearmed";
         case EventType::WeaponSwitched: return "WeaponSwitched";
         case EventType::PlantSown: return "PlantSown";
+        case EventType::Letter: return "Letter";
         case EventType::FireStarted: return "FireStarted";
         case EventType::FireOut: return "FireOut";
         case EventType::PawnCaughtFire: return "PawnCaughtFire";

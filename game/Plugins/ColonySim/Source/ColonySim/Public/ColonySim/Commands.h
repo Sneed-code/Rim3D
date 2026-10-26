@@ -409,6 +409,20 @@ struct MarkAnimalCommand {
     bool on = true;
 };
 
+// Marks every animal in `area` that can take the mark (a wild one for "Tame" or "Hunt", a tame one for "Slaughter"); the
+// others are skipped. Fails if there is none.
+struct MarkAnimalsInAreaCommand {
+    CellRect area;
+    std::string mark;
+    bool on = true;
+};
+
+// Names a tame animal (up to 24 characters; an empty name takes the name off). Fails for a wild or dead animal.
+struct SetAnimalNameCommand {
+    Entity animal = kNoEntity;
+    std::string name;
+};
+
 // A tame animal is (or is no longer) to be taught a trick: `trainable` is "Obedience", "Release", "Rescue" or "Haul".
 // Fails if the animal is wild or can't learn it.
 struct SetTrainingCommand {
@@ -602,6 +616,21 @@ struct SetGrowingZoneCropCommand {
     std::string crop;
 };
 
+// Picks the narrator (a Narrators defName: "Orrin", "Maren", "Jinx"; "" turns the narrator off) and
+// the difficulty (a Difficulties defName; "" keeps it). The narrator is off until this is sent: the
+// game sends it at the start (docs/design/narrator.md). Fails for an unknown name.
+struct SetNarratorCommand {
+    std::string narrator = "Orrin";
+    std::string difficulty;
+};
+
+// A dev command: makes an incident (an Incidents defName, like "RaidEnemy") happen now, whatever its
+// timing, with `points` threat points (0: the colony's). Fails if it is unknown or can't happen now.
+struct FireIncidentCommand {
+    std::string incident;
+    float points = 0.0f;
+};
+
 // Fire (task E4, docs/design/fire.md). Dev command: starts a fire of `size` (the start size if 0) in a cell, or sets `pawn`
 // alight if it names one. Fails if nothing could burn: no fuel, wet ground, water or rock, a fire already there, a pawn
 // that is dead or fire-resistant. `force` lights even a cell with nothing to burn (it dies away in a moment).
@@ -691,13 +720,15 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              MeleeCommand, DodgeRollCommand,
                              SetOutfitCommand, EditOutfitCommand, AddOutfitCommand, RemoveOutfitCommand,
                              StripCommand, SetWeatherCommand, MarkAnimalCommand, SetTrainingCommand,
+                             MarkAnimalsInAreaCommand, SetAnimalNameCommand,
                              CreateAnimalZoneCommand, RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand, SetBreedingCommand,
                              SpendTalentPointCommand, AddTalentXpCommand, RearmTrapCommand,
                              CarryWeaponCommand, SwitchWeaponCommand, CreateGrowingZoneCommand,
                              RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
                              SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand, SetPrisonerModeCommand,
                              SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
-                             MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand>;
+                             MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand,
+                             SetNarratorCommand, FireIncidentCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

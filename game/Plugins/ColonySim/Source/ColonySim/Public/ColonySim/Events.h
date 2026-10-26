@@ -26,7 +26,7 @@ enum class EventType : uint8_t {
     PawnAction,      // a pawn did something with its hands that Unreal animates (picked up, put down)
     JobStarted,      // a pawn took a job (docs/design/jobs.md)
     JobEnded,        // a pawn's job ended: `message` says "done", "failed: why" or "interrupted: why"
-    PawnAte,         // a pawn finished eating (docs/design/needs.md)
+    PawnAte,         // a pawn finished eating (docs/design/needs.md); `part` 1 if the meal had human flesh in it
     PawnWokeUp,      // a pawn got up after sleeping
     FrameStarted,    // a blueprint got its first materials and is a frame now (docs/design/construction.md)
     PawnMoodBand,    // a pawn's mood crossed a mental break threshold (docs/design/mood.md)
@@ -73,6 +73,9 @@ enum class EventType : uint8_t {
     TrapRearmed,     // a sprung trap was set again
     WeaponSwitched,  // a pawn finished switching weapons (P1, docs/design/weapons.md): `thing` the pawn, `def` the weapon now in its hands, `target` that weapon
     PlantSown,       // a colonist sowed a crop in a growing zone: `cell`, `def` the crop (docs/design/farming.md)
+    Letter,          // the narrator sent an incident (docs/design/narrator.md): `def` the Incidents def, `message` the
+                     // letter's text, `count` its LetterKind, `amount` its threat points, `cell` where (if it has a
+                     // place), `squad` a raid's squad
     FireStarted,     // a fire began in a cell (docs/design/fire.md)
     FireOut,         // a fire went out: burnt out, rained out or beaten out
     PawnCaughtFire,  // a pawn is on fire
