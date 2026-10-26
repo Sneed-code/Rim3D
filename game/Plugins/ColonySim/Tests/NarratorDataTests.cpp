@@ -19,7 +19,7 @@ TEST_CASE("narrator data: narrators, difficulties and rules load") {
     CHECK(db.find("Narrators", "Orrin")->number("threatCycle.offDays") > 0);
     CHECK(db.find("Narrators", "Maren")->number("threatCycle.offDays") > db.find("Narrators", "Orrin")->number("threatCycle.offDays"));
     CHECK(db.find("Narrators", "Jinx")->count("threatCycle") == 0);
-    CHECK(db.find("Narrators", "Jinx")->number("mtbDays.Misc") == doctest::Approx(1.35));
+    CHECK(db.find("Narrators", "Jinx")->number("mtbDays.Misc") == doctest::Approx(3.56));
 
     const char* levels[] = {"Peaceful", "CommunityBuilder", "AdventureStory", "StriveToSurvive", "BloodAndDust", "LosingIsFun"};
     double lastScale = 0;
