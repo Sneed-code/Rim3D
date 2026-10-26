@@ -504,6 +504,16 @@ struct SetMedicalCareCommand {
     std::string care;
 };
 
+// Dev command (task H2, docs/design/diseases.md): the pawn catches a disease (a Hediffs def of class Disease, by
+// defName) at `severity` (below 0: the def's initial severity); an infection needs the wound's body part in `part`.
+// Fails for a pawn without a body, a name that is not a disease, or when the pawn already has it or is immune.
+struct ContractDiseaseCommand {
+    Entity pawn = kNoEntity;
+    std::string disease;
+    float severity = -1.0f;
+    int part = -1;
+};
+
 // Dev command: the weather becomes this Weathers def now (by defName, e.g. "Rain") and lasts `hours`
 // game hours (0: its usual length), then the next is chosen as usual (docs/design/weather.md).
 // Fails if no Weathers def has the name.
@@ -604,7 +614,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SpendTalentPointCommand, AddTalentXpCommand, RearmTrapCommand,
                              CarryWeaponCommand, SwitchWeaponCommand, CreateGrowingZoneCommand,
                              RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
-                             SetHomeAreaCommand, SetMedicalCareCommand>;
+                             SetHomeAreaCommand, SetMedicalCareCommand, ContractDiseaseCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

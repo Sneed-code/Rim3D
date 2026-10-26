@@ -60,6 +60,8 @@ enum class EventType : uint8_t {
     MeleeHit,        // the hit moment of a swing: `message` says "hit", "deflected", "blocked", "dodged" or "missed"
     PawnTended,      // a doctor finished tending a patient (docs/design/medicine.md)
     PawnScarred,     // a healed injury left a scar or an old wound (docs/design/medicine.md)
+    PawnSick,        // a pawn caught a disease, or a wound turned infected (docs/design/diseases.md)
+    PawnRecovered,   // a pawn's disease ran its course (docs/design/diseases.md)
     ApparelDestroyed,  // a worn piece wore out or was shot to pieces: `thing` the wearer, `def` the piece's def (docs/design/apparel.md)
     WeatherChanged,  // the weather began to change into another kind (docs/design/weather.md)
     SeasonChanged,   // a new season began
@@ -156,6 +158,8 @@ struct Event {
     // PawnTended: `thing` the doctor, `target` the patient, `def` the medicine used (none if there was none),
     // `amount` the tend quality (0 to 1.3), `message` "medicine" or "no medicine", "self" if the doctor tended itself.
     // PawnScarred: `thing` the pawn, `def` the Scar or OldWound hediff, `part` the body part, `amount` its severity.
+    // PawnSick: `thing` the pawn, `def` the Disease hediff, `part` the wound's body part for an infection (-1 otherwise),
+    // `amount` its severity. PawnRecovered: `thing` the pawn, `def` the disease, `part` as above.
     // AnimalTamed, AnimalReleased, AnimalSlaughtered, AnimalStarved: `thing` the animal, `target` the colonist
     // (none for a release or a starving), `cell` where. AnimalTrained: also `message` the trick (Trainable name),
     // `amount` the steps it has now and `part` the steps it needs. AnimalAttemptFailed: `message` "tame" or the

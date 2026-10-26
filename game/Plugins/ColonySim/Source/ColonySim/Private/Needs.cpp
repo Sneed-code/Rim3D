@@ -132,6 +132,7 @@ void NeedsSystem::step() {
         if (const PawnGenes* genes = reg.try_get<PawnGenes>(pawn)) {
             perDay *= genes->effects.foodRate;
         }
+        perDay *= health_.foodRateFactor(pawn);  // gut worms
         switch (foodBandOf(rules_, needs.food)) {
             case FoodBand::Fed: perDay *= rules_.foodFallFactorFed; break;
             case FoodBand::Hungry: perDay *= rules_.foodFallFactorHungry; break;
@@ -157,7 +158,7 @@ void NeedsSystem::step() {
                 case RestBand::Tired: fall = rules_.restFallPerDayTired; break;
                 case RestBand::Exhausted: fall = rules_.restFallPerDayExhausted; break;
             }
-            needs.rest = std::max(0.0f, needs.rest - fall * kPerSecond);
+            needs.rest = std::max(0.0f, needs.rest - fall * health_.restFallFactor(pawn) * kPerSecond);  // sleeping sickness
         }
 
         if (needs.malnutrition >= 1.0f) {

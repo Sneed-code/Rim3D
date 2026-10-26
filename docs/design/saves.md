@@ -99,7 +99,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `movement` | 1 | `mover` |
 | `jobs` | 1 | `worker` (the job, its bill picks and ingredients, avoid memory), `work` (Work tab), `carrying` |
 | `colonists` | 1 | `colonist` |
-| `health` | 3 | `health` (version 2: environment hediffs such as hypothermia, E2; version 3: each injury's `peak`, for scars, H1) |
+| `health` | 4 | `health` (version 2: environment hediffs such as hypothermia, E2; version 3: each injury's `peak`, for scars, H1; version 4: `infectAt`, `diseases` and `immunities`, H2) |
 | `control` | 1 | `playerControlled`: the ids of controlled pawns |
 | `needs` | 1 | `needs`, `schedule`, `bed` |
 | `bills` | 1 | `bills` on work buildings |
