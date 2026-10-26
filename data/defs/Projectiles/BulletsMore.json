@@ -1,0 +1,10 @@
+[
+  {"defName": "Bullet_MachinePistol", "parent": "BulletBase", "label": "machine pistol bullet", "projectile": {"damageAmountBase": 6, "armorPenetrationBase": 0.09, "stoppingPower": 0.5, "speed": 1.833333}, "unverified": []},
+  {"defName": "Bullet_ChainShotgun", "parent": "BulletBase", "label": "chain shotgun blast", "projectile": {"damageAmountBase": 18, "armorPenetrationBase": 0.14, "stoppingPower": 3, "speed": 1.833333}, "unverified": []},
+  {"defName": "Bullet_HeavySMG", "parent": "BulletBase", "label": "heavy SMG bullet", "projectile": {"damageAmountBase": 12, "armorPenetrationBase": 0.18, "stoppingPower": 0.5, "speed": 1.833333}, "unverified": []},
+  {"defName": "Bullet_LMG", "parent": "BulletBase", "label": "LMG bullet", "projectile": {"damageAmountBase": 12, "armorPenetrationBase": 0.16, "stoppingPower": 1, "speed": 2.333333}, "unverified": ["projectile.speed"]},
+  {"defName": "Bullet_Minigun", "parent": "BulletBase", "label": "minigun bullet", "projectile": {"damageAmountBase": 10, "armorPenetrationBase": 0.15, "stoppingPower": 0.5, "speed": 2.333333}, "unverified": ["projectile.speed"]},
+  {"defName": "Bullet_SniperRifle", "parent": "BulletBase", "label": "sniper rifle bullet", "projectile": {"damageAmountBase": 25, "armorPenetrationBase": 0.38, "stoppingPower": 1.5, "speed": 3.0}, "unverified": ["projectile.speed"]},
+  {"defName": "Bullet_ChargeRifle", "parent": "BulletBase", "label": "charge rifle bolt", "projectile": {"damageAmountBase": 16, "armorPenetrationBase": 0.35, "stoppingPower": 0.5, "speed": 2.0}, "unverified": ["projectile.speed"]},
+  {"defName": "Bullet_ChargeLance", "parent": "BulletBase", "label": "charge lance bolt", "projectile": {"damageAmountBase": 30, "armorPenetrationBase": 0.45, "stoppingPower": 1.5, "speed": 2.666667}, "unverified": ["projectile.speed"]}
+]

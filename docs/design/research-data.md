@@ -5,7 +5,7 @@ Task D12. Data only: `data/defs/Research/Research.json`, `data/defs/TechLevels/T
 
 ## Projects (`Research`)
 
-67 projects (vanilla RimWorld's base-game tree; DLC projects are not in), with RimWorld wiki costs (research points): `baseCost`, `techLevel`, `prerequisites`
+71 projects (vanilla RimWorld's base-game tree, plus our MarineArmor, ReconArmor, PulseChargedMunitions and CataphractArmor; other DLC projects are not in), with RimWorld wiki costs (research points): `baseCost`, `techLevel`, `prerequisites`
 (shown in the tree), `hiddenPrerequisites` (also required, as in RimWorld), `benchTier` (1 = any
 research bench, 2 = hi-tech bench only) and `unlocks`, a list of defNames per kind (`Things`,
 `Recipes`, `Terrain`). `requiredFacility` ("MultiAnalyzer") marks projects that also need a
