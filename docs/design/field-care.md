@@ -21,7 +21,7 @@ role ("it can't do Doctor work"). With the alarm off the roles change nothing.
 ## Safe ground
 
 A cell is **safe** when no enemy of the colony that can still fight (the alarm's own rule: another faction, not a calm
-wild animal, not downed, not fleeing) is within `keepAway` (10 m) of it, and none within `exposureRange` (45 m) has a
+wild animal, not a prisoner, not downed, not fleeing) is within `keepAway` (10 m) of it, and none within `exposureRange` (45 m) has a
 line of sight from its standing eyes to a pawn standing there (`FieldCare::exposure` counts them, with the same
 `Cover::lineOfSight` the fighters use). It knows where every enemy is, not only the spotted ones: "reasonably safe"
 is a little generous to the colony. The list of enemies is made once a game second, at the first question.
@@ -83,7 +83,7 @@ out of sight.
 ## Snapshot, saves, hash, replays
 
 - Snapshot: `defenseRole` 3 and 4; `ThingView::rescuing` (the friend a fighter is carrying or fetching); a duty's jobs
-  are ordinary jobs (`StandBy` is job type 27).
+  are ordinary jobs (`StandBy` is job type 30).
 - Saves: no section of its own. The fighters section is version 3 (`rescuing`, `lifted`, `rescueTo`); defense
   plans with roles 3 and 4 and `StandBy` jobs load. Everything else follows from the alarm, roles, fighters and jobs,
   so a game saved mid-drag loads and goes on the same (test).

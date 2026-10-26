@@ -148,6 +148,12 @@ struct ThingView {
     bool sheltering = false;
     bool fleeing = false;
     uint32_t squad = 0;
+    // Prisoners (docs/design/prisoners.md): held in a prison bed, what wardens do with it (a PrisonerMode number) and its
+    // resistance; a bed marked for prisoners.
+    bool prisoner = false;
+    uint8_t prisonerMode = 0;
+    float resistance = 0.0f;
+    bool prisonBed = false;
     // F10 (docs/design/field-care.md): defenseRole 3 is Medic and 4 Firefighter; a fighter carrying a downed friend
     // to cover has it in `rescuing` (the friend's position follows the fighter's after the LiftPawn action).
     Entity rescuing = kNoEntity;

@@ -9,6 +9,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Things.h"
 
@@ -89,8 +90,8 @@ void FieldCare::refreshHostiles() {
     const entt::registry& reg = things_.registry();
     for (const auto [pawn, faction, pos] : reg.view<const Faction, const Position>().each()) {
         const Animal* wild = reg.try_get<Animal>(pawn);
-        if (faction.id == kPlayerFaction || (wild != nullptr && wild->temper == AnimalTemper::Calm) || !things_.spawned(pawn) ||
-            health_.incapacitated(pawn)) {
+        if (faction.id == kPlayerFaction || (wild != nullptr && wild->temper == AnimalTemper::Calm) || reg.all_of<Prisoner>(pawn) ||
+            !things_.spawned(pawn) || health_.incapacitated(pawn)) {
             continue;
         }
         const Fighter* f = reg.try_get<Fighter>(pawn);
