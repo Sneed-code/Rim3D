@@ -41,7 +41,8 @@
   },
   "stats": {
    "maxHitPoints": 130,
-   "flammability": 0.0
+   "flammability": 0.0,
+   "workToBuild": 1
   },
   "hive": {
    "insects": [
@@ -66,7 +67,10 @@
   "ours": [
    "hive",
    "visual"
-  ]
+  ],
+  "costs": {
+   "InsectJelly": 1
+  }
  },
  {
   "defName": "InsectJelly",

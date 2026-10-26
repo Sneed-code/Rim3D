@@ -65,7 +65,15 @@
    "race.armor",
    "race.combatPower",
    "race.lifeStages"
-  ]
+  ],
+  "visual": {
+   "sound": {
+    "idle": "Animal_Rodent_Idle",
+    "hurt": "Animal_Rodent_Hurt",
+    "death": "Animal_Rodent_Death",
+    "burning": "Pawn_Burning"
+   }
+  }
  },
  {
   "defName": "Spelopede",
@@ -132,7 +140,15 @@
    "race.armor",
    "race.combatPower",
    "race.lifeStages"
-  ]
+  ],
+  "visual": {
+   "sound": {
+    "idle": "Animal_Rodent_Idle",
+    "hurt": "Animal_Rodent_Hurt",
+    "death": "Animal_Rodent_Death",
+    "burning": "Pawn_Burning"
+   }
+  }
  },
  {
   "defName": "Megaspider",
@@ -200,6 +216,14 @@
    "race.armor",
    "race.combatPower",
    "race.lifeStages"
-  ]
+  ],
+  "visual": {
+   "sound": {
+    "idle": "Animal_Rodent_Idle",
+    "hurt": "Animal_Rodent_Hurt",
+    "death": "Animal_Rodent_Death",
+    "burning": "Pawn_Burning"
+   }
+  }
  }
 ]

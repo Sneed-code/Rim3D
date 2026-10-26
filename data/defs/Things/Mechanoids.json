@@ -87,7 +87,15 @@
    "race.combatPower",
    "race.weapon",
    "stats.mass"
-  ]
+  ],
+  "visual": {
+   "sound": {
+    "idle": "Hum_Generator",
+    "hurt": "Impact_Armor",
+    "death": "Explosion_Blast",
+    "burning": "Pawn_Burning"
+   }
+  }
  },
  {
   "defName": "Mech_Lancer",
@@ -159,7 +167,15 @@
    "race.combatPower",
    "race.weapon",
    "stats.mass"
-  ]
+  ],
+  "visual": {
+   "sound": {
+    "idle": "Hum_Generator",
+    "hurt": "Impact_Armor",
+    "death": "Explosion_Blast",
+    "burning": "Pawn_Burning"
+   }
+  }
  },
  {
   "defName": "Mech_Pikeman",
@@ -231,7 +247,15 @@
    "race.combatPower",
    "race.weapon",
    "stats.mass"
-  ]
+  ],
+  "visual": {
+   "sound": {
+    "idle": "Hum_Generator",
+    "hurt": "Impact_Armor",
+    "death": "Explosion_Blast",
+    "burning": "Pawn_Burning"
+   }
+  }
  },
  {
   "defName": "Mech_Centipede",
@@ -284,6 +308,14 @@
    "race.combatPower",
    "race.weapon",
    "stats.mass"
-  ]
+  ],
+  "visual": {
+   "sound": {
+    "idle": "Hum_Generator",
+    "hurt": "Impact_Armor",
+    "death": "Explosion_Blast",
+    "burning": "Pawn_Burning"
+   }
+  }
  }
 ]

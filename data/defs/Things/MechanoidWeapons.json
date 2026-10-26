@@ -40,7 +40,12 @@
    "reloadTime",
    "weaponSlot"
   ],
-  "mechOnly": true
+  "mechOnly": true,
+  "visual": {
+   "sound": {
+    "shot": "Shot_Rifle"
+   }
+  }
  },
  {
   "defName": "Gun_NeedleGun",
@@ -83,7 +88,12 @@
    "reloadTime",
    "weaponSlot"
   ],
-  "mechOnly": true
+  "mechOnly": true,
+  "visual": {
+   "sound": {
+    "shot": "Shot_Rifle"
+   }
+  }
  },
  {
   "defName": "Gun_HeavyChargeBlaster",
@@ -127,6 +137,11 @@
    "reloadTime",
    "weaponSlot"
   ],
-  "mechOnly": true
+  "mechOnly": true,
+  "visual": {
+   "sound": {
+    "shot": "Shot_Rifle"
+   }
+  }
  }
 ]
