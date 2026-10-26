@@ -110,8 +110,9 @@
     "risePerHour": 12,
     "fallPerHour": 8,
     "memoryDays": 0.6,
+    "nightHours": { "from": 21, "to": 4 },
     "unverified": ["memoryDays"],
-    "ours": ["baseMood"]
+    "ours": ["baseMood", "nightHours"]
   },
   {
     "defName": "PawnGenRules", "source": "Rim3D",
