@@ -12,7 +12,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Same rules as Unreal: no exceptions, no RTTI. Warnings are errors.
 add_library(colonysim_flags INTERFACE)
 if(MSVC)
-  target_compile_options(colonysim_flags INTERFACE /W4 /WX /permissive- /GR- /EHs-c- /external:W0)
+  # /bigobj: Save.cpp has more sections than a default object file holds (Unreal builds with it too).
+  target_compile_options(colonysim_flags INTERFACE /W4 /WX /permissive- /GR- /EHs-c- /external:W0 /bigobj)
   target_compile_definitions(colonysim_flags INTERFACE _HAS_EXCEPTIONS=0 _CRT_SECURE_NO_WARNINGS)
 else()
   target_compile_options(colonysim_flags INTERFACE -Wall -Wextra -Wpedantic -Wshadow -Werror -fno-exceptions -fno-rtti)

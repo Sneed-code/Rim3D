@@ -363,8 +363,8 @@ floor** is laid (`PlaceUpperFloorCommand`, instant for now; `UpperFloors::lay`):
 radius (6.9 m) on the level below, never over a mountain, and is the roof of the cell under it (`Map::roof` says `Thin`, Rooms puts
 no roof of its own there). Buildings and items go only on a floor. Regions, rooms and room temperature work on every level; an upper
 room beside open air is outdoors (`Room::openToAir`); heat passes through a floor like a thin roof. Save section `levels`; snapshot `z`
-includes the level. **Systems that only know the ground use `Map::onGround(c)` instead of `inBounds`** (plants, zones, filth, lights,
-cover, threat maps, floors, designations); `Map::inBounds` now takes levels 0 to 3. No stairs yet (M2), no collapse (M3), nothing drawn (U17).
+includes the level. **Systems that only know the ground use `Map::onGround(c)` instead of `inBounds`** (plants, zones, growing zones, filth,
+fire, snow, lights, cover, threat maps, floors, designations); `Map::inBounds` now takes levels 0 to 3. No stairs yet (M2), no collapse (M3), nothing drawn (U17).
 
 ## Next
 

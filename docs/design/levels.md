@@ -61,8 +61,8 @@ An upper floor is the floor of a cell on level 1 or above. It is laid with `Uppe
 ## Systems that are still ground-only
 
 These use `Map::onGround` and ignore cells on upper levels for now: plants, zones and stockpiles
-(M2), mining designations, rock, floors (C17's finishes), filth, lamps and darkness, solar panels'
-open sky, cover and line of sight, threat maps. Combat and fighters work on one level at a time but
+(M2), growing zones, mining designations, rock, floors (C17's finishes), filth, fire and the home
+area, snow, lamps and darkness, solar panels' open sky, cover and line of sight, threat maps. Combat and fighters work on one level at a time but
 take heights from the ground. Animals live on the ground. Each will take levels when a task needs it
 (M2 does stockpiles and doors; U17 draws it all).
 

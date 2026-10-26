@@ -85,7 +85,7 @@ GrowingZoneId Farming::createZone(const CellRect& area, DefId crop, std::string&
     for (int y = area.minY; y < area.minY + area.sizeY; ++y) {
         for (int x = area.minX; x < area.minX + area.sizeX; ++x) {
             const CellPos c{x, y, 0};
-            if (area.level == 0 && map_.inBounds(c) && map_.walkable(c) && map_.buildingAt(c) == kNoEntity &&
+            if (area.level == 0 && map_.onGround(c) && map_.walkable(c) && map_.buildingAt(c) == kNoEntity &&
                 zoneOf_[slot(c)] == kNoGrowingZone && stockpiles_.zoneAt(c) == kNoZone && plants_.fertility(c) > 0.0f) {
                 zone.cells.push_back(c);
             }
@@ -149,7 +149,7 @@ bool Farming::setCrop(GrowingZoneId id, DefId crop, std::string& error) {
 }
 
 GrowingZoneId Farming::zoneAt(CellPos c) const {
-    return map_.inBounds(c) ? zoneOf_[slot(c)] : kNoGrowingZone;
+    return map_.onGround(c) ? zoneOf_[slot(c)] : kNoGrowingZone;
 }
 
 const GrowingZone* Farming::find(GrowingZoneId id) const {
@@ -269,7 +269,7 @@ bool Farming::restore(const FarmingSaved& saved, std::string& error) {
         zone.cells = z.cells;
         std::sort(zone.cells.begin(), zone.cells.end(), farmingCellBefore);
         for (const CellPos& c : zone.cells) {
-            if (!map_.inBounds(c) || zoneOf_[slot(c)] != kNoGrowingZone) {
+            if (!map_.onGround(c) || zoneOf_[slot(c)] != kNoGrowingZone) {
                 error = "the save has a growing zone cell that doesn't add up";
                 std::fill(zoneOf_.begin(), zoneOf_.end(), kNoGrowingZone);
                 zones_.clear();
