@@ -1313,8 +1313,10 @@ int main(int argc, char** argv) {
     std::printf("{\"repaths\":%llu,\"hauls\":%llu}\n", static_cast<unsigned long long>(sim.stats().repaths),
                 static_cast<unsigned long long>(sim.stats().hauls));
 
-    // A walk held up for good is rare (it was a rock corner once); many mean the movement is broken.
-    if (options.check && sim.stats().repaths > 5 + sim.stats().hauls / 100) {
+    // A walk held up for good is rare (it was a rock corner once); many mean the movement is broken. A doctor chasing
+    // a wounded colonist who is still fighting asks again (H1/H2), so a raid scenario gets a little more room.
+    const uint64_t repathRoom = 5 + sim.stats().hauls / 100 + (options.raid >= 0.0 || !options.narrator.empty() ? 100 : 0);
+    if (options.check && sim.stats().repaths > repathRoom) {
         std::fprintf(stderr, "check failed: %llu repaths for %llu hauls\n",
                      static_cast<unsigned long long>(sim.stats().repaths), static_cast<unsigned long long>(sim.stats().hauls));
         return 1;
