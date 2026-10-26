@@ -7,6 +7,7 @@
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Trade.h"
 #include "ColonySim/WeaponSlot.h"
 #include "ColonySim/Zones.h"
 
@@ -539,6 +540,33 @@ struct SetPrisonBedCommand {
     bool on = true;
 };
 
+// Trade (task C23, docs/design/trade.md). StartVisitCommand: visitors, a trade caravan or an orbital trader of `faction` (a Factions
+// defName) come; `kind` is Visitors, Caravan or Orbital (visitKindName), `traderKind` a TraderKinds defName (empty: one of the
+// faction's), `edge` 0 north, 1 east, 2 south, 3 west, -1 any. T1's incidents do the same through TradeSystem::startVisit. Fails for
+// a faction that can't do that, is hostile, or has no way in.
+struct StartVisitCommand {
+    std::string faction;
+    std::string kind = "Visitors";
+    std::string traderKind;
+    int edge = -1;
+};
+
+// The colony trades with a visit's trader: it buys the `buy` lines from the trader's stock and sells the `sell` lines from what lies
+// on the map, the difference paid in silver items; `negotiator` (a colonist) sets the prices by Social skill and talents. All or
+// nothing; fails with the reason in plain words.
+struct TradeCommand {
+    uint32_t visit = 0;
+    Entity negotiator = kNoEntity;
+    std::vector<TradeLine> buy;
+    std::vector<TradeLine> sell;
+};
+
+// Dev command: changes a faction's goodwill by `delta` (within -100 to 100).
+struct AdjustGoodwillCommand {
+    std::string faction;
+    float delta = 0.0f;
+};
+
 // Dev command: the weather becomes this Weathers def now (by defName, e.g. "Rain") and lasts `hours`
 // game hours (0: its usual length), then the next is chosen as usual (docs/design/weather.md).
 // Fails if no Weathers def has the name.
@@ -697,7 +725,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
                              SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand, SetPrisonerModeCommand,
                              SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
-                             MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand>;
+                             MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand,
+                             StartVisitCommand, TradeCommand, AdjustGoodwillCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.
