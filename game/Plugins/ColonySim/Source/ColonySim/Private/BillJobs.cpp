@@ -43,7 +43,7 @@ bool JobSystem::failCheckDoBill(Entity pawn, Job& job, std::string& why) {
         return false;
     }
     if (const Recipe* recipe = bills_->recipe(bill->recipe);
-        recipe != nullptr && !fuel_->canUse(job.site, fuel_->specOf(job.site).perUse * static_cast<float>(recipe->productCount()))) {
+        recipe != nullptr && !fuel_->canUse(job.site, fuel_->specOf(job.site).perUse * static_cast<float>(recipe->fuelUses()))) {
         why = "the building is out of fuel";
         return false;
     }
@@ -169,7 +169,7 @@ JobSystem::StepResult JobSystem::billFinish(Entity pawn, Job& job, std::string& 
     // find it.
     const std::vector<BillUsed> used = std::move(job.used);
     job.used.clear();
-    fuel_->use(job.site, fuel_->specOf(job.site).perUse * static_cast<float>(recipe->productCount()));
+    fuel_->use(job.site, fuel_->specOf(job.site).perUse * static_cast<float>(recipe->fuelUses()));
     int made = 0;
     const uint32_t storeZone = bill->storeZone;
     for (const RecipeProduct& product : recipe->products) {
