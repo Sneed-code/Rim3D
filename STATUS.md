@@ -2,6 +2,8 @@
 
 Updated 2026-10-26.
 
+Stage 2 research tree filled in: the research defs now hold all 67 vanilla base-game projects with the wiki's costs and prerequisites (42 were missing and 5 were wrong: Hydroponics 700, Firefoam 600, Gun turrets now need Blowback operation, Foam turret is its own project, the breach axe moved to Smithing). Existing guns, flak armor, helmet, IED and turrets are gated by their projects; unlocks for content that doesn't exist yet are in `BACKLOG.md` (`docs/design/research-data.md`). Data only.
+
 Stage 2 hydroponics done: a powered hydroponics basin (new research `Hydroponics`, 70 steel, 70 W) gives its cell fertility 2.8 and takes a growing zone, plant pots count as fertility 1.0 spots, and a powered sun lamp within 5 m lets a lit crop grow through the night as well, so a heated, roofed room with basins and a sun lamp feeds the colony through winter (`docs/design/farming.md`, tests `HydroponicsTests`). Sim only.
 Art stage planned: `docs/plans/art-stage.md` (26 tasks V1 to V26: faces and hair, body hair, anatomy, jiggle, wounds, dismemberment, destructible clothes, real animation, Niagara fire, real buildings and items, destruction, sound, styled UI). Docs only.
 Stage 2 heat armour done: a burning pawn's flames now go through the heat armour of the clothes over the part they hit (bounce, half damage, wear on the piece), so a hyperweave duster and hat save most of the burns; clothes already carried the heat stat from RimWorld's numbers (`docs/design/fire.md`, test in `FireTests`). Sim only. Also folded in (from PR #132): hunters skip animals that turn manhunter when hurt at 10% or more, and a butcher table can cut up dead people (`Meat_Human`, `Leather_Human`).
