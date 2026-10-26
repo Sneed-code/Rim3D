@@ -215,7 +215,8 @@ TEST_CASE("Skills: cooking teaches Cooking in proportion to the recipe's experie
         manip = sim.health().capacityValue(cook, "Manipulation");
         return skillsOf(sim, cook).xp;
     };
-    const Recipe* recipe = Sim(SimSettings{5, 48, 0, 0, true}, skillsDefs()).jobs().bills().recipe(skillsDefs()->idOf("Recipes", "CookMealSimple"));
+    const Sim recipeSim(SimSettings{5, 48, 0, 0, true}, skillsDefs());  // keeps the recipe alive
+    const Recipe* recipe = recipeSim.jobs().bills().recipe(skillsDefs()->idOf("Recipes", "CookMealSimple"));
     SKILLS_REQUIRE(recipe != nullptr);
     // Minor passion is 1.0x. At skill 8 the run is a steady 'skillXp' over 'work' seconds, so a whole run gives skillXp.
     const float xp8 = xpAfterRun(8);
