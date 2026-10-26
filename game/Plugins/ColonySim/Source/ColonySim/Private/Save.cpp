@@ -1261,6 +1261,10 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 auto* goodwill = &c;
                 ar.text("faction", goodwill->faction);
                 ar.value("delta", goodwill->delta);
+            } else if constexpr (std::is_same_v<Type, GiftCommand>) {
+                auto* gift = &c;
+                ar.value("visit", gift->visit);
+                ar.list("items", gift->items, [&](TradeLine& l) { saveTradeLine(ar, l); });
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }

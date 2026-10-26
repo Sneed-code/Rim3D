@@ -575,6 +575,14 @@ struct TradeCommand {
     std::vector<TradeLine> sell;
 };
 
+// The colony gives a visit's faction a gift: the `items` are taken from what lies on the map and the faction's goodwill rises by
+// their market value over `giftSilverPerPoint` (FactionRules). A caravan's trader or a ship adds the goods to its stock. Works on any
+// visit that is still here, hostile faction or not. Fails with the reason in plain words.
+struct GiftCommand {
+    uint32_t visit = 0;
+    std::vector<TradeLine> items;
+};
+
 // Dev command: changes a faction's goodwill by `delta` (within -100 to 100).
 struct AdjustGoodwillCommand {
     std::string faction;
@@ -757,7 +765,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
                              MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand,
                              SetNarratorCommand, FireIncidentCommand,
-                             StartVisitCommand, TradeCommand, AdjustGoodwillCommand>;
+                             StartVisitCommand, TradeCommand, AdjustGoodwillCommand, GiftCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

@@ -107,6 +107,10 @@ TradeRules TradeRules::read(const DefDatabase& defs) {
         r.goodwillMin = static_cast<float>(faction->number("goodwillRange.0", r.goodwillMin));
         r.goodwillMax = static_cast<float>(faction->number("goodwillRange.1", r.goodwillMax));
         r.driftPerDay = static_cast<float>(faction->number("driftTowardNaturalPerDay", r.driftPerDay));
+        r.releaseGoodwill = static_cast<float>(faction->number("goodwillChanges.releasePrisoner", r.releaseGoodwill));
+        r.giftSilverPerPoint = std::max(1.0f, static_cast<float>(faction->number("goodwillChanges.giftSilverPerPoint", r.giftSilverPerPoint)));
+        r.visitorKilledGoodwill = static_cast<float>(faction->number("goodwillChanges.visitorKilled", r.visitorKilledGoodwill));
+        r.executedGoodwill = static_cast<float>(faction->number("goodwillChanges.prisonerExecuted", r.executedGoodwill));
     }
     const Def* rules = defs.find("Rules", "TradeRules");
     if (rules == nullptr) {
@@ -252,6 +256,9 @@ bool TradeSystem::adjustGoodwill(const std::string& faction, float delta, std::s
     it->goodwill = after;
     if (after != before) {
         emit(EventType::GoodwillChanged, 0, kNoEntity, after - before, faction);
+        if (delta < 0.0f) {
+            sendAwayIfHostile(faction);
+        }
     }
     return true;
 }
@@ -263,6 +270,96 @@ Relation TradeSystem::relation(const std::string& faction) const {
     }
     const float g = goodwill(faction);
     return g <= rules_.hostileAtOrBelow ? Relation::Hostile : g >= rules_.alliedAtOrAbove ? Relation::Ally : Relation::Neutral;
+}
+
+void TradeSystem::sendAwayIfHostile(const std::string& faction) {
+    if (!hostile(faction)) {
+        return;
+    }
+    for (Visit& visit : state_.visits) {
+        if (visit.faction == faction && visit.kind != VisitKind::Orbital && visit.phase == VisitPhase::Staying) {
+            leave(visit);
+        }
+    }
+}
+
+std::string TradeSystem::factionOf(Entity pawn) const {
+    const FactionId id = fighters_.factionOf(pawn);
+    if (id == kPlayerFaction) {
+        return std::string();
+    }
+    for (const DefId def : defs_.idsOfKind("Factions")) {
+        if (raids_.factionId(defs_.get(def).defName()) == id) {
+            return defs_.get(def).defName();
+        }
+    }
+    return std::string();
+}
+
+bool TradeSystem::gift(uint32_t visitId, const std::vector<TradeLine>& items, std::string& error) {
+    Visit* visit = nullptr;
+    for (Visit& v : state_.visits) {
+        if (v.id == visitId) {
+            visit = &v;
+        }
+    }
+    if (visit == nullptr) {
+        error = "no such visit";
+        return false;
+    }
+    if (visit->phase != VisitPhase::Staying) {
+        error = "they are leaving";
+        return false;
+    }
+    if (items.empty()) {
+        error = "nothing to give";
+        return false;
+    }
+    std::vector<TradeLine> gifts;
+    for (const TradeLine& l : items) {
+        if (l.count <= 0 || l.count > 1000000) {
+            error = "a gift line needs a count from 1 to 1,000,000";
+            return false;
+        }
+        tradeAddStock(gifts, l.thing, l.count);
+    }
+    double value = 0.0;
+    for (const TradeLine& l : gifts) {
+        const Def* def = defs_.find("Things", l.thing);
+        if (def == nullptr) {
+            error = "no such thing '" + l.thing + "'";
+            return false;
+        }
+        const double each = def->number("stats.marketValue", l.thing == "Silver" ? 1.0 : 0.0);
+        if (each <= 0.0) {
+            error = def->label() + " is worth nothing as a gift";
+            return false;
+        }
+        if (colonyHas(l.thing) < l.count) {
+            error = "the colony hasn't " + std::to_string(l.count) + " of " + def->label();
+            return false;
+        }
+        value += each * l.count;
+    }
+    for (const TradeLine& l : gifts) {
+        takeFromMap(l.thing, l.count);
+        if (l.thing == "Silver") {
+            visit->silver += l.count;
+        } else if (!visit->traderKind.empty()) {
+            tradeAddStock(visit->stock, l.thing, l.count);
+        }
+    }
+    std::string ignored;
+    adjustGoodwill(visit->faction, static_cast<float>(value / rules_.giftSilverPerPoint), ignored);
+    return true;
+}
+
+void TradeSystem::noteExecuted(Entity prisoner) {
+    const std::string faction = factionOf(prisoner);
+    std::string ignored;
+    if (!faction.empty()) {
+        adjustGoodwill(faction, rules_.executedGoodwill, ignored);
+    }
 }
 
 // ---- Starting a visit -------------------------------------------------------------------------
@@ -983,8 +1080,22 @@ void TradeSystem::wander(Visit& visit) {
     }
 }
 
-void TradeSystem::step() {
+void TradeSystem::step(const std::vector<Event>& events) {
     const int64_t t = now();
+    const entt::registry& eventReg = things_.registry();
+    for (size_t i = 0; i < events.size(); ++i) {
+        const Event& e = events[i];
+        if (e.type == EventType::PrisonerReleased && eventReg.valid(e.thing)) {
+            const std::string faction = factionOf(e.thing);
+            std::string ignored;
+            if (!faction.empty()) {
+                adjustGoodwill(faction, rules_.releaseGoodwill, ignored);
+            }
+        } else if (e.type == EventType::PawnDied && eventReg.valid(e.thing) && eventReg.all_of<Visitor>(e.thing)) {
+            std::string ignored;
+            adjustGoodwill(factionOf(e.thing), rules_.visitorKilledGoodwill, ignored);
+        }
+    }
     if (!state_.standings.empty() && t / kSecondsPerDay > state_.lastDrift) {
         // Goodwill drifts back toward where the faction started, a little every day.
         const float days = static_cast<float>(t / kSecondsPerDay - state_.lastDrift);

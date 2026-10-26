@@ -23,8 +23,19 @@ Each faction's goodwill with the colony runs from -100 to 100 (`FactionRules`). 
 `startingGoodwill` range, worked out from the world seed and the faction's name (no random draw, so the stream of everything else is
 untouched). Only factions whose goodwill has changed are stored (`TradeState::standings`); they drift back toward their start by
 `driftTowardNaturalPerDay` (0.2, ours) a day, and a permanent enemy stays at -100. `adjustGoodwill(faction, delta)` and
-`AdjustGoodwillCommand` change it; at -75 or less a faction is `Hostile`, at 75 or more `Ally`. **Nothing changes goodwill by itself yet**
-(no gifts, no raids by a faction that is not an enemy, no killing a visitor): later tasks call `adjustGoodwill`.
+`AdjustGoodwillCommand` change it; at -75 or less a faction is `Hostile`, at 75 or more `Ally`. Goodwill changes by these rules
+(`FactionRules.goodwillChanges`; the first two are recalled from RimWorld, the others ours):
+
+| Cause | Change |
+| --- | --- |
+| `GiftCommand{visit, items}`: items lying on the map go to the visit's faction (silver counts 1 each) | market value / 40 (`giftSilverPerPoint`) |
+| A prisoner of the faction is released (`PrisonerReleased`) | +12 (`releasePrisoner`) |
+| A pawn with `Visitor` dies | -25 (`visitorKilled`); any death counts, whoever caused it, as events carry no attacker |
+| `TradeSystem::noteExecuted(prisoner)`, for the executions task | -10 (`prisonerExecuted`) |
+
+Trading itself changes nothing. A faction that falls to -75 or less (`hostile`) sends its staying visits away at once, sends no new
+ones, and the narrator's raids may come from it (`NarratorSystem::setHostileCheck`) as from the permanent enemies. It is friendly again
+once drift (0.2 a day) or gifts bring it above -75.
 
 ## Visitors and traders on the map
 
@@ -65,7 +76,7 @@ Event `TradeDone`.
 
 ## Interface
 
-- Commands: `StartVisitCommand`, `TradeCommand`, `AdjustGoodwillCommand` (saved and replayed by name).
+- Commands: `StartVisitCommand`, `TradeCommand`, `GiftCommand`, `AdjustGoodwillCommand` (saved and replayed by name).
 - Events: `VisitArrived`, `VisitLeft`, `TradeDone`, `GoodwillChanged` (the visit id is in `Event::squad`).
 - Snapshot: `visits` (id, kind, phase, faction, trader pawn, leave time, silver, members, spot, stock) and `goodwill` (every faction,
   with its relation); each `ThingView` has `visitor`, `visitRole`, `visit`.

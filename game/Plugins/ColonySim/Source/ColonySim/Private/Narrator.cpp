@@ -465,12 +465,11 @@ bool NarratorSystem::fire(const std::string& name, float points, std::string& er
 }
 
 bool NarratorSystem::raidWorker(IncidentFiring& f) {
-    // A faction that is always the colony's enemy and has raiders to send. Goodwill (C23) will let
-    // others turn hostile.
+    // A faction that is the colony's enemy (always, or by goodwill at -75 or less) and has raiders to send.
     std::vector<const Def*> factions;
     for (const DefId id : defs_.idsOfKind("Factions")) {
         const Def& def = defs_.get(id);
-        if (def.flag("permanentEnemy") && def.flag("canRaid") && def.count("pawnKinds") > 0) {
+        if ((def.flag("permanentEnemy") || (hostile_ && hostile_(def.defName()))) && def.flag("canRaid") && def.count("pawnKinds") > 0) {
             factions.push_back(&def);
         }
     }

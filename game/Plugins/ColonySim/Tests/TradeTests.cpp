@@ -4,6 +4,8 @@
 #include "ColonySim/Events.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Prisoners.h"
+#include "ColonySim/Narrator.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
@@ -499,4 +501,99 @@ TEST_CASE("Trade: the commands are written into a replay and read back") {
     CHECK(check.matched());
     CHECK(again.stateHash() == recorded.stateHash());
     CHECK(again.trade().find(1) != nullptr);
+}
+
+TEST_CASE("Trade: a gift raises the faction's goodwill by its value, and the trader keeps the goods") {
+    Sim sim = trdSim();
+    const Visit* ship = trdShip(sim);
+    TRD_REQUIRE(ship != nullptr);
+    const uint32_t id = ship->id;
+    const int silverBefore = ship->silver;
+    std::string error;
+    const float before = sim.trade().goodwill("FrayCompact");
+    CHECK_FALSE(sim.trade().gift(id, {TradeLine{"Silver", 10}}, error));  // none on the map
+    CHECK(error.find("hasn't") != std::string::npos);
+    CHECK_FALSE(sim.trade().gift(id, {}, error));
+    CHECK_FALSE(sim.trade().gift(99, {TradeLine{"Silver", 10}}, error));
+    trdPutDown(sim, "Silver", 400, CellPos{50, 50, 0});
+    trdPutDown(sim, "Steel", 50, CellPos{50, 60, 0});
+    const float steel = static_cast<float>(trdDefs()->find("Things", "Steel")->number("stats.marketValue"));
+    const float worth = 200.0f + steel * 50.0f;
+    sim.submit(GiftCommand{id, {TradeLine{"Silver", 200}, TradeLine{"Steel", 50}}});
+    sim.step();
+    CHECK(sim.trade().goodwill("FrayCompact") == doctest::Approx(std::min(100.0f, before + worth / 40.0f)));
+    CHECK(sim.trade().silverOnMap() == 200);
+    CHECK(sim.trade().colonyHas("Steel") == 0);
+    const Visit* after = sim.trade().find(id);
+    TRD_REQUIRE(after != nullptr);
+    CHECK(after->silver == silverBefore + 200);
+    CHECK(trdStock(*after, "Steel") >= 50);
+}
+
+TEST_CASE("Trade: releasing a prisoner and killing a visitor move the faction's goodwill; hostile factions send visits away and raid") {
+    Sim sim = trdSim();
+    entt::registry& reg = sim.things().registry();
+    std::string error;
+    TRD_REQUIRE(sim.trade().adjustGoodwill("FrayCompact", -sim.trade().goodwill("FrayCompact"), error));  // to 0
+    // A released prisoner of the Fray Compact pleases it: +12.
+    const Entity prisoner = sim.things().spawn("Human", CellPos{40, 40, 0});
+    TRD_REQUIRE(sim.fighters().setFaction(prisoner, sim.raids().factionId("FrayCompact"), error));
+    reg.emplace<Prisoner>(prisoner);
+    CHECK(sim.trade().factionOf(prisoner) == "FrayCompact");
+    TRD_REQUIRE(sim.prisoners().release(prisoner, kNoEntity));
+    sim.step();
+    CHECK(sim.trade().goodwill("FrayCompact") == 12.0f);
+    // An executed one angers it.
+    sim.trade().noteExecuted(prisoner);
+    CHECK(sim.trade().goodwill("FrayCompact") == 2.0f);
+
+    // A visitor dying costs 25 goodwill.
+    uint32_t id = 0;
+    TRD_REQUIRE(sim.trade().startVisit("FrayCompact", VisitKind::Visitors, "", 3, id, error));
+    const Visit* group = sim.trade().find(id);
+    TRD_REQUIRE(group != nullptr);
+    const Entity victim = group->members.front();
+    Rng rng(3);
+    const std::vector<std::string> labels = sim.health().partLabels(reg.get<Thing>(victim).def);
+    const auto torso = std::find(labels.begin(), labels.end(), "torso");
+    for (int i = 0; i < 6 && !reg.get<Health>(victim).dead; ++i) {
+        sim.health().applyDamage(victim, sim.health().damageTypeId("Cut"), 200.0f, static_cast<int>(torso - labels.begin()), rng);
+    }
+    TRD_REQUIRE(reg.get<Health>(victim).dead);
+    sim.stepMany(2);
+    CHECK(sim.trade().goodwill("FrayCompact") == -23.0f);
+
+    // At -75 the faction is hostile: its group leaves, nobody new comes, and it can raid.
+    TRD_REQUIRE(sim.trade().find(id) != nullptr);
+    CHECK(sim.trade().find(id)->phase == VisitPhase::Staying);
+    CHECK_FALSE(sim.trade().hostile("FrayCompact"));
+    TRD_REQUIRE(sim.trade().adjustGoodwill("FrayCompact", -60.0f, error));
+    CHECK(sim.trade().hostile("FrayCompact"));
+    CHECK(sim.trade().find(id)->phase == VisitPhase::Leaving);
+    uint32_t again = 0;
+    CHECK_FALSE(sim.trade().startVisit("FrayCompact", VisitKind::Visitors, "", 3, again, error));
+    // Raids: with every other faction's goodwill kept out of it, the Fray Compact is among the raiders after a number of raids.
+    trdColonist(sim, CellPos{64, 64, 0});
+    bool fray = false;
+    for (int i = 0; i < 40 && !fray; ++i) {
+        sim.narrator().fire("RaidEnemy", 200.0f, error);
+        for (const Squad& squad : sim.raids().state().squads) {
+            fray = fray || squad.faction == "FrayCompact";
+        }
+    }
+    CHECK(fray);
+}
+
+TEST_CASE("Trade: a friendly faction never raids") {
+    Sim sim = trdSim();
+    std::string error;
+    TRD_REQUIRE(sim.trade().adjustGoodwill("FrayCompact", 100.0f, error));
+    trdColonist(sim, CellPos{64, 64, 0});
+    for (int i = 0; i < 40; ++i) {
+        sim.narrator().fire("RaidEnemy", 200.0f, error);
+    }
+    for (const Squad& squad : sim.raids().state().squads) {
+        CHECK(squad.faction != "FrayCompact");
+        CHECK(squad.faction != "Concord");
+    }
 }

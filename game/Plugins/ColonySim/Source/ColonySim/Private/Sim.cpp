@@ -309,6 +309,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     fighters_->setDefense(defense_.get());
     narrator_ = std::make_unique<NarratorSystem>(*raids_, *defs_, time_, settings.seed);
     narrator_->setEventLog(&events_);
+    narrator_->setHostileCheck([this](const std::string& faction) { return trade_->hostile(faction); });
     social_ = std::make_unique<SocialSystem>(*things_, *rooms_, *health_, *melee_, *mood_, *jobs_, *defs_, time_,
                                              splitMix64(settings.seed ^ 0x736F6369616CULL));
     social_->setEventLog(&events_);
@@ -672,6 +673,11 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     } else if (const auto* tradeCommand = std::get_if<TradeCommand>(&command)) {
         std::string why;
         if (!trade_->trade(tradeCommand->visit, tradeCommand->negotiator, tradeCommand->buy, tradeCommand->sell, why)) {
+            commandFailed(id, why);
+        }
+    } else if (const auto* giftCommand = std::get_if<GiftCommand>(&command)) {
+        std::string why;
+        if (!trade_->gift(giftCommand->visit, giftCommand->items, why)) {
             commandFailed(id, why);
         }
     } else if (const auto* goodwillCommand = std::get_if<AdjustGoodwillCommand>(&command)) {
@@ -1189,7 +1195,7 @@ void Sim::step() {
     }
     fighters_->step();
     prisoners_->step();
-    trade_->step();
+    trade_->step(events_);
     recreation_->step();
     animals_->step();
     husbandry_->step();

@@ -179,6 +179,8 @@ const char* commandName(const Command& command) {
                 return "Trade";
             } else if constexpr (std::is_same_v<Type, AdjustGoodwillCommand>) {
                 return "AdjustGoodwill";
+            } else if constexpr (std::is_same_v<Type, GiftCommand>) {
+                return "Gift";
             } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
                 return "PlaceUpperFloor";
             } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {

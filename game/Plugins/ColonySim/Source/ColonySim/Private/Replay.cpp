@@ -363,6 +363,16 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, AdjustGoodwillCommand>) {
                 j["faction"] = c.faction;
                 j["delta"] = c.delta;
+            } else if constexpr (std::is_same_v<Type, GiftCommand>) {
+                j["visit"] = c.visit;
+                ReplayJson array = ReplayJson::array();
+                for (const TradeLine& l : c.items) {
+                    ReplayJson line;
+                    line["thing"] = l.thing;
+                    line["count"] = l.count;
+                    array.push_back(std::move(line));
+                }
+                j["items"] = std::move(array);
             } else {
                 static_assert(std::is_same_v<Type, EndMentalBreakCommand>, "write every command type");
                 j["pawn"] = entt::to_integral(c.pawn);
@@ -1352,6 +1362,23 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         AdjustGoodwillCommand c;
         if (!r.text(j, "faction", c.faction, where) || !r.number(j, "delta", c.delta, where)) {
             return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "Gift") {
+        GiftCommand c;
+        if (!r.integer(j, "visit", c.visit, where)) {
+            return false;
+        }
+        const auto list = j.find("items");
+        if (list == j.end() || !list->is_array()) {
+            return r.fail(where + ".items must be a list of {thing, count}");
+        }
+        for (const ReplayJson& item : *list) {
+            TradeLine line;
+            if (!item.is_object() || !r.text(item, "thing", line.thing, where) || !r.integer(item, "count", line.count, where)) {
+                return false;
+            }
+            c.items.push_back(std::move(line));
         }
         out.command = std::move(c);
     } else if (type == "EndMentalBreak") {

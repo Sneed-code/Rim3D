@@ -136,6 +136,10 @@ struct COLONY_API TradeRules {
     float goodwillMin = -100.0f;
     float goodwillMax = 100.0f;
     float driftPerDay = 0.2f;
+    float releaseGoodwill = 12.0f;        // a released prisoner's faction likes the colony this much more (recalled)
+    float giftSilverPerPoint = 40.0f;     // a gift gives 1 goodwill per this much market value (recalled)
+    float visitorKilledGoodwill = -25.0f; // a visitor dying in the colony costs this (ours)
+    float executedGoodwill = -10.0f;      // an executed prisoner costs its faction's goodwill this (ours)
 
     static TradeRules read(const DefDatabase& defs);
 };
@@ -160,6 +164,15 @@ public:
     // Changes it by `delta`, within the limits; a permanent enemy stays at its lowest. False for an unknown faction.
     bool adjustGoodwill(const std::string& faction, float delta, std::string& error);
     Relation relation(const std::string& faction) const;
+    // Whether the faction is the colony's enemy now (a permanent enemy, or goodwill at -75 or less): raids may come from it.
+    bool hostile(const std::string& faction) const { return relation(faction) == Relation::Hostile; }
+    // The Factions defName a pawn belongs to (empty for the player's side and for sides that are not a faction).
+    std::string factionOf(Entity pawn) const;
+    // The colony gives the faction of visit `visit` the `items` lying on the map; its goodwill rises by their market value over
+    // `giftSilverPerPoint`. A caravan's trader or a ship adds the goods to its stock. All or nothing.
+    bool gift(uint32_t visit, const std::vector<TradeLine>& items, std::string& error);
+    // A prisoner was put to death: its faction's goodwill drops (`executedGoodwill`). The executions task calls it.
+    void noteExecuted(Entity prisoner);
 
     // ---- Visits ----
     // A visit of `faction` walks in at `edge` (0 north, 1 east, 2 south, 3 west, -1 any) or, for a ship, arrives.
@@ -190,7 +203,8 @@ public:
                std::string& error);
 
     // Visitors move about, groups leave when their time is up, pawns that reach the edge are gone, goodwill drifts. Runs once a step.
-    void step();
+    // `events` are this step's: a released prisoner pleases its faction, a visitor's death angers it.
+    void step(const std::vector<Event>& events);
 
     // Call before a thing is destroyed: it leaves its visit.
     void forget(Entity thing);
@@ -212,6 +226,8 @@ private:
     };
 
     int64_t now() const;
+    // After goodwill fell: a faction that is hostile now sends its visits away.
+    void sendAwayIfHostile(const std::string& faction);
     float startGoodwill(const std::string& faction) const;
     bool readKind(const std::string& kindName, KindInfo& out, std::string& error) const;
     bool pickEntry(const CellPos& target, int edge, CellPos& entry) const;
