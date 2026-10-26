@@ -29,5 +29,19 @@
   {"defName": "EggChickenFertilized", "parent": "EggChickenUnfertilized", "label": "fertilized chicken egg", "stackLimit": 1, "thingCategories": ["FoodRaw", "AnimalProductRaw", "EggsFertilized"], "hatches": {"into": "Chicken", "days": 3.8, "unverified": ["days"]}},
   {"defName": "WoolBase", "abstract": true, "parent": "ItemBase", "source": "RimWorld wiki", "unverified": ["stats", "stuffProps"], "stats": {"maxHitPoints": 80, "mass": 0.03, "flammability": 1.0, "deteriorationRate": 2}, "thingCategories": ["Textiles"], "visual": {"color": [0.86, 0.82, 0.72], "pieces": 4, "layer": 0.1, "parts": [{"shape": "sphere", "radius": 0.1, "height": 0.1, "color": [0.86, 0.82, 0.72]}]}},
   {"defName": "WoolAlpaca", "parent": "WoolBase", "label": "alpaca wool", "stats": {"marketValue": 1.8}, "stuffProps": {"categories": ["Fabric"], "statFactors": {"armorRatingSharp": 0.9, "armorRatingBlunt": 0.45, "armorRatingHeat": 0.9, "insulationCold": 1.5, "insulationHeat": 0.5}}},
-  {"defName": "WoolMuffalo", "parent": "WoolBase", "label": "muffalo wool", "stats": {"marketValue": 1.3}, "stuffProps": {"categories": ["Fabric"], "statFactors": {"armorRatingSharp": 0.9, "armorRatingBlunt": 0.45, "armorRatingHeat": 0.9, "insulationCold": 1.5, "insulationHeat": 0.5}}}
+  {"defName": "WoolMuffalo", "parent": "WoolBase", "label": "muffalo wool", "stats": {"marketValue": 1.3}, "stuffProps": {"categories": ["Fabric"], "statFactors": {"armorRatingSharp": 0.9, "armorRatingBlunt": 0.45, "armorRatingHeat": 0.9, "insulationCold": 1.5, "insulationHeat": 0.5}}},
+  {"defName": "Meat_Caribou", "parent": "MeatBase", "label": "caribou meat", "stats": {"marketValue": 2.0}},
+  {"defName": "Meat_Muskox", "parent": "MeatBase", "label": "muskox meat", "stats": {"marketValue": 2.0}},
+  {"defName": "Meat_ArcticFox", "parent": "MeatBase", "label": "arctic fox meat", "stats": {"marketValue": 2.0}},
+  {"defName": "Meat_ArcticWolf", "parent": "MeatBase", "label": "arctic wolf meat", "stats": {"marketValue": 2.0}},
+  {"defName": "Meat_PolarBear", "parent": "MeatBase", "label": "polar bear meat", "stats": {"marketValue": 2.0}},
+  {"defName": "Meat_Dromedary", "parent": "MeatBase", "label": "dromedary meat", "stats": {"marketValue": 2.0}},
+  {"defName": "Meat_Gazelle", "parent": "MeatBase", "label": "gazelle meat", "stats": {"marketValue": 2.0}},
+  {"defName": "Meat_Ostrich", "parent": "MeatBase", "label": "ostrich meat", "stats": {"marketValue": 2.0}},
+  {"defName": "Meat_Rhinoceros", "parent": "MeatBase", "label": "rhinoceros meat", "stats": {"marketValue": 2.0}},
+  {"defName": "Meat_Elephant", "parent": "MeatBase", "label": "elephant meat", "stats": {"marketValue": 2.0}},
+  {"defName": "Meat_Lion", "parent": "MeatBase", "label": "lion meat", "stats": {"marketValue": 2.0}},
+  {"defName": "Meat_Monkey", "parent": "MeatBase", "label": "monkey meat", "stats": {"marketValue": 2.0}},
+  {"defName": "Meat_Capybara", "parent": "MeatBase", "label": "capybara meat", "stats": {"marketValue": 2.0}},
+  {"defName": "Meat_Iguana", "parent": "MeatBase", "label": "iguana meat", "stats": {"marketValue": 2.0}}
 ]
