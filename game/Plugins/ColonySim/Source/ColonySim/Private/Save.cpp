@@ -183,6 +183,8 @@ struct SaveDrugPawn {
     Entity pawn = kNoEntity;
     std::string policy;
     int64_t searchAfter = 0;
+    int64_t bingeUntil = 0;        // section "drugs" version 2
+    std::string bingeChemical;
     std::vector<SaveDrugEntry> edits;
     std::vector<SaveDrugChemical> chemicals;
     std::vector<SaveDrugDose> last;
@@ -2428,6 +2430,10 @@ void saveDrugs(Ar& ar, SaveData& d) {
         ar.value("pawn", p.pawn);
         ar.text("policy", p.policy);
         ar.value("searchAfter", p.searchAfter);
+        if (ar.sectionVersion() >= 2) {  // binges
+            ar.value("bingeUntil", p.bingeUntil);
+            ar.text("bingeChemical", p.bingeChemical);
+        }
         ar.list("edits", p.edits, [&](SaveDrugEntry& e) {
             ar.text("drug", e.drug);
             ar.value("forAddiction", e.forAddiction);
@@ -2899,7 +2905,7 @@ void saveSections(Ar& ar, SaveData& d) {
         }
     });
     ar.section("talents", 1, [&] { saveTalents(ar, d); });
-    ar.section("drugs", 1, [&] { saveDrugs(ar, d); });
+    ar.section("drugs", 2, [&] { saveDrugs(ar, d); });
     ar.section("roomstats", 1, [&] { saveRoomStatsSection(ar, d); });
     ar.section("animals", 2, [&] {
         ar.value("wildAnimals", d.wildAnimals);
@@ -3641,6 +3647,8 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         saved.pawn = pawn;
         saved.policy = s.policy;
         saved.searchAfter = s.searchAfter;
+        saved.bingeUntil = s.bingeUntil;
+        saved.bingeChemical = s.bingeChemical;
         for (const DrugPolicyEntry& e : s.edits) {
             saved.edits.push_back(SaveDrugEntry{e.drug, e.forAddiction, e.forJoy, e.scheduled, e.daysFrequency, e.moodBelow, e.joyBelow});
         }
@@ -4528,6 +4536,10 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             DrugState state;
             state.policy = sim.drugs_->policyNamed(saved.policy) != nullptr ? saved.policy : std::string();
             state.searchAfter = saved.searchAfter;
+            if (saved.bingeUntil > 0 && sim.drugs_->chemicalIndex(saved.bingeChemical) >= 0) {
+                state.bingeUntil = saved.bingeUntil;
+                state.bingeChemical = saved.bingeChemical;
+            }
             for (const SaveDrugEntry& e : saved.edits) {
                 if (sim.drugs_->kindOf(sim.defs_->idOf("Things", e.drug)) != nullptr) {
                     state.edits.push_back(DrugPolicyEntry{e.drug, e.forAddiction, e.forJoy, e.scheduled, e.daysFrequency, e.moodBelow, e.joyBelow});

@@ -48,7 +48,7 @@ JobSystem::StepResult JobSystem::researchWork(Entity pawn, Job& job, std::string
         job.walk = 2;
         pawnDid(pawn, PawnAction::Research, job.site);
     }
-    const double points = research_->speedAt(pawn, *bench) * health_.capacityValue(pawn, "Consciousness");
+    const double points = research_->speedAt(pawn, *bench) * health_.capacityValue(pawn, "Consciousness") * health_.workSpeedFactor(pawn);
     return research_->addProgress(points, pawn, events_) ? StepResult::Next : StepResult::Running;
 }
 

@@ -131,6 +131,8 @@ enum class EventType : uint8_t {
     PrisonerExecuted,      // a warden executed a prisoner (docs/design/prisoners.md): `thing` the prisoner (dead), `target` the warden, `message` "guilty" or "innocent"
     OrganHarvested,        // an organ was taken from a living pawn: `thing` the victim, `target` the surgeon, `part` the body part, `message` "colonist" or "prisoner" (anyone who is not one of ours)
     OperationDone,      // a doctor finished an operation (H3, docs/design/surgery.md): `thing` the doctor, `target` the patient, `def` the Recipes def, `part` the body part, `amount` the success chance, `message` "success", "failed" or "the patient died"
+    DrugBinge,             // a pawn started (`message` "start", `amount` hours) or ended ("end") a drug binge: `thing` the pawn, `def` the Chemicals def
+    ChemicalDamage,        // heavy use hurt an organ for good: `thing` the pawn, `def` the Chemicals def (invalid: a major overdose), `message` the part ("liver", "heart"...), `amount` hit points lost
 };
 
 // What stopped a projectile (ProjectileHit).

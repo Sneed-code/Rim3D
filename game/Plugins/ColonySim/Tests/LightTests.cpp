@@ -138,15 +138,15 @@ TEST_CASE("Light: darkness slows walking and work") {
     const Entity pawn = sim.things().spawn("Human", spot);
     CHECK(sim.lights().workSpeedAt(spot) == doctest::Approx(1.0f));
     CHECK(sim.lights().moveSpeedAt(spot) == doctest::Approx(1.0f));
-    CHECK(sim.jobs().lightWorkFactor(pawn) == doctest::Approx(1.0f));
+    CHECK(sim.jobs().workFactor(pawn) == doctest::Approx(1.0f));
     lightGoTo(sim, 23.0);
     CHECK(sim.lights().workSpeedAt(spot) < 0.8f);
     CHECK(sim.lights().moveSpeedAt(spot) < 0.9f);
-    CHECK(sim.jobs().lightWorkFactor(pawn) == doctest::Approx(sim.lights().workSpeedAt(spot)));
+    CHECK(sim.jobs().workFactor(pawn) == doctest::Approx(sim.lights().workSpeedAt(spot)));
     // A lamp beside it brings the speed back.
     testFueled(sim, sim.things().spawn("TorchLamp", CellPos{31, 30, 0}));
     sim.step();
-    CHECK(sim.jobs().lightWorkFactor(pawn) > 0.99f);
+    CHECK(sim.jobs().workFactor(pawn) > 0.99f);
 }
 
 TEST_CASE("Light: a pawn walks slower at night than at noon") {
