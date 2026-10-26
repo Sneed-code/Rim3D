@@ -7,6 +7,7 @@
 #include "ColonySim/Construction.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Fire.h"
 #include "ColonySim/Social.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Fuel.h"
@@ -211,14 +212,12 @@ bool jobHoldsStill(const Job& job) {
 
 void jobsStartWalk(const Map& map, const Position& pos, Mover& mover) {
     std::vector<CellPos> route = std::move(mover.path);
-    smoothPath(map, pos.x, pos.y, route);
+    smoothPath(map, pos.x, pos.y, route, pos.level);
     mover.walkTo(pos.x, pos.y, std::move(route));
 }
 
 float jobsDistSq(CellPos a, CellPos b) {
-    const float dx = static_cast<float>(a.x - b.x);
-    const float dy = static_cast<float>(a.y - b.y);
-    return dx * dx + dy * dy;
+    return levelDistSq(static_cast<float>(a.x - b.x), static_cast<float>(a.y - b.y), a.level - b.level);
 }
 
 // Candidates nearest first; ties by Work tab column, scanner, then target.
@@ -754,6 +753,28 @@ bool JobSystem::findStorageCell(DefId def, CellPos from, StoragePriority better,
     return false;
 }
 
+bool JobSystem::findStorageCellIn(uint32_t zoneId, DefId def, CellPos from, Entity pawn, CellPos& out) const {
+    const StockpileZone* zone = zones_.find(zoneId);
+    if (zone == nullptr || !zone->allows(def)) {
+        return false;
+    }
+    bool found = false;
+    float bestDist = 0.0f;
+    for (const CellPos& c : zone->cells) {
+        const float dist = jobsDistSq(from, c);
+        if (found && dist >= bestDist) {
+            continue;
+        }
+        if (roomFor(def, c) <= 0 || reservedByOther(JobTarget{kNoEntity, c}, pawn) || !canReach(from, c)) {
+            continue;
+        }
+        found = true;
+        bestDist = dist;
+        out = c;
+    }
+    return found;
+}
+
 // ---- Thinking -------------------------------------------------------------------------------
 
 void JobSystem::step() {
@@ -795,6 +816,13 @@ void JobSystem::step() {
             }
             dropCarried(pawn);  // the player's colonist may carry something with no job (U10)
             restUnderPawn(pawn);
+            continue;
+        }
+        // On fire: it runs about in panic, thinking of nothing else (docs/design/fire.md). A pawn who can't (no panic) thinks as usual.
+        if (fire_ != nullptr && reg.all_of<Burning>(pawn) && fire_->panicStep(pawn, time_.seconds)) {
+            if (reg.get<Worker>(pawn).job.type != JobType::None) {
+                endJob(pawn, JobEnd::Interrupted, "it is on fire");
+            }
             continue;
         }
         if (Health* health = reg.try_get<Health>(pawn)) {
@@ -1341,8 +1369,20 @@ JobSystem::StepResult JobSystem::buildWork(Entity pawn, Job& job, std::string& w
     }
     ConstructionSite& site = reg.get<ConstructionSite>(job.thing);
     site.workDone += constructionSpeed(pawn) * static_cast<float>(construction_.numbers().buildWorkPerSecond);
+    learnSkill(pawn, "Construction", gather_.constructionXpPerSecond);
     if (site.workDone < site.workTotal) {
         return StepResult::Running;
+    }
+    if (construction_.isUpperFloor(reg.get<Thing>(job.thing).def)) {
+        // An upper floor: the frame becomes the floor (docs/design/levels.md).
+        const CellPos cell = site.origin;
+        release(pawn, job);
+        construction_.complete(job.thing);
+        if (!map_.upperFloor(cell)) {
+            why = "the floor can't be held up there any more";
+            return StepResult::Failed;
+        }
+        return StepResult::Next;
     }
     const Entity building = construction_.complete(job.thing);
     if (building == kNoEntity) {
@@ -1366,6 +1406,7 @@ JobSystem::StepResult JobSystem::deconstructWork(Entity pawn, Job& job, std::str
         pawnDid(pawn, PawnAction::Deconstruct, job.thing);
     }
     job.progress += constructionSpeed(pawn) * static_cast<float>(construction_.numbers().deconstructWorkPerSecond);
+    learnSkill(pawn, "Construction", gather_.constructionXpPerSecond);
     if (job.progress < construction_.deconstructWork(job.thing)) {
         return StepResult::Running;
     }

@@ -15,10 +15,19 @@ namespace {
 // Names are prefixed because Unreal's unity builds merge .cpp files together.
 
 constexpr int kBillsDefaultMinCount = 1;
+constexpr int kBillsMaxSkill = 20;
+constexpr float kBillsMaxRadius = 2000.0f;
 
+// An item is in a category by its `thingCategories` (FoodRaw, Textiles) or, for a stuff, by the categories
+// of its `stuffProps` (Metallic, Fabric, Leathery): recipes ask for either (`categories`, `stuffCategories`).
 bool billsHasCategory(const Def& item, const std::string& category) {
     for (size_t i = 0; i < item.count("thingCategories"); ++i) {
         if (item.textAt("thingCategories", i) == category) {
+            return true;
+        }
+    }
+    for (size_t i = 0; i < item.count("stuffProps.categories"); ++i) {
+        if (item.textAt("stuffProps.categories", i) == category) {
             return true;
         }
     }
@@ -90,12 +99,16 @@ BillSystem::BillSystem(Things& things, const DefDatabase& defs) : things_(things
             ingredient.amount = ingredient.byNutrition ? def.number((base + ".nutrition").c_str())
                                                        : def.number((base + ".count").c_str(), 1.0);
             const std::string categories = base + ".categories";
+            const std::string stuffCategories = base + ".stuffCategories";
             const std::string named = base + ".items";
             for (const DefId item : items) {
                 const Def& itemDef = defs_.get(item);
                 bool fits = false;
                 for (size_t c = 0; c < def.count(categories.c_str()) && !fits; ++c) {
                     fits = billsHasCategory(itemDef, def.textAt(categories.c_str(), c));
+                }
+                for (size_t c = 0; c < def.count(stuffCategories.c_str()) && !fits; ++c) {
+                    fits = billsHasCategory(itemDef, def.textAt(stuffCategories.c_str(), c));
                 }
                 for (size_t n = 0; n < def.count(named.c_str()) && !fits; ++n) {
                     fits = itemDef.defName() == def.textAt(named.c_str(), n);
@@ -107,6 +120,7 @@ BillSystem::BillSystem(Things& things, const DefDatabase& defs) : things_(things
             }
             recipe.ingredients.push_back(std::move(ingredient));
         }
+        recipe.stuffFromIngredient = def.flag("productsMadeOfIngredient") || def.flag("productStuffFromIngredient");
         for (const std::string& name : def.keys("products")) {
             const DefId item = defs_.idOf("Things", name);
             if (item.valid()) {
@@ -223,11 +237,101 @@ bool BillSystem::setBill(Entity building, uint32_t billId, BillMode mode, int co
             bill.mode = mode;
             bill.count = mode == BillMode::Forever ? 0 : count;
             bill.suspended = suspended;
+            bill.satisfied = false;
             return true;
         }
     }
     error = "there is no such bill";
     return false;
+}
+
+bool BillSystem::setOptions(Entity building, uint32_t billId, const Options& options, std::string& error) {
+    BillList* list = things_.registry().valid(building) ? things_.registry().try_get<BillList>(building) : nullptr;
+    Bill* bill = nullptr;
+    if (list != nullptr) {
+        for (Bill& b : list->bills) {
+            bill = b.id == billId ? &b : bill;
+        }
+    }
+    if (bill == nullptr) {
+        error = "there is no such bill";
+        return false;
+    }
+    if (options.skillMin < 0 || options.skillMax > kBillsMaxSkill || options.skillMin > options.skillMax) {
+        error = "the skill range is 0 to " + std::to_string(kBillsMaxSkill) + ", lowest first";
+        return false;
+    }
+    if (!(options.radius >= 0.0f) || options.radius > kBillsMaxRadius) {
+        error = "the ingredient radius is 0 (anywhere) to " + std::to_string(static_cast<int>(kBillsMaxRadius)) + " metres";
+        return false;
+    }
+    if (options.unpauseAt < 0 || options.unpauseAt > numbers_.maxBillCount) {
+        error = "the restart stock is 0 to " + std::to_string(numbers_.maxBillCount);
+        return false;
+    }
+    std::vector<DefId> disallowed;
+    for (const std::string& name : options.disallowed) {
+        const Def* item = defs_.find("Things", name);
+        if (item == nullptr || item->text("category") != "Item") {
+            error = "no item '" + name + "'";
+            return false;
+        }
+        disallowed.push_back(item->id());
+    }
+    std::sort(disallowed.begin(), disallowed.end(), [](DefId a, DefId b) { return a.value < b.value; });
+    disallowed.erase(std::unique(disallowed.begin(), disallowed.end()), disallowed.end());
+    bill->skillMin = options.skillMin;
+    bill->skillMax = options.skillMax;
+    bill->radius = options.radius;
+    bill->storeZone = options.storeZone;
+    bill->unpauseAt = options.unpauseAt;
+    bill->satisfied = false;
+    bill->disallowed = std::move(disallowed);
+    return true;
+}
+
+bool BillSystem::moveBill(Entity building, uint32_t billId, int index, std::string& error) {
+    BillList* list = things_.registry().valid(building) ? things_.registry().try_get<BillList>(building) : nullptr;
+    if (list != nullptr) {
+        for (size_t from = 0; from < list->bills.size(); ++from) {
+            if (list->bills[from].id != billId) {
+                continue;
+            }
+            const size_t to = static_cast<size_t>(std::clamp(index, 0, static_cast<int>(list->bills.size()) - 1));
+            Bill moved = std::move(list->bills[from]);
+            list->bills.erase(list->bills.begin() + static_cast<std::ptrdiff_t>(from));
+            list->bills.insert(list->bills.begin() + static_cast<std::ptrdiff_t>(to), std::move(moved));
+            return true;
+        }
+    }
+    error = "there is no such bill";
+    return false;
+}
+
+bool BillSystem::allowsIngredient(const Bill& bill, DefId item) {
+    return !std::binary_search(bill.disallowed.begin(), bill.disallowed.end(), item,
+                               [](DefId a, DefId b) { return a.value < b.value; });
+}
+
+void BillSystem::step() {
+    for (const auto [building, list] : things_.registry().view<BillList>().each()) {
+        for (Bill& bill : list.bills) {
+            if (bill.mode != BillMode::UntilHave || bill.unpauseAt <= 0) {
+                bill.satisfied = false;
+                continue;
+            }
+            const Recipe* r = recipe(bill.recipe);
+            if (r == nullptr || r->products.empty()) {
+                continue;
+            }
+            const int stock = stockOf(r->products.front().item);
+            if (stock >= bill.count) {
+                bill.satisfied = true;
+            } else if (stock < bill.unpauseAt) {
+                bill.satisfied = false;
+            }
+        }
+    }
 }
 
 int BillSystem::stockOf(DefId item) const {
@@ -245,6 +349,9 @@ bool BillSystem::shouldDo(const Bill& bill) const {
         case BillMode::Count: return bill.count > 0;
         case BillMode::Forever: return true;
         case BillMode::UntilHave: {
+            if (bill.satisfied) {
+                return false;
+            }
             const Recipe* r = recipe(bill.recipe);
             return r != nullptr && !r->products.empty() && stockOf(r->products.front().item) < bill.count;
         }
