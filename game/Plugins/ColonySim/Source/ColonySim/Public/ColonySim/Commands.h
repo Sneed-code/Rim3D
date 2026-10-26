@@ -504,6 +504,21 @@ struct SetMedicalCareCommand {
     std::string care;
 };
 
+// Prisoners (task C22, docs/design/prisoners.md): what wardens do with a prisoner. `mode` is NoInteraction, ReduceResistance,
+// AttemptRecruit or Release (prisonerModeName). Fails for a pawn that is no prisoner, or a name that isn't one; Release also fails
+// for a prisoner who can't walk.
+struct SetPrisonerModeCommand {
+    Entity pawn = kNoEntity;
+    std::string mode;
+};
+
+// Marks a bed as a prison bed (only prisoners sleep in it, and downed enemies are carried to it) or takes the mark off. Fails for a
+// building that is no bed, or a bed someone not fit for it already owns.
+struct SetPrisonBedCommand {
+    Entity bed = kNoEntity;
+    bool on = true;
+};
+
 // Dev command: the weather becomes this Weathers def now (by defName, e.g. "Rain") and lasts `hours`
 // game hours (0: its usual length), then the next is chosen as usual (docs/design/weather.md).
 // Fails if no Weathers def has the name.
@@ -604,7 +619,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SpendTalentPointCommand, AddTalentXpCommand, RearmTrapCommand,
                              CarryWeaponCommand, SwitchWeaponCommand, CreateGrowingZoneCommand,
                              RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
-                             SetHomeAreaCommand, SetMedicalCareCommand>;
+                             SetHomeAreaCommand, SetMedicalCareCommand, SetPrisonerModeCommand, SetPrisonBedCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

@@ -12,6 +12,7 @@
 #include "ColonySim/Map.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Regions.h"
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Talents.h"
 #include "ColonySim/Things.h"
@@ -65,7 +66,10 @@ enum class JobStepKind : uint8_t {
     StripWork,    // take the clothes and weapon off a downed or dead pawn
     ApproachAnimal,  // walk up to the job's animal (HusbandryJobs.cpp)
     HandleWork,      // tame, train, kill or feed it, standing beside it
-    ExtinguishWork   // beat the fire in the job's cell out (FireJobs.cpp)
+    ExtinguishWork,  // beat the fire in the job's cell out (FireJobs.cpp)
+    ApproachPrisoner,  // walk up to the job's prisoner (`site`) (PrisonerJobs.cpp)
+    FeedWork,          // hand the carried food over
+    ChatWork           // talk to it
 };
 
 constexpr JobStepKind kJobsWaitSteps[] = {JobStepKind::Wait};
@@ -106,6 +110,9 @@ constexpr JobStepKind kJobsHandleFoodSteps[] = {JobStepKind::GotoThing, JobStepK
                                                 JobStepKind::HandleWork};
 constexpr JobStepKind kJobsHandleSteps[] = {JobStepKind::ApproachAnimal, JobStepKind::HandleWork};
 constexpr JobStepKind kJobsExtinguishSteps[] = {JobStepKind::GotoTouch, JobStepKind::ExtinguishWork};
+constexpr JobStepKind kJobsFeedPrisonerSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::ApproachPrisoner,
+                                                  JobStepKind::FeedWork};
+constexpr JobStepKind kJobsChatSteps[] = {JobStepKind::ApproachPrisoner, JobStepKind::ChatWork};
 
 // The most steps one pawn's job may run in one game second (guards against a loop of steps that
 // all end at once).
@@ -156,6 +163,9 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::SlaughterAnimal:
         case JobType::GatherAnimal: return {kJobsHandleSteps, static_cast<int>(std::size(kJobsHandleSteps))};
         case JobType::ExtinguishFire: return {kJobsExtinguishSteps, static_cast<int>(std::size(kJobsExtinguishSteps))};
+        case JobType::CapturePrisoner: return {kJobsRescueSteps, static_cast<int>(std::size(kJobsRescueSteps))};
+        case JobType::FeedPrisoner: return {kJobsFeedPrisonerSteps, static_cast<int>(std::size(kJobsFeedPrisonerSteps))};
+        case JobType::WardenInteract: return {kJobsChatSteps, static_cast<int>(std::size(kJobsChatSteps))};
     }
     return {nullptr, 0};
 }
@@ -177,6 +187,8 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::ApparelWork:
         case JobStepKind::StripWork:
         case JobStepKind::HandleWork:
+        case JobStepKind::FeedWork:
+        case JobStepKind::ChatWork:
         case JobStepKind::Eat:
         case JobStepKind::Lie:
         case JobStepKind::BedRestLie:
@@ -244,6 +256,9 @@ const char* jobTypeName(JobType type) {
         case JobType::GatherAnimal: return "GatherAnimal";
         case JobType::SowCrop: return "SowCrop";
         case JobType::ExtinguishFire: return "ExtinguishFire";
+        case JobType::CapturePrisoner: return "CapturePrisoner";
+        case JobType::FeedPrisoner: return "FeedPrisoner";
+        case JobType::WardenInteract: return "WardenInteract";
     }
     return "?";
 }
@@ -495,9 +510,22 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
             return n;
         }
         case JobType::Rescue:
+        case JobType::CapturePrisoner:
             out[0] = keyOf(JobTarget{job.thing, CellPos{}});
             out[1] = keyOf(JobTarget{kNoEntity, job.cell});
             return 2;
+        case JobType::FeedPrisoner: {
+            // The prisoner, and the food being fetched or carried to it.
+            int n = 0;
+            out[n++] = keyOf(JobTarget{job.site, CellPos{}});
+            if (job.thing != kNoEntity) {
+                out[n++] = keyOf(JobTarget{job.thing, CellPos{}});
+            }
+            return n;
+        }
+        case JobType::WardenInteract:
+            out[0] = keyOf(JobTarget{job.site, CellPos{}});
+            return 1;
         case JobType::WearApparel:
             if (job.count != 0) {
                 return 0;  // taking a worn piece off holds nothing
@@ -762,6 +790,15 @@ void JobSystem::step() {
                 health->rest = RestKind::Ground;
             }
         }
+        // A prisoner sleeps and rests in its cell and does nothing else (PrisonerJobs.cpp).
+        if (reg.all_of<Prisoner>(pawn)) {
+            stepPrisoner(pawn);
+            if (reg.get<Worker>(pawn).job.type != JobType::None) {
+                tickJob(pawn);
+                reg.get<Mover>(pawn).hold = jobHoldsStill(reg.get<Worker>(pawn).job);
+            }
+            continue;
+        }
         // An animal that hauls works only while it is awake, fed and unhurt.
         if (animalGate_ && reg.all_of<Animal>(pawn) && !animalGate_(pawn)) {
             if (reg.get<Worker>(pawn).job.type != JobType::None) {
@@ -942,6 +979,9 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::Rescue) {
         return failCheckRescue(pawn, job, why);
     }
+    if (job.type == JobType::CapturePrisoner || job.type == JobType::FeedPrisoner || job.type == JobType::WardenInteract) {
+        return failCheckPrisoner(pawn, job, why);
+    }
     if (job.type == JobType::BedRest) {
         return failCheckBedRest(pawn, job, why);
     }
@@ -1104,6 +1144,12 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return handleWork(pawn, job, why);
         case JobStepKind::ExtinguishWork:
             return extinguishWork(pawn, job, why);
+        case JobStepKind::ApproachPrisoner:
+            return approachPrisoner(pawn, job, why);
+        case JobStepKind::FeedWork:
+            return feedPrisonerWork(pawn, job, why);
+        case JobStepKind::ChatWork:
+            return chatWork(pawn, job, why);
     }
     return StepResult::Failed;
 }

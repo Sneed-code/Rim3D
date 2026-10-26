@@ -383,13 +383,19 @@ void MoodSystem::step(int64_t now, std::vector<Event>& events) {
     const size_t eventCount = events.size();
     for (size_t i = 0; i < eventCount; ++i) {
         const Event& event = events[i];
-        Mood* mood = (event.type == EventType::PawnAte || event.type == EventType::PawnWokeUp) && reg.valid(event.thing)
-                         ? reg.try_get<Mood>(event.thing)
+        Mood* mood = (event.type == EventType::PawnAte || event.type == EventType::PawnWokeUp || event.type == EventType::PrisonerCaptured ||
+                      event.type == EventType::PrisonerChatted) &&
+                             reg.valid(event.type == EventType::PrisonerChatted ? event.target : event.thing)
+                         ? reg.try_get<Mood>(event.type == EventType::PrisonerChatted ? event.target : event.thing)
                          : nullptr;
         if (mood == nullptr) {
             continue;
         }
-        if (event.type == EventType::PawnAte) {
+        if (event.type == EventType::PrisonerCaptured) {
+            addMemory(*mood, "PrisonerCaptured", now);
+        } else if (event.type == EventType::PrisonerChatted) {
+            addMemory(*mood, "PrisonerChatted", now);
+        } else if (event.type == EventType::PawnAte) {
             const std::string preferability = defs_.get(event.def).text("ingestible.preferability");
             if (preferability == "RawBad") {
                 addMemory(*mood, "AteRawFood", now);
