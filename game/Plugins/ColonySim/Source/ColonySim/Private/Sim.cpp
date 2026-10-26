@@ -242,6 +242,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     combat_->setHurtHook([this](Entity victim, Entity attacker) { animals_->hurt(victim, attacker); });
     jobs_->setHusbandry(husbandry_.get());
     jobs_->setCombat(combat_.get());
+    jobs_->setTemperature(temperature_.get());
     husbandry_->setHaulerHook([this](Entity animal, bool on) { jobs_->setAnimalHauler(animal, on); });
     jobs_->setAnimalWorkGate([this](Entity animal) { return animals_->mayWork(animal); });
     raids_ = std::make_unique<RaidSystem>(*things_, map_, *rooms_, *combat_, *health_, *jobs_, *fighters_, *defs_, time_, rng_);
@@ -251,6 +252,23 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     prisoners_->setEventLog(&events_);
     jobs_->setPrisoners(prisoners_.get());
     mood_->addSituation("isPrisoner", [this](Entity pawn) { return prisoners_->isPrisoner(pawn) ? 0 : -1; });
+    // Night owls like being up at night and not by day (docs/design/mood.md); only pawns that are awake count.
+    const auto awakeAt = [this](Entity pawn, bool night) {
+        const Worker* worker = things_->registry().try_get<Worker>(pawn);
+        if (worker == nullptr || jobIsLyingDown(worker->job)) {
+            return -1;
+        }
+        return mood_->rules().isNightHour(time_.hourOfDay()) == night ? 0 : -1;
+    };
+    mood_->addSituation("awakeAtNight", [awakeAt](Entity pawn) { return awakeAt(pawn, true); });
+    mood_->addSituation("awakeInDay", [awakeAt](Entity pawn) { return awakeAt(pawn, false); });
+    mood_->addSituation("noBedroom", [this](Entity pawn) {
+        const Entity bed = jobs_->bedOf(pawn);
+        if (bed == kNoEntity || !things_->registry().all_of<Position>(bed)) {
+            return 0;
+        }
+        return rooms_->roleAt(cellOf(things_->registry().get<Position>(bed))) == RoomRole::Bedroom ? -1 : 0;
+    });
     combat_->setBeforeDestroy([this](Entity thing) {
         jobs_->forget(thing);
         raids_->forget(thing);
@@ -700,6 +718,14 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             error = "a mark is Tame, Slaughter, Hunt or Release";
         }
         if (!ok) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* markArea = std::get_if<MarkAnimalsInAreaCommand>(&command)) {
+        if (!husbandry_->markInArea(markArea->area, markArea->mark, markArea->on, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* animalName = std::get_if<SetAnimalNameCommand>(&command)) {
+        if (!husbandry_->setName(animalName->animal, animalName->name, error)) {
             commandFailed(id, error);
         }
     } else if (const auto* training = std::get_if<SetTrainingCommand>(&command)) {
@@ -1500,6 +1526,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 view.markSlaughter = care->markSlaughter;
                 view.markHunt = care->markHunt;
                 view.animalZone = care->zone;
+                view.animalName = care->name;
                 view.learnedTricks = husbandry_->learnedMask(entity);
                 view.wantedTricks = husbandry_->wantedMask(entity);
             }
