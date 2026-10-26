@@ -85,6 +85,8 @@ const char* commandName(const Command& command) {
                 return "PlaceFloor";
             } else if constexpr (std::is_same_v<Type, AddFilthCommand>) {
                 return "AddFilth";
+            } else if constexpr (std::is_same_v<Type, SetThermostatCommand>) {
+                return "SetThermostat";
             } else if constexpr (std::is_same_v<Type, SetRefuelCommand>) {
                 return "SetRefuel";
             } else if constexpr (std::is_same_v<Type, SetBillOptionsCommand>) {

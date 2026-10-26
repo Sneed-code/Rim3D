@@ -1068,6 +1068,12 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (changed == 0) {
             commandFailed(id, why.empty() ? std::string("no upper floor changed there") : why);
         }
+    } else if (const auto* thermostat = std::get_if<SetThermostatCommand>(&command)) {
+        if (thermostat->clear) {
+            temperature_->clearThermostat(thermostat->building);
+        } else if (!temperature_->setThermostat(thermostat->building, thermostat->celsius, &error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* refuel = std::get_if<SetRefuelCommand>(&command)) {
         if (!jobs_->fuel().setRefuel(refuel->building, refuel->autoRefuel, refuel->fillNow, error)) {
             commandFailed(id, error);

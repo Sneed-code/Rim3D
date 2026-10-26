@@ -47,6 +47,8 @@ TemperatureNumbers TemperatureNumbers::read(const DefDatabase& defs) {
     n.rock = tempFloat(*def, "conductancePerHour.rock", n.rock);
     n.safeMarginC = tempFloat(*def, "safeMarginC", n.safeMarginC);
     n.frostbiteSeverity = tempFloat(*def, "frostbiteSeverity", n.frostbiteSeverity);
+    n.thermostatMinC = tempFloat(*def, "thermostatRangeC.min", n.thermostatMinC);
+    n.thermostatMaxC = tempFloat(*def, "thermostatRangeC.max", n.thermostatMaxC);
     return n;
 }
 
@@ -67,6 +69,7 @@ TemperatureSystem::TemperatureSystem(Map& map, Things& things, Rooms& rooms, Hea
         s.maxTemp = tempFloat(d, "heatPusher.maxTemp", 0.0f);
         s.hasMin = d.has("heatPusher.minTemp");
         s.minTemp = tempFloat(d, "heatPusher.minTemp", 0.0f);
+        s.adjustable = d.flag("heatPusher.adjustable");
         s.isWall = d.flag("building.holdsRoof");
         s.isVent = d.flag("building.vent");
     }
@@ -273,6 +276,9 @@ void TemperatureSystem::refreshSources() {
         }
     }
     std::sort(sources_.begin(), sources_.end());
+    for (auto it = thermostats_.begin(); it != thermostats_.end();) {
+        it = things_.exists(it->first) ? std::next(it) : thermostats_.erase(it);
+    }
 }
 
 // The temperature on the far side of a wall, from the temperatures at the start of the interval.
@@ -374,6 +380,8 @@ void TemperatureSystem::exchange() {
             continue;
         }
         const SourceDef& s = sourceDefs_[reg.get<Thing>(source).def.value];
+        const auto target = thermostats_.find(source);
+        const float limit = target != thermostats_.end() ? target->second : (s.heatPerSecond > 0.0f ? s.maxTemp : s.minTemp);
         const RoomId id = roomOfSource(source);
         if (id == kNoRoom || !usesRoomTemperature(list[id])) {
             continue;  // heat pushed outdoors is lost
@@ -385,14 +393,14 @@ void TemperatureSystem::exchange() {
         if (s.heatPerSecond > 0.0f) {
             if (!s.hasMax) {
                 t += dt;
-            } else if (t < s.maxTemp) {
-                t = std::min(s.maxTemp, t + dt);
+            } else if (t < limit) {
+                t = std::min(limit, t + dt);
             }
         } else if (s.heatPerSecond < 0.0f) {
             if (!s.hasMin) {
                 t += dt;
-            } else if (t > s.minTemp) {
-                t = std::max(s.minTemp, t + dt);
+            } else if (t > limit) {
+                t = std::max(limit, t + dt);
             }
         }
     }
@@ -510,7 +518,69 @@ void TemperatureSystem::restore(const std::vector<RoomTemperature>& temperatures
     storeCells();
 }
 
+bool TemperatureSystem::setThermostat(Entity building, float celsius, std::string* error) {
+    const entt::registry& reg = things_.registry();
+    const Thing* thing = things_.exists(building) ? reg.try_get<Thing>(building) : nullptr;
+    if (thing == nullptr || thing->def.value >= sourceDefs_.size() || !sourceDefs_[thing->def.value].adjustable ||
+        !reg.all_of<Footprint>(building)) {
+        if (error != nullptr) {
+            *error = "that has no thermostat";
+        }
+        return false;
+    }
+    if (!std::isfinite(celsius) || celsius < numbers_.thermostatMinC || celsius > numbers_.thermostatMaxC) {
+        if (error != nullptr) {
+            *error = "that temperature is outside what a thermostat can be set to";
+        }
+        return false;
+    }
+    thermostats_[building] = celsius;
+    return true;
+}
+
+void TemperatureSystem::clearThermostat(Entity building) { thermostats_.erase(building); }
+
+bool TemperatureSystem::hasThermostat(Entity building) const { return thermostats_.count(building) != 0; }
+
+float TemperatureSystem::thermostat(Entity building) const {
+    const auto it = thermostats_.find(building);
+    if (it != thermostats_.end()) {
+        return it->second;
+    }
+    const Thing* thing = things_.exists(building) ? things_.registry().try_get<Thing>(building) : nullptr;
+    if (thing == nullptr || thing->def.value >= sourceDefs_.size()) {
+        return 0.0f;
+    }
+    const SourceDef& s = sourceDefs_[thing->def.value];
+    return s.heatPerSecond > 0.0f ? s.maxTemp : s.minTemp;
+}
+
+std::vector<Thermostat> TemperatureSystem::thermostats() const {
+    std::vector<Thermostat> out;
+    for (const auto& [building, celsius] : thermostats_) {
+        if (things_.exists(building)) {
+            out.push_back(Thermostat{building, celsius});
+        }
+    }
+    return out;
+}
+
+void TemperatureSystem::restoreThermostats(const std::vector<Thermostat>& thermostats) {
+    thermostats_.clear();
+    for (const Thermostat& t : thermostats) {
+        setThermostat(t.building, t.celsius);
+    }
+}
+
 void TemperatureSystem::hashState(StateHasher& hasher) {
+    // Only when some are set, so a game with none hashes as it did.
+    if (!thermostats_.empty()) {
+        hasher.add(static_cast<uint64_t>(thermostats_.size()));
+        for (const auto& [building, celsius] : thermostats_) {
+            hasher.add(static_cast<uint64_t>(entt::to_integral(building)));
+            hasher.add(celsius);
+        }
+    }
     const std::vector<RoomTemperature> temperatures = roomTemperatures();
     hasher.add(static_cast<uint64_t>(temperatures.size()));
     for (const RoomTemperature& t : temperatures) {
