@@ -2,6 +2,7 @@
 
 Updated 2026-10-26.
 
+Stage 2 hydroponics done: a powered hydroponics basin (new research `Hydroponics`, 70 steel, 70 W) gives its cell fertility 2.8 and takes a growing zone, plant pots count as fertility 1.0 spots, and a powered sun lamp within 5 m lets a lit crop grow through the night as well, so a heated, roofed room with basins and a sun lamp feeds the colony through winter (`docs/design/farming.md`, tests `HydroponicsTests`). Sim only.
 Art stage planned: `docs/plans/art-stage.md` (26 tasks V1 to V26: faces and hair, body hair, anatomy, jiggle, wounds, dismemberment, destructible clothes, real animation, Niagara fire, real buildings and items, destruction, sound, styled UI). Docs only.
 Stage 2 heat armour done: a burning pawn's flames now go through the heat armour of the clothes over the part they hit (bounce, half damage, wear on the piece), so a hyperweave duster and hat save most of the burns; clothes already carried the heat stat from RimWorld's numbers (`docs/design/fire.md`, test in `FireTests`). Sim only.
 
