@@ -75,6 +75,10 @@ struct Recipe {
     // (meat and leather) come from the animal's def. "Until you have" counts the raw meat on the map.
     bool butcher = false;
     // How many things one run makes. A building that burns fuel per product burns this many times its `fuel.perUse`.
+    // `fuelUses` in the def overrides it (0 = one use per product): a stove burns by time worked in RimWorld, so a batch of
+    // 50 kibble must not burn 50 wood.
+    int fuelUsesSet = 0;
+    int fuelUses() const { return fuelUsesSet > 0 ? fuelUsesSet : productCount(); }
     int productCount() const {
         int made = 0;
         for (const RecipeProduct& product : products) {

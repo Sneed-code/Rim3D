@@ -182,6 +182,8 @@ float Lights::skyGlow() const {
     return LightNumbers::eval(numbers_.skyGlowByHour, hour) * (weather_ != nullptr ? weather_->skyGlow() : 1.0f);
 }
 
+float Lights::clearSkyGlowAtHour(float hour) const { return LightNumbers::eval(numbers_.skyGlowByHour, hour); }
+
 bool Lights::underOpenSky(CellPos c) const {
     return map_.onGround(c) && map_.roof(c) == Roof::None;
 }
