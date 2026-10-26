@@ -11,6 +11,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Regions.h"
@@ -362,7 +363,8 @@ void FighterSystem::step() {
         p.able = h == nullptr || !h->downed;
         p.fighter = reg.all_of<Fighter>(e);
         const Animal* wildLife = reg.try_get<Animal>(e);
-        p.animal = wildLife != nullptr && wildLife->temper == AnimalTemper::Calm;  // a hunting, manhunting or avenging one is an enemy (N5)
+        // A hunting, manhunting or avenging animal is an enemy (N5); a prisoner is nobody's target (C22).
+        p.animal = (wildLife != nullptr && wildLife->temper == AnimalTemper::Calm) || reg.all_of<Prisoner>(e);
         p.stance = p.able ? posture.stance : Stance::Prone;
         pawns_.push_back(p);
     }

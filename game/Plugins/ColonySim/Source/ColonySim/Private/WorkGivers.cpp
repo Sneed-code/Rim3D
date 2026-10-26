@@ -1,4 +1,5 @@
 // The work scanners, one per task name in the WorkTypes defs (docs/design/jobs.md).
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Jobs.h"
 
 #include "ColonySim/Apparel.h"
@@ -580,7 +581,7 @@ bool medicalColonist(const entt::registry& reg, Entity pawn) {
         return false;
     }
     const Faction* faction = reg.try_get<Faction>(pawn);
-    return faction == nullptr || faction->id == kPlayerFaction;
+    return faction == nullptr || faction->id == kPlayerFaction || reg.all_of<Prisoner>(pawn);  // doctors tend prisoners too
 }
 
 // TendPatients (WorkGiver_Tend): a patient with an injury or lost part nobody has tended, the pawn itself too, as
@@ -857,6 +858,7 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<ExtinguishFiresGiver>());
     givers.push_back(std::make_unique<StripGiver>());
     addHusbandryWorkGivers(givers);
+    addPrisonerWorkGivers(givers);
     return givers;
 }
 
