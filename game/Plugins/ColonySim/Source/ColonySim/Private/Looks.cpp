@@ -1,6 +1,7 @@
 #include "ColonySim/Looks.h"
 
 #include "ColonySim/Defs.h"
+#include "ColonySim/Genes.h"
 #include "ColonySim/Random.h"
 
 #include <algorithm>
@@ -56,26 +57,30 @@ LooksColor looksMelaninColor(const Def& rules, float melanin) {
     return before;
 }
 
-// Skin and hair as drawn: the lineage's colour over the melanin colour, a little darker for
-// darker skin so the shading between pawns of one lineage stays.
-void looksApplyLineage(const Def* rules, const Def* lineage, PawnLooks& out) {
+// Skin and hair as drawn: the colour of the lineage's last skin gene over the melanin colour, a
+// little darker for darker skin so the shading between pawns of one lineage stays.
+void looksApplyLineage(const DefDatabase& defs, const Def* rules, const Def* lineage, PawnLooks& out) {
     const LooksColor base = rules ? looksMelaninColor(*rules, out.melanin) : LooksColor{0.75f, 0.58f, 0.45f};
     out.skin = base;
     out.hair = out.naturalHair;
     if (lineage == nullptr) {
         return;
     }
-    const float amount = std::clamp(static_cast<float>(lineage->number("visual.skinColorAmount", 0.0)), 0.0f, 1.0f);
-    if (amount > 0.0f && lineage->count("visual.skinColor") >= 3) {
-        const LooksColor tint = looksColorField(*lineage, "visual.skinColor", base);
-        const float shade = 1.1f - 0.35f * out.melanin;
-        out.skin = looksLerp(base, LooksColor{tint.r * shade, tint.g * shade, tint.b * shade}, amount);
-        out.skin.r = std::clamp(out.skin.r, 0.0f, 1.0f);
-        out.skin.g = std::clamp(out.skin.g, 0.0f, 1.0f);
-        out.skin.b = std::clamp(out.skin.b, 0.0f, 1.0f);
+    if (const Def* skinGene = lineageGeneWith(defs, *lineage, "visual.skinColor")) {
+        const float amount = std::clamp(static_cast<float>(skinGene->number("visual.skinColorAmount", 0.0)), 0.0f, 1.0f);
+        if (amount > 0.0f && skinGene->count("visual.skinColor") >= 3) {
+            const LooksColor tint = looksColorField(*skinGene, "visual.skinColor", base);
+            const float shade = 1.1f - 0.35f * out.melanin;
+            out.skin = looksLerp(base, LooksColor{tint.r * shade, tint.g * shade, tint.b * shade}, amount);
+            out.skin.r = std::clamp(out.skin.r, 0.0f, 1.0f);
+            out.skin.g = std::clamp(out.skin.g, 0.0f, 1.0f);
+            out.skin.b = std::clamp(out.skin.b, 0.0f, 1.0f);
+        }
     }
-    if (lineage->count("visual.hairColor") >= 3) {
-        out.hair = looksColorField(*lineage, "visual.hairColor", out.naturalHair);
+    if (const Def* hairGene = lineageGeneWith(defs, *lineage, "visual.hairColor")) {
+        if (hairGene->count("visual.hairColor") >= 3) {
+            out.hair = looksColorField(*hairGene, "visual.hairColor", out.naturalHair);
+        }
     }
 }
 
@@ -104,7 +109,7 @@ bool generateLooks(const DefDatabase& defs, uint64_t seed, bool female, const st
         ok = false;
     }
     if (rules == nullptr) {
-        looksApplyLineage(nullptr, lineageDef, out);
+        looksApplyLineage(defs, nullptr, lineageDef, out);
         return ok;
     }
 
@@ -158,7 +163,7 @@ bool generateLooks(const DefDatabase& defs, uint64_t seed, bool female, const st
         out.naturalHair = looksColorField(*rules, "hairColors." + std::to_string(i) + ".color", out.naturalHair);
     }
 
-    looksApplyLineage(rules, lineageDef, out);
+    looksApplyLineage(defs, rules, lineageDef, out);
     return ok;
 }
 
@@ -169,7 +174,7 @@ bool setLineage(const DefDatabase& defs, const std::string& lineage, PawnLooks& 
         return false;
     }
     looks.lineage = lineage;
-    looksApplyLineage(defs.find("Rules", "LooksRules"), lineageDef, looks);
+    looksApplyLineage(defs, defs.find("Rules", "LooksRules"), lineageDef, looks);
     return true;
 }
 

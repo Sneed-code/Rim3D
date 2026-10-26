@@ -1,6 +1,6 @@
 [
  {
-  "defName": "Armchair", "researchPrerequisite": "ComplexFurniture",
+  "defName": "Armchair", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Armchair.SM_Armchair" }, "researchPrerequisite": "ComplexFurniture",
   "parent": "StuffBuildingBase",
   "label": "armchair",
   "size": [
@@ -28,7 +28,7 @@
   ]
  },
  {
-  "defName": "EndTable", "researchPrerequisite": "ComplexFurniture",
+  "defName": "EndTable", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_EndTable.SM_EndTable" }, "researchPrerequisite": "ComplexFurniture",
   "parent": "StuffBuildingBase",
   "label": "end table",
   "size": [
@@ -52,7 +52,7 @@
   ]
  },
  {
-  "defName": "Dresser", "researchPrerequisite": "ComplexFurniture",
+  "defName": "Dresser", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Dresser.SM_Dresser" }, "researchPrerequisite": "ComplexFurniture",
   "parent": "StuffBuildingBase",
   "label": "dresser",
   "size": [
@@ -82,7 +82,7 @@
   ]
  },
  {
-  "defName": "PlantPot",
+  "defName": "PlantPot", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_PlantPot.SM_PlantPot" },
   "parent": "StuffBuildingBase",
   "label": "plant pot",
   "size": [

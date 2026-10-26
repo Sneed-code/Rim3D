@@ -1,8 +1,10 @@
 #include "ColonySim/Things.h"
 
+#include "ColonySim/Animals.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Cover.h"
+#include "ColonySim/Defense.h"
 #include "ColonySim/Doors.h"
 #include "ColonySim/Fuel.h"
 #include "ColonySim/Health.h"
@@ -11,6 +13,8 @@
 #include "ColonySim/Power.h"
 
 #include <algorithm>
+#include <iterator>
+#include <string>
 #include <utility>
 
 namespace colony {
@@ -91,6 +95,9 @@ Entity Things::make(DefId defId, int stackCount) {
     }
     switch (category) {
         case ThingCategory::Item: {
+            if (thingHasSpoilage(def)) {
+                registry_.emplace<Spoilage>(thing);
+            }
             const int limit = std::max(1, static_cast<int>(def.integer("stackLimit", 1)));
             registry_.emplace<StackCount>(thing, StackCount{std::clamp(stackCount, 1, limit)});
             break;
@@ -112,6 +119,12 @@ Entity Things::make(DefId defId, int stackCount) {
             if (def.has("power")) {
                 registry_.emplace<PowerPart>(thing);  // switch, output, charge (Power.h)
             }
+            if (def.has("turret")) {
+                registry_.emplace<Turret>(thing);  // Defense.h
+            }
+            if (def.has("trap")) {
+                registry_.emplace<Trap>(thing);
+            }
             if (const FuelSpec fuelSpec = readFuelSpec(*defs_, def); fuelSpec.present) {
                 registry_.emplace<Fuel>(thing, Fuel{fuelSpec.capacity * fuelSpec.initial});  // Fuel.h
             }
@@ -125,6 +138,9 @@ Entity Things::make(DefId defId, int stackCount) {
             registry_.emplace<Posture>(thing);
             if (def.has("race.body")) {
                 registry_.emplace<Health>(thing);
+            }
+            if (def.text("race.intelligence") == "Animal") {
+                registry_.emplace<Animal>(thing, makeAnimalFor(def));  // Animals.h
             }
             break;
         }
@@ -259,7 +275,43 @@ Entity Things::splitOff(Entity item, int count) {
     if (const HitPoints* hp = registry_.try_get<HitPoints>(item)) {
         registry_.emplace_or_replace<HitPoints>(part, *hp);
     }
+    if (const Spoilage* spoilage = registry_.try_get<Spoilage>(item)) {
+        registry_.emplace_or_replace<Spoilage>(part, *spoilage);
+    }
     return part;
+}
+
+void Things::addToStack(Entity into, Entity from, int count) {
+    StackCount& stack = registry_.get<StackCount>(into);
+    Spoilage* a = registry_.try_get<Spoilage>(into);
+    const Spoilage* b = registry_.try_get<Spoilage>(from);
+    if (a != nullptr && b != nullptr && count > 0) {
+        const float have = static_cast<float>(stack.count);
+        const float put = static_cast<float>(count);
+        a->rot = (a->rot * have + b->rot * put) / (have + put);
+        a->decay = std::max(a->decay, b->decay);
+        a->poisoned = a->poisoned || b->poisoned;
+        std::vector<DefId> joined;
+        std::set_union(a->ingredients.begin(), a->ingredients.end(), b->ingredients.begin(), b->ingredients.end(),
+                       std::back_inserter(joined), [](DefId x, DefId y) { return x.value < y.value; });
+        a->ingredients = std::move(joined);
+    }
+    stack.count += count;
+}
+
+bool thingHasSpoilage(const Def& def) {
+    return def.text("category") == "Item" &&
+           (thingRotDays(def) > 0.0 || def.number("stats.deteriorationRate") > 0.0 || def.text("ingestible.foodType") == "Meal");
+}
+
+double thingRotDays(const Def& def) {
+    for (size_t i = 0, n = def.count("comps"); i < n; ++i) {
+        const std::string path = "comps." + std::to_string(i);
+        if (def.text((path + ".type").c_str()) == "Rottable") {
+            return def.number((path + ".daysToRotStart").c_str());
+        }
+    }
+    return 0.0;
 }
 
 void Things::destroy(Entity thing) {

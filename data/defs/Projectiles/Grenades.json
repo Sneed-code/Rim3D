@@ -1,0 +1,14 @@
+[
+  {
+    "defName": "GrenadeBase", "abstract": true, "source": "RimWorld wiki",
+    "projectile": { "damageDef": "Bomb" }
+  },
+  {
+    "defName": "Proj_GrenadeFrag", "parent": "GrenadeBase", "label": "frag grenade",
+    "thrown": { "speed": 0.4, "fuse": 50 },
+    "explosion": { "damageDef": "Bomb", "damage": 50, "armorPenetration": 0.1, "radius": 1.9 },
+    "visual": { "parts": [{ "shape": "sphere", "radius": 0.035, "height": 0.07, "color": [0.25, 0.3, 0.2] }] },
+    "unverified": ["explosion.radius", "thrown.fuse"],
+    "ours": ["thrown"]
+  }
+]

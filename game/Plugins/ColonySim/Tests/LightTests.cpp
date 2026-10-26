@@ -43,6 +43,10 @@ Sim lightSim(int size = 64) { return Sim(SimSettings{5, size, 0, 0, true}, light
 
 // Runs the sim to an hour of the day (from a sim that has not run yet).
 void lightGoTo(Sim& sim, double hour) {
+    if (sim.time().seconds == 0) {
+        // Held clear, so the sun's light is the time of day's alone (E1 dims it in cloud and fog).
+        sim.submit(SetWeatherCommand{"Clear", 1000.0f});
+    }
     sim.stepMany(static_cast<int64_t>(hour * static_cast<double>(kSecondsPerHour)) - sim.time().seconds);
 }
 

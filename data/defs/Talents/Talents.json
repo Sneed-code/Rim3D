@@ -1,0 +1,9 @@
+[
+  {"defName": "FastBuilder", "label": "fast builder", "stat": "buildSpeed", "perRank": 0.10, "maxRank": 5, "cost": 1, "ours": ["stat", "perRank", "maxRank", "cost"]},
+  {"defName": "MasterBuilder", "label": "master builder", "stat": "buildSpeed", "perRank": 0.15, "maxRank": 2, "cost": 2, "requires": {"FastBuilder": 3}, "ours": ["stat", "perRank", "maxRank", "cost", "requires"]},
+  {"defName": "SteadyAim", "label": "steady aim", "stat": "aimSpread", "perRank": -0.06, "maxRank": 5, "cost": 1, "ours": ["stat", "perRank", "maxRank", "cost"]},
+  {"defName": "DeadEye", "label": "dead eye", "stat": "aimSpread", "perRank": -0.10, "maxRank": 2, "cost": 2, "requires": {"SteadyAim": 3}, "ours": ["stat", "perRank", "maxRank", "cost", "requires"]},
+  {"defName": "PackMule", "label": "pack mule", "stat": "carryCapacity", "perRank": 0.20, "maxRank": 5, "cost": 1, "ours": ["stat", "perRank", "maxRank", "cost"]},
+  {"defName": "Haggler", "label": "haggler", "stat": "tradePrice", "perRank": -0.04, "maxRank": 5, "cost": 1, "ours": ["stat", "perRank", "maxRank", "cost"]},
+  {"defName": "SilverTongue", "label": "silver tongue", "stat": "tradePrice", "perRank": -0.06, "maxRank": 2, "cost": 2, "requires": {"Haggler": 3}, "ours": ["stat", "perRank", "maxRank", "cost", "requires"]}
+]

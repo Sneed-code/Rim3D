@@ -5,7 +5,9 @@
 #include "ColonySim/Entity.h"
 
 #include <cstdint>
+#include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace colony {
@@ -14,6 +16,7 @@ struct Event;
 class NeedsSystem;
 class RoomStats;
 class Rooms;
+class TemperatureSystem;
 class Things;
 
 // Mood and thoughts (task C9). See docs/design/mood.md.
@@ -71,10 +74,19 @@ class COLONY_API MoodSystem {
 public:
     MoodSystem(Things& things, const NeedsSystem& needs, const DefDatabase& defs);
 
+    // A condition other systems evaluate (task C15 on): a Thoughts def whose `situation.condition` is
+    // `condition` counts for a pawn while `stage` gives a stage number of the def's `stages` (0 first), and
+    // not at all for a negative number. `situation.trait` and `situation.notTrait` limit a thought to
+    // pawns with, or without, a trait.
+    using SituationStage = std::function<int(Entity pawn)>;
+    void addSituation(const std::string& condition, SituationStage stage);
+
     // Where a pawn slept decides "slept outside" (docs/design/rooms.md); without rooms nothing is outside.
     void setRooms(Rooms* rooms) { rooms_ = rooms; }
     // The room and beauty thoughts (C17, docs/design/room-stats.md) read the room stats and the beauty need.
     void setRoomStats(RoomStats* roomStats) { roomStats_ = roomStats; }
+    // Where the temperature thoughts (Cold, Hot) get the degrees outside a pawn's comfort from.
+    void setTemperature(TemperatureSystem* temperature) { temperature_ = temperature; }
 
     const MoodRules& rules() const { return rules_; }
     // The mood the pawn is heading for (not clamped to the 0 to 100 scale), or its base if it has none.
@@ -83,6 +95,10 @@ public:
     std::vector<ThoughtView> thoughts(Entity pawn, int64_t now) const;
     // The three thresholds as mood levels (0 to 100) for this pawn: its traits move them.
     void breakLevels(Entity pawn, float& minor, float& major, float& extreme) const;
+
+    // Starts the memories whose thought def has this `trigger` (docs/design/mood.md): another system
+    // raises one, like the social system's (C20). Nothing happens to a pawn with no mood yet.
+    void remember(Entity pawn, const std::string& trigger, int64_t now);
 
     // `events` are the step's events; `now` the game second the step ran in.
     void step(int64_t now, std::vector<Event>& events);
@@ -108,6 +124,8 @@ private:
         std::vector<float> thresholds;
         std::vector<Stage> stages;
         std::vector<std::string> roomRoles;
+        std::string trait;      // staged by another system (addSituation): only for pawns with this trait
+        std::string notTrait;   // ...and not for pawns with this one
     };
     // A situation with stages (`situation.condition` and `stages` in the def): which stage holds is
     // decided by a measured number against the def's thresholds (Mood.cpp, `conditionValue`).
@@ -120,6 +138,15 @@ private:
     };
     // The number a staged thought's condition measures for this pawn, or false if it has none now.
     bool conditionValue(Entity pawn, const std::string& condition, float& value) const;
+    // A condition other systems evaluate (task C15 on): a Thoughts def whose `situation.condition` is
+    // `condition` counts for a pawn while `stage` gives a stage number of the def's `stages` (0 first), and
+    // not at all for a negative number. `situation.trait` and `situation.notTrait` limit a thought to
+    // pawns with, or without, a trait.
+    struct Situation {
+        std::string condition;
+        SituationStage stage;
+    };
+    bool hasTrait(Entity pawn, const std::string& trait) const;
     float traitMoodOffset(Entity pawn) const;
     float traitBreakOffset(Entity pawn) const;
     void addMemory(Mood& mood, const std::string& trigger, int64_t now);
@@ -127,11 +154,13 @@ private:
     Things& things_;
     Rooms* rooms_ = nullptr;
     RoomStats* roomStats_ = nullptr;
+    TemperatureSystem* temperature_ = nullptr;
     const NeedsSystem& needs_;
     const DefDatabase& defs_;
     MoodRules rules_;
     std::vector<Thought> thoughts_;
     std::vector<StagedThought> staged_;
+    std::vector<Situation> situations_;
 };
 
 }  // namespace colony

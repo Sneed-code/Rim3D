@@ -12,6 +12,7 @@
 #include "ColonySim/Plants.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
@@ -58,6 +59,8 @@ SimSettings handSettings() {
 // the map around it cleared of plants.
 Entity handColonist(Sim& sim, CellPos cell) {
     const Entity pawn = sim.things().spawn("Human", cell);
+    std::string why;  // a parka, so the weather doesn't hurt the hands (C15)
+    sim.apparel().putOn(pawn, sim.apparel().make(sim.defs().idOf("Things", "Apparel_Parka"), sim.defs().idOf("Things", "Cloth"), -1, cell, &why), why);
     sim.things().registry().emplace<Colonist>(pawn);
     sim.jobs().addWorker(pawn, {}, false);
     for (int y = 4; y < 24; ++y) {

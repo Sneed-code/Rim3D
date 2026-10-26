@@ -1,6 +1,6 @@
 [
   {
-    "defName": "InjuryBase", "abstract": true, "source": "RimWorld wiki", "hediffClass": "Injury",
+    "defName": "InjuryBase", "abstract": true, "source": "RimWorld wiki", "hediffClass": "Injury", "tendable": true,
     "injuryProps": { "painPerSeverity": 0.0125, "averagePainPerSeverityPermanent": 0.00625, "bleedRate": 0, "canMerge": false }
   },
   {
@@ -32,7 +32,7 @@
     "injuryProps": { "bleedRate": 0.01, "canMerge": true, "destroyedLabel": "crushed" }
   },
   {
-    "defName": "Bruise", "parent": "InjuryBase", "label": "bruise", "neverScars": true,
+    "defName": "Bruise", "parent": "InjuryBase", "label": "bruise", "neverScars": true, "tendable": false,
     "injuryProps": { "destroyedLabel": "destroyed" }
   },
   {

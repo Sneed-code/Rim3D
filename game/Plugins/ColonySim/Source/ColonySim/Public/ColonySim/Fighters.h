@@ -4,6 +4,7 @@
 #include "ColonySim/Cover.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Events.h"
+#include "ColonySim/Explosives.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/Pathfinder.h"
 #include "ColonySim/ThreatMap.h"
@@ -16,11 +17,15 @@ namespace colony {
 
 class CombatSystem;
 class DefDatabase;
+class DefenseSystem;
+class ExplosiveSystem;
 class HealthSystem;
 class JobSystem;
 class Map;
+class MeleeSystem;
 class StateHasher;
 class Things;
+class Weather;
 struct GameTime;
 
 // Fighter AI: where to stand, whom to shoot, when to fall back. See docs/design/fighters.md.
@@ -50,8 +55,12 @@ struct KnownEnemy {
     int64_t seenAt = 0;
 };
 
-// On a pawn that fights instead of working: a drafted colonist, or every pawn of another faction.
-// The job system leaves it alone. Every field is saved.
+// What a fighter is doing (F6, docs/design/raids.md): fighting, hiding in a shelter (the alarm's
+// Shelter role) or running off the map (a routed raider). Only Fight looks for enemies and shoots.
+enum class FightMode : uint8_t { Fight, Shelter, Flee };
+
+// On a pawn that fights instead of working: a drafted colonist, a colonist the colony alarm called
+// up, or every pawn of another faction. The job system leaves it alone. Every field is saved.
 struct Fighter {
     bool drafted = false;    // a colonist the player drafted; otherwise an AI fighter of its faction
     bool advances = false;   // moves toward its target when it can't shoot from where it is
@@ -73,6 +82,13 @@ struct Fighter {
     std::vector<KnownEnemy> known;  // by pawn id
     int64_t reactUntil = 0;  // game second from which it may shoot its target (its reaction time, F5)
     int64_t dodgeUntil = 0;  // sidestepping a projectile until this game second: no plans, no shots (F5)
+    // F6 (docs/design/raids.md).
+    FightMode mode = FightMode::Fight;
+    bool defending = false;  // called up by the colony alarm, not drafted: the alarm sends it back to work
+    uint32_t squad = 0;      // the raid squad it belongs to, 0 for none
+    bool hasGoal = false;    // where it heads while it knows no enemy: the raid's target, a shelter, the way out
+    CellPos goal;
+    bool retreat = false;    // its squad falls back: it falls back whatever the odds around it
 };
 
 // The numbers (FighterRules in data/defs/Rules/FighterRules.json, all ours: RimWorld has no
@@ -110,6 +126,18 @@ struct FighterRules {
     float dodgeRadius = 0.6f;       // a projectile passing closer than this to the pawn's centre would hit it
     float dodgeClearance = 0.9f;    // how far from the projectile's line a sidestep has to take it
     int dodgeHoldSteps = 3;         // steps it stays out of the way after the projectile has passed
+    // F9 (docs/design/explosives.md): diving away from grenades and throwing them.
+    float diveMargin = 0.6f;        // it runs when closer than the blast radius plus this
+    float diveSafe = 0.4f;          // and wants to end this far beyond the radius (or behind cover)
+    int throwEvery = 15;            // game seconds between looks for a place to throw (staggered by pawn id)
+    int throwMinEnemies = 2;        // throws at a group of at least this many known enemies...
+    int throwMemory = 150;          // ...seen this recently (steps), or at one it has no shot at
+    float throwSelfMargin = 1.5f;   // never throws closer to itself than the radius plus this
+    float throwFriendMargin = 0.5f; // nor with a friend within the radius plus this
+    // P1 (docs/design/weapons.md): a fighter who carries several weapons takes the one that suits the distance.
+    float switchMeleeRange = 2.5f;    // metres: closer than this to its target it takes up a melee weapon...
+    float switchSidearmRange = 9.0f;  // ...closer than this a sidearm, and further off the rifle
+    float switchMargin = 2.0f;        // the weapon in the hands is kept this much past its band, so a target on the edge does not flip it
 };
 
 class COLONY_API FighterSystem {
@@ -122,6 +150,16 @@ public:
 
     const FighterRules& rules() const { return rules_; }
     void setEventLog(std::vector<Event>* events) { events_ = events; }
+    // Grenades (F9): fighters throw the ones on their belts and dive away from ones about to go off.
+    void setExplosives(ExplosiveSystem* explosives) { explosives_ = explosives; }
+    // Traps (F11, docs/design/defense.md): fighters of a side that knows where armed traps are keep their spots off
+    // those cells and walk round them. Without it nobody does.
+    void setDefense(const DefenseSystem* defense) { defense_ = defense; }
+    // Melee (F8, docs/design/melee.md): fighters armed for it charge, the others strike back at
+    // enemies in reach. Without it nobody fights in melee.
+    void setMelee(MeleeSystem* melee) { melee_ = melee; }
+    // Fog and the rest shorten how far a fighter under the open sky spots enemies (docs/design/weather.md).
+    void setWeather(const Weather* weather) { weather_ = weather; }
 
     // A pawn's side (kPlayerFaction without a Faction component). Different factions are enemies.
     FactionId factionOf(Entity pawn) const;
@@ -136,6 +174,14 @@ public:
     // Dev command until raids (F6): puts a pawn on a side. A pawn of another faction than the
     // player's fights at once and advances on its enemies; back on the player's side it works again.
     bool setFaction(Entity pawn, FactionId faction, std::string& error);
+
+    // F6: the colony alarm calls a colonist up (its job ends; `defending` is set) or sends it back
+    // to work, and squads change what their fighters do. `enlist` returns the new fighter, whose
+    // first plan is spread over the next planEvery steps like a drafted one's.
+    Fighter& enlist(Entity pawn, const char* why);
+    void standDown(Entity pawn);
+    // Drops the fighter's spot and walk, so it plans again in this step (a new goal or mode).
+    void replan(Entity pawn);
 
     // One step for every fighter, in id order: re-plan when due, walk, crouch, step out and shoot.
     // Runs after the job system and before movement.
@@ -161,6 +207,7 @@ private:
         int level = 0;
         bool able = false;    // not downed
         bool fighter = false;
+        bool animal = false;  // wild animals are nobody's enemy unless ordered or provoked (animal-life.md, N5)
         Stance stance = Stance::Standing;  // as it stands now (prone when downed)
     };
     struct Candidate {
@@ -180,9 +227,13 @@ private:
     };
 
     void plan(Entity pawn, Fighter& f);
+    void planGoal(Entity pawn, Fighter& f, const PawnInfo& self);
     bool dodge(Entity pawn, Fighter& f);
+    bool dive(Entity pawn, Fighter& f);
+    bool considerThrow(Entity pawn, const Fighter& f);
     void tacticalReload(Entity pawn, const Fighter& f, bool canShoot);
     void act(Entity pawn, Fighter& f);
+    void chooseWeapon(Entity pawn, const Fighter& f);
     void see(Entity pawn, Fighter& f, const PawnInfo& self);
     Entity chooseTarget(Entity pawn, const Fighter& f, const PawnInfo& self) const;
     bool fireOption(CellPos cell, const PawnInfo& target, float range, float tx, float ty, Candidate& c);
@@ -194,6 +245,8 @@ private:
     float weaponRange(Entity pawn) const;
     bool badlyHurt(Entity pawn) const;
     int64_t now() const;
+    void planCharge(Entity pawn, Fighter& f, CellPos goal);
+    bool meleeAct(Entity pawn, Fighter& f);
 
     Things& things_;
     Map& map_;
@@ -211,9 +264,14 @@ private:
     std::vector<KnownEnemy> merged_;     // scratch for sharing what friends know
     std::vector<Entity> order_;
     std::vector<Incoming> incoming_;     // scratch: projectiles in flight this step, by id
+    ExplosiveSystem* explosives_ = nullptr;
+    std::vector<GrenadeDanger> blasts_;  // scratch: grenades about to go off this step, by id
     std::vector<Event>* events_ = nullptr;
+    MeleeSystem* melee_ = nullptr;
+    const DefenseSystem* defense_ = nullptr;
     uint64_t plans_ = 0;
     uint64_t sightChecks_ = 0;
+    const Weather* weather_ = nullptr;
 };
 
 }  // namespace colony

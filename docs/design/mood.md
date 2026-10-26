@@ -19,6 +19,8 @@ Base mood 50 is ours: the wiki's base is by difficulty (32 on Strive to Survive)
 sit higher because comfort, beauty, outdoors, joy and the rest add to it, and we haven't built those. Revisit
 when they exist (`ours` in the def).
 
+Another system can start a memory with `MoodSystem::remember(pawn, trigger, now)`: the social system (C20, [social.md](social.md)) does for chats, slights, insults, weddings, breakups and deaths of friends.
+
 ## Thoughts (`Thoughts` defs)
 
 Two kinds. Numbers are RimWorld's as recalled; only Hungry (-6) is from the wiki, the rest are
@@ -53,6 +55,13 @@ it is a situation, when a memory fades; strongest first.
 (`MoodSystem::breakLevels`). `Mood::band` is kept up to date; when it changes a **`PawnMoodBand`** event
 says so (`message` the new band, `amount` the mood). Nothing happens yet: mental breaks come later.
 
+## Temperature thoughts (E2)
+
+A thought def with `situation.condition` `coldBelowComfort` or `hotAboveComfort` (D9's `Cold` and `Hot`)
+counts while the pawn is outside its comfortable temperature range; its `stages` are picked by the degrees
+outside it ([temperature.md](temperature.md)). The thought's label in the panel is the stage's (`chilly`,
+`freezing`, `warm`, `scorching`). Like the food and rest situations it exists only while it holds.
+
 ## What Unreal sees
 
 - **Snapshot:** a pawn with a mood has `mood` (else -1) and `moodBand` (0 to 3).
@@ -82,5 +91,5 @@ list says where each stage ends, and the stage's `moodOffset` counts. A conditio
 ## Not yet
 
 Mental breaks, inspirations, ideology and precepts; thoughts from pain, injuries,
-temperature, joy, relationships, other pawns' deaths, passions at work (`SkillRules.passionMood` is read by
+joy, relationships, other pawns' deaths, passions at work (`SkillRules.passionMood` is read by
 nothing yet); social and mood stacking beyond one of each; thoughts from traits' `moodWithRangedWeapon`.

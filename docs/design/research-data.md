@@ -43,3 +43,5 @@ parts. Which projects a new colony starts with done is C21's decision (the scena
 speed 1.0, +0.1 with a multi-analyzer, 250 W, needs Microelectronics). `researchBench.tier` matches
 a project's `benchTier`: a bench works on projects of its tier or lower. Work to build is the
 wiki's ticks x 1.44.
+
+The research system that reads all this is [research.md](research.md) (C21).

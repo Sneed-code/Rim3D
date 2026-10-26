@@ -12,7 +12,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Same rules as Unreal: no exceptions, no RTTI. Warnings are errors.
 add_library(colonysim_flags INTERFACE)
 if(MSVC)
-  target_compile_options(colonysim_flags INTERFACE /W4 /WX /permissive- /GR- /EHs-c- /external:W0)
+  # /bigobj: Save.cpp has more sections than a default object file holds (Unreal builds with it too).
+  target_compile_options(colonysim_flags INTERFACE /W4 /WX /permissive- /GR- /EHs-c- /external:W0 /bigobj)
   target_compile_definitions(colonysim_flags INTERFACE _HAS_EXCEPTIONS=0 _CRT_SECURE_NO_WARNINGS)
 else()
   target_compile_options(colonysim_flags INTERFACE -Wall -Wextra -Wpedantic -Wshadow -Werror -fno-exceptions -fno-rtti)
@@ -30,7 +31,7 @@ target_include_directories(colonysim SYSTEM PUBLIC ThirdParty)
 add_library(colonysim_thirdparty INTERFACE)
 target_include_directories(colonysim_thirdparty SYSTEM INTERFACE ThirdParty)
 
-add_executable(simrun Tools/simrun/main.cpp Tools/simrun/ColonyScenario.cpp Tools/simrun/PowerScenario.cpp)
+add_executable(simrun Tools/simrun/main.cpp Tools/simrun/ColonyScenario.cpp Tools/simrun/PowerScenario.cpp Tools/simrun/RaidSoak.cpp)
 target_link_libraries(simrun PRIVATE colonysim colonysim_thirdparty)
 target_compile_definitions(simrun PRIVATE COLONY_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../data")
 
@@ -52,6 +53,15 @@ add_test(NAME simrun_gather COMMAND simrun --seed 42 --size 256 --days 2 --start
          --png ${CMAKE_BINARY_DIR}/gather.png)
 # Food, rest and schedules (C6): the Crashlanded colonists live three days on their starting food, nobody dies.
 add_test(NAME simrun_needs COMMAND simrun --seed 42 --size 128 --days 3 --start Crashlanded --check)
+# Raids (F6): pirates walk in, the alarm sounds, the armed colonists fight, and the raid ends
+# (beaten, routed or gone) within a quarter of a day.
+add_test(NAME simrun_raid COMMAND simrun --seed 1 --size 256 --days 0.25 --start Crashlanded --raid 300 --armed --check)
+# Raid soak (F7, docs/design/raid-soak.md): firefights and raids over a few seeds. The nightly workflow runs many more.
+add_test(NAME simrun_raid_soak COMMAND simrun --seed 1 --raid-soak 3)
+
+# Temperature (E2, docs/design/temperature.md): the Crashlanded colonists live two days in 4 degrees weather
+# (just above the safe range their T-shirts and pants give them) and nobody falls ill or dies.
+add_test(NAME simrun_temperature COMMAND simrun --seed 42 --size 128 --days 2 --start Crashlanded --outdoor 4 --check)
 
 # The colony scenario (C10, docs/design/colony-scenario.md): six colonists build a room, mine, chop, pick berries and
 # cook for five days; fails if anyone dies or starves, stands stuck for a game hour, or a mark is left undone.
@@ -110,6 +120,19 @@ set_tests_properties(save_first_half PROPERTIES FIXTURES_SETUP save_first_half)
 set_tests_properties(save_second_half PROPERTIES FIXTURES_REQUIRED save_first_half FIXTURES_SETUP save_loaded)
 set_tests_properties(save_straight_run PROPERTIES FIXTURES_SETUP save_straight)
 set_tests_properties(save_compare PROPERTIES FIXTURES_REQUIRED "save_loaded;save_straight")
+
+# Wild animals (N1, docs/design/animal-life.md): herds by biome graze, sleep and walk for two days; fails if
+# none were placed, one stands on ground it can't walk, or the wild herd falls under half its density.
+# (The 1 km run with about 300 animals, `--size 1024 --days 1 --animals`, is for the nightly job.)
+add_test(NAME simrun_animals COMMAND simrun --seed 42 --size 512 --days 2 --animals --check
+         --png ${CMAKE_BINARY_DIR}/animals.png)
+
+# A chicken farm (N4, docs/design/breeding.md): tame hens and roosters mate, lay and cost the breeding pass next to nothing.
+# (`--farm 500 --days 3` is the nightly one; 100 chickens over a day and a half keep CI quick.)
+add_test(NAME simrun_farm COMMAND simrun --seed 42 --size 128 --days 1.6 --farm 100 --check)
+
+# Fire (E4, docs/design/fire.md): a grass fire lit near the Crashlanded colonists is beaten out, nobody dies.
+add_test(NAME simrun_fire COMMAND simrun --seed 42 --size 256 --days 1 --start Crashlanded --fire --check)
 
 # Pathfinding load test (S3): 100 pawns hauling on a 1 km map for a day, no failed job or search.
 add_test(NAME simrun_paths COMMAND simrun --seed 42 --size 1024 --days 1 --pawns 100 --items 2000 --check

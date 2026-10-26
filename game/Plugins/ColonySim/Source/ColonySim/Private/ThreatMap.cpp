@@ -22,7 +22,7 @@ void ThreatMap::clear() {
 
 void ThreatMap::addSource(const Viewpoint& from, float range, float weight, Stance targetStance) {
     const CellPos origin{static_cast<int>(std::floor(from.x)), static_cast<int>(std::floor(from.y)), from.level};
-    if (!map_.inBounds(origin) || range < 0.0f) {
+    if (!map_.onGround(origin) || range < 0.0f) {
         return;
     }
     if (threat_.empty()) {
@@ -63,7 +63,7 @@ void ThreatMap::addSource(const Viewpoint& from, float range, float weight, Stan
 }
 
 float ThreatMap::threatAt(CellPos c) const {
-    if (threat_.empty() || !map_.inBounds(c)) {
+    if (threat_.empty() || !map_.onGround(c)) {
         return 0.0f;
     }
     return threat_[static_cast<size_t>(map_.index(c))];

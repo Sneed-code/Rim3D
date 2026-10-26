@@ -1,6 +1,7 @@
 // The DoBill job: fetch ingredients to a work building, work, make the product (task C7,
 // docs/design/bills.md). Part of the job system.
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Spoilage.h"
 
 #include "ColonySim/Bills.h"
 #include "ColonySim/Fuel.h"
@@ -120,13 +121,16 @@ JobSystem::StepResult JobSystem::billWork(Entity pawn, Job& job, std::string& wh
     return job.progress < recipe->work ? StepResult::Running : StepResult::Next;
 }
 
-void JobSystem::dropNewItems(Entity pawn, DefId def, int count) {
+void JobSystem::dropNewItems(Entity pawn, DefId def, int count, const std::vector<BillUsed>* madeFrom) {
     entt::registry& reg = things_.registry();
     const int limit = stackLimit(def);
     for (int left = count; left > 0; left -= limit) {
         const Entity item = things_.make(def, std::min(left, limit));
         if (item == kNoEntity) {
             return;
+        }
+        if (madeFrom != nullptr && spoilage_ != nullptr) {
+            spoilage_->madeBy(item, *madeFrom, pawn, cellOf(reg.get<Position>(pawn)));
         }
         reg.emplace_or_replace<Carrying>(pawn, Carrying{item});
         dropCarried(pawn);
@@ -142,11 +146,12 @@ JobSystem::StepResult JobSystem::billFinish(Entity pawn, Job& job, std::string& 
     }
     // The ingredients are gone for good (and the fuel burnt); the product lies by the pawn, where haulers
     // find it.
+    const std::vector<BillUsed> used = std::move(job.used);
     job.used.clear();
     fuel_->use(job.site, fuel_->specOf(job.site).perUse * static_cast<float>(recipe->productCount()));
     int made = 0;
     for (const RecipeProduct& product : recipe->products) {
-        dropNewItems(pawn, product.item, product.count);
+        dropNewItems(pawn, product.item, product.count, &used);
         made += product.count;
     }
     const DefId recipeDef = recipe->def;

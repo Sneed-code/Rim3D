@@ -66,7 +66,7 @@ from the wiki), `restartReserveSeconds` (60, ours), the default sun curve and th
    `PowerChanged` event (not for conduits and switches).
 
 The sun is E3's sky glow. `PowerRules` still holds a fallback curve (none before 05:00, full 08:00 to 16:00,
-none after 19:00; ours) for a grid with no sun source set; wind is a constant 1.0 until E1's weather sets one.
+none after 19:00; ours) for a grid with no sun source set; wind follows E1's weather (`weather().wind()`, see weather.md).
 
 ## Asking and doing
 
@@ -83,8 +83,8 @@ none after 19:00; ours) for a grid with no sun source set; wind is a constant 1.
 | `shortCircuit(b, released, error)` | empties every battery on b's net, returns the energy in Wd, and sends a `ShortCircuit` event with it |
 
 **Hooks** (set on the grid by `Sim` or by the system that owns the source):
-`setSun(f(time) -> 0..1)`, wired to E3's `lights().skyGlow()`; `setWind(f(time) -> factor)` for E1
-(a constant 1.0 until then); `setFuel(f(generator) -> bool)`, **wired by C11 to `fuel().lit`**: a
+`setSun(f(time) -> 0..1)`, wired to E3's `lights().skyGlow()`; `setWind(f(time) -> factor)`, wired to E1's `weather().wind()`
+(a constant 1.0 with no climate defs); `setFuel(f(generator) -> bool)`, **wired by C11 to `fuel().lit`**: a
 wood-fired generator makes nothing while its `Fuel` part is empty, and burns `fuel.perDay` of its item
 only while it is switched on (`FuelSystem::setBurning`; [fuel.md](fuel.md)). A new generator starts
 empty, so a colonist has to bring wood before it runs.

@@ -46,7 +46,7 @@ names in lowerCamel (`workSpeedGlobal`), keys that are def names keep their case
 | `Things` (D11) | `BuildingsPowerClimate.json`: conduit, switch, wood-fired, solar and wind generators, battery; heater, cooler, vent, passive cooler, campfire; standing, sun and torch lamps. `BuildingsFurniture.json`: armchair, end table, dresser, plant pot, column. `Terrain/Floors.json`: wood floor, stone tiles, flagstone, carpet, smoothed stone | E2, E5, C17, C18, A6 | `power` (`output` W, `consumption` W, `battery` Wd, `transmitter`, `scalesWithSun`/`scalesWithWind`), `heatPusher` (degrees C a second), `glower` (`radius` m, `color`), `fuel` (item, capacity, `perDay`). Floors are terrain with `designationCategory: "Floors"`, `costs` or `costStuffCount`, `workToBuild`. Every number is in `unverified` (recalled, not read off the wiki) |
 | `Recipes` | simple meal, four simple meals, fine meal | C7 | `recipeUsers`, `workAmount` (game seconds), `ingredients` (item categories and nutrition or count), `products` ([bills.md](bills.md)) |
 | `Weathers` | clear, fog, rain, foggy rain, dry and rainy thunderstorm, light and heavy snow | D4 (read by E1) | `durationHours` (range), `temperatureRange` (where it can happen), `skyGlow`, `moveSpeedFactor`, `accuracyFactor`, `sightFactor`, `rainRate`, `snowRate`, `extinguishesFire`; a biome's `weather` lists commonality per kind |
-| `Rules` | `PlantRules`, `SkillRules`, `HealthRules`, `PawnGenRules`, `JobRules`, `NeedRules`, `ConstructionRules`, `MoodRules`, `CombatRules`, `DoorRules`, `RoomRules`, `BillRules`, `MentalBreakRules`, `JoyRules`, `SocialRules` | C2, C8, F1, C1, C6, C4, C9, F2, C5, C7 | Numbers RimWorld keeps in its code rather than its defs (`JobRules`: [jobs.md](jobs.md); `NeedRules`: [needs.md](needs.md); `ConstructionRules`: [construction.md](construction.md); `CombatRules`: [combat.md](combat.md); `DoorRules`, `RoomRules`: [rooms.md](rooms.md)) |
+| `Rules` | `ClimateRules` (E1), `PlantRules`, `SkillRules`, `HealthRules`, `PawnGenRules`, `JobRules`, `NeedRules`, `ConstructionRules`, `MoodRules`, `CombatRules`, `DoorRules`, `RoomRules`, `BillRules`, `MentalBreakRules`, `JoyRules`, `SocialRules`, `MeleeRules` | C2, C8, F1, C1, C6, C4, C9, F2, C5, C7, F8 | Numbers RimWorld keeps in its code rather than its defs (`JobRules`: [jobs.md](jobs.md); `NeedRules`: [needs.md](needs.md); `ConstructionRules`: [construction.md](construction.md); `CombatRules`: [combat.md](combat.md); `MeleeRules` (in its own file): [melee.md](melee.md); `DoorRules`, `RoomRules`: [rooms.md](rooms.md)) |
 | `Skills` | the 12 skills | C1, C8 | `disablingWorkTags` |
 | `WorkTypes` | the 20 Core work types, in Work tab order | C1 | `relevantSkills`, `workTags`, `alwaysStartActive`, `inPrototype`, `tasks` (our job names, in order) |
 | `Traits` | 27 traits, spectra as `degreeDatas` | C8 | `statOffsets`, `statFactors`, `skillGains`, `conflictingTraits`; mood numbers used by C9 ([mood.md](mood.md)) |
@@ -148,8 +148,9 @@ whoever merges second drops a duplicate def. Each biome has `climate` (`seasonMe
 season of 15 days, `dailySwing` in degrees, `rainfallMmPerYear`, `growingSeasons`), `weather`
 (commonality per `Weathers` def) and `animals` (commonality by RimWorld's animal names until D5
 defines them). Only the temperate forest got wild healroot (0.06), so existing maps change a little.
-Almost every crop and climate number is in `unverified`: the wiki was not read for this task, so
-check the numbers a task leans on (C13 for crops, E1 for climate and weather).
+Almost every crop number is in `unverified`: the wiki was not read for this task, so check the
+numbers a task leans on (C13 for crops). E1 checked the weather ones against the wiki and fixed them
+([weather.md](weather.md) lists what changed); the seasonal means are still unverified.
 
 **Apparel and textiles (D6).** Clothes are made of a stuff, as in RimWorld. A garment has no armor
 or insulation of its own: `apparel.stuffEffectMultiplierArmor` times the stuff's armor factor

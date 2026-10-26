@@ -4,20 +4,22 @@
     "category": "Item", "stackLimit": 1, "equipmentType": "Primary",
     "stats": { "maxHitPoints": 100 },
     "unverified": ["stats.maxHitPoints"],
-    "ours": ["recoilPerShot", "magazineSize", "reloadTime"]
+    "ours": ["recoilPerShot", "recoilKicks", "magazineSize", "reloadTime", "weaponSlot"]
   },
   {
-    "defName": "Gun_Revolver", "parent": "GunBase", "label": "revolver",
+    "defName": "Gun_Revolver", "parent": "GunBase", "label": "revolver", "weaponSlot": "Sidearm",
     "stats": { "mass": 1.4, "rangedWeaponCooldown": 48, "accuracyTouch": 0.8, "accuracyShort": 0.75, "accuracyMedium": 0.55, "accuracyLong": 0.4 },
     "verbs": [ { "range": 25.9, "warmupTime": 9, "burstShotCount": 1, "defaultProjectile": "Bullet_Revolver" } ],
     "recoilPerShot": 0.015,
+    "recoilKicks": [{"up": 2.8, "side": 0.3}],
     "magazineSize": 6, "reloadTime": 120
   },
   {
-    "defName": "Gun_Autopistol", "parent": "GunBase", "label": "autopistol",
+    "defName": "Gun_Autopistol", "parent": "GunBase", "label": "autopistol", "weaponSlot": "Sidearm",
     "stats": { "mass": 1.2, "rangedWeaponCooldown": 30, "accuracyTouch": 0.8, "accuracyShort": 0.7, "accuracyMedium": 0.4, "accuracyLong": 0.3 },
     "verbs": [ { "range": 25.9, "warmupTime": 9, "burstShotCount": 1, "defaultProjectile": "Bullet_Autopistol" } ],
     "recoilPerShot": 0.012,
+    "recoilKicks": [{"up": 1.2, "side": 0.1}],
     "magazineSize": 15, "reloadTime": 60
   },
   {
@@ -25,6 +27,7 @@
     "stats": { "mass": 3.5, "rangedWeaponCooldown": 45, "accuracyTouch": 0.65, "accuracyShort": 0.8, "accuracyMedium": 0.9, "accuracyLong": 0.8 },
     "verbs": [ { "range": 36.9, "warmupTime": 51, "burstShotCount": 1, "defaultProjectile": "Bullet_BoltActionRifle" } ],
     "recoilPerShot": 0.02,
+    "recoilKicks": [{"up": 3.0, "side": 0.2}],
     "magazineSize": 5, "reloadTime": 105
   },
   {
@@ -32,6 +35,7 @@
     "stats": { "mass": 3.4, "rangedWeaponCooldown": 37.5, "accuracyTouch": 0.8, "accuracyShort": 0.87, "accuracyMedium": 0.77, "accuracyLong": 0.64 },
     "verbs": [ { "range": 15.9, "warmupTime": 27, "burstShotCount": 1, "defaultProjectile": "Bullet_Shotgun" } ],
     "recoilPerShot": 0.03,
+    "recoilKicks": [{"up": 4.0, "side": 0.3}],
     "magazineSize": 6, "reloadTime": 150
   },
   {
@@ -39,6 +43,7 @@
     "stats": { "mass": 3.5, "rangedWeaponCooldown": 51, "accuracyTouch": 0.6, "accuracyShort": 0.7, "accuracyMedium": 0.65, "accuracyLong": 0.55 },
     "verbs": [ { "range": 30.9, "warmupTime": 30, "burstShotCount": 3, "secondsBetweenBurstShots": 5, "defaultProjectile": "Bullet_AssaultRifle" } ],
     "recoilPerShot": 0.01,
+    "recoilKicks": [{"up": 0.7, "side": 0.05}, {"up": 0.8, "side": -0.15}, {"up": 0.9, "side": 0.2}, {"up": 0.9, "side": 0.25}, {"up": 0.8, "side": -0.1}, {"up": 0.8, "side": -0.25}],
     "magazineSize": 30, "reloadTime": 75
   }
 ]

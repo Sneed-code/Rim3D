@@ -51,7 +51,7 @@ an hour, a duration range and a place.
     cell will do. `users[0]` is not used either: a lone player plays at full rate, as RimWorld's
     pawns play chess alone.)
   - *Chat at a table*: a chair next to any table (the same chair rule as eating), up to six at a
-    table. Nothing is said yet: C20 will pick chitchat and deep talk while they sit.
+    table. Since C20 they talk while they sit: pawns beside each other at a table or a game start talks every 15 minutes or so ([social.md](social.md)).
   - *A walk*: strolls from place to place over open ground, each leg 4 to 18 m (integer offsets
     from the hash). *Watching the clouds*: the nearest open-air cell, from 06:00 to 18:59 only.
     "Open air" is `!Rooms::indoors`. The `weather: Clear` condition is not checked until the
@@ -90,7 +90,7 @@ and load without it; the needs are made fresh on the first step. Hashed in `Sim:
 
 ## Not yet
 
-- Weather for the clouds (E1), talk while chatting (C20), a bored pawn's mental breaks (C19),
+- Weather for the clouds (E1), a bored pawn's mental breaks (C19),
   joy from other sources (a drink, a meal that tastes good, art, meditation), reading, the
   recreation policy per pawn, rooms with joy buildings counting for impressiveness (C17), the
   "recreation power" of outdoor spots, an animation or pose for playing (U task).

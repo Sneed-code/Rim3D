@@ -153,6 +153,18 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildHandsOnPhases();
 	}
+	else if (TestName == TEXT("animals"))
+	{
+		BuildAnimalsPhases();
+	}
+	else if (TestName == TEXT("sky"))
+	{
+		BuildSkyPhases();
+	}
+	else if (TestName == TEXT("melee"))
+	{
+		BuildMeleePhases();
+	}
 	else
 	{
 		Fail(FString::Printf(TEXT("Unknown smoke test '%s'"), *TestName));
@@ -488,6 +500,8 @@ void USmokeTestSubsystem::BuildTerrainMesh(const colony::Map& Map, double BuildS
 						case colony::Terrain::Soil: Color = FColor(90, 130, 60); break;
 						case colony::Terrain::Rock: Color = FColor(120, 115, 110); break;
 						case colony::Terrain::RoughStone: Color = FColor(150, 140, 125); break;
+						case colony::Terrain::Air:
+						case colony::Terrain::UpperFloor: break;
 					}
 					Colors.Add(Color);
 				}
@@ -1170,12 +1184,13 @@ void USmokeTestSubsystem::Tick(float DeltaTime)
 	}
 	Samples.Add({DeltaTime * 1000.0f, static_cast<float>(FPlatformTime::ToMilliseconds(GGameThreadTime)),
 		static_cast<float>(FPlatformTime::ToMilliseconds(GRenderThreadTime)), static_cast<float>(FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()))});
-	if (!bScreenshotTaken && PhaseTime >= Phase.WarmupSeconds + 1.0f)
+	// A second into the measuring, or earlier in a phase measured for less than that (the file is written a frame or two later).
+	if (!bScreenshotTaken && PhaseTime >= Phase.WarmupSeconds + FMath::Min(1.0f, Phase.MeasureSeconds * 0.6f))
 	{
 		bScreenshotTaken = true;
 		const FString Path = FPaths::ProjectSavedDir() / TEXT("Smoke") / TestName / (Phase.Name + TEXT(".png"));
 		// The sim tests show the on-screen sim timings and the overseer its ImGui panels, which count as UI.
-		FScreenshotRequest::RequestScreenshot(Path, TestName == TEXT("sim") || TestName == TEXT("overseer") || TestName == TEXT("saves") || TestName == TEXT("protagonist") || TestName == TEXT("orders") || TestName == TEXT("panels") || TestName == TEXT("fights") || TestName == TEXT("handson"), false);
+		FScreenshotRequest::RequestScreenshot(Path, TestName == TEXT("sim") || TestName == TEXT("overseer") || TestName == TEXT("saves") || TestName == TEXT("protagonist") || TestName == TEXT("orders") || TestName == TEXT("panels") || TestName == TEXT("fights") || TestName == TEXT("handson") || TestName == TEXT("sky") || TestName == TEXT("melee"), false);
 	}
 	if (PhaseTime >= Phase.WarmupSeconds + Phase.MeasureSeconds)
 	{

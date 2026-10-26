@@ -1,5 +1,6 @@
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Replay.h"
@@ -55,7 +56,17 @@ std::unique_ptr<Sim> healthTestSim(int pawns = 0, int items = 0) {
     return std::make_unique<Sim>(settings, healthTestDefs());
 }
 
-Entity healthTestPawn(Sim& sim, int x = 10, int y = 10) { return sim.things().spawn("Human", CellPos{x, y, 0}); }
+// A parka, so the weather doesn't give the pawn hypothermia in tests about something else (C15).
+Entity healthTestPawn(Sim& sim, int x = 10, int y = 10) {
+    const Entity pawn = sim.things().spawn("Human", CellPos{x, y, 0});
+    if (pawn != kNoEntity) {
+        std::string why;
+        const Entity parka = sim.apparel().make(sim.defs().idOf("Things", "Apparel_Parka"), sim.defs().idOf("Things", "Cloth"), -1,
+                                                CellPos{x, y, 0}, &why);
+        sim.apparel().putOn(pawn, parka, why);
+    }
+    return pawn;
+}
 
 int healthTestPart(const Sim& sim, Entity pawn, const std::string& label) {
     const std::vector<std::string> labels =

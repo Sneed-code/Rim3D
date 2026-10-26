@@ -1,15 +1,25 @@
 // The work scanners, one per task name in the WorkTypes defs (docs/design/jobs.md).
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Jobs.h"
 
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Designations.h"
+#include "ColonySim/Fighters.h"
+#include "ColonySim/Farming.h"
+#include "ColonySim/Colonist.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Fuel.h"
+#include "ColonySim/Health.h"
+#include "ColonySim/Fire.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Medicine.h"
+#include "ColonySim/Needs.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Regions.h"
+#include "ColonySim/Research.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Things.h"
 
@@ -70,6 +80,43 @@ public:
 
 private:
     std::vector<std::tuple<uint32_t, uint32_t, int>> noRoom_;  // def, group, stored priority
+};
+
+// Stripping (RimWorld's WorkGiver_Strip, under Hauling): a downed or dead pawn the player marked has its
+// clothes and weapon taken off where it lies; hauling then carries them to a stockpile.
+class StripGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "Strip"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        ApparelSystem* apparel = jobs.apparel();
+        if (apparel == nullptr) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        reg.view<const StripMark, const Position>().each([&](Entity target, const Position& pos) {
+            if (target == pawn || pos.level != at.level) {
+                return;
+            }
+            const float dx = pos.x - at.x;
+            const float dy = pos.y - at.y;
+            out.push_back(WorkCandidate{JobTarget{target, CellPos{}}, dx * dx + dy * dy, 0, 0, false, CellPos{}});
+        });
+    }
+
+    bool makeJob(JobSystem& jobs, Entity, const WorkCandidate& candidate, Job& out) override {
+        const ApparelSystem* apparel = jobs.apparel();
+        const Entity target = candidate.target.thing;
+        if (apparel == nullptr || !apparel->stripMarked(target) || !apparel->hasGear(target)) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::StripPawn;
+        out.thing = target;
+        out.cell = cellOf(jobs.things().registry().get<Position>(target));
+        return true;
+    }
 };
 
 float workGiverDistSq(const Position& a, const Position& b) {
@@ -283,6 +330,86 @@ public:
     }
 };
 
+// Growing (RimWorld's WorkGiver_GrowerSow and GrowerHarvest, in the Growing work type): colonists sow the
+// zone's crop on its cells and harvest it when it is fully grown (docs/design/farming.md).
+class SowCropsGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "SowCrops"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        const Farming* farming = jobs.farming();
+        if (farming == nullptr || farming->zones().empty() || !jobs.canUseHands(pawn)) {
+            return;
+        }
+        const Position& at = jobs.things().registry().get<Position>(pawn);
+        const int skill = jobs.skillLevel(pawn, "Plants");
+        for (const GrowingZone& zone : farming->zones()) {
+            const Def& crop = jobs.defs().get(zone.crop);
+            if (skill < static_cast<int>(crop.integer("plant.sowMinSkill", 0))) {
+                continue;
+            }
+            for (const CellPos& cell : zone.cells) {
+                if (cell.level != at.level || (jobs.plants().has(cell) && jobs.plants().defAt(cell) == zone.crop)) {
+                    continue;
+                }
+                const std::string why = farming->sowBlocker(cell);
+                if (!why.empty()) {
+                    if (why == "the weather is wrong for it") {
+                        break;  // the same for the rest of the zone, give or take a roof
+                    }
+                    continue;
+                }
+                const float dx = static_cast<float>(cell.x) + 0.5f - at.x;
+                const float dy = static_cast<float>(cell.y) + 0.5f - at.y;
+                out.push_back(WorkCandidate{JobTarget{kNoEntity, cell}, dx * dx + dy * dy, 0, 0, false, CellPos{}});
+            }
+        }
+    }
+
+    bool makeJob(JobSystem& jobs, Entity, const WorkCandidate& candidate, Job& out) override {
+        if (jobs.farming() == nullptr || !jobs.farming()->sowBlocker(candidate.target.cell).empty()) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::SowCrop;
+        out.cell = candidate.target.cell;
+        return true;
+    }
+};
+
+class HarvestCropsGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "HarvestCrops"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        const Farming* farming = jobs.farming();
+        if (farming == nullptr || farming->zones().empty() || !jobs.canUseHands(pawn)) {
+            return;
+        }
+        const Position& at = jobs.things().registry().get<Position>(pawn);
+        for (const GrowingZone& zone : farming->zones()) {
+            for (const CellPos& cell : zone.cells) {
+                if (cell.level != at.level || !farming->readyToHarvest(cell)) {
+                    continue;
+                }
+                const float dx = static_cast<float>(cell.x) + 0.5f - at.x;
+                const float dy = static_cast<float>(cell.y) + 0.5f - at.y;
+                out.push_back(WorkCandidate{JobTarget{kNoEntity, cell}, dx * dx + dy * dy, 0, 0, false, CellPos{}});
+            }
+        }
+    }
+
+    bool makeJob(JobSystem& jobs, Entity, const WorkCandidate& candidate, Job& out) override {
+        if (jobs.farming() == nullptr || !jobs.farming()->readyToHarvest(candidate.target.cell)) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::HarvestPlant;
+        out.cell = candidate.target.cell;
+        return true;
+    }
+};
+
 // Bills on a stove (RimWorld's WorkGiver_DoBill): the first bill in the building's list that should
 // be done now, that the pawn is skilled enough for, and whose ingredients it can fetch. The
 // ingredients are the nearest free stacks to the building; the pawn carries them one stack at a
@@ -413,6 +540,186 @@ private:
     }
 };
 
+// Research (RimWorld's WorkGiver_Researcher): a research bench that can work on the colony's current
+// project, with nobody else at it (docs/design/research.md). The pawn sits at a cell beside the bench.
+class ResearchGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "Research"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        const ResearchSystem* research = jobs.research();
+        if (research == nullptr || research->current().empty()) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        reg.view<const Thing, const Footprint, const Position>().each(
+            [&](Entity bench, const Thing& thing, const Footprint& footprint, const Position& pos) {
+                const ResearchBenchInfo* info = research->benchInfo(thing.def);
+                if (info == nullptr || pos.level != at.level || reg.all_of<ConstructionSite>(bench) ||
+                    reg.all_of<MarkedForDeconstruct>(bench) || !research->benchCanWork(*info) ||
+                    !jobs.buildingRuns(bench)) {
+                    return;
+                }
+                CellPos stand;
+                if (!jobs.construction().workCell(footprint.rect(), cellOf(at), stand)) {
+                    return;
+                }
+                out.push_back(WorkCandidate{JobTarget{bench, CellPos{}}, workGiverDistSq(at, pos), 0, 0, true, stand});
+            });
+    }
+
+    bool makeJob(JobSystem&, Entity, const WorkCandidate& candidate, Job& out) override {
+        out = Job{};
+        out.type = JobType::Research;
+        out.site = candidate.target.thing;
+        out.cell = candidate.reach;
+        return true;
+    }
+};
+
+// Medicine (task H1, docs/design/medicine.md). RimWorld's doctor tasks: tend whoever needs it (the bleeding first),
+// carry the downed to a bed; and the patient's own: go to a medical bed, rest in any bed.
+
+// A pawn of the player's side with a body that thinks (a colonist): who doctors work on.
+bool medicalColonist(const entt::registry& reg, Entity pawn) {
+    if (!reg.all_of<Health, Position, Worker>(pawn) || reg.get<Health>(pawn).dead) {
+        return false;
+    }
+    const Faction* faction = reg.try_get<Faction>(pawn);
+    return faction == nullptr || faction->id == kPlayerFaction || reg.all_of<Prisoner>(pawn);  // doctors tend prisoners too
+}
+
+// TendPatients (WorkGiver_Tend): a patient with an injury or lost part nobody has tended, the pawn itself too, as
+// long as it isn't down. If anyone is bleeding, only those are offered.
+class TendPatientsGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "TendPatients"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        if (jobs.medicine() == nullptr || !jobs.canUseHands(pawn)) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        const size_t first = out.size();
+        bool urgent = false;
+        for (const auto [patient, health, pos] : reg.view<const Health, const Position>().each()) {
+            if (pos.level != at.level || !medicalColonist(reg, patient) || !jobs.health().needsTending(patient) ||
+                jobs.medicine()->careOf(patient) == MedicalCare::NoCare) {
+                continue;
+            }
+            const bool bleeds = jobs.health().urgentlyNeedsTending(patient);
+            if (urgent && !bleeds) {
+                continue;
+            }
+            if (bleeds && !urgent) {
+                urgent = true;
+                out.resize(first);  // the ones found so far are not urgent
+            }
+            out.push_back(WorkCandidate{JobTarget{patient, CellPos{}}, workGiverDistSq(at, pos), 0, 0, false, CellPos{}});
+        }
+    }
+
+    bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
+        const Entity patient = candidate.target.thing;
+        if (!jobs.health().needsTending(patient)) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::TendPatient;
+        out.thing = patient;
+        out.site = jobs.findMedicine(pawn, patient);
+        return true;
+    }
+};
+
+// Rescue (WorkGiver_RescueDowned): a downed colonist that no bed holds goes to the best free bed.
+class RescueGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "Rescue"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        if (jobs.medicine() == nullptr) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        for (const auto [patient, health, pos] : reg.view<const Health, const Position>().each()) {
+            if (patient == pawn || pos.level != at.level || !jobs.needsRescue(patient)) {
+                continue;
+            }
+            out.push_back(WorkCandidate{JobTarget{patient, CellPos{}}, workGiverDistSq(at, pos), 0, 0, false, CellPos{}});
+        }
+    }
+
+    bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
+        const Entity patient = candidate.target.thing;
+        Entity bed = kNoEntity;
+        CellPos cell;
+        if (!jobs.needsRescue(patient) || !jobs.findPatientBed(patient, pawn, false, bed, cell)) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::Rescue;
+        out.thing = patient;
+        out.chair = bed;
+        out.cell = cell;
+        return true;
+    }
+};
+
+// A patient that isn't down goes to bed to heal: GoToMedicalBed only to a medical bed, RestToHeal to any bed.
+class BedRestGiver : public WorkGiver {
+public:
+    explicit BedRestGiver(bool medicalOnly) : medicalOnly_(medicalOnly) {}
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        const entt::registry& reg = jobs.things().registry();
+        if (!reg.all_of<Health, Worker>(pawn) || reg.get<Health>(pawn).downed || !jobs.health().needsRest(pawn)) {
+            return;
+        }
+        const Entity under = jobs.bedUnder(pawn);
+        if (under != kNoEntity && (!medicalOnly_ || jobs.isMedicalBed(under))) {
+            // Already on a bed that will do: rest there.
+            out.push_back(WorkCandidate{JobTarget{under, CellPos{}}, 0.0f, 0, 0, true, cellOf(reg.get<Position>(pawn))});
+            return;
+        }
+        Entity bed = kNoEntity;
+        CellPos cell;
+        if (jobs.findPatientBed(pawn, pawn, medicalOnly_, bed, cell)) {
+            out.push_back(WorkCandidate{JobTarget{bed, CellPos{}}, workGiverDistSq(reg.get<Position>(pawn), reg.get<Position>(bed)),
+                                        0, 0, true, cell});
+        }
+    }
+
+    bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
+        if (!jobs.health().needsRest(pawn)) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::BedRest;
+        out.thing = candidate.target.thing;
+        out.cell = candidate.reach;
+        return true;
+    }
+
+private:
+    bool medicalOnly_;
+};
+
+class GoToMedicalBedGiver final : public BedRestGiver {
+public:
+    GoToMedicalBedGiver() : BedRestGiver(true) {}
+    const char* task() const override { return "GoToMedicalBed"; }
+};
+
+class RestToHealGiver final : public BedRestGiver {
+public:
+    RestToHealGiver() : BedRestGiver(false) {}
+    const char* task() const override { return "RestToHeal"; }
+};
+
 // Cleaning filth (RimWorld's WorkGiver_CleanFilth, in the Cleaning work type): any cell indoors with
 // filth in it. Outdoor filth waits for the home area, which RimWorld's cleaners are limited to.
 class CleanFilthGiver final : public WorkGiver {
@@ -447,6 +754,76 @@ public:
         out.cell = candidate.target.cell;
         return true;
     }
+};
+
+// Firefighting (RimWorld's WorkGiver_FightFires, in the Firefighter work type): a fire inside the home area, or one under
+// a burning colonist wherever it is. Colonists don't reserve fires, so several beat one out together.
+class ExtinguishFiresGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "ExtinguishFires"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        Fire* fire = jobs.fire();
+        if (fire == nullptr || fire->count() == 0 || !jobs.canUseHands(pawn)) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Map& map = jobs.map();
+        const Position& at = reg.get<Position>(pawn);
+        rescue_.clear();
+        for (const auto [burning, burn, pos, colonist] : reg.view<const Burning, const Position, const Colonist>().each()) {
+            (void)burn;
+            (void)colonist;
+            if (burning != pawn) {
+                rescue_.push_back(map.index(cellOf(pos)));
+            }
+        }
+        for (const auto& [index, state] : fire->all()) {
+            (void)state;
+            const CellPos cell = map.cellAt(index);
+            if (cell.level != at.level) {
+                continue;
+            }
+            if (!fire->home(cell) && std::find(rescue_.begin(), rescue_.end(), index) == rescue_.end()) {
+                continue;
+            }
+            WorkCandidate candidate{JobTarget{kNoEntity, cell}, 0.0f, 0, 0, false, CellPos{}};
+            const float dx = static_cast<float>(cell.x) + 0.5f - at.x;
+            const float dy = static_cast<float>(cell.y) + 0.5f - at.y;
+            candidate.distSq = dx * dx + dy * dy;
+            if (!map.walkable(cell)) {
+                // A burning wall or table: the pawn works from a cell beside it.
+                const CellPos around[4] = {{cell.x, cell.y - 1, cell.level}, {cell.x + 1, cell.y, cell.level},
+                                           {cell.x, cell.y + 1, cell.level}, {cell.x - 1, cell.y, cell.level}};
+                bool found = false;
+                for (const CellPos& n : around) {
+                    if (map.walkable(n)) {
+                        candidate.hasReach = true;
+                        candidate.reach = n;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    continue;
+                }
+            }
+            out.push_back(candidate);
+        }
+    }
+
+    bool makeJob(JobSystem& jobs, Entity, const WorkCandidate& candidate, Job& out) override {
+        if (jobs.fire() == nullptr || !jobs.fire()->burning(candidate.target.cell)) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::ExtinguishFire;
+        out.cell = candidate.target.cell;
+        return true;
+    }
+
+private:
+    std::vector<int> rescue_;
 };
 
 // Fuel for buildings (RimWorld's WorkGiver_Refuel): a building that burns fuel and is low on it (or the
@@ -544,8 +921,19 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<DeconstructGiver>());
     givers.push_back(std::make_unique<MineGiver>());
     givers.push_back(std::make_unique<CutOrHarvestPlantsGiver>());
+    givers.push_back(std::make_unique<HarvestCropsGiver>());
+    givers.push_back(std::make_unique<SowCropsGiver>());
     givers.push_back(std::make_unique<DoBillsCookStoveGiver>());
+    givers.push_back(std::make_unique<ResearchGiver>());
     givers.push_back(std::make_unique<CleanFilthGiver>());
+    givers.push_back(std::make_unique<TendPatientsGiver>());
+    givers.push_back(std::make_unique<RescueGiver>());
+    givers.push_back(std::make_unique<GoToMedicalBedGiver>());
+    givers.push_back(std::make_unique<RestToHealGiver>());
+    givers.push_back(std::make_unique<ExtinguishFiresGiver>());
+    givers.push_back(std::make_unique<StripGiver>());
+    addHusbandryWorkGivers(givers);
+    addPrisonerWorkGivers(givers);
     givers.push_back(std::make_unique<RefuelGiver>());
     return givers;
 }

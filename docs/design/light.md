@@ -12,8 +12,8 @@ Every cell has a light level, 0 (pitch dark) to 1 (full light): the larger of th
 the lamps' light. `sim.lights().lightAt(cell)` is the one call others use.
 
 - **Sun.** `skyGlow()` follows the hour of the day: 0 until 05:00, up to 1 at 07:00, 1 until 17:00,
-  down to 0 at 19:00 (`LightRules.skyGlowByHour`, our shape; no seasons or weather yet, E1 can scale
-  it). It lights only cells with no roof, thin or thick (`underOpenSky`), so a built room and a mined
+  down to 0 at 19:00 (`LightRules.skyGlowByHour`, our shape), times the weather's `skyGlow` since E1 (a
+  thunderstorm lets 45% through, fog 85%; [weather.md](weather.md)). It lights only cells with no roof, thin or thick (`underOpenSky`), so a built room and a mined
   tunnel are dark inside whatever the hour.
 - **Lamps.** A building def with `glower: { radius, glow }` lights the cells round its
   position: `glow` at the source, falling in a straight line to 0 at `radius` metres. Something at
