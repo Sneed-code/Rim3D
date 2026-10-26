@@ -247,7 +247,8 @@ void ASimPawnActor::SetDetail(ESimPawnDetail InDetail, float TickInterval)
 		{
 			if (Groom)
 			{
-				Groom->SetVisibility(Detail == ESimPawnDetail::Full);
+				// Hair under a helmet or a tuque stays hidden at every detail.
+				Groom->SetVisibility(Detail == ESimPawnDetail::Full && !(bHairHidden && Groom->GetName().Contains(TEXT("Hair"))));
 			}
 		}
 	}
@@ -310,6 +311,26 @@ void ASimPawnActor::ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& In
 		}
 	}
 
+	// The clothes and the skin under them share the body's shape and the pawn's skin colour.
+	for (USkeletalMeshComponent* Layer : BareLayer)
+	{
+		Layer->SetCustomPrimitiveDataVector3(0, FVector(Looks.Skin.R, Looks.Skin.G, Looks.Skin.B));
+		for (const TPair<FName, float>& Morph : Looks.MorphWeights())
+		{
+			Layer->SetMorphTarget(Morph.Key, Morph.Value);
+		}
+	}
+	for (UMeshComponent* Worn : WornMeshes)
+	{
+		if (USkeletalMeshComponent* Skinned = Cast<USkeletalMeshComponent>(Worn))
+		{
+			for (const TPair<FName, float>& Morph : Looks.MorphWeights())
+			{
+				Skinned->SetMorphTarget(Morph.Key, Morph.Value);
+			}
+		}
+	}
+
 	// Horns on the head bone of whichever body shows, placed in its reference pose.
 	for (UStaticMeshComponent* Horn : Horns)
 	{
@@ -343,6 +364,212 @@ void ASimPawnActor::ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& In
 			Horns.Add(Horn);
 		}
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Worn clothes (docs/design/clothes-draw.md).
+
+namespace
+{
+	const TCHAR* const PawnBareMeshes[] = {
+		TEXT("/Game/Rim3D/Generated/Clothes/SK_Body_Bare_0.SK_Body_Bare_0"),
+		TEXT("/Game/Rim3D/Generated/Clothes/SK_Body_Bare_1.SK_Body_Bare_1"),
+	};
+	// The garment material's custom primitive data: the cloth's colour (RGB) at 0 and the wear at 3.
+	constexpr int32 PawnClothColorIndex = 0;
+	constexpr int32 PawnClothWearIndex = 3;
+
+	/** The colour a garment mesh has by itself (its material instance's `Color`), for pieces with no stuff. */
+	FLinearColor PawnOwnColor(const UMeshComponent* Mesh)
+	{
+		FLinearColor Color(0.3f, 0.3f, 0.3f);
+		if (const UMaterialInterface* Material = Mesh ? Mesh->GetMaterial(0) : nullptr)
+		{
+			Material->GetVectorParameterValue(FHashedMaterialParameterInfo(TEXT("Color")), Color);
+		}
+		return Color;
+	}
+}
+
+void ASimPawnActor::EnsureBareLayer(USimPawnSubsystem& Pawns)
+{
+	if (bBareLayerTried || !MetaHuman || !MetaHumanBody)
+	{
+		return;
+	}
+	bBareLayerTried = true;
+	for (USkeletalMeshComponent* Mesh : ShapedMeshes)
+	{
+		const FString Name = Mesh->GetSkeletalMeshAsset() ? Mesh->GetSkeletalMeshAsset()->GetName() : FString();
+		if (Name.Contains(TEXT("hoodie")))
+		{
+			DefaultTop = Mesh;
+		}
+		else if (Name.Contains(TEXT("cargopants")))
+		{
+			DefaultTrousers = Mesh;
+		}
+	}
+	if (!DefaultTop || !DefaultTrousers)
+	{
+		return;
+	}
+	USkinnedMeshComponent* Leader = DefaultTop->LeaderPoseComponent.IsValid() ? DefaultTop->LeaderPoseComponent.Get() : MetaHumanBody.Get();
+	for (const TCHAR* Path : PawnBareMeshes)
+	{
+		USkeletalMesh* Mesh = Cast<USkeletalMesh>(Pawns.GetClothesAsset(Path));
+		if (!Mesh)
+		{
+			// Without the skin layer Kellan's own clothes must stay: nothing else covers the body.
+			for (USkeletalMeshComponent* Layer : BareLayer)
+			{
+				Layer->DestroyComponent();
+			}
+			BareLayer.Reset();
+			return;
+		}
+		USkeletalMeshComponent* Layer = NewObject<USkeletalMeshComponent>(MetaHuman);
+		Layer->SetSkeletalMeshAsset(Mesh);
+		Layer->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Layer->SetCanEverAffectNavigation(false);
+		Layer->SetupAttachment(MetaHuman->GetRootComponent());
+		Layer->RegisterComponent();
+		Layer->SetLeaderPoseComponent(Leader);
+		const FLinearColor Skin = bHasLooks ? Looks.Skin : FLinearColor(0.4f, 0.28f, 0.22f);
+		Layer->SetCustomPrimitiveDataVector3(PawnClothColorIndex, FVector(Skin.R, Skin.G, Skin.B));
+		Layer->SetCustomPrimitiveDataFloat(PawnClothWearIndex, 0.0f);
+		if (bHasLooks)
+		{
+			for (const TPair<FName, float>& Morph : Looks.MorphWeights())
+			{
+				Layer->SetMorphTarget(Morph.Key, Morph.Value);
+			}
+		}
+		BareLayer.Add(Layer);
+	}
+	// The skin is there now: Kellan's own clothes go.
+	if (DefaultTop)
+	{
+		DefaultTop->SetVisibility(false);
+	}
+	if (DefaultTrousers)
+	{
+		DefaultTrousers->SetVisibility(false);
+	}
+}
+
+void ASimPawnActor::DestroyWorn()
+{
+	for (UMeshComponent* Mesh : WornMeshes)
+	{
+		if (Mesh)
+		{
+			Mesh->DestroyComponent();
+		}
+	}
+	WornMeshes.Reset();
+	WornMeshItems.Reset();
+}
+
+void ASimPawnActor::StyleWornMesh(UMeshComponent* Mesh, const FSimWornPiece& Piece)
+{
+	const FLinearColor Color = Piece.bHasTint ? Piece.Tint : PawnOwnColor(Mesh);
+	Mesh->SetCustomPrimitiveDataVector3(PawnClothColorIndex, FVector(Color.R, Color.G, Color.B));
+	Mesh->SetCustomPrimitiveDataFloat(PawnClothWearIndex, Piece.Wear);
+	if (USkeletalMeshComponent* Skinned = Cast<USkeletalMeshComponent>(Mesh); Skinned && bHasLooks)
+	{
+		for (const TPair<FName, float>& Morph : Looks.MorphWeights())
+		{
+			Skinned->SetMorphTarget(Morph.Key, Morph.Value);
+		}
+	}
+}
+
+void ASimPawnActor::UpdateHairVisibility()
+{
+	bool bHide = false;
+	for (const FSimWornPiece& Piece : Apparel.Pieces)
+	{
+		bHide = bHide || Piece.bHidesHair;
+	}
+	bHairHidden = bHide;
+	for (USceneComponent* Groom : Grooms)
+	{
+		if (Groom && Groom->GetName().Contains(TEXT("Hair")))
+		{
+			Groom->SetVisibility(!bHide && Detail == ESimPawnDetail::Full);
+		}
+	}
+}
+
+void ASimPawnActor::ApplyApparel(USimPawnSubsystem& Pawns, const FSimPawnApparel& Wanted, uint64 Key)
+{
+	ApparelKey = Key;
+	bApparelApplied = true;
+	if (!MetaHuman || !MetaHumanBody)
+	{
+		return;  // a mannequin has no clothes to change
+	}
+	EnsureBareLayer(Pawns);
+	if (BareLayer.IsEmpty() || !DefaultTop || !DefaultTrousers)
+	{
+		return;  // no clothes assets, or no looks meshes to put away: Kellan's own clothes stay
+	}
+
+	if (!Wanted.SameStructure(Apparel))
+	{
+		DestroyWorn();
+		++ApparelRebuilds;
+		USkinnedMeshComponent* Leader = DefaultTop && DefaultTop->LeaderPoseComponent.IsValid() ? DefaultTop->LeaderPoseComponent.Get() : MetaHumanBody.Get();
+		for (const FSimWornPiece& Piece : Wanted.Pieces)
+		{
+			for (const FSimWornMesh& Part : Piece.Meshes)
+			{
+				UObject* Asset = Pawns.GetClothesAsset(Part.Path);
+				UMeshComponent* Made = nullptr;
+				if (USkeletalMesh* Skinned = Cast<USkeletalMesh>(Asset); Skinned && Part.Bone.IsNone())
+				{
+					USkeletalMeshComponent* Component = NewObject<USkeletalMeshComponent>(MetaHuman);
+					Component->SetSkeletalMeshAsset(Skinned);
+					Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+					Component->SetCanEverAffectNavigation(false);
+					Component->SetupAttachment(MetaHuman->GetRootComponent());
+					Component->RegisterComponent();
+					Component->SetLeaderPoseComponent(Leader);
+					Made = Component;
+				}
+				else if (UStaticMesh* Prop = Cast<UStaticMesh>(Asset); Prop && !Part.Bone.IsNone())
+				{
+					UStaticMeshComponent* Component = NewObject<UStaticMeshComponent>(MetaHuman);
+					Component->SetStaticMesh(Prop);
+					Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+					Component->SetCanEverAffectNavigation(false);
+					Component->SetupAttachment(MetaHumanBody, Part.Bone);
+					Component->RegisterComponent();
+					Made = Component;
+				}
+				if (Made)
+				{
+					WornMeshes.Add(Made);
+					WornMeshItems.Add(Piece.Item);
+				}
+			}
+		}
+	}
+	Apparel = Wanted;
+
+	// Colour and wear of every mesh, rebuilt or not.
+	for (const FSimWornPiece& Piece : Apparel.Pieces)
+	{
+		for (int32 I = 0; I < WornMeshItems.Num(); ++I)
+		{
+			if (WornMeshItems[I] == Piece.Item && WornMeshes.IsValidIndex(I) && WornMeshes[I])
+			{
+				StyleWornMesh(WornMeshes[I], Piece);
+			}
+		}
+	}
+	UpdateHairVisibility();
 }
 
 void ASimPawnActor::PlayHitReaction(const FVector& ShotDirection, float Strength)

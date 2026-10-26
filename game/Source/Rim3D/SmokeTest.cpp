@@ -165,6 +165,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildMeleePhases();
 	}
+	else if (TestName == TEXT("clothes"))
+	{
+		BuildClothesPhases();
+	}
 	else
 	{
 		Fail(FString::Printf(TEXT("Unknown smoke test '%s'"), *TestName));

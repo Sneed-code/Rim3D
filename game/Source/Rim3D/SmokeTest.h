@@ -31,7 +31,8 @@ namespace colony { class Map; }
  * animals (animal actors on their A4 models: poses, scale by life stage, animation detail by distance),
  * sky (sun and moon from the sim's clock, the season's sun height, rain, snow in the air and on the ground, wet ground, fog,
  * thunderstorm flashes and the date readout).
- * melee (carried and holstered weapons, the weapon switch key, melee swings timed to the sim, blocks, dodges and hit-stop).
+ * melee (carried and holstered weapons, the weapon switch key, melee swings timed to the sim, blocks, dodges and hit-stop),
+ * clothes (worn apparel drawn on MetaHumans over a skin layer: stuff tint, torn look, hats and hair, taking off and stripping).
  * Optional: -SmokeTimeout=<seconds> (default 300) fails a run that hangs.
  * To add a test: write a Build<Name>Phases() and add a branch in OnWorldBeginPlay.
  * Run it with tools/smoke.ps1.
@@ -89,6 +90,7 @@ private:
 	void BuildAnimalsPhases();      // SmokeTestAnimals.cpp
 	void BuildSkyPhases();          // SmokeTestSky.cpp
 	void BuildMeleePhases();        // SmokeTestMelee.cpp
+	void BuildClothesPhases();      // SmokeTestClothes.cpp
 	void StartPhase(int32 Index);
 	void FinishPhase();
 	void WriteResultsAndQuit();
