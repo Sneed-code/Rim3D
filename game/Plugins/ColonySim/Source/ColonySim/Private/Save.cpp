@@ -28,6 +28,7 @@
 #include "ColonySim/Plants.h"
 #include "ColonySim/Weather.h"
 #include "ColonySim/Designations.h"
+#include "ColonySim/RoofCollapse.h"
 #include "ColonySim/RoomStats.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Jobs.h"
@@ -435,6 +436,7 @@ struct SaveData {
     FireSaved fire;                    // section "fire": fires, burnt ground, the home area (E4)
     std::vector<RoomTemperature> roomTemperatures;  // section "temperature" (E2)
     std::vector<CellPos> upperFloors;  // section "levels" (M1), by level then row
+    RoofCollapseSaved roofs;           // section "roofs" (M3)
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
     uint32_t nextOutfitId = 1;
     SpoilageState spoilageState;                    // section "spoilage" (C16)
@@ -2661,6 +2663,12 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("fuel", 1, [&] {
         saveParts(ar, "fuel", e, &SaveEntity::fuel, [&](Fuel& f) { saveFuelPart(ar, f); });
     });
+    ar.section("roofs", 1, [&] {
+        ar.value("collapses", d.roofs.collapses);
+        ar.list("thin", d.roofs.thin, [&](CellPos& c) { saveCell(ar, c); });
+        ar.list("fallenThick", d.roofs.fallenThick, [&](int& cell) { ar.value("cell", cell); });
+        ar.list("pending", d.roofs.pending, [&](CellPos& c) { saveCell(ar, c); });
+    });
     ar.section("crafting", 1, [&] {
         ar.value("rngState", d.craftingState.rngState);
         ar.value("rngIncrement", d.craftingState.rngIncrement);
@@ -3135,6 +3143,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.roomStats = sim.roomStats_->state();
     d.roomTemperatures = sim.temperature_->roomTemperatures();
     d.upperFloors = sim.map_.upperFloorCells();
+    d.roofs = sim.roofCollapse_->state();
     d.raids = sim.raids_->state();
     d.spoilageState = sim.spoilage_->state();
     d.craftingState = sim.crafting_->state();
@@ -3887,6 +3896,10 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             return false;
         }
     }
+    if (!sim.rooms_->restoreThinRoofs(d.roofs.thin)) {
+        error = "the save has a roof outside the map";
+        return false;
+    }
     sim.rooms_->update();
     sim.power_->markDirty();
     sim.power_->update();
@@ -3894,6 +3907,10 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     sim.temperature_->setOutdoor(sim.outdoorTemperature());
     sim.temperature_->restore(d.roomTemperatures);
     sim.spoilage_->restore(d.spoilageState);
+    if (!sim.roofCollapse_->restore(d.roofs)) {
+        error = "the save has a fallen roof outside the map";
+        return false;
+    }
     sim.crafting_->restore(d.craftingState);
     if (!sim.fire_->restore(d.fire, error)) {
         return false;

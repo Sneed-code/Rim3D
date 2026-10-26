@@ -87,6 +87,7 @@ enum class EventType : uint8_t {
     PrisonBreak,        // prisoners broke out (the hook for T3): `count` how many, `message` the cause
     OutOfFuel,       // a building's fuel ran out (docs/design/fuel.md)
     Refueled,        // a pawn put fuel into a building
+    RoofCollapsed,   // a roof or an upper floor fell (M3, docs/design/roofs.md): `cell`, `message` "roof" (a built roof), "mountain" (the thick roof of a mined-out cell) or "floor" (an upper floor), `count` how many things and pawns it hit
     FirefoamPopped,     // a firefoam popper went off (docs/design/fire.md): `thing` the popper (destroyed right after), `def` its def, `cell` its cell, `amount` the foam radius
     AnimalHunted,       // a hunter's target died (docs/design/hunting.md): `thing` the animal (a corpse now), `target` the hunter, `cell` where
     AnimalButchered,    // a corpse was cut up (docs/design/hunting.md): `thing` the butcher, `def` the animal's def, `target` the table, `cell` where, `amount` the meat, `part` the leather

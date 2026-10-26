@@ -179,12 +179,38 @@ void Map::setTerrain(CellPos c, Terrain terrain) {
     }
     const bool walkableBefore = groundWalkable(c);
     const uint8_t obstacleBefore = obstacleDm(c);
+    const bool wasRock = terrain_[i] == Terrain::Rock;
     terrain_[i] = terrain;
+    if (wasRock && terrain != Terrain::Rock && roof_[i] == Roof::Thick) {
+        hollow_.push_back(static_cast<int>(i));  // mined out under the mountain's roof
+        ++rockChanges_;
+    } else if (!wasRock && terrain == Terrain::Rock) {
+        hollow_.erase(std::remove(hollow_.begin(), hollow_.end(), static_cast<int>(i)), hollow_.end());
+    }
     if (groundWalkable(c) != walkableBefore) {
         regions_->markDirty(c);
     }
     if (obstacleDm(c) != obstacleBefore) {
         cover_->markDirty(c);
+    }
+}
+
+void Map::setThickRoof(CellPos c, bool thick) {
+    if (c.level != 0 || !inBounds(c)) {
+        return;
+    }
+    const size_t i = static_cast<size_t>(index(c));
+    if ((roof_[i] == Roof::Thick) == thick) {
+        return;
+    }
+    roof_[i] = thick ? Roof::Thick : Roof::None;
+    ++rockChanges_;
+    if (terrain_[i] != Terrain::Rock) {
+        if (thick) {
+            hollow_.push_back(static_cast<int>(i));
+        } else {
+            hollow_.erase(std::remove(hollow_.begin(), hollow_.end(), static_cast<int>(i)), hollow_.end());
+        }
     }
 }
 

@@ -46,6 +46,7 @@
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/RoofCollapse.h"
 #include "ColonySim/UpperFloors.h"
 #include "ColonySim/Weather.h"
 #include "ColonySim/Zones.h"
@@ -254,6 +255,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     melee_->setEventLog(&events_);
     fighters_->setMelee(melee_.get());
     upperFloors_ = std::make_unique<UpperFloors>(map_, *rooms_, *things_);
+    roofCollapse_ = std::make_unique<RoofCollapse>(map_, *rooms_, *things_, *health_, *defs_);
+    roofCollapse_->setEventLog(&events_);
+    roofCollapse_->setInterruptHandler([this](Entity pawn, const std::string& why) { jobs_->interrupt(pawn, why); });
     construction_->setUpperFloors(upperFloors_.get());
     animals_->setMelee(melee_.get());
     defense_ = std::make_unique<DefenseSystem>(*things_, map_, *combat_, *health_, *power_, *defs_, time_);
@@ -1102,6 +1106,7 @@ void Sim::step() {
     apparel_->step(time_.seconds, rng_, events_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     rooms_->update();
+    roofCollapse_->step(rng_);  // roofs and floors that lost their holders fall
     power_->step(time_);
     lights_->update();
     filth_->step();
@@ -1575,6 +1580,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
     }
     out.roofCells = rooms_->thinRoofCells();
     out.roofChanges = rooms_->roofChanges();
+    out.roofCollapses = roofCollapse_->collapses();
     {
         const WeatherEffects effects = weather_->effects();
         WeatherView& w = out.weather;
@@ -1642,6 +1648,7 @@ uint64_t Sim::stateHash() const {
     fire_->hashState(h);
     temperature_->hashState(h);
     h.add(map_.upperFloorHash());
+    roofCollapse_->hashState(h);
     spoilage_->hashState(h);
     crafting_->hashState(h);
     farming_->hashState(h);

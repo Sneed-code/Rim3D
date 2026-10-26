@@ -48,8 +48,8 @@ An upper floor is the floor of a cell on level 1 or above. It is laid with `Uppe
   building spawned. A plan over open air is worked from the level below too, under it or beside that
   (`Construction::workCell`), so the first floor needs no stairs. Cost and work are the wood floor's: 4
   stuff (metal, wood or stone), 216 s (ours: RimWorld has no upper floors). `PlaceUpperFloorCommand`
-  still lays floors at once, for tests and the dev tools. Floors that fall when the walls under them go
-  come with M3.
+  still lays floors at once, for tests and the dev tools. Floors fall when the walls under them go
+  ([roofs](roofs.md)).
 
 ## Regions, rooms and temperature per level
 
@@ -138,5 +138,4 @@ pawn's `climbed`; the state hash adds it only while a pawn climbs, so older hash
 - Direct mode climbing stairs and ladders, and the orders bar's upper floor and stairs tools (U17).
 - Raiders, fighters and animals using stairs: they path over them already, but combat, cover and the
   defence plans still look at one level at a time.
-- Roof collapse and floors falling when their support goes (M3).
 - Upper levels on screen (U17).
