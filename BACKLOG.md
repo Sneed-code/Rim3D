@@ -2,6 +2,7 @@
 
 Ideas parked for later. Newest first. Move an item into a stage plan when it's picked up.
 
+- Social life (found in C20): sexual orientations and attractiveness for romance (now anyone may love anyone), cheating and jealousy, a wedding party, the Social skill raising the opinion a chat gives and the chance of romance, the colonist panel's relations tab, and mood effects of seeing a friend die in front of you.
 - Breeding (found in N4): an "allow breeding" switch per animal or zone, so the player can keep a pen from growing; young animals following their mother; health that grows with the life stages (`healthScaleFactor` is in the defs, unused); hatching and gestation needing warmth (E2's room temperatures); a hatchery for the fertilized eggs; tailoring from wool (C14 bills); milk pasteurizing is not in RimWorld either.
 - Names for tamed animals (RimWorld lets you name them); shown in the animals tab (U19). Found in N3.
 - Effects of the trained tricks: Obedience (come when called, follow when drafted), Release (go wild on a command), Rescue (carry a downed colonist to a bed). N3 only counts the steps.

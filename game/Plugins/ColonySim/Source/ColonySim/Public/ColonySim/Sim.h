@@ -48,6 +48,7 @@ class Mineables;
 class MovementSystem;
 class MoodSystem;
 class RecreationSystem;
+class SocialSystem;
 class ResearchSystem;
 class TalentSystem;
 class NeedsSystem;
@@ -254,6 +255,10 @@ public:
     MeleeSystem& melee() { return *melee_; }
     const MeleeSystem& melee() const { return *melee_; }
 
+    // Opinions, interactions, bonds and social fights (docs/design/social.md).
+    SocialSystem& social() { return *social_; }
+    const SocialSystem& social() const { return *social_; }
+
     // Wild animals: herds, grazing, sleep, coming and going at the edges (docs/design/animal-life.md).
     AnimalSystem& animals() { return *animals_; }
     const AnimalSystem& animals() const { return *animals_; }
@@ -357,6 +362,7 @@ private:
     std::vector<Checkpoint> checkpoints_;
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
+    std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
 };
 
 }  // namespace colony

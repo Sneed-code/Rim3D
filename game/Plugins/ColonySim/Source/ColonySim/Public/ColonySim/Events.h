@@ -71,6 +71,9 @@ enum class EventType : uint8_t {
     TrapRearmed,     // a sprung trap was set again
     WeaponSwitched,  // a pawn finished switching weapons (P1, docs/design/weapons.md): `thing` the pawn, `def` the weapon now in its hands, `target` that weapon
     PlantSown,       // a colonist sowed a crop in a growing zone: `cell`, `def` the crop (docs/design/farming.md)
+    Interaction,     // one colonist talked to another (C20, docs/design/social.md): `thing` the talker, `target` the one spoken to, `message` the Interactions def, `count` 1 if it worked, 0 if refused, `amount` the listener's opinion of the talker after
+    BondChanged,     // a stored bond formed or ended: `thing` and `target` the two, `message` the bond kind ("Lover", "Spouse", "ExLover", "ExSpouse"), `count` 1 formed, 0 ended
+    SocialFight,     // a fight with fists began or ended: `thing` and `target` the two, `message` "started" or "ended: why"
 };
 
 // What stopped a projectile (ProjectileHit).

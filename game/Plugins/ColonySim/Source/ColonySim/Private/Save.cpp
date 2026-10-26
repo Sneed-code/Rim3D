@@ -33,6 +33,7 @@
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Recreation.h"
+#include "ColonySim/Social.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Talents.h"
 #include "ColonySim/Things.h"
@@ -298,6 +299,8 @@ struct SaveEntity {
     std::optional<SaveThrower> thrower;     // section "explosives"
     std::optional<KnockedDown> knocked;     // section "explosives"
     std::optional<Melee> melee;             // section "melee" (F8)
+    std::optional<Social> social;           // section "social" (C20)
+    std::optional<SocialFight> socialFight; // section "social" (C20)
     std::optional<SaveApparel> apparel;     // section "apparel" (format 20 on)
     std::optional<RecoilKick> kick;         // section "feel"
     std::optional<DodgeRoll> roll;          // section "feel"
@@ -1104,6 +1107,11 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 auto* strip = &c;
                 ar.value("thing", strip->thing);
                 ar.value("strip", strip->strip);
+            } else if constexpr (std::is_same_v<Type, InteractCommand>) {
+                ar.value("initiator", c.initiator);
+                ar.value("recipient", c.recipient);
+                ar.text("interaction", c.interaction);
+                ar.value("outcome", c.outcome);
             } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
                 ar.value("pawn", c.pawn);
                 ar.value("dx", c.dx);
@@ -1820,6 +1828,33 @@ void saveMeleePart(Ar& ar, Melee& m) {
 }
 
 template <typename Ar>
+void saveSocialPart(Ar& ar, Social& social) {
+    ar.value("nextTalk", social.nextTalk);
+    ar.value("mourned", social.mourned);
+    ar.list("memories", social.memories, [&](OpinionMemory& m) {
+        ar.value("other", m.other);
+        ar.text("label", m.label);
+        ar.value("offset", m.offset);
+        ar.value("expires", m.expires);
+        ar.require(m.offset >= -1.0e3f && m.offset <= 1.0e3f, "the save file has an impossible opinion");
+    });
+    ar.list("bonds", social.bonds, [&](Bond& b) {
+        ar.value("kind", b.kind);
+        ar.require(b.kind <= BondKind::ExSpouse, "the save file has a bad bond kind");
+        ar.value("other", b.other);
+        ar.value("since", b.since);
+    });
+}
+
+template <typename Ar>
+void saveSocialFightPart(Ar& ar, SocialFight& f) {
+    ar.value("opponent", f.opponent);
+    ar.value("startedAt", f.startedAt);
+    ar.value("endsBy", f.endsBy);
+    ar.value("nextMove", f.nextMove);
+}
+
+template <typename Ar>
 void saveTurretPart(Ar& ar, Turret& t) {
     ar.value("phase", t.phase);
     ar.require(static_cast<int>(t.phase) <= static_cast<int>(TurretPhase::Cooling), "the save file has a bad turret phase");
@@ -2430,6 +2465,10 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("melee", 1, [&] {
         saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
     });
+    ar.section("social", 1, [&] {
+        saveParts(ar, "social", e, &SaveEntity::social, [&](Social& social) { saveSocialPart(ar, social); });
+        saveParts(ar, "fight", e, &SaveEntity::socialFight, [&](SocialFight& f) { saveSocialFightPart(ar, f); });
+    });
     ar.section("apparel", 1, [&] {
         saveParts(ar, "apparel", e, &SaveEntity::apparel, [&](SaveApparel& a) { saveApparelPart(ar, a); });
         ar.value("nextOutfitId", d.nextOutfitId);
@@ -2819,6 +2858,12 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const Melee* melee = reg.try_get<Melee>(e)) {
             out.melee = *melee;
+        }
+        if (const Social* social = reg.try_get<Social>(e)) {
+            out.social = *social;
+        }
+        if (const SocialFight* fight = reg.try_get<SocialFight>(e)) {
+            out.socialFight = *fight;
         }
         if (const Projectile* p = reg.try_get<Projectile>(e)) {
             out.projectile = SaveProjectile{sim.defs_->get(p->def).defName(), sim.defs_->get(p->weapon).defName(), *p};
@@ -3320,6 +3365,12 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.melee) {
             reg.emplace<Melee>(entity, *e.melee);
+        }
+        if (e.social) {
+            reg.emplace<Social>(entity, *e.social);
+        }
+        if (e.socialFight) {
+            reg.emplace<SocialFight>(entity, *e.socialFight);
         }
         if (e.turret) {
             reg.emplace<Turret>(entity, *e.turret);
