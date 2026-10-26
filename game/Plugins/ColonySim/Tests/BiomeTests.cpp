@@ -59,8 +59,8 @@ TEST_CASE("Biomes: all twelve vanilla biomes are in the defs and make a working 
     CHECK(db->find("Biomes", "TropicalRainforest")->number("climate.seasonMeanTemperature.winter") > 20.0);
     CHECK(db->find("Biomes", "IceSheet")->count("climate.growingSeasons") == 0);
     CHECK(db->find("Biomes", "TropicalRainforest")->count("climate.growingSeasons") == 4);
-    // No snow in the tropics.
-    CHECK(db->find("Biomes", "TropicalRainforest")->number("weather.SnowHard") == doctest::Approx(0));
+    // The wiki lists snow for the tropics too; the weather's own temperature range keeps it away.
+    CHECK(db->find("Biomes", "TropicalRainforest")->number("weather.SnowHard") == doctest::Approx(4));
     // More rain in the rainforest than in the desert.
     CHECK(db->find("Biomes", "TropicalRainforest")->number("climate.rainfallMmPerYear") >
           db->find("Biomes", "Desert")->number("climate.rainfallMmPerYear"));

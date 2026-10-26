@@ -508,3 +508,5 @@ binds R to reload; reload and sidestep animations are not drawn yet). ~~**C10** 
 
 - Nothing now. (Megascans for A2 are no longer needed: the free textures are in; Megascans can replace them
   later through `assets/terrain_textures.json`.)
+
+**Biome and animal numbers checked on the wiki** (after PR #160): all 12 biomes now have the wiki's plant and animal density, disease days, weather commonalities, and animal and plant commonalities (plants we have no def for are folded into a similar tree or left out, listed in each biome's `ours`). 12 of the 14 new animals have the wiki's speed, value, size, health, life span, meat, leather, wildness, food, gestation and litter. Still `unverified`: biome `climate` and `terrain` (the wiki only gives a minimum or maximum temperature), animal `tools`, and the lion and monkey (their wiki pages could not be fetched).
