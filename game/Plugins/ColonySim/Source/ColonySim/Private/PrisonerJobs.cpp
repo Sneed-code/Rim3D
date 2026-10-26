@@ -63,12 +63,13 @@ public:
             }
             armed.push_back(&pos);
         }
+        // An arrest target of another side is itself "armed" until it is in the cell: not a danger to its own capture.
         for (const auto [patient, health, pos] : reg.view<const Health, const Position>().each()) {
-            if (pos.level != at.level || !prisoners->capturable(patient)) {
+            if (pos.level != at.level || !prisoners->carryable(patient)) {
                 continue;
             }
             const bool danger = std::any_of(armed.begin(), armed.end(), [&](const Position* p) {
-                return p->level == pos.level && prisonDistSq(*p, pos) < safe * safe;
+                return p != &pos && p->level == pos.level && prisonDistSq(*p, pos) < safe * safe;
             });
             if (!danger) {
                 out.push_back(WorkCandidate{JobTarget{patient, CellPos{}}, prisonDistSq(at, pos), 0, 0, false, CellPos{}});
@@ -81,7 +82,7 @@ public:
         const Entity patient = candidate.target.thing;
         Entity bed = kNoEntity;
         CellPos cell;
-        if (prisoners == nullptr || !prisoners->capturable(patient) || !prisoners->findPrisonBed(patient, pawn, bed, cell)) {
+        if (prisoners == nullptr || !prisoners->carryable(patient) || !prisoners->findPrisonBed(patient, pawn, bed, cell)) {
             return false;
         }
         out = Job{};
@@ -89,6 +90,39 @@ public:
         out.thing = patient;
         out.chair = bed;
         out.cell = cell;
+        return true;
+    }
+};
+
+// ExecutePrisoners: a prisoner the player ordered executed gets a warden at its side (the same walk and wait as a talk).
+class ExecutePrisonersGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "ExecutePrisoners"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        PrisonerSystem* prisoners = jobs.prisoners();
+        if (prisoners == nullptr) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        for (const auto [prisoner, p, pos] : reg.view<const Prisoner, const Position>().each()) {
+            if (p.execute && prisoner != pawn && pos.level == at.level && prisoners->executeDue(prisoner)) {
+                out.push_back(WorkCandidate{JobTarget{prisoner, CellPos{}}, prisonDistSq(at, pos), 0, 0, false, CellPos{}});
+            }
+        }
+    }
+
+    bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
+        const entt::registry& reg = jobs.things().registry();
+        const Entity prisoner = candidate.target.thing;
+        if (jobs.prisoners() == nullptr || !jobs.prisoners()->executeDue(prisoner) || prisoner == pawn) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::WardenInteract;
+        out.site = prisoner;
+        out.cell = cellOf(reg.get<Position>(prisoner));
         return true;
     }
 };
@@ -158,6 +192,7 @@ void addPrisonerWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers) {
     givers.push_back(std::make_unique<CapturePrisonersGiver>());
     givers.push_back(std::make_unique<FeedPrisonersGiver>());
     givers.push_back(std::make_unique<ChatWithPrisonersGiver>());
+    givers.push_back(std::make_unique<ExecutePrisonersGiver>());
 }
 
 // ---- Food for a prisoner --------------------------------------------------------------------------
@@ -218,7 +253,7 @@ bool JobSystem::failCheckPrisoner(Entity pawn, Job& job, std::string& why) {
         return false;
     }
     if (job.type == JobType::CapturePrisoner) {
-        if (!prisoners_->capturable(job.thing)) {
+        if (!prisoners_->carryable(job.thing)) {
             why = "it can't be captured now";
             return false;
         }
@@ -237,7 +272,7 @@ bool JobSystem::failCheckPrisoner(Entity pawn, Job& job, std::string& why) {
         return false;
     }
     if (job.type == JobType::WardenInteract) {
-        if (!prisoners_->chatDue(job.site)) {
+        if (!prisoners_->chatDue(job.site) && !prisoners_->executeDue(job.site)) {
             why = "the prisoner doesn't want to talk now";
             return false;
         }
@@ -365,12 +400,15 @@ JobSystem::StepResult JobSystem::chatWork(Entity pawn, Job& job, std::string& wh
         job.walk = 2;
         pawnDid(pawn, PawnAction::Chat, prisoner);
     }
-    job.progress += static_cast<float>(std::max(0.1f, health_.capacityValue(pawn, "Talking")));
-    if (job.progress < static_cast<float>(prisoners_->rules().chatWorkSeconds)) {
+    const bool executing = prisoners_->executeDue(prisoner);
+    job.progress += executing ? 1.0f : static_cast<float>(std::max(0.1f, health_.capacityValue(pawn, "Talking")));
+    if (job.progress < static_cast<float>(executing ? prisoners_->rules().executeWorkSeconds : prisoners_->rules().chatWorkSeconds)) {
         return StepResult::Running;
     }
     prisoners_->interact(pawn, prisoner);
-    learnSkill(pawn, "Social", static_cast<double>(prisoners_->rules().chatXp));
+    if (!executing) {
+        learnSkill(pawn, "Social", static_cast<double>(prisoners_->rules().chatXp));
+    }
     return StepResult::Next;
 }
 

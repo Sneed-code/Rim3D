@@ -300,10 +300,16 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
                 j["bed"] = entt::to_integral(c.bed);
                 j["on"] = c.on;
-            } else {
-                static_assert(std::is_same_v<Type, PlaceUpperFloorCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
                 j["area"] = replayRectJson(c.area);
                 j["remove"] = c.remove;
+            } else if constexpr (std::is_same_v<Type, ArrestCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["on"] = c.on;
+            } else {
+                static_assert(std::is_same_v<Type, ExecutePrisonerCommand>, "write every command type");
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["on"] = c.on;
             }
         },
         logged.command);
@@ -1078,6 +1084,17 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.bed = static_cast<Entity>(bed);
         out.command = std::move(c);
+    } else if (type == "Arrest" || type == "ExecutePrisoner") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        bool on = true;
+        if (!r.integer(j, "pawn", pawn, where) || !r.flag(j, "on", on, where)) {
+            return false;
+        }
+        if (type == "Arrest") {
+            out.command = ArrestCommand{static_cast<Entity>(pawn), on};
+        } else {
+            out.command = ExecutePrisonerCommand{static_cast<Entity>(pawn), on};
+        }
     } else if (type == "PlaceUpperFloor") {
         PlaceUpperFloorCommand c;
         if (!replayReadRect(r, j, where, c.area) || !r.flag(j, "remove", c.remove, where)) {

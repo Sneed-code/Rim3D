@@ -157,9 +157,13 @@ const char* commandName(const Command& command) {
                 return "SetPrisonerMode";
             } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
                 return "SetPrisonBed";
-            } else {
-                static_assert(std::is_same_v<Type, PlaceUpperFloorCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
                 return "PlaceUpperFloor";
+            } else if constexpr (std::is_same_v<Type, ArrestCommand>) {
+                return "Arrest";
+            } else {
+                static_assert(std::is_same_v<Type, ExecutePrisonerCommand>, "name every command type");
+                return "ExecutePrisoner";
             }
         },
         command);
@@ -258,6 +262,7 @@ const char* eventTypeName(EventType type) {
         case EventType::PrisonerRecruited: return "PrisonerRecruited";
         case EventType::PrisonerReleased: return "PrisonerReleased";
         case EventType::PrisonBreak: return "PrisonBreak";
+        case EventType::PrisonerExecuted: return "PrisonerExecuted";
         case EventType::Interaction: return "Interaction";
         case EventType::BondChanged: return "BondChanged";
         case EventType::SocialFight: return "SocialFight";

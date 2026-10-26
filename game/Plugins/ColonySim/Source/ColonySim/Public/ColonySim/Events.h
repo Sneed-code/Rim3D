@@ -80,11 +80,12 @@ enum class EventType : uint8_t {
     Interaction,     // one colonist talked to another (C20, docs/design/social.md): `thing` the talker, `target` the one spoken to, `message` the Interactions def, `count` 1 if it worked, 0 if refused, `amount` the listener's opinion of the talker after
     BondChanged,     // a stored bond formed or ended: `thing` and `target` the two, `message` the bond kind ("Lover", "Spouse", "ExLover", "ExSpouse"), `count` 1 formed, 0 ended
     SocialFight,     // a fight with fists began or ended: `thing` and `target` the two, `message` "started" or "ended: why"
-    PrisonerCaptured,   // a downed enemy was laid in a prison bed: `thing` the prisoner, `target` the warden (docs/design/prisoners.md)
+    PrisonerCaptured,   // a downed enemy was laid in a prison bed (`message` "arrested" for an arrest): `thing` the prisoner, `target` the warden (docs/design/prisoners.md)
     PrisonerChatted,    // a warden finished a talk with a prisoner: `thing` the warden, `target` the prisoner, `amount` its resistance now, `message` "reduced", "recruit failed" or "no change"
     PrisonerRecruited,  // a prisoner joined the colony: `thing` the new colonist, `target` the warden
     PrisonerReleased,   // a prisoner was set free and walks off the map: `thing` the pawn, `target` the warden (none for a dev command)
     PrisonBreak,        // prisoners broke out (the hook for T3): `count` how many, `message` the cause
+    PrisonerExecuted,   // a warden executed a prisoner: `thing` the dead pawn, `target` the warden, `message` "colonist" if it was one of the colony's own
 };
 
 // What stopped a projectile (ProjectileHit).

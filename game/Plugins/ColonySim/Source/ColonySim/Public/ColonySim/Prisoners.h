@@ -20,6 +20,7 @@ class JobSystem;
 class Map;
 class RaidSystem;
 class Rng;
+class Rooms;
 class StateHasher;
 class Things;
 struct GameTime;
@@ -50,6 +51,13 @@ struct Prisoner {
     float resistance = 0.0f;   // 0 when it can be recruited
     int64_t capturedAt = 0;    // game second
     int64_t nextChat = 0;      // game second from which a warden may talk to it again
+    bool execute = false;      // a warden is to execute it (saved from section version 2)
+};
+
+// On a pawn the player has ordered arrested (a colonist, or a pawn of another side who is no raider): a warden takes it to a
+// prison bed. `by` is the warden carrying it, none until it is lifted; a carried pawn thinks and moves no more.
+struct ArrestOrder {
+    Entity by = kNoEntity;
 };
 
 // On a bed building: only prisoners sleep in it, and downed enemies are carried to it.
@@ -76,6 +84,7 @@ struct COLONY_API PrisonerRules {
     float recruitChanceBase = 0.5f;        // times the mood factor, between the two limits
     float recruitChanceMin = 0.05f;
     float recruitChanceMax = 0.95f;
+    int64_t executeWorkSeconds = 120;      // ours: how long a warden takes over an execution
     float captureSafeRadius = 25.0f;       // wardens leave a downed enemy alone while an able one is this close
     float feedBelow = 0.3f;                // wardens feed a prisoner whose food is under this
     int edgeSearch = 40;                   // cells along the map edge looked at for a way out
@@ -90,6 +99,8 @@ public:
 
     const PrisonerRules& rules() const { return rules_; }
     void setEventLog(std::vector<Event>* events) { events_ = events; }
+    // The rooms a prison cell must be closed by; without them every cell counts as closed.
+    void setRooms(Rooms* rooms) { rooms_ = rooms; }
 
     bool isPrisoner(Entity pawn) const;
     bool isPrisonBed(Entity bed) const;
@@ -101,17 +112,34 @@ public:
     // Whether wardens may capture this pawn now: a living, downed pawn of another side that is no animal (not wild, not a prisoner
     // already) on the map.
     bool capturable(Entity pawn) const;
+    // Whether the cell is in a fully enclosed room (walls and doors all round, a roof over every cell): the only place a prison
+    // bed takes a prisoner. A door counts as closed; it is not in any room.
+    bool cellEnclosed(CellPos cell) const;
+    // Whether the player's order to arrest `pawn` can be carried out: a living pawn on the map, not a raider, an animal, a prisoner
+    // already, the protagonist or the one the player is walking.
+    bool arrestable(Entity pawn) const;
+    // `capturable` or `arrestable` with an order: what a capture job may carry to a bed.
+    bool carryable(Entity pawn) const;
     // The prison bed slot a warden (`helper`) would put `pawn` in: free, reachable, the nearest to the pawn. False if there is none.
     bool findPrisonBed(Entity pawn, Entity helper, Entity& bed, CellPos& cell) const;
 
     // Commands. False, with a reason in plain words, when they can't be done.
     bool setMode(Entity pawn, PrisonerMode mode, std::string& error);
     bool setPrisonBed(Entity bed, bool on, std::string& error);
+    // Orders `pawn` arrested (or cancels the order). A colonist or a visitor of another side; not a raider (they must be downed
+    // and captured), not an animal, not the protagonist.
+    bool setArrest(Entity pawn, bool on, std::string& error);
+    // Orders a prisoner executed by a warden (or cancels the order).
+    bool setExecute(Entity prisoner, bool on, std::string& error);
 
     // The end of a capture: `pawn` becomes the colony's prisoner in `bed` (the bed's slot is its own, its weapons are dropped, it stops
     // fighting and leaves its raid squad). `warden` is only for the event. Also a dev entry point for tests.
     bool imprison(Entity pawn, Entity bed, Entity warden, std::string& error);
 
+    // A warden has lifted `pawn` for an arrest: it stops what it is doing and goes where the warden goes.
+    void seize(Entity pawn, Entity warden);
+    // Whether a prisoner has an execution ordered on it (a warden can walk up to it, downed or not).
+    bool executeDue(Entity prisoner) const;
     // Whether a warden may start a talk with this prisoner now: it has a mode that wants one, its time has come, it is not
     // downed, it lies or stands somewhere a warden can walk to, and (Release) it can walk.
     bool chatDue(Entity prisoner) const;
@@ -121,6 +149,9 @@ public:
     float resistanceReduction(Entity warden, Entity prisoner) const;
     // The chance a recruit attempt on `prisoner` works now (once its resistance is 0).
     float recruitChance(Entity prisoner) const;
+    // A warden kills `prisoner`: it dies (DeathCause::Executed) and is a prisoner no more; the colonists remember it. Event
+    // PrisonerExecuted. False if it is no prisoner.
+    bool execute(Entity prisoner, Entity warden);
     // The prisoner joins the colony (its side becomes the player's, it works and fights for it), or is set free (it walks off the
     // map). False if it is no prisoner (or, for a release, can't walk).
     bool recruit(Entity prisoner, Entity warden);
@@ -151,6 +182,7 @@ private:
     const DefDatabase& defs_;
     const GameTime& time_;
     Rng& rng_;
+    Rooms* rooms_ = nullptr;
     PrisonerRules rules_;
     std::vector<Event>* events_ = nullptr;
 };

@@ -3,6 +3,7 @@
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Events.h"
+#include "ColonySim/Fighters.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Genes.h"
 #include "ColonySim/Health.h"
@@ -390,6 +391,20 @@ void MoodSystem::step(int64_t now, std::vector<Event>& events) {
     const size_t eventCount = events.size();
     for (size_t i = 0; i < eventCount; ++i) {
         const Event& event = events[i];
+        if (event.type == EventType::PrisonerExecuted) {
+            // Every living colonist hears of it (a colonist's own execution weighs more).
+            const char* trigger = event.message == "colonist" ? "ColonistExecuted" : "PrisonerExecuted";
+            for (const Entity pawn : pawns) {
+                const Health* h = reg.try_get<Health>(pawn);
+                const Faction* f = reg.try_get<Faction>(pawn);
+                Mood* witness = reg.try_get<Mood>(pawn);
+                if (witness != nullptr && pawn != event.thing && (h == nullptr || !h->dead) &&
+                    (f == nullptr || f->id == kPlayerFaction) && reg.all_of<WorkSettings>(pawn)) {
+                    addMemory(*witness, trigger, now);
+                }
+            }
+            continue;
+        }
         Mood* mood = (event.type == EventType::PawnAte || event.type == EventType::PawnWokeUp || event.type == EventType::PrisonerCaptured ||
                       event.type == EventType::PrisonerChatted) &&
                              reg.valid(event.type == EventType::PrisonerChatted ? event.target : event.thing)

@@ -46,7 +46,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Raids (section `raids`, `fighters` 2) | the raid squads (faction, points, state, target, members, when they give up), the alarm and its threat and home points, the shelter mark, the factions met so far; per pawn its `Raider` squad and kind and its `DefensePlan`; a fighter's mode, goal, squad, `defending` and `retreat` ([raids.md](raids.md)) |
 | Talents (section `talents`) | per protagonist: pawn, XP and ranks by talent **`defName`** ([talents.md](talents.md)) |
 | Farming (section `farming`) | growing zones: id, crop **by `defName`**, cells; the next zone id and the counters ([farming.md](farming.md)) |
-| Prisoners (section `prisoners`) | each prisoner's mode, resistance, capture time and next talk; each prison-marked bed ([prisoners.md](prisoners.md)) |
+| Prisoners (section `prisoners`) | each prisoner's mode, resistance, capture time, next talk and execution order; each prison-marked bed; each pawn ordered arrested ([prisoners.md](prisoners.md)) |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
@@ -292,6 +292,7 @@ Every section is version 1 at format 20. A task that changes a section adds a li
 - `roomstats` 1 (C17): floors, filth, carried filth, the filth rng, beauty needs ([room-stats.md](room-stats.md)). Commands `PlaceFloor` and `AddFilth` by name.
 - `health` 2 (E2): each pawn's environment hediffs (hypothermia, heatstroke...), a list of def name and severity before `dead`. Version 1 files load with none.
 - `prisoners` 1 (C22): new section, see the table. Commands `SetPrisonerMode` and `SetPrisonBed` by name; the job check now accepts `CapturePrisoner`, `FeedPrisoner` and `WardenInteract`.
+- `prisoners` 2 (C22 leftovers): `execute` on each prisoner and an `arrest` part (`ArrestOrder::by`). Version 1 files load with neither. Commands `Arrest` and `ExecutePrisoner` by name.
 - `raids` 1 (F6): new section, see the table. Commands `StartRaid`, `SoundAlarm`, `SetDefenseRole`, `MarkShelter` by name.
 - `fighters` 2 (F6): a fighter's `mode`, `defending`, `squad`, `hasGoal`, `goal`, `retreat` after `dodgeUntil`. Version 1 files load them as a plain fighter.
 - `breeding` 1 (N4): new section, see the table: the counters, per animal its `AnimalBreed` (pregnancy, litter, mating wait, milk, wool and egg timers, the female a male is walking to), per fertilized egg its `Hatching` time ([breeding.md](breeding.md)). The job check now accepts the animal jobs (it stopped at `StripPawn`, so a save made mid-taming would not load).

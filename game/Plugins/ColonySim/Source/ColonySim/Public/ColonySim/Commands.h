@@ -531,6 +531,20 @@ struct SetPrisonBedCommand {
     bool on = true;
 };
 
+// Orders a pawn arrested (`on`) or cancels the order: a warden carries it to a free prison bed in a closed room and it becomes a
+// prisoner. For a colonist (not the protagonist) or a visitor of another side; fails for a raider (they must be downed first), an
+// animal, a prisoner and a pawn the player is walking.
+struct ArrestCommand {
+    Entity pawn = kNoEntity;
+    bool on = true;
+};
+
+// Orders a prisoner executed (`on`) or cancels the order: a warden walks up and kills it. Fails for a pawn that is no prisoner.
+struct ExecutePrisonerCommand {
+    Entity pawn = kNoEntity;
+    bool on = true;
+};
+
 // Dev command: the weather becomes this Weathers def now (by defName, e.g. "Rain") and lasts `hours`
 // game hours (0: its usual length), then the next is chosen as usual (docs/design/weather.md).
 // Fails if no Weathers def has the name.
@@ -642,7 +656,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              CarryWeaponCommand, SwitchWeaponCommand, CreateGrowingZoneCommand,
                              RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
                              SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand, SetPrisonerModeCommand,
-                             SetPrisonBedCommand, PlaceUpperFloorCommand>;
+                             SetPrisonBedCommand, PlaceUpperFloorCommand, ArrestCommand, ExecutePrisonerCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

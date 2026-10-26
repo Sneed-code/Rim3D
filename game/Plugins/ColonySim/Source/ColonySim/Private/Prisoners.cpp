@@ -16,6 +16,7 @@
 #include "ColonySim/Raids.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Regions.h"
+#include "ColonySim/Rooms.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -74,6 +75,7 @@ PrisonerRules PrisonerRules::read(const DefDatabase& defs) {
     num("recruitChanceBase", r.recruitChanceBase);
     num("recruitChanceMin", r.recruitChanceMin);
     num("recruitChanceMax", r.recruitChanceMax);
+    r.executeWorkSeconds = std::max<int64_t>(1, rules->integer("executeWorkSeconds", r.executeWorkSeconds));
     num("captureSafeRadius", r.captureSafeRadius);
     num("feedBelow", r.feedBelow);
     r.edgeSearch = static_cast<int>(rules->integer("edgeSearch", r.edgeSearch));
@@ -179,6 +181,31 @@ bool PrisonerSystem::capturable(Entity pawn) const {
     return health.downed && !health.dead && side != kPlayerFaction && side != kWildFaction;
 }
 
+bool PrisonerSystem::cellEnclosed(CellPos cell) const {
+    if (rooms_ == nullptr) {
+        return true;
+    }
+    const Room* room = rooms_->roomOf(cell);
+    return room != nullptr && !room->outdoors();
+}
+
+bool PrisonerSystem::arrestable(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    if (!things_.spawned(pawn) || !reg.all_of<Health, Mover>(pawn) || reg.any_of<Prisoner, Animal, Raider, PlayerControl>(pawn)) {
+        return false;
+    }
+    if (const Colonist* colonist = reg.try_get<Colonist>(pawn); colonist != nullptr && colonist->protagonist) {
+        return false;  // the protagonist's arrest would lock the game away from the player
+    }
+    const Health& health = reg.get<Health>(pawn);
+    return !health.dead && fighters_.factionOf(pawn) != kWildFaction;
+}
+
+bool PrisonerSystem::carryable(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    return capturable(pawn) || (reg.all_of<ArrestOrder>(pawn) && arrestable(pawn));
+}
+
 bool PrisonerSystem::findPrisonBed(Entity pawn, Entity helper, Entity& bed, CellPos& cell) const {
     const entt::registry& reg = things_.registry();
     if (!reg.valid(pawn) || !reg.all_of<Position>(pawn) || !reg.valid(helper) || !reg.all_of<Position>(helper)) {
@@ -207,7 +234,7 @@ bool PrisonerSystem::findPrisonBed(Entity pawn, Entity helper, Entity& bed, Cell
             continue;
         }
         const CellPos c{rect.minX + index % rect.sizeX, rect.minY + index / rect.sizeX, rect.level};
-        if (c.level != at.level || !map_.walkable(c) || jobs_.bedOccupied(c, pawn) ||
+        if (c.level != at.level || !map_.walkable(c) || !cellEnclosed(c) || jobs_.bedOccupied(c, pawn) ||
             jobs_.reservedByOther(JobTarget{kNoEntity, c}, helper) || jobs_.avoiding(helper, JobTarget{candidate, CellPos{}}) ||
             !jobs_.canReach(from, c)) {
             continue;
@@ -232,6 +259,10 @@ bool PrisonerSystem::setMode(Entity pawn, PrisonerMode mode, std::string& error)
     entt::registry& reg = things_.registry();
     if (!isPrisoner(pawn)) {
         error = "that pawn is no prisoner";
+        return false;
+    }
+    if (fighters_.factionOf(pawn) == kPlayerFaction && mode != PrisonerMode::NoInteraction && mode != PrisonerMode::Release) {
+        error = "that is one of your own colonists: keep it locked up (NoInteraction) or set it free (Release)";
         return false;
     }
     if (mode == PrisonerMode::Release && reg.get<Health>(pawn).downed) {
@@ -262,11 +293,49 @@ bool PrisonerSystem::setPrisonBed(Entity bed, bool on, std::string& error) {
     return true;
 }
 
+bool PrisonerSystem::setArrest(Entity pawn, bool on, std::string& error) {
+    entt::registry& reg = things_.registry();
+    if (!on) {
+        if (reg.valid(pawn) && reg.all_of<ArrestOrder>(pawn)) {
+            reg.remove<ArrestOrder>(pawn);
+        }
+        return true;
+    }
+    if (!arrestable(pawn)) {
+        error = reg.valid(pawn) && reg.all_of<Raider>(pawn) ? "raiders can only be captured once they are downed"
+                                                             : "that pawn can't be arrested";
+        return false;
+    }
+    if (!reg.all_of<ArrestOrder>(pawn)) {
+        reg.emplace<ArrestOrder>(pawn);
+    }
+    return true;
+}
+
+bool PrisonerSystem::setExecute(Entity pawn, bool on, std::string& error) {
+    if (!isPrisoner(pawn)) {
+        error = "that pawn is no prisoner";
+        return false;
+    }
+    things_.registry().get<Prisoner>(pawn).execute = on;
+    return true;
+}
+
+void PrisonerSystem::seize(Entity pawn, Entity warden) {
+    entt::registry& reg = things_.registry();
+    if (!reg.all_of<ArrestOrder>(pawn)) {
+        return;
+    }
+    jobs_.interrupt(pawn, "arrested");
+    fighters_.standDown(pawn);
+    reg.get<ArrestOrder>(pawn).by = warden;
+}
+
 // ---- Capture ------------------------------------------------------------------------------------
 
 bool PrisonerSystem::imprison(Entity pawn, Entity bed, Entity warden, std::string& error) {
     entt::registry& reg = things_.registry();
-    if (!capturable(pawn)) {
+    if (!carryable(pawn)) {
         error = "that pawn can't be captured";
         return false;
     }
@@ -279,8 +348,15 @@ bool PrisonerSystem::imprison(Entity pawn, Entity bed, Entity warden, std::strin
         jobs_.addWorker(pawn, {}, true);
     }
     reg.remove<WorkSettings>(pawn);  // a prisoner does no work
+    const bool arrested = reg.all_of<ArrestOrder>(pawn);
+    const bool ownSide = fighters_.factionOf(pawn) == kPlayerFaction;
+    reg.remove<ArrestOrder>(pawn);
     Prisoner prisoner;
-    prisoner.resistance = rng_.range(rules_.initialResistanceMin, rules_.initialResistanceMax);
+    // A colonist put away has nothing to wear down, and nobody talks to it unless the player says so.
+    prisoner.resistance = ownSide ? 0.0f : rng_.range(rules_.initialResistanceMin, rules_.initialResistanceMax);
+    if (ownSide) {
+        prisoner.mode = PrisonerMode::NoInteraction;
+    }
     prisoner.capturedAt = now();
     prisoner.nextChat = now();
     reg.emplace<Prisoner>(pawn, prisoner);
@@ -301,7 +377,7 @@ bool PrisonerSystem::imprison(Entity pawn, Entity bed, Entity warden, std::strin
     fighters_.standDown(pawn);
     raids_.forget(pawn);
     reg.remove<Raider>(pawn);
-    emit(EventType::PrisonerCaptured, pawn, warden, reg.get<Prisoner>(pawn).resistance, "");
+    emit(EventType::PrisonerCaptured, pawn, warden, reg.get<Prisoner>(pawn).resistance, arrested ? "arrested" : "");
     return true;
 }
 
@@ -325,6 +401,12 @@ float PrisonerSystem::recruitChance(Entity prisoner) const {
                       rules_.recruitChanceMax);
 }
 
+bool PrisonerSystem::executeDue(Entity prisoner) const {
+    const entt::registry& reg = things_.registry();
+    return isPrisoner(prisoner) && reg.get<Prisoner>(prisoner).execute && reg.all_of<Health, Position>(prisoner) &&
+           !reg.get<Health>(prisoner).dead;
+}
+
 bool PrisonerSystem::chatDue(Entity prisoner) const {
     const entt::registry& reg = things_.registry();
     if (!isPrisoner(prisoner) || !reg.all_of<Health, Position>(prisoner)) {
@@ -332,7 +414,7 @@ bool PrisonerSystem::chatDue(Entity prisoner) const {
     }
     const Prisoner& p = reg.get<Prisoner>(prisoner);
     const Health& health = reg.get<Health>(prisoner);
-    if (p.mode == PrisonerMode::NoInteraction || now() < p.nextChat || health.downed || health.dead) {
+    if (p.execute || p.mode == PrisonerMode::NoInteraction || now() < p.nextChat || health.downed || health.dead) {
         return false;
     }
     if (p.mode == PrisonerMode::ReduceResistance && p.resistance <= 0.0f) {
@@ -348,6 +430,10 @@ void PrisonerSystem::interact(Entity warden, Entity prisoner) {
     }
     Prisoner& p = reg.get<Prisoner>(prisoner);
     p.nextChat = now() + rules_.chatIntervalSeconds;
+    if (p.execute) {
+        execute(prisoner, warden);
+        return;
+    }
     if (p.mode == PrisonerMode::Release) {
         release(prisoner, warden);
         return;
@@ -400,6 +486,22 @@ bool PrisonerSystem::recruit(Entity prisoner, Entity warden) {
     return true;
 }
 
+bool PrisonerSystem::execute(Entity prisoner, Entity warden) {
+    entt::registry& reg = things_.registry();
+    if (!isPrisoner(prisoner)) {
+        return false;
+    }
+    const bool ownSide = fighters_.factionOf(prisoner) == kPlayerFaction;
+    jobs_.interrupt(prisoner, "executed");
+    if (!health_.kill(prisoner, DeathCause::Executed)) {
+        return false;
+    }
+    reg.remove<Prisoner>(prisoner);
+    prisonerLeaveBed(reg, prisoner);
+    emit(EventType::PrisonerExecuted, prisoner, warden, 0.0f, ownSide ? "colonist" : "");
+    return true;
+}
+
 CellPos PrisonerSystem::edgeGoal(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     const CellPos here = cellOf(reg.get<Position>(pawn));
@@ -437,6 +539,14 @@ bool PrisonerSystem::release(Entity prisoner, Entity warden) {
     jobs_.interrupt(prisoner, "freed");
     reg.remove<Prisoner>(prisoner);
     prisonerLeaveBed(reg, prisoner);
+    if (fighters_.factionOf(prisoner) == kPlayerFaction) {
+        // One of the colony's own, arrested and let out: back to work.
+        const Colonist* colonist = reg.try_get<Colonist>(prisoner);
+        reg.emplace_or_replace<WorkSettings>(prisoner, jobs_.defaultWorkSettings(colonist != nullptr ? colonist->disabledWorkTags
+                                                                                                     : std::vector<std::string>{}));
+        emit(EventType::PrisonerReleased, prisoner, warden, 0.0f, "");
+        return true;
+    }
     Fighter& f = fighters_.enlist(prisoner, "freed");
     f.mode = FightMode::Flee;
     f.advances = false;
@@ -474,6 +584,34 @@ void PrisonerSystem::step() {
         return;
     }
     entt::registry& reg = things_.registry();
+    // An arrest whose warden is gone or has dropped the job puts the pawn down: it is free again.
+    std::vector<Entity> dropped;
+    for (const auto [pawn, order] : reg.view<ArrestOrder>().each()) {
+        if (order.by == kNoEntity) {
+            continue;
+        }
+        const Worker* worker = reg.valid(order.by) ? reg.try_get<Worker>(order.by) : nullptr;
+        if (worker == nullptr || worker->job.type != JobType::CapturePrisoner || worker->job.thing != pawn) {
+            dropped.push_back(pawn);
+        }
+    }
+    std::sort(dropped.begin(), dropped.end());
+    for (const Entity pawn : dropped) {
+        reg.get<ArrestOrder>(pawn).by = kNoEntity;
+    }
+    // A prisoner who died of anything else is no prisoner and holds no bed.
+    std::vector<Entity> dead;
+    for (const auto [pawn, p, health] : reg.view<Prisoner, const Health>().each()) {
+        (void)p;
+        if (health.dead) {
+            dead.push_back(pawn);
+        }
+    }
+    std::sort(dead.begin(), dead.end());
+    for (const Entity pawn : dead) {
+        reg.remove<Prisoner>(pawn);
+        prisonerLeaveBed(reg, pawn);
+    }
     std::vector<Entity> leaving;
     const int w = map_.width();
     const int h = map_.height();
@@ -499,6 +637,10 @@ void PrisonerSystem::hashThing(Entity e, StateHasher& h) const {
         h.add(p->resistance);
         h.add(p->capturedAt);
         h.add(p->nextChat);
+        h.add(p->execute);
+    }
+    if (const ArrestOrder* order = reg.try_get<ArrestOrder>(e)) {
+        h.add(static_cast<uint32_t>(entt::to_integral(order->by)));
     }
     if (const PrisonBed* bed = reg.try_get<PrisonBed>(e)) {
         h.add(bed->marked);

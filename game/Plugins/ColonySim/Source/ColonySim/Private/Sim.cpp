@@ -227,6 +227,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     raids_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
     prisoners_ = std::make_unique<PrisonerSystem>(*things_, map_, *combat_, *health_, *jobs_, *fighters_, *raids_, *defs_, time_, rng_);
     prisoners_->setEventLog(&events_);
+    prisoners_->setRooms(rooms_.get());
     jobs_->setPrisoners(prisoners_.get());
     mood_->addSituation("isPrisoner", [this](Entity pawn) { return prisoners_->isPrisoner(pawn) ? 0 : -1; });
     combat_->setBeforeDestroy([this](Entity thing) {
@@ -580,6 +581,16 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     } else if (const auto* prisonBed = std::get_if<SetPrisonBedCommand>(&command)) {
         std::string why;
         if (!prisoners_->setPrisonBed(prisonBed->bed, prisonBed->on, why)) {
+            commandFailed(id, why);
+        }
+    } else if (const auto* arrest = std::get_if<ArrestCommand>(&command)) {
+        std::string why;
+        if (!prisoners_->setArrest(arrest->pawn, arrest->on, why)) {
+            commandFailed(id, why);
+        }
+    } else if (const auto* execute = std::get_if<ExecutePrisonerCommand>(&command)) {
+        std::string why;
+        if (!prisoners_->setExecute(execute->pawn, execute->on, why)) {
             commandFailed(id, why);
         }
     } else if (const auto* throwCommand = std::get_if<ThrowCommand>(&command)) {

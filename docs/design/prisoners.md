@@ -12,8 +12,11 @@ talk does is the prisoner's mode: wear its resistance down, recruit it once the 
 `SetPrisonBedCommand{bed, on}` marks a bed (`PrisonBed` on the building) as a prison bed. Prison beds are for prisoners and
 nobody else: `findBed` and `findPatientBed` skip them for everyone who is not a prisoner and skip every other bed for a
 prisoner, and `assignBed` refuses the wrong pairing. A bed with a colonist in it can't be marked, and one with a prisoner in
-it can't be unmarked. A prison cell is whatever room the bed is in; **nothing checks yet that the room is closed** (RimWorld
-needs an enclosed room). Prisoners never leave their cell on their own, because nothing sends them anywhere: they sleep, rest
+it can't be unmarked. A prison cell is whatever room the bed is in, and **it must be fully enclosed**: `PrisonerSystem::cellEnclosed` is true
+when the cell is in a room that is not the outdoors (walls and doors all round, roofed over every cell; a door counts as
+closed). `findPrisonBed` skips every bed that fails this, so a downed enemy is not captured into an open yard. Marking a bed
+is allowed anywhere (the cell may be built later). Nothing happens to a prisoner already inside if a wall is later knocked out.
+Prisoners never leave their cell on their own, because nothing sends them anywhere: they sleep, rest
 and stand.
 
 ## Capture
@@ -32,6 +35,29 @@ old side is still its side). Event `PrisonerCaptured`.
 
 **Nobody shoots a prisoner**: fighters (`PawnInfo::animal`), turrets and the alarm treat a pawn with `Prisoner` as nobody's
 enemy; raid squads don't count it.
+
+## Arrest
+
+`ArrestCommand{pawn, on}` orders a pawn arrested (`on` false cancels it). It works on a colonist (not the protagonist, not a pawn
+the player is walking) or a pawn of another side that is no raider (`PrisonerSystem::arrestable`); a raider has to be downed first,
+and animals and prisoners are refused. The pawn gets an `ArrestOrder`. The same `CapturePrisoners` scanner then sends a warden
+(`carryable` = a downed enemy, or an arrest order), with the same Rescue-job steps and the same free, closed prison bed. When the
+warden lifts the pawn (`PrisonerSystem::seize`) its own job ends, it stands down and the job system leaves it alone
+(`ArrestOrder::by` is the warden carrying it) until the lay-down; if the warden drops the job, the next 15 s check frees it.
+At the lay-down it becomes a prisoner as in Capture, with event `PrisonerCaptured` (`message` "arrested"). A prisoner of the
+player's own side starts with **resistance 0 and mode NoInteraction** (it stays locked up until the player says otherwise), cannot be
+set to ReduceResistance or AttemptRecruit, and on `Release` goes back to work (its Work tab row returns) instead of walking off the map.
+**Nothing here makes a colonist resist or break out**, and there is no "was imprisoned" thought beyond `Captured` and `Captive`.
+Chasing a walking target gives up after the usual repaths and the scanner starts again.
+
+## Execution
+
+`ExecutePrisonerCommand{pawn, on}` marks a prisoner (`Prisoner::execute`). `ExecutePrisoners` (a fourth Warden scanner) sends a warden
+as for a talk (`JobType::WardenInteract`; a downed prisoner is fine); after `executeWorkSeconds` (120, ours) `PrisonerSystem::execute`
+kills it (`DeathCause::Executed`, "executed"), it is a prisoner no more and its bed slot is free. Event `PrisonerExecuted` (`message`
+"colonist" if it was one of the colony's own). Every living colonist gets the memory `PrisonerExecuted` (-3 for 5 days) or, for
+an own colonist, `ColonistExecuted` (-8 for 10 days); both are ours, `Thoughts3.json`. A prisoner with an execution ordered gets no
+talks. The wardens' goodwill and faction anger (C23) are not here.
 
 ## Feeding and rest
 
@@ -91,13 +117,14 @@ feeds the two mood factors above.
 
 ## Save
 
-Section `prisoners` (version 1): the `prisoner` part of every prisoner (mode, resistance, `capturedAt`, `nextChat`) and the
-`prisonBed` part of every marked bed. The jobs are saved in the job (`JobType` check now ends at `WardenInteract`; the three
-jobs reuse `thing`, `site`, `chair`, `cell`, `count`). Commands `SetPrisonerMode` and `SetPrisonBed` by name.
+Section `prisoners` (version 2): the `prisoner` part of every prisoner (mode, resistance, `capturedAt`, `nextChat`, and from
+version 2 `execute`), the `prisonBed` part of every marked bed and, from version 2, the `arrest` part (`ArrestOrder::by`) of every
+pawn ordered arrested. The jobs are saved in the job (`JobType` check now ends at `WardenInteract`; the three
+jobs reuse `thing`, `site`, `chair`, `cell`, `count`). Commands `SetPrisonerMode`, `SetPrisonBed`, `Arrest` and `ExecutePrisoner` by name.
 
 ## Not here
 
-Arresting colonists (and the "was imprisoned" thought), execution, selling prisoners, organ harvesting, slaves, a prison cell
-that must be enclosed, wardens escorting a freed prisoner out, goodwill from a release, prisoners eating from a dispenser or
+Selling prisoners (C23), organ harvesting, slaves, a "was imprisoned" thought of its own, colonists who resist
+arrest, wardens escorting a freed prisoner out, goodwill from a release, prisoners eating from a dispenser or
 food lying in their cell, the warden's opinion in the resistance formula and prisoner traits (C20), the prisoner tab in the
 panels (U18), prisoners breaking out by themselves (T3 calls `breakOut`), a prisoner's mental breaks (C19).

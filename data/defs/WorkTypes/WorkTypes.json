@@ -23,7 +23,7 @@
   },
   {
     "defName": "Warden", "parent": "WorkTypeBase", "label": "warden", "naturalPriority": 1050,
-    "relevantSkills": ["Social"], "workTags": ["Social"], "tasks": ["CapturePrisoners", "FeedPrisoners", "ChatWithPrisoners"]
+    "relevantSkills": ["Social"], "workTags": ["Social"], "tasks": ["CapturePrisoners", "FeedPrisoners", "ChatWithPrisoners", "ExecutePrisoners"]
   },
   {
     "defName": "Handling", "parent": "WorkTypeBase", "label": "handle", "naturalPriority": 1000,

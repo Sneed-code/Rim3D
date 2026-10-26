@@ -316,6 +316,7 @@ struct SaveEntity {
     std::optional<Trap> trap;               // section "defense" (F11)
     std::optional<Prisoner> prisoner;       // section "prisoners" (C22)
     std::optional<PrisonBed> prisonBed;     // section "prisoners" (C22)
+    std::optional<ArrestOrder> arrest;      // section "prisoners" version 2
 };
 
 // A stockpile zone, with its filter by defName.
@@ -1173,6 +1174,9 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
             } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
                 ar.group("area", [&] { saveRect(ar, c.area); });
                 ar.value("remove", c.remove);
+            } else if constexpr (std::is_same_v<Type, ArrestCommand> || std::is_same_v<Type, ExecutePrisonerCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.value("on", c.on);
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }
@@ -1411,7 +1415,7 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
     }
     ar.value("dead", h.dead);
     ar.value("cause", h.cause);
-    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Slaughtered), "the save file has a bad cause of death");
+    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Executed), "the save file has a bad cause of death");
 
 }
 
@@ -2567,15 +2571,21 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.list("home", d.fire.home, [&](int& cell) { ar.value("cell", cell); });
         saveParts(ar, "burning", e, &SaveEntity::burning, [&](Burning& b) { ar.value("until", b.until); });
     });
-    ar.section("prisoners", 1, [&] {
+    ar.section("prisoners", 2, [&] {
         saveParts(ar, "prisoner", e, &SaveEntity::prisoner, [&](Prisoner& p) {
             ar.value("mode", p.mode);
             ar.value("resistance", p.resistance);
             ar.value("capturedAt", p.capturedAt);
             ar.value("nextChat", p.nextChat);
+            if (ar.sectionVersion() >= 2) {
+                ar.value("execute", p.execute);
+            }
             ar.require(static_cast<int>(p.mode) <= static_cast<int>(PrisonerMode::Release), "the save file has a bad prisoner mode");
         });
         saveParts(ar, "prisonBed", e, &SaveEntity::prisonBed, [&](PrisonBed& b) { ar.value("marked", b.marked); });
+        if (ar.sectionVersion() >= 2) {
+            saveParts(ar, "arrest", e, &SaveEntity::arrest, [&](ArrestOrder& a) { ar.value("by", a.by); });
+        }
     });
     ar.section("levels", 1, [&] {
         ar.list("upperFloors", d.upperFloors, [&](CellPos& c) {
@@ -2923,6 +2933,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const PrisonBed* prisonBed = reg.try_get<PrisonBed>(e)) {
             out.prisonBed = *prisonBed;
+        }
+        if (const ArrestOrder* arrest = reg.try_get<ArrestOrder>(e)) {
+            out.arrest = *arrest;
         }
         if (const MedicalSettings* medical = reg.try_get<MedicalSettings>(e)) {
             out.medical = *medical;
@@ -3429,6 +3442,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.prisonBed) {
             reg.emplace<PrisonBed>(entity, *e.prisonBed);
+        }
+        if (e.arrest) {
+            reg.emplace<ArrestOrder>(entity, *e.arrest);
         }
         if (e.defense) {
             reg.emplace<DefensePlan>(entity, *e.defense);
