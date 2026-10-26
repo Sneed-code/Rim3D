@@ -1,7 +1,7 @@
 [
   {
     "defName": "MakeKibble", "parent": "RecipeBase", "label": "make kibble",
-    "recipeUsers": ["FueledStove"],
+    "recipeUsers": ["FueledStove", "ElectricStove"],
     "workAmount": 450, "workSkillXp": 60,
     "ingredients": [
       { "categories": ["MeatRaw", "AnimalProductRaw"], "nutrition": 0.5 },
