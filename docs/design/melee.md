@@ -29,7 +29,8 @@ an animal's teeth and claws). Each tool has (D8, [starting-data.md](starting-dat
 
 Stuff and quality don't change melee damage yet (items have no stuff).
 
-**Reach** (ours, `MeleeRules`): fists and other body tools 0.85 m from the pawn's centre; knife 1.0;
+**Reach** (ours, `MeleeRules`): fists and other body tools 0.85 m from the pawn's centre (an animal's teeth
+and claws 0.65 m + 0.4 x the root of its body size, N5: [animal-fights.md](animal-fights.md)); knife 1.0;
 club, gladius and mace 1.2; breach axe 1.3; longsword 1.5; spear 1.9 (`weaponReach`, by defName).
 
 ## A swing

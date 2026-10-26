@@ -47,8 +47,6 @@ TemperatureNumbers TemperatureNumbers::read(const DefDatabase& defs) {
     n.rock = tempFloat(*def, "conductancePerHour.rock", n.rock);
     n.safeMarginC = tempFloat(*def, "safeMarginC", n.safeMarginC);
     n.frostbiteSeverity = tempFloat(*def, "frostbiteSeverity", n.frostbiteSeverity);
-    n.clothesColdC = tempFloat(*def, "clothesColdC", n.clothesColdC);
-    n.clothesHeatC = tempFloat(*def, "clothesHeatC", n.clothesHeatC);
     return n;
 }
 
@@ -201,10 +199,6 @@ bool TemperatureSystem::comfortRange(Entity pawn, float& min, float& max) const 
     }
     min = tempFloat(def, "stats.comfyTemperatureMin", 16.0f);
     max = tempFloat(def, "stats.comfyTemperatureMax", 26.0f);
-    if (def.text("race.intelligence") == "Humanlike") {
-        min -= numbers_.clothesColdC;
-        max += numbers_.clothesHeatC;
-    }
     if (const PawnGenes* genes = reg.try_get<PawnGenes>(pawn)) {
         min += genes->effects.comfyMinC;
         max += genes->effects.comfyMaxC;
@@ -234,6 +228,27 @@ float TemperatureSystem::degreesAboveComfort(Entity pawn) {
 }
 
 // ---- Each game second -----------------------------------------------------------------------------
+
+void TemperatureSystem::addHeat(CellPos cell, double heatPerSecond, double seconds, float maxTemp) {
+    syncRooms();
+    const Room* room = rooms_.roomOf(cell);
+    if (room == nullptr || !usesRoomTemperature(*room) || room->id >= roomTemp_.size()) {
+        return;
+    }
+    float& t = roomTemp_[room->id];
+    if (t >= maxTemp) {
+        return;
+    }
+    const float dt = static_cast<float>(heatPerSecond * kTempEnergyPerGameSecond * seconds / static_cast<double>(room->cellCount));
+    t = std::min(maxTemp, t + dt);
+    if (!cellTemp_.empty()) {
+        for (const CellPos& c : rooms_.cellsOf(*room)) {
+            if (float* stored = cellTempOf(c, false)) {
+                *stored = t;
+            }
+        }
+    }
+}
 
 void TemperatureSystem::step(int64_t now) {
     syncRooms();

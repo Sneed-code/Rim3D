@@ -26,8 +26,12 @@
 namespace colony {
 
 class AnimalSystem;
+class Breeding;
+class Fire;
+class ApparelSystem;
 class Construction;
 class DefDatabase;
+class DefenseSystem;
 class Filth;
 class Floors;
 class RoomStats;
@@ -35,24 +39,32 @@ struct Colonist;
 struct PawnLooks;
 struct PawnGenes;
 class Designations;
+class ExplosiveSystem;
 class FighterSystem;
+class Husbandry;
 class JobSystem;
 class Lights;
 class MeleeSystem;
 class Mineables;
 class MovementSystem;
 class MoodSystem;
+class MedicineSystem;
 class RecreationSystem;
 class ResearchSystem;
+class TalentSystem;
 class NeedsSystem;
+class RaidSystem;
 class Plants;
 class PowerGrid;
 class Regions;
 class Rooms;
 class TemperatureSystem;
+class SpoilageSystem;
 class Things;
 class UpperFloors;
+class Weather;
 class Zones;
+class Farming;
 struct Snapshot;
 class SimSaveAccess;
 
@@ -154,9 +166,24 @@ public:
     // Research projects and what they unlock (docs/design/research.md).
     ResearchSystem& research() { return *research_; }
     const ResearchSystem& research() const { return *research_; }
+    // Medicine: tend quality, medical care settings (docs/design/medicine.md).
+    MedicineSystem& medicine() { return *medicine_; }
+    const MedicineSystem& medicine() const { return *medicine_; }
+    // The protagonist's talent XP, points and ranks (docs/design/talents.md).
+    TalentSystem& talents() { return *talents_; }
+    const TalentSystem& talents() const { return *talents_; }
     // Guns, projectiles, hitboxes and armor (docs/design/combat.md).
     CombatSystem& combat() { return *combat_; }
     const CombatSystem& combat() const { return *combat_; }
+    // Grenades: belts, throwing, fuses (docs/design/explosives.md). Blasts are `combat().explode`.
+    ExplosiveSystem& explosives() { return *explosives_; }
+    const ExplosiveSystem& explosives() const { return *explosives_; }
+    // Turrets and traps (docs/design/defense.md).
+    DefenseSystem& defense() { return *defense_; }
+    const DefenseSystem& defense() const { return *defense_; }
+    // Clothes and armor, outfits, stripping (docs/design/apparel.md).
+    ApparelSystem& apparel() { return *apparel_; }
+    const ApparelSystem& apparel() const { return *apparel_; }
     // What a health panel shows for a pawn; false if it has no body.
     bool healthReport(Entity pawn, HealthReport& out) const { return health_->report(pawn, out); }
 
@@ -173,6 +200,10 @@ public:
     Plants& plants() { return *plants_; }
     const Plants& plants() const { return *plants_; }
 
+    // Seasons, outdoor temperature, weather and snow (docs/design/weather.md).
+    Weather& weather() { return *weather_; }
+    const Weather& weather() const { return *weather_; }
+
     // The rock and ore layer, mined down by jobs (docs/design/mining.md), and the marks the player
     // has put on rock and plants for colonists to work on.
     Mineables& mineables() { return *mineables_; }
@@ -188,6 +219,8 @@ public:
     const Rooms& rooms() const { return *rooms_; }
 
     // Light and darkness (docs/design/light.md). Brought up to date at the end of every step.
+    Farming& farming() { return *farming_; }
+    const Farming& farming() const { return *farming_; }
     Lights& lights() { return *lights_; }
     const Lights& lights() const { return *lights_; }
     // Floors, filth, room stats and the beauty need (docs/design/room-stats.md).
@@ -201,10 +234,12 @@ public:
     // Room temperature, comfort and exposure (docs/design/temperature.md).
     TemperatureSystem& temperature() { return *temperature_; }
     const TemperatureSystem& temperature() const { return *temperature_; }
-    // The temperature in the open right now, in degrees Celsius: the biome's season and the hour of
-    // the day. E1 replaces this with its seasons and weather.
+    SpoilageSystem& spoilage() { return *spoilage_; }
+    const SpoilageSystem& spoilage() const { return *spoilage_; }
+    // The temperature in the open right now, in degrees Celsius: the biome's season, the hour of the
+    // day and the random drift (Weather::temperatureAt).
     float outdoorTemperature() const;
-    // The biome's temperature at any game second, ignoring the override (for tests and previews).
+    // The open air's temperature at any game second, ignoring the override (for tests and previews).
     float outdoorTemperatureAt(int64_t gameSeconds) const;
     // The temperature under rock: the biome's mean over the year.
     float groundTemperature() const;
@@ -232,6 +267,18 @@ public:
     // Wild animals: herds, grazing, sleep, coming and going at the edges (docs/design/animal-life.md).
     AnimalSystem& animals() { return *animals_; }
     const AnimalSystem& animals() const { return *animals_; }
+    // Raids, raid squads and the colony alarm with its defense roles (docs/design/raids.md).
+    RaidSystem& raids() { return *raids_; }
+    const RaidSystem& raids() const { return *raids_; }
+
+    // Taming, training, animal zones and pens (docs/design/husbandry.md).
+    Husbandry& husbandry() { return *husbandry_; }
+    // Fire, burning pawns, burnt ground and the home area (docs/design/fire.md).
+    Fire& fire() { return *fire_; }
+    const Fire& fire() const { return *fire_; }
+    Breeding& breeding() { return *breeding_; }
+    const Breeding& breeding() const { return *breeding_; }
+    const Husbandry& husbandry() const { return *husbandry_; }
 
     // Blueprints, frames and taking buildings down (docs/design/construction.md).
     Construction& construction() { return *construction_; }
@@ -277,6 +324,7 @@ private:
     std::unique_ptr<Zones> zones_;
     std::unique_ptr<Things> things_;
     std::unique_ptr<Plants> plants_;
+    std::unique_ptr<Weather> weather_;
     std::unique_ptr<Mineables> mineables_;
     std::unique_ptr<Designations> designations_;
     std::unique_ptr<MovementSystem> movement_;
@@ -284,6 +332,8 @@ private:
     std::unique_ptr<PowerGrid> power_;
     std::unique_ptr<Lights> lights_;
     std::unique_ptr<TemperatureSystem> temperature_;  // after rooms_ and health_
+    std::unique_ptr<Farming> farming_;                // after temperature_, lights_ and zones_
+    std::unique_ptr<SpoilageSystem> spoilage_;        // after temperature_ and roomStats_
     std::optional<float> outdoorOverride_;
     DoorNumbers doorNumbers_;  // for the snapshot's door animation
     std::unique_ptr<HealthSystem> health_;
@@ -291,7 +341,11 @@ private:
     std::unique_ptr<MoodSystem> mood_;
     std::unique_ptr<RecreationSystem> recreation_;
     std::unique_ptr<ResearchSystem> research_;
+    std::unique_ptr<MedicineSystem> medicine_;
+    std::unique_ptr<TalentSystem> talents_;
     std::unique_ptr<CombatSystem> combat_;
+    std::unique_ptr<ExplosiveSystem> explosives_;  // after combat_ and health_
+    std::unique_ptr<ApparelSystem> apparel_;  // after combat, which it uses
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
     Rng rng_;
@@ -307,6 +361,10 @@ private:
     std::unique_ptr<RoomStats> roomStats_;
     std::unique_ptr<AnimalSystem> animals_;
     std::unique_ptr<UpperFloors> upperFloors_;  // M1
+    std::unique_ptr<RaidSystem> raids_;        // after the fighters
+    std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system
+    std::unique_ptr<Breeding> breeding_;    // after husbandry_
+    std::unique_ptr<Fire> fire_;            // after the weather, temperature, rooms, floors, filth, plants and health
     std::vector<std::string> setupErrors_;
     std::vector<std::pair<uint64_t, Command>> pending_;  // id, command
     uint64_t submitted_ = 0;
@@ -314,6 +372,7 @@ private:
     std::vector<Event> events_;
     std::vector<Checkpoint> checkpoints_;
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
+    std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
 };
 
 }  // namespace colony

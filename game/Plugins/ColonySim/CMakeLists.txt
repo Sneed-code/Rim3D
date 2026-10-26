@@ -52,10 +52,13 @@ add_test(NAME simrun_gather COMMAND simrun --seed 42 --size 256 --days 2 --start
          --png ${CMAKE_BINARY_DIR}/gather.png)
 # Food, rest and schedules (C6): the Crashlanded colonists live three days on their starting food, nobody dies.
 add_test(NAME simrun_needs COMMAND simrun --seed 42 --size 128 --days 3 --start Crashlanded --check)
+# Raids (F6): pirates walk in, the alarm sounds, the armed colonists fight, and the raid ends
+# (beaten, routed or gone) within a quarter of a day.
+add_test(NAME simrun_raid COMMAND simrun --seed 1 --size 256 --days 0.25 --start Crashlanded --raid 300 --armed --check)
 
-# Temperature (E2, docs/design/temperature.md): the Crashlanded colonists live two days in -5 degrees weather
-# (just above their safe range) and nobody falls ill or dies.
-add_test(NAME simrun_temperature COMMAND simrun --seed 42 --size 128 --days 2 --start Crashlanded --outdoor -5 --check)
+# Temperature (E2, docs/design/temperature.md): the Crashlanded colonists live two days in 4 degrees weather
+# (just above the safe range their T-shirts and pants give them) and nobody falls ill or dies.
+add_test(NAME simrun_temperature COMMAND simrun --seed 42 --size 128 --days 2 --start Crashlanded --outdoor 4 --check)
 
 # The colony scenario (C10, docs/design/colony-scenario.md): six colonists build a room, mine, chop, pick berries and
 # cook for five days; fails if anyone dies or starves, stands stuck for a game hour, or a mark is left undone.
@@ -120,6 +123,13 @@ set_tests_properties(save_compare PROPERTIES FIXTURES_REQUIRED "save_loaded;save
 # (The 1 km run with about 300 animals, `--size 1024 --days 1 --animals`, is for the nightly job.)
 add_test(NAME simrun_animals COMMAND simrun --seed 42 --size 512 --days 2 --animals --check
          --png ${CMAKE_BINARY_DIR}/animals.png)
+
+# A chicken farm (N4, docs/design/breeding.md): tame hens and roosters mate, lay and cost the breeding pass next to nothing.
+# (`--farm 500 --days 3` is the nightly one; 100 chickens over a day and a half keep CI quick.)
+add_test(NAME simrun_farm COMMAND simrun --seed 42 --size 128 --days 1.6 --farm 100 --check)
+
+# Fire (E4, docs/design/fire.md): a grass fire lit near the Crashlanded colonists is beaten out, nobody dies.
+add_test(NAME simrun_fire COMMAND simrun --seed 42 --size 256 --days 1 --start Crashlanded --fire --check)
 
 # Pathfinding load test (S3): 100 pawns hauling on a 1 km map for a day, no failed job or search.
 add_test(NAME simrun_paths COMMAND simrun --seed 42 --size 1024 --days 1 --pawns 100 --items 2000 --check

@@ -32,6 +32,7 @@ int run(double days, std::shared_ptr<const DefDatabase> defs, bool verbose) {
         return 2;
     }
     Sim sim(SimSettings{1, 96, 0, 0, true}, defs);
+    sim.submit(SetWeatherCommand{"Clear", 1000.0f});  // the check is about the grid, not cloud dimming the sun (E1)
     Things& things = sim.things();
     const auto put = [&](const char* def, int x, int y) { return things.spawn(def, CellPos{x, y, 0}); };
 

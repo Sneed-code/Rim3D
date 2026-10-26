@@ -119,8 +119,8 @@ injury); under all of it halves the damage and turns a sharp hit blunt (a bruise
 layers still use their sharp rating. Flak vest (torso and neck, 100% sharp), flak pants (legs, 55%)
 and a simple helmet (upper head and ears, 45%, the steel one: RimWorld makes it from any metal and
 Crashlanded's is plasteel; materials come later). Against a revolver (18%) a flak vest stops 41% of
-torso hits and halves another 41%. Apparel doesn't wear down from hits yet (clothing repair is a
-design goal), and the vest's and pants' movement penalty (`equippedStatOffsets`) isn't applied yet.
+torso hits and halves another 41%. Since C15 every piece has its own armor (stuff, quality) and wears down
+by what it absorbs ([apparel.md](apparel.md)), and the vest's and pants' movement penalty (`equippedStatOffsets`) isn't applied yet.
 
 ## Gear
 
@@ -142,13 +142,17 @@ state hash and the save (format 12). The random choices of a hit (part, armor ro
 each projectile gets when it is fired, so they don't depend on the order things are visited in;
 triggers fire in id order from the sim's random stream.
 
+## Explosions
+
+Grenades and blasts (F9) are in [explosives.md](explosives.md). They use this file's armor rule
+(`armorPass`) and hitboxes, and `trace` with `pawns` false for the blast's lines of sight.
+
 ## Not done yet
 
 Melee is F8's ([melee.md](melee.md)); melee weapons go in `Gear::weapon` through `equip`, and
 strikes land through `hitPawn`, the bullets' own armor and part code.
 
-
-Grenades and blast radius, stopping power, apparel damage, aim affected
+Stopping power, apparel damage, aim affected
 by sight and manipulation, bullets
 hitting corpses and plants (C2's trees should stop some bullets), shooting through doorways when
 doors open and close (C5).

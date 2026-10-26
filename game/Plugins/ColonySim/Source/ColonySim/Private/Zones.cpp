@@ -69,7 +69,7 @@ ZoneId Zones::createStockpile(const CellRect& area, StoragePriority priority) {
     for (int y = area.minY; y < area.minY + area.sizeY; ++y) {
         for (int x = area.minX; x < area.minX + area.sizeX; ++x) {
             const CellPos c{x, y, area.level};
-            if (map_.onGround(c) && map_.walkable(c) && zoneOf_[slot(c)] == kNoZone) {
+            if (map_.onGround(c) && map_.walkable(c) && zoneOf_[slot(c)] == kNoZone && !(taken_ && taken_(c))) {
                 zone.cells.push_back(c);
             }
         }

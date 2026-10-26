@@ -348,6 +348,7 @@ TEST_CASE("Power: solar output follows the sun and is lost under a roof") {
 
 TEST_CASE("Power: the default sun is dark at night and full at noon") {
     Sim sim = powerSim();
+    sim.submit(SetWeatherCommand{"Clear", 1000.0f});  // cloud would dim the sun (E1)
     const Entity panel = powerPut(sim, "SolarGenerator", 10, 10);
     powerWire(sim, 14, 15, 10);
     powerPut(sim, "StandingLamp", 16, 10);
@@ -361,6 +362,7 @@ TEST_CASE("Power: the default sun is dark at night and full at noon") {
     CHECK(sim.power().wattsOf(panel) == doctest::Approx(1700.0));
     // Half way up the morning ramp it is somewhere between.
     Sim morning = powerSim();
+    morning.submit(SetWeatherCommand{"Clear", 1000.0f});
     const Entity p2 = powerPut(morning, "SolarGenerator", 10, 10);
     powerWire(morning, 14, 15, 10);
     powerPut(morning, "StandingLamp", 16, 10);

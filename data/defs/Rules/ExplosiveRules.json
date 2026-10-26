@@ -1,0 +1,24 @@
+[
+  {
+    "defName": "ExplosiveRules", "source": "Rim3D",
+    "edgeFactor": 0.4,
+    "stanceFactor": [1.0, 0.85, 0.5],
+    "blastHeight": 0.3,
+    "knockdownMinDamage": 8,
+    "knockdownBaseSteps": 20,
+    "knockdownStepsPerDamage": 0.6,
+    "knockdownMaxSteps": 90,
+    "knockbackMetres": 1.5,
+    "missDistance": 9,
+    "missFactorBySkill": [1.0, 0.5],
+    "playerMissFactor": 0.6,
+    "playerWarmup": 0,
+    "leadBySkill": [0.4, 1.0],
+    "landingTolerance": 1.0,
+    "beltLimit": 10,
+    "releaseDrop": 0.2,
+    "ours": ["edgeFactor", "stanceFactor", "blastHeight", "knockdownMinDamage", "knockdownBaseSteps", "knockdownStepsPerDamage",
+             "knockdownMaxSteps", "knockbackMetres", "missDistance", "missFactorBySkill", "playerMissFactor", "playerWarmup",
+             "leadBySkill", "landingTolerance", "beltLimit", "releaseDrop"]
+  }
+]

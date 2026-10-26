@@ -498,6 +498,7 @@ void UTerrainSubsystem::OnSimEvent(const colony::Event& Event)
 		case colony::EventType::CellMined: MarkCellDirty(Event.cell); break;
 		case colony::EventType::PlantRemoved:
 		case colony::EventType::PlantHarvested: MarkPlantDirty(Event.cell); break;
+		case colony::EventType::PlantSown: MarkPlantDirty(Event.cell); break;
 		default: break;
 	}
 }

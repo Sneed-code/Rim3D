@@ -24,6 +24,18 @@ enum class JobType : uint8_t {
     Recreate,          // walk to a place and play, sit or stroll for a while, for joy (recreation.md)
     Research,          // walk to a research bench and add points to the current project (research.md)
     CleanFilth,        // walk to a cell with filth and clean it, a layer at a time (docs/design/room-stats.md)
+    WearApparel,       // walk to clothes lying on the map and put them on, or take off a worn piece (apparel.md)
+    StripPawn,         // walk to a downed or dead pawn marked for it and take its clothes and weapon (apparel.md)
+    TameAnimal,        // fetch animal food, walk to a marked wild animal, feed it and try to tame it (docs/design/husbandry.md)
+    TrainAnimal,       // the same for one training attempt on a tame animal
+    SlaughterAnimal,   // walk to a marked tame animal and kill it
+    FeedAnimal,        // fetch animal food and carry it to a hungry tame animal
+    GatherAnimal,      // walk to a tame animal with full milk or wool and milk or shear it (docs/design/breeding.md)
+    SowCrop,           // walk next to a cell of a growing zone and sow the zone's crop (docs/design/farming.md)
+    ExtinguishFire,    // walk next to a fire and beat it out (docs/design/fire.md)
+    BedRest,           // go to a bed and lie in it until the injuries have healed (docs/design/medicine.md)
+    TendPatient,       // fetch medicine, walk to a patient and tend its injuries (docs/design/medicine.md)
+    Rescue,            // carry a downed colonist to a bed (docs/design/medicine.md)
 };
 
 COLONY_API const char* jobTypeName(JobType type);

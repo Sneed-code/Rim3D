@@ -1,6 +1,14 @@
 # Status
 
-Updated 2026-10-25.
+Updated 2026-10-26.
+
+Stage 2 P1 done: a pawn carries a rifle, a sidearm and a melee weapon (`docs/design/weapons.md`).
+Stage 2 E4 done: fire spreads over flammable ground, burns things to ash, heats rooms, sets pawns alight and is put out by rain, snow and colonists with the Firefighter work type in the home area (`docs/design/fire.md`).
+Stage 2 N4 done: tame animals mate and bear young, hens lay eggs, calves and chicks grow up, colonists milk and shear (`docs/design/breeding.md`).
+Stage 2 D10 done: narrators (Orrin, Maren, Jinx), difficulty levels, 30 incidents, ten factions with goodwill, visitor, trader and guard pawn kinds, trader kinds and price rules (`docs/design/narrator-data.md`).
+Stage 2 F11 done: turrets and traps (`docs/design/defense.md`).
+Stage 2 C13 done: growing zones with a chosen crop, colonists sow and harvest them (Growing work), crops grow by light and temperature, frost and heat kill them (`docs/design/farming.md`).
+Stage 2 C24 done: carrying is by mass (capacity over item mass), a hauler takes neighbouring stacks of the same def in one trip, a load slows walking up to 25% (`docs/design/jobs.md`).
 
 ## Where we are
 
@@ -87,7 +95,7 @@ healing and tending (`sim.health().applyDamage`, the dev commands `DamagePawn` a
 `PawnInjured`/`PartLost`/`Downed`/`GotUp`/`Died`, `downed` and `dead` in the snapshot, `sim.healthReport`;
 `docs/design/health.md`). Injured pawns walk slower and downed ones stop. Capacities now work per limb
 (one lost leg is 50% moving), see `starting-data.md`. The protagonist from the Crashlanded start has 2x
-part hit points. Not built yet: scars, infections, diseases, medicine items and the doctor job.
+part hit points. Not built yet: infections and diseases.
 
 Since C1 pawns work through a job system like RimWorld's (`docs/design/jobs.md`): a think list
 (work, then idle; emergencies, defense, needs and schedule slot in ahead of work later), the 20 work
@@ -160,8 +168,7 @@ and pops up over sandbags or steps out past a wall's end to shoot, then ducks ba
 one or badly hurt it falls back. The F3 threat map isn't used (too slow to rebuild; fighters.md says
 why); 30 against 40 costs about 0.35 ms a step in the cloud. Snapshot `faction`, `drafted`,
 `fighting`, `fightTarget`, `fightSpot`, `fallingBack`; save format 15. **A new system that acts on
-pawns must skip pawns with `Fighter`** as the job system does. Not yet: squads, morale, raids and
-the alarm (F6); undrafted colonists ignore enemies.
+pawns must skip pawns with `Fighter`** as the job system does.
 
 Since F5 fighters aim like players (`docs/design/aiming.md`): Shooting skill sets a reaction time
 before shooting a new target (0.5 s at skill 0, 0.17 s at 20), how well a shot leads a moving target
@@ -172,14 +179,30 @@ Fighters sidestep slow projectiles they see coming in time (bullets are far too 
 and arrows later). Events `PawnAction` `Reload` and `Dodge`; snapshot `rounds`, `magazineSize`,
 `reloading`; save format 17.
 
+Since F6 there are raids and a colony defense (`docs/design/raids.md`): `StartRaidCommand` (dev until
+the narrator) buys pirates with RimWorld's raid points (from colony wealth and colonists, the wiki's
+curves; about 50 points for the Crashlanded start) among three gunner kinds (`data/defs/PawnKinds`,
+`Factions`), each a whole person with a gun and some flak, and walks them in at a map edge toward the
+colony. The squad advances, holds or falls back by comparing its strength (health, gun, armor) with
+the enemies it knows, and routs off the map after losing half its pawns or after 10 to 15 game hours.
+The colony alarm sounds by itself when a colonist spots an enemy (or `SoundAlarmCommand`) and stops
+when no enemy can fight any more; colonists then follow their defense role (`SetDefenseRoleCommand`):
+Defender (holds its defense spot, or a line 15 m from home toward the threat and fights freely once
+in contact), Shelter (goes to the room marked with `MarkShelterCommand`) or Keep working (until an
+enemy is within 20 m). Drafting still wins. Events `RaidArrived`, `SquadChanged`, `AlarmChanged`,
+`PawnLeftMap`; snapshot `alarm`, `squads` and per pawn `defenseRole`, `defending`, `sheltering`,
+`fleeing`, `squad`; save section `raids` and `fighters` 2. `simrun --raid POINTS --armed` plays a raid and reports it (CTest
+`simrun_raid`). Findings for F7: on open ground, crouched pawns are hit about 1 shot in 100 at 20 to
+30 m, so fights take long and downed colonists bleed out (no rescue or doctors yet).
+
 Since D3 the game has real starting data in `data/defs/`, written by hand with RimWorld's numbers
 from the RimWorld wiki (there is no RimWorld install to import from; `docs/decisions/0003`):
 terrain fertility, wild plants and the temperate forest, basic items, the Human, skills, work
 types, traits, our own backstories and names, the Crashlanded start, the Human body, capacities,
 injuries and blood loss (`docs/design/starting-data.md`). `check_defs.py` now also checks that
 defs name defs that exist. `simrun --pawns/--items` runs on the real data.
-Not written yet: sandbags, thoughts and raiders; the tasks that use them
-(C9, F6) add them the same way. C7 wrote the recipes (simple meal, four simple meals, fine meal) and `BillRules`. Guns, bullets, flak gear and hitboxes came with F2. C4 wrote the buildings (wall, door, bed, stool, three tables,
+Not written yet: sandbags and thoughts; the tasks that use them
+(C9) add them the same way. F6 wrote the raiders (the Pirate faction, three gunner pawn kinds, `RaidRules`). C7 wrote the recipes (simple meal, four simple meals, fine meal) and `BillRules`. Guns, bullets, flak gear and hitboxes came with F2. C4 wrote the buildings (wall, door, bed, stool, three tables,
 fueled stove).
 
 Since C4 colonists build (`docs/design/construction.md`): `PlaceBlueprintCommand{def, stuff, cell, rot}`
@@ -231,9 +254,11 @@ Solar panels follow E3's `lights().skyGlow()` and lamps that draw power glow onl
 a constant until E1 calls `setWind`, and **wood-fired generators run without fuel until C11 calls `setFuel`** (whoever merges second wires it).
 Since E3 every cell has a light level (`docs/design/light.md`, tests `LightTests`, `simrun --light FILE --hour H`): the sun by the hour of the day on cells with no roof, plus lamps (`glower`, with new `TorchLamp` and `Campfire` defs) falling off to their radius and stopped by walls; `sim.lights().lightAt(cell)`. Dark cells slow work (mining, plants, building, cooking) to 70% and walking to 85% at full dark. Rebuilt on change, not saved (no save format change). **The sim starts at midnight, so a test with the real defs that counts work steps needs a lamp beside the worker**; the tests' own small defs have no `LightRules` and no night.
 
+Since E1 the sim has a calendar, an outdoor temperature, weather and snow (`docs/design/weather.md`, tests `WeatherTests`, `simrun --days 60 --weather` prints a line a day): the 60-day year in four seasons (`SeasonChanged`), `sim.weather().outdoorTemperature()` from the biome's season means, a day cycle (coldest about 04:20, warmest about 16:20) and a slow random drift, and weather chosen by the biome's commonalities among the kinds that can happen at that temperature, lasting its `durationHours`, blending in over 1.6 hours (`WeatherChanged`, snapshot `weather`). Under the open sky rain, fog, storms and snow slow walking, cut the hit chance, shorten how far a fighter sees and dim the sun (`Lights::skyGlow`). `weather().wind()` drives wind turbines. Snow falls and melts hourly per cell (`weather().snowDepth(cell)`) and slows walking by depth. `SetWeatherCommand{weather, hours}` is the dev command. E1 checked D4's weather numbers against the wiki and fixed them (`weather.md` lists what). New save section `weather` (the sim and snapshot gained a Weather system; no save format change). **The weather is random from the first hours, so a test with the real defs that needs a clear sky or an exact walking speed sends `SetWeatherCommand{"Clear", 1000}` first** (`LightTests` and `PowerTests` do); the tests' own small defs have no climate and always clear weather.
+
 ## Stage 1 progress
 
-36 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7, U8, U11, U10). Tick tasks in `docs/plans/stage-1.md` as they merge.
+40 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7, U8, U11, U10, C10, A1, A2, F6); F7, G1 and G2 are left. Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Stage 2
 
@@ -254,14 +279,20 @@ Stage 2 done so far: **D7** medicine and disease data (`docs/design/medicine-dat
 **D5** animal data (15 animals, bodies, meat, leather, milk, eggs, wool: `docs/design/animals.md`).
 **E5** power (`docs/design/power.md`).
 **E3** light and darkness (`docs/design/light.md`).
+**E1** seasons, weather, outdoor temperature and snow (`docs/design/weather.md`).
 **D8** production data (work tables, stone blocks, melee weapons with tools; the meal recipes still list only the fueled stove, C14 adds the electric stove).
 **C18** recreation, comfort and outdoors (`docs/design/recreation.md`, tests `RecreationTests`, colony scenario): colonists have three new needs (`Joy` component; save section `recreation`). The standard schedule now has **Joy 19:00 to 21:59**; in Joy hours (or when bored with no work, Anything hours) they play horseshoes, chess or billiards, chat at a table, stroll or watch the clouds (`JobType::Recreate`), kinds wear in with tolerance. Comfort follows the bed or chair in use, Outdoors the roof. The D9 thoughts apply by stage (`MoodSystem::conditionValue` is where a task adds its own staged condition). Snapshot has `joy`, `comfort`, `outdoors`. Not yet: talk while chatting (C20), weather for the clouds (E1), the Unreal side (animations, a need bar; a U task).
 
 **C21** research (`docs/design/research.md`, tests `ResearchTests`): one current project, `SetResearchCommand` picks it; colonists with the Research work type sit at a research bench and add points per second by Intellectual skill and bench speed (`JobType::Research`); finished projects open the defs with a `researchPrerequisite` (plans and bills fail until then); `Snapshot::research`; save section `research`. A new colony has nothing researched (a scenario may list `startingResearch`). Not yet: multi-analyzer bonus and facility check, skill XP, gating floors/plants, the Unreal research tab (U18).
 
+**H1** doctors, medicine and rescue (`docs/design/medicine.md`, tests `MedicineTests`): the Doctor work type tends colonists' wounds (`JobType::TendPatient`, the bleeding first) with the strongest medicine their care setting allows (`SetMedicalCareCommand`: NoCare, NoMedicine, Herbal, Normal, Best), quality from Medicine skill, medicine and bed offset (`MedicineSystem::tendQuality`); downed colonists are carried to a medical bed, else their own or a free bed (`JobType::Rescue`, the patient's position follows the rescuer's); hurt colonists rest in bed until healed (`JobType::BedRest`, work types Patient and PatientBedRest); hospital beds are not slept in; healed injuries may leave scars or old wounds (`Injury::peak`, `PawnScarred`); emergency work types are asked first at each priority and a pawn on a droppable job looks for them every 10 s; events `PawnTended`, `PawnScarred`, actions `Tend`, `LiftPawn`, `LayPawn`; save section `medicine`, health section 3. Also fixed: saves made while someone was cleaning filth could not be loaded.
+
 **P2** recoil kicks and a dodge roll (`docs/design/shooter-feel.md` "Built", tests `ShooterFeelTests`, save section `feel`): each gun has a `recoilKicks` list (degrees up and to the right per shot of a spray); the player's shots (`ShootCommand` with `player`) fly where the shots before have lifted the aim, the kick holds 5 steps then wears off, and the spray restarts after 15 steps; `Snapshot` has `kickUp`/`kickSide` for the camera. `DodgeRollCommand{pawn, dx, dy}` rolls the protagonist 4 m: 3 steps start-up, 15 rolling (bullets pass through for the first 12), 9 recovery, 6 waiting; the sim moves the pawn (**`DirectMove` is ignored while `rollLocked`**), shooting is off, a roll cancels aiming and firing but not a reload; snapshot `rollPhase`/`rollStepsLeft`/`rollDir`/`hitProof`, `PawnAction::Roll`. Numbers are ours (`CombatRules`, `Weapons.json`). **Not verified on screen: U21 binds the key, plays the animation over the sim's motion, applies the camera kick from the snapshot and must follow the sim's position during a roll (it must not keep sending its own).**
+**P3** talent tree (`docs/design/talents.md`, tests `TalentTests`): the protagonist earns talent XP from finished jobs (100, 125, 150... XP per point), spends points with `SpendTalentPointCommand` on seven talents (build speed, aim spread, carry capacity, trade price; second tier needs rank 3 of the first); stats applied through `TalentSystem::statFactor` in `JobSystem` and `CombatSystem`; `Snapshot::talents`, event `TalentPoint`, save section `talents`. Not yet: combat XP, the trade stat (no trade system), the Unreal talent screen.
+**P1** several weapons (`docs/design/weapons.md`, tests `WeaponsTests`, save section `weapons`): `Gear::stowed` holds the weapons carried on the body besides `Gear::weapon` (the one in the hands, which everything else still reads); one weapon to a slot (`WeaponSlot` Primary, Sidearm, Melee; guns say `weaponSlot` in their def, the revolver and autopistol are sidearms). `CarryWeaponCommand{pawn, item}` adds a weapon, `SwitchWeaponCommand{pawn, slot}` brings one up in `CombatRules.weaponSwitchSteps` (rifle 36, sidearm 18, melee 27 steps) during which the pawn can't shoot, reload or swing; each gun keeps its own magazine. The fighter AI (`chooseWeapon`) takes a melee weapon within 2.5 m of its target, a sidearm within 9 m, else the rifle, with a 2 m margin to stop flip-flopping; pawns with one weapon behave as before. Weapons on the body count in C24's load (`bodyWeaponMass`: slower walking, less room for hauling). Snapshot `carried[3]`, `switchSlot`, `switchStepsLeft`; `PawnAction::Switch` and `WeaponSwitched`. **U22 binds the switch key and draws holstered weapons; nothing is on screen yet.**
+
 **D12** research data (22 projects, tech levels, two research benches, content gated by `researchPrerequisite`: `docs/design/research-data.md`).
-**E2** room temperature is in (`docs/design/temperature.md`, tests `TemperatureTests`, `simrun --outdoor C`, CTest `simrun_temperature`): every roofed enclosed room has a temperature that follows the outdoors through its roof, walls, doors (open ones much faster), vents and rock, mixes when rooms join and split, and is pushed by heaters, coolers and campfires (`heatPusher` in the defs; **E5 power decides which run**: `Sim` wires `PowerGrid::running` into `TemperatureSystem::setSourceRunning`, a campfire needs none, and C11 fuel will add its test the same way). Pawns get Cold and Hot thoughts outside their comfortable range, and hypothermia or heatstroke (new *environment hediffs* in `Health`, with stages on the capacities and death at 1.0) outside the safe range, and a rare frostbite injury below -10. **Outdoor temperature is a stand-in until E1** (`Sim::outdoorTemperature()`: the biome's season and a daily swing; E1 replaces its body and everything else reads `temperature().outdoor()`); **humanlike pawns' comfort range is widened 12 degrees on the cold side as a stand-in for clothes until C15** (`TemperatureRules.clothesColdC`; C15 calls `setComfortModifier` and deletes it). Colonists do not yet go looking for warmth (BACKLOG). Save: section `temperature` 1 and `health` 2, no format change.
+**E2** room temperature is in (`docs/design/temperature.md`, tests `TemperatureTests`, `simrun --outdoor C`, CTest `simrun_temperature`): every roofed enclosed room has a temperature that follows the outdoors through its roof, walls, doors (open ones much faster), vents and rock, mixes when rooms join and split, and is pushed by heaters, coolers and campfires (`heatPusher` in the defs; **E5 power decides which run**: `Sim` wires `PowerGrid::running` into `TemperatureSystem::setSourceRunning`, a campfire needs none, and C11 fuel will add its test the same way). Pawns get Cold and Hot thoughts outside their comfortable range, and hypothermia or heatstroke (new *environment hediffs* in `Health`, with stages on the capacities and death at 1.0) outside the safe range, and a rare frostbite injury below -10. **Outdoor temperature is a stand-in until E1** (`Sim::outdoorTemperature()`: the biome's season and a daily swing; E1 replaces its body and everything else reads `temperature().outdoor()`); **what a pawn wears widens its comfort range** (C15 replaced the flat 12 degree stand-in: `Sim` wires `ApparelSystem::insulation` into `setComfortModifier`; a naked human has the plain 16 to 26). Colonists do not yet go looking for warmth (BACKLOG). Save: section `temperature` 1 and `health` 2, no format change.
 
 **F8** melee is in (`docs/design/melee.md`, tests `MeleeTests`): fists and the D8 melee weapons swing with a
 wind-up, a hit moment and a recovery (the whole swing is the tool's cooldown, so RimWorld's damage per second
@@ -275,18 +306,55 @@ length. `MeleeCommand` (Attack, Block) for the player and dev use, events `Melee
 `Block`, snapshot `meleePhase`, `meleeStepsLeft`, `meleeTarget`, `blocking`, save section `melee`. **C20's
 social fights and N5's animal fights start swings with `MeleeSystem::attack`.**
 
+**F9** explosives and grenades are in (`docs/design/explosives.md`, tests `ExplosiveTests`): `CombatSystem::explode`
+is the one blast (radius, falloff to 40% at the edge, three sample points per pawn traced from just above the
+ground so cover and walls shield, a prone pawn takes less, 2 to 4 fragments each through `armorPass`, a knock-down
+for a big hit, and buildings take x2/x4/x8 by material with walls between shielding). A frag grenade (50 damage,
+radius 1.9 m) is a Things item on a pawn's belt (`Belt`, 10 per pawn, `ExplosiveSystem::take`/`give`); `ThrowCommand`
+winds up (none for the player), throws it in a flat or steep arc planned against walls and cover, and it explodes
+50 steps after landing. A grenade is a `Grenade` entity (no `Thing`) in the snapshot's `projectiles`. Fighters
+**dive** from a grenade they see (run out of the radius, or lie prone if there is no room; F5's `dodgeUntil`) and
+**throw** at two or more enemies together or at one they cannot shoot, never with friends in the radius.
+`ExplodeCommand` is the dev/player blast. Events `GrenadeThrown`, `GrenadeLanded`, `Explosion`, `PawnKnockedDown`,
+`PawnAction` `Throw` and `Dive`; save section `explosives` 1. **Molotovs wait for E4 (fire); F11's IED trap, F12's
+sappers and U21's effects call `CombatSystem::explode`.**
+
+**F11** turrets and traps are in (`docs/design/defense.md`, tests `DefenseTests`): `Turret_Mini` is a powered building (100 W, research
+`GunTurrets`) that picks the nearest seen, able, non-animal enemy in its gun's range, winds up, fires bursts of real bullets
+(`CombatSystem::fireFrom`, a shot from a gun no pawn holds) and blows up when combat destroys it (any building with `explosion` and
+`explodeWhenDestroyed` does; deconstructing never does). `TrapSpike` (5 stabs, 100 total) and `TrapIEDExplosive` (a 3.9 m blast through
+`CombatSystem::explode`) spring under any pawn that does not know them: the colony's side always does, an enemy side learns a trap when one
+of its pawns springs it or one of its fighters notices it within 4 m, and then its fighters keep their spots off it and bend their walks round it
+(`DefenseSystem::avoidsCell` and `detour`). `RearmTrapCommand` sets a sprung spike trap again; **no colonist job rearms traps yet and raiders do not
+shoot at turrets (both in `docs/design/defense.md` "Not done yet")**. New events `TrapSprung`, `TrapRearmed`; snapshot `turretPhase`, `turretTarget`,
+`trapState`; save section `defense` 1. Research now has 23 projects.
+
 D9 (thoughts, recreation, mental break and social data) is in: `docs/design/thoughts-data.md`. Data only; C15, C17, C18, C19, C20, E2 and E3 read it.
+**C15** apparel (`docs/design/apparel.md`): clothes worn in layers with armor and insulation per piece (stuff times quality), wear and tear (absorbed damage and 0.4 HP a day), tattered, naked, nudist and dead man's clothes thoughts, outfit policies (`SetOutfit`, `EditOutfit`, `AddOutfit`, `RemoveOutfit`), a change-clothes think node and a strip job for the downed and dead (`Strip`). Colonists start dressed. Insulation widens the comfortable temperature range (see E2). The starting T-shirt and pants hold a colonist to about 4 degrees outdoors; parkas (C14 tailoring) are what winter needs. Save section `apparel` 1.
 **C17** room stats, beauty and filth (`docs/design/room-stats.md`): floors and filth layers, a cleaning job (indoors only for now), space, beauty, wealth, cleanliness and impressiveness by RimWorld's formulas, the beauty need and the room thoughts. Floors come only by `PlaceFloor` command: no floor-building job exists in any plan task yet (BACKLOG). Save section `roomstats` 1.
+**C16** rot and storage (`docs/design/spoilage.md`): food rots by the temperature of its cell (stops below 0, full speed from 10 degrees), items with a deterioration rate wear out under open sky, meals remember their ingredients and may be poisoned by a dirty kitchen or a poor cook; `SpoilageSystem::setPoisonHandler` is the hook **H2 must wire to give the `FoodPoisoning` hediff**; E1 can call `setOutdoorFactor` for rain. Save section `spoilage` 1.
 
 **N1** animals on the map (`docs/design/animal-life.md`, tests `AnimalTests`, `simrun --animals`): `SimSettings::wildAnimals`
 (percent of the biome's density; 0 is the default, so nothing else changes) puts wild herds on the map when it is made; animals are pawns
 with `Animal` (no `Worker`, side 100), wander in herds behind the lowest-id leader, graze plants, sleep by day or night, walk in from and off
 the edges to keep the biome's density, and rot away 15 days after dying. About 300 animals on a 1 km map cost 0.36 ms a step, 80% of it in
-`MovementSystem` (for S9). Save section `animals`. Fighters never take an animal for an enemy on their own. **Unreal does not turn
-`wildAnimals` on until U15 draws animals** (the pawn drawing would show them as people); **code that counts pawns of another faction as raiders
+`MovementSystem` (for S9). Save section `animals`. Fighters never take an animal for an enemy on their own. Unreal's own start turns `wildAnimals` on at 100% (U15; `-SimWildAnimals=<percent>`, 0 for none, off on flat maps); **code that counts pawns of another faction as raiders
 must skip `Animal`**.
 
 **X1** genes and lineages (`docs/design/genes.md`, tests `GenesTests`): 55 genes as defs (`data/defs/Genes`) with stat offsets and factors, skill aptitudes and looks; Emberkin, Frostkin, Warbred, Ashborn and Delver as gene sets (wiki totals for metabolism and complexity; most single-gene numbers are recalled and marked `unverified`). `PawnGenes` on every humanlike pawn is made from its lineage (not saved; rebuilt on creation, `SetLineage` and load). Read today: walking speed, comfortable temperature range, hunger rate, mood, damage taken, wound healing, mining and plant speed, skill levels; every other stat is summed and available through `geneStat`. Looks take skin, hair and horns from genes (the lineage's own `visual` block is gone). Scenario `lineageWeights` rolls colonists' lineages (never the protagonist's); `CrashlandedMixed` does, `Crashlanded` is unchanged. **A new rule that a gene should change reads `geneStat(*sim.genesOf(pawn), "stat", base)`**; Unreal's horn lookup changed in `PawnSubsystem.cpp` (uncompiled until the PC builds).
+
+
+**N3** taming, training and pens (`docs/design/husbandry.md`, tests `HusbandryTests`): a `MarkAnimal` Tame mark makes a Handling colonist fetch hay (or whatever the animal eats), walk to it and roll
+`(0.5 + 0.05 x Animals) x (1 - wildness)`; a failed try keeps the mark. Tame animals join side 1, eat hay, kibble, meat and plants (walking round walls by path tickets), are hand-fed under 25% food and starve after 5 days.
+Training (Obedience, Release, Rescue, Haul: 10/5/20/30 steps, one try per 6 h, fades over 6 days) is by `SetTraining`; **Haul makes the animal a Hauling-only worker**. Animal zones and pens (`isPen`: no walkable way out except doors), `AssignAnimalZone`, `Release`, slaughter (corpse only; butchering is N2).
+Save section `husbandry` 1, five new commands (`MarkAnimal`, `SetTraining`, `CreateAnimalZone`, `RemoveAnimalZoneCells`, `AssignAnimalZone`). **Obedience, Release and Rescue only count steps; their effects wait for later tasks.** Animals walk through doors (only the pen test treats them as barriers). Not done: names for tamed animals, manhunters on a failed try (N5), a taming line in the colony scenario (C25 can add it).
+
+**N4** breeding and products (`docs/design/breeding.md`, tests `BreedingTests`, ctest `simrun_farm`): tame, grown animals mate (a male rolls about every 12 hours, picks the nearest willing female of his kind and zone within 40 m, walks to her if she is further than 12 m, and 50% of matings leave a gestating female pregnant); litters are born tame into the mother's zone after the def's `gestationDays`; hens lay an egg every 1.5 days (unfertilized ones stack, a mated hen's next egg is fertilized and hatches into a tame chick after 3.8 days); cows and muffalo fill with milk, muffalo and alpacas with wool, and the Handling tasks **Milk** and **Shear** send a colonist (new job `GatherAnimal`). Everything runs from one pass a minute over the tame animals (`Breeding::step`), so it costs about 0.005 ms a step for 500 chickens (`simrun --farm 500`). Sex is fixed per animal from the seed and its id (nothing saved); save section `breeding` 1; events `AnimalMated`, `AnimalBorn`, `EggLaid`, `EggHatched`, `AnimalGathered`; snapshot `sex`, `pregnant`, `milkFullness`, `woolFullness`. Young animals aren't adults until their last life stage: no mating, products or hauling before. **Also fixed:** a save made while a colonist was taming or feeding an animal used to be refused on load (the job check stopped at `StripPawn`). **Worth knowing for S9:** 500 animals cost about 0.8 ms a step, mostly movement (N1 put 80% of it in `MovementSystem::movePawns`), not breeding. Not done: health scaling with age, hatching needs no warmth, no breeding switch (BACKLOG).
+
+**N5** animal fights and predators (`docs/design/animal-fights.md`, tests `AnimalFightTests`, `simrun --animals` prints the counters): animals have hitboxes now (shots hit them) and reach with teeth and claws. `Animal::temper` (Calm, Hunting, Revenge, Manhunter); anything but Calm is an enemy to the fighter AI and the colony alarm. A hurt wild animal turns manhunter by chance (0.5 tusker, 0.2 predator, 0.02 other), else predators and tuskers take revenge for a while and the rest run; shots, blows and blasts frighten calm animals within 22 m. Hungry wild predators hunt prey up to 1.5 x their size and lone colonists, the prey freezes when caught, the kill is eaten (corpse gone). **`AnimalSystem::enrage` is the hook T3 (manhunter pack) and a failed taming use.** Save section `animals` 2. Not done: packs, pathing round walls for chasers, manhunters from failed taming.
+**E4** fire and firefighting (`docs/design/fire.md`, tests `FireTests`, ctest `simrun_fire`): a sparse fire layer (`sim.fire()`), one pass a minute over only the cells that burn. A fire starts from an `Ignite` command, a Burn-damage explosion (molotovs for F9/F11 are now one projectile def away), a burning pawn or a room above 235 degrees, grows on the cell's flammability (building times stuff, items, plant, floor; grass 1.3, wood 1.0, stone and steel 0), burns those things down (a plant, building or item at 0 is destroyed and leaves ash), pushes heat into its room (`TemperatureSystem::addHeat`), and spreads up to two cells away (knight's move, embers need a big fire). Rain and 10% snow put it out outdoors, not under a roof. Pawns in a fire catch fire (a `Burning` component, 2 damage per RimWorld second, drops their job, fire-resistant skin never catches); beating out the fire under a burning pawn puts them out. The **home area** (`SetHomeArea` command, grows by itself round buildings and colonists until painted) is where colonists with the Firefighter work type go: job `ExtinguishFire`, nothing reserved so several fight one fire; a burning colonist is rescued anywhere. Burnt ground (fades in 6 days) and ash are left behind. Save section `fire` 1; events `FireStarted`, `FireOut`, `PawnCaughtFire`, `PawnFireOut`, `PawnAction::Extinguish`; snapshot `fires`, `burnt`, `homeArea`, `onFire`. `simrun --fire` lights a grass fire near the colonists (nothing burns more than two cells in the Crashlanded start, the colonists beat it out in minutes). **Also:** wood logs now have flammability 1.0 (they had none), and wood floor and carpet 1.0 (unverified). Numbers in `FireRules` are partly recalled and partly ours; tune `spreadPerTick`, `plantDamageFactor` and `beatPerTick` after a playtest. Not done (BACKLOG): firefoam, panic running and water for burning pawns, per-colonist allowed areas, fuel buildings catching fire, a home-area tool.
+
+**U15** animals on screen (`docs/design/animal-life.md`, smoke test `animals`): `USimAnimalSubsystem` draws every pawn with a snapshot `lifeStage` of 0 to 2 as an `ASimAnimalActor` on its A4 skeletal mesh (model and scale from `assets/animal_art.json`, fitted to its `lengthM`), playing idle, walk, gallop, eating and death clips picked from the snapshot; `USimPawnSubsystem` skips animals. Animation by distance: every frame within 40 m, 8 Hz within 120 m, a frozen pose within 400 m, hidden beyond (`Animals.NearDistance`, `MidDistance`, `HideDistance`). Not done: far herds as instanced meshes with baked animation (G3 decides if the frozen skinned pose is cheap enough), a lying-down pose for sleep (it slows the idle clip), and the models' facing is unchecked by eye.
 
 **M1** upper levels (`docs/design/levels.md`, tests `LevelsTests`): the map has four levels, 3 m apart; upper levels are stored in
 16 m chunks made only where something is built, so empty sky costs nothing. A cell up there is `Terrain::Air` until an **upper
@@ -351,8 +419,9 @@ schedules~~ done (`docs/design/needs.md`; save format 8), ~~**F2** guns and hitb
 and harvesting~~ done (`docs/design/mining.md`; save format 14). On the PC, ~~**U9**~~ and ~~**A3** seeded looks~~ are done (smoke test `looks`; save format 16).
 U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priorities).
 ~~**F4** fighter AI: where to stand~~ done (`docs/design/fighters.md`; save format 15), ~~**F5** fighter
-AI: aiming~~ done (`docs/design/aiming.md`; save format 17), so **F6** raid and defense (cloud, Opus high)
-is open once C8 is in (it is); with U9 and F2 in, ~~**U11** fights on screen~~ is done (PC; smoke test `fights`; `docs/design/fights.md`; it
+AI: aiming~~ done (`docs/design/aiming.md`; save format 17), ~~**F6** raid and defense~~ done
+(`docs/design/raids.md`; save section `raids`, `fighters` 2), so **F7** raid scenario tests and nightly soak (cloud, Sonnet
+high) is open; with U9 and F2 in, ~~**U11** fights on screen~~ is done (PC; smoke test `fights`; `docs/design/fights.md`; it
 binds R to reload; reload and sidestep animations are not drawn yet). ~~**C10** colony scenario test~~ done
 (`docs/design/colony-scenario.md`); ~~**U10** hands-on work~~ is done (PC; smoke test `handson`; `docs/design/handson.md`); ~~**A1** placeholder art~~ is done (PC; free Poly Haven meshes on the bed, door, table, stool, stove, logs, meals, berries, trees and bushes; `docs/design/building-draw.md`, `python tools/placeholder_art.py` then the `PlaceholderArt` commandlet). ~~**A2** terrain materials~~ is done (PC; free CC0 Poly Haven textures instead of Megascans, so nobody had to download anything: grass, sand, gravel and rock blended by terrain type and slope, placed by world position; `docs/design/terrain.md`, `python tools/terrain_textures.py` then the `TerrainMaterials` commandlet; swapping in Megascans later is a change in `assets/terrain_textures.json`). ~~**A6** placeholder art 2~~ is done (PC; 30 more free Poly Haven meshes on crops, work tables, power, climate, lamps and furniture, same list and commandlet as A1; walls, floors, solar panel, wind turbine and a few small things stay shapes). ~~**A5** clothes art~~ is done (PC; worn meshes for all 12 apparel defs by layer, made from the morphed hoodie and trousers plus a free CC0 Poly Haven hat, no downloads by sneed; `docs/design/looks.md`, `python tools/clothes_art.py` then the `ClothesArt` commandlet; not yet seen in game, U16 draws them). **G1** is what is left on the PC.
 

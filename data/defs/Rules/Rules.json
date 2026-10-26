@@ -21,17 +21,20 @@
     "recoilKickResetSteps": 15,
     "recoilKickRecoveryPerStep": 0.2,
     "recoilKickMaxDegrees": 10,
+    "weaponSwitchSteps": { "Primary": 36, "Sidearm": 18, "Melee": 27 },
     "dodgeRoll": { "startUpSteps": 3, "rollSteps": 15, "hitProofSteps": 12, "recoverySteps": 9, "cooldownSteps": 6, "distance": 4.0 },
     "unverified": ["accuracyDistances", "minHitChance"],
     "ours": ["defaultShootingSkill", "standardTarget", "playerSpreadDistance", "gravity", "recoilRecoveryPerSecond",
              "recoilSkillReduction", "maxFlightSeconds", "reactionStepsBySkill", "leadBySkill", "leadErrorBySkill",
              "reloadTimeFactorBySkill", "recoilKickHoldSteps", "recoilKickResetSteps", "recoilKickRecoveryPerStep",
-             "recoilKickMaxDegrees", "dodgeRoll"]
+             "recoilKickMaxDegrees", "dodgeRoll", "weaponSwitchSteps"]
   },
   {
     "defName": "PlantRules", "source": "RimWorld wiki",
     "growHours": [6, 19],
-    "growthNeedsLight": 0.51
+    "growthNeedsLight": 0.51,
+    "killChancePerDegree": 0.1,
+    "unverified": ["killChancePerDegree"]
   },
   {
     "defName": "SkillRules", "source": "RimWorld wiki",
@@ -56,6 +59,8 @@
     "healPerIntervalFactor": 0.01,
     "lostPartBleedHpFactor": 2,
     "scarChance": { "max": 0.02, "minHpLost": 4, "fullAtHpLost": 14 },
+    "scarSeverity": 1.0,
+    "oldWoundFromHpLost": 14,
     "bloodLossPerDayPerBleedRate": 1.0,
     "bloodLossRecoveryPerDay": 0.333,
     "bleedRateMinForBloodLoss": 0.1,
@@ -63,7 +68,7 @@
     "protagonistPartHitPointsFactor": 2.0,
     "innerInjuryAlsoHurtsOuter": true,
     "unverified": ["bloodLossPerDayPerBleedRate", "bloodLossRecoveryPerDay", "bleedRateMinForBloodLoss", "innerInjuryAlsoHurtsOuter"],
-    "ours": ["protagonistPartHitPointsFactor", "innerInjuryAlsoHurtsOuter"]
+    "ours": ["protagonistPartHitPointsFactor", "innerInjuryAlsoHurtsOuter", "scarSeverity", "oldWoundFromHpLost"]
   },
   {
     "defName": "JobRules", "source": "Rim3D",
@@ -71,7 +76,8 @@
     "idleSeconds": 60,
     "avoidFailedTargetSeconds": 600,
     "maxRepaths": 5,
-    "ours": ["idleSeconds", "avoidFailedTargetSeconds", "maxRepaths"]
+    "carrySlowdown": 0.25,
+    "ours": ["idleSeconds", "avoidFailedTargetSeconds", "maxRepaths", "carrySlowdown"]
   },
   {
     "defName": "NeedRules", "source": "RimWorld wiki",
@@ -235,20 +241,48 @@
     "ours": ["defaultLevel"]
   },
   {
+    "defName": "ApparelRules", "source": "RimWorld wiki",
+    "absorbDamageDivisor": 4,
+    "wearHpLossChancePerDay": 0.4,
+    "deathHpLoss": [0.15, 0.4],
+    "rattyBelow": 0.5,
+    "tatteredBelow": 0.25,
+    "taintedStageCap": 4,
+    "defaultOutfit": "Anything",
+    "wearSteps": 60,
+    "stripStepsPerPiece": 60,
+    "checkEverySteps": 1200,
+    "scoreBase": 0.1,
+    "scoreSharp": 1.0,
+    "scoreBlunt": 0.5,
+    "scoreHeat": 0.25,
+    "scoreInsulationPerDegree": 0.01,
+    "scoreHpFloor": 0.4,
+    "taintedScorePenalty": 0.2,
+    "minGain": 0.05,
+    "unverified": ["wearSteps", "stripStepsPerPiece"],
+    "ours": ["defaultOutfit", "wearSteps", "stripStepsPerPiece", "checkEverySteps", "scoreBase", "scoreSharp", "scoreBlunt", "scoreHeat", "scoreInsulationPerDegree", "scoreHpFloor", "taintedScorePenalty", "minGain"]
+  },
+  {
     "defName": "MedicineRules", "source": "RimWorld wiki",
     "tendQualityBySkill": [[0, 0.2], [5, 0.5], [10, 0.8], [15, 1.0], [20, 1.2]],
     "tendQualityRandomFactor": [0.7, 1.3],
     "tendQualityNoMedicineFactor": 0.7,
+    "tendWorkSeconds": 864,
+    "tendXp": 500,
+    "selfTendQualityFactor": 0.7,
+    "careHerbalMaxPotency": 0.6,
+    "careNormalMaxPotency": 1.0,
     "surgerySuccessBySkill": [[0, 0.5], [5, 0.75], [10, 1.0], [15, 1.2], [20, 1.4]],
     "surgeryFailDeathChanceFactor": 0.1,
     "immunityGainPerDayMultiplierWhenTended": 1.0,
     "diseaseOnsetMtbDays": { "Flu": 50, "Plague": 80, "Malaria": 80, "SleepingSickness": 80, "GutWorms": 80, "MuscleParasites": 80 },
     "foodPoisoningChancePerMeal": { "default": 0.0, "dirtyKitchen": 0.02, "rotten": 0.25 },
     "bodyTemperatureC": { "normal": 37.0, "hypothermiaBelow": 35.0, "heatstrokeAbove": 37.5 },
-    "unverified": ["tendQualityBySkill", "tendQualityRandomFactor", "tendQualityNoMedicineFactor", "surgerySuccessBySkill", "surgeryFailDeathChanceFactor", "diseaseOnsetMtbDays", "foodPoisoningChancePerMeal", "bodyTemperatureC"],
-    "ours": ["immunityGainPerDayMultiplierWhenTended", "foodPoisoningChancePerMeal.dirtyKitchen"]
+    "unverified": ["tendQualityBySkill", "tendQualityRandomFactor", "tendQualityNoMedicineFactor", "tendWorkSeconds", "tendXp", "selfTendQualityFactor", "surgerySuccessBySkill", "surgeryFailDeathChanceFactor", "diseaseOnsetMtbDays", "foodPoisoningChancePerMeal", "bodyTemperatureC"],
+    "ours": ["immunityGainPerDayMultiplierWhenTended", "foodPoisoningChancePerMeal.dirtyKitchen", "careHerbalMaxPotency", "careNormalMaxPotency"]
   },
   {"defName": "MentalBreakRules", "source": "RimWorld", "meanDaysBetweenBreaks": {"Minor": 4.0, "Major": 1.5, "Extreme": 0.5}, "moodCurve": [[0, 0.1], [0.5, 0.5], [1, 1]], "moodCurveNote": "x is mood / threshold level, y multiplies the mean days between breaks (lower mood, shorter wait)", "catharsisThought": "Catharsis", "minHoursBetweenBreaks": 24, "recoveryMoodMargin": 0.1, "restOnlyWhenAwake": true, "unverified": ["meanDaysBetweenBreaks", "moodCurve", "minHoursBetweenBreaks", "recoveryMoodMargin"], "ours": ["restOnlyWhenAwake"]},
   {"defName": "JoyRules", "source": "RimWorld", "fallPerDay": 0.8, "joyHours": [19, 21], "toleranceMinGainFactor": 0.1, "toleranceMax": 1.0, "note": "Recreation falls fallPerDay when awake; it is done in the joy hours of the schedule (C18): the standard schedule has Joy from the first hour through the second, inclusive (19:00 to 21:59, three evening hours; D9 guessed 16 to 22, which took six working hours a day). Effective gain = joyPerHour x (1 - tolerance of the kind) x joyGainFactor, never under toleranceMinGainFactor.", "unverified": ["fallPerDay", "toleranceMinGainFactor"], "ours": ["joyHours", "toleranceMax"]},
-  {"defName": "SocialRules", "source": "RimWorld", "friendOpinion": 20, "rivalOpinion": -20, "interactionMeanHours": 6, "maxDistance": 6, "opinionMin": -100, "opinionMax": 100, "socialSkillXpPerInteraction": 15, "deadMansApparelDays": 6, "unverified": ["interactionMeanHours", "maxDistance"], "ours": ["opinionMin", "opinionMax", "socialSkillXpPerInteraction", "deadMansApparelDays"]}
+  {"defName": "SocialRules", "source": "RimWorld", "friendOpinion": 20, "rivalOpinion": -20, "interactionMeanHours": 6, "maxDistance": 6, "opinionMin": -100, "opinionMax": 100, "socialSkillXpPerInteraction": 15, "unverified": ["interactionMeanHours", "maxDistance"], "ours": ["opinionMin", "opinionMax", "socialSkillXpPerInteraction", "deadMansApparelDays"]}
 ]

@@ -7,11 +7,13 @@
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/WeaponSlot.h"
 #include "ColonySim/Zones.h"
 
 #include <cstdint>
 #include <string>
 #include <variant>
+#include <vector>
 
 namespace colony {
 
@@ -337,6 +339,99 @@ struct UnlockResearchCommand {
     std::string project;
 };
 
+// Throws a grenade (task F9, docs/design/explosives.md): the pawn winds up, then throws one grenade of
+// `item` (a Things defName; empty for the first kind on its belt) at the ground under `target` if that
+// is a pawn on the map, else at the point (x, y) in metres. `player` is the protagonist's own throw: no
+// wind-up. Fails if the pawn has no such grenade, is downed, knocked down or mid-shot, or is still
+// cooling down from its last throw.
+struct ThrowCommand {
+    Entity pawn = kNoEntity;
+    std::string item;
+    Entity target = kNoEntity;
+    float x = 0.0f;
+    float y = 0.0f;
+    bool player = false;
+};
+
+// Dev command: a blast now at (x, y) on the ground, as if a grenade went off there. `damageType` is a
+// DamageTypes defName ("Bomb"). Fails for an unknown type, a point off the map or a radius or damage
+// of 0 or less.
+struct ExplodeCommand {
+    float x = 0.0f;
+    float y = 0.0f;
+    float radius = 1.9f;
+    float damage = 50.0f;
+    std::string damageType = "Bomb";
+    float penetration = 0.1f;
+};
+
+// Raids (F6, docs/design/raids.md). Dev command until the narrator sends raids: a raid of
+// `faction` (a Factions defName) worth `points` raid points (0: what the colony is worth now, by
+// RimWorld's rule) walks in at `edge` (0 north, 1 east, 2 south, 3 west, -1 any) and attacks.
+// Fails for an unknown faction or edge, or when there is no way in from that edge.
+struct StartRaidCommand {
+    std::string faction = "Pirate";
+    float points = 0.0f;
+    int edge = -1;
+};
+
+// The colony alarm: on calls every colonist to its defense role, off sends them back to work. It
+// also sounds by itself when a colonist spots an enemy, and stops when the enemies are gone or
+// fleeing; one the player sounded stays on until the player stops it. Fails if it already is.
+struct SoundAlarmCommand {
+    bool on = true;
+};
+
+// What a colonist does when the alarm sounds: 0 Defender, 1 Shelter, 2 Keep working (DefenseRole
+// in Raids.h). A Defender can have a defense spot it holds. Fails for a pawn that isn't the
+// colony's, a spot for another role, or a spot nobody can stand on.
+struct SetDefenseRoleCommand {
+    Entity pawn = kNoEntity;
+    uint8_t role = 0;
+    bool hasSpot = false;
+    CellPos spot;
+};
+
+// Marks the room at `cell` as the shelter for Shelter colonists, or with `clear` takes the mark off.
+// Fails if the cell is not in a room under a roof.
+struct MarkShelterCommand {
+    CellPos cell;
+    bool clear = false;
+};
+
+// Taming, training and pens (task N3, docs/design/husbandry.md). `mark` is "Tame" (a wild animal, to be tamed by a colonist
+// with the Handling work), "Slaughter" (a tame one, to be killed) or "Release" (a tame one goes wild at once; `on` is
+// ignored). `on` false takes a mark off. Fails for a thing that is no animal, a dead one, or one of the wrong kind.
+struct MarkAnimalCommand {
+    Entity animal = kNoEntity;
+    std::string mark;
+    bool on = true;
+};
+
+// A tame animal is (or is no longer) to be taught a trick: `trainable` is "Obedience", "Release", "Rescue" or "Haul".
+// Fails if the animal is wild or can't learn it.
+struct SetTrainingCommand {
+    Entity animal = kNoEntity;
+    std::string trainable;
+    bool wanted = true;
+};
+
+// Paints an animal zone over the walkable cells of `area` that are in no animal zone. Fails if there are none.
+struct CreateAnimalZoneCommand {
+    CellRect area;
+};
+
+// Takes the cells of `area` out of their animal zones; an emptied zone is deleted, and animals that had it roam freely.
+struct RemoveAnimalZoneCellsCommand {
+    CellRect area;
+};
+
+// A tame animal stays in this animal zone; zone 0 lets it roam near home again.
+struct AssignAnimalZoneCommand {
+    Entity animal = kNoEntity;
+    uint32_t zone = 0;
+};
+
 // Melee (task F8, docs/design/melee.md). Attack: `pawn` swings at `target`, a pawn within reach;
 // for the colonist the player controls, `target` may be none for a swing straight ahead, and its
 // swings have no spread (the player aims). Block: `pawn` raises its melee weapon for a moment.
@@ -350,6 +445,44 @@ struct MeleeCommand {
     MeleeMode mode = MeleeMode::Attack;
 };
 
+// Clothes (task C15, docs/design/apparel.md). A pawn follows an outfit (an id from the snapshot's outfits):
+// it takes off what the outfit doesn't allow and puts on the best clothes it may wear. Fails if the thing
+// isn't a pawn or there is no such outfit.
+struct SetOutfitCommand {
+    Entity pawn = kNoEntity;
+    uint32_t outfit = 1;
+};
+
+// Changes an outfit: the apparel defs it doesn't allow (a Things defName each), the share of its hit
+// points apparel must have (0 to 1) and the quality range (0 awful to 6 legendary). Fails if there is no
+// such outfit or a value is wrong.
+struct EditOutfitCommand {
+    uint32_t outfit = 1;
+    std::vector<std::string> disallowed;
+    float hitPointsMin = 0.0f;
+    float hitPointsMax = 1.0f;
+    int qualityMin = 0;
+    int qualityMax = 6;
+};
+
+// A new outfit with the given name that allows everything. Its id is the next one (the snapshot lists it).
+struct AddOutfitCommand {
+    std::string name;
+};
+
+// Removes an outfit; pawns that followed it go back to the default. Fails for the first outfit.
+struct RemoveOutfitCommand {
+    uint32_t outfit = 0;
+};
+
+// Marks a downed or dead pawn to be stripped of its clothes and weapon by a colonist with Hauling work
+// (`strip` true), or takes the mark off. Fails if it isn't a pawn on the map, isn't downed or dead, or
+// has nothing on it.
+struct StripCommand {
+    Entity thing = kNoEntity;
+    bool strip = true;
+};
+
 // The protagonist's dodge roll (P2, docs/design/shooter-feel.md): a start-up, a roll of a few metres
 // in the direction (dx, dy) (any length; not a number, or zero, is a backstep away from where the
 // pawn faces) in which bullets pass through the pawn for a short window, then a recovery in which it
@@ -361,6 +494,94 @@ struct DodgeRollCommand {
     Entity pawn = kNoEntity;
     float dx = 0.0f;
     float dy = 0.0f;
+};
+
+// Medicine (task H1, docs/design/medicine.md): how far a colonist's medicine may go. `care` is a name from
+// medicalCareName: NoCare, NoMedicine, Herbal, Normal or Best. Fails for a pawn without a body or a name that
+// isn't one.
+struct SetMedicalCareCommand {
+    Entity pawn = kNoEntity;
+    std::string care;
+};
+
+// Dev command: the weather becomes this Weathers def now (by defName, e.g. "Rain") and lasts `hours`
+// game hours (0: its usual length), then the next is chosen as usual (docs/design/weather.md).
+// Fails if no Weathers def has the name.
+struct SetWeatherCommand {
+    std::string weather;
+    float hours = 0.0f;
+};
+
+// Talents (task P3, docs/design/talents.md): the protagonist spends talent points on one more rank of a
+// talent. Fails for a pawn that has no talents, a talent that doesn't exist or is at its top rank, a
+// requirement missing, or too few points.
+struct SpendTalentPointCommand {
+    Entity pawn = kNoEntity;
+    std::string talent;
+};
+
+// Dev command: adds talent XP to the protagonist.
+struct AddTalentXpCommand {
+    Entity pawn = kNoEntity;
+    int64_t amount = 0;
+};
+
+// Traps (task F11, docs/design/defense.md): sets a sprung spike trap again. Fails for a thing that is not a trap,
+// a trap that is armed already, or one that can't be used twice (an IED). No colonist job rearms traps yet.
+struct RearmTrapCommand {
+    Entity trap = kNoEntity;
+};
+
+// Several weapons (task P1, docs/design/weapons.md): adds a weapon to what the pawn carries, in the hands
+// if they are empty, else on the body; the weapon carried in its slot is dropped. The item may lie on the
+// map. Fails if the pawn has no body or is dead, or the item is no weapon or is someone else's.
+struct CarryWeaponCommand {
+    Entity pawn = kNoEntity;
+    Entity item = kNoEntity;
+};
+
+// Switches to the weapon carried in `slot`: it takes a while (CombatRules `weaponSwitchSteps`) in which the
+// pawn can't shoot, reload or swing, then the weapon is in the hands and the old one on the body. Fails if
+// nothing is carried in that slot, it is in the hands already, or the pawn is downed, rolling, mid-shot,
+// mid-swing or switching already.
+struct SwitchWeaponCommand {
+    Entity pawn = kNoEntity;
+    WeaponSlot slot = WeaponSlot::Primary;
+};
+
+// Growing zones (task C13, docs/design/farming.md). CreateGrowingZone paints a zone with `crop` (a Things def of a
+// sowable plant, like "Plant_Rice") over the cells of `area` that are soil, free and in no zone; fails if there are none.
+struct CreateGrowingZoneCommand {
+    CellRect area;
+    std::string crop;
+};
+
+// Takes the cells of `area` out of their growing zones; an emptied zone is deleted. Fails if none was in a zone.
+struct RemoveGrowingZoneCellsCommand {
+    CellRect area;
+};
+
+// Changes the crop of a growing zone; plants of the old crop are cut and replaced as colonists get to them.
+struct SetGrowingZoneCropCommand {
+    uint32_t zone = 0;
+    std::string crop;
+};
+
+// Fire (task E4, docs/design/fire.md). Dev command: starts a fire of `size` (the start size if 0) in a cell, or sets `pawn`
+// alight if it names one. Fails if nothing could burn: no fuel, wet ground, water or rock, a fire already there, a pawn
+// that is dead or fire-resistant. `force` lights even a cell with nothing to burn (it dies away in a moment).
+struct IgniteCommand {
+    CellPos cell;
+    float size = 0.0f;
+    Entity pawn = kNoEntity;
+    bool force = false;
+};
+
+// Paints the home area, where colonists with the Firefighter work type put fires out: adds the rectangle (or takes it
+// off). The first use turns the automatic growth round new buildings off. Fails if no cell changed.
+struct SetHomeAreaCommand {
+    CellRect area;
+    bool add = true;
 };
 
 // Multi-storey (task M1, docs/design/levels.md): lays an upper floor on every cell of `area` (on
@@ -384,8 +605,16 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ReloadCommand, AddBillCommand,
                              RemoveBillCommand, SetBillCommand, HandsOnCommand, FlickCommand, ShortCircuitCommand,
                              PlaceFloorCommand, AddFilthCommand,
-                             SetResearchCommand, UnlockResearchCommand,
-                             MeleeCommand, DodgeRollCommand, PlaceUpperFloorCommand>;
+                             SetResearchCommand, UnlockResearchCommand, StartRaidCommand, SoundAlarmCommand,
+                             SetDefenseRoleCommand, MarkShelterCommand, ThrowCommand, ExplodeCommand,
+                             MeleeCommand, DodgeRollCommand,
+                             SetOutfitCommand, EditOutfitCommand, AddOutfitCommand, RemoveOutfitCommand,
+                             StripCommand, SetWeatherCommand, MarkAnimalCommand, SetTrainingCommand,
+                             CreateAnimalZoneCommand, RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand,
+                             SpendTalentPointCommand, AddTalentXpCommand, RearmTrapCommand,
+                             CarryWeaponCommand, SwitchWeaponCommand, CreateGrowingZoneCommand,
+                             RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
+                             SetHomeAreaCommand, SetMedicalCareCommand, PlaceUpperFloorCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

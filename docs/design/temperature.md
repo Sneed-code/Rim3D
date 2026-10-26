@@ -2,23 +2,20 @@
 
 Code: `ColonySim/Temperature.h`, `Private/Temperature.cpp`; the hediff side in `Health.h` /
 `Private/Health.cpp` (environment hediffs), the thoughts in `Private/Mood.cpp`, the outdoor
-stand-in in `Private/Sim.cpp` (`Sim::outdoorTemperature`). Tests: `Tests/TemperatureTests.cpp`,
+outdoor temperature from [weather](weather.md) (`Sim::outdoorTemperature`). Tests: `Tests/TemperatureTests.cpp`,
 `simrun --outdoor C` (prints a `temperature` line), CTest `simrun_temperature`. Data:
 `TemperatureRules` in `data/defs/Rules/TemperatureRules.json`, `heatPusher` on the heater, cooler,
 passive cooler and campfire (`Things/BuildingsPowerClimate.json`, D11), `comfyTemperatureMin/Max`
 on pawn defs, the `Hypothermia`, `Heatstroke` and `Frostbite` hediffs (D7) and the `Cold` and `Hot`
 thoughts (D9). Task E2. Builds on [rooms](rooms.md) and [health](health.md).
 
-## The outdoor temperature (until E1)
+## The outdoor temperature
 
-`Sim::outdoorTemperature()` is what the sim says the open air is. E1 (seasons and weather) will
-replace its body; **everything else only asks `TemperatureSystem::outdoor()`**, which the sim sets
-at the start of every step. The stand-in reads the biome (`TemperateForest`): the season's mean
-joined smoothly from the middle of one season to the middle of the next, plus a daily swing of
-`climate.dailySwing` (14 degrees, peak to peak) that is coldest at 05:00 and warmest at 15:00. It
-uses no library maths (smoothstep only), so Linux and Windows agree to the bit. The ground (the
-temperature under rock) is the mean of the four seasons. `Sim::setOutdoorOverride(C)` (and
-`simrun --outdoor C`) holds both fixed for tests; it is not saved.
+`Sim::outdoorTemperature()` is what the sim says the open air is: `Weather::temperatureAt` from E1
+([weather.md](weather.md)), the season's mean, the day's cycle and a slow random drift. Everything
+else only asks `TemperatureSystem::outdoor()`, which the sim sets at the start of every step. The
+ground (the temperature under rock) is the mean of the four seasons (`Weather::yearMeanTemperature`).
+`Sim::setOutdoorOverride(C)` (and `simrun --outdoor C`) holds both fixed for tests; it is not saved.
 
 ## Rooms
 
@@ -61,6 +58,9 @@ beside it. **Power (E5) decides which pushers run**: `Sim` installs
 cooler warms only while its net runs it, and a campfire (no power part) always does. Fuel (C11)
 will add its test the same way.
 
+**Fire** (E4) pushes heat with `TemperatureSystem::addHeat(cell, heatPerSecond, seconds, maxTemp)`: the same formula as a
+pusher, once per fire pass, into the enclosed room the cell is in ([fire.md](fire.md)).
+
 **Rooms change.** A new room starts at the mean temperature its cells had (cells that were
 outdoors count as the outdoor temperature then), so joining two rooms mixes their heat by size and
 splitting one gives each half the temperature it had. `cellTemp_` (one number per map cell, set
@@ -70,11 +70,10 @@ written out again, so it isn't saved.
 ## Pawns
 
 A pawn feels `ambientOf(pawn)`: the temperature at the cell it stands in. Its **comfortable range**
-is the def's `stats.comfyTemperatureMin/Max` (Human 16 to 26). **Until C15 (apparel) a humanlike
-pawn's range is 12 degrees wider on the cold side and 4 on the hot side** (`clothesColdC`,
-`clothesHeatC`, ours), as a stand-in for clothes; C15 replaces it with real insulation through
-`TemperatureSystem::setComfortModifier(fn(Entity, float& min, float& max))` and deletes the two
-numbers. The **safe range** is the comfortable one widened by 10 degrees (`safeMarginC`,
+is the def's `stats.comfyTemperatureMin/Max` (Human 16 to 26). **What a pawn wears widens it** (C15): each worn piece's cold insulation lowers the minimum and
+its heat insulation raises the maximum, through `TemperatureSystem::setComfortModifier(fn(Entity,
+float& min, float& max))`, set by `Sim` from `ApparelSystem::insulation` (`apparel.md`). A pawn with
+no clothes has the plain def range. The **safe range** is the comfortable one widened by 10 degrees (`safeMarginC`,
 RimWorld's, recalled).
 
 - **Cold and Hot thoughts** (mood): a situation while the pawn is outside the comfortable range.
@@ -116,7 +115,6 @@ or answers, so a save made between steps loads back the same.
 
 - **A pawn that seeks a safe place**: RimWorld's colonists go indoors or toward warmth when they
   are outside their safe range; ours don't (BACKLOG). Colonists outdoors in hard frost just get sick.
-- **Apparel**: C15 sets the comfort modifier and deletes the clothes stand-in.
 - **Heat from fire, sunlight on rooms, cold from rain and snow**: E4 and E1. A building's own
   insulation (stone walls hold better than wood) isn't separate from the wall conductance.
 - **Food rot, crops, plants dying of frost and heat stroke in animals' habits** read the room

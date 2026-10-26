@@ -89,6 +89,8 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
         }
     }
     num("bodyReach", r.bodyReach);
+    num("animalReachBase", r.animalReachBase);
+    num("animalReachPerRoot", r.animalReachPerRoot);
     num("defaultWeaponReach", r.defaultWeaponReach);
     num("shoulderBelowEye", r.shoulderBelowEye);
     num("strikeDepth", r.strikeDepth);
@@ -154,6 +156,10 @@ MeleeSystem::MeleeSystem(Things& things, Map& map, CombatSystem& combat, HealthS
             }
         }
         set.reach = rules_.bodyReach;
+        if (!weapon && def.text("race.intelligence") == "Animal") {
+            set.reach = rules_.animalReachBase +
+                        rules_.animalReachPerRoot * std::sqrt(static_cast<float>(std::max(0.1, def.number("race.baseBodySize", 1.0))));
+        }
         if (weapon) {
             set.reach = rules_.defaultWeaponReach;
             if (rulesDef != nullptr) {
@@ -311,7 +317,7 @@ bool MeleeSystem::ready(Entity pawn) const {
         return false;
     }
     const Melee* m = reg.try_get<Melee>(pawn);
-    return m == nullptr || m->phase == MeleePhase::Ready;
+    return (m == nullptr || m->phase == MeleePhase::Ready) && !combat_.switching(pawn);
 }
 
 bool MeleeSystem::winding(Entity pawn) const {
@@ -342,6 +348,9 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
     }
     if (combat_.rollLocked(pawn)) {
         return fail("rolling");
+    }
+    if (combat_.switching(pawn)) {
+        return fail("switching weapons");
     }
     if (const Shooter* s = reg.try_get<Shooter>(pawn); s != nullptr && (s->phase == ShotPhase::Aiming || s->phase == ShotPhase::Firing)) {
         return fail("busy shooting");
@@ -742,6 +751,7 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
             e.message = "hit";
             e.amount = tool->power;
             ++hits_;
+            combat_.noteHurt(victim, pawn);
         } else {
             const PawnHitResult result =
                 combat_.hitPawn(victim, hit.part, tool->damageType, tool->power, tool->penetration, splitMix64(m.seed ^ 0x417ULL));
@@ -759,6 +769,10 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
             }
             if (!result.deflected) {
                 health_.applyHit(victim, result.damageType, result.amount, result.part);
+            }
+            combat_.wearApparel(victim, result);
+            if (!result.deflected) {
+                combat_.noteHurt(victim, pawn);
             }
             return;
         }

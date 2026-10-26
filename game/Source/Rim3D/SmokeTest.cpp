@@ -153,6 +153,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildHandsOnPhases();
 	}
+	else if (TestName == TEXT("animals"))
+	{
+		BuildAnimalsPhases();
+	}
 	else
 	{
 		Fail(FString::Printf(TEXT("Unknown smoke test '%s'"), *TestName));

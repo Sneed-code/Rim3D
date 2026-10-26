@@ -5,6 +5,7 @@
 #include "ColonySim/Map.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Weather.h"
 
 #include <algorithm>
 #include <cmath>
@@ -178,7 +179,7 @@ void Lights::rebuild() {
 
 float Lights::skyGlow() const {
     const float hour = static_cast<float>(time_.seconds % kSecondsPerDay) / static_cast<float>(kSecondsPerHour);
-    return LightNumbers::eval(numbers_.skyGlowByHour, hour);
+    return LightNumbers::eval(numbers_.skyGlowByHour, hour) * (weather_ != nullptr ? weather_->skyGlow() : 1.0f);
 }
 
 bool Lights::underOpenSky(CellPos c) const {
