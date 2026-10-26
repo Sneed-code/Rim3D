@@ -1,4 +1,5 @@
 // Fire and firefighting (task E4, docs/design/fire.md).
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
@@ -614,13 +615,36 @@ TEST_CASE("Fire: a burning colonist runs to water and jumps in") {
     CHECK(cellOf(f.reg().get<Position>(pawn)).x >= 34);  // it ran east, to the water
 }
 
-TEST_CASE("Fire: a burning protagonist does not panic") {
+TEST_CASE("Fire: heat armor on a burning pawn turns flames aside and the clothes wear") {
+    // Two pawns burn for the same time; one wears a hyperweave duster and cowboy hat (heat armor 0.86 and 1.4).
     FireFixture f;
-    const Entity pawn = f.colonist(CellPos{30, 30, 0});
-    f.reg().get<Colonist>(pawn).protagonist = true;
-    f.fire().setPawnAlight(pawn, f.sim.time().seconds, true);
-    FIRE_REQUIRE(f.fire().pawnBurning(pawn));
-    const CellPos start = cellOf(f.reg().get<Position>(pawn));
-    f.run(10);
-    CHECK(cellOf(f.reg().get<Position>(pawn)) == start);
+    const Entity bare = f.sim.things().spawn("Human", CellPos{10, 10, 0});
+    const Entity clad = f.sim.things().spawn("Human", CellPos{40, 40, 0});
+    FIRE_REQUIRE(bare != kNoEntity);
+    FIRE_REQUIRE(clad != kNoEntity);
+    const auto wear = [&](const char* name) -> Entity {
+        const DefId def = f.sim.defs().idOf("Things", name);
+        const Entity item = f.sim.apparel().make(def, f.sim.defs().idOf("Things", "Hyperweave"), -1, CellPos{40, 40, 0});
+        std::string why;
+        CHECK(item != kNoEntity);
+        CHECK(f.sim.apparel().putOn(clad, item, why));
+        return item;
+    };
+    const Entity duster = wear("Apparel_Duster");
+    wear("Apparel_CowboyHat");
+    const int hpBefore = f.reg().get<HitPoints>(duster).current;
+    CHECK(f.fire().setPawnAlight(bare, f.sim.time().seconds, true));
+    CHECK(f.fire().setPawnAlight(clad, f.sim.time().seconds, true));
+    f.run(30 * 60);
+    const auto total = [&](Entity pawn) {
+        float sum = 0.0f;
+        for (const Injury& injury : f.reg().get<Health>(pawn).injuries) {
+            sum += injury.severity;
+        }
+        return sum;
+    };
+    CHECK(total(bare) > 0.0f);
+    CHECK(total(clad) < total(bare) * 0.7f);
+    const HitPoints* after = f.reg().try_get<HitPoints>(duster);
+    CHECK((after == nullptr || after->current < hpBefore));
 }

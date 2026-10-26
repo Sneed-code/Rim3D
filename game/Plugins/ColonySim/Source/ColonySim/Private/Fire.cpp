@@ -2,7 +2,6 @@
 #include "ColonySim/Fire.h"
 
 #include "ColonySim/Colonist.h"
-#include "ColonySim/Protagonist.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Floors.h"
@@ -781,7 +780,7 @@ void Fire::onDestroy(Entity building) {
 
 bool Fire::panicStep(Entity pawn, int64_t now) {
     entt::registry& reg = things_.registry();
-    if (!numbers_.panic || !reg.valid(pawn) || !reg.all_of<Burning, Position, Mover>(pawn) || mindIsPlayersOwn(reg, pawn)) {
+    if (!numbers_.panic || !reg.valid(pawn) || !reg.all_of<Burning, Position, Mover>(pawn)) {
         return false;
     }
     // A colonist who isn't alight and is within arm's reach beats the flames out as the pawn runs past.
@@ -900,7 +899,9 @@ void Fire::pass(int64_t now) {
         }
         Rng rng(rngSeed(now, static_cast<int>(entt::to_integral(pawn)), 7), 7);
         const int amount = fireRoundRandom(static_cast<float>(numbers_.pawnDamagePerTick * ticks), rng);
-        if (amount > 0 && !health_.applyDamage(pawn, burnType_, static_cast<float>(amount), -1, rng)) {
+        const bool hurt = pawnHurt_ ? pawnHurt_(pawn, burnType_, static_cast<float>(amount), rng)
+                                    : health_.applyDamage(pawn, burnType_, static_cast<float>(amount), -1, rng);
+        if (amount > 0 && !hurt) {
             reg.remove<Burning>(pawn);
             continue;
         }

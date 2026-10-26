@@ -145,7 +145,10 @@ control away. Today that means:
 
 - no mental breaks (C19): the natural roll skips them and `StartMentalBreakCommand` fails;
 - no social fights: an insult or a jealous rage never starts a fistfight with them;
-- no panic when burning: they stay under the player's hand (the player puts themself out);
+- no panic when burning while the player steers (a steered pawn is already skipped by the job system and
+  the break system, so the panic run never touches them). In the overseer view, when the sim runs the
+  protagonist, they panic and run for water like any colonist, because standing still in a fire kills them
+  (a first version exempted them there and a seed-42 colony burned a protagonist to death);
 - no refusing orders and no AI-driven behaviour overrides (none exist for colonists today; any new
   one must ask the rule below).
 

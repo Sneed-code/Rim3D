@@ -223,7 +223,7 @@ DefId MentalBreakSystem::breakOf(Entity pawn) const {
 bool MentalBreakSystem::eligible(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     return reg.valid(pawn) && reg.all_of<Thing, Position, Mover, Worker>(pawn) && !reg.all_of<PlayerControl>(pawn) &&
-           !mindIsPlayersOwn(reg, pawn) && fighters_.factionOf(pawn) == kPlayerFaction && !health_.incapacitated(pawn);
+           fighters_.factionOf(pawn) == kPlayerFaction && !health_.incapacitated(pawn);
 }
 
 bool MentalBreakSystem::feasible(Entity pawn, const Kind& kind, Rng& rng) {
@@ -310,6 +310,11 @@ void MentalBreakSystem::natural(Entity pawn, int64_t now, Rng& rng) {
             break;
         }
         pick -= kind->commonality;
+    }
+    // The protagonist rolls like anyone (so the random stream, and every game seed, is the same whichever way
+    // the rule is set) but the break is not taken: docs/design/protagonist.md.
+    if (mindIsPlayersOwn(reg, pawn)) {
+        return;
     }
     begin(pawn, *chosen, band, now, rng);
 }
