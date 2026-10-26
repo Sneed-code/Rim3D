@@ -457,7 +457,10 @@ TEST_CASE("Crashlanded: a starting colonist can be rerolled before the game star
     for (const Entity e : before) old.push_back(sim.things().registry().get<Colonist>(e));
     const auto wornBy = [&](const std::vector<Entity>& pawns) {
         size_t n = 0;
-        for (const Entity e : pawns) n += sim.things().registry().get<Gear>(e).apparel.size();
+        for (const Entity e : pawns) {
+            const Gear* gear = sim.things().registry().try_get<Gear>(e);
+            n += gear == nullptr ? 0 : gear->apparel.size();
+        }
         return n;
     };
     const size_t thingsBefore = sim.things().count() - wornBy(before);
@@ -487,7 +490,8 @@ TEST_CASE("Crashlanded: a starting colonist can be rerolled before the game star
         const bool same = colonistSame(c, old[i]);
         changed += same ? 0 : 1;
         CHECK(sim.things().registry().all_of<Worker>(after[i]));
-        CHECK(sim.things().registry().get<Gear>(after[i]).apparel.size() == (colonistBgHas(c, "Nudist") ? 0u : 2u));
+        const Gear* gear = sim.things().registry().try_get<Gear>(after[i]);
+        CHECK((gear == nullptr ? 0u : gear->apparel.size()) == (colonistBgHas(c, "Nudist") ? 0u : 2u));
     }
     CHECK(changed >= 2);
     int protagonists = 0;
