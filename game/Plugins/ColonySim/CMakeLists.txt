@@ -56,6 +56,8 @@ add_test(NAME simrun_needs COMMAND simrun --seed 42 --size 128 --days 3 --start 
 # Raids (F6): pirates walk in, the alarm sounds, the armed colonists fight, and the raid ends
 # (beaten, routed or gone) within a quarter of a day.
 add_test(NAME simrun_raid COMMAND simrun --seed 1 --size 256 --days 0.25 --start Crashlanded --raid 300 --armed --check)
+# Orrin's first big threat, a raid, comes between day 11 and 15.6 of a new colony (T1, docs/design/narrator.md).
+add_test(NAME simrun_narrator COMMAND simrun --seed 42 --size 128 --days 15.7 --start Crashlanded --narrator Orrin --armed --check)
 # Raid soak (F7, docs/design/raid-soak.md): firefights and raids over a few seeds. The nightly workflow runs many more.
 add_test(NAME simrun_raid_soak COMMAND simrun --seed 1 --raid-soak 3)
 
