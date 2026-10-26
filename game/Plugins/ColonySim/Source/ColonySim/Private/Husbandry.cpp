@@ -557,6 +557,17 @@ bool Husbandry::assignZone(Entity animal, AnimalZoneId zone, std::string& error)
     return true;
 }
 
+bool Husbandry::setZoneBreeding(AnimalZoneId zone, bool allow, std::string& error) {
+    for (AnimalZone& z : saved_.zones) {
+        if (z.id == zone) {
+            z.breedingOff = !allow;
+            return true;
+        }
+    }
+    error = "no such animal zone";
+    return false;
+}
+
 bool Husbandry::isPen(AnimalZoneId id) const {
     const uint64_t stamp[2] = {zoneChanges_, map_.buildingChanges()};
     if (stamp[0] != penStamp_[0] || stamp[1] != penStamp_[1]) {
@@ -791,6 +802,9 @@ void Husbandry::hashState(StateHasher& h) const {
     h.add(static_cast<uint64_t>(saved_.zones.size()));
     for (const AnimalZone& zone : saved_.zones) {
         h.add(zone.id);
+        if (zone.breedingOff) {
+            h.add(uint64_t{1});
+        }
         for (const CellPos& c : zone.cells) {
             h.add(c.x);
             h.add(c.y);

@@ -266,6 +266,7 @@ private:
     struct Stage {
         int64_t minAgeSeconds = 0;
         float bodySizeFactor = 1.0f;
+        float healthFactor = 1.0f;  // `healthScaleFactor`: the share of its adult hit points
         float foodFactor = 1.0f;
     };
     struct Kind {

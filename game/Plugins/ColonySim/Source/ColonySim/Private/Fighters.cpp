@@ -989,7 +989,7 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
             f.nextPlan = std::min(f.nextPlan, now() + 1);
             return;
         }
-        smoothPath(map_, pos.x, pos.y, route);
+        smoothPath(map_, pos.x, pos.y, route, pos.level);
         if (defense_ != nullptr) {
             defense_->detour(factionOf(pawn), pos.x, pos.y, route);
         }

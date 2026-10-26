@@ -46,11 +46,25 @@ struct PathHeapAfter {
 }  // namespace
 
 Pathfinder::Pathfinder(Map& map) : map_(map) {
-    const size_t cells = static_cast<size_t>(map.width()) * static_cast<size_t>(map.height());
-    g_.assign(cells, 0.0f);
-    parent_.assign(cells, -1);
-    seen_.assign(cells, 0);
-    closed_.assign(cells, 0);
+    cellsPerLevel_ = map.width() * map.height();
+    sizeCellArrays(1);
+}
+
+int Pathfinder::cellKey(CellPos c) const {
+    return c.level * cellsPerLevel_ + map_.index(c);
+}
+
+// The cell pass's arrays hold every level a path may use; upper levels are added the first time a
+// search starts with regions on them.
+void Pathfinder::sizeCellArrays(int levels) {
+    const size_t cells = static_cast<size_t>(cellsPerLevel_) * static_cast<size_t>(levels);
+    if (g_.size() >= cells) {
+        return;
+    }
+    g_.resize(cells, 0.0f);
+    parent_.resize(cells, -1);
+    seen_.resize(cells, 0);
+    closed_.resize(cells, 0);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -352,6 +366,13 @@ bool Pathfinder::beginSearch(CellPos start, CellPos goal) {
     regionsChangeCount_ = regions.changeCount();
     start_ = start;
     goal_ = goal;
+    int levels = 1;
+    for (int level = 1; level < map_.levels(); ++level) {
+        if (regions.regionIdsOnLevel(level) != nullptr) {
+            levels = level + 1;
+        }
+    }
+    sizeCellArrays(levels);
 
     // Two generations per search: the route and corridor use the first, the guide and the cell
     // pass the second.
@@ -466,7 +487,7 @@ Pathfinder::Outcome Pathfinder::runRoute(int64_t& work, int64_t budget) {
         }
         for (const RegionLink& link : regions.region(node).links) {
             if (rClosed_[link.other] != gen) {
-                const float enter = regions.region(link.other).kind == RegionKind::Door ? doorCost_ : 0.0f;
+                const float enter = (regions.region(link.other).kind == RegionKind::Door ? doorCost_ : 0.0f) + link.extra;
                 pushRegion(link.other, node, g + pathOctile(link.x - px, link.y - py) + enter, link.x, link.y,
                            pathOctile(gx - link.x, gy - link.y), gen);
             }
@@ -516,7 +537,7 @@ Pathfinder::Outcome Pathfinder::runGuide(int64_t& work, int64_t budget) {
         const float g = rG_[node];
         for (const RegionLink& link : regions.region(node).links) {
             if (corridor_[link.other] == routeGen_ && rClosed_[link.other] != gen) {
-                pushRegion(link.other, node, g + pathOctile(link.x - px, link.y - py), link.x, link.y, 0.0f, gen);
+                pushRegion(link.other, node, g + pathOctile(link.x - px, link.y - py) + link.extra, link.x, link.y, 0.0f, gen);
             }
         }
     }
@@ -525,7 +546,7 @@ Pathfinder::Outcome Pathfinder::runGuide(int64_t& work, int64_t budget) {
 
 void Pathfinder::beginCells(bool corridorOnly) {
     corridorOnly_ = corridorOnly;
-    const int start = map_.index(start_);
+    const int start = cellKey(start_);
     g_[static_cast<size_t>(start)] = 0.0f;
     parent_[static_cast<size_t>(start)] = -1;
     seen_[static_cast<size_t>(start)] = generation_;
@@ -543,23 +564,40 @@ float Pathfinder::cellHeuristic(int x, int y, RegionId region) const {
     return rG_[region] + pathOctile(rX_[region] - (static_cast<float>(x) + 0.5f), rY_[region] - (static_cast<float>(y) + 0.5f));
 }
 
-// Cell pass: A* over the 8-connected grid, with no corner cutting. With the corridor, only cells
-// in corridor regions are used and the heuristic is the guide's.
+// Cell pass: A* over the 8-connected grid of each level, with no corner cutting, and between levels
+// over stairs and ladders (Map::levelLinks). With the corridor, only cells in corridor regions are
+// used and the heuristic is the guide's.
 Pathfinder::Outcome Pathfinder::runCells(int64_t& work, int64_t budget) {
     const uint32_t gen = generation_;
     const int w = map_.width();
     const int h = map_.height();
-    const int goal = map_.index(goal_);
+    const int perLevel = cellsPerLevel_;
+    const int goal = cellKey(goal_);
     const Regions& regions = map_.regions();
-    const RegionId* regionOf = regions.regionIdsOnLevel(goal_.level);  // kNoRegion: can't be walked
-    if (regionOf == nullptr) {
+    // Per level, kNoRegion where a cell can't be walked; null for a level with nothing built on it.
+    const RegionId* regionOfLevel[Map::kLevels];
+    for (int level = 0; level < Map::kLevels; ++level) {
+        regionOfLevel[level] = regions.regionIdsOnLevel(level);
+    }
+    if (regionOfLevel[goal_.level] == nullptr) {
         return Outcome::Failed;  // an upper level with nothing built on it
     }
-    const Passage* passage = goal_.level == 0 ? map_.groundPassage() : nullptr;  // null: ask the regions
     const auto at = [](auto& v, int i) -> auto& { return v[static_cast<size_t>(i)]; };
 
     static constexpr int kDx[8] = {1, -1, 0, 0, 1, 1, -1, -1};
     static constexpr int kDy[8] = {0, 0, 1, -1, 1, -1, 1, -1};
+
+    const auto relax = [&](int c, int n, RegionId region, float step, int nx, int ny) {
+        const float ng = at(g_, c) + step;
+        if (at(seen_, n) != gen || ng < at(g_, n)) {
+            at(seen_, n) = gen;
+            at(g_, n) = ng;
+            at(parent_, n) = c;
+            const float nh = cellHeuristic(nx, ny, region);
+            open_.push_back(OpenNode{ng + nh, nh, static_cast<uint32_t>(n), static_cast<uint32_t>(n)});
+            std::push_heap(open_.begin(), open_.end(), PathHeapAfter{});
+        }
+    };
 
     while (!open_.empty()) {
         if (work >= budget) {
@@ -578,16 +616,20 @@ Pathfinder::Outcome Pathfinder::runCells(int64_t& work, int64_t budget) {
             return Outcome::Found;
         }
 
-        const int cx = c % w;
-        const int cy = c / w;
+        const int level = c / perLevel;
+        const int cx = (c % perLevel) % w;
+        const int cy = (c % perLevel) / w;
+        const RegionId* regionOf = regionOfLevel[level];
+        const Passage* passage = level == 0 ? map_.groundPassage() : nullptr;  // null: ask the regions
+        const int base = level * perLevel;
         for (int d = 0; d < 8; ++d) {
             const int nx = cx + kDx[d];
             const int ny = cy + kDy[d];
             if (nx < 0 || ny < 0 || nx >= w || ny >= h) {
                 continue;
             }
-            const int n = ny * w + nx;
-            const RegionId region = regionOf[n];
+            const int i = ny * w + nx;
+            const RegionId region = regionOf[i];
             if (region == kNoRegion || (corridorOnly_ && corridor_[region] != routeGen_)) {
                 continue;
             }
@@ -595,17 +637,31 @@ Pathfinder::Outcome Pathfinder::runCells(int64_t& work, int64_t budget) {
             if (diagonal && (regionOf[cy * w + nx] == kNoRegion || regionOf[ny * w + cx] == kNoRegion)) {
                 continue;  // no corner cutting
             }
+            const int n = base + i;
             if (at(closed_, n) == gen) {
                 continue;
             }
-            const float ng = at(g_, c) + (diagonal ? kPathDiagonalCost : 1.0f) + ((passage != nullptr ? passage[n] == Passage::Door : regions.region(region).kind == RegionKind::Door) ? doorCost_ : 0.0f);
-            if (at(seen_, n) != gen || ng < at(g_, n)) {
-                at(seen_, n) = gen;
-                at(g_, n) = ng;
-                at(parent_, n) = c;
-                const float nh = cellHeuristic(nx, ny, region);
-                open_.push_back(OpenNode{ng + nh, nh, static_cast<uint32_t>(n), static_cast<uint32_t>(n)});
-                std::push_heap(open_.begin(), open_.end(), PathHeapAfter{});
+            const bool door = passage != nullptr ? passage[i] == Passage::Door : regions.region(region).kind == RegionKind::Door;
+            relax(c, n, region, (diagonal ? kPathDiagonalCost : 1.0f) + (door ? doorCost_ : 0.0f), nx, ny);
+        }
+
+        // Up or down stairs and ladders that start or end here.
+        if (!regions.region(regionOf[cy * w + cx]).climbs) {
+            continue;
+        }
+        const CellPos here{cx, cy, level};
+        for (const LevelLink& link : map_.levelLinks()) {
+            const CellPos other = link.low == here ? link.high : link.high == here ? link.low : CellPos{-1, -1, -1};
+            if (other.level < 0 || !map_.inBounds(other) || regionOfLevel[other.level] == nullptr) {
+                continue;
+            }
+            const RegionId region = regionOfLevel[other.level][map_.index(other)];
+            if (region == kNoRegion || (corridorOnly_ && corridor_[region] != routeGen_)) {
+                continue;
+            }
+            const int n = cellKey(other);
+            if (at(closed_, n) != gen) {
+                relax(c, n, region, link.cost(), other.x, other.y);
             }
         }
     }
@@ -614,9 +670,9 @@ Pathfinder::Outcome Pathfinder::runCells(int64_t& work, int64_t budget) {
 
 void Pathfinder::buildPath(std::vector<CellPos>& out) const {
     out.clear();
-    const int start = map_.index(start_);
-    for (int i = map_.index(goal_); i != start; i = parent_[static_cast<size_t>(i)]) {
-        out.push_back(map_.cellAt(i, goal_.level));
+    const int start = cellKey(start_);
+    for (int i = cellKey(goal_); i != start; i = parent_[static_cast<size_t>(i)]) {
+        out.push_back(map_.cellAt(i % cellsPerLevel_, i / cellsPerLevel_));
     }
     std::reverse(out.begin(), out.end());
 }

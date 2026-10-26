@@ -18,6 +18,7 @@ tame animal does by itself). Tests: `Tests/HusbandryTests.cpp`. Numbers: `data/d
 | `CreateAnimalZone` | Paints an animal zone over the walkable cells of a rectangle that are in no animal zone. |
 | `RemoveAnimalZoneCells` | Takes cells out of their zones; an emptied zone is deleted and its animals roam free again. |
 | `AssignAnimalZone` | A tame animal stays in a zone (0: anywhere near where it was tamed). |
+| `SetBreeding` | Breeding on or off for one tame animal, or for every animal in a zone ([breeding.md](breeding.md)). |
 
 A command that can't be done fails with a reason in plain words (a `CommandFailed` event).
 

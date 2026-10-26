@@ -17,6 +17,7 @@ namespace colony {
 class Husbandry;
 class Map;
 class StateHasher;
+class TemperatureSystem;
 class Things;
 
 // Breeding and animal products (task N4, docs/design/breeding.md): tame animals mate, females carry
@@ -44,6 +45,7 @@ struct AnimalBreed {
     int64_t eggSince = kBreedNotStarted;
     Entity courting = kNoEntity;  // a male on his way to a female he chose
     int64_t courtUntil = 0;       // and the game second he gives up
+    bool breedingOff = false;     // the player switched breeding off for this animal (saved from section version 2)
 };
 
 // On a fertilized egg lying on the map: the game second it hatches.
@@ -68,6 +70,8 @@ struct BreedingRules {
     double woolWorkSeconds = 28.3;    // and shears this long (1,700 ticks)
     double gatherXp = 75.0;           // Animals experience for one milking or shearing
     double birthSpread = 1.5;         // metres round the mother the young are placed
+    double hatchMinTemp = 0.0;        // a fertilized egg only warms towards hatching between these degrees
+    double hatchMaxTemp = 50.0;
 };
 
 struct BreedingStats {
@@ -93,6 +97,8 @@ public:
     Breeding& operator=(const Breeding&) = delete;
 
     void setEventLog(std::vector<Event>* events) { events_ = events; }
+    // Where eggs get the temperature that decides whether they hatch. Not saved; without it every egg is warm enough.
+    void setClimate(TemperatureSystem* temperature) { temperature_ = temperature; }
     const BreedingRules& rules() const { return rules_; }
 
     // Once a game second; the work is done every `passSeconds`.
@@ -109,6 +115,10 @@ public:
     bool matureTame(Entity animal) const;
     const AnimalBreed* breed(Entity animal) const;
     bool pregnant(Entity animal) const;
+    // Whether this animal may mate: its own switch and its zone's switch are both on.
+    bool breedingAllowed(Entity animal) const;
+    // Switches breeding on or off for one tame animal. Fails, with `error`, for a wild one or a thing that is no animal.
+    bool setBreeding(Entity animal, bool allow, std::string& error);
     // How full the animal's milk or wool is, 0 to 1; -1 for an animal that gives none (wild, young, or the wrong sex).
     float fullness(Entity animal, AnimalProduct what) const;
     // True when a colonist can milk or shear it now (full, alive, up and about).
@@ -191,6 +201,7 @@ private:
     Husbandry& husbandry_;
     const DefDatabase& defs_;
     const GameTime& time_;
+    TemperatureSystem* temperature_ = nullptr;
     uint64_t seed_;
     BreedingRules rules_;
     BreedingStats stats_;

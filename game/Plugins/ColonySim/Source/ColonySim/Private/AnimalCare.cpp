@@ -282,7 +282,7 @@ bool AnimalSystem::pollPath(Entity e, Animal& a, const Kind& kind, AnimalCare& c
         return true;
     }
     const Position& pos = reg.get<Position>(e);
-    smoothPath(map_, pos.x, pos.y, route);
+    smoothPath(map_, pos.x, pos.y, route, pos.level);
     Mover& mover = reg.get<Mover>(e);
     mover.metresPerStep = kind.topSpeed * rules_.wanderSpeed;
     mover.walkTo(pos.x, pos.y, std::move(route));

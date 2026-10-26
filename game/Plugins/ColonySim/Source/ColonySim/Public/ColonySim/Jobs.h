@@ -9,6 +9,7 @@
 #include "ColonySim/JobType.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Pathfinder.h"
+#include "ColonySim/Skills.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Zones.h"
 
@@ -274,6 +275,14 @@ public:
     // Ends the pawn's job, if it has one, as interrupted for `why`: reservations let go, what it
     // carried put down. Used when the player takes the pawn over (ControlPawnCommand).
     void interrupt(Entity pawn, const std::string& why);
+
+    // Skill learning (docs/design/skills.md). Every job that uses a skill calls `learnSkill` each
+    // second it works; `skillsNewDay` is Sim's midnight (daily XP total starts over, high skills decay).
+    const SkillRules& skillRules() const { return skillRules_; }
+    void skillsNewDay();
+    // The skill the pawn's current job uses (a Skills `defName`), or empty for a job that uses none
+    // (hauling, eating, sleeping...). The whole job counts, the walk to the work too.
+    std::string activeSkill(Entity pawn) const;
     // Schedule: what a pawn does in an hour of the day (0 to 23).
     bool setSchedule(Entity pawn, int hour, ScheduleKind kind, std::string& error);
     // Bed ownership. `pawn` becomes an owner of `bed` (and stops owning any other bed); kNoEntity
@@ -680,12 +689,12 @@ private:
         double plantSpeedBase = 0.08;
         double plantSpeedPerLevel = 0.115;
         double plantXpPerSecond = 0.059028;
+        double constructionXpPerSecond = 0.173611;
         double growthYieldFloor = 0.5;
         int unskilledLevel = 8;
         std::vector<double> yieldByLevel;
-        std::vector<double> xpToNextLevel;
-        double passionLearn[3] = {0.35, 1.0, 1.5};
     } gather_;
+    SkillRules skillRules_;
     int manipulationIndex_ = -1;  // position of the Manipulation capacity in Health::capacities, or -1
     std::map<TargetKey, Entity> reservations_;  // follows from the jobs; rebuilt on load
     int64_t idleSeconds_ = 0;
