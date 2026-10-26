@@ -4,7 +4,7 @@ Code: `game/Source/Rim3D/LevelsSubsystem.h/.cpp` (`ULevelsSubsystem`), the level
 `PawnSubsystem.cpp` and `PawnActor.cpp` (`SetCutAway`), climbing drawn in `SimSubsystem.cpp` (`GetViewLocation`),
 picking in `SimPicking.cpp`, Page Up and Page Down in `OverseerPawn.cpp`, the level on the orders tools in
 `OrdersSubsystem.cpp`, climbing in direct mode in `ProtagonistPawn.cpp` and `ProtagonistSubsystem.cpp`. Sim side:
-`ClimbCommand` and the stairwell rule ([levels](levels.md)). Smoke test `levels`. Task U17.
+`ClimbCommand` ([levels](levels.md)). Smoke test `levels`. Task U17.
 
 ## What is drawn
 
@@ -13,7 +13,9 @@ picking in `SimPicking.cpp`, Page Up and Page Down in `OverseerPawn.cpp`, the le
   floor does), lifted 2 cm so it covers the tops of the 3 m walls under it. The underside is a pale ceiling, and the
   cut edge shows where the floor ends. Boards alternate two browns by cell, so the cells can be counted from above.
   A chunk is rebuilt only when its floors or roofs change (`Map::upperFloorChanges`, the snapshot's `roofChanges` and
-  `roofCollapses`).
+  `roofCollapses`), or stairs come or go.
+- **The stairwell**: no floor is drawn over stairs and ladders (the sim may still have one there: the house scenario
+  lays its floor over the whole house, so the upper room stays closed), and the floor's edge shows round the hole.
 - **Roofs** of enclosed rooms upstairs (the snapshot's `roofCells` on levels 1 to 3) are thin roof slabs 3 m over the
   room's floor, drawn with the floors and shown or hidden with the ground's roofs (`Terrain.Roofs`: hidden in the
   overseer view). The terrain draws only the ground's roofs.
@@ -37,12 +39,12 @@ and any other view show every level. Console: `Levels.View N`, `Levels.Enable 0`
   over the point, else the ground; a picked cell carries its level, so the inspect panel and move orders work upstairs.
 - **The architect's tools** work on the level looked at (`PickGroundFromRay` at that level's height): stockpiles,
   cancel and take-down marks and buildings go on that level, and the upper floor tool lays a floor over open air
-  where `UpperFloors::whyNotLay` allows. Stairs and ladders can't be planned on the top level or under a floor.
+  where `UpperFloors::whyNotLay` allows. Stairs and ladders can't be planned on the top level.
 
 ## Climbing in direct mode
 
 Walking into stairs or a ladder from the cell in front of their foot (or back towards them from the cell beyond
-their head), within about 45 degrees of their way, sends `ClimbCommand{pawn, dx, dy}`. The sim climbs the colonist
+their head, into the stairwell, floored or not), within about 45 degrees of their way, sends `ClimbCommand{pawn, dx, dy}`. The sim climbs the colonist
 as it climbs any pawn (at the link's share of its speed) and ignores `DirectMove` until it stands at the other end;
 the body stands still meanwhile, then takes the sim's place and level. The camera follows the drawn body up the slope.
 

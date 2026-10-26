@@ -205,6 +205,7 @@ void ULevelsSubsystem::Teardown()
 	LastFloorChanges = ~0ULL;
 	LastRoofChanges = ~0ULL;
 	LastCollapses = ~0ULL;
+	LastLinks = ~0ULL;
 	ShownTop = -1;
 	const int32 FullBuilds = Stats.FullBuilds;
 	const int32 CutChanges = Stats.CutChanges;
@@ -254,13 +255,19 @@ void ULevelsSubsystem::Refresh()
 	}
 	const colony::Map& Map = BuiltSim->map();
 	const colony::Snapshot& Snapshot = Sim->GetCurrentSnapshot();
-	if (Map.upperFloorChanges() == LastFloorChanges && Snapshot.roofChanges == LastRoofChanges && Snapshot.roofCollapses == LastCollapses)
+	uint64 Links = Map.levelLinks().size();
+	for (const colony::LevelLink& Link : Map.levelLinks())
+	{
+		Links = LvlMix(Links ^ static_cast<uint64>(static_cast<uint32>(Link.building)));
+	}
+	if (Map.upperFloorChanges() == LastFloorChanges && Snapshot.roofChanges == LastRoofChanges && Snapshot.roofCollapses == LastCollapses && Links == LastLinks)
 	{
 		return;
 	}
 	LastFloorChanges = Map.upperFloorChanges();
 	LastRoofChanges = Snapshot.roofChanges;
 	LastCollapses = Snapshot.roofCollapses;
+	LastLinks = Links;
 
 	// Each chunk's signature: the floors and the roofs in it.
 	const int32 Cells = Map.width() * Map.height();
@@ -279,15 +286,38 @@ void ULevelsSubsystem::Refresh()
 			Sign(Cell, 1);
 		}
 	}
-	TArray<uint8> RoofFlags;
-	RoofFlags.Init(0, Cells * colony::Map::kLevels);
+	TArray<uint8> Flags;
+	Flags.Init(0, Cells * colony::Map::kLevels);
 	for (const colony::CellPos& Cell : Snapshot.roofCells)
 	{
 		// The ground's roofs are the terrain's.
 		if (Cell.level > 0 && Map.inBounds(Cell))
 		{
-			RoofFlags[Cell.level * Cells + Map.index(Cell)] = 1;
+			Flags[Cell.level * Cells + Map.index(Cell)] |= 1;
 			Sign(Cell, 2);
+		}
+	}
+	// The stairwell: the cells over each staircase and ladder, one level up.
+	for (const colony::LevelLink& Link : Map.levelLinks())
+	{
+		const colony::ThingView* Stairs = Snapshot.find(Link.building);
+		if (!Stairs || Stairs->level + 1 >= colony::Map::kLevels)
+		{
+			continue;
+		}
+		const int32 X0 = FMath::RoundToInt32(Stairs->x - Stairs->sizeX * 0.5f);
+		const int32 Y0 = FMath::RoundToInt32(Stairs->y - Stairs->sizeY * 0.5f);
+		for (int32 Y = Y0; Y < Y0 + Stairs->sizeY; ++Y)
+		{
+			for (int32 X = X0; X < X0 + Stairs->sizeX; ++X)
+			{
+				const colony::CellPos Cell{X, Y, Stairs->level + 1};
+				if (Map.inBounds(Cell) && (Flags[Cell.level * Cells + Map.index(Cell)] & 2) == 0)
+				{
+					Flags[Cell.level * Cells + Map.index(Cell)] |= 2;
+					Sign(Cell, 3);
+				}
+			}
 		}
 	}
 	for (int32 Level = 1; Level < colony::Map::kLevels; ++Level)
@@ -300,7 +330,7 @@ void ULevelsSubsystem::Refresh()
 				const uint64 Signature = Signatures[ChunkIndex(Level, CX, CY)];
 				if (Signature != Chunk.Signature)
 				{
-					RebuildChunk(Level, CX, CY, RoofFlags);
+					RebuildChunk(Level, CX, CY, Flags);
 					Chunk.Signature = Signature;
 				}
 			}
@@ -309,7 +339,7 @@ void ULevelsSubsystem::Refresh()
 	ApplyVisibility(true);
 }
 
-void ULevelsSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, const TArray<uint8>& RoofFlags)
+void ULevelsSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, const TArray<uint8>& Flags)
 {
 	const colony::Map& Map = BuiltSim->map();
 	FChunk& Chunk = Chunks[ChunkIndex(Level, ChunkX, ChunkY)];
@@ -324,10 +354,11 @@ void ULevelsSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, con
 		const float Ground = Map.groundHeight(FMath::Clamp(X, 0, Map.width() - 1), FMath::Clamp(Y, 0, Map.height() - 1));
 		return FVector(X * 100.0, Y * 100.0, (Ground + Level * colony::Map::kLevelHeightM) * 100.0 + LiftCm);
 	};
-	const auto Floor = [&Map, Level](int32 X, int32 Y)
+	// A floor drawn: laid, and not over stairs (the stairwell).
+	const auto Floor = [&Map, &Flags, Level, Cells](int32 X, int32 Y)
 	{
 		const colony::CellPos Cell{X, Y, Level};
-		return Map.inBounds(Cell) && Map.upperFloor(Cell);
+		return Map.inBounds(Cell) && Map.upperFloor(Cell) && (Flags[Level * Cells + Map.index(Cell)] & 2) == 0;
 	};
 
 	FLvlMesh Floors;
@@ -365,7 +396,7 @@ void ULevelsSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, con
 					Floors.AddQuad(Corner(X, Y + 1, B), Corner(X + 1, Y + 1, B), Corner(X + 1, Y + 1, T), Corner(X, Y + 1, T), FVector(0.0, 1.0, 0.0), LvlEdgeColor);
 				}
 			}
-			if (RoofFlags[Level * Cells + Map.index(colony::CellPos{X, Y, Level})] != 0)
+			if ((Flags[Level * Cells + Map.index(colony::CellPos{X, Y, Level})] & 1) != 0)
 			{
 				++RoofCells;
 				const double T = TerrainDraw::RoofHeightM * 100.0;

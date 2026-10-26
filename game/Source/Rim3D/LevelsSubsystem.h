@@ -35,6 +35,7 @@ struct FLevelsStats
  * - **Upper floors** are slabs 20 cm thick whose top is the floor a pawn stands on (the ground's height plus 3 m a
  *   level, as the sim has it), with a ceiling on their underside and edges where the floor ends. One procedural mesh
  *   per level and 32 m chunk, rebuilt when the sim's floors in it change (Map::upperFloorChanges) or a roof changes.
+ * - **The stairwell**: no floor is drawn over stairs or a ladder, though the sim may have one there.
  * - **Roofs** of enclosed rooms on upper levels are drawn like the ground's thin roofs, 3 m over the room's floor,
  *   and hidden with them in the overseer view (the terrain's Terrain.Roofs).
  *
@@ -90,7 +91,8 @@ private:
 
 	void Teardown();
 	void RebuildAll();
-	void RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, const TArray<uint8>& RoofFlags);
+	/** `Flags` holds, per level and cell: 1 a roof of an upstairs room, 2 the stairwell over stairs or a ladder. */
+	void RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, const TArray<uint8>& Flags);
 	void ApplyVisibility(bool bForce);
 	bool WantRoofs() const;
 	int32 ChunkIndex(int32 Level, int32 ChunkX, int32 ChunkY) const { return (Level * ChunksY + ChunkY) * ChunksX + ChunkX; }
@@ -110,6 +112,7 @@ private:
 	uint64 LastFloorChanges = ~0ULL;
 	uint64 LastRoofChanges = ~0ULL;
 	uint64 LastCollapses = ~0ULL;
+	uint64 LastLinks = ~0ULL;
 	int32 BuiltGeneration = -1;
 	const colony::Sim* BuiltSim = nullptr;
 	FVector BuiltOrigin = FVector::ZeroVector;

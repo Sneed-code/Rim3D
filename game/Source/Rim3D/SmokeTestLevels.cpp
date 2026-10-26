@@ -28,7 +28,7 @@ namespace
 
 	// The house, from the south-west corner of its site A: walls round x 1..7, y 2..8 with a door at (4, 2); stairs at x 9
 	// climbing north from (9, 1) on the ground to (9, 5) upstairs; a floor over x 0..8, y 1..9 and a landing over x 9,
-	// y 5..9 (the stairwell over the stairs stays open); upstairs a wall along y 8, a pile of wood and a second colonist; a ladder
+	// y 2..9 (over the stairs too, drawn as an open stairwell); upstairs a wall along y 8, a pile of wood and a second colonist; a ladder
 // at (10, 8) climbing west onto the landing.
 	constexpr int32 LevelsSiteW = 12;
 	constexpr int32 LevelsSiteH = 11;
@@ -302,7 +302,8 @@ void USmokeTestSubsystem::BuildLevelsPhases()
 	{
 		USimSubsystem* B = Bridge();
 		B->Submit(colony::PlaceUpperFloorCommand{colony::CellRect{State->Site.x, State->Site.y + 1, 9, 9, 1}});
-		B->Submit(colony::PlaceUpperFloorCommand{colony::CellRect{State->Site.x + 9, State->Site.y + 5, 1, 5, 1}});
+		// The landing covers the stairs too, as the house scenario's floor does: the stairwell is drawn open anyway.
+		B->Submit(colony::PlaceUpperFloorCommand{colony::CellRect{State->Site.x + 9, State->Site.y + 2, 1, 8, 1}});
 		B->StepOnce();
 		for (int32 X = 1; X <= 5; ++X)
 		{
@@ -335,13 +336,15 @@ void USmokeTestSubsystem::BuildLevelsPhases()
 		{
 			Floors += Cell.level == 1 ? 1 : 0;
 		}
-		if (Floors != 86)
+		if (Floors != 89)
 		{
-			Fail(FString::Printf(TEXT("upper-floor: the sim has %d floor cells on level 1, not 86 (%s)"), Floors, *State->FirstFailure));
+			Fail(FString::Printf(TEXT("upper-floor: the sim has %d floor cells on level 1, not 89 (%s)"), Floors, *State->FirstFailure));
 		}
-		if (L->GetFloorCells(1) != Floors || !L->IsLevelShown(1) || L->GetViewLevel() != 1)
+		// The three over the stairs are the stairwell, not drawn.
+		if (L->GetFloorCells(1) != Floors - 3 || !L->IsLevelShown(1) || L->GetViewLevel() != 1)
 		{
-			Fail(FString::Printf(TEXT("upper-floor: %d floor cells drawn for %d, level 1 shown %d, looked at %d"), L->GetFloorCells(1), Floors, L->IsLevelShown(1) ? 1 : 0, L->GetViewLevel()));
+			Fail(FString::Printf(TEXT("upper-floor: %d floor cells drawn for %d less the stairwell, level 1 shown %d, looked at %d"), L->GetFloorCells(1), Floors, L->IsLevelShown(1) ? 1 : 0,
+				L->GetViewLevel()));
 		}
 		UProceduralMeshComponent* Mesh = L->GetChunkMesh(1, State->Site.x / 32, State->Site.y / 32);
 		if (!Mesh || Mesh->GetNumSections() < 1 || Mesh->GetProcMeshSection(0) == nullptr || Mesh->GetProcMeshSection(0)->ProcVertexBuffer.Num() == 0)

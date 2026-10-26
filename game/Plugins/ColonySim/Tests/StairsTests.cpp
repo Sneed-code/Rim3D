@@ -546,39 +546,6 @@ TEST_CASE("Stairs: the player's colonist climbs the stairs or ladder it pushes t
     }
 }
 
-TEST_CASE("Stairs: the cells over stairs and ladders stay open: no floor is laid or planned there, and no stairs go under a floor") {
-    auto sim = stairsSim();
-    STAIRS_REQUIRE(stairsHouse(*sim) != kNoEntity);  // stairs at x 18, y 10 to 12; the house's floor was laid before them
-    const DefId floorDef = sim->defs().idOf("Things", "UpperFloor");
-    const DefId stairsDef = sim->defs().idOf("Things", "Stairs");
-    const DefId wood = sim->defs().idOf("Things", "WoodLog");
-    STAIRS_REQUIRE(floorDef.valid());
-    STAIRS_REQUIRE(stairsDef.valid());
-    STAIRS_REQUIRE(wood.valid());
-    // Take up the floor over the stairs, then it can't go back.
-    for (int y = 10; y <= 12; ++y) {
-        CHECK(sim->upperFloors().remove(CellPos{18, y, 1}));
-        CHECK(sim->upperFloors().whyNotLay(CellPos{18, y, 1}) == "the stairs go up through there");
-        std::string error;
-        CHECK(sim->construction().placeBlueprint(floorDef, wood, CellPos{18, y, 1}, Rot4::North, error) == kNoEntity);
-    }
-    CHECK(sim->upperFloors().whyNotLay(CellPos{17, 11, 1}).empty());  // beside them it can
-
-    // Stairs planned under the floor are refused; beside it, with a floor planned over them afterwards, that floor is refused.
-    std::string error;
-    CHECK(sim->construction().placeBlueprint(stairsDef, wood, CellPos{12, 12, 0}, Rot4::North, error) == kNoEntity);
-    CHECK(error.find("open stairwell") != std::string::npos);
-    error.clear();
-    STAIRS_REQUIRE(sim->construction().placeBlueprint(stairsDef, wood, CellPos{20, 10, 0}, Rot4::North, error) != kNoEntity);
-    CHECK(sim->construction().placeBlueprint(floorDef, wood, CellPos{20, 11, 1}, Rot4::North, error) == kNoEntity);
-    CHECK(error.find("stairs are planned under") != std::string::npos);
-    // And a floor planned first keeps stairs from going under it.
-    error.clear();
-    STAIRS_REQUIRE(sim->construction().placeBlueprint(floorDef, wood, CellPos{19, 15, 1}, Rot4::North, error) != kNoEntity);
-    CHECK(sim->construction().placeBlueprint(stairsDef, wood, CellPos{19, 13, 0}, Rot4::North, error) == kNoEntity);
-    CHECK(error.find("open stairwell") != std::string::npos);
-}
-
 TEST_CASE("Stairs: the player's climb survives a save, plays back from a replay, and the climb command goes through the replay text") {
     auto sim = stairsSim();
     STAIRS_REQUIRE(stairsHouse(*sim) != kNoEntity);

@@ -19,12 +19,6 @@ std::string UpperFloors::whyNotLay(CellPos c) const {
     if (map_.roof(below) == Roof::Thick) {
         return "the mountain is in the way";
     }
-    // A stairwell (U17): stairs and ladders climb up through the cells over them.
-    const entt::registry& reg = things_.registry();
-    if (const Entity building = map_.buildingAt(below);
-        building != kNoEntity && reg.all_of<Thing>(building) && things_.defs().get(reg.get<Thing>(building).def).has("building.climb")) {
-        return "the stairs go up through there";
-    }
     if (!rooms_.roofSupported(below)) {
         return "nothing holds it up: it needs a wall or column within " +
                std::to_string(static_cast<int>(rooms_.numbers().roofSupportRadius)) + " m on the level below";

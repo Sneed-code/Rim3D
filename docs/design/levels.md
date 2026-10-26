@@ -84,9 +84,10 @@ no levels):
   link counts once both are. Nothing is planned on the top level (there is nothing to climb to).
   An upper wall with open air on its outside cannot be reached once the walls on its two inner sides stand (see the
   house scenario).
-- **The stairwell** (U17): the cells over stairs and ladders stay open. `UpperFloors::whyNotLay` refuses a floor over
-  a built one ("the stairs go up through there"), and planning refuses a floor over planned stairs and stairs under a
-  floor, laid or planned. (Dev spawns skip the check, as they skip all planning.)
+  Nothing stops a floor over the stairs: the house scenario lays one, so that the upper room is closed (open air
+  beside a room makes it outdoors). U17 draws no floor over stairs and ladders, and walking into that cell from the
+  head climbs down ([levels-draw](levels-draw.md)). A real stairwell rule needs rooms to join the room above and the
+  one below through it.
 - **The map** keeps the links (`Map::levelLinks`, `LevelLink{low, high, building, length, speedFactor}`,
   sorted by cell) in step with the buildings (`Things` adds them on spawn and load, removes them on
   despawn), and marks the regions at both ends dirty.

@@ -186,19 +186,25 @@ void AProtagonistPawn::Move(double Right, double Forward, bool bWalk, float Delt
 	{
 		return colony::pawnFitsAt(Map, static_cast<float>(Position.X + Try.X), static_cast<float>(Position.Y + Try.Y), colony::kPawnRadius, Level);
 	};
-	// Pushing into stairs or a ladder (or back towards them from their head) climbs them.
-	if (!Wanted.IsNearlyZero() && !Delta.IsNearlyZero(1.0e-7) && !Fits(Delta) && ClimbWait <= 0.0f)
+	// Pushing into stairs or a ladder (or back towards them from their head, into the stairwell over them, which may
+	// have a floor laid) climbs them.
+	if (!Wanted.IsNearlyZero() && !Delta.IsNearlyZero(1.0e-7) && ClimbWait <= 0.0f)
 	{
 		const colony::CellPos Here{FMath::FloorToInt32(Position.X), FMath::FloorToInt32(Position.Y), Level};
+		const FVector2D Lead = Position + Delta + Wanted * (colony::kPawnRadius + 0.05);
+		const bool bBlocked = !Fits(Delta);
 		for (const colony::LevelLink& Link : Map.levelLinks())
 		{
 			if (Link.low != Here && Link.high != Here)
 			{
 				continue;
 			}
+			const colony::CellPos Into{FMath::FloorToInt32(Lead.X), FMath::FloorToInt32(Lead.Y), Level};
+			const colony::CellPos Under{Into.x, Into.y, Level - 1};
+			const bool bIntoStairs = (Map.inBounds(Into) && Map.buildingAt(Into) == Link.building) || (Map.inBounds(Under) && Map.buildingAt(Under) == Link.building);
 			const colony::CellPos Other = Link.low == Here ? Link.high : Link.low;
 			const FVector2D Towards = FVector2D(Other.x - Here.x, Other.y - Here.y).GetSafeNormal();
-			if (FVector2D::DotProduct(Towards, Wanted) > ProtagonistClimbDot)
+			if ((bBlocked || bIntoStairs) && FVector2D::DotProduct(Towards, Wanted) > ProtagonistClimbDot)
 			{
 				bClimbWanted = true;
 				ClimbDirection = Wanted;
