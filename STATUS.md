@@ -393,6 +393,8 @@ events `OutOfFuel`, `Refueled`, `PawnAction::Refuel`; snapshot `fuel`, `fuelCapa
 checks wood was put in (`woodIn`). A lamp with no fuel is dark and a wood-fired generator with none makes no power (it burns
 only while switched on); **new fuel buildings start empty, so tests about something else fill them with `testFueled` (`Tests/FuelTestHelper.h`)**. **A new thing that burns fuel puts a `fuel` field in its def and reads `sim.jobs().fuel()` (`lit`, `canUse`, `use`).**
 
+**Guessed-number check (partial):** checked against the wiki: melee weapon mass and work (knife, mace, spear, gladius, longsword), gun turrets research cost (800 to 500), multi-analyzer and fabrication tech level (Industrial). Still marked `unverified`: furniture and bench costs, floors, crop product mass and values, genes, recipes, and the melee weapon tool powers; the wiki pages fetched did not give those.
+
 ## Next
 
 Wave 1:
