@@ -138,6 +138,8 @@ private:
         std::vector<std::string> roomRoles;
         std::string trait;      // staged by another system (addSituation): only for pawns with this trait
         std::string notTrait;   // ...and not for pawns with this one
+        std::vector<std::string> notTraits;  // ...and not for pawns with any of these (`situation.notTraits`)
+        std::vector<std::string> anyTraits;  // ...only for pawns with at least one of these (`situation.anyTraits`)
     };
     // A situation with stages (`situation.condition` and `stages` in the def): which stage holds is
     // decided by a measured number against the def's thresholds (Mood.cpp, `conditionValue`).
@@ -159,6 +161,8 @@ private:
         SituationStage stage;
     };
     bool hasTrait(Entity pawn, const std::string& trait) const;
+    // Cannibals and psychopaths are not troubled by people as meat or leather.
+    bool eatsPeople(Entity pawn) const { return hasTrait(pawn, "Cannibal") || hasTrait(pawn, "Psychopath"); }
     float traitMoodOffset(Entity pawn) const;
     float traitBreakOffset(Entity pawn) const;
     void addMemory(Mood& mood, const std::string& trigger, int64_t now);
