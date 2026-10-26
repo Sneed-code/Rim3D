@@ -88,6 +88,7 @@ constexpr JobStepKind kJobsHaulSteps[] = {JobStepKind::GotoThing, JobStepKind::P
 constexpr JobStepKind kJobsIngestSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::WalkToSpot,
                                             JobStepKind::Eat};
 constexpr JobStepKind kJobsLayDownSteps[] = {JobStepKind::WalkToSpot, JobStepKind::Lie};
+constexpr JobStepKind kJobsShelterSteps[] = {JobStepKind::GotoCell, JobStepKind::Wait};
 constexpr JobStepKind kJobsMineSteps[] = {JobStepKind::GotoTouch, JobStepKind::MineWork};
 constexpr JobStepKind kJobsPlantSteps[] = {JobStepKind::GotoTouch, JobStepKind::PlantWork};
 constexpr JobStepKind kJobsCleanSteps[] = {JobStepKind::GotoCell, JobStepKind::CleanWork};
@@ -190,6 +191,7 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::HaulCorpse: return {kJobsHaulCorpseSteps, static_cast<int>(std::size(kJobsHaulCorpseSteps))};
         case JobType::Butcher: return {kJobsButcherSteps, static_cast<int>(std::size(kJobsButcherSteps))};
         case JobType::Party: return {kJobsPartySteps, static_cast<int>(std::size(kJobsPartySteps))};
+        case JobType::SeekShelter: return {kJobsShelterSteps, static_cast<int>(std::size(kJobsShelterSteps))};
     }
     return {nullptr, 0};
 }
@@ -289,6 +291,7 @@ const char* jobTypeName(JobType type) {
         case JobType::HaulCorpse: return "HaulCorpse";
         case JobType::Butcher: return "Butcher";
         case JobType::Party: return "Party";
+        case JobType::SeekShelter: return "SeekShelter";
     }
     return "?";
 }
@@ -594,6 +597,7 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
         case JobType::None:
         case JobType::Wait:
         case JobType::Party:  // a party spot is open ground, not reserved
+        case JobType::SeekShelter:
         case JobType::ExtinguishFire:  // colonists fight a fire together: nothing is reserved
             return 0;
     }
@@ -1577,7 +1581,9 @@ void JobSystem::endJob(Entity pawn, JobEnd end, const std::string& why) {
     }
     Worker& worker = reg.get<Worker>(pawn);
     if (end == JobEnd::Failed) {
-        ++stats_.failedJobs;
+        if (job.type != JobType::TendPatient) {
+            ++stats_.failedJobs;  // a doctor giving up on a patient who keeps walking (a fight) is not a broken job
+        }
         for (const Entity target : {job.thing, job.site}) {
             if (target != kNoEntity) {
                 worker.avoid.push_back(AvoidTarget{JobTarget{target, CellPos{}}, now() + avoidSeconds_});

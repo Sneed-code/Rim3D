@@ -169,6 +169,7 @@ class ApparelSystem;
 class BillSystem;
 class Breeding;
 class CombatSystem;
+class TemperatureSystem;
 class Construction;
 class FuelSystem;
 class DefDatabase;
@@ -309,6 +310,8 @@ public:
     Breeding* breeding() const { return breeding_; }
     // Hunting (HuntJobs.cpp, docs/design/hunting.md): hunters shoot through the combat system. Without it nobody hunts.
     void setCombat(CombatSystem* combat) { combat_ = combat; }
+    // Where pawns that stand outside their safe temperature look for shelter (docs/design/temperature.md).
+    void setTemperature(TemperatureSystem* temperature) { temperature_ = temperature; }
     CombatSystem* combat() const { return combat_; }
     // An animal that has learned to haul works through the job system with only the Hauling work type on. `on` false
     // takes it off again (ending its job). The gate says whether it may work now (awake, fed, unhurt).
@@ -483,6 +486,9 @@ private:
     // The think list: each node may give a job; the first that does wins (docs/design/jobs.md).
     using ThinkNode = bool (JobSystem::*)(Entity pawn, Job& out);
     bool thinkNeeds(Entity pawn, Job& out);
+    // A SeekShelter job for a pawn outside its safe temperature: to the nearest reachable cell inside its comfortable
+    // range (else its safe range). False if it is safe, or nowhere is.
+    bool makeShelterJob(Entity pawn, Job& out);
     bool thinkSchedule(Entity pawn, Job& out);
     bool thinkApparel(Entity pawn, Job& out);
     bool thinkWork(Entity pawn, Job& out);
@@ -665,6 +671,7 @@ private:
     Husbandry* husbandry_ = nullptr;
     Breeding* breeding_ = nullptr;
     CombatSystem* combat_ = nullptr;
+    TemperatureSystem* temperature_ = nullptr;
     std::function<bool(Entity)> animalGate_;
     const TalentSystem* talents_ = nullptr;  // build speed and carrying capacity (docs/design/talents.md)
     RecreationRules recreation_;

@@ -111,6 +111,10 @@ const char* commandName(const Command& command) {
                 return "MarkShelter";
             } else if constexpr (std::is_same_v<Type, MarkAnimalCommand>) {
                 return "MarkAnimal";
+            } else if constexpr (std::is_same_v<Type, MarkAnimalsInAreaCommand>) {
+                return "MarkAnimalsInArea";
+            } else if constexpr (std::is_same_v<Type, SetAnimalNameCommand>) {
+                return "SetAnimalName";
             } else if constexpr (std::is_same_v<Type, SetTrainingCommand>) {
                 return "SetTraining";
             } else if constexpr (std::is_same_v<Type, CreateAnimalZoneCommand>) {
@@ -153,6 +157,10 @@ const char* commandName(const Command& command) {
                 return "AddTalentXp";
             } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
                 return "CarryWeapon";
+            } else if constexpr (std::is_same_v<Type, SetNarratorCommand>) {
+                return "SetNarrator";
+            } else if constexpr (std::is_same_v<Type, FireIncidentCommand>) {
+                return "FireIncident";
             } else if constexpr (std::is_same_v<Type, SwitchWeaponCommand>) {
                 return "SwitchWeapon";
             } else if constexpr (std::is_same_v<Type, IgniteCommand>) {
@@ -169,6 +177,8 @@ const char* commandName(const Command& command) {
                 return "PlaceUpperFloor";
             } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
                 return "StartMentalBreak";
+            } else if constexpr (std::is_same_v<Type, ContractDiseaseCommand>) {
+                return "ContractDisease";
             } else {
                 static_assert(std::is_same_v<Type, EndMentalBreakCommand>, "name every command type");
                 return "EndMentalBreak";
@@ -249,6 +259,8 @@ const char* eventTypeName(EventType type) {
         case EventType::MeleeHit: return "MeleeHit";
         case EventType::PawnTended: return "PawnTended";
         case EventType::PawnScarred: return "PawnScarred";
+        case EventType::PawnSick: return "PawnSick";
+        case EventType::PawnRecovered: return "PawnRecovered";
         case EventType::ApparelDestroyed: return "ApparelDestroyed";
         case EventType::WeatherChanged: return "WeatherChanged";
         case EventType::SeasonChanged: return "SeasonChanged";
@@ -262,6 +274,7 @@ const char* eventTypeName(EventType type) {
         case EventType::TrapRearmed: return "TrapRearmed";
         case EventType::WeaponSwitched: return "WeaponSwitched";
         case EventType::PlantSown: return "PlantSown";
+        case EventType::Letter: return "Letter";
         case EventType::FireStarted: return "FireStarted";
         case EventType::FireOut: return "FireOut";
         case EventType::PawnCaughtFire: return "PawnCaughtFire";

@@ -184,6 +184,22 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		return;  // the physics body is on its own until the pawn gets up
 	}
 	StanceHeight = Now.stance == colony::Stance::Crouching ? 0.66f : (Now.stance == colony::Stance::Prone ? 0.24f : 1.0f);
+	// A dodge roll (P2): the sim has the pawn start up, roll for 15 steps and recover (27 in all, `rollStepsLeft` counting down);
+	// the body turns over once about its middle across the rolling steps, fitted to those steps.
+	const float WasRolling = RollProgress;
+	if (Now.rollPhase > 0)
+	{
+		RollProgress = FMath::Clamp(1.0f - static_cast<float>(Now.rollStepsLeft) / 27.0f, 0.001f, 1.0f);
+		RollDirection = FVector(Now.rollDirX, Now.rollDirY, 0.0f).GetSafeNormal();
+		const float Turn = FMath::Clamp((RollProgress - 3.0f / 27.0f) / (15.0f / 27.0f), 0.0f, 1.0f);
+		RollAngle = 360.0f * Turn * Turn * (3.0f - 2.0f * Turn);
+		RollsSeen += WasRolling <= 0.0f ? 1 : 0;
+	}
+	else
+	{
+		RollProgress = 0.0f;
+		RollAngle = 0.0f;
+	}
 
 	// The hit-stop holds the swing, the flinch and the animation for a moment of real time.
 	float GameDelta = DeltaTime * Speed;
@@ -657,7 +673,8 @@ void ASimPawnActor::ApplyBodyPose(float GameDelta, bool bBlocking)
 	}
 	const bool bReacting = ReactionAge < kHitReactionSeconds;
 	const bool bMelee = Swing.IsActive() || BlockBlend > 0.0f || DodgeAge < kDodgeSeconds;
-	if (!bReacting && !bMelee)
+	const bool bRolling = RollProgress > 0.0f;
+	if (!bReacting && !bMelee && !bRolling)
 	{
 		if (bBodyPosed)
 		{
@@ -697,7 +714,19 @@ void ASimPawnActor::ApplyBodyPose(float GameDelta, bool bBlocking)
 		Offset = FVector(Pose.Lunge, 0.0, -Pose.Dip);
 	}
 	const FQuat RootQuat = GetActorQuat();
-	Body->SetRelativeLocationAndRotation(Offset, RootQuat.Inverse() * LeanWorld * RootQuat * MeleeLocal * PawnBodyRelativeRotation.Quaternion());
+	// The roll: tumble forward over the way the sim is moving the pawn, about the middle of the body, ducking into it.
+	FQuat RollWorld = FQuat::Identity;
+	if (bRolling)
+	{
+		const FVector Axis = FVector::CrossProduct(FVector::UpVector, RollDirection).GetSafeNormal();
+		RollWorld = FQuat(Axis, FMath::DegreesToRadians(RollAngle));
+		const float Height = bHasLooks ? Looks.Height : 1.0f;
+		const float PivotZ = 90.0f * Height;
+		const float Duck = FMath::Sin(PI * RollProgress) * 22.0f * Height;
+		const FVector World = FVector(0.0, 0.0, PivotZ) - RollWorld.RotateVector(FVector(0.0, 0.0, PivotZ)) - FVector(0.0, 0.0, Duck);
+		Offset += RootQuat.Inverse().RotateVector(World);
+	}
+	Body->SetRelativeLocationAndRotation(Offset, RootQuat.Inverse() * RollWorld * LeanWorld * RootQuat * MeleeLocal * PawnBodyRelativeRotation.Quaternion());
 }
 
 void ASimPawnActor::SpawnRagdollFloor()
