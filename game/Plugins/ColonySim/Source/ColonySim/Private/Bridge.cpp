@@ -87,6 +87,10 @@ const char* commandName(const Command& command) {
                 return "AddFilth";
             } else if constexpr (std::is_same_v<Type, SetRefuelCommand>) {
                 return "SetRefuel";
+            } else if constexpr (std::is_same_v<Type, SetBillOptionsCommand>) {
+                return "SetBillOptions";
+            } else if constexpr (std::is_same_v<Type, MoveBillCommand>) {
+                return "MoveBill";
             } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
                 return "ShortCircuit";
             } else if constexpr (std::is_same_v<Type, SetResearchCommand>) {
