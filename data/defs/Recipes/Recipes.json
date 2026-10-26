@@ -5,14 +5,14 @@
   },
   {
     "defName": "CookMealSimple", "parent": "RecipeBase", "label": "cook simple meal",
-    "recipeUsers": ["FueledStove"],
+    "recipeUsers": ["FueledStove", "ElectricStove"],
     "workAmount": 432, "workSkillXp": 60,
     "ingredients": [{ "categories": ["FoodRaw"], "nutrition": 0.5 }],
     "products": { "MealSimple": 1 }
   },
   {
     "defName": "CookMealSimpleBulk", "parent": "RecipeBase", "label": "cook simple meals (4)",
-    "recipeUsers": ["FueledStove"],
+    "recipeUsers": ["FueledStove", "ElectricStove"],
     "workAmount": 1728, "workSkillXp": 240,
     "ingredients": [{ "categories": ["FoodRaw"], "nutrition": 2.0 }],
     "products": { "MealSimple": 4 },
@@ -20,7 +20,7 @@
   },
   {
     "defName": "CookMealFine", "parent": "RecipeBase", "label": "cook fine meal",
-    "recipeUsers": ["FueledStove"],
+    "recipeUsers": ["FueledStove", "ElectricStove"],
     "workAmount": 648, "workSkillXp": 110, "minSkill": 6,
     "ingredients": [
       { "categories": ["PlantFoodRaw"], "nutrition": 0.25 },

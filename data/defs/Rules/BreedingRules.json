@@ -15,7 +15,9 @@
     "woolWorkSeconds": 28.3,
     "gatherXp": 75,
     "birthSpread": 1.5,
+    "hatchMinTemp": 0,
+    "hatchMaxTemp": 50,
     "unverified": ["mateChance", "milkWorkSeconds", "woolWorkSeconds", "gatherXp"],
-    "ours": ["passSeconds", "mateMeanHours", "mateRadius", "mateSearchRadius", "courtSeconds", "mateHoldSeconds", "mateCooldownHours", "birthCooldownDays", "minFood", "birthSpread"]
+    "ours": ["passSeconds", "mateMeanHours", "mateRadius", "mateSearchRadius", "courtSeconds", "mateHoldSeconds", "mateCooldownHours", "birthCooldownDays", "minFood", "birthSpread", "hatchMinTemp", "hatchMaxTemp"]
   }
 ]

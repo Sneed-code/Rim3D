@@ -68,7 +68,9 @@ nothing is left, or the pawn gets up.
 - E2 (temperature): `ApparelSystem::insulation(pawn, cold, heat)` gives the degrees the comfortable
   range widens.
 - C14 (crafting) makes apparel with `ApparelSystem::make(def, stuff, quality, cell)`.
-- P4 (repair) mends hit points; U16 draws `Snapshot::apparel` layers, torn by `hitPointShare`.
+- P4 (repair) mends hit points; U16 draws `Snapshot::apparel` layers, torn by `hitPointShare`
+  ([clothes-draw.md](clothes-draw.md)). Apparel defs may say `apparel.hidesHair: true` (tuque, simple helmet) so the
+  hair is not drawn through them.
 
 ## Save and hash
 

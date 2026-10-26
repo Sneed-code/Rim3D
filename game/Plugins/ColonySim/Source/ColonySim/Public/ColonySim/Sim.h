@@ -62,6 +62,7 @@ class PrisonerSystem;
 class Rooms;
 class TemperatureSystem;
 class SpoilageSystem;
+class CraftingSystem;
 class Things;
 class UpperFloors;
 class RoofCollapse;
@@ -239,6 +240,9 @@ public:
     const TemperatureSystem& temperature() const { return *temperature_; }
     SpoilageSystem& spoilage() { return *spoilage_; }
     const SpoilageSystem& spoilage() const { return *spoilage_; }
+    // Quality, stuff and bench speed of what work tables make (docs/design/crafting.md).
+    CraftingSystem& crafting() { return *crafting_; }
+    const CraftingSystem& crafting() const { return *crafting_; }
     // The temperature in the open right now, in degrees Celsius: the biome's season, the hour of the
     // day and the random drift (Weather::temperatureAt).
     float outdoorTemperature() const;
@@ -359,6 +363,7 @@ private:
     std::unique_ptr<CombatSystem> combat_;
     std::unique_ptr<ExplosiveSystem> explosives_;  // after combat_ and health_
     std::unique_ptr<ApparelSystem> apparel_;  // after combat, which it uses
+    std::unique_ptr<CraftingSystem> crafting_;  // after apparel_ and zones_
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
     Rng rng_;
