@@ -1116,6 +1116,13 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("animal", c.animal);
                 ar.text("mark", c.mark);
                 ar.value("on", c.on);
+            } else if constexpr (std::is_same_v<Type, MarkAnimalsInAreaCommand>) {
+                ar.group("area", [&] { saveRect(ar, c.area); });
+                ar.text("mark", c.mark);
+                ar.value("on", c.on);
+            } else if constexpr (std::is_same_v<Type, SetAnimalNameCommand>) {
+                ar.value("animal", c.animal);
+                ar.text("name", c.name);
             } else if constexpr (std::is_same_v<Type, SetTrainingCommand>) {
                 ar.value("animal", c.animal);
                 ar.text("trainable", c.trainable);
@@ -1373,7 +1380,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::Butcher, "the save file has a bad job");
+    ar.require(job.type <= JobType::SeekShelter, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -1677,6 +1684,9 @@ void saveCarePart(Ar& ar, AnimalCare& c) {
     if (ar.sectionVersion() >= 2) {  // N2: hunting
         ar.value("markHunt", c.markHunt);
         ar.value("collect", c.collect);
+    }
+    if (ar.sectionVersion() >= 3) {  // animal names
+        ar.text("name", c.name);
     }
     ar.value("zone", c.zone);
     ar.value("hasHome", c.hasHome);
@@ -2548,7 +2558,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.require(d.wildAnimals >= 0 && d.animals.percent >= 0, "the save file has a bad wild animal density");
         saveParts(ar, "animal", e, &SaveEntity::animal, [&](Animal& a) { saveAnimalPart(ar, a); });
     });
-    ar.section("husbandry", 2, [&] {
+    ar.section("husbandry", 3, [&] {
         ar.value("nextZone", d.husbandry.nextZone);
         ar.list("zones", d.husbandry.zones, [&](AnimalZone& z) {
             ar.value("id", z.id);

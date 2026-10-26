@@ -14,6 +14,7 @@
 namespace colony {
 
 class Lights;
+class Things;
 class Map;
 class Plants;
 class StateHasher;
@@ -68,6 +69,17 @@ public:
         forecast_ = std::move(outdoorAt);
         clock_ = std::move(now);
     }
+    // The buildings that can carry a plant (plant pot, hydroponics basin) and whether one is running (powered).
+    // A building with `plantSpot` gives its cell that fertility; with `plantSpot.needsPower` the crop on it
+    // does not grow, and cannot be sown, while it has no power. Without this no building carries plants.
+    void setPlantSpots(const Things* things, std::function<bool(Entity)> running) {
+        things_ = things;
+        spotRunning_ = std::move(running);
+    }
+    // The fertility the building on a cell gives (a negative number: none), by the cell's index on level 0.
+    float spotFertility(size_t cellIndex) const;
+    // Crops in this cell grow through the night: a sun lamp that lights it is within its `plantLightRadius`.
+    bool sunLampLit(size_t cellIndex) const;
 
     // True for a Things def that can be sown: a plant with `plant.sowWork` that is not a tree.
     bool isCrop(DefId def) const;
@@ -116,6 +128,7 @@ private:
     // Whether a crop sown in this open-air cell now would ripen before the temperature falls under its
     // `coldDamageBelow`, by the forecast; true where there is no forecast or the cell is under a roof.
     bool ripensBeforeFrost(CellPos c, DefId cropId) const;
+    bool spotUnpowered(CellPos c) const;
     size_t slot(CellPos c) const;
 
     const Map& map_;
@@ -125,6 +138,8 @@ private:
     std::vector<Event>& events_;
     TemperatureSystem* temperature_ = nullptr;
     const Lights* lights_ = nullptr;
+    const Things* things_ = nullptr;
+    std::function<bool(Entity)> spotRunning_;
     GrowingZoneId nextZone_ = 1;
     std::vector<GrowingZone> zones_;
     FarmingStats stats_;
