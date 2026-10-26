@@ -20,6 +20,8 @@
 //                                     herds by biome, a report of them, checks they stay on walkable ground)
 //   simrun --seed 42 --size 256 --days 3 --farm 500 --check   (a farm of tame chickens, N4: they are fed every hour; reports
 //                                     eggs, chicks and what a step costs on the minute the breeding pass runs; docs/design/breeding.md)
+//   simrun --seed 42 --size 256 --days 1 --start Crashlanded --fire --check   (a grass fire lit near the colonists, E4: they put it out;
+//                                     reports fires, peak size, burnt-up things, pawns that caught fire; docs/design/fire.md)
 // --replay takes the settings and commands from the file and runs to its endStep (--days
 // overrides). --record writes what this run did as a replay, with its state hashes.
 // --check makes it exit with 1 if any job or path search failed.
@@ -45,6 +47,7 @@
 #include "ColonySim/Raids.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Fire.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Random.h"
@@ -96,6 +99,7 @@ struct Options {
     int gather = 0;      // mark rock to mine and plants to harvest this many cells round the middle
     int animals = 0;     // wild animals as a percent of the biome's density (0: none; --animals alone means 100)
     int farm = 0;        // --farm N: N tame chickens, fed every hour (N4)
+    bool fire = false;   // --fire: light a grass fire near the first colonist ten minutes in (E4)
     double raid = -1.0;  // start a pirate raid of this many points at the first step (0: the colony's threat points)
     bool armed = false;  // give every colonist an assault rifle first (not a command: not in replays)
     std::string png;
@@ -146,6 +150,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.gather = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--animals") == 0) {
             out.animals = std::max(out.animals, 100);
+        } else if (std::strcmp(arg, "--fire") == 0) {
+            out.fire = true;
         } else if (std::strcmp(arg, "--farm") == 0 && hasValue) {
             out.farm = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--animal-percent") == 0 && hasValue) {
@@ -186,7 +192,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--scenario colony [--verbose]] [--power] [--raid POINTS] [--armed] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony [--verbose]] [--power] [--raid POINTS] [--armed] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS]\n");
             return false;
         }
@@ -776,8 +782,34 @@ int main(int argc, char** argv) {
     double dayLow = 1.0e9;
     double dayHigh = -1.0e9;
     std::string dayWeather;
+    // --fire: the fire counts.
+    size_t firePeak = 0;
+    uint64_t fireBeaten = 0;
+    uint64_t fireBurntOut = 0;
+    uint64_t pawnsCaught = 0;
+    uint64_t fireLit = 0;
     for (int64_t i = 0; i < steps; ++i) {
         feeder.submitDue(sim);
+        if (options.fire && sim.time().seconds == 600) {
+            // A fire in the grass 6 to 14 cells from the first colonist.
+            colony::CellPos from{sim.map().width() / 2, sim.map().height() / 2, 0};
+            for (const auto [e, c, pos] : sim.things().registry().view<const colony::Colonist, const colony::Position>().each()) {
+                (void)e;
+                (void)c;
+                from = colony::cellOf(pos);
+                break;
+            }
+            bool lit = false;
+            for (int r = 6; r <= 14 && !lit; ++r) {
+                for (int d = -r; d <= r && !lit; ++d) {
+                    const colony::CellPos cell{from.x + d, from.y + r, 0};
+                    if (sim.map().inBounds(cell) && sim.plants().has(cell)) {
+                        sim.submit(colony::IgniteCommand{cell, 0.0f, colony::kNoEntity, false});
+                        lit = true;
+                    }
+                }
+            }
+        }
         if (options.farm > 0 && sim.time().seconds % colony::kSecondsPerHour == 0) {
             std::vector<colony::Entity> animals;
             for (const colony::Entity e : sim.things().registry().view<const colony::Animal>()) {
@@ -800,6 +832,7 @@ int main(int argc, char** argv) {
             raid.ended = sim.time().seconds;
         }
         events += sim.events().size();
+        firePeak = std::max(firePeak, sim.fire().count());
         for (const colony::Event& e : sim.events()) {
             ate += e.type == colony::EventType::PawnAte ? 1 : 0;
             wokeUp += e.type == colony::EventType::PawnWokeUp ? 1 : 0;
@@ -810,6 +843,10 @@ int main(int argc, char** argv) {
             }
             mined += e.type == colony::EventType::CellMined ? 1 : 0;
             felled += e.type == colony::EventType::PlantRemoved ? 1 : 0;
+            fireBeaten += e.type == colony::EventType::FireOut && e.message == "beaten" ? 1 : 0;
+            fireBurntOut += e.type == colony::EventType::FireOut && e.message != "beaten" ? 1 : 0;
+            pawnsCaught += e.type == colony::EventType::PawnCaughtFire ? 1 : 0;
+            fireLit += e.type == colony::EventType::FireStarted ? 1 : 0;
             picked += e.type == colony::EventType::PlantHarvested ? 1 : 0;
             if (options.raid >= 0.0) {
                 const int64_t t = sim.time().seconds;
@@ -1147,6 +1184,40 @@ int main(int argc, char** argv) {
             }
             if (extraPerStep > 0.5) {
                 std::fprintf(stderr, "check failed: breeding costs %.3f ms a step\n", extraPerStep);
+                return 1;
+            }
+        }
+    }
+
+    // The fire (E4, docs/design/fire.md): a grass fire near the colonists; they put it out or it burns out.
+    if (options.fire) {
+        const colony::Fire& fire = sim.fire();
+        int colonistsDead = 0;
+        for (const auto [e, c, h] : sim.things().registry().view<const colony::Colonist, const colony::Health>().each()) {
+            (void)e;
+            (void)c;
+            colonistsDead += h.dead ? 1 : 0;
+        }
+        std::printf("{\"fire\":{\"lit\":%llu,\"peakCells\":%zu,\"left\":%zu,\"beatenOut\":%llu,\"burntOut\":%llu,\"thingsBurntUp\":%llu,"
+                    "\"pawnsCaughtFire\":%llu,\"colonistsDead\":%d,\"burntCells\":%zu,\"homeCells\":%zu}}\n",
+                    static_cast<unsigned long long>(fireLit), firePeak, fire.count(), static_cast<unsigned long long>(fireBeaten),
+                    static_cast<unsigned long long>(fireBurntOut), static_cast<unsigned long long>(fire.burntUp()),
+                    static_cast<unsigned long long>(pawnsCaught), colonistsDead, fire.burntCells().size(), fire.homeCount());
+        if (options.check) {
+            if (fireLit == 0) {
+                std::fprintf(stderr, "check failed: no fire was lit (no grass near the colonists?)\n");
+                return 1;
+            }
+            if (options.days >= 0.5 && fire.count() != 0) {
+                std::fprintf(stderr, "check failed: %zu cells are still on fire after %.1f days\n", fire.count(), options.days);
+                return 1;
+            }
+            if (colonistsDead != 0) {
+                std::fprintf(stderr, "check failed: %d colonists died in the fire\n", colonistsDead);
+                return 1;
+            }
+            if (fireBeaten == 0) {
+                std::fprintf(stderr, "check failed: nobody beat a fire out\n");
                 return 1;
             }
         }
