@@ -62,6 +62,9 @@ public:
     // older, plants past their lifespan die, and in the growing hours the rest grow by
     // 1 / (growDays x 24) of full growth times their fertility rate.
     void growHour(int hourOfDay);
+    // Whether plants grow in the hour that begins at `hourOfDay` (0..23), and the data's growth multiplier.
+    bool growsAtHour(int hourOfDay) const { return hourOfDay >= growStartHour_ && hourOfDay < growEndHour_; }
+    double growthTuning() const { return growthTuning_; }
     // Scales a plant's growth in a cell (by the cell's index) by a factor of 0 to 1; farming uses it for
     // the light and temperature of sown crops. Not saved: whoever installs it does so again on loading.
     void setGrowthModifier(std::function<double(size_t)> modifier) { modifier_ = std::move(modifier); }

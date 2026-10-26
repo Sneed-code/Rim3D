@@ -2,20 +2,26 @@
 
 #include <chrono>
 
+#include "ColonySim/Animals.h"
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Farming.h"
 #include "ColonySim/Filth.h"
+#include "ColonySim/Fighters.h"
 #include "ColonySim/Floors.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Husbandry.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Health.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Plants.h"
+#include "ColonySim/Raids.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/RoomStats.h"
@@ -163,6 +169,16 @@ CellPos findFieldSite(const Sim& sim, CellPos landing, const CellRect& room) {
     return best;
 }
 
+size_t ripeCrops(const Sim& sim) {
+    size_t ripe = 0;
+    for (const GrowingZone& zone : sim.farming().zones()) {
+        for (const CellPos& c : zone.cells) {
+            ripe += sim.farming().readyToHarvest(c) ? 1 : 0;
+        }
+    }
+    return ripe;
+}
+
 }  // namespace
 
 int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDatabase> defs, bool verbose, bool year) {
@@ -219,6 +235,9 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     plan("FueledStove", "", 4, 1);
     plan("HorseshoesPin", "WoodLog", 6, 3);  // something to do in the evening hours (C18)
     plan("CraftingSpot", "", 7, 1);          // a club to make from the chopped wood (C14)
+    if (year) {
+        plan("ButcherTable", "WoodLog", -2, 6);  // outside the west wall, beside the stockpile: hunted animals are cut up here (N2)
+    }
     for (const Plan& p : plans) {
         sim.submit(PlaceBlueprintCommand{p.defName, p.stuff, p.cell, p.rot});
     }
@@ -294,6 +313,33 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         colonists.push_back(pawn);
     }
 
+    if (year) {
+        // The player arms the best shot with the landing's rifle and revolver (colonists do not equip loose weapons
+        // themselves): it hunts for the colony and defends it, and the rest run for shelter when the alarm sounds.
+        std::vector<Entity> byShooting = colonists;
+        const auto shooting = [&](Entity pawn) {
+            const Colonist* colonist = sim.colonistOf(pawn);
+            for (size_t i = 0; colonist != nullptr && i < colonist->skills.size(); ++i) {
+                if (colonist->skills[i].def == "Shooting") {
+                    return colonist->skills[i].level;
+                }
+            }
+            return 0;
+        };
+        std::stable_sort(byShooting.begin(), byShooting.end(), [&](Entity a, Entity b) { return shooting(a) > shooting(b); });
+        // The best shot carries both (the rifle for range, the revolver when something is close).
+        const char* const guns[2] = {"Gun_BoltActionRifle", "Gun_Revolver"};
+        for (size_t g = 0; g < 2 && g < byShooting.size(); ++g) {
+            const DefId gun = defs->idOf("Things", guns[g]);
+            for (const auto [item, thing] : sim.things().registry().view<const Thing>().each()) {
+                if (thing.def == gun) {
+                    sim.submit(CarryWeaponCommand{byShooting[0], item});
+                    break;
+                }
+            }
+        }
+    }
+
     // Skills under level 10 do not decay: their total experience (levels counted in) shows that the
     // work taught something.
     std::vector<std::pair<Entity, size_t>> learners;
@@ -308,7 +354,11 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     const auto skillXpTotal = [&]() {
         double total = 0.0;
         for (const auto& [pawn, index] : learners) {
-            const SkillRecord& skill = sim.colonistOf(pawn)->skills[index];
+            const Colonist* colonist = sim.colonistOf(pawn);
+            if (colonist == nullptr || index >= colonist->skills.size()) {
+                continue;  // died and gone
+            }
+            const SkillRecord& skill = colonist->skills[index];
             total += static_cast<double>(skill.xp);
             for (int level = 0; level < skill.level; ++level) {
                 total += sim.jobs().skillRules().xpToNextLevel[static_cast<size_t>(level)];
@@ -348,6 +398,8 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     int frostShown = 0;
     bool fieldMade = false;
     bool billAdded = false;
+    bool butcherBillAdded = false;
+    uint64_t butchered = 0;
     bool clubBillAdded = false;
     uint64_t clubsMade = 0;
     bool bedsAssigned = false;
@@ -399,6 +451,28 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                         std::fprintf(stderr, "day %lld %02d:%02d: colonist %u hurt at %d,%d, part %d, %.1f damage (%s)\n", static_cast<long long>(sim.time().day()),
                                      sim.time().hourOfDay(), static_cast<int>((sim.time().seconds / 60) % 60), static_cast<unsigned>(entt::to_integral(e.thing)), e.cell.x,
                                      e.cell.y, e.part, static_cast<double>(e.amount), e.message.c_str());
+                        // What the colonist and the animals round it were doing, to see why nobody fought back.
+                        const entt::registry& reg = sim.things().registry();
+                        const Fighter* fighter = reg.try_get<Fighter>(e.thing);
+                        const Gear* gear = reg.try_get<Gear>(e.thing);
+                        std::fprintf(stderr, "    alarm %d, fighter %s%s, weapon %s", sim.raids().state().alarm ? 1 : 0, fighter != nullptr ? "yes" : "no",
+                                     fighter != nullptr && fighter->defending ? " (defending)" : "",
+                                     gear != nullptr && gear->weapon != kNoEntity ? "yes" : "no");
+                        if (fighter != nullptr && gear != nullptr && gear->weapon != kNoEntity) {
+                            const Thing& weaponThing = reg.get<Thing>(gear->weapon);
+                            std::fprintf(stderr, " [%s mode %d target %u canFire %d falling %d walk %d stowed %zu known %zu]", defs->get(weaponThing.def).defName().c_str(),
+                                         static_cast<int>(fighter->mode), static_cast<unsigned>(entt::to_integral(fighter->target)), fighter->canFire ? 1 : 0,
+                                         fighter->fallingBack ? 1 : 0, static_cast<int>(fighter->walk), gear->stowed.size(), fighter->known.size());
+                        }
+                        const Position& at = reg.get<Position>(e.thing);
+                        for (const auto [animal, wild, pos] : reg.view<const Animal, const Position>().each()) {
+                            const float d = std::hypot(pos.x - at.x, pos.y - at.y);
+                            if (wild.temper != AnimalTemper::Calm && d < 8.0f) {
+                                std::fprintf(stderr, "; animal %u temper %d at %.1f m", static_cast<unsigned>(entt::to_integral(animal)), static_cast<int>(wild.temper),
+                                             static_cast<double>(d));
+                            }
+                        }
+                        std::fprintf(stderr, "\n");
                     }
                     break;
                 case EventType::WeatherChanged: ++weatherChanges; break;
@@ -419,6 +493,8 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 case EventType::RecipeDone:
                     if (defs->get(e.def).defName() == "MakeClub") {
                         clubsMade += static_cast<uint64_t>(std::max(0.0f, e.amount));
+                    } else if (defs->get(e.def).defName() == "ButcherCorpse") {
+                        ++butchered;
                     } else {
                         mealsMade += static_cast<uint64_t>(std::max(0.0f, e.amount));
                     }
@@ -533,6 +609,48 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
             if (stoveId > 0 && stoveBuiltAt < 0) {
                 stoveBuiltAt = now;
             }
+            if (year) {
+                for (const ThingView& t : snapshot.things) {
+                    if (!butcherBillAdded && t.category == ThingCategory::Building && t.stage == ConstructionStage::Built &&
+                        defs->get(t.def).defName() == "ButcherTable") {
+                        sim.submit(AddBillCommand{t.id, "ButcherCorpse", BillMode::Forever, 1});
+                        // Only corpses within 40 m: with no limit the butcher walks across the map to a wolf's kill.
+                        sim.submit(SetBillOptionsCommand{t.id, 1, 0, 20, 40.0f, 0, 0, {}});
+                        butcherBillAdded = true;
+                    }
+                }
+                // Hunting: keep a few game animals marked, nearest to the landing first (not the predators or the boars).
+                if (now >= kFieldDay * kSecondsPerDay) {
+                    int marked = 0;
+                    std::vector<std::pair<float, Entity>> prey;
+                    const entt::registry& reg = sim.things().registry();
+                    for (const auto [animal, wild, thing, pos] : reg.view<const Animal, const Thing, const Position>().each()) {
+                        const Health* health = reg.try_get<Health>(animal);
+                        const std::string& name = defs->get(thing.def).defName();
+                        if (!wild.wild || (health != nullptr && health->dead)) {
+                            continue;
+                        }
+                        const AnimalCare* care = sim.husbandry().care(animal);
+                        const float away = std::hypot(pos.x - static_cast<float>(landing.x), pos.y - static_cast<float>(landing.y));
+                        if (care != nullptr && care->markHunt) {
+                            if (away > 80.0f) {
+                                sim.submit(MarkAnimalCommand{animal, "Hunt", false});  // it ran off: the hunter would follow it for good
+                            } else {
+                                ++marked;
+                            }
+                        } else if (name == "Deer" || name == "Hare" || name == "Muffalo" || name == "Alpaca") {
+                            const float d = std::hypot(pos.x - static_cast<float>(landing.x), pos.y - static_cast<float>(landing.y));
+                            if (d < 45.0f) {
+                                prey.emplace_back(d, animal);
+                            }
+                        }
+                    }
+                    std::sort(prey.begin(), prey.end());
+                    for (size_t k = 0; marked < 3 && k < prey.size(); ++k, ++marked) {
+                        sim.submit(MarkAnimalCommand{prey[k].second, "Hunt", true});
+                    }
+                }
+            }
             if (stove != kNoEntity && !billAdded) {
                 // Cook until there are 8 meals on the map, so the stove keeps the colony fed.
                 sim.submit(AddBillCommand{stove, "CookMealSimple", BillMode::UntilHave, year ? 30 : 8});
@@ -557,6 +675,19 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                              static_cast<long long>(sim.time().day()), sim.time().hourOfDay(), built, plans.size(),
                              sim.designations().count(), static_cast<unsigned long long>(mealsMade),
                              static_cast<unsigned long long>(ate));
+            }
+            if (verbose && year && now % (6 * kSecondsPerHour) == 0) {
+                int rice = 0;
+                int meat = 0;
+                int meals = 0;
+                for (const auto [item, thing, stack] : sim.things().registry().view<const Thing, const StackCount>().each()) {
+                    const std::string& name = defs->get(thing.def).defName();
+                    rice += name == "RawRice" ? stack.count : 0;
+                    meat += name.rfind("Meat", 0) == 0 ? stack.count : 0;
+                    meals += name.rfind("Meal", 0) == 0 ? stack.count : 0;
+                }
+                std::fprintf(stderr, "    food: rice %d, meat %d, meals %d; crops ripe %zu; hunted %llu\n", rice, meat, meals, ripeCrops(sim),
+                             static_cast<unsigned long long>(sim.husbandry().stats().hunted));
             }
         }
     }
@@ -664,6 +795,8 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         std::printf("{\"crops\":{\"standing\":%zu,\"meanGrowth\":%.3f,\"ready\":%zu}}\n", crops, crops > 0 ? growthSum / static_cast<double>(crops) : 0.0, mature);
         std::printf("{\"farming\":{\"zones\":%zu,\"sown\":%llu,\"harvested\":%llu,\"frostKilled\":%llu,\"heatKilled\":%llu}}\n", sim.farming().zones().size(),
                     static_cast<unsigned long long>(f.sown), static_cast<unsigned long long>(f.harvested), static_cast<unsigned long long>(f.frostKilled), static_cast<unsigned long long>(f.heatKilled));
+        std::printf("{\"hunting\":{\"hunted\":%llu,\"butchered\":%llu}}\n", static_cast<unsigned long long>(sim.husbandry().stats().hunted),
+                    static_cast<unsigned long long>(butchered));
         for (const auto& [cause, n] : animalDeaths) {
             std::printf("{\"otherDeaths\":{\"cause\":\"%s\",\"count\":%d}}\n", cause.c_str(), n);
         }

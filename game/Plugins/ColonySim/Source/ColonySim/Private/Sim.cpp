@@ -182,6 +182,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     spoilage_->setEventLog(&events_);
     farming_ = std::make_unique<Farming>(map_, *plants_, *zones_, *defs_, events_);
     farming_->setClimate(temperature_.get(), lights_.get());
+    farming_->setForecast(
+        [this](int64_t seconds) { return outdoorOverride_ ? *outdoorOverride_ : outdoorTemperatureAt(seconds); },
+        [this]() { return time_.seconds; });
     plants_->setGrowthModifier([this](size_t cell) { return farming_->growthFactor(cell); });
     zones_->setCellTaken([this](CellPos c) { return farming_->zoneAt(c) != kNoGrowingZone; });
     lights_->setWeather(weather_.get());
@@ -1163,6 +1166,7 @@ void Sim::step() {
     if (time_.seconds % kSecondsPerHour == 0) {
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
         farming_->growHour(time_.seconds);
+        filth_->fadeHour(weather_->effects().rainRate);
         pruneDesignations();
     }
     if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {

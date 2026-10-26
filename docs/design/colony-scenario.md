@@ -99,7 +99,25 @@ farming counters, deaths of everything that is not a colonist by cause, and coun
 the room. In verbose mode it prints every injury a colonist takes. Colonists lying in `BedRest` are no longer
 counted as stuck. Without `--year` nothing changes.
 
-The first runs (seeds 1, 7, 42) found no crash, no stuck job and no determinism break (the same seed twice gives the
-same state hash), but all six colonists starve between day 37 and day 51 once the autumn frosts kill the field.
-What is missing is in `BACKLOG.md` (first entry). The run is not in CTest: it is expected to fail until those
-are done, and takes minutes.
+The year run also arms the colonist with the best Shooting skill with the landing's rifle and revolver (colonists do not
+pick loose weapons up themselves), builds a butcher table outside the west wall with a forever bill for corpses within
+40 m, and from day 13 keeps three deer, hares, muffalo or alpacas within 45 m of the landing marked for the hunt (a mark
+is taken off an animal that runs 80 m away). In verbose mode it prints a food line every six game hours, and for each
+injury what the colonist and the animals round it were doing.
+
+**First runs (seeds 1, 7, 42, 60 days, before the fixes):** no crash, no stuck job, no determinism break, but all six
+colonists starved between day 37 and day 51 once the autumn frosts killed the field; colonists sowed into the frost
+(1,137 sown, 274 harvested on seed 1); wolves killed colonists (nobody fought back); animal blood piled up to 2,500 to
+8,600 layers.
+
+**After the fixes** (sow only what ripens before the frost, armed colonists stand and shoot, unarmed ones run for shelter,
+outdoor filth fades, hunting; `farming.md`, `raids.md`, `fighters.md`, `room-stats.md`):
+
+| Seed | Colonists alive on day 60 | Frost-killed crops | Hunted | What killed the rest |
+| --- | --- | --- | --- | --- |
+| 1 | 1 of 6 | 0 (137 sown, 137 harvested) | 8 | predators and manhunters, day 43 to 48 |
+| 7 | 1 of 6 | 0 (260 sown, 260 harvested) | 6 | predator day 24, starvation day 31, predators and a bleed-out later |
+| 42 | 1 of 6 | 0 (128 sown, 128 harvested) | 0 | a predator day 9, then hypothermia on days 50 to 52 (four) |
+
+Frost no longer kills a single crop, and no seed is dead by day 51 any more (the first runs lost everyone), but the colony
+still does not last the year: see `BACKLOG.md`. The run is not in CTest: it takes about ten minutes.

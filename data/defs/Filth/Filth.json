@@ -2,8 +2,9 @@
   {
     "defName": "FilthBase", "abstract": true, "source": "RimWorld wiki (Filth)",
     "maxThickness": 3, "trackable": true,
-    "unverified": ["maxThickness"],
-    "note": "Beauty is the indoor value; outdoors it counts 30% of it (FilthRules.outdoorBeautyFactor). Cleanliness is the filth's own value in a cell, added to the floor's. Neither grows with thickness: thickness is how many cleaning passes the heap takes. cleanTicks are RimWorld ticks of work per layer at 100% speed; the sim converts them to game seconds."
+    "filth": { "disappearsInDays": [4, 8], "rainWashes": true },
+    "unverified": ["maxThickness", "filth.disappearsInDays"],
+    "note": "Beauty is the indoor value; outdoors it counts 30% of it (FilthRules.outdoorBeautyFactor). Cleanliness is the filth's own value in a cell, added to the floor's. Neither grows with thickness: thickness is how many cleaning passes the heap takes. cleanTicks are RimWorld ticks of work per layer at 100% speed; the sim converts them to game seconds. Under the open sky a layer goes after about the mean of filth.disappearsInDays (Filth::fadeHour), quicker in rain when rainWashes."
   },
   {
     "defName": "Dirt", "parent": "FilthBase", "label": "dirt",
