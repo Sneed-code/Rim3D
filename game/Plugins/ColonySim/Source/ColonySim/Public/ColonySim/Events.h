@@ -104,6 +104,17 @@ enum class EventType : uint8_t {
     PawnAddicted,          // it became addicted: `thing` the pawn, `def` the Chemicals def, `message` its defName, `amount` the need
     AddictionCured,        // an addiction healed away: the same fields
     DrugOverdose,          // a dose took the overdose past minor (0.5), major (0.75) or fatal (1): `thing` the pawn, `def` the drug, `amount` the severity, `message` "minor", "major" or "fatal"
+    DropPodLanded,         // a raider's pod came down (F12, docs/design/raid-strategies.md): `thing` the raider, `cell` where, `squad`
+    SappersBreaking,       // raiders began digging through a wall (F12): `cell` the wall, `squad`, `count` how many dig
+    ItemStolen,            // a thief lifted loose items (F12): `thing` the thief, `target` the item it carries, `def` its def, `count`
+    PawnKidnapped,         // a raider lifted a downed colonist (F12): `thing` the kidnapper, `target` the colonist. `message` "left the map" when it got away with it
+    InspirationStarted,    // a colonist became inspired (docs/design/inspirations.md): `thing` the pawn, `message` the Inspirations defName, `amount` its days
+    InspirationEnded,      // it ended: `message` "why:defName" (used, expired, dismissed), `amount` how many game seconds it lasted
+    ShipReactorStarted,    // the ship reactor began its activation (docs/design/ship.md): `thing` the reactor, `amount` days it takes
+    ShipWave,              // a wave of raiders came because of the reactor: `amount` the wave number (the raid's own events follow)
+    ShipReactorReady,      // the activation finished: the ship can launch
+    ShipReactorLost,       // the reactor was destroyed or taken down: the activation is lost, `message` says which
+    ShipLaunched,          // the ship left and the game is won: `amount` how many pawns went (a PawnLeftMap each)
 };
 
 // What stopped a projectile (ProjectileHit).

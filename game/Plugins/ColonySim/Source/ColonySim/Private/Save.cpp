@@ -38,10 +38,12 @@
 #include "ColonySim/Spoilage.h"
 #include "ColonySim/Crafting.h"
 #include "ColonySim/Temperature.h"
+#include "ColonySim/Inspirations.h"
 #include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Medicine.h"
 #include "ColonySim/Prisoners.h"
+#include "ColonySim/Ship.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Social.h"
 #include "ColonySim/Research.h"
@@ -357,6 +359,7 @@ struct SaveEntity {
     std::optional<Animal> animal;           // section "animals"
     std::optional<DefensePlan> defense;     // section "raids"
     std::optional<Raider> raider;           // section "raids"
+    std::optional<Kidnapped> kidnapped;     // section "raids" 2 (F12)
     std::optional<AnimalCare> care;         // section "husbandry"
     std::optional<AnimalBreed> breed;       // section "breeding" (N4)
     std::optional<Hatching> hatching;       // section "breeding" (N4)
@@ -382,6 +385,7 @@ struct SaveEntity {
     std::optional<Fuel> fuel;               // "fuel" section (C11)
     std::optional<StoreIn> storeIn;         // "crafting" section (C14)
     std::optional<MentalBreaker> mentalBreaker;  // section "mentalBreaks" (C19)
+    std::optional<Inspired> inspired;            // section "inspirations" (C25)
 };
 
 // A stockpile zone, with its filter by defName.
@@ -468,10 +472,11 @@ struct SaveData {
     SavePlants plants;                 // format 10 on
     bool hasRock = false;              // the file has the rock layer (format 12 on); older saves keep the generated one
     SaveMineables mineables;           // format 12 on
-    SaveDesignations designations;     // format 12 on
-    ResearchState research;            // section "research"
     std::vector<SaveDrugPawn> drugPawns;  // section "drugs"
 
+    SaveDesignations designations;     // format 12 on
+    ResearchState research;            // section "research"
+    ShipState ship;                    // section "ship"
     // Section "talents" (P3): per protagonist, parallel lists in pawn order.
     std::vector<Entity> talentPawns;
     std::vector<int64_t> talentXp;
@@ -882,189 +887,177 @@ struct SaveCommandNames {
 template <typename>
 inline constexpr bool kSaveNoSuchCommand = false;
 
-// The second half of the command chain, in a function of its own: MSVC stops at 128 nested blocks (error C1061).
-template <typename Ar, typename Cmd>
-void saveCommandTail(Ar& ar, Cmd& c) {
-    using Type = std::decay_t<Cmd>;
-            if constexpr (std::is_same_v<Type, TakeDrugCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.value("thing", c.thing);
-            } else if constexpr (std::is_same_v<Type, SetDrugPolicyCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.text("policy", c.policy);
-            } else if constexpr (std::is_same_v<Type, SetDrugPolicyEntryCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.text("drug", c.drug);
-                ar.value("forAddiction", c.forAddiction);
-                ar.value("forJoy", c.forJoy);
-                ar.value("scheduled", c.scheduled);
-                ar.value("daysFrequency", c.daysFrequency);
-                ar.value("moodBelow", c.moodBelow);
-                ar.value("joyBelow", c.joyBelow);
-            } else if constexpr (std::is_same_v<Type, SetRefuelCommand>) {
-                auto* refuel = &c;
-                ar.value("building", refuel->building);
-                ar.value("autoRefuel", refuel->autoRefuel);
-                ar.value("fillNow", refuel->fillNow);
-            } else if constexpr (std::is_same_v<Type, SetResearchCommand> || std::is_same_v<Type, UnlockResearchCommand>) {
-                ar.text("project", c.project);
-            } else if constexpr (std::is_same_v<Type, ThrowCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.text("item", c.item);
-                ar.value("target", c.target);
-                ar.value("x", c.x);
-                ar.value("y", c.y);
-                ar.value("player", c.player);
-            } else if constexpr (std::is_same_v<Type, ExplodeCommand>) {
-                ar.value("x", c.x);
-                ar.value("y", c.y);
-                ar.value("radius", c.radius);
-                ar.value("damage", c.damage);
-                ar.text("damageType", c.damageType);
-                ar.value("penetration", c.penetration);
-            } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
-                ar.text("faction", c.faction);
-                ar.value("points", c.points);
-                ar.value("edge", c.edge);
-            } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
-                ar.value("on", c.on);
-            } else if constexpr (std::is_same_v<Type, SetDefenseRoleCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.value("role", c.role);
-                ar.value("hasSpot", c.hasSpot);
-                ar.group("spot", [&] { saveCell(ar, c.spot); });
-            } else if constexpr (std::is_same_v<Type, MarkShelterCommand>) {
-                ar.group("cell", [&] { saveCell(ar, c.cell); });
-                ar.value("clear", c.clear);
-            } else if constexpr (std::is_same_v<Type, MarkAnimalCommand>) {
-                ar.value("animal", c.animal);
-                ar.text("mark", c.mark);
-                ar.value("on", c.on);
-            } else if constexpr (std::is_same_v<Type, MarkAnimalsInAreaCommand>) {
-                ar.group("area", [&] { saveRect(ar, c.area); });
-                ar.text("mark", c.mark);
-                ar.value("on", c.on);
-            } else if constexpr (std::is_same_v<Type, SetAnimalNameCommand>) {
-                ar.value("animal", c.animal);
-                ar.text("name", c.name);
-            } else if constexpr (std::is_same_v<Type, SetTrainingCommand>) {
-                ar.value("animal", c.animal);
-                ar.text("trainable", c.trainable);
-                ar.value("wanted", c.wanted);
-            } else if constexpr (std::is_same_v<Type, CreateAnimalZoneCommand> || std::is_same_v<Type, RemoveAnimalZoneCellsCommand>) {
-                ar.group("area", [&] { saveRect(ar, c.area); });
-            } else if constexpr (std::is_same_v<Type, AssignAnimalZoneCommand>) {
-                ar.value("animal", c.animal);
-                ar.value("zone", c.zone);
-            } else if constexpr (std::is_same_v<Type, SetBreedingCommand>) {
-                ar.value("animal", c.animal);
-                ar.value("zone", c.zone);
-                ar.value("allow", c.allow);
-            } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
-                auto* melee = &c;
-                ar.value("pawn", melee->pawn);
-                ar.value("target", melee->target);
-                ar.value("mode", melee->mode);
-                ar.require(melee->mode <= MeleeMode::Block, "the save file has a bad melee mode");
-            } else if constexpr (std::is_same_v<Type, SetOutfitCommand>) {
-                auto* setOutfit = &c;
-                ar.value("pawn", setOutfit->pawn);
-                ar.value("outfit", setOutfit->outfit);
-            } else if constexpr (std::is_same_v<Type, EditOutfitCommand>) {
-                auto* edit = &c;
-                ar.value("outfit", edit->outfit);
-                ar.list("disallowed", edit->disallowed, [&](std::string& name) { ar.text(nullptr, name); });
-                ar.value("hitPointsMin", edit->hitPointsMin);
-                ar.value("hitPointsMax", edit->hitPointsMax);
-                ar.value("qualityMin", edit->qualityMin);
-                ar.value("qualityMax", edit->qualityMax);
-            } else if constexpr (std::is_same_v<Type, AddOutfitCommand>) {
-                auto* addOutfit = &c;
-                ar.text("name", addOutfit->name);
-            } else if constexpr (std::is_same_v<Type, RemoveOutfitCommand>) {
-                auto* removeOutfit = &c;
-                ar.value("outfit", removeOutfit->outfit);
-            } else if constexpr (std::is_same_v<Type, StripCommand>) {
-                auto* strip = &c;
-                ar.value("thing", strip->thing);
-                ar.value("strip", strip->strip);
-            } else if constexpr (std::is_same_v<Type, InteractCommand>) {
-                ar.value("initiator", c.initiator);
-                ar.value("recipient", c.recipient);
-                ar.text("interaction", c.interaction);
-                ar.value("outcome", c.outcome);
-            } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.value("dx", c.dx);
-                ar.value("dy", c.dy);
-            } else if constexpr (std::is_same_v<Type, SetMedicalCareCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.text("care", c.care);
-            } else if constexpr (std::is_same_v<Type, ContractDiseaseCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.text("disease", c.disease);
-                ar.value("severity", c.severity);
-                ar.value("part", c.part);
-            } else if constexpr (std::is_same_v<Type, SetWeatherCommand>) {
-                auto* setWeather = &c;
-                ar.text("weather", setWeather->weather);
-                ar.value("hours", setWeather->hours);
-            } else if constexpr (std::is_same_v<Type, SpendTalentPointCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.text("talent", c.talent);
-            } else if constexpr (std::is_same_v<Type, AddTalentXpCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.value("amount", c.amount);
-            } else if constexpr (std::is_same_v<Type, RearmTrapCommand>) {
-                ar.value("trap", c.trap);
-            } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.value("item", c.item);
-            } else if constexpr (std::is_same_v<Type, SwitchWeaponCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.value("slot", c.slot);
-                ar.require(static_cast<int>(c.slot) < kWeaponSlotCount, "the save file has a bad weapon slot");
-            } else if constexpr (std::is_same_v<Type, CreateGrowingZoneCommand>) {
-                ar.group("area", [&] { saveRect(ar, c.area); });
-                ar.text("crop", c.crop);
-            } else if constexpr (std::is_same_v<Type, RemoveGrowingZoneCellsCommand>) {
-                ar.group("area", [&] { saveRect(ar, c.area); });
-            } else if constexpr (std::is_same_v<Type, SetGrowingZoneCropCommand>) {
-                ar.value("zone", c.zone);
-                ar.text("crop", c.crop);
-            } else if constexpr (std::is_same_v<Type, SetNarratorCommand>) {
-                ar.text("narrator", c.narrator);
-                ar.text("difficulty", c.difficulty);
-            } else if constexpr (std::is_same_v<Type, FireIncidentCommand>) {
-                ar.text("incident", c.incident);
-                ar.value("points", c.points);
-            } else if constexpr (std::is_same_v<Type, IgniteCommand>) {
-                ar.group("cell", [&] { saveCell(ar, c.cell); });
-                ar.value("size", c.size);
-                ar.value("pawn", c.pawn);
-                ar.value("force", c.force);
-            } else if constexpr (std::is_same_v<Type, SetHomeAreaCommand>) {
-                ar.group("area", [&] { saveRect(ar, c.area); });
-                ar.value("add", c.add);
-            } else if constexpr (std::is_same_v<Type, SetPrisonerModeCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.text("mode", c.mode);
-            } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
-                ar.value("bed", c.bed);
-                ar.value("on", c.on);
-            } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
-                ar.group("area", [&] { saveRect(ar, c.area); });
-                ar.value("remove", c.remove);
-            } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
-                auto* start = &c;
-                ar.value("pawn", start->pawn);
-                ar.text("breakDef", start->breakDef);
-            } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
-                auto* stop = &c;
-                ar.value("pawn", stop->pawn);
-            } else {
-                static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
-            }
+// Second half of the command chain, split out because MSVC stops at 127 nested else-if blocks (C1061).
+template <typename Ar, typename Type>
+void saveCommandTail(Ar& ar, Type& c) {
+    if constexpr (std::is_same_v<Type, StartRaidCommand>) {
+        ar.text("faction", c.faction);
+        ar.value("points", c.points);
+        ar.value("edge", c.edge);
+    } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
+        ar.value("on", c.on);
+    } else if constexpr (std::is_same_v<Type, SetDefenseRoleCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("role", c.role);
+        ar.value("hasSpot", c.hasSpot);
+        ar.group("spot", [&] { saveCell(ar, c.spot); });
+    } else if constexpr (std::is_same_v<Type, MarkShelterCommand>) {
+        ar.group("cell", [&] { saveCell(ar, c.cell); });
+        ar.value("clear", c.clear);
+    } else if constexpr (std::is_same_v<Type, MarkAnimalCommand>) {
+        ar.value("animal", c.animal);
+        ar.text("mark", c.mark);
+        ar.value("on", c.on);
+    } else if constexpr (std::is_same_v<Type, MarkAnimalsInAreaCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+        ar.text("mark", c.mark);
+        ar.value("on", c.on);
+    } else if constexpr (std::is_same_v<Type, SetAnimalNameCommand>) {
+        ar.value("animal", c.animal);
+        ar.text("name", c.name);
+    } else if constexpr (std::is_same_v<Type, SetTrainingCommand>) {
+        ar.value("animal", c.animal);
+        ar.text("trainable", c.trainable);
+        ar.value("wanted", c.wanted);
+    } else if constexpr (std::is_same_v<Type, CreateAnimalZoneCommand> || std::is_same_v<Type, RemoveAnimalZoneCellsCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+    } else if constexpr (std::is_same_v<Type, AssignAnimalZoneCommand>) {
+        ar.value("animal", c.animal);
+        ar.value("zone", c.zone);
+    } else if constexpr (std::is_same_v<Type, SetBreedingCommand>) {
+        ar.value("animal", c.animal);
+        ar.value("zone", c.zone);
+        ar.value("allow", c.allow);
+    } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
+        auto* melee = &c;
+        ar.value("pawn", melee->pawn);
+        ar.value("target", melee->target);
+        ar.value("mode", melee->mode);
+        ar.require(melee->mode <= MeleeMode::Block, "the save file has a bad melee mode");
+    } else if constexpr (std::is_same_v<Type, SetOutfitCommand>) {
+        auto* setOutfit = &c;
+        ar.value("pawn", setOutfit->pawn);
+        ar.value("outfit", setOutfit->outfit);
+    } else if constexpr (std::is_same_v<Type, EditOutfitCommand>) {
+        auto* edit = &c;
+        ar.value("outfit", edit->outfit);
+        ar.list("disallowed", edit->disallowed, [&](std::string& name) { ar.text(nullptr, name); });
+        ar.value("hitPointsMin", edit->hitPointsMin);
+        ar.value("hitPointsMax", edit->hitPointsMax);
+        ar.value("qualityMin", edit->qualityMin);
+        ar.value("qualityMax", edit->qualityMax);
+    } else if constexpr (std::is_same_v<Type, AddOutfitCommand>) {
+        auto* addOutfit = &c;
+        ar.text("name", addOutfit->name);
+    } else if constexpr (std::is_same_v<Type, RemoveOutfitCommand>) {
+        auto* removeOutfit = &c;
+        ar.value("outfit", removeOutfit->outfit);
+    } else if constexpr (std::is_same_v<Type, StripCommand>) {
+        auto* strip = &c;
+        ar.value("thing", strip->thing);
+        ar.value("strip", strip->strip);
+    } else if constexpr (std::is_same_v<Type, InteractCommand>) {
+        ar.value("initiator", c.initiator);
+        ar.value("recipient", c.recipient);
+        ar.text("interaction", c.interaction);
+        ar.value("outcome", c.outcome);
+    } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("dx", c.dx);
+        ar.value("dy", c.dy);
+    } else if constexpr (std::is_same_v<Type, SetMedicalCareCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("care", c.care);
+    } else if constexpr (std::is_same_v<Type, ContractDiseaseCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("disease", c.disease);
+        ar.value("severity", c.severity);
+        ar.value("part", c.part);
+    } else if constexpr (std::is_same_v<Type, SetWeatherCommand>) {
+        auto* setWeather = &c;
+        ar.text("weather", setWeather->weather);
+        ar.value("hours", setWeather->hours);
+    } else if constexpr (std::is_same_v<Type, SpendTalentPointCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("talent", c.talent);
+    } else if constexpr (std::is_same_v<Type, AddTalentXpCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("amount", c.amount);
+    } else if constexpr (std::is_same_v<Type, RearmTrapCommand>) {
+        ar.value("trap", c.trap);
+    } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("item", c.item);
+    } else if constexpr (std::is_same_v<Type, SwitchWeaponCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("slot", c.slot);
+        ar.require(static_cast<int>(c.slot) < kWeaponSlotCount, "the save file has a bad weapon slot");
+    } else if constexpr (std::is_same_v<Type, CreateGrowingZoneCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+        ar.text("crop", c.crop);
+    } else if constexpr (std::is_same_v<Type, RemoveGrowingZoneCellsCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+    } else if constexpr (std::is_same_v<Type, SetGrowingZoneCropCommand>) {
+        ar.value("zone", c.zone);
+        ar.text("crop", c.crop);
+    } else if constexpr (std::is_same_v<Type, SetNarratorCommand>) {
+        ar.text("narrator", c.narrator);
+        ar.text("difficulty", c.difficulty);
+    } else if constexpr (std::is_same_v<Type, FireIncidentCommand>) {
+        ar.text("incident", c.incident);
+        ar.value("points", c.points);
+    } else if constexpr (std::is_same_v<Type, IgniteCommand>) {
+        ar.group("cell", [&] { saveCell(ar, c.cell); });
+        ar.value("size", c.size);
+        ar.value("pawn", c.pawn);
+        ar.value("force", c.force);
+    } else if constexpr (std::is_same_v<Type, SetHomeAreaCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+        ar.value("add", c.add);
+    } else if constexpr (std::is_same_v<Type, SetPrisonerModeCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("mode", c.mode);
+    } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
+        ar.value("bed", c.bed);
+        ar.value("on", c.on);
+    } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+        ar.value("remove", c.remove);
+    } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
+        auto* start = &c;
+        ar.value("pawn", start->pawn);
+        ar.text("breakDef", start->breakDef);
+    } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
+        auto* stop = &c;
+        ar.value("pawn", stop->pawn);
+    } else if constexpr (std::is_same_v<Type, StartStrategyRaidCommand>) {
+        ar.text("faction", c.faction);
+        ar.value("points", c.points);
+        ar.value("edge", c.edge);
+        ar.text("strategy", c.strategy);
+        ar.value("hour", c.hour);
+    } else if constexpr (std::is_same_v<Type, ShipCommand>) {
+        ar.text("action", c.action);
+        ar.value("thing", c.thing);
+        ar.value("pawn", c.pawn);
+    } else if constexpr (std::is_same_v<Type, TakeDrugCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("thing", c.thing);
+    } else if constexpr (std::is_same_v<Type, SetDrugPolicyCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("policy", c.policy);
+    } else if constexpr (std::is_same_v<Type, SetDrugPolicyEntryCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("drug", c.drug);
+        ar.value("forAddiction", c.forAddiction);
+        ar.value("forJoy", c.forJoy);
+        ar.value("scheduled", c.scheduled);
+        ar.value("daysFrequency", c.daysFrequency);
+        ar.value("moodBelow", c.moodBelow);
+        ar.value("joyBelow", c.joyBelow);
+    } else {
+        static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
+    }
 }
 
 template <typename Ar>
@@ -1316,6 +1309,27 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("building", c.building);
                 ar.value("bill", c.bill);
                 ar.value("index", c.index);
+            } else if constexpr (std::is_same_v<Type, SetRefuelCommand>) {
+                auto* refuel = &c;
+                ar.value("building", refuel->building);
+                ar.value("autoRefuel", refuel->autoRefuel);
+                ar.value("fillNow", refuel->fillNow);
+            } else if constexpr (std::is_same_v<Type, SetResearchCommand> || std::is_same_v<Type, UnlockResearchCommand>) {
+                ar.text("project", c.project);
+            } else if constexpr (std::is_same_v<Type, ThrowCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.text("item", c.item);
+                ar.value("target", c.target);
+                ar.value("x", c.x);
+                ar.value("y", c.y);
+                ar.value("player", c.player);
+            } else if constexpr (std::is_same_v<Type, ExplodeCommand>) {
+                ar.value("x", c.x);
+                ar.value("y", c.y);
+                ar.value("radius", c.radius);
+                ar.value("damage", c.damage);
+                ar.text("damageType", c.damageType);
+                ar.value("penetration", c.penetration);
             } else {
                 saveCommandTail(ar, c);
             }
@@ -2029,7 +2043,7 @@ void saveFighterPart(Ar& ar, Fighter& f) {
     }
     if (ar.sectionVersion() >= 2) {  // F6: what the alarm or a raid has it do
         ar.value("mode", f.mode);
-        ar.require(static_cast<int>(f.mode) <= static_cast<int>(FightMode::Flee), "the save file has a bad fighter mode");
+        ar.require(static_cast<int>(f.mode) <= static_cast<int>(FightMode::Seize), "the save file has a bad fighter mode");
         ar.value("defending", f.defending);
         ar.value("squad", f.squad);
         ar.value("hasGoal", f.hasGoal);
@@ -2298,6 +2312,20 @@ void saveResearch(Ar& ar, ResearchState& r) {
 }
 
 template <typename Ar>
+void saveShip(Ar& ar, ShipState& s) {
+    ar.value("phase", s.phase);
+    ar.require(static_cast<int>(s.phase) <= static_cast<int>(ShipPhase::Launched), "the save file has a bad ship phase");
+    ar.value("reactor", s.reactor);
+    ar.value("startedAt", s.startedAt);
+    ar.value("nextWave", s.nextWave);
+    ar.value("waves", s.waves);
+    ar.value("escaped", s.escaped);
+    ar.value("launchedAt", s.launchedAt);
+    ar.list("caskets", s.caskets, [&](Entity& e) { ar.value(nullptr, e); });
+    ar.list("riders", s.riders, [&](Entity& e) { ar.value(nullptr, e); });
+}
+
+template <typename Ar>
 void saveDrugs(Ar& ar, SaveData& d) {
     ar.list("pawns", d.drugPawns, [&](SaveDrugPawn& p) {
         ar.value("pawn", p.pawn);
@@ -2440,6 +2468,13 @@ void saveRaids(Ar& ar, RaidState& r) {
         ar.value("giveUpAt", s.giveUpAt);
         ar.value("state", s.state);
         ar.require(static_cast<int>(s.state) <= static_cast<int>(SquadState::Rout), "the save file has a bad squad state");
+        if (ar.sectionVersion() >= 2) {  // F12
+            ar.value("strategy", s.strategy);
+            ar.require(static_cast<int>(s.strategy) < kRaidStrategyCount, "the save file has a bad raid strategy");
+            ar.value("hasBreach", s.hasBreach);
+            ar.group("breach", [&] { saveCell(ar, s.breach); });
+            ar.group("breachFrom", [&] { saveCell(ar, s.breachFrom); });
+        }
         ar.value("gaveUp", s.gaveUp);
         ar.group("entry", [&] { saveCell(ar, s.entry); });
         ar.value("hasTarget", s.hasTarget);
@@ -2448,6 +2483,16 @@ void saveRaids(Ar& ar, RaidState& r) {
         ar.list("members", s.members, [&](Entity& m) { ar.value(nullptr, m); });
     });
     ar.value("nextSquad", r.nextSquad);
+    if (ar.sectionVersion() >= 2) {  // F12: raids waiting for their hour
+        ar.list("pending", r.pending, [&](PendingRaid& p) {
+            ar.text("faction", p.faction);
+            ar.value("points", p.points);
+            ar.value("edge", p.edge);
+            ar.value("strategy", p.strategy);
+            ar.require(static_cast<int>(p.strategy) < kRaidStrategyCount, "the save file has a bad raid strategy");
+            ar.value("at", p.at);
+        });
+    }
     ar.value("alarm", r.alarm);
     ar.value("manual", r.manual);
     ar.value("suppressed", r.suppressed);
@@ -2672,6 +2717,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "joy", e, &SaveEntity::joy, [&](SaveJoy& j) { saveJoyPart(ar, j); });
     });
     ar.section("research", 1, [&] { saveResearch(ar, d.research); });
+    ar.section("ship", 1, [&] { saveShip(ar, d.ship); });
     ar.section("medicine", 1, [&] {
         saveParts(ar, "medical", e, &SaveEntity::medical, [&](MedicalSettings& m) {
             ar.value("care", m.care);
@@ -2744,7 +2790,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(t.celsius > -500.0f && t.celsius < 1000.0f, "the save file has an impossible room temperature");
         });
     });
-    ar.section("raids", 1, [&] {
+    ar.section("raids", 2, [&] {
         saveRaids(ar, d.raids);
         saveParts(ar, "defense", e, &SaveEntity::defense, [&](DefensePlan& p) {
             ar.value("role", p.role);
@@ -2755,7 +2801,15 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "raider", e, &SaveEntity::raider, [&](Raider& r) {
             ar.value("squad", r.squad);
             ar.text("kind", r.kind);
+            if (ar.sectionVersion() >= 2) {  // F12
+                ar.value("goalThing", r.goalThing);
+                ar.value("loot", r.loot);
+                ar.value("sparesDowned", r.sparesDowned);
+            }
         });
+        if (ar.sectionVersion() >= 2) {
+            saveParts(ar, "kidnapped", e, &SaveEntity::kidnapped, [&](Kidnapped& k) { ar.value("by", k.by); });
+        }
     });
     ar.section("spoilage", 1, [&] {
         ar.value("rngState", d.spoilageState.rngState);
@@ -2882,6 +2936,13 @@ void saveSections(Ar& ar, SaveData& d) {
     });
     ar.section("mentalBreaks", 1, [&] {
         saveParts(ar, "mentalBreaker", e, &SaveEntity::mentalBreaker, [&](MentalBreaker& b) { saveMentalBreakerPart(ar, b); });
+    });
+    ar.section("inspirations", 1, [&] {
+        saveParts(ar, "inspired", e, &SaveEntity::inspired, [&](Inspired& i) {
+            ar.text("def", i.def);
+            ar.value("startedAt", i.startedAt);
+            ar.value("endsAt", i.endsAt);
+        });
     });
     // New sections go here, at the end.
 }
@@ -3117,6 +3178,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const MentalBreaker* breaker = reg.try_get<MentalBreaker>(e)) {
             out.mentalBreaker = *breaker;
         }
+        if (const Inspired* inspired = reg.try_get<Inspired>(e)) {
+            out.inspired = *inspired;
+        }
         out.playerControlled = reg.all_of<PlayerControl>(e);
         if (const ConstructionSite* site = reg.try_get<ConstructionSite>(e)) {
             SaveSite s;
@@ -3235,6 +3299,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const Raider* raider = reg.try_get<Raider>(e)) {
             out.raider = *raider;
         }
+        if (const Kidnapped* kidnapped = reg.try_get<Kidnapped>(e)) {
+            out.kidnapped = *kidnapped;
+        }
         if (const RecoilKick* kick = reg.try_get<RecoilKick>(e)) {
             out.kick = *kick;
         }
@@ -3324,6 +3391,22 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (defIndexOf[r.def.value] == UINT32_MAX) {
             defIndexOf[r.def.value] = static_cast<uint32_t>(d.plants.defs.size());
             d.plants.defs.push_back(sim.defs_->get(r.def).defName());
+    for (const auto& [pawn, s] : sim.drugs_->states()) {
+        SaveDrugPawn saved;
+        saved.pawn = pawn;
+        saved.policy = s.policy;
+        saved.searchAfter = s.searchAfter;
+        for (const DrugPolicyEntry& e : s.edits) {
+            saved.edits.push_back(SaveDrugEntry{e.drug, e.forAddiction, e.forJoy, e.scheduled, e.daysFrequency, e.moodBelow, e.joyBelow});
+        }
+        for (const ChemicalState& c : s.chemicals) {
+            saved.chemicals.push_back(SaveDrugChemical{c.chemical, c.tolerance, c.addicted, c.need, c.progress, c.armed});
+        }
+        for (const DrugDose& dose : s.last) {
+            saved.last.push_back(SaveDrugDose{dose.drug, dose.at});
+        }
+        d.drugPawns.push_back(std::move(saved));
+    }
         }
         d.plants.cells.push_back(static_cast<uint32_t>(r.cell));
         d.plants.defIndex.push_back(defIndexOf[r.def.value]);
@@ -3345,22 +3428,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         d.designations.kinds.push_back(static_cast<uint8_t>(kind));
     }
     d.research = sim.research_->state();
-    for (const auto& [pawn, s] : sim.drugs_->states()) {
-        SaveDrugPawn saved;
-        saved.pawn = pawn;
-        saved.policy = s.policy;
-        saved.searchAfter = s.searchAfter;
-        for (const DrugPolicyEntry& e : s.edits) {
-            saved.edits.push_back(SaveDrugEntry{e.drug, e.forAddiction, e.forJoy, e.scheduled, e.daysFrequency, e.moodBelow, e.joyBelow});
-        }
-        for (const ChemicalState& c : s.chemicals) {
-            saved.chemicals.push_back(SaveDrugChemical{c.chemical, c.tolerance, c.addicted, c.need, c.progress, c.armed});
-        }
-        for (const DrugDose& dose : s.last) {
-            saved.last.push_back(SaveDrugDose{dose.drug, dose.at});
-        }
-        d.drugPawns.push_back(std::move(saved));
-    }
+    d.ship = sim.ship_->state();
     for (const auto& [pawn, s] : sim.talents_->states()) {
         d.talentPawns.push_back(pawn);
         d.talentXp.push_back(s.xp);
@@ -3619,6 +3687,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.mentalBreaker) {
             reg.emplace<MentalBreaker>(entity, std::move(*e.mentalBreaker));
         }
+        if (e.inspired) {
+            reg.emplace<Inspired>(entity, std::move(*e.inspired));
+        }
         if (e.bills) {
             BillList list;
             list.nextId = e.bills->nextId;
@@ -3847,6 +3918,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.defense) {
             reg.emplace<DefensePlan>(entity, *e.defense);
         }
+        if (e.kidnapped) {
+            reg.emplace<Kidnapped>(entity, *e.kidnapped);
+        }
         if (e.raider) {
             reg.emplace<Raider>(entity, *e.raider);
         }
@@ -4011,6 +4085,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.mentalBreaks_->afterLoad(error)) {
         return false;
     }
+    if (!sim.inspirations_->afterLoad(error)) {
+        return false;
+    }
     if (d.stockpile && !sim.map_.inBounds(*d.stockpile)) {
         error = "the save has a stockpile outside the map";
         return false;
@@ -4086,9 +4163,17 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                 error = "the save has a raid squad with a pawn that isn't there";
                 return false;
             }
+            const Raider& raider = reg.get<Raider>(m);
+            if ((raider.loot != kNoEntity && !reg.valid(raider.loot)) || (raider.goalThing != kNoEntity && !reg.valid(raider.goalThing))) {
+                error = "the save has a raider after something that isn't there";
+                return false;
+            }
         }
     }
     if (!sim.raids_->restore(std::move(d.raids), error)) {
+        return false;
+    }
+    if (!sim.ship_->restore(std::move(d.ship), error)) {
         return false;
     }
     sim.apparel_->restoreOutfits(std::move(d.outfits), d.nextOutfitId);

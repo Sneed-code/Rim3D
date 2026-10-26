@@ -563,6 +563,14 @@ struct ContractDiseaseCommand {
     int part = -1;
 };
 
+// The spaceship ending (docs/design/ship.md). `action` is "StartReactor" (`thing` a finished ship reactor), "Board" (`pawn` rides
+// in the ship cryptosleep casket `thing`; no pawn empties the casket) or "Launch". Fails with the reason in plain words.
+struct ShipCommand {
+    std::string action;
+    Entity thing = kNoEntity;
+    Entity pawn = kNoEntity;
+};
+
 // Dev command: the weather becomes this Weathers def now (by defName, e.g. "Rain") and lasts `hours`
 // game hours (0: its usual length), then the next is chosen as usual (docs/design/weather.md).
 // Fails if no Weathers def has the name.
@@ -742,6 +750,18 @@ struct EndMentalBreakCommand {
     Entity pawn = kNoEntity;
 };
 
+// A raid with a strategy (F12, docs/design/raid-strategies.md), the narrator's way to send one. `strategy` is
+// "Assault", "Sappers", "DropPods", "Thieves", "Kidnappers", or "Auto" to pick by the rules' weights; `hour` 0 to
+// 23.99 holds the raid until that hour of the day (a night attack), -1 sends it now. Fails like StartRaid, and for
+// a strategy with nothing to go for (thieves with no loose items, kidnappers with no colonist).
+struct StartStrategyRaidCommand {
+    std::string faction = "Pirate";
+    float points = 0.0f;
+    int edge = -1;
+    std::string strategy = "Auto";
+    float hour = -1.0f;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -765,9 +785,9 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
                              SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand, SetPrisonerModeCommand,
                              SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
-                             MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand, TakeDrugCommand,
-                             SetDrugPolicyCommand, SetDrugPolicyEntryCommand, SetNarratorCommand, FireIncidentCommand,
-                             ContractDiseaseCommand>;
+                             MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand,
+                             SetNarratorCommand, FireIncidentCommand, ContractDiseaseCommand, StartStrategyRaidCommand,
+                             ShipCommand, TakeDrugCommand, SetDrugPolicyCommand, SetDrugPolicyEntryCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.
