@@ -127,6 +127,8 @@ public:
     void setRunning(std::function<bool(Entity)> running) { running_ = std::move(running); }
     // The hook for buildings destroyed by damage (CombatSystem::setBeforeDestroy): a popper bursts and lays its foam.
     void onDestroy(Entity building);
+    // Set by the sim: hurts a pawn through its armor (CombatSystem::hurtPawn); without it flames hit bare.
+    void setPawnHurt(std::function<bool(Entity, DefId, float, Rng&)> hurt) { pawnHurt_ = std::move(hurt); }
     void setPawnFactor(std::function<float(Entity)> factor) { pawnFactor_ = std::move(factor); }
 
     // One game second, `now` the game second. The sim's event list (set with setEventLog) holds this step's
@@ -248,6 +250,7 @@ private:
     DefId burnType_;
     DefId ashKind_;
     std::function<float(Entity)> pawnFactor_;
+    std::function<bool(Entity, DefId, float, Rng&)> pawnHurt_;
     std::vector<Event>* events_ = nullptr;
 
     std::map<int, FireCell> fires_;
