@@ -308,6 +308,12 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["item"] = entt::to_integral(c.item);
+            } else if constexpr (std::is_same_v<Type, SetNarratorCommand>) {
+                j["narrator"] = c.narrator;
+                j["difficulty"] = c.difficulty;
+            } else if constexpr (std::is_same_v<Type, FireIncidentCommand>) {
+                j["incident"] = c.incident;
+                j["points"] = c.points;
             } else if constexpr (std::is_same_v<Type, SwitchWeaponCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["slot"] = static_cast<int>(c.slot);
@@ -334,6 +340,11 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["breakDef"] = c.breakDef;
+            } else if constexpr (std::is_same_v<Type, ContractDiseaseCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["disease"] = c.disease;
+                j["severity"] = c.severity;
+                j["part"] = c.part;
             } else {
                 static_assert(std::is_same_v<Type, EndMentalBreakCommand>, "write every command type");
                 j["pawn"] = entt::to_integral(c.pawn);
@@ -1105,6 +1116,18 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = c;
+    } else if (type == "SetNarrator") {
+        SetNarratorCommand c;
+        if (!r.text(j, "narrator", c.narrator, where) || !r.text(j, "difficulty", c.difficulty, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "FireIncident") {
+        FireIncidentCommand c;
+        if (!r.text(j, "incident", c.incident, where) || !r.number(j, "points", c.points, where)) {
+            return false;
+        }
+        out.command = std::move(c);
     } else if (type == "SetGrowingZoneCrop") {
         SetGrowingZoneCropCommand c;
         if (!r.integer(j, "zone", c.zone, where) || !r.text(j, "crop", c.crop, where)) {
@@ -1154,6 +1177,15 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         uint32_t pawn = entt::to_integral(kNoEntity);
         SetMedicalCareCommand c;
         if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "care", c.care, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "ContractDisease") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        ContractDiseaseCommand c;
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "disease", c.disease, where) ||
+            !r.number(j, "severity", c.severity, where) || !r.integer(j, "part", c.part, where)) {
             return false;
         }
         c.pawn = static_cast<Entity>(pawn);
