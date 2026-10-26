@@ -1116,6 +1116,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!mentalBreaks_->start(startBreak->pawn, startBreak->breakDef, rng_, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* reroll = std::get_if<RerollColonistCommand>(&command)) {
+        if (!rerollColonist(reroll->slot, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* endBreak = std::get_if<EndMentalBreakCommand>(&command)) {
         if (!mentalBreaks_->end(endBreak->pawn, error)) {
             commandFailed(id, error);

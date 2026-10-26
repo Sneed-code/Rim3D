@@ -411,7 +411,7 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, s
         Colonist person;
         for (uint64_t tries = 0; tries < 20; ++tries) {
             std::string ignored;
-            if (!generateColonist(defs_, base + tries, false, person, ignored)) {
+            if (!generateColonist(defs_, base + tries, false, person, ignored, "Raider")) {
                 break;
             }
             if (std::find(person.disabledWorkTags.begin(), person.disabledWorkTags.end(), "Violent") == person.disabledWorkTags.end()) {

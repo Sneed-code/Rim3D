@@ -704,6 +704,14 @@ struct EndMentalBreakCommand {
     Entity pawn = kNoEntity;
 };
 
+// Before the game starts (game second 0): throws away the starting colonist in slot `slot` (0 is the
+// first one made, the protagonist when the scenario has one) and makes another in the same place,
+// with new backstories, traits, skills and gear. The draw comes from the sim's main stream, so
+// the same seed and the same rerolls give the same colonists. Fails later in the game.
+struct RerollColonistCommand {
+    int slot = 0;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -728,7 +736,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand, SetPrisonerModeCommand,
                              SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
                              MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand,
-                             SetNarratorCommand, FireIncidentCommand>;
+                             SetNarratorCommand, FireIncidentCommand, RerollColonistCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

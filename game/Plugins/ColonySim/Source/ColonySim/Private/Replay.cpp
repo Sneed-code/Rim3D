@@ -340,9 +340,11 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["breakDef"] = c.breakDef;
-            } else {
-                static_assert(std::is_same_v<Type, EndMentalBreakCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
+            } else {
+                static_assert(std::is_same_v<Type, RerollColonistCommand>, "write every command type");
+                j["slot"] = c.slot;
             }
         },
         logged.command);
@@ -1117,6 +1119,12 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = std::move(c);
+    } else if (type == "RerollColonist") {
+        RerollColonistCommand c;
+        if (!r.integer(j, "slot", c.slot, where)) {
+            return false;
+        }
+        out.command = c;
     } else if (type == "FireIncident") {
         FireIncidentCommand c;
         if (!r.text(j, "incident", c.incident, where) || !r.number(j, "points", c.points, where)) {

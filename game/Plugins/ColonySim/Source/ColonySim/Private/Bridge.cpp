@@ -177,9 +177,11 @@ const char* commandName(const Command& command) {
                 return "PlaceUpperFloor";
             } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
                 return "StartMentalBreak";
-            } else {
-                static_assert(std::is_same_v<Type, EndMentalBreakCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
                 return "EndMentalBreak";
+            } else {
+                static_assert(std::is_same_v<Type, RerollColonistCommand>, "name every command type");
+                return "RerollColonist";
             }
         },
         command);

@@ -1209,6 +1209,8 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
             } else if constexpr (std::is_same_v<Type, SetNarratorCommand>) {
                 ar.text("narrator", c.narrator);
                 ar.text("difficulty", c.difficulty);
+            } else if constexpr (std::is_same_v<Type, RerollColonistCommand>) {
+                ar.value("slot", c.slot);
             } else if constexpr (std::is_same_v<Type, FireIncidentCommand>) {
                 ar.text("incident", c.incident);
                 ar.value("points", c.points);
