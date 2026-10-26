@@ -766,7 +766,8 @@ int main(int argc, char** argv) {
     uint64_t commandsFailed = 0;
     uint64_t ate = 0;     // PawnAte events
     uint64_t wokeUp = 0;  // PawnWokeUp events
-    uint64_t died = 0;    // PawnDied events
+    uint64_t died = 0;    // PawnDied events of pawns that are not animals
+    uint64_t animalsDied = 0;  // and of animals
     uint64_t mined = 0;   // CellMined events
     uint64_t felled = 0;  // PlantRemoved events
     uint64_t picked = 0;  // PlantHarvested events
@@ -802,7 +803,11 @@ int main(int argc, char** argv) {
         for (const colony::Event& e : sim.events()) {
             ate += e.type == colony::EventType::PawnAte ? 1 : 0;
             wokeUp += e.type == colony::EventType::PawnWokeUp ? 1 : 0;
-            died += e.type == colony::EventType::PawnDied ? 1 : 0;
+            if (e.type == colony::EventType::PawnDied) {
+                // Predators kill prey now (N5): animals that die are counted apart.
+                const entt::registry& reg = sim.things().registry();
+                (reg.valid(e.thing) && reg.all_of<colony::Animal>(e.thing) ? animalsDied : died) += 1;
+            }
             mined += e.type == colony::EventType::CellMined ? 1 : 0;
             felled += e.type == colony::EventType::PlantRemoved ? 1 : 0;
             picked += e.type == colony::EventType::PlantHarvested ? 1 : 0;
@@ -1081,12 +1086,16 @@ int main(int argc, char** argv) {
         }
         std::printf("{\"animals\":{\"living\":%zu,\"wild\":%zu,\"herds\":%d,\"weight\":%.1f,\"targetWeight\":%.1f,"
                     "\"asleepNow\":%d,\"minFood\":%.2f,\"offGround\":%d,\"arrived\":%llu,\"left\":%llu,\"grazed\":%llu,"
-                    "\"cleared\":%llu,\"species\":{%s}}}\n",
+                    "\"cleared\":%llu,\"died\":%llu,\"scares\":%llu,\"hunts\":%llu,\"kills\":%llu,\"meals\":%llu,"
+                    "\"revenges\":%llu,\"manhunters\":%llu,\"species\":{%s}}}\n",
                     animals.livingCount(), animals.wildCount(), herdsSeen, static_cast<double>(animals.wildWeight()),
                     static_cast<double>(animals.targetWeight()), asleep, static_cast<double>(minFood), offGround,
                     static_cast<unsigned long long>(animals.stats().arrived), static_cast<unsigned long long>(animals.stats().left),
                     static_cast<unsigned long long>(animals.stats().grazed), static_cast<unsigned long long>(animals.stats().cleared),
-                    species.c_str());
+                    static_cast<unsigned long long>(animalsDied), static_cast<unsigned long long>(animals.stats().scares),
+                    static_cast<unsigned long long>(animals.stats().hunts), static_cast<unsigned long long>(animals.stats().kills),
+                    static_cast<unsigned long long>(animals.stats().meals), static_cast<unsigned long long>(animals.stats().revenges),
+                    static_cast<unsigned long long>(animals.stats().manhunters), species.c_str());
         if (options.check && settings.wildAnimals > 0) {
             if (animals.livingCount() == 0) {
                 std::fprintf(stderr, "check failed: no wild animals were placed\n");

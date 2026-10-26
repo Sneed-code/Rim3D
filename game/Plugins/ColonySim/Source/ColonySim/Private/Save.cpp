@@ -1534,7 +1534,14 @@ void saveAnimalPart(Ar& ar, Animal& a) {
     ar.value("nextThink", a.nextThink);
     ar.value("staysUntil", a.staysUntil);
     ar.group("goal", [&] { saveCell(ar, a.goal); });
-    ar.require(static_cast<int>(a.mode) <= static_cast<int>(AnimalMode::EatItem), "the save file has a bad animal mode");
+    if (ar.sectionVersion() >= 2) {  // N5: fights
+        ar.value("temper", a.temper);
+        ar.value("enemy", a.enemy);
+        ar.value("temperUntil", a.temperUntil);
+        ar.value("huntAfter", a.huntAfter);
+        ar.require(static_cast<int>(a.temper) <= static_cast<int>(AnimalTemper::Manhunter), "the save file has a bad animal temper");
+    }
+    ar.require(static_cast<int>(a.mode) <= static_cast<int>(AnimalMode::Seized), "the save file has a bad animal mode");
     ar.require(a.sleepShift < 24, "the save file has a bad animal sleep shift");
 }
 
@@ -2329,7 +2336,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("research", 1, [&] { saveResearch(ar, d.research); });
     ar.section("talents", 1, [&] { saveTalents(ar, d); });
     ar.section("roomstats", 1, [&] { saveRoomStatsSection(ar, d); });
-    ar.section("animals", 1, [&] {
+    ar.section("animals", 2, [&] {
         ar.value("wildAnimals", d.wildAnimals);
         ar.value("populated", d.animals.populated);
         ar.value("percent", d.animals.percent);
@@ -2341,6 +2348,14 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("left", d.animals.stats.left);
         ar.value("grazed", d.animals.stats.grazed);
         ar.value("cleared", d.animals.stats.cleared);
+        if (ar.sectionVersion() >= 2) {  // N5
+            ar.value("manhunters", d.animals.stats.manhunters);
+            ar.value("revenges", d.animals.stats.revenges);
+            ar.value("hunts", d.animals.stats.hunts);
+            ar.value("kills", d.animals.stats.kills);
+            ar.value("meals", d.animals.stats.meals);
+            ar.value("scares", d.animals.stats.scares);
+        }
         ar.require(d.wildAnimals >= 0 && d.animals.percent >= 0, "the save file has a bad wild animal density");
         saveParts(ar, "animal", e, &SaveEntity::animal, [&](Animal& a) { saveAnimalPart(ar, a); });
     });

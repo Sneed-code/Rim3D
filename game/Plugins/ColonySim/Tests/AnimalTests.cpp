@@ -331,10 +331,10 @@ TEST_CASE("Animals: a fed deer leaves plants alone, and wolves never graze") {
     }
     const size_t before = sim.plants().count();
     sim.stepMany(600);
-    // The deer fell from 1.0 of its capacity by little in ten minutes; the wolf never looks for food.
+    // The deer fell from 1.0 of its capacity by little in ten minutes; the wolf hunts when it is hungry (N5) but never grazes.
     CHECK(sim.plants().count() == before);
     CHECK(sim.animals().stats().grazed == 0);
-    CHECK(sim.animals().foodShare(wolf) == doctest::Approx(1.0f));
+    CHECK(sim.animals().foodShare(wolf) < 1.0f);  // wild predators get hungry too
 }
 
 TEST_CASE("Animals: a herd stays together") {

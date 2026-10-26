@@ -361,7 +361,8 @@ void FighterSystem::step() {
         p.level = pos.level;
         p.able = h == nullptr || !h->downed;
         p.fighter = reg.all_of<Fighter>(e);
-        p.animal = reg.all_of<Animal>(e);
+        const Animal* wildLife = reg.try_get<Animal>(e);
+        p.animal = wildLife != nullptr && wildLife->temper == AnimalTemper::Calm;  // a hunting, manhunting or avenging one is an enemy (N5)
         p.stance = p.able ? posture.stance : Stance::Prone;
         pawns_.push_back(p);
     }

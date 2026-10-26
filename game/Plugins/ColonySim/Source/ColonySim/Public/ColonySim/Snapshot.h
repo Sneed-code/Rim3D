@@ -159,6 +159,10 @@ struct ThingView {
     // `asleep` and `faction` (100 for wild) are filled for them too.
     int lifeStage = -1;
     float bodySize = 0.0f;
+    // Animals in fights (docs/design/animal-fights.md): 0 calm, 1 hunting a pawn, 2 avenging a hurt, 3 manhunter;
+    // `animalMode` is the AnimalMode number (running, chasing, fighting, eating a kill are the last five).
+    int animalTemper = 0;
+    int animalMode = 0;
     // Animals and husbandry (docs/design/husbandry.md): marked to be tamed (wild) or slaughtered (tame), the animal zone it
     // stays in (0 none), and the tricks it has learned and that are wanted, a bit per Trainable (Obedience 1, Release 2,
     // Rescue 4, Haul 8). A tame animal's `faction` is the player's.
