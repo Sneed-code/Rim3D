@@ -13,7 +13,8 @@ colonist is carried to a bed, and the patient lies in bed until the wounds have 
 `TendPatients` (the Doctor work type) offers every colonist (a pawn of the player's side that thinks, so with a
 `Worker`) with an injury or lost part nobody has tended (`HealthSystem::needsTending`: the injury's Hediffs def is
 `tendable`, which a bruise is not, and it is not a scar). If anyone is bleeding, only the bleeding ones are offered.
-A doctor may tend itself (quality x 0.7, `selfTendQualityFactor`). Nearest first.
+A doctor may tend itself (quality x 0.7, `selfTendQualityFactor`). Nearest first. (ours) A colonist in a mental break is not offered until the break is over: it walks about, a tend takes minutes in
+reach, and the doctors used to chase one for hours (185 re-paths in the narrator scenario once a raid left a breaking colonist hurt).
 
 `JobType::TendPatient`: walk to the medicine, pick one up, walk to the patient, work, tend. The medicine is the one the
 patient's **care setting** allows (below), the strongest first, then the nearest, that nobody else holds. With none the
