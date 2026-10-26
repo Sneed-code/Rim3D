@@ -107,7 +107,7 @@ Events: `FireStarted` (cell, size), `FireOut` (cell, message "burnt out" or "bea
 `PlantRemoved` ("burnt") and `ThingDestroyed` for what burnt up. Snapshot: `fires` (cell, size,
 rewritten when `fireChanges` goes up, which is every pass while any burn), `burnt`, `homeArea`,
 `ThingView::onFire`. Commands: `Ignite` (a cell, or a pawn) and `SetHomeArea`. U14 draws fire,
-smoke and burnt ground from these; the home area overlay is a U19 job.
+smoke and burnt ground from these ([fire-draw.md](fire-draw.md)); the home area overlay is a U19 job.
 
 ## Numbers
 
