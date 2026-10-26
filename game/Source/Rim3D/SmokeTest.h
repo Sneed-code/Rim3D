@@ -91,6 +91,7 @@ private:
 	void BuildSkyPhases();          // SmokeTestSky.cpp
 	void BuildMeleePhases();        // SmokeTestMelee.cpp
 	void BuildClothesPhases();      // SmokeTestClothes.cpp
+	void BuildFeelPhases();         // SmokeTestFeel.cpp
 	void StartPhase(int32 Index);
 	void FinishPhase();
 	void WriteResultsAndQuit();
