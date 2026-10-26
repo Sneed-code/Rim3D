@@ -111,7 +111,7 @@ G2, A1 and A2 are Stage 1 tasks.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | C11 | **Fuel.** A refuelable part for buildings: the stove burns wood per meal (BACKLOG), campfires, torches, later generators; a refuel job under Hauling; out of fuel means stopped. | Cloud | Sonnet, medium | 60 min | S7 |
+| ✓ | C11 | **Fuel.** A refuelable part for buildings: the stove burns wood per meal (BACKLOG), campfires, torches, later generators; a refuel job under Hauling; out of fuel means stopped. | Cloud | Sonnet, medium | 60 min | S7 |
 | | C12 | **Skill learning everywhere.** XP from every job that uses a skill (building, cooking, doctoring later), passions, RimWorld's daily XP cap and the slow loss above level 10; a mood bonus for passion work. | Cloud | Sonnet, medium | 60 min | S7 |
 | ✓ | C13 | **Growing zones and farming.** Growing zones with a chosen crop, sow and harvest jobs under Growing, growth from fertility, light and temperature, frost kills, harvest yield from the Plants skill. | Cloud | Sonnet, high | 90 min | E1, D4 |
 | | C14 | **Work tables, crafting and quality.** Bills on every bench, not just the stove; products with quality from the crafter's skill (RimWorld's curve); stone blocks, smithing, tailoring and butchering; the bill extras in BACKLOG (pause at a full stock, where products go, ingredient filters, skill range). | Cloud | Sonnet, high | 90 min | C11, D6, D8 |

@@ -6,6 +6,7 @@
 #include "ColonySim/Cover.h"
 #include "ColonySim/Defense.h"
 #include "ColonySim/Doors.h"
+#include "ColonySim/Fuel.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Needs.h"
@@ -123,6 +124,9 @@ Entity Things::make(DefId defId, int stackCount) {
             }
             if (def.has("trap")) {
                 registry_.emplace<Trap>(thing);
+            }
+            if (const FuelSpec fuelSpec = readFuelSpec(*defs_, def); fuelSpec.present) {
+                registry_.emplace<Fuel>(thing, Fuel{fuelSpec.capacity * fuelSpec.initial});  // Fuel.h
             }
             break;
         }

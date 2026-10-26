@@ -102,8 +102,8 @@ cook makes a simple meal in 432 game seconds, 7.2 game minutes, plus the walking
 
 ## Not yet
 
-- **Fuel.** The fueled stove should burn wood (RimWorld: 1 wood a meal, capacity 50, a refuel job
-  under Hauling). It cooks for free for now; BACKLOG has it.
+- ~~Fuel~~ done (C11, [fuel.md](fuel.md)): the stove holds 50 wood, burns one per meal made and is
+  stopped when it is out; the Refuel job under Hauling brings wood. A new stove starts empty.
 - Skill learning (XP is in the recipe, no sim system gives it), food poisoning, meals remembering
   their ingredients (mood from human or insect meat), rot.
 - Bill details: reordering, the ingredient radius, allowed skill range, "store products in" choice,
