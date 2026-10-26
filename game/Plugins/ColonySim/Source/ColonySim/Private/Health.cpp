@@ -120,6 +120,9 @@ public:
         float painPerSeverity = 0.0f;
         float bleedRate = 0.0f;
         bool canMerge = false;
+        bool permanent = false;   // a scar or old wound: never heals
+        bool tendable = true;     // a doctor can tend it (a bruise can't be)
+        bool neverScars = false;
     };
     struct DamageType {
         bool valid = false;
@@ -170,6 +173,14 @@ public:
     float bleedMinForBloodLoss = 0.1f;
     float protagonistFactor = 2.0f;
     bool innerHurtsOuter = true;
+    // Scars (H1): the chance a healed injury leaves one grows from 0 at scarMinHp hit points lost to scarMax at scarFullHp.
+    float scarMax = 0.02f;
+    float scarMinHp = 4.0f;
+    float scarFullHp = 14.0f;
+    float scarSeverity = 1.0f;
+    float oldWoundFromHp = 14.0f;
+    DefId scarHediff;
+    DefId oldWoundHediff;
 
     const Kind* kindOf(DefId thingDef) const {
         if (!thingDef.valid() || thingDef.value >= kinds.size() || kinds[thingDef.value].body < 0) {
@@ -372,6 +383,14 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
         h.painPerSeverity = static_cast<float>(def.number("injuryProps.painPerSeverity"));
         h.bleedRate = static_cast<float>(def.number("injuryProps.bleedRate"));
         h.canMerge = def.flag("injuryProps.canMerge");
+        h.permanent = def.flag("permanent");
+        h.tendable = def.flag("tendable", true);
+        h.neverScars = def.flag("neverScars");
+        if (def.defName() == "Scar") {
+            scarHediff = id;
+        } else if (def.defName() == "OldWound") {
+            oldWoundHediff = id;
+        }
         if (def.defName() == "MissingBodyPart") {
             missingHediff = id;
         } else if (def.defName() == "BloodLoss") {
@@ -425,6 +444,11 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
         bleedMinForBloodLoss = static_cast<float>(rules->number("bleedRateMinForBloodLoss", bleedMinForBloodLoss));
         protagonistFactor = static_cast<float>(rules->number("protagonistPartHitPointsFactor", protagonistFactor));
         innerHurtsOuter = rules->flag("innerInjuryAlsoHurtsOuter", innerHurtsOuter);
+        scarMax = static_cast<float>(rules->number("scarChance.max", scarMax));
+        scarMinHp = static_cast<float>(rules->number("scarChance.minHpLost", scarMinHp));
+        scarFullHp = static_cast<float>(rules->number("scarChance.fullAtHpLost", scarFullHp));
+        scarSeverity = static_cast<float>(rules->number("scarSeverity", scarSeverity));
+        oldWoundFromHp = static_cast<float>(rules->number("oldWoundFromHpLost", oldWoundFromHp));
     }
 }
 
@@ -639,7 +663,7 @@ const HealthModel::Kind* healthKindOf(const HealthModel& model, const entt::regi
 }
 
 float healthHpFactor(const HealthModel& model, const Health& health) {
-    return health.protagonist ? model.protagonistFactor : 1.0f;
+    return (health.protagonist ? model.protagonistFactor : 1.0f) * health.stageHp;
 }
 
 }  // namespace
@@ -1047,7 +1071,7 @@ int HealthSystem::tendAll(Entity pawn, float quality) {
     quality = std::max(0.0f, quality);
     int tended = 0;
     for (Injury& injury : health.injuries) {
-        if (!injury.tended()) {
+        if (!injury.tended() && !model_->hediffs[injury.hediff.value].permanent) {
             injury.tendQuality = quality;
             ++tended;
         }
@@ -1062,6 +1086,40 @@ int HealthSystem::tendAll(Entity pawn, float quality) {
         recompute(pawn, health, true);
     }
     return tended;
+}
+
+bool HealthSystem::needsTending(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Health* health = reg.valid(pawn) ? reg.try_get<Health>(pawn) : nullptr;
+    if (health == nullptr || health->dead || healthKindOf(*model_, reg, pawn) == nullptr) {
+        return false;
+    }
+    for (const Injury& injury : health->injuries) {
+        const HealthModel::Hediff& h = model_->hediffs[injury.hediff.value];
+        if (!injury.tended() && h.tendable && !h.permanent) {
+            return true;
+        }
+    }
+    return std::any_of(health->missing.begin(), health->missing.end(), [](const MissingPart& m) { return !m.tended(); });
+}
+
+bool HealthSystem::needsRest(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Health* health = reg.valid(pawn) ? reg.try_get<Health>(pawn) : nullptr;
+    if (health == nullptr || health->dead || healthKindOf(*model_, reg, pawn) == nullptr) {
+        return false;
+    }
+    if (health->bleedPerDay > 0.0f) {
+        return true;
+    }
+    return std::any_of(health->injuries.begin(), health->injuries.end(), [&](const Injury& injury) {
+        return injury.tended() && !model_->hediffs[injury.hediff.value].permanent;
+    });
+}
+
+bool HealthSystem::urgentlyNeedsTending(Entity pawn) const {
+    const Health* health = things_.registry().valid(pawn) ? things_.registry().try_get<Health>(pawn) : nullptr;
+    return health != nullptr && health->bleedPerDay > 0.0f && needsTending(pawn);
 }
 
 // ---- Environment hediffs and injuries without a damage type ------------------------------------------
@@ -1155,6 +1213,29 @@ std::vector<int> HealthSystem::partsOfDef(DefId pawnDef, const std::string& part
     return out;
 }
 
+// A healed injury may leave a scar (or, if it was a big one, an old wound that aches): the chance grows with the
+// hit points it cost at its worst (HealthRules.scarChance). Bruises and the like never scar.
+void HealthSystem::leaveScar(Entity pawn, Health& health, const Injury& healed, Rng& rng) {
+    const HealthModel::Hediff& h = model_->hediffs[healed.hediff.value];
+    if (h.neverScars || h.permanent || !model_->scarHediff.valid()) {
+        return;
+    }
+    const float span = std::max(0.001f, model_->scarFullHp - model_->scarMinHp);
+    const float chance = model_->scarMax * std::clamp((healed.peak - model_->scarMinHp) / span, 0.0f, 1.0f);
+    if (chance <= 0.0f || rng.unit() >= chance) {
+        return;
+    }
+    const DefId def = healed.peak >= model_->oldWoundFromHp && model_->oldWoundHediff.valid() ? model_->oldWoundHediff
+                                                                                              : model_->scarHediff;
+    Injury scar;
+    scar.part = healed.part;
+    scar.hediff = def;
+    scar.severity = model_->scarSeverity;
+    scar.peak = model_->scarSeverity;
+    health.injuries.push_back(scar);
+    emit(EventType::PawnScarred, pawn, def, healed.part, scar.severity);
+}
+
 // ---- Each game second -------------------------------------------------------------------------
 
 void HealthSystem::step(int64_t seconds, uint64_t seed) {
@@ -1195,11 +1276,19 @@ void HealthSystem::step(int64_t seconds, uint64_t seed) {
         // Natural healing: every healInterval seconds (offset by the pawn's id so they don't all
         // heal in the same step), one random injury heals by the day's rate times a small factor.
         const int64_t interval = model_->healInterval;
-        if (!health.injuries.empty() && (seconds + static_cast<int64_t>(entt::to_integral(pawn) % static_cast<uint32_t>(interval))) % interval == 0) {
+        // Scars and old wounds never heal.
+        healable_.clear();
+        for (size_t i = 0; i < health.injuries.size(); ++i) {
+            if (!model_->hediffs[health.injuries[i].hediff.value].permanent) {
+                healable_.push_back(i);
+            }
+        }
+        if (!healable_.empty() && (seconds + static_cast<int64_t>(entt::to_integral(pawn) % static_cast<uint32_t>(interval))) % interval == 0) {
             Rng rng(splitMix64(seed ^ (static_cast<uint64_t>(entt::to_integral(pawn)) * 0x9E3779B97F4A7C15ULL) ^
                                static_cast<uint64_t>(seconds)));
-            const size_t pick = rng.below(static_cast<uint32_t>(health.injuries.size()));
+            const size_t pick = healable_[rng.below(static_cast<uint32_t>(healable_.size()))];
             Injury& injury = health.injuries[pick];
+            injury.peak = std::max(injury.peak, injury.severity);
             float rate = model_->naturalHealPerDay + model_->restBonus[static_cast<size_t>(health.rest)];
             if (injury.tended()) {
                 const float q = std::clamp(injury.tendQuality, 0.0f, 1.0f);
@@ -1210,7 +1299,9 @@ void HealthSystem::step(int64_t seconds, uint64_t seed) {
             }
             injury.severity -= rate * model_->healFactor;
             if (injury.severity <= 0.0f) {
+                const Injury healed = injury;
                 health.injuries.erase(health.injuries.begin() + static_cast<std::ptrdiff_t>(pick));
+                leaveScar(pawn, health, healed, rng);
             }
             recompute(pawn, health, true);
         }
@@ -1294,6 +1385,8 @@ bool HealthSystem::report(Entity pawn, HealthReport& out) const {
         line.injury = injury.hediff.valid() ? things_.defs().get(injury.hediff).label() : std::string();
         line.severity = injury.severity;
         line.tended = injury.tended();
+        line.tendQuality = injury.tendQuality;
+        line.permanent = injury.hediff.valid() && model_->hediffs[injury.hediff.value].permanent;
         out.injuries.push_back(std::move(line));
     }
     for (const MissingPart& missing : health.missing) {

@@ -6,6 +6,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Spoilage.h"
 #include "ColonySim/Things.h"
 
@@ -24,10 +25,9 @@ float needJobsDistSq(CellPos a, CellPos b) {
     return dx * dx + dy * dy;
 }
 
+// Across levels a level counts as kLevelDetourM metres more (docs/design/levels.md).
 float needJobsDistSq(const Position& a, CellPos b) {
-    const float dx = a.x - (static_cast<float>(b.x) + 0.5f);
-    const float dy = a.y - (static_cast<float>(b.y) + 0.5f);
-    return dx * dx + dy * dy;
+    return levelDistSq(a.x - (static_cast<float>(b.x) + 0.5f), a.y - (static_cast<float>(b.y) + 0.5f), a.level - b.level);
 }
 
 }  // namespace
@@ -106,7 +106,8 @@ void JobSystem::interruptForNeeds(Entity pawn) {
         return;
     }
     if (current.forced || (current.type != JobType::Wait && current.type != JobType::HaulToCell &&
-                           current.type != JobType::Recreate && !jobIsGather(current.type))) {
+                           current.type != JobType::Recreate && current.type != JobType::BedRest &&
+                           !jobIsGather(current.type))) {
         return;
     }
     const Needs* needs = reg.try_get<Needs>(pawn);
@@ -114,7 +115,8 @@ void JobSystem::interruptForNeeds(Entity pawn) {
         return;
     }
     const bool hungry = needs->food < rules_.foodSeekBelow && now() >= needs->foodSearchAfter;
-    const bool sleepy = needs->rest < sleepBelow(scheduleNow(pawn));
+    // A patient resting in bed gets up to eat but not to sleep: it is in bed already.
+    const bool sleepy = current.type != JobType::BedRest && needs->rest < sleepBelow(scheduleNow(pawn));
     if (!hungry && !sleepy) {
         return;
     }
@@ -141,7 +143,7 @@ bool JobSystem::findFood(Entity pawn, Job& out) {
     for (const auto [item, thing, pos, stack] : reg.view<const Thing, const Position, const StackCount>().each()) {
         (void)stack;
         const int tier = thing.def.value < foodTier_.size() ? foodTier_[thing.def.value] : -1;
-        if (tier < 0 || pos.level != at.level || (tier == 0 && needs.food >= rules_.foodRavenousBelow)) {
+        if (tier < 0 || (tier == 0 && needs.food >= rules_.foodRavenousBelow)) {
             continue;
         }
         const float dist = needJobsDistSq(at, cellOf(pos));
@@ -330,7 +332,12 @@ bool JobSystem::findBed(Entity pawn, Entity& bed, CellPos& cell) {
     float bestDist = 0.0f;
     for (const auto [candidate, thing, owners, footprint] : reg.view<const Thing, const Bed, const Footprint>().each()) {
         const int slots = std::max(1, static_cast<int>(defs_.get(thing.def).integer("building.sleepingSlots", 1)));
-        if (static_cast<int>(owners.owners.size()) >= slots || !things_.spawned(candidate)) {
+        // A medical bed is for patients: nobody claims one to sleep in (RimWorld's rule).
+        if (static_cast<int>(owners.owners.size()) >= slots || !things_.spawned(candidate) || isMedical_[thing.def.value] != 0) {
+            continue;
+        }
+        // Prison beds are for prisoners and nobody else.
+        if (reg.all_of<PrisonBed>(candidate) != reg.all_of<Prisoner>(pawn)) {
             continue;
         }
         const CellRect rect = footprint.rect();
@@ -340,7 +347,7 @@ bool JobSystem::findBed(Entity pawn, Entity& bed, CellPos& cell) {
         }
         const CellPos c{rect.minX + index % rect.sizeX, rect.minY + index / rect.sizeX, rect.level};
         const float dist = needJobsDistSq(at, c);
-        if (c.level != at.level || (best != kNoEntity && (dist > bestDist || (dist == bestDist && candidate >= best))) ||
+        if ((best != kNoEntity && (dist > bestDist || (dist == bestDist && candidate >= best))) ||
             !usable(candidate, c)) {
             continue;
         }
@@ -462,6 +469,10 @@ bool JobSystem::assignBed(Entity bed, Entity pawn, std::string& error) {
     }
     if (!reg.valid(pawn) || !reg.all_of<Needs>(pawn)) {
         error = "that pawn doesn't sleep";
+        return false;
+    }
+    if (reg.all_of<PrisonBed>(bed) != reg.all_of<Prisoner>(pawn)) {
+        error = reg.all_of<PrisonBed>(bed) ? "that is a prison bed, for prisoners only" : "a prisoner sleeps only in a prison bed";
         return false;
     }
     if (std::find(owned.owners.begin(), owned.owners.end(), pawn) != owned.owners.end()) {

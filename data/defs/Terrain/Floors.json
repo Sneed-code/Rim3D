@@ -29,7 +29,8 @@
   "workToBuild": 216.0,
   "stats": {
    "beauty": 1,
-   "cleanliness": 0
+   "cleanliness": 0,
+   "flammability": 1.0
   },
   "unverified": [
    "costs",
@@ -86,7 +87,8 @@
   "workToBuild": 288.0,
   "stats": {
    "beauty": 2,
-   "cleanliness": -0.5
+   "cleanliness": -0.5,
+   "flammability": 1.0
   },
   "unverified": [
    "costStuffCount",

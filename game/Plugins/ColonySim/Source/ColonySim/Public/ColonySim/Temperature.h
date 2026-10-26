@@ -89,6 +89,11 @@ public:
     float degreesBelowComfort(Entity pawn);
     float degreesAboveComfort(Entity pawn);
 
+    // Pushes heat into the enclosed room a cell is in, as a heat pusher would: `heatPerSecond` RimWorld heat units
+    // a second for `seconds` game seconds, shared by the room's cells, never taking the room past `maxTemp`.
+    // Heat pushed into the open air is lost. Fires use it (docs/design/fire.md).
+    void addHeat(CellPos cell, double heatPerSecond, double seconds, float maxTemp);
+
     // One game second, after the rooms are brought up to date. `now` is the game second.
     void step(int64_t now);
 
@@ -117,6 +122,11 @@ private:
     void exposePawns(int64_t now);
     bool usesRoomTemperature(const Room& room) const { return room.enclosed() && !room.outdoors(); }
     float temperatureBeyond(CellPos cell);
+    // The temperature on the other side of an upper floor (the room above or below), or -1000 when
+    // no room is there (a wall, water): no heat goes that way.
+    float temperatureThroughFloor(CellPos cell);
+    // The slot of a cell in cellTemp_, making its level's layer first if `make`; null if none.
+    float* cellTempOf(CellPos c, bool make);
     RoomId roomOfSource(Entity source);
     void refreshSources();
 
@@ -142,8 +152,10 @@ private:
     float frostbiteChancePerHour_ = 0.0004f;
 
     std::vector<float> roomTemp_;     // by RoomId; meaningful for rooms that use room temperature
-    std::vector<float> cellTemp_;     // per map cell: the temperature its room had at the last change, NaN if none
-    std::vector<int> storedCells_;    // the cells cellTemp_ holds a number for
+    // Per level, per map cell: the temperature its room had at the last change, NaN if none. An
+    // upper level's layer is made when it first has a room.
+    std::vector<std::vector<float>> cellTemp_;
+    std::vector<CellPos> storedCells_;  // the cells cellTemp_ holds a number for
     uint64_t seenRebuilds_ = ~uint64_t{0};
     uint64_t sourceChanges_ = ~uint64_t{0};
     std::vector<Entity> sources_;     // heaters, coolers, campfires, by entity id

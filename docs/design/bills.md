@@ -1,7 +1,7 @@
 # Bills and cooking
 
 Code: `ColonySim/Bills.h`, `ColonySim/BillMode.h`, `Private/Bills.cpp` (recipes, bills, cooking speed),
-`Private/BillJobs.cpp` (the `DoBill` job), the `DoBillsCookStove` scanner in `Private/WorkGivers.cpp`.
+`Private/BillJobs.cpp` (the `DoBill` job), the `DoBillsGiver` scanners in `Private/WorkGivers.cpp` (one per bench kind, see [crafting.md](crafting.md)).
 Defs: `data/defs/Recipes/Recipes.json`, the meals in `data/defs/Things/Items.json`, `BillRules` in
 `data/defs/Rules/Rules.json`. Tests: `Tests/BillsTests.cpp`, the replay `Tests/replays/colony-cook.json`.
 Task C7.
@@ -16,7 +16,7 @@ A `Recipes` def (RimWorld's RecipeDef):
 
 | Field | Meaning |
 | --- | --- |
-| `recipeUsers` | the Things building defs that can hold a bill for it (`["FueledStove"]`) |
+| `recipeUsers` | the Things building defs that can hold a bill for it (`["FueledStove", "ElectricStove"]`) |
 | `workAmount` | game seconds of work at speed 1 (RimWorld's ticks x 1.44) |
 | `workSkill`, `minSkill`, `workSkillXp` | the Skills def that speeds it up; the least level to be given the job; the XP per run (kept for the day skills learn) |
 | `ingredients` | a list; each has `categories` (item defs whose `thingCategories` include one) and/or `items` (defNames), plus `nutrition` (worth of the items' `stats.nutrition`) or `count` |
@@ -53,7 +53,7 @@ The snapshot has `ThingView::firstBill` / `billCount` into `Snapshot::bills` (`B
 
 ## Who cooks, and the job
 
-The Cooking work type's `DoBillsCookStove` scanner offers every work building that has a bill which
+The Cooking work type's `DoBillsCookStove` scanner (a `DoBillsGiver`) offers every work building that has a bill which
 isn't suspended (and, for `Count`, has runs left), nearest the pawn first like all work. A cook on the
 stove **holds it** (one cook at a time, as RimWorld's single interaction cell). `makeJob` goes through
 the bills **in list order** and takes the first that:
@@ -100,15 +100,20 @@ cook makes a simple meal in 432 game seconds, 7.2 game minutes, plus the walking
 - Save format 18: a building's bills (`recipe` by defName), a job's `bill`, `picks` and `used`
   (by defName). Format 6 to 17 saves still load.
 
+## Experience
+
+Every second of bill work teaches the recipe's `workSkill` `workSkillXp / work` XP ([skills.md](skills.md)).
+
 ## Not yet
 
-- **Fuel.** The fueled stove should burn wood (RimWorld: 1 wood a meal, capacity 50, a refuel job
-  under Hauling). It cooks for free for now; BACKLOG has it.
-- Skill learning (XP is in the recipe, no sim system gives it), food poisoning, meals remembering
+- ~~Fuel~~ done (C11, [fuel.md](fuel.md)): the stove holds 50 wood, burns one per meal made and is
+  stopped when it is out; the Refuel job under Hauling brings wood. A new stove starts empty.
+- Food poisoning, meals remembering
   their ingredients (mood from human or insect meat), rot.
-- Bill details: reordering, the ingredient radius, allowed skill range, "store products in" choice,
-  per-bill ingredient filters, "pause when stock is full".
-- Butchering, other stoves and work tables (they are a recipe with other `recipeUsers`), campfire
-  (half speed), cooking indoors, temperature and room-role speed factors, the stove's heat.
+- ~~Bill details~~ done (C14, [crafting.md](crafting.md)): reordering, the ingredient radius, allowed skill
+  range, "store products in", the ingredient filter, "pause when satisfied, unpause at".
+- ~~Other stoves and work tables~~ done (C14): the electric stove and every bench have their own work giver.
+  Butchering waits for N2. Still open: campfire (half speed), cooking indoors, temperature and room-role speed
+  factors, the stove's heat.
 - Pawns pick the cheapest food for the cook's kitchen first only by distance to the stove; no
   "prefer the older stack" rule.

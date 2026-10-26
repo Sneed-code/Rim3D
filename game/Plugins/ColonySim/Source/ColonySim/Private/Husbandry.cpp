@@ -101,6 +101,15 @@ Husbandry::Husbandry(Things& things, const Map& map, AnimalSystem& animals, Heal
         rules_.slaughterXp = r->number("slaughterXp", rules_.slaughterXp);
         rules_.feedXp = r->number("feedXp", rules_.feedXp);
         rules_.repathSeconds = r->number("repathSeconds", rules_.repathSeconds);
+        rules_.huntRangeShare = r->number("huntRangeShare", rules_.huntRangeShare);
+        rules_.huntMinRange = r->number("huntMinRange", rules_.huntMinRange);
+        rules_.huntMaxSeconds = r->number("huntMaxSeconds", rules_.huntMaxSeconds);
+        rules_.huntRepathSeconds = r->number("huntRepathSeconds", rules_.huntRepathSeconds);
+        rules_.butcherEfficiencyBase = r->number("butcherEfficiencyBase", rules_.butcherEfficiencyBase);
+        rules_.butcherEfficiencyPerLevel = r->number("butcherEfficiencyPerLevel", rules_.butcherEfficiencyPerLevel);
+        rules_.butcherManipulationImportance = r->number("butcherManipulationImportance", rules_.butcherManipulationImportance);
+        rules_.butcherMaxEfficiency = r->number("butcherMaxEfficiency", rules_.butcherMaxEfficiency);
+        rules_.butcherXp = r->number("butcherXp", rules_.butcherXp);
         for (int d = 0; d < 3; ++d) {
             const std::string key = std::string("dietFoods.") + kHusbandryDietNames[d];
             if (r->count(key.c_str()) > 0) {
@@ -235,8 +244,37 @@ bool Husbandry::markTame(Entity animal, bool on, std::string& error) {
         return false;
     }
     AnimalCare* c = careFor(animal);
+    if (on && c->markHunt) {
+        c->markHunt = false;  // a wild animal is to be tamed or hunted, not both
+        emit(EventType::DesignationsChanged, animal, kNoEntity);
+    }
     if (c->markTame != on) {
         c->markTame = on;
+        emit(EventType::DesignationsChanged, animal, kNoEntity);
+    }
+    return true;
+}
+
+bool Husbandry::markHunt(Entity animal, bool on, std::string& error) {
+    if (!valid(animal)) {
+        error = "that is no animal";
+        return false;
+    }
+    if (husbandryDead(things_.registry(), animal)) {
+        error = "it is dead";
+        return false;
+    }
+    if (on && isTame(animal)) {
+        error = "only a wild animal can be hunted; slaughter a tame one";
+        return false;
+    }
+    AnimalCare* c = careFor(animal);
+    if (on && c->markTame) {
+        c->markTame = false;
+        emit(EventType::DesignationsChanged, animal, kNoEntity);
+    }
+    if (c->markHunt != on) {
+        c->markHunt = on;
         emit(EventType::DesignationsChanged, animal, kNoEntity);
     }
     return true;
@@ -519,6 +557,17 @@ bool Husbandry::assignZone(Entity animal, AnimalZoneId zone, std::string& error)
     return true;
 }
 
+bool Husbandry::setZoneBreeding(AnimalZoneId zone, bool allow, std::string& error) {
+    for (AnimalZone& z : saved_.zones) {
+        if (z.id == zone) {
+            z.breedingOff = !allow;
+            return true;
+        }
+    }
+    error = "no such animal zone";
+    return false;
+}
+
 bool Husbandry::isPen(AnimalZoneId id) const {
     const uint64_t stamp[2] = {zoneChanges_, map_.buildingChanges()};
     if (stamp[0] != penStamp_[0] || stamp[1] != penStamp_[1]) {
@@ -631,6 +680,7 @@ bool Husbandry::finishSlaughter(Entity handler, Entity animal) {
     }
     if (AnimalCare* c = careFor(animal)) {
         c->markSlaughter = false;
+        c->collect = true;
     }
     if (!health_.kill(animal, DeathCause::Slaughtered)) {
         return false;
@@ -639,6 +689,55 @@ bool Husbandry::finishSlaughter(Entity handler, Entity animal) {
     emit(EventType::AnimalSlaughtered, animal, handler);
     emit(EventType::DesignationsChanged, animal, kNoEntity);
     return true;
+}
+
+void Husbandry::finishHunt(Entity hunter, Entity animal) {
+    AnimalCare* c = valid(animal) ? careFor(animal) : nullptr;
+    if (c == nullptr || c->collect) {
+        return;
+    }
+    c->markHunt = false;
+    c->collect = true;
+    ++saved_.stats.hunted;
+    emit(EventType::AnimalHunted, animal, hunter);
+    emit(EventType::DesignationsChanged, animal, kNoEntity);
+}
+
+bool Husbandry::isCorpse(Entity animal) const {
+    const entt::registry& reg = things_.registry();
+    if (!valid(animal) || !husbandryDead(reg, animal) || !things_.spawned(animal)) {
+        return false;
+    }
+    const Def& def = defs_.get(reg.get<Thing>(animal).def);
+    return def.has("race.meatDef") || def.has("race.leatherDef");
+}
+
+Husbandry::ButcherYield Husbandry::butcherYield(Entity corpse, double efficiency) const {
+    ButcherYield out;
+    const Kind* kind = kindOf(corpse);
+    if (kind == nullptr) {
+        return out;
+    }
+    const Def& def = defs_.get(things_.registry().get<Thing>(corpse).def);
+    const double share = kind->bodySize > 0.0f ? static_cast<double>(animals_.bodySize(corpse)) / static_cast<double>(kind->bodySize) : 1.0;
+    const double scale = std::max(0.0, efficiency) * share;
+    if (def.has("race.meatDef")) {
+        out.meat = defs_.idOf("Things", def.text("race.meatDef"));
+        out.meatCount = out.meat.valid() ? static_cast<int>(std::lround(def.number("race.meatAmount", 0.0) * scale)) : 0;
+    }
+    if (def.has("race.leatherDef")) {
+        out.leather = defs_.idOf("Things", def.text("race.leatherDef"));
+        out.leatherCount = out.leather.valid() ? static_cast<int>(std::lround(def.number("race.leatherAmount", 0.0) * scale)) : 0;
+    }
+    return out;
+}
+
+bool Husbandry::wantsHauling(Entity animal) const {
+    if (!isCorpse(animal)) {
+        return false;
+    }
+    const AnimalCare* c = care(animal);
+    return c != nullptr && (c->collect || c->markHunt);
 }
 
 void Husbandry::feed(Entity animal, float nutrition) {
@@ -703,6 +802,9 @@ void Husbandry::hashState(StateHasher& h) const {
     h.add(static_cast<uint64_t>(saved_.zones.size()));
     for (const AnimalZone& zone : saved_.zones) {
         h.add(zone.id);
+        if (zone.breedingOff) {
+            h.add(uint64_t{1});
+        }
         for (const CellPos& c : zone.cells) {
             h.add(c.x);
             h.add(c.y);
@@ -715,6 +817,9 @@ void Husbandry::hashState(StateHasher& h) const {
     h.add(saved_.stats.slaughtered);
     h.add(saved_.stats.fed);
     h.add(saved_.stats.starved);
+    if (saved_.stats.hunted != 0) {  // only once there was a hunt, so older recordings hash as before
+        h.add(saved_.stats.hunted);
+    }
 }
 
 void Husbandry::hashThing(Entity e, StateHasher& h) const {
@@ -724,6 +829,10 @@ void Husbandry::hashThing(Entity e, StateHasher& h) const {
     }
     h.add(c->markTame);
     h.add(c->markSlaughter);
+    if (c->markHunt || c->collect) {
+        h.add(c->markHunt);
+        h.add(c->collect);
+    }
     h.add(c->zone);
     h.add(c->hasHome);
     h.add(c->home.x);

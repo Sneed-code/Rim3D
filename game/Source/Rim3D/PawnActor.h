@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 
+#include "MeleePose.h"
 #include "PawnAnimInstance.h"
 #include "PawnSubsystem.h"
 
@@ -14,6 +15,7 @@
 class USimPawnSubsystem;
 class USimSubsystem;
 class USkeletalMeshComponent;
+class UMeshComponent;
 class UStaticMeshComponent;
 namespace colony { struct ThingView; }
 
@@ -56,6 +58,27 @@ public:
 	const TArray<TObjectPtr<USkeletalMeshComponent>>& GetSkinMeshes() const { return SkinMeshes; }
 	const TArray<TObjectPtr<UStaticMeshComponent>>& GetHorns() const { return Horns; }
 
+	/** Dresses the MetaHuman in what the sim says it wears (docs/design/clothes-draw.md): Kellan's own top and trousers are put
+	 *  away, a bare skin layer (the pawn's skin colour) shows what nothing covers, and each worn piece's meshes go on over it, in
+	 *  the order they were put on, tinted by the stuff and torn by the piece's hit points. Pieces that left the list are
+	 *  removed. `Key` is USimPawnSubsystem::ApparelKey of the snapshot. Mannequins just remember the key. */
+	void ApplyApparel(USimPawnSubsystem& Pawns, const FSimPawnApparel& Wanted, uint64 Key);
+	bool HasApparel() const { return bApparelApplied; }
+	uint64 GetApparelKey() const { return ApparelKey; }
+	const FSimPawnApparel& GetApparel() const { return Apparel; }
+	/** The meshes of the worn pieces now (skinned garments and head props), and the item each belongs to. */
+	const TArray<TObjectPtr<UMeshComponent>>& GetWornMeshes() const { return WornMeshes; }
+	const TArray<uint32>& GetWornMeshItems() const { return WornMeshItems; }
+	/** The bare skin layer (torso and arms, legs); empty while the clothes assets are missing. */
+	const TArray<TObjectPtr<USkeletalMeshComponent>>& GetBareLayer() const { return BareLayer; }
+	/** Kellan's own top and trousers (hidden while the clothes are drawn); null for a mannequin. */
+	USkeletalMeshComponent* GetDefaultTop() const { return DefaultTop; }
+	USkeletalMeshComponent* GetDefaultTrousers() const { return DefaultTrousers; }
+	/** Whether the hair is hidden under a hat that covers it. */
+	bool IsHairHidden() const { return bHairHidden; }
+	/** How many times the worn meshes were remade (not just retinted). */
+	int32 GetApparelRebuilds() const { return ApparelRebuilds; }
+
 	/** Hides or shows the whole pawn, MetaHuman included (first person view hides the player's own body). */
 	void SetBodyHidden(bool bHide);
 	bool IsBodyHidden() const { return IsHidden(); }
@@ -83,6 +106,38 @@ public:
 	USkeletalMeshComponent* GetDecalMesh() const;
 
 	static constexpr float kHitReactionSeconds = 0.55f;
+
+	// --- Melee on screen (docs/design/melee-draw.md). All cosmetic: the sim decides who is hit. ---
+
+	/** The sim began a swing; the hit moment comes `StepsToHit` sim steps later. The body draws back and
+	 *  strikes so that the blow lands on that step. */
+	void BeginMeleeSwing(EMeleeStyle Style, float StepsToHit);
+	/** The sim's MeleeHit: the blow lands now (if it has not on screen yet) and the follow-through starts. */
+	void MeleeHitMoment();
+	/** A sidestep toward the world point: the body dips and tips that way for a third of a second. */
+	void PlayDodge(const FVector& TowardWorld);
+	/** Freezes the swing, the animation and the flinch for `Seconds` of real time (the hit-stop). */
+	void HitStop(float Seconds);
+	bool IsHitStopped() const { return HitStopLeft > 0.0f; }
+	const FMeleeSwingTrack& GetSwing() const { return Swing; }
+	/** 0 to 1: how far the weapon has come up to block. */
+	float GetBlockBlend() const { return BlockBlend; }
+	/** The dodge roll's somersault (U21): 0 when not rolling, then how far through the sim's 27 steps the roll is, and the angle the
+	 *  body has turned over its way, 0 to 360 (docs/design/shooter-feel-draw.md). The sim moves the body; this only turns it. */
+	float GetRollProgress() const { return RollProgress; }
+	float GetRollAngle() const { return RollAngle; }
+	int32 GetRollsSeen() const { return RollsSeen; }
+	/** 1 standing, 0.66 crouching, 0.24 lying: what weapon heights are scaled by. */
+	float GetStanceHeight() const { return StanceHeight; }
+	/** Where the held melee weapon is now, in this actor's space (cm, degrees): the swing or the block,
+	 *  the dodge and the body's twist and lunge together. */
+	void GetMeleeWeaponPose(FVector& OutLocation, FRotator& OutRotation) const;
+	/** How far the body is bent by melee now (lean and tilt together, degrees), for tests. */
+	float GetMeleeBodyDegrees() const;
+	int32 GetDodgesPlayed() const { return DodgesPlayed; }
+	int32 GetHitStops() const { return HitStops; }
+	bool IsDodging() const { return DodgeAge < kDodgeSeconds; }
+	static constexpr float kDodgeSeconds = 0.35f;
 
 	colony::Entity GetThing() const { return Thing; }
 	ESimPawnDetail GetDetail() const { return Detail; }
@@ -124,8 +179,38 @@ private:
 	UPROPERTY()
 	TObjectPtr<USkeletalMeshComponent> MetaHumanBody;
 
+	void EnsureBareLayer(USimPawnSubsystem& Pawns);
+	void DestroyWorn();
+	/** Colour, wear and morphs of a garment mesh. */
+	void StyleWornMesh(UMeshComponent* Mesh, const FSimWornPiece& Piece);
+	void UpdateHairVisibility();
+
+	UPROPERTY()
+	TArray<TObjectPtr<UMeshComponent>> WornMeshes;
+
+	TArray<uint32> WornMeshItems;
+
+	UPROPERTY()
+	TArray<TObjectPtr<USkeletalMeshComponent>> BareLayer;
+
+	UPROPERTY()
+	TObjectPtr<USkeletalMeshComponent> DefaultTop;
+
+	UPROPERTY()
+	TObjectPtr<USkeletalMeshComponent> DefaultTrousers;
+
+	FSimPawnApparel Apparel;
+	uint64 ApparelKey = 0;
+	bool bApparelApplied = false;
+	bool bBareLayerTried = false;
+	bool bHairHidden = false;
+	int32 ApparelRebuilds = 0;
+
 	void SpawnRagdollFloor();
-	void ApplyLean(float DeltaTime);
+	/** The hit reaction's lean and the melee pose, applied to the body together. */
+	void ApplyBodyPose(float GameDelta, bool bBlocking);
+	/** The swing or block, plus the dodge: what the body and the weapon do now. */
+	FMeleePose ComputeMeleePose() const;
 
 	/** An invisible slab at the ground under a ragdoll (the ground is drawn from the sim and has no collision). */
 	UPROPERTY()
@@ -140,6 +225,22 @@ private:
 	FVector ReactionDirection = FVector::ForwardVector;
 	float LeanDegrees = 0.0f;
 	int32 HitReactions = 0;
+
+	FMeleeSwingTrack Swing;
+	float BlockBlend = 0.0f;
+	float StanceHeight = 1.0f;
+	float DodgeAge = kDodgeSeconds;
+	float DodgeSide = 1.0f;
+	float HitStopLeft = 0.0f;
+	/** Real seconds the sim has disagreed with the swing on screen (a swing the sim called off). */
+	float SwingMismatch = 0.0f;
+	bool bBodyPosed = false;
+	float RollProgress = 0.0f;
+	float RollAngle = 0.0f;
+	FVector RollDirection = FVector::ForwardVector;
+	int32 RollsSeen = 0;
+	int32 DodgesPlayed = 0;
+	int32 HitStops = 0;
 
 	colony::Entity Thing = colony::kNoEntity;
 	ESimPawnDetail Detail = ESimPawnDetail::Full;

@@ -88,6 +88,10 @@ public:
     // Where the temperature thoughts (Cold, Hot) get the degrees outside a pawn's comfort from.
     void setTemperature(TemperatureSystem* temperature) { temperature_ = temperature; }
 
+    // Which skill a pawn's job is using right now (Skills `defName`), or empty: passion for it
+    // lifts the mood while the work goes on (docs/design/skills.md). Without one, no work thoughts.
+    void setActiveSkill(std::function<std::string(Entity)> activeSkill) { activeSkill_ = std::move(activeSkill); }
+
     const MoodRules& rules() const { return rules_; }
     // The mood the pawn is heading for (not clamped to the 0 to 100 scale), or its base if it has none.
     float target(Entity pawn, int64_t now) const;
@@ -95,6 +99,10 @@ public:
     std::vector<ThoughtView> thoughts(Entity pawn, int64_t now) const;
     // The three thresholds as mood levels (0 to 100) for this pawn: its traits move them.
     void breakLevels(Entity pawn, float& minor, float& major, float& extreme) const;
+
+    // Starts the memories whose thought def has this `trigger` (docs/design/mood.md): another system
+    // raises one, like the social system's (C20). Nothing happens to a pawn with no mood yet.
+    void remember(Entity pawn, const std::string& trigger, int64_t now);
 
     // `events` are the step's events; `now` the game second the step ran in.
     void step(int64_t now, std::vector<Event>& events);
@@ -107,6 +115,7 @@ private:
         std::string trigger;    // memories: what starts it (see Mood.cpp)
         std::string need;       // situations: "food" or "rest"
         std::string band;       // situations: the band name
+        std::string passion;    // situations: "Minor" or "Major", while working at a skill with that passion
         // Situations with stages (D9): `condition` names a state RoomStats knows, `thresholds` are
         // the values each stage ends at (one fewer than the stages), `stages` their offsets and labels
         // (and the room roles a stage counts in, none: any), `roomRoles` the roles the thought is
@@ -155,6 +164,7 @@ private:
     const DefDatabase& defs_;
     MoodRules rules_;
     std::vector<Thought> thoughts_;
+    std::function<std::string(Entity)> activeSkill_;
     std::vector<StagedThought> staged_;
     std::vector<Situation> situations_;
 };

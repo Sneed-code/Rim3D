@@ -70,7 +70,11 @@ namespace
 		"float h11 = frac(sin(dot(qi + float2(1, 1), float2(12.9898, 78.233))) * 43758.5453);\n"
 		"float patch = lerp(lerp(h00, h10, qf.x), lerp(h01, h11, qf.x), qf.y);\n"
 		"land *= float3(VCR, VCG, VCB) * 2.0 * lerp(0.8, 1.2, patch);\n"
+		// Wet ground (U13, from the rain): darker, and shinier than it is dry. Water keeps its own look.
+		"float wet = saturate(Wetness) * (1.0 - water);\n"
+		"land *= lerp(1.0, 0.55, wet);\n"
 		"float rough = grass * RoughGrass + sand * RoughSand + gravel * RoughGravel + rock * RoughRock + water * WaterRough;\n"
+		"rough *= lerp(1.0, 0.3, wet);\n"
 		"float3 color = land + water * WaterColor;\n"
 		"color = lerp(color, float3(VCR, VCG, VCB), VCA);\n"
 		"rough = lerp(rough, 0.9, VCA);\n"
@@ -241,6 +245,7 @@ namespace
 		WaterColorNode->DefaultValue = FLinearColor(static_cast<float>(WaterColor[0]->AsNumber()), static_cast<float>(WaterColor[1]->AsNumber()), static_cast<float>(WaterColor[2]->AsNumber()), 1.0f);
 		TerrInput(ColorNode, TEXT("WaterColor"), WaterColorNode, 0);
 		TerrInput(ColorNode, TEXT("WaterRough"), TerrScalar(Material, TEXT("WaterRough"), Water->GetNumberField(TEXT("roughness")), 960));
+		TerrInput(ColorNode, TEXT("Wetness"), TerrScalar(Material, TEXT("Wetness"), 0.0, 990));
 		Y = 1020;
 		for (int32 I = 0; I < 4; ++I, Y += 60)
 		{

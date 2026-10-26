@@ -11,6 +11,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Rooms.h"
@@ -298,11 +299,13 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, s
     // Where it walks in: a cell near the chosen edge that can reach the target.
     const int w = map_.width();
     const int h = map_.height();
-    const int side = edge >= 0 ? edge : static_cast<int>(rng_.below(4));
+    const int firstSide = edge >= 0 ? edge : static_cast<int>(rng_.below(4));
     Regions& regions = map_.regions();
     bool found = false;
     CellPos entry;
-    for (int attempt = 0; attempt < 40 && !found; ++attempt) {
+    // A raid with no chosen edge tries the others in turn when the first has no way in (water, rock).
+    for (int attempt = 0; attempt < (edge >= 0 ? 40 : 160) && !found; ++attempt) {
+        const int side = (firstSide + attempt / 40) % 4;
         const int along = static_cast<int>(rng_.below(static_cast<uint32_t>(side % 2 == 0 ? w : h)));
         const int d = rules_.edgeDepth;
         const CellPos guess = side == 0 ? CellPos{along, h - 1 - d, 0}
@@ -474,7 +477,7 @@ bool RaidSystem::soundAlarm(bool on, std::string& error) {
     // Enemies still about: don't sound it again by itself until they are gone.
     const entt::registry& reg = things_.registry();
     for (const auto [pawn, faction] : reg.view<const Faction>().each()) {
-        if (faction.id != kPlayerFaction && !reg.all_of<Animal>(pawn) && things_.spawned(pawn) &&
+        if (faction.id != kPlayerFaction && !reg.all_of<Animal>(pawn) && !reg.all_of<Prisoner>(pawn) && things_.spawned(pawn) &&
             !health_.incapacitated(pawn)) {
             state_.suppressed = true;
             break;
@@ -877,7 +880,8 @@ void RaidSystem::thinkAlarm() {
     for (const auto [pawn, faction, pos] : reg.view<const Faction, const Position>().each()) {
         // Wild animals aren't enemies (Animals.h) until they hunt, fight back or go manhunter (N5).
         const Animal* wild = reg.try_get<Animal>(pawn);
-        if (faction.id == kPlayerFaction || (wild != nullptr && wild->temper == AnimalTemper::Calm) || health_.incapacitated(pawn)) {
+        if (faction.id == kPlayerFaction || (wild != nullptr && wild->temper == AnimalTemper::Calm) || health_.incapacitated(pawn) ||
+            reg.all_of<Prisoner>(pawn)) {
             continue;
         }
         const Fighter* f = reg.try_get<Fighter>(pawn);

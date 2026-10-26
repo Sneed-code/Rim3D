@@ -16,7 +16,7 @@ const char* designationKindName(DesignationKind kind) {
 }
 
 DesignationKind Designations::at(CellPos c) const {
-    if (!map_.inBounds(c)) {
+    if (!map_.onGround(c)) {
         return DesignationKind::None;
     }
     const auto it = marks_.find(map_.index(c));
@@ -24,7 +24,7 @@ DesignationKind Designations::at(CellPos c) const {
 }
 
 bool Designations::set(CellPos c, DesignationKind kind) {
-    if (!map_.inBounds(c)) {
+    if (!map_.onGround(c)) {
         return false;
     }
     if (kind == DesignationKind::None) {

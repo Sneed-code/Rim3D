@@ -177,6 +177,8 @@ public:
     // colonists up or sends them back. Runs after the job system, before the fighters.
     void step();
 
+    // A pawn walks off the map for good (its gear goes with it): a PawnLeftMap event, then it is destroyed.
+    void leaveMap(Entity pawn);
     // Call before a thing is destroyed: it leaves its squad.
     void forget(Entity thing);
     // A Faction id for a Factions def: the same def always gets the same id.
@@ -214,7 +216,6 @@ private:
     float strength(Entity pawn) const;
     bool canSee(Entity watcher, Entity pawn) const;
     void squadEvent(const Squad& squad, EventType type, std::string message);
-    void leaveMap(Entity pawn);
     int64_t now() const;
 
     Things& things_;

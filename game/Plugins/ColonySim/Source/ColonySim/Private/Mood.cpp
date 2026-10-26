@@ -124,6 +124,12 @@ MoodSystem::MoodSystem(Things& things, const NeedsSystem& needs, const DefDataba
             thought.trait = def.text("situation.trait");
             thought.notTrait = def.text("situation.notTrait");
         }
+        thought.passion = def.text("situation.passion");
+        if (!thought.passion.empty()) {
+            // The size of the lift is SkillRules.passionMood, not a number of the thought's own.
+            const SkillRules skills = SkillRules::read(defs);
+            thought.offset = static_cast<float>(skills.passionMood[thought.passion == "Major" ? 2 : 1]);
+        }
         thoughts_.push_back(std::move(thought));
 
         StagedThought staged;
@@ -315,6 +321,19 @@ std::vector<ThoughtView> MoodSystem::thoughts(Entity pawn, int64_t now) const {
             }
         }
     }
+    // Working at a skill the pawn is passionate about.
+    const Colonist* colonist = activeSkill_ ? reg.try_get<Colonist>(pawn) : nullptr;
+    const std::string skill = colonist != nullptr ? activeSkill_(pawn) : std::string();
+    const SkillRecord* record = skill.empty() ? nullptr : colonist->skill(skill);
+    if (record != nullptr && !record->disabled && record->passion != Passion::None) {
+        const char* passion = record->passion == Passion::Major ? "Major" : "Minor";
+        for (const Thought& thought : thoughts_) {
+            if (thought.passion == passion) {
+                const Def& def = defs_.get(thought.def);
+                out.push_back(ThoughtView{def.defName(), def.label(), thought.offset, true, 0});
+            }
+        }
+    }
     if (const Mood* mood = reg.try_get<Mood>(pawn)) {
         for (const Memory& memory : mood->memories) {
             if (memory.expires <= now) {
@@ -359,6 +378,13 @@ void MoodSystem::addMemory(Mood& mood, const std::string& trigger, int64_t now) 
     }
 }
 
+void MoodSystem::remember(Entity pawn, const std::string& trigger, int64_t now) {
+    entt::registry& reg = things_.registry();
+    if (Mood* mood = reg.valid(pawn) ? reg.try_get<Mood>(pawn) : nullptr) {
+        addMemory(*mood, trigger, now);
+    }
+}
+
 void MoodSystem::step(int64_t now, std::vector<Event>& events) {
     if (!rules_.present) {
         return;
@@ -383,13 +409,29 @@ void MoodSystem::step(int64_t now, std::vector<Event>& events) {
     const size_t eventCount = events.size();
     for (size_t i = 0; i < eventCount; ++i) {
         const Event& event = events[i];
-        Mood* mood = (event.type == EventType::PawnAte || event.type == EventType::PawnWokeUp) && reg.valid(event.thing)
-                         ? reg.try_get<Mood>(event.thing)
+        // A break that ended in calm (or by the pawn going down) is a relief; an insult stings its target.
+        if (event.type == EventType::PawnMentalBreakEnded || event.type == EventType::PawnInsulted) {
+            const bool ended = event.type == EventType::PawnMentalBreakEnded;
+            const Entity who = ended ? event.thing : event.target;
+            Mood* felt = reg.valid(who) ? reg.try_get<Mood>(who) : nullptr;
+            if (felt != nullptr && (!ended || event.message == "recovered" || event.message == "downed")) {
+                addMemory(*felt, ended ? "MentalBreakEnded" : "Insulted", now);
+            }
+            continue;
+        }
+        Mood* mood = (event.type == EventType::PawnAte || event.type == EventType::PawnWokeUp || event.type == EventType::PrisonerCaptured ||
+                      event.type == EventType::PrisonerChatted) &&
+                             reg.valid(event.type == EventType::PrisonerChatted ? event.target : event.thing)
+                         ? reg.try_get<Mood>(event.type == EventType::PrisonerChatted ? event.target : event.thing)
                          : nullptr;
         if (mood == nullptr) {
             continue;
         }
-        if (event.type == EventType::PawnAte) {
+        if (event.type == EventType::PrisonerCaptured) {
+            addMemory(*mood, "PrisonerCaptured", now);
+        } else if (event.type == EventType::PrisonerChatted) {
+            addMemory(*mood, "PrisonerChatted", now);
+        } else if (event.type == EventType::PawnAte) {
             const std::string preferability = defs_.get(event.def).text("ingestible.preferability");
             if (preferability == "RawBad") {
                 addMemory(*mood, "AteRawFood", now);

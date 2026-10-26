@@ -98,6 +98,8 @@ public:
     bool add(CellPos c, const std::string& kindName, int layers = 1) { return add(c, kindIndex(kindName), layers); }
     // Takes one layer off the cell's first pile. False if there is none.
     bool clean(CellPos c);
+    // Takes one layer off the cell's pile of that kind. False if there is none.
+    bool clean(CellPos c, int kind);
     // Takes every pile off the cell.
     void clear(CellPos c);
 

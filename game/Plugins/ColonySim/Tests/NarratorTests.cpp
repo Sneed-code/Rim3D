@@ -11,6 +11,7 @@
 #include <doctest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -137,14 +138,14 @@ TEST_CASE("Narrator: off until one is picked, then Orrin's big threats come on h
     NARRATOR_REQUIRE(run.narrator.setNarrator("Orrin", "", error));
     run.run(61.0);
     const std::vector<double> raids = run.daysOf("RaidEnemy");
-    // Turned on at day 20, past his first threat day: a cycle of 1.5 days on and 4.6 off from then,
-    // one big threat in each "on" part.
-    NARRATOR_REQUIRE(raids.size() >= 9);
-    CHECK(raids.size() <= 11);
-    for (size_t i = 0; i < raids.size(); ++i) {
-        const double cycleStart = 20.0 + 6.1 * static_cast<double>(i);
-        CHECK(raids[i] >= cycleStart - 0.02);
-        CHECK(raids[i] <= cycleStart + 1.5 + 0.02);
+    // Turned on at day 20, past his first threat day: a cycle of 4.6 days on and 6.0 off from then,
+    // one or two big threats (at least 1.9 days apart) in each "on" part: six cycles fit before day 81.
+    NARRATOR_REQUIRE(raids.size() >= 6);
+    CHECK(raids.size() <= 12);
+    for (const double day : raids) {
+        const double inCycle = std::fmod(day - 20.0, 10.6);
+        CHECK(day >= 20.0 - 0.02);
+        CHECK(inCycle <= 4.6 + 0.02);
     }
     // Each one says so in a ThreatBig letter with its threat points.
     NARRATOR_REQUIRE(!run.events.empty());
@@ -154,27 +155,27 @@ TEST_CASE("Narrator: off until one is picked, then Orrin's big threats come on h
     CHECK(run.narrator.state().incidents == raids.size());
 }
 
-TEST_CASE("Narrator: from the start, Orrin's first raid comes on day 5 and Maren's on day 8") {
+TEST_CASE("Narrator: from the start, Orrin's first raid comes on day 11 and Maren's on day 13") {
     NarratorTestRun orrin({"RaidEnemy"});
     std::string error;
     NARRATOR_REQUIRE(orrin.narrator.setNarrator("Orrin", "", error));
-    orrin.run(12.0);
+    orrin.run(20.0);
     const std::vector<double> o = orrin.daysOf("RaidEnemy");
-    NARRATOR_REQUIRE(o.size() == 2);
-    CHECK(o[0] >= 5.0);
-    CHECK(o[0] <= 6.5 + 0.02);
-    CHECK(o[1] >= 11.1 - 0.02);
+    NARRATOR_REQUIRE(!o.empty());
+    CHECK(o[0] >= 11.0);
+    CHECK(o[0] <= 15.6 + 0.02);
+    CHECK(o.size() <= 2);
 
     NarratorTestRun maren({"RaidEnemy"});
     NARRATOR_REQUIRE(maren.narrator.setNarrator("Maren", "", error));
     maren.run(60.0);
     const std::vector<double> m = maren.daysOf("RaidEnemy");
     NARRATOR_REQUIRE(!m.empty());
-    CHECK(m[0] >= 8.0);
-    CHECK(m[0] <= 9.0 + 0.02);
-    // About nine days apart: fewer than Orrin's ten in the same time.
-    CHECK(m.size() >= 5);
-    CHECK(m.size() <= 7);
+    CHECK(m[0] >= 13.0);
+    CHECK(m[0] <= 21.0 + 0.02);
+    // One in each 8 days on, every 16 days: three before day 61.
+    CHECK(m.size() >= 3);
+    CHECK(m.size() <= 4);
 }
 
 TEST_CASE("Narrator: Jinx rolls every category on its own, and earliest days and cooldowns hold") {

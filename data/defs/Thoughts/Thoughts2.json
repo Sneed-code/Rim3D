@@ -38,5 +38,8 @@
   {"defName": "RivalDied", "label": "my rival died", "source": "RimWorld", "moodOffset": 6, "durationDays": 15, "trigger": "RivalDied", "note": "Bond kind Rival.", "unverified": ["moodOffset", "durationDays"]},
   {"defName": "GotMarried", "label": "got married", "source": "RimWorld", "moodOffset": 20, "durationDays": 15, "trigger": "GotMarried", "note": "Both spouses; the wedding party adds its own.", "unverified": ["moodOffset", "durationDays"]},
   {"defName": "BrokeUp", "label": "broke up", "source": "RimWorld", "moodOffset": -10, "durationDays": 30, "trigger": "BrokeUp", "note": "Both, if the breakup was theirs.", "unverified": ["moodOffset", "durationDays"]},
-  {"defName": "RejectedMyProposal", "label": "rejected my proposal", "source": "RimWorld", "moodOffset": -8, "durationDays": 15, "trigger": "RejectedMyProposal", "note": "The one who asked.", "unverified": ["moodOffset", "durationDays"]}
+  {"defName": "RejectedMyProposal", "label": "rejected my proposal", "source": "RimWorld", "moodOffset": -8, "durationDays": 15, "trigger": "RejectedMyProposal", "note": "The one who asked.", "unverified": ["moodOffset", "durationDays"]},
+  {"defName": "CheatedOnMe", "label": "my partner cheated on me", "source": "RimWorld", "moodOffset": -12, "durationDays": 20, "trigger": "CheatedOnMe", "note": "The betrayed lover or spouse (C20 extras).", "unverified": ["moodOffset", "durationDays"]},
+  {"defName": "AttendedWedding", "label": "attended a wedding", "source": "RimWorld", "moodOffset": 6, "durationDays": 6, "trigger": "AttendedWedding", "note": "Every colonist awake and free when a couple marries.", "unverified": ["moodOffset", "durationDays"]},
+  {"defName": "WeddingParty", "label": "my wedding party", "source": "RimWorld", "moodOffset": 10, "durationDays": 15, "trigger": "WeddingParty", "note": "The couple, on top of 'got married'.", "unverified": ["moodOffset", "durationDays"]}
 ]

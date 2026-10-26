@@ -15,11 +15,15 @@
 //   simrun --seed 42 --size 128 --days 60 --weather   (a line a day: season, temperatures, weather, snow; E1)
 //   simrun --scenario colony [--seed 42] [--size 512] [--days 5] [--verbose]   (the colony test, C10;
 //                                     exit 1 if a check fails, docs/design/colony-scenario.md)
+//   simrun --scenario house [--seed 42] [--days 3] [--png house.png] [--verbose]   (the two-storey house, M4: builds, sleeps and hauls
+//                                     across two levels, writes house-level0.png and house-level1.png; docs/design/house-scenario.md)
 //   simrun --power [--days 3] [--verbose]   (the power check, E5: solar, batteries, lamps and a switch; docs/design/power.md)
 //   simrun --seed 42 --size 1024 --days 3 --animals [--animal-percent 300] --check   (wild animals, N1:
 //                                     herds by biome, a report of them, checks they stay on walkable ground)
 //   simrun --seed 42 --size 256 --days 3 --farm 500 --check   (a farm of tame chickens, N4: they are fed every hour; reports
 //                                     eggs, chicks and what a step costs on the minute the breeding pass runs; docs/design/breeding.md)
+//   simrun --seed 42 --size 256 --days 1 --start Crashlanded --fire --check   (a grass fire lit near the colonists, E4: they put it out;
+//                                     reports fires, peak size, burnt-up things, pawns that caught fire; docs/design/fire.md)
 // --replay takes the settings and commands from the file and runs to its endStep (--days
 // overrides). --record writes what this run did as a replay, with its state hashes.
 // --check makes it exit with 1 if any job or path search failed.
@@ -27,7 +31,9 @@
 // Human and Steel and the WorkTypes def Hauling, which data/defs provides. Its pawns haul items
 // scattered over the map to a stockpile zone in the middle through the job system (C1).
 #include "ColonyScenario.h"
+#include "HouseScenario.h"
 #include "PowerScenario.h"
+#include "RaidSoak.h"
 #include "ColonySim/Animals.h"
 #include "ColonySim/Breeding.h"
 #include "ColonySim/Husbandry.h"
@@ -46,6 +52,7 @@
 #include "ColonySim/Raids.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Fire.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Random.h"
@@ -97,7 +104,9 @@ struct Options {
     int gather = 0;      // mark rock to mine and plants to harvest this many cells round the middle
     int animals = 0;     // wild animals as a percent of the biome's density (0: none; --animals alone means 100)
     int farm = 0;        // --farm N: N tame chickens, fed every hour (N4)
+    bool fire = false;   // --fire: light a grass fire near the first colonist ten minutes in (E4)
     double raid = -1.0;  // start a pirate raid of this many points at the first step (0: the colony's threat points)
+    int raidSoak = 0;    // --raid-soak N: the F7 soak over N seeds from --seed
     bool armed = false;  // give every colonist an assault rifle first (not a command: not in replays)
     std::string narrator;    // --narrator NAME: a SetNarratorCommand at the first step (T1)
     std::string difficulty;  // --difficulty NAME: with it
@@ -149,10 +158,14 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.gather = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--animals") == 0) {
             out.animals = std::max(out.animals, 100);
+        } else if (std::strcmp(arg, "--fire") == 0) {
+            out.fire = true;
         } else if (std::strcmp(arg, "--farm") == 0 && hasValue) {
             out.farm = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--animal-percent") == 0 && hasValue) {
             out.animals = std::atoi(argv[++i]);
+        } else if (std::strcmp(arg, "--raid-soak") == 0 && hasValue) {
+            out.raidSoak = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--raid") == 0 && hasValue) {
             out.raid = std::atof(argv[++i]);
         } else if (std::strcmp(arg, "--armed") == 0) {
@@ -194,6 +207,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
                          "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--scenario colony [--verbose]] [--power] [--raid POINTS] [--armed] [--narrator NAME [--difficulty NAME]] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house [--verbose]] [--power] [--raid POINTS] [--armed] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS]\n");
             return false;
         }
@@ -217,6 +231,8 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
                 case colony::Terrain::Soil: r = 90; g = 130; b = 60; break;
                 case colony::Terrain::Rock: r = 120; g = 115; b = 110; break;
                 case colony::Terrain::RoughStone: r = 150; g = 140; b = 125; break;
+                case colony::Terrain::Air:
+                case colony::Terrain::UpperFloor: break;  // upper levels only, never on the ground
             }
             // Ore shows brighter than the rock round it: steel blue, silver white, components orange.
             const colony::DefId rock = sim.mineables().defAt(colony::CellPos{x, y, 0});
@@ -270,10 +286,17 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
         pixels[i + 1] = static_cast<unsigned char>((pixels[i + 1] + 110) / 2);
         pixels[i + 2] = static_cast<unsigned char>((pixels[i + 2] + 80) / 2);
     }
+    // Upper floors (levels.md): the ground under them tinted pale blue, once per floor over it.
+    for (const colony::CellPos& c : map.upperFloorCells()) {
+        const size_t i = static_cast<size_t>(map.index(c)) * 3;
+        pixels[i] = static_cast<unsigned char>((pixels[i] + 170) / 2);
+        pixels[i + 1] = static_cast<unsigned char>((pixels[i + 1] + 200) / 2);
+        pixels[i + 2] = static_cast<unsigned char>((pixels[i + 2] + 235) / 2);
+    }
     // Buildings dark grey, items yellow, pawns red (drawn last, on top). Ground level only.
     const auto mark = [&](const colony::Position& pos, unsigned char r, unsigned char g, unsigned char b) {
         const colony::CellPos c = colony::cellOf(pos);
-        if (!map.inBounds(c)) {
+        if (!map.onGround(c)) {
             return;
         }
         const size_t i = static_cast<size_t>(map.index(c)) * 3;
@@ -610,11 +633,23 @@ int main(int argc, char** argv) {
         return powerscenario::run(options.daysGiven ? options.days : 3.0, defs, options.verbose);
     }
 
+    // The raid soak (F7): firefights and raids over many seeds, from --seed on.
+    if (options.raidSoak > 0) {
+        return raidsoak::run(options.seed, options.raidSoak, defs, options.verbose);
+    }
+
     // The colony scenario (C10) runs its own script on the Crashlanded start; 5 days unless --days says.
     if (!options.scenario.empty()) {
-        if (options.scenario != "colony" || !defs) {
-            std::fprintf(stderr, "--scenario takes 'colony' and needs the game's defs\n");
+        if ((options.scenario != "colony" && options.scenario != "house") || !defs) {
+            std::fprintf(stderr, "--scenario takes 'colony' or 'house' and needs the game's defs\n");
             return 2;
+        }
+        if (options.scenario == "house") {
+            std::string pngBase = options.png;
+            if (pngBase.size() > 4 && pngBase.compare(pngBase.size() - 4, 4, ".png") == 0) {
+                pngBase.resize(pngBase.size() - 4);
+            }
+            return housescenario::run(options.seed, options.size, options.daysGiven ? options.days : 3.0, defs, options.verbose, pngBase);
         }
         return colonyscenario::run(options.seed, options.size, options.daysGiven ? options.days : 5.0, defs, options.verbose);
     }
@@ -792,8 +827,34 @@ int main(int argc, char** argv) {
     double dayLow = 1.0e9;
     double dayHigh = -1.0e9;
     std::string dayWeather;
+    // --fire: the fire counts.
+    size_t firePeak = 0;
+    uint64_t fireBeaten = 0;
+    uint64_t fireBurntOut = 0;
+    uint64_t pawnsCaught = 0;
+    uint64_t fireLit = 0;
     for (int64_t i = 0; i < steps; ++i) {
         feeder.submitDue(sim);
+        if (options.fire && sim.time().seconds == 600) {
+            // A fire in the grass 6 to 14 cells from the first colonist.
+            colony::CellPos from{sim.map().width() / 2, sim.map().height() / 2, 0};
+            for (const auto [e, c, pos] : sim.things().registry().view<const colony::Colonist, const colony::Position>().each()) {
+                (void)e;
+                (void)c;
+                from = colony::cellOf(pos);
+                break;
+            }
+            bool lit = false;
+            for (int r = 6; r <= 14 && !lit; ++r) {
+                for (int d = -r; d <= r && !lit; ++d) {
+                    const colony::CellPos cell{from.x + d, from.y + r, 0};
+                    if (sim.map().inBounds(cell) && sim.plants().has(cell)) {
+                        sim.submit(colony::IgniteCommand{cell, 0.0f, colony::kNoEntity, false});
+                        lit = true;
+                    }
+                }
+            }
+        }
         if (options.farm > 0 && sim.time().seconds % colony::kSecondsPerHour == 0) {
             std::vector<colony::Entity> animals;
             for (const colony::Entity e : sim.things().registry().view<const colony::Animal>()) {
@@ -801,6 +862,14 @@ int main(int argc, char** argv) {
             }
             for (const colony::Entity e : animals) {
                 sim.animals().addFood(e, 50.0f);
+            }
+        }
+        // --narrator runs reach the narrator's first threat day (11 or later): the colonists are fed every
+        // game hour, since nobody farms in this run and they would starve first.
+        if (!options.narrator.empty() && sim.time().seconds % 3600 == 0) {
+            for (const auto [pawn, needs] : sim.things().registry().view<colony::Needs>().each()) {
+                needs.food = 1.0f;
+                needs.malnutrition = 0.0f;
             }
         }
         const bool passStep = options.farm > 0 && sim.time().seconds > 0 && sim.time().seconds % sim.breeding().rules().passSeconds == 0;
@@ -816,6 +885,7 @@ int main(int argc, char** argv) {
             raid.ended = sim.time().seconds;
         }
         events += sim.events().size();
+        firePeak = std::max(firePeak, sim.fire().count());
         for (const colony::Event& e : sim.events()) {
             ate += e.type == colony::EventType::PawnAte ? 1 : 0;
             wokeUp += e.type == colony::EventType::PawnWokeUp ? 1 : 0;
@@ -826,6 +896,10 @@ int main(int argc, char** argv) {
             }
             mined += e.type == colony::EventType::CellMined ? 1 : 0;
             felled += e.type == colony::EventType::PlantRemoved ? 1 : 0;
+            fireBeaten += e.type == colony::EventType::FireOut && e.message == "beaten" ? 1 : 0;
+            fireBurntOut += e.type == colony::EventType::FireOut && e.message != "beaten" ? 1 : 0;
+            pawnsCaught += e.type == colony::EventType::PawnCaughtFire ? 1 : 0;
+            fireLit += e.type == colony::EventType::FireStarted ? 1 : 0;
             picked += e.type == colony::EventType::PlantHarvested ? 1 : 0;
             if (e.type == colony::EventType::Letter) {
                 const double day = static_cast<double>(sim.time().seconds) / static_cast<double>(colony::kSecondsPerDay);
@@ -1193,6 +1267,40 @@ int main(int argc, char** argv) {
             }
             if (extraPerStep > 0.5) {
                 std::fprintf(stderr, "check failed: breeding costs %.3f ms a step\n", extraPerStep);
+                return 1;
+            }
+        }
+    }
+
+    // The fire (E4, docs/design/fire.md): a grass fire near the colonists; they put it out or it burns out.
+    if (options.fire) {
+        const colony::Fire& fire = sim.fire();
+        int colonistsDead = 0;
+        for (const auto [e, c, h] : sim.things().registry().view<const colony::Colonist, const colony::Health>().each()) {
+            (void)e;
+            (void)c;
+            colonistsDead += h.dead ? 1 : 0;
+        }
+        std::printf("{\"fire\":{\"lit\":%llu,\"peakCells\":%zu,\"left\":%zu,\"beatenOut\":%llu,\"burntOut\":%llu,\"thingsBurntUp\":%llu,"
+                    "\"pawnsCaughtFire\":%llu,\"colonistsDead\":%d,\"burntCells\":%zu,\"homeCells\":%zu}}\n",
+                    static_cast<unsigned long long>(fireLit), firePeak, fire.count(), static_cast<unsigned long long>(fireBeaten),
+                    static_cast<unsigned long long>(fireBurntOut), static_cast<unsigned long long>(fire.burntUp()),
+                    static_cast<unsigned long long>(pawnsCaught), colonistsDead, fire.burntCells().size(), fire.homeCount());
+        if (options.check) {
+            if (fireLit == 0) {
+                std::fprintf(stderr, "check failed: no fire was lit (no grass near the colonists?)\n");
+                return 1;
+            }
+            if (options.days >= 0.5 && fire.count() != 0) {
+                std::fprintf(stderr, "check failed: %zu cells are still on fire after %.1f days\n", fire.count(), options.days);
+                return 1;
+            }
+            if (colonistsDead != 0) {
+                std::fprintf(stderr, "check failed: %d colonists died in the fire\n", colonistsDead);
+                return 1;
+            }
+            if (fireBeaten == 0) {
+                std::fprintf(stderr, "check failed: nobody beat a fire out\n");
                 return 1;
             }
         }

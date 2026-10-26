@@ -25,9 +25,9 @@ if it is ever set). At each check:
 
 1. **Threat cycle** (Orrin and Maren, `threatCycle`): big threats come in cycles of `onDays` with
    threats, then `offDays` of calm. At the start of a cycle the narrator picks `incidentsPerCycle`
-   moments at random within the "on" days. The first cycle starts on `firstThreatDay` (Orrin day 5,
-   Maren day 8), or when the narrator is picked if that is later. Orrin's 1.5 + 4.6 days give one big
-   threat every 6.1 days; Maren's 1 + 8, one every 9.
+   moments at random within the "on" days. The first cycle starts on `firstThreatDay` (Orrin day 11,
+   Maren day 13), or when the narrator is picked if that is later. Orrin's 4.6 + 6.0 days give one or
+   two big threats every 10.6 days; Maren's 8 + 8, one every 16.
 2. **By chance**, per category: each category the narrator has a `mtbDays` for (mean days between)
    rolls once: it happens with chance (check length / mean days), RimWorld's own MTB roll. Jinx rolls
    big threats this way too; Orrin and Maren leave them to the cycle. Diseases are rolled with the
