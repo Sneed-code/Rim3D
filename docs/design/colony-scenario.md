@@ -81,3 +81,19 @@ If that shows up in play, the fix is to mark routes stale when `Regions` changes
 Later systems that colonists use (farming, hauling to stockpiles, research, a doctor) should get a
 line in the script and a check, so this stays the "everything together" test. Keep it under
 10 seconds. A failure that is not worth fixing in the thread goes in `BACKLOG.md` with the seed.
+
+## The year run (`--year`)
+
+`simrun --scenario colony --year --seed N --size 512 --days 60` (60 game days is one game year; about 10 minutes
+on one core) is the same script plus things the long game needs: wild animals at 100% density, a stockpile with
+32 stacks of survival meals (there is no hunting yet, so food has to come from somewhere), a rice field of
+14 x 10 cells on the most fertile soil within 40 cells of the landing, laid out on day 13 (sown earlier it dies
+in the early spring frosts), and a meal bill of 30. It also prints the slowest step (`worstStepMs`), crop and
+farming counters, deaths of everything that is not a colonist by cause, and counts filth only within 15 cells of
+the room. In verbose mode it prints every injury a colonist takes. Colonists lying in `BedRest` are no longer
+counted as stuck. Without `--year` nothing changes.
+
+The first runs (seeds 1, 7, 42) found no crash, no stuck job and no determinism break (the same seed twice gives the
+same state hash), but all six colonists starve between day 37 and day 51 once the autumn frosts kill the field.
+What is missing is in `BACKLOG.md` (first entry). The run is not in CTest: it is expected to fail until those
+are done, and takes minutes.

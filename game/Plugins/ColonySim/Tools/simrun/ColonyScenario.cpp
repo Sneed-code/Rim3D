@@ -1,10 +1,13 @@
 #include "ColonyScenario.h"
 
+#include <chrono>
+
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Events.h"
+#include "ColonySim/Farming.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Floors.h"
 #include "ColonySim/Jobs.h"
@@ -20,6 +23,7 @@
 #include "ColonySim/Sim.h"
 #include "ColonySim/Social.h"
 #include "ColonySim/Snapshot.h"
+#include "ColonySim/Temperature.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -34,6 +38,8 @@
 namespace colonyscenario {
 
 namespace {
+
+constexpr int64_t kFieldDay = 13;  // year run: the rice field is laid out on this game day
 
 using namespace colony;
 
@@ -130,11 +136,39 @@ bool findRoomSite(Sim& sim, CellPos landing, CellPos& out) {
     return found;
 }
 
+// The best 14 x 10 patch of ground for the rice field within 40 cells of the landing: the most fertile soil
+// with no rock, water or building in it, outside the room (poor ground grows crops too slowly for a year run).
+CellPos findFieldSite(const Sim& sim, CellPos landing, const CellRect& room) {
+    CellPos best{landing.x + 10, landing.y, 0};
+    float bestScore = -1.0f;
+    for (int dy = -40; dy <= 40; dy += 2) {
+        for (int dx = -40; dx <= 40; dx += 2) {
+            const CellPos origin{landing.x + dx, landing.y + dy, 0};
+            float score = 0.0f;
+            bool ok = sim.map().inBounds(CellPos{origin.x + 13, origin.y + 9, 0}) && sim.map().inBounds(origin);
+            for (int y = 0; y < 10 && ok; ++y) {
+                for (int x = 0; x < 14 && ok; ++x) {
+                    const CellPos c{origin.x + x, origin.y + y, 0};
+                    ok = sim.map().groundWalkable(c) && sim.map().buildingAt(c) == kNoEntity && !room.contains(c) &&
+                         sim.map().terrain(c) == Terrain::Soil;
+                    score += ok ? sim.plants().fertility(c) : 0.0f;
+                }
+            }
+            if (ok && score > bestScore) {
+                bestScore = score;
+                best = origin;
+            }
+        }
+    }
+    return best;
+}
+
 }  // namespace
 
-int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDatabase> defs, bool verbose) {
+int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDatabase> defs, bool verbose, bool year) {
     SimSettings settings{seed, mapSize, 0, 0};
     settings.scenario = "Crashlanded";
+    settings.wildAnimals = year ? 100 : 0;
     Sim sim(settings, defs);
     if (!sim.setupErrors().empty()) {
         for (const std::string& e : sim.setupErrors()) {
@@ -188,6 +222,14 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         sim.submit(PlaceBlueprintCommand{p.defName, p.stuff, p.cell, p.rot});
     }
     const CellRect roomRect{origin.x, origin.y, kRoomWidth, kRoomHeight, 0};
+    if (year) {
+        // The year run: a rice field beside the room and a stockpile for its harvest, so the colony can live on.
+        sim.submit(CreateStockpileCommand{CellRect{origin.x - 8, origin.y, 6, 6, 0}});
+        // Food to last until the first harvest (the script has no hunting yet): 32 stacks of survival meals.
+        for (int i = 0; i < 32; ++i) {
+            sim.submit(SpawnThingCommand{"MealSurvivalPack", CellPos{origin.x - 8 + i % 6, origin.y + 1 + i / 6, 0}, 20});
+        }
+    }
     // A wood floor inside the room (C17): dirt tracked in from the bare ground gets dropped on it,
     // and the colonists clean it.
     sim.submit(PlaceFloorCommand{CellRect{origin.x + 1, origin.y + 1, kRoomWidth - 2, kRoomHeight - 2, 0}, "WoodFloor"});
@@ -278,6 +320,8 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     float minRest = 1.0f;
     float maxMalnutrition = 0.0f;
     float minMood = 100.0f;
+    int frostShown = 0;
+    bool fieldMade = false;
     bool billAdded = false;
     bool bedsAssigned = false;
     int64_t stoveBuiltAt = -1;
@@ -286,11 +330,27 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     const int64_t steps = static_cast<int64_t>(days * static_cast<double>(kSecondsPerDay));
     Snapshot snapshot;
 
+    std::map<std::string, int> animalDeaths;  // deaths of anything that is not a colonist, by cause
+    double worstStepMs = 0.0;
+    int64_t worstStepAt = 0;
     for (int64_t i = 0; i < steps; ++i) {
+        const auto stepStart = std::chrono::steady_clock::now();
         sim.step();
+        const double stepMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - stepStart).count();
+        if (stepMs > worstStepMs) {
+            worstStepMs = stepMs;
+            worstStepAt = i;
+        }
         for (const Event& e : sim.events()) {
             switch (e.type) {
-                case EventType::PawnDied: ++died; std::fprintf(stderr, "day %lld: a colonist died: %s\n", static_cast<long long>(sim.time().day()), e.message.c_str()); break;
+                case EventType::PawnDied:
+                    if (sim.things().registry().valid(e.thing) && sim.things().registry().all_of<Colonist>(e.thing)) {
+                        ++died;
+                        std::fprintf(stderr, "day %lld: a colonist died: %s\n", static_cast<long long>(sim.time().day()), e.message.c_str());
+                    } else {
+                        ++animalDeaths[e.message];
+                    }
+                    break;
                 case EventType::PawnAte: ++ate; atTable += e.message == "table" ? 1 : 0; break;
                 case EventType::PawnWokeUp: ++slept; sleptInBed += e.message == "bed" ? 1 : 0; break;
                 case EventType::Interaction: ++talks; break;
@@ -307,9 +367,22 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                                      jobTypeName(e.job), e.cell.x, e.cell.y, e.message.c_str());
                     }
                     break;
+                case EventType::PawnInjured:
+                    if (verbose && sim.things().registry().valid(e.thing) && sim.things().registry().all_of<Colonist>(e.thing)) {
+                        std::fprintf(stderr, "day %lld %02d:%02d: colonist %u hurt at %d,%d, part %d, %.1f damage (%s)\n", static_cast<long long>(sim.time().day()),
+                                     sim.time().hourOfDay(), static_cast<int>((sim.time().seconds / 60) % 60), static_cast<unsigned>(entt::to_integral(e.thing)), e.cell.x,
+                                     e.cell.y, e.part, static_cast<double>(e.amount), e.message.c_str());
+                    }
+                    break;
                 case EventType::WeatherChanged: ++weatherChanges; break;
                 case EventType::CellMined: ++mined; break;
-                case EventType::PlantRemoved: ++felled; break;
+                case EventType::PlantRemoved:
+                    ++felled;
+                    if (e.message == "frost" && frostShown++ < 5) {
+                        std::fprintf(stderr, "day %lld %02d:00: frost killed a crop at %d,%d (%.1f C there)\n", static_cast<long long>(sim.time().day()),
+                                     sim.time().hourOfDay(), e.cell.x, e.cell.y, static_cast<double>(sim.temperature().temperatureAt(e.cell)));
+                    }
+                    break;
                 case EventType::PlantHarvested: ++picked; break;
                 case EventType::PawnAction: cleaned += e.action == PawnAction::Clean ? 1 : 0; break;
                 case EventType::RecipeDone: mealsMade += static_cast<uint64_t>(std::max(0.0f, e.amount)); break;
@@ -347,7 +420,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 }
                 // Lying down and playing (sitting, watching the clouds) are meant to be still.
                 const bool working = job.type != JobType::None && job.type != JobType::Wait && !jobIsLyingDown(job) &&
-                                     !(job.type == JobType::Recreate && job.step > 0);
+                                     !(job.type == JobType::Recreate && job.step > 0) && !(job.type == JobType::BedRest && job.step > 0);
                 if (working && fp == s.fingerprint) {
                     ++s.samples;
                     if (s.samples > s.worst) {
@@ -387,6 +460,15 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         }
 
         if (now % kSecondsPerHour == 0) {
+            if (year && !fieldMade && sim.time().day() >= kFieldDay) {
+                // Sown at the start, the crops die in the early spring frosts: the field goes in with the warm weather.
+                const CellPos site = findFieldSite(sim, landing, roomRect);
+                if (verbose) {
+                    std::fprintf(stderr, "rice field at %d,%d\n", site.x, site.y);
+                }
+                sim.submit(CreateGrowingZoneCommand{CellRect{site.x, site.y, 14, 10, 0}, "Plant_Rice"});
+                fieldMade = true;
+            }
             sim.writeSnapshot(snapshot);
             int built = 0;
             int stoveId = 0;
@@ -413,7 +495,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
             }
             if (stove != kNoEntity && !billAdded) {
                 // Cook until there are 8 meals on the map, so the stove keeps the colony fed.
-                sim.submit(AddBillCommand{stove, "CookMealSimple", BillMode::UntilHave, 8});
+                sim.submit(AddBillCommand{stove, "CookMealSimple", BillMode::UntilHave, year ? 30 : 8});
                 billAdded = true;
             }
             if (!bedsAssigned && static_cast<int>(beds.size()) >= kBeds && colonists.size() >= static_cast<size_t>(kBeds)) {
@@ -516,6 +598,29 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 static_cast<unsigned long long>(weatherChanges), static_cast<unsigned long long>(commandsFailed), static_cast<unsigned long long>(sim.stats().failedJobs),
                 static_cast<unsigned long long>(sim.stateHash()));
 
+    if (year) {
+        std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay));
+        const FarmingStats& f = sim.farming().stats();
+        double growthSum = 0.0;
+        size_t crops = 0;
+        size_t mature = 0;
+        for (const GrowingZone& zone : sim.farming().zones()) {
+            for (const CellPos& c : zone.cells) {
+                if (sim.plants().has(c) && sim.plants().defAt(c) == zone.crop) {
+                    ++crops;
+                    growthSum += static_cast<double>(sim.plants().growth(c));
+                    mature += sim.farming().readyToHarvest(c) ? 1 : 0;
+                }
+            }
+        }
+        std::printf("{\"crops\":{\"standing\":%zu,\"meanGrowth\":%.3f,\"ready\":%zu}}\n", crops, crops > 0 ? growthSum / static_cast<double>(crops) : 0.0, mature);
+        std::printf("{\"farming\":{\"zones\":%zu,\"sown\":%llu,\"harvested\":%llu,\"frostKilled\":%llu,\"heatKilled\":%llu}}\n", sim.farming().zones().size(),
+                    static_cast<unsigned long long>(f.sown), static_cast<unsigned long long>(f.harvested), static_cast<unsigned long long>(f.frostKilled), static_cast<unsigned long long>(f.heatKilled));
+        for (const auto& [cause, n] : animalDeaths) {
+            std::printf("{\"otherDeaths\":{\"cause\":\"%s\",\"count\":%d}}\n", cause.c_str(), n);
+        }
+    }
+
     // The checks.
     int failures = 0;
     const auto fail = [&failures](const char* format, auto... args) {
@@ -567,8 +672,18 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     if (talks == 0) {
         fail("%s", "the colonists never talked to each other");
     }
-    if (sim.filth().totalLayers() > 12) {
-        fail("%zu layers of filth lie about (cleaned %llu): nobody keeps up with the dirt", sim.filth().totalLayers(),
+    size_t homeFilth = 0;
+    for (int y = origin.y - 15; y < origin.y + kRoomHeight + 15; ++y) {
+        for (int x = origin.x - 15; x < origin.x + kRoomWidth + 15; ++x) {
+            if (year && sim.map().inBounds(CellPos{x, y, 0})) {
+                for (const FilthPile& pile : sim.filth().at(CellPos{x, y, 0})) {
+                    homeFilth += static_cast<size_t>(pile.thickness);
+                }
+            }
+        }
+    }
+    if (year ? homeFilth > 60 : sim.filth().totalLayers() > 12) {
+        fail("%zu layers of filth lie about (cleaned %llu): nobody keeps up with the dirt", year ? homeFilth : sim.filth().totalLayers(),
              static_cast<unsigned long long>(cleaned));
     }
     if (roomStat == nullptr) {
