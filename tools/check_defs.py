@@ -53,6 +53,8 @@ REFERENCES = [
     ("Biomes", "animals{}", "Things"),
     ("Things", "race.wildBiomes{}", "Biomes"),
     ("Biomes", "weather{}", "Weathers"),
+    ("WorldGen", "biomeRules[].biome", "Biomes"),
+    ("WorldGen", "waterRules[].biome", "Biomes"),
     ("Bodies", "corePart.**.def", "BodyParts"),
     ("Bodies", "corePart.**.groups[]", "BodyPartGroups"),
     ("WorkTypes", "relevantSkills[]", "Skills"),
@@ -124,6 +126,17 @@ REFERENCES = [
 RESEARCH_GATED_KINDS = ("Things", "Recipes", "Terrain")
 
 
+# Cues the sim plays for an event with no def to name them (Sound.cpp, docs/design/sound.md).
+EVENT_CUES = {
+    "Impact_Armor", "Impact_Building", "Impact_Ground", "Impact_Rock", "Melee_Clang", "Melee_Block", "Punch", "Dodge",
+    "Grenade_Throw", "Grenade_Landed", "Trap_Spring", "Trap_Rearm", "Item_PickUp", "Item_PutDown", "Power_On",
+    "Power_Off", "Short_Circuit", "Roof_Collapse", "Fire_Ignite", "Fire_Burning", "Fire_Out", "Alarm", "Raid_Horn",
+    "Research_Done", "Work_Mine", "Work_Chop", "Work_Harvest", "Work_Build", "Work_Cook", "Work_Smith", "Work_Craft",
+    "Work_Tailor", "Work_Research", "Work_Clean", "Work_Tend", "Work_Stonecut", "Work_Butcher", "Work_Eat",
+    "Work_Refuel", "Work_Handle", "Work_Chat", "Work_Extinguish",
+}
+
+
 def walk(node, steps):
     """Yields the values at a REFERENCES path."""
     if not steps:
@@ -188,6 +201,35 @@ def check_research_unlocks(defs_by_kind):
     return problems
 
 
+def check_sound_cues(defs_by_kind):
+    """Every cue a def names under visual.sound must be a SoundCues def; returns the problems and the cues used."""
+    problems = []
+    cues = defs_by_kind.get("SoundCues", {})
+    used = set()
+    for kind, kind_defs in defs_by_kind.items():
+        for name, (file, entry) in kind_defs.items():
+            visual = entry.get("visual")
+            sound = visual.get("sound") if isinstance(visual, dict) else None
+            if sound is None:
+                continue
+            if not isinstance(sound, dict):
+                problems.append(f"{file}: {kind} '{name}' visual.sound must be an object of slot: cue")
+                continue
+            for slot, cue in sound.items():
+                if not isinstance(cue, str) or cue not in cues:
+                    problems.append(f"{file}: {kind} '{name}' visual.sound.{slot} names unknown SoundCues def '{cue}'")
+                else:
+                    used.add(cue)
+    for name, (file, entry) in cues.items():
+        tone = entry.get("tone")
+        if not isinstance(tone, dict) or tone.get("wave") not in ("sine", "square", "saw", "noise") or not tone.get("hz") or not tone.get("seconds"):
+            problems.append(f"{file}: SoundCues '{name}' needs tone {{wave, hz, seconds}}")
+        volume = entry.get("volume")
+        if entry.get("loop") not in (True, False) or not isinstance(volume, (int, float)) or not 0 < volume <= 1 or entry.get("priority") not in (0, 1, 2, 3):
+            problems.append(f"{file}: SoundCues '{name}' needs loop, volume (0 to 1) and priority (0 to 3)")
+    return problems, used
+
+
 def main() -> int:
     problems = []
     defs_by_kind = {}
@@ -239,6 +281,12 @@ def main() -> int:
 
     if CHECK_REFERENCES and "Research" in defs_by_kind:
         problems.extend(check_research_unlocks(defs_by_kind))
+
+    if CHECK_REFERENCES and "SoundCues" in defs_by_kind:
+        sound_problems, used = check_sound_cues(defs_by_kind)
+        problems.extend(sound_problems)
+        for name in sorted(set(defs_by_kind["SoundCues"]) - used - EVENT_CUES):
+            problems.append(f"{defs_by_kind['SoundCues'][name][0]}: SoundCues '{name}' is used by no def and no event")
 
     for problem in problems:
         print(problem)

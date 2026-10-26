@@ -51,10 +51,31 @@ struct DefensePlan {
     CellPos spot;
 };
 
+// How a raid comes and what it is after (F12, docs/design/raid-strategies.md).
+enum class RaidStrategy : uint8_t {
+    Assault,    // walks in at an edge and goes for the colony (F6)
+    Sappers,    // walks in; when walls shut the colony off, digs through the nearest wall on the way
+    DropPods,   // lands in pods round the colony, inside its walls if need be
+    Thieves,    // walks in, grabs the most valuable loose items and runs for the edge with them
+    Kidnappers, // walks in, fights, and carries off colonists who go down
+};
+inline constexpr int kRaidStrategyCount = 5;
+
 // On every pawn a raid brought: its squad and pawn kind (PawnKinds defName).
 struct Raider {
     uint32_t squad = 0;
     std::string kind;
+    // F12 (raids section 2): what it is going for, and what it is carrying off. `loot` is a stolen item
+    // (the pawn also has Carrying) or a kidnapped pawn (which has Kidnapped and follows it).
+    Entity goalThing = kNoEntity;
+    Entity loot = kNoEntity;
+    bool sparesDowned = false;  // kidnappers don't shoot the downed: they come to carry them off
+};
+
+// On a colonist a kidnapper carries off: its position follows `by` until it is put down or leaves the map.
+// Rescue and capture jobs leave a kidnapped pawn alone.
+struct Kidnapped {
+    Entity by = kNoEntity;
 };
 
 // How a squad feels about the fight (architecture.md, "Morale and squads").
@@ -74,6 +95,10 @@ struct Squad {
     int64_t arrivedAt = 0;  // game second
     int64_t giveUpAt = 0;   // it leaves at this game second if it hasn't routed before
     SquadState state = SquadState::Advance;
+    RaidStrategy strategy = RaidStrategy::Assault;  // F12 (raids section 2)
+    bool hasBreach = false;  // Sappers: the wall they are digging through, and the cell they dig from
+    CellPos breach;
+    CellPos breachFrom;
     bool gaveUp = false;    // routed because time ran out rather than losses
     CellPos entry;          // where it walked in
     bool hasTarget = false;  // the cell it goes for: the colonist nearest to it
@@ -82,8 +107,18 @@ struct Squad {
     std::vector<Entity> members;  // in id order; the dead and those that left are dropped
 };
 
+// A raid that waits for an hour of the day (a night attack), started with the command's strategy then.
+struct PendingRaid {
+    std::string faction;
+    float points = 0.0f;
+    int edge = -1;
+    RaidStrategy strategy = RaidStrategy::Assault;
+    int64_t at = 0;  // game second
+};
+
 // Everything a raid and the alarm keep between steps; saved as a whole (Save.cpp).
 struct RaidState {
+    std::vector<PendingRaid> pending;   // in the order they were asked for (F12, raids section 2)
     std::vector<std::string> factions;  // Factions defNames; faction id = index + 2 (1 is the player)
     std::vector<Squad> squads;          // in id order
     uint32_t nextSquad = 1;
@@ -138,6 +173,23 @@ struct RaidRules {
     float lineMoves = 6.0f;        // the line moves when the threat has moved it this far
     int shelterSearch = 4000;      // cells searched for an indoor cell when no shelter is marked
     float shelterFlee = 25.0f;     // no indoor cell: this far from the threat instead
+    // F12 (all ours): which strategy a raid picks when the caller doesn't say, and how each one works.
+    float weightAssault = 60.0f;
+    float weightSappers = 12.0f;   // times blockedBoost when walls shut the colony off from every edge
+    float weightDropPods = 14.0f;
+    float weightThieves = 8.0f;
+    float weightKidnappers = 6.0f;
+    float blockedBoost = 8.0f;
+    float dropPodsMinPoints = 120.0f;  // smaller raids walk
+    float dropMinDistance = 8.0f;      // pods land this far from the target...
+    float dropMaxDistance = 24.0f;     // ...to this far
+    float sapDamage = 4.0f;            // hit points a digging raider takes off its wall each second
+    float sapReach = 2.2f;             // metres from the wall's cell middle a raider digs from
+    int sapSearch = 60000;             // cells searched for the wall to dig through
+    float grabReach = 1.6f;            // metres from the loot or the downed colonist a raider can lift it
+    float stealMass = 40.0f;           // kilograms of items a thief carries off
+    float kidnapRange = 90.0f;         // a kidnapper goes for downed colonists this close
+    float seizeRange = 12.0f;          // and stops fighting to lift one this close
 };
 
 class COLONY_API RaidSystem {
@@ -168,6 +220,14 @@ public:
     // A raid of `faction` (a Factions defName) with `points` (0: threatPoints()) walks in at `edge`
     // (0 north, 1 east, 2 south, 3 west, -1 any).
     bool startRaid(const std::string& faction, float points, int edge, std::string& error);
+    // F12: the same with a strategy. `hour` 0 to 23.99 waits for that hour of the day (a raid at night; the
+    // next one, today or tomorrow), -1 comes now. Fails when the strategy has nothing to work with (thieves
+    // with no loose items, kidnappers with no colonist, sappers with no wall in the way are fine).
+    bool startRaid(const std::string& faction, float points, int edge, RaidStrategy strategy, float hour, std::string& error);
+    // The strategy a raid of these points would pick now, by the rules' weights: sappers favoured when no edge
+    // reaches the colony, drop pods only from dropPodsMinPoints, thieves only when loose items exist, kidnappers
+    // only when colonists do. Draws from the sim's Rng, so call it from the sim.
+    RaidStrategy pickStrategy(float points);
     bool soundAlarm(bool on, std::string& error);
     bool setRole(Entity pawn, DefenseRole role, bool hasSpot, CellPos spot, std::string& error);
     // The room at `cell` is where Shelter colonists go; `clear` takes the mark off.
@@ -205,6 +265,18 @@ private:
     };
 
     void thinkSquad(Squad& squad);
+    // F12.
+    bool pickEntry(int edge, CellPos target, bool needReach, CellPos& entry);
+    void stepStrategies();
+    void thinkBreach(Squad& squad);
+    void thinkLoot(Squad& squad);
+    void thinkKidnap(Squad& squad);
+    void dropLoot(Entity pawn);
+    void flee(Entity pawn, Squad& squad);
+    bool findBreach(const Squad& squad, CellPos from, CellPos& wall, CellPos& approach) const;
+    bool blockedFromColony(CellPos from, CellPos target) const;
+    bool colonyWalledOff();
+    void removeForGood(Entity pawn);
     void leaveAtEdge(Squad& squad);
     void thinkAlarm();
     void setAlarm(bool on, const char* why);
@@ -238,5 +310,8 @@ private:
 
 COLONY_API const char* defenseRoleName(DefenseRole role);
 COLONY_API const char* squadStateName(SquadState state);
+COLONY_API const char* raidStrategyName(RaidStrategy strategy);
+// The strategy with this name ("Assault", "Sappers", "DropPods", "Thieves", "Kidnappers"); false if there is none.
+COLONY_API bool raidStrategyFromName(const std::string& name, RaidStrategy& out);
 
 }  // namespace colony

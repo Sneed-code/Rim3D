@@ -533,3 +533,67 @@ TEST_CASE("Fighters: the orders go through a replay file and play back the same 
     CHECK(replayed.stateHash() == original.stateHash());
     CHECK(checkReplay(loaded, replayed).matched());
 }
+
+TEST_CASE("Fighters: a gunner's shooting spot is inside its gun's range, not at the very edge") {
+    auto sim = fightTestSim(21, 128);
+    GunStats gun;
+    FIGHT_REQUIRE(sim->combat().gunStats(sim->defs().idOf("Things", "Gun_Revolver"), gun));
+    const float margin = sim->fighters().rules().rangeMargin;
+    CHECK(margin > 0.0f);
+    // The enemy stands as far off as the revolver reaches, in the open, and doesn't move.
+    const Entity gunner = fightTestPawn(*sim, 60, 40, "Gun_Revolver");
+    const Entity enemy = fightTestPawn(*sim, 60, 40 + static_cast<int>(gun.range), "Gun_Revolver");
+    fightTestDraft(*sim, gunner);
+    fightTestHostile(*sim, enemy);
+    sim->step();
+    sim->things().registry().get<Fighter>(enemy).advances = false;
+    int shots = 0;
+    int checked = 0;
+    for (int i = 0; i < 600; ++i) {
+        fightTestHeal(*sim, gunner);
+        fightTestHeal(*sim, enemy);
+        sim->step();
+        for (const Event& e : sim->events()) {
+            shots += e.type == EventType::ShotFired && e.thing == gunner ? 1 : 0;
+        }
+        const Fighter& f = fightTestFighter(*sim, gunner);
+        if (f.canFire && f.target == enemy) {
+            const Position& t = sim->things().registry().get<Position>(enemy);
+            const float d = std::hypot(static_cast<float>(f.fireCell.x) + 0.5f - t.x, static_cast<float>(f.fireCell.y) + 0.5f - t.y);
+            CHECK(d <= gun.range - margin + 0.6f);  // the enemy may have drifted a little since the plan
+            ++checked;
+        }
+    }
+    CHECK(checked > 0);
+    CHECK(shots >= 3);
+}
+
+TEST_CASE("Fighters: an advancing raider with no shot goes round a wall by its goal") {
+    auto sim = fightTestSim(23, 128);
+    // A long wall across the way with its ends far off: only the goal's route gets round it.
+    fightTestBuild(*sim, "FightTestWall", 64, 20, 64, 108);
+    const Entity raider = fightTestPawn(*sim, 40, 64, "Gun_Revolver");
+    const Entity colonist = fightTestPawn(*sim, 90, 64);
+    fightTestHostile(*sim, raider);
+    sim->step();
+    {
+        Fighter& f = sim->things().registry().get<Fighter>(raider);
+        f.hasGoal = true;
+        f.goal = CellPos{90, 64, 0};
+        f.known.push_back(KnownEnemy{colonist, 90.5f, 64.5f, 0, sim->time().seconds});
+    }
+    float furthestEast = 0.0f;
+    for (int i = 0; i < 2400; ++i) {
+        fightTestHeal(*sim, raider);
+        fightTestHeal(*sim, colonist);
+        sim->step();
+        furthestEast = std::max(furthestEast, sim->things().registry().get<Position>(raider).x);
+        Fighter& f = sim->things().registry().get<Fighter>(raider);
+        if (f.known.empty() || f.known.front().pawn != colonist) {
+            f.known.clear();  // it can't see the colonist through the wall: keep the knowledge it was given
+            f.known.push_back(KnownEnemy{colonist, 90.5f, 64.5f, 0, sim->time().seconds});
+        }
+    }
+    CHECK(furthestEast > 66.0f);  // past the wall
+    MESSAGE("the raider got as far east as x = " << furthestEast);
+}

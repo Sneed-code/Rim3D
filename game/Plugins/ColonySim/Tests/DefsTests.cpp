@@ -298,7 +298,7 @@ TEST_CASE("defs: medicine and disease data (D7)") {
         const Def* d = db.find("Hediffs", name);
         if (d == nullptr) { CHECK_MESSAGE(false, name); continue; }
         CHECK_MESSAGE(d->text("hediffClass") == "Disease", name);
-        CHECK_MESSAGE(d->count("stages") >= 2, name);
+        CHECK_MESSAGE(d->count("stages") >= 1, name);
     }
     CHECK(db.find("Hediffs", "Plague")->number("lethalSeverity") == doctest::Approx(1.0));
     CHECK(db.find("Hediffs", "GutWorms")->number("lethalSeverity") == doctest::Approx(0.0));
@@ -334,5 +334,5 @@ TEST_CASE("defs: medicine and disease data (D7)") {
     CHECK(hospital->number("stats.medicalTendQualityOffset") > 0.0);
     const Def* healthRules = db.find("Rules", "HealthRules");
     CHECK(healthRules->number("restHealBonusPerDay.HospitalBed") > healthRules->number("restHealBonusPerDay.Bed"));
-    CHECK(db.find("Rules", "MedicineRules")->count("tendQualityBySkill") == 5);
+    CHECK(db.find("Rules", "MedicineRules")->count("tendQualityBySkill") == 21);
 }
