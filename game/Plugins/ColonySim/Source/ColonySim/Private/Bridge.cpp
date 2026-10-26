@@ -279,6 +279,8 @@ const char* eventTypeName(EventType type) {
         case EventType::PrisonerChatted: return "PrisonerChatted";
         case EventType::PrisonerRecruited: return "PrisonerRecruited";
         case EventType::PrisonerReleased: return "PrisonerReleased";
+        case EventType::PrisonerExecuted: return "PrisonerExecuted";
+        case EventType::OrganHarvested: return "OrganHarvested";
         case EventType::PrisonBreak: return "PrisonBreak";
         case EventType::Interaction: return "Interaction";
         case EventType::BondChanged: return "BondChanged";

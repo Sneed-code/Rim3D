@@ -98,6 +98,8 @@ enum class EventType : uint8_t {
     PawnMentalBreakEnded,  // it ended: `message` says how ("recovered", "downed", "died", "stopped")
     PawnInsulted,          // a pawn in an insulting spree insulted another
     PawnLeftColony,        // a pawn gave up and walked off the map for good
+    PrisonerExecuted,      // a warden executed a prisoner (docs/design/prisoners.md): `thing` the prisoner (dead), `target` the warden, `message` "guilty" or "innocent"
+    OrganHarvested,        // an organ was taken from a living pawn: `thing` the victim, `target` the surgeon, `part` the body part, `message` "colonist" or "prisoner" (anyone who is not one of ours)
 };
 
 // What stopped a projectile (ProjectileHit).

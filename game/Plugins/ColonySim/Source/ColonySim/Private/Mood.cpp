@@ -458,6 +458,35 @@ void MoodSystem::step(int64_t now, std::vector<Event>& events) {
             }
             continue;
         }
+        if (event.type == EventType::PrisonerExecuted) {
+            // The colony knows. Cold-hearted, bloodthirsty and cannibal colonists shrug (RimWorld wiki).
+            const char* trigger = event.message == "guilty" ? "KnowPrisonerExecutedGuilty" : "KnowPrisonerExecuted";
+            for (const Entity other : pawns) {
+                if (moodIsColonist(reg, other) && !hasTrait(other, "Psychopath") && !hasTrait(other, "Bloodlust") &&
+                    !hasTrait(other, "Cannibal")) {
+                    addMemory(reg.get<Mood>(other), trigger, now);
+                }
+            }
+            continue;
+        }
+        if (event.type == EventType::OrganHarvested) {
+            // The victim, if one of ours, is scarred by it; everyone else hears. A bloodthirsty colonist enjoys it.
+            const bool ours = event.message == "colonist";
+            if (ours && moodIsColonist(reg, event.thing)) {
+                addMemory(reg.get<Mood>(event.thing), "MyOrganHarvested", now);
+            }
+            for (const Entity other : pawns) {
+                if (other == event.thing || !moodIsColonist(reg, other)) {
+                    continue;
+                }
+                if (hasTrait(other, "Bloodlust")) {
+                    addMemory(reg.get<Mood>(other), "BloodlustOrganHarvested", now);
+                } else if (!hasTrait(other, "Psychopath") && (ours || !hasTrait(other, "Cannibal"))) {
+                    addMemory(reg.get<Mood>(other), ours ? "KnowColonistOrganHarvested" : "KnowGuestOrganHarvested", now);
+                }
+            }
+            continue;
+        }
         if (event.type == EventType::AnimalButchered) {
             // Cutting up a person: only the cold-hearted and the cannibals do not mind.
             Mood* butcher = reg.valid(event.thing) ? reg.try_get<Mood>(event.thing) : nullptr;

@@ -38,6 +38,7 @@ enum class PrisonerMode : uint8_t {
     ReduceResistance,  // each talk lowers its resistance, down to 0
     AttemptRecruit,    // the same, and once the resistance is 0 each talk tries to recruit it
     Release,           // the next talk sets it free (it walks off the map)
+    Execute,           // a warden kills it (docs/design/prisoners.md, Executions)
 };
 
 COLONY_API const char* prisonerModeName(PrisonerMode mode);
@@ -50,6 +51,7 @@ struct Prisoner {
     float resistance = 0.0f;   // 0 when it can be recruited
     int64_t capturedAt = 0;    // game second
     int64_t nextChat = 0;      // game second from which a warden may talk to it again
+    int64_t guiltyUntil = 0;   // it harmed the colony (it was captured in a raid) until this game second; an execution before is justified
 };
 
 // On a bed building: only prisoners sleep in it, and downed enemies are carried to it.
@@ -78,6 +80,8 @@ struct COLONY_API PrisonerRules {
     float recruitChanceMax = 0.95f;
     float captureSafeRadius = 25.0f;       // wardens leave a downed enemy alone while an able one is this close
     float feedBelow = 0.3f;                // wardens feed a prisoner whose food is under this
+    int64_t executeWorkSeconds = 60;       // ours: the cut itself is quick
+    int64_t guiltyHours = 24;              // RimWorld wiki: a prisoner is guilty if it harmed the colony in the past 24 hours
     int edgeSearch = 40;                   // cells along the map edge looked at for a way out
 
     static PrisonerRules read(const DefDatabase& defs);
@@ -125,6 +129,13 @@ public:
     // map). False if it is no prisoner (or, for a release, can't walk).
     bool recruit(Entity prisoner, Entity warden);
     bool release(Entity prisoner, Entity warden);
+    // Whether the prisoner harmed the colony in the past `guiltyHours` (it was captured out of a raid then): killing it is justified.
+    bool guilty(Entity prisoner) const;
+    // A warden kills the prisoner at once (death cause Executed). Event PrisonerExecuted. False if it is no living prisoner.
+    bool execute(Entity prisoner, Entity warden);
+    // The hook for surgery: a part was taken from the living `victim` by `surgeon` for its organ (not a prosthetic). Raises the
+    // OrganHarvested event the colony's moods read. `part` is the body part index.
+    void noteOrganHarvested(Entity victim, Entity surgeon, int part);
     // The hook for T3's prison break incident: every prisoner who can walk breaks out (it is a prisoner no more and fights
     // its own side's fight, with no weapon, walking off the map; a PrisonBreak event). Returns how many.
     int breakOut(const char* why);
