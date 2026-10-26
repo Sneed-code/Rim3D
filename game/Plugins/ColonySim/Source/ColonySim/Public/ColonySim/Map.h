@@ -215,6 +215,16 @@ public:
         return stored == Roof::None && floorAbove(c) ? Roof::Thin : stored;
     }
 
+    // The mountain's thick roof over a ground cell (M3, docs/design/roofs.md): generation puts it over
+    // all rock; it stays when the rock is mined out, held up by rock and walls within the roof support
+    // radius, and RoofCollapse takes it away when nothing holds it. `false` clears it.
+    void setThickRoof(CellPos c, bool thick);
+    // Ground cells (by `index`) that are no longer rock but still have the thick roof: the only thick
+    // roofs that can fall. In the order they were mined out.
+    const std::vector<int>& hollowRoofCells() const { return hollow_; }
+    // Goes up whenever rock is mined out under a thick roof or a thick roof is cleared.
+    uint64_t rockChanges() const { return rockChanges_; }
+
     // Regions and reachability groups of the walkable cells (docs/design/regions.md).
     Regions& regions();
     // Cover from the eight sides and line of sight (docs/design/cover.md).
@@ -274,6 +284,8 @@ private:
     std::vector<std::unique_ptr<UpperChunk>> upper_;
     uint64_t upperFloorChanges_ = 0;
     uint64_t buildingChanges_ = 0;
+    uint64_t rockChanges_ = 0;
+    std::vector<int> hollow_;  // mined-out ground cells that still have the thick roof
     std::vector<LevelLink> levelLinks_;
     std::unique_ptr<Regions> regions_;
     std::unique_ptr<Cover> cover_;
