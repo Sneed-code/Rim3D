@@ -43,6 +43,7 @@ enum class JobType : uint8_t {
     Hunt,              // walk up to a wild animal marked for the hunt and shoot it dead (docs/design/hunting.md)
     HaulCorpse,        // carry a hunted or slaughtered animal's corpse to a stockpile (docs/design/hunting.md)
     Butcher,           // carry a corpse to a butcher table and cut it up into meat and leather (docs/design/hunting.md)
+    RearmTrap,         // walk next to a sprung trap and set it again (docs/design/defense.md)
 };
 
 COLONY_API const char* jobTypeName(JobType type);

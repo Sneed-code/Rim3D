@@ -175,6 +175,7 @@ class DefDatabase;
 class Farming;
 class Filth;
 class Fire;
+class DefenseSystem;
 class SpoilageSystem;
 class CraftingSystem;
 struct Bill;
@@ -338,6 +339,9 @@ public:
     // The fire layer, for the Firefighter work type's job (FireJobs.cpp, docs/design/fire.md). Without it nobody fights fires.
     void setFire(Fire* fire) { fire_ = fire; }
     Fire* fire() const { return fire_; }
+    // The turrets and traps, for the Rearm job (DefenseJobs.cpp, docs/design/defense.md). Without it nobody rearms traps.
+    void setDefense(DefenseSystem* defense) { defense_ = defense; }
+    DefenseSystem* defense() const { return defense_; }
     Rooms* rooms() const { return rooms_; }
     // How fast a pawn cleans (1 is 100%): FilthRules.cleaningSpeed times its Manipulation.
     double cleaningSpeed(Entity pawn) const;
@@ -584,6 +588,9 @@ private:
     // Firefighting (FireJobs.cpp).
     bool failCheckExtinguish(Entity pawn, Job& job, std::string& why);
     StepResult extinguishWork(Entity pawn, Job& job, std::string& why);
+    // Rearming sprung traps (DefenseJobs.cpp).
+    bool failCheckRearm(Entity pawn, Job& job, std::string& why);
+    StepResult rearmWork(Entity pawn, Job& job, std::string& why);
 
     void startJob(Entity pawn, Job job);
     void tickJob(Entity pawn);
@@ -703,6 +710,7 @@ private:
     uint8_t defaultPriority_ = kDefaultPriority;
     Filth* filth_ = nullptr;
     Fire* fire_ = nullptr;
+    DefenseSystem* defense_ = nullptr;
     SpoilageSystem* spoilage_ = nullptr;
     CraftingSystem* crafting_ = nullptr;
     Farming* farming_ = nullptr;

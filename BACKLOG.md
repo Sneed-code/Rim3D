@@ -20,8 +20,8 @@ Ideas parked for later. Newest first. Move an item into a stage plan when it's p
 - Elevators for multi-storey buildings (after stairs and ladders).
 - Carry on as another colonist after the protagonist dies (currently game over).
 - Children and sexual content: out of scope for now; sneed may revisit.
-- Rearm job for sprung spike traps (a Construction-style colonist job; F11 has only `RearmTrapCommand`) and a "rearm all" button (U19 panels).
-- Raiders shooting back at turrets (the fighter AI targets pawns only); armor for spike-trap stabs; the other turrets (sentry, autocannon) and trap kinds (found in F11).
+- A "rearm all" button and a rearm animation for the trap (U19 panels, Unreal side; the sim job `RearmTrap` is done).
+- Raiders shooting back at turrets (the fighter AI targets pawns only; needs turrets as fighter targets in `Fighters.cpp`, left while the raid-soak fixes touch it); the other turrets (sentry, autocannon) and trap kinds (found in F11).
 - Fix what the F7 raid soak found (`docs/design/raid-soak.md`): fighters stuck while walking to their spot (about 0.4 per seed in raids), fighters waiting in the open 13.6% of the time against the 10% rule, and some raids still going after a quarter game day. Then tighten the soak's limits.
 - Fire (found in E4): heat armor of apparel against Burn damage, an allowed area per colonist (the home area is one shared area), a home-area overlay and painting tool (U19), burnt ground slowing plant regrowth, wood-fired buildings (stoves, generators, campfires) catching fire from their fuel, a "fire danger" thought for sleeping next to fuel. Tune `spreadPerTick`, `plantDamageFactor` and `beatPerTick` in a playtest (`data/defs/Rules/FireRules.json`).
 - Hunting (found in N2, `docs/design/hunting.md`): hunters should skip animals that are too dangerous for them (bears, thrumbos), a butcher spot (70% yield) and tool cabinets by the butcher table, butchering and eating people and their mood effects, damaged and rotting corpses giving less, "store in this stockpile" for butchered meat, and Shooting experience for hunters.

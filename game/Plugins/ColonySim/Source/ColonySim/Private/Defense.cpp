@@ -42,6 +42,8 @@ struct DefenseModel {
         float damageLow = 0.7f;    // the random factor on the total
         float damageHigh = 1.3f;
         float destroyChance = 0.0f;  // chance a spike trap is gone after it goes off
+        float penetration = 0.0f;    // armor penetration of each stab
+        float rearmSeconds = 13.0f;  // work a colonist's rearming takes
         bool rearmable = true;
     };
 
@@ -82,6 +84,8 @@ struct DefenseModel {
                 t.damageLow = static_cast<float>(def.number("trap.damageFactorLow", 0.7));
                 t.damageHigh = static_cast<float>(def.number("trap.damageFactorHigh", 1.3));
                 t.destroyChance = static_cast<float>(def.number("trap.destroyChance"));
+                t.penetration = static_cast<float>(def.number("trap.armorPenetration"));
+                t.rearmSeconds = static_cast<float>(def.number("trap.rearmSeconds", 13.0));
                 t.rearmable = def.flag("trap.rearmable", !t.explodes);
                 t.valid = t.explodes ? blasts[id.value].valid : (t.damage > 0.0f && t.damageType.valid());
             }
@@ -457,6 +461,22 @@ void DefenseSystem::learn(Trap& trap, FactionId faction) {
     trap.known.insert(std::upper_bound(trap.known.begin(), trap.known.end(), faction), faction);
 }
 
+bool DefenseSystem::needsRearm(Entity trap) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(trap) || !things_.spawned(trap)) {
+        return false;
+    }
+    const Trap* t = reg.try_get<Trap>(trap);
+    const DefenseModel::TrapInfo* info = model_->trap(reg.get<Thing>(trap).def);
+    return t != nullptr && t->sprung && info != nullptr && info->rearmable;
+}
+
+float DefenseSystem::rearmSeconds(Entity trap) const {
+    const entt::registry& reg = things_.registry();
+    const DefenseModel::TrapInfo* info = reg.valid(trap) ? model_->trap(reg.get<Thing>(trap).def) : nullptr;
+    return info != nullptr ? info->rearmSeconds : 0.0f;
+}
+
 bool DefenseSystem::rearm(Entity trap, std::string* why) {
     entt::registry& reg = things_.registry();
     const auto fail = [why](const char* message) {
@@ -547,7 +567,7 @@ void DefenseSystem::spring(Entity trap, Entity victim, Rng& rng) {
         if (h == nullptr || h->dead) {
             break;
         }
-        health_.applyDamage(victim, info->damageType, each, -1, rng);
+        combat_.strikePawn(victim, info->damageType, each, info->penetration, rng);
     }
     if (info->destroyChance > 0.0f && rng.unit() < info->destroyChance) {
         if (beforeDestroy_) {

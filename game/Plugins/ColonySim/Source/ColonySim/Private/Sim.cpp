@@ -275,6 +275,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     fire_->setRunning([this](Entity building) { return power_->running(building); });
     defense_->setOnLearn([this](Entity pawn) { fighters_->replan(pawn); });
     fighters_->setDefense(defense_.get());
+    jobs_->setDefense(defense_.get());
     social_ = std::make_unique<SocialSystem>(*things_, *rooms_, *health_, *melee_, *mood_, *jobs_, *defs_, time_,
                                              splitMix64(settings.seed ^ 0x736F6369616CULL));
     social_->setEventLog(&events_);
