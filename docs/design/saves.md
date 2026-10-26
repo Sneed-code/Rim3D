@@ -43,7 +43,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Combat (format 12) | per pawn its posture (stance, facing), gear (gun and apparel ids) and trigger (phase, steps, burst, aim, recoil); `EquippedBy` on gear; every projectile in flight with its defs **by `defName`** ([combat.md](combat.md)) |
 | Pawn looks (format 16) | each humanlike pawn's lineage (by `defName`), gender, body type, weight, height, melanin and colours; `SetLineage` commands in the log ([looks.md](looks.md)). Older files load with pawns that have no looks |
 | Aiming (format 17) | rounds left in each gun that has been fired (`Magazine`), the trigger's reloading phase, a fighter's reaction and dodge times ([aiming.md](aiming.md)) |
-| Raids (section `raids`, `fighters` 2) | the raid squads (faction, points, state, target, members, when they give up), the alarm and its threat and home points, the shelter mark, the factions met so far; per pawn its `Raider` squad and kind and its `DefensePlan`; a fighter's mode, goal, squad, `defending` and `retreat` ([raids.md](raids.md)) |
+| Raids (section `raids` 2, `fighters` 2) | the raid squads (faction, points, state, target, members, when they give up), the alarm and its threat and home points, the shelter mark, the factions met so far; per pawn its `Raider` squad and kind and its `DefensePlan`; a fighter's mode, goal, squad, `defending` and `retreat` ([raids.md](raids.md)) |
 | Talents (section `talents`) | per protagonist: pawn, XP and ranks by talent **`defName`** ([talents.md](talents.md)) |
 | Farming (section `farming`) | growing zones: id, crop **by `defName`**, cells; the next zone id and the counters ([farming.md](farming.md)) |
 | Prisoners (section `prisoners`) | each prisoner's mode, resistance, capture time and next talk; each prison-marked bed ([prisoners.md](prisoners.md)) |
@@ -136,6 +136,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `breeding` | 1 | the counters, then `breed` (an animal's pregnancy, mating wait, milk, wool and egg timers, the female a male is courting) and `hatching` (a fertilized egg's hatch time) ([breeding.md](breeding.md), N4) |
 | `fire` | 1 | the counters, `fires` (cell, size, age, plant damage), `burnt` (cell, game second), `home` (the home area's cell indices), the automatic-growth flags, and `burning` (a pawn on fire: when it burns out) ([fire.md](fire.md), E4) |
 | `mentalBreaks` | 1 | `mentalBreaker` ([mental-breaks.md](mental-breaks.md)) |
+| `inspirations` | 1 | `inspired` ([inspirations.md](inspirations.md)) |
 
 **Commands are saved by name (S7).** The `commands` section starts with the names of the command
 types it uses (`commandNames`); each command then gives its type as a place in that list, and its
@@ -298,6 +299,7 @@ Every section is version 1 at format 20. A task that changes a section adds a li
 - `prisoners` 1 (C22): new section, see the table. Commands `SetPrisonerMode` and `SetPrisonBed` by name; the job check now accepts `CapturePrisoner`, `FeedPrisoner` and `WardenInteract`.
 - `raids` 2 (adaptation): AdaptDays, the next growth time and the colonists watched, after the alarm values; version 1 loads as 0 and an empty list.
 - `raids` 1 (F6): new section, see the table. Commands `StartRaid`, `SoundAlarm`, `SetDefenseRole`, `MarkShelter` by name.
+- `raids` 2 (F12): per squad `strategy`, `hasBreach`, `breach`, `breachFrom`; the raids waiting for their hour (`pending`); per raider `goalThing`, `loot`, `sparesDowned`; a `kidnapped` part on a colonist a raider carries ([raid-strategies.md](raid-strategies.md)). Version 1 files load with Assault squads and nothing waiting. Command `StartStrategyRaid` by name.
 - `fighters` 2 (F6): a fighter's `mode`, `defending`, `squad`, `hasGoal`, `goal`, `retreat` after `dodgeUntil`. Version 1 files load them as a plain fighter.
 - `breeding` 1 (N4): new section, see the table: the counters, per animal its `AnimalBreed` (pregnancy, litter, mating wait, milk, wool and egg timers, the female a male is walking to), per fertilized egg its `Hatching` time ([breeding.md](breeding.md)). The job check now accepts the animal jobs (it stopped at `StripPawn`, so a save made mid-taming would not load).
 - `husbandry` 2 (N2): per animal care record `markHunt` and `collect` after `markSlaughter`, and the `hunted` counter after `starved`. Version 1 files load with none. The job check now accepts `Hunt`, `HaulCorpse` and `Butcher`.

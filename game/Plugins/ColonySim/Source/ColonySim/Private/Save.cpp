@@ -37,10 +37,12 @@
 #include "ColonySim/Spoilage.h"
 #include "ColonySim/Crafting.h"
 #include "ColonySim/Temperature.h"
+#include "ColonySim/Inspirations.h"
 #include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Medicine.h"
 #include "ColonySim/Prisoners.h"
+#include "ColonySim/Ship.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Social.h"
 #include "ColonySim/Research.h"
@@ -325,6 +327,7 @@ struct SaveEntity {
     std::optional<Animal> animal;           // section "animals"
     std::optional<DefensePlan> defense;     // section "raids"
     std::optional<Raider> raider;           // section "raids"
+    std::optional<Kidnapped> kidnapped;     // section "raids" 2 (F12)
     std::optional<AnimalCare> care;         // section "husbandry"
     std::optional<AnimalBreed> breed;       // section "breeding" (N4)
     std::optional<Hatching> hatching;       // section "breeding" (N4)
@@ -350,6 +353,7 @@ struct SaveEntity {
     std::optional<Fuel> fuel;               // "fuel" section (C11)
     std::optional<StoreIn> storeIn;         // "crafting" section (C14)
     std::optional<MentalBreaker> mentalBreaker;  // section "mentalBreaks" (C19)
+    std::optional<Inspired> inspired;            // section "inspirations" (C25)
 };
 
 // A stockpile zone, with its filter by defName.
@@ -438,6 +442,7 @@ struct SaveData {
     SaveMineables mineables;           // format 12 on
     SaveDesignations designations;     // format 12 on
     ResearchState research;            // section "research"
+    ShipState ship;                    // section "ship"
     // Section "talents" (P3): per protagonist, parallel lists in pawn order.
     std::vector<Entity> talentPawns;
     std::vector<int64_t> talentXp;
@@ -1258,6 +1263,16 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
             } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
                 auto* stop = &c;
                 ar.value("pawn", stop->pawn);
+            } else if constexpr (std::is_same_v<Type, StartStrategyRaidCommand>) {
+                ar.text("faction", c.faction);
+                ar.value("points", c.points);
+                ar.value("edge", c.edge);
+                ar.text("strategy", c.strategy);
+                ar.value("hour", c.hour);
+            } else if constexpr (std::is_same_v<Type, ShipCommand>) {
+                ar.text("action", c.action);
+                ar.value("thing", c.thing);
+                ar.value("pawn", c.pawn);
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }
@@ -1971,7 +1986,7 @@ void saveFighterPart(Ar& ar, Fighter& f) {
     }
     if (ar.sectionVersion() >= 2) {  // F6: what the alarm or a raid has it do
         ar.value("mode", f.mode);
-        ar.require(static_cast<int>(f.mode) <= static_cast<int>(FightMode::Flee), "the save file has a bad fighter mode");
+        ar.require(static_cast<int>(f.mode) <= static_cast<int>(FightMode::Seize), "the save file has a bad fighter mode");
         ar.value("defending", f.defending);
         ar.value("squad", f.squad);
         ar.value("hasGoal", f.hasGoal);
@@ -2240,6 +2255,20 @@ void saveResearch(Ar& ar, ResearchState& r) {
 }
 
 template <typename Ar>
+void saveShip(Ar& ar, ShipState& s) {
+    ar.value("phase", s.phase);
+    ar.require(static_cast<int>(s.phase) <= static_cast<int>(ShipPhase::Launched), "the save file has a bad ship phase");
+    ar.value("reactor", s.reactor);
+    ar.value("startedAt", s.startedAt);
+    ar.value("nextWave", s.nextWave);
+    ar.value("waves", s.waves);
+    ar.value("escaped", s.escaped);
+    ar.value("launchedAt", s.launchedAt);
+    ar.list("caskets", s.caskets, [&](Entity& e) { ar.value(nullptr, e); });
+    ar.list("riders", s.riders, [&](Entity& e) { ar.value(nullptr, e); });
+}
+
+template <typename Ar>
 void saveTalents(Ar& ar, SaveData& d) {
     ar.list("pawns", d.talentPawns, [&](Entity& pawn) { ar.value(nullptr, pawn); });
     ar.list("xp", d.talentXp, [&](int64_t& xp) { ar.value(nullptr, xp); });
@@ -2348,6 +2377,13 @@ void saveRaids(Ar& ar, RaidState& r) {
         ar.value("giveUpAt", s.giveUpAt);
         ar.value("state", s.state);
         ar.require(static_cast<int>(s.state) <= static_cast<int>(SquadState::Rout), "the save file has a bad squad state");
+        if (ar.sectionVersion() >= 2) {  // F12
+            ar.value("strategy", s.strategy);
+            ar.require(static_cast<int>(s.strategy) < kRaidStrategyCount, "the save file has a bad raid strategy");
+            ar.value("hasBreach", s.hasBreach);
+            ar.group("breach", [&] { saveCell(ar, s.breach); });
+            ar.group("breachFrom", [&] { saveCell(ar, s.breachFrom); });
+        }
         ar.value("gaveUp", s.gaveUp);
         ar.group("entry", [&] { saveCell(ar, s.entry); });
         ar.value("hasTarget", s.hasTarget);
@@ -2356,6 +2392,16 @@ void saveRaids(Ar& ar, RaidState& r) {
         ar.list("members", s.members, [&](Entity& m) { ar.value(nullptr, m); });
     });
     ar.value("nextSquad", r.nextSquad);
+    if (ar.sectionVersion() >= 2) {  // F12: raids waiting for their hour
+        ar.list("pending", r.pending, [&](PendingRaid& p) {
+            ar.text("faction", p.faction);
+            ar.value("points", p.points);
+            ar.value("edge", p.edge);
+            ar.value("strategy", p.strategy);
+            ar.require(static_cast<int>(p.strategy) < kRaidStrategyCount, "the save file has a bad raid strategy");
+            ar.value("at", p.at);
+        });
+    }
     ar.value("alarm", r.alarm);
     ar.value("manual", r.manual);
     ar.value("suppressed", r.suppressed);
@@ -2588,6 +2634,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "joy", e, &SaveEntity::joy, [&](SaveJoy& j) { saveJoyPart(ar, j); });
     });
     ar.section("research", 1, [&] { saveResearch(ar, d.research); });
+    ar.section("ship", 1, [&] { saveShip(ar, d.ship); });
     ar.section("medicine", 1, [&] {
         saveParts(ar, "medical", e, &SaveEntity::medical, [&](MedicalSettings& m) {
             ar.value("care", m.care);
@@ -2670,7 +2717,15 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "raider", e, &SaveEntity::raider, [&](Raider& r) {
             ar.value("squad", r.squad);
             ar.text("kind", r.kind);
+            if (ar.sectionVersion() >= 2) {  // F12
+                ar.value("goalThing", r.goalThing);
+                ar.value("loot", r.loot);
+                ar.value("sparesDowned", r.sparesDowned);
+            }
         });
+        if (ar.sectionVersion() >= 2) {
+            saveParts(ar, "kidnapped", e, &SaveEntity::kidnapped, [&](Kidnapped& k) { ar.value("by", k.by); });
+        }
     });
     ar.section("spoilage", 1, [&] {
         ar.value("rngState", d.spoilageState.rngState);
@@ -2797,6 +2852,13 @@ void saveSections(Ar& ar, SaveData& d) {
     });
     ar.section("mentalBreaks", 1, [&] {
         saveParts(ar, "mentalBreaker", e, &SaveEntity::mentalBreaker, [&](MentalBreaker& b) { saveMentalBreakerPart(ar, b); });
+    });
+    ar.section("inspirations", 1, [&] {
+        saveParts(ar, "inspired", e, &SaveEntity::inspired, [&](Inspired& i) {
+            ar.text("def", i.def);
+            ar.value("startedAt", i.startedAt);
+            ar.value("endsAt", i.endsAt);
+        });
     });
     // New sections go here, at the end.
 }
@@ -3032,6 +3094,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const MentalBreaker* breaker = reg.try_get<MentalBreaker>(e)) {
             out.mentalBreaker = *breaker;
         }
+        if (const Inspired* inspired = reg.try_get<Inspired>(e)) {
+            out.inspired = *inspired;
+        }
         out.playerControlled = reg.all_of<PlayerControl>(e);
         if (const ConstructionSite* site = reg.try_get<ConstructionSite>(e)) {
             SaveSite s;
@@ -3150,6 +3215,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const Raider* raider = reg.try_get<Raider>(e)) {
             out.raider = *raider;
         }
+        if (const Kidnapped* kidnapped = reg.try_get<Kidnapped>(e)) {
+            out.kidnapped = *kidnapped;
+        }
         if (const RecoilKick* kick = reg.try_get<RecoilKick>(e)) {
             out.kick = *kick;
         }
@@ -3260,6 +3328,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         d.designations.kinds.push_back(static_cast<uint8_t>(kind));
     }
     d.research = sim.research_->state();
+    d.ship = sim.ship_->state();
     for (const auto& [pawn, s] : sim.talents_->states()) {
         d.talentPawns.push_back(pawn);
         d.talentXp.push_back(s.xp);
@@ -3518,6 +3587,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.mentalBreaker) {
             reg.emplace<MentalBreaker>(entity, std::move(*e.mentalBreaker));
         }
+        if (e.inspired) {
+            reg.emplace<Inspired>(entity, std::move(*e.inspired));
+        }
         if (e.bills) {
             BillList list;
             list.nextId = e.bills->nextId;
@@ -3746,6 +3818,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.defense) {
             reg.emplace<DefensePlan>(entity, *e.defense);
         }
+        if (e.kidnapped) {
+            reg.emplace<Kidnapped>(entity, *e.kidnapped);
+        }
         if (e.raider) {
             reg.emplace<Raider>(entity, *e.raider);
         }
@@ -3910,6 +3985,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.mentalBreaks_->afterLoad(error)) {
         return false;
     }
+    if (!sim.inspirations_->afterLoad(error)) {
+        return false;
+    }
     if (d.stockpile && !sim.map_.inBounds(*d.stockpile)) {
         error = "the save has a stockpile outside the map";
         return false;
@@ -3985,9 +4063,17 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                 error = "the save has a raid squad with a pawn that isn't there";
                 return false;
             }
+            const Raider& raider = reg.get<Raider>(m);
+            if ((raider.loot != kNoEntity && !reg.valid(raider.loot)) || (raider.goalThing != kNoEntity && !reg.valid(raider.goalThing))) {
+                error = "the save has a raider after something that isn't there";
+                return false;
+            }
         }
     }
     if (!sim.raids_->restore(std::move(d.raids), error)) {
+        return false;
+    }
+    if (!sim.ship_->restore(std::move(d.ship), error)) {
         return false;
     }
     sim.apparel_->restoreOutfits(std::move(d.outfits), d.nextOutfitId);

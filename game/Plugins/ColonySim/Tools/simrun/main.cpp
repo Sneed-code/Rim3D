@@ -107,6 +107,7 @@ struct Options {
     int farm = 0;        // --farm N: N tame chickens, fed every hour (N4)
     bool fire = false;   // --fire: light a grass fire near the first colonist ten minutes in (E4)
     double raid = -1.0;  // start a pirate raid of this many points at the first step (0: the colony's threat points)
+    std::string raidStrategy = "Assault";  // --raid-strategy NAME: Assault, Sappers, DropPods, Thieves, Kidnappers or Auto (F12)
     int raidSoak = 0;    // --raid-soak N: the F7 soak over N seeds from --seed
     bool armed = false;  // give every colonist an assault rifle first (not a command: not in replays)
     std::string narrator;    // --narrator NAME: a SetNarratorCommand at the first step (T1)
@@ -169,6 +170,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.animals = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--raid-soak") == 0 && hasValue) {
             out.raidSoak = std::atoi(argv[++i]);
+        } else if (std::strcmp(arg, "--raid-strategy") == 0 && hasValue) {
+            out.raidStrategy = argv[++i];
         } else if (std::strcmp(arg, "--raid") == 0 && hasValue) {
             out.raid = std::atof(argv[++i]);
         } else if (std::strcmp(arg, "--armed") == 0) {
@@ -209,8 +212,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--scenario colony [--verbose]] [--power] [--raid POINTS] [--armed] [--narrator NAME [--difficulty NAME]] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house [--verbose]] [--power] [--raid POINTS] [--armed] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--scenario colony [--verbose]] [--power] [--raid POINTS [--raid-strategy NAME]] [--armed] [--narrator NAME [--difficulty NAME]] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house [--verbose]] [--power] [--raid POINTS [--raid-strategy NAME]] [--armed] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS]\n");
             return false;
         }
@@ -758,7 +761,7 @@ int main(int argc, char** argv) {
         }
     }
     if (options.raid >= 0.0) {
-        sim.submit(colony::StartRaidCommand{"Pirate", static_cast<float>(options.raid), -1});
+        sim.submit(colony::StartStrategyRaidCommand{"Pirate", static_cast<float>(options.raid), -1, options.raidStrategy, -1.0f});
     }
     // --narrator: the narrator sends incidents from the first step (T1, docs/design/narrator.md); each
     // letter is printed as it comes.
