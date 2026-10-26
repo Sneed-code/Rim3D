@@ -544,3 +544,72 @@ TEST_CASE("Fire: a firefoam popper stays quiet while the fire is out of its reac
     CHECK(f.reg().valid(popper));
     CHECK(f.fire().poppersUsed() == 0);
 }
+
+TEST_CASE("Fire: a firefoam popper leaves foam on the ground that nothing catches on, until it fades") {
+    FireFixture f;
+    f.sim.things().spawn("FirefoamPopper", CellPos{30, 30, 0});
+    f.grassPatch(32, 30, 3, 3);
+    f.fire().ignite(CellPos{32, 30, 0});
+    f.run(2);
+    const CellPos foamed{33, 31, 0};
+    FIRE_REQUIRE(f.sim.filth().has(foamed));
+    CHECK(!f.fire().ignite(foamed));
+    CHECK(!f.fire().ignite(foamed, 0.1f, false));
+    CHECK(!f.sim.filth().has(CellPos{45, 45, 0}));  // outside the radius
+    // It fades over hours.
+    f.run(2 * 24 * 3600);
+    CHECK(!f.sim.filth().has(foamed));
+}
+
+TEST_CASE("Fire: a firefoam popper that is destroyed bursts even with no fire near") {
+    FireFixture f;
+    const Entity popper = f.sim.things().spawn("FirefoamPopper", CellPos{30, 30, 0});
+    FIRE_REQUIRE(f.reg().valid(popper));
+    const Entity pawn = f.sim.things().spawn("Human", CellPos{32, 32, 0});
+    f.fire().setPawnAlight(pawn, f.sim.time().seconds, true);
+    f.fire().onDestroy(popper);
+    CHECK(f.fire().poppersUsed() == 1);
+    CHECK(!f.fire().pawnBurning(pawn));
+    CHECK(f.sim.filth().has(CellPos{31, 30, 0}));
+}
+
+TEST_CASE("Fire: a foam turret shoots a fire in range, lays foam and does not touch fires out of range") {
+    FireFixture f;
+    const Entity turret = f.sim.things().spawn("FoamTurret", CellPos{30, 30, 0});
+    FIRE_REQUIRE(f.reg().valid(turret));
+    f.fire().setRunning([](Entity) { return true; });
+    f.grassPatch(40, 30, 2, 2);
+    f.grassPatch(60, 30, 2, 2);
+    f.fire().ignite(CellPos{40, 30, 0});
+    f.fire().ignite(CellPos{60, 30, 0});
+    f.run(12);
+    CHECK(!f.fire().burning(CellPos{40, 30, 0}));
+    CHECK(f.sim.filth().has(CellPos{40, 30, 0}));
+    CHECK(f.fire().burning(CellPos{60, 30, 0}));
+    CHECK(f.reg().valid(turret));  // not used up
+}
+
+TEST_CASE("Fire: a foam turret without power stays quiet") {
+    FireFixture f;
+    f.sim.things().spawn("FoamTurret", CellPos{30, 30, 0});
+    f.fire().setRunning([](Entity) { return false; });
+    f.grassPatch(40, 30, 2, 2);
+    f.fire().ignite(CellPos{40, 30, 0});
+    f.run(12);
+    CHECK(f.fire().burning(CellPos{40, 30, 0}));
+}
+
+TEST_CASE("Fire: a burning colonist runs to water and jumps in") {
+    FireFixture f;
+    for (int y = 28; y <= 32; ++y) {
+        const_cast<Map&>(f.sim.map()).setTerrain(CellPos{36, y, 0}, Terrain::Water);
+    }
+    const Entity pawn = f.colonist(CellPos{30, 30, 0});
+    f.fire().setPawnAlight(pawn, f.sim.time().seconds, true);
+    FIRE_REQUIRE(f.fire().pawnBurning(pawn));
+    for (int i = 0; i < 150 && f.fire().pawnBurning(pawn); ++i) {
+        f.run(1);
+    }
+    CHECK(!f.fire().pawnBurning(pawn));
+    CHECK(cellOf(f.reg().get<Position>(pawn)).x >= 34);  // it ran east, to the water
+}
