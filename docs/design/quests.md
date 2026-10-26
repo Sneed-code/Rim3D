@@ -34,8 +34,9 @@ the offer stays open.
   Both fail with a reason in plain words when none can be offered.
 - The same through `QuestCommand` (`action` "offer", `kind` empty for random), so a replay
   records what the narrator did. `accept` and `decline` take `quest` (the id).
-- No `Incidents` def yet: T1 decides how often to call it (a `Misc` incident that calls
-  `offerRandom` is enough).
+- The `QuestOffer` incident (`Misc`, earliest day 2, 3 days between, a `PositiveEvent` letter) has
+  a worker that calls `offerRandom`, so the narrator offers quests by its usual chance and weights;
+  its letter text is the quest's text. `FireIncidentCommand` with "QuestOffer" offers one now.
 
 ## What Unreal sees
 

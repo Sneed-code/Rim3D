@@ -5,6 +5,7 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Narrator.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Quests.h"
 #include "ColonySim/Raids.h"
@@ -302,4 +303,13 @@ TEST_CASE("quests: old finished quests are dropped beyond the history limit") {
     }
     CHECK(static_cast<int>(sim->quests().state().quests.size()) == keep);
     CHECK(sim->quests().state().quests.front().id == 6);
+}
+
+TEST_CASE("quests: the narrator's QuestOffer incident offers a quest") {
+    auto sim = questSim();
+    questStepTo(*sim, 3 * kSecondsPerDay);
+    CHECK(sim->narrator().hasWorker("QuestOffer"));
+    sim->submit(FireIncidentCommand{"QuestOffer", 0.0f});
+    sim->step();
+    CHECK(sim->quests().count(QuestState::Offered) == 1);
 }
