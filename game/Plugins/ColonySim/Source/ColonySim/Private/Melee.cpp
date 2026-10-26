@@ -177,10 +177,10 @@ int64_t MeleeSystem::now() const {
 
 // ---- What a pawn fights with -----------------------------------------------------------------
 
-const MeleeSystem::ToolSet* MeleeSystem::toolsOf(Entity pawn, bool& weapon) const {
+const MeleeSystem::ToolSet* MeleeSystem::toolsOf(Entity pawn, bool& weapon, bool fists) const {
     const entt::registry& reg = things_.registry();
     weapon = false;
-    if (const Gear* gear = reg.try_get<Gear>(pawn); gear != nullptr && gear->weapon != kNoEntity && reg.valid(gear->weapon)) {
+    if (const Gear* gear = reg.try_get<Gear>(pawn); !fists && gear != nullptr && gear->weapon != kNoEntity && reg.valid(gear->weapon)) {
         const DefId def = reg.get<Thing>(gear->weapon).def;
         if (def.value < tools_.size() && !tools_[def.value].tools.empty()) {
             weapon = true;
@@ -211,13 +211,13 @@ const MeleeSystem::Tool* MeleeSystem::toolOf(Entity pawn, const Melee& m) const 
     return set != nullptr && m.tool < set->tools.size() ? &set->tools[m.tool] : nullptr;
 }
 
-float MeleeSystem::reach(Entity pawn) const {
+float MeleeSystem::reach(Entity pawn, bool fists) const {
     bool weapon = false;
-    const ToolSet* set = toolsOf(pawn, weapon);
+    const ToolSet* set = toolsOf(pawn, weapon, fists);
     return set != nullptr ? set->reach : 0.0f;
 }
 
-bool MeleeSystem::inReach(Entity pawn, Entity target) const {
+bool MeleeSystem::inReach(Entity pawn, Entity target, bool fists) const {
     const entt::registry& reg = things_.registry();
     if (!reg.valid(pawn) || !reg.valid(target) || !reg.all_of<Position>(pawn) || !reg.all_of<Position>(target)) {
         return false;
@@ -226,7 +226,7 @@ bool MeleeSystem::inReach(Entity pawn, Entity target) const {
     const Position& b = reg.get<Position>(target);
     const float dx = b.x - a.x;
     const float dy = b.y - a.y;
-    const float r = reach(pawn) + rules_.reachSlack;
+    const float r = reach(pawn, fists) + rules_.reachSlack;
     return a.level == b.level && dx * dx + dy * dy <= r * r;
 }
 
@@ -332,7 +332,7 @@ bool MeleeSystem::blocking(Entity pawn) const {
 
 // ---- Orders ----------------------------------------------------------------------------------
 
-bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* why) {
+bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* why, bool fists) {
     entt::registry& reg = things_.registry();
     const auto fail = [why](const char* message) {
         if (why != nullptr) {
@@ -359,7 +359,7 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
         return fail("not ready to swing yet");
     }
     bool weapon = false;
-    const ToolSet* set = toolsOf(pawn, weapon);
+    const ToolSet* set = toolsOf(pawn, weapon, fists);
     if (set == nullptr) {
         return fail("that pawn has nothing to fight with");
     }
@@ -371,7 +371,7 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
         if (target == pawn || !things_.spawned(target) || !reg.all_of<Posture>(target) || (h != nullptr && h->dead)) {
             return fail("the target isn't a living pawn on the map");
         }
-        if (!inReach(pawn, target)) {
+        if (!inReach(pawn, target, fists)) {
             return fail("the target is out of reach");
         }
     }

@@ -3,6 +3,7 @@
 Updated 2026-10-26.
 
 Stage 2 X2 done: resonance, the setting's magic: attuned pawns with an attunement level, strain and focus, and four powers (stun, numb, burden, and jump at level 4 as in RimWorld) through commands and the fighter AI; a stunned pawn can't move or act (`Stunned`, checked by every system that acts) (`docs/design/resonance.md`).
+Stage 2 C20 done: colonists talk (chitchat, deep talk, kind words, slights, insults, romance, proposals, breakups), hold opinions of each other, become friends, rivals, lovers and spouses, and an insult can start a fistfight (`docs/design/social.md`).
 Stage 2 P1 done: a pawn carries a rifle, a sidearm and a melee weapon (`docs/design/weapons.md`).
 Stage 2 E4 done: fire spreads over flammable ground, burns things to ash, heats rooms, sets pawns alight and is put out by rain, snow and colonists with the Firefighter work type in the home area (`docs/design/fire.md`).
 Stage 2 N4 done: tame animals mate and bear young, hens lay eggs, calves and chicks grow up, colonists milk and shear (`docs/design/breeding.md`).
@@ -172,6 +173,18 @@ why); 30 against 40 costs about 0.35 ms a step in the cloud. Snapshot `faction`,
 `fighting`, `fightTarget`, `fightSpot`, `fallingBack`; save format 15. **A new system that acts on
 pawns must skip pawns with `Fighter`** as the job system does.
 
+Since C20 colonists have a social life (`docs/design/social.md`, tests `SocialTests`, the colony scenario prints `talks`): every
+pawn with needs gets a `Social` component (opinion memories, stored bonds). A pawn thinks of another by a hash-based compatibility
+(-10 to 10), the other's traits (`opinionOfMe`: Abrasive -20), bonds (lover +40, spouse +60, ex -25) and fading memories; friends
+(both 20 or more) and rivals (-20 or less) are worked out, never stored. About every 6 game hours a pawn with someone in the same room within
+6 m picks an interaction by D9's weights and the opinion limits (chitchat, deep talk, kind words, slight, insult, romance attempt,
+proposal, breakup); at a table or game beside others every 15 minutes. Each changes the listener's opinion, starts mood thoughts and
+gives the talker Social experience. Romance and marriage are bonds only (one at a time, adults, no orientations yet); a death gives
+the spouse, lover, friends and rivals their thought. An insult can start a fistfight (`SocialFight`: both walk up and swing fists even
+with a gun in hand, ends at pain 0.25, a downed pawn, 5 minutes or a draft). Events `Interaction`, `BondChanged`, `SocialFight`,
+dev command `InteractCommand`, snapshot `partner` and `socialFight`, save section `social`. **A new system that acts on pawns must skip
+pawns with `SocialFight`, as for `Fighter`.**
+
 Since F5 fighters aim like players (`docs/design/aiming.md`): Shooting skill sets a reaction time
 before shooting a new target (0.5 s at skill 0, 0.17 s at 20), how well a shot leads a moving target
 (a skill 20 shooter hits a man walking past about as often as one standing, a novice almost never)
@@ -260,7 +273,7 @@ Since E1 the sim has a calendar, an outdoor temperature, weather and snow (`docs
 
 ## Stage 1 progress
 
-40 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7, U8, U11, U10, C10, A1, A2, F6); F7, G1 and G2 are left. Tick tasks in `docs/plans/stage-1.md` as they merge.
+40 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7, U8, U11, U10, C10, A1, A2, F6); G1 and G2 are left (F7 done). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Stage 2
 
@@ -413,8 +426,7 @@ and harvesting~~ done (`docs/design/mining.md`; save format 14). On the PC, ~~**
 U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priorities).
 ~~**F4** fighter AI: where to stand~~ done (`docs/design/fighters.md`; save format 15), ~~**F5** fighter
 AI: aiming~~ done (`docs/design/aiming.md`; save format 17), ~~**F6** raid and defense~~ done
-(`docs/design/raids.md`; save section `raids`, `fighters` 2), so **F7** raid scenario tests and nightly soak (cloud, Sonnet
-high) is open; with U9 and F2 in, ~~**U11** fights on screen~~ is done (PC; smoke test `fights`; `docs/design/fights.md`; it
+(`docs/design/raids.md`; save section `raids`, `fighters` 2), so ~~**F7** raid scenario tests and nightly soak~~ is done (`simrun --raid-soak N`, `.github/workflows/nightly.yml` at 03:17 UTC, `docs/design/raid-soak.md`; it found stuck fighters, 13.6% waiting in the open and some raids that drag on, now in BACKLOG); with U9 and F2 in, ~~**U11** fights on screen~~ is done (PC; smoke test `fights`; `docs/design/fights.md`; it
 binds R to reload; reload and sidestep animations are not drawn yet). ~~**C10** colony scenario test~~ done
 (`docs/design/colony-scenario.md`); ~~**U10** hands-on work~~ is done (PC; smoke test `handson`; `docs/design/handson.md`); ~~**A1** placeholder art~~ is done (PC; free Poly Haven meshes on the bed, door, table, stool, stove, logs, meals, berries, trees and bushes; `docs/design/building-draw.md`, `python tools/placeholder_art.py` then the `PlaceholderArt` commandlet). ~~**A2** terrain materials~~ is done (PC; free CC0 Poly Haven textures instead of Megascans, so nobody had to download anything: grass, sand, gravel and rock blended by terrain type and slope, placed by world position; `docs/design/terrain.md`, `python tools/terrain_textures.py` then the `TerrainMaterials` commandlet; swapping in Megascans later is a change in `assets/terrain_textures.json`). ~~**A6** placeholder art 2~~ is done (PC; 30 more free Poly Haven meshes on crops, work tables, power, climate, lamps and furniture, same list and commandlet as A1; walls, floors, solar panel, wind turbine and a few small things stay shapes). ~~**A5** clothes art~~ is done (PC; worn meshes for all 12 apparel defs by layer, made from the morphed hoodie and trousers plus a free CC0 Poly Haven hat, no downloads by sneed; `docs/design/looks.md`, `python tools/clothes_art.py` then the `ClothesArt` commandlet; not yet seen in game, U16 draws them). **G1** is what is left on the PC.
 
