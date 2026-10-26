@@ -685,7 +685,7 @@ void JobSystem::step() {
         // The player walks this one (U9): no think, until control is let go. Its only job is a
         // hands-on one the player started (U10), done in place.
         if (reg.all_of<PlayerControl>(pawn)) {
-            if (reg.get<Worker>(pawn).job.type != JobType::None) {
+            if (reg.get<Worker>(pawn).job.type != JobType::None && !(pauseGate_ && pauseGate_(pawn))) {
                 tickJob(pawn);
             }
             continue;
@@ -700,6 +700,11 @@ void JobSystem::step() {
                 endJob(pawn, JobEnd::Interrupted, reg.get<Health>(pawn).dead ? "died" : "downed");
             }
             dropCarried(pawn);  // the player's colonist may carry something with no job (U10)
+            continue;
+        }
+        // Stunned or winding up a power (X2): the job waits where it is.
+        if (pauseGate_ && pauseGate_(pawn)) {
+            reg.get<Mover>(pawn).hold = true;
             continue;
         }
         // An animal that hauls works only while it is awake, fed and unhurt.

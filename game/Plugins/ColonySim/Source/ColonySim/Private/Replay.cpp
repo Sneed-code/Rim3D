@@ -275,6 +275,18 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["item"] = entt::to_integral(c.item);
+            } else if constexpr (std::is_same_v<Type, AttuneCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["level"] = c.level;
+            } else if constexpr (std::is_same_v<Type, LearnPowerCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["power"] = c.power;
+            } else if constexpr (std::is_same_v<Type, CastPowerCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["power"] = c.power;
+                j["target"] = entt::to_integral(c.target);
+                j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
+                j["player"] = c.player;
             } else {
                 static_assert(std::is_same_v<Type, SwitchWeaponCommand>, "write every command type");
                 j["pawn"] = entt::to_integral(c.pawn);
@@ -984,6 +996,33 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         c.trap = static_cast<Entity>(trap);
+        out.command = std::move(c);
+    } else if (type == "Attune") {
+        AttuneCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "level", c.level, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = c;
+    } else if (type == "LearnPower") {
+        LearnPowerCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "power", c.power, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "CastPower") {
+        CastPowerCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        uint32_t target = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "power", c.power, where) || !r.integer(j, "target", target, where) ||
+            !replayCell(r, j, "cell", c.cell, where) || !r.flag(j, "player", c.player, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        c.target = static_cast<Entity>(target);
         out.command = std::move(c);
     } else if (type == "CarryWeapon") {
         CarryWeaponCommand c;

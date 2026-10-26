@@ -27,6 +27,7 @@
 #include "ColonySim/Mood.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Research.h"
+#include "ColonySim/Resonance.h"
 #include "ColonySim/Talents.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Genes.h"
@@ -228,6 +229,11 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     });
     defense_->setOnLearn([this](Entity pawn) { fighters_->replan(pawn); });
     fighters_->setDefense(defense_.get());
+    resonance_ = std::make_unique<ResonanceSystem>(*things_, map_, *health_, *jobs_, *fighters_, *defs_, time_,
+                                                   splitMix64(settings.seed ^ 0x7265736F6EULL));
+    resonance_->setEventLog(&events_);
+    health_->setMods([this](Entity pawn, HealthMods& mods) { resonance_->healthMods(pawn, mods); });
+    jobs_->setPauseGate([this](Entity pawn) { return things_->registry().any_of<Stunned, Casting>(pawn); });
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -649,6 +655,19 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!combat_->switchWeapon(switchWeapon->pawn, switchWeapon->slot, &error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* attune = std::get_if<AttuneCommand>(&command)) {
+        if (!resonance_->attune(attune->pawn, attune->level, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* learnPower = std::get_if<LearnPowerCommand>(&command)) {
+        if (!resonance_->learn(learnPower->pawn, defs_->idOf("Powers", learnPower->power), error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* castPower = std::get_if<CastPowerCommand>(&command)) {
+        if (!resonance_->cast(castPower->pawn, defs_->idOf("Powers", castPower->power), castPower->target, castPower->cell,
+                              castPower->player, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* talentXp = std::get_if<AddTalentXpCommand>(&command)) {
         if (!talents_->addXp(talentXp->pawn, talentXp->amount, events_, error)) {
             commandFailed(id, error);
@@ -670,8 +689,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "that pawn isn't under direct control");
         } else if (health_->incapacitated(move->pawn)) {
             commandFailed(id, "that colonist is downed or dead");
-        } else if (combat_->rollLocked(move->pawn)) {
-            // Rolling (P2): the sim moves the pawn; the player's position is ignored, without a failure
+        } else if (combat_->rollLocked(move->pawn) || reg.any_of<Stunned, Casting>(move->pawn)) {
+            // Rolling (P2), stunned or winding up a power (X2): the player's position is ignored, without a failure
             // because Unreal sends one every step.
         } else {
             Position& pos = reg.get<Position>(move->pawn);
@@ -954,6 +973,7 @@ void Sim::step() {
         events_.insert(events_.end(), gained.begin(), gained.end());
     }
     fighters_->step();
+    resonance_->step();
     recreation_->step();
     animals_->step();
     husbandry_->step();
@@ -1040,6 +1060,16 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.animalZoneCells.clear();
     out.looks.clear();
     out.research.clear();
+    out.attuned.clear();
+    {
+        const entt::registry& reg = things_->registry();
+        std::vector<Entity> attuned(reg.view<Attunement>().begin(), reg.view<Attunement>().end());
+        std::sort(attuned.begin(), attuned.end());
+        for (const Entity pawn : attuned) {
+            const Attunement& a = reg.get<Attunement>(pawn);
+            out.attuned.push_back(AttunedView{pawn, a.level, a.strain, resonance_->strainLimit(pawn), a.focus, a.powers});
+        }
+    }
     out.talents.clear();
     for (const auto& [pawn, state] : talents_->states()) {
         TalentView view;
@@ -1218,6 +1248,17 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.grenades = explosives_->count(entity);
             view.throwReadyIn = explosives_->throwReadyIn(entity);
             view.knockedDown = combat_->knockedDownFor(entity) > 0;
+            if (const Stunned* stunned = reg.try_get<Stunned>(entity)) {
+                view.stunnedFor = stunned->stepsLeft;
+            }
+            if (const ResonanceEffects* fx = reg.try_get<ResonanceEffects>(entity)) {
+                view.numbed = fx->numbSteps > 0;
+                view.burdened = fx->burdenSteps > 0;
+            }
+            if (const Casting* cast = reg.try_get<Casting>(entity)) {
+                view.castPower = cast->power;
+                view.castStepsLeft = cast->stepsLeft;
+            }
         }
         if (const Gear* gear = reg.try_get<Gear>(entity); gear != nullptr && gear->weapon != kNoEntity) {
             view.weapon = reg.get<Thing>(gear->weapon).def;
@@ -1713,6 +1754,7 @@ uint64_t Sim::stateHash() const {
         breeding_->hashThing(e, h);
         melee_->hashThing(e, h);
         defense_->hashThing(e, h);
+        resonance_->hashThing(e, h);
         apparel_->hashThing(e, h);
     }
     apparel_->hashState(h);

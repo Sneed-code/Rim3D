@@ -559,6 +559,30 @@ struct SetGrowingZoneCropCommand {
     std::string crop;
 };
 
+// Resonance (task X2, docs/design/resonance.md). Attune sets a pawn's attunement level, 0 to 6 (0 takes it away);
+// each new level teaches one power of that level at random. Stands in for RimWorld's neuroformer and titles.
+struct AttuneCommand {
+    Entity pawn = kNoEntity;
+    int level = 1;
+};
+
+// Teaches an attuned pawn a power (a Powers defName) of its level or lower, as RimWorld's psytrainer does.
+struct LearnPowerCommand {
+    Entity pawn = kNoEntity;
+    std::string power;
+};
+
+// Uses a power: `target` the pawn it is used on (kNoEntity or the pawn itself for itself), `cell` where a jump
+// takes the target. Fails if the pawn doesn't know it or can't act, focus or strain don't allow it, or the
+// target (or cell) is out of range or sight.
+struct CastPowerCommand {
+    Entity pawn = kNoEntity;
+    std::string power;
+    Entity target = kNoEntity;
+    CellPos cell;
+    bool player = false;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -578,7 +602,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              CreateAnimalZoneCommand, RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand,
                              SpendTalentPointCommand, AddTalentXpCommand, RearmTrapCommand,
                              CarryWeaponCommand, SwitchWeaponCommand, CreateGrowingZoneCommand,
-                             RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand>;
+                             RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, AttuneCommand,
+                             LearnPowerCommand, CastPowerCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

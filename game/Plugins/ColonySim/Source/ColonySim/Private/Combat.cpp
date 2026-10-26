@@ -983,6 +983,9 @@ bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, 
     if (reg.all_of<KnockedDown>(pawn)) {
         return fail("that pawn is knocked down");
     }
+    if (reg.all_of<Stunned>(pawn)) {
+        return fail("that pawn is stunned");
+    }
     if (target != kNoEntity && (target == pawn || !things_.spawned(target) || !reg.all_of<Posture>(target))) {
         return fail("the target is not a pawn on the map");
     }
@@ -1019,7 +1022,7 @@ bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, 
 
 bool CombatSystem::setStance(Entity pawn, Stance stance) {
     Posture* posture = things_.registry().try_get<Posture>(pawn);
-    if (posture == nullptr || things_.registry().all_of<KnockedDown>(pawn)) {
+    if (posture == nullptr || things_.registry().any_of<KnockedDown, Stunned>(pawn)) {
         return false;
     }
     posture->stance = stance;
@@ -1034,7 +1037,7 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
         gear != nullptr && gear->weapon != kNoEntity ? model_->gun(reg.get<Thing>(gear->weapon).def) : nullptr;
     if (s.phase == ShotPhase::Aiming || s.phase == ShotPhase::Firing || s.phase == ShotPhase::Reloading) {
         if (gun == nullptr || (s.phase != ShotPhase::Reloading &&
-                                  (health_.incapacitated(pawn) || !things_.spawned(pawn) || reg.all_of<KnockedDown>(pawn)))) {
+                                  (health_.incapacitated(pawn) || !things_.spawned(pawn) || reg.any_of<KnockedDown, Stunned>(pawn)))) {
             s.phase = ShotPhase::Ready;  // the shot (or reload) is off
             s.shotsLeft = 0;
             s.stepsLeft = 0;
@@ -2171,6 +2174,9 @@ bool CombatSystem::switchWeapon(Entity pawn, WeaponSlot slot, std::string* why) 
     }
     if (reg.all_of<KnockedDown>(pawn)) {
         return fail("that pawn is knocked down");
+    }
+    if (reg.all_of<Stunned>(pawn)) {
+        return fail("that pawn is stunned");
     }
     if (rollLocked(pawn)) {
         return fail("rolling");

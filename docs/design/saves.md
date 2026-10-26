@@ -45,6 +45,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Aiming (format 17) | rounds left in each gun that has been fired (`Magazine`), the trigger's reloading phase, a fighter's reaction and dodge times ([aiming.md](aiming.md)) |
 | Raids (section `raids`, `fighters` 2) | the raid squads (faction, points, state, target, members, when they give up), the alarm and its threat and home points, the shelter mark, the factions met so far; per pawn its `Raider` squad and kind and its `DefensePlan`; a fighter's mode, goal, squad, `defending` and `retreat` ([raids.md](raids.md)) |
 | Talents (section `talents`) | per protagonist: pawn, XP and ranks by talent **`defName`** ([talents.md](talents.md)) |
+| Resonance (section `resonance`) | per pawn its `attunement` (level, strain, focus, powers **by `defName`**), a `casting` under way (power by `defName`, target, cell, steps, player), `stunned` (steps) and resonance `effects` (numb and burden steps and values) ([resonance.md](resonance.md)) |
 | Farming (section `farming`) | growing zones: id, crop **by `defName`**, cells; the next zone id and the counters ([farming.md](farming.md)) |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 

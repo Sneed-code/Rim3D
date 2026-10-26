@@ -2,6 +2,7 @@
 
 Updated 2026-10-25.
 
+Stage 2 X2 done: resonance, the setting's magic: attuned pawns with an attunement level, strain and focus, and four powers (stun, numb, burden, and jump at level 4 as in RimWorld) through commands and the fighter AI; a stunned pawn can't move or act (`Stunned`, checked by every system that acts) (`docs/design/resonance.md`).
 Stage 2 P1 done: a pawn carries a rifle, a sidearm and a melee weapon (`docs/design/weapons.md`).
 Stage 2 N4 done: tame animals mate and bear young, hens lay eggs, calves and chicks grow up, colonists milk and shear (`docs/design/breeding.md`).
 Stage 2 D10 done: narrators (Orrin, Maren, Jinx), difficulty levels, 30 incidents, ten factions with goodwill, visitor, trader and guard pawn kinds, trader kinds and price rules (`docs/design/narrator-data.md`).

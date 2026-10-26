@@ -188,8 +188,8 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
         const float geneSpeed = genes != nullptr ? genes->effects.moveSpeed / static_cast<float>(kStepsPerRealSecondAt1x) : 0.0f;
         const float base = std::max(0.0f, mover.metresPerStep + geneSpeed) * (health != nullptr ? health->movingFactor : 1.0f) *
                            lightFactor * weatherFactor * (speedFactor_ ? speedFactor_(a.entity) : 1.0f);
-        if (base <= 0.0f || mover.hold || reg.all_of<KnockedDown>(a.entity)) {
-            // Downed or dead, knocked down by a blast, or working standing still: it stays where it is. Others still steer around it.
+        if (base <= 0.0f || mover.hold || reg.any_of<KnockedDown, Stunned>(a.entity)) {
+            // Downed or dead, knocked down by a blast or stunned, or working standing still: it stays where it is. Others still steer around it.
             a.newVx = 0.0f;
             a.newVy = 0.0f;
             mover.blockedSteps = 0;

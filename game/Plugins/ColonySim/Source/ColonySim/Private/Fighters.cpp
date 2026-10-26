@@ -14,6 +14,7 @@
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Regions.h"
+#include "ColonySim/Resonance.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Weather.h"
 
@@ -393,8 +394,8 @@ void FighterSystem::step() {
             }
             continue;
         }
-        // Thrown to the ground by a blast: nothing until it is up.
-        if (reg.all_of<KnockedDown>(pawn)) {
+        // Thrown to the ground by a blast, stunned, or winding up a power (X2): nothing until it is over.
+        if (reg.any_of<KnockedDown, Stunned, Casting>(pawn)) {
             if (f.walk != 0) {
                 stop(pawn, f);
             }

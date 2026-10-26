@@ -49,6 +49,7 @@ class MovementSystem;
 class MoodSystem;
 class RecreationSystem;
 class ResearchSystem;
+class ResonanceSystem;
 class TalentSystem;
 class NeedsSystem;
 class RaidSystem;
@@ -271,6 +272,10 @@ public:
     Construction& construction() { return *construction_; }
     const Construction& construction() const { return *construction_; }
 
+    // Attunement, strain, focus and the powers of resonance (docs/design/resonance.md).
+    ResonanceSystem& resonance() { return *resonance_; }
+    const ResonanceSystem& resonance() const { return *resonance_; }
+
     // Power nets, generators, batteries and who has power (docs/design/power.md). Stepped at the end
     // of every step, after rooms (the sun needs roofs).
     PowerGrid& power() { return *power_; }
@@ -357,6 +362,7 @@ private:
     std::vector<Checkpoint> checkpoints_;
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
+    std::unique_ptr<ResonanceSystem> resonance_;  // after the fighters and the job system it holds
 };
 
 }  // namespace colony

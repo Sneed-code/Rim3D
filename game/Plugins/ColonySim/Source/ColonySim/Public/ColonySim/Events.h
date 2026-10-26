@@ -71,6 +71,9 @@ enum class EventType : uint8_t {
     TrapRearmed,     // a sprung trap was set again
     WeaponSwitched,  // a pawn finished switching weapons (P1, docs/design/weapons.md): `thing` the pawn, `def` the weapon now in its hands, `target` that weapon
     PlantSown,       // a colonist sowed a crop in a growing zone: `cell`, `def` the crop (docs/design/farming.md)
+    PowerCast,       // a resonance power went off (docs/design/resonance.md): `thing` the caster, `def` the Powers def, `target` the pawn it
+                     // was used on, `cell` where a jump took it, (x, y, z) where the target is now, `amount` the caster's strain now,
+                     // `count` the steps the effect lasts (0 for a jump)
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -109,6 +112,7 @@ enum class PawnAction : uint8_t {
     Block,        // raised its melee weapon against the swing of `target` (none: the player's own block)
     Switch,       // started switching weapons (P1): `target` the weapon coming to the hands, `amount` the steps it takes
     Roll,         // started a dodge roll (P2): `cell` where it began, (x, y) the unit direction, `amount` the steps from start-up to the end of recovery
+    Cast,         // started the warm-up of a resonance power (X2) at `target` (a jump: to `cell`); `amount` the steps until it goes off
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.

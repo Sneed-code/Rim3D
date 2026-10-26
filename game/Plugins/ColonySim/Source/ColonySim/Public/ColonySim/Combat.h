@@ -131,6 +131,13 @@ struct KnockedDown {
     Stance before = Stance::Standing;
 };
 
+// On a stunned pawn (resonance's Stun, X2, docs/design/resonance.md): it can't walk, shoot, throw,
+// swing, block, cast or work until the steps run out; its stance stays as it was. ResonanceSystem
+// counts it down.
+struct Stunned {
+    int stepsLeft = 0;
+};
+
 // An explosion (CombatSystem::explode): a blast of `damage` that falls off to `edgeFactor` of it at
 // `radius`, is stopped by walls and cover, and reaches pawns as 2 to 4 fragments each.
 struct Explosion {

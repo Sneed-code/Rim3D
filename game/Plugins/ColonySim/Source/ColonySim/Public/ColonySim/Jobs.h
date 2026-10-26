@@ -262,6 +262,9 @@ public:
     // Ends the pawn's job, if it has one, as interrupted for `why`: reservations let go, what it
     // carried put down. Used when the player takes the pawn over (ControlPawnCommand).
     void interrupt(Entity pawn, const std::string& why);
+    // Pawns that can't work for a moment (stunned, or winding up a power, X2): their job waits, they stand
+    // still and don't think, and they go on where they were when it says no more.
+    void setPauseGate(std::function<bool(Entity)> gate) { pauseGate_ = std::move(gate); }
     // Schedule: what a pawn does in an hour of the day (0 to 23).
     bool setSchedule(Entity pawn, int hour, ScheduleKind kind, std::string& error);
     // Bed ownership. `pawn` becomes an owner of `bed` (and stops owning any other bed); kNoEntity
@@ -536,6 +539,7 @@ private:
     Husbandry* husbandry_ = nullptr;
     Breeding* breeding_ = nullptr;
     std::function<bool(Entity)> animalGate_;
+    std::function<bool(Entity)> pauseGate_;
     const TalentSystem* talents_ = nullptr;  // build speed and carrying capacity (docs/design/talents.md)
     RecreationRules recreation_;
     std::unique_ptr<BillSystem> bills_;
