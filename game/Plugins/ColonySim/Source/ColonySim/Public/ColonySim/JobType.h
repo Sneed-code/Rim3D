@@ -36,6 +36,13 @@ enum class JobType : uint8_t {
     BedRest,           // go to a bed and lie in it until the injuries have healed (docs/design/medicine.md)
     TendPatient,       // fetch medicine, walk to a patient and tend its injuries (docs/design/medicine.md)
     Rescue,            // carry a downed colonist to a bed (docs/design/medicine.md)
+    CapturePrisoner,   // carry a downed enemy to a prison bed and make it a prisoner (docs/design/prisoners.md)
+    FeedPrisoner,      // fetch food, walk to a hungry prisoner and hand it over
+    WardenInteract,    // walk to a prisoner and talk to it: resistance, recruiting or release
+    Refuel,            // carry fuel to a building and put it in (fuel.md)
+    Hunt,              // walk up to a wild animal marked for the hunt and shoot it dead (docs/design/hunting.md)
+    HaulCorpse,        // carry a hunted or slaughtered animal's corpse to a stockpile (docs/design/hunting.md)
+    Butcher,           // carry a corpse to a butcher table and cut it up into meat and leather (docs/design/hunting.md)
 };
 
 COLONY_API const char* jobTypeName(JobType type);

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <string>
 
 namespace colony {
@@ -205,14 +206,28 @@ void Rooms::rebuild() {
             }
         }
         room.listedCells = static_cast<uint32_t>(cells_.size()) - room.firstCell;
+        if (room.bounds.level > 0) {
+            // An upper room that reaches the edge of its floor is open to the air.
+            for (const CellPos& c : cellsOf(room)) {
+                for (const auto& n : kRoomsNeighbours) {
+                    const CellPos side{c.x + n[0], c.y + n[1], c.level};
+                    if ((n[0] == 0 || n[1] == 0) && map_.inBounds(side) && map_.terrain(side) == Terrain::Air) {
+                        room.openToAir = true;
+                    }
+                }
+            }
+            if (room.openToAir) {
+                cells_.resize(room.firstCell);
+                room.listedCells = 0;
+            }
+        }
     }
 
     roof();
     scanContents();
 }
 
-bool Rooms::roofHolderAt(int x, int y) const {
-    const CellPos c{x, y, 0};
+bool Rooms::roofHolderAt(CellPos c) const {
     if (map_.terrain(c) == Terrain::Rock) {
         return true;
     }
@@ -220,32 +235,46 @@ bool Rooms::roofHolderAt(int x, int y) const {
     return building != kNoEntity && holdsRoof_[things_.registry().get<Thing>(building).def.value] != 0;
 }
 
-bool Rooms::supported(int x, int y) const {
+bool Rooms::roofSupported(CellPos c) const {
+    if (!map_.inBounds(c)) {
+        return false;
+    }
+    if (roofHolderAt(c)) {
+        return true;
+    }
     for (const auto& [dx, dy] : supportOffsets_) {
-        const int nx = x + dx;
-        const int ny = y + dy;
-        if (nx >= 0 && ny >= 0 && nx < map_.width() && ny < map_.height() && roofHolderAt(nx, ny)) {
+        const CellPos n{c.x + dx, c.y + dy, c.level};
+        if (map_.inBounds(n) && roofHolderAt(n)) {
             return true;
         }
     }
     return false;
 }
 
-// The thin roof follows the walls: it is worked out afresh from the enclosed rooms every time they
-// change, so opening a wall takes the roof off (RimWorld's would collapse, which comes later).
+// A thin roof goes up over the cells of an enclosed room that a roof holder reaches, and stays while one
+// does, whether or not the room is kept closed (RimWorld's). With nothing in reach any more it falls
+// (M3): the cell is reported through takeUnsupportedRoofs for RoofCollapse.
 void Rooms::roof() {
+    std::vector<CellPos> fresh;
     for (const CellPos& c : thinCells_) {
-        Roof& slot = map_.roof_[static_cast<size_t>(map_.index(c))];
-        if (slot == Roof::Thin) {
+        Roof& slot = map_.roofSlot(c);
+        if (slot != Roof::Thin) {
+            continue;
+        }
+        if (map_.floorAbove(c)) {
+            slot = Roof::None;  // its roof is the floor above now
+        } else if (roofSupported(c)) {
+            fresh.push_back(c);
+        } else {
             slot = Roof::None;
+            unsupported_.push_back(c);
         }
     }
-    std::vector<CellPos> fresh;
-    const auto mark = [&](int x, int y) {
-        const CellPos c{x, y, 0};
-        Roof& slot = map_.roof_[static_cast<size_t>(map_.index(c))];
-        if (slot != Roof::None) {
-            return false;
+    const auto mark = [&](int x, int y, int level) {
+        const CellPos c{x, y, level};
+        Roof& slot = map_.roofSlot(c);
+        if (slot != Roof::None || map_.floorAbove(c)) {
+            return false;  // already roofed, or an upper floor is its roof
         }
         slot = Roof::Thin;
         fresh.push_back(c);
@@ -256,24 +285,51 @@ void Rooms::roof() {
             continue;
         }
         for (const CellPos& c : cellsOf(room)) {
-            if (!supported(c.x, c.y) || !mark(c.x, c.y)) {
+            if (map_.floorAbove(c)) {
+                continue;  // its roof is the floor above
+            }
+            if (!roofSupported(c) || !mark(c.x, c.y, c.level)) {
                 continue;
             }
             // The walls, doors and furniture round a roofed cell are under the roof too.
             for (const auto& n : kRoomsNeighbours) {
                 const int nx = c.x + n[0];
                 const int ny = c.y + n[1];
-                if (map_.inBounds(CellPos{nx, ny, 0}) && map_.passage(CellPos{nx, ny, 0}) != Passage::Open) {
-                    mark(nx, ny);
+                if (map_.inBounds(CellPos{nx, ny, c.level}) && map_.passage(CellPos{nx, ny, c.level}) != Passage::Open) {
+                    mark(nx, ny, c.level);
                 }
             }
         }
     }
-    std::sort(fresh.begin(), fresh.end(), [&](const CellPos& a, const CellPos& b) { return map_.index(a) < map_.index(b); });
+    std::sort(fresh.begin(), fresh.end(), [&](const CellPos& a, const CellPos& b) {
+        return a.level != b.level ? a.level < b.level : map_.index(a) < map_.index(b);
+    });
     if (fresh != thinCells_) {
         ++roofChanges_;
         thinCells_ = std::move(fresh);
     }
+}
+
+bool Rooms::restoreThinRoofs(const std::vector<CellPos>& cells) {
+    for (const CellPos& c : cells) {
+        if (!map_.inBounds(c)) {
+            return false;
+        }
+    }
+    thinCells_ = cells;
+    for (const CellPos& c : thinCells_) {
+        Roof& slot = map_.roofSlot(c);
+        if (slot == Roof::None) {
+            slot = Roof::Thin;
+        }
+    }
+    return true;
+}
+
+std::vector<CellPos> Rooms::takeUnsupportedRoofs() {
+    std::vector<CellPos> out = std::move(unsupported_);
+    unsupported_.clear();
+    return out;
 }
 
 // What is in each room and the role that gives it. Only enclosed rooms are looked at.

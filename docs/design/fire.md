@@ -71,13 +71,19 @@ so they never burn). `Burning {until}` is a component on the pawn; it lasts `paw
 times 0.75 to 1.25.
 
 While it burns, every pass the pawn takes `pawnDamagePerTick` (2 heat damage per RimWorld second,
-the wiki's number) as a hit of Burn damage on a random part, **its job is dropped** (`PawnCaughtFire`
+the wiki's number) as a hit of Burn damage on a random outside part, **through the heat armor** of what covers it (the same armor rule as bullets: heat armor less nothing is the share of hits changed, half of those bounce off, the rest do half damage, and the piece loses 1 hit point per 4 damage that reached it; `CombatSystem::hurtPawn`), **its job is dropped** (`PawnCaughtFire`
 makes the sim `interrupt` it), and the cell under it keeps a fire going (a burning pawn sets the
 ground alight, as the wiki says). A downed pawn burns until it is put out or it burns out: it can
 die of it. Beating out the fire under a pawn puts it out too (`PawnFireOut`).
 
-Not here yet: a burning pawn running about in panic, jumping in water (there is no shallow water),
-and the Heat armor of apparel (devilstrand): `applyDamage` takes the hit as it is.
+**Panic.** A burning pawn that isn't downed, drafted or player-controlled does not think: each time it has
+stopped (`Fire::panicStep`, called by the job system instead of the think list) it takes one step to a random
+walkable neighbour, preferring one that isn't alight, and its job ends ("it is on fire"). A colonist who is not
+alight and within 1.5 m beats the flames out as it runs past. `panic` in `FireRules` turns it off.
+
+**Water.** A burning pawn that has water within `waterRunRadius` (12 cells, ours) runs for the nearest water cell (a greedy step each time
+it stops) and is put out when it is next to it. Not here yet: shallow water that can be waded, and the Heat armor of apparel
+(devilstrand): `applyDamage` takes the hit as it is.
 
 ## Firefighting
 
@@ -97,17 +103,32 @@ RimWorld does it. A fire already out when the colonist arrives ends the job as d
 At size 0 the fire is out (`FireOut`, "beaten"), and so is any pawn burning there. A drafted
 colonist is not put on this job (drafted colonists skip the think list).
 
+**Firefoam popper** (`FirefoamPopper` in `Things/Defense.json`, research `Firefoam`, steel 30; numbers unverified).
+While any fire burns, each game second a popper looks for a fire within `firefoam.triggerRadius` (3 m, ours). If one
+is there it puts out every fire within `firefoam.radius` (9 m) (`FireOut` "foamed") and every pawn burning there,
+emits `FirefoamPopped` and is destroyed (single use). A popper that is destroyed by damage bursts the same way
+whether or not a fire is near (`Fire::onDestroy`, from the combat before-destroy hook), message "destroyed".
+
+**Firefoam on the ground.** A burst lays a layer of `FireFoam` filth on every cell in its radius. A cell with foam on it counts
+as wet: it cannot be lit (`ignite` fails, spread and hot-room ignition skip it), so embers cannot relight what was foamed.
+Each hour a layer fades with chance 1 / `foamFadeHours` (12, ours); colonists can also clean it (Cleaning work type).
+
+**Foam turret** (`FoamTurret`, research `Firefoam`, needs power; `firefoamTurret {range 20, radius 2.5, cooldown 10}`, ours). Every
+`cooldown` game seconds (staggered by entity id) a running turret shoots the nearest fire in range: fires and burning pawns within
+`radius` of it are put out and the ground there is foamed (event `FirefoamPopped`, message "turret"). It is not used up and needs
+no line of sight.
+
 A fire that grows faster than the colonists beat it (a big grass fire, a burning house) needs the
-home area, hands, and a good start; there is no water or firefoam yet.
+home area, hands, and a good start, or a popper.
 
 ## What Unreal gets
 
 Events: `FireStarted` (cell, size), `FireOut` (cell, message "burnt out" or "beaten"),
-`PawnCaughtFire`, `PawnFireOut`, `PawnAction::Extinguish` (a colonist started beating a fire),
+`PawnCaughtFire`, `PawnFireOut`, `FirefoamPopped`, `PawnAction::Extinguish` (a colonist started beating a fire),
 `PlantRemoved` ("burnt") and `ThingDestroyed` for what burnt up. Snapshot: `fires` (cell, size,
 rewritten when `fireChanges` goes up, which is every pass while any burn), `burnt`, `homeArea`,
 `ThingView::onFire`. Commands: `Ignite` (a cell, or a pawn) and `SetHomeArea`. U14 draws fire,
-smoke and burnt ground from these; the home area overlay is a U19 job.
+smoke and burnt ground from these ([fire-draw.md](fire-draw.md)); the home area overlay is a U19 job.
 
 ## Numbers
 

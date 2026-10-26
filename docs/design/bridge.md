@@ -75,12 +75,16 @@ rest (place blueprint, designate, draft, actions) come with the tasks that build
 | `DodgeRollCommand{pawn, dx, dy}` | `CombatSystem::dodgeRoll`: the protagonist's roll, direction any length (zero or not a number: a backstep); start-up, a hit-proof roll, recovery, a short wait ([shooter-feel.md](shooter-feel.md)) | not a colonist under direct control; downed; prone; rolling already or waiting out the last roll |
 | `CarryWeaponCommand{pawn, item}` | `CombatSystem::carryWeapon`: a weapon into the hands if empty, else on the body; the weapon in its slot is dropped ([weapons.md](weapons.md)) | no body or dead; not a weapon; someone else's |
 | `SwitchWeaponCommand{pawn, slot}` | `CombatSystem::switchWeapon`: bring up the weapon carried in slot 0 Primary, 1 Sidearm or 2 Melee; no shooting or swinging for the slot's switch time | nothing in the slot or in the hands already; downed, rolling, knocked down, switching, mid-shot or mid-swing |
+| `SetRefuelCommand{building, autoRefuel, fillNow}` | allow auto refuel on or off, and `fillNow` orders a fill to the top ([fuel.md](fuel.md)) | not a finished building with a fuel part |
+| `StartMentalBreakCommand{pawn, breakDef}` | dev command: a mental break now, whatever the mood ([mental-breaks.md](mental-breaks.md)) | not a colonist on the map; walked by the player; downed or dead; in a break already; an unknown break; one that needs fire; one with nothing to do (no food to binge on) |
+| `EndMentalBreakCommand{pawn}` | dev command: ends the break at once, no catharsis | not in a break |
 | `ReloadCommand{pawn}` | `CombatSystem::reload`: a new magazine now (the protagonist's reload key, [aiming.md](aiming.md)) | no gun with a magazine; full; downed, mid-shot or reloading |
 | `StartRaidCommand{faction, points, edge}` | dev until the narrator: a raid of a Factions def worth `points` (0: the colony's raid points) walks in at `edge` (0 N, 1 E, 2 S, 3 W, -1 any) ([raids.md](raids.md)) | unknown faction or edge; no way in from that edge |
 | `SoundAlarmCommand{on}` | the colony alarm on (every colonist to its defense role; stays on until the player stops it) or off (back to work) | on (off) already |
 | `SetDefenseRoleCommand{pawn, role, hasSpot, spot}` | a colonist's defense role: 0 Defender (with a spot to hold, or none), 1 Shelter, 2 Keep working | not the colony's colonist; a spot for another role; can't stand on the spot |
 | `MarkShelterCommand{cell, clear}` | the room at `cell` is the shelter, or with `clear` none is | not a roofed room; nothing to clear |
 | `MeleeCommand{pawn, target, mode}` | `Attack`: a melee swing at `target` (the controlled colonist may swing at none, straight ahead); `Block`: raises the melee weapon ([melee.md](melee.md)) | downed or dead; mid-shot; still swinging or recovering; nothing to fight with; the target isn't a living pawn in reach; no melee weapon to block with |
+| `InteractCommand{initiator, recipient, interaction, outcome}` | dev (C20, [social.md](social.md)): one colonist does an Interactions def to another now; `outcome` 1 or 0 forces a romance, proposal or insult-fight roll, -1 dice | unknown interaction; not two colonists; either can't talk (down, asleep, fighting, drafted); out of earshot; needs a lover or adults |
 | `RearmTrapCommand{trap}` | sets a sprung spike trap again ([defense.md](defense.md)) | not a trap; armed already; an IED, which is gone once it goes off |
 
 In replay files a `rot` is `"North"`, `"East"`, `"South"` or `"West"` (`"North"` if left out) and an `area` is `[minX, minY, sizeX, sizeY, level]` and a storage priority its name
@@ -121,6 +125,8 @@ starts, so read it after every step. Before the first step it holds what setting
 | `PawnSick` | `thing`, `def` (the disease), `part` (an infection's wound, else -1), `amount` (severity) | a pawn caught a disease or a wound turned infected ([diseases.md](diseases.md)) |
 | `PawnRecovered` | `thing`, `def`, `part` | a disease ran its course or was cured |
 | `FrameStarted` | `thing` (the plan), `def` (the building), `cell` | a blueprint got its first materials and is a frame now; the plan itself came with a `ThingSpawned` |
+| `OutOfFuel` | `thing` (the building), `def`, `cell` | a building's fuel reached 0 ([fuel.md](fuel.md)) |
+| `Refueled` | `thing`, `def`, `cell`, `amount` (items in) | a colonist put fuel in a building |
 | `RecipeDone` | `thing` (the cook), `def` (the Recipes def), `target` (the stove), `cell`, `amount` (products made), `message` | one run of a bill is done; `message` is "bill finished" when a "do X times" bill reached 0 and went ([bills.md](bills.md)) |
 | `PawnInjured` | `thing`, `def` (the injury), `part`, `amount`, `cell` | a pawn got an injury (F1) |
 | `PawnPartLost` | `thing`, `def` (MissingBodyPart), `part`, `amount`, `cell` | a pawn lost a body part |
@@ -139,6 +145,10 @@ starts, so read it after every step. Before the first step it holds what setting
 | `AlarmChanged` | `message` ("on: why", "off: why") | the colony alarm went on or off |
 | `PawnLeftMap` | `thing`, `def`, `cell`, `squad` | a routed raider walked off the map; its `ThingDestroyed` follows |
 | `PawnMoodBand` | `thing`, `amount` (its mood), `message` ("stable", "minor", "major" or "extreme") | a pawn's mood crossed a mental break threshold (C9, [mood.md](mood.md)) |
+| `PawnMentalBreak` | `thing`, `message` (the MentalBreaks defName), `amount` (its mood) | a colonist snapped (C19, [mental-breaks.md](mental-breaks.md)) |
+| `PawnMentalBreakEnded` | `thing`, `message` ("recovered", "downed", "died" or "stopped"), `amount` (seconds it lasted) | the break is over |
+| `PawnInsulted` | `thing` (the one insulting), `target` | an insulting spree insulted someone |
+| `PawnLeftColony` | `thing`, `message` (the break) | a colonist gave up and walked off the map; a `ThingDestroyed` follows for it and what it took |
 | `ShotFired` | `thing` (shooter), `def` (gun), `target` (projectile), `x, y, z` (muzzle) | a pawn fired (F2, [combat.md](combat.md)) |
 | `PowerChanged` | `thing`, `def`, `cell`, `message` ("on" or "off") | a generator, consumer or battery gained or lost power (E5, [power.md](power.md)); conduits are not announced |
 | `ShortCircuit` | `thing`, `def`, `cell`, `amount` (Wd released) | a short circuit emptied a net's batteries (E5) |
@@ -151,6 +161,9 @@ starts, so read it after every step. Before the first step it holds what setting
 | `ProjectileHit` | `thing` (projectile), `def` (Projectiles def), `hit`, `target`, `part`, `amount`, `x, y, z`, `cell` | a projectile stopped: ground, rock, building, pawn, armor, or gone |
 | `MeleeSwing` | `thing` (attacker), `target`, `def` (melee weapon, or the pawn's def for fists), `message` (the tool), `amount` (steps to the hit), `cell` | a melee swing began (F8, [melee.md](melee.md)) |
 | `WeaponSwitched` | `thing` (the pawn), `def` and `target` (the weapon now in its hands) | a weapon switch ended (P1, [weapons.md](weapons.md)) |
+| `Interaction` | `thing` (talker), `target` (listener), `message` (the Interactions def), `count` (1 worked, 0 refused), `amount` (the listener's opinion after) | one colonist talked to another (C20, [social.md](social.md)) |
+| `BondChanged` | `thing`, `target`, `message` (Lover, Spouse, ExLover, ExSpouse), `count` (1 formed) | a stored bond formed |
+| `SocialFight` | `thing`, `target`, `message` ("started", "ended: why") | a fight with fists began or ended |
 | `MeleeHit` | `thing`, `def`, `target`, `hit`, `part`, `amount`, `x, y, z`, `cell`, `message` ("hit", "deflected", "blocked", "dodged", "missed") | the hit moment of a swing |
 
 `Things` reports its own spawns and despawns once the sim points it at the event list
@@ -175,7 +188,7 @@ Since F2 pawns also have
 `stance` (prone when downed or dead), `facingX`/`facingY`, the `weapon` in their hands and
 `shotReadyIn`, and `Snapshot::projectiles` lists every bullet in flight ([combat.md](combat.md)); since F5
 `rounds`, `magazineSize` and `reloading` ([aiming.md](aiming.md)); since F8 `meleePhase`, `meleeStepsLeft`,
-`meleeTarget` and `blocking` ([melee.md](melee.md)).
+`meleeTarget` and `blocking` ([melee.md](melee.md)); since C20 `partner` and `socialFight` ([social.md](social.md)).
 Since E5 a building with a power part has `power`, `powerNet`, `powerWatts` and `batteryFill`, and the snapshot has `powerNets` ([power.md](power.md)). Since C5 a door's `ThingView` has `doorOpen` (0 to 1) and the snapshot has `rooms` (the enclosed rooms with role and
 size), `roofCells` (the thin roof) and `roofChanges` ([rooms.md](rooms.md)). Since C3 the snapshot lists the `designations`
 (cell and kind of every mine, cut and harvest mark; [mining.md](mining.md)).

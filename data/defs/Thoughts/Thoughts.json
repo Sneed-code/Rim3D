@@ -58,5 +58,15 @@
     "moodOffset": -6, "durationDays": 0.6, "trigger": "SleptOutside",
     "note": "Started when a pawn wakes up in a place that is not indoors (docs/design/rooms.md).",
     "unverified": ["moodOffset", "durationDays"]
+  },
+  {
+    "defName": "PassionMinorWork", "label": "doing work I enjoy", "source": "RimWorld",
+    "situation": { "passion": "Minor" },
+    "note": "While the job uses a skill the pawn has a minor passion for; the lift is SkillRules.passionMood.Minor (docs/design/skills.md)."
+  },
+  {
+    "defName": "PassionMajorWork", "label": "doing work I love", "source": "RimWorld",
+    "situation": { "passion": "Major" },
+    "note": "While the job uses a skill the pawn has a major passion for; the lift is SkillRules.passionMood.Major (docs/design/skills.md)."
   }
 ]

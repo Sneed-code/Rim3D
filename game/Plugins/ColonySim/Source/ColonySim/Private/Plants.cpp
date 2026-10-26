@@ -103,7 +103,9 @@ Plants::Plants(const Map& map, const DefDatabase& defs, uint64_t seed, const std
                 }
                 case Terrain::Water:
                 case Terrain::Rock:
-                case Terrain::RoughStone: break;
+                case Terrain::RoughStone:
+                case Terrain::Air:
+                case Terrain::UpperFloor: break;
             }
             fertility_[static_cast<size_t>(map.index(c))] = static_cast<float>(f);
         }
@@ -118,8 +120,18 @@ size_t Plants::indexOf(CellPos c) const {
     return static_cast<size_t>(map_.index(c));
 }
 
+float Plants::fertilityAtIndex(size_t i) const {
+    if (fertilityOverride_) {
+        const float own = fertilityOverride_(i);
+        if (own >= 0.0f) {
+            return own;
+        }
+    }
+    return fertility_[i];
+}
+
 float Plants::fertility(CellPos c) const {
-    return map_.inBounds(c) ? fertility_[indexOf(c)] : 0.0f;
+    return map_.onGround(c) ? fertilityAtIndex(indexOf(c)) : 0.0f;
 }
 
 DefId Plants::defAt(CellPos c) const {
@@ -157,11 +169,11 @@ void Plants::set(size_t i, uint16_t kind, uint32_t growth, uint32_t age) {
 
 bool Plants::place(CellPos c, DefId def, float growth) {
     const int k = kindOfDef(def);
-    if (k < 0 || !map_.inBounds(c)) {
+    if (k < 0 || !map_.onGround(c)) {
         return false;
     }
     const size_t i = indexOf(c);
-    if (kind_[i] != 0 || fertility_[i] <= 0.0f) {
+    if (kind_[i] != 0 || fertilityAtIndex(i) <= 0.0f) {
         return false;
     }
     const float g = std::clamp(growth, 0.0f, 1.0f);
@@ -170,13 +182,13 @@ bool Plants::place(CellPos c, DefId def, float growth) {
 }
 
 void Plants::remove(CellPos c) {
-    if (map_.inBounds(c)) {
+    if (map_.onGround(c)) {
         set(indexOf(c), 0, 0, 0);
     }
 }
 
 void Plants::setGrowth(CellPos c, float growth) {
-    if (!map_.inBounds(c) || !has(c)) {
+    if (!map_.onGround(c) || !has(c)) {
         return;
     }
     const size_t i = indexOf(c);
@@ -202,8 +214,9 @@ void Plants::growHour(int hourOfDay) {
             continue;
         }
         uint32_t growth = growth_[i];
-        if (growing && growth < kPlantFullGrowth && fertility_[i] >= k.fertilityMin) {
-            double rate = std::max(0.0, 1.0 + (static_cast<double>(fertility_[i]) - 1.0) * k.fertilitySensitivity);
+        const float fertility = fertilityAtIndex(i);
+        if ((growing || (anytime_ && anytime_(i))) && growth < kPlantFullGrowth && fertility >= k.fertilityMin) {
+            double rate = std::max(0.0, 1.0 + (static_cast<double>(fertility) - 1.0) * k.fertilitySensitivity);
             if (modifier_) {
                 rate *= modifier_(i);
             }

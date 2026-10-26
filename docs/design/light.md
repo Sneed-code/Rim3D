@@ -43,9 +43,12 @@ steps puts a lamp beside the worker.
 
 ## For later tasks
 
-- **E5 power:** a lamp that is off should not shine. Take it out of the source scan (a `lit` check in
-  `Lights::rebuild`) and call `lights().markDirty()` when power changes.
+- **C11 fuel (done):** a lamp whose building has a `Fuel` part with nothing in it is left out of
+  the source scan, and `FuelSystem` calls `lights().markDirty()` when fuel runs out or comes back.
+- **E5 power:** a lamp that is off should not shine. Add a power check next to the fuel one in
+  `Lights::rebuild` and call `lights().markDirty()` when power changes.
 - **E4 fire, U14:** `lights().sources()` lists the lamps (building, cell, radius, glow); fire can add
-  its own. U14 draws a real light for each.
+  its own. U14 draws a real light for each ([fire-draw.md](fire-draw.md)); a glower def may also say `lift` (metres
+  above the ground the light sits) and its `visual.flame` (`lift`, `size`) puts flames on it.
 - **D9 thoughts:** "dark" and "in the light" can read `lightAt(pawn cell)`.
 - **E5 solar:** use `skyGlow()` for the sun's output.

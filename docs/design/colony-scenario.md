@@ -21,9 +21,13 @@ The Crashlanded start (protagonist and 5 colonists, 50 survival meals, steel and
 | Cooking | once the stove stands (checked every game hour): `AddBill` "simple meal, until 8 on the map" |
 | Beds | once all six stand: `AssignBed`, one each |
 
+C14 adds a crafting spot in the room (a wood club bill, "make club once", added when the spot stands): the run fails unless exactly one club is made, and the summary prints `clubsMade` (`mealsCooked` counts food only).
+
 C17 adds a wood floor over the room's inside (placed by command at step 0). Colonists then clean the
 dirt they walk in. The summary prints `cleaned`, `filthLeft`, `roomBeauty` and `roomImpressiveness`;
 the run fails if more than 12 layers of filth are left or the room has no stats.
+
+C20 adds social life: the summary prints `talks`, `fights`, `friendPairs` and `rivalPairs`, and the run fails if the six never talked.
 
 Everything else is built by the colonists themselves from the starting steel and wood. The script
 never touches a pawn or an item.
@@ -42,6 +46,7 @@ stderr for each of these that does not hold:
 - Everything planned is built (walls, door, 6 beds, table, 3 stools, stove) and the room is one
   enclosed, roofed room holding them.
 - The stove made meals and colonists ate them; at least one colonist woke up in a bed.
+- The work taught something: the total experience of skills under level 10 went up (`skillXpGained`).
 - Colonists started recreation jobs, at least one at the horseshoes pin (C18: Joy hours 19:00 to 21:59).
   Standing or lying still while playing doesn't count as stuck.
 - No command and no job failed (a failed job is a bug here: nothing in the script can legitimately
@@ -49,6 +54,9 @@ stderr for each of these that does not hold:
 
 It also reports, without failing on it, the lowest recreation, comfort and outdoors needs, the recreation jobs and how many were at the pin, the longest idle spell (about 10 hours at night once the
 work is done) and the mood minimum.
+It also reports, without failing on it, the longest idle spell (about 10 hours at night once the
+work is done), the mood minimum and `mentalBreaks`, the number of mental breaks (C19; a break that
+makes a colonist leave fails the "six colonists" check).
 
 A typical seed 42 run: everything built by game hour 7 of day 1, marks done by hour 11, 22 meals
 cooked and 54 eaten (29 at the table) in 5 days, lowest food 0.12, lowest mood 38, worst stuck

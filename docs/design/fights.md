@@ -93,6 +93,7 @@ try the left mouse button, R, C, Z and E once.
 
 ## Not done here
 
+- **Melee, weapon switching and holstered weapons** are U22: [melee-draw.md](melee-draw.md). The held weapon is drawn by `UWeaponDrawSubsystem` since then.
 - **A real gun in the hands.** The gun floats at the chest, and nobody has an aiming or recoil
   animation; the sample's aiming databases (and strafe) are needed, with real weapon meshes (A1).
   In first person the player's own body is hidden, so the gun is too: only flashes, tracers and impacts show.
@@ -103,4 +104,4 @@ try the left mouse button, R, C, Z and E once.
 - **Dead pawns** stay as ragdolls for as long as the sim keeps them; corpse removal is a later task.
 - **MetaHuman ragdolls** go through the leader pose (the hidden mannequin simulates); strand hair and
   clothes follow it but have not been looked at closely.
-- **Melee, grenades and explosions** have no sim yet.
+- **Grenades and explosions** have no sim yet.

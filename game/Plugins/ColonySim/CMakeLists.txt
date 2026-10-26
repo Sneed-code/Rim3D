@@ -12,7 +12,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Same rules as Unreal: no exceptions, no RTTI. Warnings are errors.
 add_library(colonysim_flags INTERFACE)
 if(MSVC)
-  target_compile_options(colonysim_flags INTERFACE /W4 /WX /permissive- /GR- /EHs-c- /external:W0)
+  # /bigobj: Save.cpp has more sections than a default object file holds (Unreal builds with it too).
+  target_compile_options(colonysim_flags INTERFACE /W4 /WX /permissive- /GR- /EHs-c- /external:W0 /bigobj)
   target_compile_definitions(colonysim_flags INTERFACE _HAS_EXCEPTIONS=0 _CRT_SECURE_NO_WARNINGS)
 else()
   target_compile_options(colonysim_flags INTERFACE -Wall -Wextra -Wpedantic -Wshadow -Werror -fno-exceptions -fno-rtti)
@@ -30,7 +31,7 @@ target_include_directories(colonysim SYSTEM PUBLIC ThirdParty)
 add_library(colonysim_thirdparty INTERFACE)
 target_include_directories(colonysim_thirdparty SYSTEM INTERFACE ThirdParty)
 
-add_executable(simrun Tools/simrun/main.cpp Tools/simrun/ColonyScenario.cpp Tools/simrun/PowerScenario.cpp)
+add_executable(simrun Tools/simrun/main.cpp Tools/simrun/ColonyScenario.cpp Tools/simrun/HouseScenario.cpp Tools/simrun/PowerScenario.cpp Tools/simrun/RaidSoak.cpp)
 target_link_libraries(simrun PRIVATE colonysim colonysim_thirdparty)
 target_compile_definitions(simrun PRIVATE COLONY_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../data")
 
@@ -55,6 +56,8 @@ add_test(NAME simrun_needs COMMAND simrun --seed 42 --size 128 --days 3 --start 
 # Raids (F6): pirates walk in, the alarm sounds, the armed colonists fight, and the raid ends
 # (beaten, routed or gone) within a quarter of a day.
 add_test(NAME simrun_raid COMMAND simrun --seed 1 --size 256 --days 0.25 --start Crashlanded --raid 300 --armed --check)
+# Raid soak (F7, docs/design/raid-soak.md): firefights and raids over a few seeds. The nightly workflow runs many more.
+add_test(NAME simrun_raid_soak COMMAND simrun --seed 1 --raid-soak 3)
 
 # Temperature (E2, docs/design/temperature.md): the Crashlanded colonists live two days in 4 degrees weather
 # (just above the safe range their T-shirts and pants give them) and nobody falls ill or dies.
@@ -65,6 +68,11 @@ add_test(NAME simrun_temperature COMMAND simrun --seed 42 --size 128 --days 2 --
 # A second seed, because the first run on seed 7 found a bug seed 42 did not.
 add_test(NAME colony_scenario COMMAND simrun --scenario colony --seed 42)
 add_test(NAME colony_scenario_seed7 COMMAND simrun --scenario colony --seed 7)
+
+# The two-storey house (M4, docs/design/house-scenario.md): six colonists build a house with stairs and an upper floor,
+# sleep upstairs and haul up and down for three days.
+add_test(NAME house_scenario COMMAND simrun --scenario house --seed 42)
+add_test(NAME house_scenario_seed7 COMMAND simrun --scenario house --seed 7)
 
 # The power check (E5, docs/design/power.md): solar, batteries, lamps and a switch for three days.
 add_test(NAME power_check COMMAND simrun --power)

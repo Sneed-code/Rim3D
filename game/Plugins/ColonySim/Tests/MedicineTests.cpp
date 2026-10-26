@@ -5,6 +5,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Medicine.h"
+#include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
@@ -332,6 +333,7 @@ TEST_CASE("Medicine: a healed injury may leave a scar, a big one an old wound, a
 
 TEST_CASE("Medicine: a doctor tends a bleeding, downed colonist where it lies, then carries it to the hospital bed") {
     Sim sim = medSim();
+    sim.mentalBreaks().setNatural(false);  // it runs for days
     const Entity bed = sim.things().spawn("HospitalBed", CellPos{20, 20, 0});
     sim.things().spawn("MedicineIndustrial", CellPos{12, 12, 0}, 5);
     sim.things().spawn("MealSurvivalPack", CellPos{14, 14, 0}, 20);

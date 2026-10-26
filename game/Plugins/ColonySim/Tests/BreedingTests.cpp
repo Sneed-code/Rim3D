@@ -547,6 +547,7 @@ TEST_CASE("Breeding: a male does not court a female in another zone or of anothe
 
 TEST_CASE("Breeding: saving and loading keeps pregnancy, eggs, fill levels and a milking in progress") {
     BreedFixture f;
+    f.sim.setOutdoorOverride(4.0f);  // mild enough for the egg to hatch (the override is not saved: the copy gets it too)
     const Entity cow = f.tame("Cow", CellPos{20, 20, 0}, 1);
     const Entity boar = f.tame("WildBoar", CellPos{30, 30, 0}, 1);
     const Entity hen = f.tame("Chicken", CellPos{40, 40, 0}, 1);
@@ -570,6 +571,7 @@ TEST_CASE("Breeding: saving and loading keeps pregnancy, eggs, fill levels and a
     CHECK(loaded.error.empty());
     CHECK(loaded.warnings.empty());
     Sim& copy = *loaded.sim;
+    copy.setOutdoorOverride(4.0f);
     CHECK(copy.stateHash() == f.sim.stateHash());
     CHECK(saveSim(copy) == bytes);
     CHECK(saveToJson(f.sim).find("\"breeding\"") != std::string::npos);
@@ -660,3 +662,124 @@ TEST_CASE("Breeding: a farm of 500 chickens lays every hen's egg and loses none"
 }
 
 
+
+TEST_CASE("Breeding: a young animal has a share of its adult hit points that grows with its life stage") {
+    BreedFixture f;
+    const Entity adult = f.tame("Cow", CellPos{20, 20, 0}, 1);
+    const Entity calf = f.tame("Cow", CellPos{24, 20, 0}, 1);
+    BREED_REQUIRE(adult != kNoEntity);
+    BREED_REQUIRE(calf != kNoEntity);
+    f.reg().get<Animal>(calf).bornAt = f.sim.time().seconds;  // a newborn
+    f.run(kSecondsPerHour);
+    HealthSystem& health = f.sim.health();
+    const float full = health.partMaxHitPoints(adult, 0);
+    BREED_REQUIRE(full > 0.0f);
+    CHECK(health.partMaxHitPoints(calf, 0) == doctest::Approx(full * 0.3f));  // baby: healthScaleFactor 0.3
+    f.reg().get<Animal>(calf).bornAt -= 14 * kSecondsPerDay;  // 0.2 years and more: a juvenile
+    f.run(kSecondsPerHour);
+    CHECK(health.partMaxHitPoints(calf, 0) == doctest::Approx(full * 0.6f));
+    f.reg().get<Animal>(calf).bornAt -= 60 * kSecondsPerDay;  // grown
+    f.run(kSecondsPerHour);
+    CHECK(health.partMaxHitPoints(calf, 0) == doctest::Approx(full));
+}
+
+TEST_CASE("Breeding: breeding can be switched off for an animal or a whole zone") {
+    BreedFixture f;
+    const Entity bull = f.tame("Cow", CellPos{20, 20, 0}, 0);
+    const Entity cow = f.tame("Cow", CellPos{22, 20, 0}, 1);
+    BREED_REQUIRE(bull != kNoEntity);
+    BREED_REQUIRE(cow != kNoEntity);
+    const Entity wild = f.sim.things().spawn("WildBoar", CellPos{40, 40, 0});
+    CHECK(f.br().breedingAllowed(bull));
+
+    // The command: a wild animal can't be told, a tame one can.
+    std::string error;
+    CHECK_FALSE(f.br().setBreeding(wild, false, error));
+    CHECK_FALSE(error.empty());
+    f.sim.submit(SetBreedingCommand{cow, 0, false});
+    f.sim.step();
+    CHECK_FALSE(f.br().breedingAllowed(cow));
+    for (int i = 0; i < 10; ++i) {
+        f.feedAll();
+        f.br().runPass(true);
+        f.run(61);
+    }
+    CHECK(f.br().stats().matings == 0);
+
+    // Back on: they mate.
+    f.sim.submit(SetBreedingCommand{cow, 0, true});
+    f.sim.step();
+    CHECK(f.br().breedingAllowed(cow));
+    for (int i = 0; i < 10 && f.br().stats().matings == 0; ++i) {
+        f.feedAll();
+        f.br().runPass(true);
+        f.run(61);
+    }
+    CHECK(f.br().stats().matings >= 1);
+
+    // A zone's switch stops every animal in it, and survives saving.
+    BreedFixture g;
+    const Entity bull2 = g.tame("Cow", CellPos{20, 20, 0}, 0);
+    const Entity cow2 = g.tame("Cow", CellPos{22, 20, 0}, 1);
+    BREED_REQUIRE(bull2 != kNoEntity);
+    BREED_REQUIRE(cow2 != kNoEntity);
+    const AnimalZoneId zone = g.sim.husbandry().createZone(CellRect{15, 15, 12, 12});
+    BREED_REQUIRE(g.sim.husbandry().assignZone(bull2, zone, error));
+    BREED_REQUIRE(g.sim.husbandry().assignZone(cow2, zone, error));
+    g.sim.submit(SetBreedingCommand{kNoEntity, zone, false});
+    g.sim.step();
+    CHECK_FALSE(g.br().breedingAllowed(bull2));
+    g.sim.submit(SetBreedingCommand{cow2, 0, false});
+    g.sim.step();
+
+    const std::vector<uint8_t> bytes = saveSim(g.sim);
+    SaveLoadResult loaded = loadSim(bytes, breedDefs());
+    BREED_REQUIRE(loaded.sim != nullptr);
+    CHECK(loaded.error.empty());
+    CHECK(loaded.sim->stateHash() == g.sim.stateHash());
+    CHECK(saveSim(*loaded.sim) == bytes);
+    CHECK_FALSE(loaded.sim->breeding().breedingAllowed(bull2));
+    CHECK_FALSE(loaded.sim->breeding().breedingAllowed(cow2));
+    for (int i = 0; i < 10; ++i) {
+        g.feedAll();
+        g.br().runPass(true);
+        g.run(61);
+    }
+    CHECK(g.br().stats().matings == 0);
+}
+
+TEST_CASE("Breeding: a fertilized egg that is too cold or too hot does not hatch until it is warm again") {
+    BreedFixture f;
+    const Entity hen = f.tame("Chicken", CellPos{20, 20, 0}, 1);
+    BREED_REQUIRE(hen != kNoEntity);
+    f.sim.setOutdoorOverride(-15.0f);
+    const Entity egg = f.br().layEgg(hen, true);
+    BREED_REQUIRE(egg != kNoEntity);
+    // The weather wears an egg in the open away in a few days: keep it whole, this test is about the clock.
+    const int hitPoints = f.reg().get<HitPoints>(egg).current;
+    auto runWhole = [&](int64_t seconds) {
+        for (int64_t t = 0; t < seconds && f.sim.things().exists(egg); t += 600) {
+            f.runFed(std::min<int64_t>(600, seconds - t));
+            if (f.sim.things().exists(egg)) {
+                f.reg().get<HitPoints>(egg).current = hitPoints;
+            }
+        }
+    };
+    // Too cold: the time left to hatch stays the same however long it lies there.
+    const int64_t left = f.reg().get<Hatching>(egg).hatchAt - f.sim.time().seconds;
+    runWhole(kSecondsPerDay);
+    BREED_REQUIRE(f.sim.things().exists(egg));
+    CHECK(std::abs(f.reg().get<Hatching>(egg).hatchAt - f.sim.time().seconds - left) <= 61);
+    f.sim.setOutdoorOverride(60.0f);  // too hot is the same
+    runWhole(2 * kSecondsPerHour);  // (a short while: an egg rots in the heat)
+    BREED_REQUIRE(f.sim.things().exists(egg));
+    CHECK(std::abs(f.reg().get<Hatching>(egg).hatchAt - f.sim.time().seconds - left) <= 61);
+    CHECK(f.br().stats().hatched == 0);
+    // Mild again: it hatches when the time left has gone.
+    f.sim.setOutdoorOverride(4.0f);
+    runWhole(left - 2 * kSecondsPerHour);
+    BREED_REQUIRE(f.sim.things().exists(egg));
+    CHECK(f.br().stats().hatched == 0);
+    runWhole(3 * kSecondsPerHour);
+    CHECK(f.br().stats().hatched == 1);
+}

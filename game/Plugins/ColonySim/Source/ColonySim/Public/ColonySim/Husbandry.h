@@ -48,6 +48,7 @@ inline constexpr AnimalZoneId kNoAnimalZone = 0;
 struct AnimalZone {
     AnimalZoneId id = kNoAnimalZone;
     std::vector<CellPos> cells;  // in row order: by y, then x
+    bool breedingOff = false;    // the animals in it do not mate (saved from section version 2)
 };
 
 struct TrainingState {
@@ -59,6 +60,8 @@ struct TrainingState {
 struct AnimalCare {
     bool markTame = false;       // a wild animal marked to be tamed
     bool markSlaughter = false;  // a tame animal marked to be slaughtered
+    bool markHunt = false;       // a wild animal marked to be hunted (N2, docs/design/hunting.md); it stays set on the corpse
+    bool collect = false;        // its corpse is to be carried to a stockpile: it was hunted or slaughtered
     AnimalZoneId zone = kNoAnimalZone;  // the zone a tame animal stays in; none: anywhere near home
     bool hasHome = false;
     CellPos home;                // where it was tamed; an animal with no zone stays within `homeRadius` of it
@@ -104,6 +107,17 @@ struct HusbandryRules {
     double slaughterXp = 50.0;
     double feedXp = 20.0;
     double repathSeconds = 600.0;
+    // N2 (docs/design/hunting.md).
+    double huntRangeShare = 0.8;       // a hunter shoots from within this share of its gun's range
+    double huntMinRange = 3.0;         // metres: a hunter never closes in nearer than this (the range of a short-barrelled gun)
+    double huntMaxSeconds = 900.0;     // a hunt that has not killed its target in this long is given up
+    double huntAvoidManhunterChance = 0.1;  // hunters skip animals that turn manhunter when hurt at this chance or more (ours)
+    double huntRepathSeconds = 3.0;    // a hunter walking at a moving animal looks for a new path this often
+    double butcherEfficiencyBase = 0.75;
+    double butcherEfficiencyPerLevel = 0.025;  // per Cooking level
+    double butcherManipulationImportance = 0.9;
+    double butcherMaxEfficiency = 1.5;
+    double butcherXp = 30.0;           // Cooking experience for one corpse
     std::vector<std::string> dietFoods[3];  // food types (`ingestible.foodType`) a Herbivore, Carnivore, Omnivore eats
     std::vector<TrainableRule> trainables;  // indexed by Trainable
 };
@@ -116,6 +130,7 @@ struct HusbandryStats {
     uint64_t slaughtered = 0;
     uint64_t fed = 0;
     uint64_t starved = 0;
+    uint64_t hunted = 0;     // animals a hunter killed (N2)
 };
 
 struct HusbandrySaved {
@@ -143,6 +158,8 @@ public:
     bool markTame(Entity animal, bool on, std::string& error);
     // Marks a tame animal to be slaughtered, or takes the mark off.
     bool markSlaughter(Entity animal, bool on, std::string& error);
+    // Marks a wild animal to be hunted, or takes the mark off (N2).
+    bool markHunt(Entity animal, bool on, std::string& error);
     // A tame animal goes wild again: it loses its training, zone and marks, and leaves for the map edge in its own time.
     bool release(Entity animal, std::string& error);
     // Wants (or no longer wants) the animal to learn a trick. Wanting one also wants what it needs first.
@@ -152,6 +169,8 @@ public:
     int removeZoneCells(const CellRect& area);
     // A tame animal stays in a zone (0: anywhere near home).
     bool assignZone(Entity animal, AnimalZoneId zone, std::string& error);
+    // Switches breeding on or off for every animal in a zone.
+    bool setZoneBreeding(AnimalZoneId zone, bool allow, std::string& error);
 
     // ---- Questions
     const AnimalCare* care(Entity animal) const;
@@ -201,6 +220,21 @@ public:
     bool finishTrain(Entity handler, Entity animal, Trainable what, int skill);
     // Kills the animal for the colony's table. False if it is already dead.
     bool finishSlaughter(Entity handler, Entity animal);
+    // A hunter saw its target dead: the corpse is to be carried home and the hunt mark is done (N2).
+    void finishHunt(Entity hunter, Entity animal);
+    // What a corpse gives when butchered at `efficiency` (1 is the animal def's `race.meatAmount` and `leatherAmount`; a young animal
+    // gives its body size against an adult's). Counts are 0, and the defs not valid, for what the animal doesn't have.
+    struct ButcherYield {
+        DefId meat;
+        int meatCount = 0;
+        DefId leather;
+        int leatherCount = 0;
+    };
+    ButcherYield butcherYield(Entity corpse, double efficiency) const;
+    // A dead animal with a body to cut up: it has a meat or leather def.
+    bool isCorpse(Entity animal) const;
+    // A corpse a hauler should carry to a stockpile: it was hunted (marked, or marked and killed by someone else) or slaughtered.
+    bool wantsHauling(Entity animal) const;
     // A handler gives the animal food: it gains the nutrition (up to what it holds).
     void feed(Entity animal, float nutrition);
     const AnimalSystem& animals() const { return animals_; }

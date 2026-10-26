@@ -82,6 +82,9 @@ every run (`simrun_regions` test).
 
 ## Not done here
 
+- **Levels** (M1, M2): every level has its own regions; stairs and ladders link the regions at their two
+  ends with the climb's extra cost (`RegionLink::extra`, `Region::climbs`); see [levels.md](levels.md).
+
 - **Who may pass a door.** Every pawn can pass every door for now (they open and cost time, [rooms.md](rooms.md)). Raiders can't open colony doors
   in RimWorld (they bash them), and forbidden doors stop colonists; that becomes per-faction
   reachability when the raid comes (F6).

@@ -15,6 +15,8 @@
 //   simrun --seed 42 --size 128 --days 60 --weather   (a line a day: season, temperatures, weather, snow; E1)
 //   simrun --scenario colony [--seed 42] [--size 512] [--days 5] [--verbose]   (the colony test, C10;
 //                                     exit 1 if a check fails, docs/design/colony-scenario.md)
+//   simrun --scenario house [--seed 42] [--days 3] [--png house.png] [--verbose]   (the two-storey house, M4: builds, sleeps and hauls
+//                                     across two levels, writes house-level0.png and house-level1.png; docs/design/house-scenario.md)
 //   simrun --power [--days 3] [--verbose]   (the power check, E5: solar, batteries, lamps and a switch; docs/design/power.md)
 //   simrun --seed 42 --size 1024 --days 3 --animals [--animal-percent 300] --check   (wild animals, N1:
 //                                     herds by biome, a report of them, checks they stay on walkable ground)
@@ -29,7 +31,9 @@
 // Human and Steel and the WorkTypes def Hauling, which data/defs provides. Its pawns haul items
 // scattered over the map to a stockpile zone in the middle through the job system (C1).
 #include "ColonyScenario.h"
+#include "HouseScenario.h"
 #include "PowerScenario.h"
+#include "RaidSoak.h"
 #include "ColonySim/Animals.h"
 #include "ColonySim/Breeding.h"
 #include "ColonySim/Husbandry.h"
@@ -101,6 +105,7 @@ struct Options {
     int farm = 0;        // --farm N: N tame chickens, fed every hour (N4)
     bool fire = false;   // --fire: light a grass fire near the first colonist ten minutes in (E4)
     double raid = -1.0;  // start a pirate raid of this many points at the first step (0: the colony's threat points)
+    int raidSoak = 0;    // --raid-soak N: the F7 soak over N seeds from --seed
     bool armed = false;  // give every colonist an assault rifle first (not a command: not in replays)
     std::string png;
     std::string regionsPng;
@@ -156,6 +161,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.farm = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--animal-percent") == 0 && hasValue) {
             out.animals = std::atoi(argv[++i]);
+        } else if (std::strcmp(arg, "--raid-soak") == 0 && hasValue) {
+            out.raidSoak = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--raid") == 0 && hasValue) {
             out.raid = std::atof(argv[++i]);
         } else if (std::strcmp(arg, "--armed") == 0) {
@@ -192,7 +199,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony [--verbose]] [--power] [--raid POINTS] [--armed] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house [--verbose]] [--power] [--raid POINTS] [--armed] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS]\n");
             return false;
         }
@@ -216,6 +223,8 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
                 case colony::Terrain::Soil: r = 90; g = 130; b = 60; break;
                 case colony::Terrain::Rock: r = 120; g = 115; b = 110; break;
                 case colony::Terrain::RoughStone: r = 150; g = 140; b = 125; break;
+                case colony::Terrain::Air:
+                case colony::Terrain::UpperFloor: break;  // upper levels only, never on the ground
             }
             // Ore shows brighter than the rock round it: steel blue, silver white, components orange.
             const colony::DefId rock = sim.mineables().defAt(colony::CellPos{x, y, 0});
@@ -269,10 +278,17 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
         pixels[i + 1] = static_cast<unsigned char>((pixels[i + 1] + 110) / 2);
         pixels[i + 2] = static_cast<unsigned char>((pixels[i + 2] + 80) / 2);
     }
+    // Upper floors (levels.md): the ground under them tinted pale blue, once per floor over it.
+    for (const colony::CellPos& c : map.upperFloorCells()) {
+        const size_t i = static_cast<size_t>(map.index(c)) * 3;
+        pixels[i] = static_cast<unsigned char>((pixels[i] + 170) / 2);
+        pixels[i + 1] = static_cast<unsigned char>((pixels[i + 1] + 200) / 2);
+        pixels[i + 2] = static_cast<unsigned char>((pixels[i + 2] + 235) / 2);
+    }
     // Buildings dark grey, items yellow, pawns red (drawn last, on top). Ground level only.
     const auto mark = [&](const colony::Position& pos, unsigned char r, unsigned char g, unsigned char b) {
         const colony::CellPos c = colony::cellOf(pos);
-        if (!map.inBounds(c)) {
+        if (!map.onGround(c)) {
             return;
         }
         const size_t i = static_cast<size_t>(map.index(c)) * 3;
@@ -609,11 +625,23 @@ int main(int argc, char** argv) {
         return powerscenario::run(options.daysGiven ? options.days : 3.0, defs, options.verbose);
     }
 
+    // The raid soak (F7): firefights and raids over many seeds, from --seed on.
+    if (options.raidSoak > 0) {
+        return raidsoak::run(options.seed, options.raidSoak, defs, options.verbose);
+    }
+
     // The colony scenario (C10) runs its own script on the Crashlanded start; 5 days unless --days says.
     if (!options.scenario.empty()) {
-        if (options.scenario != "colony" || !defs) {
-            std::fprintf(stderr, "--scenario takes 'colony' and needs the game's defs\n");
+        if ((options.scenario != "colony" && options.scenario != "house") || !defs) {
+            std::fprintf(stderr, "--scenario takes 'colony' or 'house' and needs the game's defs\n");
             return 2;
+        }
+        if (options.scenario == "house") {
+            std::string pngBase = options.png;
+            if (pngBase.size() > 4 && pngBase.compare(pngBase.size() - 4, 4, ".png") == 0) {
+                pngBase.resize(pngBase.size() - 4);
+            }
+            return housescenario::run(options.seed, options.size, options.daysGiven ? options.days : 3.0, defs, options.verbose, pngBase);
         }
         return colonyscenario::run(options.seed, options.size, options.daysGiven ? options.days : 5.0, defs, options.verbose);
     }

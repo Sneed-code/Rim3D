@@ -103,6 +103,7 @@ struct Health {
     DeathCause cause = DeathCause::None;
 
     // ---- Derived. Never saved or hashed.
+    float stageHp = 1.0f;        // young animals: the life stage's healthScaleFactor, set by AnimalSystem (N4 leftovers)
     bool downed = false;
     float pain = 0.0f;
     float bleedPerDay = 0.0f;    // total bleed rate, blood loss per day

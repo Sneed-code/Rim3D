@@ -6,6 +6,7 @@
 #include "ColonySim/Plants.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Temperature.h"
+#include "ColonySim/Things.h"
 #include "ColonySim/Zones.h"
 
 #include <algorithm>
@@ -85,7 +86,7 @@ GrowingZoneId Farming::createZone(const CellRect& area, DefId crop, std::string&
     for (int y = area.minY; y < area.minY + area.sizeY; ++y) {
         for (int x = area.minX; x < area.minX + area.sizeX; ++x) {
             const CellPos c{x, y, 0};
-            if (area.level == 0 && map_.inBounds(c) && map_.walkable(c) && map_.buildingAt(c) == kNoEntity &&
+            if (area.level == 0 && map_.onGround(c) && map_.walkable(c) && (map_.buildingAt(c) == kNoEntity || spotFertility(slot(c)) > 0.0f) &&
                 zoneOf_[slot(c)] == kNoGrowingZone && stockpiles_.zoneAt(c) == kNoZone && plants_.fertility(c) > 0.0f) {
                 zone.cells.push_back(c);
             }
@@ -149,7 +150,7 @@ bool Farming::setCrop(GrowingZoneId id, DefId crop, std::string& error) {
 }
 
 GrowingZoneId Farming::zoneAt(CellPos c) const {
-    return map_.inBounds(c) ? zoneOf_[slot(c)] : kNoGrowingZone;
+    return map_.onGround(c) ? zoneOf_[slot(c)] : kNoGrowingZone;
 }
 
 const GrowingZone* Farming::find(GrowingZoneId id) const {
@@ -165,6 +166,57 @@ DefId Farming::cropAt(CellPos c) const {
 
 float Farming::temperatureOf(CellPos c) const {
     return temperature_ != nullptr ? temperature_->temperatureAt(c) : 20.0f;
+}
+
+float Farming::spotFertility(size_t cellIndex) const {
+    if (things_ == nullptr) {
+        return -1.0f;
+    }
+    const Entity building = map_.buildingAt(map_.cellAt(static_cast<int>(cellIndex)));
+    if (building == kNoEntity) {
+        return -1.0f;
+    }
+    const Thing& thing = things_->registry().get<Thing>(building);
+    return static_cast<float>(defs_.get(thing.def).number("plantSpot.fertility", -1.0));
+}
+
+bool Farming::spotUnpowered(CellPos c) const {
+    if (things_ == nullptr) {
+        return false;
+    }
+    const Entity building = map_.buildingAt(c);
+    if (building == kNoEntity) {
+        return false;
+    }
+    const Thing& thing = things_->registry().get<Thing>(building);
+    return defs_.get(thing.def).flag("plantSpot.needsPower") && spotRunning_ && !spotRunning_(building);
+}
+
+bool Farming::sunLampLit(size_t cellIndex) const {
+    if (lights_ == nullptr || things_ == nullptr) {
+        return false;
+    }
+    const CellPos c = map_.cellAt(static_cast<int>(cellIndex));
+    const double glowNeeded = minGlow_;
+    if (static_cast<double>(lights_->lampLightAt(c)) < glowNeeded) {
+        return false;
+    }
+    for (const LightSource& source : lights_->sources()) {
+        if (source.cell.level != c.level) {
+            continue;
+        }
+        const Def& def = defs_.get(things_->registry().get<Thing>(source.building).def);
+        if (!def.flag("glower.growsPlants")) {
+            continue;
+        }
+        const double radius = def.number("glower.plantLightRadius", 0.0);
+        const double dx = static_cast<double>(source.cell.x - c.x);
+        const double dy = static_cast<double>(source.cell.y - c.y);
+        if (dx * dx + dy * dy <= radius * radius) {
+            return true;
+        }
+    }
+    return false;
 }
 
 std::string Farming::sowBlocker(CellPos c) const {
@@ -184,6 +236,9 @@ std::string Farming::sowBlocker(CellPos c) const {
     }
     if (plants_.fertility(c) < static_cast<float>(def.number("plant.fertilityMin", 0.0)) || plants_.fertility(c) <= 0.0f) {
         return "the soil is too poor";
+    }
+    if (spotUnpowered(c)) {
+        return "its basin has no power";
     }
     if (farmingTemperatureFactor(def, temperatureOf(c)) <= 0.0) {
         return "the weather is wrong for it";
@@ -205,6 +260,9 @@ double Farming::growthFactor(size_t cellIndex) const {
     const CellPos c = map_.cellAt(static_cast<int>(cellIndex));
     if (zone == nullptr || !plants_.has(c) || plants_.defAt(c) != zone->crop) {
         return 1.0;
+    }
+    if (spotUnpowered(c)) {
+        return 0.0;
     }
     const Def& def = defs_.get(zone->crop);
     const double glowNeeded = def.number("plant.growMinGlow", minGlow_);
@@ -269,7 +327,7 @@ bool Farming::restore(const FarmingSaved& saved, std::string& error) {
         zone.cells = z.cells;
         std::sort(zone.cells.begin(), zone.cells.end(), farmingCellBefore);
         for (const CellPos& c : zone.cells) {
-            if (!map_.inBounds(c) || zoneOf_[slot(c)] != kNoGrowingZone) {
+            if (!map_.onGround(c) || zoneOf_[slot(c)] != kNoGrowingZone) {
                 error = "the save has a growing zone cell that doesn't add up";
                 std::fill(zoneOf_.begin(), zoneOf_.end(), kNoGrowingZone);
                 zones_.clear();
