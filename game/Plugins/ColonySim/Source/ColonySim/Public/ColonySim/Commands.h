@@ -553,6 +553,16 @@ struct SetPrisonBedCommand {
     bool on = true;
 };
 
+// Dev command (task H2, docs/design/diseases.md): the pawn catches a disease (a Hediffs def of class Disease, by
+// defName) at `severity` (below 0: the def's initial severity); an infection needs the wound's body part in `part`.
+// Fails for a pawn without a body, a name that is not a disease, or when the pawn already has it or is immune.
+struct ContractDiseaseCommand {
+    Entity pawn = kNoEntity;
+    std::string disease;
+    float severity = -1.0f;
+    int part = -1;
+};
+
 // Dev command: the weather becomes this Weathers def now (by defName, e.g. "Rain") and lasts `hours`
 // game hours (0: its usual length), then the next is chosen as usual (docs/design/weather.md).
 // Fails if no Weathers def has the name.
@@ -614,6 +624,21 @@ struct RemoveGrowingZoneCellsCommand {
 struct SetGrowingZoneCropCommand {
     uint32_t zone = 0;
     std::string crop;
+};
+
+// Picks the narrator (a Narrators defName: "Orrin", "Maren", "Jinx"; "" turns the narrator off) and
+// the difficulty (a Difficulties defName; "" keeps it). The narrator is off until this is sent: the
+// game sends it at the start (docs/design/narrator.md). Fails for an unknown name.
+struct SetNarratorCommand {
+    std::string narrator = "Orrin";
+    std::string difficulty;
+};
+
+// A dev command: makes an incident (an Incidents defName, like "RaidEnemy") happen now, whatever its
+// timing, with `points` threat points (0: the colony's). Fails if it is unknown or can't happen now.
+struct FireIncidentCommand {
+    std::string incident;
+    float points = 0.0f;
 };
 
 // Fire (task E4, docs/design/fire.md). Dev command: starts a fire of `size` (the start size if 0) in a cell, or sets `pawn`
@@ -712,7 +737,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
                              SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand, SetPrisonerModeCommand,
                              SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
-                             MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand>;
+                             MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand,
+                             SetNarratorCommand, FireIncidentCommand, ContractDiseaseCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.
