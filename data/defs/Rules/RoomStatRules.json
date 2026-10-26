@@ -8,9 +8,10 @@
     "dropChancePerCell": 0.05,
     "bloodPerBleedDay": 4.0,
     "cleaningSpeed": 1.0,
+    "rainWashFactor": 4.0,
     "tracked": ["Dirt", "Blood", "Vomit", "Ash", "AnimalFilth"],
     "unverified": ["outdoorBeautyFactor"],
-    "ours": ["ticksToSeconds", "maxCarried", "pickupChancePerCell", "dropChancePerCell", "bloodPerBleedDay", "cleaningSpeed", "tracked"],
+    "ours": ["ticksToSeconds", "maxCarried", "pickupChancePerCell", "dropChancePerCell", "bloodPerBleedDay", "cleaningSpeed", "rainWashFactor", "tracked"],
     "note": "A pawn walking on bare ground (no floor) picks dirt up on its shoes with pickupChancePerCell for each new cell, times its def's stats.filthRate; it drops what it carries on floors with dropChancePerCell for each new cell. Trackable filth in the cell it enters is picked up the same way. A bleeding pawn drops about bloodPerBleedDay blood an hour for each point of blood loss a day it bleeds. ticksToSeconds is 1.44: a RimWorld tick is 1/60 s and our game day is 86,400 s against RimWorld's 60,000 ticks."
   },
   {
