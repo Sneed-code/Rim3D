@@ -119,5 +119,24 @@ outdoor filth fades, hunting; `farming.md`, `raids.md`, `fighters.md`, `room-sta
 | 7 | 1 of 6 | 0 (260 sown, 260 harvested) | 6 | predator day 24, starvation day 31, predators and a bleed-out later |
 | 42 | 1 of 6 | 0 (128 sown, 128 harvested) | 0 | a predator day 9, then hypothermia on days 50 to 52 (four) |
 
+**Winter fixes** (colonists seek warmth, pick up loose guns; `temperature.md`, `weapons.md`). The year run now also: leaves a
+shotgun and two revolvers at the landing for the others to pick up (at most three colonists end up armed), keeps six game
+animals marked for the hunt within 70 m, lays out three rice fields instead of one (the 32 stacks of survival meals are gone by day
+40 and one field feeds the colony about five days), and on day 33 places a campfire in the room (colonists with Hauling feed it),
+marks 40 more trees for its wood and hands out a parka and a tuque of cloth for each colonist (the script cannot make cloth yet).
+Hunger now interrupts hunting, butchering and corpse hauling.
+
+| Seed | Colonists alive on day 60 | Hypothermia deaths | What killed the rest |
+| --- | --- | --- | --- |
+| 1 | 2 of 6 | 0 | predators and berserk breaks, day 21 to 32 |
+| 7 | 6 of 6 (malnourished, food 0 at the end) | 0 | |
+| 42 | 4 of 6 | 0 | predators, day 24 and 35 |
+
+Not one colonist froze, and no seed is worse than two alive (before: one each). Findings on the way: arming every colonist killed
+them (a revolver against three wolves, a knife in a berserk colonist's hands: that is why only guns, only three of them); a
+`FireSpree` break burned the whole base and killed everyone on seed 42 on day 14 in one run (fires, `BACKLOG.md`); the food
+is now the limit (meals 0 at the end on every seed). `warmthSeeks` stayed 0 in these runs: the campfire room and the parkas kept
+the hypothermia under the 0.12 trigger (`ColdAndArmsTests` covers the job).
+
 Frost no longer kills a single crop, and no seed is dead by day 51 any more (the first runs lost everyone), but the colony
 still does not last the year: see `BACKLOG.md`. The run is not in CTest: it takes about ten minutes.
