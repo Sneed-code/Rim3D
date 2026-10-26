@@ -261,6 +261,7 @@ const char* eventTypeName(EventType type) {
         case EventType::Interaction: return "Interaction";
         case EventType::BondChanged: return "BondChanged";
         case EventType::SocialFight: return "SocialFight";
+        case EventType::FirefoamPopped: return "FirefoamPopped";
     }
     return "?";
 }

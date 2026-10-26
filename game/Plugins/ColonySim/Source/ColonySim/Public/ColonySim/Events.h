@@ -85,6 +85,7 @@ enum class EventType : uint8_t {
     PrisonerRecruited,  // a prisoner joined the colony: `thing` the new colonist, `target` the warden
     PrisonerReleased,   // a prisoner was set free and walks off the map: `thing` the pawn, `target` the warden (none for a dev command)
     PrisonBreak,        // prisoners broke out (the hook for T3): `count` how many, `message` the cause
+    FirefoamPopped,     // a firefoam popper went off (docs/design/fire.md): `thing` the popper (destroyed right after), `def` its def, `cell` its cell, `amount` the foam radius
 };
 
 // What stopped a projectile (ProjectileHit).
