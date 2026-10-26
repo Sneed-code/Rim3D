@@ -6,6 +6,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Melee.h"
+#include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Replay.h"
@@ -177,6 +178,7 @@ TEST_CASE("Social: a kind of memory stacks to the limit and fades after its days
     const Entity a = socPawn(sim, CellPos{20, 20, 0});
     const Entity b = socPawn(sim, CellPos{22, 20, 0});
     socStartQuiet(sim);
+    sim.mentalBreaks().setNatural(false);  // 16 days without food would break them
     const float base = sim.social().opinion(b, a);
     for (int i = 0; i < 6; ++i) {
         SOC_REQUIRE(socTalk(sim, a, b, "Chitchat"));

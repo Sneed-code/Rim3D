@@ -89,6 +89,10 @@ enum class EventType : uint8_t {
     Refueled,        // a pawn put fuel into a building
     RoofCollapsed,   // a roof or an upper floor fell (M3, docs/design/roofs.md): `cell`, `message` "roof" (a built roof), "mountain" (the thick roof of a mined-out cell) or "floor" (an upper floor), `count` how many things and pawns it hit
     FirefoamPopped,     // a firefoam popper went off (docs/design/fire.md): `thing` the popper (destroyed right after), `def` its def, `cell` its cell, `amount` the foam radius
+    PawnMentalBreak,       // a colonist snapped: a mental break began (docs/design/mental-breaks.md)
+    PawnMentalBreakEnded,  // it ended: `message` says how ("recovered", "downed", "died", "stopped")
+    PawnInsulted,          // a pawn in an insulting spree insulted another
+    PawnLeftColony,        // a pawn gave up and walked off the map for good
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -134,6 +138,7 @@ enum class PawnAction : uint8_t {
     Chat,         // started talking to `target`, a prisoner (once per job; the talk takes game seconds)
     FeedPawn,     // started handing food to `target`, a prisoner
     Refuel,       // started putting fuel into `target`, a building (once per refuel job; the work goes on until its JobEnded)
+    Punch,        // swung a fist at `target`, a pawn or a thing (a tantrum or berserk break: docs/design/mental-breaks.md)
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
@@ -196,6 +201,11 @@ struct Event {
     // SeasonChanged: `message` the season's name, `amount` its number (0 spring to 3 winter).
     // OutOfFuel: `thing` the building, `def` its Things def, `cell` the cell of its position. Refueled: the same, and
     // `amount` how many items went in. PawnAction Refuel: `thing` the pawn, `target` the building.
+    // PawnMentalBreak: `thing` the pawn, `message` the MentalBreaks defName, `amount` its mood.
+    // PawnMentalBreakEnded: `thing` the pawn, `message` how it ended, `amount` how many game seconds it lasted.
+    // PawnInsulted: `thing` the one insulting, `target` the one insulted. PawnLeftColony: `thing` the pawn (a
+    // ThingDestroyed for it and what it took comes with the event), `message` the break. PawnAction Punch:
+    // `target` the pawn or thing hit.
     float amount = 0.0f;
     // PawnAction Roll: see there.
     // GrenadeThrown: `thing` the thrower, `def` the grenade's Things def, `target` the grenade entity

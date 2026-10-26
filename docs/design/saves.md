@@ -134,6 +134,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `weather` | 1 | the current and previous weather by `defName`, when it began and ends, its random stream, the snow depth of each cell with snow ([weather.md](weather.md)) |
 | `breeding` | 1 | the counters, then `breed` (an animal's pregnancy, mating wait, milk, wool and egg timers, the female a male is courting) and `hatching` (a fertilized egg's hatch time) ([breeding.md](breeding.md), N4) |
 | `fire` | 1 | the counters, `fires` (cell, size, age, plant damage), `burnt` (cell, game second), `home` (the home area's cell indices), the automatic-growth flags, and `burning` (a pawn on fire: when it burns out) ([fire.md](fire.md), E4) |
+| `mentalBreaks` | 1 | `mentalBreaker` ([mental-breaks.md](mental-breaks.md)) |
 
 **Commands are saved by name (S7).** The `commands` section starts with the names of the command
 types it uses (`commandNames`); each command then gives its type as a place in that list, and its

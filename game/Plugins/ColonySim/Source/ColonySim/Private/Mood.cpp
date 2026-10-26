@@ -409,6 +409,16 @@ void MoodSystem::step(int64_t now, std::vector<Event>& events) {
     const size_t eventCount = events.size();
     for (size_t i = 0; i < eventCount; ++i) {
         const Event& event = events[i];
+        // A break that ended in calm (or by the pawn going down) is a relief; an insult stings its target.
+        if (event.type == EventType::PawnMentalBreakEnded || event.type == EventType::PawnInsulted) {
+            const bool ended = event.type == EventType::PawnMentalBreakEnded;
+            const Entity who = ended ? event.thing : event.target;
+            Mood* felt = reg.valid(who) ? reg.try_get<Mood>(who) : nullptr;
+            if (felt != nullptr && (!ended || event.message == "recovered" || event.message == "downed")) {
+                addMemory(*felt, ended ? "MentalBreakEnded" : "Insulted", now);
+            }
+            continue;
+        }
         Mood* mood = (event.type == EventType::PawnAte || event.type == EventType::PawnWokeUp || event.type == EventType::PrisonerCaptured ||
                       event.type == EventType::PrisonerChatted) &&
                              reg.valid(event.type == EventType::PrisonerChatted ? event.target : event.thing)

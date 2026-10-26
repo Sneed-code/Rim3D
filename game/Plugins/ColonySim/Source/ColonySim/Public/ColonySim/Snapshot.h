@@ -219,6 +219,8 @@ struct ThingView {
     uint32_t apparelCount = 0;
     int quality = -1;
     bool tainted = false;
+    // Pawns in a mental break (docs/design/mental-breaks.md): its MentalBreaks def, invalid when not in one.
+    DefId mentalBreak;
 };
 
 // One piece of worn apparel (Unreal draws each layer on the pawn, torn by `hitPointShare`).

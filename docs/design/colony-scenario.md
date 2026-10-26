@@ -54,6 +54,9 @@ stderr for each of these that does not hold:
 
 It also reports, without failing on it, the lowest recreation, comfort and outdoors needs, the recreation jobs and how many were at the pin, the longest idle spell (about 10 hours at night once the
 work is done) and the mood minimum.
+It also reports, without failing on it, the longest idle spell (about 10 hours at night once the
+work is done), the mood minimum and `mentalBreaks`, the number of mental breaks (C19; a break that
+makes a colonist leave fails the "six colonists" check).
 
 A typical seed 42 run: everything built by game hour 7 of day 1, marks done by hour 11, 22 meals
 cooked and 54 eaten (29 at the table) in 5 days, lowest food 0.12, lowest mood 38, worst stuck

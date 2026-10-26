@@ -165,9 +165,13 @@ const char* commandName(const Command& command) {
                 return "SetPrisonerMode";
             } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
                 return "SetPrisonBed";
-            } else {
-                static_assert(std::is_same_v<Type, PlaceUpperFloorCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
                 return "PlaceUpperFloor";
+            } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
+                return "StartMentalBreak";
+            } else {
+                static_assert(std::is_same_v<Type, EndMentalBreakCommand>, "name every command type");
+                return "EndMentalBreak";
             }
         },
         command);
@@ -273,6 +277,10 @@ const char* eventTypeName(EventType type) {
         case EventType::OutOfFuel: return "OutOfFuel";
         case EventType::Refueled: return "Refueled";
         case EventType::FirefoamPopped: return "FirefoamPopped";
+        case EventType::PawnMentalBreak: return "PawnMentalBreak";
+        case EventType::PawnMentalBreakEnded: return "PawnMentalBreakEnded";
+        case EventType::PawnInsulted: return "PawnInsulted";
+        case EventType::PawnLeftColony: return "PawnLeftColony";
     }
     return "?";
 }
@@ -308,6 +316,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Chat: return "Chat";
         case PawnAction::FeedPawn: return "FeedPawn";
         case PawnAction::Refuel: return "Refuel";
+        case PawnAction::Punch: return "Punch";
     }
     return "?";
 }

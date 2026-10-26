@@ -76,6 +76,8 @@ rest (place blueprint, designate, draft, actions) come with the tasks that build
 | `CarryWeaponCommand{pawn, item}` | `CombatSystem::carryWeapon`: a weapon into the hands if empty, else on the body; the weapon in its slot is dropped ([weapons.md](weapons.md)) | no body or dead; not a weapon; someone else's |
 | `SwitchWeaponCommand{pawn, slot}` | `CombatSystem::switchWeapon`: bring up the weapon carried in slot 0 Primary, 1 Sidearm or 2 Melee; no shooting or swinging for the slot's switch time | nothing in the slot or in the hands already; downed, rolling, knocked down, switching, mid-shot or mid-swing |
 | `SetRefuelCommand{building, autoRefuel, fillNow}` | allow auto refuel on or off, and `fillNow` orders a fill to the top ([fuel.md](fuel.md)) | not a finished building with a fuel part |
+| `StartMentalBreakCommand{pawn, breakDef}` | dev command: a mental break now, whatever the mood ([mental-breaks.md](mental-breaks.md)) | not a colonist on the map; walked by the player; downed or dead; in a break already; an unknown break; one that needs fire; one with nothing to do (no food to binge on) |
+| `EndMentalBreakCommand{pawn}` | dev command: ends the break at once, no catharsis | not in a break |
 | `ReloadCommand{pawn}` | `CombatSystem::reload`: a new magazine now (the protagonist's reload key, [aiming.md](aiming.md)) | no gun with a magazine; full; downed, mid-shot or reloading |
 | `StartRaidCommand{faction, points, edge}` | dev until the narrator: a raid of a Factions def worth `points` (0: the colony's raid points) walks in at `edge` (0 N, 1 E, 2 S, 3 W, -1 any) ([raids.md](raids.md)) | unknown faction or edge; no way in from that edge |
 | `SoundAlarmCommand{on}` | the colony alarm on (every colonist to its defense role; stays on until the player stops it) or off (back to work) | on (off) already |
@@ -141,6 +143,10 @@ starts, so read it after every step. Before the first step it holds what setting
 | `AlarmChanged` | `message` ("on: why", "off: why") | the colony alarm went on or off |
 | `PawnLeftMap` | `thing`, `def`, `cell`, `squad` | a routed raider walked off the map; its `ThingDestroyed` follows |
 | `PawnMoodBand` | `thing`, `amount` (its mood), `message` ("stable", "minor", "major" or "extreme") | a pawn's mood crossed a mental break threshold (C9, [mood.md](mood.md)) |
+| `PawnMentalBreak` | `thing`, `message` (the MentalBreaks defName), `amount` (its mood) | a colonist snapped (C19, [mental-breaks.md](mental-breaks.md)) |
+| `PawnMentalBreakEnded` | `thing`, `message` ("recovered", "downed", "died" or "stopped"), `amount` (seconds it lasted) | the break is over |
+| `PawnInsulted` | `thing` (the one insulting), `target` | an insulting spree insulted someone |
+| `PawnLeftColony` | `thing`, `message` (the break) | a colonist gave up and walked off the map; a `ThingDestroyed` follows for it and what it took |
 | `ShotFired` | `thing` (shooter), `def` (gun), `target` (projectile), `x, y, z` (muzzle) | a pawn fired (F2, [combat.md](combat.md)) |
 | `PowerChanged` | `thing`, `def`, `cell`, `message` ("on" or "off") | a generator, consumer or battery gained or lost power (E5, [power.md](power.md)); conduits are not announced |
 | `ShortCircuit` | `thing`, `def`, `cell`, `amount` (Wd released) | a short circuit emptied a net's batteries (E5) |
