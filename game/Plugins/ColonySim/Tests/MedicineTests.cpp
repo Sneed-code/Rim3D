@@ -461,6 +461,28 @@ TEST_CASE("Medicine: a patient who wants no care is left alone, and the herbal s
     }
 }
 
+TEST_CASE("Medicine: a patient walking about in a mental break is not chased, and is tended once it is over") {
+    Sim sim = medSim();
+    medColonist(sim, CellPos{10, 10, 0});
+    const Entity patient = medPatient(sim, CellPos{14, 10, 0});
+    sim.step();
+    medHit(sim, patient, "Cut", 6.0f, "left arm");
+    sim.submit(StartMentalBreakCommand{patient, "WanderSad"});
+    sim.step();
+    MED_REQUIRE(sim.mentalBreaks().active(patient));
+    MedLog log;
+    for (int i = 0; i < 1500; ++i) {
+        log.step(sim);
+        if (!sim.mentalBreaks().active(patient)) {
+            break;
+        }
+    }
+    CHECK(sim.stats().repaths == 0);
+    CHECK(log.type(EventType::PawnTended) == nullptr);
+    sim.submit(EndMentalBreakCommand{patient});
+    MED_REQUIRE(medRunUntil(sim, log, 4000, [&] { return log.type(EventType::PawnTended) != nullptr; }));
+}
+
 TEST_CASE("Medicine: with no hospital bed the downed go to an ordinary free bed, and a hospital bed is not slept in") {
     Sim sim = medSim();
     const Entity ordinary = sim.things().spawn("Bed", CellPos{20, 20, 0});
