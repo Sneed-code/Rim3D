@@ -615,11 +615,13 @@ bool AnimalSystem::feastStep(Entity e, Animal& a, const Kind& kind, int64_t now)
         a.foodAt = now;
         a.feeding = false;
         ++saved_.stats.meals;
-        things_.destroy(corpse);
         fightStop(mover);
         a.mode = AnimalMode::Idle;
         a.enemy = kNoEntity;
         a.nextThink = now + 2;
+        // Last: destroying a thing moves the last component of each kind into its place, so `a` and
+        // `mover` may point at nothing afterwards.
+        things_.destroy(corpse);
         return true;
     }
     if (fightDist2(pos.x, pos.y, cp.x, cp.y) <= kFightEatReach * kFightEatReach) {

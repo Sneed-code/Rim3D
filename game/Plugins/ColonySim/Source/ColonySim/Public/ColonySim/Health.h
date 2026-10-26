@@ -228,6 +228,7 @@ private:
     std::unique_ptr<HealthModel> model_;
     std::vector<Event>* events_ = nullptr;
     std::vector<Entity> active_;  // scratch for step
+    bool restoring_ = false;      // inside refreshAll: working out what a loaded save already was, so nobody stops walking for it
     std::vector<size_t> healable_;  // scratch for step: the injuries that can heal
 
     // Works out pain, bleeding, capacities and what they mean (the death cause and whether the
