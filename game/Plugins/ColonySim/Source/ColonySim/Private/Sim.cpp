@@ -7,6 +7,7 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/DeepResources.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Doors.h"
 #include "ColonySim/Explosives.h"
@@ -120,6 +121,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       things_(std::make_unique<Things>(map_, defs_)),
       plants_(std::make_unique<Plants>(map_, *defs_, splitMix64(settings.seed ^ 0x706C616E74ULL), "TemperateForest")),
       mineables_(std::make_unique<Mineables>(map_, *defs_, splitMix64(settings.seed ^ 0x6D696E65ULL))),
+      deepResources_(std::make_unique<DeepResources>(map_, *defs_, splitMix64(settings.seed ^ 0x64656570ULL))),
       designations_(std::make_unique<Designations>(map_)),
       movement_(std::make_unique<MovementSystem>()),
       health_(std::make_unique<HealthSystem>(*things_)),
@@ -195,6 +197,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setPower(power_.get());
     jobs_->setRooms(rooms_.get());
     jobs_->setResearch(research_.get());
+    jobs_->setDeepResources(deepResources_.get());
     jobs_->setMedicine(medicine_.get());
     jobs_->setTalents(talents_.get());
     jobs_->setFilth(filth_.get());
@@ -1651,6 +1654,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
             out.homeArea.push_back(map_.cellAt(index));
         }
     }
+    if (out.deepChanges != deepResources_->changes()) {
+        out.deepChanges = deepResources_->changes();
+        out.deepResources.clear();
+        for (const DeepCell& c : deepResources_->saved().cells) {
+            out.deepResources.push_back(DeepCellView{map_.cellAt(c.cell), c.def, c.units});
+        }
+    }
     out.roofCells = rooms_->thinRoofCells();
     out.roofChanges = rooms_->roofChanges();
     out.roofCollapses = roofCollapse_->collapses();
@@ -1706,6 +1716,7 @@ uint64_t Sim::stateHash() const {
     h.add(plants_->hash());
     h.add(weather_->hash());
     h.add(mineables_->hash());
+    deepResources_->hashState(h);
     designations_->hashState(h);
     research_->hashState(h);
     raids_->hashState(h);

@@ -283,6 +283,8 @@ const char* eventTypeName(EventType type) {
         case EventType::FirefoamPopped: return "FirefoamPopped";
         case EventType::AnimalHunted: return "AnimalHunted";
         case EventType::AnimalButchered: return "AnimalButchered";
+        case EventType::DeepDepositFound: return "DeepDepositFound";
+        case EventType::DeepPortionDrilled: return "DeepPortionDrilled";
         case EventType::PawnMentalBreak: return "PawnMentalBreak";
         case EventType::PawnMentalBreakEnded: return "PawnMentalBreakEnded";
         case EventType::PawnInsulted: return "PawnInsulted";
@@ -325,6 +327,8 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Butcher: return "Butcher";
         case PawnAction::DropCorpse: return "DropCorpse";
         case PawnAction::Punch: return "Punch";
+        case PawnAction::Scan: return "Scan";
+        case PawnAction::Drill: return "Drill";
     }
     return "?";
 }

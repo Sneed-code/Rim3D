@@ -190,8 +190,10 @@ class Mineables;
 class Pathfinder;
 class Plants;
 class PowerGrid;
+enum class DeepWorkKind : uint8_t { None, Scan, Drill };
 class ResearchSystem;
 class TalentSystem;
+class DeepResources;
 class Rooms;
 class Things;
 class WorkGiver;
@@ -296,6 +298,12 @@ public:
     // everywhere is outdoors.
     void setRooms(Rooms* rooms) { rooms_ = rooms; }
     void setResearch(ResearchSystem* research) { research_ = research; }
+    // Scanners and deep drills (DeepJobs.cpp, docs/design/deep-mining.md). Without it they are never worked.
+    void setDeepResources(DeepResources* deep) { deep_ = deep; }
+    DeepResources* deepResources() const { return deep_; }
+    DeepWorkKind deepKindOf(Entity building) const;
+    // Whether a scanner or drill can be worked now; `why` says what is wrong if not.
+    bool deepWorkable(Entity building, std::string& why) const;
     // Taming, training and feeding animals (HusbandryJobs.cpp, docs/design/husbandry.md). Without it nobody handles animals.
     void setHusbandry(Husbandry* husbandry) { husbandry_ = husbandry; }
     Husbandry* husbandry() const { return husbandry_; }
@@ -523,6 +531,10 @@ private:
     StepResult play(Entity pawn, Job& job, std::string& why);
 
     // Research (ResearchJobs.cpp, docs/design/research.md). `site` is the bench, `cell` where the pawn sits.
+    bool failCheckDeepWork(Entity pawn, Job& job, std::string& why);
+    StepResult deepWork(Entity pawn, Job& job, std::string& why);
+    bool deepOpenSky(Entity building) const;
+    double deepDrillRadius(Entity building) const;
     bool failCheckResearch(Entity pawn, Job& job, std::string& why);
     StepResult researchWork(Entity pawn, Job& job, std::string& why);
 
@@ -658,6 +670,7 @@ private:
 
     Rooms* rooms_ = nullptr;
     ResearchSystem* research_ = nullptr;
+    DeepResources* deep_ = nullptr;
     MedicineSystem* medicine_ = nullptr;
     PrisonerSystem* prisoners_ = nullptr;
     Husbandry* husbandry_ = nullptr;

@@ -95,6 +95,8 @@ enum class EventType : uint8_t {
     PawnMentalBreakEnded,  // it ended: `message` says how ("recovered", "downed", "died", "stopped")
     PawnInsulted,          // a pawn in an insulting spree insulted another
     PawnLeftColony,        // a pawn gave up and walked off the map for good
+    DeepDepositFound,      // a scanner found deep resources (docs/design/deep-mining.md): `def` the item, `cell` the middle of the lump, `count` its cells, `thing` the scanner (none for the long-range hook)
+    DeepPortionDrilled,    // a deep drill finished a portion: `thing` the drill, `def` what came up (a rock chunk if nothing is under it), `amount` how many, `cell` where it was taken from
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -143,6 +145,8 @@ enum class PawnAction : uint8_t {
     Butcher,      // started cutting up `target`, a corpse (once per job; the work goes on until its JobEnded)
     DropCorpse,   // put the carried `target`, a corpse, down in `cell`
     Punch,        // swung a fist at `target`, a pawn or a thing (a tantrum or berserk break: docs/design/mental-breaks.md)
+    Scan,         // started working a ground-penetrating scanner `target` (once per job; the work goes on until its JobEnded)
+    Drill,        // started working a deep drill `target` (once per job; the work goes on until its JobEnded)
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.

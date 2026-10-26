@@ -4,7 +4,7 @@
     "category": "Item", "stackLimit": 75
   },
   {
-    "defName": "Steel", "visual": {"color": [0.42, 0.46, 0.53], "pieces": 6, "layer": 0.1, "parts": [{"shape": "box", "size": [0.34, 0.17, 0.1], "color": [0.5, 0.54, 0.6]}]}, "parent": "ItemBase", "label": "steel", "unverified": ["stats.maxHitPoints"],
+    "defName": "Steel", "visual": {"color": [0.42, 0.46, 0.53], "pieces": 6, "layer": 0.1, "parts": [{"shape": "box", "size": [0.34, 0.17, 0.1], "color": [0.5, 0.54, 0.6]}]}, "parent": "ItemBase", "label": "steel", "unverified": ["stats.maxHitPoints"], "deep": {"lumpSize": [20, 40], "commonality": 4.0, "portion": 45},
     "stats": { "maxHitPoints": 100, "marketValue": 1.9, "mass": 0.5, "beauty": -4 },
     "stuffProps": {
       "categories": ["Metallic"],
@@ -26,9 +26,13 @@
     }
   },
   {
-    "defName": "Silver", "visual": {"pieces": 5, "layer": 0.04, "parts": [{"shape": "box", "size": [0.2, 0.12, 0.04], "color": [0.85, 0.87, 0.92]}]}, "parent": "ItemBase", "label": "silver", "stackLimit": 500,
+    "defName": "Silver", "visual": {"pieces": 5, "layer": 0.04, "parts": [{"shape": "box", "size": [0.2, 0.12, 0.04], "color": [0.85, 0.87, 0.92]}]}, "parent": "ItemBase", "label": "silver", "stackLimit": 500, "deep": {"lumpSize": [7, 20], "commonality": 0.5, "portion": 40},
     "stats": { "marketValue": 1.0, "mass": 0.008 }
   },
+  {"defName": "Plasteel", "parent": "ItemBase", "label": "plasteel", "stackLimit": 75, "visual": {"pieces": 5, "layer": 0.05, "parts": [{"shape": "box", "size": [0.28, 0.16, 0.05], "color": [0.62, 0.78, 0.85]}]}, "stats": {"marketValue": 9.0, "mass": 0.2}, "deep": {"lumpSize": [2, 10], "commonality": 1.0, "portion": 10}, "unverified": ["stats"]},
+  {"defName": "Uranium", "parent": "ItemBase", "label": "uranium", "stackLimit": 75, "visual": {"pieces": 5, "layer": 0.05, "parts": [{"shape": "box", "size": [0.26, 0.16, 0.06], "color": [0.35, 0.5, 0.3]}]}, "stats": {"marketValue": 6.0, "mass": 1.0}, "deep": {"lumpSize": [4, 10], "commonality": 1.0, "portion": 10}, "unverified": ["stats"]},
+  {"defName": "Jade", "parent": "ItemBase", "label": "jade", "stackLimit": 75, "visual": {"pieces": 4, "layer": 0.05, "parts": [{"shape": "box", "size": [0.18, 0.14, 0.07], "color": [0.2, 0.62, 0.42]}]}, "stats": {"marketValue": 3.0, "mass": 0.5}, "deep": {"lumpSize": [1, 5], "commonality": 0.5, "portion": 10}, "unverified": ["stats"]},
+  {"defName": "Gold", "parent": "ItemBase", "label": "gold", "stackLimit": 500, "visual": {"pieces": 5, "layer": 0.04, "parts": [{"shape": "box", "size": [0.2, 0.12, 0.04], "color": [0.9, 0.75, 0.25]}]}, "stats": {"marketValue": 10.0, "mass": 0.008}, "deep": {"lumpSize": [1, 5], "commonality": 0.5, "portion": 10}, "unverified": ["stats"]},
   {
     "defName": "ComponentIndustrial", "visual": {"pieces": 4, "layer": 0.05, "parts": [{"shape": "box", "size": [0.14, 0.14, 0.04], "color": [0.14, 0.45, 0.3]}, {"shape": "box", "size": [0.06, 0.06, 0.03], "at": [0, 0, 0.04], "color": [0.1, 0.1, 0.12]}]}, "parent": "ItemBase", "label": "component", "stackLimit": 50,
     "stats": {

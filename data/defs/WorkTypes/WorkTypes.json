@@ -49,7 +49,7 @@
   },
   {
     "defName": "Mining", "parent": "WorkTypeBase", "label": "mine", "naturalPriority": 600,
-    "relevantSkills": ["Mining"], "workTags": ["ManualSkilled", "Mining"], "inPrototype": true, "tasks": ["Mine"]
+    "relevantSkills": ["Mining"], "workTags": ["ManualSkilled", "Mining"], "inPrototype": true, "tasks": ["Mine", "DrillDeep"]
   },
   {
     "defName": "PlantCutting", "parent": "WorkTypeBase", "label": "plant cut", "naturalPriority": 500,
@@ -82,6 +82,6 @@
   },
   {
     "defName": "Research", "parent": "WorkTypeBase", "label": "research", "naturalPriority": 100,
-    "relevantSkills": ["Intellectual"], "workTags": ["Intellectual"], "tasks": ["Research"]
+    "relevantSkills": ["Intellectual"], "workTags": ["Intellectual"], "tasks": ["Research", "ScanDeep"]
   }
 ]

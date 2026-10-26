@@ -197,7 +197,7 @@ void JobSystem::interruptForEmergency(Entity pawn) {
     const Job& current = reg.get<Worker>(pawn).job;
     if (medicine_ == nullptr || current.forced || current.handsOn != 0 ||
         (current.type != JobType::Wait && current.type != JobType::HaulToCell && current.type != JobType::Recreate &&
-         current.type != JobType::Research && current.type != JobType::CleanFilth && !jobIsGather(current.type))) {
+         current.type != JobType::Research && current.type != JobType::DeepWork && current.type != JobType::CleanFilth && !jobIsGather(current.type))) {
         return;
     }
     if ((now() + static_cast<int64_t>(entt::to_integral(pawn))) % kMedEmergencyEvery != 0) {

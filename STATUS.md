@@ -2,6 +2,8 @@
 
 Updated 2026-10-26.
 
+Stage 2 deep mining done: a ground-penetrating scanner (research, 700 W, needs open sky) is worked by a colonist and finds a deposit of steel, silver, plasteel, uranium, jade or gold after about 3 game days of work (6 at most); a deep drill (research, 200 W) takes a portion out of the deposit within 2.6 m every cycle, scaled by the miner's yield; `DeepResources::findDeposit` is the hook for a later long-range mineral scanner (`docs/design/deep-mining.md`, tests `DeepMiningTests`). Chunks, stonecutting and mining yield by skill were already in. Save section `deep` 1. Sim only.
+
 Stage 2 colonist needs extras done: a colonist outside its safe temperature walks to the nearest comfortable (else safe) cell and waits there (`SeekShelter` job, `docs/design/temperature.md`); Gourmand's faster hunger, Quick sleeper's faster rest, Night owl's moods awake at night or by day and Greedy's mood without a bedroom are in (`docs/design/needs.md`, `mood.md`). Tests: `ColonistTraitNeedsTests`. Save format unchanged (new job type number at the end).
 Stage 2 animal extras done: tame animals can be named (`SetAnimalName`), one command marks every wild animal in a rectangle to tame or hunt, or every tame one to slaughter (`MarkAnimalsInArea`), and doors are gates to animals: they never walk through one (`docs/design/husbandry.md`, tests `HusbandryTests`). Save section `husbandry` 3. Sim only.
 
