@@ -25,10 +25,9 @@ float needJobsDistSq(CellPos a, CellPos b) {
     return dx * dx + dy * dy;
 }
 
+// Across levels a level counts as kLevelDetourM metres more (docs/design/levels.md).
 float needJobsDistSq(const Position& a, CellPos b) {
-    const float dx = a.x - (static_cast<float>(b.x) + 0.5f);
-    const float dy = a.y - (static_cast<float>(b.y) + 0.5f);
-    return dx * dx + dy * dy;
+    return levelDistSq(a.x - (static_cast<float>(b.x) + 0.5f), a.y - (static_cast<float>(b.y) + 0.5f), a.level - b.level);
 }
 
 }  // namespace
@@ -144,7 +143,7 @@ bool JobSystem::findFood(Entity pawn, Job& out) {
     for (const auto [item, thing, pos, stack] : reg.view<const Thing, const Position, const StackCount>().each()) {
         (void)stack;
         const int tier = thing.def.value < foodTier_.size() ? foodTier_[thing.def.value] : -1;
-        if (tier < 0 || pos.level != at.level || (tier == 0 && needs.food >= rules_.foodRavenousBelow)) {
+        if (tier < 0 || (tier == 0 && needs.food >= rules_.foodRavenousBelow)) {
             continue;
         }
         const float dist = needJobsDistSq(at, cellOf(pos));
@@ -348,7 +347,7 @@ bool JobSystem::findBed(Entity pawn, Entity& bed, CellPos& cell) {
         }
         const CellPos c{rect.minX + index % rect.sizeX, rect.minY + index / rect.sizeX, rect.level};
         const float dist = needJobsDistSq(at, c);
-        if (c.level != at.level || (best != kNoEntity && (dist > bestDist || (dist == bestDist && candidate >= best))) ||
+        if ((best != kNoEntity && (dist > bestDist || (dist == bestDist && candidate >= best))) ||
             !usable(candidate, c)) {
             continue;
         }

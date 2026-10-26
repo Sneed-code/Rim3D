@@ -9,6 +9,7 @@
 #include "ColonySim/JobType.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Pathfinder.h"
+#include "ColonySim/Skills.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Zones.h"
 
@@ -174,6 +175,8 @@ class Farming;
 class Filth;
 class Fire;
 class SpoilageSystem;
+class CraftingSystem;
+struct Recipe;
 class HealthSystem;
 class MedicineSystem;
 class PrisonerSystem;
@@ -270,6 +273,14 @@ public:
     // Ends the pawn's job, if it has one, as interrupted for `why`: reservations let go, what it
     // carried put down. Used when the player takes the pawn over (ControlPawnCommand).
     void interrupt(Entity pawn, const std::string& why);
+
+    // Skill learning (docs/design/skills.md). Every job that uses a skill calls `learnSkill` each
+    // second it works; `skillsNewDay` is Sim's midnight (daily XP total starts over, high skills decay).
+    const SkillRules& skillRules() const { return skillRules_; }
+    void skillsNewDay();
+    // The skill the pawn's current job uses (a Skills `defName`), or empty for a job that uses none
+    // (hauling, eating, sleeping...). The whole job counts, the walk to the work too.
+    std::string activeSkill(Entity pawn) const;
     // Schedule: what a pawn does in an hour of the day (0 to 23).
     bool setSchedule(Entity pawn, int hour, ScheduleKind kind, std::string& error);
     // Bed ownership. `pawn` becomes an owner of `bed` (and stops owning any other bed); kNoEntity
@@ -314,6 +325,8 @@ public:
     // Meals made by a bill remember their ingredients and may be poisoned; eating a poisoned meal may
     // give food poisoning (Spoilage.h). Without it neither happens.
     void setSpoilage(SpoilageSystem* spoilage) { spoilage_ = spoilage; }
+    void setCrafting(CraftingSystem* crafting) { crafting_ = crafting; }
+    CraftingSystem* crafting() const { return crafting_; }
     void setFarming(Farming* farming) { farming_ = farming; }
     Farming* farming() const { return farming_; }
     Filth* filth() const { return filth_; }
@@ -414,6 +427,9 @@ public:
     // `better`, then the nearest, that takes the def, has room, isn't held by another pawn and
     // can be reached from `from`. False if there is none.
     bool findStorageCell(DefId def, CellPos from, StoragePriority better, Entity pawn, CellPos& out) const;
+    // Like findStorageCell, but only in the stockpile `zone` (any priority). False if it has no room, takes
+    // no `def` or is gone.
+    bool findStorageCellIn(uint32_t zone, DefId def, CellPos from, Entity pawn, CellPos& out) const;
     // How many of an item def a pawn can carry at once: its `carryingCapacity` (RimWorld's 75 kg when
     // the pawn def has none) over the def's `stats.mass`, at least 1. It may be more than one stack.
     int carryLimit(Entity pawn, DefId def) const;
@@ -579,7 +595,10 @@ private:
     void returnIngredients(Entity pawn, const Job& job);
     // Makes `count` of an item def and puts it down on the nearest free cell near the pawn.
     // `madeFrom` is set for a bill's products: the spoilage system notes the ingredients on each new stack.
-    void dropNewItems(Entity pawn, DefId def, int count, const std::vector<BillUsed>* madeFrom = nullptr);
+    // Makes `count` of an item def and sets them down by the pawn. A product (`recipe` set) is also made of its
+    // stuff, given a quality and marked for its bill's stockpile (CraftingSystem::finishProduct).
+    void dropNewItems(Entity pawn, DefId def, int count, const std::vector<BillUsed>* madeFrom = nullptr,
+                      const Recipe* recipe = nullptr, uint32_t storeZone = 0);
     bool retargetStorage(Entity pawn, Job& job);
     void dropCarried(Entity pawn);
     // Puts what the pawn carries on `cell` if all of it fits there and no other pawn holds the cell.
@@ -650,12 +669,12 @@ private:
         double plantSpeedBase = 0.08;
         double plantSpeedPerLevel = 0.115;
         double plantXpPerSecond = 0.059028;
+        double constructionXpPerSecond = 0.173611;
         double growthYieldFloor = 0.5;
         int unskilledLevel = 8;
         std::vector<double> yieldByLevel;
-        std::vector<double> xpToNextLevel;
-        double passionLearn[3] = {0.35, 1.0, 1.5};
     } gather_;
+    SkillRules skillRules_;
     int manipulationIndex_ = -1;  // position of the Manipulation capacity in Health::capacities, or -1
     std::map<TargetKey, Entity> reservations_;  // follows from the jobs; rebuilt on load
     int64_t idleSeconds_ = 0;
@@ -665,6 +684,7 @@ private:
     Filth* filth_ = nullptr;
     Fire* fire_ = nullptr;
     SpoilageSystem* spoilage_ = nullptr;
+    CraftingSystem* crafting_ = nullptr;
     Farming* farming_ = nullptr;
     std::vector<Entity> order_;              // scratch: workers this step
     std::vector<WorkCandidate> candidates_;  // scratch: one think

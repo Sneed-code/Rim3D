@@ -87,6 +87,10 @@ const char* commandName(const Command& command) {
                 return "AddFilth";
             } else if constexpr (std::is_same_v<Type, SetRefuelCommand>) {
                 return "SetRefuel";
+            } else if constexpr (std::is_same_v<Type, SetBillOptionsCommand>) {
+                return "SetBillOptions";
+            } else if constexpr (std::is_same_v<Type, MoveBillCommand>) {
+                return "MoveBill";
             } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
                 return "ShortCircuit";
             } else if constexpr (std::is_same_v<Type, SetResearchCommand>) {
@@ -115,6 +119,8 @@ const char* commandName(const Command& command) {
                 return "RemoveAnimalZoneCells";
             } else if constexpr (std::is_same_v<Type, AssignAnimalZoneCommand>) {
                 return "AssignAnimalZone";
+            } else if constexpr (std::is_same_v<Type, SetBreedingCommand>) {
+                return "SetBreeding";
             } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
                 return "Melee";
             } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
@@ -265,6 +271,7 @@ const char* eventTypeName(EventType type) {
         case EventType::SocialFight: return "SocialFight";
         case EventType::OutOfFuel: return "OutOfFuel";
         case EventType::Refueled: return "Refueled";
+        case EventType::FirefoamPopped: return "FirefoamPopped";
     }
     return "?";
 }

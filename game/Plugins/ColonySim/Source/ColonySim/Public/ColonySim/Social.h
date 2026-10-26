@@ -129,6 +129,18 @@ struct COLONY_API SocialRules {
     // other pawn dies (the strongest of these only).
     float bondOpinion[4] = {40.0f, 60.0f, -25.0f, -25.0f};  // by BondKind
     std::string spouseDeath, loverDeath, friendDeath, rivalDeath;
+    // Social skill (ours): each level adds this share to what a good chat gives and to the odds of romance.
+    float skillOpinionPerLevel = 0.05f;
+    float skillRomancePerLevel = 0.02f;
+    // Cheating and jealousy (ours): a pawn with a lover or spouse whom it thinks less of than `cheatPartnerBelow`
+    // makes romance attempts on others at `cheatWeightFactor` times the usual weight.
+    float cheatWeightFactor = 0.15f;
+    float cheatPartnerBelow = 60.0f;
+    std::string cheatedLabel = "cheated on me", tookPartnerLabel = "took my partner";
+    float cheatedOffset = -40.0f, cheatedDays = 60.0f, tookPartnerOffset = -20.0f, tookPartnerDays = 60.0f;
+    float jealousFightChance = 0.25f;    // the betrayed one fights the new lover (not a Wimp or a Kind one)
+    std::string cheatedThought;          // mood thought triggers; empty for none
+    std::string weddingGuestThought, weddingPartyThought;
     float fightOffset = -20.0f;          // each one's opinion of the other afterwards...
     float fightDays = 30.0f;             // ...for this long
     std::vector<SocialInteraction> interactions;
@@ -189,6 +201,8 @@ public:
         uint64_t weddings = 0;
         uint64_t breakups = 0;
         uint64_t fights = 0;
+        uint64_t cheats = 0;          // romances begun by somebody who already had a partner
+        uint64_t weddingGuests = 0;   // thoughts of a wedding party given to the others
     };
     const Stats& stats() const { return stats_; }
     Stats& stats() { return stats_; }
@@ -216,6 +230,9 @@ private:
     void perform(Entity initiator, Entity recipient, const SocialInteraction& interaction, int outcome);
     void thought(Entity pawn, const std::string& trigger);
     void learn(Entity pawn, double xp);
+    void jealousy(Entity betrayed, Entity cheater, Entity newLover);
+    void weddingParty(Entity a, Entity b);
+    float skillFactor(Entity pawn, float perLevel) const;
     void startFight(Entity a, Entity b);
     void endFight(Entity a, Entity b, const char* why);
     void stepFights();

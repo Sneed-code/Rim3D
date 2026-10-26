@@ -52,7 +52,8 @@ public:
     // Goes up on every change, so a cache of zones can tell it is stale.
     uint64_t changeCount() const { return changeCount_; }
 
-    // A new stockpile of the cells in `area` that can hold one: walkable ground and no zone yet.
+    // A new stockpile of the cells in `area` that can hold one: walkable ground (an upper floor too,
+    // docs/design/levels.md) and no zone yet.
     // Returns its id, or kNoZone (and changes nothing) if no cell qualifies.
     // Cells another kind of zone has taken (a growing zone) can't be stockpile cells. Not saved.
     void setCellTaken(std::function<bool(CellPos)> taken) { taken_ = std::move(taken); }
@@ -72,10 +73,11 @@ public:
 private:
     StockpileZone* findMutable(ZoneId id);
     size_t slot(CellPos c) const;
+    void sizeFor(int level);
 
     const Map& map_;
     std::vector<StockpileZone> stockpiles_;
-    std::vector<ZoneId> zoneOf_;  // per cell of level 0
+    std::vector<ZoneId> zoneOf_;  // per cell, level after level, up to the highest level with a zone
     ZoneId nextId_ = 1;
     uint64_t changeCount_ = 0;
     std::function<bool(CellPos)> taken_;

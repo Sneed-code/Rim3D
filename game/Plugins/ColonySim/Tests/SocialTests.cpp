@@ -273,8 +273,7 @@ TEST_CASE("Social: romance is a bond only, one at a time, and marriage needs a l
     CHECK(socCountEvents(sim, EventType::BondChanged, "Lover") == 1);
     // A lover is thought of more kindly: +40 over what the two would otherwise think (the gesture adds 10).
     CHECK(sim.social().opinion(a, b) >= sim.social().opinion(a, c) + 30.0f - 10.0f);
-    // Neither can start another romance while they are together.
-    CHECK_FALSE(socTalk(sim, a, c, "RomanceAttempt", 1));
+    // Nobody can court someone who is already together with another (the partner may stray: see cheating).
     CHECK_FALSE(socTalk(sim, c, b, "RomanceAttempt", 1));
     // A refused proposal costs the asker a thought and changes no bond.
     SOC_REQUIRE(socTalk(sim, a, b, "MarriageProposal", 0));
@@ -530,4 +529,67 @@ TEST_CASE("Social: the talk command is replayed, saved by name and known by name
     Command command;
     CHECK(commandFromName("Interact", command));
     CHECK(std::string(commandName(command)) == "Interact");
+}
+
+TEST_CASE("Social: a skilled talker's good chat counts for more and romance is likelier") {
+    Sim sim = socSim();
+    const Entity a = socPawn(sim, CellPos{20, 20, 0});
+    const Entity b = socPawn(sim, CellPos{22, 20, 0});
+    const Entity c = socPawn(sim, CellPos{20, 22, 0});
+    socStartQuiet(sim);
+    sim.things().registry().get<Colonist>(b).skills[0].level = 10;
+    const float before = sim.social().opinion(c, a);
+    SOC_REQUIRE(socTalk(sim, a, c, "DeepTalk", 1));
+    const float plain = sim.social().opinion(c, a) - before;
+    const float before2 = sim.social().opinion(c, b);
+    SOC_REQUIRE(socTalk(sim, b, c, "DeepTalk", 1));
+    const float skilled = sim.social().opinion(c, b) - before2;
+    CHECK(plain == doctest::Approx(6.0f));
+    CHECK(skilled == doctest::Approx(6.0f * (1.0f + 10.0f * sim.social().rules().skillOpinionPerLevel)));
+    // A slight is no softer for skill.
+    const float before3 = sim.social().opinion(c, b);
+    SOC_REQUIRE(socTalk(sim, b, c, "Slight", 1));
+    CHECK(sim.social().opinion(c, b) - before3 == doctest::Approx(-5.0f));
+}
+
+TEST_CASE("Social: a lover who strays is cheating; the betrayed one is upset and may fight the new lover") {
+    Sim sim = socSim();
+    const Entity a = socPawn(sim, CellPos{20, 20, 0});
+    const Entity b = socPawn(sim, CellPos{22, 20, 0}, {"Kind"});  // too kind to fight
+    const Entity c = socPawn(sim, CellPos{20, 22, 0});
+    socStartQuiet(sim);
+    SOC_REQUIRE(socTalk(sim, a, b, "RomanceAttempt", 1));
+    const float before = sim.social().opinion(b, a);
+    SOC_REQUIRE(socTalk(sim, a, c, "RomanceAttempt", 1));
+    const SocialRules& rules = sim.social().rules();
+    // Both bonds stand, the betrayed one thinks worse of both and is upset.
+    CHECK(sim.social().bondBetween(a, b) != nullptr);
+    CHECK(sim.social().bondBetween(a, c) != nullptr);
+    CHECK(sim.social().stats().cheats == 1);
+    CHECK(sim.social().opinion(b, a) == doctest::Approx(before + rules.cheatedOffset));
+    CHECK(sim.social().opinion(b, c) <= sim.social().opinion(c, b) + rules.tookPartnerOffset + 20.0f);
+    CHECK(socThoughtHas(sim, b, "CheatedOnMe"));
+    CHECK_FALSE(socThoughtHas(sim, a, "CheatedOnMe"));
+    CHECK(socCountEvents(sim, EventType::Interaction, "Cheated") == 1);
+    CHECK_FALSE(sim.social().fighting(b));
+    // The one asked must be free.
+    CHECK_FALSE(socTalk(sim, c, b, "RomanceAttempt", 1));
+}
+
+TEST_CASE("Social: a wedding is a party: the guests and the couple get their thoughts") {
+    Sim sim = socSim();
+    const Entity a = socPawn(sim, CellPos{20, 20, 0});
+    const Entity b = socPawn(sim, CellPos{22, 20, 0});
+    const Entity guest = socPawn(sim, CellPos{20, 22, 0});
+    socStartQuiet(sim);
+    SOC_REQUIRE(socTalk(sim, a, b, "RomanceAttempt", 1));
+    CHECK_FALSE(socThoughtHas(sim, guest, "AttendedWedding"));
+    SOC_REQUIRE(socTalk(sim, a, b, "MarriageProposal", 1));
+    CHECK(sim.social().stats().weddings == 1);
+    CHECK(socThoughtHas(sim, a, "WeddingParty"));
+    CHECK(socThoughtHas(sim, b, "WeddingParty"));
+    CHECK(socThoughtHas(sim, a, "GotMarried"));
+    CHECK(socThoughtHas(sim, guest, "AttendedWedding"));
+    CHECK_FALSE(socThoughtHas(sim, a, "AttendedWedding"));
+    CHECK(sim.social().stats().weddingGuests == 1);
 }

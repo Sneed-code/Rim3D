@@ -20,6 +20,7 @@
 #include "ColonySim/Raids.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Spoilage.h"
+#include "ColonySim/Crafting.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Husbandry.h"
@@ -58,6 +59,8 @@
 namespace colony {
 
 namespace {
+
+constexpr int64_t kBillUpkeepSeconds = 60;  // "until you have" bills with a restart stock look at their stock this often
 
 const DefDatabase& simEmptyDefs() {
     static const DefDatabase empty;
@@ -192,6 +195,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setFilth(filth_.get());
     jobs_->setApparel(apparel_.get());
     jobs_->setSpoilage(spoilage_.get());
+    crafting_ = std::make_unique<CraftingSystem>(*things_, *apparel_, *zones_, *defs_, settings.seed);
+    jobs_->setCrafting(crafting_.get());
     jobs_->setFarming(farming_.get());
     fire_ = std::make_unique<Fire>(map_, *things_, *plants_, *floors_, *filth_, *rooms_, *temperature_, *health_, *weather_, *defs_,
                                    settings.seed);
@@ -206,6 +211,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     // A wood-fired generator makes power only with fuel, and burns it only while it makes power.
     power_->setFuel([this](Entity building) { return jobs_->fuel().lit(building); });
     jobs_->fuel().setBurning([this](Entity building) { return !power_->hasPower(building) || power_->stateOf(building) != PowerState::Off; });
+    mood_->setActiveSkill([this](Entity pawn) { return jobs_->activeSkill(pawn); });
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     explosives_ = std::make_unique<ExplosiveSystem>(*things_, map_, *combat_, *health_, *defs_);
     fighters_->setExplosives(explosives_.get());
@@ -221,6 +227,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     husbandry_->setEventLog(&events_);
     breeding_ = std::make_unique<Breeding>(*things_, map_, *animals_, *husbandry_, *defs_, time_, settings.seed);
     breeding_->setEventLog(&events_);
+    breeding_->setClimate(temperature_.get());
     jobs_->setBreeding(breeding_.get());
     animals_->setHusbandry(husbandry_.get());
     animals_->setPathfinder(&pathfinder_);
@@ -246,6 +253,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     melee_->setEventLog(&events_);
     fighters_->setMelee(melee_.get());
     upperFloors_ = std::make_unique<UpperFloors>(map_, *rooms_, *things_);
+    construction_->setUpperFloors(upperFloors_.get());
     animals_->setMelee(melee_.get());
     defense_ = std::make_unique<DefenseSystem>(*things_, map_, *combat_, *health_, *power_, *defs_, time_);
     defense_->setEventLog(&events_);
@@ -672,6 +680,12 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!husbandry_->assignZone(assignAnimalZone->animal, assignAnimalZone->zone, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* setBreeding = std::get_if<SetBreedingCommand>(&command)) {
+        const bool ok = setBreeding->animal != kNoEntity ? breeding_->setBreeding(setBreeding->animal, setBreeding->allow, error)
+                                                         : husbandry_->setZoneBreeding(setBreeding->zone, setBreeding->allow, error);
+        if (!ok) {
+            commandFailed(id, error);
+        }
     } else if (const auto* createGrowing = std::get_if<CreateGrowingZoneCommand>(&command)) {
         const DefId crop = defs_->idOf("Things", createGrowing->crop);
         if (farming_->createZone(createGrowing->area, crop, error) == kNoGrowingZone) {
@@ -909,6 +923,23 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!done) {
             commandFailed(id, error);
         }
+    } else if (const auto* billOptions = std::get_if<SetBillOptionsCommand>(&command)) {
+        BillSystem::Options options;
+        options.skillMin = billOptions->skillMin;
+        options.skillMax = billOptions->skillMax;
+        options.radius = billOptions->radius;
+        options.storeZone = billOptions->storeZone;
+        options.unpauseAt = billOptions->unpauseAt;
+        options.disallowed = billOptions->disallowed;
+        if (billOptions->storeZone != 0 && zones_->find(billOptions->storeZone) == nullptr) {
+            commandFailed(id, "there is no stockpile " + std::to_string(billOptions->storeZone));
+        } else if (!jobs_->bills().setOptions(billOptions->building, billOptions->bill, options, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* moveBill = std::get_if<MoveBillCommand>(&command)) {
+        if (!jobs_->bills().moveBill(moveBill->building, moveBill->bill, moveBill->index, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* setBill = std::get_if<SetBillCommand>(&command)) {
         if (!jobs_->bills().setBill(setBill->building, setBill->bill, setBill->mode, setBill->count, setBill->suspended,
                                     error)) {
@@ -1074,9 +1105,16 @@ void Sim::step() {
     roomStats_->step(time_.seconds);
     temperature_->step(time_.seconds);
     spoilage_->step(time_.seconds);
+    if (time_.seconds % kBillUpkeepSeconds == 0) {
+        jobs_->bills().step();
+        crafting_->step();
+    }
     time_.seconds += 1;
     weather_->step(time_.seconds);
     spoilage_->setOutdoorFactor(weather_->deteriorationFactor());
+    if (time_.seconds % kSecondsPerDay == 0) {
+        jobs_->skillsNewDay();
+    }
     if (time_.seconds % kSecondsPerHour == 0) {
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
         farming_->growHour(time_.seconds);
@@ -1202,6 +1240,20 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Mover* mover = reg.try_get<Mover>(entity)) {
             view.vx = mover->vx;
             view.vy = mover->vy;
+            // On stairs or a ladder the pawn is drawn the share `climb` of the way from where it
+            // stands to the cell at the other end (docs/design/levels.md).
+            if (mover->climbing(pos.level)) {
+                const CellPos to = mover->path[mover->next];
+                if (const LevelLink* link = map_.levelLinkBetween(cellOf(pos), to)) {
+                    const float t = std::clamp(mover->climbed / link->length, 0.0f, 1.0f);
+                    const float tx = static_cast<float>(to.x) + 0.5f;
+                    const float ty = static_cast<float>(to.y) + 0.5f;
+                    view.climb = t;
+                    view.x = pos.x + (tx - pos.x) * t;
+                    view.y = pos.y + (ty - pos.y) * t;
+                    view.z += (map_.heightAt(tx, ty, to.level) - view.z) * t;
+                }
+            }
             view.firstWaypoint = static_cast<uint32_t>(out.waypoints.size());
             for (size_t k = mover->next; k < mover->path.size(); ++k) {
                 out.waypoints.push_back(PathPointView{static_cast<float>(mover->path[k].x) + 0.5f,
@@ -1242,7 +1294,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const BillList* list = reg.try_get<BillList>(entity)) {
             view.firstBill = static_cast<uint32_t>(out.bills.size());
             for (const Bill& bill : list->bills) {
-                out.bills.push_back(BillView{bill.id, bill.recipe, bill.mode, bill.count, bill.suspended});
+                out.bills.push_back(BillView{bill.id, bill.recipe, bill.mode, bill.count, bill.suspended, bill.skillMin, bill.skillMax,
+                                             bill.radius, bill.storeZone, bill.unpauseAt, bill.satisfied, bill.disallowed});
             }
             view.billCount = static_cast<uint32_t>(out.bills.size()) - view.firstBill;
         }
@@ -1371,6 +1424,12 @@ void Sim::writeSnapshot(Snapshot& out) const {
             }
             view.quality = apparel_->stats().qualityOf(reg, entity);
             view.tainted = reg.all_of<Tainted>(entity);
+        } else if (view.category == ThingCategory::Item && crafting_->hasQuality(thing.def)) {
+            // Weapons and other crafted things with a quality: made of a stuff and of a quality like clothes.
+            if (const MadeOf* made = reg.try_get<MadeOf>(entity)) {
+                view.stuff = made->stuff;
+            }
+            view.quality = apparel_->stats().qualityOf(reg, entity);
         }
         if (view.category == ThingCategory::Pawn) {
             view.faction = fighters_->factionOf(entity);
@@ -1580,6 +1639,7 @@ uint64_t Sim::stateHash() const {
     temperature_->hashState(h);
     h.add(map_.upperFloorHash());
     spoilage_->hashState(h);
+    crafting_->hashState(h);
     farming_->hashState(h);
 
     // The entity ids the registry has handed out: the free list in reuse order (it decides the
@@ -1663,6 +1723,9 @@ uint64_t Sim::stateHash() const {
             h.add(static_cast<uint64_t>(mover->ghostSteps));
             h.add(static_cast<uint64_t>(mover->heldSteps));
             h.add(mover->gaveUp);
+            if (mover->climbed != 0.0f) {
+                h.add(mover->climbed);  // M2; only when climbing, so older hashes stay
+            }
         }
         if (const Colonist* c = reg.try_get<Colonist>(e)) {
             for (const std::string* text : {&c->firstName, &c->nickName, &c->lastName, &c->childhood, &c->adulthood}) {
@@ -1680,6 +1743,7 @@ uint64_t Sim::stateHash() const {
                 h.add(s.level);
                 h.add(static_cast<int>(s.passion));
                 h.add(s.xp);
+                h.add(s.xpToday);
                 h.add(s.disabled);
             }
             for (const std::string& tag : c->disabledWorkTags) {
@@ -1727,7 +1791,19 @@ uint64_t Sim::stateHash() const {
                 h.add(static_cast<int>(bill.mode));
                 h.add(bill.count);
                 h.add(bill.suspended);
+                h.add(bill.skillMin);
+                h.add(bill.skillMax);
+                h.add(bill.radius);
+                h.add(bill.storeZone);
+                h.add(bill.unpauseAt);
+                h.add(bill.satisfied);
+                for (const DefId def : bill.disallowed) {
+                    h.add(def.value);
+                }
             }
+        }
+        if (const StoreIn* store = reg.try_get<StoreIn>(e)) {
+            h.add(store->zone);
         }
         if (const Fuel* fuel = reg.try_get<Fuel>(e)) {
             h.add(fuel->amount);

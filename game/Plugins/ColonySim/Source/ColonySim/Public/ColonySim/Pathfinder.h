@@ -31,6 +31,8 @@ class StateHasher;
 // Every walkable cell costs the same, except a door cell: it costs `doorCost` extra metres (a
 // pawn waits for the door to open, docs/design/rooms.md), so a path takes a gap in the wall that
 // is a few metres longer in preference to a door. Cells with a blocking building can't be walked.
+// Stairs and ladders join two cells on different levels and cost their climb (Map::LevelLink,
+// docs/design/levels.md), so a path can go up and down; a path's cells carry their level.
 // Terrain, slope and danger costs come later.
 
 // A request in the queue. Copy it freely; a ticket for a freed request is simply unknown.
@@ -102,7 +104,7 @@ public:
     float doorCost() const { return doorCost_; }
 
     // Queues a path search from `start` to `goal`. A request that can't succeed (different
-    // reachability groups, off the map, another level) is Failed at once; start == goal is Found
+    // reachability groups, off the map) is Failed at once; start == goal is Found
     // at once with an empty path. Every ticket must be taken or cancelled to free its slot.
     PathTicket request(CellPos start, CellPos goal);
     PathStatus status(PathTicket ticket) const;
@@ -121,7 +123,7 @@ public:
     // Finds a path now, with no budget. For tests and tools: it throws away the progress of a
     // half-done queued search, which then starts again on the next update.
     bool findPath(CellPos start, CellPos goal, std::vector<CellPos>& out);
-    // Plain cell A* over the whole level, without regions: the best path, for tests to compare.
+    // Plain cell A* over every level, without regions: the best path, for tests to compare.
     bool findPathFullGrid(CellPos start, CellPos goal, std::vector<CellPos>& out);
 
     const PathStats& stats() const { return stats_; }
@@ -163,6 +165,9 @@ private:
     Outcome runCells(int64_t& work, int64_t budget);
     Outcome runSearch(int64_t& work, int64_t budget);
     void buildPath(std::vector<CellPos>& out) const;
+    void sizeCellArrays(int levels);
+    // A cell's place in the cell pass's arrays: level after level.
+    int cellKey(CellPos c) const;
 
     Map& map_;
 
@@ -196,7 +201,8 @@ private:
     uint32_t goalRegion_ = 0;
     uint32_t goalNode_ = 0;  // == the region id limit when the search began
 
-    // Cell pass, indexed by cell.
+    // Cell pass, indexed by cellKey.
+    int cellsPerLevel_ = 0;
     std::vector<float> g_;
     std::vector<int> parent_;
     std::vector<uint32_t> seen_;    // == generation_ when g_ and parent_ are valid

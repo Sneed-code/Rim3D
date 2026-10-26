@@ -99,7 +99,8 @@ wait in steps.
   (S4) but do not shape the route yet; [movement.md](movement.md) says why.
 - **Smoothing and local avoidance** are S4: [movement.md](movement.md). The pawn takes a path
   with `takePath`, then `smoothPath` and `Mover::walkTo` (`Sim.cpp` does it for the hauling test).
-- **Stairs**: other levels have no regions yet; stairs will be region links between levels.
+- **Stairs** (M2): stairs and ladders link regions on two levels, and the cell search steps over them at
+  their climb cost; see [levels.md](levels.md).
 - **Shared flow fields** for many raiders heading to one place come with the raid (F6).
 - **Per-faction doors**: everyone walks through every door (see regions.md).
 - **Speed per cell**: about 2,500 to 4,000 nodes per ms in the cloud. If a profile shows the

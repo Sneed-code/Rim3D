@@ -184,6 +184,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     plan("Stool", "WoodLog", 4, 3);
     plan("FueledStove", "", 4, 1);
     plan("HorseshoesPin", "WoodLog", 6, 3);  // something to do in the evening hours (C18)
+    plan("CraftingSpot", "", 7, 1);          // a club to make from the chopped wood (C14)
     for (const Plan& p : plans) {
         sim.submit(PlaceBlueprintCommand{p.defName, p.stuff, p.cell, p.rot});
     }
@@ -251,6 +252,29 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         colonists.push_back(pawn);
     }
 
+    // Skills under level 10 do not decay: their total experience (levels counted in) shows that the
+    // work taught something.
+    std::vector<std::pair<Entity, size_t>> learners;
+    for (const Entity pawn : colonists) {
+        const Colonist* colonist = sim.colonistOf(pawn);
+        for (size_t i = 0; colonist != nullptr && i < colonist->skills.size(); ++i) {
+            if (colonist->skills[i].level < 10) {
+                learners.emplace_back(pawn, i);
+            }
+        }
+    }
+    const auto skillXpTotal = [&]() {
+        double total = 0.0;
+        for (const auto& [pawn, index] : learners) {
+            const SkillRecord& skill = sim.colonistOf(pawn)->skills[index];
+            total += static_cast<double>(skill.xp);
+            for (int level = 0; level < skill.level; ++level) {
+                total += sim.jobs().skillRules().xpToNextLevel[static_cast<size_t>(level)];
+            }
+        }
+        return total;
+    };
+    const double skillXpStart = skillXpTotal();
     // The run.
     std::map<Entity, Stuck> stuck;
     uint64_t died = 0;
@@ -279,6 +303,8 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     float maxMalnutrition = 0.0f;
     float minMood = 100.0f;
     bool billAdded = false;
+    bool clubBillAdded = false;
+    uint64_t clubsMade = 0;
     bool bedsAssigned = false;
     int64_t stoveBuiltAt = -1;
     int64_t allBuiltAt = -1;
@@ -312,7 +338,13 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 case EventType::PlantRemoved: ++felled; break;
                 case EventType::PlantHarvested: ++picked; break;
                 case EventType::PawnAction: cleaned += e.action == PawnAction::Clean ? 1 : 0; break;
-                case EventType::RecipeDone: mealsMade += static_cast<uint64_t>(std::max(0.0f, e.amount)); break;
+                case EventType::RecipeDone:
+                    if (defs->get(e.def).defName() == "MakeClub") {
+                        clubsMade += static_cast<uint64_t>(std::max(0.0f, e.amount));
+                    } else {
+                        mealsMade += static_cast<uint64_t>(std::max(0.0f, e.amount));
+                    }
+                    break;
                 case EventType::Refueled: woodIn += static_cast<uint64_t>(std::max(0.0f, e.amount)); break;
                 case EventType::OutOfFuel: ++outOfFuel; break;
                 case EventType::CommandFailed:
@@ -391,6 +423,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
             int built = 0;
             int stoveId = 0;
             Entity stove = kNoEntity;
+            Entity craftingSpot = kNoEntity;
             std::vector<Entity> beds;
             for (const ThingView& t : snapshot.things) {
                 if (t.category != ThingCategory::Building || t.stage != ConstructionStage::Built) {
@@ -401,6 +434,8 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 if (name == "FueledStove") {
                     stove = t.id;
                     ++stoveId;
+                } else if (name == "CraftingSpot") {
+                    craftingSpot = t.id;
                 } else if (name == "Bed") {
                     beds.push_back(t.id);
                 }
@@ -415,6 +450,11 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 // Cook until there are 8 meals on the map, so the stove keeps the colony fed.
                 sim.submit(AddBillCommand{stove, "CookMealSimple", BillMode::UntilHave, 8});
                 billAdded = true;
+            }
+            if (craftingSpot != kNoEntity && !clubBillAdded) {
+                // One club, made of chopped wood by whoever has Crafting work.
+                sim.submit(AddBillCommand{craftingSpot, "MakeClub", BillMode::Count, 1});
+                clubBillAdded = true;
             }
             if (!bedsAssigned && static_cast<int>(beds.size()) >= kBeds && colonists.size() >= static_cast<size_t>(kBeds)) {
                 for (int b = 0; b < kBeds; ++b) {
@@ -472,6 +512,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         expectedDoors += p.defName == "Door" ? 1 : 0;
     }
 
+    const double skillXpGained = skillXpTotal() - skillXpStart;
     int friendPairs = 0;
     int rivalPairs = 0;
     for (size_t i = 0; i < colonists.size(); ++i) {
@@ -494,7 +535,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 "\"mined\":%llu,\"felled\":%llu,\"picked\":%llu,"
                 "\"planned\":%zu,\"walls\":%d,\"doors\":%d,\"beds\":%d,\"tables\":%d,\"stools\":%d,\"stoves\":%d,\"unfinished\":%d,"
                 "\"allBuiltAtSecond\":%lld,\"stoveBuiltAtSecond\":%lld,\"roomOk\":%s,"
-                "\"woodIn\":%llu,\"outOfFuel\":%llu,\"mealsCooked\":%llu,\"ate\":%llu,\"atTable\":%llu,\"woke\":%llu,\"wokeInBed\":%llu,"
+                "\"skillXpGained\":%.0f,\"woodIn\":%llu,\"outOfFuel\":%llu,\"mealsCooked\":%llu,\"clubsMade\":%llu,\"ate\":%llu,\"atTable\":%llu,\"woke\":%llu,\"wokeInBed\":%llu,"
                 "\"cleaned\":%llu,\"filthLeft\":%zu,\"roomBeauty\":%.2f,\"roomImpressiveness\":%.1f,"
                 "\"weatherChanges\":%llu,\"commandsFailed\":%llu,\"failedJobs\":%llu,\"stateHash\":\"%016llx\"}}\n",
                 static_cast<unsigned long long>(seed), mapSize, days, colonists.size(), static_cast<unsigned long long>(died),
@@ -508,9 +549,10 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 static_cast<unsigned long long>(felled), static_cast<unsigned long long>(picked), plans.size(),
                 builtBy["Wall"], builtBy["Door"], builtBy["Bed"], builtBy["Table1x2"], builtBy["Stool"], builtBy["FueledStove"], unfinished,
                 static_cast<long long>(allBuiltAt), static_cast<long long>(stoveBuiltAt), bedroomsRoofed == 1 ? "true" : "false",
+                skillXpGained,
                 static_cast<unsigned long long>(woodIn), static_cast<unsigned long long>(outOfFuel),
-                static_cast<unsigned long long>(mealsMade), static_cast<unsigned long long>(ate),
-                static_cast<unsigned long long>(atTable), static_cast<unsigned long long>(slept),
+                static_cast<unsigned long long>(mealsMade), static_cast<unsigned long long>(clubsMade),
+                static_cast<unsigned long long>(ate), static_cast<unsigned long long>(atTable), static_cast<unsigned long long>(slept),
                 static_cast<unsigned long long>(sleptInBed), static_cast<unsigned long long>(cleaned), sim.filth().totalLayers(),
                 roomStat ? static_cast<double>(roomStat->beauty) : 0.0, roomStat ? static_cast<double>(roomStat->impressiveness) : 0.0,
                 static_cast<unsigned long long>(weatherChanges), static_cast<unsigned long long>(commandsFailed), static_cast<unsigned long long>(sim.stats().failedJobs),
@@ -560,6 +602,9 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         fail("the stove made %llu meals and colonists ate %llu times", static_cast<unsigned long long>(mealsMade),
              static_cast<unsigned long long>(ate));
     }
+    if (clubsMade != 1) {
+        fail("the crafting spot made %llu clubs, not the 1 the bill asked for", static_cast<unsigned long long>(clubsMade));
+    }
     if (recreations == 0 || pinGames == 0) {
         fail("colonists started %llu recreation jobs, %llu at the horseshoes pin", static_cast<unsigned long long>(recreations),
              static_cast<unsigned long long>(pinGames));
@@ -576,6 +621,9 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     }
     if (woodIn == 0) {
         fail("%s", "nobody put wood into the stove");
+    }
+    if (!(skillXpGained > 0.0)) {
+        fail("the work taught nobody anything (%.1f experience gained)", skillXpGained);
     }
     if (commandsFailed > 0 || sim.stats().failedJobs > 0) {
         fail("%llu commands and %llu jobs failed", static_cast<unsigned long long>(commandsFailed),
