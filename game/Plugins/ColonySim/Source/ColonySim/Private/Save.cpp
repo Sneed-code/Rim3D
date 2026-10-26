@@ -1637,6 +1637,9 @@ void saveJoyPart(Ar& ar, SaveJoy& j) {
         ar.text("kind", t.kind);
         ar.value("amount", t.amount);
         ar.require(t.amount >= 0.0f && t.amount <= 1.0e3f, "the save file has an impossible tolerance");
+        if (ar.sectionVersion() >= 2) {
+            ar.value("bored", t.bored);
+        }
     });
     ar.text("activity", j.activity);
 }
@@ -2523,7 +2526,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("power", 1, [&] {
         saveParts(ar, "power", e, &SaveEntity::power, [&](PowerPart& part) { savePowerPart(ar, part); });
     });
-    ar.section("recreation", 1, [&] {
+    ar.section("recreation", 2, [&] {
         saveParts(ar, "joy", e, &SaveEntity::joy, [&](SaveJoy& j) { saveJoyPart(ar, j); });
     });
     ar.section("research", 1, [&] { saveResearch(ar, d.research); });

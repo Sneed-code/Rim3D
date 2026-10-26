@@ -2,6 +2,7 @@
 
 Updated 2026-10-26.
 
+Stage 2 recreation types done: poker (table 1.3), television (tube 1.2, flatscreen 1.4, megascreen 1.6, powered), telescope (1.2, open sky), meditation spot, stargazing by night, relaxing socially in chairs join the horseshoes, chess, billiards, walk, clouds and table chat; joy falls and moods by the wiki's stages; tolerance grows by two thirds of the joy gained, a kind above 50% tolerance is boring until under 30% and pawns then pick other kinds (`docs/design/recreation.md`, tests `RecreationTests`). Save section `recreation` 2. Sim only.
 Stage 2 colonist needs extras done: a colonist outside its safe temperature walks to the nearest comfortable (else safe) cell and waits there (`SeekShelter` job, `docs/design/temperature.md`); Gourmand's faster hunger, Quick sleeper's faster rest, Night owl's moods awake at night or by day and Greedy's mood without a bedroom are in (`docs/design/needs.md`, `mood.md`). Tests: `ColonistTraitNeedsTests`. Save format unchanged (new job type number at the end).
 Stage 2 animal extras done: tame animals can be named (`SetAnimalName`), one command marks every wild animal in a rectangle to tame or hunt, or every tame one to slaughter (`MarkAnimalsInArea`), and doors are gates to animals: they never walk through one (`docs/design/husbandry.md`, tests `HusbandryTests`). Save section `husbandry` 3. Sim only.
 

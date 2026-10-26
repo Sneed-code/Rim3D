@@ -1959,6 +1959,7 @@ uint64_t Sim::stateHash() const {
             for (const JoyTolerance& t : joy->tolerance) {
                 h.add(t.kind.data(), t.kind.size());
                 h.add(t.amount);
+                h.add(static_cast<int>(t.bored));
             }
         }
         if (const Mood* mood = reg.try_get<Mood>(e)) {
