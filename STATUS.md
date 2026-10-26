@@ -272,7 +272,7 @@ Since E1 the sim has a calendar, an outdoor temperature, weather and snow (`docs
 
 ## Stage 1 progress
 
-40 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7, U8, U11, U10, C10, A1, A2, F6); F7, G1 and G2 are left. Tick tasks in `docs/plans/stage-1.md` as they merge.
+40 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7, U8, U11, U10, C10, A1, A2, F6); G1 and G2 are left (F7 done). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Stage 2
 
@@ -425,8 +425,7 @@ and harvesting~~ done (`docs/design/mining.md`; save format 14). On the PC, ~~**
 U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priorities).
 ~~**F4** fighter AI: where to stand~~ done (`docs/design/fighters.md`; save format 15), ~~**F5** fighter
 AI: aiming~~ done (`docs/design/aiming.md`; save format 17), ~~**F6** raid and defense~~ done
-(`docs/design/raids.md`; save section `raids`, `fighters` 2), so **F7** raid scenario tests and nightly soak (cloud, Sonnet
-high) is open; with U9 and F2 in, ~~**U11** fights on screen~~ is done (PC; smoke test `fights`; `docs/design/fights.md`; it
+(`docs/design/raids.md`; save section `raids`, `fighters` 2), so ~~**F7** raid scenario tests and nightly soak~~ is done (`simrun --raid-soak N`, `.github/workflows/nightly.yml` at 03:17 UTC, `docs/design/raid-soak.md`; it found stuck fighters, 13.6% waiting in the open and some raids that drag on, now in BACKLOG); with U9 and F2 in, ~~**U11** fights on screen~~ is done (PC; smoke test `fights`; `docs/design/fights.md`; it
 binds R to reload; reload and sidestep animations are not drawn yet). ~~**C10** colony scenario test~~ done
 (`docs/design/colony-scenario.md`); ~~**U10** hands-on work~~ is done (PC; smoke test `handson`; `docs/design/handson.md`); ~~**A1** placeholder art~~ is done (PC; free Poly Haven meshes on the bed, door, table, stool, stove, logs, meals, berries, trees and bushes; `docs/design/building-draw.md`, `python tools/placeholder_art.py` then the `PlaceholderArt` commandlet). ~~**A2** terrain materials~~ is done (PC; free CC0 Poly Haven textures instead of Megascans, so nobody had to download anything: grass, sand, gravel and rock blended by terrain type and slope, placed by world position; `docs/design/terrain.md`, `python tools/terrain_textures.py` then the `TerrainMaterials` commandlet; swapping in Megascans later is a change in `assets/terrain_textures.json`). ~~**A6** placeholder art 2~~ is done (PC; 30 more free Poly Haven meshes on crops, work tables, power, climate, lamps and furniture, same list and commandlet as A1; walls, floors, solar panel, wind turbine and a few small things stay shapes). ~~**A5** clothes art~~ is done (PC; worn meshes for all 12 apparel defs by layer, made from the morphed hoodie and trousers plus a free CC0 Poly Haven hat, no downloads by sneed; `docs/design/looks.md`, `python tools/clothes_art.py` then the `ClothesArt` commandlet; not yet seen in game, U16 draws them). **G1** is what is left on the PC.
 
