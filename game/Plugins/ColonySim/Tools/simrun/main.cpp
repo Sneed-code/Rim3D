@@ -15,6 +15,8 @@
 //   simrun --seed 42 --size 128 --days 60 --weather   (a line a day: season, temperatures, weather, snow; E1)
 //   simrun --scenario colony [--seed 42] [--size 512] [--days 5] [--verbose]   (the colony test, C10;
 //                                     exit 1 if a check fails, docs/design/colony-scenario.md)
+//   simrun --perf [--seed 42] [--size 1024] [--days 1] [--budget MS]   (the sim cost check, S9: 30 colonists, 300 tame animals, crops
+//                                     and rooms; a table of what each system costs per step, exit 1 over --budget; docs/design/sim-cost.md)
 //   simrun --power [--days 3] [--verbose]   (the power check, E5: solar, batteries, lamps and a switch; docs/design/power.md)
 //   simrun --seed 42 --size 1024 --days 3 --animals [--animal-percent 300] --check   (wild animals, N1:
 //                                     herds by biome, a report of them, checks they stay on walkable ground)
@@ -27,6 +29,7 @@
 // Human and Steel and the WorkTypes def Hauling, which data/defs provides. Its pawns haul items
 // scattered over the map to a stockpile zone in the middle through the job system (C1).
 #include "ColonyScenario.h"
+#include "PerfScenario.h"
 #include "PowerScenario.h"
 #include "ColonySim/Animals.h"
 #include "ColonySim/Breeding.h"
@@ -82,6 +85,7 @@ namespace {
 struct Options {
     uint64_t seed = 42;
     int size = 512;
+    bool sizeGiven = false;
     double days = 1.0;
     bool daysGiven = false;
     int pawns = 0;
@@ -91,6 +95,8 @@ struct Options {
     std::string scenario;  // "colony": the scripted colony test (C10)
     bool verbose = false;  // --scenario, --power: an hourly line on stderr
     bool power = false;    // --power: the power check (E5)
+    bool perf = false;     // --perf: the sim cost check (S9)
+    double budget = 0.0;   // --budget MS: --perf fails if the average step costs more
     bool check = false;  // exit 1 if a job or a path search failed
     bool weather = false;  // print a line a day of the weather (E1)
     int gather = 0;      // mark rock to mine and plants to harvest this many cells round the middle
@@ -125,6 +131,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.seed = std::strtoull(argv[++i], nullptr, 10);
         } else if (std::strcmp(arg, "--size") == 0 && hasValue) {
             out.size = std::atoi(argv[++i]);
+            out.sizeGiven = true;
         } else if (std::strcmp(arg, "--days") == 0 && hasValue) {
             out.days = std::atof(argv[++i]);
             out.daysGiven = true;
@@ -138,6 +145,10 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.start = argv[++i];
         } else if (std::strcmp(arg, "--scenario") == 0 && hasValue) {
             out.scenario = argv[++i];
+        } else if (std::strcmp(arg, "--perf") == 0) {
+            out.perf = true;
+        } else if (std::strcmp(arg, "--budget") == 0 && hasValue) {
+            out.budget = std::atof(argv[++i]);
         } else if (std::strcmp(arg, "--power") == 0) {
             out.power = true;
         } else if (std::strcmp(arg, "--verbose") == 0) {
@@ -186,7 +197,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--scenario colony [--verbose]] [--power] [--raid POINTS] [--armed] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--scenario colony [--verbose]] [--power] [--perf [--budget MS]] [--raid POINTS] [--armed] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS]\n");
             return false;
         }
@@ -601,6 +612,15 @@ int main(int argc, char** argv) {
     // The power check (E5): its own small map and script; 3 days unless --days says.
     if (options.power) {
         return powerscenario::run(options.daysGiven ? options.days : 3.0, defs, options.verbose);
+    }
+
+    // The sim cost check (S9): 1 km, one game day, unless the options say.
+    if (options.perf) {
+        if (!defs) {
+            std::fprintf(stderr, "--perf needs the game's defs\n");
+            return 2;
+        }
+        return perfscenario::run(options.seed, options.sizeGiven ? options.size : 1024, options.daysGiven ? options.days : 1.0, options.budget, defs);
     }
 
     // The colony scenario (C10) runs its own script on the Crashlanded start; 5 days unless --days says.

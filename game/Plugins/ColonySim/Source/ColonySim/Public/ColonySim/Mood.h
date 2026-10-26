@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -18,6 +19,7 @@ class RoomStats;
 class Rooms;
 class TemperatureSystem;
 class Things;
+struct TraitRecord;
 
 // Mood and thoughts (task C9). See docs/design/mood.md.
 //
@@ -142,6 +144,16 @@ private:
         std::string condition;
         SituationStage stage;
     };
+    // The thoughts that hold for a pawn, most important first; `labels` false leaves the labels empty
+    // (target() only sums the offsets, and building the labels is most of the cost).
+    std::vector<ThoughtView> thoughtList(Entity pawn, int64_t now, bool labels) const;
+    // What a trait's degrees add to the mood and to the break thresholds, read from its def once.
+    struct TraitDegree {
+        int degree = 0;
+        float moodOffset = 0.0f;
+        float breakOffset = 0.0f;
+    };
+    const TraitDegree* traitDegree(const TraitRecord& record) const;
     bool hasTrait(Entity pawn, const std::string& trait) const;
     float traitMoodOffset(Entity pawn) const;
     float traitBreakOffset(Entity pawn) const;
@@ -157,6 +169,7 @@ private:
     std::vector<Thought> thoughts_;
     std::vector<StagedThought> staged_;
     std::vector<Situation> situations_;
+    mutable std::map<std::string, std::vector<TraitDegree>, std::less<>> traitDegrees_;  // by trait def name
 };
 
 }  // namespace colony

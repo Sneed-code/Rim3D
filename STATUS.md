@@ -1,7 +1,8 @@
 # Status
 
-Updated 2026-10-25.
+Updated 2026-10-26.
 
+Stage 2 S9 done: a sim step on the Stage 2 colony costs 0.66 ms, down from 0.96 (`simrun --perf`, `docs/design/sim-cost.md`, budget in `docs/decisions/0006-sim-cost-budget.md`, nightly).
 Stage 2 P1 done: a pawn carries a rifle, a sidearm and a melee weapon (`docs/design/weapons.md`).
 Stage 2 N4 done: tame animals mate and bear young, hens lay eggs, calves and chicks grow up, colonists milk and shear (`docs/design/breeding.md`).
 Stage 2 D10 done: narrators (Orrin, Maren, Jinx), difficulty levels, 30 incidents, ten factions with goodwill, visitor, trader and guard pawn kinds, trader kinds and price rules (`docs/design/narrator-data.md`).
@@ -351,6 +352,8 @@ Save section `husbandry` 1, five new commands (`MarkAnimal`, `SetTraining`, `Cre
 **N5** animal fights and predators (`docs/design/animal-fights.md`, tests `AnimalFightTests`, `simrun --animals` prints the counters): animals have hitboxes now (shots hit them) and reach with teeth and claws. `Animal::temper` (Calm, Hunting, Revenge, Manhunter); anything but Calm is an enemy to the fighter AI and the colony alarm. A hurt wild animal turns manhunter by chance (0.5 tusker, 0.2 predator, 0.02 other), else predators and tuskers take revenge for a while and the rest run; shots, blows and blasts frighten calm animals within 22 m. Hungry wild predators hunt prey up to 1.5 x their size and lone colonists, the prey freezes when caught, the kill is eaten (corpse gone). **`AnimalSystem::enrage` is the hook T3 (manhunter pack) and a failed taming use.** Save section `animals` 2. Not done: packs, pathing round walls for chasers, manhunters from failed taming.
 
 **U15** animals on screen (`docs/design/animal-life.md`, smoke test `animals`): `USimAnimalSubsystem` draws every pawn with a snapshot `lifeStage` of 0 to 2 as an `ASimAnimalActor` on its A4 skeletal mesh (model and scale from `assets/animal_art.json`, fitted to its `lengthM`), playing idle, walk, gallop, eating and death clips picked from the snapshot; `USimPawnSubsystem` skips animals. Animation by distance: every frame within 40 m, 8 Hz within 120 m, a frozen pose within 400 m, hidden beyond (`Animals.NearDistance`, `MidDistance`, `HideDistance`). Not done: far herds as instanced meshes with baked animation (G3 decides if the frozen skinned pose is cheap enough), a lying-down pose for sleep (it slows the idle clip), and the models' facing is unchecked by eye.
+
+**S9** sim cost (`docs/design/sim-cost.md`, `docs/decisions/0006-sim-cost-budget.md`, workflow `nightly.yml`, ctest `simrun_perf`, tests `SimCostTests`): `simrun --perf` plays 30 colonists building, sowing, hauling and mining on a 1 km map with 300 tame and about 290 wild animals, and prints ms per step for each system (`Sim::setProfile(StepProfile*)`, a lap timer round every system in `Sim::step`; not saved or hashed). Step cost 0.96 to 0.66 ms (1.45 to 0.99 ms of a 60 fps frame at 3x) with the **same state hash**: standing pawns skip the steering, steering tries candidates cheapest first and stops early, the mood target no longer builds thought labels and trait numbers are read from the defs once, def path lookups no longer allocate. Budget: average step under 2.0 ms (target 1.0), checked nightly. **Worth knowing:** fire (E2) is not in the sim yet, so the scenario has none; the hourly plant and crop pass is a 10 ms hitch once a game hour on 1 km (not fixed, noted in the design doc); a new system that runs every step should get a `SimLap` line in `Sim::step`.
 
 ## Next
 

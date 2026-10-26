@@ -1,0 +1,30 @@
+name: Nightly
+
+# The sim cost check (task S9, docs/design/sim-cost.md): a game day of a Stage 2 sized colony on a 1 km map,
+# timed per system. Fails if the average step costs more than the budget in docs/decisions/0006-sim-cost-budget.md.
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  sim-cost:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S game/Plugins/ColonySim -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --parallel --target simrun
+      - name: Sim cost
+        run: ./build/simrun --perf --days 1 --budget 2.0 > perf.json 2> perf-table.txt
+      - name: Show the table
+        if: always()
+        run: cat perf-table.txt perf.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sim-cost
+          path: |
+            perf.json
+            perf-table.txt
