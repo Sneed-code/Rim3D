@@ -727,6 +727,14 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!ok) {
             commandFailed(id, error);
         }
+    } else if (const auto* markArea = std::get_if<MarkAnimalsInAreaCommand>(&command)) {
+        if (!husbandry_->markInArea(markArea->area, markArea->mark, markArea->on, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* animalName = std::get_if<SetAnimalNameCommand>(&command)) {
+        if (!husbandry_->setName(animalName->animal, animalName->name, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* training = std::get_if<SetTrainingCommand>(&command)) {
         Trainable what = Trainable::Obedience;
         if (!trainableFromName(training->trainable, what)) {
@@ -1526,6 +1534,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 view.markSlaughter = care->markSlaughter;
                 view.markHunt = care->markHunt;
                 view.animalZone = care->zone;
+                view.animalName = care->name;
                 view.learnedTricks = husbandry_->learnedMask(entity);
                 view.wantedTricks = husbandry_->wantedMask(entity);
             }

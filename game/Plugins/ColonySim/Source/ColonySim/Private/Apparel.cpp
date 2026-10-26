@@ -674,6 +674,16 @@ int ApparelSystem::taintedWorn(Entity pawn) const {
     return count;
 }
 
+int ApparelSystem::humanLeatherWorn(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    int count = 0;
+    for (const Entity piece : worn(pawn)) {
+        const MadeOf* made = reg.try_get<MadeOf>(piece);
+        count += made != nullptr && made->stuff.valid() && defs_.get(made->stuff).flag("humanlike") ? 1 : 0;
+    }
+    return count;
+}
+
 void ApparelSystem::registerSituations(MoodSystem& mood) const {
     mood.addSituation("noApparel", [this](Entity pawn) { return naked(pawn) ? 0 : -1; });
     mood.addSituation("apparelOnNudist", [this](Entity pawn) { return nudistClothed(pawn) ? 0 : -1; });
@@ -688,6 +698,7 @@ void ApparelSystem::registerSituations(MoodSystem& mood) const {
         const int count = taintedWorn(pawn);
         return count <= 0 ? -1 : std::min(count, rules_.taintedStageCap) - 1;
     });
+    mood.addSituation("apparelHumanLeather", [this](Entity pawn) { return humanLeatherWorn(pawn) > 0 ? 0 : -1; });
 }
 
 // ---- Stepping -------------------------------------------------------------------------------
