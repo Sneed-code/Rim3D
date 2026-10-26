@@ -4,7 +4,7 @@ Code: `ColonySim/Map.h` (levels, upper chunks, `setUpperFloor`, `floorAbove`, `L
 `Private/UpperFloors.cpp`; level handling in `Private/Regions.cpp`, `Private/Rooms.cpp` and
 `Private/Temperature.cpp`; stairs and ladders in `Things.h` (`levelLinksOf`), `Private/Regions.cpp`
 (`linkLevels`), `Private/Pathfinder.cpp` and `Private/MovementSystem.cpp`. Command `PlaceUpperFloorCommand`.
-Tests: `Tests/LevelsTests.cpp` (M1), `Tests/StairsTests.cpp` (M2). Tasks M1 and M2, of M1 to M4 and U17.
+Tests: `Tests/LevelsTests.cpp` (M1), `Tests/StairsTests.cpp` (M2). Tasks M1 and M2, of M1 to M4 and U17. The whole thing together is checked by the [house scenario](house-scenario.md) (M4).
 Builds on [regions](regions.md) and [rooms](rooms.md).
 
 ## Levels
@@ -81,7 +81,7 @@ no levels):
   side by side, so a staircase against a wall leads onto the floor that wall holds up. The building
   itself blocks walking: it is only climbed. Neither end needs to be walkable when it is built; the
   link counts once both are. Nothing is planned on the top level (there is nothing to climb to).
-  Nothing stops a floor over the stairs for now; U17 may want a stairwell rule.
+  Nothing stops a floor over the stairs for now; U17 may want a stairwell rule. An upper wall with open air on its outside cannot be reached once the walls on its two inner sides stand (see the house scenario).
 - **The map** keeps the links (`Map::levelLinks`, `LevelLink{low, high, building, length, speedFactor}`,
   sorted by cell) in step with the buildings (`Things` adds them on spawn and load, removes them on
   despawn), and marks the regions at both ends dirty.
