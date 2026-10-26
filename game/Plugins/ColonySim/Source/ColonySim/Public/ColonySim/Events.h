@@ -98,6 +98,9 @@ enum class EventType : uint8_t {
     PawnMentalBreakEnded,  // it ended: `message` says how ("recovered", "downed", "died", "stopped")
     PawnInsulted,          // a pawn in an insulting spree insulted another
     PawnLeftColony,        // a pawn gave up and walked off the map for good
+    DisasterStarted,       // a disaster condition began (T3, docs/design/disasters.md): `message` its name ("solar flare", "toxic fallout", "volcanic winter", "flashstorm", "psychic drone", "psychic soothe"), `count` its DisasterKind, `amount` its length in game hours, `cell` a flashstorm's centre
+    DisasterEnded,         // it is over (same fields)
+    LightningStrike,       // a flashstorm's bolt hit `cell` at (x, y, z); the blast and fires that follow are their own events
 };
 
 // What stopped a projectile (ProjectileHit).
