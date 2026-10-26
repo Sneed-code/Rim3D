@@ -106,3 +106,13 @@ beauty needs. In the state hash. The stats themselves are recomputed.
 A floor-building job and architect tool; a home area (cleaning and filth outdoors); vomit, ash and
 animal filth sources; room stats while the sky is partly open; temperature; the room role "prison";
 bedroom owners' thoughts about other people's rooms.
+
+## Outdoor filth fades
+
+Under the open sky (no roof) filth goes by itself, as RimWorld's does: every game hour each layer of a pile has
+a chance of `1 / fadeHours` to go, where `fadeHours` is the mean of the filth def's `filth.disappearsInDays`
+(4 to 8, so 6 days; **unverified**, in `FilthBase`) in game hours, so a pile of three layers goes three times as
+fast as a pile of one. While it rains, kinds with `filth.rainWashes` go `FilthRules.rainWashFactor` (4, ours) times
+as fast. Under a roof, filth stays until cleaned. `Filth::fadeHour(rainRate)`, called by the sim every game hour,
+draws from the layer's own random stream, so it is saved and replayed with the rest. This is what stops animal
+blood piling up over a year in the open, where nobody cleans (the home area is still to come).

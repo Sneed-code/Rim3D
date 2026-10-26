@@ -184,25 +184,33 @@ float RaidSystem::colonyWealth() const {
             items += static_cast<double>(value) * (stack != nullptr ? stack->count : 1);
         } else if (thing.category == ThingCategory::Building && reg.all_of<Position>(e)) {
             buildings += value;
+        } else if (thing.category == ThingCategory::Pawn && things_.spawned(e) && fighters_.factionOf(e) == kPlayerFaction) {
+            // Colonists and tame animals count for their own value too (T1, wiki "Raid points").
+            const Health* h = reg.try_get<Health>(e);
+            items += h != nullptr && h->dead ? 0.0 : static_cast<double>(value);
         }
     }
     return static_cast<float>(items + buildings * rules_.buildingWealthFactor);
 }
 
-float RaidSystem::threatPoints() const {
-    const float wealth = colonyWealth();
+int RaidSystem::colonistCount() const {
     const entt::registry& reg = things_.registry();
-    float pawnPoints = 0.0f;
+    int count = 0;
     for (const auto [pawn, colonist] : reg.view<const Colonist>().each()) {
         const Health* h = reg.try_get<Health>(pawn);
-        if (!things_.spawned(pawn) || fighters_.factionOf(pawn) != kPlayerFaction || (h != nullptr && h->dead)) {
-            continue;
+        if (things_.spawned(pawn) && fighters_.factionOf(pawn) == kPlayerFaction && (h == nullptr || !h->dead)) {
+            ++count;
         }
-        pawnPoints += raidCurve(rules_.pointsPerColonist, wealth);
     }
+    return count;
+}
+
+float RaidSystem::threatPoints(float scale) const {
+    const float wealth = colonyWealth();
+    const float pawnPoints = static_cast<float>(colonistCount()) * raidCurve(rules_.pointsPerColonist, wealth);
     float points = raidCurve(rules_.wealthPoints, wealth) + pawnPoints;
     const float days = static_cast<float>(now()) / static_cast<float>(kSecondsPerDay);
-    points *= rules_.threatScale * raidCurve(rules_.daysPassedFactor, days) * rules_.adaptation;
+    points *= rules_.threatScale * raidCurve(rules_.daysPassedFactor, days) * rules_.adaptation * scale;
     return std::clamp(points, rules_.minPoints, rules_.maxPoints);
 }
 
@@ -952,6 +960,14 @@ void RaidSystem::callUp(Entity pawn, const std::vector<Entity>& spotted) {
     }
     const DefensePlan* plan = reg.try_get<DefensePlan>(pawn);
     DefenseRole role = plan != nullptr ? plan->role : DefenseRole::Defender;
+    // A colonist with no plan of its own and nothing in its hands runs for shelter instead of punching a wolf
+    // (RimWorld's default hostility response: an unarmed colonist flees); an armed one defends.
+    if (plan == nullptr) {
+        const Gear* gear = reg.try_get<Gear>(pawn);
+        if (gear == nullptr || gear->weapon == kNoEntity || !reg.valid(gear->weapon)) {
+            role = DefenseRole::Shelter;
+        }
+    }
     const Position& pos = reg.get<Position>(pawn);
     if (role == DefenseRole::KeepWorking) {
         if (f != nullptr) {

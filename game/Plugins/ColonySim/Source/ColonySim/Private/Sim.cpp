@@ -52,6 +52,7 @@
 #include "ColonySim/UpperFloors.h"
 #include "ColonySim/Weather.h"
 #include "ColonySim/Zones.h"
+#include "ColonySim/Narrator.h"
 #include "MovementSystem.h"
 
 #include <algorithm>
@@ -183,6 +184,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     spoilage_->setEventLog(&events_);
     farming_ = std::make_unique<Farming>(map_, *plants_, *zones_, *defs_, events_);
     farming_->setClimate(temperature_.get(), lights_.get());
+    farming_->setForecast(
+        [this](int64_t seconds) { return outdoorOverride_ ? *outdoorOverride_ : outdoorTemperatureAt(seconds); },
+        [this]() { return time_.seconds; });
     plants_->setGrowthModifier([this](size_t cell) { return farming_->growthFactor(cell); });
     farming_->setPlantSpots(things_.get(), [this](Entity building) { return power_->running(building); });
     plants_->setFertilityOverride([this](size_t cell) { return farming_->spotFertility(cell); });
@@ -243,6 +247,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     combat_->setHurtHook([this](Entity victim, Entity attacker) { animals_->hurt(victim, attacker); });
     jobs_->setHusbandry(husbandry_.get());
     jobs_->setCombat(combat_.get());
+    jobs_->setTemperature(temperature_.get());
     husbandry_->setHaulerHook([this](Entity animal, bool on) { jobs_->setAnimalHauler(animal, on); });
     jobs_->setAnimalWorkGate([this](Entity animal) { return animals_->mayWork(animal); });
     raids_ = std::make_unique<RaidSystem>(*things_, map_, *rooms_, *combat_, *health_, *jobs_, *fighters_, *defs_, time_, rng_);
@@ -256,6 +261,23 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     trade_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
     jobs_->setPrisoners(prisoners_.get());
     mood_->addSituation("isPrisoner", [this](Entity pawn) { return prisoners_->isPrisoner(pawn) ? 0 : -1; });
+    // Night owls like being up at night and not by day (docs/design/mood.md); only pawns that are awake count.
+    const auto awakeAt = [this](Entity pawn, bool night) {
+        const Worker* worker = things_->registry().try_get<Worker>(pawn);
+        if (worker == nullptr || jobIsLyingDown(worker->job)) {
+            return -1;
+        }
+        return mood_->rules().isNightHour(time_.hourOfDay()) == night ? 0 : -1;
+    };
+    mood_->addSituation("awakeAtNight", [awakeAt](Entity pawn) { return awakeAt(pawn, true); });
+    mood_->addSituation("awakeInDay", [awakeAt](Entity pawn) { return awakeAt(pawn, false); });
+    mood_->addSituation("noBedroom", [this](Entity pawn) {
+        const Entity bed = jobs_->bedOf(pawn);
+        if (bed == kNoEntity || !things_->registry().all_of<Position>(bed)) {
+            return 0;
+        }
+        return rooms_->roleAt(cellOf(things_->registry().get<Position>(bed))) == RoomRole::Bedroom ? -1 : 0;
+    });
     combat_->setBeforeDestroy([this](Entity thing) {
         jobs_->forget(thing);
         raids_->forget(thing);
@@ -285,6 +307,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     fire_->setRunning([this](Entity building) { return power_->running(building); });
     defense_->setOnLearn([this](Entity pawn) { fighters_->replan(pawn); });
     fighters_->setDefense(defense_.get());
+    narrator_ = std::make_unique<NarratorSystem>(*raids_, *defs_, time_, settings.seed);
+    narrator_->setEventLog(&events_);
     social_ = std::make_unique<SocialSystem>(*things_, *rooms_, *health_, *melee_, *mood_, *jobs_, *defs_, time_,
                                              splitMix64(settings.seed ^ 0x736F6369616CULL));
     social_->setEventLog(&events_);
@@ -773,6 +797,14 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!farming_->setCrop(setGrowingCrop->zone, defs_->idOf("Things", setGrowingCrop->crop), error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* setNarrator = std::get_if<SetNarratorCommand>(&command)) {
+        if (!narrator_->setNarrator(setNarrator->narrator, setNarrator->difficulty, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* fireIncident = std::get_if<FireIncidentCommand>(&command)) {
+        if (!narrator_->fire(fireIncident->incident, fireIncident->points, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* spendTalent = std::get_if<SpendTalentPointCommand>(&command)) {
         if (!talents_->spend(spendTalent->pawn, spendTalent->talent, error)) {
             commandFailed(id, error);
@@ -1203,8 +1235,10 @@ void Sim::step() {
     if (time_.seconds % kSecondsPerHour == 0) {
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
         farming_->growHour(time_.seconds);
+        filth_->fadeHour(weather_->effects().rainRate);
         pruneDesignations();
     }
+    narrator_->step();  // after the clock: incidents come on the narrator's checks (T1)
     if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
         checkpoints_.push_back(Checkpoint{time_.seconds, stateHash()});
     }
@@ -1719,6 +1753,15 @@ void Sim::writeSnapshot(Snapshot& out) const {
     }
     std::sort(out.projectiles.begin(), out.projectiles.end(),
               [](const ProjectileView& a, const ProjectileView& b) { return a.id < b.id; });
+    {
+        const NarratorState state = narrator_->state();
+        NarratorView& n = out.narrator;
+        n.narrator = narrator_->narratorDef();
+        n.difficulty = narrator_->difficultyDef();
+        n.wealth = state.wealth;
+        n.threatPoints = state.points;
+        n.incidents = state.incidents;
+    }
 }
 
 uint64_t Sim::stateHash() const {
@@ -1762,6 +1805,7 @@ uint64_t Sim::stateHash() const {
     h.add(map_.upperFloorHash());
     roofCollapse_->hashState(h);
     spoilage_->hashState(h);
+    narrator_->hashState(h);
     crafting_->hashState(h);
     farming_->hashState(h);
 

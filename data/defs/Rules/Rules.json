@@ -34,7 +34,11 @@
     "growHours": [6, 19],
     "growthNeedsLight": 0.51,
     "killChancePerDegree": 0.1,
-    "unverified": ["killChancePerDegree"]
+    "sowGrowthMargin": 0.7,
+    "sowHarvestSlackHours": 36,
+    "unverified": ["killChancePerDegree"],
+    "ours": ["sowGrowthMargin", "sowHarvestSlackHours"],
+    "note": "Colonists sow only a crop that would ripen before the frost (Farming::ripensBeforeFrost): it is taken to grow at sowGrowthMargin of the forecast rate (cloud and dusk are not in the forecast) and to need sowHarvestSlackHours more frost-free hours after it is ripe, for somebody to pick it."
   },
   {
     "defName": "SkillRules", "source": "RimWorld wiki",
@@ -110,8 +114,9 @@
     "risePerHour": 12,
     "fallPerHour": 8,
     "memoryDays": 0.6,
+    "nightHours": { "from": 21, "to": 4 },
     "unverified": ["memoryDays"],
-    "ours": ["baseMood"]
+    "ours": ["baseMood", "nightHours"]
   },
   {
     "defName": "PawnGenRules", "source": "Rim3D",
