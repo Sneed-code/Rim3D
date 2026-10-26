@@ -77,6 +77,8 @@ FireNumbers FireNumbers::read(const DefDatabase& defs) {
         n.burntFadeDays = fireNum(*d, "burntFadeDays", n.burntFadeDays);
         n.autoHomeRadius = static_cast<int>(d->number("autoHomeRadius", n.autoHomeRadius));
         n.startHomeRadius = static_cast<int>(d->number("startHomeRadius", n.startHomeRadius));
+        n.foamFadeHours = std::max(1.0f, fireNum(*d, "foamFadeHours", n.foamFadeHours));
+        n.waterRunRadius = std::max(0, static_cast<int>(d->number("waterRunRadius", n.waterRunRadius)));
         n.panic = d->flag("panic", n.panic);
     }
     return n;
@@ -101,6 +103,8 @@ Fire::Fire(Map& map, Things& things, Plants& plants, Floors& floors, Filth& filt
     maxHp_.assign(defs.size(), 0.0f);
     popperRadius_.assign(defs.size(), 0.0f);
     popperTrigger_.assign(defs.size(), 0.0f);
+    turretInfo_.assign(defs.size(), TurretInfo{});
+    foamKind_ = filth_.kindIndex("FireFoam");
     for (const DefId id : defs.idsOfKind("Things")) {
         const Def& d = defs.get(id);
         flammability_[id.value] = fireNum(d, "stats.flammability", 0.0f);
@@ -108,6 +112,9 @@ Fire::Fire(Map& map, Things& things, Plants& plants, Floors& floors, Filth& filt
         maxHp_[id.value] = fireNum(d, "stats.maxHitPoints", 0.0f);
         popperRadius_[id.value] = fireNum(d, "firefoam.radius", 0.0f);
         popperTrigger_[id.value] = fireNum(d, "firefoam.triggerRadius", 3.0f);
+        turretInfo_[id.value].range = fireNum(d, "firefoamTurret.range", 0.0f);
+        turretInfo_[id.value].radius = fireNum(d, "firefoamTurret.radius", 2.5f);
+        turretInfo_[id.value].cooldown = std::max(1, static_cast<int>(d.number("firefoamTurret.cooldown", 10.0)));
     }
     for (const DefId id : defs.idsOfKind("Terrain")) {
         const Def& d = defs.get(id);
@@ -231,7 +238,22 @@ bool Fire::canBurnGround(CellPos c) const {
 }
 
 // Rain or deep snow on a cell under the open sky: nothing catches there.
+bool Fire::foamAt(CellPos c) const {
+    if (foamKind_ < 0 || !filth_.has(c)) {
+        return false;
+    }
+    for (const FilthPile& pile : filth_.at(c)) {
+        if (pile.kind == foamKind_) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool Fire::wetAt(CellPos c) const {
+    if (foamAt(c)) {
+        return true;  // firefoam lying there: nothing catches
+    }
     if (!weather_.outdoors(c)) {
         return false;
     }
@@ -497,6 +519,10 @@ void Fire::step(int64_t now, size_t from) {
     }
     if (!fires_.empty()) {
         popperStep(now);
+        turretStep(now);
+    }
+    if (now % kSecondsPerHour == 0) {
+        foamFadeStep(now);
     }
     if (now % numbers_.passSeconds == 0) {
         pass(now);
@@ -625,35 +651,131 @@ void Fire::popperStep(int64_t now) {
         if (!seen) {
             continue;
         }
-        std::vector<CellPos> cells;
-        for (const auto& [index, fire] : fires_) {
-            const CellPos c = map_.cellAt(index);
-            const float dx = static_cast<float>(c.x) + 0.5f - pos.x;
-            const float dy = static_cast<float>(c.y) + 0.5f - pos.y;
-            if (c.level == pos.level && dx * dx + dy * dy <= radius * radius) {
-                cells.push_back(c);
-            }
-        }
-        for (const CellPos& c : cells) {
-            extinguish(c, 1000.0f, "foamed");
-        }
-        std::vector<Entity> alight;
-        for (const auto [pawn, burn, ppos] : reg.view<const Burning, const Position>().each()) {
-            (void)burn;
-            const float dx = ppos.x - pos.x;
-            const float dy = ppos.y - pos.y;
-            if (ppos.level == pos.level && dx * dx + dy * dy <= radius * radius) {
-                alight.push_back(pawn);
-            }
-        }
-        std::sort(alight.begin(), alight.end());
-        for (const Entity pawn : alight) {
-            putOutPawn(pawn);
-        }
+        foamBurst(pos.x, pos.y, pos.level, radius);
         ++poppersUsed_;
         emit(EventType::FirefoamPopped, popper, cellOf(pos), def, radius);
         things_.destroy(popper);
     }
+}
+
+// Puts out every fire and burning pawn within `radius` of a point, then lays firefoam on the ground there so embers
+// cannot light it again until the foam fades.
+void Fire::foamBurst(float x, float y, int level, float radius) {
+    entt::registry& reg = things_.registry();
+    std::vector<CellPos> cells;
+    for (const auto& [index, fire] : fires_) {
+        (void)fire;
+        const CellPos c = map_.cellAt(index);
+        const float dx = static_cast<float>(c.x) + 0.5f - x;
+        const float dy = static_cast<float>(c.y) + 0.5f - y;
+        if (c.level == level && dx * dx + dy * dy <= radius * radius) {
+            cells.push_back(c);
+        }
+    }
+    for (const CellPos& c : cells) {
+        extinguish(c, 1000.0f, "foamed");
+    }
+    std::vector<Entity> alight;
+    for (const auto [pawn, burn, ppos] : reg.view<const Burning, const Position>().each()) {
+        (void)burn;
+        const float dx = ppos.x - x;
+        const float dy = ppos.y - y;
+        if (ppos.level == level && dx * dx + dy * dy <= radius * radius) {
+            alight.push_back(pawn);
+        }
+    }
+    std::sort(alight.begin(), alight.end());
+    for (const Entity pawn : alight) {
+        putOutPawn(pawn);
+    }
+    const int r = static_cast<int>(std::ceil(radius));
+    for (int dy = -r; dy <= r; ++dy) {
+        for (int dx = -r; dx <= r; ++dx) {
+            const CellPos c{static_cast<int>(std::floor(x)) + dx, static_cast<int>(std::floor(y)) + dy, level};
+            const float fx = static_cast<float>(c.x) + 0.5f - x;
+            const float fy = static_cast<float>(c.y) + 0.5f - y;
+            if (map_.inBounds(c) && fx * fx + fy * fy <= radius * radius) {
+                filth_.add(c, foamKind_, 1);
+            }
+        }
+    }
+}
+
+// A foam turret that is running shoots the nearest fire in range every `cooldown` seconds (staggered by its entity id so
+// the result does not depend on the order turrets are visited).
+void Fire::turretStep(int64_t now) {
+    entt::registry& reg = things_.registry();
+    std::vector<Entity> turrets;
+    for (const auto [e, thing, pos] : reg.view<const Thing, const Position>().each()) {
+        (void)pos;
+        if (thing.category == ThingCategory::Building && thing.def.valid() && thing.def.value < turretInfo_.size() &&
+            turretInfo_[thing.def.value].range > 0.0f) {
+            turrets.push_back(e);
+        }
+    }
+    std::sort(turrets.begin(), turrets.end());
+    for (const Entity turret : turrets) {
+        const TurretInfo& info = turretInfo_[reg.get<Thing>(turret).def.value];
+        if ((now + static_cast<int64_t>(entt::to_integral(turret))) % info.cooldown != 0 || (running_ && !running_(turret))) {
+            continue;
+        }
+        const Position pos = reg.get<Position>(turret);
+        int best = -1;
+        float bestD = info.range * info.range + 1.0f;
+        for (const auto& [index, fire] : fires_) {
+            (void)fire;
+            const CellPos c = map_.cellAt(index);
+            const float dx = static_cast<float>(c.x) + 0.5f - pos.x;
+            const float dy = static_cast<float>(c.y) + 0.5f - pos.y;
+            const float d = dx * dx + dy * dy;
+            if (c.level == pos.level && d <= info.range * info.range && d < bestD) {
+                best = index;
+                bestD = d;
+            }
+        }
+        if (best < 0) {
+            continue;
+        }
+        const CellPos target = map_.cellAt(best);
+        foamBurst(static_cast<float>(target.x) + 0.5f, static_cast<float>(target.y) + 0.5f, target.level, info.radius);
+        emit(EventType::FirefoamPopped, turret, target, reg.get<Thing>(turret).def, info.radius, "turret");
+    }
+}
+
+// Each hour a layer of firefoam goes with chance 1 / foamFadeHours.
+void Fire::foamFadeStep(int64_t now) {
+    if (foamKind_ < 0) {
+        return;
+    }
+    std::vector<int> foamed;
+    for (const auto& [index, piles] : filth_.all()) {
+        for (const FilthPile& pile : piles) {
+            if (pile.kind == foamKind_) {
+                foamed.push_back(index);
+            }
+        }
+    }
+    Rng rng(rngSeed(now, 0, 9), 9);
+    for (const int index : foamed) {
+        if (rng.unit() < 1.0 / static_cast<double>(numbers_.foamFadeHours)) {
+            filth_.clean(map_.cellAt(index), foamKind_);
+        }
+    }
+}
+
+// A popper shot to pieces, or burnt, bursts where it stands: the foam goes off whether or not a fire is near.
+void Fire::onDestroy(Entity building) {
+    entt::registry& reg = things_.registry();
+    const Thing* thing = reg.try_get<Thing>(building);
+    const Position* pos = reg.try_get<Position>(building);
+    if (thing == nullptr || pos == nullptr || !thing->def.valid() || thing->def.value >= popperRadius_.size() ||
+        popperRadius_[thing->def.value] <= 0.0f || thing->category != ThingCategory::Building) {
+        return;
+    }
+    const float radius = popperRadius_[thing->def.value];
+    foamBurst(pos->x, pos->y, pos->level, radius);
+    ++poppersUsed_;
+    emit(EventType::FirefoamPopped, building, cellOf(*pos), thing->def, radius, "destroyed");
 }
 
 bool Fire::panicStep(Entity pawn, int64_t now) {
@@ -700,6 +822,42 @@ bool Fire::panicStep(Entity pawn, int64_t now) {
             open.push_back(c);
             if (!burning(c)) {
                 cool.push_back(c);
+            }
+        }
+    }
+    // Water close by puts the fire out: standing next to it, the pawn jumps in; otherwise it runs for the nearest.
+    {
+        const int level = here.level;
+        const int radius = numbers_.waterRunRadius;
+        CellPos water{0, 0, level};
+        int bestD = radius * radius * 2 + 1;
+        for (int dy = -radius; dy <= radius; ++dy) {
+            for (int dx = -radius; dx <= radius; ++dx) {
+                const CellPos c{here.x + dx, here.y + dy, level};
+                const int d = dx * dx + dy * dy;
+                if (d < bestD && map_.inBounds(c) && map_.terrain(c) == Terrain::Water) {
+                    water = c;
+                    bestD = d;
+                }
+            }
+        }
+        if (bestD <= 2) {
+            putOutPawn(pawn);
+            return false;
+        }
+        if (bestD <= radius * radius * 2) {
+            CellPos step = here;
+            int stepD = bestD;
+            for (const CellPos& c : open) {
+                const int d = (c.x - water.x) * (c.x - water.x) + (c.y - water.y) * (c.y - water.y);
+                if (d < stepD) {
+                    step = c;
+                    stepD = d;
+                }
+            }
+            if (!(step == here)) {
+                mover.walkTo(reg.get<Position>(pawn).x, reg.get<Position>(pawn).y, std::vector<CellPos>{step});
+                return true;
             }
         }
     }
