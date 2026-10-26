@@ -20,13 +20,14 @@ colonist is the player's, not the alarm's.
 them). `points` 0 means "what the colony is worth now", RimWorld's rule from the wiki's Raid points
 page:
 
-- **Wealth**: items on the map and the gear the player's pawns carry at their `marketValue`, plus
-  buildings at half theirs (`RaidSystem::colonyWealth`). Defs without a `marketValue` (our guns,
-  apparel and buildings so far) count nothing.
+- **Wealth**: items on the map and the gear the player's pawns carry at their `marketValue`, the
+  player's own pawns (colonists, tame animals; since T1) at theirs, plus buildings at half theirs
+  (`RaidSystem::colonyWealth`). Defs without a `marketValue` count nothing.
 - **Points** = (wealth points + 15 to 200 per colonist, both from the wiki's curves by wealth) x
   the difficulty's threat scale (Strive to survive, 1) x the days-passed factor (0.7 up to day 10,
   1 from day 40) x adaptation (0.8, its start value; adaptation isn't tracked yet), kept between
-  35 and 10,000. The six Crashlanded colonists on day 0 make about 50 points: one pirate.
+  35 and 10,000. The six Crashlanded colonists on day 0 make about 65 points: one pirate. The
+  narrator ([narrator.md](narrator.md)) multiplies this by the difficulty and its own factor.
 
 The points **buy pawns**, as RimWorld does: a pawn kind at random by weight among those the points
 left can still pay for (`combatPower`), until none can; at least one. The **Pirate** faction (a
@@ -79,6 +80,11 @@ While the alarm is on, every colonist that isn't drafted or controlled by the pl
 | **Defender** | Its job ends and it becomes a fighter (`defending`). With a **defense spot** it holds that spot, choosing cover within 3 m. Without one it goes to **the line**: a point 15 m (`defenseLine`, at most half way) from home toward the threat, choosing cover within 10 m of it; the line moves when the threat has moved it over 6 m. **Once it knows of an enemy it leaves the line** and fights like any fighter (cover, range, falling back), so an enemy out of range of the line can't shoot it from afar; with no enemy known again it goes back to the line. |
 | **Shelter** | Goes to the shelter room (`MarkShelterCommand`) and stays there, each in its own cell; with no shelter marked, the nearest roofed cell; with none, 25 m away from the threat. It never shoots. |
 | **Keep working** | Works on, until a spotted enemy comes within 20 m (`keepWorkingRadius`); then it defends itself where it is, until the alarm stops. |
+
+**Unarmed colonists run.** A colonist with no defense plan of its own and no weapon in its hands (`Gear::weapon`
+empty) is a Shelter, not a Defender, like RimWorld's default of fleeing when unarmed: it would otherwise punch a
+wolf with its fists (found by the year run, `colony-scenario.md`). The moment it carries a weapon it defends.
+A colonist the player gave a plan (`SetDefenseRoleCommand`) does what the plan says, armed or not.
 
 The alarm **stops by itself** when no enemy is left on the map that can still fight (all dead, downed
 or fleeing), and everyone it called up goes back to work. One the player sounded

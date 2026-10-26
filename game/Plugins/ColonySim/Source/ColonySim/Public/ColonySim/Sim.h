@@ -70,6 +70,7 @@ class RoofCollapse;
 class Weather;
 class Zones;
 class Farming;
+class NarratorSystem;
 struct Snapshot;
 class SimSaveAccess;
 
@@ -285,6 +286,9 @@ public:
     RaidSystem& raids() { return *raids_; }
     const RaidSystem& raids() const { return *raids_; }
 
+    // The narrator, incidents and threat points (docs/design/narrator.md).
+    NarratorSystem& narrator() { return *narrator_; }
+    const NarratorSystem& narrator() const { return *narrator_; }
     // Prisoners: capture, feeding, warden talks, recruiting and release (docs/design/prisoners.md).
     PrisonerSystem& prisoners() { return *prisoners_; }
     const PrisonerSystem& prisoners() const { return *prisoners_; }
@@ -401,6 +405,7 @@ private:
     std::vector<Checkpoint> checkpoints_;
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
+    std::unique_ptr<NarratorSystem> narrator_;  // after raids_
     std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
 };
 
