@@ -900,7 +900,9 @@ void Fire::pass(int64_t now) {
         }
         Rng rng(rngSeed(now, static_cast<int>(entt::to_integral(pawn)), 7), 7);
         const int amount = fireRoundRandom(static_cast<float>(numbers_.pawnDamagePerTick * ticks), rng);
-        if (amount > 0 && !health_.applyDamage(pawn, burnType_, static_cast<float>(amount), -1, rng)) {
+        const bool hurt = pawnHurt_ ? pawnHurt_(pawn, burnType_, static_cast<float>(amount), rng)
+                                    : health_.applyDamage(pawn, burnType_, static_cast<float>(amount), -1, rng);
+        if (amount > 0 && !hurt) {
             reg.remove<Burning>(pawn);
             continue;
         }
