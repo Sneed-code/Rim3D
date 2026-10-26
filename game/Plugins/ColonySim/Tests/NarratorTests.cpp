@@ -86,14 +86,14 @@ struct NarratorTestRun {
         narrator.setEventLog(&events);
         for (const std::string& name : incidents) {
             narrator.setWorker(name, [this, name](IncidentFiring& f) {
-                came.emplace_back(name, static_cast<double>(time.seconds) / kSecondsPerDay);
+                came.emplace_back(name, static_cast<double>(time.seconds) / static_cast<double>(kSecondsPerDay));
                 f.text = name;
                 return true;
             });
         }
     }
     void run(double days) {
-        const auto end = time.seconds + static_cast<int64_t>(days * kSecondsPerDay);
+        const auto end = time.seconds + static_cast<int64_t>(days * static_cast<double>(kSecondsPerDay));
         const int64_t every = narrator.rules().checkSeconds;
         while (time.seconds < end) {
             time.seconds += every;
