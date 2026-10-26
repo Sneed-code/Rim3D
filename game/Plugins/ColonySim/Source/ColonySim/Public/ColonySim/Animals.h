@@ -208,6 +208,8 @@ public:
     // Something hurt `victim`: a hurt animal runs, fights back or turns manhunter; its herd runs.
     // Called by the combat code the moment the hit lands.
     void hurt(Entity victim, Entity attacker);
+    // The chance a wild animal turns manhunter when hurt (0 for a non-animal); hunters weigh it.
+    float manhunterChanceOf(Entity animal) const;
     // Calm animals near the shots and blows among `events[from..]` run from them.
     void scare(const std::vector<Event>& events, size_t from);
     // Makes the animal an enemy of `target` (and of every colonist if `temper` is Manhunter) at once;
@@ -266,6 +268,7 @@ private:
     struct Stage {
         int64_t minAgeSeconds = 0;
         float bodySizeFactor = 1.0f;
+        float healthFactor = 1.0f;  // `healthScaleFactor`: the share of its adult hit points
         float foodFactor = 1.0f;
     };
     struct Kind {
@@ -287,6 +290,7 @@ private:
     };
 
     const Kind* kindOf(Entity animal) const;
+    float manhunterChance(const Kind& kind) const;
     int stageAt(const Kind& kind, int64_t ageSeconds) const;
     float capacity(const Kind& kind, int64_t ageSeconds) const;
     float foodFallPerSecond(const Kind& kind, int64_t ageSeconds) const;

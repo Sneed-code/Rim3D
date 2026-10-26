@@ -22,6 +22,8 @@ barracks (C17), comfort, outdoors, recreation (C18), darkness (E3), pain, sickne
 corpses, social memories and bond deaths (C20), catharsis (+40 for 2.5 days after a break, C19).
 Nudity is thoughts only, no sexual content.
 
+Since C20 the social memories and bond deaths are raised by the social system ([social.md](social.md)); `opinionOfMe` on traits and the extra `SocialRules` numbers are its.
+
 ## Recreation
 
 `RecreationKinds`: meditative, social, dexterity, cerebral, each with tolerance gain per use and

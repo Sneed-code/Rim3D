@@ -28,7 +28,12 @@ namespace colony { class Map; }
  * schedule tabs, the colonist and bills panels and the message log, driven by their click handlers), fights (the
  * protagonist's gun, muzzle flashes, tracers, impacts, hit reactions, ragdolls, wound decals and the hitbox view),
  * handson (the controlled colonist mines, chops, picks up, delivers and builds by hand, and plans a building with the build ghost),
- * animals (animal actors on their A4 models: poses, scale by life stage, animation detail by distance).
+ * animals (animal actors on their A4 models: poses, scale by life stage, animation detail by distance),
+ * sky (sun and moon from the sim's clock, the season's sun height, rain, snow in the air and on the ground, wet ground, fog,
+ * thunderstorm flashes and the date readout).
+ * melee (carried and holstered weapons, the weapon switch key, melee swings timed to the sim, blocks, dodges and hit-stop),
+ * clothes (worn apparel drawn on MetaHumans over a skin layer: stuff tint, torn look, hats and hair, taking off and stripping),
+ * fire (the sim's lamps and fires as lights, flames, embers and smoke; burning pawns; burnt ground and ash).
  * Optional: -SmokeTimeout=<seconds> (default 300) fails a run that hangs.
  * To add a test: write a Build<Name>Phases() and add a branch in OnWorldBeginPlay.
  * Run it with tools/smoke.ps1.
@@ -84,6 +89,11 @@ private:
 	void BuildFightsPhases();       // SmokeTestFights.cpp
 	void BuildHandsOnPhases();      // SmokeTestHandsOn.cpp
 	void BuildAnimalsPhases();      // SmokeTestAnimals.cpp
+	void BuildSkyPhases();          // SmokeTestSky.cpp
+	void BuildMeleePhases();        // SmokeTestMelee.cpp
+	void BuildClothesPhases();      // SmokeTestClothes.cpp
+	void BuildFeelPhases();         // SmokeTestFeel.cpp
+	void BuildFirePhases();         // SmokeTestFire.cpp
 	void StartPhase(int32 Index);
 	void FinishPhase();
 	void WriteResultsAndQuit();

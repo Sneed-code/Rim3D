@@ -61,6 +61,8 @@ bench; H1 and later read them for the doctor job and the patient's health tab. C
 surgery success by skill, disease onset mean-time-between in days, food poisoning chances and the body
 temperatures at which cold and heat start (all unverified or ours; H1 and E2 tune them).
 
+The system that reads the items, rules and the hospital bed is [medicine.md](medicine.md) (H1). H2 read the diseases and corrected them against the wiki (stages, rates, tend lengths; gut worms and muscle parasites now cure by total tend quality); see [diseases.md](diseases.md).
+
 ## Checker
 
 `tools/check_defs.py` now also checks recipe `ingredients[].items[]`, `surgery.addsHediff`,

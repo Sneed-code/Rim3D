@@ -400,12 +400,27 @@ struct MarkShelterCommand {
 };
 
 // Taming, training and pens (task N3, docs/design/husbandry.md). `mark` is "Tame" (a wild animal, to be tamed by a colonist
-// with the Handling work), "Slaughter" (a tame one, to be killed) or "Release" (a tame one goes wild at once; `on` is
+// with the Handling work), "Hunt" (a wild one, to be shot by a colonist with the Hunting work and a gun; N2,
+// docs/design/hunting.md), "Slaughter" (a tame one, to be killed) or "Release" (a tame one goes wild at once; `on` is
 // ignored). `on` false takes a mark off. Fails for a thing that is no animal, a dead one, or one of the wrong kind.
 struct MarkAnimalCommand {
     Entity animal = kNoEntity;
     std::string mark;
     bool on = true;
+};
+
+// Marks every animal in `area` that can take the mark (a wild one for "Tame" or "Hunt", a tame one for "Slaughter"); the
+// others are skipped. Fails if there is none.
+struct MarkAnimalsInAreaCommand {
+    CellRect area;
+    std::string mark;
+    bool on = true;
+};
+
+// Names a tame animal (up to 24 characters; an empty name takes the name off). Fails for a wild or dead animal.
+struct SetAnimalNameCommand {
+    Entity animal = kNoEntity;
+    std::string name;
 };
 
 // A tame animal is (or is no longer) to be taught a trick: `trainable` is "Obedience", "Release", "Rescue" or "Haul".
@@ -430,6 +445,13 @@ struct RemoveAnimalZoneCellsCommand {
 struct AssignAnimalZoneCommand {
     Entity animal = kNoEntity;
     uint32_t zone = 0;
+};
+
+// Switches breeding on or off: for one tame animal, or (with no animal) for every animal in a zone.
+struct SetBreedingCommand {
+    Entity animal = kNoEntity;
+    uint32_t zone = 0;
+    bool allow = true;
 };
 
 // Melee (task F8, docs/design/melee.md). Attack: `pawn` swings at `target`, a pawn within reach;
@@ -483,6 +505,18 @@ struct StripCommand {
     bool strip = true;
 };
 
+// Dev command (C20, docs/design/social.md): `initiator` does the Interactions def `interaction` to `recipient`
+// now, whatever the dice and the opinion limits would have said. `outcome` is 1 to make a roll that could go
+// either way (a romantic gesture, a proposal) work, 0 to make it fail, -1 to leave it to the dice. Fails if
+// the interaction is unknown, either pawn can't talk now (dead, downed, asleep, fighting, drafted, under the
+// player's hand), they are out of earshot, or the interaction needs what is not there (a lover).
+struct InteractCommand {
+    Entity initiator = kNoEntity;
+    Entity recipient = kNoEntity;
+    std::string interaction;
+    int outcome = -1;
+};
+
 // The protagonist's dodge roll (P2, docs/design/shooter-feel.md): a start-up, a roll of a few metres
 // in the direction (dx, dy) (any length; not a number, or zero, is a backstep away from where the
 // pawn faces) in which bullets pass through the pawn for a short window, then a recovery in which it
@@ -494,6 +528,39 @@ struct DodgeRollCommand {
     Entity pawn = kNoEntity;
     float dx = 0.0f;
     float dy = 0.0f;
+};
+
+// Medicine (task H1, docs/design/medicine.md): how far a colonist's medicine may go. `care` is a name from
+// medicalCareName: NoCare, NoMedicine, Herbal, Normal or Best. Fails for a pawn without a body or a name that
+// isn't one.
+struct SetMedicalCareCommand {
+    Entity pawn = kNoEntity;
+    std::string care;
+};
+
+// Prisoners (task C22, docs/design/prisoners.md): what wardens do with a prisoner. `mode` is NoInteraction, ReduceResistance,
+// AttemptRecruit or Release (prisonerModeName). Fails for a pawn that is no prisoner, or a name that isn't one; Release also fails
+// for a prisoner who can't walk.
+struct SetPrisonerModeCommand {
+    Entity pawn = kNoEntity;
+    std::string mode;
+};
+
+// Marks a bed as a prison bed (only prisoners sleep in it, and downed enemies are carried to it) or takes the mark off. Fails for a
+// building that is no bed, or a bed someone not fit for it already owns.
+struct SetPrisonBedCommand {
+    Entity bed = kNoEntity;
+    bool on = true;
+};
+
+// Dev command (task H2, docs/design/diseases.md): the pawn catches a disease (a Hediffs def of class Disease, by
+// defName) at `severity` (below 0: the def's initial severity); an infection needs the wound's body part in `part`.
+// Fails for a pawn without a body, a name that is not a disease, or when the pawn already has it or is immune.
+struct ContractDiseaseCommand {
+    Entity pawn = kNoEntity;
+    std::string disease;
+    float severity = -1.0f;
+    int part = -1;
 };
 
 // Dev command: the weather becomes this Weathers def now (by defName, e.g. "Rain") and lasts `hours`
@@ -559,6 +626,94 @@ struct SetGrowingZoneCropCommand {
     std::string crop;
 };
 
+// Picks the narrator (a Narrators defName: "Orrin", "Maren", "Jinx"; "" turns the narrator off) and
+// the difficulty (a Difficulties defName; "" keeps it). The narrator is off until this is sent: the
+// game sends it at the start (docs/design/narrator.md). Fails for an unknown name.
+struct SetNarratorCommand {
+    std::string narrator = "Orrin";
+    std::string difficulty;
+};
+
+// A dev command: makes an incident (an Incidents defName, like "RaidEnemy") happen now, whatever its
+// timing, with `points` threat points (0: the colony's). Fails if it is unknown or can't happen now.
+struct FireIncidentCommand {
+    std::string incident;
+    float points = 0.0f;
+};
+
+// Fire (task E4, docs/design/fire.md). Dev command: starts a fire of `size` (the start size if 0) in a cell, or sets `pawn`
+// alight if it names one. Fails if nothing could burn: no fuel, wet ground, water or rock, a fire already there, a pawn
+// that is dead or fire-resistant. `force` lights even a cell with nothing to burn (it dies away in a moment).
+struct IgniteCommand {
+    CellPos cell;
+    float size = 0.0f;
+    Entity pawn = kNoEntity;
+    bool force = false;
+};
+
+// Paints the home area, where colonists with the Firefighter work type put fires out: adds the rectangle (or takes it
+// off). The first use turns the automatic growth round new buildings off. Fails if no cell changed.
+struct SetHomeAreaCommand {
+    CellRect area;
+    bool add = true;
+};
+
+// Multi-storey (task M1, docs/design/levels.md): lays an upper floor on every cell of `area` (on
+// level 1 or above) that can hold one, or takes them up with `remove`. A floor needs a wall or column
+// within the roof support radius on the level below; one is taken up only when nothing stands on it.
+// Instant for now: the work to build one comes with stairs (M2). Fails, with the last reason, if no
+// cell changed.
+struct PlaceUpperFloorCommand {
+    CellRect area;
+    bool remove = false;
+};
+
+// Fuel (task C11, docs/design/fuel.md): whether colonists refuel the building by themselves when it
+// is low (`autoRefuel`), and `fillNow`, an order to fill it to the top regardless. Fails if the thing
+// is not a finished building that burns fuel.
+struct SetRefuelCommand {
+    Entity building = kNoEntity;
+    bool autoRefuel = true;
+    bool fillNow = false;
+};
+
+// Changes the details of a bill (task C14, docs/design/crafting.md): the least and most skill a worker may
+// have in the recipe's skill, how far from the building ingredients are taken (metres, 0 anywhere), a stockpile
+// the products are taken to (0: none), the stock an "until you have" bill waits to fall under before it starts
+// again (0: as soon as it is under its count) and the item defNames the bill may not use. Replaces all of them.
+// Fails if there is no such bill, a number is out of range, the stockpile does not exist or a name is not an item.
+struct SetBillOptionsCommand {
+    Entity building = kNoEntity;
+    uint32_t bill = 0;
+    int skillMin = 0;
+    int skillMax = 20;
+    float radius = 0.0f;
+    uint32_t storeZone = 0;
+    int unpauseAt = 0;
+    std::vector<std::string> disallowed;
+};
+
+// Moves a bill to a place in the building's list (0 first, tried first). Fails if there is no such bill.
+struct MoveBillCommand {
+    Entity building = kNoEntity;
+    uint32_t bill = 0;
+    int index = 0;
+};
+
+// Dev command: the colonist has a mental break now (a MentalBreaks defName, docs/design/mental-breaks.md),
+// whatever its mood. Fails for a pawn that isn't a colonist on the map, is controlled by the player,
+// downed, dead or in a break already; for a break that needs something the game doesn't have yet
+// (fire); or when the break has nothing to do (a binge with no food).
+struct StartMentalBreakCommand {
+    Entity pawn = kNoEntity;
+    std::string breakDef;
+};
+
+// Dev command: ends the colonist's mental break at once, with no catharsis. Fails if it isn't in one.
+struct EndMentalBreakCommand {
+    Entity pawn = kNoEntity;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -575,10 +730,15 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              MeleeCommand, DodgeRollCommand,
                              SetOutfitCommand, EditOutfitCommand, AddOutfitCommand, RemoveOutfitCommand,
                              StripCommand, SetWeatherCommand, MarkAnimalCommand, SetTrainingCommand,
-                             CreateAnimalZoneCommand, RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand,
+                             MarkAnimalsInAreaCommand, SetAnimalNameCommand,
+                             CreateAnimalZoneCommand, RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand, SetBreedingCommand,
                              SpendTalentPointCommand, AddTalentXpCommand, RearmTrapCommand,
                              CarryWeaponCommand, SwitchWeaponCommand, CreateGrowingZoneCommand,
-                             RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand>;
+                             RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
+                             SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand, SetPrisonerModeCommand,
+                             SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
+                             MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand,
+                             SetNarratorCommand, FireIncidentCommand, ContractDiseaseCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

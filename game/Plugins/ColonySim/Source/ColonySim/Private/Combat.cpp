@@ -4,6 +4,7 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Inspirations.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
@@ -1114,7 +1115,10 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
     }
     const float accuracyFactor =
         weather_ != nullptr ? weather_->accuracyAt(CellPos{static_cast<int>(std::floor(pos.x)), static_cast<int>(std::floor(pos.y)), pos.level}) : 1.0f;
-    const float steady = talents_ != nullptr ? static_cast<float>(talents_->statFactor(pawn, "aimSpread")) : 1.0f;
+    float steady = talents_ != nullptr ? static_cast<float>(talents_->statFactor(pawn, "aimSpread")) : 1.0f;
+    if (inspirations_ != nullptr) {
+        steady *= inspirations_->statFactor(pawn, "aimSpread");
+    }
     fire(pawn, fx, fy, fz, spread(weaponDef, skill, distance, s.player, accuracyFactor) * steady + s.recoil, rng, kickUp, kickSide);
     const float skillFactor = std::max(0.0f, 1.0f - model_->recoilSkillReduction * static_cast<float>(skill));
     s.recoil += gun->recoil * skillFactor;
@@ -1143,8 +1147,11 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
         s.stepsLeft = std::max(1, gun->burstGap);
         return;
     }
-    s.phase = gun->cooldown > 0 ? ShotPhase::Cooling : ShotPhase::Ready;
-    s.stepsLeft = gun->cooldown;
+    const int cooldown = inspirations_ != nullptr
+                             ? static_cast<int>(std::lround(static_cast<float>(gun->cooldown) * inspirations_->statFactor(pawn, "fireCooldown")))
+                             : gun->cooldown;
+    s.phase = cooldown > 0 ? ShotPhase::Cooling : ShotPhase::Ready;
+    s.stepsLeft = cooldown;
 }
 
 void CombatSystem::startReload(Entity pawn, Shooter& s, Entity weapon, int extraSteps) {
@@ -1489,6 +1496,20 @@ PawnHitResult CombatSystem::hitPawn(Entity pawn, int hitboxPart, DefId damageTyp
     part = health_.goInside(pawn, damageType, part, rng);
     result.part = part;
     return armorPass(pawn, part, damageType, amount, penetration, rng);
+}
+
+bool CombatSystem::hurtPawn(Entity pawn, DefId damageType, float amount, Rng& rng) {
+    const int part = pickOutsidePart(pawn, rng);
+    if (part < 0) {
+        return false;
+    }
+    const PawnHitResult hit = armorPass(pawn, part, damageType, amount, 0.0f, rng);
+    bool alive = true;
+    if (!hit.deflected && hit.amount > 0.0f) {
+        alive = health_.applyHit(pawn, hit.damageType, hit.amount, part);
+    }
+    wearApparel(pawn, hit);
+    return alive;
 }
 
 float CombatSystem::spreadRadiusFor(float chance) const {

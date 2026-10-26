@@ -6,7 +6,9 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Spoilage.h"
+#include "ColonySim/Temperature.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -24,11 +26,15 @@ float needJobsDistSq(CellPos a, CellPos b) {
     return dx * dx + dy * dy;
 }
 
+// Across levels a level counts as kLevelDetourM metres more (docs/design/levels.md).
 float needJobsDistSq(const Position& a, CellPos b) {
-    const float dx = a.x - (static_cast<float>(b.x) + 0.5f);
-    const float dy = a.y - (static_cast<float>(b.y) + 0.5f);
-    return dx * dx + dy * dy;
+    return levelDistSq(a.x - (static_cast<float>(b.x) + 0.5f), a.y - (static_cast<float>(b.y) + 0.5f), a.level - b.level);
 }
+
+// How far a pawn looks for shelter (cells), how long it stays, and how often a busy pawn checks.
+constexpr int kNeedJobsShelterRadius = 30;
+constexpr int64_t kNeedJobsShelterSeconds = 120;
+constexpr int64_t kNeedJobsShelterCheckEvery = 30;
 
 }  // namespace
 
@@ -54,6 +60,9 @@ float JobSystem::sleepBelow(ScheduleKind slot) const {
 // schedule says, a pawn that is hungry or exhausted looks after it first.
 bool JobSystem::thinkNeeds(Entity pawn, Job& out) {
     entt::registry& reg = things_.registry();
+    if (makeShelterJob(pawn, out)) {
+        return true;
+    }
     Needs* needs = reg.try_get<Needs>(pawn);
     if (needs == nullptr) {
         return false;
@@ -96,6 +105,50 @@ bool JobSystem::thinkSchedule(Entity pawn, Job& out) {
     return false;
 }
 
+// RimWorld's SeekSafeTemperature: a pawn outside its safe range goes to the nearest cell it would find comfortable (a
+// heated room, a cool cellar), searching outwards in rings, and stays there for `kNeedJobsShelterSeconds`.
+bool JobSystem::makeShelterJob(Entity pawn, Job& out) {
+    if (temperature_ == nullptr || !temperature_->outsideSafeRange(pawn)) {
+        return false;
+    }
+    float comfortMin = 0.0f;
+    float comfortMax = 0.0f;
+    float safeMin = 0.0f;
+    float safeMax = 0.0f;
+    if (!temperature_->comfortRange(pawn, comfortMin, comfortMax) || !temperature_->safeRange(pawn, safeMin, safeMax)) {
+        return false;
+    }
+    const CellPos from = cellOf(things_.registry().get<Position>(pawn));
+    // Pass 0 wants a comfortable cell, pass 1 settles for a safe one.
+    for (int pass = 0; pass < 2; ++pass) {
+        const float lo = pass == 0 ? comfortMin : safeMin;
+        const float hi = pass == 0 ? comfortMax : safeMax;
+        for (int ring = 1; ring <= kNeedJobsShelterRadius; ++ring) {
+            for (int dy = -ring; dy <= ring; ++dy) {
+                for (int dx = -ring; dx <= ring; ++dx) {
+                    if (std::max(std::abs(dx), std::abs(dy)) != ring) {
+                        continue;
+                    }
+                    const CellPos c{from.x + dx, from.y + dy, from.level};
+                    if (!map_.inBounds(c) || !map_.walkable(c)) {
+                        continue;
+                    }
+                    const float t = temperature_->temperatureAt(c);
+                    if (t < lo || t > hi || avoiding(pawn, JobTarget{kNoEntity, c}) || !canReach(from, c)) {
+                        continue;
+                    }
+                    out = Job{};
+                    out.type = JobType::SeekShelter;
+                    out.cell = c;
+                    out.until = now() + kNeedJobsShelterSeconds;
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 // A pawn on a job it may drop (hauling, waiting) who has become hungry enough to eat or tired
 // enough to sleep puts that job down. Player orders and the need jobs themselves run to the end.
 void JobSystem::interruptForNeeds(Entity pawn) {
@@ -105,8 +158,20 @@ void JobSystem::interruptForNeeds(Entity pawn) {
         endJob(pawn, JobEnd::Interrupted, "time to work");
         return;
     }
+    // Out in the cold or heat: off to shelter. Looked at every half minute, not every second, as the search is wide.
+    if (!current.forced && (current.type == JobType::Wait || current.type == JobType::HaulToCell ||
+                            current.type == JobType::Recreate || jobIsGather(current.type)) &&
+        (now() + static_cast<int64_t>(entt::to_integral(pawn))) % kNeedJobsShelterCheckEvery == 0) {
+        Job shelter;
+        if (makeShelterJob(pawn, shelter)) {
+            endJob(pawn, JobEnd::Interrupted, "too cold or hot here");
+            startJob(pawn, std::move(shelter));
+            return;
+        }
+    }
     if (current.forced || (current.type != JobType::Wait && current.type != JobType::HaulToCell &&
-                           current.type != JobType::Recreate && !jobIsGather(current.type))) {
+                           current.type != JobType::Recreate && current.type != JobType::BedRest &&
+                           !jobIsGather(current.type))) {
         return;
     }
     const Needs* needs = reg.try_get<Needs>(pawn);
@@ -114,7 +179,8 @@ void JobSystem::interruptForNeeds(Entity pawn) {
         return;
     }
     const bool hungry = needs->food < rules_.foodSeekBelow && now() >= needs->foodSearchAfter;
-    const bool sleepy = needs->rest < sleepBelow(scheduleNow(pawn));
+    // A patient resting in bed gets up to eat but not to sleep: it is in bed already.
+    const bool sleepy = current.type != JobType::BedRest && needs->rest < sleepBelow(scheduleNow(pawn));
     if (!hungry && !sleepy) {
         return;
     }
@@ -141,7 +207,7 @@ bool JobSystem::findFood(Entity pawn, Job& out) {
     for (const auto [item, thing, pos, stack] : reg.view<const Thing, const Position, const StackCount>().each()) {
         (void)stack;
         const int tier = thing.def.value < foodTier_.size() ? foodTier_[thing.def.value] : -1;
-        if (tier < 0 || pos.level != at.level || (tier == 0 && needs.food >= rules_.foodRavenousBelow)) {
+        if (tier < 0 || (tier == 0 && needs.food >= rules_.foodRavenousBelow)) {
             continue;
         }
         const float dist = needJobsDistSq(at, cellOf(pos));
@@ -257,6 +323,7 @@ JobSystem::StepResult JobSystem::eat(Entity pawn, Job& job, std::string&) {
     const float before = needs.food;
     needs.food = std::min(1.0f, needs.food + nutrition_[def.value] * static_cast<float>(count));
     reg.remove<Carrying>(pawn);
+    const bool humanIngredient = spoilage_ != nullptr && spoilage_->humanlikeIngredient(food);
     if (spoilage_ != nullptr) {
         spoilage_->eaten(pawn, food);
     }
@@ -268,6 +335,7 @@ JobSystem::StepResult JobSystem::eat(Entity pawn, Job& job, std::string&) {
     event.cell = cellOf(reg.get<Position>(pawn));
     event.amount = needs.food - before;
     event.message = job.chair != kNoEntity ? "table" : "ground";
+    event.part = humanIngredient ? 1 : -1;  // 1: cooked from human flesh (the mood minds)
     events_.push_back(std::move(event));
     return StepResult::Next;
 }
@@ -330,7 +398,12 @@ bool JobSystem::findBed(Entity pawn, Entity& bed, CellPos& cell) {
     float bestDist = 0.0f;
     for (const auto [candidate, thing, owners, footprint] : reg.view<const Thing, const Bed, const Footprint>().each()) {
         const int slots = std::max(1, static_cast<int>(defs_.get(thing.def).integer("building.sleepingSlots", 1)));
-        if (static_cast<int>(owners.owners.size()) >= slots || !things_.spawned(candidate)) {
+        // A medical bed is for patients: nobody claims one to sleep in (RimWorld's rule).
+        if (static_cast<int>(owners.owners.size()) >= slots || !things_.spawned(candidate) || isMedical_[thing.def.value] != 0) {
+            continue;
+        }
+        // Prison beds are for prisoners and nobody else.
+        if (reg.all_of<PrisonBed>(candidate) != reg.all_of<Prisoner>(pawn)) {
             continue;
         }
         const CellRect rect = footprint.rect();
@@ -340,7 +413,7 @@ bool JobSystem::findBed(Entity pawn, Entity& bed, CellPos& cell) {
         }
         const CellPos c{rect.minX + index % rect.sizeX, rect.minY + index / rect.sizeX, rect.level};
         const float dist = needJobsDistSq(at, c);
-        if (c.level != at.level || (best != kNoEntity && (dist > bestDist || (dist == bestDist && candidate >= best))) ||
+        if ((best != kNoEntity && (dist > bestDist || (dist == bestDist && candidate >= best))) ||
             !usable(candidate, c)) {
             continue;
         }
@@ -462,6 +535,10 @@ bool JobSystem::assignBed(Entity bed, Entity pawn, std::string& error) {
     }
     if (!reg.valid(pawn) || !reg.all_of<Needs>(pawn)) {
         error = "that pawn doesn't sleep";
+        return false;
+    }
+    if (reg.all_of<PrisonBed>(bed) != reg.all_of<Prisoner>(pawn)) {
+        error = reg.all_of<PrisonBed>(bed) ? "that is a prison bed, for prisoners only" : "a prisoner sleeps only in a prison bed";
         return false;
     }
     if (std::find(owned.owners.begin(), owned.owners.end(), pawn) != owned.owners.end()) {

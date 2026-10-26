@@ -153,11 +153,16 @@ public:
     // Gives a new raider its looks (Sim::giveLooks): pawn, seed, female.
     void setLooksMaker(std::function<void(Entity, uint64_t, bool)> maker) { looks_ = std::move(maker); }
 
-    // RimWorld's storyteller wealth: items on the map and carried by the player's pawns at their
-    // market value, plus buildings at half theirs. Defs without a marketValue count 0.
+    // RimWorld's storyteller wealth (wiki "Raid points"): items on the map and carried by the
+    // player's pawns, and the player's own pawns (colonists, tame animals), at their market value,
+    // plus buildings at half theirs. Defs without a marketValue count 0.
     float colonyWealth() const;
     // The raid points a raid would get now (wiki "Raid points"), between minPoints and maxPoints.
-    float threatPoints() const;
+    float threatPoints() const { return threatPoints(1.0f); }
+    // The same with another factor before the limits: the narrator's difficulty and points factor (T1).
+    float threatPoints(float scale) const;
+    // The player's living colonists on the map.
+    int colonistCount() const;
 
     // Commands. False, with a reason in plain words, when they can't be done.
     // A raid of `faction` (a Factions defName) with `points` (0: threatPoints()) walks in at `edge`
@@ -172,6 +177,8 @@ public:
     // colonists up or sends them back. Runs after the job system, before the fighters.
     void step();
 
+    // A pawn walks off the map for good (its gear goes with it): a PawnLeftMap event, then it is destroyed.
+    void leaveMap(Entity pawn);
     // Call before a thing is destroyed: it leaves its squad.
     void forget(Entity thing);
     // A Faction id for a Factions def: the same def always gets the same id.
@@ -209,7 +216,6 @@ private:
     float strength(Entity pawn) const;
     bool canSee(Entity watcher, Entity pawn) const;
     void squadEvent(const Squad& squad, EventType type, std::string message);
-    void leaveMap(Entity pawn);
     int64_t now() const;
 
     Things& things_;

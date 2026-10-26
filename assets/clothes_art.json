@@ -3,6 +3,9 @@
   "note": "from: SK_Looks_m_med_nrw_<from>. drop: triangles whose vertices all weigh most on a bone with one of these words in its name are cut. inflate: cm along the normals. color: linear RGB of the flat garment material. Props are put on the head bone: size is metres [x, y, z] the mesh is fitted into, sink is cm pushed down into the head, shape cap is a cut ellipsoid with radii in cm, centre above the head's crown in cm.",
   "armsHands": ["upperarm", "lowerarm", "hand", "thumb", "index", "middle", "ring", "pinky"],
   "garments": [
+    {"def": "Body_Bare", "note": "U16: the skin under the clothes (not an apparel def). Kellan's own top and trousers are hidden, so this is the torso, arms and legs a pawn shows where nothing is worn; it is coloured by the pawn's skin at run time.", "parts": [
+      {"from": "top_hoodie_nrm_High", "drop": ["head", "hand", "thumb", "index", "middle", "ring", "pinky"], "inflate": -1.2, "color": [0.4, 0.28, 0.22]},
+      {"from": "btm_cargopants_High", "drop": ["foot", "ball"], "inflate": -1.2, "color": [0.4, 0.28, 0.22]}]},
     {"def": "Apparel_Tribalwear", "parts": [
       {"from": "top_hoodie_nrm_High", "drop": ["upperarm", "lowerarm", "hand", "thumb", "index", "middle", "ring", "pinky", "head"], "inflate": 0.3, "color": [0.20, 0.11, 0.05]},
       {"from": "btm_cargopants_High", "drop": ["calf", "foot", "ball"], "inflate": 0.3, "color": [0.20, 0.11, 0.05]}]},

@@ -16,7 +16,7 @@
   },
   {
     "defName": "WoodLog", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_WoodLog.SM_WoodLog", "color": [0.6, 0.42, 0.26], "pieces": 6, "layer": 0.14, "parts": [{"shape": "cylinder", "radius": 0.07, "height": 0.55, "at": [0, 0, -0.205], "color": [0.55, 0.38, 0.22], "rot": [90, 0, 0]}]}, "parent": "ItemBase", "label": "wood",
-    "stats": { "maxHitPoints": 150, "marketValue": 1.2, "mass": 0.4, "beauty": -4, "deteriorationRate": 0.5 },
+    "stats": { "maxHitPoints": 150, "marketValue": 1.2, "mass": 0.4, "beauty": -4, "flammability": 1.0, "deteriorationRate": 0.5 },
     "stuffProps": {
       "categories": ["Woody"],
       "statFactors": {
@@ -59,7 +59,20 @@
       "maxHitPoints": 50, "marketValue": 24, "mass": 0.3, "flammability": 1.0, "deteriorationRate": 0.25,
       "nutrition": 0.9, "workToMake": 648
     },
+    "thingCategories": ["Foods", "PreparedFood"],
+    "comps": [{ "type": "Rottable", "daysToRotStart": 60 }],
+    "unverified": ["comps"],
     "ingestible": { "foodType": "Meal", "preferability": "MealSimple", "maxNumToIngestAtOnce": 1 }
+  },
+  {
+    "defName": "Pemmican", "parent": "ItemBase", "label": "pemmican", "stackLimit": 75,
+    "visual": {"pieces": 3, "layer": 0.1, "parts": [{"shape": "box", "size": [0.14, 0.08, 0.05], "color": [0.42, 0.22, 0.16]}]},
+    "stats": { "maxHitPoints": 50, "marketValue": 1.1, "mass": 0.025, "flammability": 0.5, "deteriorationRate": 2, "nutrition": 0.05 },
+    "thingCategories": ["Foods", "PreparedFood"],
+    "ingestible": { "foodType": "Meal", "preferability": "MealAwful", "maxNumToIngestAtOnce": 1 },
+    "comps": [{ "type": "Rottable", "daysToRotStart": 150 }],
+    "unverified": ["stats", "comps", "ingestible.preferability"],
+    "note": "Dried meat and fruit that keeps for 150 days; the long-lasting food of a colony with no cold room."
   },
   {
     "defName": "ChunkBase", "visual": {"parts": [{"shape": "sphere", "radius": 0.28, "height": 0.3, "at": [0, 0, 0], "color": [0.55, 0.53, 0.5]}]}, "parent": "ItemBase", "abstract": true, "stackLimit": 1,

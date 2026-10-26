@@ -18,6 +18,6 @@
   {
     "defName": "Apparel_SimpleHelmet", "visual": { "worn": [{ "mesh": "/Game/Rim3D/Generated/Clothes/SM_Apparel_SimpleHelmet.SM_Apparel_SimpleHelmet", "bone": "head" }] }, "parent": "ApparelBase", "label": "simple helmet",
     "stats": { "maxHitPoints": 100, "mass": 2, "armorRatingSharp": 0.45, "armorRatingBlunt": 0.225, "armorRatingHeat": 0.3 },
-    "apparel": { "bodyPartGroups": ["UpperHead"], "layers": ["Overhead"] }
+    "apparel": { "bodyPartGroups": ["UpperHead"], "layers": ["Overhead"], "hidesHair": true }
   }
 ]

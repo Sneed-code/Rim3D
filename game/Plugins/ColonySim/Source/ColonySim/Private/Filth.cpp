@@ -33,6 +33,7 @@ FilthNumbers FilthNumbers::read(const DefDatabase& defs) {
     n.dropChancePerCell = static_cast<float>(def->number("dropChancePerCell", n.dropChancePerCell));
     n.bloodPerBleedDay = static_cast<float>(def->number("bloodPerBleedDay", n.bloodPerBleedDay));
     n.cleaningSpeed = static_cast<float>(def->number("cleaningSpeed", n.cleaningSpeed));
+    n.rainWashFactor = static_cast<float>(def->number("rainWashFactor", n.rainWashFactor));
     return n;
 }
 
@@ -53,6 +54,11 @@ Filth::Filth(Map& map, Things& things, const Floors& floors, const DefDatabase& 
         kind.trackable = def.flag("trackable", false);
         kind.cleanSeconds = static_cast<float>(def.number("cleanTicks", 35.0)) * numbers_.ticksToSeconds;
         kind.maxThickness = std::clamp(static_cast<int>(def.integer("maxThickness", 3)), 1, 255);
+        if (def.count("filth.disappearsInDays") >= 2) {
+            kind.fadeHours = static_cast<float>((def.numberAt("filth.disappearsInDays", 0, 0.0) + def.numberAt("filth.disappearsInDays", 1, 0.0)) * 0.5 *
+                                                24.0);
+        }
+        kind.rainWashes = def.flag("filth.rainWashes", false);
         kinds_.push_back(std::move(kind));
     }
     dirtKind_ = kindIndex("Dirt");
@@ -80,7 +86,7 @@ bool Filth::bareGround(CellPos c) const {
 }
 
 bool Filth::add(CellPos c, int kind, int layers) {
-    if (kind < 0 || static_cast<size_t>(kind) >= kinds_.size() || layers <= 0 || !map_.inBounds(c) ||
+    if (kind < 0 || static_cast<size_t>(kind) >= kinds_.size() || layers <= 0 || !map_.onGround(c) ||
         !map_.groundWalkable(c) || map_.passage(c) == Passage::Blocked) {
         return false;
     }
@@ -104,7 +110,7 @@ bool Filth::add(CellPos c, int kind, int layers) {
 }
 
 bool Filth::clean(CellPos c) {
-    if (!map_.inBounds(c)) {
+    if (!map_.onGround(c)) {
         return false;
     }
     const auto it = piles_.find(map_.index(c));
@@ -124,18 +130,42 @@ bool Filth::clean(CellPos c) {
     return true;
 }
 
+bool Filth::clean(CellPos c, int kind) {
+    if (!map_.onGround(c)) {
+        return false;
+    }
+    const auto it = piles_.find(map_.index(c));
+    if (it == piles_.end()) {
+        return false;
+    }
+    auto pile = std::find_if(it->second.begin(), it->second.end(), [&](const FilthPile& p) { return p.kind == kind; });
+    if (pile == it->second.end()) {
+        return false;
+    }
+    if (pile->thickness > 1) {
+        --pile->thickness;
+    } else {
+        it->second.erase(pile);
+        if (it->second.empty()) {
+            piles_.erase(it);
+        }
+    }
+    ++changes_;
+    return true;
+}
+
 void Filth::clear(CellPos c) {
-    if (map_.inBounds(c) && piles_.erase(map_.index(c)) > 0) {
+    if (map_.onGround(c) && piles_.erase(map_.index(c)) > 0) {
         ++changes_;
     }
 }
 
 bool Filth::has(CellPos c) const {
-    return map_.inBounds(c) && piles_.count(map_.index(c)) > 0;
+    return map_.onGround(c) && piles_.count(map_.index(c)) > 0;
 }
 
 const std::vector<FilthPile>& Filth::at(CellPos c) const {
-    if (!map_.inBounds(c)) {
+    if (!map_.onGround(c)) {
         return kFilthNone;
     }
     const auto it = piles_.find(map_.index(c));
@@ -192,7 +222,7 @@ void Filth::step() {
     const float bloodPerSecond = numbers_.bloodPerBleedDay / static_cast<float>(kSecondsPerHour);
     for (const Entity pawn : pawns) {
         const CellPos cell = cellOf(reg.get<Position>(pawn));
-        if (!map_.inBounds(cell)) {
+        if (!map_.onGround(cell)) {
             continue;
         }
         const float rate = filthRate_[reg.get<Thing>(pawn).def.value];
@@ -237,6 +267,36 @@ void Filth::step() {
     for (auto it = carriers_.begin(); it != carriers_.end();) {
         const Entity e = static_cast<Entity>(it->first);
         it = reg.valid(e) ? std::next(it) : carriers_.erase(it);
+    }
+}
+
+void Filth::fadeHour(float rainRate) {
+    const bool raining = rainRate > 0.001f;
+    for (auto it = piles_.begin(); it != piles_.end();) {
+        const CellPos cell = map_.cellAt(it->first);
+        std::vector<FilthPile>& cellPiles = it->second;
+        if (map_.roof(cell) == Roof::None) {
+            for (size_t i = 0; i < cellPiles.size();) {
+                FilthPile& pile = cellPiles[i];
+                const FilthKind& kind = kinds_[pile.kind];
+                if (kind.fadeHours <= 0.0f) {
+                    ++i;
+                    continue;
+                }
+                const float perLayer = (raining && kind.rainWashes ? numbers_.rainWashFactor : 1.0f) / kind.fadeHours;
+                if (rng_.unit() < perLayer * static_cast<float>(pile.thickness)) {
+                    ++changes_;
+                    if (pile.thickness > 1) {
+                        --pile.thickness;
+                    } else {
+                        cellPiles.erase(cellPiles.begin() + static_cast<std::ptrdiff_t>(i));
+                        continue;
+                    }
+                }
+                ++i;
+            }
+        }
+        it = cellPiles.empty() ? piles_.erase(it) : std::next(it);
     }
 }
 

@@ -62,12 +62,17 @@ gives no work; the tasks with scanners so far:
 
 | Task | Work type | Scanner |
 | --- | --- | --- |
+| `Refuel` | Hauling (first) | finished buildings low on fuel, or ordered filled: a job to bring the nearest fuel stack ([fuel.md](fuel.md)) |
 | `HaulToStockpile` | Hauling | items outside storage, or in a stockpile worse than one that would take them |
 | `ConstructDeliverResources` | Construction | blueprints and frames that need materials ([construction.md](construction.md)) |
 | `ConstructFinishFrames` | Construction | frames with all their materials |
 | `Deconstruct` | Construction | buildings marked for deconstruction |
-| `DoBillsCookStove` | Cooking | work buildings with a bill to do ([bills.md](bills.md)) |
+| `DoBillsCookStove`, `DoBillsSmithy`, `DoBillsTailor`, `DoBillsCraftingSpot`, `DoBillsStonecut`, `DoBillsButcher` | Cooking, Smithing, Tailoring, Crafting | work buildings with a bill to do, the giver named by the building def's `workGiver` ([bills.md](bills.md), [crafting.md](crafting.md)) |
+| `TendPatients`, `Rescue` | Doctor | a colonist with untended wounds (the bleeding first); a downed colonist no bed holds ([medicine.md](medicine.md)); jobs `TendPatient`, `Rescue` |
+| `GoToMedicalBed`, `RestToHeal` | Patient, PatientBedRest | the pawn itself, when hurt and up: a medical bed, or any bed; job `BedRest` ([medicine.md](medicine.md)) |
 | `CleanFilth` | Cleaning | the nearest filthy cell indoors ([room-stats.md](room-stats.md)); job `CleanFilth`, steps GotoCell, CleanWork |
+
+Work types with a natural priority of 1100 or more are asked first at each priority level, and every ten seconds a pawn on a droppable job asks them again ([medicine.md](medicine.md)).
 
 C3 adds `Mine` and `CutOrHarvestDesignatedPlants`
 and so on: a class deriving from `WorkGiver` in `WorkGivers.cpp`, added in `makeWorkGivers`.

@@ -4,7 +4,10 @@
 #include "ColonySim/Spoilage.h"
 
 #include "ColonySim/Bills.h"
+#include "ColonySim/Crafting.h"
+#include "ColonySim/Fuel.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Inspirations.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Things.h"
@@ -38,6 +41,11 @@ bool JobSystem::failCheckDoBill(Entity pawn, Job& job, std::string& why) {
     }
     if (bill->suspended) {
         why = "the bill was suspended";
+        return false;
+    }
+    if (const Recipe* recipe = bills_->recipe(bill->recipe);
+        recipe != nullptr && !fuel_->canUse(job.site, fuel_->specOf(job.site).perUse * static_cast<float>(recipe->fuelUses()))) {
+        why = "the building is out of fuel";
         return false;
     }
     if (job.step <= kDoBillPickUpStep) {
@@ -111,11 +119,27 @@ JobSystem::StepResult JobSystem::billWork(Entity pawn, Job& job, std::string& wh
         job.walk = 2;
         pawnDid(pawn, PawnAction::Cook, job.site);
     }
-    job.progress += bills_->workSpeed(pawn, *recipe) * health_.capacityValue(pawn, "Manipulation") * lightWorkFactor(pawn);
+    // A bench works at its own speed, and some stuffs (wood against steel) take more or less work.
+    float benchFactor = 1.0f;
+    float stuffFactor = 1.0f;
+    if (crafting_ != nullptr) {
+        benchFactor = crafting_->benchSpeed(reg.get<Thing>(job.site).def);
+        if (recipe->stuffFromIngredient && !recipe->products.empty()) {
+            stuffFactor = crafting_->stuffWorkFactor(crafting_->dominantStuff(recipe->products.front().item, job.used));
+        }
+    }
+    job.progress += bills_->workSpeed(pawn, *recipe) * health_.capacityValue(pawn, "Manipulation") * lightWorkFactor(pawn) *
+                    benchFactor / std::max(stuffFactor, 0.01f);
+    // The recipe's experience is what a run gives at 100% speed, so it comes in a steady stream
+    // while the pawn works, whatever its speed (a slow worker earns more from a run).
+    if (recipe->work > 0.0f && !recipe->skill.empty()) {
+        learnSkill(pawn, recipe->skill.c_str(), static_cast<double>(recipe->skillXp) / static_cast<double>(recipe->work));
+    }
     return job.progress < recipe->work ? StepResult::Running : StepResult::Next;
 }
 
-void JobSystem::dropNewItems(Entity pawn, DefId def, int count, const std::vector<BillUsed>* madeFrom) {
+void JobSystem::dropNewItems(Entity pawn, DefId def, int count, const std::vector<BillUsed>* madeFrom, const Recipe* recipe,
+                             uint32_t storeZone) {
     entt::registry& reg = things_.registry();
     const int limit = stackLimit(def);
     for (int left = count; left > 0; left -= limit) {
@@ -125,6 +149,12 @@ void JobSystem::dropNewItems(Entity pawn, DefId def, int count, const std::vecto
         }
         if (madeFrom != nullptr && spoilage_ != nullptr) {
             spoilage_->madeBy(item, *madeFrom, pawn, cellOf(reg.get<Position>(pawn)));
+        }
+        if (recipe != nullptr && crafting_ != nullptr) {
+            // An inspired crafter's next thing with a quality is better; making it uses the inspiration up.
+            const int shift = inspirations_ != nullptr && crafting_->hasQuality(def) ? inspirations_->takeQualityShift(pawn) : 0;
+            crafting_->finishProduct(item, *recipe, bills_->skillLevel(pawn, recipe->skill), madeFrom != nullptr ? *madeFrom : std::vector<BillUsed>{},
+                                     storeZone, shift);
         }
         reg.emplace_or_replace<Carrying>(pawn, Carrying{item});
         dropCarried(pawn);
@@ -138,12 +168,15 @@ JobSystem::StepResult JobSystem::billFinish(Entity pawn, Job& job, std::string& 
         why = "the bill is gone";
         return StepResult::Failed;
     }
-    // The ingredients are gone for good; the product lies by the pawn, where haulers find it.
+    // The ingredients are gone for good (and the fuel burnt); the product lies by the pawn, where haulers
+    // find it.
     const std::vector<BillUsed> used = std::move(job.used);
     job.used.clear();
+    fuel_->use(job.site, fuel_->specOf(job.site).perUse * static_cast<float>(recipe->fuelUses()));
     int made = 0;
+    const uint32_t storeZone = bill->storeZone;
     for (const RecipeProduct& product : recipe->products) {
-        dropNewItems(pawn, product.item, product.count, &used);
+        dropNewItems(pawn, product.item, product.count, &used, recipe, storeZone);
         made += product.count;
     }
     const DefId recipeDef = recipe->def;

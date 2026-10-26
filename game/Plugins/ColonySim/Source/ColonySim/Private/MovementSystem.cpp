@@ -232,12 +232,14 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
             a.newVy = 0.0f;
             mover.blockedSteps = 0;
             mover.heldSteps = 0;
+            mover.climbed = 0.0f;  // still in the cell in front of the climb: it starts again
             continue;
         }
         const float accel = base * kMoveAccelFraction;
 
-        // Where to: skip the waypoints already reached.
-        while (!mover.arrived()) {
+        // Where to: skip the waypoints already reached (a waypoint on another level is reached by
+        // climbing, below).
+        while (!mover.arrived() && !mover.climbing(a.level)) {
             const CellPos wp = mover.path[mover.next];
             const float dx = static_cast<float>(wp.x) + 0.5f - a.x;
             const float dy = static_cast<float>(wp.y) + 0.5f - a.y;
@@ -257,6 +259,37 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
             mover.blockedSteps = 0;
         }
 
+        // Up or down stairs or a ladder: the pawn stays in the cell in front of it, out of everyone's
+        // way, while `climbed` counts up the climb's length; then it stands at the other end.
+        if (mover.climbing(a.level)) {
+            a.newVx = 0.0f;
+            a.newVy = 0.0f;
+            const CellPos to = mover.path[mover.next];
+            const LevelLink* link = map.levelLinkBetween(here, to);
+            if (link == nullptr) {
+                // The stairs are gone: the walk is given up and the job thinks again.
+                mover.path.clear();
+                mover.next = 0;
+                mover.gaveUp = true;
+                mover.climbed = 0.0f;
+                continue;
+            }
+            mover.climbed += base * link->speedFactor;
+            if (mover.climbed >= link->length) {
+                a.climbed = true;
+                a.toX = static_cast<float>(to.x) + 0.5f;
+                a.toY = static_cast<float>(to.y) + 0.5f;
+                a.toLevel = to.level;
+                mover.fromX = a.toX;
+                mover.fromY = a.toY;
+                ++mover.next;
+                mover.climbed = 0.0f;
+                mover.blockedSteps = 0;
+                mover.heldSteps = 0;
+            }
+            continue;
+        }
+        mover.climbed = 0.0f;
         // Standing still with nowhere to go, and no pawn in its space to push it: it stays put. This is
         // what the full steering below comes to for it, without the neighbour list and the candidates.
         if (mover.arrived() && a.vx == 0.0f && a.vy == 0.0f) {
@@ -574,8 +607,14 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
         }
         Position& pos = reg.get<Position>(a.entity);
         Mover& mover = reg.get<Mover>(a.entity);
-        pos.x = a.x + a.newVx;
-        pos.y = a.y + a.newVy;
+        if (a.climbed) {
+            pos.x = a.toX;
+            pos.y = a.toY;
+            pos.level = a.toLevel;
+        } else {
+            pos.x = a.x + a.newVx;
+            pos.y = a.y + a.newVy;
+        }
         mover.vx = a.newVx;
         mover.vy = a.newVy;
     }

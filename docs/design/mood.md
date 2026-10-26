@@ -19,6 +19,8 @@ Base mood 50 is ours: the wiki's base is by difficulty (32 on Strive to Survive)
 sit higher because comfort, beauty, outdoors, joy and the rest add to it, and we haven't built those. Revisit
 when they exist (`ours` in the def).
 
+Another system can start a memory with `MoodSystem::remember(pawn, trigger, now)`: the social system (C20, [social.md](social.md)) does for chats, slights, insults, weddings, breakups and deaths of friends.
+
 ## Thoughts (`Thoughts` defs)
 
 Two kinds. Numbers are RimWorld's as recalled; only Hungry (-6) is from the wiki, the rest are
@@ -45,13 +47,14 @@ needs.md), a memory if it has `trigger` (the names the table says). The trigger 
 `MoodSystem::thoughts(pawn, now)` lists what counts now for the colonist panel (U8): label, offset, whether
 it is a situation, when a memory fades; strongest first.
 
-## Mental break thresholds (recorded, no breaks yet)
+## Mental break thresholds (the breaks themselves are [mental-breaks.md](mental-breaks.md), C19)
 
 `MoodBand`: Stable, Minor, Major, Extreme (break risk). The mood is **under** a threshold's level
 (35%, 20%, 5% of the scale, `MoodRules.breakThreshold`) when in that band; the worst band wins. A trait's
 `statOffsets.mentalBreakThreshold` (Nerves: volatile +0.15, iron-willed -0.18) moves all three
 (`MoodSystem::breakLevels`). `Mood::band` is kept up to date; when it changes a **`PawnMoodBand`** event
-says so (`message` the new band, `amount` the mood). Nothing happens yet: mental breaks come later.
+says so (`message` the new band, `amount` the mood). The mental break system (C19) rolls for a break from the band; a
+break that ends calm raises the `Catharsis` memory (trigger `MentalBreakEnded`) and an insult the `Insulted` one.
 
 ## Temperature thoughts (E2)
 
@@ -59,6 +62,18 @@ A thought def with `situation.condition` `coldBelowComfort` or `hotAboveComfort`
 counts while the pawn is outside its comfortable temperature range; its `stages` are picked by the degrees
 outside it ([temperature.md](temperature.md)). The thought's label in the panel is the stage's (`chilly`,
 `freezing`, `warm`, `scorching`). Like the food and rest situations it exists only while it holds.
+## Trait situations
+
+Three staged thoughts in `Thoughts3.json` are limited to a trait (`situation.trait`) and judged in `Sim.cpp`:
+`NightOwlAwakeAtNight` (+8) and `NightOwlAwakeInDay` (-5) count while a Night owl is awake (not lying down), by
+`MoodRules.nightHours` (ours, 21:00 to 04:59); `GreedyNoBedroom` (-4) counts while a Greedy colonist owns no bed in a
+room with the Bedroom role. The numbers are half the traits' `moodAwakeAtNight`, `moodAwakeInDay` and `moodWithoutBedroom`: the full ones sent the Crashlanded colony into mental breaks (ours, tune in a playtest).
+
+## Passion at work
+
+Two more situations, `PassionMinorWork` (+8) and `PassionMajorWork` (+14, from `SkillRules.passionMood`),
+count while the pawn's job uses a skill it has that passion for ([skills.md](skills.md)). A situation def
+has `situation: {passion: "Minor"}` instead of a need and band.
 
 ## What Unreal sees
 
@@ -89,5 +104,7 @@ list says where each stage ends, and the stage's `moodOffset` counts. A conditio
 ## Not yet
 
 Mental breaks, inspirations, ideology and precepts; thoughts from pain, injuries,
-joy, relationships, other pawns' deaths, passions at work (`SkillRules.passionMood` is read by
+joy, relationships, other pawns' deaths; social and mood stacking beyond one of each; thoughts from traits' `moodWithRangedWeapon`.
+Inspirations, ideology and precepts; thoughts from pain, injuries, rooms, beauty,
+temperature, joy, relationships, other pawns' deaths, passions at work (`SkillRules.passionMood` is read by
 nothing yet); social and mood stacking beyond one of each; thoughts from traits' `moodWithRangedWeapon`.

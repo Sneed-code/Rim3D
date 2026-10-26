@@ -50,6 +50,24 @@ public:
 	/** Puts the camera where it is heading right now (after switching bodies or views). */
 	void SnapCamera();
 
+	/** Holding aim (right mouse button with a gun in hand): the view blends to the aimed one over about a fifth of a second
+	 *  (over the shoulder and zoomed, or first person with `Feel.AimView 1`) and back when it is let go (docs/design/shooter-feel-draw.md).
+	 *  Test input: `SetScriptedAim` is used instead of the mouse button until ClearScriptedAim. */
+	void SetScriptedAim(bool bHeld) { bScriptedAim = true; bScriptAimHeld = bHeld; }
+	void ClearScriptedAim() { bScriptedAim = false; }
+	bool IsAimHeld() const { return bAimHeld; }
+	/** 0 not aiming to 1 fully aimed (eased). */
+	float GetAimBlend() const { return AimBlend; }
+	/** The third person distance now, cm: the zoomed one, closer while aiming. Shots start this far along the view. */
+	float GetEffectiveArmLength() const { return EffectiveArm; }
+	/** Whether the body is hidden because the view is at its eyes: first person, or aimed in with the first person aim view. */
+	bool IsBodyHiddenInView() const;
+	/** The field of view now (80 degrees, narrowing while aimed). */
+	float GetFieldOfView() const;
+	/** What the camera is nudged by now (kick, shake, roll dip) on top of the aim, and its motion blur. */
+	FRotator GetFeelRotation() const;
+	float GetMotionBlurAmount() const;
+
 	/** Test input: used instead of the keyboard until ClearScriptedInput. */
 	void SetScriptedInput(double Right, double Forward, bool bWalk);
 	void ClearScriptedInput() { bScripted = false; }
@@ -66,7 +84,8 @@ public:
 	float GetPitch() const { return Pitch; }
 	float GetArmLength() const { return ArmLength; }
 	const FVector2D& GetLocalVelocity() const { return Velocity; }
-	/** Where the camera looks from and along (world units), for aiming. */
+	/** Where the camera looks from and along (world units), for aiming: the aim itself, without the gun's kick, the shake or a
+	 *  roll's dip, so the crosshair is where the bullet goes. */
 	FVector GetViewLocation() const;
 	FVector GetViewDirection() const;
 
@@ -98,6 +117,11 @@ private:
 	float Pitch = -10.0f;
 	float ArmLength = 350.0f;
 	bool bFirstPerson = false;
+	bool bAimHeld = false;
+	bool bScriptedAim = false;
+	bool bScriptAimHeld = false;
+	float AimBlend = 0.0f;
+	float EffectiveArm = 350.0f;
 	bool bScripted = false;
 	double ScriptRight = 0.0;
 	double ScriptForward = 0.0;

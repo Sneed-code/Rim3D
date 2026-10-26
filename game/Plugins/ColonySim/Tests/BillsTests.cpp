@@ -4,12 +4,14 @@
 #include "ColonySim/Construction.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Events.h"
+#include "ColonySim/Fuel.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
+#include "FuelTestHelper.h"
 
 #include <doctest.h>
 
@@ -50,7 +52,8 @@ Entity billsSpawn(Sim& sim, const std::string& def, CellPos cell, int count = 1)
     sim.step();
     for (const Event& e : sim.events()) {
         if (e.type == EventType::ThingSpawned && e.cell == cell && sim.defs().get(e.def).defName() == def) {
-            return e.thing;
+            // A new building starts without fuel; these tests are about cooking, not about wood.
+            return testFueled(sim, e.thing);
         }
     }
     return kNoEntity;
@@ -139,7 +142,7 @@ TEST_CASE("Bills: the recipes in the data are RimWorld's simple meal, four at on
     CHECK(simple->work == doctest::Approx(432.0f));  // 300 ticks
     CHECK(simple->skill == "Cooking");
     CHECK(simple->minSkill == 0);
-    CHECK(simple->users == std::vector<DefId>{defs.idOf("Things", "FueledStove")});
+    CHECK(simple->users == std::vector<DefId>{defs.idOf("Things", "FueledStove"), defs.idOf("Things", "ElectricStove")});
     BILLS_REQUIRE(simple->ingredients.size() == 1);
     BILLS_REQUIRE(simple->products.size() == 1);
     CHECK(simple->products[0].item == defs.idOf("Things", "MealSimple"));
@@ -524,6 +527,10 @@ TEST_CASE("Bills: the same commands give the same game, and a save in the middle
                 sim.submit(SpawnThingCommand{"RawBerries", CellPos{12, 12, 0}, 7});
                 sim.submit(SpawnThingCommand{"RawBerries", CellPos{12, 14, 0}, 7});
                 sim.submit(SpawnThingCommand{"RawBerries", CellPos{14, 12, 0}, 60});
+            }
+            if (i == 1) {
+                const Entity stove = sim.map().buildingAt(CellPos{20, 20, 0});
+                sim.things().registry().get<Fuel>(stove).amount = 50.0f;  // a new stove has no fuel
             }
             if (i == 5) {
                 const Entity stove = sim.map().buildingAt(CellPos{20, 20, 0});

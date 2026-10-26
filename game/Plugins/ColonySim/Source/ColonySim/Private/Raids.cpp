@@ -11,6 +11,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Rooms.h"
@@ -182,25 +183,33 @@ float RaidSystem::colonyWealth() const {
             items += static_cast<double>(value) * (stack != nullptr ? stack->count : 1);
         } else if (thing.category == ThingCategory::Building && reg.all_of<Position>(e)) {
             buildings += value;
+        } else if (thing.category == ThingCategory::Pawn && things_.spawned(e) && fighters_.factionOf(e) == kPlayerFaction) {
+            // Colonists and tame animals count for their own value too (T1, wiki "Raid points").
+            const Health* h = reg.try_get<Health>(e);
+            items += h != nullptr && h->dead ? 0.0 : static_cast<double>(value);
         }
     }
     return static_cast<float>(items + buildings * rules_.buildingWealthFactor);
 }
 
-float RaidSystem::threatPoints() const {
-    const float wealth = colonyWealth();
+int RaidSystem::colonistCount() const {
     const entt::registry& reg = things_.registry();
-    float pawnPoints = 0.0f;
+    int count = 0;
     for (const auto [pawn, colonist] : reg.view<const Colonist>().each()) {
         const Health* h = reg.try_get<Health>(pawn);
-        if (!things_.spawned(pawn) || fighters_.factionOf(pawn) != kPlayerFaction || (h != nullptr && h->dead)) {
-            continue;
+        if (things_.spawned(pawn) && fighters_.factionOf(pawn) == kPlayerFaction && (h == nullptr || !h->dead)) {
+            ++count;
         }
-        pawnPoints += raidCurve(rules_.pointsPerColonist, wealth);
     }
+    return count;
+}
+
+float RaidSystem::threatPoints(float scale) const {
+    const float wealth = colonyWealth();
+    const float pawnPoints = static_cast<float>(colonistCount()) * raidCurve(rules_.pointsPerColonist, wealth);
     float points = raidCurve(rules_.wealthPoints, wealth) + pawnPoints;
     const float days = static_cast<float>(now()) / static_cast<float>(kSecondsPerDay);
-    points *= rules_.threatScale * raidCurve(rules_.daysPassedFactor, days) * rules_.adaptation;
+    points *= rules_.threatScale * raidCurve(rules_.daysPassedFactor, days) * rules_.adaptation * scale;
     return std::clamp(points, rules_.minPoints, rules_.maxPoints);
 }
 
@@ -290,11 +299,13 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, s
     // Where it walks in: a cell near the chosen edge that can reach the target.
     const int w = map_.width();
     const int h = map_.height();
-    const int side = edge >= 0 ? edge : static_cast<int>(rng_.below(4));
+    const int firstSide = edge >= 0 ? edge : static_cast<int>(rng_.below(4));
     Regions& regions = map_.regions();
     bool found = false;
     CellPos entry;
-    for (int attempt = 0; attempt < 40 && !found; ++attempt) {
+    // A raid with no chosen edge tries the others in turn when the first has no way in (water, rock).
+    for (int attempt = 0; attempt < (edge >= 0 ? 40 : 160) && !found; ++attempt) {
+        const int side = (firstSide + attempt / 40) % 4;
         const int along = static_cast<int>(rng_.below(static_cast<uint32_t>(side % 2 == 0 ? w : h)));
         const int d = rules_.edgeDepth;
         const CellPos guess = side == 0 ? CellPos{along, h - 1 - d, 0}
@@ -466,7 +477,7 @@ bool RaidSystem::soundAlarm(bool on, std::string& error) {
     // Enemies still about: don't sound it again by itself until they are gone.
     const entt::registry& reg = things_.registry();
     for (const auto [pawn, faction] : reg.view<const Faction>().each()) {
-        if (faction.id != kPlayerFaction && !reg.all_of<Animal>(pawn) && things_.spawned(pawn) &&
+        if (faction.id != kPlayerFaction && !reg.all_of<Animal>(pawn) && !reg.all_of<Prisoner>(pawn) && things_.spawned(pawn) &&
             !health_.incapacitated(pawn)) {
             state_.suppressed = true;
             break;
@@ -587,6 +598,7 @@ void RaidSystem::thinkSquad(Squad& squad) {
         return;
     }
     int able = 0;
+    float fit = 0.0f;  // the able members' fitness to fight, 1 for each unhurt one
     float own = 0.0f;
     float cx = 0.0f;
     float cy = 0.0f;
@@ -597,6 +609,8 @@ void RaidSystem::thinkSquad(Squad& squad) {
         }
         ++able;
         own += strength(m);
+        const Health* hurt = reg.try_get<Health>(m);
+        fit += hurt != nullptr ? std::clamp((1.0f - hurt->pain) * std::min(1.0f, hurt->movingFactor), 0.0f, 1.0f) : 1.0f;
         const Position& p = reg.get<Position>(m);
         cx += p.x;
         cy += p.y;
@@ -623,8 +637,10 @@ void RaidSystem::thinkSquad(Squad& squad) {
     // RimWorld's rule: a raid that has lost enough of its pawns flees; one that has been at it too
     // long gives up. Otherwise morale follows the strength it sees against it.
     SquadState next = squad.state;
-    const int lost = squad.started - able;
-    if (static_cast<float>(lost) >= rules_.fleeLostFraction * static_cast<float>(squad.started) && lost > 0) {
+    // The wounded count as part lost (ours): a squad whose able members are so hurt that they add up to less than half of what
+    // came runs too, or two sides that are all hurt and none down would trade shots until the give-up time.
+    const float lost = std::max(static_cast<float>(squad.started - able), static_cast<float>(squad.started) - fit);
+    if (lost >= rules_.fleeLostFraction * static_cast<float>(squad.started) && lost > 0.0f) {
         next = SquadState::Rout;
     } else if (now() >= squad.giveUpAt) {
         next = SquadState::Rout;
@@ -869,7 +885,8 @@ void RaidSystem::thinkAlarm() {
     for (const auto [pawn, faction, pos] : reg.view<const Faction, const Position>().each()) {
         // Wild animals aren't enemies (Animals.h) until they hunt, fight back or go manhunter (N5).
         const Animal* wild = reg.try_get<Animal>(pawn);
-        if (faction.id == kPlayerFaction || (wild != nullptr && wild->temper == AnimalTemper::Calm) || health_.incapacitated(pawn)) {
+        if (faction.id == kPlayerFaction || (wild != nullptr && wild->temper == AnimalTemper::Calm) || health_.incapacitated(pawn) ||
+            reg.all_of<Prisoner>(pawn)) {
             continue;
         }
         const Fighter* f = reg.try_get<Fighter>(pawn);
@@ -947,6 +964,14 @@ void RaidSystem::callUp(Entity pawn, const std::vector<Entity>& spotted) {
     }
     const DefensePlan* plan = reg.try_get<DefensePlan>(pawn);
     DefenseRole role = plan != nullptr ? plan->role : DefenseRole::Defender;
+    // A colonist with no plan of its own and nothing in its hands runs for shelter instead of punching a wolf
+    // (RimWorld's default hostility response: an unarmed colonist flees); an armed one defends.
+    if (plan == nullptr) {
+        const Gear* gear = reg.try_get<Gear>(pawn);
+        if (gear == nullptr || gear->weapon == kNoEntity || !reg.valid(gear->weapon)) {
+            role = DefenseRole::Shelter;
+        }
+    }
     const Position& pos = reg.get<Position>(pawn);
     if (role == DefenseRole::KeepWorking) {
         if (f != nullptr) {

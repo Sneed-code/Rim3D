@@ -44,6 +44,9 @@ struct ThingView {
     // already straightened, so the points are where the pawn turns (docs/design/movement.md).
     float vx = 0.0f;
     float vy = 0.0f;
+    // Pawns on stairs or a ladder: how far along the climb, 0 to 1; x, y and z are already that
+    // share of the way to the end, `level` is the one it started on (docs/design/levels.md).
+    float climb = 0.0f;
     uint32_t firstWaypoint = 0;
     uint32_t waypointCount = 0;
     Rot4 rotation = Rot4::North;  // buildings
@@ -79,6 +82,12 @@ struct ThingView {
     // Work buildings with bills (docs/design/bills.md): `billCount` bills from Snapshot::bills[firstBill].
     uint32_t firstBill = 0;
     uint32_t billCount = 0;
+    // Buildings that burn fuel (docs/design/fuel.md): items of fuel in it of `fuelCapacity` (0 for a
+    // building with none), whether colonists refuel it by themselves, and a fill order from the player.
+    float fuel = 0.0f;
+    float fuelCapacity = 0.0f;
+    bool autoRefuel = false;
+    bool fillOrdered = false;
     // Pawns with needs (docs/design/needs.md): food and rest, 1 full to 0 empty, else -1; asleep
     // while lying down in a bed or on the ground.
     float food = -1.0f;
@@ -87,6 +96,10 @@ struct ThingView {
     // Mood (docs/design/mood.md): 0 to 100, else -1; the break band as a MoodBand (0 stable to 3 extreme).
     float mood = -1.0f;
     int moodBand = 0;
+    // Social life (docs/design/social.md): a pawn's spouse, else its lover (none if it has neither), and
+    // whether it is in a fight with fists.
+    Entity partner = kNoEntity;
+    bool socialFight = false;
     // Recreation, comfort and outdoors needs (docs/design/recreation.md): 0 empty to 1 full, else -1.
     float joy = -1.0f;
     float comfort = -1.0f;
@@ -130,6 +143,7 @@ struct ThingView {
     // Pawns: their side (1 is the player's), and for fighters (docs/design/fighters.md) whether the
     // player drafted them, whom they shoot at, the cell they hold and whether they are falling back.
     uint32_t faction = 1;
+    bool onFire = false;  // burning (docs/design/fire.md)
     bool drafted = false;
     bool fighting = false;
     Entity fightTarget = kNoEntity;
@@ -143,6 +157,12 @@ struct ThingView {
     bool sheltering = false;
     bool fleeing = false;
     uint32_t squad = 0;
+    // Prisoners (docs/design/prisoners.md): held in a prison bed, what wardens do with it (a PrisonerMode number) and its
+    // resistance; a bed marked for prisoners.
+    bool prisoner = false;
+    uint8_t prisonerMode = 0;
+    float resistance = 0.0f;
+    bool prisonBed = false;
     // Humanlike pawns: their looks, Snapshot::looks[looks]; -1 for other things.
     int32_t looks = -1;
     // Buildings with a power part (docs/design/power.md): whether they have power, the net they are
@@ -168,7 +188,9 @@ struct ThingView {
     // Rescue 4, Haul 8). A tame animal's `faction` is the player's.
     bool markTame = false;
     bool markSlaughter = false;
+    bool markHunt = false;  // a wild animal marked to be hunted (N2, docs/design/hunting.md)
     uint32_t animalZone = 0;
+    std::string animalName;  // the player's name for a tame animal, or empty
     uint32_t learnedTricks = 0;
     uint32_t wantedTricks = 0;
     // Breeding and products (docs/design/breeding.md): sex (0 male, 1 female; -1 for other things), carrying young, and how
@@ -191,13 +213,16 @@ struct ThingView {
     // Clothes (docs/design/apparel.md). Pawns: the outfit they follow (0 for other things), whether a strip
     // order is on them, and what they wear: `apparelCount` pieces from Snapshot::apparel[firstApparel], in the
     // order put on. Apparel items on the map: their `stuff` (as for buildings), `quality` (a place in
-    // QualityRules.levels, -1 for other things) and whether they are tainted.
+    // QualityRules.levels, -1 for things without one) and whether they are tainted. Crafted weapons have a
+    // `stuff` and a `quality` too (C14).
     uint32_t outfit = 0;
     bool markedForStrip = false;
     uint32_t firstApparel = 0;
     uint32_t apparelCount = 0;
     int quality = -1;
     bool tainted = false;
+    // Pawns in a mental break (docs/design/mental-breaks.md): its MentalBreaks def, invalid when not in one.
+    DefId mentalBreak;
 };
 
 // One piece of worn apparel (Unreal draws each layer on the pawn, torn by `hitPointShare`).
@@ -264,6 +289,14 @@ struct BillView {
     BillMode mode = BillMode::Count;
     int count = 0;    // Count: times left; UntilHave: the stock to reach; Forever: 0
     bool suspended = false;
+    // The bill's details (C14, docs/design/crafting.md); the commands SetBillOptions and MoveBill change them.
+    int skillMin = 0;
+    int skillMax = 20;
+    float radius = 0.0f;     // metres from the building ingredients are taken from; 0 anywhere
+    uint32_t storeZone = 0;  // the stockpile the products go to; 0 none
+    int unpauseAt = 0;
+    bool satisfied = false;  // an "until you have" bill waiting for the stock to fall to `unpauseAt`
+    std::vector<DefId> disallowed;  // ingredient item defs it may not use
 };
 
 // One stockpile zone: `cellCount` cells from Snapshot::zoneCells[firstCell].
@@ -326,6 +359,12 @@ struct FilthView {
     int thickness = 1;
 };
 
+// A fire in a cell, its size 0 to 1.75 (docs/design/fire.md).
+struct FireView {
+    CellPos cell;
+    float size = 0.0f;
+};
+
 // One mark on a cell: mine here, cut this plant, harvest it (docs/design/mining.md).
 struct DesignationView {
     CellPos cell;
@@ -358,6 +397,17 @@ struct WeatherView {
     float wetness = 0.0f;
     uint64_t snowChanges = 0;
     float snowCover = 0.0f;   // share of the map's cells with snow
+};
+
+// The narrator (docs/design/narrator.md): which one and the difficulty (invalid DefIds while it is
+// off), the colony's wealth and threat points at its last check, and incidents so far. Letters come
+// as Letter events.
+struct NarratorView {
+    DefId narrator;
+    DefId difficulty;
+    float wealth = 0.0f;
+    float threatPoints = 0.0f;
+    uint32_t incidents = 0;
 };
 
 // A talent rank the protagonist has bought (docs/design/talents.md).
@@ -396,6 +446,9 @@ struct Snapshot {
     // (`Map::roof` says which).
     std::vector<CellPos> roofCells;
     uint64_t roofChanges = 0;
+    // How many roofs and floors have fallen (M3): when it goes up, redraw the mountain's roof and the upper floors
+    // (`Map::roof`, `Map::upperFloorCells`).
+    uint64_t roofCollapses = 0;
     std::vector<ProjectileView> projectiles;  // sorted by id
     std::vector<PawnLooksView> looks;      // see ThingView::looks
     std::vector<PowerNetView> powerNets;   // by id - 1, see ThingView::powerNet
@@ -406,6 +459,14 @@ struct Snapshot {
     uint64_t floorChanges = ~0ULL;
     std::vector<FilthView> filth;
     uint64_t filthChanges = ~0ULL;
+    // Fire (docs/design/fire.md): the burning cells, the burnt ground and the home area, in cell order. Each is rewritten only
+    // when its counter goes up (the fires' counter goes up every pass while any burn, as their sizes change).
+    std::vector<FireView> fires;
+    uint64_t fireChanges = ~0ULL;
+    std::vector<CellPos> burnt;
+    uint64_t burntChanges = ~0ULL;
+    std::vector<CellPos> homeArea;
+    uint64_t homeChanges = ~0ULL;
     // The colony alarm (docs/design/raids.md): on, and whether the player sounded it (only the
     // player stops that one); the raid squads on the map.
     bool alarm = false;
@@ -414,6 +475,7 @@ struct Snapshot {
     std::vector<ApparelView> apparel;      // worn apparel, see ThingView
     std::vector<OutfitView> outfits;       // the outfit policies, by id
     WeatherView weather;
+    NarratorView narrator;
 
     // The thing with this id, or null if it is not on the map. Binary search.
     COLONY_API const ThingView* find(Entity id) const;

@@ -27,6 +27,7 @@ namespace colony {
 
 class AnimalSystem;
 class Breeding;
+class Fire;
 class ApparelSystem;
 class Construction;
 class DefDatabase;
@@ -41,13 +42,17 @@ class Designations;
 class ExplosiveSystem;
 class FighterSystem;
 class Husbandry;
+class InspirationSystem;
+class MentalBreakSystem;
 class JobSystem;
 class Lights;
 class MeleeSystem;
 class Mineables;
 class MovementSystem;
 class MoodSystem;
+class MedicineSystem;
 class RecreationSystem;
+class SocialSystem;
 class ResearchSystem;
 class TalentSystem;
 class NeedsSystem;
@@ -55,13 +60,18 @@ class RaidSystem;
 class Plants;
 class PowerGrid;
 class Regions;
+class PrisonerSystem;
 class Rooms;
 class TemperatureSystem;
 class SpoilageSystem;
+class CraftingSystem;
 class Things;
+class UpperFloors;
+class RoofCollapse;
 class Weather;
 class Zones;
 class Farming;
+class NarratorSystem;
 struct Snapshot;
 class SimSaveAccess;
 
@@ -184,6 +194,9 @@ public:
     // Research projects and what they unlock (docs/design/research.md).
     ResearchSystem& research() { return *research_; }
     const ResearchSystem& research() const { return *research_; }
+    // Medicine: tend quality, medical care settings (docs/design/medicine.md).
+    MedicineSystem& medicine() { return *medicine_; }
+    const MedicineSystem& medicine() const { return *medicine_; }
     // The protagonist's talent XP, points and ranks (docs/design/talents.md).
     TalentSystem& talents() { return *talents_; }
     const TalentSystem& talents() const { return *talents_; }
@@ -251,6 +264,9 @@ public:
     const TemperatureSystem& temperature() const { return *temperature_; }
     SpoilageSystem& spoilage() { return *spoilage_; }
     const SpoilageSystem& spoilage() const { return *spoilage_; }
+    // Quality, stuff and bench speed of what work tables make (docs/design/crafting.md).
+    CraftingSystem& crafting() { return *crafting_; }
+    const CraftingSystem& crafting() const { return *crafting_; }
     // The temperature in the open right now, in degrees Celsius: the biome's season, the hour of the
     // day and the random drift (Weather::temperatureAt).
     float outdoorTemperature() const;
@@ -261,6 +277,12 @@ public:
     // Fixes the outdoor temperature (and so the ground's) for tests and `simrun --outdoor`. Not saved:
     // a loaded game goes back to the biome's own. Pass nullopt to let the biome decide again.
     void setOutdoorOverride(std::optional<float> celsius);
+
+    // Upper floors and the rules for laying them (docs/design/levels.md).
+    UpperFloors& upperFloors() { return *upperFloors_; }
+    const UpperFloors& upperFloors() const { return *upperFloors_; }
+    RoofCollapse& roofCollapse() { return *roofCollapse_; }
+    const RoofCollapse& roofCollapse() const { return *roofCollapse_; }
 
     // Stockpile zones (docs/design/jobs.md).
     const Zones& zones() const { return *zones_; }
@@ -275,6 +297,10 @@ public:
     MeleeSystem& melee() { return *melee_; }
     const MeleeSystem& melee() const { return *melee_; }
 
+    // Opinions, interactions, bonds and social fights (docs/design/social.md).
+    SocialSystem& social() { return *social_; }
+    const SocialSystem& social() const { return *social_; }
+
     // Wild animals: herds, grazing, sleep, coming and going at the edges (docs/design/animal-life.md).
     AnimalSystem& animals() { return *animals_; }
     const AnimalSystem& animals() const { return *animals_; }
@@ -282,11 +308,29 @@ public:
     RaidSystem& raids() { return *raids_; }
     const RaidSystem& raids() const { return *raids_; }
 
+    // The narrator, incidents and threat points (docs/design/narrator.md).
+    NarratorSystem& narrator() { return *narrator_; }
+    const NarratorSystem& narrator() const { return *narrator_; }
+    // Prisoners: capture, feeding, warden talks, recruiting and release (docs/design/prisoners.md).
+    PrisonerSystem& prisoners() { return *prisoners_; }
+    const PrisonerSystem& prisoners() const { return *prisoners_; }
+
     // Taming, training, animal zones and pens (docs/design/husbandry.md).
     Husbandry& husbandry() { return *husbandry_; }
+    // Fire, burning pawns, burnt ground and the home area (docs/design/fire.md).
+    Fire& fire() { return *fire_; }
+    const Fire& fire() const { return *fire_; }
     Breeding& breeding() { return *breeding_; }
     const Breeding& breeding() const { return *breeding_; }
     const Husbandry& husbandry() const { return *husbandry_; }
+
+    // Colonists who snap when their mood is low: wander, binge, tantrum, berserk, leave (docs/design/mental-breaks.md).
+    MentalBreakSystem& mentalBreaks() { return *mentalBreaks_; }
+    const MentalBreakSystem& mentalBreaks() const { return *mentalBreaks_; }
+
+    // Good-mood colonists get inspired: a legendary craft, a recruitment, a shooting frenzy (docs/design/inspirations.md).
+    InspirationSystem& inspirations() { return *inspirations_; }
+    const InspirationSystem& inspirations() const { return *inspirations_; }
 
     // Blueprints, frames and taking buildings down (docs/design/construction.md).
     Construction& construction() { return *construction_; }
@@ -350,10 +394,12 @@ private:
     std::unique_ptr<MoodSystem> mood_;
     std::unique_ptr<RecreationSystem> recreation_;
     std::unique_ptr<ResearchSystem> research_;
+    std::unique_ptr<MedicineSystem> medicine_;
     std::unique_ptr<TalentSystem> talents_;
     std::unique_ptr<CombatSystem> combat_;
     std::unique_ptr<ExplosiveSystem> explosives_;  // after combat_ and health_
     std::unique_ptr<ApparelSystem> apparel_;  // after combat, which it uses
+    std::unique_ptr<CraftingSystem> crafting_;  // after apparel_ and zones_
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
     Rng rng_;
@@ -368,9 +414,15 @@ private:
     std::unique_ptr<Filth> filth_;
     std::unique_ptr<RoomStats> roomStats_;
     std::unique_ptr<AnimalSystem> animals_;
+    std::unique_ptr<UpperFloors> upperFloors_;  // M1
+    std::unique_ptr<RoofCollapse> roofCollapse_;  // M3, after the rooms and the job system
     std::unique_ptr<RaidSystem> raids_;        // after the fighters
+    std::unique_ptr<PrisonerSystem> prisoners_;  // after the raids
     std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system
     std::unique_ptr<Breeding> breeding_;    // after husbandry_
+    std::unique_ptr<Fire> fire_;            // after the weather, temperature, rooms, floors, filth, plants and health
+    std::unique_ptr<MentalBreakSystem> mentalBreaks_;  // after the job and fighter systems
+    std::unique_ptr<InspirationSystem> inspirations_;  // after the mood system
     std::vector<std::string> setupErrors_;
     std::vector<std::pair<uint64_t, Command>> pending_;  // id, command
     uint64_t submitted_ = 0;
@@ -379,6 +431,8 @@ private:
     std::vector<Checkpoint> checkpoints_;
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
+    std::unique_ptr<NarratorSystem> narrator_;  // after raids_
+    std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
 };
 
 }  // namespace colony

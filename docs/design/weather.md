@@ -7,7 +7,7 @@ and `ClimateRules` (`data/defs/Rules/ClimateRules.json`). Tests: `Tests/WeatherT
 `sim.weather()` answers: what season is it, how warm is it outside, what is the weather doing, how deep
 is the snow in a cell. Later tasks lean on it: E2 (room temperature starts from the outdoor
 temperature), E4 (rain puts fires out), C13 (frost, growing seasons), T2 (cold snap and heat wave),
-U13 (the sky, rain and snow Unreal draws), S8 (biome chosen at the start).
+U13 (the sky, rain and snow Unreal draws, [sky.md](sky.md)), S8 (biome chosen at the start).
 
 ## The year
 

@@ -12,7 +12,11 @@
 #include "IAssetTools.h"
 #include "MaterialEditingLibrary.h"
 #include "Materials/Material.h"
+#include "Materials/MaterialExpressionComponentMask.h"
 #include "Materials/MaterialExpressionConstant.h"
+#include "Materials/MaterialExpressionCustom.h"
+#include "Materials/MaterialExpressionScalarParameter.h"
+#include "Materials/MaterialExpressionTextureCoordinate.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
 #include "Materials/MaterialInstanceConstant.h"
 #include "MeshDescription.h"
@@ -68,14 +72,71 @@ namespace
 			return nullptr;
 		}
 		Master->TwoSided = true;
+		// Holes for the torn look (U16): the mask cuts them where a noise on the garment's own UVs is under the wear.
+		Master->BlendMode = BLEND_Masked;
+		Master->OpacityMaskClipValue = 0.5f;
 		bool bRecompile = false;
 		UMaterialEditingLibrary::SetMaterialUsage(Master, MATUSAGE_SkeletalMesh, bRecompile);
 		UMaterialEditingLibrary::SetMaterialUsage(Master, MATUSAGE_MorphTargets, bRecompile);
-		auto* Color = Cast<UMaterialExpressionVectorParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Master, UMaterialExpressionVectorParameter::StaticClass(), -400, 0));
+		// The colour and the wear can come from the pawn's custom primitive data (the colour of the cloth, RGB at 0, the
+		// wear 0 to 1 at 3) so that one material instance per piece serves every pawn; the instance's own colour is the default.
+		auto* Color = Cast<UMaterialExpressionVectorParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Master, UMaterialExpressionVectorParameter::StaticClass(), -700, 0));
 		Color->ParameterName = TEXT("Color");
 		Color->DefaultValue = FLinearColor(0.3f, 0.3f, 0.3f);
-		UMaterialEditingLibrary::ConnectMaterialProperty(Color, TEXT(""), MP_BaseColor);
-		auto* Rough = Cast<UMaterialExpressionConstant>(UMaterialEditingLibrary::CreateMaterialExpression(Master, UMaterialExpressionConstant::StaticClass(), -400, 250));
+		Color->bUseCustomPrimitiveData = true;
+		Color->PrimitiveDataIndex = 0;
+		auto* Wear = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Master, UMaterialExpressionScalarParameter::StaticClass(), -700, 150));
+		Wear->ParameterName = TEXT("Wear");
+		Wear->DefaultValue = 0.0f;
+		Wear->bUseCustomPrimitiveData = true;
+		Wear->PrimitiveDataIndex = 3;
+		auto* Uv = Cast<UMaterialExpressionTextureCoordinate>(UMaterialEditingLibrary::CreateMaterialExpression(Master, UMaterialExpressionTextureCoordinate::StaticClass(), -700, 300));
+		Uv->CoordinateIndex = 0;
+		auto* Torn = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Master, UMaterialExpressionCustom::StaticClass(), -300, 100));
+		Torn->Description = TEXT("Torn");
+		Torn->OutputType = CMOT_Float4;
+		Torn->Code = TEXT(
+			"float2 q = UV * 9.0;\n"
+			"float n = 0.0; float amp = 0.5;\n"
+			"for (int i = 0; i < 3; i++) {\n"
+			"  float2 id = floor(q); float2 f = frac(q); f = f * f * (3.0 - 2.0 * f);\n"
+			"  float a = frac(sin(dot(id, float2(12.9898, 78.233))) * 43758.5453);\n"
+			"  float b = frac(sin(dot(id + float2(1, 0), float2(12.9898, 78.233))) * 43758.5453);\n"
+			"  float c = frac(sin(dot(id + float2(0, 1), float2(12.9898, 78.233))) * 43758.5453);\n"
+			"  float d = frac(sin(dot(id + float2(1, 1), float2(12.9898, 78.233))) * 43758.5453);\n"
+			"  n += amp * lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);\n"
+			"  amp *= 0.5; q *= 2.3;\n"
+			"}\n"
+			"n /= 0.875;\n"
+			"float w = saturate(Wear);\n"
+			// Holes where the noise is under 55% of the wear, a dark frayed rim just outside them, and the whole cloth dirtier.
+			"float hole = step(n, w * 0.55);\n"
+			"float rim = smoothstep(w * 0.55, w * 0.55 + 0.1, n);\n"
+			"float3 col = Color * lerp(1.0, 0.7, w) * lerp(0.5, 1.0, w > 0.001 ? rim : 1.0);\n"
+			"return float4(col, 1.0 - hole);\n");
+		Torn->Inputs.Reset();
+		{
+			FCustomInput& InUv = Torn->Inputs.AddDefaulted_GetRef();
+			InUv.InputName = TEXT("UV");
+			InUv.Input.Connect(0, Uv);
+			FCustomInput& InColor = Torn->Inputs.AddDefaulted_GetRef();
+			InColor.InputName = TEXT("Color");
+			InColor.Input.Connect(0, Color);
+			FCustomInput& InWear = Torn->Inputs.AddDefaulted_GetRef();
+			InWear.InputName = TEXT("Wear");
+			InWear.Input.Connect(0, Wear);
+		}
+		auto* Rgb = Cast<UMaterialExpressionComponentMask>(UMaterialEditingLibrary::CreateMaterialExpression(Master, UMaterialExpressionComponentMask::StaticClass(), 100, 0));
+		Rgb->R = Rgb->G = Rgb->B = 1;
+		Rgb->A = 0;
+		Rgb->Input.Connect(0, Torn);
+		auto* Alpha = Cast<UMaterialExpressionComponentMask>(UMaterialEditingLibrary::CreateMaterialExpression(Master, UMaterialExpressionComponentMask::StaticClass(), 100, 200));
+		Alpha->R = Alpha->G = Alpha->B = 0;
+		Alpha->A = 1;
+		Alpha->Input.Connect(0, Torn);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Rgb, TEXT(""), MP_BaseColor);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Alpha, TEXT(""), MP_OpacityMask);
+		auto* Rough = Cast<UMaterialExpressionConstant>(UMaterialEditingLibrary::CreateMaterialExpression(Master, UMaterialExpressionConstant::StaticClass(), -400, 400));
 		Rough->R = 0.9f;
 		UMaterialEditingLibrary::ConnectMaterialProperty(Rough, TEXT(""), MP_Roughness);
 		UMaterialEditingLibrary::RecompileMaterial(Master);
