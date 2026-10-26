@@ -15,7 +15,8 @@ class Map;
 //
 // Walkable cells are grouped into regions: 4-connected areas that never cross a 16 m block, so a
 // changed cell rebuilds only its own block. A door cell is a region of its own. Regions that touch
-// are linked, and linked regions share a reachability group, which answers "can a pawn walk from
+// are linked, and so are the regions at the two ends of stairs or a ladder, whatever their level
+// (docs/design/levels.md). Linked regions share a reachability group, which answers "can a pawn walk from
 // here to there?" with two lookups.
 
 using RegionId = uint32_t;
@@ -24,12 +25,14 @@ inline constexpr uint32_t kNoGroup = 0xFFFFFFFFu;
 
 enum class RegionKind : uint8_t { Normal, Door };
 
-// Two regions that share a border. Both regions hold a link to each other with the same numbers.
+// Two regions that share a border, or that stairs or a ladder join across levels (Map::levelLinks).
+// Both regions hold a link to each other with the same numbers.
 struct RegionLink {
     RegionId other = kNoRegion;
-    int faces = 0;     // cell sides the two regions share
-    float x = 0.0f;    // middle of the shared border, metres
+    int faces = 0;     // cell sides the two regions share, or stairs and ladders between them
+    float x = 0.0f;    // middle of the shared border, metres; for a climb, halfway between its ends
     float y = 0.0f;
+    float extra = 0.0f;  // metres a path pays on top of the flat walk: the cheapest climb's extra
 };
 
 struct Region {
@@ -39,6 +42,7 @@ struct Region {
     CellRect bounds;     // smallest rectangle around the region's cells, on its level
     CellPos anchor;      // the region's first cell in row order; always one of its cells
     uint32_t group = kNoGroup;
+    bool climbs = false;  // some stairs or ladder starts or ends in it (the pathfinder looks)
     std::vector<RegionLink> links;  // sorted by `other`
 };
 
@@ -106,6 +110,7 @@ private:
     RegionId newRegion();
     void floodBlock(int block);
     void linkBlock(int block);
+    void linkLevels();
     void relabelGroups();
 
     const Map& map_;
@@ -133,6 +138,7 @@ private:
         RegionId b;
         float x;
         float y;
+        float extra;
     };
     std::vector<PendingLink> pendingLinks_;
 };

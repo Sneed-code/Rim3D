@@ -48,7 +48,8 @@ COLONY_API bool straightWalkIsClear(const Map& map, float x0, float y0, float x1
 // where the ground allows (clear of walls for a pawn's width, and not slower than the cells it
 // replaces over mud or hills). `path` runs from the cell after the start to the goal, as the
 // pathfinder returns it, and so does the result, a subset of its cells. The walk starts at
-// (startX, startY) in metres.
-COLONY_API void smoothPath(const Map& map, float startX, float startY, std::vector<CellPos>& path);
+// (startX, startY) in metres, on `startLevel` (-1: the level of the path's first cell). A path that
+// climbs stairs or a ladder keeps the cells at both ends of every climb.
+COLONY_API void smoothPath(const Map& map, float startX, float startY, std::vector<CellPos>& path, int startLevel = -1);
 
 }  // namespace colony

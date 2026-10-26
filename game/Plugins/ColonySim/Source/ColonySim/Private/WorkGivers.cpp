@@ -53,12 +53,12 @@ public:
         const entt::registry& reg = jobs.things().registry();
         const Position& at = reg.get<Position>(pawn);
         reg.view<const Position, const StackCount>().each([&](Entity item, const Position& pos, const StackCount&) {
-            if (pos.level != at.level || (jobs.storedPriority(item) >= best && !wantsOtherZone(jobs, item))) {
+            // On any level: stairs and ladders join them (docs/design/levels.md).
+            if (jobs.storedPriority(item) >= best && !wantsOtherZone(jobs, item)) {
                 return;
             }
-            const float dx = pos.x - at.x;
-            const float dy = pos.y - at.y;
-            out.push_back(WorkCandidate{JobTarget{item, CellPos{}}, dx * dx + dy * dy, 0, 0, false, CellPos{}});
+            out.push_back(WorkCandidate{JobTarget{item, CellPos{}}, levelDistSq(pos.x - at.x, pos.y - at.y, pos.level - at.level), 0, 0, false,
+                                        CellPos{}});
         });
     }
 
@@ -132,10 +132,9 @@ public:
     }
 };
 
+// Across levels a level counts as kLevelDetourM metres more (docs/design/levels.md).
 float workGiverDistSq(const Position& a, const Position& b) {
-    const float dx = a.x - b.x;
-    const float dy = a.y - b.y;
-    return dx * dx + dy * dy;
+    return levelDistSq(a.x - b.x, a.y - b.y, a.level - b.level);
 }
 
 // Construction (docs/design/construction.md). A pawn builds from a cell beside the footprint, so these
@@ -152,7 +151,7 @@ public:
         const entt::registry& reg = jobs.things().registry();
         const Position& at = reg.get<Position>(pawn);
         reg.view<const ConstructionSite, const Position>().each([&](Entity site, const ConstructionSite& s, const Position& pos) {
-            if (pos.level != at.level || s.hasAllMaterials() || jobs.deliveryReservedByOther(site, pawn)) {
+            if (s.hasAllMaterials() || jobs.deliveryReservedByOther(site, pawn)) {
                 return;
             }
             CellPos stand;
@@ -180,7 +179,7 @@ public:
             float bestDist = 0.0f;
             reg.view<const Thing, const Position, const StackCount>().each(
                 [&](Entity item, const Thing& thing, const Position& pos, const StackCount&) {
-                    if (thing.def != m.item || pos.level != at.level) {
+                    if (thing.def != m.item) {
                         return;
                     }
                     const float dist = workGiverDistSq(at, pos);
@@ -222,7 +221,7 @@ public:
         const entt::registry& reg = jobs.things().registry();
         const Position& at = reg.get<Position>(pawn);
         reg.view<const ConstructionSite, const Position>().each([&](Entity site, const ConstructionSite& s, const Position& pos) {
-            if (pos.level != at.level || s.stage != ConstructionStage::Frame || !s.hasAllMaterials()) {
+            if (s.stage != ConstructionStage::Frame || !s.hasAllMaterials()) {
                 return;
             }
             CellPos stand;
@@ -252,9 +251,6 @@ public:
         const Position& at = reg.get<Position>(pawn);
         reg.view<const MarkedForDeconstruct, const Footprint, const Position>().each(
             [&](Entity building, const Footprint& footprint, const Position& pos) {
-                if (pos.level != at.level) {
-                    return;
-                }
                 CellPos stand;
                 if (!jobs.construction().workCell(footprint.rect(), cellOf(at), stand)) {
                     return;

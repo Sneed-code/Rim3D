@@ -1131,6 +1131,10 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
             } else if constexpr (std::is_same_v<Type, AssignAnimalZoneCommand>) {
                 ar.value("animal", c.animal);
                 ar.value("zone", c.zone);
+            } else if constexpr (std::is_same_v<Type, SetBreedingCommand>) {
+                ar.value("animal", c.animal);
+                ar.value("zone", c.zone);
+                ar.value("allow", c.allow);
             } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
                 auto* melee = &c;
                 ar.value("pawn", melee->pawn);
@@ -1357,6 +1361,9 @@ void saveMoverPart(Ar& ar, Mover& m, const std::optional<Position>& position) {
         ar.value("ghostSteps", m.ghostSteps);
         ar.value("heldSteps", m.heldSteps);
         ar.value("gaveUp", m.gaveUp);
+        if (ar.sectionVersion() >= 2) {  // M2: stairs and ladders
+            ar.value("climbed", m.climbed);
+        }
     } else if (position) {
         // Older saves: a pawn mid-walk sets off along the line from where it stands.
         m.fromX = position->x;
@@ -1703,6 +1710,9 @@ void saveBreedPart(Ar& ar, AnimalBreed& b) {
     ar.value("eggSince", b.eggSince);
     ar.value("courting", b.courting);
     ar.value("courtUntil", b.courtUntil);
+    if (ar.sectionVersion() >= 2) {
+        ar.value("breedingOff", b.breedingOff);
+    }
 }
 
 template <typename Ar>
@@ -2398,7 +2408,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("commands", 1, [&] { saveCommandsSection(ar, d); });
     ar.section("things", 1, [&] { saveThingsSection(ar, d); });
     std::vector<SaveEntity>& e = d.entities;
-    ar.section("movement", 1, [&] {
+    ar.section("movement", 2, [&] {
         saveParts(ar, "mover", e, &SaveEntity::mover, [&](Mover& m) { saveMoverPart(ar, m, std::nullopt); });
     });
     ar.section("jobs", 1, [&] {
@@ -2513,11 +2523,14 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.require(d.wildAnimals >= 0 && d.animals.percent >= 0, "the save file has a bad wild animal density");
         saveParts(ar, "animal", e, &SaveEntity::animal, [&](Animal& a) { saveAnimalPart(ar, a); });
     });
-    ar.section("husbandry", 1, [&] {
+    ar.section("husbandry", 2, [&] {
         ar.value("nextZone", d.husbandry.nextZone);
         ar.list("zones", d.husbandry.zones, [&](AnimalZone& z) {
             ar.value("id", z.id);
             ar.list("cells", z.cells, [&](CellPos& c) { saveCell(ar, c); });
+            if (ar.sectionVersion() >= 2) {
+                ar.value("breedingOff", z.breedingOff);
+            }
         });
         ar.value("tamed", d.husbandry.stats.tamed);
         ar.value("tameFailed", d.husbandry.stats.tameFailed);
@@ -2601,7 +2614,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "grenade", e, &SaveEntity::grenade, [&](SaveGrenade& g) { saveGrenadePart(ar, g); });
         saveParts(ar, "knockedDown", e, &SaveEntity::knocked, [&](KnockedDown& k) { saveKnockedPart(ar, k); });
     });
-    ar.section("breeding", 1, [&] {
+    ar.section("breeding", 2, [&] {
         ar.value("matings", d.breeding.matings);
         ar.value("pregnancies", d.breeding.pregnancies);
         ar.value("born", d.breeding.born);

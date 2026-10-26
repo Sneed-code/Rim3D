@@ -245,6 +245,10 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, AssignAnimalZoneCommand>) {
                 j["animal"] = entt::to_integral(c.animal);
                 j["zone"] = c.zone;
+            } else if constexpr (std::is_same_v<Type, SetBreedingCommand>) {
+                j["animal"] = entt::to_integral(c.animal);
+                j["zone"] = c.zone;
+                j["allow"] = c.allow;
             } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["target"] = entt::to_integral(c.target);
@@ -1066,6 +1070,14 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         AssignAnimalZoneCommand c;
         uint32_t animal = entt::to_integral(kNoEntity);
         if (!r.integer(j, "animal", animal, where) || !r.integer(j, "zone", c.zone, where)) {
+            return false;
+        }
+        c.animal = static_cast<Entity>(animal);
+        out.command = c;
+    } else if (type == "SetBreeding") {
+        SetBreedingCommand c;
+        uint32_t animal = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "animal", animal, where) || !r.integer(j, "zone", c.zone, where) || !r.flag(j, "allow", c.allow, where)) {
             return false;
         }
         c.animal = static_cast<Entity>(animal);
