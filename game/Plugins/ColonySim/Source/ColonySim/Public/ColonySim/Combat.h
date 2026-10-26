@@ -19,6 +19,7 @@ namespace colony {
 
 class ApparelStats;
 class HealthSystem;
+class InspirationSystem;
 class TalentSystem;
 class Map;
 class StateHasher;
@@ -229,6 +230,8 @@ public:
     void setWeather(const Weather* weather) { weather_ = weather; }
     // The protagonist's talents make the spread of its shots smaller (docs/design/talents.md).
     void setTalents(const TalentSystem* talents) { talents_ = talents; }
+    // A shooting frenzy narrows the spread and shortens the cooldown (docs/design/inspirations.md).
+    void setInspirations(const InspirationSystem* inspirations) { inspirations_ = inspirations; }
     // Called before combat destroys a thing (a building shot to pieces), so jobs can let go of it.
     void setBeforeDestroy(std::function<void(Entity)> hook) { beforeDestroy_ = std::move(hook); }
     // Called when a bullet or a melee blow hurt a pawn (`victim`, `attacker`): animals react (N5, docs/design/animal-fights.md).
@@ -405,6 +408,7 @@ private:
     std::vector<Event>* events_ = nullptr;
     const Weather* weather_ = nullptr;
     const TalentSystem* talents_ = nullptr;
+    const InspirationSystem* inspirations_ = nullptr;
     std::function<void(Entity)> beforeDestroy_;
     std::function<void(Entity, Entity)> hurtHook_;
     std::vector<Entity> scratch_;
