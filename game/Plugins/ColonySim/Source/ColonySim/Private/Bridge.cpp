@@ -181,6 +181,8 @@ const char* commandName(const Command& command) {
                 return "ContractDisease";
             } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
                 return "EndMentalBreak";
+            } else if constexpr (std::is_same_v<Type, StartStrategyRaidCommand>) {
+                return "StartStrategyRaid";
             } else {
                 static_assert(std::is_same_v<Type, ShipCommand>, "name every command type");
                 return "Ship";
@@ -250,6 +252,10 @@ const char* eventTypeName(EventType type) {
         case EventType::SquadChanged: return "SquadChanged";
         case EventType::AlarmChanged: return "AlarmChanged";
         case EventType::PawnLeftMap: return "PawnLeftMap";
+        case EventType::DropPodLanded: return "DropPodLanded";
+        case EventType::SappersBreaking: return "SappersBreaking";
+        case EventType::ItemStolen: return "ItemStolen";
+        case EventType::PawnKidnapped: return "PawnKidnapped";
         case EventType::RoofCollapsed: return "RoofCollapsed";
         case EventType::AnimalTamed: return "AnimalTamed";
         case EventType::AnimalReleased: return "AnimalReleased";

@@ -722,6 +722,18 @@ struct EndMentalBreakCommand {
     Entity pawn = kNoEntity;
 };
 
+// A raid with a strategy (F12, docs/design/raid-strategies.md), the narrator's way to send one. `strategy` is
+// "Assault", "Sappers", "DropPods", "Thieves", "Kidnappers", or "Auto" to pick by the rules' weights; `hour` 0 to
+// 23.99 holds the raid until that hour of the day (a night attack), -1 sends it now. Fails like StartRaid, and for
+// a strategy with nothing to go for (thieves with no loose items, kidnappers with no colonist).
+struct StartStrategyRaidCommand {
+    std::string faction = "Pirate";
+    float points = 0.0f;
+    int edge = -1;
+    std::string strategy = "Auto";
+    float hour = -1.0f;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -746,7 +758,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand, SetPrisonerModeCommand,
                              SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
                              MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand,
-                             SetNarratorCommand, FireIncidentCommand, ContractDiseaseCommand, ShipCommand>;
+                             SetNarratorCommand, FireIncidentCommand, ContractDiseaseCommand, StartStrategyRaidCommand,
+                             ShipCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.
