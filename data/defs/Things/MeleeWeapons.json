@@ -1,6 +1,6 @@
 [
  {
-  "defName": "MeleeWeaponBase",
+  "defName": "MeleeWeaponBase", "visual": {"sound": {"swing": "Swing_Blade", "hit": "Flesh_Cut"}},
   "abstract": true,
   "parent": "ItemBase",
   "source": "RimWorld wiki",
@@ -79,7 +79,7 @@
   "defName": "Melee_Club",
   "parent": "MeleeWeaponBase",
   "label": "club",
-  "visual": {"parts": [{"shape": "box", "size": [0.60, 0.05, 0.05], "at": [0.20, 0, -0.025], "color": [0.36, 0.23, 0.12]}, {"shape": "box", "size": [0.24, 0.09, 0.09], "at": [0.45, 0, -0.045], "color": [0.36, 0.23, 0.12]}]},
+  "visual": {"sound": {"swing": "Swing_Blunt", "hit": "Flesh_Blunt"},"parts": [{"shape": "box", "size": [0.60, 0.05, 0.05], "at": [0.20, 0, -0.025], "color": [0.36, 0.23, 0.12]}, {"shape": "box", "size": [0.24, 0.09, 0.09], "at": [0.45, 0, -0.045], "color": [0.36, 0.23, 0.12]}]},
   "stuffCategories": [
    "Woody"
   ],
@@ -163,7 +163,7 @@
   "defName": "Melee_Spear",
   "parent": "MeleeWeaponBase",
   "label": "spear",
-  "visual": {"parts": [{"shape": "box", "size": [1.60, 0.03, 0.03], "at": [0.30, 0, -0.015], "color": [0.36, 0.23, 0.12]}, {"shape": "box", "size": [0.22, 0.014, 0.05], "at": [1.21, 0, -0.025], "color": [0.72, 0.74, 0.78]}]},
+  "visual": {"sound": {"swing": "Swing_Spear", "hit": "Flesh_Stab"},"parts": [{"shape": "box", "size": [1.60, 0.03, 0.03], "at": [0.30, 0, -0.015], "color": [0.36, 0.23, 0.12]}, {"shape": "box", "size": [0.22, 0.014, 0.05], "at": [1.21, 0, -0.025], "color": [0.72, 0.74, 0.78]}]},
   "stuffCategories": [
    "Metallic"
   ],
@@ -204,7 +204,7 @@
   "defName": "Melee_Mace",
   "parent": "MeleeWeaponBase",
   "label": "mace",
-  "visual": {"parts": [{"shape": "box", "size": [0.62, 0.04, 0.04], "at": [0.21, 0, -0.02], "color": [0.36, 0.23, 0.12]}, {"shape": "sphere", "size": [0.08, 0.08, 0.16], "at": [0.58, 0, -0.08], "color": [0.30, 0.31, 0.34]}]},
+  "visual": {"sound": {"swing": "Swing_Blunt", "hit": "Flesh_Blunt"},"parts": [{"shape": "box", "size": [0.62, 0.04, 0.04], "at": [0.21, 0, -0.02], "color": [0.36, 0.23, 0.12]}, {"shape": "sphere", "size": [0.08, 0.08, 0.16], "at": [0.58, 0, -0.08], "color": [0.30, 0.31, 0.34]}]},
   "stuffCategories": [
    "Metallic"
   ],
