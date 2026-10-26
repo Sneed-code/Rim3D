@@ -216,6 +216,13 @@ struct ThingView {
     uint32_t apparelCount = 0;
     int quality = -1;
     bool tainted = false;
+    // Repair and upgrades (docs/design/repair.md). Apparel and weapons on the map: whether a colonist is to repair them.
+    // Guns: the part ordered fitted (invalid for none) and the parts already fitted, `fittedCount` of them from
+    // Snapshot::fittedParts[firstFitted], in the order fitted.
+    bool repairMarked = false;
+    DefId fitOrder;
+    uint32_t firstFitted = 0;
+    uint32_t fittedCount = 0;
 };
 
 // One piece of worn apparel (Unreal draws each layer on the pawn, torn by `hitPointShare`).
@@ -452,6 +459,7 @@ struct Snapshot {
     bool alarmManual = false;
     std::vector<SquadView> squads;
     std::vector<ApparelView> apparel;      // worn apparel, see ThingView
+    std::vector<DefId> fittedParts;        // upgrade parts fitted to guns, see ThingView
     std::vector<OutfitView> outfits;       // the outfit policies, by id
     WeatherView weather;
 

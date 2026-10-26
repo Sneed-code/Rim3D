@@ -66,7 +66,7 @@ When a bill makes something (`finishProduct`):
    product lies in the zone, or the zone is gone (checked every game minute).
 
 Melee weapons carry their stuff and quality, and the snapshot shows both (`ThingView::stuff`, `quality`), but
-**their damage does not use them yet** (repair and upgrades are P4). Clothes already do (C15).
+**their damage does not use them yet** (P4 did repair and upgrades, [repair.md](repair.md), and left this). Clothes already do (C15).
 
 ## Bill details
 
@@ -99,7 +99,7 @@ stream and the `StoreIn` marks.
   leather into items is N2 ("Hunting and butchering", which needs this task), together with the hunt.
 - Skill experience from crafting (`workSkillXp` is read and unused, as for cooking).
 - Inspirations (quality shift), art, sculpting, smelting, the machining table's other recipes.
-- Damage and hit points of melee weapons from their stuff and quality (P4).
+- Damage and hit points of melee weapons from their stuff and quality.
 - "Count only what lies in this stockpile", "take from this stockpile only" and a per-bill ingredient quality
   filter (the bill's `disallowed` list is by item def).
 - The electric tailor bench's `unpoweredWorkSpeedFactor` (an unpowered bench does nothing).

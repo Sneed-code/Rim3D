@@ -105,6 +105,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `needs` | 1 | `needs`, `schedule`, `bed` |
 | `bills` | 2 | `bills` on work buildings. Version 2 (C14) adds each bill's skill range, ingredient radius, store stockpile, restart stock, satisfied flag and ingredient filter; version 1 loads with the defaults |
 | `crafting` | 1 | the quality random stream and `storeIn` marks on products bound for a stockpile ([crafting.md](crafting.md)) |
+| `repair` | 1 | per item the repair mark, the upgrade part ordered fitted and the parts fitted, by defName; `WeaponMods` is made again on load ([repair.md](repair.md)) |
 | `fuel` | 1 | `fuel` on buildings that burn it ([fuel.md](fuel.md)); a building with a fuel part and none saved loads full |
 | `construction` | 1 | `site`, `builtOf`, `marked` |
 | `mood` | 1 | `mood` |

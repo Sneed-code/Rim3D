@@ -653,6 +653,23 @@ struct MoveBillCommand {
     int index = 0;
 };
 
+// Repair (task P4, docs/design/repair.md): marks a piece of apparel or a weapon lying on the map for repair at a
+// bench by a colonist (`repair` true), or takes the mark off. Fails if it is neither apparel nor a weapon, is
+// worn or carried, or is not damaged.
+struct RepairGearCommand {
+    Entity thing = kNoEntity;
+    bool repair = true;
+};
+
+// Orders the Things upgrade part `part` fitted to a gun lying on the map by a colonist at a machining table
+// (`fit` true), or cancels the gun's order (`part` is then ignored). Fails if the thing is not a gun on the map,
+// the part is unknown or does not fit that gun, or the gun already has a part in its slot.
+struct FitUpgradeCommand {
+    Entity thing = kNoEntity;
+    std::string part;
+    bool fit = true;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -675,7 +692,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
                              SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand, SetPrisonerModeCommand,
                              SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
-                             MoveBillCommand>;
+                             MoveBillCommand, RepairGearCommand, FitUpgradeCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

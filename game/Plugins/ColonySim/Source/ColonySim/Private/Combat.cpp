@@ -597,6 +597,35 @@ CombatSystem::CombatSystem(Things& things, Map& map, HealthSystem& health)
 
 CombatSystem::~CombatSystem() = default;
 
+namespace {
+
+// The gun of a weapon item with its fitted parts' factors put on (P4, docs/design/repair.md): the def's own gun when it
+// has no parts, else `scratch` changed. Accuracy is not in the copy (the spread asks `WeaponMods` itself).
+const CombatModel::Gun* combatGunOf(const CombatModel& model, const entt::registry& reg, Entity weapon, CombatModel::Gun& scratch) {
+    const CombatModel::Gun* base = model.gun(reg.get<Thing>(weapon).def);
+    const WeaponMods* mods = base != nullptr ? reg.try_get<WeaponMods>(weapon) : nullptr;
+    if (mods == nullptr) {
+        return base;
+    }
+    scratch = *base;
+    scratch.range *= mods->range;
+    if (base->magazine > 0) {
+        const int scaled = static_cast<int>(std::lround(static_cast<float>(base->magazine) * mods->magazine));
+        scratch.magazine = mods->magazine > 1.0f ? std::max(base->magazine + 1, scaled) : std::max(1, scaled);
+    }
+    scratch.reloadTime = static_cast<int>(std::lround(static_cast<float>(base->reloadTime) * mods->reload));
+    scratch.cooldown = static_cast<int>(std::lround(static_cast<float>(base->cooldown) * mods->cooldown));
+    scratch.warmup = static_cast<int>(std::lround(static_cast<float>(base->warmup) * mods->warmup));
+    scratch.recoil *= mods->recoil;
+    for (auto& kick : scratch.kicks) {
+        kick.first *= mods->recoil;
+        kick.second *= mods->recoil;
+    }
+    return &scratch;
+}
+
+}  // namespace
+
 int CombatSystem::shootingSkill(Entity pawn) const {
     if (const Colonist* colonist = things_.registry().try_get<Colonist>(pawn)) {
         for (const SkillRecord& skill : colonist->skills) {
@@ -999,7 +1028,8 @@ bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, 
     if (s.phase == ShotPhase::Firing || s.phase == ShotPhase::Cooling) {
         return fail("not ready to fire yet");
     }
-    const CombatModel::Gun& gun = *model_->gun(reg.get<Thing>(gear->weapon).def);
+    CombatModel::Gun moddedGun;
+    const CombatModel::Gun& gun = *combatGunOf(*model_, reg, gear->weapon, moddedGun);
     if (gun.magazine > 0 && roundsLeft(pawn) <= 0) {
         startReload(pawn, s, gear->weapon, 0);
         return fail("reloading");
@@ -1030,8 +1060,9 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
     entt::registry& reg = things_.registry();
     s.recoil = std::max(0.0f, s.recoil - model_->recoilRecovery);
     const Gear* gear = reg.try_get<Gear>(pawn);
+    CombatModel::Gun moddedGun;
     const CombatModel::Gun* gun =
-        gear != nullptr && gear->weapon != kNoEntity ? model_->gun(reg.get<Thing>(gear->weapon).def) : nullptr;
+        gear != nullptr && gear->weapon != kNoEntity ? combatGunOf(*model_, reg, gear->weapon, moddedGun) : nullptr;
     if (s.phase == ShotPhase::Aiming || s.phase == ShotPhase::Firing || s.phase == ShotPhase::Reloading) {
         if (gun == nullptr || (s.phase != ShotPhase::Reloading &&
                                   (health_.incapacitated(pawn) || !things_.spawned(pawn) || reg.all_of<KnockedDown>(pawn)))) {
@@ -1115,7 +1146,10 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
     const float accuracyFactor =
         weather_ != nullptr ? weather_->accuracyAt(CellPos{static_cast<int>(std::floor(pos.x)), static_cast<int>(std::floor(pos.y)), pos.level}) : 1.0f;
     const float steady = talents_ != nullptr ? static_cast<float>(talents_->statFactor(pawn, "aimSpread")) : 1.0f;
-    fire(pawn, fx, fy, fz, spread(weaponDef, skill, distance, s.player, accuracyFactor) * steady + s.recoil, rng, kickUp, kickSide);
+    const WeaponMods* mods = reg.try_get<WeaponMods>(gear->weapon);
+    const float partsAccuracy = mods != nullptr ? mods->accuracy : 1.0f;
+    fire(pawn, fx, fy, fz, spread(weaponDef, skill, distance, s.player, accuracyFactor * partsAccuracy) * steady + s.recoil, rng, kickUp,
+         kickSide);
     const float skillFactor = std::max(0.0f, 1.0f - model_->recoilSkillReduction * static_cast<float>(skill));
     s.recoil += gun->recoil * skillFactor;
     if (kicks) {
@@ -1149,7 +1183,8 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
 
 void CombatSystem::startReload(Entity pawn, Shooter& s, Entity weapon, int extraSteps) {
     entt::registry& reg = things_.registry();
-    const CombatModel::Gun& gun = *model_->gun(reg.get<Thing>(weapon).def);
+    CombatModel::Gun moddedGun;
+    const CombatModel::Gun& gun = *combatGunOf(*model_, reg, weapon, moddedGun);
     const float factor = combatBySkill(model_->reloadFactor, shootingSkill(pawn));
     s.phase = ShotPhase::Reloading;
     s.shotsLeft = 0;
@@ -1180,8 +1215,9 @@ bool CombatSystem::reload(Entity pawn, std::string* why) {
         return fail("that is not a pawn on the map");
     }
     const Gear* gear = reg.try_get<Gear>(pawn);
+    CombatModel::Gun moddedGun;
     const CombatModel::Gun* gun =
-        gear != nullptr && gear->weapon != kNoEntity ? model_->gun(reg.get<Thing>(gear->weapon).def) : nullptr;
+        gear != nullptr && gear->weapon != kNoEntity ? combatGunOf(*model_, reg, gear->weapon, moddedGun) : nullptr;
     if (gun == nullptr || gun->magazine <= 0) {
         return fail("that pawn has no gun to reload");
     }
@@ -1211,7 +1247,8 @@ int CombatSystem::roundsLeft(Entity pawn) const {
     if (gear == nullptr || gear->weapon == kNoEntity) {
         return 0;
     }
-    const CombatModel::Gun* gun = model_->gun(reg.get<Thing>(gear->weapon).def);
+    CombatModel::Gun moddedGun;
+    const CombatModel::Gun* gun = combatGunOf(*model_, reg, gear->weapon, moddedGun);
     if (gun == nullptr || gun->magazine <= 0) {
         return 0;
     }
@@ -1222,8 +1259,9 @@ int CombatSystem::roundsLeft(Entity pawn) const {
 int CombatSystem::magazineSize(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     const Gear* gear = reg.valid(pawn) ? reg.try_get<Gear>(pawn) : nullptr;
+    CombatModel::Gun moddedGun;
     const CombatModel::Gun* gun =
-        gear != nullptr && gear->weapon != kNoEntity ? model_->gun(reg.get<Thing>(gear->weapon).def) : nullptr;
+        gear != nullptr && gear->weapon != kNoEntity ? combatGunOf(*model_, reg, gear->weapon, moddedGun) : nullptr;
     return gun != nullptr ? gun->magazine : 0;
 }
 
@@ -1315,8 +1353,10 @@ int CombatSystem::shotReadyIn(Entity pawn) const {
         return s->stepsLeft;
     }
     const Gear* gear = things_.registry().try_get<Gear>(pawn);
-    const CombatModel::Gun* gun =
-        gear != nullptr && gear->weapon != kNoEntity ? model_->gun(things_.registry().get<Thing>(gear->weapon).def) : nullptr;
+    CombatModel::Gun moddedGun;
+    const CombatModel::Gun* gun = gear != nullptr && gear->weapon != kNoEntity
+                                      ? combatGunOf(*model_, things_.registry(), gear->weapon, moddedGun)
+                                      : nullptr;
     if (gun == nullptr) {
         return s->stepsLeft;
     }

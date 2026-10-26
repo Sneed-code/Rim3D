@@ -88,6 +88,8 @@ enum class EventType : uint8_t {
     OutOfFuel,       // a building's fuel ran out (docs/design/fuel.md)
     Refueled,        // a pawn put fuel into a building
     FirefoamPopped,     // a firefoam popper went off (docs/design/fire.md): `thing` the popper (destroyed right after), `def` its def, `cell` its cell, `amount` the foam radius
+    GearRepaired,       // a pawn mended a piece of gear at a bench (docs/design/repair.md): `thing` the pawn, `target` the gear, `def` its def, `cell` where the pawn stood, `amount` the hit points restored
+    WeaponUpgraded,     // a pawn fitted an upgrade part to a gun: `thing` the pawn, `target` the gun, `def` the part's def, `cell` where the pawn stood
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -133,6 +135,7 @@ enum class PawnAction : uint8_t {
     Chat,         // started talking to `target`, a prisoner (once per job; the talk takes game seconds)
     FeedPawn,     // started handing food to `target`, a prisoner
     Refuel,       // started putting fuel into `target`, a building (once per refuel job; the work goes on until its JobEnded)
+    Repair,       // started mending gear or fitting a part at `target`, a bench (once per RepairGear job; the work goes on until its JobEnded)
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
