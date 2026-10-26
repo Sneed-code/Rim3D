@@ -56,9 +56,14 @@ public:
         }
         const entt::registry& reg = jobs.things().registry();
         const Position& at = reg.get<Position>(pawn);
+        const double avoidChance = jobs.husbandry()->rules().huntAvoidManhunterChance;
         reg.view<const Animal, const AnimalCare, const Position>().each(
             [&](Entity animal, const Animal& a, const AnimalCare& care, const Position& pos) {
                 if (!care.markHunt || !a.wild || pos.level != at.level || huntDead(reg, animal)) {
+                    return;
+                }
+                // A bear or a thrumbo that turns on its hunter is no animal to send a colonist after.
+                if (static_cast<double>(jobs.husbandry()->animals().manhunterChanceOf(animal)) >= avoidChance) {
                     return;
                 }
                 out.push_back(WorkCandidate{JobTarget{animal, CellPos{}}, huntDistSq(at, pos), 0, 0, false, CellPos{}});
@@ -168,7 +173,7 @@ bool makeButcherJob(JobSystem& jobs, Entity pawn, Entity building, const Bill& b
     const CellPos from = cellOf(at);
     Entity best = kNoEntity;
     float bestDist = 0.0f;
-    reg.view<const Animal, const Position>().each([&](Entity corpse, const Animal&, const Position& pos) {
+    reg.view<const Health, const Position>().each([&](Entity corpse, const Health&, const Position& pos) {
         if (pos.level != at.level || !hu->isCorpse(corpse)) {
             return;
         }

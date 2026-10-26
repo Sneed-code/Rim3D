@@ -111,6 +111,7 @@ struct HusbandryRules {
     double huntRangeShare = 0.8;       // a hunter shoots from within this share of its gun's range
     double huntMinRange = 3.0;         // metres: a hunter never closes in nearer than this (the range of a short-barrelled gun)
     double huntMaxSeconds = 900.0;     // a hunt that has not killed its target in this long is given up
+    double huntAvoidManhunterChance = 0.1;  // hunters skip animals that turn manhunter when hurt at this chance or more (ours)
     double huntRepathSeconds = 3.0;    // a hunter walking at a moving animal looks for a new path this often
     double butcherEfficiencyBase = 0.75;
     double butcherEfficiencyPerLevel = 0.025;  // per Cooking level

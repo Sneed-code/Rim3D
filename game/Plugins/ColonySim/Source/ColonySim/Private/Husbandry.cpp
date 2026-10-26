@@ -104,6 +104,7 @@ Husbandry::Husbandry(Things& things, const Map& map, AnimalSystem& animals, Heal
         rules_.huntRangeShare = r->number("huntRangeShare", rules_.huntRangeShare);
         rules_.huntMinRange = r->number("huntMinRange", rules_.huntMinRange);
         rules_.huntMaxSeconds = r->number("huntMaxSeconds", rules_.huntMaxSeconds);
+        rules_.huntAvoidManhunterChance = r->number("huntAvoidManhunterChance", rules_.huntAvoidManhunterChance);
         rules_.huntRepathSeconds = r->number("huntRepathSeconds", rules_.huntRepathSeconds);
         rules_.butcherEfficiencyBase = r->number("butcherEfficiencyBase", rules_.butcherEfficiencyBase);
         rules_.butcherEfficiencyPerLevel = r->number("butcherEfficiencyPerLevel", rules_.butcherEfficiencyPerLevel);
@@ -705,7 +706,7 @@ void Husbandry::finishHunt(Entity hunter, Entity animal) {
 
 bool Husbandry::isCorpse(Entity animal) const {
     const entt::registry& reg = things_.registry();
-    if (!valid(animal) || !husbandryDead(reg, animal) || !things_.spawned(animal)) {
+    if (!reg.valid(animal) || !reg.all_of<Thing>(animal) || !husbandryDead(reg, animal) || !things_.spawned(animal)) {
         return false;
     }
     const Def& def = defs_.get(reg.get<Thing>(animal).def);
@@ -714,12 +715,14 @@ bool Husbandry::isCorpse(Entity animal) const {
 
 Husbandry::ButcherYield Husbandry::butcherYield(Entity corpse, double efficiency) const {
     ButcherYield out;
-    const Kind* kind = kindOf(corpse);
-    if (kind == nullptr) {
+    if (!isCorpse(corpse)) {
         return out;
     }
+    const Kind* kind = kindOf(corpse);  // none for a person: a full body
     const Def& def = defs_.get(things_.registry().get<Thing>(corpse).def);
-    const double share = kind->bodySize > 0.0f ? static_cast<double>(animals_.bodySize(corpse)) / static_cast<double>(kind->bodySize) : 1.0;
+    const double share = kind != nullptr && kind->bodySize > 0.0f
+                             ? static_cast<double>(animals_.bodySize(corpse)) / static_cast<double>(kind->bodySize)
+                             : 1.0;
     const double scale = std::max(0.0, efficiency) * share;
     if (def.has("race.meatDef")) {
         out.meat = defs_.idOf("Things", def.text("race.meatDef"));

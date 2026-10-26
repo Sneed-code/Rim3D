@@ -110,6 +110,15 @@ void AnimalSystem::beginChase(Entity e, Animal& a, const Kind& kind, Entity enem
 
 // ---- Hurt, scared, running ---------------------------------------------------------------------
 
+float AnimalSystem::manhunterChance(const Kind& kind) const {
+    return kind.tusker ? rules_.manhunterChanceFlagged : (kind.predator ? rules_.manhunterChancePredator : rules_.manhunterChanceOther);
+}
+
+float AnimalSystem::manhunterChanceOf(Entity animal) const {
+    const Kind* kind = kindOf(animal);
+    return kind != nullptr ? manhunterChance(*kind) : 0.0f;
+}
+
 void AnimalSystem::hurt(Entity victim, Entity attacker) {
     entt::registry& reg = things_.registry();
     if (!reg.valid(victim) || !reg.valid(attacker) || victim == attacker || !reg.all_of<Animal, Position>(victim) ||
@@ -161,8 +170,7 @@ void AnimalSystem::hurt(Entity victim, Entity attacker) {
         }
         return;
     }
-    const float chance = kind.tusker ? rules_.manhunterChanceFlagged
-                                     : (kind.predator ? rules_.manhunterChancePredator : rules_.manhunterChanceOther);
+    const float chance = manhunterChance(kind);
     if (rng.unit() < chance) {
         enrage(victim, AnimalTemper::Manhunter, attacker);
     } else if (kind.predator || kind.tusker) {
