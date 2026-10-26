@@ -296,6 +296,8 @@ const char* eventTypeName(EventType type) {
         case EventType::PawnMentalBreakEnded: return "PawnMentalBreakEnded";
         case EventType::PawnInsulted: return "PawnInsulted";
         case EventType::PawnLeftColony: return "PawnLeftColony";
+        case EventType::InspirationStarted: return "InspirationStarted";
+        case EventType::InspirationEnded: return "InspirationEnded";
     }
     return "?";
 }

@@ -26,6 +26,7 @@
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Lights.h"
+#include "ColonySim/Inspirations.h"
 #include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
@@ -318,6 +319,11 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     mentalBreaks_->setEventLog(&events_);
     mentalBreaks_->setMelee(melee_.get());
     mentalBreaks_->setFire(fire_.get());
+    inspirations_ = std::make_unique<InspirationSystem>(*things_, *health_, *defs_, time_);
+    inspirations_->setEventLog(&events_);
+    jobs_->setInspirations(inspirations_.get());
+    combat_->setInspirations(inspirations_.get());
+    prisoners_->setInspirations(inspirations_.get());
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -1189,6 +1195,7 @@ void Sim::step() {
     social_->step(time_.seconds);
     mentalBreaks_->step(time_.seconds, rng_);  // before the mood system, which turns its events into memories
     mood_->step(time_.seconds, events_);
+    inspirations_->step(time_.seconds);
     movement_->step(things_->registry(), map_);
     melee_->step();
     combat_->step(rng_);
@@ -2086,6 +2093,7 @@ uint64_t Sim::stateHash() const {
         defense_->hashThing(e, h);
         apparel_->hashThing(e, h);
         mentalBreaks_->hashThing(e, h);
+        inspirations_->hashThing(e, h);
     }
     apparel_->hashState(h);
     return h.value();
