@@ -11,6 +11,7 @@
 #include "ColonySim/Medicine.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Prisoners.h"
+#include "ColonySim/Raids.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
@@ -91,6 +92,9 @@ bool JobSystem::needsRescue(Entity pawn) const {
     }
     const Health& health = reg.get<Health>(pawn);
     const Faction* faction = reg.try_get<Faction>(pawn);
+    if (reg.all_of<Kidnapped>(pawn)) {
+        return false;  // a raider is carrying it off
+    }
     return health.downed && !health.dead && (faction == nullptr || faction->id == kPlayerFaction || reg.all_of<Prisoner>(pawn)) &&
            bedUnder(pawn) == kNoEntity;
 }
@@ -384,6 +388,10 @@ bool JobSystem::failCheckRescue(Entity, Job& job, std::string& why) {
     if (!things_.spawned(job.thing) || !reg.all_of<Health>(job.thing) || !reg.get<Health>(job.thing).downed ||
         reg.get<Health>(job.thing).dead) {
         why = "the patient is up or gone";
+        return false;
+    }
+    if (reg.all_of<Kidnapped>(job.thing)) {
+        why = "a raider carried the patient off";
         return false;
     }
     if (!things_.spawned(job.chair) || !reg.all_of<Bed>(job.chair)) {
