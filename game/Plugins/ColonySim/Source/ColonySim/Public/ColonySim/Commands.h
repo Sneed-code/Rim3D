@@ -563,6 +563,14 @@ struct ContractDiseaseCommand {
     int part = -1;
 };
 
+// The spaceship ending (docs/design/ship.md). `action` is "StartReactor" (`thing` a finished ship reactor), "Board" (`pawn` rides
+// in the ship cryptosleep casket `thing`; no pawn empties the casket) or "Launch". Fails with the reason in plain words.
+struct ShipCommand {
+    std::string action;
+    Entity thing = kNoEntity;
+    Entity pawn = kNoEntity;
+};
+
 // Dev command: the weather becomes this Weathers def now (by defName, e.g. "Rain") and lasts `hours`
 // game hours (0: its usual length), then the next is chosen as usual (docs/design/weather.md).
 // Fails if no Weathers def has the name.
@@ -750,7 +758,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand, SetPrisonerModeCommand,
                              SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
                              MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand,
-                             SetNarratorCommand, FireIncidentCommand, ContractDiseaseCommand, StartStrategyRaidCommand>;
+                             SetNarratorCommand, FireIncidentCommand, ContractDiseaseCommand, StartStrategyRaidCommand,
+                             ShipCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

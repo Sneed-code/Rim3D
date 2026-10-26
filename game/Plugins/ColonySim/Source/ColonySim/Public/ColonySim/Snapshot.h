@@ -384,6 +384,19 @@ struct ResearchView {
     bool current = false;
 };
 
+// The spaceship ending (docs/design/ship.md). `phase` is a ShipPhase number.
+struct ShipView {
+    uint8_t phase = 0;
+    int64_t activationLeft = 0;  // game seconds until the reactor is active (0 unless activating)
+    int waves = 0;               // siege waves sent
+    int beams = 0, caskets = 0, reactors = 0, engines = 0, cores = 0, sensors = 0;
+    int riders = 0;              // living riders in caskets that touch a beam
+    bool canLaunch = false;
+    std::string problem;         // why not, in plain words
+    bool won = false;
+    int escaped = 0;
+};
+
 // The date, the weather and the sky's mood (docs/design/weather.md). Snow per cell is not here:
 // read `Sim::weather().snowDepth(cell)` when `snowChanges` goes up.
 struct WeatherView {
@@ -478,6 +491,7 @@ struct Snapshot {
     std::vector<ApparelView> apparel;      // worn apparel, see ThingView
     std::vector<OutfitView> outfits;       // the outfit policies, by id
     WeatherView weather;
+    ShipView ship;
     NarratorView narrator;
 
     // The thing with this id, or null if it is not on the map. Binary search.
