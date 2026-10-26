@@ -48,7 +48,9 @@ a fighter that knows no enemy walks to its goal. That is how raiders "know where
 Each squad thinks once a real second (`squadThinkEvery`, 30 steps):
 
 1. **Rout** (RimWorld's rule, recalled): when half its pawns (`fleeLostFraction`) are downed, dead or
-   gone, or when its time is up (`giveUpHours`, RimWorld's 26,000 to 38,000 ticks: 10.4 to 15.2 game
+   gone, with the wounded counted as part lost (ours, from the F7 soak: an able pawn counts as
+   (1 - pain) x Moving, at most 1, so a squad of hurt pawns that are all still on their feet adds up
+   to less and runs too), or when its time is up (`giveUpHours`, RimWorld's 26,000 to 38,000 ticks: 10.4 to 15.2 game
    hours), it runs. Every member that can still walk gets `FightMode::Flee`: no more looking or
    shooting, just the nearest edge cell it can reach. At the edge it **leaves the map** with its gear
    (`PawnLeftMap`, then `ThingDestroyed`). Downed raiders stay where they fell.
@@ -80,6 +82,11 @@ While the alarm is on, every colonist that isn't drafted or controlled by the pl
 | **Defender** | Its job ends and it becomes a fighter (`defending`). With a **defense spot** it holds that spot, choosing cover within 3 m. Without one it goes to **the line**: a point 15 m (`defenseLine`, at most half way) from home toward the threat, choosing cover within 10 m of it; the line moves when the threat has moved it over 6 m. **Once it knows of an enemy it leaves the line** and fights like any fighter (cover, range, falling back), so an enemy out of range of the line can't shoot it from afar; with no enemy known again it goes back to the line. |
 | **Shelter** | Goes to the shelter room (`MarkShelterCommand`) and stays there, each in its own cell; with no shelter marked, the nearest roofed cell; with none, 25 m away from the threat. It never shoots. |
 | **Keep working** | Works on, until a spotted enemy comes within 20 m (`keepWorkingRadius`); then it defends itself where it is, until the alarm stops. |
+
+**Unarmed colonists run.** A colonist with no defense plan of its own and no weapon in its hands (`Gear::weapon`
+empty) is a Shelter, not a Defender, like RimWorld's default of fleeing when unarmed: it would otherwise punch a
+wolf with its fists (found by the year run, `colony-scenario.md`). The moment it carries a weapon it defends.
+A colonist the player gave a plan (`SetDefenseRoleCommand`) does what the plan says, armed or not.
 
 The alarm **stops by itself** when no enemy is left on the map that can still fight (all dead, downed
 or fleeing), and everyone it called up goes back to work. One the player sounded
@@ -116,6 +123,11 @@ to a few game hours, and in most seeds the raid routs after losing half its pawn
 off the map. On open ground with no cover the shooting is slow and both sides lose people: crouched
 pawns in the open are hit about 1 shot in 100 at 20 to 30 m in these fights, and downed colonists
 bleed out because nobody rescues or tends them yet. F7 measures and tunes this over many seeds.
+
+## Strategies
+
+How a raid comes (walking in, drop pods, at night) and what it goes for (the colony, a wall to dig
+through, loose items, downed colonists) is F12's: [raid-strategies.md](raid-strategies.md).
 
 ## Not done yet
 

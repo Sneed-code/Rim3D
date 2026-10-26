@@ -79,3 +79,22 @@ terrain under the foot: `soundStepCue`), **doors** (`doorOpen` going from shut t
 
 Not here: music (V21), a sound for every def (the cues above are the first set; new defs add a slot
 and a cue and `check_defs.py` keeps the two in step).
+
+## Real sounds (V21, cloud half)
+
+`assets/sound_sources.json` lists the free packs (licence, page, direct link) and a `cueMap` that
+sends every cue to the packs to cut it from; `python tools/sound_assets.py --check` fails if a cue
+has no row (it runs in CI) and `--list` prints the table. `python tools/sound_assets.py` downloads
+the packs into `game/Content/ThirdParty/Sounds/<id>/` (needs internet, so run it on the PC; the cloud
+container cannot reach these sites) and writes `CREDITS.txt` for the CC-BY ones.
+
+- Covered by CC0 packs: guns (OpenGameArt firearm library), impacts, swings, doors, items (Kenney),
+  rain and thunder, cave bed, short stingers.
+- Needs a Sonniss GDC pack or Freesound CC0 by hand (no scriptable link): fire, hums, alarm, horn,
+  explosions, wind, blizzard, day and night beds.
+- **Gap:** no free animal call pack was found (39 animal cues); they keep placeholder tones until
+  someone picks calls from Freesound (CC0 filter) or Sonniss.
+- Music: Indie Meditations (CC-BY 4.0, credit needed) for calm play, Kenney jingles for stingers;
+  danger music is still open.
+- Nothing was downloaded or listened to in the cloud. The PC half (V21) imports the files, cuts them
+  to the cue names and checks how they sound.
