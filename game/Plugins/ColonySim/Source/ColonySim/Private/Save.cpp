@@ -37,6 +37,7 @@
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Medicine.h"
+#include "ColonySim/Surgery.h"
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Social.h"
@@ -137,11 +138,28 @@ struct SaveEnvironmentHediff {
     float severity = 0.0f;
 };
 
+struct SaveAddedPart {  // health section 4 on (H3)
+    uint16_t part = 0;
+    std::string hediff;  // defName of a Hediffs def of class AddedPart
+};
+
+struct SaveOperation {  // medicine section 2 on (H3)
+    uint32_t id = 0;
+    std::string recipe;  // defName of a surgery Recipes def
+    uint16_t part = 0;
+};
+
+struct SaveOperations {
+    uint32_t nextId = 1;
+    std::vector<SaveOperation> list;
+};
+
 struct SaveHealth {
     bool protagonist = false;
     RestKind rest = RestKind::Ground;
     std::vector<SaveInjury> injuries;
     std::vector<MissingPart> missing;
+    std::vector<SaveAddedPart> added;  // health section 4 on
     float bloodLoss = 0.0f;
     std::vector<SaveEnvironmentHediff> environment;  // health section 2 on
     bool dead = false;
@@ -321,6 +339,7 @@ struct SaveEntity {
     std::optional<RecoilKick> kick;         // section "feel"
     std::optional<DodgeRoll> roll;          // section "feel"
     std::optional<MedicalSettings> medical;  // section "medicine"
+    std::optional<SaveOperations> operations;  // section "medicine" (H3, version 2 on)
     std::optional<std::vector<Entity>> stowed;  // section "weapons" (P1): Gear::stowed
     std::optional<WeaponSwitch> weaponSwitch;   // section "weapons"
     std::optional<Turret> turret;           // section "defense" (F11)
@@ -1073,6 +1092,13 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("building", c.building);
                 ar.value("bill", c.bill);
                 ar.value("index", c.index);
+            } else if constexpr (std::is_same_v<Type, AddOperationCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.text("recipe", c.recipe);
+                ar.value("part", c.part);
+            } else if constexpr (std::is_same_v<Type, RemoveOperationCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.value("operation", c.operation);
             } else if constexpr (std::is_same_v<Type, SetRefuelCommand>) {
                 auto* refuel = &c;
                 ar.value("building", refuel->building);
@@ -1352,7 +1378,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::Refuel, "the save file has a bad job");
+    ar.require(job.type <= JobType::Operate, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -1432,6 +1458,12 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
         ar.value("tendQuality", m.tendQuality);
         ar.require(m.tendQuality >= -1.0f && m.tendQuality < 1.0e3f, "the save file has an impossible tend quality");
     });
+    if (ar.sectionVersion() >= 4) {
+        ar.list("added", h.added, [&](SaveAddedPart& a) {
+            ar.value("part", a.part);
+            ar.text("hediff", a.hediff);
+        });
+    }
     ar.value("bloodLoss", h.bloodLoss);
     ar.require(h.bloodLoss >= 0.0f && h.bloodLoss <= 1000.0f, "the save file has impossible blood loss");
     if (ar.sectionVersion() >= 2) {
@@ -1443,7 +1475,7 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
     }
     ar.value("dead", h.dead);
     ar.value("cause", h.cause);
-    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Slaughtered), "the save file has a bad cause of death");
+    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Surgery), "the save file has a bad cause of death");
 
 }
 
@@ -2392,7 +2424,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("colonists", 1, [&] {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
-    ar.section("health", 3, [&] {
+    ar.section("health", 4, [&] {
         saveParts(ar, "health", e, &SaveEntity::health, [&](SaveHealth& h) { saveHealthPart(ar, h); });
     });
     ar.section("control", 1, [&] {
@@ -2465,11 +2497,22 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "joy", e, &SaveEntity::joy, [&](SaveJoy& j) { saveJoyPart(ar, j); });
     });
     ar.section("research", 1, [&] { saveResearch(ar, d.research); });
-    ar.section("medicine", 1, [&] {
+    ar.section("medicine", 2, [&] {
         saveParts(ar, "medical", e, &SaveEntity::medical, [&](MedicalSettings& m) {
             ar.value("care", m.care);
             ar.require(static_cast<int>(m.care) <= static_cast<int>(MedicalCare::Best), "the save file has a bad medical care setting");
         });
+        if (ar.sectionVersion() >= 2) {
+            saveParts(ar, "operations", e, &SaveEntity::operations, [&](SaveOperations& ops) {
+                ar.value("nextId", ops.nextId);
+                ar.list("list", ops.list, [&](SaveOperation& op) {
+                    ar.value("id", op.id);
+                    ar.text("recipe", op.recipe);
+                    ar.value("part", op.part);
+                    ar.require(op.id > 0 && op.id < ops.nextId, "the save file has an operation with a bad number");
+                });
+            });
+        }
     });
     ar.section("talents", 1, [&] { saveTalents(ar, d); });
     ar.section("roomstats", 1, [&] { saveRoomStatsSection(ar, d); });
@@ -2949,6 +2992,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
                                                     injury.tendQuality, injury.peak});
             }
             saved.missing = health->missing;
+            for (const AddedPart& added : health->added) {
+                saved.added.push_back(SaveAddedPart{added.part, sim.defs_->get(added.hediff).defName()});
+            }
             saved.bloodLoss = health->bloodLoss;
             for (const EnvironmentHediff& env : health->environment) {
                 saved.environment.push_back(SaveEnvironmentHediff{sim.defs_->get(env.def).defName(), env.severity});
@@ -3004,6 +3050,14 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const PrisonBed* prisonBed = reg.try_get<PrisonBed>(e)) {
             out.prisonBed = *prisonBed;
+        }
+        if (const Operations* operations = reg.try_get<Operations>(e)) {
+            SaveOperations saved;
+            saved.nextId = operations->nextId;
+            for (const Operation& op : operations->list) {
+                saved.list.push_back(SaveOperation{op.id, sim.defs_->get(op.recipe).defName(), op.part});
+            }
+            out.operations = std::move(saved);
         }
         if (const MedicalSettings* medical = reg.try_get<MedicalSettings>(e)) {
             out.medical = *medical;
@@ -3408,6 +3462,17 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                 health.injuries.push_back(Injury{injury.part, hediff->id(), injury.severity, injury.tendQuality, injury.peak});
             }
             health.missing = e.health->missing;
+            for (const SaveAddedPart& added : e.health->added) {
+                const Def* hediff = sim.defs_->find("Hediffs", added.hediff);
+                std::string partDef;
+                DefId item;
+                float efficiency = 1.0f;
+                if (hediff == nullptr || !sim.health_->addedInfo(hediff->id(), partDef, item, efficiency)) {
+                    error = "the save has the artificial part '" + added.hediff + "', which the data files no longer have";
+                    return false;
+                }
+                health.added.push_back(AddedPart{added.part, hediff->id()});
+            }
             health.bloodLoss = e.health->bloodLoss;
             for (const SaveEnvironmentHediff& env : e.health->environment) {
                 const Def* hediff = sim.defs_->find("Hediffs", env.hediff);
@@ -3431,6 +3496,12 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             for (const MissingPart& missing : health.missing) {
                 if (missing.part >= parts) {
                     error = "the save has a lost body part its pawn doesn't have";
+                    return false;
+                }
+            }
+            for (const AddedPart& added : health.added) {
+                if (added.part >= parts) {
+                    error = "the save has an artificial part on a body part its pawn doesn't have";
                     return false;
                 }
             }
@@ -3536,6 +3607,24 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.animal) {
             reg.emplace<Animal>(entity, *e.animal);
+        }
+        if (e.operations) {
+            Operations operations;
+            operations.nextId = e.operations->nextId;
+            const int parts = e.thing ? sim.health_->partCount(reg.get<Thing>(entity).def) : 0;
+            for (const SaveOperation& saved : e.operations->list) {
+                const SurgeryRecipe* recipe = sim.surgery_->recipe(saved.recipe);
+                if (recipe == nullptr) {
+                    error = "the save has an operation '" + saved.recipe + "', which the data files no longer have";
+                    return false;
+                }
+                if (saved.part >= parts) {
+                    error = "the save has an operation on a body part its patient doesn't have";
+                    return false;
+                }
+                operations.list.push_back(Operation{saved.id, recipe->def, saved.part});
+            }
+            reg.emplace<Operations>(entity, std::move(operations));
         }
         if (e.medical) {
             reg.emplace<MedicalSettings>(entity, *e.medical);

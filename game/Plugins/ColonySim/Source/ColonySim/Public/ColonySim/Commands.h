@@ -653,6 +653,21 @@ struct MoveBillCommand {
     int index = 0;
 };
 
+// Surgery (task H3, docs/design/surgery.md): plans an operation on a patient. `recipe` is a Recipes defName with a `surgery`
+// block (AmputateLimb, RemoveBodyPart, InstallPegLeg...), `part` the body part's index in the patient's Bodies def. Fails if the
+// operation can't be done on that part, is planned already, or isn't researched.
+struct AddOperationCommand {
+    Entity pawn = kNoEntity;
+    std::string recipe;
+    int part = 0;
+};
+
+// Takes a planned operation off the patient.
+struct RemoveOperationCommand {
+    Entity pawn = kNoEntity;
+    uint32_t operation = 0;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -675,7 +690,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
                              SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand, SetPrisonerModeCommand,
                              SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
-                             MoveBillCommand>;
+                             MoveBillCommand, AddOperationCommand, RemoveOperationCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.
