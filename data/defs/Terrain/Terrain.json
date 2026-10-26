@@ -37,5 +37,7 @@
   { "defName": "Limestone_Rough", "parent": "RoughStoneBase", "label": "rough limestone" },
   { "defName": "Sandstone_Rough", "parent": "RoughStoneBase", "label": "rough sandstone" },
   { "defName": "Slate_Rough", "parent": "RoughStoneBase", "label": "rough slate" },
-  { "defName": "Marble_Rough", "parent": "RoughStoneBase", "label": "rough marble" }
+  { "defName": "Marble_Rough", "parent": "RoughStoneBase", "label": "rough marble" },
+  {"defName": "Ice", "parent": "TerrainBase", "label": "ice", "fertility": 0, "pathCost": 3, "source": "RimWorld wiki", "stats": {"beauty": 0, "cleanliness": 0}, "unverified": ["pathCost"]},
+  {"defName": "SeaIce", "parent": "TerrainBase", "label": "sea ice", "fertility": 0, "pathCost": 3, "source": "RimWorld wiki", "stats": {"beauty": 0, "cleanliness": 0}, "unverified": ["pathCost"]}
 ]
