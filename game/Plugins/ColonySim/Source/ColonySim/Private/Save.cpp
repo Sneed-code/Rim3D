@@ -2369,6 +2369,14 @@ void saveRaids(Ar& ar, RaidState& r) {
     ar.value("hasShelter", r.hasShelter);
     ar.group("shelter", [&] { saveCell(ar, r.shelter); });
     ar.value("nextAlarmThink", r.nextAlarmThink);
+    if (ar.sectionVersion() >= 2) {
+        ar.value("adaptDays", r.adaptDays);
+        ar.value("nextAdaptGrowth", r.nextAdaptGrowth);
+        ar.list("adaptPawns", r.adaptPawns, [&](RaidState::AdaptPawn& p) {
+            ar.value("pawn", p.pawn);
+            ar.value("downed", p.downed);
+        });
+    }
 }
 
 // ---- Sections (format 20 on) -----------------------------------------------------------------
@@ -2651,7 +2659,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(t.celsius > -500.0f && t.celsius < 1000.0f, "the save file has an impossible room temperature");
         });
     });
-    ar.section("raids", 1, [&] {
+    ar.section("raids", 2, [&] {
         saveRaids(ar, d.raids);
         saveParts(ar, "defense", e, &SaveEntity::defense, [&](DefensePlan& p) {
             ar.value("role", p.role);

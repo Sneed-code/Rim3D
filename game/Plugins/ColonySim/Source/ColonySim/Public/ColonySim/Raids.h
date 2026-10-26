@@ -100,6 +100,15 @@ struct RaidState {
     bool hasShelter = false;  // the player's shelter room, by a cell in it
     CellPos shelter;
     int64_t nextAlarmThink = 0;
+    // Adaptation (wiki "Raid points"): the days the colony has adapted, and the colonists it keeps
+    // an eye on to see who goes down or dies (section `raids` 2).
+    struct AdaptPawn {
+        Entity pawn = entt::null;
+        bool downed = false;
+    };
+    float adaptDays = 0.0f;
+    int64_t nextAdaptGrowth = 0;  // game second of the next 12-hour growth step
+    std::vector<AdaptPawn> adaptPawns;  // in id order
 };
 
 // The numbers (RaidRules in data/defs/Rules/RaidRules.json).
@@ -109,13 +118,24 @@ struct RaidRules {
     };
     // RimWorld's raid points (wiki "Raid points"): wealth points by storyteller wealth, points per
     // colonist by wealth, the difficulty's threat scale, the days-passed factor, the adaptation
-    // factor (fixed at its start value until adaptation is tracked), and the limits.
+    // factor, and the limits.
     std::vector<Point> wealthPoints{{0, 0}, {14000, 0}, {400000, 2400}, {700000, 3600}, {1000000, 4200}};
     std::vector<Point> pointsPerColonist{{0, 15}, {10000, 15}, {400000, 140}, {1000000, 200}};
     std::vector<Point> daysPassedFactor{{10, 0.7f}, {40, 1.0f}};
     float buildingWealthFactor = 0.5f;
     float threatScale = 1.0f;
-    float adaptation = 0.8f;
+    // Adaptation: AdaptDays go up every `adaptGrowthHours` by the step list's value for where they
+    // are (halved: the wiki's table is per day; never above 0 before `adaptGraceDays`), and down by
+    // the curves when a colonist dies or goes down (by colonists); the factor is the curve of
+    // AdaptDays, blended with 1 by the difficulty's adaptationImpact.
+    std::vector<Point> adaptGrowth{{-60, 3}, {0, 1}, {60, 0.5f}, {120, 0.25f}};  // from AdaptDays: added per day
+    std::vector<Point> adaptFactor{{-30, 0.4f}, {0, 0.8f}, {30, 1.0f}, {60, 1.2f}, {120, 1.6f}, {180, 2.0f}};
+    std::vector<Point> adaptDeath{{0, 30}, {11, 30}, {20, 20}};
+    std::vector<Point> adaptDowned{{1, 8}, {2, 6}, {3, 6}, {11, 5}, {20, 3.5f}};
+    float adaptMin = -60.0f;
+    float adaptMax = 100.0f;
+    float adaptGraceDays = 30.0f;
+    float adaptGrowthHours = 12.0f;
     float minPoints = 35.0f;
     float maxPoints = 10000.0f;
     // When a squad routs or gives up.
@@ -157,6 +177,10 @@ public:
     // player's pawns, and the player's own pawns (colonists, tame animals), at their market value,
     // plus buildings at half theirs. Defs without a marketValue count 0.
     float colonyWealth() const;
+    // The adaptation factor now (1 with the impact at 0), and what the difficulty says about it
+    // (its adaptationGrowth and adaptationImpact; the narrator sets them with the difficulty).
+    float adaptationFactor() const;
+    void setAdaptation(float growth, float impact);
     // The raid points a raid would get now (wiki "Raid points"), between minPoints and maxPoints.
     float threatPoints() const { return threatPoints(1.0f); }
     // The same with another factor before the limits: the narrator's difficulty and points factor (T1).
@@ -207,6 +231,7 @@ private:
     void thinkSquad(Squad& squad);
     void leaveAtEdge(Squad& squad);
     void thinkAlarm();
+    void thinkAdaptation();
     void setAlarm(bool on, const char* why);
     void callUp(Entity pawn, const std::vector<Entity>& spotted);
     CellPos defensePoint(Entity pawn, const DefensePlan* plan);
@@ -230,6 +255,8 @@ private:
     Rng& rng_;
     RaidRules rules_;
     RaidState state_;
+    float adaptGrowthRate_ = 1.0f;  // the difficulty's, not saved
+    float adaptImpact_ = 1.0f;
     std::vector<float> marketValue_;  // per def id
     std::vector<float> armor_;        // per def id: armorRatingSharp of apparel
     std::vector<Event>* events_ = nullptr;

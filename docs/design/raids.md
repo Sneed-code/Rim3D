@@ -25,7 +25,7 @@ page:
   (`RaidSystem::colonyWealth`). Defs without a `marketValue` count nothing.
 - **Points** = (wealth points + 15 to 200 per colonist, both from the wiki's curves by wealth) x
   the difficulty's threat scale (Strive to survive, 1) x the days-passed factor (0.7 up to day 10,
-  1 from day 40) x adaptation (0.8, its start value; adaptation isn't tracked yet), kept between
+  1 from day 40) x adaptation (starts 0.8, tracked since T1, see narrator.md), kept between
   35 and 10,000. The six Crashlanded colonists on day 0 make about 65 points: one pirate. The
   narrator ([narrator.md](narrator.md)) multiplies this by the difficulty and its own factor.
 
@@ -127,7 +127,7 @@ bleed out because nobody rescues or tends them yet. F7 measures and tunes this o
 - The narrator sending raids by itself, raid warnings and other strategies (siege, sappers, drop
   pods, kidnapping and stealing); RimWorld's `PawnGroupMaker` subtleties (the most expensive pawn
   limited by the points).
-- Adaptation (the factor stays at 0.8), market values for guns, apparel and buildings.
+- Market values for guns, apparel and buildings.
 - Medic and Firefighter roles (with medicine and fire, Stage 2), rescuing the downed, fallback lines
   and using the F3 threat map to choose the safe side.
 - Raiders don't yet use squad-level tactics like flanking; each fighter picks its own cover.
