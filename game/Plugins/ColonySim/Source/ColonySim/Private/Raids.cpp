@@ -1673,6 +1673,14 @@ void RaidSystem::callUp(Entity pawn, const std::vector<Entity>& spotted) {
     }
     const DefensePlan* plan = reg.try_get<DefensePlan>(pawn);
     DefenseRole role = plan != nullptr ? plan->role : DefenseRole::Defender;
+    // A colonist with no plan of its own and nothing in its hands runs for shelter instead of punching a wolf
+    // (RimWorld's default hostility response: an unarmed colonist flees); an armed one defends.
+    if (plan == nullptr) {
+        const Gear* gear = reg.try_get<Gear>(pawn);
+        if (gear == nullptr || gear->weapon == kNoEntity || !reg.valid(gear->weapon)) {
+            role = DefenseRole::Shelter;
+        }
+    }
     const Position& pos = reg.get<Position>(pawn);
     if (role == DefenseRole::KeepWorking) {
         if (f != nullptr) {
