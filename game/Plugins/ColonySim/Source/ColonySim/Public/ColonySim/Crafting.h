@@ -42,7 +42,7 @@ public:
 
     // The quality of what a crafter with this skill level makes: 0 awful to 5 masterwork, by the wiki's table
     // (CraftingRules.qualityChances). `shift` raises the result that many levels, to 6 legendary at most (an
-    // inspiration would; nothing in the sim does yet).
+    // inspiration does: Inspired Creativity, docs/design/inspirations.md).
     int rollQuality(int skillLevel, int shift = 0);
     // The chance of a quality level (0 to 6) at a skill level, from the table.
     double qualityChance(int skillLevel, int quality) const;
@@ -62,7 +62,7 @@ public:
     // when its def has one. `skillLevel` is the crafter's level in the recipe's skill. `storeZone` 0 leaves
     // it; a stockpile marks it for haulers (StoreIn).
     void finishProduct(Entity item, const Recipe& recipe, int skillLevel, const std::vector<BillUsed>& used,
-                       uint32_t storeZone);
+                       uint32_t storeZone, int qualityShift = 0);
 
     // One game minute: a `StoreIn` mark goes when the product lies in its zone or the zone is gone.
     void step();

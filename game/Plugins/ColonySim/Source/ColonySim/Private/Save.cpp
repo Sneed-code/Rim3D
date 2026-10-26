@@ -36,6 +36,7 @@
 #include "ColonySim/Spoilage.h"
 #include "ColonySim/Crafting.h"
 #include "ColonySim/Temperature.h"
+#include "ColonySim/Inspirations.h"
 #include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Medicine.h"
@@ -332,6 +333,7 @@ struct SaveEntity {
     std::optional<Fuel> fuel;               // "fuel" section (C11)
     std::optional<StoreIn> storeIn;         // "crafting" section (C14)
     std::optional<MentalBreaker> mentalBreaker;  // section "mentalBreaks" (C19)
+    std::optional<Inspired> inspired;            // section "inspirations" (C25)
 };
 
 // A stockpile zone, with its filter by defName.
@@ -2710,6 +2712,13 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("mentalBreaks", 1, [&] {
         saveParts(ar, "mentalBreaker", e, &SaveEntity::mentalBreaker, [&](MentalBreaker& b) { saveMentalBreakerPart(ar, b); });
     });
+    ar.section("inspirations", 1, [&] {
+        saveParts(ar, "inspired", e, &SaveEntity::inspired, [&](Inspired& i) {
+            ar.text("def", i.def);
+            ar.value("startedAt", i.startedAt);
+            ar.value("endsAt", i.endsAt);
+        });
+    });
     // New sections go here, at the end.
 }
 
@@ -2942,6 +2951,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const MentalBreaker* breaker = reg.try_get<MentalBreaker>(e)) {
             out.mentalBreaker = *breaker;
+        }
+        if (const Inspired* inspired = reg.try_get<Inspired>(e)) {
+            out.inspired = *inspired;
         }
         out.playerControlled = reg.all_of<PlayerControl>(e);
         if (const ConstructionSite* site = reg.try_get<ConstructionSite>(e)) {
@@ -3422,6 +3434,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.mentalBreaker) {
             reg.emplace<MentalBreaker>(entity, std::move(*e.mentalBreaker));
         }
+        if (e.inspired) {
+            reg.emplace<Inspired>(entity, std::move(*e.inspired));
+        }
         if (e.bills) {
             BillList list;
             list.nextId = e.bills->nextId;
@@ -3782,6 +3797,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         return false;
     }
     if (!sim.mentalBreaks_->afterLoad(error)) {
+        return false;
+    }
+    if (!sim.inspirations_->afterLoad(error)) {
         return false;
     }
     if (d.stockpile && !sim.map_.inBounds(*d.stockpile)) {
