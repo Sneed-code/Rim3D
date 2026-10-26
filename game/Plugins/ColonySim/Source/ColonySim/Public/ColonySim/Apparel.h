@@ -222,7 +222,9 @@ public:
     bool naked(Entity pawn) const;
     bool nudistClothed(Entity pawn) const;
     int taintedWorn(Entity pawn) const;
-    // Registers the situations "noApparel", "apparelOnNudist", "apparelTattered" and "apparelTainted".
+    // Worn pieces made of a stuff with `humanlike` true (human leather).
+    int humanLeatherWorn(Entity pawn) const;
+    // Registers the situations "noApparel", "apparelOnNudist", "apparelTattered", "apparelTainted" and "apparelHumanLeather".
     void registerSituations(MoodSystem& mood) const;
 
     // One step, after combat: the dead lose hit points on their clothes and taint it, worn clothes wear
