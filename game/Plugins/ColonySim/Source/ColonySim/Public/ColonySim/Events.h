@@ -95,6 +95,12 @@ enum class EventType : uint8_t {
     PawnMentalBreakEnded,  // it ended: `message` says how ("recovered", "downed", "died", "stopped")
     PawnInsulted,          // a pawn in an insulting spree insulted another
     PawnLeftColony,        // a pawn gave up and walked off the map for good
+    QuestOffered,          // a quest was offered (docs/design/quests.md): `count` its id, `def` its Quests def, `message` the def's name
+    QuestAccepted,         // the player accepted it
+    QuestDeclined,         // the player declined it
+    QuestExpired,          // nobody answered in time (or, once accepted, the raid could not be sent): `message` says which
+    QuestCompleted,        // it was done and paid: `message` says how ("joined", "delivered", "the raid is over", "no raid came"); `squad` the raid
+    QuestFailed,           // it went wrong: `message` says why
 };
 
 // What stopped a projectile (ProjectileHit).

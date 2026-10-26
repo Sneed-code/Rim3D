@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace colony {
@@ -252,6 +253,21 @@ struct SquadView {
     CellPos target;        // the cell it goes for
 };
 
+// A quest, offered or finished (docs/design/quests.md): `state` is a QuestState (0 Offered, 1 Active, 2 Completed, 3 Failed, 4 Declined,
+// 5 Expired), `expiresAt` the game second an unanswered offer lapses, `deadline` the game second an active raid quest fails
+// (0 for none), `people` how many come, `points` the raid's points (0 for none), `rewards` the defName and count of each reward item.
+struct QuestView {
+    uint32_t id = 0;
+    std::string kind;
+    std::string label;
+    uint8_t state = 0;
+    int64_t expiresAt = 0;
+    int64_t deadline = 0;
+    int people = 0;
+    float points = 0.0f;
+    std::vector<std::pair<std::string, int>> rewards;
+};
+
 // A bullet in flight (docs/design/combat.md). Unreal draws a tracer along its velocity; it
 // appears with a ShotFired event and disappears with a ProjectileHit event. A thrown grenade is here
 // too (docs/design/explosives.md): its def is the grenade's Projectiles def, it appears with a
@@ -461,6 +477,7 @@ struct Snapshot {
     bool alarm = false;
     bool alarmManual = false;
     std::vector<SquadView> squads;
+    std::vector<QuestView> quests;         // offered, active and recently finished quests, by id
     std::vector<ApparelView> apparel;      // worn apparel, see ThingView
     std::vector<OutfitView> outfits;       // the outfit policies, by id
     WeatherView weather;

@@ -2,6 +2,7 @@
 
 Updated 2026-10-26.
 
+Stage 2 quests done (sim side): a quest is an offer with rewards that waits a few days for accept or decline. Four kinds need no world travel: refugees run in with raiders behind them (paid when the raid is over), a wanderer asks to join, a supply cache is dropped for the colony, and "hold the line" sends a raid for a reward. The narrator offers them with `quests().offerRandom` or the `Quest` command; the snapshot lists them (`docs/design/quests.md`, tests `QuestTests`, defs `Quests/`, `Rules/QuestRules`). Save section `quests`. Sim only; no quest screen yet.
 Stage 2 colonist needs extras done: a colonist outside its safe temperature walks to the nearest comfortable (else safe) cell and waits there (`SeekShelter` job, `docs/design/temperature.md`); Gourmand's faster hunger, Quick sleeper's faster rest, Night owl's moods awake at night or by day and Greedy's mood without a bedroom are in (`docs/design/needs.md`, `mood.md`). Tests: `ColonistTraitNeedsTests`. Save format unchanged (new job type number at the end).
 Stage 2 animal extras done: tame animals can be named (`SetAnimalName`), one command marks every wild animal in a rectangle to tame or hunt, or every tame one to slaughter (`MarkAnimalsInArea`), and doors are gates to animals: they never walk through one (`docs/design/husbandry.md`, tests `HusbandryTests`). Save section `husbandry` 3. Sim only.
 

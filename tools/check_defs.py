@@ -82,6 +82,8 @@ REFERENCES = [
     ("Factions", "traders.caravan[]", "TraderKinds"),
     ("Factions", "traders.orbital[]", "TraderKinds"),
     ("TraderKinds", "stock[].thing", "Things"),
+    ("Quests", "faction", "Factions"),
+    ("Quests", "rewards[].thing", "Things"),
     ("Incidents", "hediff", "Hediffs"),
     ("Incidents", "faction", "Factions"),
     ("Rules", "defaultNarrator", "Narrators"),

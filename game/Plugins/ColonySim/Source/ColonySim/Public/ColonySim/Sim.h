@@ -60,6 +60,7 @@ class Plants;
 class PowerGrid;
 class Regions;
 class PrisonerSystem;
+class QuestSystem;
 class Rooms;
 class TemperatureSystem;
 class SpoilageSystem;
@@ -288,6 +289,9 @@ public:
     // Prisoners: capture, feeding, warden talks, recruiting and release (docs/design/prisoners.md).
     PrisonerSystem& prisoners() { return *prisoners_; }
     const PrisonerSystem& prisoners() const { return *prisoners_; }
+    // Quests: offers, answers, rewards (docs/design/quests.md). The narrator offers them with `quests().offerRandom`.
+    QuestSystem& quests() { return *quests_; }
+    const QuestSystem& quests() const { return *quests_; }
 
     // Taming, training, animal zones and pens (docs/design/husbandry.md).
     Husbandry& husbandry() { return *husbandry_; }
@@ -335,6 +339,7 @@ private:
     void pruneDesignations();
     void startScenario();
     // Gives a new pawn its looks if it is humanlike (its def names no other intelligence).
+    Entity makeJoiner(CellPos cell, uint64_t seed);
     void giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& lineage);
     // Makes (again) the genes of a pawn that has looks, from its lineage.
     void giveGenes(Entity pawn);
@@ -387,6 +392,7 @@ private:
     std::unique_ptr<RoofCollapse> roofCollapse_;  // M3, after the rooms and the job system
     std::unique_ptr<RaidSystem> raids_;        // after the fighters
     std::unique_ptr<PrisonerSystem> prisoners_;  // after the raids
+    std::unique_ptr<QuestSystem> quests_;        // after the raids
     std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system
     std::unique_ptr<Breeding> breeding_;    // after husbandry_
     std::unique_ptr<Fire> fire_;            // after the weather, temperature, rooms, floors, filth, plants and health
