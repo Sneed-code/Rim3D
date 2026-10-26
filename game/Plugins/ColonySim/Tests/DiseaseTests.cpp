@@ -8,6 +8,7 @@
 #include "ColonySim/Needs.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
+#include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Spoilage.h"
@@ -476,6 +477,7 @@ TEST_CASE("Diseases: an outbreak picks victims among those who can catch it") {
 
 TEST_CASE("Diseases: a doctor tends a sick colonist, who rests in a bed until well") {
     Sim sim = disSim();
+    sim.mentalBreaks().setNatural(false);  // it runs for days
     const Entity bed = sim.things().spawn("HospitalBed", CellPos{20, 20, 0});
     sim.things().spawn("MedicineIndustrial", CellPos{12, 12, 0}, 10);
     for (int i = 0; i < 12; ++i) {
