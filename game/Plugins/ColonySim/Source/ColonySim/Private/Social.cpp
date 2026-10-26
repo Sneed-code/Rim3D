@@ -100,6 +100,20 @@ SocialRules SocialRules::read(const DefDatabase& defs) {
     r.fightBloodLoss = socFloat(*rules, "fightBloodLoss", r.fightBloodLoss);
     r.fightMaxMinutes = socFloat(*rules, "fightMaxMinutes", r.fightMaxMinutes);
     r.fightWalkEvery = std::max(1.0f, socFloat(*rules, "fightWalkEvery", r.fightWalkEvery));
+    r.skillOpinionPerLevel = socFloat(*rules, "skillOpinionPerLevel", r.skillOpinionPerLevel);
+    r.skillRomancePerLevel = socFloat(*rules, "skillRomancePerLevel", r.skillRomancePerLevel);
+    r.cheatWeightFactor = socFloat(*rules, "cheatWeightFactor", r.cheatWeightFactor);
+    r.cheatPartnerBelow = socFloat(*rules, "cheatPartnerBelow", r.cheatPartnerBelow);
+    r.cheatedLabel = rules->text("cheated.label", r.cheatedLabel);
+    r.cheatedOffset = socFloat(*rules, "cheated.offset", r.cheatedOffset);
+    r.cheatedDays = socFloat(*rules, "cheated.days", r.cheatedDays);
+    r.tookPartnerLabel = rules->text("tookPartner.label", r.tookPartnerLabel);
+    r.tookPartnerOffset = socFloat(*rules, "tookPartner.offset", r.tookPartnerOffset);
+    r.tookPartnerDays = socFloat(*rules, "tookPartner.days", r.tookPartnerDays);
+    r.jealousFightChance = socFloat(*rules, "jealousFightChance", r.jealousFightChance);
+    r.cheatedThought = socTrigger(defs, rules->text("cheatedThought"));
+    r.weddingGuestThought = socTrigger(defs, rules->text("weddingGuestThought"));
+    r.weddingPartyThought = socTrigger(defs, rules->text("weddingPartyThought"));
     r.fightLabel = rules->text("fight.label", r.fightLabel);
     r.fightOffset = socFloat(*rules, "fight.offset", r.fightOffset);
     r.fightDays = socFloat(*rules, "fight.days", r.fightDays);
@@ -396,7 +410,8 @@ bool SocialSystem::eligible(Entity initiator, Entity recipient, const SocialInte
     if (interaction.requiresAdult && (!isAdult(initiator) || !isAdult(recipient))) {
         return false;
     }
-    if (interaction.requiresSingleOrOpen && (!single(initiator) || !single(recipient))) {
+    // The asker may have a partner (that is cheating, see `jealousy`); the one asked may not.
+    if (interaction.requiresSingleOrOpen && (!single(recipient) || (!single(initiator) && rules_.cheatWeightFactor <= 0.0f))) {
         return false;
     }
     if (interaction.requiresLover) {
@@ -492,7 +507,8 @@ void SocialSystem::perform(Entity initiator, Entity recipient, const SocialInter
     if (interaction.bond == "Lover" || interaction.bond == "Spouse") {
         const float chance = std::clamp(
             interaction.successBase * (1.0f + opinion(recipient, initiator) / rules_.romanceOpinionScale), 0.0f, 0.95f);
-        ok = outcome >= 0 ? outcome == 1 : unit(initiator, 7 + socId(recipient)) < static_cast<double>(chance);
+        const float skilled = std::clamp(chance * skillFactor(initiator, rules_.skillRomancePerLevel), 0.0f, 0.95f);
+        ok = outcome >= 0 ? outcome == 1 : unit(initiator, 7 + socId(recipient)) < static_cast<double>(skilled);
     }
 
     if (name == "Chitchat") {
@@ -513,19 +529,35 @@ void SocialSystem::perform(Entity initiator, Entity recipient, const SocialInter
 
     // What the listener now thinks of the talker. A turned-down romance changes nothing.
     if (ok) {
-        addMemory(recipient, initiator, interaction.opinionLabel, interaction.opinionOffset, interaction.opinionDays,
-                  interaction.stackLimit);
+        // A good chat counts for more from a skilled talker; a bad one is no worse for it.
+        const float offset = interaction.opinionOffset > 0.0f
+                                 ? interaction.opinionOffset * skillFactor(initiator, rules_.skillOpinionPerLevel)
+                                 : interaction.opinionOffset;
+        addMemory(recipient, initiator, interaction.opinionLabel, offset, interaction.opinionDays, interaction.stackLimit);
     }
 
     if (interaction.bond == "Lover" && ok) {
+        std::vector<Entity> betrayed;
+        if (const Social* social = things_.registry().try_get<Social>(initiator)) {
+            for (const Bond& bond : social->bonds) {
+                if ((bond.kind == BondKind::Lover || bond.kind == BondKind::Spouse) && bond.other != recipient) {
+                    betrayed.push_back(bond.other);
+                }
+            }
+        }
         setBond(initiator, recipient, BondKind::Lover);
         ++stats_.lovers;
+        for (const Entity mate : betrayed) {
+            ++stats_.cheats;
+            jealousy(mate, initiator, recipient);
+        }
     } else if (interaction.bond == "Spouse") {
         if (ok) {
             setBond(initiator, recipient, BondKind::Spouse);
             ++stats_.weddings;
             thought(initiator, interaction.acceptedTrigger);
             thought(recipient, interaction.acceptedTrigger);
+            weddingParty(initiator, recipient);
         } else {
             thought(initiator, interaction.rejectedTrigger);
         }
@@ -585,6 +617,43 @@ bool SocialSystem::interact(Entity initiator, Entity recipient, const std::strin
 }
 
 // ---- Fights ---------------------------------------------------------------------------------
+
+float SocialSystem::skillFactor(Entity pawn, float perLevel) const {
+    return 1.0f + perLevel * static_cast<float>(std::max(0, jobs_.skillLevel(pawn, "Social")));
+}
+
+// `cheater` (who still has `betrayed` as a lover or spouse) took up with `newLover`: the betrayed one thinks
+// badly of both, is upset, and may fight the new lover. The bond with the betrayed one stays.
+void SocialSystem::jealousy(Entity betrayed, Entity cheater, Entity newLover) {
+    addMemory(betrayed, cheater, rules_.cheatedLabel, rules_.cheatedOffset, rules_.cheatedDays, 0);
+    addMemory(betrayed, newLover, rules_.tookPartnerLabel, rules_.tookPartnerOffset, rules_.tookPartnerDays, 0);
+    thought(betrayed, rules_.cheatedThought);
+    push(EventType::Interaction, cheater, betrayed, "Cheated", 1, opinion(betrayed, cheater));
+    const bool peaceful = hasTrait(betrayed, "Wimp") || hasTrait(betrayed, "Kind");
+    if (!peaceful && unit(betrayed, 13 + socId(newLover)) < static_cast<double>(rules_.jealousFightChance) &&
+        canTalk(betrayed) && canTalk(newLover)) {
+        startFight(betrayed, newLover);
+    }
+}
+
+// The colony celebrates: every colonist who is awake and free to talk gets the guest thought, the couple the
+// party thought. Guests do not walk to a spot yet (a party job is a later step).
+void SocialSystem::weddingParty(Entity a, Entity b) {
+    entt::registry& reg = things_.registry();
+    std::vector<Entity> pawns(reg.view<Social>().begin(), reg.view<Social>().end());
+    std::sort(pawns.begin(), pawns.end());
+    int guests = 0;
+    for (const Entity pawn : pawns) {
+        if (pawn == a || pawn == b) {
+            thought(pawn, rules_.weddingPartyThought);
+        } else if (canTalk(pawn)) {
+            thought(pawn, rules_.weddingGuestThought);
+            ++guests;
+        }
+    }
+    stats_.weddingGuests += static_cast<uint64_t>(guests);
+    push(EventType::Interaction, a, b, "WeddingParty", guests, 0.0f);
+}
 
 void SocialSystem::startFight(Entity a, Entity b) {
     entt::registry& reg = things_.registry();
@@ -748,7 +817,15 @@ void SocialSystem::roll(Entity pawn, const std::vector<Entity>& pawns) {
             if (!eligible(pawn, other, interaction, true)) {
                 continue;
             }
-            const float weight = interaction.weight * traitWeight(pawn, interaction.defName);
+            float weight = interaction.weight * traitWeight(pawn, interaction.defName);
+            if (interaction.requiresSingleOrOpen && !single(pawn)) {
+                // Cheating: only when it thinks little enough of its partner.
+                const Entity mate = partner(pawn);
+                if (mate == kNoEntity || opinion(pawn, mate) >= rules_.cheatPartnerBelow) {
+                    continue;
+                }
+                weight *= rules_.cheatWeightFactor;
+            }
             if (weight > 0.0f) {
                 candidates_.push_back(Candidate{other, i, weight});
             }
