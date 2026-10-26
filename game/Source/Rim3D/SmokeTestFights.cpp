@@ -508,8 +508,9 @@ void USmokeTestSubsystem::BuildFightsPhases()
 			State->bFired = F->Fire();
 			return;
 		}
-		// Once the streak is well on its way and the flash is still up, stop the clock.
-		if (F->GetActiveTracers() > 0 && F->GetParticlesOfKind(EFightParticle::Flash) > 0 && F->GetTracers()[0].Distance > 400.0f)
+		// Once the streak is on its way and the flash is still up, stop the clock. (Not "well on its way": a target close by ends
+		// the streak within a few frames, so the first frames after it leaves the muzzle are all there is.)
+		if (F->GetActiveTracers() > 0 && F->GetParticlesOfKind(EFightParticle::Flash) > 0 && F->GetTracers()[0].Distance > 60.0f)
 		{
 			State->bPaused = true;
 			State->TracersAtPause = F->GetActiveTracers();
@@ -586,9 +587,11 @@ void USmokeTestSubsystem::BuildFightsPhases()
 		{
 			State->bPaused = true;
 			State->BloodAtPause = F->GetParticlesOfKind(EFightParticle::Blood);
-			if (const ASimPawnActor* Actor = Pawns()->FindPawn(State->Target))
+			// The pawn that was hit flinches: the target, or whoever stood in the line of fire in front of it.
+			State->bLeanAtPause = false;
+			for (const TPair<uint32, TObjectPtr<ASimPawnActor>>& Pair : Pawns()->GetPawns())
 			{
-				State->bLeanAtPause = Actor->IsReacting();
+				State->bLeanAtPause = State->bLeanAtPause || (Pair.Value && Pair.Value->IsReacting());
 			}
 			B->SetSpeed(0);
 			State->PausedAt = PhaseTime;
