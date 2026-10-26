@@ -133,6 +133,21 @@ struct SaveInjury {
     float severity = 0.0f;
     float tendQuality = -1.0f;
     float peak = 0.0f;  // health section 3 on
+    int64_t infectAt = -1;  // health section 4 on
+};
+
+struct SaveDisease {  // health section 4 on
+    std::string hediff;  // defName of a Hediffs def of class Disease
+    float severity = 0.0f;
+    float tendQuality = -1.0f;
+    int64_t tendedUntil = 0;
+    float tendTotal = 0.0f;
+    int32_t part = -1;
+};
+
+struct SaveImmunity {  // health section 4 on
+    std::string hediff;
+    float level = 0.0f;
 };
 
 struct SaveEnvironmentHediff {
@@ -147,6 +162,8 @@ struct SaveHealth {
     std::vector<MissingPart> missing;
     float bloodLoss = 0.0f;
     std::vector<SaveEnvironmentHediff> environment;  // health section 2 on
+    std::vector<SaveDisease> diseases;               // health section 4 on
+    std::vector<SaveImmunity> immunities;            // health section 4 on
     bool dead = false;
     DeathCause cause = DeathCause::None;
 };
@@ -1179,6 +1196,11 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
             } else if constexpr (std::is_same_v<Type, SetMedicalCareCommand>) {
                 ar.value("pawn", c.pawn);
                 ar.text("care", c.care);
+            } else if constexpr (std::is_same_v<Type, ContractDiseaseCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.text("disease", c.disease);
+                ar.value("severity", c.severity);
+                ar.value("part", c.part);
             } else if constexpr (std::is_same_v<Type, SetWeatherCommand>) {
                 auto* setWeather = &c;
                 ar.text("weather", setWeather->weather);
@@ -1461,6 +1483,10 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
             ar.value("peak", i.peak);
             ar.require(i.peak >= 0.0f && i.peak < 1.0e6f, "the save file has an impossible injury");
         }
+        if (ar.sectionVersion() >= 4) {
+            ar.value("infectAt", i.infectAt);
+            ar.require(i.infectAt >= -1, "the save file has an impossible infection time");
+        }
         ar.require(i.severity >= 0.0f && i.severity < 1.0e6f, "the save file has an impossible injury");
         ar.require(i.tendQuality >= -1.0f && i.tendQuality < 1.0e3f, "the save file has an impossible tend quality");
     });
@@ -1478,9 +1504,27 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
             ar.require(env.severity > 0.0f && env.severity < 1.0e3f, "the save file has an impossible environment hediff");
         });
     }
+    if (ar.sectionVersion() >= 4) {
+        ar.list("diseases", h.diseases, [&](SaveDisease& d) {
+            ar.text("hediff", d.hediff);
+            ar.value("severity", d.severity);
+            ar.value("tendQuality", d.tendQuality);
+            ar.value("tendedUntil", d.tendedUntil);
+            ar.value("tendTotal", d.tendTotal);
+            ar.value("part", d.part);
+            ar.require(d.severity > 0.0f && d.severity <= 1.0f, "the save file has an impossible disease");
+            ar.require(d.tendQuality >= -1.0f && d.tendQuality < 1.0e3f, "the save file has an impossible tend quality");
+            ar.require(d.part >= -1 && d.part < 4096, "the save file has a disease on an impossible body part");
+        });
+        ar.list("immunities", h.immunities, [&](SaveImmunity& m) {
+            ar.text("hediff", m.hediff);
+            ar.value("level", m.level);
+            ar.require(m.level >= 0.0f && m.level <= 1.0f, "the save file has an impossible immunity");
+        });
+    }
     ar.value("dead", h.dead);
     ar.value("cause", h.cause);
-    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Slaughtered), "the save file has a bad cause of death");
+    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Disease), "the save file has a bad cause of death");
 
 }
 
@@ -2466,7 +2510,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("colonists", 2, [&] {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
-    ar.section("health", 3, [&] {
+    ar.section("health", 4, [&] {
         saveParts(ar, "health", e, &SaveEntity::health, [&](SaveHealth& h) { saveHealthPart(ar, h); });
     });
     ar.section("control", 1, [&] {
@@ -3056,7 +3100,14 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             saved.rest = health->rest;
             for (const Injury& injury : health->injuries) {
                 saved.injuries.push_back(SaveInjury{injury.part, sim.defs_->get(injury.hediff).defName(), injury.severity,
-                                                    injury.tendQuality, injury.peak});
+                                                    injury.tendQuality, injury.peak, injury.infectAt});
+            }
+            for (const Disease& disease : health->diseases) {
+                saved.diseases.push_back(SaveDisease{sim.defs_->get(disease.def).defName(), disease.severity, disease.tendQuality,
+                                                     disease.tendedUntil, disease.tendTotal, disease.part});
+            }
+            for (const Immunity& immunity : health->immunities) {
+                saved.immunities.push_back(SaveImmunity{sim.defs_->get(immunity.def).defName(), immunity.level});
             }
             saved.missing = health->missing;
             saved.bloodLoss = health->bloodLoss;
@@ -3519,8 +3570,29 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                     error = "the save has an injury of '" + injury.hediff + "', which the data files no longer have";
                     return false;
                 }
-                health.injuries.push_back(Injury{injury.part, hediff->id(), injury.severity, injury.tendQuality, injury.peak});
+                health.injuries.push_back(Injury{injury.part, hediff->id(), injury.severity, injury.tendQuality, injury.peak, injury.infectAt});
             }
+            for (const SaveDisease& disease : e.health->diseases) {
+                const Def* hediff = sim.defs_->find("Hediffs", disease.hediff);
+                if (hediff == nullptr || !sim.health_->isDisease(hediff->id())) {
+                    error = "the save has the disease '" + disease.hediff + "', which the data files no longer have";
+                    return false;
+                }
+                health.diseases.push_back(Disease{hediff->id(), disease.severity, disease.tendQuality, disease.tendedUntil, disease.tendTotal, disease.part});
+            }
+            for (const SaveImmunity& immunity : e.health->immunities) {
+                const Def* hediff = sim.defs_->find("Hediffs", immunity.hediff);
+                if (hediff == nullptr || !sim.health_->isDisease(hediff->id())) {
+                    error = "the save has an immunity to '" + immunity.hediff + "', which the data files no longer have";
+                    return false;
+                }
+                health.immunities.push_back(Immunity{hediff->id(), immunity.level});
+            }
+            std::sort(health.diseases.begin(), health.diseases.end(), [](const Disease& a, const Disease& b) {
+                return a.def.value != b.def.value ? a.def.value < b.def.value : a.part < b.part;
+            });
+            std::sort(health.immunities.begin(), health.immunities.end(),
+                      [](const Immunity& a, const Immunity& b) { return a.def.value < b.def.value; });
             health.missing = e.health->missing;
             health.bloodLoss = e.health->bloodLoss;
             for (const SaveEnvironmentHediff& env : e.health->environment) {
@@ -3545,6 +3617,12 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             for (const MissingPart& missing : health.missing) {
                 if (missing.part >= parts) {
                     error = "the save has a lost body part its pawn doesn't have";
+                    return false;
+                }
+            }
+            for (const Disease& disease : health.diseases) {
+                if (disease.part >= parts) {
+                    error = "the save has a disease on a body part its pawn doesn't have";
                     return false;
                 }
             }
