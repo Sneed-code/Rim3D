@@ -185,6 +185,7 @@ struct ThingView {
     // Rescue 4, Haul 8). A tame animal's `faction` is the player's.
     bool markTame = false;
     bool markSlaughter = false;
+    bool markHunt = false;  // a wild animal marked to be hunted (N2, docs/design/hunting.md)
     uint32_t animalZone = 0;
     uint32_t learnedTricks = 0;
     uint32_t wantedTricks = 0;

@@ -120,7 +120,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `recreation` | 1 | `joy`: recreation, comfort and outdoors needs, tolerances, and the activity of a recreation job ([recreation.md](recreation.md)) |
 | `research` | 1 | current project, neolithic start flag, finished projects, progress of unfinished ones ([research.md](research.md)) |
 | `animals` | 1 | `SimSettings::wildAnimals`, the animal system's state (populated, percent, random stream, next herd id, over-density flag, counters) and the `animal` part of every animal ([animal-life.md](animal-life.md)) |
-| `husbandry` | 1 | animal zones (id and cells), counters, and the `care` part of every animal that has one: marks, zone, home, timers, training steps and wants, the path it waits on ([husbandry.md](husbandry.md)) |
+| `husbandry` | 2 | animal zones (id and cells), counters, and the `care` part of every animal that has one: marks, zone, home, timers, training steps and wants, the path it waits on ([husbandry.md](husbandry.md)); version 2 (N2) adds the hunt mark, the collect flag and the hunted counter ([hunting.md](hunting.md)) |
 | `explosives` | 1 | `belt`, `thrower`, `grenade` (a thrown grenade in flight or waiting out its fuse; an entity with no `Thing`), `knockedDown` ([explosives.md](explosives.md)) |
 | `temperature` | 1 | each enclosed room's temperature, by its anchor cell (E2) |
 | `raids` | 1 | the raid state (factions met, squads, the alarm, threat and home points, the shelter mark), then the `defense` and `raider` parts ([raids.md](raids.md), F6) |
@@ -297,6 +297,7 @@ Every section is version 1 at format 20. A task that changes a section adds a li
 - `raids` 1 (F6): new section, see the table. Commands `StartRaid`, `SoundAlarm`, `SetDefenseRole`, `MarkShelter` by name.
 - `fighters` 2 (F6): a fighter's `mode`, `defending`, `squad`, `hasGoal`, `goal`, `retreat` after `dodgeUntil`. Version 1 files load them as a plain fighter.
 - `breeding` 1 (N4): new section, see the table: the counters, per animal its `AnimalBreed` (pregnancy, litter, mating wait, milk, wool and egg timers, the female a male is walking to), per fertilized egg its `Hatching` time ([breeding.md](breeding.md)). The job check now accepts the animal jobs (it stopped at `StripPawn`, so a save made mid-taming would not load).
+- `husbandry` 2 (N2): per animal care record `markHunt` and `collect` after `markSlaughter`, and the `hunted` counter after `starved`. Version 1 files load with none. The job check now accepts `Hunt`, `HaulCorpse` and `Butcher`.
 - `apparel` 1 (C15): item stuff and quality, taint, strip marks, outfits ([apparel.md](apparel.md)). Commands `SetOutfit`, `EditOutfit`, `AddOutfit`, `RemoveOutfit` and `Strip` by name.
 - `fire` 1 (E4): new section, see the table. Commands `Ignite` and `SetHomeArea` by name; the job check now accepts `ExtinguishFire`. Older saves load with no fires and a home area made at the first step.
 

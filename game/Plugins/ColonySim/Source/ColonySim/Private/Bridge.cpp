@@ -270,6 +270,8 @@ const char* eventTypeName(EventType type) {
         case EventType::OutOfFuel: return "OutOfFuel";
         case EventType::Refueled: return "Refueled";
         case EventType::FirefoamPopped: return "FirefoamPopped";
+        case EventType::AnimalHunted: return "AnimalHunted";
+        case EventType::AnimalButchered: return "AnimalButchered";
     }
     return "?";
 }
@@ -305,6 +307,8 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Chat: return "Chat";
         case PawnAction::FeedPawn: return "FeedPawn";
         case PawnAction::Refuel: return "Refuel";
+        case PawnAction::Butcher: return "Butcher";
+        case PawnAction::DropCorpse: return "DropCorpse";
     }
     return "?";
 }

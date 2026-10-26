@@ -479,6 +479,12 @@ public:
                 !jobs.fuel().canUse(building, fuelPerProduct * static_cast<float>(recipe->productCount()))) {
                 continue;
             }
+            if (recipe->butcher) {
+                if (makeButcherJob(jobs, pawn, building, bill, candidate.reach, out)) {
+                    return true;
+                }
+                continue;
+            }
             std::vector<BillPick> picks;
             if (!planIngredients(jobs, pawn, building, bill, *recipe, picks)) {
                 continue;
@@ -1020,6 +1026,7 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<ExtinguishFiresGiver>());
     givers.push_back(std::make_unique<StripGiver>());
     addHusbandryWorkGivers(givers);
+    addHuntWorkGivers(givers);
     addPrisonerWorkGivers(givers);
     givers.push_back(std::make_unique<RefuelGiver>());
     return givers;

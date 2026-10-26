@@ -400,7 +400,8 @@ struct MarkShelterCommand {
 };
 
 // Taming, training and pens (task N3, docs/design/husbandry.md). `mark` is "Tame" (a wild animal, to be tamed by a colonist
-// with the Handling work), "Slaughter" (a tame one, to be killed) or "Release" (a tame one goes wild at once; `on` is
+// with the Handling work), "Hunt" (a wild one, to be shot by a colonist with the Hunting work and a gun; N2,
+// docs/design/hunting.md), "Slaughter" (a tame one, to be killed) or "Release" (a tame one goes wild at once; `on` is
 // ignored). `on` false takes a mark off. Fails for a thing that is no animal, a dead one, or one of the wrong kind.
 struct MarkAnimalCommand {
     Entity animal = kNoEntity;

@@ -1352,7 +1352,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::Refuel, "the save file has a bad job");
+    ar.require(job.type <= JobType::Butcher, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -1653,6 +1653,10 @@ template <typename Ar>
 void saveCarePart(Ar& ar, AnimalCare& c) {
     ar.value("markTame", c.markTame);
     ar.value("markSlaughter", c.markSlaughter);
+    if (ar.sectionVersion() >= 2) {  // N2: hunting
+        ar.value("markHunt", c.markHunt);
+        ar.value("collect", c.collect);
+    }
     ar.value("zone", c.zone);
     ar.value("hasHome", c.hasHome);
     ar.group("home", [&] { saveCell(ar, c.home); });
@@ -2496,7 +2500,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.require(d.wildAnimals >= 0 && d.animals.percent >= 0, "the save file has a bad wild animal density");
         saveParts(ar, "animal", e, &SaveEntity::animal, [&](Animal& a) { saveAnimalPart(ar, a); });
     });
-    ar.section("husbandry", 1, [&] {
+    ar.section("husbandry", 2, [&] {
         ar.value("nextZone", d.husbandry.nextZone);
         ar.list("zones", d.husbandry.zones, [&](AnimalZone& z) {
             ar.value("id", z.id);
@@ -2509,6 +2513,9 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("slaughtered", d.husbandry.stats.slaughtered);
         ar.value("fed", d.husbandry.stats.fed);
         ar.value("starved", d.husbandry.stats.starved);
+        if (ar.sectionVersion() >= 2) {
+            ar.value("hunted", d.husbandry.stats.hunted);
+        }
         saveParts(ar, "care", e, &SaveEntity::care, [&](AnimalCare& c) { saveCarePart(ar, c); });
     });
     ar.section("farming", 1, [&] {
