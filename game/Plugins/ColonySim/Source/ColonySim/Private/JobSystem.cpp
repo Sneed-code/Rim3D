@@ -1,5 +1,6 @@
 #include "ColonySim/Jobs.h"
 
+#include "ColonySim/Animals.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Construction.h"
@@ -11,6 +12,7 @@
 #include "ColonySim/Movement.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Talents.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -56,7 +58,12 @@ enum class JobStepKind : uint8_t {
     LiftPawn,
     CarryPawn,
     LayPawn,
-    BedRestLie
+    BedRestLie,
+    ApparelGoto,  // walk to the clothes (none to take off a worn piece)
+    ApparelWork,  // put on or take off
+    StripWork,    // take the clothes and weapon off a downed or dead pawn
+    ApproachAnimal,  // walk up to the job's animal (HusbandryJobs.cpp)
+    HandleWork       // tame, train, kill or feed it, standing beside it
 };
 
 constexpr JobStepKind kJobsWaitSteps[] = {JobStepKind::Wait};
@@ -91,6 +98,11 @@ constexpr JobStepKind kJobsRescueSteps[] = {JobStepKind::TendGotoPatient, JobSte
 // priority level their scanners are asked before the others, whatever the distance (RimWorld asks work types in
 // order; the rest of ours go nearest first). Ours.
 constexpr int kJobsUrgentWorkFrom = 1100;
+constexpr JobStepKind kJobsWearSteps[] = {JobStepKind::ApparelGoto, JobStepKind::ApparelWork};
+constexpr JobStepKind kJobsStripSteps[] = {JobStepKind::GotoThing, JobStepKind::StripWork};
+constexpr JobStepKind kJobsHandleFoodSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::ApproachAnimal,
+                                                JobStepKind::HandleWork};
+constexpr JobStepKind kJobsHandleSteps[] = {JobStepKind::ApproachAnimal, JobStepKind::HandleWork};
 
 // The most steps one pawn's job may run in one game second (guards against a loop of steps that
 // all end at once).
@@ -132,6 +144,13 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::BedRest: return {kJobsBedRestSteps, static_cast<int>(std::size(kJobsBedRestSteps))};
         case JobType::TendPatient: return {kJobsTendSteps, static_cast<int>(std::size(kJobsTendSteps))};
         case JobType::Rescue: return {kJobsRescueSteps, static_cast<int>(std::size(kJobsRescueSteps))};
+        case JobType::WearApparel: return {kJobsWearSteps, static_cast<int>(std::size(kJobsWearSteps))};
+        case JobType::StripPawn: return {kJobsStripSteps, static_cast<int>(std::size(kJobsStripSteps))};
+        case JobType::TameAnimal:
+        case JobType::TrainAnimal:
+        case JobType::FeedAnimal: return {kJobsHandleFoodSteps, static_cast<int>(std::size(kJobsHandleFoodSteps))};
+        case JobType::SlaughterAnimal:
+        case JobType::GatherAnimal: return {kJobsHandleSteps, static_cast<int>(std::size(kJobsHandleSteps))};
     }
     return {nullptr, 0};
 }
@@ -150,6 +169,9 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::BillWork:
         case JobStepKind::ResearchWork:
         case JobStepKind::CleanWork:
+        case JobStepKind::ApparelWork:
+        case JobStepKind::StripWork:
+        case JobStepKind::HandleWork:
         case JobStepKind::Eat:
         case JobStepKind::Lie:
         case JobStepKind::BedRestLie:
@@ -208,6 +230,13 @@ const char* jobTypeName(JobType type) {
         case JobType::BedRest: return "BedRest";
         case JobType::TendPatient: return "TendPatient";
         case JobType::Rescue: return "Rescue";
+        case JobType::WearApparel: return "WearApparel";
+        case JobType::StripPawn: return "StripPawn";
+        case JobType::TameAnimal: return "TameAnimal";
+        case JobType::TrainAnimal: return "TrainAnimal";
+        case JobType::SlaughterAnimal: return "SlaughterAnimal";
+        case JobType::FeedAnimal: return "FeedAnimal";
+        case JobType::GatherAnimal: return "GatherAnimal";
     }
     return "?";
 }
@@ -461,6 +490,28 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
             out[0] = keyOf(JobTarget{job.thing, CellPos{}});
             out[1] = keyOf(JobTarget{kNoEntity, job.cell});
             return 2;
+        case JobType::WearApparel:
+            if (job.count != 0) {
+                return 0;  // taking a worn piece off holds nothing
+            }
+            out[0] = keyOf(JobTarget{job.thing, CellPos{}});
+            return 1;
+        case JobType::StripPawn:
+            out[0] = keyOf(JobTarget{job.thing, CellPos{}});
+            return 1;
+        case JobType::TameAnimal:
+        case JobType::TrainAnimal:
+        case JobType::SlaughterAnimal:
+        case JobType::GatherAnimal:
+        case JobType::FeedAnimal: {
+            // The animal, and the food being fetched or carried to it.
+            int n = 0;
+            out[n++] = keyOf(JobTarget{job.site, CellPos{}});
+            if (job.thing != kNoEntity) {
+                out[n++] = keyOf(JobTarget{job.thing, CellPos{}});
+            }
+            return n;
+        }
         case JobType::None:
         case JobType::Wait:
             return 0;
@@ -514,7 +565,9 @@ int JobSystem::stackLimit(DefId def) const {
 
 double JobSystem::carryCapacity(Entity pawn) const {
     const Thing* thing = things_.registry().try_get<Thing>(pawn);
-    return thing ? defs_.get(thing->def).number("stats.carryingCapacity", kJobsCarryingCapacity) : kJobsCarryingCapacity;
+    const double capacity =
+        thing ? defs_.get(thing->def).number("stats.carryingCapacity", kJobsCarryingCapacity) : kJobsCarryingCapacity;
+    return talents_ != nullptr ? capacity * talents_->statFactor(pawn, "carryCapacity") : capacity;
 }
 
 double JobSystem::massOf(DefId def) const {
@@ -648,8 +701,8 @@ void JobSystem::step() {
     // The think list, in order. Later tasks put theirs in place: emergencies first (downed, on
     // fire: F1 and later), then the defense plan (F6), urgent needs and the schedule (C6), work
     // and finally idling. Player orders don't wait for a think: the command starts them.
-    static constexpr ThinkNode kThinkList[] = {&JobSystem::thinkNeeds, &JobSystem::thinkSchedule, &JobSystem::thinkWork,
-                                               &JobSystem::thinkJoy, &JobSystem::thinkIdle};
+    static constexpr ThinkNode kThinkList[] = {&JobSystem::thinkNeeds, &JobSystem::thinkSchedule, &JobSystem::thinkApparel,
+                                               &JobSystem::thinkWork, &JobSystem::thinkJoy, &JobSystem::thinkIdle};
 
     for (const Entity pawn : order_) {
         reg.get<Mover>(pawn).hold = false;
@@ -681,6 +734,13 @@ void JobSystem::step() {
                 !(lying.type == JobType::BedRest && lying.step >= 1)) {
                 health->rest = RestKind::Ground;
             }
+        }
+        // An animal that hauls works only while it is awake, fed and unhurt.
+        if (animalGate_ && reg.all_of<Animal>(pawn) && !animalGate_(pawn)) {
+            if (reg.get<Worker>(pawn).job.type != JobType::None) {
+                endJob(pawn, JobEnd::Interrupted, "it can't work now");
+            }
+            continue;
         }
         Worker& worker = reg.get<Worker>(pawn);
         const int64_t t = now();
@@ -858,6 +918,12 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::BedRest) {
         return failCheckBedRest(pawn, job, why);
     }
+    if (job.type == JobType::WearApparel || job.type == JobType::StripPawn) {
+        return failCheckApparel(pawn, job, why);
+    }
+    if (jobIsHandling(job.type)) {
+        return failCheckHandle(pawn, job, why);
+    }
     entt::registry& reg = things_.registry();
     if (job.type == JobType::DeliverResources) {
         const ConstructionSite* site = reg.valid(job.site) ? reg.try_get<ConstructionSite>(job.site) : nullptr;
@@ -996,6 +1062,16 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return layPawn(pawn, job, why);
         case JobStepKind::BedRestLie:
             return bedRest(pawn, job, why);
+        case JobStepKind::ApparelGoto:
+            return apparelGoto(pawn, job, why);
+        case JobStepKind::ApparelWork:
+            return apparelWork(pawn, job, why);
+        case JobStepKind::StripWork:
+            return stripWork(pawn, job, why);
+        case JobStepKind::ApproachAnimal:
+            return approachAnimal(pawn, job, why);
+        case JobStepKind::HandleWork:
+            return handleWork(pawn, job, why);
     }
     return StepResult::Failed;
 }
@@ -1127,7 +1203,8 @@ JobSystem::StepResult JobSystem::place(Entity pawn, Job& job, std::string& why) 
 // pawn's first second of work, which sends the PawnAction.
 
 float JobSystem::constructionSpeed(Entity pawn) const {
-    return construction_.skillSpeed(pawn) * health_.capacityValue(pawn, "Manipulation") * lightWorkFactor(pawn);
+    const float talent = talents_ != nullptr ? static_cast<float>(talents_->statFactor(pawn, "buildSpeed")) : 1.0f;
+    return construction_.skillSpeed(pawn) * health_.capacityValue(pawn, "Manipulation") * lightWorkFactor(pawn) * talent;
 }
 
 JobSystem::StepResult JobSystem::deliver(Entity pawn, Job& job, std::string& why) {
@@ -1329,7 +1406,7 @@ void JobSystem::jobEvent(Entity pawn, const Job& job, bool started, const std::s
     event.thing = pawn;
     event.def = things_.registry().get<Thing>(pawn).def;
     event.job = job.type;
-    event.target = job.thing;
+    event.target = jobIsHandling(job.type) ? job.site : job.thing;
     event.cell = job.cell;
     event.message = message;
     events_.push_back(std::move(event));

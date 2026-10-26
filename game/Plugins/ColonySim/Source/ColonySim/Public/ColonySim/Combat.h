@@ -16,10 +16,13 @@
 
 namespace colony {
 
+class ApparelStats;
 class HealthSystem;
+class TalentSystem;
 class Map;
 class StateHasher;
 class Things;
+class Weather;
 
 // Guns, bullets and hitboxes. See docs/design/combat.md.
 //
@@ -109,6 +112,36 @@ struct DodgeRoll {
     bool proof = false;  // bullets passed through the pawn in the step just run
 };
 
+// On a pawn thrown to the ground by a blast (F9): prone and unable to act or walk until the steps run
+// out, then it gets back to the stance it had.
+struct KnockedDown {
+    int stepsLeft = 0;
+    Stance before = Stance::Standing;
+};
+
+// An explosion (CombatSystem::explode): a blast of `damage` that falls off to `edgeFactor` of it at
+// `radius`, is stopped by walls and cover, and reaches pawns as 2 to 4 fragments each.
+struct Explosion {
+    float x = 0.0f;  // metres; z above sea level
+    float y = 0.0f;
+    float z = 0.0f;
+    int level = 0;
+    float radius = 0.0f;
+    float damage = 0.0f;
+    DefId damageType;           // a DamageTypes def, normally Bomb
+    float penetration = 0.0f;   // armor penetration of each fragment
+    Entity source = kNoEntity;      // the grenade entity, for the event
+    Entity instigator = kNoEntity;  // who threw or planted it
+    uint64_t seed = 0;          // where its random choices come from
+};
+
+struct ExplosionResult {
+    int pawnsHurt = 0;
+    int pawnsKnocked = 0;
+    int buildingsHit = 0;
+    int buildingsDestroyed = 0;
+};
+
 // A bullet in flight. Not a Thing: it has no def of kind Things and is not in the snapshot's
 // things, but in Snapshot::projectiles. Destroyed when it hits something or flies out.
 struct Projectile {
@@ -155,6 +188,19 @@ struct PawnHitResult {
     int part = -1;     // -1: the pawn has no hitboxes, so the caller lets health pick a part
     DefId damageType;  // Blunt if armor turned a sharp hit blunt
     float amount = 0.0f;
+    // Worn pieces that stopped or softened the hit and the hit points each loses (C15); the caller
+    // passes the result to CombatSystem::wearApparel.
+    std::vector<std::pair<Entity, int>> wear;
+};
+
+// What a gun's def says, for fixed guns that fire without a pawn's hands (turrets, F11): range in
+// metres, steps of warm-up, of cooldown after a burst and between the shots of a burst, shots in a burst.
+struct GunStats {
+    float range = 0.0f;
+    int warmup = 0;
+    int cooldown = 0;
+    int burst = 1;
+    int burstGap = 0;
 };
 
 struct CombatModel;
@@ -167,6 +213,10 @@ public:
     CombatSystem& operator=(const CombatSystem&) = delete;
 
     void setEventLog(std::vector<Event>* events) { events_ = events; }
+    // Weather and snow cut a shooter's hit chance under the open sky (docs/design/weather.md).
+    void setWeather(const Weather* weather) { weather_ = weather; }
+    // The protagonist's talents make the spread of its shots smaller (docs/design/talents.md).
+    void setTalents(const TalentSystem* talents) { talents_ = talents; }
     // Called before combat destroys a thing (a building shot to pieces), so jobs can let go of it.
     void setBeforeDestroy(std::function<void(Entity)> hook) { beforeDestroy_ = std::move(hook); }
 
@@ -175,6 +225,14 @@ public:
     // The item may be on the map (it is picked up) or not. False, changing nothing, if the pawn
     // has no body, is dead, or the item is neither a gun nor apparel, or is someone else's.
     bool equip(Entity pawn, Entity item, std::string* why = nullptr);
+    // Takes one worn piece (or the gun) off and puts it on the ground where the pawn stands. False if
+    // the pawn doesn't have it.
+    bool unequip(Entity pawn, Entity item);
+    // Takes `hitPoints` off a worn piece of apparel; at none it is destroyed (an ApparelDestroyed
+    // event). Used when armor takes a hit and by wear and tear (C15).
+    void damageApparel(Entity pawn, Entity item, int hitPoints);
+    // What the defs and the item's stuff and quality make of a piece of apparel (Apparel.h).
+    const ApparelStats& apparelStats() const { return *apparelStats_; }
     // Takes all of a pawn's gear off and puts it on the ground where it stands (or destroys it if
     // the pawn is off the map). For pawns about to be destroyed.
     void dropGear(Entity pawn);
@@ -219,7 +277,8 @@ public:
     // standing man in the open as RimWorld's hit chance (shooter accuracy ^ distance x the gun's
     // accuracy at that distance); a player's shot uses the gun's accuracy at the medium distance.
     // Recoil is not included.
-    float spread(DefId weapon, int shootingSkill, float distance, bool player) const;
+    // `accuracyFactor` multiplies the hit chance (the weather's, for a shooter outdoors).
+    float spread(DefId weapon, int shootingSkill, float distance, bool player, float accuracyFactor = 1.0f) const;
     int shootingSkill(Entity pawn) const;
 
     // Fires one projectile from the pawn's muzzle toward (x, y, z) with this spread. Returns it,
@@ -227,6 +286,17 @@ public:
     // (slopes) turn the shot up and to the right of the aim, the player's gun kick.
     Entity fire(Entity pawn, float x, float y, float z, float spreadSlope, Rng& rng, float kickUp = 0.0f,
                 float kickSide = 0.0f);
+
+    // A shot from a gun that no pawn holds (a turret, F11): from (ox, oy, oz) at `level` toward (x, y, z)
+    // with this spread slope, as `fire` does. `launcher` (the turret) is never hit by it, nor is a building
+    // in `startCell`. Returns the projectile, or kNoEntity if `weapon` is not a gun. ShotFired comes with it.
+    Entity fireFrom(Entity launcher, DefId weapon, float ox, float oy, float oz, int level, CellPos startCell, float x,
+                    float y, float z, float spreadSlope, Rng& rng);
+    // `leadPoint` for a gun at (fromX, fromY) that no pawn holds.
+    bool leadPointFrom(float fromX, float fromY, DefId weapon, Entity target, float lead, float& x, float& y,
+                       float& z) const;
+    // The numbers of a gun def; false if it is not a gun.
+    bool gunStats(DefId weapon, GunStats& out) const;
 
     // Gun kick (P2): where the player's shots are going above and to the right of the aim now, in
     // degrees. Zero for a pawn that has not fired a gun with a kick list.
@@ -249,13 +319,23 @@ public:
 
     // What the straight stretch from a to b meets first: ground, rock, a building (not in
     // `skipCell`'s cell) or a pawn's hitbox (not `skipPawn`). Kind None if nothing.
+    // With `pawns` false only the ground, rock and buildings count (blast lines of sight).
     TraceHit trace(float ax, float ay, float az, float bx, float by, float bz, int level, Entity skipPawn,
-                   CellPos skipCell) const;
+                   CellPos skipCell, bool pawns = true) const;
     // The point other pawns aim at on this pawn (its chest), world metres. False if not a pawn
     // on the map.
     bool aimPoint(Entity pawn, float& x, float& y, float& z) const;
     // The pawn's hitboxes as they stand now; false if it has none (no Hitboxes def, dead).
     bool hitboxesOf(Entity pawn, std::vector<HitboxView>& out) const;
+
+    // An explosion (F9, docs/design/explosives.md). Every living pawn in the radius is hurt by the share of
+    // its body the blast can see (ground, rock and buildings stop it), less with distance and for a
+    // pawn that crouches or lies, in 2 to 4 fragments that go through armor like bullets; a hard
+    // enough hit knocks the pawn down and pushes it away; buildings in the radius lose hit points
+    // (walls the most). Events: PawnInjured... and one Explosion.
+    ExplosionResult explode(const Explosion& explosion);
+    // Steps left of a pawn's knock-down (0: not knocked down).
+    int knockedDownFor(Entity pawn) const;
 
     // Hashes the combat components of one thing (Sim::stateHash calls it for every thing).
     void hashThing(Entity e, StateHasher& h) const;
@@ -266,6 +346,8 @@ public:
     // the caller does (HealthSystem::applyHit), so bullets and melee strikes land the same way (F8).
     PawnHitResult hitPawn(Entity pawn, int hitboxPart, DefId damageType, float amount, float penetration,
                           uint64_t seed) const;
+    // Takes the hit points off the pieces `result.wear` names; a piece at none is destroyed.
+    void wearApparel(Entity pawn, const PawnHitResult& result);
     // The radius around a standing man's chest, seen from the front, in which a point picked evenly
     // lands on him with this chance (the table aimed shots use). Melee strikes use it too (F8).
     float spreadRadiusFor(float chance) const;
@@ -278,7 +360,10 @@ private:
     Map& map_;
     HealthSystem& health_;
     std::unique_ptr<CombatModel> model_;
+    std::unique_ptr<ApparelStats> apparelStats_;
     std::vector<Event>* events_ = nullptr;
+    const Weather* weather_ = nullptr;
+    const TalentSystem* talents_ = nullptr;
     std::function<void(Entity)> beforeDestroy_;
     std::vector<Entity> scratch_;
 
@@ -287,6 +372,13 @@ private:
     void updateShooter(Entity pawn, Shooter& s, Rng& rng);
     void startReload(Entity pawn, Shooter& s, Entity weapon, int extraSteps);
     void drop(Entity pawn, Entity item);
+    // The armor rolls of a hit on `part` (shared by bullets, blows and blast fragments): the damage
+    // left (deflected if the armor turned it away), the damage type (sharp may become blunt) and the
+    // wear on the pieces. Uses `rng`.
+    PawnHitResult armorPass(Entity pawn, int part, DefId damageType, float damage, float penetration, Rng& rng) const;
+    int pickOutsidePart(Entity pawn, Rng& rng) const;
+    Entity launch(Entity launcher, DefId weaponDef, float ox, float oy, float oz, int level, CellPos startCell, float x,
+                  float y, float z, float spreadSlope, Rng& rng, float kickUp, float kickSide, Posture* posture);
     void stepRolls();
     void stepKicks();
 };

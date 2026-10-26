@@ -34,7 +34,8 @@ enum class DeathCause : uint8_t {
     Starvation,     // malnutrition reached its lethal severity (Needs.h)
     Hypothermia,    // an Environment hediff reached its lethal severity (Temperature.h)
     Heatstroke,
-    Environment     // any other Environment hediff
+    Environment,    // any other Environment hediff
+    Slaughtered     // a colonist killed a tame animal (Husbandry.h)
 };
 
 COLONY_API const char* deathCauseName(DeathCause cause);

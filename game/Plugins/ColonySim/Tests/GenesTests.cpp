@@ -205,6 +205,8 @@ TEST_CASE("genes: hunger, damage, walking speed and skills follow the genes") {
     const Entity ember = colonists[3];
     sim.submit(SetLineageCommand{frost, "Frostkin"});
     sim.submit(SetLineageCommand{ember, "Emberkin"});
+    // Warm weather for both (the Emberkin's range starts at 22 degrees), so cold doesn't slow either.
+    sim.setOutdoorOverride(25.0f);
     sim.step();
 
     // Hunger: both start full and fall at their own rate.

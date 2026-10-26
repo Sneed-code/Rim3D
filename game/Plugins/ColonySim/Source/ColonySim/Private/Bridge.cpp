@@ -91,10 +91,50 @@ const char* commandName(const Command& command) {
                 return "SetResearch";
             } else if constexpr (std::is_same_v<Type, UnlockResearchCommand>) {
                 return "UnlockResearch";
+            } else if constexpr (std::is_same_v<Type, ThrowCommand>) {
+                return "Throw";
+            } else if constexpr (std::is_same_v<Type, ExplodeCommand>) {
+                return "Explode";
+            } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
+                return "StartRaid";
+            } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
+                return "SoundAlarm";
+            } else if constexpr (std::is_same_v<Type, SetDefenseRoleCommand>) {
+                return "SetDefenseRole";
+            } else if constexpr (std::is_same_v<Type, MarkShelterCommand>) {
+                return "MarkShelter";
+            } else if constexpr (std::is_same_v<Type, MarkAnimalCommand>) {
+                return "MarkAnimal";
+            } else if constexpr (std::is_same_v<Type, SetTrainingCommand>) {
+                return "SetTraining";
+            } else if constexpr (std::is_same_v<Type, CreateAnimalZoneCommand>) {
+                return "CreateAnimalZone";
+            } else if constexpr (std::is_same_v<Type, RemoveAnimalZoneCellsCommand>) {
+                return "RemoveAnimalZoneCells";
+            } else if constexpr (std::is_same_v<Type, AssignAnimalZoneCommand>) {
+                return "AssignAnimalZone";
             } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
                 return "Melee";
             } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
                 return "DodgeRoll";
+            } else if constexpr (std::is_same_v<Type, SetOutfitCommand>) {
+                return "SetOutfit";
+            } else if constexpr (std::is_same_v<Type, EditOutfitCommand>) {
+                return "EditOutfit";
+            } else if constexpr (std::is_same_v<Type, AddOutfitCommand>) {
+                return "AddOutfit";
+            } else if constexpr (std::is_same_v<Type, RemoveOutfitCommand>) {
+                return "RemoveOutfit";
+            } else if constexpr (std::is_same_v<Type, StripCommand>) {
+                return "Strip";
+            } else if constexpr (std::is_same_v<Type, SetWeatherCommand>) {
+                return "SetWeather";
+            } else if constexpr (std::is_same_v<Type, SpendTalentPointCommand>) {
+                return "SpendTalentPoint";
+            } else if constexpr (std::is_same_v<Type, RearmTrapCommand>) {
+                return "RearmTrap";
+            } else if constexpr (std::is_same_v<Type, AddTalentXpCommand>) {
+                return "AddTalentXp";
             } else {
                 static_assert(std::is_same_v<Type, SetMedicalCareCommand>, "name every command type");
                 return "SetMedicalCare";
@@ -156,10 +196,35 @@ const char* eventTypeName(EventType type) {
         case EventType::ItemSpoiled: return "ItemSpoiled";
         case EventType::PawnPoisoned: return "PawnPoisoned";
         case EventType::ResearchDone: return "ResearchDone";
+        case EventType::GrenadeThrown: return "GrenadeThrown";
+        case EventType::GrenadeLanded: return "GrenadeLanded";
+        case EventType::Explosion: return "Explosion";
+        case EventType::PawnKnockedDown: return "PawnKnockedDown";
+        case EventType::RaidArrived: return "RaidArrived";
+        case EventType::SquadChanged: return "SquadChanged";
+        case EventType::AlarmChanged: return "AlarmChanged";
+        case EventType::PawnLeftMap: return "PawnLeftMap";
+        case EventType::AnimalTamed: return "AnimalTamed";
+        case EventType::AnimalReleased: return "AnimalReleased";
+        case EventType::AnimalTrained: return "AnimalTrained";
+        case EventType::AnimalAttemptFailed: return "AnimalAttemptFailed";
+        case EventType::AnimalSlaughtered: return "AnimalSlaughtered";
+        case EventType::AnimalStarved: return "AnimalStarved";
         case EventType::MeleeSwing: return "MeleeSwing";
         case EventType::MeleeHit: return "MeleeHit";
         case EventType::PawnTended: return "PawnTended";
         case EventType::PawnScarred: return "PawnScarred";
+        case EventType::ApparelDestroyed: return "ApparelDestroyed";
+        case EventType::WeatherChanged: return "WeatherChanged";
+        case EventType::SeasonChanged: return "SeasonChanged";
+        case EventType::TalentPoint: return "TalentPoint";
+        case EventType::AnimalMated: return "AnimalMated";
+        case EventType::AnimalBorn: return "AnimalBorn";
+        case EventType::EggLaid: return "EggLaid";
+        case EventType::EggHatched: return "EggHatched";
+        case EventType::AnimalGathered: return "AnimalGathered";
+        case EventType::TrapSprung: return "TrapSprung";
+        case EventType::TrapRearmed: return "TrapRearmed";
     }
     return "?";
 }
@@ -182,6 +247,10 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Cook: return "Cook";
         case PawnAction::Research: return "Research";
         case PawnAction::Clean: return "Clean";
+        case PawnAction::Throw: return "Throw";
+        case PawnAction::Dive: return "Dive";
+        case PawnAction::Handle: return "Handle";
+        case PawnAction::Slaughter: return "Slaughter";
         case PawnAction::Block: return "Block";
         case PawnAction::Tend: return "Tend";
         case PawnAction::LiftPawn: return "LiftPawn";

@@ -16,8 +16,11 @@
 
 namespace colony {
 
+struct AnimalCare;
 class HealthSystem;
+class Husbandry;
 class Map;
+class Pathfinder;
 class Plants;
 class StateHasher;
 class Things;
@@ -42,7 +45,11 @@ enum class AnimalMode : uint8_t {
     GoToFood,  // walking to the plant in `goal`
     Eat,       // eating the plant in `goal` until `until`
     Sleep,     // lying down until `until`
-    Leave      // walking to the map edge at `goal`, to go
+    Leave,     // walking to the map edge at `goal`, to go
+    // Tame animals (task N3, docs/design/husbandry.md):
+    WaitPath,  // waiting for the path to its zone or its food that AnimalCare::path asked for
+    GoToItem,  // walking to the food item (hay, kibble, meat) lying in `goal`
+    EatItem    // eating the item in `goal` until `until`
 };
 
 // On every animal. Every field is saved and hashed.
@@ -142,6 +149,24 @@ public:
 
     // Wakes a sleeping animal (something hurt it, or scared it).
     void wake(Entity animal);
+    // Keeps an animal where it is until the game second: a handler is with it (Husbandry::hold).
+    void hold(Entity animal, int64_t until);
+
+    // ---- Tame animals (AnimalCare.cpp, docs/design/husbandry.md)
+    // Husbandry says where a tame animal may be and what it eats; the pathfinder lets it walk round walls
+    // to its zone and food (without one it only walks straight). Both are set by the sim after construction.
+    void setHusbandry(Husbandry* husbandry) { husbandry_ = husbandry; }
+    void setPathfinder(Pathfinder* pathfinder) { pathfinder_ = pathfinder; }
+    // The food an animal holds now, in nutrition, and the most it can hold; 0 for a thing that is no animal.
+    float foodLevel(Entity animal) const;
+    float foodCapacity(Entity animal) const;
+    // Adds nutrition (up to what it can hold).
+    void addFood(Entity animal, float nutrition);
+    // Sends a tame animal walking to a cell, round walls if need be (a male setting out for a female, Breeding.h). False if it
+    // can't set off now: it is wild, asleep, not set up yet, or waiting for another path.
+    bool goTo(Entity animal, CellPos goal);
+    // A tame animal that has learned to haul works while it is awake, fed and unhurt (the job system asks).
+    bool mayWork(Entity animal) const;
 
     // ---- Questions
     // Living animals on the map, wild ones, and their weight in body sizes against what the biome wants.
@@ -153,6 +178,8 @@ public:
     int lifeStage(Entity animal) const;
     // The def's body size times the stage's factor; 0 for a thing that is no animal.
     float bodySize(Entity animal) const;
+    // In its last life stage: old enough to mate, to give milk and wool, to work. False for a thing that is no animal.
+    bool isAdult(Entity animal) const;
     // Food as a share of the animal's capacity, 0 to 1; -1 for a thing that is no animal.
     float foodShare(Entity animal) const;
     bool asleep(Entity animal) const;
@@ -199,6 +226,17 @@ private:
     float foodFallPerSecond(const Kind& kind, int64_t ageSeconds) const;
 
     void think(Entity e);
+    // Tame animals (AnimalCare.cpp).
+    void decideTamed(Entity e, Animal& a, const Kind& kind, Rng& rng);
+    bool tamedMayStand(const AnimalCare* care, CellPos cell) const;
+    bool findTamedFood(Entity e, Animal& a, const Kind& kind, const AnimalCare& care, Rng& rng, CellPos& out,
+                       bool& isItem, bool& blocked) const;
+    Entity edibleItemAt(Entity animal, CellPos cell) const;
+    bool walkOrPath(Entity e, Animal& a, const Kind& kind, AnimalCare& care, CellPos goal, AnimalMode mode);
+    bool pollPath(Entity e, Animal& a, const Kind& kind, AnimalCare& care);
+    void cancelPath(AnimalCare& care);
+    void finishEatingItem(Entity e, Animal& a, const Kind& kind);
+    void starveCheck(Entity e, Animal& a, const Kind& kind, AnimalCare& care);
     void begin(Entity e, Animal& a, const Kind& kind);
     void decide(Entity e, Animal& a, const Kind& kind, Rng& rng);
     bool walkTo(Entity e, Animal& a, const Kind& kind, float x, float y, AnimalMode mode);
@@ -232,6 +270,8 @@ private:
     float density_ = 0.0f;          // the biome's animalDensity
     bool hasBiome_ = false;
     std::vector<Event>* events_ = nullptr;
+    Husbandry* husbandry_ = nullptr;
+    Pathfinder* pathfinder_ = nullptr;
     std::vector<Entity> due_;       // scratch: animals to decide this step, in id order
     std::unordered_map<uint32_t, Entity> leaders_;  // scratch: herd id to its leader, rebuilt when needed
 };

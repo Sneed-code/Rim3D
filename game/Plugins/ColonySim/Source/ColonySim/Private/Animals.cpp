@@ -4,6 +4,8 @@
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Husbandry.h"
+#include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Plants.h"
@@ -221,6 +223,12 @@ int AnimalSystem::lifeStage(Entity animal) const {
     return kind != nullptr ? stageAt(*kind, time_.seconds - things_.registry().get<Animal>(animal).bornAt) : -1;
 }
 
+bool AnimalSystem::isAdult(Entity animal) const {
+    const Kind* kind = kindOf(animal);
+    return kind != nullptr &&
+           stageAt(*kind, time_.seconds - things_.registry().get<Animal>(animal).bornAt) == static_cast<int>(kind->stages.size()) - 1;
+}
+
 float AnimalSystem::bodySize(Entity animal) const {
     const Kind* kind = kindOf(animal);
     return kind != nullptr ? capacity(*kind, time_.seconds - things_.registry().get<Animal>(animal).bornAt) : 0.0f;
@@ -234,7 +242,7 @@ float AnimalSystem::foodShare(Entity animal) const {
     const Animal& a = things_.registry().get<Animal>(animal);
     const int64_t age = time_.seconds - a.bornAt;
     const float cap = capacity(*kind, age);
-    if (!a.started || cap <= 0.0f || !kind->grazer) {
+    if (!a.started || cap <= 0.0f || !(kind->grazer || !a.wild)) {
         return 1.0f;
     }
     const float now = a.food - foodFallPerSecond(*kind, age) * static_cast<float>(time_.seconds - a.foodAt);
@@ -507,7 +515,11 @@ void AnimalSystem::step() {
     due_.clear();
     bool herds = false;
     for (const auto [e, a, mover] : reg.view<Animal, Mover>().each()) {
-        mover.hold = a.mode == AnimalMode::Sleep || a.mode == AnimalMode::Eat;
+        mover.hold = a.mode == AnimalMode::Sleep || a.mode == AnimalMode::Eat || a.mode == AnimalMode::EatItem;
+        if (husbandry_ != nullptr) {
+            const AnimalCare* care = reg.try_get<AnimalCare>(e);
+            mover.hold = mover.hold || (care != nullptr && care->heldUntil > now);
+        }
         if (a.nextThink <= now) {
             due_.push_back(e);
             herds = herds || a.herd != 0;
@@ -524,6 +536,33 @@ void AnimalSystem::step() {
     }
     if (saved_.populated && now > 0 && now % kSecondsPerHour == 0) {
         hourly(now);
+    }
+}
+
+void AnimalSystem::hold(Entity animal, int64_t until) {
+    entt::registry& reg = things_.registry();
+    if (husbandry_ == nullptr || !reg.valid(animal) || !reg.all_of<Animal, Mover>(animal)) {
+        return;
+    }
+    AnimalCare* care = husbandry_->careFor(animal);
+    if (care == nullptr) {
+        return;
+    }
+    care->heldUntil = std::max(care->heldUntil, until);
+    // It stops where it is: a walk, a wait for a path or a sleep ends, and it looks round again once let go.
+    Animal& a = reg.get<Animal>(animal);
+    if (a.mode == AnimalMode::WaitPath) {
+        cancelPath(*care);
+    }
+    if (a.mode != AnimalMode::Idle) {
+        Mover& mover = reg.get<Mover>(animal);
+        mover.path.clear();
+        mover.next = 0;
+        mover.vx = 0.0f;
+        mover.vy = 0.0f;
+        a.mode = AnimalMode::Idle;
+        a.until = time_.seconds;
+        a.nextThink = std::min(a.nextThink, care->heldUntil);
     }
 }
 
@@ -681,6 +720,10 @@ bool AnimalSystem::tryLeave(Entity e, Animal& a, const Kind& kind, Rng& rng) {
 }
 
 void AnimalSystem::decide(Entity e, Animal& a, const Kind& kind, Rng& rng) {
+    if (!a.wild && husbandry_ != nullptr) {
+        decideTamed(e, a, kind, rng);
+        return;
+    }
     entt::registry& reg = things_.registry();
     const int64_t now = time_.seconds;
     const Position pos = reg.get<Position>(e);
@@ -787,6 +830,9 @@ void AnimalSystem::think(Entity e) {
     if (health != nullptr && health->dead) {
         const int64_t gone = kSecondsPerDay * rules_.corpseDays;
         if (a.diedAt < 0) {
+            if (AnimalCare* dying = husbandry_ != nullptr ? reg.try_get<AnimalCare>(e) : nullptr) {
+                cancelPath(*dying);
+            }
             a.diedAt = now;
             a.mode = AnimalMode::Idle;
             a.nextThink = now + gone;
@@ -807,10 +853,34 @@ void AnimalSystem::think(Entity e) {
 
     // Food falls all the time; it is worked out when the animal looks up.
     const int64_t age = now - a.bornAt;
-    // Animals that eat meat can't graze and have nothing to hunt yet (N5), so they stay fed.
-    a.food = kind.grazer ? std::max(0.0f, a.food - foodFallPerSecond(kind, age) * static_cast<float>(now - a.foodAt))
-                         : capacity(kind, age);
+    // Wild animals that eat meat can't graze and have nothing to hunt yet (N5), so they stay fed. A tame one eats what it
+    // is given (N3).
+    a.food = kind.grazer || !a.wild ? std::max(0.0f, a.food - foodFallPerSecond(kind, age) * static_cast<float>(now - a.foodAt))
+                                    : capacity(kind, age);
     a.foodAt = now;
+
+    // A handler is with it: it stands still. One that works (a trained hauler) is busy with its job.
+    AnimalCare* care = husbandry_ != nullptr ? reg.try_get<AnimalCare>(e) : nullptr;
+    if (care != nullptr && care->heldUntil > now) {
+        if (a.mode == AnimalMode::Sleep) {
+            a.mode = AnimalMode::Idle;
+        }
+        a.nextThink = std::min(care->heldUntil, now + kAnimalWalkCheck);
+        return;
+    }
+    if (const Worker* worker = reg.try_get<Worker>(e); worker != nullptr && worker->job.type != JobType::None && worker->job.type != JobType::Wait) {
+        mover.metresPerStep = kind.topSpeed;
+        a.nextThink = now + 2;
+        return;
+    }
+    if (!a.wild && husbandry_ != nullptr) {
+        if (AnimalCare* tameCare = husbandry_->careFor(e)) {
+            starveCheck(e, a, kind, *tameCare);
+            if (health != nullptr && health->dead) {
+                return;
+            }
+        }
+    }
 
     const bool hurt = health != nullptr && !health->injuries.empty();
     if (a.mode == AnimalMode::Sleep) {
@@ -837,7 +907,23 @@ void AnimalSystem::think(Entity e) {
         }
         finishEating(e, a, kind);
     }
-    if (a.mode == AnimalMode::Wander || a.mode == AnimalMode::GoToFood || a.mode == AnimalMode::Leave) {
+    if (a.mode == AnimalMode::EatItem) {
+        if (now < a.until) {
+            a.nextThink = a.until;
+            return;
+        }
+        finishEatingItem(e, a, kind);
+    }
+    if (a.mode == AnimalMode::WaitPath) {
+        AnimalCare* waiting = husbandry_ != nullptr ? husbandry_->careFor(e) : nullptr;
+        if (waiting == nullptr) {
+            a.mode = AnimalMode::Idle;
+        } else if (!pollPath(e, a, kind, *waiting)) {
+            return;
+        }
+    }
+    if (a.mode == AnimalMode::Wander || a.mode == AnimalMode::GoToFood || a.mode == AnimalMode::Leave ||
+        a.mode == AnimalMode::GoToItem) {
         if (!mover.arrived() && !mover.gaveUp) {
             a.nextThink = now + kAnimalWalkCheck;
             return;
@@ -848,6 +934,13 @@ void AnimalSystem::think(Entity e) {
         mover.next = 0;
         if (!gaveUp && a.mode == AnimalMode::GoToFood && cellOf(reg.get<Position>(e)) == a.goal && plants_.has(a.goal)) {
             a.mode = AnimalMode::Eat;
+            a.until = now + rules_.eatSeconds;
+            a.nextThink = a.until;
+            return;
+        }
+        if (!gaveUp && a.mode == AnimalMode::GoToItem && cellOf(reg.get<Position>(e)) == a.goal &&
+            edibleItemAt(e, a.goal) != kNoEntity) {
+            a.mode = AnimalMode::EatItem;
             a.until = now + rules_.eatSeconds;
             a.nextThink = a.until;
             return;

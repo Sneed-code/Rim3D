@@ -43,6 +43,8 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Combat (format 12) | per pawn its posture (stance, facing), gear (gun and apparel ids) and trigger (phase, steps, burst, aim, recoil); `EquippedBy` on gear; every projectile in flight with its defs **by `defName`** ([combat.md](combat.md)) |
 | Pawn looks (format 16) | each humanlike pawn's lineage (by `defName`), gender, body type, weight, height, melanin and colours; `SetLineage` commands in the log ([looks.md](looks.md)). Older files load with pawns that have no looks |
 | Aiming (format 17) | rounds left in each gun that has been fired (`Magazine`), the trigger's reloading phase, a fighter's reaction and dodge times ([aiming.md](aiming.md)) |
+| Raids (section `raids`, `fighters` 2) | the raid squads (faction, points, state, target, members, when they give up), the alarm and its threat and home points, the shelter mark, the factions met so far; per pawn its `Raider` squad and kind and its `DefensePlan`; a fighter's mode, goal, squad, `defending` and `retreat` ([raids.md](raids.md)) |
+| Talents (section `talents`) | per protagonist: pawn, XP and ranks by talent **`defName`** ([talents.md](talents.md)) |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
@@ -104,7 +106,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `mood` | 1 | `mood` |
 | `combat` | 1 | `posture`, `gear`, `equippedBy`, `shooter`, `projectile`, `magazine` |
 | `doors` | 1 | `door` |
-| `fighters` | 1 | `faction`, `fighter` |
+| `fighters` | 2 | `faction`, `fighter` (version 2: its mode, `defending`, squad, goal and `retreat`, F6) |
 | `looks` | 1 | `looks` |
 | `paths` | 1 | the path queue |
 | `zones` | 1 | next zone id, stockpile zones |
@@ -114,10 +116,16 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `recreation` | 1 | `joy`: recreation, comfort and outdoors needs, tolerances, and the activity of a recreation job ([recreation.md](recreation.md)) |
 | `research` | 1 | current project, neolithic start flag, finished projects, progress of unfinished ones ([research.md](research.md)) |
 | `animals` | 1 | `SimSettings::wildAnimals`, the animal system's state (populated, percent, random stream, next herd id, over-density flag, counters) and the `animal` part of every animal ([animal-life.md](animal-life.md)) |
+| `husbandry` | 1 | animal zones (id and cells), counters, and the `care` part of every animal that has one: marks, zone, home, timers, training steps and wants, the path it waits on ([husbandry.md](husbandry.md)) |
+| `explosives` | 1 | `belt`, `thrower`, `grenade` (a thrown grenade in flight or waiting out its fuse; an entity with no `Thing`), `knockedDown` ([explosives.md](explosives.md)) |
 | `temperature` | 1 | each enclosed room's temperature, by its anchor cell (E2) |
+| `raids` | 1 | the raid state (factions met, squads, the alarm, threat and home points, the shelter mark), then the `defense` and `raider` parts ([raids.md](raids.md), F6) |
 | `melee` | 1 | `melee`: each pawn's swing, its defense against one, its block (F8, [melee.md](melee.md)) |
+| `apparel` | 1 | `apparel`: the stuff and quality of an item, taint, a strip mark, a pawn's outfit and next look; the outfit policies ([apparel.md](apparel.md)) |
 | `feel` | 1 | `kick` (the player's gun kick and its spray) and `roll` (a dodge roll's phase, steps, direction, wait) ([shooter-feel.md](shooter-feel.md)) |
 | `medicine` | 1 | `medical`: the medical care setting of each pawn that has one (H1, [medicine.md](medicine.md)) |
+| `weather` | 1 | the current and previous weather by `defName`, when it began and ends, its random stream, the snow depth of each cell with snow ([weather.md](weather.md)) |
+| `breeding` | 1 | the counters, then `breed` (an animal's pregnancy, mating wait, milk, wool and egg timers, the female a male is courting) and `hatching` (a fertilized egg's hatch time) ([breeding.md](breeding.md), N4) |
 
 **Commands are saved by name (S7).** The `commands` section starts with the names of the command
 types it uses (`commandNames`); each command then gives its type as a place in that list, and its
@@ -277,6 +285,10 @@ Every section is version 1 at format 20. A task that changes a section adds a li
 
 - `roomstats` 1 (C17): floors, filth, carried filth, the filth rng, beauty needs ([room-stats.md](room-stats.md)). Commands `PlaceFloor` and `AddFilth` by name.
 - `health` 2 (E2): each pawn's environment hediffs (hypothermia, heatstroke...), a list of def name and severity before `dead`. Version 1 files load with none.
+- `raids` 1 (F6): new section, see the table. Commands `StartRaid`, `SoundAlarm`, `SetDefenseRole`, `MarkShelter` by name.
+- `fighters` 2 (F6): a fighter's `mode`, `defending`, `squad`, `hasGoal`, `goal`, `retreat` after `dodgeUntil`. Version 1 files load them as a plain fighter.
+- `breeding` 1 (N4): new section, see the table: the counters, per animal its `AnimalBreed` (pregnancy, litter, mating wait, milk, wool and egg timers, the female a male is walking to), per fertilized egg its `Hatching` time ([breeding.md](breeding.md)). The job check now accepts the animal jobs (it stopped at `StripPawn`, so a save made mid-taming would not load).
+- `apparel` 1 (C15): item stuff and quality, taint, strip marks, outfits ([apparel.md](apparel.md)). Commands `SetOutfit`, `EditOutfit`, `AddOutfit`, `RemoveOutfit` and `Strip` by name.
 
 ## Why the state hash changed in S6
 

@@ -1,0 +1,12 @@
+[
+  {
+    "defName": "Pirate", "source": "RimWorld wiki", "label": "pirates", "hostile": true,
+    "pawnKinds": [
+      { "kind": "ScavengerGunner", "weight": 9.4 },
+      { "kind": "PirateGunner", "weight": 9.4 },
+      { "kind": "MercenaryGunner", "weight": 9.4 }
+    ],
+    "unverified": ["pawnKinds"],
+    "notes": "Weights are the gunner kinds' shares in the wiki's Yttakin pirate 'ranged with melee mix-ins' raid group (9.4% each), used for the base pirates. Drifters, thrashers, slashers, grenadiers, snipers and heavies come when melee, grenades and their guns exist."
+  }
+]
