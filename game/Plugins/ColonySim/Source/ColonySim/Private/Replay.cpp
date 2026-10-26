@@ -187,6 +187,19 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["building"] = entt::to_integral(c.building);
                 j["autoRefuel"] = c.autoRefuel;
                 j["fillNow"] = c.fillNow;
+            } else if constexpr (std::is_same_v<Type, SetBillOptionsCommand>) {
+                j["building"] = entt::to_integral(c.building);
+                j["bill"] = c.bill;
+                j["skillMin"] = c.skillMin;
+                j["skillMax"] = c.skillMax;
+                j["radius"] = c.radius;
+                j["storeZone"] = c.storeZone;
+                j["unpauseAt"] = c.unpauseAt;
+                j["disallowed"] = c.disallowed;
+            } else if constexpr (std::is_same_v<Type, MoveBillCommand>) {
+                j["building"] = entt::to_integral(c.building);
+                j["bill"] = c.bill;
+                j["index"] = c.index;
             } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
                 j["thing"] = entt::to_integral(c.thing);
             } else if constexpr (std::is_same_v<Type, SetResearchCommand>) {
@@ -223,6 +236,13 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["animal"] = entt::to_integral(c.animal);
                 j["mark"] = c.mark;
                 j["on"] = c.on;
+            } else if constexpr (std::is_same_v<Type, MarkAnimalsInAreaCommand>) {
+                j["area"] = replayRectJson(c.area);
+                j["mark"] = c.mark;
+                j["on"] = c.on;
+            } else if constexpr (std::is_same_v<Type, SetAnimalNameCommand>) {
+                j["animal"] = entt::to_integral(c.animal);
+                j["name"] = c.name;
             } else if constexpr (std::is_same_v<Type, SetTrainingCommand>) {
                 j["animal"] = entt::to_integral(c.animal);
                 j["trainable"] = c.trainable;
@@ -232,6 +252,10 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, AssignAnimalZoneCommand>) {
                 j["animal"] = entt::to_integral(c.animal);
                 j["zone"] = c.zone;
+            } else if constexpr (std::is_same_v<Type, SetBreedingCommand>) {
+                j["animal"] = entt::to_integral(c.animal);
+                j["zone"] = c.zone;
+                j["allow"] = c.allow;
             } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["target"] = entt::to_integral(c.target);
@@ -304,10 +328,15 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
                 j["bed"] = entt::to_integral(c.bed);
                 j["on"] = c.on;
-            } else {
-                static_assert(std::is_same_v<Type, PlaceUpperFloorCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
                 j["area"] = replayRectJson(c.area);
                 j["remove"] = c.remove;
+            } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["breakDef"] = c.breakDef;
+            } else {
+                static_assert(std::is_same_v<Type, EndMentalBreakCommand>, "write every command type");
+                j["pawn"] = entt::to_integral(c.pawn);
             }
         },
         logged.command);
@@ -798,6 +827,38 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.building = static_cast<Entity>(building);
         out.command = c;
+    } else if (type == "SetBillOptions") {
+        SetBillOptionsCommand c;
+        uint32_t building = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "building", building, where) || !r.integer(j, "bill", c.bill, where) ||
+            !r.integer(j, "skillMin", c.skillMin, where) || !r.integer(j, "skillMax", c.skillMax, where) ||
+            !r.number(j, "radius", c.radius, where) || !r.integer(j, "storeZone", c.storeZone, where) ||
+            !r.integer(j, "unpauseAt", c.unpauseAt, where)) {
+            return false;
+        }
+        const auto list = j.find("disallowed");
+        if (list != j.end()) {
+            if (!list->is_array()) {
+                return r.fail(where + ".disallowed must be a list of def names");
+            }
+            for (const ReplayJson& name : *list) {
+                if (!name.is_string()) {
+                    return r.fail(where + ".disallowed must be a list of def names");
+                }
+                c.disallowed.push_back(name.get<std::string>());
+            }
+        }
+        c.building = static_cast<Entity>(building);
+        out.command = std::move(c);
+    } else if (type == "MoveBill") {
+        MoveBillCommand c;
+        uint32_t building = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "building", building, where) || !r.integer(j, "bill", c.bill, where) ||
+            !r.integer(j, "index", c.index, where)) {
+            return false;
+        }
+        c.building = static_cast<Entity>(building);
+        out.command = c;
     } else if (type == "SetRefuel") {
         SetRefuelCommand c;
         uint32_t building = entt::to_integral(kNoEntity);
@@ -982,6 +1043,20 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.animal = static_cast<Entity>(animal);
         out.command = std::move(c);
+    } else if (type == "MarkAnimalsInArea") {
+        MarkAnimalsInAreaCommand c;
+        if (!replayReadRect(r, j, where, c.area) || !r.text(j, "mark", c.mark, where) || !r.flag(j, "on", c.on, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "SetAnimalName") {
+        SetAnimalNameCommand c;
+        uint32_t animal = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "animal", animal, where) || !r.text(j, "name", c.name, where)) {
+            return false;
+        }
+        c.animal = static_cast<Entity>(animal);
+        out.command = std::move(c);
     } else if (type == "CreateAnimalZone") {
         CreateAnimalZoneCommand c;
         if (!replayReadRect(r, j, where, c.area)) {
@@ -998,6 +1073,14 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         AssignAnimalZoneCommand c;
         uint32_t animal = entt::to_integral(kNoEntity);
         if (!r.integer(j, "animal", animal, where) || !r.integer(j, "zone", c.zone, where)) {
+            return false;
+        }
+        c.animal = static_cast<Entity>(animal);
+        out.command = c;
+    } else if (type == "SetBreeding") {
+        SetBreedingCommand c;
+        uint32_t animal = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "animal", animal, where) || !r.integer(j, "zone", c.zone, where) || !r.flag(j, "allow", c.allow, where)) {
             return false;
         }
         c.animal = static_cast<Entity>(animal);
@@ -1187,6 +1270,20 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = c;
+    } else if (type == "StartMentalBreak") {
+        StartMentalBreakCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "breakDef", c.breakDef, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "EndMentalBreak") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where)) {
+            return false;
+        }
+        out.command = EndMentalBreakCommand{static_cast<Entity>(pawn)};
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");
     }

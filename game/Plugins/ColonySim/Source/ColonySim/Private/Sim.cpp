@@ -20,11 +20,13 @@
 #include "ColonySim/Raids.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Spoilage.h"
+#include "ColonySim/Crafting.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Lights.h"
+#include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Recreation.h"
@@ -45,6 +47,7 @@
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/RoofCollapse.h"
 #include "ColonySim/UpperFloors.h"
 #include "ColonySim/Weather.h"
 #include "ColonySim/Zones.h"
@@ -58,6 +61,8 @@
 namespace colony {
 
 namespace {
+
+constexpr int64_t kBillUpkeepSeconds = 60;  // "until you have" bills with a restart stock look at their stock this often
 
 const DefDatabase& simEmptyDefs() {
     static const DefDatabase empty;
@@ -178,6 +183,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     farming_ = std::make_unique<Farming>(map_, *plants_, *zones_, *defs_, events_);
     farming_->setClimate(temperature_.get(), lights_.get());
     plants_->setGrowthModifier([this](size_t cell) { return farming_->growthFactor(cell); });
+    farming_->setPlantSpots(things_.get(), [this](Entity building) { return power_->running(building); });
+    plants_->setFertilityOverride([this](size_t cell) { return farming_->spotFertility(cell); });
+    plants_->setGrowsAnytime([this](size_t cell) { return farming_->sunLampLit(cell); });
     zones_->setCellTaken([this](CellPos c) { return farming_->zoneAt(c) != kNoGrowingZone; });
     lights_->setWeather(weather_.get());
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
@@ -192,6 +200,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setFilth(filth_.get());
     jobs_->setApparel(apparel_.get());
     jobs_->setSpoilage(spoilage_.get());
+    crafting_ = std::make_unique<CraftingSystem>(*things_, *apparel_, *zones_, *defs_, settings.seed);
+    jobs_->setCrafting(crafting_.get());
     jobs_->setFarming(farming_.get());
     fire_ = std::make_unique<Fire>(map_, *things_, *plants_, *floors_, *filth_, *rooms_, *temperature_, *health_, *weather_, *defs_,
                                    settings.seed);
@@ -201,14 +211,18 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         const PawnGenes* genes = genesOf(pawn);
         return genes != nullptr ? geneStat(*genes, "flammability", 1.0f) : 1.0f;
     });
+    fire_->setPawnHurt([this](Entity pawn, DefId type, float amount, Rng& rng) { return combat_->hurtPawn(pawn, type, amount, rng); });
     jobs_->setFire(fire_.get());
     jobs_->fuel().setLights(lights_.get());
     // A wood-fired generator makes power only with fuel, and burns it only while it makes power.
     power_->setFuel([this](Entity building) { return jobs_->fuel().lit(building); });
     jobs_->fuel().setBurning([this](Entity building) { return !power_->hasPower(building) || power_->stateOf(building) != PowerState::Off; });
+    mood_->setActiveSkill([this](Entity pawn) { return jobs_->activeSkill(pawn); });
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     explosives_ = std::make_unique<ExplosiveSystem>(*things_, map_, *combat_, *health_, *defs_);
     fighters_->setExplosives(explosives_.get());
+    mentalBreaks_ = std::make_unique<MentalBreakSystem>(*things_, map_, *health_, *fighters_, *jobs_, *mood_, *rooms_,
+                                                        pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
     combat_->setTalents(talents_.get());
     explosives_->setEventLog(&events_);
@@ -221,11 +235,14 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     husbandry_->setEventLog(&events_);
     breeding_ = std::make_unique<Breeding>(*things_, map_, *animals_, *husbandry_, *defs_, time_, settings.seed);
     breeding_->setEventLog(&events_);
+    breeding_->setClimate(temperature_.get());
     jobs_->setBreeding(breeding_.get());
     animals_->setHusbandry(husbandry_.get());
     animals_->setPathfinder(&pathfinder_);
     combat_->setHurtHook([this](Entity victim, Entity attacker) { animals_->hurt(victim, attacker); });
     jobs_->setHusbandry(husbandry_.get());
+    jobs_->setCombat(combat_.get());
+    jobs_->setTemperature(temperature_.get());
     husbandry_->setHaulerHook([this](Entity animal, bool on) { jobs_->setAnimalHauler(animal, on); });
     jobs_->setAnimalWorkGate([this](Entity animal) { return animals_->mayWork(animal); });
     raids_ = std::make_unique<RaidSystem>(*things_, map_, *rooms_, *combat_, *health_, *jobs_, *fighters_, *defs_, time_, rng_);
@@ -235,10 +252,29 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     prisoners_->setEventLog(&events_);
     jobs_->setPrisoners(prisoners_.get());
     mood_->addSituation("isPrisoner", [this](Entity pawn) { return prisoners_->isPrisoner(pawn) ? 0 : -1; });
+    // Night owls like being up at night and not by day (docs/design/mood.md); only pawns that are awake count.
+    const auto awakeAt = [this](Entity pawn, bool night) {
+        const Worker* worker = things_->registry().try_get<Worker>(pawn);
+        if (worker == nullptr || jobIsLyingDown(worker->job)) {
+            return -1;
+        }
+        return mood_->rules().isNightHour(time_.hourOfDay()) == night ? 0 : -1;
+    };
+    mood_->addSituation("awakeAtNight", [awakeAt](Entity pawn) { return awakeAt(pawn, true); });
+    mood_->addSituation("awakeInDay", [awakeAt](Entity pawn) { return awakeAt(pawn, false); });
+    mood_->addSituation("noBedroom", [this](Entity pawn) {
+        const Entity bed = jobs_->bedOf(pawn);
+        if (bed == kNoEntity || !things_->registry().all_of<Position>(bed)) {
+            return 0;
+        }
+        return rooms_->roleAt(cellOf(things_->registry().get<Position>(bed))) == RoomRole::Bedroom ? -1 : 0;
+    });
     combat_->setBeforeDestroy([this](Entity thing) {
         jobs_->forget(thing);
         raids_->forget(thing);
         defense_->onDestroy(thing);
+        fire_->onDestroy(thing);
+        mentalBreaks_->forget(thing);
     });
     fighters_->setWeather(weather_.get());
     melee_ = std::make_unique<MeleeSystem>(*things_, map_, *combat_, *health_, *defs_, time_,
@@ -246,18 +282,27 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     melee_->setEventLog(&events_);
     fighters_->setMelee(melee_.get());
     upperFloors_ = std::make_unique<UpperFloors>(map_, *rooms_, *things_);
+    roofCollapse_ = std::make_unique<RoofCollapse>(map_, *rooms_, *things_, *health_, *defs_);
+    roofCollapse_->setEventLog(&events_);
+    roofCollapse_->setInterruptHandler([this](Entity pawn, const std::string& why) { jobs_->interrupt(pawn, why); });
+    construction_->setUpperFloors(upperFloors_.get());
     animals_->setMelee(melee_.get());
     defense_ = std::make_unique<DefenseSystem>(*things_, map_, *combat_, *health_, *power_, *defs_, time_);
     defense_->setEventLog(&events_);
     defense_->setBeforeDestroy([this](Entity thing) {
         jobs_->forget(thing);
         raids_->forget(thing);
+        mentalBreaks_->forget(thing);
     });
+    fire_->setRunning([this](Entity building) { return power_->running(building); });
     defense_->setOnLearn([this](Entity pawn) { fighters_->replan(pawn); });
     fighters_->setDefense(defense_.get());
     social_ = std::make_unique<SocialSystem>(*things_, *rooms_, *health_, *melee_, *mood_, *jobs_, *defs_, time_,
                                              splitMix64(settings.seed ^ 0x736F6369616CULL));
     social_->setEventLog(&events_);
+    mentalBreaks_->setEventLog(&events_);
+    mentalBreaks_->setMelee(melee_.get());
+    mentalBreaks_->setFire(fire_.get());
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -429,6 +474,25 @@ void Sim::commandFailed(uint64_t id, std::string message) {
 
 void Sim::applyCommand(const Command& command, uint64_t id) {
     std::string error;
+    // A colonist in a mental break takes no orders: it isn't the player's to command until it is over.
+    Entity ordered = kNoEntity;
+    if (const auto* draft = std::get_if<DraftCommand>(&command)) {
+        ordered = draft->drafted ? draft->pawn : kNoEntity;
+    } else if (const auto* moveOrder = std::get_if<MoveOrderCommand>(&command)) {
+        ordered = moveOrder->pawn;
+    } else if (const auto* attack = std::get_if<AttackOrderCommand>(&command)) {
+        ordered = attack->pawn;
+    } else if (const auto* haul = std::get_if<OrderHaulCommand>(&command)) {
+        ordered = haul->pawn;
+    } else if (const auto* control = std::get_if<ControlPawnCommand>(&command)) {
+        ordered = control->pawn;
+    } else if (const auto* hands = std::get_if<HandsOnCommand>(&command)) {
+        ordered = hands->mode == HandsOnMode::Work ? hands->pawn : kNoEntity;
+    }
+    if (ordered != kNoEntity && mentalBreaks_->active(ordered)) {
+        commandFailed(id, "that colonist is in a mental break");
+        return;
+    }
     if (const auto* spawn = std::get_if<SpawnThingCommand>(&command)) {
         const DefId def = defs_->idOf("Things", spawn->def);
         Entity thing = kNoEntity;
@@ -453,6 +517,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             jobs_->forget(destroy->thing);
             fighters_->forget(destroy->thing);
             raids_->forget(destroy->thing);
+            mentalBreaks_->forget(destroy->thing);
             things_->destroy(destroy->thing);
         }
     } else if (const auto* damage = std::get_if<DamagePawnCommand>(&command)) {
@@ -645,12 +710,22 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             ok = husbandry_->markTame(mark->animal, mark->on, error);
         } else if (mark->mark == "Slaughter") {
             ok = husbandry_->markSlaughter(mark->animal, mark->on, error);
+        } else if (mark->mark == "Hunt") {
+            ok = husbandry_->markHunt(mark->animal, mark->on, error);
         } else if (mark->mark == "Release") {
             ok = husbandry_->release(mark->animal, error);
         } else {
-            error = "a mark is Tame, Slaughter or Release";
+            error = "a mark is Tame, Slaughter, Hunt or Release";
         }
         if (!ok) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* markArea = std::get_if<MarkAnimalsInAreaCommand>(&command)) {
+        if (!husbandry_->markInArea(markArea->area, markArea->mark, markArea->on, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* animalName = std::get_if<SetAnimalNameCommand>(&command)) {
+        if (!husbandry_->setName(animalName->animal, animalName->name, error)) {
             commandFailed(id, error);
         }
     } else if (const auto* training = std::get_if<SetTrainingCommand>(&command)) {
@@ -670,6 +745,12 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
     } else if (const auto* assignAnimalZone = std::get_if<AssignAnimalZoneCommand>(&command)) {
         if (!husbandry_->assignZone(assignAnimalZone->animal, assignAnimalZone->zone, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* setBreeding = std::get_if<SetBreedingCommand>(&command)) {
+        const bool ok = setBreeding->animal != kNoEntity ? breeding_->setBreeding(setBreeding->animal, setBreeding->allow, error)
+                                                         : husbandry_->setZoneBreeding(setBreeding->zone, setBreeding->allow, error);
+        if (!ok) {
             commandFailed(id, error);
         }
     } else if (const auto* createGrowing = std::get_if<CreateGrowingZoneCommand>(&command)) {
@@ -909,6 +990,23 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!done) {
             commandFailed(id, error);
         }
+    } else if (const auto* billOptions = std::get_if<SetBillOptionsCommand>(&command)) {
+        BillSystem::Options options;
+        options.skillMin = billOptions->skillMin;
+        options.skillMax = billOptions->skillMax;
+        options.radius = billOptions->radius;
+        options.storeZone = billOptions->storeZone;
+        options.unpauseAt = billOptions->unpauseAt;
+        options.disallowed = billOptions->disallowed;
+        if (billOptions->storeZone != 0 && zones_->find(billOptions->storeZone) == nullptr) {
+            commandFailed(id, "there is no stockpile " + std::to_string(billOptions->storeZone));
+        } else if (!jobs_->bills().setOptions(billOptions->building, billOptions->bill, options, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* moveBill = std::get_if<MoveBillCommand>(&command)) {
+        if (!jobs_->bills().moveBill(moveBill->building, moveBill->bill, moveBill->index, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* setBill = std::get_if<SetBillCommand>(&command)) {
         if (!jobs_->bills().setBill(setBill->building, setBill->bill, setBill->mode, setBill->count, setBill->suspended,
                                     error)) {
@@ -1000,6 +1098,14 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!jobs_->fuel().setRefuel(refuel->building, refuel->autoRefuel, refuel->fillNow, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* startBreak = std::get_if<StartMentalBreakCommand>(&command)) {
+        if (!mentalBreaks_->start(startBreak->pawn, startBreak->breakDef, rng_, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* endBreak = std::get_if<EndMentalBreakCommand>(&command)) {
+        if (!mentalBreaks_->end(endBreak->pawn, error)) {
+            commandFailed(id, error);
+        }
     }
 }
 
@@ -1049,6 +1155,7 @@ void Sim::step() {
     husbandry_->step();
     breeding_->step();
     social_->step(time_.seconds);
+    mentalBreaks_->step(time_.seconds, rng_);  // before the mood system, which turns its events into memories
     mood_->step(time_.seconds, events_);
     movement_->step(things_->registry(), map_);
     melee_->step();
@@ -1068,15 +1175,23 @@ void Sim::step() {
     apparel_->step(time_.seconds, rng_, events_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     rooms_->update();
+    roofCollapse_->step(rng_);  // roofs and floors that lost their holders fall
     power_->step(time_);
     lights_->update();
     filth_->step();
     roomStats_->step(time_.seconds);
     temperature_->step(time_.seconds);
     spoilage_->step(time_.seconds);
+    if (time_.seconds % kBillUpkeepSeconds == 0) {
+        jobs_->bills().step();
+        crafting_->step();
+    }
     time_.seconds += 1;
     weather_->step(time_.seconds);
     spoilage_->setOutdoorFactor(weather_->deteriorationFactor());
+    if (time_.seconds % kSecondsPerDay == 0) {
+        jobs_->skillsNewDay();
+    }
     if (time_.seconds % kSecondsPerHour == 0) {
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
         farming_->growHour(time_.seconds);
@@ -1202,6 +1317,20 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Mover* mover = reg.try_get<Mover>(entity)) {
             view.vx = mover->vx;
             view.vy = mover->vy;
+            // On stairs or a ladder the pawn is drawn the share `climb` of the way from where it
+            // stands to the cell at the other end (docs/design/levels.md).
+            if (mover->climbing(pos.level)) {
+                const CellPos to = mover->path[mover->next];
+                if (const LevelLink* link = map_.levelLinkBetween(cellOf(pos), to)) {
+                    const float t = std::clamp(mover->climbed / link->length, 0.0f, 1.0f);
+                    const float tx = static_cast<float>(to.x) + 0.5f;
+                    const float ty = static_cast<float>(to.y) + 0.5f;
+                    view.climb = t;
+                    view.x = pos.x + (tx - pos.x) * t;
+                    view.y = pos.y + (ty - pos.y) * t;
+                    view.z += (map_.heightAt(tx, ty, to.level) - view.z) * t;
+                }
+            }
             view.firstWaypoint = static_cast<uint32_t>(out.waypoints.size());
             for (size_t k = mover->next; k < mover->path.size(); ++k) {
                 out.waypoints.push_back(PathPointView{static_cast<float>(mover->path[k].x) + 0.5f,
@@ -1242,7 +1371,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const BillList* list = reg.try_get<BillList>(entity)) {
             view.firstBill = static_cast<uint32_t>(out.bills.size());
             for (const Bill& bill : list->bills) {
-                out.bills.push_back(BillView{bill.id, bill.recipe, bill.mode, bill.count, bill.suspended});
+                out.bills.push_back(BillView{bill.id, bill.recipe, bill.mode, bill.count, bill.suspended, bill.skillMin, bill.skillMax,
+                                             bill.radius, bill.storeZone, bill.unpauseAt, bill.satisfied, bill.disallowed});
             }
             view.billCount = static_cast<uint32_t>(out.bills.size()) - view.firstBill;
         }
@@ -1306,6 +1436,9 @@ void Sim::writeSnapshot(Snapshot& out) const {
         }
         if (const Worker* worker = reg.try_get<Worker>(entity)) {
             view.asleep = jobIsLyingDown(worker->job);
+        }
+        if (const MentalBreaker* breaker = reg.try_get<MentalBreaker>(entity); breaker != nullptr && breaker->active) {
+            view.mentalBreak = defs_->idOf("MentalBreaks", breaker->def);
         }
         if (const Carrying* carrying = reg.try_get<Carrying>(entity); carrying && reg.valid(carrying->thing)) {
             view.carriedDef = reg.get<Thing>(carrying->thing).def;
@@ -1371,6 +1504,12 @@ void Sim::writeSnapshot(Snapshot& out) const {
             }
             view.quality = apparel_->stats().qualityOf(reg, entity);
             view.tainted = reg.all_of<Tainted>(entity);
+        } else if (view.category == ThingCategory::Item && crafting_->hasQuality(thing.def)) {
+            // Weapons and other crafted things with a quality: made of a stuff and of a quality like clothes.
+            if (const MadeOf* made = reg.try_get<MadeOf>(entity)) {
+                view.stuff = made->stuff;
+            }
+            view.quality = apparel_->stats().qualityOf(reg, entity);
         }
         if (view.category == ThingCategory::Pawn) {
             view.faction = fighters_->factionOf(entity);
@@ -1385,7 +1524,9 @@ void Sim::writeSnapshot(Snapshot& out) const {
             if (const AnimalCare* care = husbandry_->care(entity)) {
                 view.markTame = care->markTame;
                 view.markSlaughter = care->markSlaughter;
+                view.markHunt = care->markHunt;
                 view.animalZone = care->zone;
+                view.animalName = care->name;
                 view.learnedTricks = husbandry_->learnedMask(entity);
                 view.wantedTricks = husbandry_->wantedMask(entity);
             }
@@ -1512,6 +1653,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
     }
     out.roofCells = rooms_->thinRoofCells();
     out.roofChanges = rooms_->roofChanges();
+    out.roofCollapses = roofCollapse_->collapses();
     {
         const WeatherEffects effects = weather_->effects();
         WeatherView& w = out.weather;
@@ -1579,7 +1721,9 @@ uint64_t Sim::stateHash() const {
     fire_->hashState(h);
     temperature_->hashState(h);
     h.add(map_.upperFloorHash());
+    roofCollapse_->hashState(h);
     spoilage_->hashState(h);
+    crafting_->hashState(h);
     farming_->hashState(h);
 
     // The entity ids the registry has handed out: the free list in reuse order (it decides the
@@ -1663,6 +1807,9 @@ uint64_t Sim::stateHash() const {
             h.add(static_cast<uint64_t>(mover->ghostSteps));
             h.add(static_cast<uint64_t>(mover->heldSteps));
             h.add(mover->gaveUp);
+            if (mover->climbed != 0.0f) {
+                h.add(mover->climbed);  // M2; only when climbing, so older hashes stay
+            }
         }
         if (const Colonist* c = reg.try_get<Colonist>(e)) {
             for (const std::string* text : {&c->firstName, &c->nickName, &c->lastName, &c->childhood, &c->adulthood}) {
@@ -1680,6 +1827,7 @@ uint64_t Sim::stateHash() const {
                 h.add(s.level);
                 h.add(static_cast<int>(s.passion));
                 h.add(s.xp);
+                h.add(s.xpToday);
                 h.add(s.disabled);
             }
             for (const std::string& tag : c->disabledWorkTags) {
@@ -1727,7 +1875,19 @@ uint64_t Sim::stateHash() const {
                 h.add(static_cast<int>(bill.mode));
                 h.add(bill.count);
                 h.add(bill.suspended);
+                h.add(bill.skillMin);
+                h.add(bill.skillMax);
+                h.add(bill.radius);
+                h.add(bill.storeZone);
+                h.add(bill.unpauseAt);
+                h.add(bill.satisfied);
+                for (const DefId def : bill.disallowed) {
+                    h.add(def.value);
+                }
             }
+        }
+        if (const StoreIn* store = reg.try_get<StoreIn>(e)) {
+            h.add(store->zone);
         }
         if (const Fuel* fuel = reg.try_get<Fuel>(e)) {
             h.add(fuel->amount);
@@ -1866,6 +2026,7 @@ uint64_t Sim::stateHash() const {
         social_->hashThing(e, h);
         defense_->hashThing(e, h);
         apparel_->hashThing(e, h);
+        mentalBreaks_->hashThing(e, h);
     }
     apparel_->hashState(h);
     return h.value();

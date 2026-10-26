@@ -54,6 +54,11 @@ Defs use RimWorld's fields:
 tables and stove is recalled, listed under `unverified`. The dining chair's wiki page gave
 implausible numbers, so the stool stands in for it. Sandbags are not written yet.)
 
+Stairs, a ladder and the **upper floor** (M2) are built the same way; an upper floor's frame lays a
+floor instead of becoming a building, and a plan over open air is also worked from the level below.
+Their numbers and rules are in [levels.md](levels.md). Delivering, building and taking down look
+across levels for their target.
+
 ## The jobs
 
 All three go to the **Construction** work type, whose tasks name the scanners
@@ -128,7 +133,7 @@ others. All of it is in `Sim::stateHash`. Saves of formats 6 and 7 still load.
 ## Not yet
 
 - Failed construction. RimWorld lets low skill ruin a build (`ConstructSuccessChance`); we have no
-  failures, and builders don't gain Construction XP yet (no skill learning in the sim at all).
+  failures, and builders gain Construction XP as they work ([skills.md](skills.md)).
 - Repair, replacing a building with a better stuff, minifying and moving furniture. Roofs and rooms are not
   built: they follow from the walls ([rooms.md](rooms.md)).
 - Walls over water, terrain affordances and floors; blueprint rules like "doors only between walls".

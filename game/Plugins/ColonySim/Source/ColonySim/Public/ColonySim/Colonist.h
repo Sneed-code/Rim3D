@@ -20,6 +20,7 @@ struct SkillRecord {
     Passion passion = Passion::None;
     float xp = 0.0f;  // experience towards the next level
     bool disabled = false;  // a backstory or trait disables the work this skill is for
+    float xpToday = 0.0f;   // experience earned since midnight; the daily soft cap counts it (Skills.h)
 };
 
 struct TraitRecord {

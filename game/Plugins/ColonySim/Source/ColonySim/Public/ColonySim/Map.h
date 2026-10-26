@@ -32,6 +32,30 @@ enum class Passage : uint8_t { Open, Blocked, Door };
 // upper floor is to the cell under it (docs/design/levels.md).
 enum class Roof : uint8_t { None, Thin, Thick };
 
+// A way between two levels: stairs or a ladder (task M2, docs/design/levels.md). A pawn steps on
+// from `low`, the cell in front of its foot on the building's own level, and steps off at `high`,
+// the cell beyond its head one level up; the two are side by side seen from above. Things keeps
+// these in step with the buildings, and regions link the regions of the two cells.
+struct LevelLink {
+    CellPos low;
+    CellPos high;
+    Entity building = kNoEntity;
+    float length = 0.0f;       // metres from the middle of `low` to the middle of `high`, climbing
+    float speedFactor = 1.0f;  // share of its walking speed a pawn keeps on it
+
+    // What the link costs a path, in metres of flat walking.
+    float cost() const { return length / speedFactor; }
+};
+
+// How far apart two places are when choosing the nearest target, in square metres: the flat
+// distance, and each level between them counts as kLevelDetourM more (ours: the walk round to the
+// stairs and up them). Work scanners that look across levels use it (docs/design/levels.md).
+inline constexpr float kLevelDetourM = 10.0f;
+inline float levelDistSq(float dx, float dy, int levels) {
+    const float up = kLevelDetourM * static_cast<float>(levels < 0 ? -levels : levels);
+    return dx * dx + dy * dy + up * up;
+}
+
 struct MapSettings {
     int width = 512;   // cells, 1 m each
     int height = 512;  // cells, 1 m each
@@ -129,6 +153,14 @@ public:
     // Hash of the upper floors, for Sim::stateHash; cheap, it only visits chunks that exist.
     uint64_t upperFloorHash() const;
 
+    // Stairs and ladders (docs/design/levels.md), sorted by `low` then `high` (row order, levels
+    // first). Adding or removing one tells the regions at both ends.
+    void addLevelLink(const LevelLink& link);
+    void removeLevelLinks(Entity building);
+    const std::vector<LevelLink>& levelLinks() const { return levelLinks_; }
+    // The link with `a` at one end and `b` at the other, either way round; null if none.
+    const LevelLink* levelLinkBetween(CellPos a, CellPos b) const;
+
     // Building layer: the building covering each cell, kNoEntity if none. Kept up to date by
     // Things when buildings spawn and despawn; nothing else should call the setters.
     Entity buildingAt(CellPos c) const {
@@ -182,6 +214,16 @@ public:
         }
         return stored == Roof::None && floorAbove(c) ? Roof::Thin : stored;
     }
+
+    // The mountain's thick roof over a ground cell (M3, docs/design/roofs.md): generation puts it over
+    // all rock; it stays when the rock is mined out, held up by rock and walls within the roof support
+    // radius, and RoofCollapse takes it away when nothing holds it. `false` clears it.
+    void setThickRoof(CellPos c, bool thick);
+    // Ground cells (by `index`) that are no longer rock but still have the thick roof: the only thick
+    // roofs that can fall. In the order they were mined out.
+    const std::vector<int>& hollowRoofCells() const { return hollow_; }
+    // Goes up whenever rock is mined out under a thick roof or a thick roof is cleared.
+    uint64_t rockChanges() const { return rockChanges_; }
 
     // Regions and reachability groups of the walkable cells (docs/design/regions.md).
     Regions& regions();
@@ -242,6 +284,9 @@ private:
     std::vector<std::unique_ptr<UpperChunk>> upper_;
     uint64_t upperFloorChanges_ = 0;
     uint64_t buildingChanges_ = 0;
+    uint64_t rockChanges_ = 0;
+    std::vector<int> hollow_;  // mined-out ground cells that still have the thick roof
+    std::vector<LevelLink> levelLinks_;
     std::unique_ptr<Regions> regions_;
     std::unique_ptr<Cover> cover_;
 };

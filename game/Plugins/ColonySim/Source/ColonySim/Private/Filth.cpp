@@ -124,6 +124,30 @@ bool Filth::clean(CellPos c) {
     return true;
 }
 
+bool Filth::clean(CellPos c, int kind) {
+    if (!map_.onGround(c)) {
+        return false;
+    }
+    const auto it = piles_.find(map_.index(c));
+    if (it == piles_.end()) {
+        return false;
+    }
+    auto pile = std::find_if(it->second.begin(), it->second.end(), [&](const FilthPile& p) { return p.kind == kind; });
+    if (pile == it->second.end()) {
+        return false;
+    }
+    if (pile->thickness > 1) {
+        --pile->thickness;
+    } else {
+        it->second.erase(pile);
+        if (it->second.empty()) {
+            piles_.erase(it);
+        }
+    }
+    ++changes_;
+    return true;
+}
+
 void Filth::clear(CellPos c) {
     if (map_.onGround(c) && piles_.erase(map_.index(c)) > 0) {
         ++changes_;
