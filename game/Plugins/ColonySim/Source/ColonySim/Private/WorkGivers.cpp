@@ -6,6 +6,7 @@
 #include "ColonySim/Construction.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Farming.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
@@ -320,6 +321,86 @@ public:
         }
         out = Job{};
         out.type = kind == DesignationKind::CutPlant ? JobType::CutPlant : JobType::HarvestPlant;
+        out.cell = candidate.target.cell;
+        return true;
+    }
+};
+
+// Growing (RimWorld's WorkGiver_GrowerSow and GrowerHarvest, in the Growing work type): colonists sow the
+// zone's crop on its cells and harvest it when it is fully grown (docs/design/farming.md).
+class SowCropsGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "SowCrops"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        const Farming* farming = jobs.farming();
+        if (farming == nullptr || farming->zones().empty() || !jobs.canUseHands(pawn)) {
+            return;
+        }
+        const Position& at = jobs.things().registry().get<Position>(pawn);
+        const int skill = jobs.skillLevel(pawn, "Plants");
+        for (const GrowingZone& zone : farming->zones()) {
+            const Def& crop = jobs.defs().get(zone.crop);
+            if (skill < static_cast<int>(crop.integer("plant.sowMinSkill", 0))) {
+                continue;
+            }
+            for (const CellPos& cell : zone.cells) {
+                if (cell.level != at.level || (jobs.plants().has(cell) && jobs.plants().defAt(cell) == zone.crop)) {
+                    continue;
+                }
+                const std::string why = farming->sowBlocker(cell);
+                if (!why.empty()) {
+                    if (why == "the weather is wrong for it") {
+                        break;  // the same for the rest of the zone, give or take a roof
+                    }
+                    continue;
+                }
+                const float dx = static_cast<float>(cell.x) + 0.5f - at.x;
+                const float dy = static_cast<float>(cell.y) + 0.5f - at.y;
+                out.push_back(WorkCandidate{JobTarget{kNoEntity, cell}, dx * dx + dy * dy, 0, 0, false, CellPos{}});
+            }
+        }
+    }
+
+    bool makeJob(JobSystem& jobs, Entity, const WorkCandidate& candidate, Job& out) override {
+        if (jobs.farming() == nullptr || !jobs.farming()->sowBlocker(candidate.target.cell).empty()) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::SowCrop;
+        out.cell = candidate.target.cell;
+        return true;
+    }
+};
+
+class HarvestCropsGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "HarvestCrops"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        const Farming* farming = jobs.farming();
+        if (farming == nullptr || farming->zones().empty() || !jobs.canUseHands(pawn)) {
+            return;
+        }
+        const Position& at = jobs.things().registry().get<Position>(pawn);
+        for (const GrowingZone& zone : farming->zones()) {
+            for (const CellPos& cell : zone.cells) {
+                if (cell.level != at.level || !farming->readyToHarvest(cell)) {
+                    continue;
+                }
+                const float dx = static_cast<float>(cell.x) + 0.5f - at.x;
+                const float dy = static_cast<float>(cell.y) + 0.5f - at.y;
+                out.push_back(WorkCandidate{JobTarget{kNoEntity, cell}, dx * dx + dy * dy, 0, 0, false, CellPos{}});
+            }
+        }
+    }
+
+    bool makeJob(JobSystem& jobs, Entity, const WorkCandidate& candidate, Job& out) override {
+        if (jobs.farming() == nullptr || !jobs.farming()->readyToHarvest(candidate.target.cell)) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::HarvestPlant;
         out.cell = candidate.target.cell;
         return true;
     }
@@ -692,6 +773,8 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<DeconstructGiver>());
     givers.push_back(std::make_unique<MineGiver>());
     givers.push_back(std::make_unique<CutOrHarvestPlantsGiver>());
+    givers.push_back(std::make_unique<HarvestCropsGiver>());
+    givers.push_back(std::make_unique<SowCropsGiver>());
     givers.push_back(std::make_unique<DoBillsCookStoveGiver>());
     givers.push_back(std::make_unique<ResearchGiver>());
     givers.push_back(std::make_unique<CleanFilthGiver>());

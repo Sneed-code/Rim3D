@@ -764,6 +764,7 @@ void RaidSystem::leaveMap(Entity pawn) {
     }
     if (const Gear* gear = reg.try_get<Gear>(pawn)) {
         std::vector<Entity> carried = gear->apparel;
+        carried.insert(carried.end(), gear->stowed.begin(), gear->stowed.end());
         if (gear->weapon != kNoEntity) {
             carried.push_back(gear->weapon);
         }
@@ -866,8 +867,9 @@ void RaidSystem::thinkAlarm() {
     // Enemies on the map that still fight; routed ones running off don't count.
     std::vector<Entity> hostiles;
     for (const auto [pawn, faction, pos] : reg.view<const Faction, const Position>().each()) {
-        // Wild animals aren't enemies (Animals.h); a hunted one fights back on its own.
-        if (faction.id == kPlayerFaction || reg.all_of<Animal>(pawn) || health_.incapacitated(pawn)) {
+        // Wild animals aren't enemies (Animals.h) until they hunt, fight back or go manhunter (N5).
+        const Animal* wild = reg.try_get<Animal>(pawn);
+        if (faction.id == kPlayerFaction || (wild != nullptr && wild->temper == AnimalTemper::Calm) || health_.incapacitated(pawn)) {
             continue;
         }
         const Fighter* f = reg.try_get<Fighter>(pawn);

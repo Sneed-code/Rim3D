@@ -1,0 +1,10 @@
+[
+  {
+    "defName": "FactionRules", "source": "RimWorld wiki",
+    "goodwillRange": [-100, 100], "hostileAtOrBelow": -75, "alliedAtOrAbove": 75,
+    "driftTowardNaturalPerDay": 0.2,
+    "unverified": ["hostileAtOrBelow", "alliedAtOrAbove", "driftTowardNaturalPerDay"],
+    "ours": ["driftTowardNaturalPerDay"],
+    "notes": "Goodwill runs from -100 to 100; at -75 or less a faction is hostile and at 75 or more an ally (recalled). Goodwill drifts back toward the faction's starting middle slowly; the rate is a placeholder. A faction with permanentEnemy never leaves -100."
+  }
+]

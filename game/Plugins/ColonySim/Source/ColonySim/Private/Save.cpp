@@ -15,6 +15,7 @@
 #include "ColonySim/Doors.h"
 #include "ColonySim/Explosives.h"
 #include "ColonySim/Power.h"
+#include "ColonySim/Farming.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Filth.h"
@@ -303,6 +304,8 @@ struct SaveEntity {
     std::optional<RecoilKick> kick;         // section "feel"
     std::optional<DodgeRoll> roll;          // section "feel"
     std::optional<MedicalSettings> medical;  // section "medicine"
+    std::optional<std::vector<Entity>> stowed;  // section "weapons" (P1): Gear::stowed
+    std::optional<WeaponSwitch> weaponSwitch;   // section "weapons"
     std::optional<Turret> turret;           // section "defense" (F11)
     std::optional<Trap> trap;               // section "defense" (F11)
 };
@@ -412,6 +415,7 @@ struct SaveData {
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
     uint32_t nextOutfitId = 1;
     SpoilageState spoilageState;                    // section "spoilage" (C16)
+    FarmingSaved farming;                           // section "farming" (C13)
     bool hasWeather = false;           // the file has the weather section; older saves start it fresh
     SaveWeather weather;
 };
@@ -1122,6 +1126,21 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("amount", c.amount);
             } else if constexpr (std::is_same_v<Type, RearmTrapCommand>) {
                 ar.value("trap", c.trap);
+            } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.value("item", c.item);
+            } else if constexpr (std::is_same_v<Type, SwitchWeaponCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.value("slot", c.slot);
+                ar.require(static_cast<int>(c.slot) < kWeaponSlotCount, "the save file has a bad weapon slot");
+            } else if constexpr (std::is_same_v<Type, CreateGrowingZoneCommand>) {
+                ar.group("area", [&] { saveRect(ar, c.area); });
+                ar.text("crop", c.crop);
+            } else if constexpr (std::is_same_v<Type, RemoveGrowingZoneCellsCommand>) {
+                ar.group("area", [&] { saveRect(ar, c.area); });
+            } else if constexpr (std::is_same_v<Type, SetGrowingZoneCropCommand>) {
+                ar.value("zone", c.zone);
+                ar.text("crop", c.crop);
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }
@@ -1535,7 +1554,14 @@ void saveAnimalPart(Ar& ar, Animal& a) {
     ar.value("nextThink", a.nextThink);
     ar.value("staysUntil", a.staysUntil);
     ar.group("goal", [&] { saveCell(ar, a.goal); });
-    ar.require(static_cast<int>(a.mode) <= static_cast<int>(AnimalMode::EatItem), "the save file has a bad animal mode");
+    if (ar.sectionVersion() >= 2) {  // N5: fights
+        ar.value("temper", a.temper);
+        ar.value("enemy", a.enemy);
+        ar.value("temperUntil", a.temperUntil);
+        ar.value("huntAfter", a.huntAfter);
+        ar.require(static_cast<int>(a.temper) <= static_cast<int>(AnimalTemper::Manhunter), "the save file has a bad animal temper");
+    }
+    ar.require(static_cast<int>(a.mode) <= static_cast<int>(AnimalMode::Seized), "the save file has a bad animal mode");
     ar.require(a.sleepShift < 24, "the save file has a bad animal sleep shift");
 }
 
@@ -1619,6 +1645,18 @@ void saveKickPart(Ar& ar, RecoilKick& k) {
     ar.value("sinceShot", k.sinceShot);
     ar.require(std::isfinite(k.up) && std::isfinite(k.side) && k.shots >= 0 && k.sinceShot >= 0,
                "the save file has a bad gun kick");
+}
+
+template <typename Ar>
+void saveStowedPart(Ar& ar, std::vector<Entity>& items) {
+    ar.list("items", items, [&](Entity& item) { ar.value(nullptr, item); });
+}
+
+template <typename Ar>
+void saveWeaponSwitchPart(Ar& ar, WeaponSwitch& w) {
+    ar.value("to", w.to);
+    ar.value("stepsLeft", w.stepsLeft);
+    ar.require(w.stepsLeft >= 0 && (w.stepsLeft == 0 || w.to != kNoEntity), "the save file has a bad weapon switch");
 }
 
 template <typename Ar>
@@ -2324,7 +2362,7 @@ void saveSections(Ar& ar, SaveData& d) {
     });
     ar.section("talents", 1, [&] { saveTalents(ar, d); });
     ar.section("roomstats", 1, [&] { saveRoomStatsSection(ar, d); });
-    ar.section("animals", 1, [&] {
+    ar.section("animals", 2, [&] {
         ar.value("wildAnimals", d.wildAnimals);
         ar.value("populated", d.animals.populated);
         ar.value("percent", d.animals.percent);
@@ -2336,6 +2374,14 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("left", d.animals.stats.left);
         ar.value("grazed", d.animals.stats.grazed);
         ar.value("cleared", d.animals.stats.cleared);
+        if (ar.sectionVersion() >= 2) {  // N5
+            ar.value("manhunters", d.animals.stats.manhunters);
+            ar.value("revenges", d.animals.stats.revenges);
+            ar.value("hunts", d.animals.stats.hunts);
+            ar.value("kills", d.animals.stats.kills);
+            ar.value("meals", d.animals.stats.meals);
+            ar.value("scares", d.animals.stats.scares);
+        }
         ar.require(d.wildAnimals >= 0 && d.animals.percent >= 0, "the save file has a bad wild animal density");
         saveParts(ar, "animal", e, &SaveEntity::animal, [&](Animal& a) { saveAnimalPart(ar, a); });
     });
@@ -2353,6 +2399,18 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("fed", d.husbandry.stats.fed);
         ar.value("starved", d.husbandry.stats.starved);
         saveParts(ar, "care", e, &SaveEntity::care, [&](AnimalCare& c) { saveCarePart(ar, c); });
+    });
+    ar.section("farming", 1, [&] {
+        ar.value("nextZone", d.farming.nextZone);
+        ar.list("zones", d.farming.zones, [&](FarmingSaved::Zone& z) {
+            ar.value("id", z.id);
+            ar.text("crop", z.crop);
+            ar.list("cells", z.cells, [&](CellPos& c) { saveCell(ar, c); });
+        });
+        ar.value("sown", d.farming.stats.sown);
+        ar.value("harvested", d.farming.stats.harvested);
+        ar.value("frostKilled", d.farming.stats.frostKilled);
+        ar.value("heatKilled", d.farming.stats.heatKilled);
     });
     ar.section("temperature", 1, [&] {
         ar.list("roomTemperatures", d.roomTemperatures, [&](RoomTemperature& t) {
@@ -2392,6 +2450,10 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "apparel", e, &SaveEntity::apparel, [&](SaveApparel& a) { saveApparelPart(ar, a); });
         ar.value("nextOutfitId", d.nextOutfitId);
         ar.list("outfits", d.outfits, [&](OutfitPolicy& o) { saveOutfitPolicy(ar, o); });
+    });
+    ar.section("weapons", 1, [&] {
+        saveParts(ar, "stowed", e, &SaveEntity::stowed, [&](std::vector<Entity>& items) { saveStowedPart(ar, items); });
+        saveParts(ar, "switch", e, &SaveEntity::weaponSwitch, [&](WeaponSwitch& w) { saveWeaponSwitchPart(ar, w); });
     });
     ar.section("feel", 1, [&] {
         saveParts(ar, "kick", e, &SaveEntity::kick, [&](RecoilKick& k) { saveKickPart(ar, k); });
@@ -2532,6 +2594,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.wildAnimals = sim.settings_.wildAnimals;
     d.animals = sim.animals_->saved();
     d.husbandry = sim.husbandry_->saved();
+    d.farming = sim.farming_->saved();
     d.breeding = sim.breeding_->saved();
     d.seconds = sim.time_.seconds;
     d.rngState = sim.rng_.state();
@@ -2745,6 +2808,12 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const DodgeRoll* roll = reg.try_get<DodgeRoll>(e)) {
             out.roll = *roll;
+        }
+        if (const Gear* gear = reg.try_get<Gear>(e); gear != nullptr && !gear->stowed.empty()) {
+            out.stowed = gear->stowed;
+        }
+        if (const WeaponSwitch* change = reg.try_get<WeaponSwitch>(e)) {
+            out.weaponSwitch = *change;
         }
         if (const Animal* animal = reg.try_get<Animal>(e)) {
             out.animal = *animal;
@@ -3214,6 +3283,16 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.roll) {
             reg.emplace<DodgeRoll>(entity, *e.roll);
         }
+        if (e.stowed) {
+            if (!reg.all_of<Gear>(entity)) {
+                error = "the save has carried weapons on a pawn without gear";
+                return false;
+            }
+            reg.get<Gear>(entity).stowed = *e.stowed;
+        }
+        if (e.weaponSwitch) {
+            reg.emplace<WeaponSwitch>(entity, *e.weaponSwitch);
+        }
         if (e.joy) {
             reg.emplace<Joy>(entity, e.joy->joy);
             if (!e.joy->activity.empty()) {
@@ -3280,6 +3359,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         return false;
     }
     sim.breeding_->restore(d.breeding);
+    if (!sim.farming_->restore(d.farming, error)) {
+        return false;
+    }
     sim.health_->refreshAll();
     for (const SaveEntity& e : d.entities) {
         if (e.position && !things.relink(static_cast<Entity>(e.id))) {
@@ -3296,6 +3378,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             const Gear& gear = reg.get<Gear>(static_cast<Entity>(e.id));
             gearExists = exists(gear.weapon);
             for (const Entity a : gear.apparel) {
+                gearExists = gearExists && a != kNoEntity && reg.valid(a);
+            }
+            for (const Entity a : gear.stowed) {
                 gearExists = gearExists && a != kNoEntity && reg.valid(a);
             }
         }

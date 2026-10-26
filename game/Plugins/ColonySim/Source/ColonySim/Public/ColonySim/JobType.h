@@ -31,6 +31,7 @@ enum class JobType : uint8_t {
     SlaughterAnimal,   // walk to a marked tame animal and kill it
     FeedAnimal,        // fetch animal food and carry it to a hungry tame animal
     GatherAnimal,      // walk to a tame animal with full milk or wool and milk or shear it (docs/design/breeding.md)
+    SowCrop,           // walk next to a cell of a growing zone and sow the zone's crop (docs/design/farming.md)
     BedRest,           // go to a bed and lie in it until the injuries have healed (docs/design/medicine.md)
     TendPatient,       // fetch medicine, walk to a patient and tend its injuries (docs/design/medicine.md)
     Rescue,            // carry a downed colonist to a bed (docs/design/medicine.md)

@@ -77,6 +77,8 @@ struct MeleeRules {
     float penetrationPerDamage = 0.015f;  // a tool's armor penetration when it gives none
     std::vector<std::string> chargeTraits = {"Brawler"};
     float bodyReach = 0.85f;          // metres from the pawn's centre that fists, teeth and claws reach
+    float animalReachBase = 0.65f;    // an animal's teeth and claws reach this plus animalReachPerRoot times the root of its body size (N5)
+    float animalReachPerRoot = 0.4f;
     float defaultWeaponReach = 1.2f;  // a melee weapon not in weaponReach
     float shoulderBelowEye = 0.25f;   // the strike starts this far below the eyes
     float strikeDepth = 0.35f;        // and goes this far past the point it aims at

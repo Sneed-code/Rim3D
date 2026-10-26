@@ -116,6 +116,12 @@ struct ThingView {
     float rollDirX = 0.0f;
     float rollDirY = 0.0f;
     bool hitProof = false;
+    // Several weapons (P1, docs/design/weapons.md): the weapon def carried in each slot (Primary, Sidearm, Melee;
+    // invalid for none), in the hands or on the body, and while the pawn switches the slot it switches to and
+    // the steps left (255 and 0 when it does not).
+    DefId carried[3];
+    uint8_t switchSlot = 255;
+    int switchStepsLeft = 0;
     // Pawns (docs/design/explosives.md): grenades on the belt, steps until the next throw can start
     // (0: ready), and whether a blast has thrown the pawn to the ground (it lies prone meanwhile).
     int grenades = 0;
@@ -153,6 +159,10 @@ struct ThingView {
     // `asleep` and `faction` (100 for wild) are filled for them too.
     int lifeStage = -1;
     float bodySize = 0.0f;
+    // Animals in fights (docs/design/animal-fights.md): 0 calm, 1 hunting a pawn, 2 avenging a hurt, 3 manhunter;
+    // `animalMode` is the AnimalMode number (running, chasing, fighting, eating a kill are the last five).
+    int animalTemper = 0;
+    int animalMode = 0;
     // Animals and husbandry (docs/design/husbandry.md): marked to be tamed (wild) or slaughtered (tame), the animal zone it
     // stays in (0 none), and the tricks it has learned and that are wanted, a bit per Trainable (Obedience 1, Release 2,
     // Rescue 4, Haul 8). A tame animal's `faction` is the player's.
@@ -272,6 +282,14 @@ struct AnimalZoneView {
     bool pen = false;
 };
 
+// One growing zone (C13): `cellCount` cells from Snapshot::growingZoneCells[firstCell], growing `crop`.
+struct GrowingZoneView {
+    uint32_t id = 0;
+    DefId crop;
+    uint32_t firstCell = 0;
+    uint32_t cellCount = 0;
+};
+
 // An enclosed room (docs/design/rooms.md); the outdoors is not listed. Ids are good until the next
 // change to the walls.
 struct RoomView {
@@ -368,6 +386,8 @@ struct Snapshot {
     std::vector<CellPos> zoneCells;        // the zones' cells, see ZoneView
     std::vector<AnimalZoneView> animalZones;  // animal zones and pens (N3)
     std::vector<CellPos> animalZoneCells;     // their cells, see AnimalZoneView
+    std::vector<GrowingZoneView> growingZones;  // growing zones (C13)
+    std::vector<CellPos> growingZoneCells;      // their cells, see GrowingZoneView
     std::vector<DesignationView> designations;  // every mark, in cell order
     std::vector<RoomView> rooms;           // enclosed rooms, by id
     float outdoorTemperature = 0.0f;       // degrees Celsius

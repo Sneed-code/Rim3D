@@ -7,6 +7,7 @@
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/WeaponSlot.h"
 #include "ColonySim/Zones.h"
 
 #include <cstdint>
@@ -531,6 +532,41 @@ struct RearmTrapCommand {
     Entity trap = kNoEntity;
 };
 
+// Several weapons (task P1, docs/design/weapons.md): adds a weapon to what the pawn carries, in the hands
+// if they are empty, else on the body; the weapon carried in its slot is dropped. The item may lie on the
+// map. Fails if the pawn has no body or is dead, or the item is no weapon or is someone else's.
+struct CarryWeaponCommand {
+    Entity pawn = kNoEntity;
+    Entity item = kNoEntity;
+};
+
+// Switches to the weapon carried in `slot`: it takes a while (CombatRules `weaponSwitchSteps`) in which the
+// pawn can't shoot, reload or swing, then the weapon is in the hands and the old one on the body. Fails if
+// nothing is carried in that slot, it is in the hands already, or the pawn is downed, rolling, mid-shot,
+// mid-swing or switching already.
+struct SwitchWeaponCommand {
+    Entity pawn = kNoEntity;
+    WeaponSlot slot = WeaponSlot::Primary;
+};
+
+// Growing zones (task C13, docs/design/farming.md). CreateGrowingZone paints a zone with `crop` (a Things def of a
+// sowable plant, like "Plant_Rice") over the cells of `area` that are soil, free and in no zone; fails if there are none.
+struct CreateGrowingZoneCommand {
+    CellRect area;
+    std::string crop;
+};
+
+// Takes the cells of `area` out of their growing zones; an emptied zone is deleted. Fails if none was in a zone.
+struct RemoveGrowingZoneCellsCommand {
+    CellRect area;
+};
+
+// Changes the crop of a growing zone; plants of the old crop are cut and replaced as colonists get to them.
+struct SetGrowingZoneCropCommand {
+    uint32_t zone = 0;
+    std::string crop;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -548,7 +584,9 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SetOutfitCommand, EditOutfitCommand, AddOutfitCommand, RemoveOutfitCommand,
                              StripCommand, SetWeatherCommand, MarkAnimalCommand, SetTrainingCommand,
                              CreateAnimalZoneCommand, RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand,
-                             SpendTalentPointCommand, AddTalentXpCommand, RearmTrapCommand, SetMedicalCareCommand>;
+                             SpendTalentPointCommand, AddTalentXpCommand, RearmTrapCommand,
+                             CarryWeaponCommand, SwitchWeaponCommand, CreateGrowingZoneCommand,
+                             RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, SetMedicalCareCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.
