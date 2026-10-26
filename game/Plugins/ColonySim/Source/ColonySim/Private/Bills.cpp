@@ -123,6 +123,7 @@ BillSystem::BillSystem(Things& things, const DefDatabase& defs) : things_(things
             recipe.ingredients.push_back(std::move(ingredient));
         }
         recipe.butcher = def.has("butcher");
+        recipe.fuelUsesSet = static_cast<int>(def.integer("fuelUses", 0));
         recipe.stuffFromIngredient = def.flag("productsMadeOfIngredient") || def.flag("productStuffFromIngredient");
         for (const std::string& name : def.keys("products")) {
             const DefId item = defs_.idOf("Things", name);

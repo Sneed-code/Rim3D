@@ -8,6 +8,7 @@
 #include "ColonySim/Combat.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Hash.h"
+#include "ColonySim/Inspirations.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
@@ -376,7 +377,11 @@ void PrisonerSystem::interact(Entity warden, Entity prisoner) {
     // The roll comes from the second and the two pawns, so who talks first can't change it.
     Rng roll(splitMix64(static_cast<uint64_t>(now()) ^ (static_cast<uint64_t>(entt::to_integral(warden)) << 32) ^
                         static_cast<uint64_t>(entt::to_integral(prisoner)) ^ 0x7265637275ULL));
-    if (roll.unit() < recruitChance(prisoner)) {
+    float chance = recruitChance(prisoner);
+    if (inspirations_ != nullptr) {
+        chance = std::min(1.0f, chance * inspirations_->takeRecruitFactor(warden));
+    }
+    if (roll.unit() < chance) {
         recruit(prisoner, warden);
     } else {
         emit(EventType::PrisonerChatted, warden, prisoner, p.resistance, "recruit failed");

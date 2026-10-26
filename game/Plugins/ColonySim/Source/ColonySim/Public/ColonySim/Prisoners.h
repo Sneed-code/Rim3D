@@ -16,6 +16,7 @@ namespace colony {
 class CombatSystem;
 class FighterSystem;
 class HealthSystem;
+class InspirationSystem;
 class JobSystem;
 class Map;
 class RaidSystem;
@@ -143,6 +144,9 @@ public:
     // Freed prisoners that reach the map edge leave it. Runs once a step, after the fighters.
     void step();
 
+    // A warden's inspired recruitment gives its next attempt a better chance (docs/design/inspirations.md).
+    void setInspirations(InspirationSystem* inspirations) { inspirations_ = inspirations; }
+
     // After a prisoner or bed is destroyed (or a pawn leaves): nothing to do now, kept for symmetry with the other systems.
     void hashThing(Entity e, StateHasher& h) const;
 
@@ -158,6 +162,7 @@ private:
     HealthSystem& health_;
     JobSystem& jobs_;
     FighterSystem& fighters_;
+    InspirationSystem* inspirations_ = nullptr;
     RaidSystem& raids_;
     const DefDatabase& defs_;
     const GameTime& time_;
