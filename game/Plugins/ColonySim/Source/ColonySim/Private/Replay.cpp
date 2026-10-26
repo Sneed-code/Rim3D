@@ -308,6 +308,12 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["item"] = entt::to_integral(c.item);
+            } else if constexpr (std::is_same_v<Type, SetNarratorCommand>) {
+                j["narrator"] = c.narrator;
+                j["difficulty"] = c.difficulty;
+            } else if constexpr (std::is_same_v<Type, FireIncidentCommand>) {
+                j["incident"] = c.incident;
+                j["points"] = c.points;
             } else if constexpr (std::is_same_v<Type, SwitchWeaponCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["slot"] = static_cast<int>(c.slot);
@@ -1105,6 +1111,18 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = c;
+    } else if (type == "SetNarrator") {
+        SetNarratorCommand c;
+        if (!r.text(j, "narrator", c.narrator, where) || !r.text(j, "difficulty", c.difficulty, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "FireIncident") {
+        FireIncidentCommand c;
+        if (!r.text(j, "incident", c.incident, where) || !r.number(j, "points", c.points, where)) {
+            return false;
+        }
+        out.command = std::move(c);
     } else if (type == "SetGrowingZoneCrop") {
         SetGrowingZoneCropCommand c;
         if (!r.integer(j, "zone", c.zone, where) || !r.text(j, "crop", c.crop, where)) {
