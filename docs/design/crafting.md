@@ -101,3 +101,7 @@ stream and the `StoreIn` marks.
 - "Count only what lies in this stockpile", "take from this stockpile only" and a per-bill ingredient quality
   filter (the bill's `disallowed` list is by item def).
 - The electric tailor bench's `unpoweredWorkSpeedFactor` (an unpowered bench does nothing).
+
+## Fuel per run and long-lasting foods
+
+A stove burns `fuel.perUse` wood per product, unless the recipe has `fuelUses`: then the run burns that many uses. `MakeKibble` (50 kibble), `MakePemmican` (16) and `CookMealSurvival` (1) have `fuelUses: 1`. Pemmican keeps 150 days, the packaged survival meal 60, kibble 50 (simple meal 4); rot follows `docs/design/spoilage.md`. `Pemmican` research unlocks its recipe.
