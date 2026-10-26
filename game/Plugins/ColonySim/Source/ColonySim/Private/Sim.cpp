@@ -211,6 +211,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         const PawnGenes* genes = genesOf(pawn);
         return genes != nullptr ? geneStat(*genes, "flammability", 1.0f) : 1.0f;
     });
+    fire_->setPawnHurt([this](Entity pawn, DefId type, float amount, Rng& rng) { return combat_->hurtPawn(pawn, type, amount, rng); });
     jobs_->setFire(fire_.get());
     jobs_->fuel().setLights(lights_.get());
     // A wood-fired generator makes power only with fuel, and burns it only while it makes power.
@@ -254,6 +255,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         jobs_->forget(thing);
         raids_->forget(thing);
         defense_->onDestroy(thing);
+        fire_->onDestroy(thing);
         mentalBreaks_->forget(thing);
     });
     fighters_->setWeather(weather_.get());
@@ -274,6 +276,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         raids_->forget(thing);
         mentalBreaks_->forget(thing);
     });
+    fire_->setRunning([this](Entity building) { return power_->running(building); });
     defense_->setOnLearn([this](Entity pawn) { fighters_->replan(pawn); });
     fighters_->setDefense(defense_.get());
     social_ = std::make_unique<SocialSystem>(*things_, *rooms_, *health_, *melee_, *mood_, *jobs_, *defs_, time_,
