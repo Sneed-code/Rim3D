@@ -104,7 +104,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | M1 | **Upper levels.** Sparse storage for levels above the ground (about 3 m each); a floor on level 1 is the roof of level 0; building on an upper level needs support below (walls or columns); regions and rooms per level. Every interface already takes a level (`CellPos`); this fills them in. | Cloud | Opus, high | 120 min | S7 |
 | ✓ | M2 | **Stairs and ladders.** Buildings that link two levels; upper floors built with work and materials (M1 lays them instantly); region links and reachability across levels; the region-graph search and cell paths climb them; climbing speed; doors and stockpiles on upper levels. | Cloud | Opus, high | 90 min | M1 |
-| | M3 | **Roof support and collapse.** RimWorld's roof support range, collapse when support is lost (falling roof damage), overhead mountain collapse when mining under thick roof, upper floors that fall when the walls under them go. | Cloud | Sonnet, high | 90 min | M1 |
+| ✓ | M3 | **Roof support and collapse.** RimWorld's roof support range, collapse when support is lost (falling roof damage), overhead mountain collapse when mining under thick roof, upper floors that fall when the walls under them go. | Cloud | Sonnet, high | 90 min | M1 |
 | | M4 | **Two-storey scenario test.** Colonists build a two-storey house with stairs, sleep upstairs and haul up and down for 3 days; `simrun --png` per level. In CI. | Cloud | Sonnet, high | 60 min | M2, M3 |
 
 ### Colony life (C)

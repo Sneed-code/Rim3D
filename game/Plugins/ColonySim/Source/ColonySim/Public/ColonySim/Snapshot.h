@@ -431,6 +431,9 @@ struct Snapshot {
     // (`Map::roof` says which).
     std::vector<CellPos> roofCells;
     uint64_t roofChanges = 0;
+    // How many roofs and floors have fallen (M3): when it goes up, redraw the mountain's roof and the upper floors
+    // (`Map::roof`, `Map::upperFloorCells`).
+    uint64_t roofCollapses = 0;
     std::vector<ProjectileView> projectiles;  // sorted by id
     std::vector<PawnLooksView> looks;      // see ThingView::looks
     std::vector<PowerNetView> powerNets;   // by id - 1, see ThingView::powerNet

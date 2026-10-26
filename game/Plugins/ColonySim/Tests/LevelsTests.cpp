@@ -320,13 +320,14 @@ TEST_CASE("Levels: a floor over a room is its roof, and walls on the floor make 
     LEVELS_REQUIRE(up != nullptr);
     CHECK(up->enclosed());
 
-    // Take a wall up there away: the upper room opens to the ledge and the air, its roof goes.
+    // Take a wall up there away: the upper room opens to the ledge and the air. Its roof stays up, as
+    // the other walls still hold it (M3).
     sim->things().destroy(sim->map().buildingAt(CellPos{16, 13, 1}));
     sim->rooms().update();
     up = sim->rooms().roomOf(CellPos{13, 13, 1});
     LEVELS_REQUIRE(up != nullptr);
     CHECK(up->outdoors());
-    CHECK(sim->rooms().thinRoofCells().empty());
+    CHECK(sim->rooms().thinRoofCells().size() == 49);
     CHECK(sim->map().roof(CellPos{13, 13, 0}) == Roof::Thin);  // the floor still roofs the room below
 }
 

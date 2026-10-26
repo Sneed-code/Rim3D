@@ -118,6 +118,18 @@ public:
     const std::vector<CellPos>& thinRoofCells() const { return thinCells_; }
     uint64_t roofChanges() const { return roofChanges_; }
 
+    // Cells whose thin roof went when its last holder (a wall, a column) in reach was lost, since the
+    // last call (M3: RoofCollapse drops them and hurts what is under them). A roof that only came off
+    // because its room was opened, with a holder still in reach, does not count. In cell order.
+    std::vector<CellPos> takeUnsupportedRoofs();
+    // Puts back what takeUnsupportedRoofs would have said, for a loaded save.
+    void restoreUnsupportedRoofs(std::vector<CellPos> cells) { unsupported_ = std::move(cells); }
+    const std::vector<CellPos>& unsupportedRoofs() const { return unsupported_; }
+    // Puts back the thin roofs of a loaded save (cells in `thinRoofCells` order), before the first
+    // update: since M3 a roof stays while a holder is in reach, so it is no longer worked out from the
+    // walls alone. False, and nothing changed, if a cell is off the map.
+    bool restoreThinRoofs(const std::vector<CellPos>& cells);
+
     uint64_t rebuilds() const { return rebuilds_; }
 
 private:
@@ -143,6 +155,7 @@ private:
     std::vector<uint32_t> firstRegion_;  // per room, into roomRegions_ (rooms_.size() + 1 entries)
     std::vector<CellPos> cells_;
     std::vector<CellPos> thinCells_;
+    std::vector<CellPos> unsupported_;  // thin roofs that lost their support, until RoofCollapse takes them
 };
 
 }  // namespace colony
