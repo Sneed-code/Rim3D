@@ -79,6 +79,7 @@ struct Health {
     std::vector<EnvironmentHediff> environment;  // by def id, only those above 0
     bool dead = false;
     DeathCause cause = DeathCause::None;
+    Entity lastAttacker = kNoEntity;  // who last hurt it (section "health" 4 on); named as the killer if it dies of its wounds
 
     // ---- Derived. Never saved or hashed.
     float stageHp = 1.0f;        // young animals: the life stage's healthScaleFactor, set by AnimalSystem (N4 leftovers)
@@ -162,13 +163,14 @@ public:
     // `rng`; penetrating types can then go in to an organ or bone under it (and the outside part
     // over it is hurt too). Returns false, and changes nothing, if the pawn has no tracked health,
     // is dead, the type is unknown, or the part is missing or doesn't exist.
-    bool applyDamage(Entity pawn, DefId damageType, float amount, int part, Rng& rng);
+    // `attacker` (a pawn, or none) is remembered as the one who last hurt it: the killer in PawnDied.
+    bool applyDamage(Entity pawn, DefId damageType, float amount, int part, Rng& rng, Entity attacker = kNoEntity);
     DefId damageTypeId(const std::string& name) const;
 
     // Damage to exactly this part, after the hit has been aimed (combat picks the part from a
     // hitbox and goInside): as a random hit there would be, an inside part also hurts the outside
     // part over it. Same failures as applyDamage.
-    bool applyHit(Entity pawn, DefId damageType, float amount, int part);
+    bool applyHit(Entity pawn, DefId damageType, float amount, int part, Entity attacker = kNoEntity);
     // Where a hit on `part` ends up if the damage type reaches inside: an organ or bone under it,
     // by coverage, as applyDamage's random hits do. `part` itself if not.
     int goInside(Entity pawn, DefId damageType, int part, Rng& rng) const;
@@ -239,10 +241,10 @@ private:
     void derive(int body, float healthScale, Health& health, DeathCause& cause, bool& shouldBeDown, float painShockOffset = 0.0f) const;
     void recompute(Entity pawn, Health& health, bool announce);
     void emit(EventType type, Entity pawn, DefId def = DefId{}, int part = -1, float amount = 0.0f,
-              const char* message = nullptr);
+              const char* message = nullptr, Entity target = kNoEntity);
     void stopWalking(Entity pawn);
     void die(Entity pawn, Health& health, DeathCause cause, bool announce);
-    bool hitPart(Entity pawn, DefId damageType, float amount, int target, bool hurtOuter);
+    bool hitPart(Entity pawn, DefId damageType, float amount, int target, bool hurtOuter, Entity attacker);
     bool damagePart(Entity pawn, Health& health, int part, DefId hediff, float amount);
     void destroyPart(Entity pawn, Health& health, int part, float amount);
     void leaveScar(Entity pawn, Health& health, const Injury& healed, Rng& rng);

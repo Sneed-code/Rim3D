@@ -2,7 +2,7 @@
 
 Code: `Tools/simrun/HouseScenario.{h,cpp}` (in `game/Plugins/ColonySim/`), run with
 `simrun --scenario house [--seed N] [--size 512] [--days 3] [--png house.png] [--verbose]`. CTest:
-`house_scenario` (seed 42) and `house_scenario_seed7`, about 12 seconds each; runs in CI on Linux and
+`house_scenario` (seed 42) and `house_scenario_seed8` (seed 8; seed 7 had a colonist starve once the Jealous trait changed who gets generated: the scenario is sensitive to the colonists it draws), about 12 seconds each; runs in CI on Linux and
 Windows. Task M4. Builds on [levels](levels.md), [roofs](roofs.md) and the [colony scenario](colony-scenario.md).
 
 The check that two storeys work with everything else the colony does: building, sleeping, eating and

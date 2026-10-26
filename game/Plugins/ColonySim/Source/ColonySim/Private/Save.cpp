@@ -148,6 +148,7 @@ struct SaveHealth {
     std::vector<SaveEnvironmentHediff> environment;  // health section 2 on
     bool dead = false;
     DeathCause cause = DeathCause::None;
+    Entity lastAttacker = kNoEntity;  // health section 4 on
 };
 
 // An item's rot and wear and what a meal was cooked from, by defName (section "spoilage").
@@ -1472,6 +1473,9 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
     ar.value("dead", h.dead);
     ar.value("cause", h.cause);
     ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Slaughtered), "the save file has a bad cause of death");
+    if (ar.sectionVersion() >= 4) {
+        ar.value("lastAttacker", h.lastAttacker);
+    }
 
 }
 
@@ -2454,7 +2458,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("colonists", 2, [&] {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
-    ar.section("health", 3, [&] {
+    ar.section("health", 4, [&] {
         saveParts(ar, "health", e, &SaveEntity::health, [&](SaveHealth& h) { saveHealthPart(ar, h); });
     });
     ar.section("control", 1, [&] {
@@ -3035,6 +3039,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             }
             saved.dead = health->dead;
             saved.cause = health->cause;
+            saved.lastAttacker = health->lastAttacker;
             out.health = std::move(saved);
         }
         if (const Posture* posture = reg.try_get<Posture>(e)) {
@@ -3505,6 +3510,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                       [](const EnvironmentHediff& a, const EnvironmentHediff& b) { return a.def.value < b.def.value; });
             health.dead = e.health->dead;
             health.cause = e.health->cause;
+            health.lastAttacker = e.health->lastAttacker;
             const int parts = e.thing ? sim.health_->partCount(reg.get<Thing>(entity).def) : 0;
             for (const Injury& injury : health.injuries) {
                 if (injury.part >= parts) {

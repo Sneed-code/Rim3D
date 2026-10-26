@@ -1377,7 +1377,7 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
                 return;
             }
             emitHit(projectile, p, h, result.amount);
-            health_.applyHit(hit.thing, result.damageType, result.amount, result.part);
+            health_.applyHit(hit.thing, result.damageType, result.amount, result.part, p.launcher);
             wearApparel(hit.thing, result);
             if (p.launcher != kNoEntity) {
                 noteHurt(hit.thing, p.launcher);

@@ -747,7 +747,7 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
             }
         } else if (hit.part < 0) {
             Rng rng(splitMix64(m.seed ^ 0xB0D7ULL));
-            health_.applyDamage(victim, tool->damageType, tool->power, -1, rng);
+            health_.applyDamage(victim, tool->damageType, tool->power, -1, rng, pawn);
             e.message = "hit";
             e.amount = tool->power;
             ++hits_;
@@ -768,7 +768,7 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
                 events_->push_back(e);
             }
             if (!result.deflected) {
-                health_.applyHit(victim, result.damageType, result.amount, result.part);
+                health_.applyHit(victim, result.damageType, result.amount, result.part, pawn);
             }
             combat_.wearApparel(victim, result);
             if (!result.deflected) {

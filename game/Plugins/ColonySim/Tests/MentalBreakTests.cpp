@@ -521,3 +521,56 @@ TEST_CASE("Mental breaks: the break commands replay to the same game") {
     CHECK(replayed.stateHash() == sim.stateHash());
     CHECK(checkReplay(loaded, replayed).matched());
 }
+
+TEST_CASE("Mental breaks: a gourmand's only minor break is the food binge") {
+    Sim sim = breakSim();
+    const Entity gourmand = breakColonist(sim, CellPos{10, 24, 0});
+    const Entity plain = breakColonist(sim, CellPos{30, 24, 0});
+    sim.things().registry().get<Colonist>(gourmand).traits.push_back(TraitRecord{"Gourmand", 0});
+    sim.step();
+    BreakLog log;
+    // A minor-break mood, no food anywhere: the plain one wanders sadly, the gourmand has nothing to binge on.
+    for (int64_t i = 0; i < 12 * 86400; ++i) {
+        for (const Entity pawn : {gourmand, plain}) {
+            breakMood(sim, pawn).level = sim.mentalBreaks().active(pawn) ? 90.0f : 25.0f;
+            sim.things().registry().get<Needs>(pawn).food = 1.0f;
+        }
+        breakRun(sim, log, 1);
+    }
+    int plainBreaks = 0;
+    for (const Event& e : log.events) {
+        if (e.type == EventType::PawnMentalBreak) {
+            CHECK(e.thing == plain);
+            plainBreaks += e.thing == plain ? 1 : 0;
+        }
+    }
+    CHECK(plainBreaks >= 1);
+}
+
+TEST_CASE("Mental breaks: a pyromaniac starts fires now and then even in a good mood") {
+    Sim sim = breakSim();
+    const Entity pyro = breakColonist(sim, CellPos{24, 24, 0});
+    const Entity plain = breakColonist(sim, CellPos{12, 24, 0});
+    sim.things().registry().get<Colonist>(pyro).traits.push_back(TraitRecord{"Pyromaniac", 0});
+    sim.things().spawn("Table", CellPos{28, 24, 0});
+    sim.mentalBreaks().setPyromaniacMeanDays(0.05);
+    sim.step();
+    BreakLog log;
+    for (int64_t i = 0; i < 86400 && sim.fire().started() == 0; ++i) {
+        for (const Entity pawn : {pyro, plain}) {
+            breakMood(sim, pawn).level = sim.mentalBreaks().active(pawn) ? 90.0f : 70.0f;
+            sim.things().registry().get<Needs>(pawn).food = 1.0f;
+        }
+        breakRun(sim, log, 1);
+    }
+    const Event* started = log.first(EventType::PawnMentalBreak);
+    BREAK_REQUIRE(started != nullptr);
+    CHECK(started->thing == pyro);
+    CHECK(started->message == "FireSpree");
+    CHECK(sim.fire().started() > 0);
+    for (const Event& e : log.events) {
+        if (e.type == EventType::PawnMentalBreak) {
+            CHECK(e.thing == pyro);
+        }
+    }
+}

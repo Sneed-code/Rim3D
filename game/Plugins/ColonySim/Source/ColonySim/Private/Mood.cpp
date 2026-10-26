@@ -1,3 +1,4 @@
+#include "ColonySim/Looks.h"
 #include "ColonySim/Mood.h"
 
 #include "ColonySim/Clock.h"
@@ -399,6 +400,32 @@ void MoodSystem::remember(Entity pawn, const std::string& trigger, int64_t now) 
     entt::registry& reg = things_.registry();
     if (Mood* mood = reg.valid(pawn) ? reg.try_get<Mood>(pawn) : nullptr) {
         addMemory(*mood, trigger, now);
+    }
+}
+
+void MoodSystem::noteKills(int64_t now, const std::vector<Event>& events) {
+    entt::registry& reg = things_.registry();
+    static const char* const kStages[] = {"KilledBloodlust1", "KilledBloodlust2", "KilledBloodlust3"};
+    for (const Event& event : events) {
+        if (event.type != EventType::PawnDied || !reg.valid(event.thing) || event.target == kNoEntity || event.target == event.thing ||
+            !reg.valid(event.target) || !reg.all_of<Mood>(event.target) || !hasTrait(event.target, "Bloodlust")) {
+            continue;
+        }
+        // Only people count, not animals.
+        if (!reg.all_of<PawnLooks>(event.thing) && !reg.all_of<Colonist>(event.thing)) {
+            continue;
+        }
+        Mood& mood = reg.get<Mood>(event.target);
+        // Each kill moves one stage up; the earlier stage is replaced.
+        size_t stage = 0;
+        for (size_t i = 0; i < 3; ++i) {
+            const auto it = std::find_if(mood.memories.begin(), mood.memories.end(), [&](const Memory& m) { return m.def == kStages[i]; });
+            if (it != mood.memories.end()) {
+                stage = std::min<size_t>(i + 1, 2);
+                mood.memories.erase(it);
+            }
+        }
+        addMemory(mood, kStages[stage], now);
     }
 }
 

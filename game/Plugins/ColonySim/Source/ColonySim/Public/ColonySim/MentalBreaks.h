@@ -76,6 +76,7 @@ struct COLONY_API MentalBreakRules {
     int64_t minSecondsBetween = 24 * 3600;
     float recoveryMargin = 0.1f;  // of the 0 to 100 scale, above the threshold
     bool restOnlyWhenAwake = true;
+    double pyromaniacMeanDays = 50.0;  // a pyromaniac's extra fire-starting break at any mood; 0 for never
     // Behaviour (all ours but the interval).
     int checkEvery = 216;  // game seconds between a pawn's chances; RimWorld's 150 ticks
     int wanderRadius = 15;
@@ -115,6 +116,8 @@ public:
     void setEventLog(std::vector<Event>* events) { events_ = events; }
     // Whether colonists snap by themselves (default yes). Off for tests of something else that run for days.
     void setNatural(bool natural) { natural_ = natural; }
+    // Tests make the pyromaniac's extra fire-starting break (`MentalBreakRules::pyromaniacMeanDays`) common.
+    void setPyromaniacMeanDays(double days) { rules_.pyromaniacMeanDays = days; }
 
     // Berserk fights with F8's melee (the pawn's weapon or fists, real swings, dodges and blocks); without
     // it, or against a thing that isn't a pawn, it punches as before.

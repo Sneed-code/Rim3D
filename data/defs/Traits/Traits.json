@@ -113,6 +113,10 @@
     "degreeDatas": [{ "degree": 0, "label": "greedy", "moodWithoutBedroom": -8 }]
   },
   {
+    "defName": "Jealous", "parent": "TraitBase", "commonality": 0.5,
+    "degreeDatas": [{ "degree": 0, "label": "jealous", "moodWithoutBestBedroom": -8 }]
+  },
+  {
     "defName": "Pyromaniac", "parent": "TraitBase", "commonality": 0.8, "disabledWorkTags": ["Firefighting"],
     "degreeDatas": [{ "degree": 0, "label": "pyromaniac", "statOffsets": { "marketValue": -0.2 } }]
   },

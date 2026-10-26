@@ -276,6 +276,27 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         }
         return rooms_->roleAt(cellOf(things_->registry().get<Position>(bed))) == RoomRole::Bedroom ? -1 : 0;
     });
+    // A jealous colonist wants the best bedroom of the colony: unhappy while another colonist's bedroom
+    // is more impressive than its own (none counts as worse than any).
+    constexpr float kNoBedroom = -1.0e9f;
+    const auto bedroomImpressiveness = [this](Entity pawn) {
+        const Entity bed = jobs_->bedOf(pawn);
+        if (bed == kNoEntity || !things_->registry().all_of<Position>(bed)) {
+            return kNoBedroom;
+        }
+        const CellPos at = cellOf(things_->registry().get<Position>(bed));
+        const RoomStatValues* stats = rooms_->roleAt(at) == RoomRole::Bedroom ? roomStats_->statsAt(at) : nullptr;
+        return stats != nullptr ? std::floor(stats->impressiveness) : kNoBedroom;
+    };
+    mood_->addSituation("worseBedroom", [this, bedroomImpressiveness](Entity pawn) {
+        const float own = bedroomImpressiveness(pawn);
+        for (const Entity other : things_->registry().view<Colonist>()) {
+            if (other != pawn && fighters_->factionOf(other) == kPlayerFaction && bedroomImpressiveness(other) > own) {
+                return 0;
+            }
+        }
+        return -1;
+    });
     // A brawler is unhappy with a gun in hand (docs/design/traits.md).
     mood_->addSituation("wieldsRanged", [this](Entity pawn) {
         const Gear* gear = things_->registry().try_get<Gear>(pawn);
@@ -1207,6 +1228,7 @@ void Sim::step() {
         }
     }
     apparel_->step(time_.seconds, rng_, events_);
+    mood_->noteKills(time_.seconds, events_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     rooms_->update();
     roofCollapse_->step(rng_);  // roofs and floors that lost their holders fall
@@ -2045,6 +2067,9 @@ uint64_t Sim::stateHash() const {
             h.add(health->bloodLoss);
             h.add(health->dead);
             h.add(static_cast<int>(health->cause));
+            if (health->lastAttacker != kNoEntity) {
+                h.add(static_cast<uint64_t>(entt::to_integral(health->lastAttacker)));
+            }
         }
         medicine_->hashPawn(e, h);
         combat_->hashThing(e, h);

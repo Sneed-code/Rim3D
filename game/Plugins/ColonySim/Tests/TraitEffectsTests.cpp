@@ -6,6 +6,8 @@
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Random.h"
+#include "ColonySim/RoomStats.h"
+#include "ColonySim/Rooms.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Skills.h"
 #include "ColonySim/Things.h"
@@ -219,4 +221,84 @@ TEST_CASE("Trait effects: an ascetic does not care about a table or the quality 
     CHECK(!traitFxHas(*sim, ascetic, "AteLavishMeal"));
     CHECK(traitFxHas(*sim, plain, "AteWithoutTable"));
     CHECK(traitFxHas(*sim, plain, "AteLavishMeal"));
+}
+
+TEST_CASE("Trait effects: the killer is named in the death, and a bloodlusty one is pleased") {
+    auto sim = traitFxSim();
+    const Entity killer = traitFxPawn(*sim, CellPos{10, 10, 0}, "Bloodlust");
+    const Entity calm = traitFxPawn(*sim, CellPos{12, 10, 0});
+    sim->step();  // the moods start
+    Rng rng(3);
+    const DefId bullet = sim->health().damageTypeId("Bullet");
+    std::vector<Entity> victims;
+    for (int i = 0; i < 4; ++i) {
+        victims.push_back(traitFxPawn(*sim, CellPos{20 + 3 * i, 20, 0}));
+    }
+    // Hunger kills nobody's killer.
+    // (Damage dealt outside a step puts its events in the list the next step clears, so the mood system is handed the list here.)
+    CHECK(sim->health().kill(victims[3], DeathCause::Starvation));
+    int deaths = 0;
+    for (const Event& e : sim->events()) {
+        if (e.type == EventType::PawnDied) {
+            ++deaths;
+            CHECK(e.thing == victims[3]);
+            CHECK(e.target == kNoEntity);
+        }
+    }
+    CHECK(deaths == 1);
+    CHECK(!traitFxHas(*sim, killer, "KilledBloodlust1"));
+
+    const float expected[] = {12.0f, 24.0f, 37.0f};
+    for (int i = 0; i < 2; ++i) {
+        // A bystander's shot does not count for the killer, who finishes the victim off.
+        CHECK(sim->health().applyDamage(victims[static_cast<size_t>(i)], bullet, 500.0f, 0, rng, i == 0 ? calm : killer));
+        bool died = false;
+        for (const Event& e : sim->events()) {
+            if (e.type == EventType::PawnDied && e.thing == victims[static_cast<size_t>(i)]) {
+                died = true;
+                CHECK(e.target == (i == 0 ? calm : killer));
+            }
+        }
+        CHECK(died);
+        sim->mood().noteKills(sim->time().seconds, sim->events());
+        sim->step();  // clears the list
+    }
+    CHECK(traitFxThought(*sim, killer, "KilledBloodlust1") == doctest::Approx(expected[0]));
+    CHECK(!traitFxHas(*sim, calm, "KilledBloodlust1"));
+    CHECK(sim->health().applyDamage(victims[2], bullet, 500.0f, 0, rng, killer));
+    sim->mood().noteKills(sim->time().seconds, sim->events());
+    sim->step();
+    CHECK(!traitFxHas(*sim, killer, "KilledBloodlust1"));
+    CHECK(traitFxThought(*sim, killer, "KilledBloodlust2") == doctest::Approx(expected[1]));
+}
+
+TEST_CASE("Trait effects: a jealous colonist minds another's better bedroom") {
+    auto sim = traitFxSim();
+    const Entity jealous = traitFxPawn(*sim, CellPos{10, 10, 0}, "Jealous");
+    const Entity plain = traitFxPawn(*sim, CellPos{14, 10, 0});
+    sim->step();
+    CHECK(!traitFxHas(*sim, jealous, "JealousBedroom"));  // nobody has a bedroom
+    const auto room = [&](int x0) {
+        for (int y = 30; y <= 36; ++y) {
+            for (int x = x0; x <= x0 + 6; ++x) {
+                if (x == x0 || x == x0 + 6 || y == 30 || y == 36) {
+                    sim->things().spawn("Wall", CellPos{x, y, 0});
+                }
+            }
+        }
+        return sim->things().spawn("Bed", CellPos{x0 + 3, 33, 0});
+    };
+    std::string error;
+    const Entity first = room(30);
+    CHECK(sim->jobs().assignBed(first, plain, error));
+    sim->rooms().update();
+    sim->roomStats().refresh();
+    CHECK(traitFxThought(*sim, jealous, "JealousBedroom") == doctest::Approx(-8.0f));
+    CHECK(!traitFxHas(*sim, plain, "JealousBedroom"));
+    // An equal room of its own is enough.
+    const Entity second = room(40);
+    CHECK(sim->jobs().assignBed(second, jealous, error));
+    sim->rooms().update();
+    sim->roomStats().refresh();
+    CHECK(!traitFxHas(*sim, jealous, "JealousBedroom"));
 }

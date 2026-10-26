@@ -111,6 +111,10 @@ public:
     // raises one, like the social system's (C20). Nothing happens to a pawn with no mood yet.
     void remember(Entity pawn, const std::string& trigger, int64_t now);
 
+    // Bloodlust (docs/design/traits.md): a colonist with the trait who killed a person this step (the
+    // `target` of a PawnDied event) is pleased: +12, +24, then +37 mood for each kill in the last 4 days.
+    void noteKills(int64_t now, const std::vector<Event>& events);
+
     // `events` are the step's events; `now` the game second the step ran in.
     void step(int64_t now, std::vector<Event>& events);
 

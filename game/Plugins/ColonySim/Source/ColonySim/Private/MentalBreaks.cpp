@@ -100,6 +100,7 @@ MentalBreakRules MentalBreakRules::read(const DefDatabase& defs) {
         r.minSecondsBetween = static_cast<int64_t>(std::llround(when->number("minHoursBetweenBreaks", 24.0) * 3600.0));
         r.recoveryMargin = static_cast<float>(when->number("recoveryMoodMargin", r.recoveryMargin));
         r.restOnlyWhenAwake = when->flag("restOnlyWhenAwake", r.restOnlyWhenAwake);
+        r.pyromaniacMeanDays = when->number("pyromaniacMeanDays", r.pyromaniacMeanDays);
     }
     if (const Def* how = defs.find("Rules", "MentalBreakBehaviour")) {
         const auto whole = [&](const char* path, int fallback) { return static_cast<int>(how->integer(path, fallback)); };
@@ -255,8 +256,7 @@ bool MentalBreakSystem::feasible(Entity pawn, const Kind& kind, Rng& rng) {
 void MentalBreakSystem::natural(Entity pawn, int64_t now, Rng& rng) {
     entt::registry& reg = things_.registry();
     const Mood& mood = reg.get<Mood>(pawn);
-    if (mood.band == MoodBand::Stable || (now + static_cast<int64_t>(entt::to_integral(pawn))) % rules_.checkEvery != 0 ||
-        !eligible(pawn)) {
+    if ((now + static_cast<int64_t>(entt::to_integral(pawn))) % rules_.checkEvery != 0 || !eligible(pawn)) {
         return;
     }
     const MentalBreaker* history = reg.try_get<MentalBreaker>(pawn);
@@ -268,6 +268,25 @@ void MentalBreakSystem::natural(Entity pawn, int64_t now, Rng& rng) {
         if (jobIsLyingDown(worker.job)) {
             return;
         }
+    }
+    // A pyromaniac also starts fires at any mood, about once in `pyromaniacMeanDays` (docs/design/traits.md).
+    // The roll has a stream of its own, so a pyromaniac in the colony leaves everyone else's luck as it was.
+    if (rules_.pyromaniacMeanDays > 0.0 && mood_.hasTrait(pawn, "Pyromaniac")) {
+        Rng own(splitMix64(0x5079726FULL ^ (static_cast<uint64_t>(now) * 0x9E3779B97F4A7C15ULL) ^
+                           (static_cast<uint64_t>(entt::to_integral(pawn)) * 0xC2B2AE3D27D4EB4FULL)));
+        const double meanSeconds = rules_.pyromaniacMeanDays * static_cast<double>(kSecondsPerDay);
+        const double chance = std::min(1.0, static_cast<double>(rules_.checkEvery) / meanSeconds);
+        if (static_cast<double>(own.below(1000000)) < chance * 1000000.0) {
+            for (const Kind& kind : kinds_) {
+                if (kind.state == BreakState::FireSpree && provided(kind) && feasible(pawn, kind, own)) {
+                    begin(pawn, kind, kind.band, now, own);
+                    return;
+                }
+            }
+        }
+    }
+    if (mood.band == MoodBand::Stable) {
+        return;
     }
     float levels[3] = {0.0f, 0.0f, 0.0f};
     mood_.breakLevels(pawn, levels[0], levels[1], levels[2]);
@@ -294,8 +313,10 @@ void MentalBreakSystem::natural(Entity pawn, int64_t now, Rng& rng) {
     double total = 0.0;
     // A pyromaniac's only extreme break is the fire-starting spree (docs/design/traits.md).
     const bool pyromaniac = band == 2 && mood_.hasTrait(pawn, "Pyromaniac");
+    // ...and a gourmand's only minor break is the food binge.
+    const bool gourmand = band == 0 && mood_.hasTrait(pawn, "Gourmand");
     for (const Kind& kind : kinds_) {
-        if (pyromaniac && kind.state != BreakState::FireSpree) {
+        if ((pyromaniac && kind.state != BreakState::FireSpree) || (gourmand && kind.state != BreakState::Binge)) {
             continue;
         }
         if (kind.band == band && provided(kind) && kind.commonality > 0.0 && feasible(pawn, kind, rng)) {
@@ -929,7 +950,7 @@ void MentalBreakSystem::tickAttack(Entity pawn, MentalBreaker& b, int64_t now, R
     if (reg.all_of<Mover>(target)) {
         const DefId type = health_.damageTypeId(rules_.punchDamageType);
         if (type.valid()) {
-            health_.applyDamage(target, type, rules_.punchDamage, -1, rng);
+            health_.applyDamage(target, type, rules_.punchDamage, -1, rng, pawn);
         }
         return;
     }

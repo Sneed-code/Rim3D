@@ -704,7 +704,7 @@ bool HealthSystem::kill(Entity pawn, DeathCause cause) {
     return true;
 }
 
-void HealthSystem::emit(EventType type, Entity pawn, DefId def, int part, float amount, const char* message) {
+void HealthSystem::emit(EventType type, Entity pawn, DefId def, int part, float amount, const char* message, Entity target) {
     if (events_ == nullptr) {
         return;
     }
@@ -715,6 +715,7 @@ void HealthSystem::emit(EventType type, Entity pawn, DefId def, int part, float 
     event.def = def;
     event.part = part;
     event.amount = amount;
+    event.target = target;
     if (const Position* pos = reg.try_get<Position>(pawn)) {
         event.cell = cellOf(*pos);
     }
@@ -743,7 +744,11 @@ void HealthSystem::die(Entity pawn, Health& health, DeathCause cause, bool annou
     health.movingFactor = 0.0f;
     stopWalking(pawn);
     if (announce) {
-        emit(EventType::PawnDied, pawn, DefId{}, -1, 0.0f, deathCauseName(cause));
+        // The killer is whoever last hurt it, if it died of that (not of hunger, cold or a slaughter).
+        const bool wounds = cause == DeathCause::BloodLoss || cause == DeathCause::VitalPartLost || cause == DeathCause::VitalCapacity;
+        const entt::registry& reg = things_.registry();
+        const Entity killer = wounds && health.lastAttacker != pawn && reg.valid(health.lastAttacker) ? health.lastAttacker : kNoEntity;
+        emit(EventType::PawnDied, pawn, DefId{}, -1, 0.0f, deathCauseName(cause), killer);
     }
 }
 
@@ -900,7 +905,7 @@ int healthGoInside(const HealthModel::Body& body, const std::vector<uint8_t>& go
 
 }  // namespace
 
-bool HealthSystem::applyDamage(Entity pawn, DefId damageType, float amount, int part, Rng& rng) {
+bool HealthSystem::applyDamage(Entity pawn, DefId damageType, float amount, int part, Rng& rng, Entity attacker) {
     entt::registry& reg = things_.registry();
     const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);
     if (kind == nullptr || reg.get<Health>(pawn).dead || !(amount > 0.0f) || !damageType.valid() ||
@@ -924,10 +929,10 @@ bool HealthSystem::applyDamage(Entity pawn, DefId damageType, float amount, int 
         }
     }
 
-    return hitPart(pawn, damageType, amount, target, part < 0);
+    return hitPart(pawn, damageType, amount, target, part < 0, attacker);
 }
 
-bool HealthSystem::applyHit(Entity pawn, DefId damageType, float amount, int part) {
+bool HealthSystem::applyHit(Entity pawn, DefId damageType, float amount, int part, Entity attacker) {
     entt::registry& reg = things_.registry();
     const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);
     if (kind == nullptr || reg.get<Health>(pawn).dead || !(amount > 0.0f) || !damageType.valid() ||
@@ -940,7 +945,7 @@ bool HealthSystem::applyHit(Entity pawn, DefId damageType, float amount, int par
     if (static_cast<size_t>(part) >= body.parts.size() || eval.gone[static_cast<size_t>(part)] != 0) {
         return false;
     }
-    return hitPart(pawn, damageType, amount, part, true);
+    return hitPart(pawn, damageType, amount, part, true, attacker);
 }
 
 int HealthSystem::goInside(Entity pawn, DefId damageType, int part, Rng& rng) const {
@@ -969,11 +974,14 @@ std::vector<BodyPartInfo> HealthSystem::bodyParts(DefId pawnDef) const {
     return out;
 }
 
-bool HealthSystem::hitPart(Entity pawn, DefId damageType, float amount, int target, bool hurtOuter) {
+bool HealthSystem::hitPart(Entity pawn, DefId damageType, float amount, int target, bool hurtOuter, Entity attacker) {
     entt::registry& reg = things_.registry();
     const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);
     const HealthModel::DamageType& type = model_->damageTypes[damageType.value];
     Health& health = reg.get<Health>(pawn);
+    if (attacker != kNoEntity && attacker != pawn) {
+        health.lastAttacker = attacker;
+    }
     if (const PawnGenes* genes = reg.try_get<PawnGenes>(pawn)) {
         amount *= genes->effects.damageTaken;  // docs/design/genes.md
     }
