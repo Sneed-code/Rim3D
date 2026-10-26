@@ -9,6 +9,7 @@
 #include "ColonySim/Movement.h"
 #include "ColonySim/Talents.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Traits.h"
 #include "ColonySim/Weather.h"
 
 #include <algorithm>
@@ -598,14 +599,16 @@ CombatSystem::CombatSystem(Things& things, Map& map, HealthSystem& health)
 CombatSystem::~CombatSystem() = default;
 
 int CombatSystem::shootingSkill(Entity pawn) const {
+    // The careful shooter's +5 and the trigger-happy one's -5 count as skill levels (docs/design/traits.md).
+    const int bonus = traits_ != nullptr ? static_cast<int>(std::lround(traits_->of(pawn).shootingSkill)) : 0;
     if (const Colonist* colonist = things_.registry().try_get<Colonist>(pawn)) {
         for (const SkillRecord& skill : colonist->skills) {
             if (skill.def == "Shooting") {
-                return std::clamp(skill.level, 0, 20);
+                return std::clamp(skill.level + bonus, 0, 20);
             }
         }
     }
-    return std::clamp(model_->defaultSkill, 0, 20);
+    return std::clamp(model_->defaultSkill + bonus, 0, 20);
 }
 
 float CombatSystem::spread(DefId weapon, int skill, float distance, bool player, float accuracyFactor) const {
@@ -1011,8 +1014,10 @@ bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, 
     s.player = player;
     if (s.phase == ShotPhase::Ready || player) {
         s.shotsLeft = gun.burst;
-        s.phase = player || gun.warmup <= 0 ? ShotPhase::Firing : ShotPhase::Aiming;
-        s.stepsLeft = player ? 0 : gun.warmup;
+        // Trigger-happy pawns spend half the aiming time, careful shooters a quarter more (TraitStats).
+        const int warmup = traits_ != nullptr ? static_cast<int>(std::lround(static_cast<float>(gun.warmup) * traits_->of(pawn).aimDelayFactor)) : gun.warmup;
+        s.phase = player || warmup <= 0 ? ShotPhase::Firing : ShotPhase::Aiming;
+        s.stepsLeft = player ? 0 : warmup;
     }
     return true;
 }

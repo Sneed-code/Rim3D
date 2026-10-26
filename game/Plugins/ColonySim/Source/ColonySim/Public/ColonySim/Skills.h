@@ -37,7 +37,8 @@ COLONY_API double learnSkillXp(const SkillRules& rules, SkillRecord& skill, doub
 
 // Midnight for one skill: today's total starts again, and from level 10 up the skill loses
 // `decayXpPerDay[level]`. Experience may sink `xpBelowZeroBeforeLevelLoss` below zero before the
-// level is lost; the level below then takes over what is left.
-COLONY_API void skillDayPassed(const SkillRules& rules, SkillRecord& skill);
+// level is lost; the level below then takes over what is left. `lossFactor` scales the daily loss
+// (a great memory halves it).
+COLONY_API void skillDayPassed(const SkillRules& rules, SkillRecord& skill, float lossFactor = 1.0f);
 
 }  // namespace colony

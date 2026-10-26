@@ -5,6 +5,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Traits.h"
 
 #include <algorithm>
 
@@ -190,7 +191,7 @@ double ResearchSystem::speedAt(Entity pawn, const ResearchBenchInfo& bench) cons
         }
     }
     const double skill = std::max(0.0, rules_.skillSpeedBase + rules_.skillSpeedPerLevel * level);
-    return rules_.pointsPerSecond() * skill * bench.speedFactor;
+    return rules_.pointsPerSecond() * skill * bench.speedFactor * (traits_ != nullptr ? traits_->of(pawn).workSpeed : 1.0f);
 }
 
 bool ResearchSystem::addProgress(double points, Entity pawn, std::vector<Event>& events) {

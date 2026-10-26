@@ -50,13 +50,13 @@ double learnSkillXp(const SkillRules& rules, SkillRecord& skill, double xp) {
     return added;
 }
 
-void skillDayPassed(const SkillRules& rules, SkillRecord& skill) {
+void skillDayPassed(const SkillRules& rules, SkillRecord& skill, float lossFactor) {
     skill.xpToday = 0.0f;
     const int top = rules.maxLevel();
     if (skill.disabled || top < 1 || skill.level < 0 || static_cast<size_t>(skill.level) >= rules.decayXpPerDay.size()) {
         return;
     }
-    skill.xp -= static_cast<float>(rules.decayXpPerDay[static_cast<size_t>(skill.level)]);
+    skill.xp -= static_cast<float>(rules.decayXpPerDay[static_cast<size_t>(skill.level)]) * lossFactor;
     while (skill.level > 0 && skill.xp < -static_cast<float>(rules.xpBelowZeroBeforeLevelLoss)) {
         --skill.level;
         skill.xp += static_cast<float>(rules.xpToNextLevel[static_cast<size_t>(skill.level)]);

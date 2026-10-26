@@ -353,6 +353,10 @@ std::vector<ThoughtView> MoodSystem::thoughts(Entity pawn, int64_t now) const {
                 continue;
             }
             const Def* def = defs_.find("Thoughts", memory.def);
+            // A memory with `notTrait` is not felt by pawns with that trait (an ascetic's meals).
+            if (def != nullptr && def->text("notTrait").empty() == false && hasTrait(pawn, def->text("notTrait"))) {
+                continue;
+            }
             if (def != nullptr) {
                 out.push_back(ThoughtView{def->defName(), def->label(), moodFloat(*def, "moodOffset", 0.0f), false, memory.expires});
             }

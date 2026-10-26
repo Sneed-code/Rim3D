@@ -192,6 +192,7 @@ class Plants;
 class PowerGrid;
 class ResearchSystem;
 class TalentSystem;
+class TraitBook;
 class Rooms;
 class Things;
 class WorkGiver;
@@ -316,6 +317,8 @@ public:
     void setMedicine(MedicineSystem* medicine) { medicine_ = medicine; }
     MedicineSystem* medicine() const { return medicine_; }
     void setTalents(const TalentSystem* talents) { talents_ = talents; }
+    // Hard workers work faster, fast learners learn faster, a great memory forgets slower (docs/design/traits.md).
+    void setTraits(const TraitBook* traits) { traits_ = traits; }
     // Prisoners (PrisonerJobs.cpp, docs/design/prisoners.md); without it nobody captures, feeds or talks to prisoners, and prison
     // beds are ordinary beds.
     void setPrisoners(PrisonerSystem* prisoners) { prisoners_ = prisoners; }
@@ -665,6 +668,7 @@ private:
     CombatSystem* combat_ = nullptr;
     TemperatureSystem* temperature_ = nullptr;
     std::function<bool(Entity)> animalGate_;
+    const TraitBook* traits_ = nullptr;
     const TalentSystem* talents_ = nullptr;  // build speed and carrying capacity (docs/design/talents.md)
     RecreationRules recreation_;
     std::unique_ptr<BillSystem> bills_;

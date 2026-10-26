@@ -54,6 +54,7 @@ class RecreationSystem;
 class SocialSystem;
 class ResearchSystem;
 class TalentSystem;
+class TraitBook;
 class NeedsSystem;
 class RaidSystem;
 class Plants;
@@ -365,6 +366,7 @@ private:
     std::unique_ptr<ResearchSystem> research_;
     std::unique_ptr<MedicineSystem> medicine_;
     std::unique_ptr<TalentSystem> talents_;
+    std::unique_ptr<TraitBook> traits_;
     std::unique_ptr<CombatSystem> combat_;
     std::unique_ptr<ExplosiveSystem> explosives_;  // after combat_ and health_
     std::unique_ptr<ApparelSystem> apparel_;  // after combat, which it uses

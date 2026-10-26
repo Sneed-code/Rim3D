@@ -69,6 +69,8 @@ Three staged thoughts in `Thoughts3.json` are limited to a trait (`situation.tra
 `MoodRules.nightHours` (ours, 21:00 to 04:59); `GreedyNoBedroom` (-4) counts while a Greedy colonist owns no bed in a
 room with the Bedroom role. The numbers are half the traits' `moodAwakeAtNight`, `moodAwakeInDay` and `moodWithoutBedroom`: the full ones sent the Crashlanded colony into mental breaks (ours, tune in a playtest).
 
+More trait situations (Brawler with a gun, Pyromaniac near fire, Ascetic bedroom) and the meal memories an Ascetic ignores (`notTrait` on a memory def) are in [traits.md](traits.md).
+
 ## Passion at work
 
 Two more situations, `PassionMinorWork` (+8) and `PassionMajorWork` (+14, from `SkillRules.passionMood`),

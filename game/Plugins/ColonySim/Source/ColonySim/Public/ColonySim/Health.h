@@ -15,6 +15,7 @@ namespace colony {
 
 class HealthModel;
 class Things;
+class TraitBook;
 
 // Health of pawns: a body of parts from the Bodies defs, injuries on parts, bleeding, pain,
 // downed and death, slow natural healing. See docs/design/health.md.
@@ -145,6 +146,8 @@ public:
 
     // Where events go; null (the default) reports none.
     void setEventLog(std::vector<Event>* events) { events_ = events; }
+    // Tough takes less damage and a wimp is downed by less pain (docs/design/traits.md); null: no trait does.
+    void setTraits(const TraitBook* traits) { traits_ = traits; }
 
     // True if the pawn has a Health the system understands (its body def is known).
     bool tracks(Entity pawn) const;
@@ -227,12 +230,13 @@ private:
     Things& things_;
     std::unique_ptr<HealthModel> model_;
     std::vector<Event>* events_ = nullptr;
+    const TraitBook* traits_ = nullptr;
     std::vector<Entity> active_;  // scratch for step
     std::vector<size_t> healable_;  // scratch for step: the injuries that can heal
 
     // Works out pain, bleeding, capacities and what they mean (the death cause and whether the
     // pawn should be downed) into `health`'s derived fields. Changes nothing else.
-    void derive(int body, float healthScale, Health& health, DeathCause& cause, bool& shouldBeDown) const;
+    void derive(int body, float healthScale, Health& health, DeathCause& cause, bool& shouldBeDown, float painShockOffset = 0.0f) const;
     void recompute(Entity pawn, Health& health, bool announce);
     void emit(EventType type, Entity pawn, DefId def = DefId{}, int part = -1, float amount = 0.0f,
               const char* message = nullptr);
