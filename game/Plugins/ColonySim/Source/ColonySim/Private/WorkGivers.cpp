@@ -16,6 +16,7 @@
 #include "ColonySim/Fire.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Medicine.h"
+#include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Surgery.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Mineables.h"
@@ -693,6 +694,12 @@ public:
                 continue;
             }
             const bool bleeds = jobs.health().urgentlyNeedsTending(patient);
+            // One in a mental break walks about and can't be caught up with (a tend takes minutes in reach), so the doctors
+            // would chase it for hours; it is tended when the break is over.
+            const MentalBreaker* breaker = reg.try_get<MentalBreaker>(patient);
+            if (breaker != nullptr && breaker->active) {
+                continue;
+            }
             if (urgent && !bleeds) {
                 continue;
             }

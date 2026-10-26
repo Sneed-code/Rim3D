@@ -102,6 +102,11 @@ enum class EventType : uint8_t {
     PawnLeftColony,        // a pawn gave up and walked off the map for good
     InspirationStarted,    // a colonist became inspired (docs/design/inspirations.md): `thing` the pawn, `message` the Inspirations defName, `amount` its days
     InspirationEnded,      // it ended: `message` "why:defName" (used, expired, dismissed), `amount` how many game seconds it lasted
+    ShipReactorStarted,    // the ship reactor began its activation (docs/design/ship.md): `thing` the reactor, `amount` days it takes
+    ShipWave,              // a wave of raiders came because of the reactor: `amount` the wave number (the raid's own events follow)
+    ShipReactorReady,      // the activation finished: the ship can launch
+    ShipReactorLost,       // the reactor was destroyed or taken down: the activation is lost, `message` says which
+    ShipLaunched,          // the ship left and the game is won: `amount` how many pawns went (a PawnLeftMap each)
     OperationDone,      // a doctor finished an operation (H3, docs/design/surgery.md): `thing` the doctor, `target` the patient, `def` the Recipes def, `part` the body part, `amount` the success chance, `message` "success", "failed" or "the patient died"
 };
 

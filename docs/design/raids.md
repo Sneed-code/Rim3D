@@ -48,7 +48,9 @@ a fighter that knows no enemy walks to its goal. That is how raiders "know where
 Each squad thinks once a real second (`squadThinkEvery`, 30 steps):
 
 1. **Rout** (RimWorld's rule, recalled): when half its pawns (`fleeLostFraction`) are downed, dead or
-   gone, or when its time is up (`giveUpHours`, RimWorld's 26,000 to 38,000 ticks: 10.4 to 15.2 game
+   gone, with the wounded counted as part lost (ours, from the F7 soak: an able pawn counts as
+   (1 - pain) x Moving, at most 1, so a squad of hurt pawns that are all still on their feet adds up
+   to less and runs too), or when its time is up (`giveUpHours`, RimWorld's 26,000 to 38,000 ticks: 10.4 to 15.2 game
    hours), it runs. Every member that can still walk gets `FightMode::Flee`: no more looking or
    shooting, just the nearest edge cell it can reach. At the edge it **leaves the map** with its gear
    (`PawnLeftMap`, then `ThingDestroyed`). Downed raiders stay where they fell.

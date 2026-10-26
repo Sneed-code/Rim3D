@@ -43,6 +43,7 @@
 #include "ColonySim/Medicine.h"
 #include "ColonySim/Surgery.h"
 #include "ColonySim/Prisoners.h"
+#include "ColonySim/Ship.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Social.h"
 #include "ColonySim/Research.h"
@@ -459,6 +460,7 @@ struct SaveData {
     SaveMineables mineables;           // format 12 on
     SaveDesignations designations;     // format 12 on
     ResearchState research;            // section "research"
+    ShipState ship;                    // section "ship"
     // Section "talents" (P3): per protagonist, parallel lists in pawn order.
     std::vector<Entity> talentPawns;
     std::vector<int64_t> talentXp;
@@ -902,6 +904,10 @@ void saveCommandTail(Ar& ar, Type& c) {
     } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
         auto* stop = &c;
         ar.value("pawn", stop->pawn);
+    } else if constexpr (std::is_same_v<Type, ShipCommand>) {
+        ar.text("action", c.action);
+        ar.value("thing", c.thing);
+        ar.value("pawn", c.pawn);
     } else {
         static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
     }
@@ -2282,6 +2288,20 @@ void saveResearch(Ar& ar, ResearchState& r) {
 }
 
 template <typename Ar>
+void saveShip(Ar& ar, ShipState& s) {
+    ar.value("phase", s.phase);
+    ar.require(static_cast<int>(s.phase) <= static_cast<int>(ShipPhase::Launched), "the save file has a bad ship phase");
+    ar.value("reactor", s.reactor);
+    ar.value("startedAt", s.startedAt);
+    ar.value("nextWave", s.nextWave);
+    ar.value("waves", s.waves);
+    ar.value("escaped", s.escaped);
+    ar.value("launchedAt", s.launchedAt);
+    ar.list("caskets", s.caskets, [&](Entity& e) { ar.value(nullptr, e); });
+    ar.list("riders", s.riders, [&](Entity& e) { ar.value(nullptr, e); });
+}
+
+template <typename Ar>
 void saveTalents(Ar& ar, SaveData& d) {
     ar.list("pawns", d.talentPawns, [&](Entity& pawn) { ar.value(nullptr, pawn); });
     ar.list("xp", d.talentXp, [&](int64_t& xp) { ar.value(nullptr, xp); });
@@ -2622,6 +2642,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "joy", e, &SaveEntity::joy, [&](SaveJoy& j) { saveJoyPart(ar, j); });
     });
     ar.section("research", 1, [&] { saveResearch(ar, d.research); });
+    ar.section("ship", 1, [&] { saveShip(ar, d.ship); });
     ar.section("medicine", 2, [&] {
         saveParts(ar, "medical", e, &SaveEntity::medical, [&](MedicalSettings& m) {
             ar.value("care", m.care);
@@ -3326,6 +3347,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         d.designations.kinds.push_back(static_cast<uint8_t>(kind));
     }
     d.research = sim.research_->state();
+    d.ship = sim.ship_->state();
     for (const auto& [pawn, s] : sim.talents_->states()) {
         d.talentPawns.push_back(pawn);
         d.talentXp.push_back(s.xp);
@@ -4095,6 +4117,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
     }
     if (!sim.raids_->restore(std::move(d.raids), error)) {
+        return false;
+    }
+    if (!sim.ship_->restore(std::move(d.ship), error)) {
         return false;
     }
     sim.apparel_->restoreOutfits(std::move(d.outfits), d.nextOutfitId);
