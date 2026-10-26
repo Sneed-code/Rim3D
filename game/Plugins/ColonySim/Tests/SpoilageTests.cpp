@@ -6,6 +6,7 @@
 #include "ColonySim/Map.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Filth.h"
+#include "FuelTestHelper.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
@@ -256,7 +257,7 @@ TEST_CASE("Spoilage: a cooked meal remembers its ingredients and rots in the war
     Colonist colonist;
     colonist.skills.push_back(SkillRecord{"Cooking", 8, Passion::None, 0.0f, false});
     sim.things().registry().emplace<Colonist>(cook, std::move(colonist));
-    const Entity stove = sim.map().buildingAt(CellPos{20, 20, 0});
+    const Entity stove = testFueled(sim, sim.map().buildingAt(CellPos{20, 20, 0}));
     sim.submit(AddBillCommand{stove, "CookMealSimple", BillMode::Count, 1});
     Entity meal = kNoEntity;
     for (int i = 0; i < 3000 && meal == kNoEntity; ++i) {

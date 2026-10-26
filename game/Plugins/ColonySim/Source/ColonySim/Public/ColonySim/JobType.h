@@ -39,6 +39,7 @@ enum class JobType : uint8_t {
     CapturePrisoner,   // carry a downed enemy to a prison bed and make it a prisoner (docs/design/prisoners.md)
     FeedPrisoner,      // fetch food, walk to a hungry prisoner and hand it over
     WardenInteract,    // walk to a prisoner and talk to it: resistance, recruiting or release
+    Refuel,            // carry fuel to a building and put it in (fuel.md)
 };
 
 COLONY_API const char* jobTypeName(JobType type);

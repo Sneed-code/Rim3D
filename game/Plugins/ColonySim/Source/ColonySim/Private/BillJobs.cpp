@@ -4,6 +4,7 @@
 #include "ColonySim/Spoilage.h"
 
 #include "ColonySim/Bills.h"
+#include "ColonySim/Fuel.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Power.h"
@@ -38,6 +39,11 @@ bool JobSystem::failCheckDoBill(Entity pawn, Job& job, std::string& why) {
     }
     if (bill->suspended) {
         why = "the bill was suspended";
+        return false;
+    }
+    if (const Recipe* recipe = bills_->recipe(bill->recipe);
+        recipe != nullptr && !fuel_->canUse(job.site, fuel_->specOf(job.site).perUse * static_cast<float>(recipe->productCount()))) {
+        why = "the building is out of fuel";
         return false;
     }
     if (job.step <= kDoBillPickUpStep) {
@@ -138,9 +144,11 @@ JobSystem::StepResult JobSystem::billFinish(Entity pawn, Job& job, std::string& 
         why = "the bill is gone";
         return StepResult::Failed;
     }
-    // The ingredients are gone for good; the product lies by the pawn, where haulers find it.
+    // The ingredients are gone for good (and the fuel burnt); the product lies by the pawn, where haulers
+    // find it.
     const std::vector<BillUsed> used = std::move(job.used);
     job.used.clear();
+    fuel_->use(job.site, fuel_->specOf(job.site).perUse * static_cast<float>(recipe->productCount()));
     int made = 0;
     for (const RecipeProduct& product : recipe->products) {
         dropNewItems(pawn, product.item, product.count, &used);

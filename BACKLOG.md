@@ -13,7 +13,7 @@ Ideas parked for later. Newest first. Move an item into a stage plan when it's p
 - Colonists that seek a safe temperature (go indoors or toward a heater when outside their safe range, like RimWorld's `SeekSafeTemperature`): E2 only makes them sick (`docs/design/temperature.md` "Not yet"). Needed before the year scenario C25 can say nobody freezes; fits H-tasks or C25 itself.
 - Per-building thermostat targets for heaters and coolers (U19 panels).
 
-- Cooking leftovers and shooter feel: picked up in `docs/plans/stage-2.md` (C11 fuel, C14 bills, C16 food poisoning; P2 and U21 shooter feel).
+- Cooking leftovers and shooter feel: picked up in `docs/plans/stage-2.md` (C11 fuel done, C14 bills, C16 food poisoning; P2 and U21 shooter feel).
 - Protagonist needs sleep or not (open question in `docs/game-design.md`).
 - Elevators for multi-storey buildings (after stairs and ladders).
 - Carry on as another colonist after the protagonist dies (currently game over).
