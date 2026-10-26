@@ -386,6 +386,7 @@ JobSystem::StepResult JobSystem::eat(Entity pawn, Job& job, std::string&) {
     const float before = needs.food;
     needs.food = std::min(1.0f, needs.food + nutrition_[def.value] * static_cast<float>(count));
     reg.remove<Carrying>(pawn);
+    const bool humanIngredient = spoilage_ != nullptr && spoilage_->humanlikeIngredient(food);
     if (spoilage_ != nullptr) {
         spoilage_->eaten(pawn, food);
     }
@@ -397,6 +398,7 @@ JobSystem::StepResult JobSystem::eat(Entity pawn, Job& job, std::string&) {
     event.cell = cellOf(reg.get<Position>(pawn));
     event.amount = needs.food - before;
     event.message = job.chair != kNoEntity ? "table" : "ground";
+    event.part = humanIngredient ? 1 : -1;  // 1: cooked from human flesh (the mood minds)
     events_.push_back(std::move(event));
     return StepResult::Next;
 }

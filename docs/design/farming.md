@@ -55,6 +55,20 @@ with chance `degrees x PlantRules.killChancePerDegree` (0.1, ours: RimWorld dama
 from a hash of the cell and the hour, so no random stream is used. `PlantRemoved` is sent with message "frost"
 or "heat"; `stats()` counts both.
 
+## Plant spots, hydroponics and sun lamps
+
+A building def with `plantSpot` gives its own cell a fertility (plant pot 1.0, hydroponics basin 2.8, after
+RimWorld); `Plants::setFertilityOverride` asks `Farming::spotFertility`, so sowing, growth rate and `place`
+all use it. A growing zone may take such cells (other buildings still keep a cell out). `plantSpot.needsPower`
+(the basin, 70 W, research `Hydroponics`) stops growth and sowing while the basin has no power. Light and
+temperature work as for any crop, so an indoor crop needs a roofed, heated room and a lamp.
+
+Crops grow only 06:00 to 19:00, except where a lit **sun lamp** is near: a powered building with
+`glower.growsPlants` within its `glower.plantLightRadius` (5 m) of the cell, and the lamps' light on the cell at
+least the crop's minimum glow, makes `Plants::setGrowsAnytime` true, so the crop also grows in the night hours
+(`Farming::sunLampLit`). An ordinary lamp lights the cell for sowing but gives no night growth. Tests:
+`HydroponicsTests`.
+
 ## Saves
 
 Section `farming` 1: next zone id, each zone's id, crop by `defName` and cells, the counters. Older saves
@@ -62,5 +76,5 @@ have none and load with no zones. The growth modifier is installed by the `Sim` 
 
 ## Not here
 
-Fertilizer, plants spreading, blight (T3), crops in pots or hydroponics, harvest only part of a zone, zone
+Fertilizer, plants spreading, blight (T3), harvest only part of a zone, zone
 filters of what may be sown by which colonist, and Unreal's zone tool (U18).
