@@ -240,9 +240,23 @@ Entity Construction::placeBlueprint(DefId def, DefId stuff, CellPos cell, Rot4 r
                     error = why;
                     return kNoEntity;
                 }
+                if (const Entity under = siteAt(CellPos{c.x, c.y, c.level - 1});
+                    under != kNoEntity && defs_.get(things_.registry().get<Thing>(under).def).has("building.climb")) {
+                    error = "stairs are planned under " + constructionCellText(c);
+                    return kNoEntity;
+                }
             } else if (!map_.inBounds(c) || !map_.groundWalkable(c)) {
                 error = "can't build on " + constructionCellText(c);
                 return kNoEntity;
+            }
+            if (d.has("building.climb")) {
+                // The stairwell (U17): the cells over stairs or a ladder stay open, floor or a floor planned.
+                const CellPos above{c.x, c.y, c.level + 1};
+                const Entity planned = siteAt(above);
+                if (map_.upperFloor(above) || (planned != kNoEntity && isUpperFloor(things_.registry().get<Thing>(planned).def))) {
+                    error = "the floor over " + constructionCellText(c) + " is in the way: stairs need an open stairwell";
+                    return kNoEntity;
+                }
             }
             if (map_.buildingAt(c) != kNoEntity) {
                 error = "there is a building at " + constructionCellText(c);

@@ -445,6 +445,61 @@ void Sim::commandFailed(uint64_t id, std::string message) {
     events_.push_back(std::move(event));
 }
 
+bool Sim::startClimb(Entity pawn, float dx, float dy, std::string& error) {
+    entt::registry& reg = things_->registry();
+    if (!things_->exists(pawn) || !reg.all_of<PlayerControl, Position, Mover>(pawn)) {
+        error = "that pawn isn't under direct control";
+        return false;
+    }
+    if (health_->incapacitated(pawn)) {
+        error = "that colonist is downed or dead";
+        return false;
+    }
+    if (combat_->rollLocked(pawn)) {
+        error = "that colonist is rolling";
+        return false;
+    }
+    const Position& pos = reg.get<Position>(pawn);
+    Mover& mover = reg.get<Mover>(pawn);
+    if (mover.climbing(pos.level)) {
+        error = "that colonist is climbing already";
+        return false;
+    }
+    // The link from this cell whose other end lies most nearly the way the player pushes.
+    const CellPos here = cellOf(pos);
+    const float want = std::sqrt(dx * dx + dy * dy);
+    const bool anyWay = !std::isfinite(want) || want < 1.0e-4f;
+    const LevelLink* best = nullptr;
+    CellPos to;
+    float bestDot = 0.5f;  // within 60 degrees
+    for (const LevelLink& link : map_.levelLinks()) {
+        if (link.low != here && link.high != here) {
+            continue;
+        }
+        const CellPos other = link.low == here ? link.high : link.low;
+        const float ox = static_cast<float>(other.x - here.x);
+        const float oy = static_cast<float>(other.y - here.y);
+        const float along = std::sqrt(ox * ox + oy * oy);
+        const float dot = anyWay || along <= 0.0f ? 1.0f : (ox * dx + oy * dy) / (along * want);
+        if (dot >= bestDot && (best == nullptr || dot > bestDot)) {
+            best = &link;
+            to = other;
+            bestDot = dot;
+            if (anyWay) {
+                break;
+            }
+        }
+    }
+    if (best == nullptr) {
+        error = "there are no stairs or ladder that way";
+        return false;
+    }
+    mover.walkTo(pos.x, pos.y, std::vector<CellPos>{to});
+    mover.vx = 0.0f;
+    mover.vy = 0.0f;
+    return true;
+}
+
 void Sim::applyCommand(const Command& command, uint64_t id) {
     std::string error;
     // A colonist in a mental break takes no orders: it isn't the player's to command until it is over.
@@ -781,6 +836,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         } else if (combat_->rollLocked(move->pawn)) {
             // Rolling (P2): the sim moves the pawn; the player's position is ignored, without a failure
             // because Unreal sends one every step.
+        } else if (reg.get<Mover>(move->pawn).climbing(reg.get<Position>(move->pawn).level)) {
+            // Climbing (U17): the movement system takes it up or down; the same, no failure.
         } else {
             Position& pos = reg.get<Position>(move->pawn);
             Mover& mover = reg.get<Mover>(move->pawn);
@@ -807,8 +864,16 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             mover.vx = moveX;
             mover.vy = moveY;
         }
+    } else if (const auto* climb = std::get_if<ClimbCommand>(&command)) {
+        if (!startClimb(climb->pawn, climb->dx, climb->dy, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* roll = std::get_if<DodgeRollCommand>(&command)) {
-        if (!combat_->dodgeRoll(roll->pawn, roll->dx, roll->dy, &error)) {
+        const entt::registry& reg = things_->registry();
+        if (things_->exists(roll->pawn) && reg.all_of<Mover, Position>(roll->pawn) &&
+            reg.get<Mover>(roll->pawn).climbing(reg.get<Position>(roll->pawn).level)) {
+            commandFailed(id, "that pawn is climbing");
+        } else if (!combat_->dodgeRoll(roll->pawn, roll->dx, roll->dy, &error)) {
             commandFailed(id, error);
         }
     } else if (const auto* schedule = std::get_if<SetScheduleCommand>(&command)) {

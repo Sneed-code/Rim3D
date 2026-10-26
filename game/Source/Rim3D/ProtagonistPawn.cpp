@@ -31,6 +31,10 @@ namespace
 	constexpr double ProtagonistEyeForward = 12.0;
 	// Third person looks at a point this far above the feet (cm).
 	constexpr double ProtagonistPivotHeight = 150.0;
+	// Walking into stairs within about 45 degrees of their way up (or down) climbs them; the sim is given this long
+	// (real seconds) to start the climb before the body asks again.
+	constexpr double ProtagonistClimbDot = 0.7;
+	constexpr float ProtagonistClimbWait = 0.5f;
 }
 
 AProtagonistPawn::AProtagonistPawn()
@@ -85,11 +89,15 @@ void AProtagonistPawn::OnTakeOverPressed()
 	}
 }
 
-void AProtagonistPawn::Begin(colony::Entity InThing, const FVector2D& SimPosition, float InCruiseSpeed, float InYaw)
+void AProtagonistPawn::Begin(colony::Entity InThing, const FVector2D& SimPosition, float InCruiseSpeed, float InYaw, int32 InLevel)
 {
 	Thing = InThing;
 	Yaw = FRotator::NormalizeAxis(InYaw);
 	Position = SimPosition;
+	Level = InLevel;
+	bClimbing = false;
+	bClimbWanted = false;
+	ClimbWait = 0.0f;
 	Velocity = FVector2D::ZeroVector;
 	CruiseSpeed = InCruiseSpeed > 0.1f ? InCruiseSpeed : 4.6f;
 	SnapCamera();
@@ -143,8 +151,9 @@ void AProtagonistPawn::Move(double Right, double Forward, bool bWalk, float Delt
 	{
 		return;
 	}
-	// A paused game freezes the body; the view still turns.
-	if (Bridge->GetSpeed() == 0)
+	// A paused game freezes the body; the view still turns. So does a climb: the sim moves the colonist.
+	ClimbWait = FMath::Max(0.0f, ClimbWait - DeltaTime);
+	if (Bridge->GetSpeed() == 0 || bClimbing)
 	{
 		Velocity = FVector2D::ZeroVector;
 		return;
@@ -173,11 +182,36 @@ void AProtagonistPawn::Move(double Right, double Forward, bool bWalk, float Delt
 	// The whole move, or sliding along one axis (a wall), or no move: the sim does the same.
 	const FVector2D Delta = Velocity * DeltaTime;
 	const FVector2D Tries[3] = {Delta, FVector2D(Delta.X, 0.0), FVector2D(0.0, Delta.Y)};
+	const auto Fits = [&](const FVector2D& Try)
+	{
+		return colony::pawnFitsAt(Map, static_cast<float>(Position.X + Try.X), static_cast<float>(Position.Y + Try.Y), colony::kPawnRadius, Level);
+	};
+	// Pushing into stairs or a ladder (or back towards them from their head) climbs them.
+	if (!Wanted.IsNearlyZero() && !Delta.IsNearlyZero(1.0e-7) && !Fits(Delta) && ClimbWait <= 0.0f)
+	{
+		const colony::CellPos Here{FMath::FloorToInt32(Position.X), FMath::FloorToInt32(Position.Y), Level};
+		for (const colony::LevelLink& Link : Map.levelLinks())
+		{
+			if (Link.low != Here && Link.high != Here)
+			{
+				continue;
+			}
+			const colony::CellPos Other = Link.low == Here ? Link.high : Link.low;
+			const FVector2D Towards = FVector2D(Other.x - Here.x, Other.y - Here.y).GetSafeNormal();
+			if (FVector2D::DotProduct(Towards, Wanted) > ProtagonistClimbDot)
+			{
+				bClimbWanted = true;
+				ClimbDirection = Wanted;
+				ClimbWait = ProtagonistClimbWait;
+				Velocity = FVector2D::ZeroVector;
+				return;
+			}
+		}
+	}
 	bool bMoved = false;
 	for (const FVector2D& Try : Tries)
 	{
-		if (!Try.IsNearlyZero(1.0e-7) &&
-			colony::pawnFitsAt(Map, static_cast<float>(Position.X + Try.X), static_cast<float>(Position.Y + Try.Y), colony::kPawnRadius, 0))
+		if (!Try.IsNearlyZero(1.0e-7) && Fits(Try))
 		{
 			Position += Try;
 			bMoved = true;
@@ -235,6 +269,34 @@ void AProtagonistPawn::SetSimPosition(const FVector2D& SimPosition)
 {
 	Position = SimPosition;
 	Velocity = FVector2D::ZeroVector;
+}
+
+void AProtagonistPawn::FollowSim(const FVector2D& SimPosition, int32 SimLevel, bool bSimClimbing)
+{
+	if (bSimClimbing)
+	{
+		bClimbing = true;
+		Velocity = FVector2D::ZeroVector;
+		return;
+	}
+	if (bClimbing || SimLevel != Level)
+	{
+		// Off the stairs: on at the other end, on its level.
+		bClimbing = false;
+		Level = SimLevel;
+		SetSimPosition(SimPosition);
+	}
+}
+
+bool AProtagonistPawn::TakeClimbRequest(FVector2D& OutDirection)
+{
+	if (!bClimbWanted)
+	{
+		return false;
+	}
+	bClimbWanted = false;
+	OutDirection = ClimbDirection;
+	return true;
 }
 
 FVector AProtagonistPawn::GetViewLocation() const

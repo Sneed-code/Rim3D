@@ -168,8 +168,8 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
         if (map.inBounds(here) && map.passage(here) == Passage::Door) {
             requestDoor(map.buildingAt(here));
         }
-        if (reg.all_of<PlayerControl>(a.entity)) {
-            // The player's pawn: DirectMoveCommand moved it already. The others steer around it. It
+        if (reg.all_of<PlayerControl>(a.entity) && !mover.climbing(a.level)) {
+            // The player's pawn: DirectMoveCommand moved it already (but ClimbCommand's climb is done below). The others steer around it. It
             // is never held up by a door, but it opens the one it is walking up to.
             const CellPos ahead{static_cast<int>(std::floor(a.x + a.vx * kMoveDoorLookAhead)),
                                 static_cast<int>(std::floor(a.y + a.vy * kMoveDoorLookAhead)), a.level};
@@ -525,7 +525,7 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
 
     // Everyone moves together, from the state they all saw.
     for (const Agent& a : agents_) {
-        if (reg.all_of<PlayerControl>(a.entity)) {
+        if (reg.all_of<PlayerControl>(a.entity) && !a.climbed) {
             continue;
         }
         Position& pos = reg.get<Position>(a.entity);

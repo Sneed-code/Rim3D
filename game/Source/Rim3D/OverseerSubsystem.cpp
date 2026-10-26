@@ -10,6 +10,7 @@
 
 #include <imgui.h>
 
+#include "LevelsSubsystem.h"
 #include "OrdersSubsystem.h"
 #include "OverseerPawn.h"
 #include "ProtagonistSubsystem.h"
@@ -317,8 +318,22 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 				Bridge.StepOnce();
 			}
 		}
-		// The date, the season's temperature and the weather (U13).
+		// The date, the season's temperature and the weather (U13), and the level looked at (U17).
 		OverseerText(USkySubsystem::DescribeDate(Sim) + TEXT("   ") + USkySubsystem::DescribeClimate(Sim));
+		if (ULevelsSubsystem* Levels = GetWorld()->GetSubsystem<ULevelsSubsystem>())
+		{
+			OverseerText(ULevelsSubsystem::DescribeLevel(Levels->GetViewLevel()));
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Up (PgUp)") && Pawn)
+			{
+				Pawn->StepLevel(1);
+			}
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Down (PgDn)") && Pawn)
+			{
+				Pawn->StepLevel(-1);
+			}
+		}
 	}
 	ImGui::End();
 
@@ -384,7 +399,8 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 			{
 				const colony::CellPos Cell = Selection.Cell;
 				const colony::Map& Map = Sim.map();
-				OverseerText(FString::Printf(TEXT("Cell %d, %d"), Cell.x, Cell.y));
+				OverseerText(Cell.level > 0 ? FString::Printf(TEXT("Cell %d, %d   %s"), Cell.x, Cell.y, *ULevelsSubsystem::DescribeLevel(Cell.level))
+					: FString::Printf(TEXT("Cell %d, %d"), Cell.x, Cell.y));
 				ImGui::Separator();
 				OverseerText(FString::Printf(TEXT("%s, ground %.1f m"), OverseerTerrainName(Map.terrain(Cell)), Map.groundHeight(Cell)));
 				OverseerText(FString(Map.isDoor(Cell) ? TEXT("Door: walkable, own region") : (Map.walkable(Cell) ? TEXT("Walkable") : TEXT("Not walkable"))));
@@ -395,7 +411,7 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 				}
 				for (const colony::ThingView& View : Snapshot.things)
 				{
-					if (View.category != colony::ThingCategory::Building && FMath::FloorToInt32(View.x) == Cell.x && FMath::FloorToInt32(View.y) == Cell.y)
+					if (View.category != colony::ThingCategory::Building && View.level == Cell.level && FMath::FloorToInt32(View.x) == Cell.x && FMath::FloorToInt32(View.y) == Cell.y)
 					{
 						OverseerText(FString::Printf(TEXT("%s: %s"), OverseerCategoryName(View.category), UTF8_TO_TCHAR(OverseerLabel(Bridge, View).c_str())));
 					}
@@ -413,6 +429,7 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 		ImGui::TextUnformatted("WASD pan   Q/E turn   wheel zoom");
 		ImGui::TextUnformatted("middle-drag orbit   click select");
 		ImGui::TextUnformatted("F centre   Home reset   Esc deselect");
+		ImGui::TextUnformatted("Page Up / Page Down level above / below");
 		ImGui::TextUnformatted("Tab take control of the selected colonist");
 		ImGui::TextUnformatted("R draft colonist / turn building   right click order");
 	}

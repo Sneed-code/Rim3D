@@ -331,6 +331,8 @@ private:
 
     void applyCommand(const Command& command, uint64_t id);
     void commandFailed(uint64_t id, std::string message);
+    // ClimbCommand (U17): sets the controlled pawn off up or down the stairs or ladder at its cell.
+    bool startClimb(Entity pawn, float dx, float dy, std::string& error);
     void placeStockpileAndThings();
     void pruneDesignations();
     void startScenario();
