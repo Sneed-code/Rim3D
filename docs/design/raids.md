@@ -83,6 +83,11 @@ While the alarm is on, every colonist that isn't drafted or controlled by the pl
 | **Shelter** | Goes to the shelter room (`MarkShelterCommand`) and stays there, each in its own cell; with no shelter marked, the nearest roofed cell; with none, 25 m away from the threat. It never shoots. |
 | **Keep working** | Works on, until a spotted enemy comes within 20 m (`keepWorkingRadius`); then it defends itself where it is, until the alarm stops. |
 
+**Unarmed colonists run.** A colonist with no defense plan of its own and no weapon in its hands (`Gear::weapon`
+empty) is a Shelter, not a Defender, like RimWorld's default of fleeing when unarmed: it would otherwise punch a
+wolf with its fists (found by the year run, `colony-scenario.md`). The moment it carries a weapon it defends.
+A colonist the player gave a plan (`SetDefenseRoleCommand`) does what the plan says, armed or not.
+
 The alarm **stops by itself** when no enemy is left on the map that can still fight (all dead, downed
 or fleeing), and everyone it called up goes back to work. One the player sounded
 (`SoundAlarmCommand{true}`) stays on until the player stops it; stopping it while enemies are about

@@ -473,7 +473,7 @@ public:
             }
             const int skill = bills.skillLevel(pawn, recipe->skill);
             if (skill < recipe->minSkill || skill < bill.skillMin || skill > bill.skillMax ||
-                !jobs.fuel().canUse(building, fuelPerProduct * static_cast<float>(recipe->productCount()))) {
+                !jobs.fuel().canUse(building, fuelPerProduct * static_cast<float>(recipe->fuelUses()))) {
                 continue;
             }
             if (recipe->butcher) {

@@ -321,6 +321,43 @@ TEST_CASE("Farming: it is too cold to sow, and the zone waits for the weather") 
     CHECK(sim->plants().has(CellPos{10, 8, 0}));
 }
 
+TEST_CASE("Farming: a crop is not sown where frost would come before it ripens, and is when it would not") {
+    // Rice takes 5.8 growing days: about 10.7 game days in the open at full growth (13 growing hours a day).
+    const CellPos cell{10, 8, 0};
+    const int64_t frostAt = 8 * kSecondsPerDay;
+    for (const bool lateFrost : {false, true}) {
+        auto sim = farmingSim();
+        sim->submit(CreateGrowingZoneCommand{CellRect{10, 8, 1, 1, 0}, "Plant_Rice"});
+        sim->step();
+        const int64_t late = 30 * kSecondsPerDay;
+        const int64_t at = lateFrost ? late : frostAt;
+        sim->farming().setForecast([at](int64_t seconds) { return seconds < at ? 15.0f : -4.0f; }, [&sim]() { return sim->time().seconds; });
+        if (lateFrost) {
+            CHECK(sim->farming().sowBlocker(cell).empty());
+        } else {
+            CHECK(sim->farming().sowBlocker(cell) == "it would not ripen before the frost");
+        }
+    }
+}
+
+TEST_CASE("Farming: a colonist leaves the zone alone when the frost is coming, and sows it once the weather allows") {
+    auto sim = farmingSim();
+    farmingColonist(*sim, CellPos{8, 8, 0}, 8);
+    sim->submit(CreateGrowingZoneCommand{CellRect{10, 8, 1, 1, 0}, "Plant_Rice"});
+    bool frostSoon = true;
+    sim->farming().setForecast([&frostSoon](int64_t) { return frostSoon ? -4.0f : 15.0f; }, [&sim]() { return sim->time().seconds; });
+    // The temperature is 20 now (so the old "too cold now" check passes), but the forecast says frost.
+    for (int i = 0; i < 400; ++i) {
+        sim->step();
+    }
+    CHECK_FALSE(sim->plants().has(CellPos{10, 8, 0}));
+    frostSoon = false;
+    for (int i = 0; i < 4000; ++i) {  // colonists look at the forecast afresh each game hour
+        sim->step();
+    }
+    CHECK(sim->plants().has(CellPos{10, 8, 0}));
+}
+
 TEST_CASE("Farming: sowing clears a wild plant, but a tree in the way stays") {
     auto sim = farmingSim();
     farmingColonist(*sim, CellPos{8, 8, 0}, 8);
