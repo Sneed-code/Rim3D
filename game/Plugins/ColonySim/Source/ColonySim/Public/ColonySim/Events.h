@@ -104,6 +104,8 @@ enum class EventType : uint8_t {
     SappersBreaking,       // raiders began digging through a wall (F12): `cell` the wall, `squad`, `count` how many dig
     ItemStolen,            // a thief lifted loose items (F12): `thing` the thief, `target` the item it carries, `def` its def, `count`
     PawnKidnapped,         // a raider lifted a downed colonist (F12): `thing` the kidnapper, `target` the colonist. `message` "left the map" when it got away with it
+    InspirationStarted,    // a colonist became inspired (docs/design/inspirations.md): `thing` the pawn, `message` the Inspirations defName, `amount` its days
+    InspirationEnded,      // it ended: `message` "why:defName" (used, expired, dismissed), `amount` how many game seconds it lasted
 };
 
 // What stopped a projectile (ProjectileHit).

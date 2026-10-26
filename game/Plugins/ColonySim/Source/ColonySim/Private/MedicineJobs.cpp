@@ -6,6 +6,7 @@
 #include "ColonySim/Events.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Inspirations.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Medicine.h"
 #include "ColonySim/Needs.h"
@@ -349,13 +350,21 @@ JobSystem::StepResult JobSystem::tendWork(Entity pawn, Job& job, std::string& wh
                                                  patient == pawn, rng.unit());
     const int tended = health_.tendAll(patient, quality);
     DefId used;
+    // An inspired doctor's tend uses no medicine (the inspiration is used up).
+    const bool free = tended > 0 && medicineItem != kNoEntity && inspirations_ != nullptr && inspirations_->takeFreeMedicine(pawn);
     if (tended > 0 && medicineItem != kNoEntity) {
         used = reg.get<Thing>(medicineItem).def;
+    }
+    if (tended > 0 && medicineItem != kNoEntity) {
         release(pawn, job);
         job.site = kNoEntity;
         reserve(pawn, job);
-        reg.remove<Carrying>(pawn);
-        things_.destroy(medicineItem);
+        if (free) {
+            dropCarried(pawn);  // kept: it lies where the doctor stands
+        } else {
+            reg.remove<Carrying>(pawn);
+            things_.destroy(medicineItem);
+        }
     }
     if (tended > 0) {
         Event event;
