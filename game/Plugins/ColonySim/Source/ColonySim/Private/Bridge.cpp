@@ -127,6 +127,8 @@ const char* commandName(const Command& command) {
                 return "RemoveOutfit";
             } else if constexpr (std::is_same_v<Type, StripCommand>) {
                 return "Strip";
+            } else if constexpr (std::is_same_v<Type, InteractCommand>) {
+                return "Interact";
             } else if constexpr (std::is_same_v<Type, SetWeatherCommand>) {
                 return "SetWeather";
             } else if constexpr (std::is_same_v<Type, SpendTalentPointCommand>) {
@@ -147,9 +149,15 @@ const char* commandName(const Command& command) {
                 return "SwitchWeapon";
             } else if constexpr (std::is_same_v<Type, IgniteCommand>) {
                 return "Ignite";
-            } else {
-                static_assert(std::is_same_v<Type, SetHomeAreaCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, SetHomeAreaCommand>) {
                 return "SetHomeArea";
+            } else if constexpr (std::is_same_v<Type, SetMedicalCareCommand>) {
+                return "SetMedicalCare";
+            } else if constexpr (std::is_same_v<Type, SetPrisonerModeCommand>) {
+                return "SetPrisonerMode";
+            } else {
+                static_assert(std::is_same_v<Type, SetPrisonBedCommand>, "name every command type");
+                return "SetPrisonBed";
             }
         },
         command);
@@ -224,6 +232,8 @@ const char* eventTypeName(EventType type) {
         case EventType::AnimalStarved: return "AnimalStarved";
         case EventType::MeleeSwing: return "MeleeSwing";
         case EventType::MeleeHit: return "MeleeHit";
+        case EventType::PawnTended: return "PawnTended";
+        case EventType::PawnScarred: return "PawnScarred";
         case EventType::ApparelDestroyed: return "ApparelDestroyed";
         case EventType::WeatherChanged: return "WeatherChanged";
         case EventType::SeasonChanged: return "SeasonChanged";
@@ -241,6 +251,14 @@ const char* eventTypeName(EventType type) {
         case EventType::FireOut: return "FireOut";
         case EventType::PawnCaughtFire: return "PawnCaughtFire";
         case EventType::PawnFireOut: return "PawnFireOut";
+        case EventType::PrisonerCaptured: return "PrisonerCaptured";
+        case EventType::PrisonerChatted: return "PrisonerChatted";
+        case EventType::PrisonerRecruited: return "PrisonerRecruited";
+        case EventType::PrisonerReleased: return "PrisonerReleased";
+        case EventType::PrisonBreak: return "PrisonBreak";
+        case EventType::Interaction: return "Interaction";
+        case EventType::BondChanged: return "BondChanged";
+        case EventType::SocialFight: return "SocialFight";
     }
     return "?";
 }
@@ -270,6 +288,11 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Handle: return "Handle";
         case PawnAction::Slaughter: return "Slaughter";
         case PawnAction::Block: return "Block";
+        case PawnAction::Tend: return "Tend";
+        case PawnAction::LiftPawn: return "LiftPawn";
+        case PawnAction::LayPawn: return "LayPawn";
+        case PawnAction::Chat: return "Chat";
+        case PawnAction::FeedPawn: return "FeedPawn";
     }
     return "?";
 }

@@ -48,7 +48,9 @@ class MeleeSystem;
 class Mineables;
 class MovementSystem;
 class MoodSystem;
+class MedicineSystem;
 class RecreationSystem;
+class SocialSystem;
 class ResearchSystem;
 class TalentSystem;
 class NeedsSystem;
@@ -56,6 +58,7 @@ class RaidSystem;
 class Plants;
 class PowerGrid;
 class Regions;
+class PrisonerSystem;
 class Rooms;
 class TemperatureSystem;
 class SpoilageSystem;
@@ -164,6 +167,9 @@ public:
     // Research projects and what they unlock (docs/design/research.md).
     ResearchSystem& research() { return *research_; }
     const ResearchSystem& research() const { return *research_; }
+    // Medicine: tend quality, medical care settings (docs/design/medicine.md).
+    MedicineSystem& medicine() { return *medicine_; }
+    const MedicineSystem& medicine() const { return *medicine_; }
     // The protagonist's talent XP, points and ranks (docs/design/talents.md).
     TalentSystem& talents() { return *talents_; }
     const TalentSystem& talents() const { return *talents_; }
@@ -255,12 +261,20 @@ public:
     MeleeSystem& melee() { return *melee_; }
     const MeleeSystem& melee() const { return *melee_; }
 
+    // Opinions, interactions, bonds and social fights (docs/design/social.md).
+    SocialSystem& social() { return *social_; }
+    const SocialSystem& social() const { return *social_; }
+
     // Wild animals: herds, grazing, sleep, coming and going at the edges (docs/design/animal-life.md).
     AnimalSystem& animals() { return *animals_; }
     const AnimalSystem& animals() const { return *animals_; }
     // Raids, raid squads and the colony alarm with its defense roles (docs/design/raids.md).
     RaidSystem& raids() { return *raids_; }
     const RaidSystem& raids() const { return *raids_; }
+
+    // Prisoners: capture, feeding, warden talks, recruiting and release (docs/design/prisoners.md).
+    PrisonerSystem& prisoners() { return *prisoners_; }
+    const PrisonerSystem& prisoners() const { return *prisoners_; }
 
     // Taming, training, animal zones and pens (docs/design/husbandry.md).
     Husbandry& husbandry() { return *husbandry_; }
@@ -332,6 +346,7 @@ private:
     std::unique_ptr<MoodSystem> mood_;
     std::unique_ptr<RecreationSystem> recreation_;
     std::unique_ptr<ResearchSystem> research_;
+    std::unique_ptr<MedicineSystem> medicine_;
     std::unique_ptr<TalentSystem> talents_;
     std::unique_ptr<CombatSystem> combat_;
     std::unique_ptr<ExplosiveSystem> explosives_;  // after combat_ and health_
@@ -351,6 +366,7 @@ private:
     std::unique_ptr<RoomStats> roomStats_;
     std::unique_ptr<AnimalSystem> animals_;
     std::unique_ptr<RaidSystem> raids_;        // after the fighters
+    std::unique_ptr<PrisonerSystem> prisoners_;  // after the raids
     std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system
     std::unique_ptr<Breeding> breeding_;    // after husbandry_
     std::unique_ptr<Fire> fire_;            // after the weather, temperature, rooms, floors, filth, plants and health
@@ -362,6 +378,7 @@ private:
     std::vector<Checkpoint> checkpoints_;
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
+    std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
 };
 
 }  // namespace colony

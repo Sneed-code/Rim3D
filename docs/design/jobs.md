@@ -67,7 +67,11 @@ gives no work; the tasks with scanners so far:
 | `ConstructFinishFrames` | Construction | frames with all their materials |
 | `Deconstruct` | Construction | buildings marked for deconstruction |
 | `DoBillsCookStove` | Cooking | work buildings with a bill to do ([bills.md](bills.md)) |
+| `TendPatients`, `Rescue` | Doctor | a colonist with untended wounds (the bleeding first); a downed colonist no bed holds ([medicine.md](medicine.md)); jobs `TendPatient`, `Rescue` |
+| `GoToMedicalBed`, `RestToHeal` | Patient, PatientBedRest | the pawn itself, when hurt and up: a medical bed, or any bed; job `BedRest` ([medicine.md](medicine.md)) |
 | `CleanFilth` | Cleaning | the nearest filthy cell indoors ([room-stats.md](room-stats.md)); job `CleanFilth`, steps GotoCell, CleanWork |
+
+Work types with a natural priority of 1100 or more are asked first at each priority level, and every ten seconds a pawn on a droppable job asks them again ([medicine.md](medicine.md)).
 
 C3 adds `Mine` and `CutOrHarvestDesignatedPlants`
 and so on: a class deriving from `WorkGiver` in `WorkGivers.cpp`, added in `makeWorkGivers`.

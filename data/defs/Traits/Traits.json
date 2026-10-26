@@ -52,11 +52,12 @@
   {
     "defName": "Beauty", "parent": "TraitBase",
     "degreeDatas": [
-      { "degree": -2, "label": "staggeringly ugly", "statOffsets": { "pawnBeauty": -2 } },
-      { "degree": -1, "label": "ugly", "statOffsets": { "pawnBeauty": -1 } },
-      { "degree": 1, "label": "pretty", "statOffsets": { "pawnBeauty": 1 } },
-      { "degree": 2, "label": "beautiful", "statOffsets": { "pawnBeauty": 2 } }
-    ]
+      { "degree": -2, "label": "staggeringly ugly", "statOffsets": { "pawnBeauty": -2 }, "opinionOfMe": -10 },
+      { "degree": -1, "label": "ugly", "statOffsets": { "pawnBeauty": -1 }, "opinionOfMe": -5 },
+      { "degree": 1, "label": "pretty", "statOffsets": { "pawnBeauty": 1 }, "opinionOfMe": 5 },
+      { "degree": 2, "label": "beautiful", "statOffsets": { "pawnBeauty": 2 }, "opinionOfMe": 10 }
+    ],
+    "unverified": ["opinionOfMe"]
   },
   {
     "defName": "Tough", "parent": "TraitBase", "commonality": 1.1,
@@ -84,7 +85,8 @@
   },
   {
     "defName": "Abrasive", "parent": "TraitBase", "conflictingTraits": ["Kind"],
-    "degreeDatas": [{ "degree": 0, "label": "abrasive", "statOffsets": { "marketValue": -0.15 } }]
+    "degreeDatas": [{ "degree": 0, "label": "abrasive", "statOffsets": { "marketValue": -0.15 }, "opinionOfMe": -20 }],
+    "unverified": ["opinionOfMe"]
   },
   {
     "defName": "Psychopath", "parent": "TraitBase", "conflictingTraits": ["Kind"],

@@ -58,6 +58,8 @@ enum class EventType : uint8_t {
     AnimalStarved,        // a tame animal died of hunger
     MeleeSwing,      // a pawn began a melee swing: the hit comes `amount` steps later (docs/design/melee.md)
     MeleeHit,        // the hit moment of a swing: `message` says "hit", "deflected", "blocked", "dodged" or "missed"
+    PawnTended,      // a doctor finished tending a patient (docs/design/medicine.md)
+    PawnScarred,     // a healed injury left a scar or an old wound (docs/design/medicine.md)
     ApparelDestroyed,  // a worn piece wore out or was shot to pieces: `thing` the wearer, `def` the piece's def (docs/design/apparel.md)
     WeatherChanged,  // the weather began to change into another kind (docs/design/weather.md)
     SeasonChanged,   // a new season began
@@ -75,6 +77,14 @@ enum class EventType : uint8_t {
     FireOut,         // a fire went out: burnt out, rained out or beaten out
     PawnCaughtFire,  // a pawn is on fire
     PawnFireOut,     // a pawn is no longer on fire
+    Interaction,     // one colonist talked to another (C20, docs/design/social.md): `thing` the talker, `target` the one spoken to, `message` the Interactions def, `count` 1 if it worked, 0 if refused, `amount` the listener's opinion of the talker after
+    BondChanged,     // a stored bond formed or ended: `thing` and `target` the two, `message` the bond kind ("Lover", "Spouse", "ExLover", "ExSpouse"), `count` 1 formed, 0 ended
+    SocialFight,     // a fight with fists began or ended: `thing` and `target` the two, `message` "started" or "ended: why"
+    PrisonerCaptured,   // a downed enemy was laid in a prison bed: `thing` the prisoner, `target` the warden (docs/design/prisoners.md)
+    PrisonerChatted,    // a warden finished a talk with a prisoner: `thing` the warden, `target` the prisoner, `amount` its resistance now, `message` "reduced", "recruit failed" or "no change"
+    PrisonerRecruited,  // a prisoner joined the colony: `thing` the new colonist, `target` the warden
+    PrisonerReleased,   // a prisoner was set free and walks off the map: `thing` the pawn, `target` the warden (none for a dev command)
+    PrisonBreak,        // prisoners broke out (the hook for T3): `count` how many, `message` the cause
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -114,6 +124,11 @@ enum class PawnAction : uint8_t {
     Switch,       // started switching weapons (P1): `target` the weapon coming to the hands, `amount` the steps it takes
     Roll,         // started a dodge roll (P2): `cell` where it began, (x, y) the unit direction, `amount` the steps from start-up to the end of recovery
     Extinguish,   // started beating out the fire in `cell`; goes on until its JobEnded (docs/design/fire.md)
+    Tend,         // started tending `target`, a patient (once per job; the work takes game seconds)
+    LiftPawn,     // lifted `target`, a downed pawn, to carry it (its position follows this pawn's until LayPawn)
+    LayPawn,      // laid the carried `target` down in a bed (or where it stood, if the bed was lost)
+    Chat,         // started talking to `target`, a prisoner (once per job; the talk takes game seconds)
+    FeedPawn,     // started handing food to `target`, a prisoner
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
@@ -148,6 +163,9 @@ struct Event {
     // def, `cell` its origin, `message` "on" (in a net that works and switched on) or "off".
     // ResearchDone: `thing` the pawn who finished it (none if a dev command did), `message` the Research
     // def's defName, `amount` its cost in points.
+    // PawnTended: `thing` the doctor, `target` the patient, `def` the medicine used (none if there was none),
+    // `amount` the tend quality (0 to 1.3), `message` "medicine" or "no medicine", "self" if the doctor tended itself.
+    // PawnScarred: `thing` the pawn, `def` the Scar or OldWound hediff, `part` the body part, `amount` its severity.
     // AnimalTamed, AnimalReleased, AnimalSlaughtered, AnimalStarved: `thing` the animal, `target` the colonist
     // (none for a release or a starving), `cell` where. AnimalTrained: also `message` the trick (Trainable name),
     // `amount` the steps it has now and `part` the steps it needs. AnimalAttemptFailed: `message` "tame" or the

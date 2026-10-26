@@ -27,6 +27,9 @@
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Recreation.h"
+#include "ColonySim/Social.h"
+#include "ColonySim/Medicine.h"
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Talents.h"
 #include "ColonySim/Needs.h"
@@ -149,6 +152,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     recreation_ = std::make_unique<RecreationSystem>(*things_, *defs_);
     recreation_->setRooms(rooms_.get());
     research_ = std::make_unique<ResearchSystem>(*things_, *defs_);
+    medicine_ = std::make_unique<MedicineSystem>(*things_, *defs_);
     talents_ = std::make_unique<TalentSystem>(*things_, *defs_);
     temperature_ = std::make_unique<TemperatureSystem>(map_, *things_, *rooms_, *health_, *defs_,
                                                        splitMix64(settings.seed ^ 0x74656D70ULL));
@@ -180,6 +184,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setPower(power_.get());
     jobs_->setRooms(rooms_.get());
     jobs_->setResearch(research_.get());
+    jobs_->setMedicine(medicine_.get());
     jobs_->setTalents(talents_.get());
     jobs_->setFilth(filth_.get());
     jobs_->setApparel(apparel_.get());
@@ -219,6 +224,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     raids_ = std::make_unique<RaidSystem>(*things_, map_, *rooms_, *combat_, *health_, *jobs_, *fighters_, *defs_, time_, rng_);
     raids_->setEventLog(&events_);
     raids_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
+    prisoners_ = std::make_unique<PrisonerSystem>(*things_, map_, *combat_, *health_, *jobs_, *fighters_, *raids_, *defs_, time_, rng_);
+    prisoners_->setEventLog(&events_);
+    jobs_->setPrisoners(prisoners_.get());
+    mood_->addSituation("isPrisoner", [this](Entity pawn) { return prisoners_->isPrisoner(pawn) ? 0 : -1; });
     combat_->setBeforeDestroy([this](Entity thing) {
         jobs_->forget(thing);
         raids_->forget(thing);
@@ -238,6 +247,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     });
     defense_->setOnLearn([this](Entity pawn) { fighters_->replan(pawn); });
     fighters_->setDefense(defense_.get());
+    social_ = std::make_unique<SocialSystem>(*things_, *rooms_, *health_, *melee_, *mood_, *jobs_, *defs_, time_,
+                                             splitMix64(settings.seed ^ 0x736F6369616CULL));
+    social_->setEventLog(&events_);
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -545,6 +557,28 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             jobs_->forget(circuit->thing);
             fighters_->forget(circuit->thing);
             things_->destroy(circuit->thing);
+        }
+    } else if (const auto* medical = std::get_if<SetMedicalCareCommand>(&command)) {
+        MedicalCare care = MedicalCare::Best;
+        if (!things_->exists(medical->pawn) || !health_->tracks(medical->pawn)) {
+            commandFailed(id, "that thing has no body to care for");
+        } else if (!medicalCareFromName(medical->care, care)) {
+            commandFailed(id, "no medical care '" + medical->care + "' (NoCare, NoMedicine, Herbal, Normal or Best)");
+        } else {
+            things_->registry().emplace_or_replace<MedicalSettings>(medical->pawn, MedicalSettings{care});
+        }
+    } else if (const auto* prisonerMode = std::get_if<SetPrisonerModeCommand>(&command)) {
+        PrisonerMode mode = PrisonerMode::NoInteraction;
+        std::string why;
+        if (!prisonerModeFromName(prisonerMode->mode, mode)) {
+            commandFailed(id, "no prisoner mode '" + prisonerMode->mode + "' (NoInteraction, ReduceResistance, AttemptRecruit or Release)");
+        } else if (!prisoners_->setMode(prisonerMode->pawn, mode, why)) {
+            commandFailed(id, why);
+        }
+    } else if (const auto* prisonBed = std::get_if<SetPrisonBedCommand>(&command)) {
+        std::string why;
+        if (!prisoners_->setPrisonBed(prisonBed->bed, prisonBed->on, why)) {
+            commandFailed(id, why);
         }
     } else if (const auto* throwCommand = std::get_if<ThrowCommand>(&command)) {
         DefId item;
@@ -934,6 +968,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!apparel_->markStrip(strip->thing, strip->strip, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* interact = std::get_if<InteractCommand>(&command)) {
+        if (!social_->interact(interact->initiator, interact->recipient, interact->interaction, interact->outcome, error)) {
+            commandFailed(id, error);
+        }
     }
 }
 
@@ -976,10 +1014,12 @@ void Sim::step() {
         events_.insert(events_.end(), gained.begin(), gained.end());
     }
     fighters_->step();
+    prisoners_->step();
     recreation_->step();
     animals_->step();
     husbandry_->step();
     breeding_->step();
+    social_->step(time_.seconds);
     mood_->step(time_.seconds, events_);
     movement_->step(things_->registry(), map_);
     melee_->step();
@@ -1221,6 +1261,10 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.mood = mood->level;
             view.moodBand = static_cast<int>(mood->band);
         }
+        if (reg.all_of<Social>(entity)) {
+            view.partner = social_->partner(entity);
+            view.socialFight = social_->fighting(entity);
+        }
         if (const BeautyNeed* beauty = roomStats_->beautyNeed(entity)) {
             view.beautyNeed = beauty->level;
         }
@@ -1331,6 +1375,12 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Raider* raider = reg.try_get<Raider>(entity)) {
             view.squad = raider->squad;
         }
+        if (const Prisoner* prisoner = reg.try_get<Prisoner>(entity)) {
+            view.prisoner = true;
+            view.prisonerMode = static_cast<uint8_t>(prisoner->mode);
+            view.resistance = prisoner->resistance;
+        }
+        view.prisonBed = reg.all_of<PrisonBed>(entity);
         if (const Melee* melee = reg.try_get<Melee>(entity)) {
             view.meleePhase = melee->phase;
             view.meleeStepsLeft = melee->stepsLeft;
@@ -1749,6 +1799,7 @@ uint64_t Sim::stateHash() const {
                 h.add(injury.hediff.value);
                 h.add(injury.severity);
                 h.add(injury.tendQuality);
+                h.add(injury.peak);
             }
             h.add(static_cast<uint64_t>(health->missing.size()));
             for (const MissingPart& missing : health->missing) {
@@ -1759,15 +1810,18 @@ uint64_t Sim::stateHash() const {
             h.add(health->dead);
             h.add(static_cast<int>(health->cause));
         }
+        medicine_->hashPawn(e, h);
         combat_->hashThing(e, h);
         explosives_->hashThing(e, h);
         fighters_->hashThing(e, h);
         animals_->hashThing(e, h);
         raids_->hashThing(e, h);
+        prisoners_->hashThing(e, h);
         husbandry_->hashThing(e, h);
         breeding_->hashThing(e, h);
         fire_->hashThing(e, h);
         melee_->hashThing(e, h);
+        social_->hashThing(e, h);
         defense_->hashThing(e, h);
         apparel_->hashThing(e, h);
     }

@@ -87,6 +87,10 @@ struct ThingView {
     // Mood (docs/design/mood.md): 0 to 100, else -1; the break band as a MoodBand (0 stable to 3 extreme).
     float mood = -1.0f;
     int moodBand = 0;
+    // Social life (docs/design/social.md): a pawn's spouse, else its lover (none if it has neither), and
+    // whether it is in a fight with fists.
+    Entity partner = kNoEntity;
+    bool socialFight = false;
     // Recreation, comfort and outdoors needs (docs/design/recreation.md): 0 empty to 1 full, else -1.
     float joy = -1.0f;
     float comfort = -1.0f;
@@ -144,6 +148,12 @@ struct ThingView {
     bool sheltering = false;
     bool fleeing = false;
     uint32_t squad = 0;
+    // Prisoners (docs/design/prisoners.md): held in a prison bed, what wardens do with it (a PrisonerMode number) and its
+    // resistance; a bed marked for prisoners.
+    bool prisoner = false;
+    uint8_t prisonerMode = 0;
+    float resistance = 0.0f;
+    bool prisonBed = false;
     // Humanlike pawns: their looks, Snapshot::looks[looks]; -1 for other things.
     int32_t looks = -1;
     // Buildings with a power part (docs/design/power.md): whether they have power, the net they are

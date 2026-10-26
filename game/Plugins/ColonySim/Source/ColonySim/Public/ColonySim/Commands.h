@@ -483,6 +483,18 @@ struct StripCommand {
     bool strip = true;
 };
 
+// Dev command (C20, docs/design/social.md): `initiator` does the Interactions def `interaction` to `recipient`
+// now, whatever the dice and the opinion limits would have said. `outcome` is 1 to make a roll that could go
+// either way (a romantic gesture, a proposal) work, 0 to make it fail, -1 to leave it to the dice. Fails if
+// the interaction is unknown, either pawn can't talk now (dead, downed, asleep, fighting, drafted, under the
+// player's hand), they are out of earshot, or the interaction needs what is not there (a lover).
+struct InteractCommand {
+    Entity initiator = kNoEntity;
+    Entity recipient = kNoEntity;
+    std::string interaction;
+    int outcome = -1;
+};
+
 // The protagonist's dodge roll (P2, docs/design/shooter-feel.md): a start-up, a roll of a few metres
 // in the direction (dx, dy) (any length; not a number, or zero, is a backstep away from where the
 // pawn faces) in which bullets pass through the pawn for a short window, then a recovery in which it
@@ -494,6 +506,29 @@ struct DodgeRollCommand {
     Entity pawn = kNoEntity;
     float dx = 0.0f;
     float dy = 0.0f;
+};
+
+// Medicine (task H1, docs/design/medicine.md): how far a colonist's medicine may go. `care` is a name from
+// medicalCareName: NoCare, NoMedicine, Herbal, Normal or Best. Fails for a pawn without a body or a name that
+// isn't one.
+struct SetMedicalCareCommand {
+    Entity pawn = kNoEntity;
+    std::string care;
+};
+
+// Prisoners (task C22, docs/design/prisoners.md): what wardens do with a prisoner. `mode` is NoInteraction, ReduceResistance,
+// AttemptRecruit or Release (prisonerModeName). Fails for a pawn that is no prisoner, or a name that isn't one; Release also fails
+// for a prisoner who can't walk.
+struct SetPrisonerModeCommand {
+    Entity pawn = kNoEntity;
+    std::string mode;
+};
+
+// Marks a bed as a prison bed (only prisoners sleep in it, and downed enemies are carried to it) or takes the mark off. Fails for a
+// building that is no bed, or a bed someone not fit for it already owns.
+struct SetPrisonBedCommand {
+    Entity bed = kNoEntity;
+    bool on = true;
 };
 
 // Dev command: the weather becomes this Weathers def now (by defName, e.g. "Rain") and lasts `hours`
@@ -596,7 +631,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SpendTalentPointCommand, AddTalentXpCommand, RearmTrapCommand,
                              CarryWeaponCommand, SwitchWeaponCommand, CreateGrowingZoneCommand,
                              RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
-                             SetHomeAreaCommand>;
+                             SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand, SetPrisonerModeCommand,
+                             SetPrisonBedCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

@@ -120,9 +120,9 @@ G2, A1 and A2 are Stage 1 tasks.
 | ✓ | C17 | **Room stats, beauty and filth.** Beauty per cell from things and floors; filth (dirt walked in, blood, ash) and a cleaning job; room space, beauty, wealth, cleanliness and impressiveness by RimWorld's formulas; room thoughts; the beauty need. | Cloud | Sonnet, high | 90 min | S7, D9, D11 |
 | ✓ | C18 | **Recreation, comfort and outdoors.** The recreation need with kinds and tolerance, recreation jobs (horseshoes, chess, billiards, walking, cloud watching, chatting at a table) in Joy hours; comfort from chairs and beds; the outdoors need; their thoughts. | Cloud | Sonnet, high | 90 min | S7, D9, D11 |
 | | C19 | **Mental breaks.** RimWorld's break chances by mood band; minor (wander sadly, food binge, hide in room), major (tantrum, sad wander, insulting spree) and extreme (berserk, give up and leave, fire-starting spree after E4) breaks; catharsis. | Cloud | Sonnet, high | 90 min | S7, D9 |
-| | C20 | **Social life.** Opinions, interactions at RimWorld's rates, friends, rivals, lovers and spouses as bonds (no sex, no pregnancy), social fights with fists (F8), social thoughts, Social skill XP. | Cloud | Sonnet, high | 90 min | F8, D9 |
+| ✓ | C20 | **Social life.** Opinions, interactions at RimWorld's rates, friends, rivals, lovers and spouses as bonds (no sex, no pregnancy), social fights with fists (F8), social thoughts, Social skill XP. | Cloud | Sonnet, high | 90 min | F8, D9 |
 | ✓ | C21 | **Research.** Research benches, a current project, the research job (Intellectual), unlocks that gate building plans and bills; commands to pick a project. | Cloud | Sonnet, medium | 60 min | S7, D12 |
-| | C22 | **Prisoners.** Capture downed enemies to a prison bed; warden feeding, chats and recruiting against resistance as in RimWorld; release; prisoner thoughts; prison-break hook for T3. | Cloud | Sonnet, high | 90 min | H1 |
+| ✓ | C22 | **Prisoners.** Capture downed enemies to a prison bed; warden feeding, chats and recruiting against resistance as in RimWorld; release; prisoner thoughts; prison-break hook for T3. | Cloud | Sonnet, high | 90 min | H1 |
 | | C23 | **Visitors and traders.** Faction goodwill; visitor groups walk in, stay a while and leave; trader caravans with stock; a trade command with RimWorld's prices (Social skill), silver as money. | Cloud | Sonnet, high | 90 min | T1, D10 |
 | ✓ | C24 | **Carry weight and hauling 2.** Item mass, carry capacity, carrying several stacks at once, slower walking when loaded, stacks merging in stockpiles. | Cloud | Sonnet, medium | 60 min | S7 |
 | | C25 | **Colony-year scenario.** `simrun --scenario year`: the Crashlanded colony on a 1 km map for 60 days with farming, clothes, fuel, temperature, animals and the narrator. Checks: nobody starves or freezes, nobody stuck for a game hour, food stays above zero. Nightly. | Cloud | Sonnet, high | 90 min | C13, C14, C15, E2, E4, H2, N3, T2 |
@@ -131,7 +131,7 @@ G2, A1 and A2 are Stage 1 tasks.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | H1 | **Doctors, medicine and rescue.** Medicine items; the Doctor job tends patients in bed, quality from Medicine skill, medicine and bed; patient and bed-rest work; medical beds; rescuing downed colonists to a bed; scars from healed wounds. | Cloud | Sonnet, high | 90 min | S7, D7 |
+| ✓ | H1 | **Doctors, medicine and rescue.** Medicine items; the Doctor job tends patients in bed, quality from Medicine skill, medicine and bed; patient and bed-rest work; medical beds; rescuing downed colonists to a bed; scars from healed wounds. | Cloud | Sonnet, high | 90 min | S7, D7 |
 | | H2 | **Infections and diseases.** Infection chance from wound tending; RimWorld's immunity race (immunity against severity); flu, plague, malaria, sleeping sickness, gut worms, muscle parasites, food poisoning; a hook for T3's outbreaks. | Cloud | Sonnet, high | 90 min | H1 |
 | | H3 | **Surgery and prosthetics.** Operation bills on a pawn (amputate, install or remove a part); success chance by RimWorld's rule (skill, bed, medicine, cleanliness); body parts as items; prosthetics and bionics change capacities. | Cloud | Sonnet, high | 90 min | H1, C14 |
 
@@ -193,7 +193,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | | U19 | **Panels 3.** Animals tab, outfits, trade window, power, temperature and beauty overlays. | PC Unreal | Sonnet, medium | 90 min | N3, C15, C23, E5, E2 |
 | | U20 | **Letters and the narrator.** Letters (raids, events) with a jump-to button, an alert list, choosing the narrator and difficulty at game start. | PC Unreal | Sonnet, medium | 60 min | T1 |
 | | U21 | **Shooter feel on screen.** Aim-hold camera blend, recoil camera kick, camera shake and motion blur from sim events (with settings sliders), dodge-roll animation, grenade and explosion effects with Chaos debris (`shooter-feel.md`). | PC Unreal | Sonnet, high | 90 min | P2, F9 |
-| | U22 | **Melee and weapon switching on screen.** Swing, block and dodge animations timed to the sim, hit-stop and flinch, the protagonist's melee input, weapon switch key and holstered weapons. | PC Unreal | Sonnet, high | 60 min | F8, P1 |
+| ✓ | U22 | **Melee and weapon switching on screen.** Swing, block and dodge animations timed to the sim, hit-stop and flinch, the protagonist's melee input, weapon switch key and holstered weapons. | PC Unreal | Sonnet, high | 60 min | F8, P1 |
 
 ### Art (A)
 

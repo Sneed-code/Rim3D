@@ -253,6 +253,11 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, StripCommand>) {
                 j["thing"] = entt::to_integral(c.thing);
                 j["strip"] = c.strip;
+            } else if constexpr (std::is_same_v<Type, InteractCommand>) {
+                j["initiator"] = entt::to_integral(c.initiator);
+                j["recipient"] = entt::to_integral(c.recipient);
+                j["interaction"] = c.interaction;
+                j["outcome"] = c.outcome;
             } else if constexpr (std::is_same_v<Type, SetWeatherCommand>) {
                 j["weather"] = c.weather;
                 j["hours"] = c.hours;
@@ -283,10 +288,19 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["size"] = c.size;
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["force"] = c.force;
-            } else {
-                static_assert(std::is_same_v<Type, SetHomeAreaCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, SetHomeAreaCommand>) {
                 j["area"] = replayRectJson(c.area);
                 j["add"] = c.add;
+            } else if constexpr (std::is_same_v<Type, SetMedicalCareCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["care"] = c.care;
+            } else if constexpr (std::is_same_v<Type, SetPrisonerModeCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["mode"] = c.mode;
+            } else {
+                static_assert(std::is_same_v<Type, SetPrisonBedCommand>, "write every command type");
+                j["bed"] = entt::to_integral(c.bed);
+                j["on"] = c.on;
             }
         },
         logged.command);
@@ -859,6 +873,19 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.thing = static_cast<Entity>(thing);
         out.command = c;
+    } else if (type == "Interact") {
+        InteractCommand c;
+        uint32_t initiator = entt::to_integral(kNoEntity);
+        uint32_t recipient = entt::to_integral(kNoEntity);
+        int64_t outcome = -1;
+        if (!r.integer(j, "initiator", initiator, where) || !r.integer(j, "recipient", recipient, where) ||
+            !r.text(j, "interaction", c.interaction, where) || !r.integer(j, "outcome", outcome, where)) {
+            return false;
+        }
+        c.initiator = static_cast<Entity>(initiator);
+        c.recipient = static_cast<Entity>(recipient);
+        c.outcome = static_cast<int>(outcome);
+        out.command = std::move(c);
     } else if (type == "ShortCircuit") {
         uint32_t thing = entt::to_integral(kNoEntity);
         if (!r.integer(j, "thing", thing, where)) {
@@ -1023,6 +1050,30 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "SetMedicalCare") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        SetMedicalCareCommand c;
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "care", c.care, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "SetPrisonerMode") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        SetPrisonerModeCommand c;
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "mode", c.mode, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "SetPrisonBed") {
+        uint32_t bed = entt::to_integral(kNoEntity);
+        SetPrisonBedCommand c;
+        if (!r.integer(j, "bed", bed, where) || !r.flag(j, "on", c.on, where)) {
+            return false;
+        }
+        c.bed = static_cast<Entity>(bed);
         out.command = std::move(c);
     } else if (type == "PlaceFloor") {
         PlaceFloorCommand c;

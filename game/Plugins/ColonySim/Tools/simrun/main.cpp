@@ -30,6 +30,7 @@
 // scattered over the map to a stockpile zone in the middle through the job system (C1).
 #include "ColonyScenario.h"
 #include "PowerScenario.h"
+#include "RaidSoak.h"
 #include "ColonySim/Animals.h"
 #include "ColonySim/Breeding.h"
 #include "ColonySim/Husbandry.h"
@@ -101,6 +102,7 @@ struct Options {
     int farm = 0;        // --farm N: N tame chickens, fed every hour (N4)
     bool fire = false;   // --fire: light a grass fire near the first colonist ten minutes in (E4)
     double raid = -1.0;  // start a pirate raid of this many points at the first step (0: the colony's threat points)
+    int raidSoak = 0;    // --raid-soak N: the F7 soak over N seeds from --seed
     bool armed = false;  // give every colonist an assault rifle first (not a command: not in replays)
     std::string png;
     std::string regionsPng;
@@ -156,6 +158,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.farm = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--animal-percent") == 0 && hasValue) {
             out.animals = std::atoi(argv[++i]);
+        } else if (std::strcmp(arg, "--raid-soak") == 0 && hasValue) {
+            out.raidSoak = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--raid") == 0 && hasValue) {
             out.raid = std::atof(argv[++i]);
         } else if (std::strcmp(arg, "--armed") == 0) {
@@ -192,7 +196,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony [--verbose]] [--power] [--raid POINTS] [--armed] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony [--verbose]] [--power] [--raid POINTS] [--armed] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS]\n");
             return false;
         }
@@ -607,6 +611,11 @@ int main(int argc, char** argv) {
     // The power check (E5): its own small map and script; 3 days unless --days says.
     if (options.power) {
         return powerscenario::run(options.daysGiven ? options.days : 3.0, defs, options.verbose);
+    }
+
+    // The raid soak (F7): firefights and raids over many seeds, from --seed on.
+    if (options.raidSoak > 0) {
+        return raidsoak::run(options.seed, options.raidSoak, defs, options.verbose);
     }
 
     // The colony scenario (C10) runs its own script on the Crashlanded start; 5 days unless --days says.

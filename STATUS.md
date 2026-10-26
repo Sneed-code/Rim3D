@@ -3,13 +3,16 @@
 Updated 2026-10-26.
 
 Stage 2 U13 done: the sim's clock and weather are on screen. The sun and moon cross a sky atmosphere with clouds and fog (sun height by season, moon phase over 30 days), rain and snow fall in a block of air round the camera and stop under roofs, the ground gets wet in the rain and white with the sim's snow, thunderstorms flash, and the overseer's top bar and direct mode's time box show "Spring 6, Year 1   12°C, rain" (`docs/design/sky.md`, smoke test `sky`; `USkySubsystem`, `USnowSubsystem`; no sim changes). **Run the `TerrainMaterials` commandlet again on each machine to give the ground its `Wetness` input** (`assets/manifest.json`); without it everything else works and the ground just does not get wet.
+Stage 2 C20 done: colonists talk (chitchat, deep talk, kind words, slights, insults, romance, proposals, breakups), hold opinions of each other, become friends, rivals, lovers and spouses, and an insult can start a fistfight (`docs/design/social.md`).
 Stage 2 P1 done: a pawn carries a rifle, a sidearm and a melee weapon (`docs/design/weapons.md`).
 Stage 2 E4 done: fire spreads over flammable ground, burns things to ash, heats rooms, sets pawns alight and is put out by rain, snow and colonists with the Firefighter work type in the home area (`docs/design/fire.md`).
 Stage 2 N4 done: tame animals mate and bear young, hens lay eggs, calves and chicks grow up, colonists milk and shear (`docs/design/breeding.md`).
 Stage 2 D10 done: narrators (Orrin, Maren, Jinx), difficulty levels, 30 incidents, ten factions with goodwill, visitor, trader and guard pawn kinds, trader kinds and price rules (`docs/design/narrator-data.md`).
 Stage 2 F11 done: turrets and traps (`docs/design/defense.md`).
 Stage 2 C13 done: growing zones with a chosen crop, colonists sow and harvest them (Growing work), crops grow by light and temperature, frost and heat kill them (`docs/design/farming.md`).
+Stage 2 C22 done: wardens carry downed enemies to prison beds, feed prisoners, talk their resistance down and recruit or release them; `PrisonerSystem::breakOut` is the hook for T3's prison break (`docs/design/prisoners.md`).
 Stage 2 C24 done: carrying is by mass (capacity over item mass), a hauler takes neighbouring stacks of the same def in one trip, a load slows walking up to 25% (`docs/design/jobs.md`).
+Stage 2 U22 done: melee and weapon switching on screen. In direct mode the left mouse button swings a melee weapon (or fists), the right holds it up to block, Q brings up the next carried weapon; every carried weapon is drawn (rifle on the back, sidearm and melee weapon on the hips); swings are procedural poses timed to the sim's hit step, with hit-stop, flinch, blood and sparks, a dipping sidestep and a raised blade for blocks (`docs/design/melee-draw.md`, smoke test `melee`). No human melee animations exist yet, so the arms do not move.
 
 ## Where we are
 
@@ -96,7 +99,7 @@ healing and tending (`sim.health().applyDamage`, the dev commands `DamagePawn` a
 `PawnInjured`/`PartLost`/`Downed`/`GotUp`/`Died`, `downed` and `dead` in the snapshot, `sim.healthReport`;
 `docs/design/health.md`). Injured pawns walk slower and downed ones stop. Capacities now work per limb
 (one lost leg is 50% moving), see `starting-data.md`. The protagonist from the Crashlanded start has 2x
-part hit points. Not built yet: scars, infections, diseases, medicine items and the doctor job.
+part hit points. Not built yet: infections and diseases.
 
 Since C1 pawns work through a job system like RimWorld's (`docs/design/jobs.md`): a think list
 (work, then idle; emergencies, defense, needs and schedule slot in ahead of work later), the 20 work
@@ -170,6 +173,18 @@ one or badly hurt it falls back. The F3 threat map isn't used (too slow to rebui
 why); 30 against 40 costs about 0.35 ms a step in the cloud. Snapshot `faction`, `drafted`,
 `fighting`, `fightTarget`, `fightSpot`, `fallingBack`; save format 15. **A new system that acts on
 pawns must skip pawns with `Fighter`** as the job system does.
+
+Since C20 colonists have a social life (`docs/design/social.md`, tests `SocialTests`, the colony scenario prints `talks`): every
+pawn with needs gets a `Social` component (opinion memories, stored bonds). A pawn thinks of another by a hash-based compatibility
+(-10 to 10), the other's traits (`opinionOfMe`: Abrasive -20), bonds (lover +40, spouse +60, ex -25) and fading memories; friends
+(both 20 or more) and rivals (-20 or less) are worked out, never stored. About every 6 game hours a pawn with someone in the same room within
+6 m picks an interaction by D9's weights and the opinion limits (chitchat, deep talk, kind words, slight, insult, romance attempt,
+proposal, breakup); at a table or game beside others every 15 minutes. Each changes the listener's opinion, starts mood thoughts and
+gives the talker Social experience. Romance and marriage are bonds only (one at a time, adults, no orientations yet); a death gives
+the spouse, lover, friends and rivals their thought. An insult can start a fistfight (`SocialFight`: both walk up and swing fists even
+with a gun in hand, ends at pain 0.25, a downed pawn, 5 minutes or a draft). Events `Interaction`, `BondChanged`, `SocialFight`,
+dev command `InteractCommand`, snapshot `partner` and `socialFight`, save section `social`. **A new system that acts on pawns must skip
+pawns with `SocialFight`, as for `Fighter`.**
 
 Since F5 fighters aim like players (`docs/design/aiming.md`): Shooting skill sets a reaction time
 before shooting a new target (0.5 s at skill 0, 0.17 s at 20), how well a shot leads a moving target
@@ -259,7 +274,7 @@ Since E1 the sim has a calendar, an outdoor temperature, weather and snow (`docs
 
 ## Stage 1 progress
 
-40 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7, U8, U11, U10, C10, A1, A2, F6); F7, G1 and G2 are left. Tick tasks in `docs/plans/stage-1.md` as they merge.
+40 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7, U8, U11, U10, C10, A1, A2, F6); G1 and G2 are left (F7 done). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Stage 2
 
@@ -285,6 +300,10 @@ Stage 2 done so far: **D7** medicine and disease data (`docs/design/medicine-dat
 **C18** recreation, comfort and outdoors (`docs/design/recreation.md`, tests `RecreationTests`, colony scenario): colonists have three new needs (`Joy` component; save section `recreation`). The standard schedule now has **Joy 19:00 to 21:59**; in Joy hours (or when bored with no work, Anything hours) they play horseshoes, chess or billiards, chat at a table, stroll or watch the clouds (`JobType::Recreate`), kinds wear in with tolerance. Comfort follows the bed or chair in use, Outdoors the roof. The D9 thoughts apply by stage (`MoodSystem::conditionValue` is where a task adds its own staged condition). Snapshot has `joy`, `comfort`, `outdoors`. Not yet: talk while chatting (C20), weather for the clouds (E1), the Unreal side (animations, a need bar; a U task).
 
 **C21** research (`docs/design/research.md`, tests `ResearchTests`): one current project, `SetResearchCommand` picks it; colonists with the Research work type sit at a research bench and add points per second by Intellectual skill and bench speed (`JobType::Research`); finished projects open the defs with a `researchPrerequisite` (plans and bills fail until then); `Snapshot::research`; save section `research`. A new colony has nothing researched (a scenario may list `startingResearch`). Not yet: multi-analyzer bonus and facility check, skill XP, gating floors/plants, the Unreal research tab (U18).
+
+**H1** doctors, medicine and rescue (`docs/design/medicine.md`, tests `MedicineTests`): the Doctor work type tends colonists' wounds (`JobType::TendPatient`, the bleeding first) with the strongest medicine their care setting allows (`SetMedicalCareCommand`: NoCare, NoMedicine, Herbal, Normal, Best), quality from Medicine skill, medicine and bed offset (`MedicineSystem::tendQuality`); downed colonists are carried to a medical bed, else their own or a free bed (`JobType::Rescue`, the patient's position follows the rescuer's); hurt colonists rest in bed until healed (`JobType::BedRest`, work types Patient and PatientBedRest); hospital beds are not slept in; healed injuries may leave scars or old wounds (`Injury::peak`, `PawnScarred`); emergency work types are asked first at each priority and a pawn on a droppable job looks for them every 10 s; events `PawnTended`, `PawnScarred`, actions `Tend`, `LiftPawn`, `LayPawn`; save section `medicine`, health section 3. Also fixed: saves made while someone was cleaning filth could not be loaded.
+
+**C22** prisoners (`docs/design/prisoners.md`, tests `PrisonerTests`, save section `prisoners`): a bed marked with `SetPrisonBedCommand` becomes a prison bed (`PrisonBed`; only prisoners sleep in it, `findBed`, `findPatientBed` and `assignBed` keep the two apart); the Warden work type has three scanners, `CapturePrisoners` (a downed enemy of another side goes to a free prison bed by the Rescue job's steps, `JobType::CapturePrisoner`, unless an able enemy is within 25 m), `FeedPrisoners` (`JobType::FeedPrisoner`, food rises, `PawnAte` "fed") and `ChatWithPrisoners` (`JobType::WardenInteract`, every 6 game hours); a `Prisoner` component (mode, resistance 5 to 9 at the start, times) keeps its `Faction` but it has no `Fighter`, no `Raider`, no Work tab row and a prisoner thinks only in `JobSystem::stepPrisoner` (sleeps in its bed, never fetches food); fighters, turrets, the alarm and raid squads ignore prisoners (**a new system that picks enemies must skip pawns with `Prisoner`**); `SetPrisonerModeCommand` (NoInteraction, ReduceResistance, AttemptRecruit, Release); a talk lowers resistance by 1.0 x mood factor x the warden's negotiation (Social, Talking); recruiting joins the colony, release walks off the map; doctors tend prisoners; events `PrisonerCaptured`, `PrisonerChatted`, `PrisonerRecruited`, `PrisonerReleased`, `PrisonBreak`, actions `Chat`, `FeedPawn`; thoughts `Captive`, `Captured`, `WardenTalk`; snapshot `prisoner`, `prisonerMode`, `resistance`, `prisonBed`. **T3 calls `PrisonerSystem::breakOut` for the prison break incident.**
 
 **P2** recoil kicks and a dodge roll (`docs/design/shooter-feel.md` "Built", tests `ShooterFeelTests`, save section `feel`): each gun has a `recoilKicks` list (degrees up and to the right per shot of a spray); the player's shots (`ShootCommand` with `player`) fly where the shots before have lifted the aim, the kick holds 5 steps then wears off, and the spray restarts after 15 steps; `Snapshot` has `kickUp`/`kickSide` for the camera. `DodgeRollCommand{pawn, dx, dy}` rolls the protagonist 4 m: 3 steps start-up, 15 rolling (bullets pass through for the first 12), 9 recovery, 6 waiting; the sim moves the pawn (**`DirectMove` is ignored while `rollLocked`**), shooting is off, a roll cancels aiming and firing but not a reload; snapshot `rollPhase`/`rollStepsLeft`/`rollDir`/`hitProof`, `PawnAction::Roll`. Numbers are ours (`CombatRules`, `Weapons.json`). **Not verified on screen: U21 binds the key, plays the animation over the sim's motion, applies the camera kick from the snapshot and must follow the sim's position during a roll (it must not keep sending its own).**
 **P3** talent tree (`docs/design/talents.md`, tests `TalentTests`): the protagonist earns talent XP from finished jobs (100, 125, 150... XP per point), spends points with `SpendTalentPointCommand` on seven talents (build speed, aim spread, carry capacity, trade price; second tier needs rank 3 of the first); stats applied through `TalentSystem::statFactor` in `JobSystem` and `CombatSystem`; `Snapshot::talents`, event `TalentPoint`, save section `talents`. Not yet: combat XP, the trade stat (no trade system), the Unreal talent screen.
@@ -410,8 +429,7 @@ and harvesting~~ done (`docs/design/mining.md`; save format 14). On the PC, ~~**
 U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priorities).
 ~~**F4** fighter AI: where to stand~~ done (`docs/design/fighters.md`; save format 15), ~~**F5** fighter
 AI: aiming~~ done (`docs/design/aiming.md`; save format 17), ~~**F6** raid and defense~~ done
-(`docs/design/raids.md`; save section `raids`, `fighters` 2), so **F7** raid scenario tests and nightly soak (cloud, Sonnet
-high) is open; with U9 and F2 in, ~~**U11** fights on screen~~ is done (PC; smoke test `fights`; `docs/design/fights.md`; it
+(`docs/design/raids.md`; save section `raids`, `fighters` 2), so ~~**F7** raid scenario tests and nightly soak~~ is done (`simrun --raid-soak N`, `.github/workflows/nightly.yml` at 03:17 UTC, `docs/design/raid-soak.md`; it found stuck fighters, 13.6% waiting in the open and some raids that drag on, now in BACKLOG); with U9 and F2 in, ~~**U11** fights on screen~~ is done (PC; smoke test `fights`; `docs/design/fights.md`; it
 binds R to reload; reload and sidestep animations are not drawn yet). ~~**C10** colony scenario test~~ done
 (`docs/design/colony-scenario.md`); ~~**U10** hands-on work~~ is done (PC; smoke test `handson`; `docs/design/handson.md`); ~~**A1** placeholder art~~ is done (PC; free Poly Haven meshes on the bed, door, table, stool, stove, logs, meals, berries, trees and bushes; `docs/design/building-draw.md`, `python tools/placeholder_art.py` then the `PlaceholderArt` commandlet). ~~**A2** terrain materials~~ is done (PC; free CC0 Poly Haven textures instead of Megascans, so nobody had to download anything: grass, sand, gravel and rock blended by terrain type and slope, placed by world position; `docs/design/terrain.md`, `python tools/terrain_textures.py` then the `TerrainMaterials` commandlet; swapping in Megascans later is a change in `assets/terrain_textures.json`). ~~**A6** placeholder art 2~~ is done (PC; 30 more free Poly Haven meshes on crops, work tables, power, climate, lamps and furniture, same list and commandlet as A1; walls, floors, solar panel, wind turbine and a few small things stay shapes). ~~**A5** clothes art~~ is done (PC; worn meshes for all 12 apparel defs by layer, made from the morphed hoodie and trousers plus a free CC0 Poly Haven hat, no downloads by sneed; `docs/design/looks.md`, `python tools/clothes_art.py` then the `ClothesArt` commandlet; not yet seen in game, U16 draws them). **G1** is what is left on the PC.
 
