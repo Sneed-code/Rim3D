@@ -172,6 +172,7 @@ class CombatSystem;
 class Construction;
 class FuelSystem;
 class DefDatabase;
+class DrugSystem;
 class Farming;
 class Filth;
 class Fire;
@@ -256,6 +257,9 @@ public:
     // A player order: haul this item to the best stockpile now, ending the pawn's current job.
     // Refused for the pawn the player controls directly (PlayerControl).
     bool orderHaul(Entity pawn, Entity thing, std::string& error);
+    // A player order: go and take this drug (an Ingest job; docs/design/drugs.md). Refused for a pawn the player controls.
+    bool orderTakeDrug(Entity pawn, Entity thing, std::string& error);
+    void setDrugs(DrugSystem* drugs) { drugs_ = drugs; }
     // Hands-on work (HandsOnCommand, docs/design/handson.md). What the controlled pawn would do with
     // its hands on this blueprint, frame or item (`thing`), else on the rock or plant in `cell`.
     HandsOnPlan planHandsOn(Entity pawn, Entity thing, CellPos cell) const;
@@ -477,6 +481,8 @@ private:
     // The think list: each node may give a job; the first that does wins (docs/design/jobs.md).
     using ThinkNode = bool (JobSystem::*)(Entity pawn, Job& out);
     bool thinkNeeds(Entity pawn, Job& out);
+    // An addict's dose, a scheduled one, or one for joy, as the pawn's drug policy says (DrugJobs.cpp, docs/design/drugs.md).
+    bool thinkDrugs(Entity pawn, Job& out);
     bool thinkSchedule(Entity pawn, Job& out);
     bool thinkApparel(Entity pawn, Job& out);
     bool thinkWork(Entity pawn, Job& out);
@@ -704,6 +710,7 @@ private:
     Filth* filth_ = nullptr;
     Fire* fire_ = nullptr;
     SpoilageSystem* spoilage_ = nullptr;
+    DrugSystem* drugs_ = nullptr;
     CraftingSystem* crafting_ = nullptr;
     Farming* farming_ = nullptr;
     std::vector<Entity> order_;              // scratch: workers this step

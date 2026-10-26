@@ -95,6 +95,10 @@ enum class EventType : uint8_t {
     PawnMentalBreakEnded,  // it ended: `message` says how ("recovered", "downed", "died", "stopped")
     PawnInsulted,          // a pawn in an insulting spree insulted another
     PawnLeftColony,        // a pawn gave up and walked off the map for good
+    PawnTookDrug,          // a pawn took a dose of a drug (docs/design/drugs.md): `thing` the pawn, `def` the drug's Things def, `amount` the high's severity now, `cell` where
+    PawnAddicted,          // it became addicted: `thing` the pawn, `def` the Chemicals def, `message` its defName, `amount` the need
+    AddictionCured,        // an addiction healed away: the same fields
+    DrugOverdose,          // a dose took the overdose past minor (0.5), major (0.75) or fatal (1): `thing` the pawn, `def` the drug, `amount` the severity, `message` "minor", "major" or "fatal"
 };
 
 // What stopped a projectile (ProjectileHit).

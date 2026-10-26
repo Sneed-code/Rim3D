@@ -14,6 +14,7 @@
 #include "ColonySim/Melee.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Drugs.h"
 #include "ColonySim/Doors.h"
 #include "ColonySim/Explosives.h"
 #include "ColonySim/Power.h"
@@ -132,6 +133,37 @@ struct SaveInjury {
     float severity = 0.0f;
     float tendQuality = -1.0f;
     float peak = 0.0f;  // health section 3 on
+};
+
+// Section "drugs" (Drugs.h): one record per pawn that has taken a drug or been given a policy.
+struct SaveDrugEntry {
+    std::string drug;
+    bool forAddiction = true;
+    bool forJoy = false;
+    bool scheduled = false;
+    float daysFrequency = 1.0f;
+    float moodBelow = 1.01f;
+    float joyBelow = 1.01f;
+};
+struct SaveDrugChemical {
+    std::string chemical;  // Chemicals defName
+    float tolerance = 0.0f;
+    bool addicted = false;
+    float need = 0.0f;
+    float progress = 0.0f;
+    bool armed = false;
+};
+struct SaveDrugDose {
+    std::string drug;  // Things defName
+    int64_t at = 0;
+};
+struct SaveDrugPawn {
+    Entity pawn = kNoEntity;
+    std::string policy;
+    int64_t searchAfter = 0;
+    std::vector<SaveDrugEntry> edits;
+    std::vector<SaveDrugChemical> chemicals;
+    std::vector<SaveDrugDose> last;
 };
 
 struct SaveEnvironmentHediff {
@@ -420,6 +452,8 @@ struct SaveData {
     SaveMineables mineables;           // format 12 on
     SaveDesignations designations;     // format 12 on
     ResearchState research;            // section "research"
+    std::vector<SaveDrugPawn> drugPawns;  // section "drugs"
+
     // Section "talents" (P3): per protagonist, parallel lists in pawn order.
     std::vector<Entity> talentPawns;
     std::vector<int64_t> talentXp;
@@ -1077,6 +1111,21 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("building", c.building);
                 ar.value("bill", c.bill);
                 ar.value("index", c.index);
+            } else if constexpr (std::is_same_v<Type, TakeDrugCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.value("thing", c.thing);
+            } else if constexpr (std::is_same_v<Type, SetDrugPolicyCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.text("policy", c.policy);
+            } else if constexpr (std::is_same_v<Type, SetDrugPolicyEntryCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.text("drug", c.drug);
+                ar.value("forAddiction", c.forAddiction);
+                ar.value("forJoy", c.forJoy);
+                ar.value("scheduled", c.scheduled);
+                ar.value("daysFrequency", c.daysFrequency);
+                ar.value("moodBelow", c.moodBelow);
+                ar.value("joyBelow", c.joyBelow);
             } else if constexpr (std::is_same_v<Type, SetRefuelCommand>) {
                 auto* refuel = &c;
                 ar.value("building", refuel->building);
@@ -1464,7 +1513,7 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
     }
     ar.value("dead", h.dead);
     ar.value("cause", h.cause);
-    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Slaughtered), "the save file has a bad cause of death");
+    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Withdrawal), "the save file has a bad cause of death");
 
 }
 
@@ -2177,6 +2226,40 @@ void saveResearch(Ar& ar, ResearchState& r) {
 }
 
 template <typename Ar>
+void saveDrugs(Ar& ar, SaveData& d) {
+    ar.list("pawns", d.drugPawns, [&](SaveDrugPawn& p) {
+        ar.value("pawn", p.pawn);
+        ar.text("policy", p.policy);
+        ar.value("searchAfter", p.searchAfter);
+        ar.list("edits", p.edits, [&](SaveDrugEntry& e) {
+            ar.text("drug", e.drug);
+            ar.value("forAddiction", e.forAddiction);
+            ar.value("forJoy", e.forJoy);
+            ar.value("scheduled", e.scheduled);
+            ar.value("daysFrequency", e.daysFrequency);
+            ar.value("moodBelow", e.moodBelow);
+            ar.value("joyBelow", e.joyBelow);
+            ar.require(e.daysFrequency > 0.0f && e.daysFrequency <= 1000.0f, "the save file has an impossible drug frequency");
+        });
+        ar.list("chemicals", p.chemicals, [&](SaveDrugChemical& c) {
+            ar.text("chemical", c.chemical);
+            ar.value("tolerance", c.tolerance);
+            ar.value("addicted", c.addicted);
+            ar.value("need", c.need);
+            ar.value("progress", c.progress);
+            ar.value("armed", c.armed);
+            ar.require(c.tolerance >= 0.0f && c.tolerance <= 1.0f && c.need >= 0.0f && c.need <= 1.0f && c.progress >= 0.0f &&
+                           c.progress <= 1.0f,
+                       "the save file has an impossible drug record");
+        });
+        ar.list("last", p.last, [&](SaveDrugDose& dose) {
+            ar.text("drug", dose.drug);
+            ar.value("at", dose.at);
+        });
+    });
+}
+
+template <typename Ar>
 void saveTalents(Ar& ar, SaveData& d) {
     ar.list("pawns", d.talentPawns, [&](Entity& pawn) { ar.value(nullptr, pawn); });
     ar.list("xp", d.talentXp, [&](int64_t& xp) { ar.value(nullptr, xp); });
@@ -2524,6 +2607,7 @@ void saveSections(Ar& ar, SaveData& d) {
         });
     });
     ar.section("talents", 1, [&] { saveTalents(ar, d); });
+    ar.section("drugs", 1, [&] { saveDrugs(ar, d); });
     ar.section("roomstats", 1, [&] { saveRoomStatsSection(ar, d); });
     ar.section("animals", 2, [&] {
         ar.value("wildAnimals", d.wildAnimals);
@@ -3164,6 +3248,22 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         d.designations.kinds.push_back(static_cast<uint8_t>(kind));
     }
     d.research = sim.research_->state();
+    for (const auto& [pawn, s] : sim.drugs_->states()) {
+        SaveDrugPawn saved;
+        saved.pawn = pawn;
+        saved.policy = s.policy;
+        saved.searchAfter = s.searchAfter;
+        for (const DrugPolicyEntry& e : s.edits) {
+            saved.edits.push_back(SaveDrugEntry{e.drug, e.forAddiction, e.forJoy, e.scheduled, e.daysFrequency, e.moodBelow, e.joyBelow});
+        }
+        for (const ChemicalState& c : s.chemicals) {
+            saved.chemicals.push_back(SaveDrugChemical{c.chemical, c.tolerance, c.addicted, c.need, c.progress, c.armed});
+        }
+        for (const DrugDose& dose : s.last) {
+            saved.last.push_back(SaveDrugDose{dose.drug, dose.at});
+        }
+        d.drugPawns.push_back(std::move(saved));
+    }
     for (const auto& [pawn, s] : sim.talents_->states()) {
         d.talentPawns.push_back(pawn);
         d.talentXp.push_back(s.xp);
@@ -3889,6 +3989,37 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     } else {
         // A save from before the weather: it begins clear at the time the game had reached.
         sim.weather_->restore(sim.weather_->state(), {}, d.seconds);
+    }
+    {
+        // Drug records of a pawn that is gone are forgotten; so is a policy, chemical or drug the data files dropped.
+        sim.drugs_->states().clear();
+        for (const SaveDrugPawn& saved : d.drugPawns) {
+            if (!sim.things_->exists(saved.pawn)) {
+                continue;
+            }
+            DrugState state;
+            state.policy = sim.drugs_->policyNamed(saved.policy) != nullptr ? saved.policy : std::string();
+            state.searchAfter = saved.searchAfter;
+            for (const SaveDrugEntry& e : saved.edits) {
+                if (sim.drugs_->kindOf(sim.defs_->idOf("Things", e.drug)) != nullptr) {
+                    state.edits.push_back(DrugPolicyEntry{e.drug, e.forAddiction, e.forJoy, e.scheduled, e.daysFrequency, e.moodBelow, e.joyBelow});
+                }
+            }
+            for (const SaveDrugChemical& c : saved.chemicals) {
+                if (sim.drugs_->chemicalIndex(c.chemical) >= 0) {
+                    state.chemicals.push_back(ChemicalState{c.chemical, c.tolerance, c.addicted, c.need, c.progress, c.armed});
+                }
+            }
+            for (const SaveDrugDose& dose : saved.last) {
+                if (sim.drugs_->kindOf(sim.defs_->idOf("Things", dose.drug)) != nullptr) {
+                    state.last.push_back(DrugDose{dose.drug, dose.at});
+                }
+            }
+            std::sort(state.edits.begin(), state.edits.end(), [](const DrugPolicyEntry& a, const DrugPolicyEntry& b) { return a.drug < b.drug; });
+            std::sort(state.chemicals.begin(), state.chemicals.end(), [](const ChemicalState& a, const ChemicalState& b) { return a.chemical < b.chemical; });
+            std::sort(state.last.begin(), state.last.end(), [](const DrugDose& a, const DrugDose& b) { return a.drug < b.drug; });
+            sim.drugs_->states()[saved.pawn] = std::move(state);
+        }
     }
     {
         // Talents of a pawn that is gone, or of a talent the data files dropped, are forgotten.

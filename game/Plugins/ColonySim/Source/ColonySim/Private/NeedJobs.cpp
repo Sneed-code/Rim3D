@@ -2,6 +2,7 @@
 #include "ColonySim/Jobs.h"
 
 #include "ColonySim/Clock.h"
+#include "ColonySim/Drugs.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
@@ -253,6 +254,16 @@ JobSystem::StepResult JobSystem::eat(Entity pawn, Job& job, std::string&) {
     }
     if (now() < job.until) {
         return StepResult::Running;
+    }
+    if (drugs_ != nullptr && drugs_->isDrug(def)) {
+        // A drug: one dose per item, no nutrition (docs/design/drugs.md).
+        const int doses = reg.get<StackCount>(food).count;
+        reg.remove<Carrying>(pawn);
+        things_.destroy(food);
+        for (int i = 0; i < doses; ++i) {
+            drugs_->takeDose(pawn, def, now());
+        }
+        return StepResult::Next;
     }
     const int count = reg.get<StackCount>(food).count;
     Needs& needs = reg.get<Needs>(pawn);

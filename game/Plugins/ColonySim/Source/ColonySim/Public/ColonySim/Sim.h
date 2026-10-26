@@ -32,6 +32,7 @@ class ApparelSystem;
 class Construction;
 class DefDatabase;
 class DefenseSystem;
+class DrugSystem;
 class Filth;
 class Floors;
 class RoomStats;
@@ -168,6 +169,9 @@ public:
     // Recreation, comfort and the outdoors need (docs/design/recreation.md).
     RecreationSystem& recreation() { return *recreation_; }
     const RecreationSystem& recreation() const { return *recreation_; }
+    // Drugs, tolerance, addiction, withdrawal and drug policies (docs/design/drugs.md).
+    DrugSystem& drugs() { return *drugs_; }
+    const DrugSystem& drugs() const { return *drugs_; }
     // Research projects and what they unlock (docs/design/research.md).
     ResearchSystem& research() { return *research_; }
     const ResearchSystem& research() const { return *research_; }
@@ -362,6 +366,7 @@ private:
     std::unique_ptr<NeedsSystem> needs_;
     std::unique_ptr<MoodSystem> mood_;
     std::unique_ptr<RecreationSystem> recreation_;
+    std::unique_ptr<DrugSystem> drugs_;  // after health_, needs_ and mood_
     std::unique_ptr<ResearchSystem> research_;
     std::unique_ptr<MedicineSystem> medicine_;
     std::unique_ptr<TalentSystem> talents_;

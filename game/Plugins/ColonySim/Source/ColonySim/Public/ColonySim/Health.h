@@ -35,7 +35,9 @@ enum class DeathCause : uint8_t {
     Hypothermia,    // an Environment hediff reached its lethal severity (Temperature.h)
     Heatstroke,
     Environment,    // any other Environment hediff
-    Slaughtered     // a colonist killed a tame animal (Husbandry.h)
+    Slaughtered,    // a colonist killed a tame animal (Husbandry.h)
+    Overdose,       // the Overdose hediff reached its lethal severity (Drugs.h)
+    Withdrawal      // a withdrawal hediff did (luciferium)
 };
 
 COLONY_API const char* deathCauseName(DeathCause cause);

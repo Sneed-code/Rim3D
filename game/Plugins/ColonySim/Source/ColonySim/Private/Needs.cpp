@@ -157,6 +157,9 @@ void NeedsSystem::step() {
                 case RestBand::Tired: fall = rules_.restFallPerDayTired; break;
                 case RestBand::Exhausted: fall = rules_.restFallPerDayExhausted; break;
             }
+            if (restFallFactor_) {
+                fall *= restFallFactor_(pawn);
+            }
             needs.rest = std::max(0.0f, needs.rest - fall * kPerSecond);
         }
 

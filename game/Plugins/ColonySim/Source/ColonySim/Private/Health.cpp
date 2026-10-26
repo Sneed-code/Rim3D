@@ -46,6 +46,8 @@ const char* deathCauseName(DeathCause cause) {
         case DeathCause::Hypothermia: return "hypothermia";
         case DeathCause::Heatstroke: return "heatstroke";
         case DeathCause::Environment: return "exposure";
+        case DeathCause::Overdose: return "overdose";
+        case DeathCause::Withdrawal: return "withdrawal";
         case DeathCause::Slaughtered: return "slaughtered";
     }
     return "";
@@ -402,7 +404,9 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
             e.lethal = static_cast<float>(def.number("lethalSeverity", 1.0));
             e.cause = def.defName() == "Hypothermia"  ? DeathCause::Hypothermia
                       : def.defName() == "Heatstroke" ? DeathCause::Heatstroke
-                                                      : DeathCause::Environment;
+                                                      : def.text("deathCause") == "Overdose"     ? DeathCause::Overdose
+                                                      : def.text("deathCause") == "Withdrawal"   ? DeathCause::Withdrawal
+                                                                                                 : DeathCause::Environment;
             e.stages = readStages(def, capacityOf, &e.lifeThreatening);
         }
     }
