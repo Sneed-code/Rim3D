@@ -15,6 +15,7 @@
 #include "PawnActor.h"
 #include "PawnLooks.h"
 #include "SimSubsystem.h"
+#include "VisualMesh.h"
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Defs.h"
@@ -202,6 +203,103 @@ FSimPawnLooks USimPawnSubsystem::MakeLooks(const colony::PawnLooksView& View, co
 	return Looks;
 }
 
+namespace
+{
+	/** How torn a piece with this share of its hit points looks: whole above 70%, in tatters at none, in sixteenths. */
+	float PawnWearOf(float HitPointShare)
+	{
+		const float Wear = FMath::Clamp((0.7f - HitPointShare) / 0.7f, 0.0f, 1.0f);
+		return FMath::RoundToFloat(Wear * 16.0f) * (1.0f / 16.0f);
+	}
+
+	const colony::ApparelView* PawnApparelAt(const colony::Snapshot& Snapshot, const colony::ThingView& View, uint32 Index)
+	{
+		const size_t At = static_cast<size_t>(View.firstApparel) + Index;
+		return At < Snapshot.apparel.size() ? &Snapshot.apparel[At] : nullptr;
+	}
+}
+
+uint64 USimPawnSubsystem::ApparelKey(const colony::Snapshot& Snapshot, const colony::ThingView& View)
+{
+	uint64 Key = 1469598103934665603ULL;
+	const auto Mix = [&Key](uint64 Value) { Key = (Key ^ Value) * 1099511628211ULL; };
+	Mix(View.apparelCount);
+	for (uint32 I = 0; I < View.apparelCount; ++I)
+	{
+		if (const colony::ApparelView* Piece = PawnApparelAt(Snapshot, View, I))
+		{
+			Mix(entt::to_integral(Piece->item));
+			Mix(Piece->def.value);
+			Mix(Piece->stuff.value);
+			Mix(static_cast<uint64>(PawnWearOf(Piece->hitPointShare) * 16.0f + 0.5f));
+		}
+	}
+	return Key;
+}
+
+FSimPawnApparel USimPawnSubsystem::MakeApparel(const colony::Snapshot& Snapshot, const colony::ThingView& View, const colony::DefDatabase* Defs)
+{
+	FSimPawnApparel Out;
+	if (!Defs)
+	{
+		return Out;
+	}
+	for (uint32 I = 0; I < View.apparelCount; ++I)
+	{
+		const colony::ApparelView* Piece = PawnApparelAt(Snapshot, View, I);
+		if (!Piece || !Piece->def.valid() || Piece->def.value >= Defs->size())
+		{
+			continue;
+		}
+		const colony::Def& Def = Defs->get(Piece->def);
+		FSimWornPiece Worn;
+		Worn.Item = static_cast<uint32>(entt::to_integral(Piece->item));
+		Worn.Def = Piece->def.value;
+		Worn.Stuff = Piece->stuff.value;
+		Worn.Wear = PawnWearOf(Piece->hitPointShare);
+		Worn.bHidesHair = Def.flag("apparel.hidesHair", false);
+		if (Piece->stuff.valid() && Piece->stuff.value < Defs->size())
+		{
+			const colony::Def& Stuff = Defs->get(Piece->stuff);
+			if (Stuff.count("visual.color") >= 3)
+			{
+				Worn.bHasTint = true;
+				Worn.Tint = VisualMesh::ReadColor(Stuff, "visual.color", FLinearColor::White);
+			}
+		}
+		const size_t Count = Def.count("visual.worn");
+		for (size_t M = 0; M < Count; ++M)
+		{
+			const std::string Base = "visual.worn." + std::to_string(M);
+			FSimWornMesh Mesh;
+			Mesh.Path = UTF8_TO_TCHAR(Def.text((Base + ".mesh").c_str()).c_str());
+			const std::string Bone = Def.text((Base + ".bone").c_str());
+			Mesh.Bone = Bone.empty() ? NAME_None : FName(UTF8_TO_TCHAR(Bone.c_str()));
+			if (!Mesh.Path.IsEmpty())
+			{
+				Worn.Meshes.Add(MoveTemp(Mesh));
+			}
+		}
+		Out.Pieces.Add(MoveTemp(Worn));
+	}
+	return Out;
+}
+
+UObject* USimPawnSubsystem::GetClothesAsset(const FString& Path)
+{
+	if (const TObjectPtr<UObject>* Found = ClothesAssets.Find(Path))
+	{
+		return *Found;
+	}
+	UObject* Asset = LoadObject<UObject>(nullptr, *Path);
+	ClothesAssets.Add(Path, Asset);
+	if (!Asset)
+	{
+		UE_LOG(LogSimPawns, Warning, TEXT("Clothes mesh %s is missing: run python tools/clothes_art.py and the ClothesArt commandlet (docs/design/looks.md)"), *Path);
+	}
+	return Asset;
+}
+
 USkeletalMesh* USimPawnSubsystem::GetMorphMesh(const USkeletalMesh* Original)
 {
 	if (!Original)
@@ -373,6 +471,12 @@ void USimPawnSubsystem::Tick(float DeltaTime)
 		if (View.looks >= 0 && View.looks < static_cast<int32>(Now.looks.size()))
 		{
 			Pawn->ApplyLooks(*this, MakeLooks(Now.looks[static_cast<size_t>(View.looks)], Defs));
+		}
+		// Worn clothes (U16): rebuilt only when what is worn, or how torn it is, changed.
+		const uint64 WornKey = ApparelKey(Now, View);
+		if (!Pawn->HasApparel() || Pawn->GetApparelKey() != WornKey)
+		{
+			Pawn->ApplyApparel(*this, MakeApparel(Now, View, Defs), WornKey);
 		}
 	}
 	for (auto It = Pawns.CreateIterator(); It; ++It)
