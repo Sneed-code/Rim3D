@@ -1729,9 +1729,11 @@ bool JobSystem::afterLoad(std::string& error) {
         TargetKey held[kMaxReservations];
         const int heldCount = reservationsOf(job, held);
         for (int i = 0; i < heldCount; ++i) {
-            if (!reservations_.emplace(held[i], pawn).second) {
-                error = "the save has two jobs holding the same thing or cell";
-                return false;
+            // Two jobs on one target can happen in play (reserve() lets the later one take over), so a file with
+            // two is not a bad file: the job that started later keeps the reservation, as it did.
+            const auto placed = reservations_.emplace(held[i], pawn);
+            if (!placed.second && reg.get<Worker>(placed.first->second).job.startedAt <= job.startedAt) {
+                placed.first->second = pawn;
             }
         }
         if (job.type == JobType::Ingest) {

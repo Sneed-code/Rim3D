@@ -391,7 +391,7 @@ void JobSystem::stepPrisoner(Entity pawn) {
         } else if (health_.needsRest(pawn)) {
             const Entity bed = bedOf(pawn);
             CellPos cell;
-            if (bed != kNoEntity && bedSlotCell(bed, pawn, cell)) {
+            if (bed != kNoEntity && bedSlotCell(bed, pawn, cell) && !reservedByOther(JobTarget{kNoEntity, cell}, pawn)) {
                 job = Job{};
                 job.type = JobType::BedRest;
                 job.thing = bed;

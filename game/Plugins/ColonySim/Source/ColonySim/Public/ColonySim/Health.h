@@ -191,7 +191,8 @@ public:
     // Works the derived values out for one pawn or all of them, without events. Called after
     // loading a save.
     void refresh(Entity pawn);
-    void refreshAll();
+    // `exact`: the save held each pawn's downed and dirty flags, so they stay as saved.
+    void refreshAll(bool exact = false);
 
     bool incapacitated(Entity pawn) const;
     // Kills a pawn for a cause that is not an injury (starvation). False if it has no tracked
@@ -233,7 +234,7 @@ private:
     // Works out pain, bleeding, capacities and what they mean (the death cause and whether the
     // pawn should be downed) into `health`'s derived fields. Changes nothing else.
     void derive(int body, float healthScale, Health& health, DeathCause& cause, bool& shouldBeDown) const;
-    void recompute(Entity pawn, Health& health, bool announce);
+    void recompute(Entity pawn, Health& health, bool announce, bool exact = false);
     void emit(EventType type, Entity pawn, DefId def = DefId{}, int part = -1, float amount = 0.0f,
               const char* message = nullptr);
     void stopWalking(Entity pawn);

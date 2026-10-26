@@ -788,8 +788,9 @@ void HealthSystem::derive(int bodyIndex, float healthScale, Health& health, Deat
     }
 }
 
-void HealthSystem::recompute(Entity pawn, Health& health, bool announce) {
-    health.dirty = false;
+void HealthSystem::recompute(Entity pawn, Health& health, bool announce, bool exact) {
+    // `exact` (after loading a save that holds them): dirty, downed and dead stay as saved; only the derived values are worked out.
+    health.dirty = exact ? health.dirty : false;
     const HealthModel::Kind* kind = healthKindOf(*model_, things_.registry(), pawn);
     if (kind == nullptr) {
         return;
@@ -798,10 +799,10 @@ void HealthSystem::recompute(Entity pawn, Health& health, bool announce) {
     bool shouldBeDown = false;
     derive(kind->body, kind->healthScale, health, cause, shouldBeDown);
 
-    if (!health.dead && cause != DeathCause::None) {
+    if (!exact && !health.dead && cause != DeathCause::None) {
         die(pawn, health, cause, announce);
     }
-    if (!health.dead) {
+    if (!exact && !health.dead) {
         const bool wasDowned = health.downed;
         health.downed = shouldBeDown;
         if (shouldBeDown && !wasDowned) {
@@ -826,10 +827,10 @@ void HealthSystem::refresh(Entity pawn) {
     }
 }
 
-void HealthSystem::refreshAll() {
+void HealthSystem::refreshAll(bool exact) {
     entt::registry& reg = things_.registry();
     for (const auto [entity, health] : reg.view<Health>().each()) {
-        recompute(entity, health, false);
+        recompute(entity, health, false, exact);
     }
 }
 

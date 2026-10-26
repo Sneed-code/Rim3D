@@ -149,6 +149,8 @@ struct SaveHealth {
     std::vector<SaveEnvironmentHediff> environment;  // health section 2 on
     bool dead = false;
     DeathCause cause = DeathCause::None;
+    bool downed = false;  // health section 4 on: saved, not worked out again, so a hit not yet taken in comes back as it was
+    bool dirty = true;
 };
 
 // An item's rot and wear and what a meal was cooked from, by defName (section "spoilage").
@@ -447,6 +449,7 @@ struct SaveData {
     FarmingSaved farming;                           // section "farming" (C13)
     bool hasWeather = false;           // the file has the weather section; older saves start it fresh
     SaveWeather weather;
+    bool healthExact = false;          // health section 4 on: downed and dirty are in the file
     bool hasNarrator = false;          // section "narrator" (T1); older saves keep the narrator off
     NarratorState narrator;
 };
@@ -1481,7 +1484,10 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
     ar.value("dead", h.dead);
     ar.value("cause", h.cause);
     ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Slaughtered), "the save file has a bad cause of death");
-
+    if (ar.sectionVersion() >= 4) {
+        ar.value("downed", h.downed);
+        ar.value("dirty", h.dirty);
+    }
 }
 
 template <typename Ar>
@@ -2463,7 +2469,8 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("colonists", 2, [&] {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
-    ar.section("health", 3, [&] {
+    ar.section("health", 4, [&] {
+        d.healthExact = ar.sectionVersion() >= 4;
         saveParts(ar, "health", e, &SaveEntity::health, [&](SaveHealth& h) { saveHealthPart(ar, h); });
     });
     ar.section("control", 1, [&] {
@@ -3062,6 +3069,8 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             }
             saved.dead = health->dead;
             saved.cause = health->cause;
+            saved.downed = health->downed;
+            saved.dirty = health->dirty;
             out.health = std::move(saved);
         }
         if (const Posture* posture = reg.try_get<Posture>(e)) {
@@ -3532,6 +3541,8 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                       [](const EnvironmentHediff& a, const EnvironmentHediff& b) { return a.def.value < b.def.value; });
             health.dead = e.health->dead;
             health.cause = e.health->cause;
+            health.downed = e.health->downed;
+            health.dirty = e.health->dirty;
             const int parts = e.thing ? sim.health_->partCount(reg.get<Thing>(entity).def) : 0;
             for (const Injury& injury : health.injuries) {
                 if (injury.part >= parts) {
@@ -3723,7 +3734,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.farming_->restore(d.farming, error)) {
         return false;
     }
-    sim.health_->refreshAll();
+    sim.health_->refreshAll(d.healthExact);
     // Upper floors before the buildings that stand on them.
     for (const CellPos& c : d.upperFloors) {
         if (!sim.map_.setUpperFloor(c, true)) {
@@ -3992,6 +4003,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     sim.temperature_->setOutdoor(sim.outdoorTemperature());
     sim.temperature_->restore(d.roomTemperatures);
     sim.spoilage_->restore(d.spoilageState);
+    sim.spoilage_->setOutdoorFactor(sim.weather_->deteriorationFactor());  // the step sets it for the next one
     if (!sim.roofCollapse_->restore(d.roofs)) {
         error = "the save has a fallen roof outside the map";
         return false;
