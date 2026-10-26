@@ -31,9 +31,17 @@ Kept in `DisasterSystem` (saved as section `disasters`, in the state hash), one 
 - **`ShortCircuit`** (RimWorld's "zzzt"): a random member of a random power net shorts out
   (`PowerGrid::shortCircuit`: the net's batteries empty, the conduit or building burns out), then a Burn blast of
   radius 1 + 0.1 times the square root of the energy released in Wd (up to 5 m) and fires round it.
-- **`Blight`**: a random sown crop plant in a growing zone is the centre; plants of that crop in growing zones
-  within a 10 to 20 m circle die with chance 0.7 (the centre always). Wild plants and the same crop outside
-  zones are left alone.
+- **`Blight`** (spreads over days): a random sown crop plant in a growing zone is the centre; plants of that crop in growing zones
+  within a 2 to 4 m circle catch it with chance 0.7 (the centre always). A blighted plant (`DisasterSystem::blighted()`, saved)
+  withers 24 to 72 hours after catching it (`PlantRemoved`, message "blighted") and every hour passes the blight to each of its
+  four neighbours of the same crop in a growing zone with chance 0.03. Harvesting a plant clears it. Wild plants and the same crop
+  outside zones are left alone.
+- **Disease outbreaks** (`Disease_Flu`, `Disease_Plague`, `Disease_Malaria`, `Disease_SleepingSickness`, `Disease_GutWorms`,
+  `Disease_MuscleParasites`; one worker per Incidents def of category `Disease`, naming its `hediff`): a share of the colonists
+  (10% to 50%, at least one) gets the disease through `HealthSystem::outbreak`, skipping the immune and the already sick. Fails
+  if nobody can catch it. Letter "Disease outbreak: ...", placed at the first victim.
+- **`PrisonBreak`**: `PrisonerSystem::breakOut`: every prisoner who can walk is a prisoner no more, flees unarmed to the map's
+  edge and leaves it (`PrisonBreak` event with the count). Fails if no prisoner can walk.
 - **`ManhunterPack`**: the incident's points (the colony's threat points times 1.4, the wiki's 40% more
   than a raid) buy wild animals of the biome: a kind is picked by commonality among those whose power
   (100 times body size, at least 20, ours) is within the points, and `points / power` of them (1 to 30)
@@ -51,9 +59,9 @@ animal power, the short circuit's blast, the mad animal's range and length, the 
 ## Not yet
 
 - Volcanic winter's halved wildlife; toxic fallout's permanent damage (dementia, cancer) at 40% buildup, the
-  rotting of animals that die of it and the sun lamp that protects plants under a roof; blight that spreads
-  and withers over days (here it kills at once); a solar flare that also stops turrets' targeting beyond the
+  rotting of animals that die of it and the sun lamp that protects plants under a roof; a solar flare that also stops turrets' targeting beyond the
   power cut (they are powered buildings, so they do stop); lightning on tall buildings; the extreme drone
   (a ship part's). Zzzt is the same event as `ShortCircuit`.
 - Unreal draws none of it yet (U20's letters; a dark sky for the flare and winter, bolts, a fallout haze).
-- Disease outbreaks, infestation and the prison break are other tasks (H2, F12, C22 hooks).
+- Infestation is another task (F12). A prison break that only some prisoners join, armed breakers who fight, and outbreaks that
+  spread from colonist to colonist.

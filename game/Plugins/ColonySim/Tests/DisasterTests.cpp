@@ -11,6 +11,8 @@
 #include "ColonySim/Narrator.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Power.h"
+#include "ColonySim/Prisoners.h"
+#include "ColonySim/Fighters.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
@@ -124,7 +126,8 @@ TEST_CASE("Disasters: every trouble incident has a worker") {
     const auto sim = disasterSim();
     DISASTER_REQUIRE(sim->setupErrors().empty());
     for (const char* name : {"SolarFlare", "ToxicFallout", "VolcanicWinter", "Flashstorm", "PsychicDrone", "PsychicSoothe",
-                             "ShortCircuit", "Blight", "ManhunterPack", "MadAnimal"}) {
+                             "ShortCircuit", "Blight", "ManhunterPack", "MadAnimal", "PrisonBreak", "Disease_Flu", "Disease_Plague",
+                             "Disease_Malaria", "Disease_SleepingSickness", "Disease_GutWorms", "Disease_MuscleParasites"}) {
         CHECK_MESSAGE(sim->narrator().hasWorker(name), name);
     }
 }
@@ -319,12 +322,30 @@ TEST_CASE("Disasters: crop blight kills one crop's plants round a centre, only i
     const Event* letter = disasterFire(*sim, "Blight");
     DISASTER_REQUIRE(letter != nullptr);
     CHECK(letter->message.find("Crop blight") == 0);
-    int left = 0;
-    for (const CellPos& c : sim->farming().find(zone)->cells) {
-        left += sim->plants().has(c) && sim->plants().defAt(c) == rice ? 1 : 0;
+    // The blight starts in a small cluster and kills nothing yet.
+    const size_t first = sim->disasters().blighted().size();
+    CHECK(first >= 1);
+    for (const BlightedPlant& b : sim->disasters().blighted()) {
+        CHECK(sim->plants().has(b.cell));
+        CHECK(sim->plants().defAt(b.cell) == rice);
     }
-    CHECK(left < sown);
-    CHECK(left > 0);  // a 10 to 20 m circle on a 12 m field leaves some, and kills 70% of what it reaches
+    CHECK(sim->plants().has(wild));
+    // Over days it spreads to the neighbours and every blighted plant withers (within 72 hours of catching it).
+    size_t most = first;
+    int withered = 0;
+    disasterRun(*sim, 4 * 3600);
+    for (int h = 0; h < 6 * 24; ++h) {
+        for (int i = 0; i < 3600; ++i) {
+            sim->step();
+            for (const Event& e : sim->events()) {
+                withered += e.type == EventType::PlantRemoved && e.message == "blighted" ? 1 : 0;
+            }
+        }
+        most = std::max(most, sim->disasters().blighted().size());
+    }
+    CHECK(withered > 0);
+    CHECK(most > first);
+    CHECK(sim->disasters().blighted().empty());
     CHECK(sim->plants().has(wild));
     (void)grass;
 
@@ -407,4 +428,64 @@ TEST_CASE("Disasters: the same seed and commands give the same game") {
         return sim->stateHash();
     };
     CHECK(play() == play());
+}
+
+TEST_CASE("Disasters: an outbreak gives the disease to a share of the colonists, never one that is immune") {
+    const auto sim = disasterSim();
+    const std::vector<Entity> people = disasterColonists(*sim);
+    DISASTER_REQUIRE(people.size() >= 3);
+    const DefId flu = sim->health().diseaseId("Flu");
+    DISASTER_REQUIRE(flu.valid());
+    const Event* letter = disasterFire(*sim, "Disease_Flu");
+    DISASTER_REQUIRE(letter != nullptr);
+    CHECK(letter->message.find("Disease outbreak") == 0);
+    size_t sick = 0;
+    for (const Entity e : people) {
+        sick += sim->health().diseaseSeverity(e, flu) > 0.0f ? 1 : 0;
+    }
+    CHECK(sick >= 1);
+    CHECK(sick <= people.size());
+
+    // With everyone immune it fails in plain words.
+    for (const Entity e : people) {
+        sim->health().setImmunity(e, sim->health().diseaseId("Plague"), 1.0f);
+    }
+    sim->submit(FireIncidentCommand{"Disease_Plague", 0.0f});
+    sim->step();
+    CHECK(disasterCommandFailures(*sim) == 1);
+}
+
+TEST_CASE("Disasters: a prison break frees the prisoners who can walk; with none it fails") {
+    const auto sim = disasterSim();
+    sim->submit(FireIncidentCommand{"PrisonBreak", 0.0f});
+    sim->step();
+    CHECK(disasterCommandFailures(*sim) == 1);
+
+    const Entity bed = sim->things().spawn("Bed", CellPos{40, 40, 0});
+    const Entity enemy = sim->things().spawn("Human", CellPos{42, 42, 0});
+    std::string error;
+    DISASTER_REQUIRE(sim->fighters().setFaction(enemy, 2, error));
+    sim->submit(SetPrisonBedCommand{bed, true});
+    sim->step();
+    Rng rng(5);  // downed to be captured, then healed so it can walk
+    const std::vector<std::string> labels = sim->health().partLabels(sim->things().registry().get<Thing>(enemy).def);
+    for (const char* part : {"torso", "left leg", "right leg", "left arm"}) {
+        const auto it = std::find(labels.begin(), labels.end(), part);
+        sim->health().applyDamage(enemy, sim->health().damageTypeId("Blunt"), 20.0f, static_cast<int>(it - labels.begin()), rng);
+    }
+    DISASTER_REQUIRE(sim->prisoners().imprison(enemy, bed, kNoEntity, error));
+    Health& hurt = sim->things().registry().get<Health>(enemy);
+    hurt.injuries.clear();
+    hurt.dirty = true;
+    sim->step();
+    CHECK(sim->prisoners().isPrisoner(enemy));
+    const Event* letter = disasterFire(*sim, "PrisonBreak");
+    DISASTER_REQUIRE(letter != nullptr);
+    CHECK(letter->message.find("Prison break") == 0);
+    CHECK_FALSE(sim->prisoners().isPrisoner(enemy));
+    bool broke = false;
+    for (const Event& e : sim->events()) {
+        broke = broke || e.type == EventType::PrisonBreak;
+    }
+    CHECK(broke);
 }

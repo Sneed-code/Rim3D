@@ -314,7 +314,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     narrator_ = std::make_unique<NarratorSystem>(*raids_, *defs_, time_, settings.seed);
     narrator_->setEventLog(&events_);
     disasters_ = std::make_unique<DisasterSystem>(*narrator_, *power_, *weather_, *plants_, *farming_, *things_, *health_, *mood_,
-                                                  *animals_, *fire_, *combat_, map_, *defs_, time_, settings.seed);
+                                                  *animals_, *fire_, *combat_, *prisoners_, map_, *defs_, time_, settings.seed);
     disasters_->setEventLog(&events_);
     social_ = std::make_unique<SocialSystem>(*things_, *rooms_, *health_, *melee_, *mood_, *jobs_, *defs_, time_,
                                              splitMix64(settings.seed ^ 0x736F6369616CULL));

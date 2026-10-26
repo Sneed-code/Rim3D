@@ -2,6 +2,8 @@
 
 Updated 2026-10-26.
 
+Stage 2 T3 leftovers done: the narrator can send disease outbreaks (flu, plague, malaria, sleeping sickness, gut worms, muscle parasites; a share of the colonists falls ill) and a prison break (every prisoner who can walk escapes); crop blight now starts small, spreads plant to plant over days and withers the plants after 1 to 3 days (`docs/design/disasters.md`).
+
 Stage 2 H2 done: wounds can turn infected (tending in time stops it), pawns catch flu, plague, malaria, sleeping sickness, gut worms, muscle parasites and food poisoning, and fight them in RimWorld's immunity race; doctors tend them, the sick rest in bed, T3 can start outbreaks (`docs/design/diseases.md`).
 
 Stage 2 T3 disasters done (sim): the narrator can send a solar flare (every power net dark), toxic fallout (plants outside die, buildup on pawns outdoors, -5 mood), volcanic winter (-7 degrees, 30% less light, 7.5 to 40 days), a flashstorm (lightning and fires in a circle), psychic drone and soothe (one sex's mood -12 to -32 or +16), a short circuit (batteries blow, fire), crop blight, a manhunter pack sized by threat points and a mad animal (`docs/design/disasters.md`, tests `DisasterTests`, section `disasters`, `Sim::disasters()`). Diseases, infestation and the prison break are not in this. Sim only.
