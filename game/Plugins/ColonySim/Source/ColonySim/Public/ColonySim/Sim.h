@@ -42,6 +42,7 @@ class Designations;
 class ExplosiveSystem;
 class FighterSystem;
 class Husbandry;
+class MentalBreakSystem;
 class JobSystem;
 class Lights;
 class MeleeSystem;
@@ -297,6 +298,10 @@ public:
     const Breeding& breeding() const { return *breeding_; }
     const Husbandry& husbandry() const { return *husbandry_; }
 
+    // Colonists who snap when their mood is low: wander, binge, tantrum, berserk, leave (docs/design/mental-breaks.md).
+    MentalBreakSystem& mentalBreaks() { return *mentalBreaks_; }
+    const MentalBreakSystem& mentalBreaks() const { return *mentalBreaks_; }
+
     // Blueprints, frames and taking buildings down (docs/design/construction.md).
     Construction& construction() { return *construction_; }
     const Construction& construction() const { return *construction_; }
@@ -385,6 +390,7 @@ private:
     std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system
     std::unique_ptr<Breeding> breeding_;    // after husbandry_
     std::unique_ptr<Fire> fire_;            // after the weather, temperature, rooms, floors, filth, plants and health
+    std::unique_ptr<MentalBreakSystem> mentalBreaks_;  // after the job and fighter systems
     std::vector<std::string> setupErrors_;
     std::vector<std::pair<uint64_t, Command>> pending_;  // id, command
     uint64_t submitted_ = 0;
