@@ -14,6 +14,7 @@
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
+#include "ColonySim/Raids.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Weather.h"
@@ -499,9 +500,15 @@ Entity FighterSystem::chooseTarget(Entity pawn, const Fighter& f, const PawnInfo
     Entity best = kNoEntity;
     int bestRank = 0;
     float bestDist = 0.0f;
+    const entt::registry& reg = things_.registry();
+    const Raider* raider = reg.try_get<Raider>(pawn);
     for (const KnownEnemy& k : f.known) {
         const PawnInfo* p = info(k.pawn);
         if (p == nullptr) {
+            continue;
+        }
+        // Kidnappers (F12) carry the downed off instead of shooting them, and nobody shoots a colonist being carried off.
+        if (!p->able && raider != nullptr && (raider->sparesDowned || raider->goalThing == k.pawn || reg.all_of<Kidnapped>(k.pawn))) {
             continue;
         }
         // Able before downed, seen just now before remembered, then the nearest.

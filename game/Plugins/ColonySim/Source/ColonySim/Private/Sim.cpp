@@ -1080,6 +1080,19 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!mentalBreaks_->end(endBreak->pawn, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* strategyRaid = std::get_if<StartStrategyRaidCommand>(&command)) {
+        RaidStrategy strategy = RaidStrategy::Assault;
+        if (strategyRaid->strategy != "Auto" && !raidStrategyFromName(strategyRaid->strategy, strategy)) {
+            commandFailed(id, "no raid strategy '" + strategyRaid->strategy + "'");
+        } else {
+            if (strategyRaid->strategy == "Auto") {
+                strategy = raids_->pickStrategy(strategyRaid->points);
+            }
+            if (!raids_->startRaid(strategyRaid->faction, strategyRaid->points, strategyRaid->edge, strategy, strategyRaid->hour,
+                                   error)) {
+                commandFailed(id, error);
+            }
+        }
     }
 }
 
@@ -1554,7 +1567,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.squads.clear();
     for (const Squad& squad : raids_->state().squads) {
         out.squads.push_back(SquadView{squad.id, squad.side, static_cast<uint8_t>(squad.state),
-                                       static_cast<int>(squad.members.size()), squad.started, squad.target});
+                                       static_cast<int>(squad.members.size()), squad.started, squad.target,
+                                       static_cast<uint8_t>(squad.strategy), squad.hasBreach, squad.breach});
     }
 
     out.rooms.clear();

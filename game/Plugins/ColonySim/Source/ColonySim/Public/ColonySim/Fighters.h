@@ -56,8 +56,10 @@ struct KnownEnemy {
 };
 
 // What a fighter is doing (F6, docs/design/raids.md): fighting, hiding in a shelter (the alarm's
-// Shelter role) or running off the map (a routed raider). Only Fight looks for enemies and shoots.
-enum class FightMode : uint8_t { Fight, Shelter, Flee };
+// Shelter role), running off the map (a routed raider), or (F12, docs/design/raid-strategies.md) going
+// for loot or a downed colonist whatever is about: Seize walks to the goal like the other two and doesn't
+// shoot. Only Fight looks for enemies and shoots.
+enum class FightMode : uint8_t { Fight, Shelter, Flee, Seize };
 
 // On a pawn that fights instead of working: a drafted colonist, a colonist the colony alarm called
 // up, or every pawn of another faction. The job system leaves it alone. Every field is saved.

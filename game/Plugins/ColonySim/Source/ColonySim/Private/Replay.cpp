@@ -327,9 +327,15 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["breakDef"] = c.breakDef;
-            } else {
-                static_assert(std::is_same_v<Type, EndMentalBreakCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
+            } else {
+                static_assert(std::is_same_v<Type, StartStrategyRaidCommand>, "write every command type");
+                j["faction"] = c.faction;
+                j["points"] = static_cast<double>(c.points);
+                j["edge"] = c.edge;
+                j["strategy"] = c.strategy;
+                j["hour"] = static_cast<double>(c.hour);
             }
         },
         logged.command);
@@ -1263,6 +1269,14 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = EndMentalBreakCommand{static_cast<Entity>(pawn)};
+    } else if (type == "StartStrategyRaid") {
+        StartStrategyRaidCommand c;
+        if (!r.text(j, "faction", c.faction, where) || !r.number(j, "points", c.points, where) ||
+            !r.integer(j, "edge", c.edge, where) || !r.text(j, "strategy", c.strategy, where) ||
+            !r.number(j, "hour", c.hour, where)) {
+            return false;
+        }
+        out.command = std::move(c);
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");
     }

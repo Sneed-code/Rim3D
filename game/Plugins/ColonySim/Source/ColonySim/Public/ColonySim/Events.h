@@ -95,6 +95,10 @@ enum class EventType : uint8_t {
     PawnMentalBreakEnded,  // it ended: `message` says how ("recovered", "downed", "died", "stopped")
     PawnInsulted,          // a pawn in an insulting spree insulted another
     PawnLeftColony,        // a pawn gave up and walked off the map for good
+    DropPodLanded,         // a raider's pod came down (F12, docs/design/raid-strategies.md): `thing` the raider, `cell` where, `squad`
+    SappersBreaking,       // raiders began digging through a wall (F12): `cell` the wall, `squad`, `count` how many dig
+    ItemStolen,            // a thief lifted loose items (F12): `thing` the thief, `target` the item it carries, `def` its def, `count`
+    PawnKidnapped,         // a raider lifted a downed colonist (F12): `thing` the kidnapper, `target` the colonist. `message` "left the map" when it got away with it
 };
 
 // What stopped a projectile (ProjectileHit).

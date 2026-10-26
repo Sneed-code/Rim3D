@@ -116,6 +116,11 @@ off the map. On open ground with no cover the shooting is slow and both sides lo
 pawns in the open are hit about 1 shot in 100 at 20 to 30 m in these fights, and downed colonists
 bleed out because nobody rescues or tends them yet. F7 measures and tunes this over many seeds.
 
+## Strategies
+
+How a raid comes (walking in, drop pods, at night) and what it goes for (the colony, a wall to dig
+through, loose items, downed colonists) is F12's: [raid-strategies.md](raid-strategies.md).
+
 ## Not done yet
 
 - The narrator sending raids by itself, raid warnings and other strategies (siege, sappers, drop
