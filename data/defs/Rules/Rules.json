@@ -183,11 +183,12 @@
       "speedBase": 0.08, "speedPerLevel": 0.115,
       "xpPerSecond": 0.059028
     },
+    "construction": { "xpPerSecond": 0.173611 },
     "yieldByLevel": [0.6, 0.7, 0.8, 0.85, 0.9, 0.925, 0.95, 0.975, 1.0, 1.01, 1.02,
                      1.03, 1.04, 1.05, 1.06, 1.07, 1.08, 1.09, 1.1, 1.12, 1.13],
     "growthYieldFloor": 0.5,
     "unskilledSkillLevel": 8,
-    "unverified": ["mining.hitDamage", "mining.hitSeconds", "mining.xpPerSecond", "plants.xpPerSecond", "yieldByLevel", "growthYieldFloor"],
+    "unverified": ["mining.hitDamage", "mining.hitSeconds", "mining.xpPerSecond", "plants.xpPerSecond", "construction.xpPerSecond", "yieldByLevel", "growthYieldFloor"],
     "ours": ["mining.rockTypesPerMap", "mining.orePerTenThousandRockCells", "unskilledSkillLevel"]
   },
   {

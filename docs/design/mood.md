@@ -61,6 +61,11 @@ A thought def with `situation.condition` `coldBelowComfort` or `hotAboveComfort`
 counts while the pawn is outside its comfortable temperature range; its `stages` are picked by the degrees
 outside it ([temperature.md](temperature.md)). The thought's label in the panel is the stage's (`chilly`,
 `freezing`, `warm`, `scorching`). Like the food and rest situations it exists only while it holds.
+## Passion at work
+
+Two more situations, `PassionMinorWork` (+8) and `PassionMajorWork` (+14, from `SkillRules.passionMood`),
+count while the pawn's job uses a skill it has that passion for ([skills.md](skills.md)). A situation def
+has `situation: {passion: "Minor"}` instead of a need and band.
 
 ## What Unreal sees
 
@@ -91,5 +96,4 @@ list says where each stage ends, and the stage's `moodOffset` counts. A conditio
 ## Not yet
 
 Mental breaks, inspirations, ideology and precepts; thoughts from pain, injuries,
-joy, relationships, other pawns' deaths, passions at work (`SkillRules.passionMood` is read by
-nothing yet); social and mood stacking beyond one of each; thoughts from traits' `moodWithRangedWeapon`.
+joy, relationships, other pawns' deaths; social and mood stacking beyond one of each; thoughts from traits' `moodWithRangedWeapon`.

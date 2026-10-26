@@ -124,6 +124,12 @@ MoodSystem::MoodSystem(Things& things, const NeedsSystem& needs, const DefDataba
             thought.trait = def.text("situation.trait");
             thought.notTrait = def.text("situation.notTrait");
         }
+        thought.passion = def.text("situation.passion");
+        if (!thought.passion.empty()) {
+            // The size of the lift is SkillRules.passionMood, not a number of the thought's own.
+            const SkillRules skills = SkillRules::read(defs);
+            thought.offset = static_cast<float>(skills.passionMood[thought.passion == "Major" ? 2 : 1]);
+        }
         thoughts_.push_back(std::move(thought));
 
         StagedThought staged;
@@ -312,6 +318,19 @@ std::vector<ThoughtView> MoodSystem::thoughts(Entity pawn, int64_t now) const {
                 const Thought::Stage& s = thought.stages[static_cast<size_t>(stage)];
                 const Def& def = defs_.get(thought.def);
                 out.push_back(ThoughtView{def.defName(), s.label.empty() ? def.label() : s.label, s.offset, true, 0});
+            }
+        }
+    }
+    // Working at a skill the pawn is passionate about.
+    const Colonist* colonist = activeSkill_ ? reg.try_get<Colonist>(pawn) : nullptr;
+    const std::string skill = colonist != nullptr ? activeSkill_(pawn) : std::string();
+    const SkillRecord* record = skill.empty() ? nullptr : colonist->skill(skill);
+    if (record != nullptr && !record->disabled && record->passion != Passion::None) {
+        const char* passion = record->passion == Passion::Major ? "Major" : "Minor";
+        for (const Thought& thought : thoughts_) {
+            if (thought.passion == passion) {
+                const Def& def = defs_.get(thought.def);
+                out.push_back(ThoughtView{def.defName(), def.label(), thought.offset, true, 0});
             }
         }
     }

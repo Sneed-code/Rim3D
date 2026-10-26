@@ -1252,6 +1252,9 @@ void saveColonist(Ar& ar, Colonist& c) {
         ar.value("level", s.level);
         ar.value("passion", s.passion);
         ar.value("xp", s.xp);
+        if (ar.sectionVersion() >= 2) {
+            ar.value("xpToday", s.xpToday);
+        }
         ar.value("disabled", s.disabled);
         ar.require(static_cast<int>(s.passion) <= static_cast<int>(Passion::Major), "the save file has a bad passion");
     });
@@ -2399,7 +2402,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "work", e, &SaveEntity::work, [&](SaveWorkSettings& w) { saveWorkPart(ar, w); });
         saveParts(ar, "carrying", e, &SaveEntity::carrying, [&](Carrying& c) { saveCarryingPart(ar, c); });
     });
-    ar.section("colonists", 1, [&] {
+    ar.section("colonists", 2, [&] {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
     ar.section("health", 3, [&] {

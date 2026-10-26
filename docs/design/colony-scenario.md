@@ -46,6 +46,7 @@ stderr for each of these that does not hold:
 - Everything planned is built (walls, door, 6 beds, table, 3 stools, stove) and the room is one
   enclosed, roofed room holding them.
 - The stove made meals and colonists ate them; at least one colonist woke up in a bed.
+- The work taught something: the total experience of skills under level 10 went up (`skillXpGained`).
 - Colonists started recreation jobs, at least one at the horseshoes pin (C18: Joy hours 19:00 to 21:59).
   Standing or lying still while playing doesn't count as stuck.
 - No command and no job failed (a failed job is a bug here: nothing in the script can legitimately

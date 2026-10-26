@@ -211,6 +211,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     // A wood-fired generator makes power only with fuel, and burns it only while it makes power.
     power_->setFuel([this](Entity building) { return jobs_->fuel().lit(building); });
     jobs_->fuel().setBurning([this](Entity building) { return !power_->hasPower(building) || power_->stateOf(building) != PowerState::Off; });
+    mood_->setActiveSkill([this](Entity pawn) { return jobs_->activeSkill(pawn); });
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     explosives_ = std::make_unique<ExplosiveSystem>(*things_, map_, *combat_, *health_, *defs_);
     fighters_->setExplosives(explosives_.get());
@@ -1111,6 +1112,9 @@ void Sim::step() {
     time_.seconds += 1;
     weather_->step(time_.seconds);
     spoilage_->setOutdoorFactor(weather_->deteriorationFactor());
+    if (time_.seconds % kSecondsPerDay == 0) {
+        jobs_->skillsNewDay();
+    }
     if (time_.seconds % kSecondsPerHour == 0) {
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
         farming_->growHour(time_.seconds);
@@ -1739,6 +1743,7 @@ uint64_t Sim::stateHash() const {
                 h.add(s.level);
                 h.add(static_cast<int>(s.passion));
                 h.add(s.xp);
+                h.add(s.xpToday);
                 h.add(s.disabled);
             }
             for (const std::string& tag : c->disabledWorkTags) {

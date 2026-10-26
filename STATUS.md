@@ -408,6 +408,8 @@ events `OutOfFuel`, `Refueled`, `PawnAction::Refuel`; snapshot `fuel`, `fuelCapa
 checks wood was put in (`woodIn`). A lamp with no fuel is dark and a wood-fired generator with none makes no power (it burns
 only while switched on); **new fuel buildings start empty, so tests about something else fill them with `testFueled` (`Tests/FuelTestHelper.h`)**. **A new thing that burns fuel puts a `fuel` field in its def and reads `sim.jobs().fuel()` (`lit`, `canUse`, `use`).**
 
+**C12** skill learning (`docs/design/skills.md`): every job that uses a skill teaches it (mining, plants, building, taking down, every bill's recipe), with passion factors, the 4,000 XP daily soft cap, the slow loss above level 10 at midnight, and a mood lift (+8 minor, +14 major) while working at a passion. **A new job that uses a skill calls `JobSystem::learnSkill` each working second and is listed in `JobSystem::activeSkill`.** Save: `colonists` section version 2.
+
 ## Next
 
 Wave 1:
