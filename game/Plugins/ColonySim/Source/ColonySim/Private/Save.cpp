@@ -840,6 +840,37 @@ void saveTradeLine(Ar& ar, TradeLine& l) {
     ar.value("count", l.count);
 }
 
+template <typename Type>
+inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitCommand> || std::is_same_v<Type, TradeCommand> ||
+                                            std::is_same_v<Type, AdjustGoodwillCommand> || std::is_same_v<Type, GiftCommand>;
+
+// The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
+template <typename Ar, typename Type>
+void saveTradeCommand(Ar& ar, Type& c) {
+    if constexpr (std::is_same_v<Type, StartVisitCommand>) {
+        auto* visit = &c;
+        ar.text("faction", visit->faction);
+        ar.text("kind", visit->kind);
+        ar.text("traderKind", visit->traderKind);
+        ar.value("edge", visit->edge);
+    } else if constexpr (std::is_same_v<Type, TradeCommand>) {
+        auto* deal = &c;
+        ar.value("visit", deal->visit);
+        ar.value("negotiator", deal->negotiator);
+        ar.list("buy", deal->buy, [&](TradeLine& l) { saveTradeLine(ar, l); });
+        ar.list("sell", deal->sell, [&](TradeLine& l) { saveTradeLine(ar, l); });
+    } else if constexpr (std::is_same_v<Type, AdjustGoodwillCommand>) {
+        auto* goodwill = &c;
+        ar.text("faction", goodwill->faction);
+        ar.value("delta", goodwill->delta);
+    } else {
+        static_assert(std::is_same_v<Type, GiftCommand>, "save every trade command here");
+        auto* gift = &c;
+        ar.value("visit", gift->visit);
+        ar.list("items", gift->items, [&](TradeLine& l) { saveTradeLine(ar, l); });
+    }
+}
+
 template <typename Ar>
 void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
     if (names != nullptr) {
@@ -1245,26 +1276,8 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
             } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
                 auto* stop = &c;
                 ar.value("pawn", stop->pawn);
-            } else if constexpr (std::is_same_v<Type, StartVisitCommand>) {
-                auto* visit = &c;
-                ar.text("faction", visit->faction);
-                ar.text("kind", visit->kind);
-                ar.text("traderKind", visit->traderKind);
-                ar.value("edge", visit->edge);
-            } else if constexpr (std::is_same_v<Type, TradeCommand>) {
-                auto* deal = &c;
-                ar.value("visit", deal->visit);
-                ar.value("negotiator", deal->negotiator);
-                ar.list("buy", deal->buy, [&](TradeLine& l) { saveTradeLine(ar, l); });
-                ar.list("sell", deal->sell, [&](TradeLine& l) { saveTradeLine(ar, l); });
-            } else if constexpr (std::is_same_v<Type, AdjustGoodwillCommand>) {
-                auto* goodwill = &c;
-                ar.text("faction", goodwill->faction);
-                ar.value("delta", goodwill->delta);
-            } else if constexpr (std::is_same_v<Type, GiftCommand>) {
-                auto* gift = &c;
-                ar.value("visit", gift->visit);
-                ar.list("items", gift->items, [&](TradeLine& l) { saveTradeLine(ar, l); });
+            } else if constexpr (kSaveIsTradeCommand<Type>) {
+                saveTradeCommand(ar, c);
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }
