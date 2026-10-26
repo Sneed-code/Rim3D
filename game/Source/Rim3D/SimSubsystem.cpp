@@ -91,6 +91,8 @@ namespace
 		FParse::Value(Line, TEXT("SimItems="), Options.Items);
 		Options.bFlatMap = FParse::Param(Line, TEXT("SimFlat"));
 		FParse::Value(Line, TEXT("SimScenario="), Options.Scenario);
+		Options.WildAnimals = Options.bFlatMap ? 0 : 100;
+		FParse::Value(Line, TEXT("SimWildAnimals="), Options.WildAnimals);
 		return Options;
 	}
 
@@ -284,6 +286,7 @@ bool USimSubsystem::StartSim(const FSimStartOptions& Options)
 	Settings.items = Options.Items;
 	Settings.flatMap = Options.bFlatMap;
 	Settings.scenario = SimBridgeUtf8(Options.Scenario);
+	Settings.wildAnimals = Options.WildAnimals;
 	Sim = Defs ? std::make_unique<colony::Sim>(Settings, Defs) : std::make_unique<colony::Sim>(Settings);
 	for (const std::string& Problem : Sim->setupErrors())
 	{
