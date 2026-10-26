@@ -182,8 +182,14 @@ public:
 	bool IsDecalMaterialMissing() const { return bDecalMaterialMissing; }
 	/** Frames in which the HUD was drawn. */
 	int32 GetHudFramesDrawn() const { return HudFramesDrawn; }
-	/** The held gun component for a pawn, if it has one. */
+	/** The weapon in a pawn's hands, if it has one (drawn by UWeaponDrawSubsystem since U22). */
 	UStaticMeshComponent* GetHeldGun(colony::Entity Pawn) const;
+
+	/** The picture of a melee blow landing at `At` (world cm), going along `Direction`: blood and a flinch on
+	 *  flesh, sparks on armor or a blocking weapon, chips on a building (docs/design/melee-draw.md). The same
+	 *  effects a bullet's arrival makes; nothing here changes the sim. */
+	void SpawnMeleeImpact(colony::ProjectileHitKind Kind, colony::Entity Attacker, colony::Entity Target, const FVector& At,
+		const FVector& Direction, int32 Part, float Amount);
 
 protected:
 	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
@@ -199,12 +205,6 @@ private:
 		float SizeCm = 5.0f;
 		float Gravity = 980.0f;
 		float Drag = 2.0f;
-	};
-
-	struct FHeldGun
-	{
-		TWeakObjectPtr<UStaticMeshComponent> Component;
-		colony::DefId Def;
 	};
 
 	void OnSimEvent(const colony::Event& Event);
@@ -224,8 +224,6 @@ private:
 	void UpdateParticles(float GameDelta);
 	void UpdateLights(float GameDelta);
 	void SyncPawns();
-	void UpdateHeldGun(ASimPawnActor& Actor, const colony::ThingView& View);
-	UStaticMesh* GunMesh(colony::DefId Weapon);
 	void UpdatePlayerInput();
 	void DrawHitboxes();
 	void DrawHud();
@@ -247,9 +245,6 @@ private:
 	TArray<TObjectPtr<UStaticMesh>> KeepMeshes;
 
 	UPROPERTY()
-	TMap<uint32, TObjectPtr<UStaticMesh>> GunMeshes;
-
-	UPROPERTY()
 	TObjectPtr<UMaterialInterface> SolidMaterial;
 
 	UPROPERTY()
@@ -267,7 +262,6 @@ private:
 	TArray<FFightTracer> Tracers;
 	TArray<FParticle> Particles;
 	TArray<float> LightAges;
-	TMap<uint32, FHeldGun> HeldGuns;
 	TMap<uint32, TPair<FVector, int64>> RecentImpulse;
 	TArray<FFightHitRecord> HitLog;
 

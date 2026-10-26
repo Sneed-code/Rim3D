@@ -19,6 +19,7 @@
 #include "ColonySim/RoomStats.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Social.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
 
@@ -277,6 +278,8 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     uint64_t commandsFailed = 0;
     uint64_t recreations = 0;  // recreation jobs started
     uint64_t pinGames = 0;     // ... of them at the horseshoes pin
+    uint64_t talks = 0;        // interactions between colonists (C20)
+    uint64_t fights = 0;       // fights with fists begun
     float minJoy = 1.0f;
     float minComfort = 1.0f;
     float minOutdoors = 1.0f;
@@ -299,6 +302,8 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 case EventType::PawnDied: ++died; std::fprintf(stderr, "day %lld: a colonist died: %s\n", static_cast<long long>(sim.time().day()), e.message.c_str()); break;
                 case EventType::PawnAte: ++ate; atTable += e.message == "table" ? 1 : 0; break;
                 case EventType::PawnWokeUp: ++slept; sleptInBed += e.message == "bed" ? 1 : 0; break;
+                case EventType::Interaction: ++talks; break;
+                case EventType::SocialFight: fights += e.message == "started" ? 1 : 0; break;
                 case EventType::JobStarted:
                     if (e.job == JobType::Recreate) {
                         ++recreations;
@@ -474,11 +479,24 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         expectedDoors += p.defName == "Door" ? 1 : 0;
     }
 
+    int friendPairs = 0;
+    int rivalPairs = 0;
+    for (size_t i = 0; i < colonists.size(); ++i) {
+        for (size_t j = 0; j < colonists.size(); ++j) {
+            if (i < j && sim.social().friends(colonists[i], colonists[j])) {
+                ++friendPairs;
+            }
+            if (i != j && sim.social().rival(colonists[i], colonists[j])) {
+                ++rivalPairs;
+            }
+        }
+    }
+
     const RoomStatValues* roomStat = sim.roomStats().statsAt(CellPos{origin.x + 2, origin.y + 2, 0});
     std::printf("{\"colony\":{\"seed\":%llu,\"size\":%d,\"days\":%.2f,\"colonists\":%zu,\"died\":%llu,"
                 "\"minFood\":%.3f,\"maxMalnutrition\":%.3f,\"minRest\":%.3f,\"minMood\":%.1f,"
                 "\"stuckMinutesWorst\":%lld,\"idleMinutesWorst\":%lld,"
-                "\"minJoy\":%.3f,\"minComfort\":%.3f,\"minOutdoors\":%.3f,\"recreations\":%llu,\"pinGames\":%llu,"
+                "\"minJoy\":%.3f,\"minComfort\":%.3f,\"minOutdoors\":%.3f,\"recreations\":%llu,\"pinGames\":%llu,\"talks\":%llu,\"fights\":%llu,\"friendPairs\":%d,\"rivalPairs\":%d,"
                 "\"marked\":{\"rock\":%zu,\"trees\":%zu,\"bushes\":%zu},\"marksLeft\":%zu,\"marksDoneAtSecond\":%lld,"
                 "\"mined\":%llu,\"felled\":%llu,\"picked\":%llu,"
                 "\"planned\":%zu,\"walls\":%d,\"doors\":%d,\"beds\":%d,\"tables\":%d,\"stools\":%d,\"stoves\":%d,\"unfinished\":%d,"
@@ -491,6 +509,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 static_cast<double>(minMood), static_cast<long long>(worstStuck), static_cast<long long>(worstIdle),
                 static_cast<double>(minJoy), static_cast<double>(minComfort), static_cast<double>(minOutdoors),
                 static_cast<unsigned long long>(recreations), static_cast<unsigned long long>(pinGames),
+                static_cast<unsigned long long>(talks), static_cast<unsigned long long>(fights), friendPairs, rivalPairs,
                 markedRock, markedTrees, markedBushes, sim.designations().count(),
                 static_cast<long long>(designationsDoneAt), static_cast<unsigned long long>(mined),
                 static_cast<unsigned long long>(felled), static_cast<unsigned long long>(picked), plans.size(),
@@ -550,6 +569,9 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     if (recreations == 0 || pinGames == 0) {
         fail("colonists started %llu recreation jobs, %llu at the horseshoes pin", static_cast<unsigned long long>(recreations),
              static_cast<unsigned long long>(pinGames));
+    }
+    if (talks == 0) {
+        fail("%s", "the colonists never talked to each other");
     }
     if (sim.filth().totalLayers() > 12) {
         fail("%zu layers of filth lie about (cleaned %llu): nobody keeps up with the dirt", sim.filth().totalLayers(),

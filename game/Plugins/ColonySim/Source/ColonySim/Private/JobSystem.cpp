@@ -8,6 +8,7 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/FieldCare.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Social.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
@@ -748,6 +749,10 @@ void JobSystem::step() {
         }
         // It fights (drafted, or another faction's: F4): no think, no job, until it is undrafted.
         if (reg.all_of<Fighter>(pawn)) {
+            continue;
+        }
+        // It is in a fight with fists with a pawn it quarrelled with (C20): the social system acts for it.
+        if (reg.all_of<SocialFight>(pawn)) {
             continue;
         }
         // Downed or dead (F1): the job ends, what it carried is put down, and it doesn't think.

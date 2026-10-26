@@ -292,11 +292,13 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, s
     // Where it walks in: a cell near the chosen edge that can reach the target.
     const int w = map_.width();
     const int h = map_.height();
-    const int side = edge >= 0 ? edge : static_cast<int>(rng_.below(4));
+    const int firstSide = edge >= 0 ? edge : static_cast<int>(rng_.below(4));
     Regions& regions = map_.regions();
     bool found = false;
     CellPos entry;
-    for (int attempt = 0; attempt < 40 && !found; ++attempt) {
+    // A raid with no chosen edge tries the others in turn when the first has no way in (water, rock).
+    for (int attempt = 0; attempt < (edge >= 0 ? 40 : 160) && !found; ++attempt) {
+        const int side = (firstSide + attempt / 40) % 4;
         const int along = static_cast<int>(rng_.below(static_cast<uint32_t>(side % 2 == 0 ? w : h)));
         const int d = rules_.edgeDepth;
         const CellPos guess = side == 0 ? CellPos{along, h - 1 - d, 0}

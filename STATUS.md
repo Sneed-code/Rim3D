@@ -3,6 +3,7 @@
 Updated 2026-10-26.
 
 Stage 2 F10 done: the alarm's Medic and Firefighter roles (they tend, rescue and put out fires only where the enemy can't see, and wait behind the line otherwise), and fighters drag downed friends out of the line of fire when the way is reasonably safe (`docs/design/field-care.md`).
+Stage 2 C20 done: colonists talk (chitchat, deep talk, kind words, slights, insults, romance, proposals, breakups), hold opinions of each other, become friends, rivals, lovers and spouses, and an insult can start a fistfight (`docs/design/social.md`).
 Stage 2 P1 done: a pawn carries a rifle, a sidearm and a melee weapon (`docs/design/weapons.md`).
 Stage 2 E4 done: fire spreads over flammable ground, burns things to ash, heats rooms, sets pawns alight and is put out by rain, snow and colonists with the Firefighter work type in the home area (`docs/design/fire.md`).
 Stage 2 N4 done: tame animals mate and bear young, hens lay eggs, calves and chicks grow up, colonists milk and shear (`docs/design/breeding.md`).
@@ -10,6 +11,7 @@ Stage 2 D10 done: narrators (Orrin, Maren, Jinx), difficulty levels, 30 incident
 Stage 2 F11 done: turrets and traps (`docs/design/defense.md`).
 Stage 2 C13 done: growing zones with a chosen crop, colonists sow and harvest them (Growing work), crops grow by light and temperature, frost and heat kill them (`docs/design/farming.md`).
 Stage 2 C24 done: carrying is by mass (capacity over item mass), a hauler takes neighbouring stacks of the same def in one trip, a load slows walking up to 25% (`docs/design/jobs.md`).
+Stage 2 U22 done: melee and weapon switching on screen. In direct mode the left mouse button swings a melee weapon (or fists), the right holds it up to block, Q brings up the next carried weapon; every carried weapon is drawn (rifle on the back, sidearm and melee weapon on the hips); swings are procedural poses timed to the sim's hit step, with hit-stop, flinch, blood and sparks, a dipping sidestep and a raised blade for blocks (`docs/design/melee-draw.md`, smoke test `melee`). No human melee animations exist yet, so the arms do not move.
 
 ## Where we are
 
@@ -171,6 +173,18 @@ why); 30 against 40 costs about 0.35 ms a step in the cloud. Snapshot `faction`,
 `fighting`, `fightTarget`, `fightSpot`, `fallingBack`; save format 15. **A new system that acts on
 pawns must skip pawns with `Fighter`** as the job system does.
 
+Since C20 colonists have a social life (`docs/design/social.md`, tests `SocialTests`, the colony scenario prints `talks`): every
+pawn with needs gets a `Social` component (opinion memories, stored bonds). A pawn thinks of another by a hash-based compatibility
+(-10 to 10), the other's traits (`opinionOfMe`: Abrasive -20), bonds (lover +40, spouse +60, ex -25) and fading memories; friends
+(both 20 or more) and rivals (-20 or less) are worked out, never stored. About every 6 game hours a pawn with someone in the same room within
+6 m picks an interaction by D9's weights and the opinion limits (chitchat, deep talk, kind words, slight, insult, romance attempt,
+proposal, breakup); at a table or game beside others every 15 minutes. Each changes the listener's opinion, starts mood thoughts and
+gives the talker Social experience. Romance and marriage are bonds only (one at a time, adults, no orientations yet); a death gives
+the spouse, lover, friends and rivals their thought. An insult can start a fistfight (`SocialFight`: both walk up and swing fists even
+with a gun in hand, ends at pain 0.25, a downed pawn, 5 minutes or a draft). Events `Interaction`, `BondChanged`, `SocialFight`,
+dev command `InteractCommand`, snapshot `partner` and `socialFight`, save section `social`. **A new system that acts on pawns must skip
+pawns with `SocialFight`, as for `Fighter`.**
+
 Since F5 fighters aim like players (`docs/design/aiming.md`): Shooting skill sets a reaction time
 before shooting a new target (0.5 s at skill 0, 0.17 s at 20), how well a shot leads a moving target
 (a skill 20 shooter hits a man walking past about as often as one standing, a novice almost never)
@@ -259,7 +273,7 @@ Since E1 the sim has a calendar, an outdoor temperature, weather and snow (`docs
 
 ## Stage 1 progress
 
-40 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7, U8, U11, U10, C10, A1, A2, F6); F7, G1 and G2 are left. Tick tasks in `docs/plans/stage-1.md` as they merge.
+40 of 43 tasks done (D1, D2, D3, U1, S1, S2, S5, S6, F3, S3, U2, S4, U6, U5, C8, U12, F1, C1, U9, C6, C2, C4, C9, F2, C5, C3, F4, A3, F5, U3, U4, U7, C7, U8, U11, U10, C10, A1, A2, F6); G1 and G2 are left (F7 done). Tick tasks in `docs/plans/stage-1.md` as they merge.
 
 ## Stage 2
 
@@ -357,7 +371,7 @@ Save section `husbandry` 1, five new commands (`MarkAnimal`, `SetTraining`, `Cre
 
 **U15** animals on screen (`docs/design/animal-life.md`, smoke test `animals`): `USimAnimalSubsystem` draws every pawn with a snapshot `lifeStage` of 0 to 2 as an `ASimAnimalActor` on its A4 skeletal mesh (model and scale from `assets/animal_art.json`, fitted to its `lengthM`), playing idle, walk, gallop, eating and death clips picked from the snapshot; `USimPawnSubsystem` skips animals. Animation by distance: every frame within 40 m, 8 Hz within 120 m, a frozen pose within 400 m, hidden beyond (`Animals.NearDistance`, `MidDistance`, `HideDistance`). Not done: far herds as instanced meshes with baked animation (G3 decides if the frozen skinned pose is cheap enough), a lying-down pose for sleep (it slows the idle clip), and the models' facing is unchecked by eye.
 
-**F10** medics, firefighters and rescue under fire (`docs/design/field-care.md`, tests `FieldCareTests`, ctest `simrun_medics`): defense roles 3 **Medic** and 4 **Firefighter** (`SetDefenseRoleCommand`; refused for a colonist incapable of the work). While the alarm is on they are **on duty** (`FieldCare::dutyWorkType`): the job system skips their think list (`JobSystem::dutyStep`) and gives them only Doctor or Firefighter work on targets out of the enemies' sight (`FieldCare::safe`: no enemy within 10 m, none within 45 m with a line of sight), else the new job **`StandBy`** (job type 27) 6 m behind home away from the threat. An enemy within 8 m in sight makes them fight like a Keep working colonist; a duty job whose target comes under fire before they get there is dropped. The alarm's fighters **drag** a downed friend lying in sight to the nearest safe cell (`FightMode::Rescue`, `FighterSystem::startRescue`, `Fighter::rescuing`/`lifted`/`rescueTo`; `LiftPawn`, then `LayPawn` "safe" or "let go") when no enemy is within 8 m of it, a fighter is within 15 m and at most two enemies see any point of the way; then the medic tends it there. `rescuerOf(reg, pawn)`; `JobSystem::needsRescue` now skips a pawn a fighter is fetching. Snapshot `ThingView::rescuing`; save section `fighters` 3; data `Rules/FieldCareRules` (all ours). `simrun --raid N --medics` gives the first two colonists the roles and prints `fieldCare` counters; the colony scenario gives the same roles (no effect without a raid). **F7's nightly raid runs should include `--medics` on some seeds.** Not done: medics fetching the downed themselves, drafted colonists or raiders carrying the downed, Unreal showing a carried pawn in the rescuer's arms.
+**F10** medics, firefighters and rescue under fire (`docs/design/field-care.md`, tests `FieldCareTests`, ctest `simrun_medics`): defense roles 3 **Medic** and 4 **Firefighter** (`SetDefenseRoleCommand`; refused for a colonist incapable of the work). While the alarm is on they are **on duty** (`FieldCare::dutyWorkType`): the job system skips their think list (`JobSystem::dutyStep`) and gives them only Doctor or Firefighter work on targets out of the enemies' sight (`FieldCare::safe`: no enemy within 10 m, none within 45 m with a line of sight), else the new job **`StandBy`** (job type 27) 6 m behind home away from the threat. An enemy within 8 m in sight makes them fight like a Keep working colonist; a duty job whose target comes under fire before they get there is dropped. The alarm's fighters **drag** a downed friend lying in sight to the nearest safe cell (`FightMode::Rescue`, `FighterSystem::startRescue`, `Fighter::rescuing`/`lifted`/`rescueTo`; `LiftPawn`, then `LayPawn` "safe" or "let go") when no enemy is within 8 m of it, a fighter is within 15 m and at most two enemies see any point of the way; then the medic tends it there. `rescuerOf(reg, pawn)`; `JobSystem::needsRescue` now skips a pawn a fighter is fetching. Snapshot `ThingView::rescuing`; save section `fighters` 3; data `Rules/FieldCareRules` (all ours). `simrun --raid N --medics` gives the first two colonists the roles and prints `fieldCare` counters; the colony scenario gives the same roles (no effect without a raid). F7's raid soak now plays each seed's raid a second time with the two roles (`raidSoakMedics` line; only a raid that never came fails). Not done: medics fetching the downed themselves, drafted colonists or raiders carrying the downed, Unreal showing a carried pawn in the rescuer's arms.
 
 ## Next
 
@@ -414,8 +428,7 @@ and harvesting~~ done (`docs/design/mining.md`; save format 14). On the PC, ~~**
 U6's work tab and a colonist panel can now read `sim.jobs()` (work types, priorities).
 ~~**F4** fighter AI: where to stand~~ done (`docs/design/fighters.md`; save format 15), ~~**F5** fighter
 AI: aiming~~ done (`docs/design/aiming.md`; save format 17), ~~**F6** raid and defense~~ done
-(`docs/design/raids.md`; save section `raids`, `fighters` 2), so **F7** raid scenario tests and nightly soak (cloud, Sonnet
-high) is open; with U9 and F2 in, ~~**U11** fights on screen~~ is done (PC; smoke test `fights`; `docs/design/fights.md`; it
+(`docs/design/raids.md`; save section `raids`, `fighters` 2), so ~~**F7** raid scenario tests and nightly soak~~ is done (`simrun --raid-soak N`, `.github/workflows/nightly.yml` at 03:17 UTC, `docs/design/raid-soak.md`; it found stuck fighters, 13.6% waiting in the open and some raids that drag on, now in BACKLOG); with U9 and F2 in, ~~**U11** fights on screen~~ is done (PC; smoke test `fights`; `docs/design/fights.md`; it
 binds R to reload; reload and sidestep animations are not drawn yet). ~~**C10** colony scenario test~~ done
 (`docs/design/colony-scenario.md`); ~~**U10** hands-on work~~ is done (PC; smoke test `handson`; `docs/design/handson.md`); ~~**A1** placeholder art~~ is done (PC; free Poly Haven meshes on the bed, door, table, stool, stove, logs, meals, berries, trees and bushes; `docs/design/building-draw.md`, `python tools/placeholder_art.py` then the `PlaceholderArt` commandlet). ~~**A2** terrain materials~~ is done (PC; free CC0 Poly Haven textures instead of Megascans, so nobody had to download anything: grass, sand, gravel and rock blended by terrain type and slope, placed by world position; `docs/design/terrain.md`, `python tools/terrain_textures.py` then the `TerrainMaterials` commandlet; swapping in Megascans later is a change in `assets/terrain_textures.json`). ~~**A6** placeholder art 2~~ is done (PC; 30 more free Poly Haven meshes on crops, work tables, power, climate, lamps and furniture, same list and commandlet as A1; walls, floors, solar panel, wind turbine and a few small things stay shapes). ~~**A5** clothes art~~ is done (PC; worn meshes for all 12 apparel defs by layer, made from the morphed hoodie and trousers plus a free CC0 Poly Haven hat, no downloads by sneed; `docs/design/looks.md`, `python tools/clothes_art.py` then the `ClothesArt` commandlet; not yet seen in game, U16 draws them). **G1** is what is left on the PC.
 

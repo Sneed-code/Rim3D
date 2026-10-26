@@ -111,7 +111,8 @@ public:
     // Starts a swing at `target` (a living pawn in reach), or straight ahead if it is kNoEntity and
     // `player` is set. False, with a reason in plain words, if the pawn can't swing now: downed, mid-shot,
     // still swinging or recovering, nothing to hit with, or the target out of reach.
-    bool attack(Entity pawn, Entity target, bool player, std::string* why = nullptr);
+    // `fists` swings the body's own tools even with a weapon in the hands (a social fight, C20).
+    bool attack(Entity pawn, Entity target, bool player, std::string* why = nullptr, bool fists = false);
     // The player's block: raises the weapon for playerBlockSteps (after blockSteps). Needs a melee weapon.
     bool block(Entity pawn, std::string* why = nullptr);
 
@@ -120,9 +121,9 @@ public:
     bool winding(Entity pawn) const;
     bool blocking(Entity pawn) const;
     // Metres from the pawn's centre its strike reaches on the ground: its melee weapon's, else its body's.
-    float reach(Entity pawn) const;
+    float reach(Entity pawn, bool fists = false) const;
     // The target's centre is within the pawn's reach (plus reachSlack: its front is).
-    bool inReach(Entity pawn, Entity target) const;
+    bool inReach(Entity pawn, Entity target, bool fists = false) const;
     // The fighter AI charges with this pawn: no gun, and a melee weapon in hand or a trait that says
     // so (Brawler). Others only strike back at enemies in reach.
     bool charges(Entity pawn) const;
@@ -158,7 +159,7 @@ private:
         float reach = 0.0f;
     };
 
-    const ToolSet* toolsOf(Entity pawn, bool& weapon) const;
+    const ToolSet* toolsOf(Entity pawn, bool& weapon, bool fists = false) const;
     const Tool* toolOf(Entity pawn, const Melee& m) const;
     void prepareDefense(Entity defender, Entity attacker, int stepsToHit, uint64_t seed);
     void defend(Entity defender, Melee& d);

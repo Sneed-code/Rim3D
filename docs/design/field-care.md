@@ -90,7 +90,8 @@ out of sight.
 - Hash: the new fighter fields. Replays: nothing new (the role is `SetDefenseRole`).
 - `simrun --medics` (with `--raid`) makes the first colonist the Medic and the second the Firefighter and prints
   `{"fieldCare":{tendedInFight, dragsStarted, dragged, letGo, givenUp}}`. The colony scenario gives the same two
-  roles (with no raid they change nothing). F7's nightly runs should add `--medics` to some seeds.
+  roles (with no raid they change nothing). F7's raid soak (`--raid-soak`, nightly and the `simrun_raid_soak` ctest)
+plays every seed's raid a second time with the two roles ([raid-soak.md](raid-soak.md)).
 
 ## What a fight looks like now
 

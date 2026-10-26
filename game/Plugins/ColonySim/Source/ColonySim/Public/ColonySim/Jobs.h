@@ -388,6 +388,8 @@ public:
     double plantWorkSpeed(Entity pawn) const;
     // A skill level of a pawn: from its Colonist record, `unskilledLevel` for a pawn with none.
     int skillLevel(Entity pawn, const char* skill) const;
+    // Experience in a skill, scaled by the pawn's passion for it (the social system's, C20).
+    void addSkillXp(Entity pawn, const char* skill, double xp) { learnSkill(pawn, skill, xp); }
 
     // How well an item is stored where it lies: its stockpile's priority if that stockpile takes
     // it, else Unstored. Unstored for an item off the map.

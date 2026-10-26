@@ -484,6 +484,18 @@ struct StripCommand {
     bool strip = true;
 };
 
+// Dev command (C20, docs/design/social.md): `initiator` does the Interactions def `interaction` to `recipient`
+// now, whatever the dice and the opinion limits would have said. `outcome` is 1 to make a roll that could go
+// either way (a romantic gesture, a proposal) work, 0 to make it fail, -1 to leave it to the dice. Fails if
+// the interaction is unknown, either pawn can't talk now (dead, downed, asleep, fighting, drafted, under the
+// player's hand), they are out of earshot, or the interaction needs what is not there (a lover).
+struct InteractCommand {
+    Entity initiator = kNoEntity;
+    Entity recipient = kNoEntity;
+    std::string interaction;
+    int outcome = -1;
+};
+
 // The protagonist's dodge roll (P2, docs/design/shooter-feel.md): a start-up, a roll of a few metres
 // in the direction (dx, dy) (any length; not a number, or zero, is a backstep away from where the
 // pawn faces) in which bullets pass through the pawn for a short window, then a recovery in which it
@@ -605,7 +617,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SpendTalentPointCommand, AddTalentXpCommand, RearmTrapCommand,
                              CarryWeaponCommand, SwitchWeaponCommand, CreateGrowingZoneCommand,
                              RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
-                             SetHomeAreaCommand, SetMedicalCareCommand>;
+                             SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

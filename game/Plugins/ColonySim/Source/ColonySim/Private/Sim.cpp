@@ -28,6 +28,7 @@
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Recreation.h"
+#include "ColonySim/Social.h"
 #include "ColonySim/Medicine.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Talents.h"
@@ -244,6 +245,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     fighters_->setDefense(defense_.get());
     fieldCare_ = std::make_unique<FieldCare>(*things_, map_, *health_, *jobs_, *fighters_, *raids_, *defs_, time_);
     jobs_->setFieldCare(fieldCare_.get());
+    social_ = std::make_unique<SocialSystem>(*things_, *rooms_, *health_, *melee_, *mood_, *jobs_, *defs_, time_,
+                                             splitMix64(settings.seed ^ 0x736F6369616CULL));
+    social_->setEventLog(&events_);
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -949,6 +953,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!apparel_->markStrip(strip->thing, strip->strip, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* interact = std::get_if<InteractCommand>(&command)) {
+        if (!social_->interact(interact->initiator, interact->recipient, interact->interaction, interact->outcome, error)) {
+            commandFailed(id, error);
+        }
     }
 }
 
@@ -997,6 +1005,7 @@ void Sim::step() {
     animals_->step();
     husbandry_->step();
     breeding_->step();
+    social_->step(time_.seconds);
     mood_->step(time_.seconds, events_);
     movement_->step(things_->registry(), map_);
     melee_->step();
@@ -1237,6 +1246,10 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Mood* mood = reg.try_get<Mood>(entity)) {
             view.mood = mood->level;
             view.moodBand = static_cast<int>(mood->band);
+        }
+        if (reg.all_of<Social>(entity)) {
+            view.partner = social_->partner(entity);
+            view.socialFight = social_->fighting(entity);
         }
         if (const BeautyNeed* beauty = roomStats_->beautyNeed(entity)) {
             view.beautyNeed = beauty->level;
@@ -1788,6 +1801,7 @@ uint64_t Sim::stateHash() const {
         breeding_->hashThing(e, h);
         fire_->hashThing(e, h);
         melee_->hashThing(e, h);
+        social_->hashThing(e, h);
         defense_->hashThing(e, h);
         apparel_->hashThing(e, h);
     }

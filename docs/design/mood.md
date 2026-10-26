@@ -19,6 +19,8 @@ Base mood 50 is ours: the wiki's base is by difficulty (32 on Strive to Survive)
 sit higher because comfort, beauty, outdoors, joy and the rest add to it, and we haven't built those. Revisit
 when they exist (`ours` in the def).
 
+Another system can start a memory with `MoodSystem::remember(pawn, trigger, now)`: the social system (C20, [social.md](social.md)) does for chats, slights, insults, weddings, breakups and deaths of friends.
+
 ## Thoughts (`Thoughts` defs)
 
 Two kinds. Numbers are RimWorld's as recalled; only Hungry (-6) is from the wiki, the rest are

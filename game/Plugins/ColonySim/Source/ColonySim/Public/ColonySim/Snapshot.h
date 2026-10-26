@@ -87,6 +87,10 @@ struct ThingView {
     // Mood (docs/design/mood.md): 0 to 100, else -1; the break band as a MoodBand (0 stable to 3 extreme).
     float mood = -1.0f;
     int moodBand = 0;
+    // Social life (docs/design/social.md): a pawn's spouse, else its lover (none if it has neither), and
+    // whether it is in a fight with fists.
+    Entity partner = kNoEntity;
+    bool socialFight = false;
     // Recreation, comfort and outdoors needs (docs/design/recreation.md): 0 empty to 1 full, else -1.
     float joy = -1.0f;
     float comfort = -1.0f;
