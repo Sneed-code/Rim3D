@@ -43,6 +43,7 @@ class ExplosiveSystem;
 class FighterSystem;
 class Husbandry;
 class MentalBreakSystem;
+class NatureEvents;
 class JobSystem;
 class Lights;
 class MeleeSystem;
@@ -287,6 +288,8 @@ public:
     const RaidSystem& raids() const { return *raids_; }
 
     // The narrator, incidents and threat points (docs/design/narrator.md).
+    NatureEvents& nature() { return *nature_; }
+    const NatureEvents& nature() const { return *nature_; }
     NarratorSystem& narrator() { return *narrator_; }
     const NarratorSystem& narrator() const { return *narrator_; }
     // Prisoners: capture, feeding, warden talks, recruiting and release (docs/design/prisoners.md).
@@ -338,6 +341,8 @@ private:
     void placeStockpileAndThings();
     void pruneDesignations();
     void startScenario();
+    // A newcomer made like the scenario's colonists (Scenario.cpp); kNoEntity if it can't be placed.
+    Entity joinColonist(CellPos cell, uint64_t seed);
     // Gives a new pawn its looks if it is humanlike (its def names no other intelligence).
     void giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& lineage);
     // Makes (again) the genes of a pawn that has looks, from its lineage.
@@ -404,6 +409,7 @@ private:
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<NarratorSystem> narrator_;  // after raids_
+    std::unique_ptr<NatureEvents> nature_;      // after narrator_ (T2)
     std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
 };
 

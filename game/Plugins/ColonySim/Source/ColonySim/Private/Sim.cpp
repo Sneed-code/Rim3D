@@ -52,6 +52,7 @@
 #include "ColonySim/Weather.h"
 #include "ColonySim/Zones.h"
 #include "ColonySim/Narrator.h"
+#include "ColonySim/NatureEvents.h"
 #include "MovementSystem.h"
 
 #include <algorithm>
@@ -300,6 +301,12 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     fighters_->setDefense(defense_.get());
     narrator_ = std::make_unique<NarratorSystem>(*raids_, *defs_, time_, settings.seed);
     narrator_->setEventLog(&events_);
+    nature_ = std::make_unique<NatureEvents>(*narrator_, *raids_, *defs_, time_, map_, *things_, *plants_, *animals_, *husbandry_,
+                                             *health_, settings.seed);
+    nature_->setColonistMaker([this](CellPos cell, uint64_t seed) { return joinColonist(cell, seed); });
+    weather_->setConditions([this](int64_t seconds) { return nature_->temperatureOffset(seconds); },
+                            [this]() { return nature_->skyFactor(); });
+    lights_->setSkyFloor([this]() { return nature_->skyFloor(); });
     social_ = std::make_unique<SocialSystem>(*things_, *rooms_, *health_, *melee_, *mood_, *jobs_, *defs_, time_,
                                              splitMix64(settings.seed ^ 0x736F6369616CULL));
     social_->setEventLog(&events_);
@@ -1701,6 +1708,10 @@ void Sim::writeSnapshot(Snapshot& out) const {
         n.wealth = state.wealth;
         n.threatPoints = state.points;
         n.incidents = state.incidents;
+        n.conditions.clear();
+        for (const NatureCondition& c : nature_->active()) {
+            n.conditions.push_back(NarratorConditionView{defs_->idOf("Incidents", c.incident), c.startsAt, c.endsAt});
+        }
     }
 }
 
@@ -1745,6 +1756,7 @@ uint64_t Sim::stateHash() const {
     roofCollapse_->hashState(h);
     spoilage_->hashState(h);
     narrator_->hashState(h);
+    nature_->hashState(h);
     crafting_->hashState(h);
     farming_->hashState(h);
 

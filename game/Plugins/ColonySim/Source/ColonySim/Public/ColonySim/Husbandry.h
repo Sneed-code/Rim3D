@@ -183,6 +183,8 @@ public:
     const AnimalCare* care(Entity animal) const;
     // The care record, made if the animal has none yet; null for a thing that isn't an animal.
     AnimalCare* careFor(Entity animal);
+    // A wild animal walks into the colony and is tame at once (T2's animal joins); nothing to roll. False if it is not a living wild animal.
+    bool joinColony(Entity animal);
     bool isTame(Entity animal) const;  // a living or dead animal that is not wild
     // Trainability of the animal's def: 0 None, 1 Simple, 2 Intermediate, 3 Advanced.
     int trainability(Entity animal) const;

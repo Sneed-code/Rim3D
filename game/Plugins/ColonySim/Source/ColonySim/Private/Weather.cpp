@@ -169,7 +169,8 @@ double Weather::drift(int64_t seconds) const {
 
 double Weather::temperatureAt(int64_t seconds) const {
     const double dayPercent = static_cast<double>(seconds % kSecondsPerDay) / static_cast<double>(kSecondsPerDay);
-    return seasonalMean(seconds) + weatherCosTurns(dayPercent + dayCyclePhase_) * dailySwing_ * 0.5 + drift(seconds);
+    const double offset = temperatureOffset_ ? temperatureOffset_(seconds) : 0.0;
+    return seasonalMean(seconds) + weatherCosTurns(dayPercent + dayCyclePhase_) * dailySwing_ * 0.5 + drift(seconds) + offset;
 }
 
 // ---- Weather ---------------------------------------------------------------------------------
@@ -183,6 +184,14 @@ float Weather::transition() const {
 }
 
 WeatherEffects Weather::effects() const {
+    WeatherEffects out = blendedEffects();
+    if (skyFactor_) {
+        out.skyGlow *= skyFactor_();
+    }
+    return out;
+}
+
+WeatherEffects Weather::blendedEffects() const {
     const Kind* now = kindOf(state_.current);
     if (now == nullptr) {
         return WeatherEffects{};
@@ -323,7 +332,7 @@ bool Weather::outdoors(CellPos c) const {
 
 const WeatherEffects& Weather::cachedEffects() const {
     if (cacheAt_ != now_) {
-        cache_ = effects();
+        cache_ = blendedEffects();
         cacheAt_ = now_;
     }
     return cache_;

@@ -195,7 +195,7 @@ float Lights::lightAt(CellPos c) const {
         return 0.0f;
     }
     const float lamp = lamp_[static_cast<size_t>(map_.index(c))];
-    return map_.roof(c) == Roof::None ? std::max(lamp, skyGlow()) : lamp;
+    return map_.roof(c) == Roof::None ? std::max(lamp, std::max(skyGlow(), skyFloor_ ? skyFloor_() : 0.0f)) : lamp;
 }
 
 float Lights::workSpeedAt(CellPos c) const {

@@ -67,6 +67,9 @@ public:
 
     // Cloud, rain and fog dim the sun by the weather's `skyGlow` (docs/design/weather.md); null: they don't.
     void setWeather(const Weather* weather) { weather_ = weather; }
+    // A glow the open sky never falls below, now (T2's aurora lights the night); null: none. Only the light on open
+    // ground: the sun's own glow (skyGlow, solar power) is unchanged.
+    void setSkyFloor(std::function<float()> floor) { skyFloor_ = std::move(floor); }
 
     // The sun's glow now, from the time of day and the weather. 0 at night, 1 on a clear day.
     float skyGlow() const;
@@ -92,6 +95,7 @@ private:
     Things& things_;
     const Rooms& rooms_;
     const GameTime& time_;
+    std::function<float()> skyFloor_;
     const Weather* weather_ = nullptr;
     LightNumbers numbers_;
     std::function<bool(Entity)> active_;

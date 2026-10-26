@@ -402,12 +402,21 @@ struct WeatherView {
 // The narrator (docs/design/narrator.md): which one and the difficulty (invalid DefIds while it is
 // off), the colony's wealth and threat points at its last check, and incidents so far. Letters come
 // as Letter events.
+// A spell in force because of an incident (cold snap, heat wave, eclipse, aurora): its Incidents def and the game
+// seconds it started and ends.
+struct NarratorConditionView {
+    DefId incident;
+    int64_t startsAt = 0;
+    int64_t endsAt = 0;
+};
+
 struct NarratorView {
     DefId narrator;
     DefId difficulty;
     float wealth = 0.0f;
     float threatPoints = 0.0f;
     uint32_t incidents = 0;
+    std::vector<NarratorConditionView> conditions;  // T2: the spells in force now
 };
 
 // A talent rank the protagonist has bought (docs/design/talents.md).

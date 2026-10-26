@@ -168,6 +168,9 @@ public:
     // A raid of `faction` (a Factions defName) with `points` (0: threatPoints()) walks in at `edge`
     // (0 north, 1 east, 2 south, 3 west, -1 any).
     bool startRaid(const std::string& faction, float points, int edge, std::string& error);
+    // Where outsiders walk in: `target` is the player's colonist nearest the middle (else the middle) and `entry` a cell
+    // near a map edge (`edge` 0 to 3, or -1 for any) that can reach it. False, with a reason, if there is no way in.
+    bool findEntry(int edge, CellPos& target, CellPos& entry, std::string& error);
     bool soundAlarm(bool on, std::string& error);
     bool setRole(Entity pawn, DefenseRole role, bool hasSpot, CellPos spot, std::string& error);
     // The room at `cell` is where Shelter colonists go; `clear` takes the mark off.

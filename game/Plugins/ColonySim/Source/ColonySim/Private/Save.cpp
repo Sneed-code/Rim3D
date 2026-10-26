@@ -19,6 +19,7 @@
 #include "ColonySim/Power.h"
 #include "ColonySim/Farming.h"
 #include "ColonySim/Narrator.h"
+#include "ColonySim/NatureEvents.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Filth.h"
@@ -449,6 +450,8 @@ struct SaveData {
     SaveWeather weather;
     bool hasNarrator = false;          // section "narrator" (T1); older saves keep the narrator off
     NarratorState narrator;
+    bool hasNature = false;            // section "nature" (T2)
+    NatureState nature;
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -2693,6 +2696,17 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("wealth", n.wealth);
         ar.value("points", n.points);
     });
+    ar.section("nature", 1, [&] {
+        d.hasNature = true;
+        NatureState& n = d.nature;
+        ar.value("rngState", n.rngState);
+        ar.value("rngIncrement", n.rngIncrement);
+        ar.list("conditions", n.conditions, [&](NatureCondition& c) {
+            ar.text("incident", c.incident);
+            ar.value("startsAt", c.startsAt);
+            ar.value("endsAt", c.endsAt);
+        });
+    });
     ar.section("fire", 1, [&] {
         ar.value("started", d.fire.started);
         ar.value("burntUp", d.fire.burntUp);
@@ -2859,6 +2873,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.farming = sim.farming_->saved();
     d.breeding = sim.breeding_->saved();
     d.narrator = sim.narrator_->state();
+    d.nature = sim.nature_->state();
     d.fire = sim.fire_->saved();
     d.seconds = sim.time_.seconds;
     d.rngState = sim.rng_.state();
@@ -3719,6 +3734,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     sim.breeding_->restore(d.breeding);
     if (d.hasNarrator && !sim.narrator_->restore(d.narrator, error)) {
         return false;
+    }
+    if (d.hasNature) {
+        sim.nature_->restore(d.nature);
     }
     if (!sim.farming_->restore(d.farming, error)) {
         return false;

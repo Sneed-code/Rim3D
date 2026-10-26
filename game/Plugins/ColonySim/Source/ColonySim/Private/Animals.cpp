@@ -474,10 +474,13 @@ bool AnimalSystem::pickEdgeCell(Rng& rng, CellPos& out) const {
     return false;
 }
 
-float AnimalSystem::placeGroup(int kindIndex, CellPos centre, Rng& rng, bool adultsOnly, bool entering) {
+float AnimalSystem::placeGroup(int kindIndex, CellPos centre, Rng& rng, bool adultsOnly, bool entering, int countOverride,
+                               std::vector<Entity>* placed, int64_t stayFor) {
     const Kind& kind = kinds_[static_cast<size_t>(kindIndex)];
     entt::registry& reg = things_.registry();
-    const int n = kind.herdMin + static_cast<int>(rng.below(static_cast<uint32_t>(kind.herdMax - kind.herdMin + 1)));
+    const int n = countOverride > 0
+                      ? countOverride
+                      : kind.herdMin + static_cast<int>(rng.below(static_cast<uint32_t>(kind.herdMax - kind.herdMin + 1)));
     const uint32_t herd = n >= 2 ? saved_.nextHerd++ : 0;
     const int64_t now = time_.seconds;
     const double adultYears = static_cast<double>(kind.adultAgeSeconds) / static_cast<double>(kAnimalSecondsPerYear);
@@ -505,12 +508,48 @@ float AnimalSystem::placeGroup(int kindIndex, CellPos centre, Rng& rng, bool adu
             a.herd = herd;
             const double ageYears = adultsOnly ? adultYears + static_cast<double>(rng.unit()) * (oldest - adultYears) : 0.0;
             a.bornAt = now - animalYearsToSeconds(ageYears);
-            a.staysUntil = entering ? now + kAnimalEntryGrace : 0;
+            a.staysUntil = entering ? now + (stayFor >= 0 ? stayFor : kAnimalEntryGrace) : 0;
+            if (placed != nullptr) {
+                placed->push_back(e);
+            }
             weight += capacity(kind, now - a.bornAt);
             break;
         }
     }
     return weight;
+}
+
+std::vector<Entity> AnimalSystem::arrive(const std::string& animalDef, int count, int stayHours, CellPos& entry) {
+    std::vector<Entity> placed;
+    if (count <= 0 || !hasBiome_) {
+        return placed;
+    }
+    int kind = -1;
+    if (animalDef.empty()) {
+        // A herd of something that eats plants and doesn't bite, as the biome has it.
+        for (int tries = 0; tries < 40 && kind < 0; ++tries) {
+            const int k = pickKind(rng_);
+            if (k >= 0 && kinds_[static_cast<size_t>(k)].grazer && !kinds_[static_cast<size_t>(k)].predator &&
+                !kinds_[static_cast<size_t>(k)].tusker && !kinds_[static_cast<size_t>(k)].domestic) {
+                kind = k;
+            }
+        }
+    } else {
+        const DefId want = defs_.idOf("Things", animalDef);
+        for (size_t i = 0; i < kinds_.size(); ++i) {
+            if (kinds_[i].def == want) {
+                kind = static_cast<int>(i);
+            }
+        }
+    }
+    CellPos edge;
+    if (kind < 0 || !pickEdgeCell(rng_, edge)) {
+        return placed;
+    }
+    entry = edge;
+    placeGroup(kind, edge, rng_, true, true, count, &placed, static_cast<int64_t>(stayHours) * kSecondsPerHour);
+    saved_.stats.arrived += placed.size();
+    return placed;
 }
 
 void AnimalSystem::populate(int percent) {

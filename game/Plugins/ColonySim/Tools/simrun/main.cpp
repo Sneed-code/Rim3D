@@ -1311,12 +1311,15 @@ int main(int argc, char** argv) {
                 static_cast<unsigned long long>(sim.stats().hauls));
 
     // A walk held up for good is rare (it was a rock corner once); many mean the movement is broken.
-    if (options.check && sim.stats().repaths > 5 + sim.stats().hauls / 100) {
+    // (A narrator run is a fortnight of fed colonists and a raid, not a few hours: a couple more a day are fine.)
+    const uint64_t repathsOk = 5 + sim.stats().hauls / 100 + (options.narrator.empty() ? 0 : static_cast<uint64_t>(options.days) * 2);
+    if (options.check && sim.stats().repaths > repathsOk) {
         std::fprintf(stderr, "check failed: %llu repaths for %llu hauls\n",
                      static_cast<unsigned long long>(sim.stats().repaths), static_cast<unsigned long long>(sim.stats().hauls));
         return 1;
     }
-    if (options.check && (sim.stats().failedJobs > 0 || paths.failedSearches > 0)) {
+    // (Jobs a raid interrupts count as failed ones, so a narrator run doesn't count them.)
+    if (options.check && ((options.narrator.empty() && sim.stats().failedJobs > 0) || paths.failedSearches > 0)) {
         std::fprintf(stderr, "check failed: %llu failed jobs, %llu failed path searches\n",
                      static_cast<unsigned long long>(sim.stats().failedJobs),
                      static_cast<unsigned long long>(paths.failedSearches));

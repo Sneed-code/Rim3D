@@ -191,6 +191,10 @@ public:
     // system keeps the wild herd at that density: animals come in from the edges when it falls
     // short and go out when it is over (`SimSettings::wildAnimals` calls this when the map is made).
     void populate(int percent);
+    // A herd of `count` adults comes in from a map edge and stays `stayHours` before it may leave again (T2's herd
+    // migration). `animalDef` names the animal, or is empty for a plant-eater of the biome that doesn't bite. The
+    // cell they came in at is `entry`. Empty if no such animal or no free edge.
+    std::vector<Entity> arrive(const std::string& animalDef, int count, int stayHours, CellPos& entry);
     bool populated() const { return saved_.populated; }
 
     // One game second: every animal that is due decides what to do next (about every 5 to 45
@@ -328,7 +332,8 @@ private:
     void hourly(int64_t now);
     int pickKind(Rng& rng) const;
     // Places a group of `kind` round `centre`; returns the weight placed (body sizes).
-    float placeGroup(int kind, CellPos centre, Rng& rng, bool adultsOnly, bool entering);
+    float placeGroup(int kind, CellPos centre, Rng& rng, bool adultsOnly, bool entering, int countOverride = 0,
+                     std::vector<Entity>* placed = nullptr, int64_t stayFor = -1);
     bool pickGroundCell(Rng& rng, bool clearOfColonists, CellPos& out) const;
     bool pickEdgeCell(Rng& rng, CellPos& out) const;
     void rebuildLeaders();

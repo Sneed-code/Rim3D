@@ -7,6 +7,7 @@
 #include "ColonySim/Random.h"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -77,6 +78,14 @@ public:
 
     // Outdoor temperature in degrees Celsius at a game second, and now.
     double temperatureAt(int64_t seconds) const;
+    // Events change the weather without being part of it (T2: cold snap, heat wave, eclipse). The offset is
+    // added to the outdoor temperature at a time, the factor multiplies the sun's glow now. Both are set
+    // once by whatever holds the events; null: none.
+    void setConditions(std::function<double(int64_t)> temperatureOffset, std::function<float()> skyFactor) {
+        temperatureOffset_ = std::move(temperatureOffset);
+        skyFactor_ = std::move(skyFactor);
+        cacheAt_ = -1;
+    }
     double outdoorTemperature() const { return temperatureAt(now_); }
     // The season's mean at a game second (no day cycle or drift), and the biome's daily swing.
     double seasonalMean(int64_t seconds) const;
@@ -97,7 +106,7 @@ public:
     // The effects now: the previous weather's, blended into the current one's over the transition.
     WeatherEffects effects() const;
     // The share of the sun's light that gets through now (effects().skyGlow, but cheap to ask often).
-    float skyGlow() const { return cachedEffects().skyGlow; }
+    float skyGlow() const { return cachedEffects().skyGlow * (skyFactor_ ? skyFactor_() : 1.0f); }
     // The wind now as a factor of a wind turbine's output: the weather's wind factor (still in fog, strong
     // in storms and snow) times gusts that drift over hours, 0 to `windMax` (1.5). Worked out from the
     // seed and the time, so it has no state of its own.
@@ -172,6 +181,9 @@ private:
     Rng rng_;
     WeatherState state_;  // the random stream in it is only filled in by state()
     int64_t now_ = 0;
+    WeatherEffects blendedEffects() const;  // effects() before the events' sky factor
+    std::function<double(int64_t)> temperatureOffset_;
+    std::function<float()> skyFactor_;
     mutable WeatherEffects cache_;  // effects() as of game second `cacheAt_`
     mutable int64_t cacheAt_ = -1;
 

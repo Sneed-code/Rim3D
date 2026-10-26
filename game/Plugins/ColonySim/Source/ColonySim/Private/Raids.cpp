@@ -225,6 +225,58 @@ FactionId RaidSystem::factionId(const std::string& faction) {
     return static_cast<FactionId>(state_.factions.size() + 1);
 }
 
+bool RaidSystem::findEntry(int edge, CellPos& target, CellPos& entry, std::string& error) {
+    entt::registry& reg = things_.registry();
+    // What it goes for: the player's colonist nearest the middle of the map, else the middle.
+    const float mid = static_cast<float>(map_.width()) * 0.5f;
+    target = CellPos{map_.width() / 2, map_.height() / 2, 0};
+    bool hasTarget = false;
+    float bestD = 0.0f;
+    for (const auto [pawn, colonist, pos] : reg.view<const Colonist, const Position>().each()) {
+        if (fighters_.factionOf(pawn) != kPlayerFaction || health_.incapacitated(pawn)) {
+            continue;
+        }
+        const float d = raidDist(pos.x, pos.y, mid, static_cast<float>(map_.height()) * 0.5f);
+        const CellPos c = cellOf(pos);
+        if (!hasTarget || d < bestD || (d == bestD && (c.y < target.y || (c.y == target.y && c.x < target.x)))) {
+            target = c;
+            bestD = d;
+            hasTarget = true;
+        }
+    }
+    if (!hasTarget && !nearestFree(raidCentre(target.x), raidCentre(target.y), 0, target, 30, target)) {
+        error = "nowhere for a raid to go";
+        return false;
+    }
+
+    // Where it walks in: a cell near the chosen edge that can reach the target.
+    const int w = map_.width();
+    const int h = map_.height();
+    const int firstSide = edge >= 0 ? edge : static_cast<int>(rng_.below(4));
+    Regions& regions = map_.regions();
+    bool found = false;
+    // A raid with no chosen edge tries the others in turn when the first has no way in (water, rock).
+    for (int attempt = 0; attempt < (edge >= 0 ? 40 : 160) && !found; ++attempt) {
+        const int side = (firstSide + attempt / 40) % 4;
+        const int along = static_cast<int>(rng_.below(static_cast<uint32_t>(side % 2 == 0 ? w : h)));
+        const int d = rules_.edgeDepth;
+        const CellPos guess = side == 0 ? CellPos{along, h - 1 - d, 0}
+                            : side == 1 ? CellPos{w - 1 - d, along, 0}
+                            : side == 2 ? CellPos{along, d, 0}
+                                        : CellPos{d, along, 0};
+        CellPos c;
+        if (nearestFree(raidCentre(guess.x), raidCentre(guess.y), 0, CellPos{-1, -1, 0}, 6, c) && regions.canReach(c, target)) {
+            entry = c;
+            found = true;
+        }
+    }
+    if (!found) {
+        error = "no way in from that edge to the colony";
+        return false;
+    }
+    return true;
+}
+
 bool RaidSystem::startRaid(const std::string& faction, float points, int edge, std::string& error) {
     const Def* factionDef = defs_.find("Factions", faction);
     if (factionDef == nullptr) {
@@ -273,53 +325,9 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, s
         return false;
     }
     entt::registry& reg = things_.registry();
-
-    // What it goes for: the player's colonist nearest the middle of the map, else the middle.
-    const float mid = static_cast<float>(map_.width()) * 0.5f;
-    CellPos target{map_.width() / 2, map_.height() / 2, 0};
-    bool hasTarget = false;
-    float bestD = 0.0f;
-    for (const auto [pawn, colonist, pos] : reg.view<const Colonist, const Position>().each()) {
-        if (fighters_.factionOf(pawn) != kPlayerFaction || health_.incapacitated(pawn)) {
-            continue;
-        }
-        const float d = raidDist(pos.x, pos.y, mid, static_cast<float>(map_.height()) * 0.5f);
-        const CellPos c = cellOf(pos);
-        if (!hasTarget || d < bestD || (d == bestD && (c.y < target.y || (c.y == target.y && c.x < target.x)))) {
-            target = c;
-            bestD = d;
-            hasTarget = true;
-        }
-    }
-    if (!hasTarget && !nearestFree(raidCentre(target.x), raidCentre(target.y), 0, target, 30, target)) {
-        error = "nowhere for a raid to go";
-        return false;
-    }
-
-    // Where it walks in: a cell near the chosen edge that can reach the target.
-    const int w = map_.width();
-    const int h = map_.height();
-    const int firstSide = edge >= 0 ? edge : static_cast<int>(rng_.below(4));
-    Regions& regions = map_.regions();
-    bool found = false;
+    CellPos target;
     CellPos entry;
-    // A raid with no chosen edge tries the others in turn when the first has no way in (water, rock).
-    for (int attempt = 0; attempt < (edge >= 0 ? 40 : 160) && !found; ++attempt) {
-        const int side = (firstSide + attempt / 40) % 4;
-        const int along = static_cast<int>(rng_.below(static_cast<uint32_t>(side % 2 == 0 ? w : h)));
-        const int d = rules_.edgeDepth;
-        const CellPos guess = side == 0 ? CellPos{along, h - 1 - d, 0}
-                            : side == 1 ? CellPos{w - 1 - d, along, 0}
-                            : side == 2 ? CellPos{along, d, 0}
-                                        : CellPos{d, along, 0};
-        CellPos c;
-        if (nearestFree(raidCentre(guess.x), raidCentre(guess.y), 0, CellPos{-1, -1, 0}, 6, c) && regions.canReach(c, target)) {
-            entry = c;
-            found = true;
-        }
-    }
-    if (!found) {
-        error = "no way in from that edge to the colony";
+    if (!findEntry(edge, target, entry, error)) {
         return false;
     }
 

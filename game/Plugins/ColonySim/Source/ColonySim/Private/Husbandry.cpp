@@ -689,6 +689,14 @@ void Husbandry::becomeTame(Entity handler, Entity animal) {
     emit(EventType::DesignationsChanged, animal, kNoEntity);
 }
 
+bool Husbandry::joinColony(Entity animal) {
+    if (!valid(animal) || !things_.registry().get<Animal>(animal).wild) {
+        return false;
+    }
+    becomeTame(kNoEntity, animal);
+    return true;
+}
+
 bool Husbandry::finishTame(Entity handler, Entity animal, int skill) {
     if (!valid(animal) || !things_.registry().get<Animal>(animal).wild) {
         return false;
