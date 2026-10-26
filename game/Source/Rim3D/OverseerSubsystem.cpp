@@ -14,6 +14,7 @@
 #include "OverseerPawn.h"
 #include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
+#include "SkySubsystem.h"
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Map.h"
@@ -314,6 +315,8 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 				Bridge.StepOnce();
 			}
 		}
+		// The date, the season's temperature and the weather (U13).
+		OverseerText(USkySubsystem::DescribeDate(Sim) + TEXT("   ") + USkySubsystem::DescribeClimate(Sim));
 	}
 	ImGui::End();
 

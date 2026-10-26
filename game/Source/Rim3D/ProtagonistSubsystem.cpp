@@ -16,6 +16,7 @@
 #include "ProtagonistPawn.h"
 #include "SimPicking.h"
 #include "SimSubsystem.h"
+#include "SkySubsystem.h"
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
@@ -502,6 +503,8 @@ void UProtagonistSubsystem::DrawHud(USimSubsystem& Bridge)
 		ProtagonistSpeedButton("Pause", 0, Bridge);
 		ImGui::SameLine();
 		ProtagonistSpeedButton("1x", 1, Bridge);
+		// The date, the temperature and the weather (U13).
+		ProtagonistText(USkySubsystem::DescribeDate(Sim) + TEXT("   ") + USkySubsystem::DescribeClimate(Sim));
 	}
 	ImGui::End();
 

@@ -6,6 +6,7 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "MeshDescription.h"
 #include "ProceduralMeshComponent.h"
@@ -627,6 +628,15 @@ void UTerrainSubsystem::ReadThinRoof(bool& bOutChanged)
 	bOutChanged = true;
 }
 
+void UTerrainSubsystem::SetGroundWetness(float Wetness)
+{
+	GroundWetness = FMath::Clamp(Wetness, 0.0f, 1.0f);
+	if (GroundDynamic)
+	{
+		GroundDynamic->SetScalarParameterValue(TEXT("Wetness"), GroundWetness);
+	}
+}
+
 bool UTerrainSubsystem::WantRoofs() const
 {
 	const int32 Mode = GTerrainRoofs.GetValueOnGameThread();
@@ -892,9 +902,17 @@ void UTerrainSubsystem::RebuildAll()
 	// The terrain material if it was made and wanted, else the flat vertex colours.
 	GroundMaterial = GTerrainTextured.GetValueOnGameThread() != 0 ? LoadObject<UMaterialInterface>(nullptr, TerrTexturedMaterialPath) : nullptr;
 	bTextured = GroundMaterial != nullptr;
+	GroundDynamic = nullptr;
 	if (!GroundMaterial)
 	{
 		GroundMaterial = LoadObject<UMaterialInterface>(nullptr, TerrMaterialPath);
+	}
+	else
+	{
+		// One instance for the whole ground, so the sky can make it wet (SetGroundWetness).
+		GroundDynamic = UMaterialInstanceDynamic::Create(GroundMaterial, this);
+		GroundDynamic->SetScalarParameterValue(TEXT("Wetness"), GroundWetness);
+		GroundMaterial = GroundDynamic;
 	}
 	LoadPlantVisuals(Core);
 	bool bUnused = false;
