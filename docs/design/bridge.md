@@ -81,6 +81,7 @@ rest (place blueprint, designate, draft, actions) come with the tasks that build
 | `SetDefenseRoleCommand{pawn, role, hasSpot, spot}` | a colonist's defense role: 0 Defender (with a spot to hold, or none), 1 Shelter, 2 Keep working | not the colony's colonist; a spot for another role; can't stand on the spot |
 | `MarkShelterCommand{cell, clear}` | the room at `cell` is the shelter, or with `clear` none is | not a roofed room; nothing to clear |
 | `MeleeCommand{pawn, target, mode}` | `Attack`: a melee swing at `target` (the controlled colonist may swing at none, straight ahead); `Block`: raises the melee weapon ([melee.md](melee.md)) | downed or dead; mid-shot; still swinging or recovering; nothing to fight with; the target isn't a living pawn in reach; no melee weapon to block with |
+| `InteractCommand{initiator, recipient, interaction, outcome}` | dev (C20, [social.md](social.md)): one colonist does an Interactions def to another now; `outcome` 1 or 0 forces a romance, proposal or insult-fight roll, -1 dice | unknown interaction; not two colonists; either can't talk (down, asleep, fighting, drafted); out of earshot; needs a lover or adults |
 | `RearmTrapCommand{trap}` | sets a sprung spike trap again ([defense.md](defense.md)) | not a trap; armed already; an IED, which is gone once it goes off |
 
 In replay files a `rot` is `"North"`, `"East"`, `"South"` or `"West"` (`"North"` if left out) and an `area` is `[minX, minY, sizeX, sizeY, level]` and a storage priority its name
@@ -149,6 +150,9 @@ starts, so read it after every step. Before the first step it holds what setting
 | `ProjectileHit` | `thing` (projectile), `def` (Projectiles def), `hit`, `target`, `part`, `amount`, `x, y, z`, `cell` | a projectile stopped: ground, rock, building, pawn, armor, or gone |
 | `MeleeSwing` | `thing` (attacker), `target`, `def` (melee weapon, or the pawn's def for fists), `message` (the tool), `amount` (steps to the hit), `cell` | a melee swing began (F8, [melee.md](melee.md)) |
 | `WeaponSwitched` | `thing` (the pawn), `def` and `target` (the weapon now in its hands) | a weapon switch ended (P1, [weapons.md](weapons.md)) |
+| `Interaction` | `thing` (talker), `target` (listener), `message` (the Interactions def), `count` (1 worked, 0 refused), `amount` (the listener's opinion after) | one colonist talked to another (C20, [social.md](social.md)) |
+| `BondChanged` | `thing`, `target`, `message` (Lover, Spouse, ExLover, ExSpouse), `count` (1 formed) | a stored bond formed |
+| `SocialFight` | `thing`, `target`, `message` ("started", "ended: why") | a fight with fists began or ended |
 | `MeleeHit` | `thing`, `def`, `target`, `hit`, `part`, `amount`, `x, y, z`, `cell`, `message` ("hit", "deflected", "blocked", "dodged", "missed") | the hit moment of a swing |
 
 `Things` reports its own spawns and despawns once the sim points it at the event list
@@ -173,7 +177,7 @@ Since F2 pawns also have
 `stance` (prone when downed or dead), `facingX`/`facingY`, the `weapon` in their hands and
 `shotReadyIn`, and `Snapshot::projectiles` lists every bullet in flight ([combat.md](combat.md)); since F5
 `rounds`, `magazineSize` and `reloading` ([aiming.md](aiming.md)); since F8 `meleePhase`, `meleeStepsLeft`,
-`meleeTarget` and `blocking` ([melee.md](melee.md)).
+`meleeTarget` and `blocking` ([melee.md](melee.md)); since C20 `partner` and `socialFight` ([social.md](social.md)).
 Since E5 a building with a power part has `power`, `powerNet`, `powerWatts` and `batteryFill`, and the snapshot has `powerNets` ([power.md](power.md)). Since C5 a door's `ThingView` has `doorOpen` (0 to 1) and the snapshot has `rooms` (the enclosed rooms with role and
 size), `roofCells` (the thin roof) and `roofChanges` ([rooms.md](rooms.md)). Since C3 the snapshot lists the `designations`
 (cell and kind of every mine, cut and harvest mark; [mining.md](mining.md)).

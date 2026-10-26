@@ -2,6 +2,7 @@
 
 Updated 2026-10-26.
 
+Stage 2 C20 done: colonists talk (chitchat, deep talk, kind words, slights, insults, romance, proposals, breakups), hold opinions of each other, become friends, rivals, lovers and spouses, and an insult can start a fistfight (`docs/design/social.md`).
 Stage 2 P1 done: a pawn carries a rifle, a sidearm and a melee weapon (`docs/design/weapons.md`).
 Stage 2 E4 done: fire spreads over flammable ground, burns things to ash, heats rooms, sets pawns alight and is put out by rain, snow and colonists with the Firefighter work type in the home area (`docs/design/fire.md`).
 Stage 2 N4 done: tame animals mate and bear young, hens lay eggs, calves and chicks grow up, colonists milk and shear (`docs/design/breeding.md`).
@@ -170,6 +171,18 @@ one or badly hurt it falls back. The F3 threat map isn't used (too slow to rebui
 why); 30 against 40 costs about 0.35 ms a step in the cloud. Snapshot `faction`, `drafted`,
 `fighting`, `fightTarget`, `fightSpot`, `fallingBack`; save format 15. **A new system that acts on
 pawns must skip pawns with `Fighter`** as the job system does.
+
+Since C20 colonists have a social life (`docs/design/social.md`, tests `SocialTests`, the colony scenario prints `talks`): every
+pawn with needs gets a `Social` component (opinion memories, stored bonds). A pawn thinks of another by a hash-based compatibility
+(-10 to 10), the other's traits (`opinionOfMe`: Abrasive -20), bonds (lover +40, spouse +60, ex -25) and fading memories; friends
+(both 20 or more) and rivals (-20 or less) are worked out, never stored. About every 6 game hours a pawn with someone in the same room within
+6 m picks an interaction by D9's weights and the opinion limits (chitchat, deep talk, kind words, slight, insult, romance attempt,
+proposal, breakup); at a table or game beside others every 15 minutes. Each changes the listener's opinion, starts mood thoughts and
+gives the talker Social experience. Romance and marriage are bonds only (one at a time, adults, no orientations yet); a death gives
+the spouse, lover, friends and rivals their thought. An insult can start a fistfight (`SocialFight`: both walk up and swing fists even
+with a gun in hand, ends at pain 0.25, a downed pawn, 5 minutes or a draft). Events `Interaction`, `BondChanged`, `SocialFight`,
+dev command `InteractCommand`, snapshot `partner` and `socialFight`, save section `social`. **A new system that acts on pawns must skip
+pawns with `SocialFight`, as for `Fighter`.**
 
 Since F5 fighters aim like players (`docs/design/aiming.md`): Shooting skill sets a reaction time
 before shooting a new target (0.5 s at skill 0, 0.17 s at 20), how well a shot leads a moving target
