@@ -90,7 +90,7 @@ bool JobSystem::needsRescue(Entity pawn) const {
     const Health& health = reg.get<Health>(pawn);
     const Faction* faction = reg.try_get<Faction>(pawn);
     return health.downed && !health.dead && (faction == nullptr || faction->id == kPlayerFaction) &&
-           bedUnder(pawn) == kNoEntity;
+           bedUnder(pawn) == kNoEntity && rescuerOf(reg, pawn) == kNoEntity;  // a fighter fetching it to cover (F10)
 }
 
 bool JobSystem::findPatientBed(Entity patient, Entity helper, bool medicalOnly, Entity& bed, CellPos& cell) const {

@@ -382,9 +382,10 @@ struct SoundAlarmCommand {
     bool on = true;
 };
 
-// What a colonist does when the alarm sounds: 0 Defender, 1 Shelter, 2 Keep working (DefenseRole
-// in Raids.h). A Defender can have a defense spot it holds. Fails for a pawn that isn't the
-// colony's, a spot for another role, or a spot nobody can stand on.
+// What a colonist does when the alarm sounds: 0 Defender, 1 Shelter, 2 Keep working, 3 Medic, 4 Firefighter
+// (DefenseRole in Raids.h; the last two docs/design/field-care.md). A Defender can have a defense spot it holds.
+// Fails for a pawn that isn't the colony's, a spot for another role, a spot nobody can stand on, or a Medic or
+// Firefighter who can't do that work.
 struct SetDefenseRoleCommand {
     Entity pawn = kNoEntity;
     uint8_t role = 0;

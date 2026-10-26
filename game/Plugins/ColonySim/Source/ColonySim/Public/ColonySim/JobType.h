@@ -36,6 +36,7 @@ enum class JobType : uint8_t {
     BedRest,           // go to a bed and lie in it until the injuries have healed (docs/design/medicine.md)
     TendPatient,       // fetch medicine, walk to a patient and tend its injuries (docs/design/medicine.md)
     Rescue,            // carry a downed colonist to a bed (docs/design/medicine.md)
+    StandBy,           // a Medic or Firefighter on duty walks to its place behind the line and waits (docs/design/field-care.md)
 };
 
 COLONY_API const char* jobTypeName(JobType type);

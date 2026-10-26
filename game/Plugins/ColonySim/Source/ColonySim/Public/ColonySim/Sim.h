@@ -54,6 +54,7 @@ class ResearchSystem;
 class TalentSystem;
 class NeedsSystem;
 class RaidSystem;
+class FieldCare;
 class Plants;
 class PowerGrid;
 class Regions;
@@ -265,6 +266,9 @@ public:
     // Raids, raid squads and the colony alarm with its defense roles (docs/design/raids.md).
     RaidSystem& raids() { return *raids_; }
     const RaidSystem& raids() const { return *raids_; }
+    // Medics, firefighters and rescue under fire (F10, docs/design/field-care.md).
+    FieldCare& fieldCare() { return *fieldCare_; }
+    const FieldCare& fieldCare() const { return *fieldCare_; }
 
     // Taming, training, animal zones and pens (docs/design/husbandry.md).
     Husbandry& husbandry() { return *husbandry_; }
@@ -367,6 +371,7 @@ private:
     std::vector<Checkpoint> checkpoints_;
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
+    std::unique_ptr<FieldCare> fieldCare_;    // after the raids, the fighters and the jobs, which hold a pointer to it
 };
 
 }  // namespace colony

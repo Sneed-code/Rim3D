@@ -55,6 +55,8 @@ add_test(NAME simrun_needs COMMAND simrun --seed 42 --size 128 --days 3 --start 
 # Raids (F6): pirates walk in, the alarm sounds, the armed colonists fight, and the raid ends
 # (beaten, routed or gone) within a quarter of a day.
 add_test(NAME simrun_raid COMMAND simrun --seed 1 --size 256 --days 0.25 --start Crashlanded --raid 300 --armed --check)
+# Medics, firefighters and rescue under fire (F10): the same raid with a Medic and a Firefighter; it still ends.
+add_test(NAME simrun_medics COMMAND simrun --seed 1 --size 256 --days 0.25 --start Crashlanded --raid 300 --armed --medics --check)
 
 # Temperature (E2, docs/design/temperature.md): the Crashlanded colonists live two days in 4 degrees weather
 # (just above the safe range their T-shirts and pants give them) and nobody falls ill or dies.

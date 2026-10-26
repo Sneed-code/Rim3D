@@ -320,6 +320,9 @@ Fighter& FighterSystem::enlist(Entity pawn, const char* why) {
 void FighterSystem::standDown(Entity pawn) {
     entt::registry& reg = things_.registry();
     if (Fighter* f = reg.valid(pawn) ? reg.try_get<Fighter>(pawn) : nullptr) {
+        if (f->mode == FightMode::Rescue) {
+            endRescue(pawn, *f, false);
+        }
         stop(pawn, *f);
         reg.remove<Fighter>(pawn);
         if (things_.spawned(pawn)) {
@@ -387,6 +390,9 @@ void FighterSystem::step() {
         Fighter& f = reg.get<Fighter>(pawn);
         // The player walks this one (U9), or it can't act: it stops where it is.
         if (!things_.spawned(pawn) || reg.all_of<PlayerControl>(pawn) || health_.incapacitated(pawn)) {
+            if (f.mode == FightMode::Rescue) {
+                endRescue(pawn, f, false);  // it lets go of the friend it carried
+            }
             if (f.walk != 0 || f.hasSpot) {
                 stop(pawn, f);
                 f.hasSpot = false;
@@ -405,6 +411,9 @@ void FighterSystem::step() {
         }
         if (dive(pawn, f) || dodge(pawn, f)) {
             continue;
+        }
+        if (f.mode == FightMode::Rescue) {
+            rescueStep(pawn, f);
         }
         if (now() >= f.nextPlan) {
             f.nextPlan = now() + rules_.planEvery;
@@ -1558,6 +1567,9 @@ void FighterSystem::hashThing(Entity e, StateHasher& h) const {
         h.add(f->hasGoal);
         cell(f->goal);
         h.add(f->retreat);
+        h.add(entt::to_integral(f->rescuing));
+        h.add(f->lifted);
+        cell(f->rescueTo);
     }
 }
 

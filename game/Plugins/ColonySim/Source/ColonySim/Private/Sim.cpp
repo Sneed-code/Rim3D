@@ -12,6 +12,7 @@
 #include "ColonySim/Explosives.h"
 #include "ColonySim/Defense.h"
 #include "ColonySim/Farming.h"
+#include "ColonySim/FieldCare.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Fire.h"
@@ -241,6 +242,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     });
     defense_->setOnLearn([this](Entity pawn) { fighters_->replan(pawn); });
     fighters_->setDefense(defense_.get());
+    fieldCare_ = std::make_unique<FieldCare>(*things_, map_, *health_, *jobs_, *fighters_, *raids_, *defs_, time_);
+    jobs_->setFieldCare(fieldCare_.get());
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -916,7 +919,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, error);
         }
     } else if (const auto* role = std::get_if<SetDefenseRoleCommand>(&command)) {
-        if (role->role > static_cast<uint8_t>(DefenseRole::KeepWorking)) {
+        if (role->role > static_cast<uint8_t>(DefenseRole::Firefighter)) {
             commandFailed(id, "no such defense role");
         } else if (!raids_->setRole(role->pawn, static_cast<DefenseRole>(role->role), role->hasSpot, role->spot, error)) {
             commandFailed(id, error);
@@ -980,8 +983,10 @@ void Sim::step() {
         }
     }
     const size_t eventsBefore = events_.size();
+    fieldCare_->invalidate();
     jobs_->step();
     raids_->step();
+    fieldCare_->step();
     {
         std::vector<Event> gained;
         talents_->awardJobXp(events_, eventsBefore, gained);
@@ -1336,6 +1341,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.defending = fighter->defending;
             view.sheltering = fighter->mode == FightMode::Shelter;
             view.fleeing = fighter->mode == FightMode::Flee;
+            view.rescuing = fighter->mode == FightMode::Rescue ? fighter->rescuing : kNoEntity;
         }
         if (reg.all_of<Colonist>(entity) && view.faction == kPlayerFaction) {
             view.defenseRole = static_cast<uint8_t>(raids_->roleOf(entity));

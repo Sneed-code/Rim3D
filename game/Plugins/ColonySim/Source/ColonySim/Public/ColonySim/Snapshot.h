@@ -144,6 +144,9 @@ struct ThingView {
     bool sheltering = false;
     bool fleeing = false;
     uint32_t squad = 0;
+    // F10 (docs/design/field-care.md): defenseRole 3 is Medic and 4 Firefighter; a fighter carrying a downed friend
+    // to cover has it in `rescuing` (the friend's position follows the fighter's after the LiftPawn action).
+    Entity rescuing = kNoEntity;
     // Humanlike pawns: their looks, Snapshot::looks[looks]; -1 for other things.
     int32_t looks = -1;
     // Buildings with a power part (docs/design/power.md): whether they have power, the net they are

@@ -42,6 +42,9 @@ enum class DefenseRole : uint8_t {
     Defender,     // takes cover on the side the threat comes from, or holds its defense spot
     Shelter,      // goes to the shelter room and stays there
     KeepWorking,  // works on, unless an enemy comes within keepWorkingRadius; then it defends itself
+    // F10 (docs/design/field-care.md): FieldCare gives these their duty.
+    Medic,        // waits behind the line; tends and rescues the downed it can reach without coming under fire
+    Firefighter,  // waits behind the line; puts out fires in the home area once it is safe to go to them
 };
 
 // A colonist's defense plan, on the pawn. A colonist without one is a Defender with no spot.

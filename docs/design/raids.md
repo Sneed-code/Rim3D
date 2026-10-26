@@ -79,6 +79,7 @@ While the alarm is on, every colonist that isn't drafted or controlled by the pl
 | **Defender** | Its job ends and it becomes a fighter (`defending`). With a **defense spot** it holds that spot, choosing cover within 3 m. Without one it goes to **the line**: a point 15 m (`defenseLine`, at most half way) from home toward the threat, choosing cover within 10 m of it; the line moves when the threat has moved it over 6 m. **Once it knows of an enemy it leaves the line** and fights like any fighter (cover, range, falling back), so an enemy out of range of the line can't shoot it from afar; with no enemy known again it goes back to the line. |
 | **Shelter** | Goes to the shelter room (`MarkShelterCommand`) and stays there, each in its own cell; with no shelter marked, the nearest roofed cell; with none, 25 m away from the threat. It never shoots. |
 | **Keep working** | Works on, until a spotted enemy comes within 20 m (`keepWorkingRadius`); then it defends itself where it is, until the alarm stops. |
+| **Medic**, **Firefighter** | F10, [field-care.md](field-care.md): only Doctor or Firefighter work, on targets out of the enemies' sight, else waiting behind the line; fights only when an enemy comes within 8 m. |
 
 The alarm **stops by itself** when no enemy is left on the map that can still fight (all dead, downed
 or fleeing), and everyone it called up goes back to work. One the player sounded
@@ -122,6 +123,6 @@ bleed out because nobody rescues or tends them yet. F7 measures and tunes this o
   pods, kidnapping and stealing); RimWorld's `PawnGroupMaker` subtleties (the most expensive pawn
   limited by the points).
 - Adaptation (the factor stays at 0.8), market values for guns, apparel and buildings.
-- Medic and Firefighter roles (with medicine and fire, Stage 2), rescuing the downed, fallback lines
-  and using the F3 threat map to choose the safe side.
+- Fallback lines and using the F3 threat map to choose the safe side. (Medic and Firefighter roles and dragging the
+  downed to cover came with F10, [field-care.md](field-care.md).)
 - Raiders don't yet use squad-level tactics like flanking; each fighter picks its own cover.

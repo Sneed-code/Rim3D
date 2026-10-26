@@ -151,7 +151,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | F8 | **Melee.** Melee weapons and fists from D8 with wind-up, hit moment and recovery in the sim; reach checked against hitboxes; blocks and dodges with timing (Melee skill); the fighter AI charges only when armed for it or the trait says so (Brawler). | Cloud | Opus, high | 90 min | S7, D8 |
 | ✓ | F9 | **Explosives and grenades.** An explosion system (radius, falloff, damage to pawns and buildings, knock-down); frag grenades thrown as arcing projectiles; fighters throw them at groups in cover and dive away from them (F5's sidestep grown into a dive). Molotovs once E4 is in. | Cloud | Sonnet, high | 90 min | S7 |
-| | F10 | **Medics, firefighters and rescue under fire.** The alarm's Medic and Firefighter roles from `game-design.md`; fighters drag downed friends to safety when the route is reasonably safe; scenario checks in F7's nightly run. | Cloud | Opus, high | 90 min | F6, H1, E4 |
+| ✓ | F10 | **Medics, firefighters and rescue under fire.** The alarm's Medic and Firefighter roles from `game-design.md`; fighters drag downed friends to safety when the route is reasonably safe; scenario checks in F7's nightly run. | Cloud | Opus, high | 90 min | F6, H1, E4 |
 | ✓ | F11 | **Turrets and traps.** Powered mini-turret (F2's guns, auto targeting, blows up when destroyed), spike trap and IED trap; the fighter AI avoids known traps. | Cloud | Sonnet, medium | 60 min | E5, F9 |
 | | F12 | **Raid strategies.** Sappers who dig or blast through walls, drop-pod raids landing inside the base, raiders who steal or kidnap and run, staged attacks at night; picked by T1's points. | Cloud | Opus, high | 120 min | T1, F9 |
 

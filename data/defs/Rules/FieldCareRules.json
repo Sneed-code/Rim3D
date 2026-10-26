@@ -1,0 +1,19 @@
+[
+  {
+    "defName": "FieldCareRules", "source": "Rim3D",
+    "thinkEvery": 15,
+    "exposureRange": 45,
+    "keepAway": 10,
+    "rallyBehind": 6,
+    "rallySearch": 8,
+    "selfDefenseRadius": 8,
+    "dragRadius": 15,
+    "dragEnemyRadius": 8,
+    "dragMaxExposure": 2,
+    "dragDistance": 12,
+    "routeStep": 1.5,
+    "ours": ["thinkEvery", "exposureRange", "keepAway", "rallyBehind", "rallySearch", "selfDefenseRadius", "dragRadius",
+             "dragEnemyRadius", "dragMaxExposure", "dragDistance", "routeStep"],
+    "notes": "Medic and Firefighter defense roles and fighters dragging the downed to cover (docs/design/field-care.md). RimWorld has no alarm roles, so every number is ours."
+  }
+]
