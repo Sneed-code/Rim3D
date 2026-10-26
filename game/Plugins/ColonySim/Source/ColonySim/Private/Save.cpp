@@ -1,6 +1,7 @@
 #include "ColonySim/Save.h"
 
 #include "ColonySim/Animals.h"
+#include "ColonySim/Areas.h"
 #include "ColonySim/Breeding.h"
 #include "ColonySim/Apparel.h"
 #include "ColonySim/Husbandry.h"
@@ -457,6 +458,7 @@ struct SaveData {
     std::vector<RoomTemperature> roomTemperatures;  // section "temperature" (E2)
     std::vector<CellPos> upperFloors;  // section "levels" (M1), by level then row
     RoofCollapseSaved roofs;           // section "roofs" (M3)
+    AreasSaved areas;                  // section "areas": allowed areas and who is limited to one
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
     uint32_t nextOutfitId = 1;
     SpoilageState spoilageState;                    // section "spoilage" (C16)
@@ -1196,6 +1198,17 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
             } else if constexpr (std::is_same_v<Type, SetMedicalCareCommand>) {
                 ar.value("pawn", c.pawn);
                 ar.text("care", c.care);
+            } else if constexpr (std::is_same_v<Type, CreateAreaCommand>) {
+                ar.text("name", c.name);
+            } else if constexpr (std::is_same_v<Type, PaintAreaCommand>) {
+                ar.value("area", c.area);
+                ar.group("rect", [&] { saveRect(ar, c.rect); });
+                ar.value("add", c.add);
+            } else if constexpr (std::is_same_v<Type, DeleteAreaCommand>) {
+                ar.value("area", c.area);
+            } else if constexpr (std::is_same_v<Type, AssignAreaCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.value("area", c.area);
             } else if constexpr (std::is_same_v<Type, ContractDiseaseCommand>) {
                 ar.value("pawn", c.pawn);
                 ar.text("disease", c.disease);
@@ -2776,6 +2789,18 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("fuel", 1, [&] {
         saveParts(ar, "fuel", e, &SaveEntity::fuel, [&](Fuel& f) { saveFuelPart(ar, f); });
     });
+    ar.section("areas", 1, [&] {
+        ar.value("nextId", d.areas.nextId);
+        ar.list("areas", d.areas.areas, [&](Area& a) {
+            ar.value("id", a.id);
+            ar.text("name", a.name);
+            ar.list("cells", a.cells, [&](CellPos& c) { saveCell(ar, c); });
+        });
+        ar.list("assigned", d.areas.assigned, [&](std::pair<Entity, AreaId>& p) {
+            ar.value("pawn", p.first);
+            ar.value("area", p.second);
+        });
+    });
     ar.section("roofs", 1, [&] {
         ar.value("collapses", d.roofs.collapses);
         ar.list("thin", d.roofs.thin, [&](CellPos& c) { saveCell(ar, c); });
@@ -3271,6 +3296,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.roomTemperatures = sim.temperature_->roomTemperatures();
     d.upperFloors = sim.map_.upperFloorCells();
     d.roofs = sim.roofCollapse_->state();
+    d.areas = sim.areas_->saved();
     d.raids = sim.raids_->state();
     d.spoilageState = sim.spoilage_->state();
     d.craftingState = sim.crafting_->state();
@@ -4058,6 +4084,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (!sim.filth_->restore(d.filth, error) || !sim.roomStats_->restore(d.roomStats, error)) {
             return false;
         }
+    }
+    if (!sim.areas_->restore(d.areas, error)) {
+        return false;
     }
     if (!sim.rooms_->restoreThinRoofs(d.roofs.thin)) {
         error = "the save has a roof outside the map";

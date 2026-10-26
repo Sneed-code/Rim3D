@@ -29,3 +29,5 @@ Ideas parked for later. Newest first. Move an item into a stage plan when it's p
 - Hunting (found in N2, `docs/design/hunting.md`): a butcher spot (70% yield) and tool cabinets by the butcher table, human-meat meals counting as a separate preference, damaged and rotting corpses giving less, "store in this stockpile" for butchered meat, and Shooting experience for hunters.
 
 - Colony-wide "knows" thoughts still missing (no sim event for them yet): a prisoner executed, an organ harvested from a living person (and "knows someone was harvested"). Pattern: raise the event, then loop over `moodIsColonist` pawns in `MoodSystem::step` like `KnowColonistDied`.
+
+- Allowed areas (found in the work/zones parity check): walk a limited pawn back into its area and limit idle wandering and recreation to it; an Areas tab and paint tool in Unreal. Stockpile filters by quality and hit points; bill product store mode "Drop on floor" versus "Best stockpile". Within one work priority the nearest job wins, not the Work tab order (deliberate, game design doc).

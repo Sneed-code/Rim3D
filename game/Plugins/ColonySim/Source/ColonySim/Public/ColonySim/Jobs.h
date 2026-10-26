@@ -183,6 +183,7 @@ struct Recipe;
 class HealthSystem;
 class MedicineSystem;
 class PrisonerSystem;
+class Areas;
 class Husbandry;
 class Lights;
 class Map;
@@ -298,6 +299,9 @@ public:
     void setResearch(ResearchSystem* research) { research_ = research; }
     // Taming, training and feeding animals (HusbandryJobs.cpp, docs/design/husbandry.md). Without it nobody handles animals.
     void setHusbandry(Husbandry* husbandry) { husbandry_ = husbandry; }
+    // Allowed areas (docs/design/areas.md): a pawn limited to one takes no work outside it.
+    void setAreas(const Areas* areas) { areas_ = areas; }
+    const Areas* areas() const { return areas_; }
     Husbandry* husbandry() const { return husbandry_; }
     // Milking and shearing (Breeding.h); without it nobody gathers from animals.
     void setBreeding(Breeding* breeding) { breeding_ = breeding; }
@@ -661,6 +665,7 @@ private:
     MedicineSystem* medicine_ = nullptr;
     PrisonerSystem* prisoners_ = nullptr;
     Husbandry* husbandry_ = nullptr;
+    const Areas* areas_ = nullptr;
     Breeding* breeding_ = nullptr;
     CombatSystem* combat_ = nullptr;
     TemperatureSystem* temperature_ = nullptr;

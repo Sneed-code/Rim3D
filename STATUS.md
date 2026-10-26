@@ -2,6 +2,8 @@
 
 Updated 2026-10-26.
 
+Stage 2 allowed areas done: named areas of cells (`CreateArea`, `PaintArea`, `DeleteArea`, `AssignArea`) and a pawn limited to one takes no work and hauls nothing outside it, as in RimWorld; the rest of the work priority, schedule, stockpile and bill rules were checked against RimWorld and match except gaps listed in `docs/design/areas.md` and `BACKLOG.md` (`docs/design/areas.md`, tests `AreasTests`, save section `areas`). Sim only.
+
 Stage 2 H2 done: wounds can turn infected (tending in time stops it), pawns catch flu, plague, malaria, sleeping sickness, gut worms, muscle parasites and food poisoning, and fight them in RimWorld's immunity race; doctors tend them, the sick rest in bed, T3 can start outbreaks (`docs/design/diseases.md`).
 Stage 2 long-lasting foods done: pemmican (16 from meat and plants at a stove, `Pemmican` research, keeps 150 days, traded by the clan shaman), the packaged survival meal can be cooked (Cooking 7, keeps 60 days) and both go through the C16 rot rules; a recipe's `fuelUses` sets the wood a run burns, so 50 kibble or 16 pemmican burn one wood, not 50 or 16 (`docs/design/crafting.md`, tests `PreservedFoodTests`, `FuelTests`). Raid and cargo-pod loot of survival meals is not in yet (BACKLOG).
 Stage 2 T1 done: the narrator (Orrin, Maren, Jinx) sends incidents by RimWorld's rules (threat cycle, mean days between, weights, earliest days, cooldowns) with threat points from wealth, colonists, difficulty and narrator; the raid is the first incident; letters are `Letter` events (`docs/design/narrator.md`). **The narrator is off until a `SetNarratorCommand`: U20 sends it at game start. Event tasks add a worker per incident (`sim.narrator().setWorker`).**

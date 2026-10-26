@@ -714,6 +714,28 @@ struct EndMentalBreakCommand {
     Entity pawn = kNoEntity;
 };
 
+// Allowed areas (docs/design/areas.md). CreateArea makes an empty named area (ids count 1, 2, 3); PaintArea adds the
+// rectangle to it or takes it off (fails for an unknown area or if no cell changed); DeleteArea frees the pawns limited to it;
+// AssignArea limits a pawn to an area, or frees it with area 0.
+struct CreateAreaCommand {
+    std::string name;
+};
+
+struct PaintAreaCommand {
+    uint32_t area = 0;
+    CellRect rect;
+    bool add = true;
+};
+
+struct DeleteAreaCommand {
+    uint32_t area = 0;
+};
+
+struct AssignAreaCommand {
+    Entity pawn = kNoEntity;
+    uint32_t area = 0;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -738,7 +760,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand, SetPrisonerModeCommand,
                              SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
                              MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand,
-                             SetNarratorCommand, FireIncidentCommand, ContractDiseaseCommand>;
+                             SetNarratorCommand, FireIncidentCommand, ContractDiseaseCommand,
+                             CreateAreaCommand, PaintAreaCommand, DeleteAreaCommand, AssignAreaCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

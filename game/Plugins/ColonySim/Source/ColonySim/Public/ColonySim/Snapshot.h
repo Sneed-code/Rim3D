@@ -62,6 +62,7 @@ struct ThingView {
     bool dead = false;
     // Pawns: the job they are on (docs/design/jobs.md) and what it is about, and what they carry.
     JobType job = JobType::None;
+    uint32_t area = 0;  // the allowed area a pawn is limited to (AreaView::id), 0 for none
     Entity jobTarget = kNoEntity;
     float jobProgress = 0.0f;  // 0 to 1: a swing of the pick, a plant being cut, a frame being built (hands-on work, U10)
     DefId carriedDef;
@@ -315,6 +316,14 @@ struct AnimalZoneView {
     bool pen = false;
 };
 
+// One allowed area (docs/design/areas.md): `cellCount` cells from Snapshot::areaCells[firstCell].
+struct AreaView {
+    uint32_t id = 0;
+    std::string name;
+    uint32_t firstCell = 0;
+    uint32_t cellCount = 0;
+};
+
 // One growing zone (C13): `cellCount` cells from Snapshot::growingZoneCells[firstCell], growing `crop`.
 struct GrowingZoneView {
     uint32_t id = 0;
@@ -436,6 +445,8 @@ struct Snapshot {
     std::vector<CellPos> zoneCells;        // the zones' cells, see ZoneView
     std::vector<AnimalZoneView> animalZones;  // animal zones and pens (N3)
     std::vector<CellPos> animalZoneCells;     // their cells, see AnimalZoneView
+    std::vector<AreaView> areas;                // allowed areas, by id
+    std::vector<CellPos> areaCells;             // their cells, see AreaView
     std::vector<GrowingZoneView> growingZones;  // growing zones (C13)
     std::vector<CellPos> growingZoneCells;      // their cells, see GrowingZoneView
     std::vector<DesignationView> designations;  // every mark, in cell order

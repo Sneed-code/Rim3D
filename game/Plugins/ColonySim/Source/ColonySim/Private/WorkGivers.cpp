@@ -3,6 +3,7 @@
 #include "ColonySim/Jobs.h"
 
 #include "ColonySim/Apparel.h"
+#include "ColonySim/Areas.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Crafting.h"
 #include "ColonySim/Construction.h"
@@ -990,6 +991,9 @@ bool makeHaulJob(JobSystem& jobs, Entity pawn, Entity item, Job& out) {
                         jobs.findStorageCellIn(store->zone, def, from, pawn, cell);
     if (!toZone && !jobs.findStorageCell(def, from, jobs.storedPriority(item), pawn, cell)) {
         return false;
+    }
+    if (jobs.areas() != nullptr && !jobs.areas()->allows(pawn, cell)) {
+        return false;  // a pawn limited to an area hauls only into it
     }
     out = Job{};
     out.type = JobType::HaulToCell;
