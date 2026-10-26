@@ -194,6 +194,7 @@ struct ThingView {
     bool markSlaughter = false;
     bool markHunt = false;  // a wild animal marked to be hunted (N2, docs/design/hunting.md)
     uint32_t animalZone = 0;
+    std::string animalName;  // the player's name for a tame animal, or empty
     uint32_t learnedTricks = 0;
     uint32_t wantedTricks = 0;
     // Breeding and products (docs/design/breeding.md): sex (0 male, 1 female; -1 for other things), carrying young, and how
