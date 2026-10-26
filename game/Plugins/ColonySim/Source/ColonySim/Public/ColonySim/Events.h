@@ -26,7 +26,7 @@ enum class EventType : uint8_t {
     PawnAction,      // a pawn did something with its hands that Unreal animates (picked up, put down)
     JobStarted,      // a pawn took a job (docs/design/jobs.md)
     JobEnded,        // a pawn's job ended: `message` says "done", "failed: why" or "interrupted: why"
-    PawnAte,         // a pawn finished eating (docs/design/needs.md)
+    PawnAte,         // a pawn finished eating (docs/design/needs.md); `part` 1 if the meal had human flesh in it
     PawnWokeUp,      // a pawn got up after sleeping
     FrameStarted,    // a blueprint got its first materials and is a frame now (docs/design/construction.md)
     PawnMoodBand,    // a pawn's mood crossed a mental break threshold (docs/design/mood.md)

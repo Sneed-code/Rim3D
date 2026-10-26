@@ -388,6 +388,9 @@ public:
     // by size, goes through the pawn's armor like a bullet (so armor wears) and hurts what is left.
     // A pawn with no hitboxes takes it on a part health picks.
     void strikePawn(Entity pawn, DefId damageType, float amount, float penetration, Rng& rng);
+    // Damage of a kind with no aim behind it (flames): a random outside part, through the armor that
+    // covers it (heat armor for Burn), worn pieces losing hit points. False if the pawn can't be hurt.
+    bool hurtPawn(Entity pawn, DefId damageType, float amount, Rng& rng);
     // Takes the hit points off the pieces `result.wear` names; a piece at none is destroyed.
     void wearApparel(Entity pawn, const PawnHitResult& result);
     // The radius around a standing man's chest, seen from the front, in which a point picked evenly

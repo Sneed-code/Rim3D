@@ -183,6 +183,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     farming_ = std::make_unique<Farming>(map_, *plants_, *zones_, *defs_, events_);
     farming_->setClimate(temperature_.get(), lights_.get());
     plants_->setGrowthModifier([this](size_t cell) { return farming_->growthFactor(cell); });
+    farming_->setPlantSpots(things_.get(), [this](Entity building) { return power_->running(building); });
+    plants_->setFertilityOverride([this](size_t cell) { return farming_->spotFertility(cell); });
+    plants_->setGrowsAnytime([this](size_t cell) { return farming_->sunLampLit(cell); });
     zones_->setCellTaken([this](CellPos c) { return farming_->zoneAt(c) != kNoGrowingZone; });
     lights_->setWeather(weather_.get());
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
@@ -208,6 +211,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         const PawnGenes* genes = genesOf(pawn);
         return genes != nullptr ? geneStat(*genes, "flammability", 1.0f) : 1.0f;
     });
+    fire_->setPawnHurt([this](Entity pawn, DefId type, float amount, Rng& rng) { return combat_->hurtPawn(pawn, type, amount, rng); });
     jobs_->setFire(fire_.get());
     jobs_->fuel().setLights(lights_.get());
     // A wood-fired generator makes power only with fuel, and burns it only while it makes power.
@@ -697,6 +701,14 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             error = "a mark is Tame, Slaughter, Hunt or Release";
         }
         if (!ok) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* markArea = std::get_if<MarkAnimalsInAreaCommand>(&command)) {
+        if (!husbandry_->markInArea(markArea->area, markArea->mark, markArea->on, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* animalName = std::get_if<SetAnimalNameCommand>(&command)) {
+        if (!husbandry_->setName(animalName->animal, animalName->name, error)) {
             commandFailed(id, error);
         }
     } else if (const auto* training = std::get_if<SetTrainingCommand>(&command)) {
@@ -1497,6 +1509,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 view.markSlaughter = care->markSlaughter;
                 view.markHunt = care->markHunt;
                 view.animalZone = care->zone;
+                view.animalName = care->name;
                 view.learnedTricks = husbandry_->learnedMask(entity);
                 view.wantedTricks = husbandry_->wantedMask(entity);
             }
