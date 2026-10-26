@@ -53,6 +53,8 @@ REFERENCES = [
     ("Biomes", "animals{}", "Things"),
     ("Things", "race.wildBiomes{}", "Biomes"),
     ("Biomes", "weather{}", "Weathers"),
+    ("WorldGen", "biomeRules[].biome", "Biomes"),
+    ("WorldGen", "waterRules[].biome", "Biomes"),
     ("Bodies", "corePart.**.def", "BodyParts"),
     ("Bodies", "corePart.**.groups[]", "BodyPartGroups"),
     ("WorkTypes", "relevantSkills[]", "Skills"),

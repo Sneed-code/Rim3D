@@ -2,6 +2,8 @@
 
 Updated 2026-10-26.
 
+Stage 3 W1 done: the world map. A seeded planet of 120 by 60 wrapping tiles with elevation, temperature, rainfall, a biome from the Biomes defs by data rules, hills, rivers that run downhill into the sea or a lake, about 86 settlements of the humanlike factions with territory, roads between near settlements, and choosing a start tile (`World::generate`, `chooseStartTile`, `suggestStartTile`, `siteFor` for the map generator); `simrun --world world.png --check` draws it (`docs/design/world-map.md`, `docs/plans/stage-3.md`, defs `WorldGen`, tests `WorldTests`). Sim only; the sim does not own a world yet (W2) and no save section was added.
+
 Stage 2 colonist needs extras done: a colonist outside its safe temperature walks to the nearest comfortable (else safe) cell and waits there (`SeekShelter` job, `docs/design/temperature.md`); Gourmand's faster hunger, Quick sleeper's faster rest, Night owl's moods awake at night or by day and Greedy's mood without a bedroom are in (`docs/design/needs.md`, `mood.md`). Tests: `ColonistTraitNeedsTests`. Save format unchanged (new job type number at the end).
 Stage 2 animal extras done: tame animals can be named (`SetAnimalName`), one command marks every wild animal in a rectangle to tame or hunt, or every tame one to slaughter (`MarkAnimalsInArea`), and doors are gates to animals: they never walk through one (`docs/design/husbandry.md`, tests `HusbandryTests`). Save section `husbandry` 3. Sim only.
 
