@@ -89,6 +89,8 @@ enum class EventType : uint8_t {
     Refueled,        // a pawn put fuel into a building
     RoofCollapsed,   // a roof or an upper floor fell (M3, docs/design/roofs.md): `cell`, `message` "roof" (a built roof), "mountain" (the thick roof of a mined-out cell) or "floor" (an upper floor), `count` how many things and pawns it hit
     FirefoamPopped,     // a firefoam popper went off (docs/design/fire.md): `thing` the popper (destroyed right after), `def` its def, `cell` its cell, `amount` the foam radius
+    AnimalHunted,       // a hunter's target died (docs/design/hunting.md): `thing` the animal (a corpse now), `target` the hunter, `cell` where
+    AnimalButchered,    // a corpse was cut up (docs/design/hunting.md): `thing` the butcher, `def` the animal's def, `target` the table, `cell` where, `amount` the meat, `part` the leather
     PawnMentalBreak,       // a colonist snapped: a mental break began (docs/design/mental-breaks.md)
     PawnMentalBreakEnded,  // it ended: `message` says how ("recovered", "downed", "died", "stopped")
     PawnInsulted,          // a pawn in an insulting spree insulted another
@@ -138,6 +140,8 @@ enum class PawnAction : uint8_t {
     Chat,         // started talking to `target`, a prisoner (once per job; the talk takes game seconds)
     FeedPawn,     // started handing food to `target`, a prisoner
     Refuel,       // started putting fuel into `target`, a building (once per refuel job; the work goes on until its JobEnded)
+    Butcher,      // started cutting up `target`, a corpse (once per job; the work goes on until its JobEnded)
+    DropCorpse,   // put the carried `target`, a corpse, down in `cell`
     Punch,        // swung a fist at `target`, a pawn or a thing (a tantrum or berserk break: docs/design/mental-breaks.md)
 };
 

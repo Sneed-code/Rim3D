@@ -237,6 +237,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     animals_->setPathfinder(&pathfinder_);
     combat_->setHurtHook([this](Entity victim, Entity attacker) { animals_->hurt(victim, attacker); });
     jobs_->setHusbandry(husbandry_.get());
+    jobs_->setCombat(combat_.get());
     husbandry_->setHaulerHook([this](Entity animal, bool on) { jobs_->setAnimalHauler(animal, on); });
     jobs_->setAnimalWorkGate([this](Entity animal) { return animals_->mayWork(animal); });
     raids_ = std::make_unique<RaidSystem>(*things_, map_, *rooms_, *combat_, *health_, *jobs_, *fighters_, *defs_, time_, rng_);
@@ -685,10 +686,12 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             ok = husbandry_->markTame(mark->animal, mark->on, error);
         } else if (mark->mark == "Slaughter") {
             ok = husbandry_->markSlaughter(mark->animal, mark->on, error);
+        } else if (mark->mark == "Hunt") {
+            ok = husbandry_->markHunt(mark->animal, mark->on, error);
         } else if (mark->mark == "Release") {
             ok = husbandry_->release(mark->animal, error);
         } else {
-            error = "a mark is Tame, Slaughter or Release";
+            error = "a mark is Tame, Slaughter, Hunt or Release";
         }
         if (!ok) {
             commandFailed(id, error);
@@ -1489,6 +1492,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             if (const AnimalCare* care = husbandry_->care(entity)) {
                 view.markTame = care->markTame;
                 view.markSlaughter = care->markSlaughter;
+                view.markHunt = care->markHunt;
                 view.animalZone = care->zone;
                 view.learnedTricks = husbandry_->learnedMask(entity);
                 view.wantedTricks = husbandry_->wantedMask(entity);
