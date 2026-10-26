@@ -71,7 +71,7 @@ so they never burn). `Burning {until}` is a component on the pawn; it lasts `paw
 times 0.75 to 1.25.
 
 While it burns, every pass the pawn takes `pawnDamagePerTick` (2 heat damage per RimWorld second,
-the wiki's number) as a hit of Burn damage on a random part, **its job is dropped** (`PawnCaughtFire`
+the wiki's number) as a hit of Burn damage on a random outside part, **through the heat armor** of what covers it (the same armor rule as bullets: heat armor less nothing is the share of hits changed, half of those bounce off, the rest do half damage, and the piece loses 1 hit point per 4 damage that reached it; `CombatSystem::hurtPawn`), **its job is dropped** (`PawnCaughtFire`
 makes the sim `interrupt` it), and the cell under it keeps a fire going (a burning pawn sets the
 ground alight, as the wiki says). A downed pawn burns until it is put out or it burns out: it can
 die of it. Beating out the fire under a pawn puts it out too (`PawnFireOut`).

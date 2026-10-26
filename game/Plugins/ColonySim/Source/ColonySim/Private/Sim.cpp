@@ -208,6 +208,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         const PawnGenes* genes = genesOf(pawn);
         return genes != nullptr ? geneStat(*genes, "flammability", 1.0f) : 1.0f;
     });
+    fire_->setPawnHurt([this](Entity pawn, DefId type, float amount, Rng& rng) { return combat_->hurtPawn(pawn, type, amount, rng); });
     jobs_->setFire(fire_.get());
     jobs_->fuel().setLights(lights_.get());
     // A wood-fired generator makes power only with fuel, and burns it only while it makes power.
