@@ -15,6 +15,7 @@
 class USimPawnSubsystem;
 class USimSubsystem;
 class USkeletalMeshComponent;
+class UMeshComponent;
 class UStaticMeshComponent;
 namespace colony { struct ThingView; }
 
@@ -56,6 +57,27 @@ public:
 	const TArray<TObjectPtr<USkeletalMeshComponent>>& GetShapedMeshes() const { return ShapedMeshes; }
 	const TArray<TObjectPtr<USkeletalMeshComponent>>& GetSkinMeshes() const { return SkinMeshes; }
 	const TArray<TObjectPtr<UStaticMeshComponent>>& GetHorns() const { return Horns; }
+
+	/** Dresses the MetaHuman in what the sim says it wears (docs/design/clothes-draw.md): Kellan's own top and trousers are put
+	 *  away, a bare skin layer (the pawn's skin colour) shows what nothing covers, and each worn piece's meshes go on over it, in
+	 *  the order they were put on, tinted by the stuff and torn by the piece's hit points. Pieces that left the list are
+	 *  removed. `Key` is USimPawnSubsystem::ApparelKey of the snapshot. Mannequins just remember the key. */
+	void ApplyApparel(USimPawnSubsystem& Pawns, const FSimPawnApparel& Wanted, uint64 Key);
+	bool HasApparel() const { return bApparelApplied; }
+	uint64 GetApparelKey() const { return ApparelKey; }
+	const FSimPawnApparel& GetApparel() const { return Apparel; }
+	/** The meshes of the worn pieces now (skinned garments and head props), and the item each belongs to. */
+	const TArray<TObjectPtr<UMeshComponent>>& GetWornMeshes() const { return WornMeshes; }
+	const TArray<uint32>& GetWornMeshItems() const { return WornMeshItems; }
+	/** The bare skin layer (torso and arms, legs); empty while the clothes assets are missing. */
+	const TArray<TObjectPtr<USkeletalMeshComponent>>& GetBareLayer() const { return BareLayer; }
+	/** Kellan's own top and trousers (hidden while the clothes are drawn); null for a mannequin. */
+	USkeletalMeshComponent* GetDefaultTop() const { return DefaultTop; }
+	USkeletalMeshComponent* GetDefaultTrousers() const { return DefaultTrousers; }
+	/** Whether the hair is hidden under a hat that covers it. */
+	bool IsHairHidden() const { return bHairHidden; }
+	/** How many times the worn meshes were remade (not just retinted). */
+	int32 GetApparelRebuilds() const { return ApparelRebuilds; }
 
 	/** Hides or shows the whole pawn, MetaHuman included (first person view hides the player's own body). */
 	void SetBodyHidden(bool bHide);
@@ -151,6 +173,33 @@ private:
 	/** The MetaHuman's own body (leader of its clothes), where horns go. */
 	UPROPERTY()
 	TObjectPtr<USkeletalMeshComponent> MetaHumanBody;
+
+	void EnsureBareLayer(USimPawnSubsystem& Pawns);
+	void DestroyWorn();
+	/** Colour, wear and morphs of a garment mesh. */
+	void StyleWornMesh(UMeshComponent* Mesh, const FSimWornPiece& Piece);
+	void UpdateHairVisibility();
+
+	UPROPERTY()
+	TArray<TObjectPtr<UMeshComponent>> WornMeshes;
+
+	TArray<uint32> WornMeshItems;
+
+	UPROPERTY()
+	TArray<TObjectPtr<USkeletalMeshComponent>> BareLayer;
+
+	UPROPERTY()
+	TObjectPtr<USkeletalMeshComponent> DefaultTop;
+
+	UPROPERTY()
+	TObjectPtr<USkeletalMeshComponent> DefaultTrousers;
+
+	FSimPawnApparel Apparel;
+	uint64 ApparelKey = 0;
+	bool bApparelApplied = false;
+	bool bBareLayerTried = false;
+	bool bHairHidden = false;
+	int32 ApparelRebuilds = 0;
 
 	void SpawnRagdollFloor();
 	/** The hit reaction's lean and the melee pose, applied to the body together. */
