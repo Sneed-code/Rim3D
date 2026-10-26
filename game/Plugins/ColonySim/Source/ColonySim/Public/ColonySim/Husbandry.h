@@ -59,6 +59,7 @@ struct TrainingState {
 struct AnimalCare {
     bool markTame = false;       // a wild animal marked to be tamed
     bool markSlaughter = false;  // a tame animal marked to be slaughtered
+    std::string name;            // the player's name for a tame animal, "" for none
     AnimalZoneId zone = kNoAnimalZone;  // the zone a tame animal stays in; none: anywhere near home
     bool hasHome = false;
     CellPos home;                // where it was tamed; an animal with no zone stays within `homeRadius` of it
@@ -143,6 +144,8 @@ public:
     bool markTame(Entity animal, bool on, std::string& error);
     // Marks a tame animal to be slaughtered, or takes the mark off.
     bool markSlaughter(Entity animal, bool on, std::string& error);
+    // Names a tame animal (an empty name takes the name off). Fails for a wild animal or a name over kMaxAnimalNameLength.
+    bool setName(Entity animal, const std::string& name, std::string& error);
     // A tame animal goes wild again: it loses its training, zone and marks, and leaves for the map edge in its own time.
     bool release(Entity animal, std::string& error);
     // Wants (or no longer wants) the animal to learn a trick. Wanting one also wants what it needs first.

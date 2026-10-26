@@ -282,6 +282,15 @@ bool AnimalSystem::pollPath(Entity e, Animal& a, const Kind& kind, AnimalCare& c
         return true;
     }
     const Position& pos = reg.get<Position>(e);
+    // The pathfinder walks through doors; an animal can't open one, so a route with a door in it is no route.
+    const CellPos from = cellOf(pos);
+    for (const CellPos& c : route) {
+        if (!(c == from) && map_.isDoor(c)) {
+            care.noPathUntil = now + static_cast<int64_t>(husbandry_->rules().repathSeconds);
+            a.mode = AnimalMode::Idle;
+            return true;
+        }
+    }
     smoothPath(map_, pos.x, pos.y, route);
     Mover& mover = reg.get<Mover>(e);
     mover.metresPerStep = kind.topSpeed * rules_.wanderSpeed;

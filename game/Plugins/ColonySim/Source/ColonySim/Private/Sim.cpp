@@ -660,6 +660,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         } else if (!husbandry_->setTraining(training->animal, what, training->wanted, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* animalName = std::get_if<SetAnimalNameCommand>(&command)) {
+        if (!husbandry_->setName(animalName->animal, animalName->name, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* createAnimalZone = std::get_if<CreateAnimalZoneCommand>(&command)) {
         if (husbandry_->createZone(createAnimalZone->area) == kNoAnimalZone) {
             commandFailed(id, "no free walkable ground in that area for an animal zone");
@@ -1383,6 +1387,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.animalTemper = static_cast<int>(reg.get<Animal>(entity).temper);
             view.animalMode = static_cast<int>(reg.get<Animal>(entity).mode);
             if (const AnimalCare* care = husbandry_->care(entity)) {
+                view.animalName = care->name;
                 view.markTame = care->markTame;
                 view.markSlaughter = care->markSlaughter;
                 view.animalZone = care->zone;

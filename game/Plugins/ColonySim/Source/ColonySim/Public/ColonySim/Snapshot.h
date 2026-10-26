@@ -185,6 +185,7 @@ struct ThingView {
     // Rescue 4, Haul 8). A tame animal's `faction` is the player's.
     bool markTame = false;
     bool markSlaughter = false;
+    std::string animalName;  // the player's name for a tame animal, "" for none
     uint32_t animalZone = 0;
     uint32_t learnedTricks = 0;
     uint32_t wantedTricks = 0;

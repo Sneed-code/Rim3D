@@ -250,7 +250,8 @@ bool AnimalSystem::walkAt(Entity e, Animal& a, const Kind& kind, float x, float 
     if (!map_.inBounds(cell) || !map_.walkable(cell)) {
         return false;
     }
-    if (!straightWalkIsClear(map_, pos.x, pos.y, static_cast<float>(cell.x) + 0.5f, static_cast<float>(cell.y) + 0.5f, kPawnRadius, pos.level)) {
+    if (!straightWalkIsClear(map_, pos.x, pos.y, static_cast<float>(cell.x) + 0.5f, static_cast<float>(cell.y) + 0.5f, kPawnRadius, pos.level) ||
+        doorOnWay(pos.x, pos.y, static_cast<float>(cell.x) + 0.5f, static_cast<float>(cell.y) + 0.5f, pos.level)) {
         return false;
     }
     Mover& mover = reg.get<Mover>(e);

@@ -553,3 +553,72 @@ TEST_CASE("Husbandry: a game that never touches animal care hashes the same with
     CHECK(f.hu().zones().empty());
     CHECK(f.hu().stats().tamed == 0);
 }
+
+TEST_CASE("Husbandry: a tame animal can be named, the name saves, replays and shows in the snapshot") {
+    HusbFixture f;
+    f.addColonist(CellPos{10, 10, 0}, 20);
+    const Entity husky = f.animal("Husky", CellPos{20, 20, 0});
+    const Entity muffalo = f.animal("Muffalo", CellPos{30, 20, 0});
+    HUSB_REQUIRE(f.tameNow(husky));
+    f.sim.submit(SetAnimalNameCommand{husky, "Rex"});
+    f.sim.submit(SetAnimalNameCommand{muffalo, "Wild"});                 // wild: fails
+    f.sim.submit(SetAnimalNameCommand{husky, std::string(33, 'x')});     // too long: fails
+    f.sim.step();
+    int failed = 0;
+    for (const Event& e : f.sim.events()) {
+        failed += e.type == EventType::CommandFailed ? 1 : 0;
+    }
+    CHECK(failed == 2);
+    CHECK(f.hu().care(husky)->name == "Rex");
+
+    const uint64_t named = f.sim.stateHash();
+    f.sim.submit(SetAnimalNameCommand{husky, ""});
+    f.sim.step();
+    CHECK(f.hu().care(husky)->name.empty());
+    CHECK(f.sim.stateHash() != named);
+    f.sim.submit(SetAnimalNameCommand{husky, "Rex"});
+    f.sim.step();
+
+    SaveLoadResult loaded = loadSim(saveSim(f.sim), husbDefs());
+    HUSB_REQUIRE(loaded.sim != nullptr);
+    CHECK(loaded.error.empty());
+    CHECK(loaded.sim->husbandry().care(husky)->name == "Rex");
+    CHECK(loaded.sim->stateHash() == f.sim.stateHash());
+
+    const Replay recorded = recordReplay(f.sim);
+    Replay again;
+    std::string error;
+    HUSB_REQUIRE(readReplay(writeReplay(recorded), again, error));
+    const bool seen = std::any_of(again.commands.begin(), again.commands.end(),
+                                  [](const auto& c) { return std::string(commandName(c.command)) == "SetAnimalName"; });
+    CHECK(seen);
+}
+
+TEST_CASE("Husbandry: a tame animal can't open a door, so a pen with a door for its only way in stays shut to it") {
+    HusbFixture f;
+    f.addColonist(CellPos{5, 5, 0}, 10);
+    for (int i = 29; i <= 37; ++i) {
+        for (int j = 29; j <= 37; ++j) {
+            const bool edge = i == 29 || i == 37 || j == 29 || j == 37;
+            if (edge && !(i == 33 && j == 29)) {
+                f.sim.things().spawn("Wall", CellPos{i, j, 0});
+            }
+        }
+    }
+    f.sim.things().spawn("Door", CellPos{33, 29, 0});
+    f.sim.stepMany(5);
+    HUSB_REQUIRE(f.sim.map().isDoor(CellPos{33, 29, 0}));
+    const AnimalZoneId zone = f.hu().createZone(CellRect{30, 30, 7, 7});
+    HUSB_REQUIRE(zone != kNoAnimalZone);
+    const Entity cow = f.animal("Cow", CellPos{33, 22, 0});
+    HUSB_REQUIRE(f.tameNow(cow));
+    std::string error;
+    HUSB_REQUIRE(f.hu().assignZone(cow, zone, error));
+    int inside = 0;
+    for (int i = 0; i < 4000; ++i) {
+        f.sim.animals().addFood(cow, 0.01f);
+        f.sim.step();
+        inside += f.hu().zoneAt(f.cellOfThing(cow)) == zone ? 1 : 0;
+    }
+    CHECK(inside == 0);
+}

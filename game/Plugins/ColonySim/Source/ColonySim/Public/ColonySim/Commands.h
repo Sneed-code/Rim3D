@@ -416,6 +416,12 @@ struct SetTrainingCommand {
     bool wanted = true;
 };
 
+// Gives a tame animal a name (empty: no name). Fails if the animal is wild or the name is longer than 32 characters.
+struct SetAnimalNameCommand {
+    Entity animal = kNoEntity;
+    std::string name;
+};
+
 // Paints an animal zone over the walkable cells of `area` that are in no animal zone. Fails if there are none.
 struct CreateAnimalZoneCommand {
     CellRect area;
@@ -651,7 +657,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              CarryWeaponCommand, SwitchWeaponCommand, CreateGrowingZoneCommand,
                              RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
                              SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand, SetPrisonerModeCommand,
-                             SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand>;
+                             SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetAnimalNameCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

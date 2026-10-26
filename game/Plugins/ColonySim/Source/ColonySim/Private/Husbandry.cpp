@@ -242,6 +242,23 @@ bool Husbandry::markTame(Entity animal, bool on, std::string& error) {
     return true;
 }
 
+bool Husbandry::setName(Entity animal, const std::string& name, std::string& error) {
+    if (!valid(animal) || husbandryDead(things_.registry(), animal)) {
+        error = "that is no living animal";
+        return false;
+    }
+    if (!isTame(animal)) {
+        error = "only a tame animal can be named";
+        return false;
+    }
+    if (name.size() > 32) {
+        error = "an animal's name is at most 32 characters";
+        return false;
+    }
+    careFor(animal)->name = name;
+    return true;
+}
+
 bool Husbandry::markSlaughter(Entity animal, bool on, std::string& error) {
     if (!valid(animal)) {
         error = "that is no animal";
@@ -724,6 +741,11 @@ void Husbandry::hashThing(Entity e, StateHasher& h) const {
     }
     h.add(c->markTame);
     h.add(c->markSlaughter);
+    if (!c->name.empty()) {  // hashed only when set, so games that name nothing hash as before
+        for (const char ch : c->name) {
+            h.add(static_cast<int>(ch));
+        }
+    }
     h.add(c->zone);
     h.add(c->hasHome);
     h.add(c->home.x);

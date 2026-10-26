@@ -316,6 +316,9 @@ private:
     void begin(Entity e, Animal& a, const Kind& kind);
     void decide(Entity e, Animal& a, const Kind& kind, Rng& rng);
     bool walkTo(Entity e, Animal& a, const Kind& kind, float x, float y, AnimalMode mode);
+    // Animals can't open doors (RimWorld): true when the straight way from (x0, y0) to (x1, y1) crosses a door cell other
+    // than the one the walk starts in.
+    bool doorOnWay(float x0, float y0, float x1, float y1, int level) const;
     bool findFood(Entity e, const Kind& kind, Rng& rng, CellPos& out) const;
     bool tryLeave(Entity e, Animal& a, const Kind& kind, Rng& rng);
     void finishEating(Entity e, Animal& a, const Kind& kind);
