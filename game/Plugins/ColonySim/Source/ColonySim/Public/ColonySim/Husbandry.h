@@ -51,6 +51,8 @@ struct AnimalZone {
     bool breedingOff = false;    // the animals in it do not mate (saved from section version 2)
 };
 
+inline constexpr size_t kMaxAnimalNameLength = 24;
+
 struct TrainingState {
     uint16_t steps = 0;    // successful attempts so far
     bool wanted = false;   // the player wants it learned
@@ -61,6 +63,7 @@ struct AnimalCare {
     bool markTame = false;       // a wild animal marked to be tamed
     bool markSlaughter = false;  // a tame animal marked to be slaughtered
     bool markHunt = false;       // a wild animal marked to be hunted (N2, docs/design/hunting.md); it stays set on the corpse
+    std::string name;            // the player's name for a tame animal (up to kMaxAnimalNameLength characters), or empty
     bool collect = false;        // its corpse is to be carried to a stockpile: it was hunted or slaughtered
     AnimalZoneId zone = kNoAnimalZone;  // the zone a tame animal stays in; none: anywhere near home
     bool hasHome = false;
@@ -111,6 +114,7 @@ struct HusbandryRules {
     double huntRangeShare = 0.8;       // a hunter shoots from within this share of its gun's range
     double huntMinRange = 3.0;         // metres: a hunter never closes in nearer than this (the range of a short-barrelled gun)
     double huntMaxSeconds = 900.0;     // a hunt that has not killed its target in this long is given up
+    double huntAvoidManhunterChance = 0.1;  // hunters skip animals that turn manhunter when hurt at this chance or more (ours)
     double huntRepathSeconds = 3.0;    // a hunter walking at a moving animal looks for a new path this often
     double butcherEfficiencyBase = 0.75;
     double butcherEfficiencyPerLevel = 0.025;  // per Cooking level
@@ -159,6 +163,10 @@ public:
     bool markSlaughter(Entity animal, bool on, std::string& error);
     // Marks a wild animal to be hunted, or takes the mark off (N2).
     bool markHunt(Entity animal, bool on, std::string& error);
+    // Names a tame animal (an empty name takes the name off).
+    bool setName(Entity animal, const std::string& name, std::string& error);
+    // Marks every animal in the area that can take the mark; the number marked is `count`.
+    bool markInArea(const CellRect& area, const std::string& mark, bool on, std::string& error);
     // A tame animal goes wild again: it loses its training, zone and marks, and leaves for the map edge in its own time.
     bool release(Entity animal, std::string& error);
     // Wants (or no longer wants) the animal to learn a trick. Wanting one also wants what it needs first.
