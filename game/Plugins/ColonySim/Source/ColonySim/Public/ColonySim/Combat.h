@@ -387,6 +387,9 @@ public:
     // the caller does (HealthSystem::applyHit), so bullets and melee strikes land the same way (F8).
     PawnHitResult hitPawn(Entity pawn, int hitboxPart, DefId damageType, float amount, float penetration,
                           uint64_t seed) const;
+    // Damage of a kind with no aim behind it (flames): a random outside part, through the armor that
+    // covers it (heat armor for Burn), worn pieces losing hit points. False if the pawn can't be hurt.
+    bool hurtPawn(Entity pawn, DefId damageType, float amount, Rng& rng);
     // Takes the hit points off the pieces `result.wear` names; a piece at none is destroyed.
     void wearApparel(Entity pawn, const PawnHitResult& result);
     // The radius around a standing man's chest, seen from the front, in which a point picked evenly
