@@ -103,7 +103,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | M1 | **Upper levels.** Sparse storage for levels above the ground (about 3 m each); a floor on level 1 is the roof of level 0; building on an upper level needs support below (walls or columns); regions and rooms per level. Every interface already takes a level (`CellPos`); this fills them in. | Cloud | Opus, high | 120 min | S7 |
-| | M2 | **Stairs and ladders.** Buildings that link two levels; upper floors built with work and materials (M1 lays them instantly); region links and reachability across levels; the region-graph search and cell paths climb them; climbing speed; doors and stockpiles on upper levels. | Cloud | Opus, high | 90 min | M1 |
+| ✓ | M2 | **Stairs and ladders.** Buildings that link two levels; upper floors built with work and materials (M1 lays them instantly); region links and reachability across levels; the region-graph search and cell paths climb them; climbing speed; doors and stockpiles on upper levels. | Cloud | Opus, high | 90 min | M1 |
 | ✓ | M3 | **Roof support and collapse.** RimWorld's roof support range, collapse when support is lost (falling roof damage), overhead mountain collapse when mining under thick roof, upper floors that fall when the walls under them go. | Cloud | Sonnet, high | 90 min | M1 |
 | | M4 | **Two-storey scenario test.** Colonists build a two-storey house with stairs, sleep upstairs and haul up and down for 3 days; `simrun --png` per level. In CI. | Cloud | Sonnet, high | 60 min | M2, M3 |
 
@@ -112,7 +112,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | C11 | **Fuel.** A refuelable part for buildings: the stove burns wood per meal (BACKLOG), campfires, torches, later generators; a refuel job under Hauling; out of fuel means stopped. | Cloud | Sonnet, medium | 60 min | S7 |
-| | C12 | **Skill learning everywhere.** XP from every job that uses a skill (building, cooking, doctoring later), passions, RimWorld's daily XP cap and the slow loss above level 10; a mood bonus for passion work. | Cloud | Sonnet, medium | 60 min | S7 |
+| ✓ | C12 | **Skill learning everywhere.** XP from every job that uses a skill (building, cooking, doctoring later), passions, RimWorld's daily XP cap and the slow loss above level 10; a mood bonus for passion work. | Cloud | Sonnet, medium | 60 min | S7 |
 | ✓ | C13 | **Growing zones and farming.** Growing zones with a chosen crop, sow and harvest jobs under Growing, growth from fertility, light and temperature, frost kills, harvest yield from the Plants skill. | Cloud | Sonnet, high | 90 min | E1, D4 |
 | ✓ | C14 | **Work tables, crafting and quality.** Bills on every bench, not just the stove; products with quality from the crafter's skill (RimWorld's curve); stone blocks, smithing, tailoring and butchering; the bill extras in BACKLOG (pause at a full stock, where products go, ingredient filters, skill range). | Cloud | Sonnet, high | 90 min | C11, D6, D8 |
 | ✓ | C15 | **Apparel.** Wearing clothes in layers; armor per covered part (F2's flak rule for every piece); insulation widens the comfortable temperature range; wear lowers hit points; tattered, naked and dead man's clothes thoughts; outfit policies and a change-clothes job; stripping the dead and downed. | Cloud | Sonnet, high | 90 min | S7, D6, D9 |

@@ -212,6 +212,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     // A wood-fired generator makes power only with fuel, and burns it only while it makes power.
     power_->setFuel([this](Entity building) { return jobs_->fuel().lit(building); });
     jobs_->fuel().setBurning([this](Entity building) { return !power_->hasPower(building) || power_->stateOf(building) != PowerState::Off; });
+    mood_->setActiveSkill([this](Entity pawn) { return jobs_->activeSkill(pawn); });
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     explosives_ = std::make_unique<ExplosiveSystem>(*things_, map_, *combat_, *health_, *defs_);
     fighters_->setExplosives(explosives_.get());
@@ -256,6 +257,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     roofCollapse_ = std::make_unique<RoofCollapse>(map_, *rooms_, *things_, *health_, *defs_);
     roofCollapse_->setEventLog(&events_);
     roofCollapse_->setInterruptHandler([this](Entity pawn, const std::string& why) { jobs_->interrupt(pawn, why); });
+    construction_->setUpperFloors(upperFloors_.get());
     animals_->setMelee(melee_.get());
     defense_ = std::make_unique<DefenseSystem>(*things_, map_, *combat_, *health_, *power_, *defs_, time_);
     defense_->setEventLog(&events_);
@@ -1115,6 +1117,9 @@ void Sim::step() {
     time_.seconds += 1;
     weather_->step(time_.seconds);
     spoilage_->setOutdoorFactor(weather_->deteriorationFactor());
+    if (time_.seconds % kSecondsPerDay == 0) {
+        jobs_->skillsNewDay();
+    }
     if (time_.seconds % kSecondsPerHour == 0) {
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
         farming_->growHour(time_.seconds);
@@ -1240,6 +1245,20 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Mover* mover = reg.try_get<Mover>(entity)) {
             view.vx = mover->vx;
             view.vy = mover->vy;
+            // On stairs or a ladder the pawn is drawn the share `climb` of the way from where it
+            // stands to the cell at the other end (docs/design/levels.md).
+            if (mover->climbing(pos.level)) {
+                const CellPos to = mover->path[mover->next];
+                if (const LevelLink* link = map_.levelLinkBetween(cellOf(pos), to)) {
+                    const float t = std::clamp(mover->climbed / link->length, 0.0f, 1.0f);
+                    const float tx = static_cast<float>(to.x) + 0.5f;
+                    const float ty = static_cast<float>(to.y) + 0.5f;
+                    view.climb = t;
+                    view.x = pos.x + (tx - pos.x) * t;
+                    view.y = pos.y + (ty - pos.y) * t;
+                    view.z += (map_.heightAt(tx, ty, to.level) - view.z) * t;
+                }
+            }
             view.firstWaypoint = static_cast<uint32_t>(out.waypoints.size());
             for (size_t k = mover->next; k < mover->path.size(); ++k) {
                 out.waypoints.push_back(PathPointView{static_cast<float>(mover->path[k].x) + 0.5f,
@@ -1711,6 +1730,9 @@ uint64_t Sim::stateHash() const {
             h.add(static_cast<uint64_t>(mover->ghostSteps));
             h.add(static_cast<uint64_t>(mover->heldSteps));
             h.add(mover->gaveUp);
+            if (mover->climbed != 0.0f) {
+                h.add(mover->climbed);  // M2; only when climbing, so older hashes stay
+            }
         }
         if (const Colonist* c = reg.try_get<Colonist>(e)) {
             for (const std::string* text : {&c->firstName, &c->nickName, &c->lastName, &c->childhood, &c->adulthood}) {
@@ -1728,6 +1750,7 @@ uint64_t Sim::stateHash() const {
                 h.add(s.level);
                 h.add(static_cast<int>(s.passion));
                 h.add(s.xp);
+                h.add(s.xpToday);
                 h.add(s.disabled);
             }
             for (const std::string& tag : c->disabledWorkTags) {

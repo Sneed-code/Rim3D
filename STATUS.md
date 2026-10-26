@@ -3,10 +3,12 @@
 Updated 2026-10-26.
 
 Stage 2 M3 done: roofs fall when their support goes. A built roof, the mountain's roof over a mined-out cell (a cave wider than about 14 m with no wall inside) and an upper floor all need a wall, column or rock within 6.9 m; when the last one goes the roof or floor falls and crushes what is under it, floors drop their pawns and items a level and lose their buildings, and a chain of falls ends in one step (`docs/design/roofs.md`, event `RoofCollapsed`, `Snapshot::roofCollapses`, save section `roofs`).
+Stage 2 M2 done: stairs and ladders link levels; colonists climb them, build upper floors with materials and work, and haul, build and sleep across levels (`docs/design/levels.md`).
 Stage 2 C14 done: every work table takes bills, done by colonists with the matching work type (smithy, machining table, hand and electric tailor bench, crafting spot, stonecutter's table, electric stove); what a bill makes can be made of its stuff (clothes and weapons take cloth, leather, steel or wood, one kind at a time) and gets a quality from the crafter's skill by RimWorld's table (no legendary without an inspiration); bills have a skill range, an ingredient radius, an ingredient filter, "store in this stockpile", "pause when satisfied, restart at" and can be moved up and down (`SetBillOptions`, `MoveBill`). **Butchering is left to N2** (a corpse is not an ingredient yet), and melee weapons carry stuff and quality but their damage does not use them yet (`docs/design/crafting.md`). Save sections `bills` 2 and `crafting` 1.
 Stage 2 U16 done: pawns wear what the sim says they wear. Kellan's own hoodie and trousers are hidden, a skin layer in the pawn's skin colour shows what nothing covers, and each worn piece's A5 meshes go on over it with the pawn's body shape, tinted by its stuff, torn (holes and dirt) as its hit points drop, and gone when it is taken off, stripped or worn out; tuques and helmets hide the hair (`docs/design/clothes-draw.md`, smoke test `clothes`; `ASimPawnActor::ApplyApparel`; no sim changes). **Run the `ClothesArt` commandlet again on each machine** (`docs/design/looks.md`, about 1 minute) for the skin meshes and the torn-look material; without it Kellan's own clothes stay on.
 Stage 2 E4 follow-up done: burning colonists run about in panic (a colonist within arm's reach beats the flames out) and the firefoam popper (new `Firefoam` research) puts out all fires within 9 m when one comes within 3 m, then is used up (`docs/design/fire.md`).
 Stage 2 U13 done: the sim's clock and weather are on screen. The sun and moon cross a sky atmosphere with clouds and fog (sun height by season, moon phase over 30 days), rain and snow fall in a block of air round the camera and stop under roofs, the ground gets wet in the rain and white with the sim's snow, thunderstorms flash, and the overseer's top bar and direct mode's time box show "Spring 6, Year 1   12°C, rain" (`docs/design/sky.md`, smoke test `sky`; `USkySubsystem`, `USnowSubsystem`; no sim changes). **Run the `TerrainMaterials` commandlet again on each machine to give the ground its `Wetness` input** (`assets/manifest.json`); without it everything else works and the ground just does not get wet.
+Stage 2 social extras done: the Social skill makes good chats count more and romance likelier, lovers may stray (the betrayed one is upset, thinks worse of both and may fight the new lover), and a wedding gives the couple and every free colonist a party thought (`docs/design/social.md`).
 Stage 2 C20 done: colonists talk (chitchat, deep talk, kind words, slights, insults, romance, proposals, breakups), hold opinions of each other, become friends, rivals, lovers and spouses, and an insult can start a fistfight (`docs/design/social.md`).
 Stage 2 P1 done: a pawn carries a rifle, a sidearm and a melee weapon (`docs/design/weapons.md`).
 Stage 2 E4 done: fire spreads over flammable ground, burns things to ash, heats rooms, sets pawns alight and is put out by rain, snow and colonists with the Firefighter work type in the home area (`docs/design/fire.md`).
@@ -388,6 +390,16 @@ room beside open air is outdoors (`Room::openToAir`); heat passes through a floo
 includes the level. **Systems that only know the ground use `Map::onGround(c)` instead of `inBounds`** (plants, zones, growing zones, filth,
 fire, snow, lights, cover, threat maps, floors, designations); `Map::inBounds` now takes levels 0 to 3. No stairs yet (M2), no collapse (M3), nothing drawn (U17).
 
+**M2** stairs and ladders (`docs/design/levels.md`, tests `StairsTests`): `Stairs` (1 x 3, 60% walking speed) and `Ladder` (1 x 1,
+30%) climb one level towards their facing, from the cell in front of the foot to the cell beyond the head one level up
+(`Map::levelLinks`, kept by `Things`). Regions link the two ends, so ground and upper floor share a reachability group; the
+pathfinder's region route and cell search climb them at their cost, and a path's cells carry their level. A pawn climbs standing
+at the foot while `Mover::climbed` counts up, then stands at the head; the snapshot has `climb` (0 to 1) and moves `x`, `y`, `z`
+along it. **Upper floors are built by colonists** now (`UpperFloor` def: 4 stuff, 216 s, planned per cell, worked from below or
+beside). Stockpiles and doors work upstairs, and hauling, delivering, building, taking down, food and beds look across levels
+(a level counts as 10 m more, `levelDistSq`); other scanners stay on their own level. Save section `movement` 2. Numbers are ours
+(RimWorld has no levels). Not done: direct mode climbing and the upper-floor and stairs tools on screen (U17), floors falling (M3).
+
 **C11** fuel (`docs/design/fuel.md`, tests `FuelTests`): a building with a `fuel` field in its def holds fuel
 (`Fuel` component, new section `fuel` in the save, format stays 20). The fueled stove holds 50 wood and burns one per meal it makes
 and is **stopped when empty**; a campfire and a torch lamp burn all the time (`perDay` or `burnHoursPerWood`, the generator's will too, E5); a new
@@ -396,6 +408,8 @@ filled) get the nearest wood stack carried to them (`Refuel` job, 345.6 s of wor
 events `OutOfFuel`, `Refueled`, `PawnAction::Refuel`; snapshot `fuel`, `fuelCapacity`, `autoRefuel`, `fillOrdered`. The colony scenario now
 checks wood was put in (`woodIn`). A lamp with no fuel is dark and a wood-fired generator with none makes no power (it burns
 only while switched on); **new fuel buildings start empty, so tests about something else fill them with `testFueled` (`Tests/FuelTestHelper.h`)**. **A new thing that burns fuel puts a `fuel` field in its def and reads `sim.jobs().fuel()` (`lit`, `canUse`, `use`).**
+
+**C12** skill learning (`docs/design/skills.md`): every job that uses a skill teaches it (mining, plants, building, taking down, every bill's recipe), with passion factors, the 4,000 XP daily soft cap, the slow loss above level 10 at midnight, and a mood lift (+8 minor, +14 major) while working at a passion. **A new job that uses a skill calls `JobSystem::learnSkill` each working second and is listed in `JobSystem::activeSkill`.** Save: `colonists` section version 2.
 
 ## Next
 

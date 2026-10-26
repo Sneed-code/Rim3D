@@ -3,6 +3,7 @@
 #include "ColonySim/Map.h"
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
 
 namespace colony {
@@ -139,6 +140,7 @@ void Regions::rebuildBlocks() {
     for (const int block : dirtyBlocks_) {
         linkBlock(block);
     }
+    linkLevels();
     std::sort(pendingLinks_.begin(), pendingLinks_.end(),
               [](const PendingLink& p, const PendingLink& q) { return p.a != q.a ? p.a < q.a : p.b < q.b; });
     std::vector<RegionId> touched;
@@ -149,15 +151,17 @@ void Regions::rebuildBlocks() {
         // Face middles are whole or half metres, so these sums are exact in any order.
         float sumX = 0.0f;
         float sumY = 0.0f;
+        float extra = pendingLinks_[i].extra;
         for (; i < pendingLinks_.size() && pendingLinks_[i].a == a && pendingLinks_[i].b == b; ++i) {
             ++faces;
             sumX += pendingLinks_[i].x;
             sumY += pendingLinks_[i].y;
+            extra = std::min(extra, pendingLinks_[i].extra);
         }
         const float x = sumX / static_cast<float>(faces);
         const float y = sumY / static_cast<float>(faces);
-        regions_[a].links.push_back(RegionLink{b, faces, x, y});
-        regions_[b].links.push_back(RegionLink{a, faces, x, y});
+        regions_[a].links.push_back(RegionLink{b, faces, x, y, extra});
+        regions_[b].links.push_back(RegionLink{a, faces, x, y, extra});
         touched.push_back(a);
         touched.push_back(b);
     }
@@ -317,9 +321,38 @@ void Regions::linkBlock(int block) {
                 if (s == kNoRegion || s == r) {
                     continue;
                 }
-                pendingLinks_.push_back(PendingLink{std::min(r, s), std::max(r, s), side.fx, side.fy});
+                pendingLinks_.push_back(PendingLink{std::min(r, s), std::max(r, s), side.fx, side.fy, 0.0f});
             }
         }
+    }
+}
+
+// Stairs and ladders: the regions at the two ends are linked when either end is in a rebuilt block
+// (a link between two untouched regions is still in place; adding or removing stairs marks both
+// ends). The link's point is halfway between the two cells' middles, and it costs the climb's
+// extra over the flat walk between them.
+void Regions::linkLevels() {
+    for (const LevelLink& link : map_.levelLinks()) {
+        if (!map_.inBounds(link.low) || !map_.inBounds(link.high)) {
+            continue;
+        }
+        if (blockDirty_[static_cast<size_t>(blockOf(link.low.x, link.low.y, link.low.level))] == 0 &&
+            blockDirty_[static_cast<size_t>(blockOf(link.high.x, link.high.y, link.high.level))] == 0) {
+            continue;
+        }
+        const RegionId r = regionOfCell(link.low);
+        const RegionId s = regionOfCell(link.high);
+        if (r == kNoRegion || s == kNoRegion || r == s) {
+            continue;
+        }
+        const float dx = static_cast<float>(link.high.x - link.low.x);
+        const float dy = static_cast<float>(link.high.y - link.low.y);
+        const float extra = std::max(0.0f, link.cost() - std::sqrt(dx * dx + dy * dy));
+        const float x = static_cast<float>(link.low.x + link.high.x + 1) * 0.5f;
+        const float y = static_cast<float>(link.low.y + link.high.y + 1) * 0.5f;
+        pendingLinks_.push_back(PendingLink{std::min(r, s), std::max(r, s), x, y, extra});
+        regions_[r].climbs = true;
+        regions_[s].climbs = true;
     }
 }
 

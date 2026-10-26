@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <tuple>
 
 namespace colony {
 
@@ -131,6 +132,37 @@ void Map::setObstacle(CellPos c, uint8_t obstacleDm) {
         obstacle_[i] = obstacleDm;
         cover_->markDirty(c);
     }
+}
+
+void Map::addLevelLink(const LevelLink& link) {
+    const auto before = [](const LevelLink& a, const LevelLink& b) {
+        const auto key = [](CellPos c) { return std::make_tuple(c.level, c.y, c.x); };
+        return key(a.low) != key(b.low) ? key(a.low) < key(b.low) : key(a.high) < key(b.high);
+    };
+    levelLinks_.insert(std::upper_bound(levelLinks_.begin(), levelLinks_.end(), link, before), link);
+    regions_->markDirty(link.low);
+    regions_->markDirty(link.high);
+}
+
+void Map::removeLevelLinks(Entity building) {
+    for (auto it = levelLinks_.begin(); it != levelLinks_.end();) {
+        if (it->building == building) {
+            regions_->markDirty(it->low);
+            regions_->markDirty(it->high);
+            it = levelLinks_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+const LevelLink* Map::levelLinkBetween(CellPos a, CellPos b) const {
+    for (const LevelLink& link : levelLinks_) {
+        if ((link.low == a && link.high == b) || (link.low == b && link.high == a)) {
+            return &link;
+        }
+    }
+    return nullptr;
 }
 
 void Map::clearBuilding(CellPos c) {

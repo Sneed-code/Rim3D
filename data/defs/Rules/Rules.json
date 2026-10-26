@@ -193,11 +193,12 @@
       "speedBase": 0.08, "speedPerLevel": 0.115,
       "xpPerSecond": 0.059028
     },
+    "construction": { "xpPerSecond": 0.173611 },
     "yieldByLevel": [0.6, 0.7, 0.8, 0.85, 0.9, 0.925, 0.95, 0.975, 1.0, 1.01, 1.02,
                      1.03, 1.04, 1.05, 1.06, 1.07, 1.08, 1.09, 1.1, 1.12, 1.13],
     "growthYieldFloor": 0.5,
     "unskilledSkillLevel": 8,
-    "unverified": ["mining.hitDamage", "mining.hitSeconds", "mining.xpPerSecond", "plants.xpPerSecond", "yieldByLevel", "growthYieldFloor"],
+    "unverified": ["mining.hitDamage", "mining.hitSeconds", "mining.xpPerSecond", "plants.xpPerSecond", "construction.xpPerSecond", "yieldByLevel", "growthYieldFloor"],
     "ours": ["mining.rockTypesPerMap", "mining.orePerTenThousandRockCells", "unskilledSkillLevel"]
   },
   {
@@ -298,7 +299,11 @@
    "minGapMinutes": 20, "tableChatMeanMinutes": 15, "compatibilityMax": 10, "stackLimit": 3, "kindWordsMoodBelow": 40, "romanceOpinionScale": 100, "adultAge": 18,
    "fightChance": 0.1, "fightPain": 0.25, "fightBloodLoss": 0.1, "fightMaxMinutes": 5, "fightWalkEvery": 2,
    "fight": {"label": "got in a fight with me", "offset": -20, "days": 30},
+   "skillOpinionPerLevel": 0.05, "skillRomancePerLevel": 0.02,
+   "cheatWeightFactor": 0.15, "cheatPartnerBelow": 60, "jealousFightChance": 0.25,
+   "cheated": {"label": "cheated on me", "offset": -40, "days": 60}, "tookPartner": {"label": "took my partner", "offset": -20, "days": 60},
+   "cheatedThought": "CheatedOnMe", "weddingGuestThought": "AttendedWedding", "weddingPartyThought": "WeddingParty",
    "traitWeights": {"Kind": {"Slight": 0, "Insult": 0}, "Abrasive": {"Slight": 3, "Insult": 3}},
    "note": "C20 (docs/design/social.md). interactionMeanHours: a pawn with somebody in earshot starts a talk about this often; at a table or a game beside another pawn, tableChatMeanMinutes. traitWeights multiply an interaction's selectionWeight for the talker. A trait degree's `opinionOfMe` (Traits) is what everyone else thinks of its owner.",
-   "unverified": ["interactionMeanHours", "maxDistance"], "ours": ["opinionMin", "opinionMax", "socialSkillXpPerInteraction", "deadMansApparelDays", "minGapMinutes", "tableChatMeanMinutes", "compatibilityMax", "stackLimit", "kindWordsMoodBelow", "romanceOpinionScale", "adultAge", "fightChance", "fightPain", "fightBloodLoss", "fightMaxMinutes", "fightWalkEvery", "fight", "traitWeights"]}
+   "unverified": ["interactionMeanHours", "maxDistance"], "ours": ["opinionMin", "opinionMax", "socialSkillXpPerInteraction", "deadMansApparelDays", "minGapMinutes", "tableChatMeanMinutes", "compatibilityMax", "stackLimit", "kindWordsMoodBelow", "romanceOpinionScale", "adultAge", "fightChance", "fightPain", "fightBloodLoss", "fightMaxMinutes", "fightWalkEvery", "fight", "traitWeights", "skillOpinionPerLevel", "skillRomancePerLevel", "cheatWeightFactor", "cheatPartnerBelow", "jealousFightChance", "cheated", "tookPartner", "cheatedThought", "weddingGuestThought", "weddingPartyThought"]}
 ]

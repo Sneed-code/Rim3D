@@ -212,14 +212,12 @@ bool jobHoldsStill(const Job& job) {
 
 void jobsStartWalk(const Map& map, const Position& pos, Mover& mover) {
     std::vector<CellPos> route = std::move(mover.path);
-    smoothPath(map, pos.x, pos.y, route);
+    smoothPath(map, pos.x, pos.y, route, pos.level);
     mover.walkTo(pos.x, pos.y, std::move(route));
 }
 
 float jobsDistSq(CellPos a, CellPos b) {
-    const float dx = static_cast<float>(a.x - b.x);
-    const float dy = static_cast<float>(a.y - b.y);
-    return dx * dx + dy * dy;
+    return levelDistSq(static_cast<float>(a.x - b.x), static_cast<float>(a.y - b.y), a.level - b.level);
 }
 
 // Candidates nearest first; ties by Work tab column, scanner, then target.
@@ -1371,8 +1369,20 @@ JobSystem::StepResult JobSystem::buildWork(Entity pawn, Job& job, std::string& w
     }
     ConstructionSite& site = reg.get<ConstructionSite>(job.thing);
     site.workDone += constructionSpeed(pawn) * static_cast<float>(construction_.numbers().buildWorkPerSecond);
+    learnSkill(pawn, "Construction", gather_.constructionXpPerSecond);
     if (site.workDone < site.workTotal) {
         return StepResult::Running;
+    }
+    if (construction_.isUpperFloor(reg.get<Thing>(job.thing).def)) {
+        // An upper floor: the frame becomes the floor (docs/design/levels.md).
+        const CellPos cell = site.origin;
+        release(pawn, job);
+        construction_.complete(job.thing);
+        if (!map_.upperFloor(cell)) {
+            why = "the floor can't be held up there any more";
+            return StepResult::Failed;
+        }
+        return StepResult::Next;
     }
     const Entity building = construction_.complete(job.thing);
     if (building == kNoEntity) {
@@ -1396,6 +1406,7 @@ JobSystem::StepResult JobSystem::deconstructWork(Entity pawn, Job& job, std::str
         pawnDid(pawn, PawnAction::Deconstruct, job.thing);
     }
     job.progress += constructionSpeed(pawn) * static_cast<float>(construction_.numbers().deconstructWorkPerSecond);
+    learnSkill(pawn, "Construction", gather_.constructionXpPerSecond);
     if (job.progress < construction_.deconstructWork(job.thing)) {
         return StepResult::Running;
     }
