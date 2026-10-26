@@ -310,6 +310,7 @@ struct SaveEntity {
     std::optional<AnimalCare> care;         // section "husbandry"
     std::optional<AnimalBreed> breed;       // section "breeding" (N4)
     std::optional<Hatching> hatching;       // section "breeding" (N4)
+    std::optional<Young> young;             // section "breeding" version 3
     std::optional<Burning> burning;         // section "fire" (E4)
     std::optional<SaveSpoilage> spoilage;   // section "spoilage"
     std::optional<SaveGrenade> grenade;     // section "explosives"
@@ -1717,6 +1718,11 @@ void saveBreedPart(Ar& ar, AnimalBreed& b) {
 }
 
 template <typename Ar>
+void saveYoungPart(Ar& ar, Young& y) {
+    ar.value("mother", y.mother);
+}
+
+template <typename Ar>
 void saveHatchingPart(Ar& ar, Hatching& h) {
     ar.value("hatchAt", h.hatchAt);
 }
@@ -2642,7 +2648,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "grenade", e, &SaveEntity::grenade, [&](SaveGrenade& g) { saveGrenadePart(ar, g); });
         saveParts(ar, "knockedDown", e, &SaveEntity::knocked, [&](KnockedDown& k) { saveKnockedPart(ar, k); });
     });
-    ar.section("breeding", 2, [&] {
+    ar.section("breeding", 3, [&] {
         ar.value("matings", d.breeding.matings);
         ar.value("pregnancies", d.breeding.pregnancies);
         ar.value("born", d.breeding.born);
@@ -2652,6 +2658,9 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("sheared", d.breeding.sheared);
         saveParts(ar, "breed", e, &SaveEntity::breed, [&](AnimalBreed& b) { saveBreedPart(ar, b); });
         saveParts(ar, "hatching", e, &SaveEntity::hatching, [&](Hatching& h) { saveHatchingPart(ar, h); });
+        if (ar.sectionVersion() >= 3) {
+            saveParts(ar, "young", e, &SaveEntity::young, [&](Young& y) { saveYoungPart(ar, y); });
+        }
     });
     ar.section("defense", 1, [&] {
         saveParts(ar, "turret", e, &SaveEntity::turret, [&](Turret& t) { saveTurretPart(ar, t); });
@@ -3086,6 +3095,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const Hatching* hatching = reg.try_get<Hatching>(e)) {
             out.hatching = *hatching;
+        }
+        if (const Young* young = reg.try_get<Young>(e)) {
+            out.young = *young;
         }
         if (const Burning* burning = reg.try_get<Burning>(e)) {
             out.burning = *burning;
@@ -3634,6 +3646,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.hatching) {
             reg.emplace<Hatching>(entity, *e.hatching);
+        }
+        if (e.young) {
+            reg.emplace<Young>(entity, *e.young);
         }
         if (e.burning) {
             reg.emplace<Burning>(entity, *e.burning);
