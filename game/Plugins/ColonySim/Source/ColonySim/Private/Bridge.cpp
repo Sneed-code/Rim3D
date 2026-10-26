@@ -117,6 +117,10 @@ const char* commandName(const Command& command) {
                 return "MarkShelter";
             } else if constexpr (std::is_same_v<Type, MarkAnimalCommand>) {
                 return "MarkAnimal";
+            } else if constexpr (std::is_same_v<Type, MarkAnimalsInAreaCommand>) {
+                return "MarkAnimalsInArea";
+            } else if constexpr (std::is_same_v<Type, SetAnimalNameCommand>) {
+                return "SetAnimalName";
             } else if constexpr (std::is_same_v<Type, SetTrainingCommand>) {
                 return "SetTraining";
             } else if constexpr (std::is_same_v<Type, CreateAnimalZoneCommand>) {
