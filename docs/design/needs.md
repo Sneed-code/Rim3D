@@ -124,6 +124,12 @@ still load (their pawns have no needs). Everything is in the state hash.
 A pawn the player controls directly (U9) gets no jobs, so it does not eat or sleep by itself;
 its food and rest still fall. Let go of it to have it look after itself.
 
+## Trait effects (Traits defs, `degreeDatas`)
+
+`NeedsSystem::step` reads two trait stats: `statFactors.hungerRateMultiplier` (Gourmand 1.5, food falls half as fast
+again) and `statOffsets.restRateMultiplier` (Quick sleeper +0.5, rest rises half as fast again while lying down). Night
+owl and greedy colonists have mood effects, see [mood.md](mood.md).
+
 ## Not yet
 
 - Overeating, food poisoning,

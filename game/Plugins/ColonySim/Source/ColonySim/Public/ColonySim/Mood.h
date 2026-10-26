@@ -63,6 +63,13 @@ struct COLONY_API MoodRules {
     float risePerHour = 12.0f;  // the level moves towards the target at most this fast
     float fallPerHour = 8.0f;
     double memoryDays = 0.6;  // for a memory def without `durationDays`
+    // The hours of the day that count as night for night owls (`nightFromHour` through `nightToHour`, wrapping midnight).
+    int nightFromHour = 21;
+    int nightToHour = 4;
+    bool isNightHour(int hour) const {
+        return nightFromHour <= nightToHour ? (hour >= nightFromHour && hour <= nightToHour)
+                                            : (hour >= nightFromHour || hour <= nightToHour);
+    }
 
     static MoodRules read(const DefDatabase& defs);
 };
