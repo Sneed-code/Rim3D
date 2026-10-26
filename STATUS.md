@@ -2,6 +2,7 @@
 
 Updated 2026-10-26.
 
+Stage 2 U16 done: pawns wear what the sim says they wear. Kellan's own hoodie and trousers are hidden, a skin layer in the pawn's skin colour shows what nothing covers, and each worn piece's A5 meshes go on over it with the pawn's body shape, tinted by its stuff, torn (holes and dirt) as its hit points drop, and gone when it is taken off, stripped or worn out; tuques and helmets hide the hair (`docs/design/clothes-draw.md`, smoke test `clothes`; `ASimPawnActor::ApplyApparel`; no sim changes). **Run the `ClothesArt` commandlet again on each machine** (`docs/design/looks.md`, about 1 minute) for the skin meshes and the torn-look material; without it Kellan's own clothes stay on.
 Stage 2 U13 done: the sim's clock and weather are on screen. The sun and moon cross a sky atmosphere with clouds and fog (sun height by season, moon phase over 30 days), rain and snow fall in a block of air round the camera and stop under roofs, the ground gets wet in the rain and white with the sim's snow, thunderstorms flash, and the overseer's top bar and direct mode's time box show "Spring 6, Year 1   12°C, rain" (`docs/design/sky.md`, smoke test `sky`; `USkySubsystem`, `USnowSubsystem`; no sim changes). **Run the `TerrainMaterials` commandlet again on each machine to give the ground its `Wetness` input** (`assets/manifest.json`); without it everything else works and the ground just does not get wet.
 Stage 2 C20 done: colonists talk (chitchat, deep talk, kind words, slights, insults, romance, proposals, breakups), hold opinions of each other, become friends, rivals, lovers and spouses, and an insult can start a fistfight (`docs/design/social.md`).
 Stage 2 P1 done: a pawn carries a rifle, a sidearm and a melee weapon (`docs/design/weapons.md`).
@@ -249,8 +250,8 @@ all reserved), work at a speed from their Cooking skill and Manipulation, and dr
 haulers and hungry pawns find them. Recipes are a new def kind (`data/defs/Recipes/`): simple meal (10 berries, 300
 ticks), four simple meals at once, fine meal (needs Cooking 6 and meat, which no item is yet). Simple and fine meals
 are in `Items.json`. A job that ends early gives the ingredients back. New job `DoBill`, event `RecipeDone`, action
-`Cook`; save format 18 (formats 6 to 17 still load). **Not built: stove fuel (it cooks for free; in BACKLOG), skill
-learning, bill reordering.**
+`Cook`; save format 18 (formats 6 to 17 still load). **Not built: skill
+learning, bill reordering.** (Stove fuel came with C11, below.)
 
 Since 0004 the game has its own setting (`docs/design/lore.md`: the year 6650, slow star travel,
 the fallen Lattice, magic called resonance) and our own names for RimWorld's proper names
@@ -382,6 +383,15 @@ no roof of its own there). Buildings and items go only on a floor. Regions, room
 room beside open air is outdoors (`Room::openToAir`); heat passes through a floor like a thin roof. Save section `levels`; snapshot `z`
 includes the level. **Systems that only know the ground use `Map::onGround(c)` instead of `inBounds`** (plants, zones, growing zones, filth,
 fire, snow, lights, cover, threat maps, floors, designations); `Map::inBounds` now takes levels 0 to 3. No stairs yet (M2), no collapse (M3), nothing drawn (U17).
+
+**C11** fuel (`docs/design/fuel.md`, tests `FuelTests`): a building with a `fuel` field in its def holds fuel
+(`Fuel` component, new section `fuel` in the save, format stays 20). The fueled stove holds 50 wood and burns one per meal it makes
+and is **stopped when empty**; a campfire and a torch lamp burn all the time (`perDay` or `burnHoursPerWood`, the generator's will too, E5); a new
+building starts empty and an old save's stove loads full. A `Refuel` scanner is first in Hauling: low buildings (at or below 30%, or ordered
+filled) get the nearest wood stack carried to them (`Refuel` job, 345.6 s of work). `SetRefuelCommand{building, autoRefuel, fillNow}`;
+events `OutOfFuel`, `Refueled`, `PawnAction::Refuel`; snapshot `fuel`, `fuelCapacity`, `autoRefuel`, `fillOrdered`. The colony scenario now
+checks wood was put in (`woodIn`). A lamp with no fuel is dark and a wood-fired generator with none makes no power (it burns
+only while switched on); **new fuel buildings start empty, so tests about something else fill them with `testFueled` (`Tests/FuelTestHelper.h`)**. **A new thing that burns fuel puts a `fuel` field in its def and reads `sim.jobs().fuel()` (`lit`, `canUse`, `use`).**
 
 ## Next
 

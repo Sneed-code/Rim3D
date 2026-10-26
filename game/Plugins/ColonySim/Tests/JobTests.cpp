@@ -93,7 +93,7 @@ TEST_CASE("Jobs: work types come from the data in Work tab order, and new worker
     }
     const int hauling = sim.jobs().workTypeIndex(defs->idOf("WorkTypes", "Hauling"));
     JOBS_REQUIRE(hauling >= 0);
-    CHECK(types[static_cast<size_t>(hauling)].givers.size() == 2);  // HaulToStockpile and Strip (C15); Refuel comes later
+    CHECK(types[static_cast<size_t>(hauling)].givers.size() == 3);  // Refuel (C11), HaulToStockpile and Strip (C15)
 
     const Entity pawn = jobsSpawn(sim, "Human", CellPos{5, 5, 0});
     JOBS_REQUIRE(sim.things().registry().all_of<Worker, WorkSettings>(pawn));

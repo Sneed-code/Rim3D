@@ -628,6 +628,15 @@ struct PlaceUpperFloorCommand {
     bool remove = false;
 };
 
+// Fuel (task C11, docs/design/fuel.md): whether colonists refuel the building by themselves when it
+// is low (`autoRefuel`), and `fillNow`, an order to fill it to the top regardless. Fails if the thing
+// is not a finished building that burns fuel.
+struct SetRefuelCommand {
+    Entity building = kNoEntity;
+    bool autoRefuel = true;
+    bool fillNow = false;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -649,7 +658,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              CarryWeaponCommand, SwitchWeaponCommand, CreateGrowingZoneCommand,
                              RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
                              SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand, SetPrisonerModeCommand,
-                             SetPrisonBedCommand, PlaceUpperFloorCommand>;
+                             SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

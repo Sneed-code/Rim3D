@@ -62,6 +62,7 @@ gives no work; the tasks with scanners so far:
 
 | Task | Work type | Scanner |
 | --- | --- | --- |
+| `Refuel` | Hauling (first) | finished buildings low on fuel, or ordered filled: a job to bring the nearest fuel stack ([fuel.md](fuel.md)) |
 | `HaulToStockpile` | Hauling | items outside storage, or in a stockpile worse than one that would take them |
 | `ConstructDeliverResources` | Construction | blueprints and frames that need materials ([construction.md](construction.md)) |
 | `ConstructFinishFrames` | Construction | frames with all their materials |

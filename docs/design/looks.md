@@ -108,7 +108,8 @@ next to nothing. At the default overseer distance horns are about 2 px long and 
   sign-in), or face morphs made from its presets.
 - **Proportions.** Shorter limbs, narrower shoulders and wider hips are skeleton, which the leader
   pose takes from the mannequin; body types change shape and the scale changes height.
-- **Clothes.** Everyone wears Kellan's outfit until U16 draws worn apparel (meshes: A5, below).
+- **Clothes.** U16 draws the sim's worn apparel over a skin layer and hides Kellan's own top and trousers
+  ([clothes-draw.md](clothes-draw.md); meshes: A5, below). Without the clothes assets Kellan's outfit stays.
 - **Mannequins** (the default look) get height and horns only.
 - **Hair styles and beards** stay Kellan's; their colour follows `hair`.
 
@@ -127,6 +128,9 @@ makes `/Game/Rim3D/Generated/Clothes` from `assets/clothes_art.json`. Nothing ne
   tuque and simple helmet made in code. Vertices are already in head bone space: attach at the
   `head` bone with no offset.
 - Thicker outward by layer (OnSkin < Middle < Shell), so U16 draws in layer order without z-fighting.
+
+U16 also adds `SK_Body_Bare_0` and `_1` (the skin under the clothes, `Body_Bare` in `clothes_art.json`) and gives `M_Garment`
+a `Wear` input that cuts holes, so rerun the commandlet after pulling it.
 
 Not done: the duster has no long skirt (thickened trousers instead), no boots or gloves defs yet,
 tribalwear is a tunic and shorts from the same two meshes, and none of it has been looked at in the

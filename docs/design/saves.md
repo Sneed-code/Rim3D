@@ -104,6 +104,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `control` | 1 | `playerControlled`: the ids of controlled pawns |
 | `needs` | 1 | `needs`, `schedule`, `bed` |
 | `bills` | 1 | `bills` on work buildings |
+| `fuel` | 1 | `fuel` on buildings that burn it ([fuel.md](fuel.md)); a building with a fuel part and none saved loads full |
 | `construction` | 1 | `site`, `builtOf`, `marked` |
 | `mood` | 1 | `mood` |
 | `combat` | 1 | `posture`, `gear`, `equippedBy`, `shooter`, `projectile`, `magazine` |

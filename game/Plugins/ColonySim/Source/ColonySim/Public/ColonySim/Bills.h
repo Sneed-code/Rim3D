@@ -62,6 +62,14 @@ struct Recipe {
     float skillXp = 0.0f;
     std::vector<RecipeIngredient> ingredients;
     std::vector<RecipeProduct> products;
+    // How many things one run makes. A building that burns fuel per product burns this many times its `fuel.perUse`.
+    int productCount() const {
+        int made = 0;
+        for (const RecipeProduct& product : products) {
+            made += product.count;
+        }
+        return made;
+    }
 };
 
 // The numbers in the BillRules def (with these values when the def is missing).
