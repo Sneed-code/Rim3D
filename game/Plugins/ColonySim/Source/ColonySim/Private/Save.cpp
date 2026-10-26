@@ -18,6 +18,7 @@
 #include "ColonySim/Explosives.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Farming.h"
+#include "ColonySim/Narrator.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Filth.h"
@@ -446,6 +447,8 @@ struct SaveData {
     FarmingSaved farming;                           // section "farming" (C13)
     bool hasWeather = false;           // the file has the weather section; older saves start it fresh
     SaveWeather weather;
+    bool hasNarrator = false;          // section "narrator" (T1); older saves keep the narrator off
+    NarratorState narrator;
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -1120,6 +1123,13 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("animal", c.animal);
                 ar.text("mark", c.mark);
                 ar.value("on", c.on);
+            } else if constexpr (std::is_same_v<Type, MarkAnimalsInAreaCommand>) {
+                ar.group("area", [&] { saveRect(ar, c.area); });
+                ar.text("mark", c.mark);
+                ar.value("on", c.on);
+            } else if constexpr (std::is_same_v<Type, SetAnimalNameCommand>) {
+                ar.value("animal", c.animal);
+                ar.text("name", c.name);
             } else if constexpr (std::is_same_v<Type, SetTrainingCommand>) {
                 ar.value("animal", c.animal);
                 ar.text("trainable", c.trainable);
@@ -1200,6 +1210,12 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
             } else if constexpr (std::is_same_v<Type, SetGrowingZoneCropCommand>) {
                 ar.value("zone", c.zone);
                 ar.text("crop", c.crop);
+            } else if constexpr (std::is_same_v<Type, SetNarratorCommand>) {
+                ar.text("narrator", c.narrator);
+                ar.text("difficulty", c.difficulty);
+            } else if constexpr (std::is_same_v<Type, FireIncidentCommand>) {
+                ar.text("incident", c.incident);
+                ar.value("points", c.points);
             } else if constexpr (std::is_same_v<Type, IgniteCommand>) {
                 ar.group("cell", [&] { saveCell(ar, c.cell); });
                 ar.value("size", c.size);
@@ -1377,7 +1393,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::Butcher, "the save file has a bad job");
+    ar.require(job.type <= JobType::SeekShelter, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -1681,6 +1697,9 @@ void saveCarePart(Ar& ar, AnimalCare& c) {
     if (ar.sectionVersion() >= 2) {  // N2: hunting
         ar.value("markHunt", c.markHunt);
         ar.value("collect", c.collect);
+    }
+    if (ar.sectionVersion() >= 3) {  // animal names
+        ar.text("name", c.name);
     }
     ar.value("zone", c.zone);
     ar.value("hasHome", c.hasHome);
@@ -2552,7 +2571,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.require(d.wildAnimals >= 0 && d.animals.percent >= 0, "the save file has a bad wild animal density");
         saveParts(ar, "animal", e, &SaveEntity::animal, [&](Animal& a) { saveAnimalPart(ar, a); });
     });
-    ar.section("husbandry", 2, [&] {
+    ar.section("husbandry", 3, [&] {
         ar.value("nextZone", d.husbandry.nextZone);
         ar.list("zones", d.husbandry.zones, [&](AnimalZone& z) {
             ar.value("id", z.id);
@@ -2660,6 +2679,23 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("defense", 1, [&] {
         saveParts(ar, "turret", e, &SaveEntity::turret, [&](Turret& t) { saveTurretPart(ar, t); });
         saveParts(ar, "trap", e, &SaveEntity::trap, [&](Trap& t) { saveTrapPart(ar, t); });
+    });
+    ar.section("narrator", 1, [&] {
+        d.hasNarrator = true;
+        NarratorState& n = d.narrator;
+        ar.text("narrator", n.narrator);
+        ar.text("difficulty", n.difficulty);
+        ar.value("rngState", n.rngState);
+        ar.value("rngIncrement", n.rngIncrement);
+        ar.value("cycleStart", n.cycleStart);
+        ar.list("threats", n.threats, [&](int64_t& t) { ar.value(nullptr, t); });
+        ar.list("fired", n.fired, [&](IncidentFired& f) {
+            ar.text("incident", f.incident);
+            ar.value("at", f.at);
+        });
+        ar.value("incidents", n.incidents);
+        ar.value("wealth", n.wealth);
+        ar.value("points", n.points);
     });
     ar.section("fire", 1, [&] {
         ar.value("started", d.fire.started);
@@ -2826,6 +2862,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.husbandry = sim.husbandry_->saved();
     d.farming = sim.farming_->saved();
     d.breeding = sim.breeding_->saved();
+    d.narrator = sim.narrator_->state();
     d.fire = sim.fire_->saved();
     d.seconds = sim.time_.seconds;
     d.rngState = sim.rng_.state();
@@ -3684,6 +3721,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         return false;
     }
     sim.breeding_->restore(d.breeding);
+    if (d.hasNarrator && !sim.narrator_->restore(d.narrator, error)) {
+        return false;
+    }
     if (!sim.farming_->restore(d.farming, error)) {
         return false;
     }

@@ -106,7 +106,7 @@ retargeter, by commandlet.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | V20 | **Sound system.** Cloud half: `visual.sound` cues in the defs (weapon shots, hits, footsteps by terrain, work, doors, animals, fire, weather) and a `docs/design/sound.md`; Unreal half: a `USoundSubsystem` playing cues from sim events with distance attenuation, a voice budget (32 voices), occlusion by roofs and walls, ambience beds by biome, time of day and weather, a mixer with sliders. Placeholder tones until V21. | Cloud, then PC Unreal | Sonnet, high | 60 min cloud + 90 min PC | U-tasks merged |
+| cloud ✓ | V20 | **Sound system.** Cloud half: `visual.sound` cues in the defs (weapon shots, hits, footsteps by terrain, work, doors, animals, fire, weather) and a `docs/design/sound.md`; Unreal half: a `USoundSubsystem` playing cues from sim events with distance attenuation, a voice budget (32 voices), occlusion by roofs and walls, ambience beds by biome, time of day and weather, a mixer with sliders. Placeholder tones until V21. | Cloud, then PC Unreal | Sonnet, high | 60 min cloud + 90 min PC | U-tasks merged |
 | | V21 | **Sound and music content.** Free CC0 packs (freesound.org CC0, Kenney, Sonniss GDC free bundles, free music such as Kevin MacLeod or Incompetech with attribution logged) downloaded by script and wired to the cues; calm, tense and combat music that follows the narrator's threat. | PC light | Sonnet, medium | 90 min | V20 |
 
 ### Styled UI (V22 to V24)

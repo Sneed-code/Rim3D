@@ -3,11 +3,13 @@
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Events.h"
+#include "ColonySim/Fighters.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Genes.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/RoomStats.h"
 #include "ColonySim/Rooms.h"
@@ -89,6 +91,8 @@ MoodRules MoodRules::read(const DefDatabase& defs) {
     r.risePerHour = moodFloat(*def, "risePerHour", r.risePerHour);
     r.fallPerHour = moodFloat(*def, "fallPerHour", r.fallPerHour);
     r.memoryDays = def->number("memoryDays", r.memoryDays);
+    r.nightFromHour = std::clamp(static_cast<int>(def->integer("nightHours.from", r.nightFromHour)), 0, 23);
+    r.nightToHour = std::clamp(static_cast<int>(def->integer("nightHours.to", r.nightToHour)), 0, 23);
     return r;
 }
 
@@ -396,6 +400,17 @@ void MoodSystem::remember(Entity pawn, const std::string& trigger, int64_t now) 
     }
 }
 
+namespace {
+// A pawn of the player's colony (not a prisoner, guest or enemy) that has a mood.
+bool moodIsColonist(entt::registry& reg, Entity pawn) {
+    if (!reg.valid(pawn) || !reg.all_of<Colonist, Mood>(pawn) || reg.all_of<Prisoner>(pawn)) {
+        return false;
+    }
+    const Faction* faction = reg.try_get<Faction>(pawn);
+    return faction == nullptr || faction->id == kPlayerFaction;
+}
+}  // namespace
+
 void MoodSystem::step(int64_t now, std::vector<Event>& events) {
     if (!rules_.present) {
         return;
@@ -430,11 +445,30 @@ void MoodSystem::step(int64_t now, std::vector<Event>& events) {
             }
             continue;
         }
+        if (event.type == EventType::PawnDied) {
+            // A colonist died: every other living colonist knows. (Psychopaths shrug, as in RimWorld.)
+            if (moodIsColonist(reg, event.thing)) {
+                for (const Entity other : pawns) {
+                    const Health* health = reg.try_get<Health>(other);
+                    if (other != event.thing && moodIsColonist(reg, other) && (health == nullptr || !health->dead) &&
+                        !hasTrait(other, "Psychopath")) {
+                        addMemory(reg.get<Mood>(other), "KnowColonistDied", now);
+                    }
+                }
+            }
+            continue;
+        }
         if (event.type == EventType::AnimalButchered) {
             // Cutting up a person: only the cold-hearted and the cannibals do not mind.
             Mood* butcher = reg.valid(event.thing) ? reg.try_get<Mood>(event.thing) : nullptr;
             if (butcher != nullptr && defs_.get(event.def).text("race.intelligence") == "Humanlike" && !eatsPeople(event.thing)) {
                 addMemory(*butcher, "ButcheredHumanlikeCorpse", now);
+                // The rest of the colony hears of it, except the butcher and those who do not mind.
+                for (const Entity other : pawns) {
+                    if (other != event.thing && moodIsColonist(reg, other) && !eatsPeople(other)) {
+                        addMemory(reg.get<Mood>(other), "KnowButcheredHumanlikeCorpse", now);
+                    }
+                }
             }
             continue;
         }

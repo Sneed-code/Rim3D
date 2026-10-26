@@ -190,6 +190,7 @@ struct ThingView {
     bool markSlaughter = false;
     bool markHunt = false;  // a wild animal marked to be hunted (N2, docs/design/hunting.md)
     uint32_t animalZone = 0;
+    std::string animalName;  // the player's name for a tame animal, or empty
     uint32_t learnedTricks = 0;
     uint32_t wantedTricks = 0;
     // Breeding and products (docs/design/breeding.md): sex (0 male, 1 female; -1 for other things), carrying young, and how
@@ -398,6 +399,17 @@ struct WeatherView {
     float snowCover = 0.0f;   // share of the map's cells with snow
 };
 
+// The narrator (docs/design/narrator.md): which one and the difficulty (invalid DefIds while it is
+// off), the colony's wealth and threat points at its last check, and incidents so far. Letters come
+// as Letter events.
+struct NarratorView {
+    DefId narrator;
+    DefId difficulty;
+    float wealth = 0.0f;
+    float threatPoints = 0.0f;
+    uint32_t incidents = 0;
+};
+
 // A talent rank the protagonist has bought (docs/design/talents.md).
 struct TalentRankView {
     DefId talent;  // a Talents def
@@ -463,6 +475,7 @@ struct Snapshot {
     std::vector<ApparelView> apparel;      // worn apparel, see ThingView
     std::vector<OutfitView> outfits;       // the outfit policies, by id
     WeatherView weather;
+    NarratorView narrator;
 
     // The thing with this id, or null if it is not on the map. Binary search.
     COLONY_API const ThingView* find(Entity id) const;
