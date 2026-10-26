@@ -59,8 +59,8 @@ When a bill makes something (`finishProduct`):
    the crafter's skill in the recipe's skill, from the wiki's table in `CraftingRules.qualityChances` (one row
    per skill level 0 to 20: awful, poor, normal, good, excellent, masterwork). Skill 0 makes an awful thing
    65% of the time, skill 8 a normal one 51%, skill 20 an excellent one 51% and a masterwork 10%. **Legendary
-   never comes from the table**: in RimWorld it takes an inspiration, which the sim does not have;
-   `rollQuality(skill, shift)` raises the result by `shift` levels, so an inspiration can use it. Normal quality
+   never comes from the table**: in RimWorld it takes an inspiration, and here too: `rollQuality(skill, shift)` raises the result by `shift`
+   levels, and Inspired Creativity gives a shift of 2 to the crafter's next thing with a quality ([inspirations.md](inspirations.md)). Normal quality
    is not stored (no `Quality` component). The roll uses the system's own random stream (seed xor `CRFT`,
    saved in the `crafting` section).
 3. **Where it goes:** with a bill's `storeZone`, the product gets a `StoreIn` mark and haulers carry it to
@@ -98,7 +98,7 @@ stream and the `StoreIn` marks.
 
 - Butchering was left to N2 and is done: [hunting.md](hunting.md).
 - Skill experience from crafting (`workSkillXp` is read and unused, as for cooking).
-- Inspirations (quality shift), art, sculpting, smelting, the machining table's other recipes.
+- Art, sculpting, smelting, the machining table's other recipes.
 - Damage and hit points of melee weapons from their stuff and quality (P4).
 - "Count only what lies in this stockpile", "take from this stockpile only" and a per-bill ingredient quality
   filter (the bill's `disallowed` list is by item def).
