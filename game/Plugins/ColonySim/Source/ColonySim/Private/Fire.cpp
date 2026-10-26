@@ -77,6 +77,7 @@ FireNumbers FireNumbers::read(const DefDatabase& defs) {
         n.burntFadeDays = fireNum(*d, "burntFadeDays", n.burntFadeDays);
         n.autoHomeRadius = static_cast<int>(d->number("autoHomeRadius", n.autoHomeRadius));
         n.startHomeRadius = static_cast<int>(d->number("startHomeRadius", n.startHomeRadius));
+        n.panic = d->flag("panic", n.panic);
     }
     return n;
 }
@@ -98,11 +99,15 @@ Fire::Fire(Map& map, Things& things, Plants& plants, Floors& floors, Filth& filt
     flammability_.assign(defs.size(), 0.0f);
     stuffFactor_.assign(defs.size(), 1.0f);
     maxHp_.assign(defs.size(), 0.0f);
+    popperRadius_.assign(defs.size(), 0.0f);
+    popperTrigger_.assign(defs.size(), 0.0f);
     for (const DefId id : defs.idsOfKind("Things")) {
         const Def& d = defs.get(id);
         flammability_[id.value] = fireNum(d, "stats.flammability", 0.0f);
         stuffFactor_[id.value] = fireNum(d, "stuffProps.statFactors.flammability", 1.0f);
         maxHp_[id.value] = fireNum(d, "stats.maxHitPoints", 0.0f);
+        popperRadius_[id.value] = fireNum(d, "firefoam.radius", 0.0f);
+        popperTrigger_[id.value] = fireNum(d, "firefoam.triggerRadius", 3.0f);
     }
     for (const DefId id : defs.idsOfKind("Terrain")) {
         const Def& d = defs.get(id);
@@ -343,7 +348,7 @@ bool Fire::putOutPawn(Entity pawn) {
 
 // ---- Putting out ----------------------------------------------------------------------------
 
-bool Fire::extinguish(CellPos cell, float amount) {
+bool Fire::extinguish(CellPos cell, float amount, const char* how) {
     if (!map_.onGround(cell)) {
         return false;
     }
@@ -361,7 +366,7 @@ bool Fire::extinguish(CellPos cell, float amount) {
         markBurnt(index, now_);
     }
     fires_.erase(it);
-    emit(EventType::FireOut, kNoEntity, cell, DefId{}, 0.0f, "beaten");
+    emit(EventType::FireOut, kNoEntity, cell, DefId{}, 0.0f, how);
     // Whoever stood in it is put out with it.
     std::vector<Entity> here;
     for (const auto [pawn, burn, pos] : things_.registry().view<const Burning, const Position>().each()) {
@@ -490,6 +495,9 @@ void Fire::step(int64_t now, size_t from) {
             }
         }
     }
+    if (!fires_.empty()) {
+        popperStep(now);
+    }
     if (now % numbers_.passSeconds == 0) {
         pass(now);
     }
@@ -582,6 +590,128 @@ void Fire::spreadFrom(CellPos c, const FireCell& fire, int64_t now, int index, s
             ignitions.push_back(map_.index(n));
         }
     }
+}
+
+// A firefoam popper goes off when a fire is within its trigger radius: every fire within its foam radius is put out, as is
+// every pawn burning there, and the popper is used up (RimWorld's popper is single use). Checked each game second, but only
+// while something burns.
+void Fire::popperStep(int64_t now) {
+    (void)now;
+    entt::registry& reg = things_.registry();
+    std::vector<Entity> poppers;
+    for (const auto [e, thing, pos] : reg.view<const Thing, const Position>().each()) {
+        if (thing.def.valid() && thing.def.value < popperRadius_.size() && popperRadius_[thing.def.value] > 0.0f &&
+            thing.category == ThingCategory::Building) {
+            poppers.push_back(e);
+        }
+        (void)pos;
+    }
+    std::sort(poppers.begin(), poppers.end());
+    for (const Entity popper : poppers) {
+        const DefId def = reg.get<Thing>(popper).def;
+        const Position pos = reg.get<Position>(popper);
+        const float trigger = popperTrigger_[def.value];
+        const float radius = popperRadius_[def.value];
+        bool seen = false;
+        for (const auto& [index, fire] : fires_) {
+            const CellPos c = map_.cellAt(index);
+            const float dx = static_cast<float>(c.x) + 0.5f - pos.x;
+            const float dy = static_cast<float>(c.y) + 0.5f - pos.y;
+            if (c.level == pos.level && dx * dx + dy * dy <= trigger * trigger) {
+                seen = true;
+                break;
+            }
+        }
+        if (!seen) {
+            continue;
+        }
+        std::vector<CellPos> cells;
+        for (const auto& [index, fire] : fires_) {
+            const CellPos c = map_.cellAt(index);
+            const float dx = static_cast<float>(c.x) + 0.5f - pos.x;
+            const float dy = static_cast<float>(c.y) + 0.5f - pos.y;
+            if (c.level == pos.level && dx * dx + dy * dy <= radius * radius) {
+                cells.push_back(c);
+            }
+        }
+        for (const CellPos& c : cells) {
+            extinguish(c, 1000.0f, "foamed");
+        }
+        std::vector<Entity> alight;
+        for (const auto [pawn, burn, ppos] : reg.view<const Burning, const Position>().each()) {
+            (void)burn;
+            const float dx = ppos.x - pos.x;
+            const float dy = ppos.y - pos.y;
+            if (ppos.level == pos.level && dx * dx + dy * dy <= radius * radius) {
+                alight.push_back(pawn);
+            }
+        }
+        std::sort(alight.begin(), alight.end());
+        for (const Entity pawn : alight) {
+            putOutPawn(pawn);
+        }
+        ++poppersUsed_;
+        emit(EventType::FirefoamPopped, popper, cellOf(pos), def, radius);
+        things_.destroy(popper);
+    }
+}
+
+bool Fire::panicStep(Entity pawn, int64_t now) {
+    entt::registry& reg = things_.registry();
+    if (!numbers_.panic || !reg.valid(pawn) || !reg.all_of<Burning, Position, Mover>(pawn)) {
+        return false;
+    }
+    // A colonist who isn't alight and is within arm's reach beats the flames out as the pawn runs past.
+    {
+        const Position& me = reg.get<Position>(pawn);
+        const Colonist* self = reg.try_get<Colonist>(pawn);
+        Entity helper = kNoEntity;
+        for (const auto [other, colonist, pos] : reg.view<const Colonist, const Position>().each()) {
+            (void)colonist;
+            const float dx = pos.x - me.x;
+            const float dy = pos.y - me.y;
+            if (self != nullptr && other != pawn && !reg.all_of<Burning>(other) && pos.level == me.level &&
+                dx * dx + dy * dy <= 2.25f && !health_.incapacitated(other) && (helper == kNoEntity || other < helper)) {
+                helper = other;
+            }
+        }
+        if (helper != kNoEntity) {
+            putOutPawn(pawn);
+            return false;
+        }
+    }
+    Mover& mover = reg.get<Mover>(pawn);
+    if (!mover.arrived()) {
+        return true;  // still running to the cell it chose
+    }
+    const CellPos here = cellOf(reg.get<Position>(pawn));
+    std::vector<CellPos> open;
+    std::vector<CellPos> cool;
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            if (dx == 0 && dy == 0) {
+                continue;
+            }
+            const CellPos c{here.x + dx, here.y + dy, here.level};
+            if (!map_.walkable(c) || (dx != 0 && dy != 0 && (!map_.walkable(CellPos{here.x + dx, here.y, here.level}) ||
+                                                              !map_.walkable(CellPos{here.x, here.y + dy, here.level})))) {
+                continue;
+            }
+            open.push_back(c);
+            if (!burning(c)) {
+                cool.push_back(c);
+            }
+        }
+    }
+    const std::vector<CellPos>& pick = cool.empty() ? open : cool;
+    if (pick.empty()) {
+        return true;
+    }
+    Rng rng(rngSeed(now, static_cast<int>(entt::to_integral(pawn)), 8), 8);
+    const CellPos to = pick[static_cast<size_t>(rng.unit() * static_cast<double>(pick.size())) % pick.size()];
+    const Position& pos = reg.get<Position>(pawn);
+    mover.walkTo(pos.x, pos.y, std::vector<CellPos>{to});
+    return true;
 }
 
 void Fire::pass(int64_t now) {

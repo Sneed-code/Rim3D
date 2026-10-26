@@ -87,6 +87,7 @@ enum class EventType : uint8_t {
     PrisonBreak,        // prisoners broke out (the hook for T3): `count` how many, `message` the cause
     OutOfFuel,       // a building's fuel ran out (docs/design/fuel.md)
     Refueled,        // a pawn put fuel into a building
+    FirefoamPopped,     // a firefoam popper went off (docs/design/fire.md): `thing` the popper (destroyed right after), `def` its def, `cell` its cell, `amount` the foam radius
 };
 
 // What stopped a projectile (ProjectileHit).

@@ -7,6 +7,7 @@
 #include "ColonySim/Construction.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Fire.h"
 #include "ColonySim/Social.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Fuel.h"
@@ -754,6 +755,28 @@ bool JobSystem::findStorageCell(DefId def, CellPos from, StoragePriority better,
     return false;
 }
 
+bool JobSystem::findStorageCellIn(uint32_t zoneId, DefId def, CellPos from, Entity pawn, CellPos& out) const {
+    const StockpileZone* zone = zones_.find(zoneId);
+    if (zone == nullptr || !zone->allows(def)) {
+        return false;
+    }
+    bool found = false;
+    float bestDist = 0.0f;
+    for (const CellPos& c : zone->cells) {
+        const float dist = jobsDistSq(from, c);
+        if (found && dist >= bestDist) {
+            continue;
+        }
+        if (roomFor(def, c) <= 0 || reservedByOther(JobTarget{kNoEntity, c}, pawn) || !canReach(from, c)) {
+            continue;
+        }
+        found = true;
+        bestDist = dist;
+        out = c;
+    }
+    return found;
+}
+
 // ---- Thinking -------------------------------------------------------------------------------
 
 void JobSystem::step() {
@@ -795,6 +818,13 @@ void JobSystem::step() {
             }
             dropCarried(pawn);  // the player's colonist may carry something with no job (U10)
             restUnderPawn(pawn);
+            continue;
+        }
+        // On fire: it runs about in panic, thinking of nothing else (docs/design/fire.md). A pawn who can't (no panic) thinks as usual.
+        if (fire_ != nullptr && reg.all_of<Burning>(pawn) && fire_->panicStep(pawn, time_.seconds)) {
+            if (reg.get<Worker>(pawn).job.type != JobType::None) {
+                endJob(pawn, JobEnd::Interrupted, "it is on fire");
+            }
             continue;
         }
         if (Health* health = reg.try_get<Health>(pawn)) {

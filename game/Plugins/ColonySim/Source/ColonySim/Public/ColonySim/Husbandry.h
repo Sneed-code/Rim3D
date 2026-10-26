@@ -48,6 +48,7 @@ inline constexpr AnimalZoneId kNoAnimalZone = 0;
 struct AnimalZone {
     AnimalZoneId id = kNoAnimalZone;
     std::vector<CellPos> cells;  // in row order: by y, then x
+    bool breedingOff = false;    // the animals in it do not mate (saved from section version 2)
 };
 
 struct TrainingState {
@@ -152,6 +153,8 @@ public:
     int removeZoneCells(const CellRect& area);
     // A tame animal stays in a zone (0: anywhere near home).
     bool assignZone(Entity animal, AnimalZoneId zone, std::string& error);
+    // Switches breeding on or off for every animal in a zone.
+    bool setZoneBreeding(AnimalZoneId zone, bool allow, std::string& error);
 
     // ---- Questions
     const AnimalCare* care(Entity animal) const;
