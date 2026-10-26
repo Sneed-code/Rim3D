@@ -192,6 +192,7 @@ class PowerGrid;
 class ResearchSystem;
 class TalentSystem;
 class Rooms;
+class TemperatureSystem;
 class Things;
 class WorkGiver;
 struct GameTime;
@@ -294,6 +295,7 @@ public:
     // Whether a cell is indoors decides where a pawn can stroll or watch the clouds (Recreation); without rooms
     // everywhere is outdoors.
     void setRooms(Rooms* rooms) { rooms_ = rooms; }
+    void setTemperature(TemperatureSystem* temperature) { temperature_ = temperature; }
     void setResearch(ResearchSystem* research) { research_ = research; }
     // Taming, training and feeding animals (HusbandryJobs.cpp, docs/design/husbandry.md). Without it nobody handles animals.
     void setHusbandry(Husbandry* husbandry) { husbandry_ = husbandry; }
@@ -479,6 +481,14 @@ private:
     bool thinkNeeds(Entity pawn, Job& out);
     bool thinkSchedule(Entity pawn, Job& out);
     bool thinkApparel(Entity pawn, Job& out);
+    // Cold (JobSystem temperature, docs/design/temperature.md): a pawn outside its safe range with hypothermia
+    // setting in walks to the nearest room warm enough and stays until it has recovered.
+    bool thinkTemperature(Entity pawn, Job& out);
+    void interruptForCold(Entity pawn);
+    bool seekWarmthJob(Entity pawn, Job& out);
+    // A weapon lying about that the pawn has no weapon of the slot for (ApparelJobs.cpp).
+    bool findLooseWeapon(Entity pawn, Job& out);
+    StepResult warmWait(Entity pawn, Job& job, std::string& why);
     bool thinkWork(Entity pawn, Job& out);
     // thinkWork's scan; `urgentOnly` asks only the emergency work types (doctor, patient...).
     bool thinkWorkPass(Entity pawn, Job& out, bool urgentOnly);
@@ -651,6 +661,7 @@ private:
     std::vector<Event>& events_;
 
     Rooms* rooms_ = nullptr;
+    TemperatureSystem* temperature_ = nullptr;
     ResearchSystem* research_ = nullptr;
     MedicineSystem* medicine_ = nullptr;
     PrisonerSystem* prisoners_ = nullptr;

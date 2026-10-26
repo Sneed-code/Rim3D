@@ -98,6 +98,18 @@ RimWorld's, recalled).
 
 Animals and any pawn def with `comfyTemperatureMin/Max` get the same, without the clothes stand-in.
 
+## Seeking warmth
+
+A colonist (not an animal) whose `Hypothermia` has reached `seekWarmthSeverity` (0.12, ours, in `TemperatureRules`) while its
+cell is under 3 degrees above its safe minimum gets a `SeekWarmth` job (`JobSystem::seekWarmthJob`, `NeedJobs.cpp`): walk to
+the nearest cell of an enclosed room under a roof that is at least 4 degrees over the safe minimum and 3 over where the
+pawn stands, and stand there (`WarmWait`, holds still) until the hypothermia is under `warmEnoughSeverity` (0.03), eight
+hours are up, or the cell has gone cold. It sits in the think list after urgent needs and before the schedule. A pawn on a
+job it may drop (hauling, mining, cutting, sowing, building, cleaning, hunting, idling) is checked every 15 steps and
+leaves it; eating, sleeping, tending and refuelling finish first. Cells are reserved, one pawn to a cell. With no warm
+room the pawn carries on: out of the safe range the illness grows, in it the illness shrinks (0.9 a day), so a colonist
+that goes in and out of a warm room lives where one that stays out dies. Tests: `ColdAndArmsTests.cpp`.
+
 ## Unreal sees
 
 `Snapshot::outdoorTemperature` and `RoomView::temperature` (degrees Celsius). Health reports show
@@ -113,8 +125,7 @@ or answers, so a save made between steps loads back the same.
 
 ## Not yet
 
-- **A pawn that seeks a safe place**: RimWorld's colonists go indoors or toward warmth when they
-  are outside their safe range; ours don't (BACKLOG). Colonists outdoors in hard frost just get sick.
+- **Seeking coolness**: the cold side is done (below); a colonist with heatstroke just stays where it is.
 - **Heat from fire, sunlight on rooms, cold from rain and snow**: E4 and E1. A building's own
   insulation (stone walls hold better than wood) isn't separate from the wall conductance.
 - **Food rot, crops, plants dying of frost and heat stroke in animals' habits** read the room

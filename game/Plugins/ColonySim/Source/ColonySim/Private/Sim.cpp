@@ -194,6 +194,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setLights(lights_.get());
     jobs_->setPower(power_.get());
     jobs_->setRooms(rooms_.get());
+    jobs_->setTemperature(temperature_.get());
     jobs_->setResearch(research_.get());
     jobs_->setMedicine(medicine_.get());
     jobs_->setTalents(talents_.get());
