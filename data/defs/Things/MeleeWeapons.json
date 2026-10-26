@@ -45,7 +45,7 @@
   "stats": {
    "mass": 0.5,
    "marketValue": 64,
-   "workToMake": 864.0
+   "workToMake": 2592
   },
   "tools": [
    {
@@ -71,7 +71,6 @@
   "unverified": [
    "tools",
    "costStuffCount",
-   "stats.workToMake",
    "stats.mass",
    "stats.marketValue"
   ]
@@ -129,9 +128,9 @@
   ],
   "costStuffCount": 40,
   "stats": {
-   "mass": 1.0,
+   "mass": 0.85,
    "marketValue": 138,
-   "workToMake": 1728.0
+   "workToMake": 17280
   },
   "tools": [
    {
@@ -157,8 +156,6 @@
   "unverified": [
    "tools",
    "costStuffCount",
-   "stats.workToMake",
-   "stats.mass",
    "stats.marketValue"
   ]
  },
@@ -172,9 +169,9 @@
   ],
   "costStuffCount": 50,
   "stats": {
-   "mass": 1.8,
+   "mass": 2,
    "marketValue": 186,
-   "workToMake": 1440.0
+   "workToMake": 17280
   },
   "tools": [
    {
@@ -200,8 +197,6 @@
   "unverified": [
    "tools",
    "costStuffCount",
-   "stats.workToMake",
-   "stats.mass",
    "stats.marketValue"
   ]
  },
@@ -215,9 +210,9 @@
   ],
   "costStuffCount": 40,
   "stats": {
-   "mass": 1.8,
+   "mass": 1.25,
    "marketValue": 117,
-   "workToMake": 1440.0
+   "workToMake": 8640
   },
   "tools": [
    {
@@ -243,8 +238,6 @@
   "unverified": [
    "tools",
    "costStuffCount",
-   "stats.workToMake",
-   "stats.mass",
    "stats.marketValue"
   ]
  },
@@ -258,7 +251,7 @@
   ],
   "costStuffCount": 100,
   "stats": {
-   "mass": 1.5,
+   "mass": 2,
    "marketValue": 255,
    "workToMake": 2880.0
   },
@@ -287,7 +280,6 @@
    "tools",
    "costStuffCount",
    "stats.workToMake",
-   "stats.mass",
    "stats.marketValue"
   ]
  },

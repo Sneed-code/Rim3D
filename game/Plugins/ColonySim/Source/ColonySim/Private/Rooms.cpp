@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <string>
 
 namespace colony {
@@ -250,16 +251,25 @@ bool Rooms::roofSupported(CellPos c) const {
     return false;
 }
 
-// The thin roof follows the walls: it is worked out afresh from the enclosed rooms every time they
-// change, so opening a wall takes the roof off (RimWorld's would collapse, which comes later).
+// A thin roof goes up over the cells of an enclosed room that a roof holder reaches, and stays while one
+// does, whether or not the room is kept closed (RimWorld's). With nothing in reach any more it falls
+// (M3): the cell is reported through takeUnsupportedRoofs for RoofCollapse.
 void Rooms::roof() {
+    std::vector<CellPos> fresh;
     for (const CellPos& c : thinCells_) {
         Roof& slot = map_.roofSlot(c);
-        if (slot == Roof::Thin) {
+        if (slot != Roof::Thin) {
+            continue;
+        }
+        if (map_.floorAbove(c)) {
+            slot = Roof::None;  // its roof is the floor above now
+        } else if (roofSupported(c)) {
+            fresh.push_back(c);
+        } else {
             slot = Roof::None;
+            unsupported_.push_back(c);
         }
     }
-    std::vector<CellPos> fresh;
     const auto mark = [&](int x, int y, int level) {
         const CellPos c{x, y, level};
         Roof& slot = map_.roofSlot(c);
@@ -298,6 +308,28 @@ void Rooms::roof() {
         ++roofChanges_;
         thinCells_ = std::move(fresh);
     }
+}
+
+bool Rooms::restoreThinRoofs(const std::vector<CellPos>& cells) {
+    for (const CellPos& c : cells) {
+        if (!map_.inBounds(c)) {
+            return false;
+        }
+    }
+    thinCells_ = cells;
+    for (const CellPos& c : thinCells_) {
+        Roof& slot = map_.roofSlot(c);
+        if (slot == Roof::None) {
+            slot = Roof::Thin;
+        }
+    }
+    return true;
+}
+
+std::vector<CellPos> Rooms::takeUnsupportedRoofs() {
+    std::vector<CellPos> out = std::move(unsupported_);
+    unsupported_.clear();
+    return out;
 }
 
 // What is in each room and the role that gives it. Only enclosed rooms are looked at.

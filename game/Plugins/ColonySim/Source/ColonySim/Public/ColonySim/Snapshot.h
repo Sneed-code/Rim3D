@@ -188,6 +188,7 @@ struct ThingView {
     // Rescue 4, Haul 8). A tame animal's `faction` is the player's.
     bool markTame = false;
     bool markSlaughter = false;
+    bool markHunt = false;  // a wild animal marked to be hunted (N2, docs/design/hunting.md)
     uint32_t animalZone = 0;
     uint32_t learnedTricks = 0;
     uint32_t wantedTricks = 0;
@@ -219,6 +220,8 @@ struct ThingView {
     uint32_t apparelCount = 0;
     int quality = -1;
     bool tainted = false;
+    // Pawns in a mental break (docs/design/mental-breaks.md): its MentalBreaks def, invalid when not in one.
+    DefId mentalBreak;
 };
 
 // One piece of worn apparel (Unreal draws each layer on the pawn, torn by `hitPointShare`).
@@ -431,6 +434,9 @@ struct Snapshot {
     // (`Map::roof` says which).
     std::vector<CellPos> roofCells;
     uint64_t roofChanges = 0;
+    // How many roofs and floors have fallen (M3): when it goes up, redraw the mountain's roof and the upper floors
+    // (`Map::roof`, `Map::upperFloorCells`).
+    uint64_t roofCollapses = 0;
     std::vector<ProjectileView> projectiles;  // sorted by id
     std::vector<PawnLooksView> looks;      // see ThingView::looks
     std::vector<PowerNetView> powerNets;   // by id - 1, see ThingView::powerNet

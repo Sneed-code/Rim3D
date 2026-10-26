@@ -15,6 +15,8 @@
 //   simrun --seed 42 --size 128 --days 60 --weather   (a line a day: season, temperatures, weather, snow; E1)
 //   simrun --scenario colony [--seed 42] [--size 512] [--days 5] [--verbose]   (the colony test, C10;
 //                                     exit 1 if a check fails, docs/design/colony-scenario.md)
+//   simrun --scenario house [--seed 42] [--days 3] [--png house.png] [--verbose]   (the two-storey house, M4: builds, sleeps and hauls
+//                                     across two levels, writes house-level0.png and house-level1.png; docs/design/house-scenario.md)
 //   simrun --power [--days 3] [--verbose]   (the power check, E5: solar, batteries, lamps and a switch; docs/design/power.md)
 //   simrun --seed 42 --size 1024 --days 3 --animals [--animal-percent 300] --check   (wild animals, N1:
 //                                     herds by biome, a report of them, checks they stay on walkable ground)
@@ -29,6 +31,7 @@
 // Human and Steel and the WorkTypes def Hauling, which data/defs provides. Its pawns haul items
 // scattered over the map to a stockpile zone in the middle through the job system (C1).
 #include "ColonyScenario.h"
+#include "HouseScenario.h"
 #include "PowerScenario.h"
 #include "RaidSoak.h"
 #include "ColonySim/Animals.h"
@@ -196,7 +199,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony [--verbose]] [--power] [--raid POINTS] [--armed] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house [--verbose]] [--power] [--raid POINTS] [--armed] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS]\n");
             return false;
         }
@@ -629,9 +632,16 @@ int main(int argc, char** argv) {
 
     // The colony scenario (C10) runs its own script on the Crashlanded start; 5 days unless --days says.
     if (!options.scenario.empty()) {
-        if (options.scenario != "colony" || !defs) {
-            std::fprintf(stderr, "--scenario takes 'colony' and needs the game's defs\n");
+        if ((options.scenario != "colony" && options.scenario != "house") || !defs) {
+            std::fprintf(stderr, "--scenario takes 'colony' or 'house' and needs the game's defs\n");
             return 2;
+        }
+        if (options.scenario == "house") {
+            std::string pngBase = options.png;
+            if (pngBase.size() > 4 && pngBase.compare(pngBase.size() - 4, 4, ".png") == 0) {
+                pngBase.resize(pngBase.size() - 4);
+            }
+            return housescenario::run(options.seed, options.size, options.daysGiven ? options.days : 3.0, defs, options.verbose, pngBase);
         }
         return colonyscenario::run(options.seed, options.size, options.daysGiven ? options.days : 5.0, defs, options.verbose);
     }

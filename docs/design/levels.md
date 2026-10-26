@@ -4,7 +4,7 @@ Code: `ColonySim/Map.h` (levels, upper chunks, `setUpperFloor`, `floorAbove`, `L
 `Private/UpperFloors.cpp`; level handling in `Private/Regions.cpp`, `Private/Rooms.cpp` and
 `Private/Temperature.cpp`; stairs and ladders in `Things.h` (`levelLinksOf`), `Private/Regions.cpp`
 (`linkLevels`), `Private/Pathfinder.cpp` and `Private/MovementSystem.cpp`. Command `PlaceUpperFloorCommand`.
-Tests: `Tests/LevelsTests.cpp` (M1), `Tests/StairsTests.cpp` (M2). Tasks M1 and M2, of M1 to M4 and U17.
+Tests: `Tests/LevelsTests.cpp` (M1), `Tests/StairsTests.cpp` (M2). Tasks M1 and M2, of M1 to M4 and U17. The whole thing together is checked by the [house scenario](house-scenario.md) (M4).
 Builds on [regions](regions.md) and [rooms](rooms.md).
 
 ## Levels
@@ -48,8 +48,8 @@ An upper floor is the floor of a cell on level 1 or above. It is laid with `Uppe
   building spawned. A plan over open air is worked from the level below too, under it or beside that
   (`Construction::workCell`), so the first floor needs no stairs. Cost and work are the wood floor's: 4
   stuff (metal, wood or stone), 216 s (ours: RimWorld has no upper floors). `PlaceUpperFloorCommand`
-  still lays floors at once, for tests and the dev tools. Floors that fall when the walls under them go
-  come with M3.
+  still lays floors at once, for tests and the dev tools. Floors fall when the walls under them go
+  ([roofs](roofs.md)).
 
 ## Regions, rooms and temperature per level
 
@@ -81,7 +81,7 @@ no levels):
   side by side, so a staircase against a wall leads onto the floor that wall holds up. The building
   itself blocks walking: it is only climbed. Neither end needs to be walkable when it is built; the
   link counts once both are. Nothing is planned on the top level (there is nothing to climb to).
-  Nothing stops a floor over the stairs for now; U17 may want a stairwell rule.
+  Nothing stops a floor over the stairs for now; U17 may want a stairwell rule. An upper wall with open air on its outside cannot be reached once the walls on its two inner sides stand (see the house scenario).
 - **The map** keeps the links (`Map::levelLinks`, `LevelLink{low, high, building, length, speedFactor}`,
   sorted by cell) in step with the buildings (`Things` adds them on spawn and load, removes them on
   despawn), and marks the regions at both ends dirty.
@@ -138,5 +138,4 @@ pawn's `climbed`; the state hash adds it only while a pawn climbs, so older hash
 - Direct mode climbing stairs and ladders, and the orders bar's upper floor and stairs tools (U17).
 - Raiders, fighters and animals using stairs: they path over them already, but combat, cover and the
   defence plans still look at one level at a time.
-- Roof collapse and floors falling when their support goes (M3).
 - Upper levels on screen (U17).

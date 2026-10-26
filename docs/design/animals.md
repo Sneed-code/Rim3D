@@ -1,6 +1,6 @@
 # Animals (data)
 
-Stage 2 task D5. Data only: the sim reads none of it until N1 (animals on the map), N2 and the
+Stage 2 task D5. Data only: the sim reads it from N1 (animals on the map), N2 (hunting and butchering) and the
 taming and husbandry tasks. Files: `data/defs/Things/Animals.json`, `Things/AnimalProducts.json`,
 two bodies in `Bodies.json` and the new `Wing` part in `BodyParts.json`.
 

@@ -104,8 +104,8 @@ G2, A1 and A2 are Stage 1 tasks.
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | M1 | **Upper levels.** Sparse storage for levels above the ground (about 3 m each); a floor on level 1 is the roof of level 0; building on an upper level needs support below (walls or columns); regions and rooms per level. Every interface already takes a level (`CellPos`); this fills them in. | Cloud | Opus, high | 120 min | S7 |
 | ✓ | M2 | **Stairs and ladders.** Buildings that link two levels; upper floors built with work and materials (M1 lays them instantly); region links and reachability across levels; the region-graph search and cell paths climb them; climbing speed; doors and stockpiles on upper levels. | Cloud | Opus, high | 90 min | M1 |
-| | M3 | **Roof support and collapse.** RimWorld's roof support range, collapse when support is lost (falling roof damage), overhead mountain collapse when mining under thick roof, upper floors that fall when the walls under them go. | Cloud | Sonnet, high | 90 min | M1 |
-| | M4 | **Two-storey scenario test.** Colonists build a two-storey house with stairs, sleep upstairs and haul up and down for 3 days; `simrun --png` per level. In CI. | Cloud | Sonnet, high | 60 min | M2, M3 |
+| ✓ | M3 | **Roof support and collapse.** RimWorld's roof support range, collapse when support is lost (falling roof damage), overhead mountain collapse when mining under thick roof, upper floors that fall when the walls under them go. | Cloud | Sonnet, high | 90 min | M1 |
+| ✓ | M4 | **Two-storey scenario test.** Colonists build a two-storey house with stairs, sleep upstairs and haul up and down for 3 days; `simrun --png` per level. In CI. | Cloud | Sonnet, high | 60 min | M2, M3 |
 
 ### Colony life (C)
 
@@ -119,7 +119,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | ✓ | C16 | **Rot and storage.** Food rots by temperature (cold slows it, freezing stops it), items left outdoors deteriorate, food poisoning from cooking skill and a dirty kitchen, meals remember their ingredients. | Cloud | Sonnet, medium | 60 min | E2, C17 |
 | ✓ | C17 | **Room stats, beauty and filth.** Beauty per cell from things and floors; filth (dirt walked in, blood, ash) and a cleaning job; room space, beauty, wealth, cleanliness and impressiveness by RimWorld's formulas; room thoughts; the beauty need. | Cloud | Sonnet, high | 90 min | S7, D9, D11 |
 | ✓ | C18 | **Recreation, comfort and outdoors.** The recreation need with kinds and tolerance, recreation jobs (horseshoes, chess, billiards, walking, cloud watching, chatting at a table) in Joy hours; comfort from chairs and beds; the outdoors need; their thoughts. | Cloud | Sonnet, high | 90 min | S7, D9, D11 |
-| | C19 | **Mental breaks.** RimWorld's break chances by mood band; minor (wander sadly, food binge, hide in room), major (tantrum, sad wander, insulting spree) and extreme (berserk, give up and leave, fire-starting spree after E4) breaks; catharsis. | Cloud | Sonnet, high | 90 min | S7, D9 |
+| ✓ | C19 | **Mental breaks.** RimWorld's break chances by mood band; minor (wander sadly, food binge, hide in room), major (tantrum, sad wander, insulting spree) and extreme (berserk, give up and leave, fire-starting spree after E4) breaks; catharsis. | Cloud | Sonnet, high | 90 min | S7, D9 |
 | ✓ | C20 | **Social life.** Opinions, interactions at RimWorld's rates, friends, rivals, lovers and spouses as bonds (no sex, no pregnancy), social fights with fists (F8), social thoughts, Social skill XP. | Cloud | Sonnet, high | 90 min | F8, D9 |
 | ✓ | C21 | **Research.** Research benches, a current project, the research job (Intellectual), unlocks that gate building plans and bills; commands to pick a project. | Cloud | Sonnet, medium | 60 min | S7, D12 |
 | ✓ | C22 | **Prisoners.** Capture downed enemies to a prison bed; warden feeding, chats and recruiting against resistance as in RimWorld; release; prisoner thoughts; prison-break hook for T3. | Cloud | Sonnet, high | 90 min | H1 |
@@ -140,7 +140,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | N1 | **Animals on the map.** Animal races with their bodies and health; wild herds placed by biome at map generation and wandering in and out at the edges; grazing from the plant layer, sleep, corpses. Hundreds stay cheap (`simrun --animals`). | Cloud | Sonnet, high | 90 min | S7, D5 |
-| | N2 | **Hunting and butchering.** A hunt mark and the Hunting job (shoot, carry the corpse home); butchering at the butcher table for meat and leather (so the fine meal can be cooked); hunted animals may turn on the hunter. | Cloud | Sonnet, high | 90 min | N1, C14 |
+| ✓ | N2 | **Hunting and butchering.** A hunt mark and the Hunting job (shoot, carry the corpse home); butchering at the butcher table for meat and leather (so the fine meal can be cooked); hunted animals may turn on the hunter. | Cloud | Sonnet, high | 90 min | N1, C14 |
 | ✓ | N3 | **Taming, training and pens.** Tame mark and Handling job (wildness, food), tamed animals join the colony, training (obedience, release, rescue, haul), animal zones and pens, feeding hay and kibble, slaughter. | Cloud | Sonnet, high | 90 min | N1 |
 | ✓ | N4 | **Breeding and products.** Animal mating, gestation and eggs, young animals growing up, milking and shearing jobs, egg laying; a 500-chicken farm stays cheap. | Cloud | Sonnet, high | 90 min | N3 |
 | ✓ | N5 | **Animal fights and predators.** Bites and scratches through F8's melee; predators hunt prey and lone pawns; revenge; the manhunter state; animals flee from fights. | Cloud | Sonnet, high | 90 min | N1, F8 |

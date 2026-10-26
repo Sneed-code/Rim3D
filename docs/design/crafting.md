@@ -18,7 +18,7 @@ A building def names the work giver that offers its bills with `workGiver`. The 
 | Work giver | Work type | Benches | Makes |
 | --- | --- | --- | --- |
 | `DoBillsCookStove` | Cooking | fueled stove, electric stove | meals, kibble |
-| `DoBillsButcher` | Cooking | butcher table | (butchering waits for N2, below) |
+| `DoBillsButcher` | Cooking | butcher table | meat and leather from corpses ([hunting.md](hunting.md), N2) |
 | `DoBillsSmithy` | Smithing | fueled smithy, electric smithy, machining table | knife, club, gladius, spear, mace, longsword, breach axe |
 | `DoBillsTailor` | Tailoring | hand tailor bench, electric tailor bench | clothes |
 | `DoBillsCraftingSpot` | Crafting | crafting spot | prosthetics (wood), knife, club, spear |
@@ -94,9 +94,7 @@ stream and the `StoreIn` marks.
 
 ## Not yet
 
-- **Butchering.** The butcher table, its `ButcherCorpse` recipe and the Cooking-type giver `DoBillsButcher`
-  exist, but a corpse is not an ingredient yet: carrying one to the table and turning the race's meat and
-  leather into items is N2 ("Hunting and butchering", which needs this task), together with the hunt.
+- Butchering was left to N2 and is done: [hunting.md](hunting.md).
 - Skill experience from crafting (`workSkillXp` is read and unused, as for cooking).
 - Inspirations (quality shift), art, sculpting, smelting, the machining table's other recipes.
 - Damage and hit points of melee weapons from their stuff and quality (P4).
