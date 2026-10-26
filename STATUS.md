@@ -2,6 +2,8 @@
 
 Updated 2026-10-26.
 
+Art stage V1 done: every humanlike pawn now has a seeded face (face shape, brow, nose and jaw sliders, eye colour), one of 14 hair styles, a beard (men only; Emberkin are beardless), a body hair amount (Frostkin furry), and 0 to 3 tattoos for about one pawn in five; a healed injury that leaves a scar on the skin adds a scar mark on that body region (Slash, Claw, Burn, Puncture, Ragged, Stitched by injury). It is in the snapshot, the state hash and saves (`looks` 2) and the numbers are in `LooksRules` (`docs/design/looks.md`, tests `LooksTests`). Sim only; V2 and V3 draw it.
+
 Art stage planned: `docs/plans/art-stage.md` (26 tasks V1 to V26: faces and hair, body hair, anatomy, jiggle, wounds, dismemberment, destructible clothes, real animation, Niagara fire, real buildings and items, destruction, sound, styled UI). Docs only.
 Stage 2 heat armour done: a burning pawn's flames now go through the heat armour of the clothes over the part they hit (bounce, half damage, wear on the piece), so a hyperweave duster and hat save most of the burns; clothes already carried the heat stat from RimWorld's numbers (`docs/design/fire.md`, test in `FireTests`). Sim only.
 

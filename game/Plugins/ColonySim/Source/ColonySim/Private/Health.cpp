@@ -2,6 +2,7 @@
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Genes.h"
+#include "ColonySim/Looks.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -1234,6 +1235,28 @@ void HealthSystem::leaveScar(Entity pawn, Health& health, const Injury& healed, 
     scar.peak = model_->scarSeverity;
     health.injuries.push_back(scar);
     emit(EventType::PawnScarred, pawn, def, healed.part, scar.severity);
+
+    // V1: a scar on the skin shows. The part's own def and the side come from its chain of parents.
+    if (PawnLooks* looks = things_.registry().try_get<PawnLooks>(pawn)) {
+        const HealthModel::Kind* kind = healthKindOf(*model_, things_.registry(), pawn);
+        if (kind != nullptr) {
+            const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+            BodyRegion region = BodyRegion::Torso;
+            bool left = false;
+            bool found = false;
+            for (int p = healed.part; p >= 0 && !found; p = body.parts[static_cast<size_t>(p)].parent) {
+                const HealthModel::Part& part = body.parts[static_cast<size_t>(p)];
+                left = left || part.label.rfind("left ", 0) == 0;
+                found = bodyRegionOfPart(part.def, left, region) && !part.inside;
+                if (!found && part.inside) {
+                    break;  // an organ or bone: nothing shows on the skin
+                }
+            }
+            if (found) {
+                addScarMark(things_.defs(), *looks, region, things_.defs().get(healed.hediff).defName(), rng);
+            }
+        }
+    }
 }
 
 // ---- Each game second -------------------------------------------------------------------------
