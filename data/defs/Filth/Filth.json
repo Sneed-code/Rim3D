@@ -22,6 +22,12 @@
     "stats": { "beauty": -12, "cleanliness": -15 }, "cleanTicks": 70
   },
   {
+    "defName": "FireFoam", "parent": "FilthBase", "label": "firefoam", "maxThickness": 1, "trackable": false,
+    "stats": { "beauty": -2, "cleanliness": -1 }, "cleanTicks": 20,
+    "ours": ["stats", "cleanTicks", "maxThickness"],
+    "note": "Laid by a firefoam popper or foam turret; nothing catches fire on it. Fire.foamFadeStep thins it (FireRules.foamFadeHours)."
+  },
+  {
     "defName": "AnimalFilth", "parent": "FilthBase", "label": "animal filth",
     "stats": { "beauty": -15, "cleanliness": -5 }, "cleanTicks": 35
   }

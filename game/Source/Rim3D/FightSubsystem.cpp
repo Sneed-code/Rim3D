@@ -31,6 +31,7 @@
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Cover.h"
+#include "ColonySim/Explosives.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
@@ -893,7 +894,8 @@ bool UFightSubsystem::ComputeAimPoint(FVector& OutWorldPoint, colony::Entity* Ou
 	const AProtagonistPawn* Body = Protagonist->GetBody();
 	const FVector Direction = Body->GetViewDirection().GetSafeNormal();
 	// Third person: the ray starts at the colonist's side of the camera, so a wall behind the colonist doesn't count.
-	const FVector Start = Body->GetViewLocation() + (Body->IsFirstPerson() ? FVector::ZeroVector : Direction * Body->GetArmLength());
+	// (The view's distance now: closer while aiming, none in first person.)
+	const FVector Start = Body->GetViewLocation() + Direction * Body->GetEffectiveArmLength();
 	const FVector A = (Start - Bridge->GetWorldOrigin()) / 100.0;
 	const FVector B = A + Direction * FightAimRangeM;
 	const colony::Entity Pawn = Protagonist->GetControlled();
@@ -1071,6 +1073,70 @@ void UFightSubsystem::UpdatePlayerInput()
 	{
 		EquipNearest();
 	}
+	// Left Shift rolls the way the movement keys point (U21); G throws a grenade at the crosshair.
+	if (PC->WasInputKeyJustPressed(EKeys::LeftShift))
+	{
+		Roll(FVector2D((PC->IsInputKeyDown(EKeys::D) ? 1.0 : 0.0) - (PC->IsInputKeyDown(EKeys::A) ? 1.0 : 0.0),
+			(PC->IsInputKeyDown(EKeys::W) ? 1.0 : 0.0) - (PC->IsInputKeyDown(EKeys::S) ? 1.0 : 0.0)));
+	}
+	if (!bBuilding && PC->WasInputKeyJustPressed(EKeys::G))
+	{
+		ThrowGrenade();
+	}
+}
+
+bool UFightSubsystem::Roll(const FVector2D& Input)
+{
+	USimSubsystem* Bridge = BridgeSource.Get();
+	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+	if (!Bridge || !Bridge->GetSim() || !Protagonist || !Protagonist->IsDirectMode() || !Protagonist->GetBody() || Bridge->GetSpeed() == 0)
+	{
+		return false;
+	}
+	const colony::Entity Pawn = Protagonist->GetControlled();
+	const colony::ThingView* View = Bridge->GetCurrentSnapshot().find(Pawn);
+	if (!View || View->downed || View->dead || View->rollPhase != 0 || Bridge->GetGameSeconds() <= LastFireStep)
+	{
+		return false;
+	}
+	// The keys are relative to the view; the sim wants a direction on the map (x east, y south as the map has it).
+	const double Yaw = FMath::DegreesToRadians(static_cast<double>(Protagonist->GetBody()->GetYaw()));
+	const FVector2D Ahead(FMath::Cos(Yaw), FMath::Sin(Yaw));
+	const FVector2D Side(-Ahead.Y, Ahead.X);
+	FVector2D Direction = Ahead * Input.Y + Side * Input.X;
+	if (Direction.IsNearlyZero())
+	{
+		Direction = -Ahead;  // no key held: a backstep
+	}
+	Direction.Normalize();
+	Bridge->Submit(colony::DodgeRollCommand{Pawn, static_cast<float>(Direction.X), static_cast<float>(Direction.Y)});
+	LastFireStep = Bridge->GetGameSeconds();
+	return true;
+}
+
+bool UFightSubsystem::ThrowGrenade()
+{
+	USimSubsystem* Bridge = BridgeSource.Get();
+	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+	if (!Bridge || !Bridge->GetSim() || !Protagonist || !Protagonist->IsDirectMode() || Bridge->GetSpeed() == 0)
+	{
+		return false;
+	}
+	const colony::Entity Pawn = Protagonist->GetControlled();
+	const colony::ThingView* View = Bridge->GetCurrentSnapshot().find(Pawn);
+	if (!View || View->downed || View->dead || Bridge->GetGameSeconds() <= LastFireStep || Bridge->GetSim()->explosives().throwReadyIn(Pawn) > 0)
+	{
+		return false;
+	}
+	FVector Aim;
+	if (!ComputeAimPoint(Aim))
+	{
+		return false;
+	}
+	const FVector Sim = (Aim - Bridge->GetWorldOrigin()) / 100.0;
+	Bridge->Submit(colony::ThrowCommand{Pawn, std::string(), colony::kNoEntity, static_cast<float>(Sim.X), static_cast<float>(Sim.Y), true});
+	LastFireStep = Bridge->GetGameSeconds();
+	return true;
 }
 
 // ---------------------------------------------------------------------------
