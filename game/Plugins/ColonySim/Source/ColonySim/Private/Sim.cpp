@@ -34,6 +34,7 @@
 #include "ColonySim/Social.h"
 #include "ColonySim/Medicine.h"
 #include "ColonySim/Prisoners.h"
+#include "ColonySim/Ship.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Talents.h"
 #include "ColonySim/Needs.h"
@@ -265,6 +266,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     prisoners_ = std::make_unique<PrisonerSystem>(*things_, map_, *combat_, *health_, *jobs_, *fighters_, *raids_, *defs_, time_, rng_);
     prisoners_->setEventLog(&events_);
     jobs_->setPrisoners(prisoners_.get());
+    ship_ = std::make_unique<ShipSystem>(*things_, *raids_, *defs_, time_);
+    ship_->setEventLog(&events_);
     mood_->addSituation("isPrisoner", [this](Entity pawn) { return prisoners_->isPrisoner(pawn) ? 0 : -1; });
     // Night owls like being up at night and not by day (docs/design/mood.md); only pawns that are awake count.
     const auto awakeAt = [this](Entity pawn, bool night) {
@@ -1140,9 +1143,36 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!mentalBreaks_->start(startBreak->pawn, startBreak->breakDef, rng_, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* ship = std::get_if<ShipCommand>(&command)) {
+        bool ok = false;
+        if (ship->action == "StartReactor") {
+            ok = ship_->startReactor(ship->thing, error);
+        } else if (ship->action == "Board") {
+            ok = ship_->board(ship->thing, ship->pawn, error);
+        } else if (ship->action == "Launch") {
+            ok = ship_->launch(error);
+        } else {
+            error = "no ship action '" + ship->action + "' (StartReactor, Board or Launch)";
+        }
+        if (!ok) {
+            commandFailed(id, error);
+        }
     } else if (const auto* endBreak = std::get_if<EndMentalBreakCommand>(&command)) {
         if (!mentalBreaks_->end(endBreak->pawn, error)) {
             commandFailed(id, error);
+        }
+    } else if (const auto* strategyRaid = std::get_if<StartStrategyRaidCommand>(&command)) {
+        RaidStrategy strategy = RaidStrategy::Assault;
+        if (strategyRaid->strategy != "Auto" && !raidStrategyFromName(strategyRaid->strategy, strategy)) {
+            commandFailed(id, "no raid strategy '" + strategyRaid->strategy + "'");
+        } else {
+            if (strategyRaid->strategy == "Auto") {
+                strategy = raids_->pickStrategy(strategyRaid->points);
+            }
+            if (!raids_->startRaid(strategyRaid->faction, strategyRaid->points, strategyRaid->edge, strategy, strategyRaid->hour,
+                                   error)) {
+                commandFailed(id, error);
+            }
         }
     }
 }
@@ -1188,6 +1218,7 @@ void Sim::step() {
     }
     fighters_->step();
     prisoners_->step();
+    ship_->step();
     recreation_->step();
     animals_->step();
     husbandry_->step();
@@ -1320,6 +1351,24 @@ void Sim::writeSnapshot(Snapshot& out) const {
         view.available = research_->available(project);
         view.current = research_->current() == project.defName;
         out.research.push_back(view);
+    }
+    {
+        const ShipParts parts = ship_->parts();
+        ShipView& s = out.ship;
+        s.phase = static_cast<uint8_t>(ship_->state().phase);
+        s.activationLeft = ship_->activationLeft();
+        s.waves = ship_->state().waves;
+        s.beams = parts.beams;
+        s.caskets = parts.caskets;
+        s.reactors = parts.reactors;
+        s.engines = parts.engines;
+        s.cores = parts.cores;
+        s.sensors = parts.sensors;
+        s.riders = parts.ridersAboard;
+        s.problem = ship_->launchProblem();
+        s.canLaunch = s.problem.empty();
+        s.won = ship_->won();
+        s.escaped = ship_->state().escaped;
     }
     out.apparel.clear();
     out.outfits.clear();
@@ -1622,7 +1671,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.squads.clear();
     for (const Squad& squad : raids_->state().squads) {
         out.squads.push_back(SquadView{squad.id, squad.side, static_cast<uint8_t>(squad.state),
-                                       static_cast<int>(squad.members.size()), squad.started, squad.target});
+                                       static_cast<int>(squad.members.size()), squad.started, squad.target,
+                                       static_cast<uint8_t>(squad.strategy), squad.hasBreach, squad.breach});
     }
 
     out.rooms.clear();
@@ -1759,6 +1809,7 @@ uint64_t Sim::stateHash() const {
     designations_->hashState(h);
     research_->hashState(h);
     raids_->hashState(h);
+    ship_->hashState(h);
     talents_->hashState(h);
     pathfinder_.hashState(h);
     zones_->hashState(h);
