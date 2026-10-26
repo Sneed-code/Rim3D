@@ -96,6 +96,10 @@ public:
     // The three thresholds as mood levels (0 to 100) for this pawn: its traits move them.
     void breakLevels(Entity pawn, float& minor, float& major, float& extreme) const;
 
+    // Starts the memories whose thought def has this `trigger` (docs/design/mood.md): another system
+    // raises one, like the social system's (C20). Nothing happens to a pawn with no mood yet.
+    void remember(Entity pawn, const std::string& trigger, int64_t now);
+
     // `events` are the step's events; `now` the game second the step ran in.
     void step(int64_t now, std::vector<Event>& events);
 

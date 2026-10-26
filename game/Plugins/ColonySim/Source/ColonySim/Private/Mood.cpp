@@ -359,6 +359,13 @@ void MoodSystem::addMemory(Mood& mood, const std::string& trigger, int64_t now) 
     }
 }
 
+void MoodSystem::remember(Entity pawn, const std::string& trigger, int64_t now) {
+    entt::registry& reg = things_.registry();
+    if (Mood* mood = reg.valid(pawn) ? reg.try_get<Mood>(pawn) : nullptr) {
+        addMemory(*mood, trigger, now);
+    }
+}
+
 void MoodSystem::step(int64_t now, std::vector<Event>& events) {
     if (!rules_.present) {
         return;
