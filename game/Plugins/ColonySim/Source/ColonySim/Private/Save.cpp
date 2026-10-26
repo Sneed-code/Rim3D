@@ -1316,6 +1316,9 @@ void saveMoverPart(Ar& ar, Mover& m, const std::optional<Position>& position) {
         ar.value("ghostSteps", m.ghostSteps);
         ar.value("heldSteps", m.heldSteps);
         ar.value("gaveUp", m.gaveUp);
+        if (ar.sectionVersion() >= 2) {  // M2: stairs and ladders
+            ar.value("climbed", m.climbed);
+        }
     } else if (position) {
         // Older saves: a pawn mid-walk sets off along the line from where it stands.
         m.fromX = position->x;
@@ -2345,7 +2348,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("commands", 1, [&] { saveCommandsSection(ar, d); });
     ar.section("things", 1, [&] { saveThingsSection(ar, d); });
     std::vector<SaveEntity>& e = d.entities;
-    ar.section("movement", 1, [&] {
+    ar.section("movement", 2, [&] {
         saveParts(ar, "mover", e, &SaveEntity::mover, [&](Mover& m) { saveMoverPart(ar, m, std::nullopt); });
     });
     ar.section("jobs", 1, [&] {

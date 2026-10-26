@@ -44,6 +44,9 @@ struct ThingView {
     // already straightened, so the points are where the pawn turns (docs/design/movement.md).
     float vx = 0.0f;
     float vy = 0.0f;
+    // Pawns on stairs or a ladder: how far along the climb, 0 to 1; x, y and z are already that
+    // share of the way to the end, `level` is the one it started on (docs/design/levels.md).
+    float climb = 0.0f;
     uint32_t firstWaypoint = 0;
     uint32_t waypointCount = 0;
     Rot4 rotation = Rot4::North;  // buildings

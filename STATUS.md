@@ -2,6 +2,7 @@
 
 Updated 2026-10-26.
 
+Stage 2 M2 done: stairs and ladders link levels; colonists climb them, build upper floors with materials and work, and haul, build and sleep across levels (`docs/design/levels.md`).
 Stage 2 U13 done: the sim's clock and weather are on screen. The sun and moon cross a sky atmosphere with clouds and fog (sun height by season, moon phase over 30 days), rain and snow fall in a block of air round the camera and stop under roofs, the ground gets wet in the rain and white with the sim's snow, thunderstorms flash, and the overseer's top bar and direct mode's time box show "Spring 6, Year 1   12°C, rain" (`docs/design/sky.md`, smoke test `sky`; `USkySubsystem`, `USnowSubsystem`; no sim changes). **Run the `TerrainMaterials` commandlet again on each machine to give the ground its `Wetness` input** (`assets/manifest.json`); without it everything else works and the ground just does not get wet.
 Stage 2 C20 done: colonists talk (chitchat, deep talk, kind words, slights, insults, romance, proposals, breakups), hold opinions of each other, become friends, rivals, lovers and spouses, and an insult can start a fistfight (`docs/design/social.md`).
 Stage 2 P1 done: a pawn carries a rifle, a sidearm and a melee weapon (`docs/design/weapons.md`).
@@ -382,6 +383,16 @@ no roof of its own there). Buildings and items go only on a floor. Regions, room
 room beside open air is outdoors (`Room::openToAir`); heat passes through a floor like a thin roof. Save section `levels`; snapshot `z`
 includes the level. **Systems that only know the ground use `Map::onGround(c)` instead of `inBounds`** (plants, zones, growing zones, filth,
 fire, snow, lights, cover, threat maps, floors, designations); `Map::inBounds` now takes levels 0 to 3. No stairs yet (M2), no collapse (M3), nothing drawn (U17).
+
+**M2** stairs and ladders (`docs/design/levels.md`, tests `StairsTests`): `Stairs` (1 x 3, 60% walking speed) and `Ladder` (1 x 1,
+30%) climb one level towards their facing, from the cell in front of the foot to the cell beyond the head one level up
+(`Map::levelLinks`, kept by `Things`). Regions link the two ends, so ground and upper floor share a reachability group; the
+pathfinder's region route and cell search climb them at their cost, and a path's cells carry their level. A pawn climbs standing
+at the foot while `Mover::climbed` counts up, then stands at the head; the snapshot has `climb` (0 to 1) and moves `x`, `y`, `z`
+along it. **Upper floors are built by colonists** now (`UpperFloor` def: 4 stuff, 216 s, planned per cell, worked from below or
+beside). Stockpiles and doors work upstairs, and hauling, delivering, building, taking down, food and beds look across levels
+(a level counts as 10 m more, `levelDistSq`); other scanners stay on their own level. Save section `movement` 2. Numbers are ours
+(RimWorld has no levels). Not done: direct mode climbing and the upper-floor and stairs tools on screen (U17), floors falling (M3).
 
 **C11** fuel (`docs/design/fuel.md`, tests `FuelTests`): a building with a `fuel` field in its def holds fuel
 (`Fuel` component, new section `fuel` in the save, format stays 20). The fueled stove holds 50 wood and burns one per meal it makes
