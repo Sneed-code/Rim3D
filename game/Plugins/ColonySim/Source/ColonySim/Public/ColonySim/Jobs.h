@@ -174,6 +174,8 @@ class Farming;
 class Filth;
 class Fire;
 class SpoilageSystem;
+class CraftingSystem;
+struct Recipe;
 class HealthSystem;
 class MedicineSystem;
 class PrisonerSystem;
@@ -314,6 +316,8 @@ public:
     // Meals made by a bill remember their ingredients and may be poisoned; eating a poisoned meal may
     // give food poisoning (Spoilage.h). Without it neither happens.
     void setSpoilage(SpoilageSystem* spoilage) { spoilage_ = spoilage; }
+    void setCrafting(CraftingSystem* crafting) { crafting_ = crafting; }
+    CraftingSystem* crafting() const { return crafting_; }
     void setFarming(Farming* farming) { farming_ = farming; }
     Farming* farming() const { return farming_; }
     Filth* filth() const { return filth_; }
@@ -414,6 +418,9 @@ public:
     // `better`, then the nearest, that takes the def, has room, isn't held by another pawn and
     // can be reached from `from`. False if there is none.
     bool findStorageCell(DefId def, CellPos from, StoragePriority better, Entity pawn, CellPos& out) const;
+    // Like findStorageCell, but only in the stockpile `zone` (any priority). False if it has no room, takes
+    // no `def` or is gone.
+    bool findStorageCellIn(uint32_t zone, DefId def, CellPos from, Entity pawn, CellPos& out) const;
     // How many of an item def a pawn can carry at once: its `carryingCapacity` (RimWorld's 75 kg when
     // the pawn def has none) over the def's `stats.mass`, at least 1. It may be more than one stack.
     int carryLimit(Entity pawn, DefId def) const;
@@ -579,7 +586,10 @@ private:
     void returnIngredients(Entity pawn, const Job& job);
     // Makes `count` of an item def and puts it down on the nearest free cell near the pawn.
     // `madeFrom` is set for a bill's products: the spoilage system notes the ingredients on each new stack.
-    void dropNewItems(Entity pawn, DefId def, int count, const std::vector<BillUsed>* madeFrom = nullptr);
+    // Makes `count` of an item def and sets them down by the pawn. A product (`recipe` set) is also made of its
+    // stuff, given a quality and marked for its bill's stockpile (CraftingSystem::finishProduct).
+    void dropNewItems(Entity pawn, DefId def, int count, const std::vector<BillUsed>* madeFrom = nullptr,
+                      const Recipe* recipe = nullptr, uint32_t storeZone = 0);
     bool retargetStorage(Entity pawn, Job& job);
     void dropCarried(Entity pawn);
     // Puts what the pawn carries on `cell` if all of it fits there and no other pawn holds the cell.
@@ -665,6 +675,7 @@ private:
     Filth* filth_ = nullptr;
     Fire* fire_ = nullptr;
     SpoilageSystem* spoilage_ = nullptr;
+    CraftingSystem* crafting_ = nullptr;
     Farming* farming_ = nullptr;
     std::vector<Entity> order_;              // scratch: workers this step
     std::vector<WorkCandidate> candidates_;  // scratch: one think

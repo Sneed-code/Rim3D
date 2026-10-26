@@ -486,3 +486,61 @@ TEST_CASE("Fire: a game with nothing alight stays quiet") {
     CHECK(f.fire().burningPawns() == 0);
     CHECK(f.fire().started() == 0);
 }
+
+TEST_CASE("Fire: a burning colonist runs about in panic instead of working, and stops when the fire is out") {
+    FireFixture f;
+    const CellPos start{30, 30, 0};
+    const Entity pawn = f.colonist(start);
+    f.fire().setPawnAlight(pawn, f.sim.time().seconds, true);
+    FIRE_REQUIRE(f.fire().pawnBurning(pawn));
+    std::vector<CellPos> cells;
+    for (int i = 0; i < 40 && f.fire().pawnBurning(pawn); ++i) {
+        f.run(1);
+        const CellPos c = cellOf(f.reg().get<Position>(pawn));
+        if (cells.empty() || cells.back() != c) {
+            cells.push_back(c);
+        }
+    }
+    CHECK(cells.size() > 4);  // it moved about
+    CHECK(f.reg().get<Worker>(pawn).job.type == JobType::None);
+    // Put out, it thinks again and stands still (nothing to do).
+    f.fire().putOutPawn(pawn);
+    f.run(3);
+    const CellPos still = cellOf(f.reg().get<Position>(pawn));
+    f.run(10);
+    CHECK(cellOf(f.reg().get<Position>(pawn)) == still);
+}
+
+TEST_CASE("Fire: a firefoam popper puts out every fire and burning pawn round it, and is used up") {
+    FireFixture f;
+    const CellPos at{30, 30, 0};
+    const Entity popper = f.sim.things().spawn("FirefoamPopper", at);
+    FIRE_REQUIRE(f.reg().valid(popper));
+    // Fires near and far, a burning pawn inside the foam, and a fire outside it.
+    f.grassPatch(32, 30, 3, 3);
+    f.grassPatch(36, 36, 2, 2);
+    f.grassPatch(50, 50, 2, 2);
+    const Entity pawn = f.sim.things().spawn("Human", CellPos{34, 34, 0});
+    f.fire().ignite(CellPos{32, 30, 0});
+    f.fire().ignite(CellPos{36, 36, 0});
+    f.fire().ignite(CellPos{50, 50, 0});
+    f.fire().setPawnAlight(pawn, f.sim.time().seconds, true);
+    f.run(2);
+    CHECK(!f.reg().valid(popper));
+    CHECK(f.fire().poppersUsed() == 1);
+    CHECK(!f.fire().burning(CellPos{32, 30, 0}));
+    CHECK(!f.fire().burning(CellPos{36, 36, 0}));
+    CHECK(f.fire().burning(CellPos{50, 50, 0}));
+    CHECK(!f.fire().pawnBurning(pawn));
+    CHECK(f.seenOf(EventType::FireOut, "foamed") == 2);
+}
+
+TEST_CASE("Fire: a firefoam popper stays quiet while the fire is out of its reach") {
+    FireFixture f;
+    const Entity popper = f.sim.things().spawn("FirefoamPopper", CellPos{30, 30, 0});
+    f.grassPatch(40, 30, 2, 2);
+    f.fire().ignite(CellPos{40, 30, 0});
+    f.run(2);
+    CHECK(f.reg().valid(popper));
+    CHECK(f.fire().poppersUsed() == 0);
+}

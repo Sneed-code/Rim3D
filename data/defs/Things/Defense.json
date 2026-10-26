@@ -44,5 +44,6 @@
     "explodeWhenDestroyed": true,
     "unverified": ["costs", "stats", "explosion", "researchPrerequisite"],
     "ours": ["trap", "explodeWhenDestroyed", "visual"]
-  }
+  },
+  {"defName": "FirefoamPopper", "parent": "BuildingBase", "label": "firefoam popper", "source": "RimWorld wiki", "researchPrerequisite": "Firefoam", "size": [1, 1], "designationCategory": "Security", "costs": {"Steel": 30}, "visual": {"parts": [{"shape": "cylinder", "radius": 0.3, "height": 0.55, "color": [0.75, 0.15, 0.12]}, {"shape": "cylinder", "radius": 0.1, "height": 0.12, "at": [0, 0, 0.55], "color": [0.85, 0.85, 0.88]}]}, "stats": {"maxHitPoints": 80, "workToBuild": 600, "flammability": 0.0}, "firefoam": {"radius": 9.0, "triggerRadius": 3.0}, "unverified": ["costs", "stats", "firefoam.radius", "researchPrerequisite"], "ours": ["firefoam.triggerRadius", "visual"]}
 ]

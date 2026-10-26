@@ -211,7 +211,8 @@ struct ThingView {
     // Clothes (docs/design/apparel.md). Pawns: the outfit they follow (0 for other things), whether a strip
     // order is on them, and what they wear: `apparelCount` pieces from Snapshot::apparel[firstApparel], in the
     // order put on. Apparel items on the map: their `stuff` (as for buildings), `quality` (a place in
-    // QualityRules.levels, -1 for other things) and whether they are tainted.
+    // QualityRules.levels, -1 for things without one) and whether they are tainted. Crafted weapons have a
+    // `stuff` and a `quality` too (C14).
     uint32_t outfit = 0;
     bool markedForStrip = false;
     uint32_t firstApparel = 0;
@@ -284,6 +285,14 @@ struct BillView {
     BillMode mode = BillMode::Count;
     int count = 0;    // Count: times left; UntilHave: the stock to reach; Forever: 0
     bool suspended = false;
+    // The bill's details (C14, docs/design/crafting.md); the commands SetBillOptions and MoveBill change them.
+    int skillMin = 0;
+    int skillMax = 20;
+    float radius = 0.0f;     // metres from the building ingredients are taken from; 0 anywhere
+    uint32_t storeZone = 0;  // the stockpile the products go to; 0 none
+    int unpauseAt = 0;
+    bool satisfied = false;  // an "until you have" bill waiting for the stock to fall to `unpauseAt`
+    std::vector<DefId> disallowed;  // ingredient item defs it may not use
 };
 
 // One stockpile zone: `cellCount` cells from Snapshot::zoneCells[firstCell].

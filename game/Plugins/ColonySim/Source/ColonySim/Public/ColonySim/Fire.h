@@ -83,6 +83,7 @@ struct COLONY_API FireNumbers {
     float burntFadeDays = 6.0f;
     int autoHomeRadius = 5;
     int startHomeRadius = 12;
+    bool panic = true;               // a burning colonist runs about at random until it is put out or burns out
 
     static FireNumbers read(const DefDatabase& defs);
 };
@@ -138,6 +139,9 @@ public:
     bool setPawnAlight(Entity pawn, int64_t now, bool force = false);
     // Puts out a burning pawn.
     bool putOutPawn(Entity pawn);
+    // A burning pawn's panic: when it has stopped, it takes one step to a random walkable neighbour cell, preferring one
+    // that isn't alight. Called by the job system instead of thinking. False if it isn't burning (or panic is off).
+    bool panicStep(Entity pawn, int64_t now);
 
     // ---- Questions
     bool burning(CellPos cell) const;
@@ -162,7 +166,7 @@ public:
     // ---- Putting out
     // Beats `amount` of size off the fire in a cell; a fire at nothing is out, and so is any pawn burning there.
     // Returns true when the fire is out.
-    bool extinguish(CellPos cell, float amount);
+    bool extinguish(CellPos cell, float amount, const char* how = "beaten");
     // Size a colonist at full speed beats out in one game second.
     float beatPerSecond() const { return static_cast<float>(numbers_.beatPerTick / numbers_.ticksToSeconds); }
 
@@ -182,6 +186,7 @@ public:
     uint64_t started() const { return started_; }
     uint64_t burntUp() const { return burntUp_; }
     uint64_t pawnsBurnt() const { return pawnsBurnt_; }
+    uint64_t poppersUsed() const { return poppersUsed_; }
 
     // Saving, loading and the state hash (docs/design/saves.md).
     FireSaved saved() const;
@@ -195,6 +200,7 @@ private:
     float thingFlammability(Entity thing) const;
     float defFlammability(DefId def) const;
     void pass(int64_t now);
+    void popperStep(int64_t now);
     void burnThings(CellPos c, FireCell& fire, float damage, Rng& rng);
     void spreadFrom(CellPos c, const FireCell& fire, int64_t now, int index, std::vector<int>& ignitions, Rng& rng);
     void catchPawns(int64_t now);
@@ -218,6 +224,8 @@ private:
     std::vector<float> flammability_;  // by DefId.value: the def's stats.flammability
     std::vector<float> stuffFactor_;   // by DefId.value: stuffProps.statFactors.flammability
     std::vector<float> maxHp_;         // by DefId.value
+    std::vector<float> popperRadius_;  // by DefId.value: `firefoam.radius`, 0 for what isn't a popper
+    std::vector<float> popperTrigger_; // `firefoam.triggerRadius`
     DefId burnType_;
     DefId ashKind_;
     std::function<float(Entity)> pawnFactor_;
@@ -237,6 +245,7 @@ private:
     uint64_t started_ = 0;
     uint64_t burntUp_ = 0;
     uint64_t pawnsBurnt_ = 0;
+    uint64_t poppersUsed_ = 0;
     std::vector<int> scratch_;
 };
 
