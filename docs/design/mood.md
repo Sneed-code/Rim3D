@@ -65,9 +65,9 @@ outside it ([temperature.md](temperature.md)). The thought's label in the panel 
 ## Trait situations
 
 Three staged thoughts in `Thoughts3.json` are limited to a trait (`situation.trait`) and judged in `Sim.cpp`:
-`NightOwlAwakeAtNight` (+16) and `NightOwlAwakeInDay` (-10) count while a Night owl is awake (not lying down), by
-`MoodRules.nightHours` (ours, 21:00 to 04:59); `GreedyNoBedroom` (-8) counts while a Greedy colonist owns no bed in a
-room with the Bedroom role. The numbers are the traits' `moodAwakeAtNight`, `moodAwakeInDay` and `moodWithoutBedroom`.
+`NightOwlAwakeAtNight` (+8) and `NightOwlAwakeInDay` (-5) count while a Night owl is awake (not lying down), by
+`MoodRules.nightHours` (ours, 21:00 to 04:59); `GreedyNoBedroom` (-4) counts while a Greedy colonist owns no bed in a
+room with the Bedroom role. The numbers are half the traits' `moodAwakeAtNight`, `moodAwakeInDay` and `moodWithoutBedroom`: the full ones sent the Crashlanded colony into mental breaks (ours, tune in a playtest).
 
 ## Passion at work
 
