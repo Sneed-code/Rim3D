@@ -67,16 +67,17 @@ building that stops sight are not spots. The score, in metres of walking each te
 | Can shoot | from here, see below | -6 if it can't shoot its target from here (-1 when falling back) |
 | Range | metres beyond the gun's range to the target, and metres closer than 4 m | -1 a metre |
 | Advance | other factions only: metres beyond 70% of the gun's range | -0.5 a metre |
-| Walking | straight-line metres from where the pawn is | -0.4 a metre |
+| Walking | metres of effort from where the pawn is (ground and slope, divided by its Moving capacity, at least a quarter); the straight line for the first pick, the effort for the best 30 | -0.4 a metre |
 | Crowding | friends' spots within 1.5 m | -3 for one right next to it |
-| Staying | the current spot | +1.5, so it doesn't hop between two equal cells |
+| Staying | the current spot | +1.5, so it doesn't hop between two equal cells; +3 more while it is walking there |
 | Falling back | metres from the nearest threat, up to 40 | +0.8 a metre |
 
-The cheap terms are worked out for every cell; the 10 best (`refine`) then get the line of sight
+The cheap terms are worked out for every cell; the 30 best get the walk's real effort; the 10 best (`refine`) then get the line of sight
 checks (exposed, can shoot), and the best of those wins. Ties go to the lower cell (y, then x), so
 floats alone never decide the order.
 
-**Can shoot** looks for a way to see the target, where it stands when it shows itself (standing up,
+**Can shoot** (a spot at least `rangeMargin`, 1 m, inside the gun's range: a pawn stands anywhere in its cell, and
+a spot at the very edge planned a shot the aimed-shot check then refused, for good) looks for a way to see the target, where it stands when it shows itself (standing up,
 or lying if downed), within the gun's range, in this order: crouched here; standing here (over low
 cover such as sandbags, "popping up"); crouched, then standing, from the cell beside this one on
 either side of the line to the target ("leaning out" past the end of a wall). A cell beside it has to
@@ -85,12 +86,23 @@ step. Standing costs -0.5 and stepping out -1, so a fighter prefers the safest p
 shoots. Shooting at a target that is crouched behind sandbags is allowed on purpose: the sandbags
 take the hits until it stands up to fire back, which is how firefights between two lines of cover go.
 
+**Going by the goal.** A fighter that advances and has a goal (a raider) but has no spot it can shoot from, and
+whose target is out of range from the best spot, doesn't settle where it is: scoring cells within 10 m can't see
+round a cliff or a long wall, so it walks the squad's route to the goal until a spot with a shot turns up. **Held
+up.** A walking fighter held up by friends for 5 steps keeps its spot (unless a friend has taken it), so
+the movement system's walk-through and give-up counts can run out (a new spot starts a new walk and clears them).
+
 **Falling back** (game design doc: "falls back when outnumbered, badly hurt or out-gunned"): a fighter
 falls back when the able enemies it knows of within 35 m are at least twice the able fighters of its
 side within 35 m (itself included), or when it is badly hurt (pain 35%, blood loss 30%, or Moving
 at 60% or less). It then scores distance from the enemy, cares less about having a shot, and keeps
 moving back plan after plan; a drafted pawn only as far as its leash. Out-gunned (weapons and armor)
 waits for F6's squad strength numbers. Fleeing the map is F6's rout.
+
+**At arm's length.** A fighter that has a gun and a known enemy within arm's length (`melee.reach` + `standGround`)
+that runs **at least as fast as it does** (the defs' `stats.moveSpeed`: a wolf, not a boar) skips the scoring: it
+stays where it is, stands and shoots from there (if it can shoot the target from its own cell). Walking to a better spot
+with a wolf on its heels only got it bitten in the back (found by the year run). A slower enemy is still kited.
 
 ## Acting
 

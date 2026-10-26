@@ -100,7 +100,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `movement` | 2 | `mover` |
 | `jobs` | 1 | `worker` (the job, its bill picks and ingredients, avoid memory), `work` (Work tab), `carrying` |
 | `colonists` | 2 | `colonist` (2: each skill's `xpToday`, C12) |
-| `health` | 3 | `health` (version 2: environment hediffs such as hypothermia, E2; version 3: each injury's `peak`, for scars, H1) |
+| `health` | 4 | `health` (version 2: environment hediffs such as hypothermia, E2; version 3: each injury's `peak`, for scars, H1; version 4: `infectAt`, `diseases` and `immunities`, H2) |
 | `control` | 1 | `playerControlled`: the ids of controlled pawns |
 | `needs` | 1 | `needs`, `schedule`, `bed` |
 | `bills` | 2 | `bills` on work buildings. Version 2 (C14) adds each bill's skill range, ingredient radius, store stockpile, restart stock, satisfied flag and ingredient filter; version 1 loads with the defaults |
@@ -136,6 +136,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `breeding` | 1 | the counters, then `breed` (an animal's pregnancy, mating wait, milk, wool and egg timers, the female a male is courting) and `hatching` (a fertilized egg's hatch time) ([breeding.md](breeding.md), N4) |
 | `fire` | 1 | the counters, `fires` (cell, size, age, plant damage), `burnt` (cell, game second), `home` (the home area's cell indices), the automatic-growth flags, and `burning` (a pawn on fire: when it burns out) ([fire.md](fire.md), E4) |
 | `mentalBreaks` | 1 | `mentalBreaker` ([mental-breaks.md](mental-breaks.md)) |
+| `inspirations` | 1 | `inspired` ([inspirations.md](inspirations.md)) |
 
 **Commands are saved by name (S7).** The `commands` section starts with the names of the command
 types it uses (`commandNames`); each command then gives its type as a place in that list, and its

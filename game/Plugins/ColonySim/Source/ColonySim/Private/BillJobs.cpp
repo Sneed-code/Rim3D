@@ -7,6 +7,7 @@
 #include "ColonySim/Crafting.h"
 #include "ColonySim/Fuel.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Inspirations.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Things.h"
@@ -43,7 +44,7 @@ bool JobSystem::failCheckDoBill(Entity pawn, Job& job, std::string& why) {
         return false;
     }
     if (const Recipe* recipe = bills_->recipe(bill->recipe);
-        recipe != nullptr && !fuel_->canUse(job.site, fuel_->specOf(job.site).perUse * static_cast<float>(recipe->productCount()))) {
+        recipe != nullptr && !fuel_->canUse(job.site, fuel_->specOf(job.site).perUse * static_cast<float>(recipe->fuelUses()))) {
         why = "the building is out of fuel";
         return false;
     }
@@ -150,8 +151,10 @@ void JobSystem::dropNewItems(Entity pawn, DefId def, int count, const std::vecto
             spoilage_->madeBy(item, *madeFrom, pawn, cellOf(reg.get<Position>(pawn)));
         }
         if (recipe != nullptr && crafting_ != nullptr) {
+            // An inspired crafter's next thing with a quality is better; making it uses the inspiration up.
+            const int shift = inspirations_ != nullptr && crafting_->hasQuality(def) ? inspirations_->takeQualityShift(pawn) : 0;
             crafting_->finishProduct(item, *recipe, bills_->skillLevel(pawn, recipe->skill), madeFrom != nullptr ? *madeFrom : std::vector<BillUsed>{},
-                                     storeZone);
+                                     storeZone, shift);
         }
         reg.emplace_or_replace<Carrying>(pawn, Carrying{item});
         dropCarried(pawn);
@@ -169,7 +172,7 @@ JobSystem::StepResult JobSystem::billFinish(Entity pawn, Job& job, std::string& 
     // find it.
     const std::vector<BillUsed> used = std::move(job.used);
     job.used.clear();
-    fuel_->use(job.site, fuel_->specOf(job.site).perUse * static_cast<float>(recipe->productCount()));
+    fuel_->use(job.site, fuel_->specOf(job.site).perUse * static_cast<float>(recipe->fuelUses()));
     int made = 0;
     const uint32_t storeZone = bill->storeZone;
     for (const RecipeProduct& product : recipe->products) {
