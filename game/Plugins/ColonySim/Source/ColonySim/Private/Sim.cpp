@@ -51,6 +51,7 @@
 #include "ColonySim/UpperFloors.h"
 #include "ColonySim/Weather.h"
 #include "ColonySim/Zones.h"
+#include "ColonySim/Disasters.h"
 #include "ColonySim/Narrator.h"
 #include "MovementSystem.h"
 
@@ -312,6 +313,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     fighters_->setDefense(defense_.get());
     narrator_ = std::make_unique<NarratorSystem>(*raids_, *defs_, time_, settings.seed);
     narrator_->setEventLog(&events_);
+    disasters_ = std::make_unique<DisasterSystem>(*narrator_, *power_, *weather_, *plants_, *farming_, *things_, *health_, *mood_,
+                                                  *animals_, *fire_, *combat_, map_, *defs_, time_, settings.seed);
+    disasters_->setEventLog(&events_);
     social_ = std::make_unique<SocialSystem>(*things_, *rooms_, *health_, *melee_, *mood_, *jobs_, *defs_, time_,
                                              splitMix64(settings.seed ^ 0x736F6369616CULL));
     social_->setEventLog(&events_);
@@ -1231,6 +1235,7 @@ void Sim::step() {
         pruneDesignations();
     }
     narrator_->step();  // after the clock: incidents come on the narrator's checks (T1)
+    disasters_->step();  // T3: conditions end, work and strike
     if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
         checkpoints_.push_back(Checkpoint{time_.seconds, stateHash()});
     }
@@ -1767,6 +1772,7 @@ uint64_t Sim::stateHash() const {
     roofCollapse_->hashState(h);
     spoilage_->hashState(h);
     narrator_->hashState(h);
+    disasters_->hashState(h);
     crafting_->hashState(h);
     farming_->hashState(h);
 
