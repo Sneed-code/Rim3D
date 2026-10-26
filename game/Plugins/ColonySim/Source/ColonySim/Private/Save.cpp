@@ -867,6 +867,44 @@ struct SaveCommandNames {
 template <typename>
 inline constexpr bool kSaveNoSuchCommand = false;
 
+// The second half of saveCommand's command list: MSVC stops at 128 nested else-ifs, so the chain is cut in two.
+template <typename Ar, typename Type>
+void saveCommandTail(Ar& ar, Type& c) {
+    if constexpr (std::is_same_v<Type, SetNarratorCommand>) {
+        ar.text("narrator", c.narrator);
+        ar.text("difficulty", c.difficulty);
+    } else if constexpr (std::is_same_v<Type, FireIncidentCommand>) {
+        ar.text("incident", c.incident);
+        ar.value("points", c.points);
+    } else if constexpr (std::is_same_v<Type, IgniteCommand>) {
+        ar.group("cell", [&] { saveCell(ar, c.cell); });
+        ar.value("size", c.size);
+        ar.value("pawn", c.pawn);
+        ar.value("force", c.force);
+    } else if constexpr (std::is_same_v<Type, SetHomeAreaCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+        ar.value("add", c.add);
+    } else if constexpr (std::is_same_v<Type, SetPrisonerModeCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("mode", c.mode);
+    } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
+        ar.value("bed", c.bed);
+        ar.value("on", c.on);
+    } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+        ar.value("remove", c.remove);
+    } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
+        auto* start = &c;
+        ar.value("pawn", start->pawn);
+        ar.text("breakDef", start->breakDef);
+    } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
+        auto* stop = &c;
+        ar.value("pawn", stop->pawn);
+    } else {
+        static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
+    }
+}
+
 template <typename Ar>
 void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
     if (names != nullptr) {
@@ -1254,38 +1292,8 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
             } else if constexpr (std::is_same_v<Type, SetGrowingZoneCropCommand>) {
                 ar.value("zone", c.zone);
                 ar.text("crop", c.crop);
-            } else if constexpr (std::is_same_v<Type, SetNarratorCommand>) {
-                ar.text("narrator", c.narrator);
-                ar.text("difficulty", c.difficulty);
-            } else if constexpr (std::is_same_v<Type, FireIncidentCommand>) {
-                ar.text("incident", c.incident);
-                ar.value("points", c.points);
-            } else if constexpr (std::is_same_v<Type, IgniteCommand>) {
-                ar.group("cell", [&] { saveCell(ar, c.cell); });
-                ar.value("size", c.size);
-                ar.value("pawn", c.pawn);
-                ar.value("force", c.force);
-            } else if constexpr (std::is_same_v<Type, SetHomeAreaCommand>) {
-                ar.group("area", [&] { saveRect(ar, c.area); });
-                ar.value("add", c.add);
-            } else if constexpr (std::is_same_v<Type, SetPrisonerModeCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.text("mode", c.mode);
-            } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
-                ar.value("bed", c.bed);
-                ar.value("on", c.on);
-            } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
-                ar.group("area", [&] { saveRect(ar, c.area); });
-                ar.value("remove", c.remove);
-            } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
-                auto* start = &c;
-                ar.value("pawn", start->pawn);
-                ar.text("breakDef", start->breakDef);
-            } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
-                auto* stop = &c;
-                ar.value("pawn", stop->pawn);
             } else {
-                static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
+                saveCommandTail(ar, c);
             }
         },
         command);
