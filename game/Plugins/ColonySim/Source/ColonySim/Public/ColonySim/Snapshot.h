@@ -426,6 +426,18 @@ struct NarratorView {
     uint32_t incidents = 0;
 };
 
+// Night skip and fast travel (docs/design/skip-travel.md). `skipKind` is a SkipKind number (0 none, 1 night, 2 travel).
+struct TravelView {
+    uint8_t skipKind = 0;
+    int64_t skipEndsAt = 0;       // game second the running skip ends
+    bool canSkipNight = false;    // a night skip could start now
+    std::string skipWhy;          // when it could not: why, in plain words
+    uint32_t nights = 0;          // night skips that ran to the end
+    uint32_t travels = 0;         // fast travels that arrived
+    uint32_t visitedBlocks = 0;   // places visited
+    int visitedBlockSize = 8;     // metres per visited block
+};
+
 // A talent rank the protagonist has bought (docs/design/talents.md).
 struct TalentRankView {
     DefId talent;  // a Talents def
@@ -493,6 +505,7 @@ struct Snapshot {
     WeatherView weather;
     ShipView ship;
     NarratorView narrator;
+    TravelView travel;
 
     // The thing with this id, or null if it is not on the map. Binary search.
     COLONY_API const ThingView* find(Entity id) const;

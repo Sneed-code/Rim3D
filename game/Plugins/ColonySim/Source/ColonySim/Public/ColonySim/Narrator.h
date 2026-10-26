@@ -129,6 +129,9 @@ public:
     // The clock has just advanced: on every incident check, rolls the categories and sends the
     // cycle's big threats that are due.
     void step();
+    // Holds the narrator back: everything it planned or remembers moves `seconds` later, as if the time had not
+    // passed (a night skip or fast travel, P5). Threats due in the skipped time come after it, not all at once.
+    void postpone(int64_t seconds);
 
     // The colony's threat points now for the difficulty and narrator (Jinx's random factor not
     // included), between RaidRules' minimum and maximum.

@@ -353,11 +353,17 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["edge"] = c.edge;
                 j["strategy"] = c.strategy;
                 j["hour"] = static_cast<double>(c.hour);
-            } else {
-                static_assert(std::is_same_v<Type, ShipCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, ShipCommand>) {
                 j["action"] = c.action;
                 j["thing"] = entt::to_integral(c.thing);
                 j["pawn"] = entt::to_integral(c.pawn);
+            } else if constexpr (std::is_same_v<Type, FastTravelCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["x"] = static_cast<double>(c.x);
+                j["y"] = static_cast<double>(c.y);
+            } else {
+                static_assert(std::is_same_v<Type, SkipNightCommand> || std::is_same_v<Type, CancelSkipCommand>,
+                              "write every command type");
             }
         },
         logged.command);
@@ -1344,6 +1350,18 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         c.thing = static_cast<Entity>(thing);
         c.pawn = static_cast<Entity>(pawn);
         out.command = std::move(c);
+    } else if (type == "SkipNight") {
+        out.command = SkipNightCommand{};
+    } else if (type == "FastTravel") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        FastTravelCommand c;
+        if (!r.integer(j, "pawn", pawn, where) || !r.number(j, "x", c.x, where) || !r.number(j, "y", c.y, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "CancelSkip") {
+        out.command = CancelSkipCommand{};
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");
     }

@@ -38,6 +38,7 @@
 #include "ColonySim/Crafting.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Inspirations.h"
+#include "ColonySim/Travel.h"
 #include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Medicine.h"
@@ -443,6 +444,7 @@ struct SaveData {
     SaveDesignations designations;     // format 12 on
     ResearchState research;            // section "research"
     ShipState ship;                    // section "ship"
+    TravelState travel;                // section "travel" (P5)
     // Section "talents" (P3): per protagonist, parallel lists in pawn order.
     std::vector<Entity> talentPawns;
     std::vector<int64_t> talentXp;
@@ -1273,6 +1275,12 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.text("action", c.action);
                 ar.value("thing", c.thing);
                 ar.value("pawn", c.pawn);
+            } else if constexpr (std::is_same_v<Type, FastTravelCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.value("x", c.x);
+                ar.value("y", c.y);
+            } else if constexpr (std::is_same_v<Type, SkipNightCommand> || std::is_same_v<Type, CancelSkipCommand>) {
+                // no fields
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }
@@ -2269,6 +2277,21 @@ void saveShip(Ar& ar, ShipState& s) {
 }
 
 template <typename Ar>
+void saveTravel(Ar& ar, TravelState& s) {
+    ar.value("kind", s.kind);
+    ar.require(static_cast<int>(s.kind) <= static_cast<int>(SkipKind::Travel), "the save file has a bad skip kind");
+    ar.value("startedAt", s.startedAt);
+    ar.value("endsAt", s.endsAt);
+    ar.value("pawn", s.pawn);
+    ar.value("destX", s.destX);
+    ar.value("destY", s.destY);
+    ar.value("nights", s.nights);
+    ar.value("travels", s.travels);
+    ar.value("skipped", s.skipped);
+    ar.list("visited", s.visited, [&](uint32_t& index) { ar.value(nullptr, index); });
+}
+
+template <typename Ar>
 void saveTalents(Ar& ar, SaveData& d) {
     ar.list("pawns", d.talentPawns, [&](Entity& pawn) { ar.value(nullptr, pawn); });
     ar.list("xp", d.talentXp, [&](int64_t& xp) { ar.value(nullptr, xp); });
@@ -2852,6 +2875,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.value("endsAt", i.endsAt);
         });
     });
+    ar.section("travel", 1, [&] { saveTravel(ar, d.travel); });
     // New sections go here, at the end.
 }
 
@@ -3321,6 +3345,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     }
     d.research = sim.research_->state();
     d.ship = sim.ship_->state();
+    d.travel = sim.travel_->state();
     for (const auto& [pawn, s] : sim.talents_->states()) {
         d.talentPawns.push_back(pawn);
         d.talentXp.push_back(s.xp);
@@ -4066,6 +4091,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         return false;
     }
     if (!sim.ship_->restore(std::move(d.ship), error)) {
+        return false;
+    }
+    if (!sim.travel_->restore(std::move(d.travel), error)) {
         return false;
     }
     sim.apparel_->restoreOutfits(std::move(d.outfits), d.nextOutfitId);

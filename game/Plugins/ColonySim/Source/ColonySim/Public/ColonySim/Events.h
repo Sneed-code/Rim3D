@@ -111,6 +111,8 @@ enum class EventType : uint8_t {
     ShipReactorReady,      // the activation finished: the ship can launch
     ShipReactorLost,       // the reactor was destroyed or taken down: the activation is lost, `message` says which
     ShipLaunched,          // the ship left and the game is won: `amount` how many pawns went (a PawnLeftMap each)
+    SkipStarted,           // a night skip or fast travel began (P5, docs/design/skip-travel.md): `message` "night" or "travel", `thing` the colonist, `amount` the game seconds it will run
+    SkipEnded,             // it ended: `message` "night: why" or "travel: why" (morning, arrived, cancelled, or the threat), `thing` the colonist (take control again), `amount` the game seconds skipped, (x, y) where the colonist is
 };
 
 // What stopped a projectile (ProjectileHit).

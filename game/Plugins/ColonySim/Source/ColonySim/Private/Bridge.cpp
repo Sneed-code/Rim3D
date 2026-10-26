@@ -183,9 +183,15 @@ const char* commandName(const Command& command) {
                 return "EndMentalBreak";
             } else if constexpr (std::is_same_v<Type, StartStrategyRaidCommand>) {
                 return "StartStrategyRaid";
-            } else {
-                static_assert(std::is_same_v<Type, ShipCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, ShipCommand>) {
                 return "Ship";
+            } else if constexpr (std::is_same_v<Type, SkipNightCommand>) {
+                return "SkipNight";
+            } else if constexpr (std::is_same_v<Type, FastTravelCommand>) {
+                return "FastTravel";
+            } else {
+                static_assert(std::is_same_v<Type, CancelSkipCommand>, "name every command type");
+                return "CancelSkip";
             }
         },
         command);
@@ -311,6 +317,8 @@ const char* eventTypeName(EventType type) {
         case EventType::ShipReactorReady: return "ShipReactorReady";
         case EventType::ShipReactorLost: return "ShipReactorLost";
         case EventType::ShipLaunched: return "ShipLaunched";
+        case EventType::SkipStarted: return "SkipStarted";
+        case EventType::SkipEnded: return "SkipEnded";
     }
     return "?";
 }

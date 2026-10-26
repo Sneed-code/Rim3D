@@ -427,6 +427,21 @@ void NarratorSystem::step() {
     }
 }
 
+void NarratorSystem::postpone(int64_t seconds) {
+    if (seconds <= 0) {
+        return;
+    }
+    if (state_.cycleStart >= 0) {
+        state_.cycleStart += seconds;
+    }
+    for (int64_t& at : state_.threats) {
+        at += seconds;
+    }
+    for (IncidentFired& fired : state_.fired) {
+        fired.at += seconds;
+    }
+}
+
 bool NarratorSystem::setNarrator(const std::string& name, const std::string& difficulty, std::string& error) {
     if (!name.empty() && defs_.find("Narrators", name) == nullptr) {
         error = "there is no narrator called " + name;
