@@ -14,10 +14,12 @@
 
 namespace colony {
 
+class Fire;
 class FighterSystem;
 class HealthSystem;
 class JobSystem;
 class Map;
+class MeleeSystem;
 class MoodSystem;
 class Rng;
 class Rooms;
@@ -84,6 +86,8 @@ struct COLONY_API MentalBreakRules {
     int berserkRadius = 25;
     float reach = 1.5f;
     float talkReach = 2.5f;
+    int fireRadius = 20;
+    int fireEvery = 5;
     int punchEvery = 2;
     float punchDamage = 6.0f;
     std::string punchDamageType = "Blunt";
@@ -111,6 +115,12 @@ public:
     void setEventLog(std::vector<Event>* events) { events_ = events; }
     // Whether colonists snap by themselves (default yes). Off for tests of something else that run for days.
     void setNatural(bool natural) { natural_ = natural; }
+
+    // Berserk fights with F8's melee (the pawn's weapon or fists, real swings, dodges and blocks); without
+    // it, or against a thing that isn't a pawn, it punches as before.
+    void setMelee(MeleeSystem* melee) { melee_ = melee; }
+    // Fire-starting (E4): gives FireSpree the fire to light, and provides the "fire" feature.
+    void setFire(Fire* fire);
 
     // A feature a break can need (a MentalBreaks def's `requires`): "fire" once E4 is in. A break
     // that needs one nothing provides never starts.
@@ -170,6 +180,7 @@ private:
     void tickHide(Entity pawn, MentalBreaker& b, int64_t now, Rng& rng);
     void tickBinge(Entity pawn, MentalBreaker& b, int64_t now, Rng& rng);
     void tickAttack(Entity pawn, MentalBreaker& b, int64_t now, Rng& rng, bool pawnsFirst);
+    void tickFireSpree(Entity pawn, MentalBreaker& b, int64_t now, Rng& rng);
     void tickInsult(Entity pawn, MentalBreaker& b, int64_t now, Rng& rng);
     void tickLeave(Entity pawn, MentalBreaker& b, int64_t now, Rng& rng);
     void leaveColony(Entity pawn, MentalBreaker& b);
@@ -182,6 +193,9 @@ private:
     Entity findSmashTarget(Entity pawn, const MentalBreaker& b) const;
     Entity findPawnTarget(Entity pawn, const MentalBreaker& b, float radius, bool colonistsOnly) const;
     // Walks (re-planning as a pawn target moves) until within `reach` of `target`; true once there.
+    // Berserk on a pawn: walks (re-planning as it moves) until the target is within the pawn's melee reach; true once there.
+    bool chase(Entity pawn, MentalBreaker& b, Entity target, int64_t now);
+    bool fireGoal(Entity pawn, Rng& rng, CellPos& cell, CellPos& stand) const;
     bool approach(Entity pawn, MentalBreaker& b, Entity target, float reach, int64_t now);
     float distanceTo(Entity pawn, Entity target) const;
     void action(Entity pawn, Entity target, PawnAction what);
@@ -195,6 +209,8 @@ private:
     MoodSystem& mood_;
     Rooms& rooms_;
     Pathfinder& pathfinder_;
+    MeleeSystem* melee_ = nullptr;
+    Fire* fire_ = nullptr;
     const DefDatabase& defs_;
     const GameTime& time_;
     MentalBreakRules rules_;

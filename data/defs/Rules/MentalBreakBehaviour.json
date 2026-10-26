@@ -7,6 +7,7 @@
     "hideRadius": 40,
     "smashRadius": 15, "berserkRadius": 25,
     "reachMetres": 1.5, "talkReachMetres": 2.5,
+    "fireRadius": 20, "fireEverySeconds": 5,
     "punchEverySeconds": 2, "punchDamage": 6, "punchDamageType": "Blunt", "smashDamage": 8,
     "tantrumMaxSmashes": 3,
     "bingeMeals": 4, "eatSeconds": 8,
@@ -14,7 +15,7 @@
     "hardEndFactor": 2, "hardEndMinHours": 12,
     "unverified": ["checkEverySeconds"],
     "ours": ["wanderRadius", "wanderWaitSeconds", "hideRadius", "smashRadius", "berserkRadius", "reachMetres", "talkReachMetres",
-             "punchEverySeconds", "punchDamage", "smashDamage", "tantrumMaxSmashes", "bingeMeals", "eatSeconds",
+             "fireRadius", "fireEverySeconds", "punchEverySeconds", "punchDamage", "smashDamage", "tantrumMaxSmashes", "bingeMeals", "eatSeconds",
              "repathEverySeconds", "targetSearchEverySeconds", "hardEndFactor", "hardEndMinHours"]
   }
 ]
