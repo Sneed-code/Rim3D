@@ -33,6 +33,7 @@ FilthNumbers FilthNumbers::read(const DefDatabase& defs) {
     n.dropChancePerCell = static_cast<float>(def->number("dropChancePerCell", n.dropChancePerCell));
     n.bloodPerBleedDay = static_cast<float>(def->number("bloodPerBleedDay", n.bloodPerBleedDay));
     n.cleaningSpeed = static_cast<float>(def->number("cleaningSpeed", n.cleaningSpeed));
+    n.rainWashFactor = static_cast<float>(def->number("rainWashFactor", n.rainWashFactor));
     return n;
 }
 
@@ -53,6 +54,11 @@ Filth::Filth(Map& map, Things& things, const Floors& floors, const DefDatabase& 
         kind.trackable = def.flag("trackable", false);
         kind.cleanSeconds = static_cast<float>(def.number("cleanTicks", 35.0)) * numbers_.ticksToSeconds;
         kind.maxThickness = std::clamp(static_cast<int>(def.integer("maxThickness", 3)), 1, 255);
+        if (def.count("filth.disappearsInDays") >= 2) {
+            kind.fadeHours = static_cast<float>((def.numberAt("filth.disappearsInDays", 0, 0.0) + def.numberAt("filth.disappearsInDays", 1, 0.0)) * 0.5 *
+                                                24.0);
+        }
+        kind.rainWashes = def.flag("filth.rainWashes", false);
         kinds_.push_back(std::move(kind));
     }
     dirtKind_ = kindIndex("Dirt");
@@ -259,6 +265,36 @@ void Filth::step() {
     for (auto it = carriers_.begin(); it != carriers_.end();) {
         const Entity e = static_cast<Entity>(it->first);
         it = reg.valid(e) ? std::next(it) : carriers_.erase(it);
+    }
+}
+
+void Filth::fadeHour(float rainRate) {
+    const bool raining = rainRate > 0.001f;
+    for (auto it = piles_.begin(); it != piles_.end();) {
+        const CellPos cell = map_.cellAt(it->first);
+        std::vector<FilthPile>& cellPiles = it->second;
+        if (map_.roof(cell) == Roof::None) {
+            for (size_t i = 0; i < cellPiles.size();) {
+                FilthPile& pile = cellPiles[i];
+                const FilthKind& kind = kinds_[pile.kind];
+                if (kind.fadeHours <= 0.0f) {
+                    ++i;
+                    continue;
+                }
+                const float perLayer = (raining && kind.rainWashes ? numbers_.rainWashFactor : 1.0f) / kind.fadeHours;
+                if (rng_.unit() < perLayer * static_cast<float>(pile.thickness)) {
+                    ++changes_;
+                    if (pile.thickness > 1) {
+                        --pile.thickness;
+                    } else {
+                        cellPiles.erase(cellPiles.begin() + static_cast<std::ptrdiff_t>(i));
+                        continue;
+                    }
+                }
+                ++i;
+            }
+        }
+        it = cellPiles.empty() ? piles_.erase(it) : std::next(it);
     }
 }
 
