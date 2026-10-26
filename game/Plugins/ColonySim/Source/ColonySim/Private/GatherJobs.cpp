@@ -5,6 +5,7 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Designations.h"
+#include "ColonySim/Farming.h"
 #include "ColonySim/Genes.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
@@ -268,8 +269,17 @@ bool JobSystem::failCheckGather(Entity pawn, Job& job, std::string& why) {
                 return false;
             }
             break;
+        case JobType::SowCrop: {
+            const std::string blocker = farming_ != nullptr ? farming_->sowBlocker(job.cell) : std::string("no farming");
+            if (!blocker.empty()) {
+                why = blocker;
+                return false;
+            }
+            return true;
+        }
         default:
-            if (designations_.at(job.cell) != DesignationKind::HarvestPlant) {
+            // A mark, or a crop in a growing zone that is fully grown.
+            if (designations_.at(job.cell) != DesignationKind::HarvestPlant && !(farming_ != nullptr && farming_->readyToHarvest(job.cell))) {
                 why = "the order was cancelled";
                 return false;
             }
@@ -354,6 +364,9 @@ JobSystem::StepResult JobSystem::plantWork(Entity pawn, Job& job, std::string& w
         why = "it can't use its hands";
         return StepResult::Failed;
     }
+    if (job.type == JobType::SowCrop) {
+        return sowWork(pawn, job, why);
+    }
     const bool harvest = job.type == JobType::HarvestPlant;
     if (job.walk == 0) {
         job.walk = 2;  // work steps don't walk: this marks that the animation event went out
@@ -382,7 +395,10 @@ JobSystem::StepResult JobSystem::plantWork(Entity pawn, Job& job, std::string& w
     } else {
         plants_.remove(job.cell);
         event.type = EventType::PlantRemoved;
-        event.message = tree ? "felled" : "cut";
+        event.message = tree ? "felled" : (harvest ? "harvested" : "cut");
+        if (harvest && farming_ != nullptr && farming_->cropAt(job.cell).valid()) {
+            farming_->noteHarvested();
+        }
     }
     events_.push_back(std::move(event));
     designations_.set(job.cell, DesignationKind::None);
@@ -392,6 +408,48 @@ JobSystem::StepResult JobSystem::plantWork(Entity pawn, Job& job, std::string& w
     if (item.valid()) {
         dropItems(item, yield, job.cell);
     }
+    return StepResult::Next;
+}
+
+// RimWorld's sowing toil: work piles up at the pawn's plant work speed until it reaches the crop's
+// `sowWork`; the seedling goes in at growth 0, replacing a wild plant that was in the way. Needs the
+// crop's `sowMinSkill` (checked by the scanner).
+JobSystem::StepResult JobSystem::sowWork(Entity pawn, Job& job, std::string& why) {
+    const double speed = plantWorkSpeed(pawn);
+    if (!(speed > 0.0)) {
+        why = "it can't use its hands";
+        return StepResult::Failed;
+    }
+    const DefId crop = farming_->cropAt(job.cell);
+    const Def& def = defs_.get(crop);
+    if (job.walk == 0) {
+        job.walk = 2;
+        gatherEvent(pawn, PawnAction::Harvest, job.cell);
+    }
+    job.progress += static_cast<float>(speed);
+    learnSkill(pawn, "Plants", gather_.plantXpPerSecond);
+    if (static_cast<double>(job.progress) < def.number("plant.sowWork", 1.0)) {
+        return StepResult::Running;
+    }
+    if (plants_.has(job.cell)) {
+        Event removed;
+        removed.type = EventType::PlantRemoved;
+        removed.cell = job.cell;
+        removed.def = plants_.defAt(job.cell);
+        removed.message = "cut";
+        plants_.remove(job.cell);
+        events_.push_back(std::move(removed));
+    }
+    if (!plants_.place(job.cell, crop, 0.0f)) {
+        why = "it can't be sown there";
+        return StepResult::Failed;
+    }
+    farming_->noteSown();
+    Event sown;
+    sown.type = EventType::PlantSown;
+    sown.cell = job.cell;
+    sown.def = crop;
+    events_.push_back(std::move(sown));
     return StepResult::Next;
 }
 

@@ -15,6 +15,7 @@
 #include "ColonySim/Doors.h"
 #include "ColonySim/Explosives.h"
 #include "ColonySim/Power.h"
+#include "ColonySim/Farming.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Filth.h"
@@ -411,6 +412,7 @@ struct SaveData {
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
     uint32_t nextOutfitId = 1;
     SpoilageState spoilageState;                    // section "spoilage" (C16)
+    FarmingSaved farming;                           // section "farming" (C13)
     bool hasWeather = false;           // the file has the weather section; older saves start it fresh
     SaveWeather weather;
 };
@@ -1125,6 +1127,14 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("pawn", c.pawn);
                 ar.value("slot", c.slot);
                 ar.require(static_cast<int>(c.slot) < kWeaponSlotCount, "the save file has a bad weapon slot");
+            } else if constexpr (std::is_same_v<Type, CreateGrowingZoneCommand>) {
+                ar.group("area", [&] { saveRect(ar, c.area); });
+                ar.text("crop", c.crop);
+            } else if constexpr (std::is_same_v<Type, RemoveGrowingZoneCellsCommand>) {
+                ar.group("area", [&] { saveRect(ar, c.area); });
+            } else if constexpr (std::is_same_v<Type, SetGrowingZoneCropCommand>) {
+                ar.value("zone", c.zone);
+                ar.text("crop", c.crop);
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }
@@ -1272,7 +1282,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::GatherAnimal, "the save file has a bad job");
+    ar.require(job.type <= JobType::SowCrop, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -2359,6 +2369,18 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("starved", d.husbandry.stats.starved);
         saveParts(ar, "care", e, &SaveEntity::care, [&](AnimalCare& c) { saveCarePart(ar, c); });
     });
+    ar.section("farming", 1, [&] {
+        ar.value("nextZone", d.farming.nextZone);
+        ar.list("zones", d.farming.zones, [&](FarmingSaved::Zone& z) {
+            ar.value("id", z.id);
+            ar.text("crop", z.crop);
+            ar.list("cells", z.cells, [&](CellPos& c) { saveCell(ar, c); });
+        });
+        ar.value("sown", d.farming.stats.sown);
+        ar.value("harvested", d.farming.stats.harvested);
+        ar.value("frostKilled", d.farming.stats.frostKilled);
+        ar.value("heatKilled", d.farming.stats.heatKilled);
+    });
     ar.section("temperature", 1, [&] {
         ar.list("roomTemperatures", d.roomTemperatures, [&](RoomTemperature& t) {
             ar.group("anchor", [&] { saveCell(ar, t.anchor); });
@@ -2541,6 +2563,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.wildAnimals = sim.settings_.wildAnimals;
     d.animals = sim.animals_->saved();
     d.husbandry = sim.husbandry_->saved();
+    d.farming = sim.farming_->saved();
     d.breeding = sim.breeding_->saved();
     d.seconds = sim.time_.seconds;
     d.rngState = sim.rng_.state();
@@ -3299,6 +3322,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         return false;
     }
     sim.breeding_->restore(d.breeding);
+    if (!sim.farming_->restore(d.farming, error)) {
+        return false;
+    }
     sim.health_->refreshAll();
     for (const SaveEntity& e : d.entities) {
         if (e.position && !things.relink(static_cast<Entity>(e.id))) {

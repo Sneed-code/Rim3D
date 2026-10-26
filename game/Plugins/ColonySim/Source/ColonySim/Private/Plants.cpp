@@ -203,7 +203,10 @@ void Plants::growHour(int hourOfDay) {
         }
         uint32_t growth = growth_[i];
         if (growing && growth < kPlantFullGrowth && fertility_[i] >= k.fertilityMin) {
-            const double rate = std::max(0.0, 1.0 + (static_cast<double>(fertility_[i]) - 1.0) * k.fertilitySensitivity);
+            double rate = std::max(0.0, 1.0 + (static_cast<double>(fertility_[i]) - 1.0) * k.fertilitySensitivity);
+            if (modifier_) {
+                rate *= modifier_(i);
+            }
             const uint64_t step = static_cast<uint64_t>(std::llround(k.growthPerHour * rate * growthTuning_));
             growth = static_cast<uint32_t>(std::min<uint64_t>(kPlantFullGrowth, growth + step));
         }

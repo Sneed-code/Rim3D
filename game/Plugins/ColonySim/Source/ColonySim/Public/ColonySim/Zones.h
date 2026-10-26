@@ -5,6 +5,7 @@
 #include "ColonySim/Grid.h"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -53,6 +54,8 @@ public:
 
     // A new stockpile of the cells in `area` that can hold one: walkable ground and no zone yet.
     // Returns its id, or kNoZone (and changes nothing) if no cell qualifies.
+    // Cells another kind of zone has taken (a growing zone) can't be stockpile cells. Not saved.
+    void setCellTaken(std::function<bool(CellPos)> taken) { taken_ = std::move(taken); }
     ZoneId createStockpile(const CellRect& area, StoragePriority priority = StoragePriority::Normal);
     // Takes the cells in `area` out of their zones; a zone left with no cells is deleted.
     // Returns how many cells were taken out.
@@ -75,6 +78,7 @@ private:
     std::vector<ZoneId> zoneOf_;  // per cell of level 0
     ZoneId nextId_ = 1;
     uint64_t changeCount_ = 0;
+    std::function<bool(CellPos)> taken_;
 };
 
 }  // namespace colony

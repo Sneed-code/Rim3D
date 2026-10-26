@@ -278,6 +278,14 @@ struct AnimalZoneView {
     bool pen = false;
 };
 
+// One growing zone (C13): `cellCount` cells from Snapshot::growingZoneCells[firstCell], growing `crop`.
+struct GrowingZoneView {
+    uint32_t id = 0;
+    DefId crop;
+    uint32_t firstCell = 0;
+    uint32_t cellCount = 0;
+};
+
 // An enclosed room (docs/design/rooms.md); the outdoors is not listed. Ids are good until the next
 // change to the walls.
 struct RoomView {
@@ -374,6 +382,8 @@ struct Snapshot {
     std::vector<CellPos> zoneCells;        // the zones' cells, see ZoneView
     std::vector<AnimalZoneView> animalZones;  // animal zones and pens (N3)
     std::vector<CellPos> animalZoneCells;     // their cells, see AnimalZoneView
+    std::vector<GrowingZoneView> growingZones;  // growing zones (C13)
+    std::vector<CellPos> growingZoneCells;      // their cells, see GrowingZoneView
     std::vector<DesignationView> designations;  // every mark, in cell order
     std::vector<RoomView> rooms;           // enclosed rooms, by id
     float outdoorTemperature = 0.0f;       // degrees Celsius
