@@ -60,6 +60,7 @@ class Plants;
 class PowerGrid;
 class Regions;
 class PrisonerSystem;
+class ShipSystem;
 class Rooms;
 class TemperatureSystem;
 class SpoilageSystem;
@@ -286,6 +287,9 @@ public:
     const RaidSystem& raids() const { return *raids_; }
 
     // Prisoners: capture, feeding, warden talks, recruiting and release (docs/design/prisoners.md).
+    // The spaceship ending: parts, reactor, siege waves, launch (docs/design/ship.md).
+    ShipSystem& ship() { return *ship_; }
+    const ShipSystem& ship() const { return *ship_; }
     PrisonerSystem& prisoners() { return *prisoners_; }
     const PrisonerSystem& prisoners() const { return *prisoners_; }
 
@@ -387,6 +391,7 @@ private:
     std::unique_ptr<RoofCollapse> roofCollapse_;  // M3, after the rooms and the job system
     std::unique_ptr<RaidSystem> raids_;        // after the fighters
     std::unique_ptr<PrisonerSystem> prisoners_;  // after the raids
+    std::unique_ptr<ShipSystem> ship_;           // after the raids
     std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system
     std::unique_ptr<Breeding> breeding_;    // after husbandry_
     std::unique_ptr<Fire> fire_;            // after the weather, temperature, rooms, floors, filth, plants and health

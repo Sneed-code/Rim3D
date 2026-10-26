@@ -173,9 +173,11 @@ const char* commandName(const Command& command) {
                 return "PlaceUpperFloor";
             } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
                 return "StartMentalBreak";
-            } else {
-                static_assert(std::is_same_v<Type, EndMentalBreakCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
                 return "EndMentalBreak";
+            } else {
+                static_assert(std::is_same_v<Type, ShipCommand>, "name every command type");
+                return "Ship";
             }
         },
         command);
@@ -287,6 +289,11 @@ const char* eventTypeName(EventType type) {
         case EventType::PawnMentalBreakEnded: return "PawnMentalBreakEnded";
         case EventType::PawnInsulted: return "PawnInsulted";
         case EventType::PawnLeftColony: return "PawnLeftColony";
+        case EventType::ShipReactorStarted: return "ShipReactorStarted";
+        case EventType::ShipWave: return "ShipWave";
+        case EventType::ShipReactorReady: return "ShipReactorReady";
+        case EventType::ShipReactorLost: return "ShipReactorLost";
+        case EventType::ShipLaunched: return "ShipLaunched";
     }
     return "?";
 }
