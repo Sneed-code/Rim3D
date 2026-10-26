@@ -163,12 +163,21 @@ bool Plants::place(CellPos c, DefId def, float growth) {
         return false;
     }
     const size_t i = indexOf(c);
-    if (kind_[i] != 0 || fertility_[i] <= 0.0f) {
+    if (kind_[i] != 0 || fertility_[i] <= 0.0f || underUpperFloor(c)) {
         return false;
     }
     const float g = std::clamp(growth, 0.0f, 1.0f);
     set(i, static_cast<uint16_t>(k + 1), static_cast<uint32_t>(std::lround(g * static_cast<float>(kPlantFullGrowth))), 0);
     return true;
+}
+
+bool Plants::underUpperFloor(CellPos c) const {
+    for (int level = 1; level < Map::kLevels; ++level) {
+        if (map_.upperFloor(CellPos{c.x, c.y, level})) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void Plants::remove(CellPos c) {
@@ -195,6 +204,12 @@ void Plants::growHour(int hourOfDay) {
     const bool growing = hourOfDay >= growStartHour_ && hourOfDay < growEndHour_;
     for (size_t i = 0; i < kind_.size(); ++i) {
         if (kind_[i] == 0) {
+            continue;
+        }
+        // No light under an upper floor: whatever was there dies.
+        if (underUpperFloor(CellPos{static_cast<int>(i % static_cast<size_t>(map_.width())),
+                                    static_cast<int>(i / static_cast<size_t>(map_.width())), 0})) {
+            set(i, 0, 0, 0);
             continue;
         }
         const Kind& k = kinds_[static_cast<size_t>(kind_[i]) - 1];

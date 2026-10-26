@@ -50,10 +50,13 @@ public:
     // Hours a plant of this def lives (grow days times its lifespan factor, in game hours).
     uint32_t lifespanHours(DefId def) const;
 
-    // Puts a plant in an empty cell with fertility above 0. Returns false otherwise (or for a def
+    // Puts a plant in an empty cell with fertility above 0 and no upper floor over it. Returns false otherwise (or for a def
     // that is not a plant). `growth` is clamped to 0..1.
     bool place(CellPos c, DefId def, float growth = 0.0f);
     void remove(CellPos c);
+    // True if an upper floor on any level covers the ground cell's column. Nothing grows there (no
+    // light): place() refuses, and growHour() kills what is left; laying a floor clears it at once.
+    bool underUpperFloor(CellPos c) const;
     // Sets the growth of the plant in the cell (e.g. a harvested berry bush goes back to
     // `plant.harvestAfterGrowth`). Does nothing if the cell has no plant.
     void setGrowth(CellPos c, float growth);
