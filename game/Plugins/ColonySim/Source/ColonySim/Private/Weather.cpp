@@ -318,7 +318,7 @@ double Weather::wind() const {
 // ---- What a pawn feels -----------------------------------------------------------------------
 
 bool Weather::outdoors(CellPos c) const {
-    return map_.inBounds(c) && map_.roof(c) == Roof::None;
+    return map_.onGround(c) && map_.roof(c) == Roof::None;
 }
 
 const WeatherEffects& Weather::cachedEffects() const {
@@ -347,7 +347,7 @@ float Weather::sightAt(CellPos c) const {
 // ---- Snow ------------------------------------------------------------------------------------
 
 float Weather::snowDepth(CellPos c) const {
-    if (!map_.inBounds(c)) {
+    if (!map_.onGround(c)) {
         return 0.0f;
     }
     return static_cast<float>(snow_[static_cast<size_t>(map_.index(c))]) * 0.01f;

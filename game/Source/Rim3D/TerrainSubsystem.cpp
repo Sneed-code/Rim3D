@@ -86,7 +86,9 @@ namespace
 			case colony::Terrain::Sand: return TerrSandColor;
 			case colony::Terrain::RoughStone: return TerrRoughStoneColor;
 			case colony::Terrain::Rock: return TerrRockTopColor;
-			case colony::Terrain::Soil: break;
+			case colony::Terrain::Soil:
+			case colony::Terrain::Air:  // upper levels only (levels.md); this is the ground
+			case colony::Terrain::UpperFloor: break;
 		}
 		const float Fertility = Plants.fertility(Cell);
 		const FLinearColor Gravel(120.0f, 122.0f, 84.0f);
@@ -128,7 +130,9 @@ namespace
 			case colony::Terrain::Sand: return FTerrLook(FLinearColor(1.15f, 1.0f, 0.75f), 1.0f, 0.0f, 0.0f, 0.0f);
 			case colony::Terrain::RoughStone: return FTerrLook(FLinearColor::White, 0.0f, 0.0f, 1.0f, 0.0f);
 			case colony::Terrain::Rock: return FTerrLook(FLinearColor::White, 0.0f, 1.0f, 0.0f, 0.0f);
-			case colony::Terrain::Soil: break;
+			case colony::Terrain::Soil:
+			case colony::Terrain::Air:  // upper levels only (levels.md); this is the ground
+			case colony::Terrain::UpperFloor: break;
 		}
 		const float Fertility = Plants.fertility(Cell);
 		// The grass texture is dull on its own; these push it toward green (dry ground yellower, rich ground darker).

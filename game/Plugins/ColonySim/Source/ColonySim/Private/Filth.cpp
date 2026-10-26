@@ -80,7 +80,7 @@ bool Filth::bareGround(CellPos c) const {
 }
 
 bool Filth::add(CellPos c, int kind, int layers) {
-    if (kind < 0 || static_cast<size_t>(kind) >= kinds_.size() || layers <= 0 || !map_.inBounds(c) ||
+    if (kind < 0 || static_cast<size_t>(kind) >= kinds_.size() || layers <= 0 || !map_.onGround(c) ||
         !map_.groundWalkable(c) || map_.passage(c) == Passage::Blocked) {
         return false;
     }
@@ -104,7 +104,7 @@ bool Filth::add(CellPos c, int kind, int layers) {
 }
 
 bool Filth::clean(CellPos c) {
-    if (!map_.inBounds(c)) {
+    if (!map_.onGround(c)) {
         return false;
     }
     const auto it = piles_.find(map_.index(c));
@@ -125,17 +125,17 @@ bool Filth::clean(CellPos c) {
 }
 
 void Filth::clear(CellPos c) {
-    if (map_.inBounds(c) && piles_.erase(map_.index(c)) > 0) {
+    if (map_.onGround(c) && piles_.erase(map_.index(c)) > 0) {
         ++changes_;
     }
 }
 
 bool Filth::has(CellPos c) const {
-    return map_.inBounds(c) && piles_.count(map_.index(c)) > 0;
+    return map_.onGround(c) && piles_.count(map_.index(c)) > 0;
 }
 
 const std::vector<FilthPile>& Filth::at(CellPos c) const {
-    if (!map_.inBounds(c)) {
+    if (!map_.onGround(c)) {
         return kFilthNone;
     }
     const auto it = piles_.find(map_.index(c));
@@ -190,7 +190,7 @@ void Filth::step() {
     const float bloodPerSecond = numbers_.bloodPerBleedDay / static_cast<float>(kSecondsPerHour);
     for (const Entity pawn : pawns) {
         const CellPos cell = cellOf(reg.get<Position>(pawn));
-        if (!map_.inBounds(cell)) {
+        if (!map_.onGround(cell)) {
             continue;
         }
         const float rate = filthRate_[reg.get<Thing>(pawn).def.value];

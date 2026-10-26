@@ -220,6 +220,8 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
                 case colony::Terrain::Soil: r = 90; g = 130; b = 60; break;
                 case colony::Terrain::Rock: r = 120; g = 115; b = 110; break;
                 case colony::Terrain::RoughStone: r = 150; g = 140; b = 125; break;
+                case colony::Terrain::Air:
+                case colony::Terrain::UpperFloor: break;  // upper levels only, never on the ground
             }
             // Ore shows brighter than the rock round it: steel blue, silver white, components orange.
             const colony::DefId rock = sim.mineables().defAt(colony::CellPos{x, y, 0});
@@ -273,10 +275,17 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
         pixels[i + 1] = static_cast<unsigned char>((pixels[i + 1] + 110) / 2);
         pixels[i + 2] = static_cast<unsigned char>((pixels[i + 2] + 80) / 2);
     }
+    // Upper floors (levels.md): the ground under them tinted pale blue, once per floor over it.
+    for (const colony::CellPos& c : map.upperFloorCells()) {
+        const size_t i = static_cast<size_t>(map.index(c)) * 3;
+        pixels[i] = static_cast<unsigned char>((pixels[i] + 170) / 2);
+        pixels[i + 1] = static_cast<unsigned char>((pixels[i + 1] + 200) / 2);
+        pixels[i + 2] = static_cast<unsigned char>((pixels[i + 2] + 235) / 2);
+    }
     // Buildings dark grey, items yellow, pawns red (drawn last, on top). Ground level only.
     const auto mark = [&](const colony::Position& pos, unsigned char r, unsigned char g, unsigned char b) {
         const colony::CellPos c = colony::cellOf(pos);
-        if (!map.inBounds(c)) {
+        if (!map.onGround(c)) {
             return;
         }
         const size_t i = static_cast<size_t>(map.index(c)) * 3;

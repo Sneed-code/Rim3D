@@ -155,9 +155,11 @@ const char* commandName(const Command& command) {
                 return "SetMedicalCare";
             } else if constexpr (std::is_same_v<Type, SetPrisonerModeCommand>) {
                 return "SetPrisonerMode";
-            } else {
-                static_assert(std::is_same_v<Type, SetPrisonBedCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
                 return "SetPrisonBed";
+            } else {
+                static_assert(std::is_same_v<Type, PlaceUpperFloorCommand>, "name every command type");
+                return "PlaceUpperFloor";
             }
         },
         command);

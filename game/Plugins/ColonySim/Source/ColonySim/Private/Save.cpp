@@ -421,6 +421,7 @@ struct SaveData {
     BreedingStats breeding;            // section "breeding": the counters (N4)
     FireSaved fire;                    // section "fire": fires, burnt ground, the home area (E4)
     std::vector<RoomTemperature> roomTemperatures;  // section "temperature" (E2)
+    std::vector<CellPos> upperFloors;  // section "levels" (M1), by level then row
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
     uint32_t nextOutfitId = 1;
     SpoilageState spoilageState;                    // section "spoilage" (C16)
@@ -1169,6 +1170,9 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
             } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
                 ar.value("bed", c.bed);
                 ar.value("on", c.on);
+            } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
+                ar.group("area", [&] { saveRect(ar, c.area); });
+                ar.value("remove", c.remove);
             } else {
                 static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
             }
@@ -2573,6 +2577,12 @@ void saveSections(Ar& ar, SaveData& d) {
         });
         saveParts(ar, "prisonBed", e, &SaveEntity::prisonBed, [&](PrisonBed& b) { ar.value("marked", b.marked); });
     });
+    ar.section("levels", 1, [&] {
+        ar.list("upperFloors", d.upperFloors, [&](CellPos& c) {
+            saveCell(ar, c);
+            ar.require(c.level >= 1, "the save file has an upper floor on the ground");
+        });
+    });
     // New sections go here, at the end.
 }
 
@@ -3020,6 +3030,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.filth = sim.filth_->state();
     d.roomStats = sim.roomStats_->state();
     d.roomTemperatures = sim.temperature_->roomTemperatures();
+    d.upperFloors = sim.map_.upperFloorCells();
     d.raids = sim.raids_->state();
     d.spoilageState = sim.spoilage_->state();
     {
@@ -3483,6 +3494,13 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         return false;
     }
     sim.health_->refreshAll();
+    // Upper floors before the buildings that stand on them.
+    for (const CellPos& c : d.upperFloors) {
+        if (!sim.map_.setUpperFloor(c, true)) {
+            error = "the save has an upper floor outside the map";
+            return false;
+        }
+    }
     for (const SaveEntity& e : d.entities) {
         if (e.position && !things.relink(static_cast<Entity>(e.id))) {
             error = "the save has a building that no longer fits on the map";

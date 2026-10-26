@@ -126,6 +126,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `social` | 1 | `social` (a colonist's opinion memories, stored bonds, next talk, mourned) and `fight` (a fight with fists in progress) per pawn (C20, [social.md](social.md)) |
 | `apparel` | 1 | `apparel`: the stuff and quality of an item, taint, a strip mark, a pawn's outfit and next look; the outfit policies ([apparel.md](apparel.md)) |
 | `feel` | 1 | `kick` (the player's gun kick and its spray) and `roll` (a dodge roll's phase, steps, direction, wait) ([shooter-feel.md](shooter-feel.md)) |
+| `levels` | 1 | the upper floors, by level then row; put back before the buildings on them (M1) |
 | `medicine` | 1 | `medical`: the medical care setting of each pawn that has one (H1, [medicine.md](medicine.md)) |
 | `weapons` | 1 | `stowed` (the weapons a pawn carries on its body besides the one in its hands) and `switch` (a weapon switch under way) ([weapons.md](weapons.md)) |
 | `weather` | 1 | the current and previous weather by `defName`, when it began and ends, its random stream, the snow depth of each cell with snow ([weather.md](weather.md)) |

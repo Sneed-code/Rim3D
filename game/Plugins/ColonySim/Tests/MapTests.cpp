@@ -33,12 +33,17 @@ TEST_CASE("Map: size, bounds and heights") {
     }
 }
 
-TEST_CASE("Map: only the ground level is stored so far") {
+TEST_CASE("Map: upper levels are empty sky until something is built there") {
     const Map map(MapSettings{16, 16, 9});
-    CHECK(map.levels() == 1);
-    CHECK_FALSE(map.inBounds(CellPos{3, 3, 1}));
+    CHECK(map.levels() == Map::kLevels);
+    CHECK(map.inBounds(CellPos{3, 3, 1}));
+    CHECK_FALSE(map.onGround(CellPos{3, 3, 1}));
+    CHECK_FALSE(map.inBounds(CellPos{3, 3, Map::kLevels}));
     CHECK_FALSE(map.inBounds(CellPos{3, 3, -1}));
+    CHECK(map.terrain(CellPos{3, 3, 1}) == Terrain::Air);
     CHECK_FALSE(map.walkable(CellPos{3, 3, 1}));
+    CHECK_FALSE(map.hasUpperChunk(CellPos{3, 3, 1}));
+    CHECK(map.upperFloorCells().empty());
 }
 
 TEST_CASE("Map: cell index round trip") {

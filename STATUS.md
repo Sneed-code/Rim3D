@@ -374,6 +374,15 @@ Save section `husbandry` 1, five new commands (`MarkAnimal`, `SetTraining`, `Cre
 
 **U15** animals on screen (`docs/design/animal-life.md`, smoke test `animals`): `USimAnimalSubsystem` draws every pawn with a snapshot `lifeStage` of 0 to 2 as an `ASimAnimalActor` on its A4 skeletal mesh (model and scale from `assets/animal_art.json`, fitted to its `lengthM`), playing idle, walk, gallop, eating and death clips picked from the snapshot; `USimPawnSubsystem` skips animals. Animation by distance: every frame within 40 m, 8 Hz within 120 m, a frozen pose within 400 m, hidden beyond (`Animals.NearDistance`, `MidDistance`, `HideDistance`). Not done: far herds as instanced meshes with baked animation (G3 decides if the frozen skinned pose is cheap enough), a lying-down pose for sleep (it slows the idle clip), and the models' facing is unchecked by eye.
 
+**M1** upper levels (`docs/design/levels.md`, tests `LevelsTests`): the map has four levels, 3 m apart; upper levels are stored in
+16 m chunks made only where something is built, so empty sky costs nothing. A cell up there is `Terrain::Air` until an **upper
+floor** is laid (`PlaceUpperFloorCommand`, instant for now; `UpperFloors::lay`): it needs a wall or column within the roof support
+radius (6.9 m) on the level below, never over a mountain, and is the roof of the cell under it (`Map::roof` says `Thin`, Rooms puts
+no roof of its own there). Buildings and items go only on a floor. Regions, rooms and room temperature work on every level; an upper
+room beside open air is outdoors (`Room::openToAir`); heat passes through a floor like a thin roof. Save section `levels`; snapshot `z`
+includes the level. **Systems that only know the ground use `Map::onGround(c)` instead of `inBounds`** (plants, zones, growing zones, filth,
+fire, snow, lights, cover, threat maps, floors, designations); `Map::inBounds` now takes levels 0 to 3. No stairs yet (M2), no collapse (M3), nothing drawn (U17).
+
 ## Next
 
 Wave 1:

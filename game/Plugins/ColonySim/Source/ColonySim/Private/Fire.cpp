@@ -142,11 +142,11 @@ void Fire::emit(EventType type, Entity thing, CellPos cell, DefId def, float amo
 // ---- Questions ------------------------------------------------------------------------------
 
 bool Fire::burning(CellPos cell) const {
-    return map_.inBounds(cell) && fires_.count(map_.index(cell)) != 0;
+    return map_.onGround(cell) && fires_.count(map_.index(cell)) != 0;
 }
 
 float Fire::sizeAt(CellPos cell) const {
-    if (!map_.inBounds(cell)) {
+    if (!map_.onGround(cell)) {
         return 0.0f;
     }
     const auto it = fires_.find(map_.index(cell));
@@ -154,7 +154,7 @@ float Fire::sizeAt(CellPos cell) const {
 }
 
 bool Fire::burnt(CellPos cell) const {
-    return map_.inBounds(cell) && burnt_.count(map_.index(cell)) != 0;
+    return map_.onGround(cell) && burnt_.count(map_.index(cell)) != 0;
 }
 
 bool Fire::pawnBurning(Entity pawn) const {
@@ -183,7 +183,7 @@ float Fire::thingFlammability(Entity thing) const {
 }
 
 float Fire::flammabilityAt(CellPos c) const {
-    if (!map_.inBounds(c)) {
+    if (!map_.onGround(c)) {
         return 0.0f;
     }
     float f = 0.0f;
@@ -218,7 +218,7 @@ float Fire::pawnFlammability(Entity pawn) const {
 }
 
 bool Fire::canBurnGround(CellPos c) const {
-    if (!map_.inBounds(c)) {
+    if (!map_.onGround(c)) {
         return false;
     }
     const Terrain t = map_.terrain(c);
@@ -267,7 +267,7 @@ bool Fire::igniteRadius(float x, float y, int level, float radius, float chance,
     for (int dy = -r; dy <= r; ++dy) {
         for (int dx = -r; dx <= r; ++dx) {
             const CellPos c{cx + dx, cy + dy, level};
-            if (!map_.inBounds(c)) {
+            if (!map_.onGround(c)) {
                 continue;
             }
             const float ex = static_cast<float>(c.x) + 0.5f - x;
@@ -344,7 +344,7 @@ bool Fire::putOutPawn(Entity pawn) {
 // ---- Putting out ----------------------------------------------------------------------------
 
 bool Fire::extinguish(CellPos cell, float amount) {
-    if (!map_.inBounds(cell)) {
+    if (!map_.onGround(cell)) {
         return false;
     }
     const int index = map_.index(cell);
@@ -387,7 +387,7 @@ void Fire::markBurnt(int index, int64_t now) {
 // ---- The home area --------------------------------------------------------------------------
 
 bool Fire::home(CellPos cell) const {
-    return map_.inBounds(cell) && home_[static_cast<size_t>(map_.index(cell))] != 0;
+    return map_.onGround(cell) && home_[static_cast<size_t>(map_.index(cell))] != 0;
 }
 
 std::vector<int> Fire::homeCells() const {
@@ -408,7 +408,7 @@ int Fire::setHome(const CellRect& area, bool add) {
     for (int y = area.minY; y < area.minY + area.sizeY; ++y) {
         for (int x = area.minX; x < area.minX + area.sizeX; ++x) {
             const CellPos c{x, y, area.level};
-            if (!map_.inBounds(c)) {
+            if (!map_.onGround(c)) {
                 continue;
             }
             uint8_t& cell = home_[static_cast<size_t>(map_.index(c))];
@@ -435,7 +435,7 @@ void Fire::stampHome(CellPos centre, int radius) {
                 continue;
             }
             const CellPos c{centre.x + dx, centre.y + dy, centre.level};
-            if (!map_.inBounds(c) || map_.terrain(c) == Terrain::Rock) {
+            if (!map_.onGround(c) || map_.terrain(c) == Terrain::Rock) {
                 continue;
             }
             uint8_t& cell = home_[static_cast<size_t>(map_.index(c))];
@@ -735,7 +735,7 @@ void Fire::pass(int64_t now) {
     std::sort(candidates.begin(), candidates.end());
     for (const Entity pawn : candidates) {
         const CellPos cell = cellOf(reg.get<Position>(pawn));
-        if (!map_.inBounds(cell)) {
+        if (!map_.onGround(cell)) {
             continue;
         }
         float chance = 0.0f;

@@ -253,7 +253,7 @@ double PowerGrid::sunFactor(const Member& m) const {
     }
     int open = 0;
     for (const CellPos c : m.cells) {
-        if (map_.inBounds(c) && map_.roof(c) == Roof::None) {
+        if (map_.onGround(c) && map_.roof(c) == Roof::None) {
             ++open;
         }
     }
@@ -283,7 +283,7 @@ double PowerGrid::windOpenShare(const Member& m) const {
     int blocked = 0;
     const auto look = [&](int x, int y) {
         const CellPos c{x, y, level};
-        if (!map_.inBounds(c)) {
+        if (!map_.onGround(c)) {
             return;  // off the map is open sky
         }
         ++total;

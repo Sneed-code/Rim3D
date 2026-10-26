@@ -44,6 +44,7 @@
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/UpperFloors.h"
 #include "ColonySim/Weather.h"
 #include "ColonySim/Zones.h"
 #include "MovementSystem.h"
@@ -238,6 +239,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
                                            splitMix64(settings.seed ^ 0x6D656C6565ULL));
     melee_->setEventLog(&events_);
     fighters_->setMelee(melee_.get());
+    upperFloors_ = std::make_unique<UpperFloors>(map_, *rooms_, *things_);
     animals_->setMelee(melee_.get());
     defense_ = std::make_unique<DefenseSystem>(*things_, map_, *combat_, *health_, *power_, *defs_, time_);
     defense_->setEventLog(&events_);
@@ -972,6 +974,22 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!social_->interact(interact->initiator, interact->recipient, interact->interaction, interact->outcome, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* upper = std::get_if<PlaceUpperFloorCommand>(&command)) {
+        int changed = 0;
+        std::string why;
+        for (int y = upper->area.minY; y < upper->area.minY + upper->area.sizeY; ++y) {
+            for (int x = upper->area.minX; x < upper->area.minX + upper->area.sizeX; ++x) {
+                const CellPos cell{x, y, upper->area.level};
+                const bool before = map_.upperFloor(cell);
+                const bool done = upper->remove ? upperFloors_->remove(cell, &why) : upperFloors_->lay(cell, &why);
+                if (done && map_.upperFloor(cell) != before) {
+                    ++changed;
+                }
+            }
+        }
+        if (changed == 0) {
+            commandFailed(id, why.empty() ? std::string("no upper floor changed there") : why);
+        }
     }
 }
 
@@ -1168,7 +1186,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
         view.category = thing.category;
         view.x = pos.x;
         view.y = pos.y;
-        view.z = map_.heightAt(pos.x, pos.y);
+        view.z = map_.heightAt(pos.x, pos.y, pos.level);
         view.level = pos.level;
         if (const Mover* mover = reg.try_get<Mover>(entity)) {
             view.vx = mover->vx;
@@ -1542,6 +1560,7 @@ uint64_t Sim::stateHash() const {
     breeding_->hashState(h);
     fire_->hashState(h);
     temperature_->hashState(h);
+    h.add(map_.upperFloorHash());
     spoilage_->hashState(h);
     farming_->hashState(h);
 
