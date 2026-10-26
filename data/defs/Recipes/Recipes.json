@@ -5,14 +5,14 @@
   },
   {
     "defName": "CookMealSimple", "parent": "RecipeBase", "label": "cook simple meal",
-    "recipeUsers": ["FueledStove"],
+    "recipeUsers": ["FueledStove", "ElectricStove"],
     "workAmount": 432, "workSkillXp": 60,
     "ingredients": [{ "categories": ["FoodRaw"], "nutrition": 0.5 }],
     "products": { "MealSimple": 1 }
   },
   {
     "defName": "CookMealSimpleBulk", "parent": "RecipeBase", "label": "cook simple meals (4)",
-    "recipeUsers": ["FueledStove"],
+    "recipeUsers": ["FueledStove", "ElectricStove"],
     "workAmount": 1728, "workSkillXp": 240,
     "ingredients": [{ "categories": ["FoodRaw"], "nutrition": 2.0 }],
     "products": { "MealSimple": 4 },
@@ -20,7 +20,7 @@
   },
   {
     "defName": "CookMealFine", "parent": "RecipeBase", "label": "cook fine meal",
-    "recipeUsers": ["FueledStove"],
+    "recipeUsers": ["FueledStove", "ElectricStove"],
     "workAmount": 648, "workSkillXp": 110, "minSkill": 6,
     "ingredients": [
       { "categories": ["PlantFoodRaw"], "nutrition": 0.25 },
@@ -56,5 +56,5 @@
   {"defName": "MakeBlocksSandstone", "researchPrerequisite": "Stonecutting", "parent": "RecipeBase", "label": "cut sandstone blocks", "recipeUsers": ["StonecutterTable"], "workSkill": "Crafting", "workAmount": 1440.0, "workSkillXp": 100, "ingredients": [{"items": ["ChunkSandstone"], "count": 1}], "products": {"BlocksSandstone": 20}, "unverified": ["workAmount", "products"]},
   {"defName": "MakeBlocksSlate", "researchPrerequisite": "Stonecutting", "parent": "RecipeBase", "label": "cut slate blocks", "recipeUsers": ["StonecutterTable"], "workSkill": "Crafting", "workAmount": 1440.0, "workSkillXp": 100, "ingredients": [{"items": ["ChunkSlate"], "count": 1}], "products": {"BlocksSlate": 20}, "unverified": ["workAmount", "products"]},
   {"defName": "MakeBlocksMarble", "researchPrerequisite": "Stonecutting", "parent": "RecipeBase", "label": "cut marble blocks", "recipeUsers": ["StonecutterTable"], "workSkill": "Crafting", "workAmount": 1440.0, "workSkillXp": 100, "ingredients": [{"items": ["ChunkMarble"], "count": 1}], "products": {"BlocksMarble": 20}, "unverified": ["workAmount", "products"]},
-  {"defName": "ButcherCorpse", "parent": "RecipeBase", "label": "butcher creature", "recipeUsers": ["ButcherTable"], "workSkill": "Cooking", "workAmount": 0, "butcher": {"workPerBodySize": 450, "fleshOnly": true}, "ingredients": [{"categories": ["Corpses"], "count": 1}], "products": {}, "ours": ["butcher", "products: meat and leather come from the race def (D5)"], "unverified": ["butcher.workPerBodySize"]}
+  {"defName": "ButcherCorpse", "parent": "RecipeBase", "label": "butcher creature", "recipeUsers": ["ButcherTable"], "workSkill": "Cooking", "workAmount": 648, "butcher": {"fleshOnly": true}, "ingredients": [{"categories": ["Corpses"], "count": 1}], "products": {}, "ours": ["butcher", "products: meat and leather come from the race def (D5)"], "note": "RimWorld: 450 ticks of work per creature (wiki), 1.44 seconds a tick here; yield is meat amount x butchery efficiency (75% + 2.5% per Cooking level, times Manipulation), see HusbandryRules"}
 ]

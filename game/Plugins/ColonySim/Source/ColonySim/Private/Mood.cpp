@@ -89,6 +89,8 @@ MoodRules MoodRules::read(const DefDatabase& defs) {
     r.risePerHour = moodFloat(*def, "risePerHour", r.risePerHour);
     r.fallPerHour = moodFloat(*def, "fallPerHour", r.fallPerHour);
     r.memoryDays = def->number("memoryDays", r.memoryDays);
+    r.nightFromHour = std::clamp(static_cast<int>(def->integer("nightHours.from", r.nightFromHour)), 0, 23);
+    r.nightToHour = std::clamp(static_cast<int>(def->integer("nightHours.to", r.nightToHour)), 0, 23);
     return r;
 }
 
@@ -123,6 +125,18 @@ MoodSystem::MoodSystem(Things& things, const NeedsSystem& needs, const DefDataba
             }
             thought.trait = def.text("situation.trait");
             thought.notTrait = def.text("situation.notTrait");
+            for (size_t i = 0; i < def.count("situation.notTraits"); ++i) {
+                thought.notTraits.push_back(def.textAt("situation.notTraits", i));
+            }
+            for (size_t i = 0; i < def.count("situation.anyTraits"); ++i) {
+                thought.anyTraits.push_back(def.textAt("situation.anyTraits", i));
+            }
+        }
+        thought.passion = def.text("situation.passion");
+        if (!thought.passion.empty()) {
+            // The size of the lift is SkillRules.passionMood, not a number of the thought's own.
+            const SkillRules skills = SkillRules::read(defs);
+            thought.offset = static_cast<float>(skills.passionMood[thought.passion == "Major" ? 2 : 1]);
         }
         thoughts_.push_back(std::move(thought));
 
@@ -303,6 +317,11 @@ std::vector<ThoughtView> MoodSystem::thoughts(Entity pawn, int64_t now) const {
             (!thought.notTrait.empty() && hasTrait(pawn, thought.notTrait))) {
             continue;
         }
+        const auto has = [&](const std::string& trait) { return hasTrait(pawn, trait); };
+        if (std::any_of(thought.notTraits.begin(), thought.notTraits.end(), has) ||
+            (!thought.anyTraits.empty() && std::none_of(thought.anyTraits.begin(), thought.anyTraits.end(), has))) {
+            continue;
+        }
         for (const Situation& situation : situations_) {
             if (situation.condition != thought.condition) {
                 continue;
@@ -312,6 +331,19 @@ std::vector<ThoughtView> MoodSystem::thoughts(Entity pawn, int64_t now) const {
                 const Thought::Stage& s = thought.stages[static_cast<size_t>(stage)];
                 const Def& def = defs_.get(thought.def);
                 out.push_back(ThoughtView{def.defName(), s.label.empty() ? def.label() : s.label, s.offset, true, 0});
+            }
+        }
+    }
+    // Working at a skill the pawn is passionate about.
+    const Colonist* colonist = activeSkill_ ? reg.try_get<Colonist>(pawn) : nullptr;
+    const std::string skill = colonist != nullptr ? activeSkill_(pawn) : std::string();
+    const SkillRecord* record = skill.empty() ? nullptr : colonist->skill(skill);
+    if (record != nullptr && !record->disabled && record->passion != Passion::None) {
+        const char* passion = record->passion == Passion::Major ? "Major" : "Minor";
+        for (const Thought& thought : thoughts_) {
+            if (thought.passion == passion) {
+                const Def& def = defs_.get(thought.def);
+                out.push_back(ThoughtView{def.defName(), def.label(), thought.offset, true, 0});
             }
         }
     }
@@ -390,6 +422,24 @@ void MoodSystem::step(int64_t now, std::vector<Event>& events) {
     const size_t eventCount = events.size();
     for (size_t i = 0; i < eventCount; ++i) {
         const Event& event = events[i];
+        // A break that ended in calm (or by the pawn going down) is a relief; an insult stings its target.
+        if (event.type == EventType::PawnMentalBreakEnded || event.type == EventType::PawnInsulted) {
+            const bool ended = event.type == EventType::PawnMentalBreakEnded;
+            const Entity who = ended ? event.thing : event.target;
+            Mood* felt = reg.valid(who) ? reg.try_get<Mood>(who) : nullptr;
+            if (felt != nullptr && (!ended || event.message == "recovered" || event.message == "downed")) {
+                addMemory(*felt, ended ? "MentalBreakEnded" : "Insulted", now);
+            }
+            continue;
+        }
+        if (event.type == EventType::AnimalButchered) {
+            // Cutting up a person: only the cold-hearted and the cannibals do not mind.
+            Mood* butcher = reg.valid(event.thing) ? reg.try_get<Mood>(event.thing) : nullptr;
+            if (butcher != nullptr && defs_.get(event.def).text("race.intelligence") == "Humanlike" && !eatsPeople(event.thing)) {
+                addMemory(*butcher, "ButcheredHumanlikeCorpse", now);
+            }
+            continue;
+        }
         Mood* mood = (event.type == EventType::PawnAte || event.type == EventType::PawnWokeUp || event.type == EventType::PrisonerCaptured ||
                       event.type == EventType::PrisonerChatted) &&
                              reg.valid(event.type == EventType::PrisonerChatted ? event.target : event.thing)
@@ -404,6 +454,14 @@ void MoodSystem::step(int64_t now, std::vector<Event>& events) {
             addMemory(*mood, "PrisonerChatted", now);
         } else if (event.type == EventType::PawnAte) {
             const std::string preferability = defs_.get(event.def).text("ingestible.preferability");
+            // Human flesh, raw or as an ingredient (`part` 1): a horror to most, a treat to a cannibal, nothing to a psychopath.
+            const bool rawHumanFlesh = defs_.get(event.def).flag("humanlike");
+            if ((rawHumanFlesh || event.part == 1) && !hasTrait(event.thing, "Psychopath")) {
+                const bool cannibal = hasTrait(event.thing, "Cannibal");
+                addMemory(*mood, rawHumanFlesh ? (cannibal ? "AteHumanlikeMeatCannibal" : "AteHumanlikeMeat")
+                                               : (cannibal ? "AteHumanlikeMeatAsIngredientCannibal" : "AteHumanlikeMeatAsIngredient"),
+                          now);
+            }
             if (preferability == "RawBad") {
                 addMemory(*mood, "AteRawFood", now);
             }

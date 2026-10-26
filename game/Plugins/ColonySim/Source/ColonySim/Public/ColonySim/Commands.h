@@ -400,12 +400,27 @@ struct MarkShelterCommand {
 };
 
 // Taming, training and pens (task N3, docs/design/husbandry.md). `mark` is "Tame" (a wild animal, to be tamed by a colonist
-// with the Handling work), "Slaughter" (a tame one, to be killed) or "Release" (a tame one goes wild at once; `on` is
+// with the Handling work), "Hunt" (a wild one, to be shot by a colonist with the Hunting work and a gun; N2,
+// docs/design/hunting.md), "Slaughter" (a tame one, to be killed) or "Release" (a tame one goes wild at once; `on` is
 // ignored). `on` false takes a mark off. Fails for a thing that is no animal, a dead one, or one of the wrong kind.
 struct MarkAnimalCommand {
     Entity animal = kNoEntity;
     std::string mark;
     bool on = true;
+};
+
+// Marks every animal in `area` that can take the mark (a wild one for "Tame" or "Hunt", a tame one for "Slaughter"); the
+// others are skipped. Fails if there is none.
+struct MarkAnimalsInAreaCommand {
+    CellRect area;
+    std::string mark;
+    bool on = true;
+};
+
+// Names a tame animal (up to 24 characters; an empty name takes the name off). Fails for a wild or dead animal.
+struct SetAnimalNameCommand {
+    Entity animal = kNoEntity;
+    std::string name;
 };
 
 // A tame animal is (or is no longer) to be taught a trick: `trainable` is "Obedience", "Release", "Rescue" or "Haul".
@@ -430,6 +445,13 @@ struct RemoveAnimalZoneCellsCommand {
 struct AssignAnimalZoneCommand {
     Entity animal = kNoEntity;
     uint32_t zone = 0;
+};
+
+// Switches breeding on or off: for one tame animal, or (with no animal) for every animal in a zone.
+struct SetBreedingCommand {
+    Entity animal = kNoEntity;
+    uint32_t zone = 0;
+    bool allow = true;
 };
 
 // Melee (task F8, docs/design/melee.md). Attack: `pawn` swings at `target`, a pawn within reach;
@@ -630,6 +652,43 @@ struct SetRefuelCommand {
     bool fillNow = false;
 };
 
+// Changes the details of a bill (task C14, docs/design/crafting.md): the least and most skill a worker may
+// have in the recipe's skill, how far from the building ingredients are taken (metres, 0 anywhere), a stockpile
+// the products are taken to (0: none), the stock an "until you have" bill waits to fall under before it starts
+// again (0: as soon as it is under its count) and the item defNames the bill may not use. Replaces all of them.
+// Fails if there is no such bill, a number is out of range, the stockpile does not exist or a name is not an item.
+struct SetBillOptionsCommand {
+    Entity building = kNoEntity;
+    uint32_t bill = 0;
+    int skillMin = 0;
+    int skillMax = 20;
+    float radius = 0.0f;
+    uint32_t storeZone = 0;
+    int unpauseAt = 0;
+    std::vector<std::string> disallowed;
+};
+
+// Moves a bill to a place in the building's list (0 first, tried first). Fails if there is no such bill.
+struct MoveBillCommand {
+    Entity building = kNoEntity;
+    uint32_t bill = 0;
+    int index = 0;
+};
+
+// Dev command: the colonist has a mental break now (a MentalBreaks defName, docs/design/mental-breaks.md),
+// whatever its mood. Fails for a pawn that isn't a colonist on the map, is controlled by the player,
+// downed, dead or in a break already; for a break that needs something the game doesn't have yet
+// (fire); or when the break has nothing to do (a binge with no food).
+struct StartMentalBreakCommand {
+    Entity pawn = kNoEntity;
+    std::string breakDef;
+};
+
+// Dev command: ends the colonist's mental break at once, with no catharsis. Fails if it isn't in one.
+struct EndMentalBreakCommand {
+    Entity pawn = kNoEntity;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -646,12 +705,14 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              MeleeCommand, DodgeRollCommand,
                              SetOutfitCommand, EditOutfitCommand, AddOutfitCommand, RemoveOutfitCommand,
                              StripCommand, SetWeatherCommand, MarkAnimalCommand, SetTrainingCommand,
-                             CreateAnimalZoneCommand, RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand,
+                             MarkAnimalsInAreaCommand, SetAnimalNameCommand,
+                             CreateAnimalZoneCommand, RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand, SetBreedingCommand,
                              SpendTalentPointCommand, AddTalentXpCommand, RearmTrapCommand,
                              CarryWeaponCommand, SwitchWeaponCommand, CreateGrowingZoneCommand,
                              RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
                              SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand, SetPrisonerModeCommand,
-                             SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand>;
+                             SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
+                             MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

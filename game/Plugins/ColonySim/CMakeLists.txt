@@ -31,7 +31,7 @@ target_include_directories(colonysim SYSTEM PUBLIC ThirdParty)
 add_library(colonysim_thirdparty INTERFACE)
 target_include_directories(colonysim_thirdparty SYSTEM INTERFACE ThirdParty)
 
-add_executable(simrun Tools/simrun/main.cpp Tools/simrun/ColonyScenario.cpp Tools/simrun/PowerScenario.cpp Tools/simrun/RaidSoak.cpp)
+add_executable(simrun Tools/simrun/main.cpp Tools/simrun/ColonyScenario.cpp Tools/simrun/HouseScenario.cpp Tools/simrun/PowerScenario.cpp Tools/simrun/RaidSoak.cpp)
 target_link_libraries(simrun PRIVATE colonysim colonysim_thirdparty)
 target_compile_definitions(simrun PRIVATE COLONY_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../data")
 
@@ -68,6 +68,11 @@ add_test(NAME simrun_temperature COMMAND simrun --seed 42 --size 128 --days 2 --
 # A second seed, because the first run on seed 7 found a bug seed 42 did not.
 add_test(NAME colony_scenario COMMAND simrun --scenario colony --seed 42)
 add_test(NAME colony_scenario_seed7 COMMAND simrun --scenario colony --seed 7)
+
+# The two-storey house (M4, docs/design/house-scenario.md): six colonists build a house with stairs and an upper floor,
+# sleep upstairs and haul up and down for three days.
+add_test(NAME house_scenario COMMAND simrun --scenario house --seed 42)
+add_test(NAME house_scenario_seed7 COMMAND simrun --scenario house --seed 7)
 
 # The power check (E5, docs/design/power.md): solar, batteries, lamps and a switch for three days.
 add_test(NAME power_check COMMAND simrun --power)

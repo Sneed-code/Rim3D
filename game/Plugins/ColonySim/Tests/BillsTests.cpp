@@ -142,7 +142,7 @@ TEST_CASE("Bills: the recipes in the data are RimWorld's simple meal, four at on
     CHECK(simple->work == doctest::Approx(432.0f));  // 300 ticks
     CHECK(simple->skill == "Cooking");
     CHECK(simple->minSkill == 0);
-    CHECK(simple->users == std::vector<DefId>{defs.idOf("Things", "FueledStove")});
+    CHECK(simple->users == std::vector<DefId>{defs.idOf("Things", "FueledStove"), defs.idOf("Things", "ElectricStove")});
     BILLS_REQUIRE(simple->ingredients.size() == 1);
     BILLS_REQUIRE(simple->products.size() == 1);
     CHECK(simple->products[0].item == defs.idOf("Things", "MealSimple"));

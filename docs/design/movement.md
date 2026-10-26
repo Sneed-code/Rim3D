@@ -114,7 +114,9 @@ and queue round each other at the stockpile.
   `1 / speed factor`) and made the corridor search 15 times bigger on the test map, because the
   region route and its guide know nothing of slopes. It needs a per-region average cost in the
   region graph first; do that with the first task that wants it (a ridge or marsh in the way).
-- **Stairs and levels**: pawns stay on their level (the movement ignores neighbours on other levels).
+- **Stairs and levels** (M2): a pawn climbs stairs and ladders standing in the cell at their foot (or head) while
+  `Mover::climbed` counts up, then stands at the other end; it only steers round pawns on its own level. See
+  [levels.md](levels.md).
 - **Running, sneaking, crawling**: one speed per pawn, from the def. Injury, load and
   apparel slow-downs come with the health and inventory tasks, as a multiplier on `metresPerStep`.
 - **Animals and remnant machines** use the same system; bigger bodies need a radius per def (`kPawnRadius`

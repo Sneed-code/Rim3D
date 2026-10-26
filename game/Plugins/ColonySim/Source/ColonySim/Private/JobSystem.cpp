@@ -7,11 +7,13 @@
 #include "ColonySim/Construction.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Fire.h"
 #include "ColonySim/Social.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Fuel.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Prisoners.h"
@@ -72,7 +74,11 @@ enum class JobStepKind : uint8_t {
     ApproachPrisoner,  // walk up to the job's prisoner (`site`) (PrisonerJobs.cpp)
     FeedWork,          // hand the carried food over
     ChatWork,          // talk to it
-    RefuelWork
+    RefuelWork,
+    HuntWork,       // walk up to the job's animal and shoot it dead (HuntJobs.cpp)
+    DropCorpse,     // put the carried corpse down in the job's cell
+    ButcherWork,    // cut the corpse up at the butcher table
+    ButcherFinish   // the meat and leather appear and the corpse is gone
 };
 
 constexpr JobStepKind kJobsWaitSteps[] = {JobStepKind::Wait};
@@ -81,6 +87,7 @@ constexpr JobStepKind kJobsHaulSteps[] = {JobStepKind::GotoThing, JobStepKind::P
 constexpr JobStepKind kJobsIngestSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::WalkToSpot,
                                             JobStepKind::Eat};
 constexpr JobStepKind kJobsLayDownSteps[] = {JobStepKind::WalkToSpot, JobStepKind::Lie};
+constexpr JobStepKind kJobsShelterSteps[] = {JobStepKind::GotoCell, JobStepKind::Wait};
 constexpr JobStepKind kJobsMineSteps[] = {JobStepKind::GotoTouch, JobStepKind::MineWork};
 constexpr JobStepKind kJobsPlantSteps[] = {JobStepKind::GotoTouch, JobStepKind::PlantWork};
 constexpr JobStepKind kJobsCleanSteps[] = {JobStepKind::GotoCell, JobStepKind::CleanWork};
@@ -119,6 +126,11 @@ constexpr JobStepKind kJobsChatSteps[] = {JobStepKind::ApproachPrisoner, JobStep
 constexpr JobStepKind kJobsRefuelSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::CarryToCell,
                                             JobStepKind::RefuelWork};
 static_assert(kRefuelPickUpStep == 1, "the Refuel steps moved");
+constexpr JobStepKind kJobsHuntSteps[] = {JobStepKind::HuntWork};
+constexpr JobStepKind kJobsHaulCorpseSteps[] = {JobStepKind::TendGotoPatient, JobStepKind::LiftPawn, JobStepKind::CarryPawn,
+                                                JobStepKind::DropCorpse};
+constexpr JobStepKind kJobsButcherSteps[] = {JobStepKind::TendGotoPatient, JobStepKind::LiftPawn, JobStepKind::CarryPawn,
+                                             JobStepKind::ButcherWork, JobStepKind::ButcherFinish};
 
 // The most steps one pawn's job may run in one game second (guards against a loop of steps that
 // all end at once).
@@ -173,6 +185,10 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::FeedPrisoner: return {kJobsFeedPrisonerSteps, static_cast<int>(std::size(kJobsFeedPrisonerSteps))};
         case JobType::WardenInteract: return {kJobsChatSteps, static_cast<int>(std::size(kJobsChatSteps))};
         case JobType::Refuel: return {kJobsRefuelSteps, static_cast<int>(std::size(kJobsRefuelSteps))};
+        case JobType::Hunt: return {kJobsHuntSteps, static_cast<int>(std::size(kJobsHuntSteps))};
+        case JobType::HaulCorpse: return {kJobsHaulCorpseSteps, static_cast<int>(std::size(kJobsHaulCorpseSteps))};
+        case JobType::Butcher: return {kJobsButcherSteps, static_cast<int>(std::size(kJobsButcherSteps))};
+        case JobType::SeekShelter: return {kJobsShelterSteps, static_cast<int>(std::size(kJobsShelterSteps))};
     }
     return {nullptr, 0};
 }
@@ -197,6 +213,7 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::FeedWork:
         case JobStepKind::ChatWork:
         case JobStepKind::RefuelWork:
+        case JobStepKind::ButcherWork:
         case JobStepKind::Eat:
         case JobStepKind::Lie:
         case JobStepKind::BedRestLie:
@@ -211,14 +228,12 @@ bool jobHoldsStill(const Job& job) {
 
 void jobsStartWalk(const Map& map, const Position& pos, Mover& mover) {
     std::vector<CellPos> route = std::move(mover.path);
-    smoothPath(map, pos.x, pos.y, route);
+    smoothPath(map, pos.x, pos.y, route, pos.level);
     mover.walkTo(pos.x, pos.y, std::move(route));
 }
 
 float jobsDistSq(CellPos a, CellPos b) {
-    const float dx = static_cast<float>(a.x - b.x);
-    const float dy = static_cast<float>(a.y - b.y);
-    return dx * dx + dy * dy;
+    return levelDistSq(static_cast<float>(a.x - b.x), static_cast<float>(a.y - b.y), a.level - b.level);
 }
 
 // Candidates nearest first; ties by Work tab column, scanner, then target.
@@ -268,6 +283,10 @@ const char* jobTypeName(JobType type) {
         case JobType::FeedPrisoner: return "FeedPrisoner";
         case JobType::WardenInteract: return "WardenInteract";
         case JobType::Refuel: return "Refuel";
+        case JobType::Hunt: return "Hunt";
+        case JobType::HaulCorpse: return "HaulCorpse";
+        case JobType::Butcher: return "Butcher";
+        case JobType::SeekShelter: return "SeekShelter";
     }
     return "?";
 }
@@ -559,8 +578,20 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
             }
             return n;
         }
+        case JobType::Hunt:
+            out[0] = keyOf(JobTarget{job.site, CellPos{}});
+            return 1;
+        case JobType::HaulCorpse:
+            out[0] = keyOf(JobTarget{job.thing, CellPos{}});
+            out[1] = keyOf(JobTarget{kNoEntity, job.cell});
+            return 2;
+        case JobType::Butcher:
+            out[0] = keyOf(JobTarget{job.site, CellPos{}});
+            out[1] = keyOf(JobTarget{job.thing, CellPos{}});
+            return 2;
         case JobType::None:
         case JobType::Wait:
+        case JobType::SeekShelter:
         case JobType::ExtinguishFire:  // colonists fight a fire together: nothing is reserved
             return 0;
     }
@@ -754,6 +785,28 @@ bool JobSystem::findStorageCell(DefId def, CellPos from, StoragePriority better,
     return false;
 }
 
+bool JobSystem::findStorageCellIn(uint32_t zoneId, DefId def, CellPos from, Entity pawn, CellPos& out) const {
+    const StockpileZone* zone = zones_.find(zoneId);
+    if (zone == nullptr || !zone->allows(def)) {
+        return false;
+    }
+    bool found = false;
+    float bestDist = 0.0f;
+    for (const CellPos& c : zone->cells) {
+        const float dist = jobsDistSq(from, c);
+        if (found && dist >= bestDist) {
+            continue;
+        }
+        if (roomFor(def, c) <= 0 || reservedByOther(JobTarget{kNoEntity, c}, pawn) || !canReach(from, c)) {
+            continue;
+        }
+        found = true;
+        bestDist = dist;
+        out = c;
+    }
+    return found;
+}
+
 // ---- Thinking -------------------------------------------------------------------------------
 
 void JobSystem::step() {
@@ -780,6 +833,10 @@ void JobSystem::step() {
             }
             continue;
         }
+        // It is in a mental break (C19): the break system walks it, until the break is over.
+        if (const MentalBreaker* breaker = reg.try_get<MentalBreaker>(pawn); breaker != nullptr && breaker->active) {
+            continue;
+        }
         // It fights (drafted, or another faction's: F4): no think, no job, until it is undrafted.
         if (reg.all_of<Fighter>(pawn)) {
             continue;
@@ -795,6 +852,13 @@ void JobSystem::step() {
             }
             dropCarried(pawn);  // the player's colonist may carry something with no job (U10)
             restUnderPawn(pawn);
+            continue;
+        }
+        // On fire: it runs about in panic, thinking of nothing else (docs/design/fire.md). A pawn who can't (no panic) thinks as usual.
+        if (fire_ != nullptr && reg.all_of<Burning>(pawn) && fire_->panicStep(pawn, time_.seconds)) {
+            if (reg.get<Worker>(pawn).job.type != JobType::None) {
+                endJob(pawn, JobEnd::Interrupted, "it is on fire");
+            }
             continue;
         }
         if (Health* health = reg.try_get<Health>(pawn)) {
@@ -1012,6 +1076,15 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::Refuel) {
         return failCheckRefuel(pawn, job, why);
     }
+    if (job.type == JobType::Hunt) {
+        return failCheckHunt(pawn, job, why);
+    }
+    if (job.type == JobType::HaulCorpse) {
+        return failCheckHaulCorpse(pawn, job, why);
+    }
+    if (job.type == JobType::Butcher) {
+        return failCheckButcher(pawn, job, why);
+    }
     entt::registry& reg = things_.registry();
     if (job.type == JobType::DeliverResources) {
         const ConstructionSite* site = reg.valid(job.site) ? reg.try_get<ConstructionSite>(job.site) : nullptr;
@@ -1170,6 +1243,14 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return feedPrisonerWork(pawn, job, why);
         case JobStepKind::ChatWork:
             return chatWork(pawn, job, why);
+        case JobStepKind::HuntWork:
+            return huntWork(pawn, job, why);
+        case JobStepKind::DropCorpse:
+            return dropCorpse(pawn, job, why);
+        case JobStepKind::ButcherWork:
+            return butcherWork(pawn, job, why);
+        case JobStepKind::ButcherFinish:
+            return butcherFinish(pawn, job, why);
     }
     return StepResult::Failed;
 }
@@ -1341,8 +1422,20 @@ JobSystem::StepResult JobSystem::buildWork(Entity pawn, Job& job, std::string& w
     }
     ConstructionSite& site = reg.get<ConstructionSite>(job.thing);
     site.workDone += constructionSpeed(pawn) * static_cast<float>(construction_.numbers().buildWorkPerSecond);
+    learnSkill(pawn, "Construction", gather_.constructionXpPerSecond);
     if (site.workDone < site.workTotal) {
         return StepResult::Running;
+    }
+    if (construction_.isUpperFloor(reg.get<Thing>(job.thing).def)) {
+        // An upper floor: the frame becomes the floor (docs/design/levels.md).
+        const CellPos cell = site.origin;
+        release(pawn, job);
+        construction_.complete(job.thing);
+        if (!map_.upperFloor(cell)) {
+            why = "the floor can't be held up there any more";
+            return StepResult::Failed;
+        }
+        return StepResult::Next;
     }
     const Entity building = construction_.complete(job.thing);
     if (building == kNoEntity) {
@@ -1366,6 +1459,7 @@ JobSystem::StepResult JobSystem::deconstructWork(Entity pawn, Job& job, std::str
         pawnDid(pawn, PawnAction::Deconstruct, job.thing);
     }
     job.progress += constructionSpeed(pawn) * static_cast<float>(construction_.numbers().deconstructWorkPerSecond);
+    learnSkill(pawn, "Construction", gather_.constructionXpPerSecond);
     if (job.progress < construction_.deconstructWork(job.thing)) {
         return StepResult::Running;
     }
@@ -1504,7 +1598,7 @@ void JobSystem::jobEvent(Entity pawn, const Job& job, bool started, const std::s
     event.thing = pawn;
     event.def = things_.registry().get<Thing>(pawn).def;
     event.job = job.type;
-    event.target = jobIsHandling(job.type) ? job.site : job.thing;
+    event.target = jobIsHandling(job.type) || job.type == JobType::Hunt ? job.site : job.thing;
     event.cell = job.cell;
     event.message = message;
     events_.push_back(std::move(event));

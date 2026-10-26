@@ -281,8 +281,15 @@ bool AnimalSystem::pollPath(Entity e, Animal& a, const Kind& kind, AnimalCare& c
         a.mode = AnimalMode::Idle;
         return true;
     }
+    for (const CellPos& step : route) {
+        if (map_.isDoor(step)) {  // animals can't open doors: the way is shut
+            care.noPathUntil = now + static_cast<int64_t>(husbandry_->rules().repathSeconds);
+            a.mode = AnimalMode::Idle;
+            return true;
+        }
+    }
     const Position& pos = reg.get<Position>(e);
-    smoothPath(map_, pos.x, pos.y, route);
+    smoothPath(map_, pos.x, pos.y, route, pos.level);
     Mover& mover = reg.get<Mover>(e);
     mover.metresPerStep = kind.topSpeed * rules_.wanderSpeed;
     mover.walkTo(pos.x, pos.y, std::move(route));

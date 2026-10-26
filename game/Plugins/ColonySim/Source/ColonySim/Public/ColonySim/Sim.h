@@ -42,6 +42,7 @@ class Designations;
 class ExplosiveSystem;
 class FighterSystem;
 class Husbandry;
+class MentalBreakSystem;
 class JobSystem;
 class Lights;
 class MeleeSystem;
@@ -62,8 +63,10 @@ class PrisonerSystem;
 class Rooms;
 class TemperatureSystem;
 class SpoilageSystem;
+class CraftingSystem;
 class Things;
 class UpperFloors;
+class RoofCollapse;
 class Weather;
 class Zones;
 class Farming;
@@ -238,6 +241,9 @@ public:
     const TemperatureSystem& temperature() const { return *temperature_; }
     SpoilageSystem& spoilage() { return *spoilage_; }
     const SpoilageSystem& spoilage() const { return *spoilage_; }
+    // Quality, stuff and bench speed of what work tables make (docs/design/crafting.md).
+    CraftingSystem& crafting() { return *crafting_; }
+    const CraftingSystem& crafting() const { return *crafting_; }
     // The temperature in the open right now, in degrees Celsius: the biome's season, the hour of the
     // day and the random drift (Weather::temperatureAt).
     float outdoorTemperature() const;
@@ -252,6 +258,8 @@ public:
     // Upper floors and the rules for laying them (docs/design/levels.md).
     UpperFloors& upperFloors() { return *upperFloors_; }
     const UpperFloors& upperFloors() const { return *upperFloors_; }
+    RoofCollapse& roofCollapse() { return *roofCollapse_; }
+    const RoofCollapse& roofCollapse() const { return *roofCollapse_; }
 
     // Stockpile zones (docs/design/jobs.md).
     const Zones& zones() const { return *zones_; }
@@ -289,6 +297,10 @@ public:
     Breeding& breeding() { return *breeding_; }
     const Breeding& breeding() const { return *breeding_; }
     const Husbandry& husbandry() const { return *husbandry_; }
+
+    // Colonists who snap when their mood is low: wander, binge, tantrum, berserk, leave (docs/design/mental-breaks.md).
+    MentalBreakSystem& mentalBreaks() { return *mentalBreaks_; }
+    const MentalBreakSystem& mentalBreaks() const { return *mentalBreaks_; }
 
     // Blueprints, frames and taking buildings down (docs/design/construction.md).
     Construction& construction() { return *construction_; }
@@ -356,6 +368,7 @@ private:
     std::unique_ptr<CombatSystem> combat_;
     std::unique_ptr<ExplosiveSystem> explosives_;  // after combat_ and health_
     std::unique_ptr<ApparelSystem> apparel_;  // after combat, which it uses
+    std::unique_ptr<CraftingSystem> crafting_;  // after apparel_ and zones_
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
     Rng rng_;
@@ -371,11 +384,13 @@ private:
     std::unique_ptr<RoomStats> roomStats_;
     std::unique_ptr<AnimalSystem> animals_;
     std::unique_ptr<UpperFloors> upperFloors_;  // M1
+    std::unique_ptr<RoofCollapse> roofCollapse_;  // M3, after the rooms and the job system
     std::unique_ptr<RaidSystem> raids_;        // after the fighters
     std::unique_ptr<PrisonerSystem> prisoners_;  // after the raids
     std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system
     std::unique_ptr<Breeding> breeding_;    // after husbandry_
     std::unique_ptr<Fire> fire_;            // after the weather, temperature, rooms, floors, filth, plants and health
+    std::unique_ptr<MentalBreakSystem> mentalBreaks_;  // after the job and fighter systems
     std::vector<std::string> setupErrors_;
     std::vector<std::pair<uint64_t, Command>> pending_;  // id, command
     uint64_t submitted_ = 0;
