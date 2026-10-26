@@ -48,6 +48,7 @@ class Lights;
 class MeleeSystem;
 class Mineables;
 class MovementSystem;
+class WoundViews;
 class MoodSystem;
 class MedicineSystem;
 class RecreationSystem;
@@ -359,6 +360,7 @@ private:
     std::optional<float> outdoorOverride_;
     DoorNumbers doorNumbers_;  // for the snapshot's door animation
     std::unique_ptr<HealthSystem> health_;
+    std::unique_ptr<WoundViews> woundViews_;  // for the snapshot's wounds
     std::unique_ptr<NeedsSystem> needs_;
     std::unique_ptr<MoodSystem> mood_;
     std::unique_ptr<RecreationSystem> recreation_;

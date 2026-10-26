@@ -112,6 +112,8 @@ injury at 0 is gone. Lost parts never come back (prosthetics and bionics are lat
 heals completely may leave a scar or old wound, which never heals and is never picked to heal ([medicine.md](medicine.md)).
 **Not built yet:** infections and diseases, immunity.
 
+What a snapshot shows of the injuries (kind, skin region, bandages, bleeding) is in [wounds.md](wounds.md).
+
 ## Using it
 
 ```cpp

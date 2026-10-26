@@ -190,6 +190,7 @@ Since F2 pawns also have
 Since E5 a building with a power part has `power`, `powerNet`, `powerWatts` and `batteryFill`, and the snapshot has `powerNets` ([power.md](power.md)). Since C5 a door's `ThingView` has `doorOpen` (0 to 1) and the snapshot has `rooms` (the enclosed rooms with role and
 size), `roofCells` (the thin roof) and `roofChanges` ([rooms.md](rooms.md)). Since C3 the snapshot lists the `designations`
 (cell and kind of every mine, cut and harvest mark; [mining.md](mining.md)).
+Since V7 pawns with a body also have `bloodLoss`, `bleedPerDay` and their visible wounds, `woundCount` from `Snapshot::wounds[firstWound]` (kind, skin region, size, bandaged, bleeding; [wounds.md](wounds.md)).
 Later tasks add what they draw and show: pawn info, the work tab.
 
 Unreal reads only snapshots and events, never the registry or `Things.h`. That lets the sim move to

@@ -52,6 +52,7 @@
 #include "ColonySim/Weather.h"
 #include "ColonySim/Zones.h"
 #include "MovementSystem.h"
+#include "WoundViews.h"
 
 #include <algorithm>
 #include <cmath>
@@ -129,6 +130,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       groundHash_(map_.contentHash()) {
     things_->setEventLog(&events_);
     health_->setEventLog(&events_);
+    woundViews_ = std::make_unique<WoundViews>(*defs_, *health_);
     weather_ = std::make_unique<Weather>(map_, *defs_, splitMix64(settings.seed ^ 0x636C696D617465ULL), "TemperateForest");
     weather_->setEventLog(&events_);
     movement_->setWeather(weather_.get());
@@ -1225,6 +1227,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.growingZoneCells.clear();
     out.animalZoneCells.clear();
     out.looks.clear();
+    out.wounds.clear();
     out.research.clear();
     out.talents.clear();
     for (const auto& [pawn, state] : talents_->states()) {
@@ -1367,6 +1370,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Health* health = reg.try_get<Health>(entity)) {
             view.downed = health->downed;
             view.dead = health->dead;
+            view.bloodLoss = health->bloodLoss;
+            view.bleedPerDay = health->bleedPerDay;
+            view.firstWound = static_cast<uint32_t>(out.wounds.size());
+            if (!health->injuries.empty() || !health->missing.empty()) {
+                woundViews_->append(entity, thing.def, *health, out.wounds);
+            }
+            view.woundCount = static_cast<uint32_t>(out.wounds.size()) - view.firstWound;
         }
         if (const PawnLooks* looks = reg.try_get<PawnLooks>(entity)) {
             PawnLooksView l;
