@@ -847,8 +847,29 @@ struct SaveCommandNames {
     std::vector<uint16_t> indexOfType;  // writing: for each variant index, its place in `names`
 };
 
-template <typename>
-inline constexpr bool kSaveNoSuchCommand = false;
+// The area commands are saved here, not in `saveCommand`'s chain of branches: MSVC stops at 128 nested blocks.
+template <typename Type>
+inline constexpr bool kSaveAreaCommand = std::is_same_v<Type, CreateAreaCommand> || std::is_same_v<Type, PaintAreaCommand> ||
+                                         std::is_same_v<Type, DeleteAreaCommand> || std::is_same_v<Type, AssignAreaCommand>;
+
+template <typename Ar>
+bool saveAreaCommand(Ar& ar, Command& command) {
+    if (auto* create = std::get_if<CreateAreaCommand>(&command)) {
+        ar.text("name", create->name);
+    } else if (auto* paint = std::get_if<PaintAreaCommand>(&command)) {
+        ar.value("area", paint->area);
+        ar.group("rect", [&] { saveRect(ar, paint->rect); });
+        ar.value("add", paint->add);
+    } else if (auto* remove = std::get_if<DeleteAreaCommand>(&command)) {
+        ar.value("area", remove->area);
+    } else if (auto* assign = std::get_if<AssignAreaCommand>(&command)) {
+        ar.value("pawn", assign->pawn);
+        ar.value("area", assign->area);
+    } else {
+        return false;
+    }
+    return true;
+}
 
 template <typename Ar>
 void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
@@ -914,6 +935,9 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
         }
     }
     ar.note("name", commandName(command));
+    if (saveAreaCommand(ar, command)) {
+        return;
+    }
     std::visit(
         [&](auto& c) {
             using Type = std::decay_t<decltype(c)>;
@@ -1198,17 +1222,6 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
             } else if constexpr (std::is_same_v<Type, SetMedicalCareCommand>) {
                 ar.value("pawn", c.pawn);
                 ar.text("care", c.care);
-            } else if constexpr (std::is_same_v<Type, CreateAreaCommand>) {
-                ar.text("name", c.name);
-            } else if constexpr (std::is_same_v<Type, PaintAreaCommand>) {
-                ar.value("area", c.area);
-                ar.group("rect", [&] { saveRect(ar, c.rect); });
-                ar.value("add", c.add);
-            } else if constexpr (std::is_same_v<Type, DeleteAreaCommand>) {
-                ar.value("area", c.area);
-            } else if constexpr (std::is_same_v<Type, AssignAreaCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.value("area", c.area);
             } else if constexpr (std::is_same_v<Type, ContractDiseaseCommand>) {
                 ar.value("pawn", c.pawn);
                 ar.text("disease", c.disease);
@@ -1272,7 +1285,7 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 auto* stop = &c;
                 ar.value("pawn", stop->pawn);
             } else {
-                static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
+                static_assert(kSaveAreaCommand<Type>, "save every command type here");
             }
         },
         command);
