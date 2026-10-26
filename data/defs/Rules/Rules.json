@@ -292,11 +292,14 @@
     "surgerySuccessBySkill": [[0, 0.1], [1, 0.2], [2, 0.3], [3, 0.4], [4, 0.5], [5, 0.6], [6, 0.7], [7, 0.75], [8, 0.8], [9, 0.85], [10, 0.9], [11, 0.92], [12, 0.94], [13, 0.96], [14, 0.98], [15, 1], [16, 1.02], [17, 1.04], [18, 1.06], [19, 1.08], [20, 1.1]],
     "surgeryFailDeathChanceFactor": 0.1,
     "immunityGainPerDayMultiplierWhenTended": 1.0,
+    "infection": { "delayHoursMin": 6, "delayHoursMax": 18, "tendedChanceFactorAtQuality0": 0.85, "tendedChanceFactorAtQuality1": 0.05, "cleanlinessSlope": -0.25, "chanceFactorMin": 0.5, "chanceFactorMax": 2.0 },
+    "immunityGainSpeedByRest": { "Ground": 1.0, "Bed": 1.05, "HospitalBed": 1.07 },
+    "diseaseUpdateSeconds": 60,
     "diseaseOnsetMtbDays": { "Flu": 50, "Plague": 80, "Malaria": 80, "SleepingSickness": 80, "GutWorms": 80, "MuscleParasites": 80 },
     "foodPoisoningChancePerMeal": { "default": 0.0, "dirtyKitchen": 0.02, "rotten": 0.25 },
     "bodyTemperatureC": { "normal": 37.0, "hypothermiaBelow": 35.0, "heatstrokeAbove": 37.5 },
     "unverified": ["tendQualityNoMedicineFactor", "tendWorkSeconds", "tendXp", "selfTendQualityFactor", "surgeryFailDeathChanceFactor", "diseaseOnsetMtbDays", "foodPoisoningChancePerMeal", "bodyTemperatureC"],
-    "ours": ["immunityGainPerDayMultiplierWhenTended", "foodPoisoningChancePerMeal.dirtyKitchen", "careHerbalMaxPotency", "careNormalMaxPotency"]
+    "ours": ["immunityGainPerDayMultiplierWhenTended", "foodPoisoningChancePerMeal.dirtyKitchen", "careHerbalMaxPotency", "careNormalMaxPotency", "infection", "immunityGainSpeedByRest", "diseaseUpdateSeconds"]
   },
   {"defName": "MentalBreakRules", "source": "RimWorld", "meanDaysBetweenBreaks": {"Minor": 4.0, "Major": 1.5, "Extreme": 0.5}, "moodCurve": [[0, 0.1], [0.5, 0.5], [1, 1]], "moodCurveNote": "x is mood / threshold level, y multiplies the mean days between breaks (lower mood, shorter wait)", "catharsisThought": "Catharsis", "minHoursBetweenBreaks": 24, "recoveryMoodMargin": 0.1, "restOnlyWhenAwake": true, "unverified": ["meanDaysBetweenBreaks", "moodCurve", "minHoursBetweenBreaks", "recoveryMoodMargin"], "ours": ["restOnlyWhenAwake"]},
   {"defName": "JoyRules", "source": "RimWorld", "fallPerDay": 0.8, "joyHours": [19, 21], "toleranceMinGainFactor": 0.1, "toleranceMax": 1.0, "note": "Recreation falls fallPerDay when awake; it is done in the joy hours of the schedule (C18): the standard schedule has Joy from the first hour through the second, inclusive (19:00 to 21:59, three evening hours; D9 guessed 16 to 22, which took six working hours a day). Effective gain = joyPerHour x (1 - tolerance of the kind) x joyGainFactor, never under toleranceMinGainFactor.", "unverified": ["fallPerDay", "toleranceMinGainFactor"], "ours": ["joyHours", "toleranceMax"]},
