@@ -138,11 +138,15 @@ TEST_CASE("Raids: raid points follow RimWorld's wealth and colonist curves") {
     auto sim = raidTestSim();
     RAID_REQUIRE(sim->setupErrors().empty());
     const float wealth = sim->raids().colonyWealth();
-    // Crashlanded: silver, steel, wood, components, medicine and meals, well under 10,000.
-    CHECK(wealth > 4000.0f);
-    CHECK(wealth < 10000.0f);
-    // Six colonists at 15 points each (wealth under 10,000), day 0 (x0.7), adaptation 0.8.
-    CHECK(sim->raids().threatPoints() == doctest::Approx(6 * 15 * 0.7 * 0.8).epsilon(0.001));
+    // Crashlanded: silver, steel, wood, components, medicine and meals, plus the six colonists at
+    // 1,750 each (T1: the wiki counts creatures): a little over 14,000, where wealth points start.
+    CHECK(wealth > 4000.0f + 6 * 1750.0f);
+    CHECK(wealth < 20000.0f);
+    // The wiki's curves: wealth points from 0 at 14,000 to 2,400 at 400,000; 15 points a colonist
+    // up to 10,000, rising to 140 at 400,000. Then day 0 (x0.7) and adaptation 0.8.
+    const float wealthPoints = std::max(0.0f, (wealth - 14000.0f) / 386000.0f * 2400.0f);
+    const float perColonist = 15.0f + (wealth - 10000.0f) / 390000.0f * 125.0f;
+    CHECK(sim->raids().threatPoints() == doctest::Approx((wealthPoints + 6 * perColonist) * 0.7 * 0.8).epsilon(0.001));
 
     // Rich colony, later: 400,000 wealth gives 2,400 points plus 140 a colonist.
     SimSettings settings;
@@ -393,6 +397,51 @@ TEST_CASE("Raids: a squad that loses half its pawns routs and runs off the map")
     for (size_t i = half; i < raiders.size(); ++i) {
         CHECK_FALSE(reg.valid(raiders[i]));
     }
+}
+
+TEST_CASE("Raids: a squad whose members are all badly hurt runs, though none is down") {
+    SimSettings settings;
+    settings.seed = 43;
+    settings.mapSize = 96;
+    settings.flatMap = true;
+    Sim sim(settings, raidTestDefs());
+    sim.submit(StartRaidCommand{"Pirate", 400.0f, 2});
+    sim.step();
+    const std::vector<Entity> raiders = raidTestRaiders(sim);
+    RAID_REQUIRE(raiders.size() >= 4);
+    sim.stepMany(60);
+    RAID_REQUIRE(sim.raids().state().squads.size() == 1);
+    CHECK(sim.raids().state().squads[0].state == SquadState::Advance);
+    // Everyone is hurt but on their feet: pain and a limp, nobody downed.
+    bool routed = false;
+    for (int i = 0; i < 90 && !routed; ++i) {
+        for (const Entity r : raiders) {
+            Health& h = sim.things().registry().get<Health>(r);
+            h.pain = 0.5f;
+            h.movingFactor = 0.5f;
+        }
+        sim.step();
+        if (const Event* e = raidTestEvent(sim, EventType::SquadChanged)) {
+            routed = e->message == "Rout";
+        }
+    }
+    CHECK(routed);
+    for (const Entity r : raiders) {
+        CHECK_FALSE(sim.health().incapacitated(r));
+    }
+}
+
+TEST_CASE("Raids: a squad of unhurt pawns doesn't run") {
+    SimSettings settings;
+    settings.seed = 43;
+    settings.mapSize = 96;
+    settings.flatMap = true;
+    Sim sim(settings, raidTestDefs());
+    sim.submit(StartRaidCommand{"Pirate", 400.0f, 2});
+    sim.step();
+    sim.stepMany(150);
+    RAID_REQUIRE(sim.raids().state().squads.size() == 1);
+    CHECK(sim.raids().state().squads[0].state != SquadState::Rout);
 }
 
 TEST_CASE("Raids: a lone raider facing a stronger colony falls back") {

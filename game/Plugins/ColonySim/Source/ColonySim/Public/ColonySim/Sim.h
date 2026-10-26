@@ -42,6 +42,7 @@ class Designations;
 class ExplosiveSystem;
 class FighterSystem;
 class Husbandry;
+class InspirationSystem;
 class MentalBreakSystem;
 class JobSystem;
 class Lights;
@@ -60,6 +61,7 @@ class Plants;
 class PowerGrid;
 class Regions;
 class PrisonerSystem;
+class ShipSystem;
 class Rooms;
 class TemperatureSystem;
 class SpoilageSystem;
@@ -70,6 +72,7 @@ class RoofCollapse;
 class Weather;
 class Zones;
 class Farming;
+class NarratorSystem;
 struct Snapshot;
 class SimSaveAccess;
 
@@ -285,7 +288,13 @@ public:
     RaidSystem& raids() { return *raids_; }
     const RaidSystem& raids() const { return *raids_; }
 
+    // The narrator, incidents and threat points (docs/design/narrator.md).
+    NarratorSystem& narrator() { return *narrator_; }
+    const NarratorSystem& narrator() const { return *narrator_; }
     // Prisoners: capture, feeding, warden talks, recruiting and release (docs/design/prisoners.md).
+    // The spaceship ending: parts, reactor, siege waves, launch (docs/design/ship.md).
+    ShipSystem& ship() { return *ship_; }
+    const ShipSystem& ship() const { return *ship_; }
     PrisonerSystem& prisoners() { return *prisoners_; }
     const PrisonerSystem& prisoners() const { return *prisoners_; }
 
@@ -301,6 +310,10 @@ public:
     // Colonists who snap when their mood is low: wander, binge, tantrum, berserk, leave (docs/design/mental-breaks.md).
     MentalBreakSystem& mentalBreaks() { return *mentalBreaks_; }
     const MentalBreakSystem& mentalBreaks() const { return *mentalBreaks_; }
+
+    // Good-mood colonists get inspired: a legendary craft, a recruitment, a shooting frenzy (docs/design/inspirations.md).
+    InspirationSystem& inspirations() { return *inspirations_; }
+    const InspirationSystem& inspirations() const { return *inspirations_; }
 
     // Blueprints, frames and taking buildings down (docs/design/construction.md).
     Construction& construction() { return *construction_; }
@@ -387,10 +400,12 @@ private:
     std::unique_ptr<RoofCollapse> roofCollapse_;  // M3, after the rooms and the job system
     std::unique_ptr<RaidSystem> raids_;        // after the fighters
     std::unique_ptr<PrisonerSystem> prisoners_;  // after the raids
+    std::unique_ptr<ShipSystem> ship_;           // after the raids
     std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system
     std::unique_ptr<Breeding> breeding_;    // after husbandry_
     std::unique_ptr<Fire> fire_;            // after the weather, temperature, rooms, floors, filth, plants and health
     std::unique_ptr<MentalBreakSystem> mentalBreaks_;  // after the job and fighter systems
+    std::unique_ptr<InspirationSystem> inspirations_;  // after the mood system
     std::vector<std::string> setupErrors_;
     std::vector<std::pair<uint64_t, Command>> pending_;  // id, command
     uint64_t submitted_ = 0;
@@ -399,6 +414,7 @@ private:
     std::vector<Checkpoint> checkpoints_;
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
+    std::unique_ptr<NarratorSystem> narrator_;  // after raids_
     std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
 };
 

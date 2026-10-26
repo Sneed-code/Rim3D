@@ -250,6 +250,9 @@ struct SquadView {
     int members = 0;       // still with it: on the map, downed ones included
     int started = 0;
     CellPos target;        // the cell it goes for
+    uint8_t strategy = 0;  // RaidStrategy (F12): 0 Assault, 1 Sappers, 2 DropPods, 3 Thieves, 4 Kidnappers
+    bool breaching = false;  // sappers are digging through a wall...
+    CellPos breach;          // ...this one
 };
 
 // A bullet in flight (docs/design/combat.md). Unreal draws a tracer along its velocity; it
@@ -381,6 +384,19 @@ struct ResearchView {
     bool current = false;
 };
 
+// The spaceship ending (docs/design/ship.md). `phase` is a ShipPhase number.
+struct ShipView {
+    uint8_t phase = 0;
+    int64_t activationLeft = 0;  // game seconds until the reactor is active (0 unless activating)
+    int waves = 0;               // siege waves sent
+    int beams = 0, caskets = 0, reactors = 0, engines = 0, cores = 0, sensors = 0;
+    int riders = 0;              // living riders in caskets that touch a beam
+    bool canLaunch = false;
+    std::string problem;         // why not, in plain words
+    bool won = false;
+    int escaped = 0;
+};
+
 // The date, the weather and the sky's mood (docs/design/weather.md). Snow per cell is not here:
 // read `Sim::weather().snowDepth(cell)` when `snowChanges` goes up.
 struct WeatherView {
@@ -397,6 +413,17 @@ struct WeatherView {
     float wetness = 0.0f;
     uint64_t snowChanges = 0;
     float snowCover = 0.0f;   // share of the map's cells with snow
+};
+
+// The narrator (docs/design/narrator.md): which one and the difficulty (invalid DefIds while it is
+// off), the colony's wealth and threat points at its last check, and incidents so far. Letters come
+// as Letter events.
+struct NarratorView {
+    DefId narrator;
+    DefId difficulty;
+    float wealth = 0.0f;
+    float threatPoints = 0.0f;
+    uint32_t incidents = 0;
 };
 
 // A talent rank the protagonist has bought (docs/design/talents.md).
@@ -464,6 +491,8 @@ struct Snapshot {
     std::vector<ApparelView> apparel;      // worn apparel, see ThingView
     std::vector<OutfitView> outfits;       // the outfit policies, by id
     WeatherView weather;
+    ShipView ship;
+    NarratorView narrator;
 
     // The thing with this id, or null if it is not on the map. Binary search.
     COLONY_API const ThingView* find(Entity id) const;

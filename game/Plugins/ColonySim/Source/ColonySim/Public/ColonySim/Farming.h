@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -62,6 +63,12 @@ public:
         lights_ = lights;
     }
 
+    // What colonists know of the weather ahead: the outdoor temperature at a game second, and the game second
+    // now. With them a crop is sown only where it can ripen before the frost (`sowBlocker`).
+    void setForecast(std::function<float(int64_t)> outdoorAt, std::function<int64_t()> now) {
+        forecast_ = std::move(outdoorAt);
+        clock_ = std::move(now);
+    }
     // The buildings that can carry a plant (plant pot, hydroponics basin) and whether one is running (powered).
     // A building with `plantSpot` gives its cell that fertility; with `plantSpot.needsPower` the crop on it
     // does not grow, and cannot be sown, while it has no power. Without this no building carries plants.
@@ -95,7 +102,8 @@ public:
     const FarmingStats& stats() const { return stats_; }
 
     // Why a crop can't be sown in a cell now (empty if it can): ground too poor, too cold or hot,
-    // a tree in the way. The plant already there, if it is not a tree, is replaced.
+    // a tree in the way, or (like RimWorld's growth season check for sowing) frost that would come before the
+    // crop could ripen in the open. The plant already there, if it is not a tree, is replaced.
     std::string sowBlocker(CellPos c) const;
     // The plant in a zone cell is fully grown and can be harvested.
     bool readyToHarvest(CellPos c) const;
@@ -117,6 +125,9 @@ public:
 
 private:
     float temperatureOf(CellPos c) const;
+    // Whether a crop sown in this open-air cell now would ripen before the temperature falls under its
+    // `coldDamageBelow`, by the forecast; true where there is no forecast or the cell is under a roof.
+    bool ripensBeforeFrost(CellPos c, DefId cropId) const;
     bool spotUnpowered(CellPos c) const;
     size_t slot(CellPos c) const;
 
@@ -136,6 +147,13 @@ private:
     uint64_t changeCount_ = 0;
     double frostKillPerDegree_ = 0.1;
     double minGlow_ = 0.51;
+    double sowGrowthMargin_ = 0.7;   // PlantRules: sowing takes crops to grow at this share of the forecast rate
+    int64_t sowSlackHours_ = 36;     // PlantRules: ... and to need this many frost-free hours after ripening, to be picked
+    std::function<float(int64_t)> forecast_;
+    std::function<int64_t()> clock_;
+    // Answers of ripensBeforeFrost for this game hour, by crop and growth rate; derived, so neither saved nor hashed.
+    mutable int64_t ripenHour_ = -1;
+    mutable std::map<std::pair<uint32_t, int>, bool> ripenCache_;
 };
 
 }  // namespace colony

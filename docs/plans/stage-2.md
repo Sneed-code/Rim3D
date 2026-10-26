@@ -132,7 +132,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | H1 | **Doctors, medicine and rescue.** Medicine items; the Doctor job tends patients in bed, quality from Medicine skill, medicine and bed; patient and bed-rest work; medical beds; rescuing downed colonists to a bed; scars from healed wounds. | Cloud | Sonnet, high | 90 min | S7, D7 |
-| | H2 | **Infections and diseases.** Infection chance from wound tending; RimWorld's immunity race (immunity against severity); flu, plague, malaria, sleeping sickness, gut worms, muscle parasites, food poisoning; a hook for T3's outbreaks. | Cloud | Sonnet, high | 90 min | H1 |
+| ✓ | H2 | **Infections and diseases.** Infection chance from wound tending; RimWorld's immunity race (immunity against severity); flu, plague, malaria, sleeping sickness, gut worms, muscle parasites, food poisoning; a hook for T3's outbreaks. | Cloud | Sonnet, high | 90 min | H1 |
 | | H3 | **Surgery and prosthetics.** Operation bills on a pawn (amputate, install or remove a part); success chance by RimWorld's rule (skill, bed, medicine, cleanliness); body parts as items; prosthetics and bionics change capacities. | Cloud | Sonnet, high | 90 min | H1, C14 |
 
 ### Animals (N)
@@ -153,7 +153,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | ✓ | F9 | **Explosives and grenades.** An explosion system (radius, falloff, damage to pawns and buildings, knock-down); frag grenades thrown as arcing projectiles; fighters throw them at groups in cover and dive away from them (F5's sidestep grown into a dive). Molotovs once E4 is in. | Cloud | Sonnet, high | 90 min | S7 |
 | | F10 | **Medics, firefighters and rescue under fire.** The alarm's Medic and Firefighter roles from `game-design.md`; fighters drag downed friends to safety when the route is reasonably safe; scenario checks in F7's nightly run. | Cloud | Opus, high | 90 min | F6, H1, E4 |
 | ✓ | F11 | **Turrets and traps.** Powered mini-turret (F2's guns, auto targeting, blows up when destroyed), spike trap and IED trap; the fighter AI avoids known traps. | Cloud | Sonnet, medium | 60 min | E5, F9 |
-| | F12 | **Raid strategies.** Sappers who dig or blast through walls, drop-pod raids landing inside the base, raiders who steal or kidnap and run, staged attacks at night; picked by T1's points. | Cloud | Opus, high | 120 min | T1, F9 |
+| ✓ | F12 | **Raid strategies.** Sappers who dig or blast through walls, drop-pod raids landing inside the base, raiders who steal or kidnap and run, staged attacks at night; picked by T1's points. | Cloud | Opus, high | 120 min | T1, F9 |
 
 ### Protagonist (P)
 
@@ -169,7 +169,7 @@ G2, A1 and A2 are Stage 1 tasks.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | T1 | **Narrator, incidents and threat points.** Colony wealth; threat points from wealth and colonists by RimWorld's curves; an incident system (weights, cooldowns, earliest day); Orrin, Maren and Jinx as RimWorld's three storytellers; letters as events; F6's raid becomes the first incident. | Cloud | Opus, high | 90 min | F6, D10 |
+| ✓ | T1 | **Narrator, incidents and threat points.** Colony wealth; threat points from wealth and colonists by RimWorld's curves; an incident system (weights, cooldowns, earliest day); Orrin, Maren and Jinx as RimWorld's three storytellers; letters as events; F6's raid becomes the first incident. | Cloud | Opus, high | 90 min | F6, D10 |
 | | T2 | **Events: nature and good news.** Wanderer joins, cargo pods, crashed pod with a downed survivor, herd migration, animal joins, cold snap, heat wave, eclipse, aurora, berry or healroot bloom. | Cloud | Sonnet, medium | 90 min | T1, E1, E3, N1 |
 | | T3 | **Events: trouble.** Manhunter pack, mad animal, disease outbreaks, blight, short circuit, solar flare, lightning fires, toxic fallout, resonance drone, prison break. | Cloud | Sonnet, medium | 90 min | T1, N5, H2, E4, E5, C13 |
 

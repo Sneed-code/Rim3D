@@ -17,6 +17,7 @@
 //                                     exit 1 if a check fails, docs/design/colony-scenario.md)
 //   simrun --scenario house [--seed 42] [--days 3] [--png house.png] [--verbose]   (the two-storey house, M4: builds, sleeps and hauls
 //                                     across two levels, writes house-level0.png and house-level1.png; docs/design/house-scenario.md)
+//   simrun --world world.png [--seed 42] [--world-size 120x60] [--check]   (the world map: biomes, rivers, roads, settlements; docs/design/world-map.md)
 //   simrun --power [--days 3] [--verbose]   (the power check, E5: solar, batteries, lamps and a switch; docs/design/power.md)
 //   simrun --seed 42 --size 1024 --days 3 --animals [--animal-percent 300] --check   (wild animals, N1:
 //                                     herds by biome, a report of them, checks they stay on walkable ground)
@@ -33,6 +34,7 @@
 #include "ColonyScenario.h"
 #include "HouseScenario.h"
 #include "PowerScenario.h"
+#include "WorldMap.h"
 #include "RaidSoak.h"
 #include "ColonySim/Animals.h"
 #include "ColonySim/Breeding.h"
@@ -48,6 +50,7 @@
 #include "ColonySim/Designations.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Pathfinder.h"
+#include "ColonySim/Narrator.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Fighters.h"
@@ -65,6 +68,7 @@
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
 #include "ColonySim/Weather.h"
+#include "ColonySim/World.h"
 #include "ColonySim/Zones.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -96,8 +100,12 @@ struct Options {
     int pathBudget = colony::Pathfinder::kDefaultBudget;
     std::string start;  // a Scenarios def; prints the colonists it makes
     std::string scenario;  // "colony": the scripted colony test (C10)
+    bool year = false;     // --year: the colony scenario with animals and a farm, for long runs
     bool verbose = false;  // --scenario, --power: an hourly line on stderr
     bool power = false;    // --power: the power check (E5)
+    std::string worldPng;  // --world FILE: make the world map of --seed and draw it (docs/design/world-map.md)
+    int worldWidth = 0;    // --world-size WxH (0: the def's)
+    int worldHeight = 0;
     bool check = false;  // exit 1 if a job or a path search failed
     bool weather = false;  // print a line a day of the weather (E1)
     int gather = 0;      // mark rock to mine and plants to harvest this many cells round the middle
@@ -105,8 +113,11 @@ struct Options {
     int farm = 0;        // --farm N: N tame chickens, fed every hour (N4)
     bool fire = false;   // --fire: light a grass fire near the first colonist ten minutes in (E4)
     double raid = -1.0;  // start a pirate raid of this many points at the first step (0: the colony's threat points)
+    std::string raidStrategy = "Assault";  // --raid-strategy NAME: Assault, Sappers, DropPods, Thieves, Kidnappers or Auto (F12)
     int raidSoak = 0;    // --raid-soak N: the F7 soak over N seeds from --seed
     bool armed = false;  // give every colonist an assault rifle first (not a command: not in replays)
+    std::string narrator;    // --narrator NAME: a SetNarratorCommand at the first step (T1)
+    std::string difficulty;  // --difficulty NAME: with it
     std::string png;
     std::string regionsPng;
     std::string replay;
@@ -147,12 +158,18 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.start = argv[++i];
         } else if (std::strcmp(arg, "--scenario") == 0 && hasValue) {
             out.scenario = argv[++i];
+        } else if (std::strcmp(arg, "--world") == 0 && hasValue) {
+            out.worldPng = argv[++i];
+        } else if (std::strcmp(arg, "--world-size") == 0 && hasValue) {
+            std::sscanf(argv[++i], "%dx%d", &out.worldWidth, &out.worldHeight);
         } else if (std::strcmp(arg, "--power") == 0) {
             out.power = true;
         } else if (std::strcmp(arg, "--verbose") == 0) {
             out.verbose = true;
         } else if (std::strcmp(arg, "--gather") == 0 && hasValue) {
             out.gather = std::atoi(argv[++i]);
+        } else if (std::strcmp(arg, "--year") == 0) {
+            out.year = true;
         } else if (std::strcmp(arg, "--animals") == 0) {
             out.animals = std::max(out.animals, 100);
         } else if (std::strcmp(arg, "--fire") == 0) {
@@ -163,10 +180,16 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.animals = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--raid-soak") == 0 && hasValue) {
             out.raidSoak = std::atoi(argv[++i]);
+        } else if (std::strcmp(arg, "--raid-strategy") == 0 && hasValue) {
+            out.raidStrategy = argv[++i];
         } else if (std::strcmp(arg, "--raid") == 0 && hasValue) {
             out.raid = std::atof(argv[++i]);
         } else if (std::strcmp(arg, "--armed") == 0) {
             out.armed = true;
+        } else if (std::strcmp(arg, "--narrator") == 0 && hasValue) {
+            out.narrator = argv[++i];
+        } else if (std::strcmp(arg, "--difficulty") == 0 && hasValue) {
+            out.difficulty = argv[++i];
         } else if (std::strcmp(arg, "--check") == 0) {
             out.check = true;
         } else if (std::strcmp(arg, "--weather") == 0) {
@@ -199,7 +222,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house [--verbose]] [--power] [--raid POINTS] [--armed] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--scenario colony [--verbose]] [--power] [--raid POINTS [--raid-strategy NAME]] [--armed] [--narrator NAME [--difficulty NAME]] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house [--verbose]] [--power] [--world FILE [--world-size WxH]] [--raid POINTS [--raid-strategy NAME]] [--armed] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS]\n");
             return false;
         }
@@ -620,6 +644,11 @@ int main(int argc, char** argv) {
         defs = std::move(loaded);
     }
 
+    // The world map: its own thing, no colony map.
+    if (!options.worldPng.empty()) {
+        return worldmap::run(options.seed, options.worldWidth, options.worldHeight, options.worldPng == "-" ? std::string() : options.worldPng, options.check, defs);
+    }
+
     // The power check (E5): its own small map and script; 3 days unless --days says.
     if (options.power) {
         return powerscenario::run(options.daysGiven ? options.days : 3.0, defs, options.verbose);
@@ -643,7 +672,7 @@ int main(int argc, char** argv) {
             }
             return housescenario::run(options.seed, options.size, options.daysGiven ? options.days : 3.0, defs, options.verbose, pngBase);
         }
-        return colonyscenario::run(options.seed, options.size, options.daysGiven ? options.days : 5.0, defs, options.verbose);
+        return colonyscenario::run(options.seed, options.size, options.daysGiven ? options.days : 5.0, defs, options.verbose, options.year);
     }
 
     // A replay brings its own settings and commands; otherwise they come from the options.
@@ -747,8 +776,17 @@ int main(int argc, char** argv) {
         }
     }
     if (options.raid >= 0.0) {
-        sim.submit(colony::StartRaidCommand{"Pirate", static_cast<float>(options.raid), -1});
+        sim.submit(colony::StartStrategyRaidCommand{"Pirate", static_cast<float>(options.raid), -1, options.raidStrategy, -1.0f});
     }
+    // --narrator: the narrator sends incidents from the first step (T1, docs/design/narrator.md); each
+    // letter is printed as it comes.
+    if (!options.narrator.empty()) {
+        sim.submit(colony::SetNarratorCommand{options.narrator, options.difficulty});
+    }
+    const bool trackRaid = options.raid >= 0.0 || !options.narrator.empty();
+    int letters = 0;
+    int threatLetters = 0;
+    double firstThreatDay = -1.0;
     struct RaidReport {
         int raiders = 0;
         float points = 0.0f;
@@ -847,6 +885,14 @@ int main(int argc, char** argv) {
                 sim.animals().addFood(e, 50.0f);
             }
         }
+        // --narrator runs reach the narrator's first threat day (11 or later): the colonists are fed every
+        // game hour, since nobody farms in this run and they would starve first.
+        if (!options.narrator.empty() && sim.time().seconds % 3600 == 0) {
+            for (const auto [pawn, needs] : sim.things().registry().view<colony::Needs>().each()) {
+                needs.food = 1.0f;
+                needs.malnutrition = 0.0f;
+            }
+        }
         const bool passStep = options.farm > 0 && sim.time().seconds > 0 && sim.time().seconds % sim.breeding().rules().passSeconds == 0;
         const auto before = Clock::now();
         sim.step();
@@ -876,7 +922,18 @@ int main(int argc, char** argv) {
             pawnsCaught += e.type == colony::EventType::PawnCaughtFire ? 1 : 0;
             fireLit += e.type == colony::EventType::FireStarted ? 1 : 0;
             picked += e.type == colony::EventType::PlantHarvested ? 1 : 0;
-            if (options.raid >= 0.0) {
+            if (e.type == colony::EventType::Letter) {
+                const double day = static_cast<double>(sim.time().seconds) / static_cast<double>(colony::kSecondsPerDay);
+                ++letters;
+                if (e.count == static_cast<int>(colony::LetterKind::ThreatBig)) {
+                    ++threatLetters;
+                    firstThreatDay = firstThreatDay < 0.0 ? day : firstThreatDay;
+                }
+                std::printf("day %6.2f letter %s: %s (%.0f points)\n", day,
+                            colony::letterKindName(static_cast<colony::LetterKind>(e.count)), e.message.c_str(),
+                            static_cast<double>(e.amount));
+            }
+            if (trackRaid) {
                 const int64_t t = sim.time().seconds;
                 const bool ours = e.thing != colony::kNoEntity && sim.things().exists(e.thing) &&
                                   sim.fighters().factionOf(e.thing) == colony::kPlayerFaction;
@@ -1086,7 +1143,7 @@ int main(int argc, char** argv) {
                 return 1;
             }
         }
-        if (options.check && died > 0 && options.raid < 0.0) {
+        if (options.check && died > 0 && !trackRaid) {
             std::fprintf(stderr, "check failed: %llu pawn(s) died\n", static_cast<unsigned long long>(died));
             return 1;
         }
@@ -1104,8 +1161,27 @@ int main(int argc, char** argv) {
         }
     }
 
+    // Narrator (docs/design/narrator.md): the letters it sent. A narrator with a threat cycle must have
+    // sent its first big threat in the cycle's first "on" days once the run has passed them.
+    if (!options.narrator.empty()) {
+        std::printf("{\"narrator\":{\"name\":\"%s\",\"letters\":%d,\"bigThreats\":%d,\"firstThreatDay\":%.2f,"
+                    "\"threatPoints\":%.0f,\"wealth\":%.0f}}\n",
+                    options.narrator.c_str(), letters, threatLetters, firstThreatDay,
+                    static_cast<double>(sim.narrator().threatPoints()), static_cast<double>(sim.raids().colonyWealth()));
+        const colony::Def* def = sim.defs().find("Narrators", options.narrator);
+        if (options.check && def != nullptr && def->has("threatCycle.onDays")) {
+            const double first = def->number("threatCycle.firstThreatDay");
+            const double last = first + def->number("threatCycle.onDays");
+            if (options.days >= last && (firstThreatDay < first || firstThreatDay > last + 0.02)) {
+                std::fprintf(stderr, "check failed: the first big threat came on day %.2f, not between %.1f and %.1f\n",
+                             firstThreatDay, first, last);
+                return 1;
+            }
+        }
+    }
+
     // Raid (docs/design/raids.md): who came, how the squad's morale went, how it ended.
-    if (options.raid >= 0.0) {
+    if (trackRaid) {
         std::printf("{\"raid\":{\"raiders\":%d,\"points\":%.0f,\"arrived\":%lld,\"alarmOn\":%lld,\"alarmOff\":%lld,"
                     "\"ended\":%lld,\"squad\":\"%s\",\"leftMap\":%d,\"raidersDowned\":%d,\"raidersDied\":%d,"
                     "\"colonistsDowned\":%d,\"colonistsDied\":%d,\"raiderShots\":%llu,\"colonyShots\":%llu}}\n",
@@ -1113,7 +1189,7 @@ int main(int argc, char** argv) {
                     static_cast<long long>(raid.alarmOn), static_cast<long long>(raid.alarmOff), static_cast<long long>(raid.ended),
                     raid.states.c_str(), raid.left, raid.raidersDowned, raid.raidersDied, raid.colonistsDowned, raid.colonistsDied,
                     static_cast<unsigned long long>(raid.raiderShots), static_cast<unsigned long long>(raid.colonyShots));
-        if (options.check && (raid.arrived < 0 || raid.ended < 0 || raid.raiderShots + raid.colonyShots == 0)) {
+        if (options.check && options.raid >= 0.0 && (raid.arrived < 0 || raid.ended < 0 || raid.raiderShots + raid.colonyShots == 0)) {
             std::fprintf(stderr, "check failed: the raid didn't arrive, didn't end, or nobody fired a shot\n");
             return 1;
         }
@@ -1255,8 +1331,10 @@ int main(int argc, char** argv) {
     std::printf("{\"repaths\":%llu,\"hauls\":%llu}\n", static_cast<unsigned long long>(sim.stats().repaths),
                 static_cast<unsigned long long>(sim.stats().hauls));
 
-    // A walk held up for good is rare (it was a rock corner once); many mean the movement is broken.
-    if (options.check && sim.stats().repaths > 5 + sim.stats().hauls / 100) {
+    // A walk held up for good is rare (it was a rock corner once); many mean the movement is broken. A doctor chasing
+    // a wounded colonist who is still fighting asks again (H1/H2), so a raid scenario gets a little more room.
+    const uint64_t repathRoom = 5 + sim.stats().hauls / 100 + (options.raid >= 0.0 || !options.narrator.empty() ? 100 : 0);
+    if (options.check && sim.stats().repaths > repathRoom) {
         std::fprintf(stderr, "check failed: %llu repaths for %llu hauls\n",
                      static_cast<unsigned long long>(sim.stats().repaths), static_cast<unsigned long long>(sim.stats().hauls));
         return 1;

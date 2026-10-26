@@ -1,5 +1,6 @@
 #include "ColonySim/Farming.h"
 
+#include "ColonySim/Clock.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Lights.h"
 #include "ColonySim/Map.h"
@@ -52,6 +53,8 @@ Farming::Farming(const Map& map, Plants& plants, const Zones& stockpiles, const 
     if (const Def* rules = defs.find("Rules", "PlantRules")) {
         frostKillPerDegree_ = rules->number("killChancePerDegree", frostKillPerDegree_);
         minGlow_ = rules->number("growthNeedsLight", minGlow_);
+        sowGrowthMargin_ = rules->number("sowGrowthMargin", sowGrowthMargin_);
+        sowSlackHours_ = static_cast<int64_t>(rules->number("sowHarvestSlackHours", static_cast<double>(sowSlackHours_)));
     }
 }
 
@@ -243,7 +246,60 @@ std::string Farming::sowBlocker(CellPos c) const {
     if (farmingTemperatureFactor(def, temperatureOf(c)) <= 0.0) {
         return "the weather is wrong for it";
     }
+    if (!ripensBeforeFrost(c, crop)) {
+        return "it would not ripen before the frost";
+    }
     return std::string();
+}
+
+// The crop grows `1 / (growDays x 24)` of its full size an hour in the growing hours, times the soil's rate and the
+// temperature curve (Plants::growHour, Farming::growthFactor); frost kills it. Walks the hours ahead on the forecast
+// until it is grown (then true) or the temperature falls under `coldDamageBelow` (then false). Only the hours the sun is bright
+// enough count (clear sky; clouds are left to the margin).
+bool Farming::ripensBeforeFrost(CellPos c, DefId cropId) const {
+    constexpr int64_t kHorizonHours = 24 * 40;
+    if (!forecast_ || !clock_ || map_.roof(c) != Roof::None) {
+        return true;
+    }
+    const Def& crop = defs_.get(cropId);
+    const int64_t now = clock_();
+    const int64_t hourNow = now / kSecondsPerHour;
+    if (hourNow != ripenHour_) {
+        ripenHour_ = hourNow;
+        ripenCache_.clear();
+    }
+    const double rate = std::max(0.0, 1.0 + (static_cast<double>(plants_.fertility(c)) - 1.0) * crop.number("plant.fertilitySensitivity", 0.0));
+    const std::pair<uint32_t, int> key{cropId.value, static_cast<int>(std::lround(rate * 1000.0))};
+    if (const auto found = ripenCache_.find(key); found != ripenCache_.end()) {
+        return found->second;
+    }
+    const double perHour = rate * sowGrowthMargin_ * plants_.growthTuning() / (crop.number("plant.growDays", 1.0) * 24.0);
+    const double cold = crop.number("plant.coldDamageBelow", 0.0);
+    bool ripe = false;
+    double grown = 0.0;
+    int64_t ripeAt = -1;
+    for (int64_t h = 0; h < kHorizonHours; ++h) {
+        const int64_t at = (hourNow + h) * kSecondsPerHour;
+        const double t = static_cast<double>(forecast_(std::max(at, now)));
+        if (t < cold) {
+            break;
+        }
+        const int hourOfDay = static_cast<int>((at / kSecondsPerHour) % 24);
+        // The crop grows in the growing hours that end in enough light (Farming::growthFactor); clouds are left to the margin.
+        const bool bright = lights_ == nullptr || static_cast<double>(lights_->clearSkyGlowAtHour(static_cast<float>(hourOfDay + 1))) >= crop.number("plant.growMinGlow", minGlow_);
+        if (ripeAt < 0 && bright && plants_.growsAtHour(hourOfDay)) {
+            grown += perHour * farmingTemperatureFactor(crop, t);
+            if (grown >= 1.0) {
+                ripeAt = h;
+            }
+        }
+        if (ripeAt >= 0 && h >= ripeAt + sowSlackHours_) {
+            ripe = true;
+            break;
+        }
+    }
+    ripenCache_[key] = ripe;
+    return ripe;
 }
 
 bool Farming::readyToHarvest(CellPos c) const {

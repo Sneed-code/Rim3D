@@ -308,6 +308,12 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["item"] = entt::to_integral(c.item);
+            } else if constexpr (std::is_same_v<Type, SetNarratorCommand>) {
+                j["narrator"] = c.narrator;
+                j["difficulty"] = c.difficulty;
+            } else if constexpr (std::is_same_v<Type, FireIncidentCommand>) {
+                j["incident"] = c.incident;
+                j["points"] = c.points;
             } else if constexpr (std::is_same_v<Type, SwitchWeaponCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["slot"] = static_cast<int>(c.slot);
@@ -334,8 +340,23 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["breakDef"] = c.breakDef;
+            } else if constexpr (std::is_same_v<Type, ContractDiseaseCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["disease"] = c.disease;
+                j["severity"] = c.severity;
+                j["part"] = c.part;
+            } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+            } else if constexpr (std::is_same_v<Type, StartStrategyRaidCommand>) {
+                j["faction"] = c.faction;
+                j["points"] = static_cast<double>(c.points);
+                j["edge"] = c.edge;
+                j["strategy"] = c.strategy;
+                j["hour"] = static_cast<double>(c.hour);
             } else {
-                static_assert(std::is_same_v<Type, EndMentalBreakCommand>, "write every command type");
+                static_assert(std::is_same_v<Type, ShipCommand>, "write every command type");
+                j["action"] = c.action;
+                j["thing"] = entt::to_integral(c.thing);
                 j["pawn"] = entt::to_integral(c.pawn);
             }
         },
@@ -1105,6 +1126,18 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = c;
+    } else if (type == "SetNarrator") {
+        SetNarratorCommand c;
+        if (!r.text(j, "narrator", c.narrator, where) || !r.text(j, "difficulty", c.difficulty, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "FireIncident") {
+        FireIncidentCommand c;
+        if (!r.text(j, "incident", c.incident, where) || !r.number(j, "points", c.points, where)) {
+            return false;
+        }
+        out.command = std::move(c);
     } else if (type == "SetGrowingZoneCrop") {
         SetGrowingZoneCropCommand c;
         if (!r.integer(j, "zone", c.zone, where) || !r.text(j, "crop", c.crop, where)) {
@@ -1154,6 +1187,15 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         uint32_t pawn = entt::to_integral(kNoEntity);
         SetMedicalCareCommand c;
         if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "care", c.care, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "ContractDisease") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        ContractDiseaseCommand c;
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "disease", c.disease, where) ||
+            !r.number(j, "severity", c.severity, where) || !r.integer(j, "part", c.part, where)) {
             return false;
         }
         c.pawn = static_cast<Entity>(pawn);
@@ -1284,6 +1326,24 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = EndMentalBreakCommand{static_cast<Entity>(pawn)};
+    } else if (type == "StartStrategyRaid") {
+        StartStrategyRaidCommand c;
+        if (!r.text(j, "faction", c.faction, where) || !r.number(j, "points", c.points, where) ||
+            !r.integer(j, "edge", c.edge, where) || !r.text(j, "strategy", c.strategy, where) ||
+            !r.number(j, "hour", c.hour, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "Ship") {
+        uint32_t thing = entt::to_integral(kNoEntity);
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        ShipCommand c;
+        if (!r.text(j, "action", c.action, where) || !r.integer(j, "thing", thing, where) || !r.integer(j, "pawn", pawn, where)) {
+            return false;
+        }
+        c.thing = static_cast<Entity>(thing);
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");
     }
