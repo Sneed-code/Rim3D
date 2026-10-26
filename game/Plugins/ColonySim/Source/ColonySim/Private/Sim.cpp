@@ -26,6 +26,7 @@
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Lights.h"
+#include "ColonySim/Inspirations.h"
 #include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
@@ -34,6 +35,7 @@
 #include "ColonySim/Medicine.h"
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Quests.h"
+#include "ColonySim/Ship.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Talents.h"
 #include "ColonySim/Needs.h"
@@ -131,6 +133,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       groundHash_(map_.contentHash()) {
     things_->setEventLog(&events_);
     health_->setEventLog(&events_);
+    health_->setWorld(&time_.seconds, settings.seed);
     weather_ = std::make_unique<Weather>(map_, *defs_, splitMix64(settings.seed ^ 0x636C696D617465ULL), "TemperateForest");
     weather_->setEventLog(&events_);
     movement_->setWeather(weather_.get());
@@ -140,6 +143,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     mood_ = std::make_unique<MoodSystem>(*things_, *needs_, *defs_);
     apparel_ = std::make_unique<ApparelSystem>(*things_, *combat_, *health_, *defs_);
     apparel_->registerSituations(*mood_);
+    health_->registerSituations(*mood_);
     doorNumbers_ = DoorNumbers::read(*defs_);
     movement_->setDoors(doorNumbers_);
     pathfinder_.setDoorCost(doorNumbers_.pathCost);
@@ -182,6 +186,13 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     spoilage_ = std::make_unique<SpoilageSystem>(map_, *things_, *temperature_, *roomStats_, *defs_,
                                                  splitMix64(settings.seed ^ 0x73706F696CULL));
     spoilage_->setEventLog(&events_);
+    // Eating a poisoned meal gives the FoodPoisoning disease (H2); a fresh wound's chance of infection follows how
+    // clean the room it was taken in is.
+    spoilage_->setPoisonHandler([this](Entity pawn) { health_->contract(pawn, health_->diseaseId("FoodPoisoning")); });
+    health_->setCleanliness([this](Entity pawn) {
+        const Position* pos = things_->registry().try_get<Position>(pawn);
+        return pos != nullptr ? roomStats_->cellCleanliness(cellOf(*pos)) : 0.0f;
+    });
     farming_ = std::make_unique<Farming>(map_, *plants_, *zones_, *defs_, events_);
     farming_->setClimate(temperature_.get(), lights_.get());
     farming_->setForecast(
@@ -259,6 +270,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     quests_ = std::make_unique<QuestSystem>(*things_, map_, *raids_, *fighters_, *health_, *defs_, time_, rng_);
     quests_->setEventLog(&events_);
     quests_->setJoinMaker([this](CellPos cell, uint64_t seed) { return makeJoiner(cell, seed); });
+    ship_ = std::make_unique<ShipSystem>(*things_, *raids_, *defs_, time_);
+    ship_->setEventLog(&events_);
     mood_->addSituation("isPrisoner", [this](Entity pawn) { return prisoners_->isPrisoner(pawn) ? 0 : -1; });
     // Night owls like being up at night and not by day (docs/design/mood.md); only pawns that are awake count.
     const auto awakeAt = [this](Entity pawn, bool night) {
@@ -323,6 +336,11 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     mentalBreaks_->setEventLog(&events_);
     mentalBreaks_->setMelee(melee_.get());
     mentalBreaks_->setFire(fire_.get());
+    inspirations_ = std::make_unique<InspirationSystem>(*things_, *health_, *defs_, time_);
+    inspirations_->setEventLog(&events_);
+    jobs_->setInspirations(inspirations_.get());
+    combat_->setInspirations(inspirations_.get());
+    prisoners_->setInspirations(inspirations_.get());
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -668,6 +686,15 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             jobs_->forget(circuit->thing);
             fighters_->forget(circuit->thing);
             things_->destroy(circuit->thing);
+        }
+    } else if (const auto* contract = std::get_if<ContractDiseaseCommand>(&command)) {
+        const DefId disease = health_->diseaseId(contract->disease);
+        if (!things_->exists(contract->pawn) || !health_->tracks(contract->pawn)) {
+            commandFailed(id, "that thing has no body to fall ill");
+        } else if (!disease.valid()) {
+            commandFailed(id, "there is no disease '" + contract->disease + "'");
+        } else if (!health_->contract(contract->pawn, disease, contract->severity, contract->part)) {
+            commandFailed(id, "that pawn can't catch " + contract->disease + " now");
         }
     } else if (const auto* medical = std::get_if<SetMedicalCareCommand>(&command)) {
         MedicalCare care = MedicalCare::Best;
@@ -1148,9 +1175,36 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!mentalBreaks_->start(startBreak->pawn, startBreak->breakDef, rng_, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* ship = std::get_if<ShipCommand>(&command)) {
+        bool ok = false;
+        if (ship->action == "StartReactor") {
+            ok = ship_->startReactor(ship->thing, error);
+        } else if (ship->action == "Board") {
+            ok = ship_->board(ship->thing, ship->pawn, error);
+        } else if (ship->action == "Launch") {
+            ok = ship_->launch(error);
+        } else {
+            error = "no ship action '" + ship->action + "' (StartReactor, Board or Launch)";
+        }
+        if (!ok) {
+            commandFailed(id, error);
+        }
     } else if (const auto* endBreak = std::get_if<EndMentalBreakCommand>(&command)) {
         if (!mentalBreaks_->end(endBreak->pawn, error)) {
             commandFailed(id, error);
+        }
+    } else if (const auto* strategyRaid = std::get_if<StartStrategyRaidCommand>(&command)) {
+        RaidStrategy strategy = RaidStrategy::Assault;
+        if (strategyRaid->strategy != "Auto" && !raidStrategyFromName(strategyRaid->strategy, strategy)) {
+            commandFailed(id, "no raid strategy '" + strategyRaid->strategy + "'");
+        } else {
+            if (strategyRaid->strategy == "Auto") {
+                strategy = raids_->pickStrategy(strategyRaid->points);
+            }
+            if (!raids_->startRaid(strategyRaid->faction, strategyRaid->points, strategyRaid->edge, strategy, strategyRaid->hour,
+                                   error)) {
+                commandFailed(id, error);
+            }
         }
     } else if (const auto* quest = std::get_if<QuestCommand>(&command)) {
         uint32_t made = 0;
@@ -1212,6 +1266,7 @@ void Sim::step() {
     fighters_->step();
     prisoners_->step();
     quests_->step();
+    ship_->step();
     recreation_->step();
     animals_->step();
     husbandry_->step();
@@ -1219,6 +1274,7 @@ void Sim::step() {
     social_->step(time_.seconds);
     mentalBreaks_->step(time_.seconds, rng_);  // before the mood system, which turns its events into memories
     mood_->step(time_.seconds, events_);
+    inspirations_->step(time_.seconds);
     movement_->step(things_->registry(), map_);
     melee_->step();
     combat_->step(rng_);
@@ -1343,6 +1399,24 @@ void Sim::writeSnapshot(Snapshot& out) const {
         view.available = research_->available(project);
         view.current = research_->current() == project.defName;
         out.research.push_back(view);
+    }
+    {
+        const ShipParts parts = ship_->parts();
+        ShipView& s = out.ship;
+        s.phase = static_cast<uint8_t>(ship_->state().phase);
+        s.activationLeft = ship_->activationLeft();
+        s.waves = ship_->state().waves;
+        s.beams = parts.beams;
+        s.caskets = parts.caskets;
+        s.reactors = parts.reactors;
+        s.engines = parts.engines;
+        s.cores = parts.cores;
+        s.sensors = parts.sensors;
+        s.riders = parts.ridersAboard;
+        s.problem = ship_->launchProblem();
+        s.canLaunch = s.problem.empty();
+        s.won = ship_->won();
+        s.escaped = ship_->state().escaped;
     }
     out.apparel.clear();
     out.outfits.clear();
@@ -1645,7 +1719,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.squads.clear();
     for (const Squad& squad : raids_->state().squads) {
         out.squads.push_back(SquadView{squad.id, squad.side, static_cast<uint8_t>(squad.state),
-                                       static_cast<int>(squad.members.size()), squad.started, squad.target});
+                                       static_cast<int>(squad.members.size()), squad.started, squad.target,
+                                       static_cast<uint8_t>(squad.strategy), squad.hasBreach, squad.breach});
     }
 
     out.quests.clear();
@@ -1801,6 +1876,7 @@ uint64_t Sim::stateHash() const {
     research_->hashState(h);
     raids_->hashState(h);
     quests_->hashState(h);
+    ship_->hashState(h);
     talents_->hashState(h);
     pathfinder_.hashState(h);
     zones_->hashState(h);
@@ -2095,6 +2171,21 @@ uint64_t Sim::stateHash() const {
                 h.add(injury.severity);
                 h.add(injury.tendQuality);
                 h.add(injury.peak);
+                h.add(injury.infectAt);
+            }
+            h.add(static_cast<uint64_t>(health->diseases.size()));
+            for (const Disease& disease : health->diseases) {
+                h.add(disease.def.value);
+                h.add(disease.severity);
+                h.add(disease.tendQuality);
+                h.add(disease.tendedUntil);
+                h.add(disease.tendTotal);
+                h.add(static_cast<int>(disease.part));
+            }
+            h.add(static_cast<uint64_t>(health->immunities.size()));
+            for (const Immunity& immunity : health->immunities) {
+                h.add(immunity.def.value);
+                h.add(immunity.level);
             }
             h.add(static_cast<uint64_t>(health->missing.size()));
             for (const MissingPart& missing : health->missing) {
@@ -2120,6 +2211,7 @@ uint64_t Sim::stateHash() const {
         defense_->hashThing(e, h);
         apparel_->hashThing(e, h);
         mentalBreaks_->hashThing(e, h);
+        inspirations_->hashThing(e, h);
     }
     apparel_->hashState(h);
     return h.value();

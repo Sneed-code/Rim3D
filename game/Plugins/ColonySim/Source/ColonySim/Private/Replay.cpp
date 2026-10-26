@@ -340,7 +340,22 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["breakDef"] = c.breakDef;
+            } else if constexpr (std::is_same_v<Type, ContractDiseaseCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["disease"] = c.disease;
+                j["severity"] = c.severity;
+                j["part"] = c.part;
             } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+            } else if constexpr (std::is_same_v<Type, StartStrategyRaidCommand>) {
+                j["faction"] = c.faction;
+                j["points"] = static_cast<double>(c.points);
+                j["edge"] = c.edge;
+                j["strategy"] = c.strategy;
+                j["hour"] = static_cast<double>(c.hour);
+            } else if constexpr (std::is_same_v<Type, ShipCommand>) {
+                j["action"] = c.action;
+                j["thing"] = entt::to_integral(c.thing);
                 j["pawn"] = entt::to_integral(c.pawn);
             } else {
                 static_assert(std::is_same_v<Type, QuestCommand>, "write every command type");
@@ -1180,6 +1195,15 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.pawn = static_cast<Entity>(pawn);
         out.command = std::move(c);
+    } else if (type == "ContractDisease") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        ContractDiseaseCommand c;
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "disease", c.disease, where) ||
+            !r.number(j, "severity", c.severity, where) || !r.integer(j, "part", c.part, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
     } else if (type == "SetPrisonerMode") {
         uint32_t pawn = entt::to_integral(kNoEntity);
         SetPrisonerModeCommand c;
@@ -1306,6 +1330,24 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = EndMentalBreakCommand{static_cast<Entity>(pawn)};
+    } else if (type == "StartStrategyRaid") {
+        StartStrategyRaidCommand c;
+        if (!r.text(j, "faction", c.faction, where) || !r.number(j, "points", c.points, where) ||
+            !r.integer(j, "edge", c.edge, where) || !r.text(j, "strategy", c.strategy, where) ||
+            !r.number(j, "hour", c.hour, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "Ship") {
+        uint32_t thing = entt::to_integral(kNoEntity);
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        ShipCommand c;
+        if (!r.text(j, "action", c.action, where) || !r.integer(j, "thing", thing, where) || !r.integer(j, "pawn", pawn, where)) {
+            return false;
+        }
+        c.thing = static_cast<Entity>(thing);
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
     } else if (type == "Quest") {
         QuestCommand c;
         if (!r.text(j, "action", c.action, where) || !r.integer(j, "quest", c.quest, where) || !r.text(j, "kind", c.kind, where)) {

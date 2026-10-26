@@ -60,6 +60,8 @@ enum class EventType : uint8_t {
     MeleeHit,        // the hit moment of a swing: `message` says "hit", "deflected", "blocked", "dodged" or "missed"
     PawnTended,      // a doctor finished tending a patient (docs/design/medicine.md)
     PawnScarred,     // a healed injury left a scar or an old wound (docs/design/medicine.md)
+    PawnSick,        // a pawn caught a disease, or a wound turned infected (docs/design/diseases.md)
+    PawnRecovered,   // a pawn's disease ran its course (docs/design/diseases.md)
     ApparelDestroyed,  // a worn piece wore out or was shot to pieces: `thing` the wearer, `def` the piece's def (docs/design/apparel.md)
     WeatherChanged,  // the weather began to change into another kind (docs/design/weather.md)
     SeasonChanged,   // a new season began
@@ -104,6 +106,17 @@ enum class EventType : uint8_t {
     QuestExpired,          // nobody answered in time (or, once accepted, the raid could not be sent): `message` says which
     QuestCompleted,        // it was done and paid: `message` says how ("joined", "delivered", "the raid is over", "no raid came"); `squad` the raid
     QuestFailed,           // it went wrong: `message` says why
+    DropPodLanded,         // a raider's pod came down (F12, docs/design/raid-strategies.md): `thing` the raider, `cell` where, `squad`
+    SappersBreaking,       // raiders began digging through a wall (F12): `cell` the wall, `squad`, `count` how many dig
+    ItemStolen,            // a thief lifted loose items (F12): `thing` the thief, `target` the item it carries, `def` its def, `count`
+    PawnKidnapped,         // a raider lifted a downed colonist (F12): `thing` the kidnapper, `target` the colonist. `message` "left the map" when it got away with it
+    InspirationStarted,    // a colonist became inspired (docs/design/inspirations.md): `thing` the pawn, `message` the Inspirations defName, `amount` its days
+    InspirationEnded,      // it ended: `message` "why:defName" (used, expired, dismissed), `amount` how many game seconds it lasted
+    ShipReactorStarted,    // the ship reactor began its activation (docs/design/ship.md): `thing` the reactor, `amount` days it takes
+    ShipWave,              // a wave of raiders came because of the reactor: `amount` the wave number (the raid's own events follow)
+    ShipReactorReady,      // the activation finished: the ship can launch
+    ShipReactorLost,       // the reactor was destroyed or taken down: the activation is lost, `message` says which
+    ShipLaunched,          // the ship left and the game is won: `amount` how many pawns went (a PawnLeftMap each)
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -189,6 +202,8 @@ struct Event {
     // PawnTended: `thing` the doctor, `target` the patient, `def` the medicine used (none if there was none),
     // `amount` the tend quality (0 to 1.3), `message` "medicine" or "no medicine", "self" if the doctor tended itself.
     // PawnScarred: `thing` the pawn, `def` the Scar or OldWound hediff, `part` the body part, `amount` its severity.
+    // PawnSick: `thing` the pawn, `def` the Disease hediff, `part` the wound's body part for an infection (-1 otherwise),
+    // `amount` its severity. PawnRecovered: `thing` the pawn, `def` the disease, `part` as above.
     // AnimalTamed, AnimalReleased, AnimalSlaughtered, AnimalStarved: `thing` the animal, `target` the colonist
     // (none for a release or a starving), `cell` where. AnimalTrained: also `message` the trick (Trainable name),
     // `amount` the steps it has now and `part` the steps it needs. AnimalAttemptFailed: `message` "tame" or the

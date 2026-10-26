@@ -177,8 +177,14 @@ const char* commandName(const Command& command) {
                 return "PlaceUpperFloor";
             } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
                 return "StartMentalBreak";
+            } else if constexpr (std::is_same_v<Type, ContractDiseaseCommand>) {
+                return "ContractDisease";
             } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
                 return "EndMentalBreak";
+            } else if constexpr (std::is_same_v<Type, StartStrategyRaidCommand>) {
+                return "StartStrategyRaid";
+            } else if constexpr (std::is_same_v<Type, ShipCommand>) {
+                return "Ship";
             } else {
                 static_assert(std::is_same_v<Type, QuestCommand>, "name every command type");
                 return "Quest";
@@ -248,6 +254,10 @@ const char* eventTypeName(EventType type) {
         case EventType::SquadChanged: return "SquadChanged";
         case EventType::AlarmChanged: return "AlarmChanged";
         case EventType::PawnLeftMap: return "PawnLeftMap";
+        case EventType::DropPodLanded: return "DropPodLanded";
+        case EventType::SappersBreaking: return "SappersBreaking";
+        case EventType::ItemStolen: return "ItemStolen";
+        case EventType::PawnKidnapped: return "PawnKidnapped";
         case EventType::RoofCollapsed: return "RoofCollapsed";
         case EventType::AnimalTamed: return "AnimalTamed";
         case EventType::AnimalReleased: return "AnimalReleased";
@@ -259,6 +269,8 @@ const char* eventTypeName(EventType type) {
         case EventType::MeleeHit: return "MeleeHit";
         case EventType::PawnTended: return "PawnTended";
         case EventType::PawnScarred: return "PawnScarred";
+        case EventType::PawnSick: return "PawnSick";
+        case EventType::PawnRecovered: return "PawnRecovered";
         case EventType::ApparelDestroyed: return "ApparelDestroyed";
         case EventType::WeatherChanged: return "WeatherChanged";
         case EventType::SeasonChanged: return "SeasonChanged";
@@ -300,6 +312,13 @@ const char* eventTypeName(EventType type) {
         case EventType::QuestExpired: return "QuestExpired";
         case EventType::QuestCompleted: return "QuestCompleted";
         case EventType::QuestFailed: return "QuestFailed";
+        case EventType::InspirationStarted: return "InspirationStarted";
+        case EventType::InspirationEnded: return "InspirationEnded";
+        case EventType::ShipReactorStarted: return "ShipReactorStarted";
+        case EventType::ShipWave: return "ShipWave";
+        case EventType::ShipReactorReady: return "ShipReactorReady";
+        case EventType::ShipReactorLost: return "ShipReactorLost";
+        case EventType::ShipLaunched: return "ShipLaunched";
     }
     return "?";
 }
