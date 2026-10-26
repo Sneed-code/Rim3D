@@ -256,6 +256,63 @@ bool Husbandry::markTame(Entity animal, bool on, std::string& error) {
     return true;
 }
 
+bool Husbandry::setName(Entity animal, const std::string& name, std::string& error) {
+    if (!valid(animal)) {
+        error = "that is no animal";
+        return false;
+    }
+    if (husbandryDead(things_.registry(), animal)) {
+        error = "it is dead";
+        return false;
+    }
+    if (!isTame(animal)) {
+        error = "only a tame animal can be named";
+        return false;
+    }
+    if (name.size() > kMaxAnimalNameLength) {
+        error = "a name is at most 24 characters";
+        return false;
+    }
+    careFor(animal)->name = name;
+    return true;
+}
+
+bool Husbandry::markInArea(const CellRect& area, const std::string& mark, bool on, std::string& error) {
+    if (mark != "Tame" && mark != "Slaughter" && mark != "Hunt") {
+        error = "a mark is Tame, Slaughter or Hunt";
+        return false;
+    }
+    std::vector<Entity> found;
+    for (const auto [e, a] : things_.registry().view<Animal>().each()) {
+        (void)a;
+        const Position& pos = things_.registry().get<Position>(e);
+        if (area.contains(CellPos{static_cast<int>(std::floor(pos.x)), static_cast<int>(std::floor(pos.y)), pos.level})) {
+            found.push_back(e);
+        }
+    }
+    std::sort(found.begin(), found.end());
+    int marked = 0;
+    std::string ignored;
+    for (const Entity e : found) {
+        if (husbandryDead(things_.registry(), e)) {
+            continue;
+        }
+        const bool tame = isTame(e);
+        if (mark == "Slaughter" ? !tame : tame) {
+            continue;
+        }
+        const bool ok = mark == "Tame" ? markTame(e, on, ignored)
+                        : mark == "Hunt" ? markHunt(e, on, ignored)
+                                         : markSlaughter(e, on, ignored);
+        marked += ok ? 1 : 0;
+    }
+    if (marked == 0) {
+        error = mark == "Slaughter" ? "no tame animal in that area" : "no wild animal in that area";
+        return false;
+    }
+    return true;
+}
+
 bool Husbandry::markHunt(Entity animal, bool on, std::string& error) {
     if (!valid(animal)) {
         error = "that is no animal";
@@ -832,6 +889,9 @@ void Husbandry::hashThing(Entity e, StateHasher& h) const {
     }
     h.add(c->markTame);
     h.add(c->markSlaughter);
+    if (!c->name.empty()) {  // only once named, so older recordings hash as before
+        h.add(c->name.data(), c->name.size());
+    }
     if (c->markHunt || c->collect) {
         h.add(c->markHunt);
         h.add(c->collect);
