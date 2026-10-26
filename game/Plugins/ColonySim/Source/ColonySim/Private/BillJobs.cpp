@@ -7,6 +7,7 @@
 #include "ColonySim/Crafting.h"
 #include "ColonySim/Fuel.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Inspirations.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Things.h"
@@ -150,8 +151,10 @@ void JobSystem::dropNewItems(Entity pawn, DefId def, int count, const std::vecto
             spoilage_->madeBy(item, *madeFrom, pawn, cellOf(reg.get<Position>(pawn)));
         }
         if (recipe != nullptr && crafting_ != nullptr) {
+            // An inspired crafter's next thing with a quality is better; making it uses the inspiration up.
+            const int shift = inspirations_ != nullptr && crafting_->hasQuality(def) ? inspirations_->takeQualityShift(pawn) : 0;
             crafting_->finishProduct(item, *recipe, bills_->skillLevel(pawn, recipe->skill), madeFrom != nullptr ? *madeFrom : std::vector<BillUsed>{},
-                                     storeZone);
+                                     storeZone, shift);
         }
         reg.emplace_or_replace<Carrying>(pawn, Carrying{item});
         dropCarried(pawn);
