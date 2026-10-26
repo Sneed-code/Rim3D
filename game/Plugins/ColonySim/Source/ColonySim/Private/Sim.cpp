@@ -11,6 +11,7 @@
 #include "ColonySim/Doors.h"
 #include "ColonySim/Explosives.h"
 #include "ColonySim/Defense.h"
+#include "ColonySim/Farming.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Floors.h"
@@ -166,6 +167,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     spoilage_ = std::make_unique<SpoilageSystem>(map_, *things_, *temperature_, *roomStats_, *defs_,
                                                  splitMix64(settings.seed ^ 0x73706F696CULL));
     spoilage_->setEventLog(&events_);
+    farming_ = std::make_unique<Farming>(map_, *plants_, *zones_, *defs_, events_);
+    farming_->setClimate(temperature_.get(), lights_.get());
+    plants_->setGrowthModifier([this](size_t cell) { return farming_->growthFactor(cell); });
+    zones_->setCellTaken([this](CellPos c) { return farming_->zoneAt(c) != kNoGrowingZone; });
     lights_->setWeather(weather_.get());
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
@@ -178,6 +183,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setFilth(filth_.get());
     jobs_->setApparel(apparel_.get());
     jobs_->setSpoilage(spoilage_.get());
+    jobs_->setFarming(farming_.get());
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     explosives_ = std::make_unique<ExplosiveSystem>(*things_, map_, *combat_, *health_, *defs_);
     fighters_->setExplosives(explosives_.get());
@@ -614,6 +620,19 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!husbandry_->assignZone(assignAnimalZone->animal, assignAnimalZone->zone, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* createGrowing = std::get_if<CreateGrowingZoneCommand>(&command)) {
+        const DefId crop = defs_->idOf("Things", createGrowing->crop);
+        if (farming_->createZone(createGrowing->area, crop, error) == kNoGrowingZone) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* removeGrowing = std::get_if<RemoveGrowingZoneCellsCommand>(&command)) {
+        if (farming_->removeCells(removeGrowing->area) == 0) {
+            commandFailed(id, "no growing zone there");
+        }
+    } else if (const auto* setGrowingCrop = std::get_if<SetGrowingZoneCropCommand>(&command)) {
+        if (!farming_->setCrop(setGrowingCrop->zone, defs_->idOf("Things", setGrowingCrop->crop), error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* spendTalent = std::get_if<SpendTalentPointCommand>(&command)) {
         if (!talents_->spend(spendTalent->pawn, spendTalent->talent, error)) {
             commandFailed(id, error);
@@ -960,6 +979,7 @@ void Sim::step() {
     spoilage_->setOutdoorFactor(weather_->deteriorationFactor());
     if (time_.seconds % kSecondsPerHour == 0) {
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
+        farming_->growHour(time_.seconds);
         pruneDesignations();
     }
     if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
@@ -1015,6 +1035,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.zones.clear();
     out.zoneCells.clear();
     out.animalZones.clear();
+    out.growingZones.clear();
+    out.growingZoneCells.clear();
     out.animalZoneCells.clear();
     out.looks.clear();
     out.research.clear();
@@ -1061,6 +1083,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
         out.animalZones.push_back(AnimalZoneView{zone.id, static_cast<uint32_t>(out.animalZoneCells.size()),
                                                  static_cast<uint32_t>(zone.cells.size()), husbandry_->isPen(zone.id)});
         out.animalZoneCells.insert(out.animalZoneCells.end(), zone.cells.begin(), zone.cells.end());
+    }
+    for (const GrowingZone& zone : farming_->zones()) {
+        out.growingZones.push_back(GrowingZoneView{zone.id, zone.crop, static_cast<uint32_t>(out.growingZoneCells.size()),
+                                                   static_cast<uint32_t>(zone.cells.size())});
+        out.growingZoneCells.insert(out.growingZoneCells.end(), zone.cells.begin(), zone.cells.end());
     }
     const entt::registry& reg = things_->registry();
     for (const auto [entity, thing, pos] : reg.view<const Thing, const Position>().each()) {
@@ -1411,6 +1438,7 @@ uint64_t Sim::stateHash() const {
     breeding_->hashState(h);
     temperature_->hashState(h);
     spoilage_->hashState(h);
+    farming_->hashState(h);
 
     // The entity ids the registry has handed out: the free list in reuse order (it decides the
     // next ids), then every live thing in id order with its components. The registry's own

@@ -5,6 +5,7 @@ Updated 2026-10-25.
 Stage 2 P1 done: a pawn carries a rifle, a sidearm and a melee weapon (`docs/design/weapons.md`).
 Stage 2 N4 done: tame animals mate and bear young, hens lay eggs, calves and chicks grow up, colonists milk and shear (`docs/design/breeding.md`).
 Stage 2 F11 done: turrets and traps (`docs/design/defense.md`).
+Stage 2 C13 done: growing zones with a chosen crop, colonists sow and harvest them (Growing work), crops grow by light and temperature, frost and heat kill them (`docs/design/farming.md`).
 Stage 2 C24 done: carrying is by mass (capacity over item mass), a hauler takes neighbouring stacks of the same def in one trip, a load slows walking up to 25% (`docs/design/jobs.md`).
 
 ## Where we are

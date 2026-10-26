@@ -119,6 +119,7 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::Deconstruct: return {kJobsDeconstructSteps, static_cast<int>(std::size(kJobsDeconstructSteps))};
         case JobType::Mine: return {kJobsMineSteps, static_cast<int>(std::size(kJobsMineSteps))};
         case JobType::CutPlant:
+        case JobType::SowCrop:
         case JobType::HarvestPlant: return {kJobsPlantSteps, static_cast<int>(std::size(kJobsPlantSteps))};
         case JobType::DoBill: return {kJobsDoBillSteps, static_cast<int>(std::size(kJobsDoBillSteps))};
         case JobType::Recreate: return {kJobsRecreateSteps, static_cast<int>(std::size(kJobsRecreateSteps))};
@@ -212,6 +213,7 @@ const char* jobTypeName(JobType type) {
         case JobType::SlaughterAnimal: return "SlaughterAnimal";
         case JobType::FeedAnimal: return "FeedAnimal";
         case JobType::GatherAnimal: return "GatherAnimal";
+        case JobType::SowCrop: return "SowCrop";
     }
     return "?";
 }
@@ -417,6 +419,7 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
         case JobType::Mine:
         case JobType::CutPlant:
         case JobType::HarvestPlant:
+        case JobType::SowCrop:
         case JobType::CleanFilth:
             out[0] = keyOf(JobTarget{kNoEntity, job.cell});
             return 1;
@@ -843,7 +846,7 @@ void JobSystem::tickJob(Entity pawn) {
 }
 
 bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
-    if (jobIsGather(job.type)) {
+    if (jobIsGather(job.type) || job.type == JobType::SowCrop) {
         return failCheckGather(pawn, job, why);
     }
     if (job.type == JobType::Ingest) {

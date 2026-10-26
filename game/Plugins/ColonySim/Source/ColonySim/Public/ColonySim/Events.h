@@ -70,6 +70,7 @@ enum class EventType : uint8_t {
     TrapSprung,      // a pawn set off a trap (docs/design/defense.md)
     TrapRearmed,     // a sprung trap was set again
     WeaponSwitched,  // a pawn finished switching weapons (P1, docs/design/weapons.md): `thing` the pawn, `def` the weapon now in its hands, `target` that weapon
+    PlantSown,       // a colonist sowed a crop in a growing zone: `cell`, `def` the crop (docs/design/farming.md)
 };
 
 // What stopped a projectile (ProjectileHit).

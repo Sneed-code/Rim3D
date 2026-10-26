@@ -261,6 +261,14 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["talent"] = c.talent;
             } else if constexpr (std::is_same_v<Type, RearmTrapCommand>) {
                 j["trap"] = entt::to_integral(c.trap);
+            } else if constexpr (std::is_same_v<Type, CreateGrowingZoneCommand>) {
+                j["area"] = replayRectJson(c.area);
+                j["crop"] = c.crop;
+            } else if constexpr (std::is_same_v<Type, RemoveGrowingZoneCellsCommand>) {
+                j["area"] = replayRectJson(c.area);
+            } else if constexpr (std::is_same_v<Type, SetGrowingZoneCropCommand>) {
+                j["zone"] = c.zone;
+                j["crop"] = c.crop;
             } else if constexpr (std::is_same_v<Type, AddTalentXpCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["amount"] = c.amount;
@@ -950,6 +958,24 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "CreateGrowingZone") {
+        CreateGrowingZoneCommand c;
+        if (!replayReadRect(r, j, where, c.area) || !r.text(j, "crop", c.crop, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "RemoveGrowingZoneCells") {
+        RemoveGrowingZoneCellsCommand c;
+        if (!replayReadRect(r, j, where, c.area)) {
+            return false;
+        }
+        out.command = c;
+    } else if (type == "SetGrowingZoneCrop") {
+        SetGrowingZoneCropCommand c;
+        if (!r.integer(j, "zone", c.zone, where) || !r.text(j, "crop", c.crop, where)) {
+            return false;
+        }
         out.command = std::move(c);
     } else if (type == "RearmTrap") {
         RearmTrapCommand c;
