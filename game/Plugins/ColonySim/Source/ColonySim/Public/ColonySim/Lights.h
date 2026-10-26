@@ -70,6 +70,8 @@ public:
 
     // The sun's glow now, from the time of day and the weather. 0 at night, 1 on a clear day.
     float skyGlow() const;
+    // The sun's glow on a clear day at an hour of the day (0 to 24, fractions count), with no weather.
+    float clearSkyGlowAtHour(float hour) const;
     // Light at a cell, 0 to 1; 0 outside the map. The cell's roof decides whether the sun reaches it.
     float lightAt(CellPos c) const;
     // Only the lamps' share, and whether the sun reaches the cell.

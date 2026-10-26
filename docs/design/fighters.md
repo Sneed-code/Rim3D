@@ -92,6 +92,11 @@ at 60% or less). It then scores distance from the enemy, cares less about having
 moving back plan after plan; a drafted pawn only as far as its leash. Out-gunned (weapons and armor)
 waits for F6's squad strength numbers. Fleeing the map is F6's rout.
 
+**At arm's length.** A fighter that has a gun and a known enemy within arm's length (`melee.reach` + `standGround`)
+that runs **at least as fast as it does** (the defs' `stats.moveSpeed`: a wolf, not a boar) skips the scoring: it
+stays where it is, stands and shoots from there (if it can shoot the target from its own cell). Walking to a better spot
+with a wolf on its heels only got it bitten in the back (found by the year run). A slower enemy is still kited.
+
 ## Acting
 
 Every step, for each fighter in id order (after the job system, before movement):
