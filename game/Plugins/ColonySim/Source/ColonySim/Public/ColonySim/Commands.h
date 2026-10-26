@@ -541,6 +541,24 @@ struct SwitchWeaponCommand {
     WeaponSlot slot = WeaponSlot::Primary;
 };
 
+// Growing zones (task C13, docs/design/farming.md). CreateGrowingZone paints a zone with `crop` (a Things def of a
+// sowable plant, like "Plant_Rice") over the cells of `area` that are soil, free and in no zone; fails if there are none.
+struct CreateGrowingZoneCommand {
+    CellRect area;
+    std::string crop;
+};
+
+// Takes the cells of `area` out of their growing zones; an emptied zone is deleted. Fails if none was in a zone.
+struct RemoveGrowingZoneCellsCommand {
+    CellRect area;
+};
+
+// Changes the crop of a growing zone; plants of the old crop are cut and replaced as colonists get to them.
+struct SetGrowingZoneCropCommand {
+    uint32_t zone = 0;
+    std::string crop;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -559,7 +577,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              StripCommand, SetWeatherCommand, MarkAnimalCommand, SetTrainingCommand,
                              CreateAnimalZoneCommand, RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand,
                              SpendTalentPointCommand, AddTalentXpCommand, RearmTrapCommand,
-                             CarryWeaponCommand, SwitchWeaponCommand>;
+                             CarryWeaponCommand, SwitchWeaponCommand, CreateGrowingZoneCommand,
+                             RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

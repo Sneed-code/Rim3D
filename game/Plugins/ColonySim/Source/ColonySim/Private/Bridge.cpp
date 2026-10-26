@@ -133,6 +133,12 @@ const char* commandName(const Command& command) {
                 return "SpendTalentPoint";
             } else if constexpr (std::is_same_v<Type, RearmTrapCommand>) {
                 return "RearmTrap";
+            } else if constexpr (std::is_same_v<Type, CreateGrowingZoneCommand>) {
+                return "CreateGrowingZone";
+            } else if constexpr (std::is_same_v<Type, RemoveGrowingZoneCellsCommand>) {
+                return "RemoveGrowingZoneCells";
+            } else if constexpr (std::is_same_v<Type, SetGrowingZoneCropCommand>) {
+                return "SetGrowingZoneCrop";
             } else if constexpr (std::is_same_v<Type, AddTalentXpCommand>) {
                 return "AddTalentXp";
             } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
@@ -226,6 +232,7 @@ const char* eventTypeName(EventType type) {
         case EventType::TrapSprung: return "TrapSprung";
         case EventType::TrapRearmed: return "TrapRearmed";
         case EventType::WeaponSwitched: return "WeaponSwitched";
+        case EventType::PlantSown: return "PlantSown";
     }
     return "?";
 }

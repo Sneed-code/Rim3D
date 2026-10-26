@@ -32,7 +32,9 @@
   {
     "defName": "PlantRules", "source": "RimWorld wiki",
     "growHours": [6, 19],
-    "growthNeedsLight": 0.51
+    "growthNeedsLight": 0.51,
+    "killChancePerDegree": 0.1,
+    "unverified": ["killChancePerDegree"]
   },
   {
     "defName": "SkillRules", "source": "RimWorld wiki",

@@ -1,0 +1,26 @@
+[
+  {
+    "defName": "Orrin", "source": "RimWorld wiki", "label": "Orrin", "description": "A steady build-up: trouble comes in waves, each a little bigger than the last, with calm between.",
+    "threatCycle": { "onDays": 1.5, "offDays": 4.6, "incidentsPerCycle": [1, 1], "firstThreatDay": 5 },
+    "mtbDays": { "Misc": 3.4, "FactionArrival": 7.0, "OrbitalVisitor": 11.0, "ThreatSmall": 12.0, "Disease": 8.0 },
+    "pointsFactor": 1.0,
+    "unverified": ["threatCycle", "mtbDays", "pointsFactor"],
+    "notes": "RimWorld's Cassandra Classic. The cycle numbers are recalled, not read from the game's files: a big threat roughly every six days."
+  },
+  {
+    "defName": "Maren", "source": "RimWorld wiki", "label": "Maren", "description": "Long quiet spells and gentler trouble; good things come more often.",
+    "threatCycle": { "onDays": 1.0, "offDays": 8.0, "incidentsPerCycle": [1, 1], "firstThreatDay": 8 },
+    "mtbDays": { "Misc": 2.6, "FactionArrival": 5.0, "OrbitalVisitor": 8.0, "ThreatSmall": 20.0, "Disease": 12.0 },
+    "pointsFactor": 0.85,
+    "unverified": ["threatCycle", "mtbDays", "pointsFactor"],
+    "notes": "RimWorld's Phoebe Chillax: about nine days between big threats. Recalled numbers."
+  },
+  {
+    "defName": "Jinx", "source": "RimWorld wiki", "label": "Jinx", "description": "Anything can happen at any time; no rhythm, no build-up.",
+    "threatCycle": null,
+    "mtbDays": { "ThreatBig": 5.0, "ThreatSmall": 6.0, "Misc": 1.35, "FactionArrival": 7.0, "OrbitalVisitor": 11.0, "Disease": 8.0 },
+    "pointsFactor": 1.0, "randomPointsFactor": [0.5, 1.5],
+    "unverified": ["mtbDays", "randomPointsFactor"],
+    "notes": "RimWorld's Randy Random: every incident rolls on its own (a mean time between, in days), and each threat's points are scaled by a random factor. Misc 1.35 days is the wiki's figure; the rest are recalled."
+  }
+]

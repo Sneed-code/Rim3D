@@ -61,6 +61,7 @@ class SpoilageSystem;
 class Things;
 class Weather;
 class Zones;
+class Farming;
 struct Snapshot;
 class SimSaveAccess;
 
@@ -212,6 +213,8 @@ public:
     const Rooms& rooms() const { return *rooms_; }
 
     // Light and darkness (docs/design/light.md). Brought up to date at the end of every step.
+    Farming& farming() { return *farming_; }
+    const Farming& farming() const { return *farming_; }
     Lights& lights() { return *lights_; }
     const Lights& lights() const { return *lights_; }
     // Floors, filth, room stats and the beauty need (docs/design/room-stats.md).
@@ -316,6 +319,7 @@ private:
     std::unique_ptr<PowerGrid> power_;
     std::unique_ptr<Lights> lights_;
     std::unique_ptr<TemperatureSystem> temperature_;  // after rooms_ and health_
+    std::unique_ptr<Farming> farming_;                // after temperature_, lights_ and zones_
     std::unique_ptr<SpoilageSystem> spoilage_;        // after temperature_ and roomStats_
     std::optional<float> outdoorOverride_;
     DoorNumbers doorNumbers_;  // for the snapshot's door animation

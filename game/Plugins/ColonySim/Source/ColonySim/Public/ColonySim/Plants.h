@@ -5,6 +5,7 @@
 #include "ColonySim/Grid.h"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -61,6 +62,9 @@ public:
     // older, plants past their lifespan die, and in the growing hours the rest grow by
     // 1 / (growDays x 24) of full growth times their fertility rate.
     void growHour(int hourOfDay);
+    // Scales a plant's growth in a cell (by the cell's index) by a factor of 0 to 1; farming uses it for
+    // the light and temperature of sown crops. Not saved: whoever installs it does so again on loading.
+    void setGrowthModifier(std::function<double(size_t)> modifier) { modifier_ = std::move(modifier); }
 
     size_t count() const { return count_; }
     size_t countOf(DefId def) const;
@@ -102,6 +106,7 @@ private:
     std::vector<uint32_t> age_;
     size_t count_ = 0;
     uint64_t hash_ = 0;
+    std::function<double(size_t)> modifier_;
 };
 
 }  // namespace colony
