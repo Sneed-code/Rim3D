@@ -1,6 +1,7 @@
 # Backlog
 
 Ideas parked for later. Newest first. Move an item into a stage plan when it's picked up.
+- Monsters (found in the mechanoid thread): a "destroy the hive" order so colonists attack mounds, dormant cave hives, jelly as food and recreation, centipede burner and gunner, termite, EMP stun and fire immunity for mechs, machine bodies with their own parts, insects that path round walls, letters for infestations and Remnant clusters, T3 narrator calls to `sim.monsters()`.
 
 - Crafting (found in C14): skill experience from bills (`workSkillXp` is read and unused, so skills never rise from crafting or cooking), inspirations that shift quality up, melee weapon damage and hit points from stuff and quality (P4 repair and upgrades fit), sculpting and smelting benches, "count only what lies in this stockpile" for "until you have" bills, the electric tailor bench's half speed without power, and the fuel rule: a stove burns `fuel.perUse` per product, so one batch of 50 kibble would burn 50 wood (RimWorld burns by time worked; found in C11, still open).
 - Social life (found in C20; cheating, jealousy, wedding thoughts and Social skill effects done): orientations and attractiveness for romance (now anyone may love anyone), a wedding party job where guests walk to a spot, the colonist panel's relations tab, and mood effects of seeing a friend die in front of you.

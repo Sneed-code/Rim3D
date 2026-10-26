@@ -1102,6 +1102,10 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.text("faction", c.faction);
                 ar.value("points", c.points);
                 ar.value("edge", c.edge);
+            } else if constexpr (std::is_same_v<Type, StartThreatCommand>) {
+                ar.text("kind", c.kind);
+                ar.value("points", c.points);
+                ar.value("edge", c.edge);
             } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
                 ar.value("on", c.on);
             } else if constexpr (std::is_same_v<Type, SetDefenseRoleCommand>) {

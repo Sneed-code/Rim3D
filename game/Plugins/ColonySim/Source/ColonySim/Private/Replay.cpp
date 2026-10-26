@@ -222,6 +222,10 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["faction"] = c.faction;
                 j["points"] = static_cast<double>(c.points);
                 j["edge"] = c.edge;
+            } else if constexpr (std::is_same_v<Type, StartThreatCommand>) {
+                j["kind"] = c.kind;
+                j["points"] = static_cast<double>(c.points);
+                j["edge"] = c.edge;
             } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
                 j["on"] = c.on;
             } else if constexpr (std::is_same_v<Type, SetDefenseRoleCommand>) {
@@ -1200,6 +1204,13 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
     } else if (type == "StartRaid") {
         StartRaidCommand c;
         if (!r.text(j, "faction", c.faction, where) || !r.number(j, "points", c.points, where) ||
+            !r.integer(j, "edge", c.edge, where)) {
+            return false;
+        }
+        out.command = c;
+    } else if (type == "StartThreat") {
+        StartThreatCommand c;
+        if (!r.text(j, "kind", c.kind, where) || !r.number(j, "points", c.points, where) ||
             !r.integer(j, "edge", c.edge, where)) {
             return false;
         }

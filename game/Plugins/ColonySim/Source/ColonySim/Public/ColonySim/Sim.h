@@ -56,6 +56,7 @@ class ResearchSystem;
 class TalentSystem;
 class NeedsSystem;
 class RaidSystem;
+class MonsterSystem;
 class Plants;
 class PowerGrid;
 class Regions;
@@ -285,6 +286,9 @@ public:
     RaidSystem& raids() { return *raids_; }
     const RaidSystem& raids() const { return *raids_; }
 
+    // Brood mounds and Remnant clusters (docs/design/monsters.md).
+    MonsterSystem& monsters() { return *monsters_; }
+
     // Prisoners: capture, feeding, warden talks, recruiting and release (docs/design/prisoners.md).
     PrisonerSystem& prisoners() { return *prisoners_; }
     const PrisonerSystem& prisoners() const { return *prisoners_; }
@@ -386,6 +390,7 @@ private:
     std::unique_ptr<UpperFloors> upperFloors_;  // M1
     std::unique_ptr<RoofCollapse> roofCollapse_;  // M3, after the rooms and the job system
     std::unique_ptr<RaidSystem> raids_;        // after the fighters
+    std::unique_ptr<MonsterSystem> monsters_;  // after raids_ and animals_
     std::unique_ptr<PrisonerSystem> prisoners_;  // after the raids
     std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system
     std::unique_ptr<Breeding> breeding_;    // after husbandry_
