@@ -1,5 +1,6 @@
 [
   {"defName": "MeatBase", "abstract": true, "parent": "ItemBase", "source": "RimWorld wiki", "unverified": ["stats", "comps"], "stackLimit": 75, "stats": {"maxHitPoints": 50, "mass": 0.03, "nutrition": 0.05, "flammability": 0.5, "deteriorationRate": 6}, "thingCategories": ["FoodRaw", "MeatRaw"], "ingestible": {"foodType": "Meat", "preferability": "RawBad"}, "comps": [{"type": "Rottable", "daysToRotStart": 2}], "visual": {"color": [0.62, 0.16, 0.16], "pieces": 4, "layer": 0.1, "parts": [{"shape": "sphere", "radius": 0.08, "height": 0.1, "color": [0.62, 0.16, 0.16]}]}},
+  {"defName": "Meat_Human", "parent": "MeatBase", "label": "human meat", "stats": {"marketValue": 2.0}, "ours": ["butchering people (N2 follow-up)"]},
   {"defName": "Meat_Hare", "parent": "MeatBase", "label": "hare meat", "stats": {"marketValue": 2.0}},
   {"defName": "Meat_Squirrel", "parent": "MeatBase", "label": "squirrel meat", "stats": {"marketValue": 2.0}},
   {"defName": "Meat_Deer", "parent": "MeatBase", "label": "deer meat", "stats": {"marketValue": 2.0}},
@@ -18,6 +19,7 @@
   {"defName": "LeatherBase", "abstract": true, "parent": "ItemBase", "source": "RimWorld wiki", "unverified": ["stats", "stuffProps"], "stats": {"maxHitPoints": 60, "mass": 0.03, "flammability": 0.5, "deteriorationRate": 2}, "thingCategories": ["Leathers"], "visual": {"color": [0.5, 0.36, 0.24], "pieces": 4, "layer": 0.1, "parts": [{"shape": "box", "size": [0.3, 0.25, 0.03], "color": [0.5, 0.36, 0.24]}]}},
   {"defName": "Leather_Light", "parent": "LeatherBase", "label": "light leather", "stats": {"marketValue": 2.1}, "stuffProps": {"categories": ["Leathery"], "statFactors": {"armorRatingSharp": 0.6, "armorRatingBlunt": 0.42, "armorRatingHeat": 0.48}}},
   {"defName": "Leather_Plain", "parent": "LeatherBase", "label": "plain leather", "stats": {"marketValue": 2.1}, "stuffProps": {"categories": ["Leathery"], "statFactors": {"armorRatingSharp": 1.0, "armorRatingBlunt": 0.7, "armorRatingHeat": 0.8}}},
+  {"defName": "Leather_Human", "parent": "LeatherBase", "label": "human leather", "stats": {"marketValue": 2.1}, "stuffProps": {"categories": ["Leathery"], "statFactors": {"armorRatingSharp": 1.0, "armorRatingBlunt": 0.7, "armorRatingHeat": 0.8}}},
   {"defName": "Leather_Pig", "parent": "LeatherBase", "label": "boar leather", "stats": {"marketValue": 2.1}, "stuffProps": {"categories": ["Leathery"], "statFactors": {"armorRatingSharp": 0.85, "armorRatingBlunt": 0.59, "armorRatingHeat": 0.68}}},
   {"defName": "Leather_Dog", "parent": "LeatherBase", "label": "dog leather", "stats": {"marketValue": 2.1}, "stuffProps": {"categories": ["Leathery"], "statFactors": {"armorRatingSharp": 0.9, "armorRatingBlunt": 0.63, "armorRatingHeat": 0.72}}},
   {"defName": "Leather_Wolf", "parent": "LeatherBase", "label": "wolf leather", "stats": {"marketValue": 3.0}, "stuffProps": {"categories": ["Leathery"], "statFactors": {"armorRatingSharp": 1.15, "armorRatingBlunt": 0.8, "armorRatingHeat": 0.92}}},
