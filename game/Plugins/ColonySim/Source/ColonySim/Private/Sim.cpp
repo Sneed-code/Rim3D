@@ -230,6 +230,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     husbandry_->setEventLog(&events_);
     breeding_ = std::make_unique<Breeding>(*things_, map_, *animals_, *husbandry_, *defs_, time_, settings.seed);
     breeding_->setEventLog(&events_);
+    breeding_->setClimate(temperature_.get());
     jobs_->setBreeding(breeding_.get());
     animals_->setHusbandry(husbandry_.get());
     animals_->setPathfinder(&pathfinder_);
@@ -679,6 +680,12 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
     } else if (const auto* assignAnimalZone = std::get_if<AssignAnimalZoneCommand>(&command)) {
         if (!husbandry_->assignZone(assignAnimalZone->animal, assignAnimalZone->zone, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* setBreeding = std::get_if<SetBreedingCommand>(&command)) {
+        const bool ok = setBreeding->animal != kNoEntity ? breeding_->setBreeding(setBreeding->animal, setBreeding->allow, error)
+                                                         : husbandry_->setZoneBreeding(setBreeding->zone, setBreeding->allow, error);
+        if (!ok) {
             commandFailed(id, error);
         }
     } else if (const auto* createGrowing = std::get_if<CreateGrowingZoneCommand>(&command)) {

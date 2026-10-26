@@ -123,6 +123,8 @@ const char* commandName(const Command& command) {
                 return "RemoveAnimalZoneCells";
             } else if constexpr (std::is_same_v<Type, AssignAnimalZoneCommand>) {
                 return "AssignAnimalZone";
+            } else if constexpr (std::is_same_v<Type, SetBreedingCommand>) {
+                return "SetBreeding";
             } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
                 return "Melee";
             } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {

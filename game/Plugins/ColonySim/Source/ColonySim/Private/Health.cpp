@@ -708,7 +708,7 @@ const HealthModel::Kind* healthKindOf(const HealthModel& model, const entt::regi
 }
 
 float healthHpFactor(const HealthModel& model, const Health& health) {
-    return health.protagonist ? model.protagonistFactor : 1.0f;
+    return (health.protagonist ? model.protagonistFactor : 1.0f) * health.stageHp;
 }
 
 }  // namespace

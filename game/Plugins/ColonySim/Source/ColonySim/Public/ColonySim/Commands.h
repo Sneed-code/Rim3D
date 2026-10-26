@@ -432,6 +432,13 @@ struct AssignAnimalZoneCommand {
     uint32_t zone = 0;
 };
 
+// Switches breeding on or off: for one tame animal, or (with no animal) for every animal in a zone.
+struct SetBreedingCommand {
+    Entity animal = kNoEntity;
+    uint32_t zone = 0;
+    bool allow = true;
+};
+
 // Melee (task F8, docs/design/melee.md). Attack: `pawn` swings at `target`, a pawn within reach;
 // for the colonist the player controls, `target` may be none for a swing straight ahead, and its
 // swings have no spread (the player aims). Block: `pawn` raises its melee weapon for a moment.
@@ -684,7 +691,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              MeleeCommand, DodgeRollCommand,
                              SetOutfitCommand, EditOutfitCommand, AddOutfitCommand, RemoveOutfitCommand,
                              StripCommand, SetWeatherCommand, MarkAnimalCommand, SetTrainingCommand,
-                             CreateAnimalZoneCommand, RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand,
+                             CreateAnimalZoneCommand, RemoveAnimalZoneCellsCommand, AssignAnimalZoneCommand, SetBreedingCommand,
                              SpendTalentPointCommand, AddTalentXpCommand, RearmTrapCommand,
                              CarryWeaponCommand, SwitchWeaponCommand, CreateGrowingZoneCommand,
                              RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
