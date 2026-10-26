@@ -57,7 +57,7 @@ all use it. A growing zone may take such cells (other buildings still keep a cel
 temperature work as for any crop, so an indoor crop needs a roofed, heated room and a lamp.
 
 Crops grow only 06:00 to 19:00, except where a lit **sun lamp** is near: a powered building with
-`glower.growsPlants` within its `glower.plantLightRadius` (5 m) of the cell, and the lamps' light on the cell at
+`glower.growsPlants` within its `glower.plantLightRadius` (5.5 m) of the cell, and the lamps' light on the cell at
 least the crop's minimum glow, makes `Plants::setGrowsAnytime` true, so the crop also grows in the night hours
 (`Farming::sunLampLit`). An ordinary lamp lights the cell for sowing but gives no night growth. Tests:
 `HydroponicsTests`.

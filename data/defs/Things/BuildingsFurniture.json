@@ -89,12 +89,12 @@
    1,
    1
   ],
-  "costStuffCount": 10,
+  "costStuffCount": 20,
   "fillPercent": 0.25,
   "designationCategory": "Furniture",
   "stats": {
-   "maxHitPoints": 60,
-   "workToBuild": 432.0,
+   "maxHitPoints": 75,
+   "workToBuild": 360.0,
    "beauty": 0.5,
    "flammability": 1.0
   },
@@ -103,10 +103,7 @@
    "fertility": 1.0
   },
   "unverified": [
-   "costStuffCount",
-   "stats",
-   "fillPercent",
-   "plantSpot"
+   "fillPercent"
   ],
   "ours": [
    "plantSpot"
