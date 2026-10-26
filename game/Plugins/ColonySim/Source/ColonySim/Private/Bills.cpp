@@ -21,6 +21,10 @@ constexpr float kBillsMaxRadius = 2000.0f;
 // An item is in a category by its `thingCategories` (FoodRaw, Textiles) or, for a stuff, by the categories
 // of its `stuffProps` (Metallic, Fabric, Leathery): recipes ask for either (`categories`, `stuffCategories`).
 bool billsHasCategory(const Def& item, const std::string& category) {
+    // Clothes and armour carry no thingCategories of their own: "Apparel" is any item with an `apparel` block.
+    if (category == "Apparel" && item.has("apparel")) {
+        return true;
+    }
     for (size_t i = 0; i < item.count("thingCategories"); ++i) {
         if (item.textAt("thingCategories", i) == category) {
             return true;
@@ -123,6 +127,8 @@ BillSystem::BillSystem(Things& things, const DefDatabase& defs) : things_(things
             recipe.ingredients.push_back(std::move(ingredient));
         }
         recipe.butcher = def.has("butcher");
+        recipe.cremate = def.flag("cremate");
+        recipe.smeltFraction = def.number("smelt", 0.0);
         recipe.fuelUsesSet = static_cast<int>(def.integer("fuelUses", 0));
         recipe.stuffFromIngredient = def.flag("productsMadeOfIngredient") || def.flag("productStuffFromIngredient");
         for (const std::string& name : def.keys("products")) {
@@ -345,7 +351,42 @@ int BillSystem::stockOf(DefId item) const {
     return total;
 }
 
+std::vector<RecipeProduct> BillSystem::smeltYield(DefId item, DefId stuff, double fraction, int count) const {
+    std::vector<RecipeProduct> out;
+    for (const Recipe& recipe : recipes_) {
+        const bool makes = std::any_of(recipe.products.begin(), recipe.products.end(),
+                                       [item](const RecipeProduct& product) { return product.item == item; });
+        if (!makes) {
+            continue;
+        }
+        for (const RecipeIngredient& ingredient : recipe.ingredients) {
+            if (ingredient.byNutrition) {
+                continue;
+            }
+            // A stuff ingredient (clothes, weapons) gives back the stuff the thing is made of; a named one, itself.
+            DefId metal;
+            if (stuff.valid() && std::find(ingredient.items.begin(), ingredient.items.end(), stuff) != ingredient.items.end()) {
+                metal = stuff;
+            } else if (ingredient.items.size() == 1) {
+                metal = ingredient.items.front();
+            }
+            if (!metal.valid() || !billsHasCategory(defs_.get(metal), "Metallic")) {
+                continue;
+            }
+            const int amount = static_cast<int>(std::floor(ingredient.amount * fraction + 1.0e-6)) * count;
+            if (amount > 0) {
+                out.push_back(RecipeProduct{metal, amount});
+            }
+        }
+        break;
+    }
+    return out;
+}
+
 bool BillSystem::stockFor(const Recipe& recipe, int& stock) const {
+    if (recipe.cremate) {
+        return false;
+    }
     if (recipe.butcher) {
         stock = 0;
         things_.registry().view<const Thing, const StackCount, const Position>().each(

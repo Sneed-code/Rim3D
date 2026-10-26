@@ -475,7 +475,7 @@ public:
                 !jobs.fuel().canUse(building, fuelPerProduct * static_cast<float>(recipe->fuelUses()))) {
                 continue;
             }
-            if (recipe->butcher) {
+            if (recipe->butcher || recipe->cremate) {
                 if (makeButcherJob(jobs, pawn, building, bill, candidate.reach, out)) {
                     return true;
                 }
@@ -1010,7 +1010,8 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<HarvestCropsGiver>());
     givers.push_back(std::make_unique<SowCropsGiver>());
     for (const char* task :
-         {"DoBillsCookStove", "DoBillsButcher", "DoBillsSmithy", "DoBillsTailor", "DoBillsCraftingSpot", "DoBillsStonecut"}) {
+         {"DoBillsCookStove", "DoBillsButcher", "DoBillsSmithy", "DoBillsTailor", "DoBillsCraftingSpot", "DoBillsStonecut", "DoBillsSmelt",
+          "DoBillsCremate"}) {
         givers.push_back(std::make_unique<DoBillsGiver>(task));
     }
     givers.push_back(std::make_unique<ResearchGiver>());

@@ -3,6 +3,7 @@
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Spoilage.h"
 
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Crafting.h"
 #include "ColonySim/Fuel.h"
@@ -77,17 +78,37 @@ JobSystem::StepResult JobSystem::depositIngredient(Entity pawn, Job& job, std::s
         return StepResult::Failed;
     }
     const Entity carried = job.thing;
-    const DefId def = reg.get<Thing>(carried).def;
-    const int count = reg.get<StackCount>(carried).count;
+    DefId def = reg.get<Thing>(carried).def;
+    int count = reg.get<StackCount>(carried).count;
+    // A smelter keeps what the thing melts down to, not the thing: it goes where the products do (an interrupted run drops the metal).
+    const Bill* smeltBill = bills_->find(job.site, job.bill);
+    const Recipe* smeltRecipe = smeltBill != nullptr ? bills_->recipe(smeltBill->recipe) : nullptr;
+    std::vector<RecipeProduct> melted;
+    const bool smelting = smeltRecipe != nullptr && smeltRecipe->smeltFraction > 0.0;
+    if (smelting) {
+        const MadeOf* madeOf = reg.try_get<MadeOf>(carried);
+        melted = bills_->smeltYield(def, madeOf != nullptr ? madeOf->stuff : DefId{}, smeltRecipe->smeltFraction, count);
+    }
     release(pawn, job);
     reg.remove<Carrying>(pawn);
     things_.destroy(carried);
     pawnDid(pawn, PawnAction::PutDown, job.site);
-    auto used = std::find_if(job.used.begin(), job.used.end(), [def](const BillUsed& u) { return u.def == def; });
-    if (used != job.used.end()) {
-        used->count += count;
+    if (smelting) {
+        for (const RecipeProduct& metal : melted) {
+            auto have = std::find_if(job.used.begin(), job.used.end(), [&](const BillUsed& u) { return u.def == metal.item; });
+            if (have != job.used.end()) {
+                have->count += metal.count;
+            } else {
+                job.used.push_back(BillUsed{metal.item, metal.count});
+            }
+        }
     } else {
-        job.used.push_back(BillUsed{def, count});
+        auto used = std::find_if(job.used.begin(), job.used.end(), [def](const BillUsed& u) { return u.def == def; });
+        if (used != job.used.end()) {
+            used->count += count;
+        } else {
+            job.used.push_back(BillUsed{def, count});
+        }
     }
     if (job.picks.empty()) {
         job.thing = kNoEntity;
@@ -172,6 +193,13 @@ JobSystem::StepResult JobSystem::billFinish(Entity pawn, Job& job, std::string& 
     fuel_->use(job.site, fuel_->specOf(job.site).perUse * static_cast<float>(recipe->fuelUses()));
     int made = 0;
     const uint32_t storeZone = bill->storeZone;
+    if (recipe->smeltFraction > 0.0) {
+        // The metal was worked out when the ingredient went in (depositIngredient).
+        for (const BillUsed& metal : used) {
+            dropNewItems(pawn, metal.def, metal.count);
+            made += metal.count;
+        }
+    }
     for (const RecipeProduct& product : recipe->products) {
         dropNewItems(pawn, product.item, product.count, &used, recipe, storeZone);
         made += product.count;
