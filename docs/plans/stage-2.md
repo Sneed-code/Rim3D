@@ -30,7 +30,7 @@ Stage 2 is done when sneed can play this in a packaged build:
 **Not in Stage 2** (Stage 3 and later): the world map, caravans, quests and other maps; orbital
 trade; drugs and addiction; sieges and mortars; Remnant clusters, chitinid brood mounds and binders;
 creeds, the Black Spires and skyhulls; leaving the planet; art objects; the styled UI (panels stay
-ImGui); sound; dismemberment visuals and full anatomy (Stage 4). Animals are the 15 in D5.
+ImGui); sound; dismemberment visuals and full anatomy (all in `art-stage.md`). Animals are the 15 in D5.
 
 ## Rules for every Stage 2 task
 

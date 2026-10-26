@@ -71,7 +71,7 @@ so they never burn). `Burning {until}` is a component on the pawn; it lasts `paw
 times 0.75 to 1.25.
 
 While it burns, every pass the pawn takes `pawnDamagePerTick` (2 heat damage per RimWorld second,
-the wiki's number) as a hit of Burn damage on a random part, **its job is dropped** (`PawnCaughtFire`
+the wiki's number) as a hit of Burn damage on a random outside part, **through the heat armor** of what covers it (the same armor rule as bullets: heat armor less nothing is the share of hits changed, half of those bounce off, the rest do half damage, and the piece loses 1 hit point per 4 damage that reached it; `CombatSystem::hurtPawn`), **its job is dropped** (`PawnCaughtFire`
 makes the sim `interrupt` it), and the cell under it keeps a fire going (a burning pawn sets the
 ground alight, as the wiki says). A downed pawn burns until it is put out or it burns out: it can
 die of it. Beating out the fire under a pawn puts it out too (`PawnFireOut`).
@@ -81,8 +81,9 @@ stopped (`Fire::panicStep`, called by the job system instead of the think list) 
 walkable neighbour, preferring one that isn't alight, and its job ends ("it is on fire"). A colonist who is not
 alight and within 1.5 m beats the flames out as it runs past. `panic` in `FireRules` turns it off.
 
-Not here yet: jumping in water (there is no shallow water),
-and the Heat armor of apparel (devilstrand): `applyDamage` takes the hit as it is.
+**Water.** A burning pawn that has water within `waterRunRadius` (12 cells, ours) runs for the nearest water cell (a greedy step each time
+it stops) and is put out when it is next to it. Not here yet: shallow water that can be waded, and the Heat armor of apparel
+(devilstrand): `applyDamage` takes the hit as it is.
 
 ## Firefighting
 
@@ -105,8 +106,17 @@ colonist is not put on this job (drafted colonists skip the think list).
 **Firefoam popper** (`FirefoamPopper` in `Things/Defense.json`, research `Firefoam`, steel 30; numbers unverified).
 While any fire burns, each game second a popper looks for a fire within `firefoam.triggerRadius` (3 m, ours). If one
 is there it puts out every fire within `firefoam.radius` (9 m) (`FireOut` "foamed") and every pawn burning there,
-emits `FirefoamPopped` and is destroyed (single use). No foam is left on the ground, so embers can relight cells
-next to the radius. Not here yet: a foam turret, a popper going off when it is destroyed.
+emits `FirefoamPopped` and is destroyed (single use). A popper that is destroyed by damage bursts the same way
+whether or not a fire is near (`Fire::onDestroy`, from the combat before-destroy hook), message "destroyed".
+
+**Firefoam on the ground.** A burst lays a layer of `FireFoam` filth on every cell in its radius. A cell with foam on it counts
+as wet: it cannot be lit (`ignite` fails, spread and hot-room ignition skip it), so embers cannot relight what was foamed.
+Each hour a layer fades with chance 1 / `foamFadeHours` (12, ours); colonists can also clean it (Cleaning work type).
+
+**Foam turret** (`FoamTurret`, research `Firefoam`, needs power; `firefoamTurret {range 20, radius 2.5, cooldown 10}`, ours). Every
+`cooldown` game seconds (staggered by entity id) a running turret shoots the nearest fire in range: fires and burning pawns within
+`radius` of it are put out and the ground there is foamed (event `FirefoamPopped`, message "turret"). It is not used up and needs
+no line of sight.
 
 A fire that grows faster than the colonists beat it (a big grass fire, a burning house) needs the
 home area, hands, and a good start, or a popper.
