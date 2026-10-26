@@ -25,6 +25,7 @@
     "huntMinRange": 3,
     "huntMaxSeconds": 900,
     "huntRepathSeconds": 3,
+    "huntAvoidManhunterChance": 0.1,
     "butcherEfficiencyBase": 0.75,
     "butcherEfficiencyPerLevel": 0.025,
     "butcherManipulationImportance": 0.9,
@@ -45,6 +46,6 @@
                    "trainables", "tameXp", "trainXp", "slaughterXp", "butcherXp"],
     "ours": ["feedSeconds", "skillChanceBase", "skillChancePerLevel", "handReach", "holdRadius", "starveDays", "handFeedBelow",
              "workMinFood", "homeRadius", "itemRadius", "feedXp", "repathSeconds", "dietFoods", "huntRangeShare", "huntMinRange",
-             "huntMaxSeconds", "huntRepathSeconds"]
+             "huntMaxSeconds", "huntRepathSeconds", "huntAvoidManhunterChance"]
   }
 ]
