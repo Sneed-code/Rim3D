@@ -264,19 +264,18 @@ TEST_CASE("Hunting: nobody hunts without a gun in their hands") {
     CHECK(started);
 }
 
-TEST_CASE("Hunting: a hunted animal that is hurt can turn on the hunter") {
-    // Wild boar fight back at whoever hurts them (N5): across a few games at least one of them does.
+TEST_CASE("Hunting: a hurt animal can turn on the hunter") {
+    // Hunters leave boars alone since they fight back, but a hunter set on a hare that hurts a boar by chance gets what N5 gives:
+    // across a few games at least one boar fights back.
     uint64_t turned = 0;
     for (uint64_t seed = 1; seed <= 6; ++seed) {
         HuntFixture f(seed);
-        f.addColonist(CellPos{10, 10, 0}, 8, true);
+        const Entity hunter = f.addColonist(CellPos{10, 10, 0}, 8, true);
         const Entity boar = f.animal("WildBoar", CellPos{24, 10, 0});
         if (boar == kNoEntity) {
             continue;
         }
-        std::string error;
-        f.hu().markHunt(boar, true, error);
-        f.runUntil(6000, [&] { return f.dead(boar); });
+        f.sim.animals().hurt(boar, hunter);
         turned += f.sim.animals().stats().revenges + f.sim.animals().stats().manhunters;
     }
     CHECK(turned > 0);
@@ -465,4 +464,55 @@ TEST_CASE("Hunting: the hunt mark is a command that goes into the replay file") 
     std::string error;
     HUNT_REQUIRE(readReplay(writeReplay(recorded), loaded, error));
     CHECK(loaded.commands.size() == recorded.commands.size());
+}
+
+TEST_CASE("Hunting: hunters keep away from animals that turn on them, and take the safe mark instead") {
+    HuntFixture f;
+    f.addColonist(CellPos{10, 10, 0}, 8, true);
+    const Entity bear = f.animal("GrizzlyBear", CellPos{16, 10, 0});
+    const Entity thrumbo = f.animal("Thrumbo", CellPos{16, 14, 0});
+    HUNT_REQUIRE(bear != kNoEntity && thrumbo != kNoEntity);
+    CHECK(f.sim.animals().manhunterChanceOf(bear) >= 0.1f);
+    CHECK(f.sim.animals().manhunterChanceOf(thrumbo) >= 0.1f);
+    CHECK(f.sim.animals().manhunterChanceOf(f.colonist) == 0.0f);
+    std::string error;
+    HUNT_REQUIRE(f.hu().markHunt(bear, true, error));
+    HUNT_REQUIRE(f.hu().markHunt(thrumbo, true, error));
+    bool hunting = false;
+    for (int i = 0; i < 1500; ++i) {
+        f.sim.step();
+        for (const Event& e : f.sim.events()) {
+            hunting = hunting || (e.type == EventType::JobStarted && e.job == JobType::Hunt);
+        }
+    }
+    CHECK_FALSE(hunting);
+    CHECK_FALSE(f.dead(bear));
+    CHECK_FALSE(f.dead(thrumbo));
+    // A harmless hare marked too is hunted.
+    const Entity hare = f.animal("Hare", CellPos{14, 12, 0});
+    HUNT_REQUIRE(f.hu().markHunt(hare, true, error));
+    CHECK(f.runUntil(3000, [&] {
+        for (const Event& e : f.sim.events()) {
+            hunting = hunting || (e.type == EventType::JobStarted && e.job == JobType::Hunt);
+        }
+        return hunting;
+    }));
+    CHECK_FALSE(f.dead(bear));
+}
+
+TEST_CASE("Butchering: a dead person can be cut up at the butcher table") {
+    HuntFixture f;
+    f.addColonist(CellPos{10, 10, 0}, 8, false);
+    const Entity table = f.building("ButcherTable", CellPos{12, 10, 0});
+    const Entity raider = f.sim.things().spawn("Human", CellPos{18, 12, 0});
+    HUNT_REQUIRE(table != kNoEntity && raider != kNoEntity);
+    f.kill(raider);
+    CHECK(f.hu().isCorpse(raider));
+    f.sim.submit(AddBillCommand{table, "ButcherCorpse", BillMode::Count, 1});
+    f.sim.step();
+    const bool done = f.runUntil(5000, [&] { return !f.reg().valid(raider); });
+    HUNT_REQUIRE(done);
+    f.sim.stepMany(5);
+    CHECK(f.onMap("Meat_Human") > 100);
+    CHECK(f.onMap("Leather_Human") > 50);
 }

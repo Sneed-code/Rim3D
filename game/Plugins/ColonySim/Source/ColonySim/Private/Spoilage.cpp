@@ -131,6 +131,16 @@ bool SpoilageSystem::eaten(Entity pawn, Entity item) {
     return true;
 }
 
+bool SpoilageSystem::humanlikeIngredient(Entity item) const {
+    const entt::registry& reg = things_.registry();
+    const Spoilage* spoilage = reg.valid(item) ? reg.try_get<Spoilage>(item) : nullptr;
+    if (spoilage == nullptr) {
+        return false;
+    }
+    return std::any_of(spoilage->ingredients.begin(), spoilage->ingredients.end(),
+                       [&](DefId ingredient) { return defs_.get(ingredient).flag("humanlike"); });
+}
+
 void SpoilageSystem::step(int64_t now) {
     if (now % numbers_.intervalSeconds != 0) {
         return;
