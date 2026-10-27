@@ -13,6 +13,7 @@
 #include "ColonySim/Explosives.h"
 #include "ColonySim/Defense.h"
 #include "ColonySim/Farming.h"
+#include "ColonySim/FieldCare.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Fire.h"
@@ -416,6 +417,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     fire_->setRunning([this](Entity building) { return power_->running(building); });
     defense_->setOnLearn([this](Entity pawn) { fighters_->replan(pawn); });
     fighters_->setDefense(defense_.get());
+    fieldCare_ = std::make_unique<FieldCare>(*things_, map_, *health_, *jobs_, *fighters_, *raids_, *defs_, time_);
+    jobs_->setFieldCare(fieldCare_.get());
     narrator_ = std::make_unique<NarratorSystem>(*raids_, *defs_, time_, settings.seed);
     narrator_->setEventLog(&events_);
     narrator_->setHostileCheck([this](const std::string& faction) { return trade_->hostile(faction); });
@@ -1341,7 +1344,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, error);
         }
     } else if (const auto* role = std::get_if<SetDefenseRoleCommand>(&command)) {
-        if (role->role > static_cast<uint8_t>(DefenseRole::KeepWorking)) {
+        if (role->role > static_cast<uint8_t>(DefenseRole::Firefighter)) {
             commandFailed(id, "no such defense role");
         } else if (!raids_->setRole(role->pawn, static_cast<DefenseRole>(role->role), role->hasSpot, role->spot, error)) {
             commandFailed(id, error);
@@ -1503,9 +1506,11 @@ void Sim::step() {
         }
     }
     const size_t eventsBefore = events_.size();
+    fieldCare_->invalidate();
     { SimLap lap(profile_, "jobs"); jobs_->fuel().step(); }
     { SimLap lap(profile_, "jobs"); jobs_->step(); }
     { SimLap lap(profile_, "raids"); raids_->step(); }
+    { SimLap lap(profile_, "fieldCare"); fieldCare_->step(); }
     {
         std::vector<Event> gained;
         talents_->awardJobXp(events_, eventsBefore, gained);
@@ -1978,6 +1983,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.defending = fighter->defending;
             view.sheltering = fighter->mode == FightMode::Shelter;
             view.fleeing = fighter->mode == FightMode::Flee;
+            view.rescuing = fighter->mode == FightMode::Rescue ? fighter->rescuing : kNoEntity;
         }
         if (reg.all_of<Colonist>(entity) && view.faction == kPlayerFaction) {
             view.defenseRole = static_cast<uint8_t>(raids_->roleOf(entity));

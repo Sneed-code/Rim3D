@@ -1626,7 +1626,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::Party, "the save file has a bad job");
+    ar.require(job.type <= JobType::StandBy, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -2227,12 +2227,17 @@ void saveFighterPart(Ar& ar, Fighter& f) {
     }
     if (ar.sectionVersion() >= 2) {  // F6: what the alarm or a raid has it do
         ar.value("mode", f.mode);
-        ar.require(static_cast<int>(f.mode) <= static_cast<int>(FightMode::Seize), "the save file has a bad fighter mode");
+        ar.require(static_cast<int>(f.mode) <= static_cast<int>(FightMode::Rescue), "the save file has a bad fighter mode");
         ar.value("defending", f.defending);
         ar.value("squad", f.squad);
         ar.value("hasGoal", f.hasGoal);
         ar.group("goal", [&] { saveCell(ar, f.goal); });
         ar.value("retreat", f.retreat);
+    }
+    if (ar.sectionVersion() >= 3) {  // F10: carrying a downed friend to cover
+        ar.value("rescuing", f.rescuing);
+        ar.value("lifted", f.lifted);
+        ar.group("rescueTo", [&] { saveCell(ar, f.rescueTo); });
     }
 
 }
@@ -2942,7 +2947,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("doors", 1, [&] {
         saveParts(ar, "door", e, &SaveEntity::door, [&](Door& door) { saveDoorPart(ar, door); });
     });
-    ar.section("fighters", 2, [&] {
+    ar.section("fighters", 3, [&] {
         saveParts(ar, "faction", e, &SaveEntity::faction, [&](Faction& f) { saveFactionPart(ar, f); });
         saveParts(ar, "fighter", e, &SaveEntity::fighter, [&](Fighter& f) { saveFighterPart(ar, f); });
     });
@@ -3055,7 +3060,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveRaids(ar, d.raids);
         saveParts(ar, "defense", e, &SaveEntity::defense, [&](DefensePlan& p) {
             ar.value("role", p.role);
-            ar.require(static_cast<int>(p.role) <= static_cast<int>(DefenseRole::KeepWorking), "the save file has a bad defense role");
+            ar.require(static_cast<int>(p.role) <= static_cast<int>(DefenseRole::Firefighter), "the save file has a bad defense role");
             ar.value("hasSpot", p.hasSpot);
             ar.group("spot", [&] { saveCell(ar, p.spot); });
         });

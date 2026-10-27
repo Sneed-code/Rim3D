@@ -115,6 +115,8 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `mood` | 1 | `mood` |
 | `combat` | 1 | `posture`, `gear`, `equippedBy`, `shooter`, `projectile`, `magazine` |
 | `doors` | 1 | `door` |
+| `fighters` | 3 | `faction`, `fighter` (version 2: its mode, `defending`, squad, goal and `retreat`, F6; version 3: `rescuing`, `lifted`, `rescueTo`, F10) |
+| `looks` | 1 | `looks` |
 | `fighters` | 2 | `faction`, `fighter` (version 2: its mode, `defending`, squad, goal and `retreat`, F6) |
 | `looks` | 2 | `looks`. Version 2 (V1) adds the face sliders, eyes, hair style, beard, body hair, tattoos and scars; version 1 loads with the defaults |
 | `paths` | 1 | the path queue |
@@ -308,6 +310,7 @@ Every section is version 1 at format 20. A task that changes a section adds a li
 - `raids` 1 (F6): new section, see the table. Commands `StartRaid`, `SoundAlarm`, `SetDefenseRole`, `MarkShelter` by name.
 - `raids` 2 (F12): per squad `strategy`, `hasBreach`, `breach`, `breachFrom`; the raids waiting for their hour (`pending`); per raider `goalThing`, `loot`, `sparesDowned`; a `kidnapped` part on a colonist a raider carries ([raid-strategies.md](raid-strategies.md)). Version 1 files load with Assault squads and nothing waiting. Command `StartStrategyRaid` by name.
 - `fighters` 2 (F6): a fighter's `mode`, `defending`, `squad`, `hasGoal`, `goal`, `retreat` after `dodgeUntil`. Version 1 files load them as a plain fighter.
+- `fighters` 3 (F10): a fighter's `rescuing`, `lifted`, `rescueTo` after `retreat` ([field-care.md](field-care.md)). Older files load with nobody carried.
 - `breeding` 1 (N4): new section, see the table: the counters, per animal its `AnimalBreed` (pregnancy, litter, mating wait, milk, wool and egg timers, the female a male is walking to), per fertilized egg its `Hatching` time ([breeding.md](breeding.md)). The job check now accepts the animal jobs (it stopped at `StripPawn`, so a save made mid-taming would not load).
 - `husbandry` 2 (N2): per animal care record `markHunt` and `collect` after `markSlaughter`, and the `hunted` counter after `starved`. Version 1 files load with none. The job check now accepts `Hunt`, `HaulCorpse` and `Butcher`.
 - `apparel` 1 (C15): item stuff and quality, taint, strip marks, outfits ([apparel.md](apparel.md)). Commands `SetOutfit`, `EditOutfit`, `AddOutfit`, `RemoveOutfit` and `Strip` by name.
