@@ -177,6 +177,7 @@ class TemperatureSystem;
 class Construction;
 class FuelSystem;
 class DefDatabase;
+class DrugSystem;
 class Farming;
 class Filth;
 class Fire;
@@ -264,6 +265,9 @@ public:
     // A player order: haul this item to the best stockpile now, ending the pawn's current job.
     // Refused for the pawn the player controls directly (PlayerControl).
     bool orderHaul(Entity pawn, Entity thing, std::string& error);
+    // A player order: go and take this drug (an Ingest job; docs/design/drugs.md). Refused for a pawn the player controls.
+    bool orderTakeDrug(Entity pawn, Entity thing, std::string& error);
+    void setDrugs(DrugSystem* drugs) { drugs_ = drugs; }
     // Hands-on work (HandsOnCommand, docs/design/handson.md). What the controlled pawn would do with
     // its hands on this blueprint, frame or item (`thing`), else on the rock or plant in `cell`.
     HandsOnPlan planHandsOn(Entity pawn, Entity thing, CellPos cell) const;
@@ -283,6 +287,12 @@ public:
     // Ends the pawn's job, if it has one, as interrupted for `why`: reservations let go, what it
     // carried put down. Used when the player takes the pawn over (ControlPawnCommand).
     void interrupt(Entity pawn, const std::string& why);
+    // A party (PartyJobs.cpp, docs/design/social.md): the pawn drops what it is doing, walks to `cell` and stays
+    // there until game second `until`, gaining `joyPerHour` of its recreation need. Refused for a pawn that is
+    // not a free colonist (player-controlled, lying down, no way to the cell).
+    // Whether `cell` is a place the pawn could stand at a party.
+    bool partyCellOk(Entity pawn, CellPos cell) const;
+    bool startParty(Entity pawn, CellPos cell, int64_t until, float joyPerHour, std::string& error);
 
     // Skill learning (docs/design/skills.md). Every job that uses a skill calls `learnSkill` each
     // second it works; `skillsNewDay` is Sim's midnight (daily XP total starts over, high skills decay).
@@ -503,6 +513,8 @@ private:
     // The think list: each node may give a job; the first that does wins (docs/design/jobs.md).
     using ThinkNode = bool (JobSystem::*)(Entity pawn, Job& out);
     bool thinkNeeds(Entity pawn, Job& out);
+    // An addict's dose, a scheduled one, or one for joy, as the pawn's drug policy says (DrugJobs.cpp, docs/design/drugs.md).
+    bool thinkDrugs(Entity pawn, Job& out);
     // A SeekShelter job for a pawn outside its safe temperature: to the nearest reachable cell inside its comfortable
     // range (else its safe range). False if it is safe, or nowhere is.
     bool makeShelterJob(Entity pawn, Job& out);
@@ -544,6 +556,8 @@ private:
     int recreationUsers(Entity building, Entity except) const;
     bool failCheckRecreate(Entity pawn, Job& job, std::string& why);
     StepResult play(Entity pawn, Job& job, std::string& why);
+    bool failCheckParty(Entity pawn, Job& job, std::string& why);
+    StepResult partyWork(Entity pawn, Job& job, std::string& why);
 
     // Research (ResearchJobs.cpp, docs/design/research.md). `site` is the bench, `cell` where the pawn sits.
     bool failCheckResearch(Entity pawn, Job& job, std::string& why);
@@ -743,6 +757,7 @@ private:
     Filth* filth_ = nullptr;
     Fire* fire_ = nullptr;
     SpoilageSystem* spoilage_ = nullptr;
+    DrugSystem* drugs_ = nullptr;
     CraftingSystem* crafting_ = nullptr;
     Farming* farming_ = nullptr;
     std::vector<Entity> order_;              // scratch: workers this step

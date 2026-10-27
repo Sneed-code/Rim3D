@@ -183,6 +183,21 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
                 j["kind"] = c.kind;
                 j["layers"] = c.layers;
+            } else if constexpr (std::is_same_v<Type, TakeDrugCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["thing"] = entt::to_integral(c.thing);
+            } else if constexpr (std::is_same_v<Type, SetDrugPolicyCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["policy"] = c.policy;
+            } else if constexpr (std::is_same_v<Type, SetDrugPolicyEntryCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["drug"] = c.drug;
+                j["forAddiction"] = c.forAddiction;
+                j["forJoy"] = c.forJoy;
+                j["scheduled"] = c.scheduled;
+                j["daysFrequency"] = c.daysFrequency;
+                j["moodBelow"] = c.moodBelow;
+                j["joyBelow"] = c.joyBelow;
             } else if constexpr (std::is_same_v<Type, SetRefuelCommand>) {
                 j["building"] = entt::to_integral(c.building);
                 j["autoRefuel"] = c.autoRefuel;
@@ -364,6 +379,39 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["edge"] = c.edge;
                 j["strategy"] = c.strategy;
                 j["hour"] = static_cast<double>(c.hour);
+            } else if constexpr (std::is_same_v<Type, StartVisitCommand>) {
+                j["faction"] = c.faction;
+                j["kind"] = c.kind;
+                j["traderKind"] = c.traderKind;
+                j["edge"] = c.edge;
+            } else if constexpr (std::is_same_v<Type, TradeCommand>) {
+                j["visit"] = c.visit;
+                j["negotiator"] = entt::to_integral(c.negotiator);
+                const auto lines = [](const std::vector<TradeLine>& list) {
+                    ReplayJson array = ReplayJson::array();
+                    for (const TradeLine& l : list) {
+                        ReplayJson line;
+                        line["thing"] = l.thing;
+                        line["count"] = l.count;
+                        array.push_back(std::move(line));
+                    }
+                    return array;
+                };
+                j["buy"] = lines(c.buy);
+                j["sell"] = lines(c.sell);
+            } else if constexpr (std::is_same_v<Type, AdjustGoodwillCommand>) {
+                j["faction"] = c.faction;
+                j["delta"] = c.delta;
+            } else if constexpr (std::is_same_v<Type, GiftCommand>) {
+                j["visit"] = c.visit;
+                ReplayJson array = ReplayJson::array();
+                for (const TradeLine& l : c.items) {
+                    ReplayJson line;
+                    line["thing"] = l.thing;
+                    line["count"] = l.count;
+                    array.push_back(std::move(line));
+                }
+                j["items"] = std::move(array);
             } else if constexpr (std::is_same_v<Type, ShipCommand>) {
                 j["action"] = c.action;
                 j["thing"] = entt::to_integral(c.thing);
@@ -895,6 +943,35 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.building = static_cast<Entity>(building);
         out.command = c;
+    } else if (type == "TakeDrug") {
+        TakeDrugCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        uint32_t thing = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "thing", thing, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        c.thing = static_cast<Entity>(thing);
+        out.command = c;
+    } else if (type == "SetDrugPolicy") {
+        SetDrugPolicyCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "policy", c.policy, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = c;
+    } else if (type == "SetDrugPolicyEntry") {
+        SetDrugPolicyEntryCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "drug", c.drug, where) || !r.flag(j, "forAddiction", c.forAddiction, where) ||
+            !r.flag(j, "forJoy", c.forJoy, where) || !r.flag(j, "scheduled", c.scheduled, where) ||
+            !r.number(j, "daysFrequency", c.daysFrequency, where) || !r.number(j, "moodBelow", c.moodBelow, where) ||
+            !r.number(j, "joyBelow", c.joyBelow, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = c;
     } else if (type == "AddOperation") {
         AddOperationCommand c;
         uint32_t pawn = entt::to_integral(kNoEntity);
@@ -1357,6 +1434,58 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "StartVisit") {
+        StartVisitCommand c;
+        if (!r.text(j, "faction", c.faction, where) || !r.text(j, "kind", c.kind, where) || !r.text(j, "traderKind", c.traderKind, where) ||
+            !r.integer(j, "edge", c.edge, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "Trade") {
+        TradeCommand c;
+        uint32_t negotiator = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "visit", c.visit, where) || !r.integer(j, "negotiator", negotiator, where)) {
+            return false;
+        }
+        c.negotiator = static_cast<Entity>(negotiator);
+        for (const char* key : {"buy", "sell"}) {
+            const auto list = j.find(key);
+            if (list == j.end() || !list->is_array()) {
+                return r.fail(where + "." + key + " must be a list of {thing, count}");
+            }
+            std::vector<TradeLine>& into = std::string(key) == "buy" ? c.buy : c.sell;
+            for (const ReplayJson& item : *list) {
+                TradeLine line;
+                if (!item.is_object() || !r.text(item, "thing", line.thing, where) || !r.integer(item, "count", line.count, where)) {
+                    return false;
+                }
+                into.push_back(std::move(line));
+            }
+        }
+        out.command = std::move(c);
+    } else if (type == "AdjustGoodwill") {
+        AdjustGoodwillCommand c;
+        if (!r.text(j, "faction", c.faction, where) || !r.number(j, "delta", c.delta, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "Gift") {
+        GiftCommand c;
+        if (!r.integer(j, "visit", c.visit, where)) {
+            return false;
+        }
+        const auto list = j.find("items");
+        if (list == j.end() || !list->is_array()) {
+            return r.fail(where + ".items must be a list of {thing, count}");
+        }
+        for (const ReplayJson& item : *list) {
+            TradeLine line;
+            if (!item.is_object() || !r.text(item, "thing", line.thing, where) || !r.integer(item, "count", line.count, where)) {
+                return false;
+            }
+            c.items.push_back(std::move(line));
+        }
         out.command = std::move(c);
     } else if (type == "EndMentalBreak") {
         uint32_t pawn = entt::to_integral(kNoEntity);

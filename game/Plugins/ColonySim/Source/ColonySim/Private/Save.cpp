@@ -14,6 +14,7 @@
 #include "ColonySim/Melee.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Drugs.h"
 #include "ColonySim/Doors.h"
 #include "ColonySim/Explosives.h"
 #include "ColonySim/Power.h"
@@ -50,6 +51,7 @@
 #include "ColonySim/Social.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Talents.h"
+#include "ColonySim/Trade.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
 #include "ColonySim/Zones.h"
@@ -153,6 +155,37 @@ struct SaveDisease {  // health section 4 on
 struct SaveImmunity {  // health section 4 on
     std::string hediff;
     float level = 0.0f;
+};
+
+// Section "drugs" (Drugs.h): one record per pawn that has taken a drug or been given a policy.
+struct SaveDrugEntry {
+    std::string drug;
+    bool forAddiction = true;
+    bool forJoy = false;
+    bool scheduled = false;
+    float daysFrequency = 1.0f;
+    float moodBelow = 1.01f;
+    float joyBelow = 1.01f;
+};
+struct SaveDrugChemical {
+    std::string chemical;  // Chemicals defName
+    float tolerance = 0.0f;
+    bool addicted = false;
+    float need = 0.0f;
+    float progress = 0.0f;
+    bool armed = false;
+};
+struct SaveDrugDose {
+    std::string drug;  // Things defName
+    int64_t at = 0;
+};
+struct SaveDrugPawn {
+    Entity pawn = kNoEntity;
+    std::string policy;
+    int64_t searchAfter = 0;
+    std::vector<SaveDrugEntry> edits;
+    std::vector<SaveDrugChemical> chemicals;
+    std::vector<SaveDrugDose> last;
 };
 
 struct SaveEnvironmentHediff {
@@ -375,6 +408,7 @@ struct SaveEntity {
     std::optional<Fuel> fuel;               // "fuel" section (C11)
     std::optional<StoreIn> storeIn;         // "crafting" section (C14)
     std::optional<MentalBreaker> mentalBreaker;  // section "mentalBreaks" (C19)
+    std::optional<Visitor> visitor;         // section "trade" (C23)
     std::optional<Inspired> inspired;            // section "inspirations" (C25)
 };
 
@@ -462,6 +496,8 @@ struct SaveData {
     SavePlants plants;                 // format 10 on
     bool hasRock = false;              // the file has the rock layer (format 12 on); older saves keep the generated one
     SaveMineables mineables;           // format 12 on
+    std::vector<SaveDrugPawn> drugPawns;  // section "drugs"
+
     SaveDesignations designations;     // format 12 on
     ResearchState research;            // section "research"
     ShipState ship;                    // section "ship"
@@ -492,6 +528,7 @@ struct SaveData {
     FarmingSaved farming;                           // section "farming" (C13)
     bool hasWeather = false;           // the file has the weather section; older saves start it fresh
     SaveWeather weather;
+    TradeState trade;                  // section "trade" (C23)
     bool hasNarrator = false;          // section "narrator" (T1); older saves keep the narrator off
     NarratorState narrator;
     bool hasDisasters = false;         // section "disasters" (T3); older saves have none on
@@ -1033,6 +1070,21 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.text("action", c.action);
         ar.value("thing", c.thing);
         ar.value("pawn", c.pawn);
+    } else if constexpr (std::is_same_v<Type, TakeDrugCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("thing", c.thing);
+    } else if constexpr (std::is_same_v<Type, SetDrugPolicyCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("policy", c.policy);
+    } else if constexpr (std::is_same_v<Type, SetDrugPolicyEntryCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("drug", c.drug);
+        ar.value("forAddiction", c.forAddiction);
+        ar.value("forJoy", c.forJoy);
+        ar.value("scheduled", c.scheduled);
+        ar.value("daysFrequency", c.daysFrequency);
+        ar.value("moodBelow", c.moodBelow);
+        ar.value("joyBelow", c.joyBelow);
     } else if constexpr (std::is_same_v<Type, StartThreatCommand>) {
         ar.text("kind", c.kind);
         ar.value("points", c.points);
@@ -1043,6 +1095,43 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.text("kind", c.kind);
     } else {
         static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
+    }
+}
+
+template <typename Ar>
+void saveTradeLine(Ar& ar, TradeLine& l) {
+    ar.text("thing", l.thing);
+    ar.value("count", l.count);
+}
+
+template <typename Type>
+inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitCommand> || std::is_same_v<Type, TradeCommand> ||
+                                            std::is_same_v<Type, AdjustGoodwillCommand> || std::is_same_v<Type, GiftCommand>;
+
+// The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
+template <typename Ar, typename Type>
+void saveTradeCommand(Ar& ar, Type& c) {
+    if constexpr (std::is_same_v<Type, StartVisitCommand>) {
+        auto* visit = &c;
+        ar.text("faction", visit->faction);
+        ar.text("kind", visit->kind);
+        ar.text("traderKind", visit->traderKind);
+        ar.value("edge", visit->edge);
+    } else if constexpr (std::is_same_v<Type, TradeCommand>) {
+        auto* deal = &c;
+        ar.value("visit", deal->visit);
+        ar.value("negotiator", deal->negotiator);
+        ar.list("buy", deal->buy, [&](TradeLine& l) { saveTradeLine(ar, l); });
+        ar.list("sell", deal->sell, [&](TradeLine& l) { saveTradeLine(ar, l); });
+    } else if constexpr (std::is_same_v<Type, AdjustGoodwillCommand>) {
+        auto* goodwill = &c;
+        ar.text("faction", goodwill->faction);
+        ar.value("delta", goodwill->delta);
+    } else {
+        static_assert(std::is_same_v<Type, GiftCommand>, "save every trade command here");
+        auto* gift = &c;
+        ar.value("visit", gift->visit);
+        ar.list("items", gift->items, [&](TradeLine& l) { saveTradeLine(ar, l); });
     }
 }
 
@@ -1323,6 +1412,8 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("damage", c.damage);
                 ar.text("damageType", c.damageType);
                 ar.value("penetration", c.penetration);
+            } else if constexpr (kSaveIsTradeCommand<Type>) {
+                saveTradeCommand(ar, c);
             } else {
                 saveCommandTail(ar, c);
             }
@@ -1476,7 +1567,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::Operate, "the save file has a bad job");
+    ar.require(job.type <= JobType::Party, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -1595,7 +1686,7 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
     }
     ar.value("dead", h.dead);
     ar.value("cause", h.cause);
-    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Surgery), "the save file has a bad cause of death");
+    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Withdrawal), "the save file has a bad cause of death");
 
 }
 
@@ -2330,6 +2421,40 @@ void saveShip(Ar& ar, ShipState& s) {
 }
 
 template <typename Ar>
+void saveDrugs(Ar& ar, SaveData& d) {
+    ar.list("pawns", d.drugPawns, [&](SaveDrugPawn& p) {
+        ar.value("pawn", p.pawn);
+        ar.text("policy", p.policy);
+        ar.value("searchAfter", p.searchAfter);
+        ar.list("edits", p.edits, [&](SaveDrugEntry& e) {
+            ar.text("drug", e.drug);
+            ar.value("forAddiction", e.forAddiction);
+            ar.value("forJoy", e.forJoy);
+            ar.value("scheduled", e.scheduled);
+            ar.value("daysFrequency", e.daysFrequency);
+            ar.value("moodBelow", e.moodBelow);
+            ar.value("joyBelow", e.joyBelow);
+            ar.require(e.daysFrequency > 0.0f && e.daysFrequency <= 1000.0f, "the save file has an impossible drug frequency");
+        });
+        ar.list("chemicals", p.chemicals, [&](SaveDrugChemical& c) {
+            ar.text("chemical", c.chemical);
+            ar.value("tolerance", c.tolerance);
+            ar.value("addicted", c.addicted);
+            ar.value("need", c.need);
+            ar.value("progress", c.progress);
+            ar.value("armed", c.armed);
+            ar.require(c.tolerance >= 0.0f && c.tolerance <= 1.0f && c.need >= 0.0f && c.need <= 1.0f && c.progress >= 0.0f &&
+                           c.progress <= 1.0f,
+                       "the save file has an impossible drug record");
+        });
+        ar.list("last", p.last, [&](SaveDrugDose& dose) {
+            ar.text("drug", dose.drug);
+            ar.value("at", dose.at);
+        });
+    });
+}
+
+template <typename Ar>
 void saveTalents(Ar& ar, SaveData& d) {
     ar.list("pawns", d.talentPawns, [&](Entity& pawn) { ar.value(nullptr, pawn); });
     ar.list("xp", d.talentXp, [&](int64_t& xp) { ar.value(nullptr, xp); });
@@ -2511,6 +2636,37 @@ void saveRaids(Ar& ar, RaidState& r) {
             ar.value("downed", p.downed);
         });
     }
+}
+
+template <typename Ar>
+void saveTrade(Ar& ar, TradeState& t) {
+    ar.value("nextVisit", t.nextVisit);
+    ar.value("lastDrift", t.lastDrift);
+    ar.list("standings", t.standings, [&](Standing& s) {
+        ar.text("faction", s.faction);
+        ar.value("goodwill", s.goodwill);
+        ar.require(std::isfinite(s.goodwill), "the save file has an impossible goodwill");
+    });
+    ar.list("visits", t.visits, [&](Visit& v) {
+        ar.value("id", v.id);
+        ar.value("kind", v.kind);
+        ar.require(static_cast<int>(v.kind) <= static_cast<int>(VisitKind::Orbital), "the save file has a bad visit kind");
+        ar.value("phase", v.phase);
+        ar.require(static_cast<int>(v.phase) <= static_cast<int>(VisitPhase::Leaving), "the save file has a bad visit phase");
+        ar.text("faction", v.faction);
+        ar.text("traderKind", v.traderKind);
+        ar.value("side", v.side);
+        ar.value("arrivedAt", v.arrivedAt);
+        ar.value("leaveAt", v.leaveAt);
+        ar.value("nextWander", v.nextWander);
+        ar.group("entry", [&] { saveCell(ar, v.entry); });
+        ar.group("spot", [&] { saveCell(ar, v.spot); });
+        ar.value("silver", v.silver);
+        ar.value("started", v.started);
+        ar.value("trader", v.trader);
+        ar.list("stock", v.stock, [&](TradeLine& l) { saveTradeLine(ar, l); });
+        ar.list("members", v.members, [&](Entity& m) { ar.value(nullptr, m); });
+    });
 }
 
 // ---- Sections (format 20 on) -----------------------------------------------------------------
@@ -2741,6 +2897,7 @@ void saveSections(Ar& ar, SaveData& d) {
         }
     });
     ar.section("talents", 1, [&] { saveTalents(ar, d); });
+    ar.section("drugs", 1, [&] { saveDrugs(ar, d); });
     ar.section("roomstats", 1, [&] { saveRoomStatsSection(ar, d); });
     ar.section("animals", 2, [&] {
         ar.value("wildAnimals", d.wildAnimals);
@@ -2946,13 +3103,16 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.list("home", d.fire.home, [&](int& cell) { ar.value("cell", cell); });
         saveParts(ar, "burning", e, &SaveEntity::burning, [&](Burning& b) { ar.value("until", b.until); });
     });
-    ar.section("prisoners", 1, [&] {
+    ar.section("prisoners", 2, [&] {
         saveParts(ar, "prisoner", e, &SaveEntity::prisoner, [&](Prisoner& p) {
             ar.value("mode", p.mode);
             ar.value("resistance", p.resistance);
             ar.value("capturedAt", p.capturedAt);
             ar.value("nextChat", p.nextChat);
-            ar.require(static_cast<int>(p.mode) <= static_cast<int>(PrisonerMode::Release), "the save file has a bad prisoner mode");
+            if (ar.sectionVersion() >= 2) {  // executions
+                ar.value("guiltyUntil", p.guiltyUntil);
+            }
+            ar.require(static_cast<int>(p.mode) <= static_cast<int>(PrisonerMode::Execute), "the save file has a bad prisoner mode");
         });
         saveParts(ar, "prisonBed", e, &SaveEntity::prisonBed, [&](PrisonBed& b) { ar.value("marked", b.marked); });
     });
@@ -2978,6 +3138,14 @@ void saveSections(Ar& ar, SaveData& d) {
     });
     ar.section("mentalBreaks", 1, [&] {
         saveParts(ar, "mentalBreaker", e, &SaveEntity::mentalBreaker, [&](MentalBreaker& b) { saveMentalBreakerPart(ar, b); });
+    });
+    ar.section("trade", 1, [&] {
+        saveTrade(ar, d.trade);
+        saveParts(ar, "visitor", e, &SaveEntity::visitor, [&](Visitor& v) {
+            ar.value("visit", v.visit);
+            ar.value("role", v.role);
+            ar.require(static_cast<int>(v.role) <= static_cast<int>(VisitorRole::Guard), "the save file has a bad visitor role");
+        });
     });
     ar.section("quests", 1, [&] { saveQuests(ar, d.quests); });
     ar.section("inspirations", 1, [&] {
@@ -3241,6 +3409,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const MentalBreaker* breaker = reg.try_get<MentalBreaker>(e)) {
             out.mentalBreaker = *breaker;
         }
+        if (const Visitor* visitor = reg.try_get<Visitor>(e)) {
+            out.visitor = *visitor;
+        }
         if (const Inspired* inspired = reg.try_get<Inspired>(e)) {
             out.inspired = *inspired;
         }
@@ -3463,6 +3634,22 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         z.cells = zone.cells;
         d.zones.push_back(std::move(z));
     }
+    for (const auto& [pawn, s] : sim.drugs_->states()) {
+        SaveDrugPawn saved;
+        saved.pawn = pawn;
+        saved.policy = s.policy;
+        saved.searchAfter = s.searchAfter;
+        for (const DrugPolicyEntry& e : s.edits) {
+            saved.edits.push_back(SaveDrugEntry{e.drug, e.forAddiction, e.forJoy, e.scheduled, e.daysFrequency, e.moodBelow, e.joyBelow});
+        }
+        for (const ChemicalState& c : s.chemicals) {
+            saved.chemicals.push_back(SaveDrugChemical{c.chemical, c.tolerance, c.addicted, c.need, c.progress, c.armed});
+        }
+        for (const DrugDose& dose : s.last) {
+            saved.last.push_back(SaveDrugDose{dose.drug, dose.at});
+        }
+        d.drugPawns.push_back(std::move(saved));
+    }
     std::vector<uint32_t> defIndexOf(sim.defs_->size(), UINT32_MAX);
     for (const PlantRecord& r : sim.plants_->records()) {
         if (defIndexOf[r.def.value] == UINT32_MAX) {
@@ -3513,6 +3700,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.quests = sim.quests_->state();
     d.spoilageState = sim.spoilage_->state();
     d.craftingState = sim.crafting_->state();
+    d.trade = sim.trade_->state();
     {
         const WeatherState state = sim.weather_->state();
         const auto nameOf = [&](DefId def) { return def.valid() ? sim.defs_->get(def).defName() : std::string(); };
@@ -3748,6 +3936,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.mentalBreaker) {
             reg.emplace<MentalBreaker>(entity, std::move(*e.mentalBreaker));
+        }
+        if (e.visitor) {
+            reg.emplace<Visitor>(entity, *e.visitor);
         }
         if (e.inspired) {
             reg.emplace<Inspired>(entity, std::move(*e.inspired));
@@ -4276,6 +4467,21 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.raids_->restore(std::move(d.raids), error)) {
         return false;
     }
+    for (const Visit& visit : d.trade.visits) {
+        for (const Entity m : visit.members) {
+            if (!reg.valid(m) || !reg.all_of<Visitor>(m)) {
+                error = "the save has a visit with a pawn that isn't there";
+                return false;
+            }
+        }
+        if (visit.trader != kNoEntity && !reg.valid(visit.trader)) {
+            error = "the save has a trader that isn't there";
+            return false;
+        }
+    }
+    if (!sim.trade_->restore(std::move(d.trade), error)) {
+        return false;
+    }
     for (Quest& quest : d.quests.quests) {
         quest.people.erase(std::remove_if(quest.people.begin(), quest.people.end(), [&](Entity p) { return !reg.valid(p); }),
                            quest.people.end());
@@ -4309,6 +4515,37 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     } else {
         // A save from before the weather: it begins clear at the time the game had reached.
         sim.weather_->restore(sim.weather_->state(), {}, d.seconds);
+    }
+    {
+        // Drug records of a pawn that is gone are forgotten; so is a policy, chemical or drug the data files dropped.
+        sim.drugs_->states().clear();
+        for (const SaveDrugPawn& saved : d.drugPawns) {
+            if (!sim.things_->exists(saved.pawn)) {
+                continue;
+            }
+            DrugState state;
+            state.policy = sim.drugs_->policyNamed(saved.policy) != nullptr ? saved.policy : std::string();
+            state.searchAfter = saved.searchAfter;
+            for (const SaveDrugEntry& e : saved.edits) {
+                if (sim.drugs_->kindOf(sim.defs_->idOf("Things", e.drug)) != nullptr) {
+                    state.edits.push_back(DrugPolicyEntry{e.drug, e.forAddiction, e.forJoy, e.scheduled, e.daysFrequency, e.moodBelow, e.joyBelow});
+                }
+            }
+            for (const SaveDrugChemical& c : saved.chemicals) {
+                if (sim.drugs_->chemicalIndex(c.chemical) >= 0) {
+                    state.chemicals.push_back(ChemicalState{c.chemical, c.tolerance, c.addicted, c.need, c.progress, c.armed});
+                }
+            }
+            for (const SaveDrugDose& dose : saved.last) {
+                if (sim.drugs_->kindOf(sim.defs_->idOf("Things", dose.drug)) != nullptr) {
+                    state.last.push_back(DrugDose{dose.drug, dose.at});
+                }
+            }
+            std::sort(state.edits.begin(), state.edits.end(), [](const DrugPolicyEntry& a, const DrugPolicyEntry& b) { return a.drug < b.drug; });
+            std::sort(state.chemicals.begin(), state.chemicals.end(), [](const ChemicalState& a, const ChemicalState& b) { return a.chemical < b.chemical; });
+            std::sort(state.last.begin(), state.last.end(), [](const DrugDose& a, const DrugDose& b) { return a.drug < b.drug; });
+            sim.drugs_->states()[saved.pawn] = std::move(state);
+        }
     }
     {
         // Talents of a pawn that is gone, or of a talent the data files dropped, are forgotten.
