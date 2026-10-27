@@ -231,7 +231,10 @@ public:
     // RimWorld's storyteller wealth (wiki "Raid points"): items on the map and carried by the
     // player's pawns, and the player's own pawns (colonists, tame animals), at their market value,
     // plus buildings at half theirs. Defs without a marketValue count 0.
-    float colonyWealth() const;
+    float colonyWealth() const { return colonyWealth(rules_.buildingWealthFactor); }
+    // The same with buildings at the given share of their value: 1 is RimWorld's map wealth, which sets the colonists'
+    // expectations (docs/design/mood.md).
+    float colonyWealth(float buildingFactor) const;
     // The adaptation factor now (1 with the impact at 0), and what the difficulty says about it
     // (its adaptationGrowth and adaptationImpact; the narrator sets them with the difficulty).
     float adaptationFactor() const;

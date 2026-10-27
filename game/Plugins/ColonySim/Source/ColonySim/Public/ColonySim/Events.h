@@ -97,6 +97,8 @@ enum class EventType : uint8_t {
     Refueled,        // a pawn put fuel into a building
     RoofCollapsed,   // a roof or an upper floor fell (M3, docs/design/roofs.md): `cell`, `message` "roof" (a built roof), "mountain" (the thick roof of a mined-out cell) or "floor" (an upper floor), `count` how many things and pawns it hit
     FirefoamPopped,     // a firefoam popper went off (docs/design/fire.md): `thing` the popper (destroyed right after), `def` its def, `cell` its cell, `amount` the foam radius
+    GearRepaired,       // a pawn mended a piece of gear at a bench (docs/design/repair.md): `thing` the pawn, `target` the gear, `def` its def, `cell` where the pawn stood, `amount` the hit points restored
+    WeaponUpgraded,     // a pawn fitted an upgrade part to a gun: `thing` the pawn, `target` the gun, `def` the part's def, `cell` where the pawn stood
     AnimalHunted,       // a hunter's target died (docs/design/hunting.md): `thing` the animal (a corpse now), `target` the hunter, `cell` where
     AnimalButchered,    // a corpse was cut up (docs/design/hunting.md): `thing` the butcher, `def` the animal's def, `target` the table, `cell` where, `amount` the meat, `part` the leather
     PawnMentalBreak,       // a colonist snapped: a mental break began (docs/design/mental-breaks.md)
@@ -136,6 +138,8 @@ enum class EventType : uint8_t {
     OperationDone,      // a doctor finished an operation (H3, docs/design/surgery.md): `thing` the doctor, `target` the patient, `def` the Recipes def, `part` the body part, `amount` the success chance, `message` "success", "failed" or "the patient died"
     DeepDepositFound,      // a scanner found deep resources (docs/design/deep-mining.md): `def` the item, `cell` the middle of the lump, `count` its cells, `thing` the scanner (none for the long-range hook)
     DeepPortionDrilled,    // a deep drill finished a portion: `thing` the drill, `def` what came up (a rock chunk if nothing is under it), `amount` how many, `cell` where it was taken from
+    SkipStarted,           // a night skip or fast travel began (P5, docs/design/skip-travel.md): `message` "night" or "travel", `thing` the colonist, `amount` the game seconds it will run
+    SkipEnded,             // it ended: `message` "night: why" or "travel: why" (morning, arrived, cancelled, or the threat), `thing` the colonist (take control again), `amount` the game seconds skipped, (x, y) where the colonist is
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -182,6 +186,7 @@ enum class PawnAction : uint8_t {
     Chat,         // started talking to `target`, a prisoner (once per job; the talk takes game seconds)
     FeedPawn,     // started handing food to `target`, a prisoner
     Refuel,       // started putting fuel into `target`, a building (once per refuel job; the work goes on until its JobEnded)
+    Repair,       // started mending gear or fitting a part at `target`, a bench (once per RepairGear job; the work goes on until its JobEnded)
     Butcher,      // started cutting up `target`, a corpse (once per job; the work goes on until its JobEnded)
     DropCorpse,   // put the carried `target`, a corpse, down in `cell`
     Rearm,        // started setting the sprung trap `target` again (once per job; the work goes on until its JobEnded)

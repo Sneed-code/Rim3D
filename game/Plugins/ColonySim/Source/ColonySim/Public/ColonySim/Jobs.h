@@ -63,7 +63,7 @@ struct Job {
     Entity site = kNoEntity;   // DeliverResources: the blueprint or frame it brings materials to; DoBill: the
                                // building that holds the bill; TameAnimal, TrainAnimal, SlaughterAnimal, FeedAnimal, GatherAnimal:
                                // the animal (`thing` is the food it fetches, none for slaughter)
-                               // (Refuel: the building to put fuel in)
+                               // (Refuel: the building to put fuel in; RepairGear: the bench)
     float progress = 0.0f;     // Deconstruct: work done so far; Mine: work towards the next pick hit; CutPlant,
                                // HarvestPlant: work done on the plant. For the gather jobs both are game seconds
                                // at 100% work speed (the worker's speed adds to it every second); DoBill: work done
@@ -144,6 +144,10 @@ inline constexpr uint8_t kDoBillDepositStep = 3;
 // Refuel has four: go to the fuel, pick it up, carry it beside the building, put it in (the work
 // takes FuelSystem::kRefuelWorkSeconds). The pawn carries the fuel from the third on.
 inline constexpr uint8_t kRefuelPickUpStep = 1;
+// RepairGear has four as well: go to the gear, pick it up, carry it beside the bench, work. `thing` is the gear, `site` the
+// bench, `cell` where the pawn stands, `bill` 0 for a repair or the upgrade part's def id + 1 for a fitting.
+inline constexpr uint8_t kGearPickUpStep = 1;
+
 // Operate: the DoBill steps with the patient for the work building. `thing` is the part or medicine being fetched (none when
 // there is nothing to fetch), `site` the patient, `bill` the operation's id, `cell` where the doctor stands.
 inline constexpr uint8_t kOperatePickUpStep = 1;
@@ -179,6 +183,7 @@ class FuelSystem;
 class DefDatabase;
 class DrugSystem;
 class Farming;
+class RepairSystem;
 class FieldCare;
 class Filth;
 class Fire;
@@ -192,6 +197,7 @@ class MedicineSystem;
 class SurgerySystem;
 class RoomStats;
 class PrisonerSystem;
+class Areas;
 class Husbandry;
 class Lights;
 class Map;
@@ -205,6 +211,7 @@ class InspirationSystem;
 class TalentSystem;
 class DeepResources;
 class Rooms;
+class TemperatureSystem;
 class Things;
 class WorkGiver;
 struct GameTime;
@@ -319,6 +326,7 @@ public:
     // Whether a cell is indoors decides where a pawn can stroll or watch the clouds (Recreation); without rooms
     // everywhere is outdoors.
     void setRooms(Rooms* rooms) { rooms_ = rooms; }
+    void setTemperature(TemperatureSystem* temperature) { temperature_ = temperature; }
     void setResearch(ResearchSystem* research) { research_ = research; }
     // Scanners and deep drills (DeepJobs.cpp, docs/design/deep-mining.md). Without it they are never worked.
     void setDeepResources(DeepResources* deep) { deep_ = deep; }
@@ -328,14 +336,15 @@ public:
     bool deepWorkable(Entity building, std::string& why) const;
     // Taming, training and feeding animals (HusbandryJobs.cpp, docs/design/husbandry.md). Without it nobody handles animals.
     void setHusbandry(Husbandry* husbandry) { husbandry_ = husbandry; }
+    // Allowed areas (docs/design/areas.md): a pawn limited to one takes no work outside it.
+    void setAreas(const Areas* areas) { areas_ = areas; }
+    const Areas* areas() const { return areas_; }
     Husbandry* husbandry() const { return husbandry_; }
     // Milking and shearing (Breeding.h); without it nobody gathers from animals.
     void setBreeding(Breeding* breeding) { breeding_ = breeding; }
     Breeding* breeding() const { return breeding_; }
     // Hunting (HuntJobs.cpp, docs/design/hunting.md): hunters shoot through the combat system. Without it nobody hunts.
     void setCombat(CombatSystem* combat) { combat_ = combat; }
-    // Where pawns that stand outside their safe temperature look for shelter (docs/design/temperature.md).
-    void setTemperature(TemperatureSystem* temperature) { temperature_ = temperature; }
     CombatSystem* combat() const { return combat_; }
     // An animal that has learned to haul works through the job system with only the Hauling work type on. `on` false
     // takes it off again (ending its job). The gate says whether it may work now (awake, fed, unhurt).
@@ -376,6 +385,8 @@ public:
     void setCrafting(CraftingSystem* crafting) { crafting_ = crafting; }
     CraftingSystem* crafting() const { return crafting_; }
     void setFarming(Farming* farming) { farming_ = farming; }
+    void setRepair(RepairSystem* repair) { repair_ = repair; }
+    RepairSystem* repair() const { return repair_; }
     Farming* farming() const { return farming_; }
     Filth* filth() const { return filth_; }
     // The fire layer, for the Firefighter work type's job (FireJobs.cpp, docs/design/fire.md). Without it nobody fights fires.
@@ -417,6 +428,8 @@ public:
     bool needsRescue(Entity pawn) const;
     // The food a warden should carry to a hungry prisoner: the best the prisoner may eat, the nearest of that kind, with how
     // many to bring. Fills `out` as a FeedPrisoner job; false if there is none.
+    // A colonist the FeedPatients work brings food to (PrisonerJobs.cpp).
+    bool feedablePatient(Entity patient) const;
     bool findFoodForPrisoner(Entity warden, Entity prisoner, Job& out);
 
     // ---- For scanners and tests -----------------------------------------------------------
@@ -540,6 +553,14 @@ private:
     bool makeShelterJob(Entity pawn, Job& out);
     bool thinkSchedule(Entity pawn, Job& out);
     bool thinkApparel(Entity pawn, Job& out);
+    // Cold (JobSystem temperature, docs/design/temperature.md): a pawn outside its safe range with hypothermia
+    // setting in walks to the nearest room warm enough and stays until it has recovered.
+    bool thinkTemperature(Entity pawn, Job& out);
+    void interruptForCold(Entity pawn);
+    bool seekWarmthJob(Entity pawn, Job& out);
+    // A weapon lying about that the pawn has no weapon of the slot for (ApparelJobs.cpp).
+    bool findLooseWeapon(Entity pawn, Job& out);
+    StepResult warmWait(Entity pawn, Job& job, std::string& why);
     bool thinkWork(Entity pawn, Job& out);
     // thinkWork's scan; `urgentOnly` asks only the emergency work types (doctor, patient...). With `dutyWork` (an
     // index in workTypes_) it asks only that work type, whatever its priority, and only targets FieldCare allows.
@@ -692,6 +713,9 @@ private:
     // Refuel (FuelJobs.cpp, docs/design/fuel.md): fetch fuel, carry it to the building, put it in.
     StepResult refuelWork(Entity pawn, Job& job, std::string& why);
     bool failCheckRefuel(Entity pawn, Job& job, std::string& why);
+    // RepairGear (GearJobs.cpp, docs/design/repair.md): carry the gear to a bench, mend it or fit a part.
+    StepResult gearWork(Entity pawn, Job& job, std::string& why);
+    bool failCheckGear(Entity pawn, Job& job, std::string& why);
     // Puts the ingredients delivered so far back on the ground near the pawn.
     void returnIngredients(Entity pawn, const Job& job);
     // Makes `count` of an item def and puts it down on the nearest free cell near the pawn.
@@ -733,6 +757,7 @@ private:
     std::vector<Event>& events_;
 
     Rooms* rooms_ = nullptr;
+    TemperatureSystem* temperature_ = nullptr;
     ResearchSystem* research_ = nullptr;
     DeepResources* deep_ = nullptr;
     MedicineSystem* medicine_ = nullptr;
@@ -740,9 +765,9 @@ private:
     RoomStats* roomStats_ = nullptr;
     PrisonerSystem* prisoners_ = nullptr;
     Husbandry* husbandry_ = nullptr;
+    const Areas* areas_ = nullptr;
     Breeding* breeding_ = nullptr;
     CombatSystem* combat_ = nullptr;
-    TemperatureSystem* temperature_ = nullptr;
     std::function<bool(Entity)> animalGate_;
     std::function<bool(Entity)> pauseGate_;
     InspirationSystem* inspirations_ = nullptr;
@@ -797,6 +822,7 @@ private:
     DrugSystem* drugs_ = nullptr;
     CraftingSystem* crafting_ = nullptr;
     Farming* farming_ = nullptr;
+    RepairSystem* repair_ = nullptr;
     std::vector<Entity> order_;              // scratch: workers this step
     std::vector<WorkCandidate> candidates_;  // scratch: one think
 };

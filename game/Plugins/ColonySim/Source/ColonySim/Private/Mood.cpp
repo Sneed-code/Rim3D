@@ -172,6 +172,13 @@ bool MoodSystem::conditionValue(Entity pawn, const std::string& condition, float
             return true;
         }
     }
+    if (condition == "colonyWealth") {
+        // Expectations: the player's colonists only, once the wealth has been measured.
+        value = wealth_;
+        const Faction* faction = reg.try_get<Faction>(pawn);
+        return wealthAt_ >= 0 && reg.all_of<Colonist>(pawn) && !reg.all_of<Prisoner>(pawn) &&
+               (faction == nullptr || faction->id == kPlayerFaction);
+    }
     if (temperature_ != nullptr && (condition == "coldBelowComfort" || condition == "hotAboveComfort")) {
         value = condition == "coldBelowComfort" ? temperature_->degreesBelowComfort(pawn)
                                                 : temperature_->degreesAboveComfort(pawn);
@@ -431,6 +438,12 @@ void MoodSystem::step(int64_t now, std::vector<Event>& events) {
         pawns.push_back(pawn);
     }
     std::sort(pawns.begin(), pawns.end());
+
+    // The colony's wealth for the expectations, once a game hour (and at once in a new game or an old save).
+    if (wealthFn_ && (wealthAt_ < 0 || now - wealthAt_ >= kSecondsPerHour)) {
+        wealth_ = wealthFn_();
+        wealthAt_ = now;
+    }
 
     // New colonists start at the mood they are heading for.
     for (const Entity pawn : pawns) {

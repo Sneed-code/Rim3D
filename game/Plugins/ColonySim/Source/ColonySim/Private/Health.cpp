@@ -997,7 +997,7 @@ void HealthSystem::recompute(Entity pawn, Health& health, bool announce) {
     if (!health.dead) {
         const bool wasDowned = health.downed;
         health.downed = shouldBeDown;
-        if (shouldBeDown && !wasDowned) {
+        if (shouldBeDown && !wasDowned && !restoring_) {
             stopWalking(pawn);
         }
         if (announce && shouldBeDown != wasDowned) {
@@ -1021,9 +1021,20 @@ void HealthSystem::refresh(Entity pawn) {
 
 void HealthSystem::refreshAll() {
     entt::registry& reg = things_.registry();
+    // Saves before health section 6 do not hold `downed`, so every downed pawn looks newly downed here. It was
+    // downed before the save, and whatever path it holds now it held then. A wound still waiting to be worked
+    // out (`dirty`, saved) keeps its saved downed flag and stays pending, so the next step downs and announces it.
+    restoring_ = true;
     for (const auto [entity, health] : reg.view<Health>().each()) {
+        const bool pending = health.dirty;
+        const bool downed = health.downed;
         recompute(entity, health, false);
+        if (pending) {
+            health.downed = downed;
+            health.dirty = true;
+        }
     }
+    restoring_ = false;
 }
 
 // ---- Damage ---------------------------------------------------------------------------------------
@@ -1154,7 +1165,7 @@ std::vector<BodyPartInfo> HealthSystem::bodyParts(DefId pawnDef) const {
     std::vector<BodyPartInfo> out;
     if (const HealthModel::Kind* kind = model_->kindOf(pawnDef)) {
         for (const HealthModel::Part& p : model_->bodies[static_cast<size_t>(kind->body)].parts) {
-            out.push_back(BodyPartInfo{p.label, p.parent, p.inside, p.ownOutside, p.groups});
+            out.push_back(BodyPartInfo{p.label, p.parent, p.inside, p.ownOutside, p.groups, p.def});
         }
     }
     return out;
