@@ -9,6 +9,7 @@
 #include "ColonySim/Movement.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Traits.h"
 #include "ColonySim/Weather.h"
 
 #include <algorithm>
@@ -223,7 +224,8 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
             const float weatherFactor = weather_ != nullptr ? weather_->moveFactorAt(here) : 1.0f;
             const PawnGenes* genes = reg.try_get<PawnGenes>(a.entity);
             const float geneSpeed = genes != nullptr ? genes->effects.moveSpeed / static_cast<float>(kStepsPerRealSecondAt1x) : 0.0f;
-            base = std::max(0.0f, mover.metresPerStep + geneSpeed) * (health != nullptr ? health->movingFactor : 1.0f) *
+            const float traitSpeed = traits_ != nullptr ? traits_->of(a.entity).moveSpeedStep : 0.0f;
+            base = std::max(0.0f, mover.metresPerStep + geneSpeed + traitSpeed) * (health != nullptr ? health->movingFactor : 1.0f) *
                    lightFactor * weatherFactor * (speedFactor_ ? speedFactor_(a.entity) : 1.0f);
             stays = base <= 0.0f;
         }

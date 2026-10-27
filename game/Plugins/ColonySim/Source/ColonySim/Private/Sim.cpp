@@ -18,6 +18,7 @@
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Fire.h"
+#include "ColonySim/Traits.h"
 #include "ColonySim/Floors.h"
 #include "ColonySim/Fuel.h"
 #include "ColonySim/Raids.h"
@@ -283,6 +284,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     medicine_ = std::make_unique<MedicineSystem>(*things_, *defs_);
     surgery_ = std::make_unique<SurgerySystem>(*things_, *defs_, *health_, research_.get());
     talents_ = std::make_unique<TalentSystem>(*things_, *defs_);
+    traits_ = std::make_unique<TraitBook>(things_->registry(), *defs_);
+    health_->setTraits(traits_.get());
+    movement_->setTraits(traits_.get());
+    research_->setTraits(traits_.get());
     temperature_ = std::make_unique<TemperatureSystem>(map_, *things_, *rooms_, *health_, *defs_,
                                                        splitMix64(settings.seed ^ 0x74656D70ULL));
     temperature_->setOutdoor(outdoorTemperature());
@@ -333,6 +338,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setSurgery(surgery_.get());
     jobs_->setRoomStats(roomStats_.get());
     jobs_->setTalents(talents_.get());
+    jobs_->setTraits(traits_.get());
     jobs_->setFilth(filth_.get());
     jobs_->setApparel(apparel_.get());
     jobs_->setSpoilage(spoilage_.get());
@@ -363,6 +369,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
                                                         pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
     combat_->setTalents(talents_.get());
+    combat_->setTraits(traits_.get());
     explosives_->setEventLog(&events_);
     fighters_->setEventLog(&events_);
     animals_ = std::make_unique<AnimalSystem>(*things_, map_, *plants_, *health_, *defs_, time_,
@@ -417,6 +424,33 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
             return 0;
         }
         return rooms_->roleAt(cellOf(things_->registry().get<Position>(bed))) == RoomRole::Bedroom ? -1 : 0;
+    });
+    // A brawler is unhappy with a gun in hand (docs/design/traits.md).
+    mood_->addSituation("wieldsRanged", [this](Entity pawn) {
+        const Gear* gear = things_->registry().try_get<Gear>(pawn);
+        return gear != nullptr && gear->weapon != kNoEntity && things_->registry().valid(gear->weapon) &&
+                       combat_->isGun(things_->registry().get<Thing>(gear->weapon).def)
+                   ? 0
+                   : -1;
+    });
+    // A pyromaniac enjoys fire: each burning cell within reach counts as two nearby fires, up to four.
+    mood_->addSituation("nearFire", [this](Entity pawn) {
+        const Position* at = things_->registry().try_get<Position>(pawn);
+        if (at == nullptr || fire_->count() == 0) {
+            return -1;
+        }
+        const CellPos here = cellOf(*at);
+        constexpr int kPyromaniacFireRadius = 8;
+        int units = 0;
+        for (int dy = -kPyromaniacFireRadius; dy <= kPyromaniacFireRadius && units < 4; ++dy) {
+            for (int dx = -kPyromaniacFireRadius; dx <= kPyromaniacFireRadius && units < 4; ++dx) {
+                const CellPos c{here.x + dx, here.y + dy, here.level};
+                if (dx * dx + dy * dy <= kPyromaniacFireRadius * kPyromaniacFireRadius && map_.inBounds(c) && fire_->burning(c)) {
+                    units += 2;
+                }
+            }
+        }
+        return units > 0 ? std::min(units, 4) - 1 : -1;
     });
     combat_->setBeforeDestroy([this](Entity thing) {
         jobs_->forget(thing);

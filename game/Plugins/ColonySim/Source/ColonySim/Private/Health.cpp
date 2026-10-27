@@ -5,6 +5,7 @@
 #include "ColonySim/Looks.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Traits.h"
 
 #include <algorithm>
 #include <cmath>
@@ -924,7 +925,8 @@ void HealthSystem::die(Entity pawn, Health& health, DeathCause cause, bool annou
     }
 }
 
-void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, const HealthMods& mods, Health& health, DeathCause& cause, bool& shouldBeDown) const {
+void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, const HealthMods& mods, Health& health, DeathCause& cause,
+                          bool& shouldBeDown, float painShockOffset) const {
     const HealthModel::Body& body = model_->bodies[static_cast<size_t>(bodyIndex)];
     HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
     eval.workOutPainAndBleeding();
@@ -989,7 +991,7 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, con
             cause = DeathCause::Disease;
         }
     }
-    shouldBeDown = health.pain > model_->painShock;
+    shouldBeDown = health.pain > model_->painShock + painShockOffset;
     for (size_t c = 0; c < model_->capacities.size(); ++c) {
         const HealthModel::Capacity& cap = model_->capacities[c];
         shouldBeDown = shouldBeDown || (cap.hasDownedBelow && health.capacities[c] < cap.downedBelow) ||
@@ -1009,7 +1011,8 @@ void HealthSystem::recompute(Entity pawn, Health& health, bool announce) {
     if (mods_) {
         mods_(pawn, mods);
     }
-    derive(kind->body, kind->healthScale, kind->mechanical, mods, health, cause, shouldBeDown);
+    derive(kind->body, kind->healthScale, kind->mechanical, mods, health, cause, shouldBeDown,
+           traits_ != nullptr ? traits_->of(pawn).painShockOffset : 0.0f);
 
     if (!health.dead && cause != DeathCause::None) {
         die(pawn, health, cause, announce);
@@ -1198,6 +1201,9 @@ bool HealthSystem::hitPart(Entity pawn, DefId damageType, float amount, int targ
     Health& health = reg.get<Health>(pawn);
     if (const PawnGenes* genes = reg.try_get<PawnGenes>(pawn)) {
         amount *= genes->effects.damageTaken;  // docs/design/genes.md
+    }
+    if (traits_ != nullptr) {
+        amount *= traits_->of(pawn).damageFactor;  // Tough
     }
     const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
     const auto hediffFor = [&](int p) {
@@ -2198,7 +2204,8 @@ bool HealthSystem::report(Entity pawn, HealthReport& out) const {
         if (mods_) {
             mods_(pawn, mods);
         }
-        derive(kind->body, kind->healthScale, kind->mechanical, mods, health, cause, shouldBeDown);
+        derive(kind->body, kind->healthScale, kind->mechanical, mods, health, cause, shouldBeDown,
+               traits_ != nullptr ? traits_->of(pawn).painShockOffset : 0.0f);
         if (!health.dead && cause != DeathCause::None) {
             health.dead = true;
             health.cause = cause;
