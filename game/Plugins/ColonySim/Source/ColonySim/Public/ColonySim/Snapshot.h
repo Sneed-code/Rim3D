@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace colony {
@@ -162,6 +163,10 @@ struct ThingView {
     bool prisoner = false;
     uint8_t prisonerMode = 0;
     float resistance = 0.0f;
+    // Visitors (docs/design/trade.md): a pawn of a visit (a VisitorRole number: 0 visitor, 1 trader, 2 guard) and the visit's id.
+    bool visitor = false;
+    uint8_t visitRole = 0;
+    uint32_t visit = 0;
     bool prisonBed = false;
     // Humanlike pawns: their looks, Snapshot::looks[looks]; -1 for other things.
     int32_t looks = -1;
@@ -250,6 +255,52 @@ struct SquadView {
     int members = 0;       // still with it: on the map, downed ones included
     int started = 0;
     CellPos target;        // the cell it goes for
+    uint8_t strategy = 0;  // RaidStrategy (F12): 0 Assault, 1 Sappers, 2 DropPods, 3 Thieves, 4 Kidnappers
+    bool breaching = false;  // sappers are digging through a wall...
+    CellPos breach;          // ...this one
+};
+
+// A thing in a trader's stock.
+struct StockView {
+    std::string thing;  // Things defName
+    int count = 0;
+};
+
+// Visitors, a trade caravan or an orbital trader on the map (docs/design/trade.md). `kind` is a VisitKind (0 visitors, 1 caravan,
+// 2 orbital), `phase` a VisitPhase (0 staying, 1 leaving). The trader's `stock` is what the colony may buy; send a TradeCommand to trade.
+struct VisitView {
+    uint32_t id = 0;
+    uint8_t kind = 0;
+    uint8_t phase = 0;
+    std::string faction;
+    std::string traderKind;
+    Entity trader = kNoEntity;  // the pawn to trade with, none for a ship
+    int64_t leaveAt = 0;        // game second
+    int silver = 0;             // what the trader can pay with
+    int members = 0;
+    CellPos spot;               // where they gather and where goods are put down
+    std::vector<StockView> stock;
+};
+
+// What a faction thinks of the colony: goodwill from -100 to 100 and its relation (0 hostile, 1 neutral, 2 ally).
+struct GoodwillView {
+    std::string faction;
+    float goodwill = 0.0f;
+    uint8_t relation = 1;
+};
+// A quest, offered or finished (docs/design/quests.md): `state` is a QuestState (0 Offered, 1 Active, 2 Completed, 3 Failed, 4 Declined,
+// 5 Expired), `expiresAt` the game second an unanswered offer lapses, `deadline` the game second an active raid quest fails
+// (0 for none), `people` how many come, `points` the raid's points (0 for none), `rewards` the defName and count of each reward item.
+struct QuestView {
+    uint32_t id = 0;
+    std::string kind;
+    std::string label;
+    uint8_t state = 0;
+    int64_t expiresAt = 0;
+    int64_t deadline = 0;
+    int people = 0;
+    float points = 0.0f;
+    std::vector<std::pair<std::string, int>> rewards;
 };
 
 // A bullet in flight (docs/design/combat.md). Unreal draws a tracer along its velocity; it
@@ -392,6 +443,19 @@ struct ResearchView {
     bool current = false;
 };
 
+// The spaceship ending (docs/design/ship.md). `phase` is a ShipPhase number.
+struct ShipView {
+    uint8_t phase = 0;
+    int64_t activationLeft = 0;  // game seconds until the reactor is active (0 unless activating)
+    int waves = 0;               // siege waves sent
+    int beams = 0, caskets = 0, reactors = 0, engines = 0, cores = 0, sensors = 0;
+    int riders = 0;              // living riders in caskets that touch a beam
+    bool canLaunch = false;
+    std::string problem;         // why not, in plain words
+    bool won = false;
+    int escaped = 0;
+};
+
 // The date, the weather and the sky's mood (docs/design/weather.md). Snow per cell is not here:
 // read `Sim::weather().snowDepth(cell)` when `snowChanges` goes up.
 struct WeatherView {
@@ -408,6 +472,17 @@ struct WeatherView {
     float wetness = 0.0f;
     uint64_t snowChanges = 0;
     float snowCover = 0.0f;   // share of the map's cells with snow
+};
+
+// The narrator (docs/design/narrator.md): which one and the difficulty (invalid DefIds while it is
+// off), the colony's wealth and threat points at its last check, and incidents so far. Letters come
+// as Letter events.
+struct NarratorView {
+    DefId narrator;
+    DefId difficulty;
+    float wealth = 0.0f;
+    float threatPoints = 0.0f;
+    uint32_t incidents = 0;
 };
 
 // A talent rank the protagonist has bought (docs/design/talents.md).
@@ -472,9 +547,14 @@ struct Snapshot {
     bool alarm = false;
     bool alarmManual = false;
     std::vector<SquadView> squads;
+    std::vector<VisitView> visits;         // visitors and traders here now (docs/design/trade.md)
+    std::vector<GoodwillView> goodwill;    // every faction's goodwill with the colony
+    std::vector<QuestView> quests;         // offered, active and recently finished quests, by id
     std::vector<ApparelView> apparel;      // worn apparel, see ThingView
     std::vector<OutfitView> outfits;       // the outfit policies, by id
     WeatherView weather;
+    ShipView ship;
+    NarratorView narrator;
 
     // The thing with this id, or null if it is not on the map. Binary search.
     COLONY_API const ThingView* find(Entity id) const;
