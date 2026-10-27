@@ -377,6 +377,16 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         (void)colonist;
         colonists.push_back(pawn);
     }
+    // F10 (docs/design/field-care.md): one colonist is the alarm's Medic and one its Firefighter. With no raid the
+    // roles change nothing: they work as everyone does.
+    {
+        std::vector<Entity> crew = colonists;
+        std::sort(crew.begin(), crew.end());
+        for (size_t c = 0; c < crew.size() && c < 2; ++c) {
+            const DefenseRole role = c == 0 ? DefenseRole::Medic : DefenseRole::Firefighter;
+            sim.submit(SetDefenseRoleCommand{crew[c], static_cast<uint8_t>(role), false, CellPos{}});
+        }
+    }
 
     if (year) {
         // The player arms the best shot with the landing's rifle and revolver (colonists do not equip loose weapons
@@ -838,7 +848,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                         defs->get(t.def).defName() == "ButcherTable") {
                         sim.submit(AddBillCommand{t.id, "ButcherCorpse", BillMode::Forever, 1});
                         // Only corpses within 40 m: with no limit the butcher walks across the map to a wolf's kill.
-                        sim.submit(SetBillOptionsCommand{t.id, 1, 0, 20, 40.0f, 0, 0, {}});
+                        sim.submit(SetBillOptionsCommand{t.id, 1, 0, 20, 40.0f, 0, 0, 0, {}});
                         butcherBillAdded = true;
                     }
                 }

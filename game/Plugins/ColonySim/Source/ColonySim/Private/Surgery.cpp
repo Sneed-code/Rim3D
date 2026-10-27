@@ -85,6 +85,7 @@ SurgerySystem::SurgerySystem(Things& things, const DefDatabase& defs, HealthSyst
         r.requiresMissing = def.flag("surgery.requiresMissing");
         r.removes = def.flag("surgery.removes");
         r.limbsOnly = def.flag("surgery.limbsOnly");
+        r.harvests = def.flag("surgery.harvests");
         r.partDef = def.text("surgery.part");
         r.adds = defs.idOf("Hediffs", def.text("surgery.addsHediff"));
         r.ingredient = defs.idOf("Things", def.text("surgery.ingredient"));
@@ -103,6 +104,10 @@ const SurgeryRecipe* SurgerySystem::recipe(DefId def) const {
 
 const SurgeryRecipe* SurgerySystem::recipe(const std::string& defName) const {
     return recipe(defs_.idOf(kSurgeryRecipesKind, defName));
+}
+
+DefId SurgerySystem::organItem(Entity patient, int part) const {
+    return defs_.idOf("Things", "Organ" + health_.partDef(patient, part));
 }
 
 bool SurgerySystem::eligible(Entity patient, const SurgeryRecipe& recipe, int part, std::string& why) const {
@@ -140,6 +145,16 @@ bool SurgerySystem::eligible(Entity patient, const SurgeryRecipe& recipe, int pa
         return false;
     }
     if (recipe.removes) {
+        if (recipe.harvests) {
+            if (condition != PartCondition::Whole || !organItem(patient, part).valid()) {
+                why = "there is no organ to harvest there";
+            } else if (!health_.canRemovePart(patient, part)) {
+                why = "the patient could not live without it";
+            } else {
+                return true;
+            }
+            return false;
+        }
         if (condition == PartCondition::Fitted) {
             return true;  // the artificial part comes off
         }
@@ -307,7 +322,12 @@ SurgeryResult SurgerySystem::perform(Entity patient, uint32_t operation, float c
                 result.returned = item;
             }
         } else {
+            const DefId organ = r->harvests ? organItem(patient, op.part) : DefId{};
             result.success = health_.removePart(patient, op.part, tendQuality);
+            if (result.success && organ.valid()) {
+                result.harvested = organ;
+                result.harvestedPart = op.part;
+            }
         }
     } else {
         health_.botch(patient, op.part, numbers_.botchHpFraction);

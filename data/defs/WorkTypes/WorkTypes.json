@@ -41,7 +41,7 @@
   {
     "defName": "Construction", "parent": "WorkTypeBase", "label": "construct", "naturalPriority": 800,
     "relevantSkills": ["Construction"], "workTags": ["ManualSkilled", "Constructing"], "inPrototype": true,
-    "tasks": ["Repair", "BuildRoofs", "RemoveRoofs", "ConstructFinishFrames", "ConstructDeliverResources", "Deconstruct"]
+    "tasks": ["Repair", "BuildRoofs", "RemoveRoofs", "ConstructFinishFrames", "ConstructDeliverResources", "Deconstruct", "RearmTraps"]
   },
   {
     "defName": "Growing", "parent": "WorkTypeBase", "label": "grow", "naturalPriority": 700,
@@ -49,7 +49,7 @@
   },
   {
     "defName": "Mining", "parent": "WorkTypeBase", "label": "mine", "naturalPriority": 600,
-    "relevantSkills": ["Mining"], "workTags": ["ManualSkilled", "Mining"], "inPrototype": true, "tasks": ["Mine"]
+    "relevantSkills": ["Mining"], "workTags": ["ManualSkilled", "Mining"], "inPrototype": true, "tasks": ["Mine", "DrillDeep"]
   },
   {
     "defName": "PlantCutting", "parent": "WorkTypeBase", "label": "plant cut", "naturalPriority": 500,
@@ -82,6 +82,6 @@
   },
   {
     "defName": "Research", "parent": "WorkTypeBase", "label": "research", "naturalPriority": 100,
-    "relevantSkills": ["Intellectual"], "workTags": ["Intellectual"], "tasks": ["Research"]
+    "relevantSkills": ["Intellectual"], "workTags": ["Intellectual"], "tasks": ["Research", "ScanDeep"]
   }
 ]

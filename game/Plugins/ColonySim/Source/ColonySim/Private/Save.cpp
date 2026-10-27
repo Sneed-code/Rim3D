@@ -30,6 +30,7 @@
 #include "ColonySim/Hash.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Weather.h"
+#include "ColonySim/DeepResources.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/RoofCollapse.h"
 #include "ColonySim/RoomStats.h"
@@ -51,12 +52,14 @@
 #include "ColonySim/Social.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Talents.h"
+#include "ColonySim/Resonance.h"
 #include "ColonySim/Trade.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
 #include "ColonySim/Zones.h"
 
 #include <algorithm>
+#include <unordered_map>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -252,11 +255,12 @@ struct SaveBill {
     BillMode mode = BillMode::Count;
     int count = 0;
     bool suspended = false;
-    // Section "bills" version 2 (C14); older saves have the defaults.
+    // Section "bills" version 2 (C14) and 3 (count stockpile); older saves have the defaults.
     int skillMin = 0;
     int skillMax = 20;
     float radius = 0.0f;
     uint32_t storeZone = 0;
+    uint32_t countZone = 0;  // version 3
     int unpauseAt = 0;
     bool satisfied = false;
     std::vector<std::string> disallowed;  // Things defNames
@@ -343,6 +347,18 @@ struct SaveApparel {
     int64_t nextCheck = 0;
 };
 
+// X2's resonance (section "resonance"): an attuned pawn and a cast under way, their powers by defName.
+struct SaveAttunement {
+    int level = 1;
+    float strain = 0.0f;
+    float focus = 0.0f;
+    std::vector<std::string> powers;
+};
+struct SaveCasting {
+    std::string power;
+    Casting c;
+};
+
 struct SaveEntity {
     uint32_t id = 0;
     std::optional<SaveThing> thing;
@@ -403,6 +419,10 @@ struct SaveEntity {
     std::optional<WeaponSwitch> weaponSwitch;   // section "weapons"
     std::optional<Turret> turret;           // section "defense" (F11)
     std::optional<Trap> trap;               // section "defense" (F11)
+    std::optional<SaveAttunement> attunement;   // section "resonance" (X2)
+    std::optional<SaveCasting> casting;         // section "resonance"
+    std::optional<Stunned> stunned;             // section "resonance"
+    std::optional<ResonanceEffects> resonanceFx;  // section "resonance"
     std::optional<Prisoner> prisoner;       // section "prisoners" (C22)
     std::optional<PrisonBed> prisonBed;     // section "prisoners" (C22)
     std::optional<Fuel> fuel;               // "fuel" section (C11)
@@ -436,6 +456,21 @@ struct SaveMineables {
     std::vector<uint32_t> cells;    // cell index in the map
     std::vector<uint32_t> defIndex;  // into `defs`
     std::vector<uint32_t> hitPoints;
+};
+
+// Deep resources (section "deep", docs/design/deep-mining.md): the item defNames, then one entry per cell in cell order,
+// then the work scanners and drills have done.
+struct SaveDeep {
+    std::vector<std::string> defs;
+    std::vector<uint32_t> cells;
+    std::vector<uint32_t> defIndex;
+    std::vector<uint32_t> units;
+    std::vector<CellPos> workAt;
+    std::vector<double> work;
+    uint64_t rngState = 0;
+    uint64_t rngIncrement = 1;
+    uint64_t found = 0;
+    uint64_t portions = 0;
 };
 
 // The player's marks on rock and plants (format 10 on), in cell order.
@@ -521,8 +556,10 @@ struct SaveData {
     BreedingStats breeding;            // section "breeding": the counters (N4)
     FireSaved fire;                    // section "fire": fires, burnt ground, the home area (E4)
     std::vector<RoomTemperature> roomTemperatures;  // section "temperature" (E2)
+    std::vector<Thermostat> thermostats;            // section "thermostats"
     std::vector<CellPos> upperFloors;  // section "levels" (M1), by level then row
     RoofCollapseSaved roofs;           // section "roofs" (M3)
+    SaveDeep deep;                     // section "deep"
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
     uint32_t nextOutfitId = 1;
     SpoilageState spoilageState;                    // section "spoilage" (C16)
@@ -1095,6 +1132,18 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.text("action", c.action);
         ar.value("quest", c.quest);
         ar.text("kind", c.kind);
+    } else if constexpr (std::is_same_v<Type, AttuneCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("level", c.level);
+    } else if constexpr (std::is_same_v<Type, LearnPowerCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("power", c.power);
+    } else if constexpr (std::is_same_v<Type, CastPowerCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("power", c.power);
+        ar.value("target", c.target);
+        ar.group("cell", [&] { saveCell(ar, c.cell); });
+        ar.value("player", c.player);
     } else {
         static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
     }
@@ -1380,12 +1429,19 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("skillMax", c.skillMax);
                 ar.value("radius", c.radius);
                 ar.value("storeZone", c.storeZone);
+                if (ar.sectionVersion() >= 2) {
+                    ar.value("countZone", c.countZone);
+                }
                 ar.value("unpauseAt", c.unpauseAt);
                 ar.list("disallowed", c.disallowed, [&](std::string& name) { ar.text(nullptr, name); });
             } else if constexpr (std::is_same_v<Type, MoveBillCommand>) {
                 ar.value("building", c.building);
                 ar.value("bill", c.bill);
                 ar.value("index", c.index);
+            } else if constexpr (std::is_same_v<Type, SetThermostatCommand>) {
+                ar.value("building", c.building);
+                ar.value("celsius", c.celsius);
+                ar.value("clear", c.clear);
             } else if constexpr (std::is_same_v<Type, ClimbCommand>) {
                 ar.value("pawn", c.pawn);
                 ar.value("dx", c.dx);
@@ -1820,6 +1876,9 @@ void saveBillsPart(Ar& ar, SaveBillList& list) {
             ar.value("skillMax", bill.skillMax);
             ar.value("radius", bill.radius);
             ar.value("storeZone", bill.storeZone);
+            if (ar.sectionVersion() >= 3) {
+                ar.value("countZone", bill.countZone);
+            }
             ar.value("unpauseAt", bill.unpauseAt);
             ar.value("satisfied", bill.satisfied);
             ar.list("disallowed", bill.disallowed, [&](std::string& name) { ar.text(nullptr, name); });
@@ -2107,6 +2166,34 @@ void saveThrowerPart(Ar& ar, SaveThrower& st) {
 }
 
 template <typename Ar>
+void saveAttunementPart(Ar& ar, SaveAttunement& a) {
+    ar.value("level", a.level);
+    ar.require(a.level >= 1 && a.level <= 99, "the save file has a bad attunement level");
+    ar.value("strain", a.strain);
+    ar.value("focus", a.focus);
+    ar.require(a.strain >= 0.0f && a.strain < 1e6f && a.focus >= 0.0f && a.focus <= 1.0f, "the save file has impossible strain or focus");
+    ar.list("powers", a.powers, [&](std::string& name) { ar.text(nullptr, name); });
+}
+
+template <typename Ar>
+void saveCastingPart(Ar& ar, SaveCasting& s) {
+    ar.text("power", s.power);
+    ar.value("target", s.c.target);
+    ar.group("cell", [&] { saveCell(ar, s.c.cell); });
+    ar.value("stepsLeft", s.c.stepsLeft);
+    ar.value("player", s.c.player);
+}
+
+template <typename Ar>
+void saveResonanceFxPart(Ar& ar, ResonanceEffects& fx) {
+    ar.value("numbSteps", fx.numbSteps);
+    ar.value("painFactor", fx.painFactor);
+    ar.value("burdenSteps", fx.burdenSteps);
+    ar.value("movingMax", fx.movingMax);
+    ar.require(fx.numbSteps >= 0 && fx.burdenSteps >= 0, "the save file has a resonance effect with negative time");
+}
+
+template <typename Ar>
 void saveKnockedPart(Ar& ar, KnockedDown& k) {
     ar.value("stepsLeft", k.stepsLeft);
     ar.value("before", k.before);
@@ -2172,12 +2259,17 @@ void saveFighterPart(Ar& ar, Fighter& f) {
     }
     if (ar.sectionVersion() >= 2) {  // F6: what the alarm or a raid has it do
         ar.value("mode", f.mode);
-        ar.require(static_cast<int>(f.mode) <= static_cast<int>(FightMode::Seize), "the save file has a bad fighter mode");
+        ar.require(static_cast<int>(f.mode) <= static_cast<int>(FightMode::Rescue), "the save file has a bad fighter mode");
         ar.value("defending", f.defending);
         ar.value("squad", f.squad);
         ar.value("hasGoal", f.hasGoal);
         ar.group("goal", [&] { saveCell(ar, f.goal); });
         ar.value("retreat", f.retreat);
+    }
+    if (ar.sectionVersion() >= 3) {  // F10: carrying a downed friend to cover
+        ar.value("rescuing", f.rescuing);
+        ar.value("lifted", f.lifted);
+        ar.group("rescueTo", [&] { saveCell(ar, f.rescueTo); });
     }
 
 }
@@ -2825,7 +2917,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("repaths", d.repaths);
         ar.list("setupErrors", d.setupErrors, [&](std::string& s) { ar.text(nullptr, s); });
     });
-    ar.section("commands", 1, [&] { saveCommandsSection(ar, d); });
+    ar.section("commands", 2, [&] { saveCommandsSection(ar, d); });
     ar.section("things", 1, [&] { saveThingsSection(ar, d); });
     std::vector<SaveEntity>& e = d.entities;
     ar.section("movement", 2, [&] {
@@ -2865,7 +2957,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "schedule", e, &SaveEntity::schedule, [&](Schedule& s) { saveSchedulePart(ar, s); });
         saveParts(ar, "bed", e, &SaveEntity::bed, [&](Bed& b) { saveBedPart(ar, b); });
     });
-    ar.section("bills", 2, [&] {
+    ar.section("bills", 3, [&] {
         saveParts(ar, "bills", e, &SaveEntity::bills, [&](SaveBillList& list) { saveBillsPart(ar, list); });
     });
     ar.section("construction", 1, [&] {
@@ -2887,7 +2979,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("doors", 1, [&] {
         saveParts(ar, "door", e, &SaveEntity::door, [&](Door& door) { saveDoorPart(ar, door); });
     });
-    ar.section("fighters", 2, [&] {
+    ar.section("fighters", 3, [&] {
         saveParts(ar, "faction", e, &SaveEntity::faction, [&](Faction& f) { saveFactionPart(ar, f); });
         saveParts(ar, "fighter", e, &SaveEntity::fighter, [&](Fighter& f) { saveFighterPart(ar, f); });
     });
@@ -2996,11 +3088,17 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(t.celsius > -500.0f && t.celsius < 1000.0f, "the save file has an impossible room temperature");
         });
     });
+    ar.section("thermostats", 1, [&] {
+        ar.list("thermostats", d.thermostats, [&](Thermostat& t) {
+            ar.value("building", t.building);
+            ar.value("celsius", t.celsius);
+        });
+    });
     ar.section("raids", 2, [&] {
         saveRaids(ar, d.raids);
         saveParts(ar, "defense", e, &SaveEntity::defense, [&](DefensePlan& p) {
             ar.value("role", p.role);
-            ar.require(static_cast<int>(p.role) <= static_cast<int>(DefenseRole::KeepWorking), "the save file has a bad defense role");
+            ar.require(static_cast<int>(p.role) <= static_cast<int>(DefenseRole::Firefighter), "the save file has a bad defense role");
             ar.value("hasSpot", p.hasSpot);
             ar.group("spot", [&] { saveCell(ar, p.spot); });
         });
@@ -3137,6 +3235,12 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.list("home", d.fire.home, [&](int& cell) { ar.value("cell", cell); });
         saveParts(ar, "burning", e, &SaveEntity::burning, [&](Burning& b) { ar.value("until", b.until); });
     });
+    ar.section("resonance", 1, [&] {
+        saveParts(ar, "attunement", e, &SaveEntity::attunement, [&](SaveAttunement& a) { saveAttunementPart(ar, a); });
+        saveParts(ar, "casting", e, &SaveEntity::casting, [&](SaveCasting& c) { saveCastingPart(ar, c); });
+        saveParts(ar, "stunned", e, &SaveEntity::stunned, [&](Stunned& s) { ar.value("stepsLeft", s.stepsLeft); });
+        saveParts(ar, "effects", e, &SaveEntity::resonanceFx, [&](ResonanceEffects& fx) { saveResonanceFxPart(ar, fx); });
+    });
     ar.section("prisoners", 2, [&] {
         saveParts(ar, "prisoner", e, &SaveEntity::prisoner, [&](Prisoner& p) {
             ar.value("mode", p.mode);
@@ -3158,6 +3262,21 @@ void saveSections(Ar& ar, SaveData& d) {
     });
     ar.section("fuel", 1, [&] {
         saveParts(ar, "fuel", e, &SaveEntity::fuel, [&](Fuel& f) { saveFuelPart(ar, f); });
+    });
+    ar.section("deep", 1, [&] {
+        ar.list("defs", d.deep.defs, [&](std::string& s) { ar.text(nullptr, s); });
+        ar.list("cells", d.deep.cells, [&](uint32_t& v) { ar.value(nullptr, v); });
+        ar.list("defIndex", d.deep.defIndex, [&](uint32_t& v) { ar.value(nullptr, v); });
+        ar.list("units", d.deep.units, [&](uint32_t& v) { ar.value(nullptr, v); });
+        ar.require(d.deep.cells.size() == d.deep.defIndex.size() && d.deep.cells.size() == d.deep.units.size(),
+                   "the save file's deep resource lists don't match");
+        ar.list("workAt", d.deep.workAt, [&](CellPos& c) { saveCell(ar, c); });
+        ar.list("work", d.deep.work, [&](double& v) { ar.value(nullptr, v); });
+        ar.require(d.deep.workAt.size() == d.deep.work.size(), "the save file's machine work lists don't match");
+        ar.value("rngState", d.deep.rngState);
+        ar.value("rngIncrement", d.deep.rngIncrement);
+        ar.value("found", d.deep.found);
+        ar.value("portions", d.deep.portions);
     });
     ar.section("roofs", 1, [&] {
         ar.value("collapses", d.roofs.collapses);
@@ -3505,6 +3624,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
                 b.skillMax = bill.skillMax;
                 b.radius = bill.radius;
                 b.storeZone = bill.storeZone;
+                b.countZone = bill.countZone;
                 b.unpauseAt = bill.unpauseAt;
                 b.satisfied = bill.satisfied;
                 for (const DefId def : bill.disallowed) {
@@ -3630,6 +3750,22 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const Trap* trap = reg.try_get<Trap>(e)) {
             out.trap = *trap;
         }
+        if (const Attunement* a = reg.try_get<Attunement>(e)) {
+            SaveAttunement saved{a->level, a->strain, a->focus, {}};
+            for (const DefId p : a->powers) {
+                saved.powers.push_back(sim.defs_->get(p).defName());
+            }
+            out.attunement = std::move(saved);
+        }
+        if (const Casting* c = reg.try_get<Casting>(e)) {
+            out.casting = SaveCasting{sim.defs_->get(c->power).defName(), *c};
+        }
+        if (const Stunned* s = reg.try_get<Stunned>(e)) {
+            out.stunned = *s;
+        }
+        if (const ResonanceEffects* fx = reg.try_get<ResonanceEffects>(e)) {
+            out.resonanceFx = *fx;
+        }
         if (const Melee* melee = reg.try_get<Melee>(e)) {
             out.melee = *melee;
         }
@@ -3734,8 +3870,35 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.filth = sim.filth_->state();
     d.roomStats = sim.roomStats_->state();
     d.roomTemperatures = sim.temperature_->roomTemperatures();
+    d.thermostats = sim.temperature_->thermostats();
     d.upperFloors = sim.map_.upperFloorCells();
     d.roofs = sim.roofCollapse_->state();
+    {
+        const DeepResourcesSaved deep = sim.deepResources_->saved();
+        std::unordered_map<uint32_t, uint32_t> indexOf;
+        for (const DeepCell& c : deep.cells) {
+            const auto it = indexOf.find(c.def.value);
+            uint32_t index = 0;
+            if (it == indexOf.end()) {
+                index = static_cast<uint32_t>(d.deep.defs.size());
+                indexOf[c.def.value] = index;
+                d.deep.defs.push_back(sim.defs_->get(c.def).defName());
+            } else {
+                index = it->second;
+            }
+            d.deep.cells.push_back(static_cast<uint32_t>(c.cell));
+            d.deep.defIndex.push_back(index);
+            d.deep.units.push_back(c.units);
+        }
+        for (const DeepWork& w : deep.work) {
+            d.deep.workAt.push_back(w.at);
+            d.deep.work.push_back(w.work);
+        }
+        d.deep.rngState = deep.rngState;
+        d.deep.rngIncrement = deep.rngIncrement;
+        d.deep.found = deep.found;
+        d.deep.portions = deep.portions;
+    }
     d.raids = sim.raids_->state();
     d.quests = sim.quests_->state();
     d.spoilageState = sim.spoilage_->state();
@@ -4002,6 +4165,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                 bill.skillMax = saved.skillMax;
                 bill.radius = saved.radius;
                 bill.storeZone = saved.storeZone;
+                bill.countZone = saved.countZone;
                 bill.unpauseAt = saved.unpauseAt;
                 bill.satisfied = saved.satisfied;
                 for (const std::string& name : saved.disallowed) {
@@ -4303,6 +4467,33 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         } else if (e.footprint && e.thing && sim.defs_->get(reg.get<Thing>(entity).def).has("trap")) {
             reg.emplace<Trap>(entity);
         }
+        if (e.attunement) {
+            Attunement a;
+            a.level = e.attunement->level;
+            a.strain = e.attunement->strain;
+            a.focus = e.attunement->focus;
+            for (const std::string& name : e.attunement->powers) {
+                const DefId power = sim.defs_->idOf("Powers", name);
+                if (power.valid()) {  // a power the data files dropped is forgotten
+                    a.powers.push_back(power);
+                }
+            }
+            std::sort(a.powers.begin(), a.powers.end(), [](DefId x, DefId y) { return x.value < y.value; });
+            reg.emplace<Attunement>(entity, std::move(a));
+        }
+        if (e.casting) {
+            Casting c = e.casting->c;
+            c.power = sim.defs_->idOf("Powers", e.casting->power);
+            if (c.power.valid()) {
+                reg.emplace<Casting>(entity, c);
+            }
+        }
+        if (e.stunned) {
+            reg.emplace<Stunned>(entity, *e.stunned);
+        }
+        if (e.resonanceFx) {
+            reg.emplace<ResonanceEffects>(entity, *e.resonanceFx);
+        }
     }
     sim.animals_->restore(d.animals);
     if (!sim.husbandry_->restore(d.husbandry, error)) {
@@ -4349,7 +4540,8 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if ((e.worker && (!exists(e.worker->job.thing) || !exists(e.worker->job.chair) ||
                           !exists(e.worker->job.site))) ||
-            (e.carrying && !exists(e.carrying->thing)) || !gearExists || (e.equippedBy && !exists(e.equippedBy->pawn))) {
+            (e.carrying && !exists(e.carrying->thing)) || !gearExists || (e.equippedBy && !exists(e.equippedBy->pawn)) ||
+            (e.casting && !exists(e.casting->c.target))) {
             error = "the save has a thing that names another thing that doesn't exist";
             return false;
         }
@@ -4648,8 +4840,34 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     sim.power_->update();
     sim.roomStats_->refresh();
     sim.temperature_->setOutdoor(sim.outdoorTemperature());
+    sim.temperature_->restoreThermostats(d.thermostats);
     sim.temperature_->restore(d.roomTemperatures);
     sim.spoilage_->restore(d.spoilageState);
+    {
+        DeepResourcesSaved deep;
+        for (size_t i = 0; i < d.deep.cells.size(); ++i) {
+            if (d.deep.defIndex[i] >= d.deep.defs.size() || d.deep.units[i] > 65535) {
+                error = "the save has deep resources that don't fit";
+                return false;
+            }
+            deep.cells.push_back(DeepCell{static_cast<int>(d.deep.cells[i]),
+                                          sim.defs_->idOf("Things", d.deep.defs[d.deep.defIndex[i]]),
+                                          static_cast<uint16_t>(d.deep.units[i])});
+        }
+        for (size_t i = 0; i < d.deep.work.size(); ++i) {
+            deep.work.push_back(DeepWork{d.deep.workAt[i], d.deep.work[i]});
+        }
+        deep.rngState = d.deep.rngState;
+        deep.rngIncrement = d.deep.rngIncrement;
+        deep.found = d.deep.found;
+        deep.portions = d.deep.portions;
+        if (d.deep.cells.empty() && d.deep.rngState == 0) {
+            // An older save without the section: a fresh layer, with the stream the map started with.
+        } else if (!sim.deepResources_->restore(deep)) {
+            error = "the save has deep resources outside the map";
+            return false;
+        }
+    }
     if (!sim.roofCollapse_->restore(d.roofs)) {
         error = "the save has a fallen roof outside the map";
         return false;

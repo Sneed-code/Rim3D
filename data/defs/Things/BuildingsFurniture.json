@@ -98,8 +98,7 @@
    "fertility": 1.0
   },
   "unverified": [
-   "fillPercent",
-   "plantSpot"
+   "fillPercent"
   ],
   "ours": [
    "plantSpot"

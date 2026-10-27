@@ -213,8 +213,8 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
             a.newVy = a.vy;
             continue;
         }
-        // Working standing still, or knocked down by a blast: it stays where it is. Others still steer around it.
-        bool stays = mover.hold || reg.all_of<KnockedDown>(a.entity);
+        // Working standing still, knocked down by a blast or stunned: it stays where it is. Others still steer around it.
+        bool stays = mover.hold || reg.any_of<KnockedDown, Stunned>(a.entity);
         float base = 0.0f;
         if (!stays) {
             // Injuries slow a pawn down (its Moving capacity); a downed or dead one doesn't walk.
