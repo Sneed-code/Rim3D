@@ -12,6 +12,7 @@
 #include "ColonySim/Melee.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Rooms.h"
+#include "ColonySim/Wounds.h"
 #include "ColonySim/Zones.h"
 
 #include <cstdint>
@@ -174,6 +175,12 @@ struct ThingView {
     Entity rescuing = kNoEntity;
     // Humanlike pawns: their looks, Snapshot::looks[looks]; -1 for other things.
     int32_t looks = -1;
+    // Pawns with a body (docs/design/wounds.md): their wounds and lost parts that show on the skin, `woundCount` from
+    // Snapshot::wounds[firstWound]; blood lost (0 to 1, 1 is death) and how fast it is going (blood loss a day).
+    uint32_t firstWound = 0;
+    uint32_t woundCount = 0;
+    float bloodLoss = 0.0f;
+    float bleedPerDay = 0.0f;
     // Buildings with a power part (docs/design/power.md): whether they have power, the net they are
     // in (Snapshot::powerNets[powerNet - 1]; 0 for none), watts now (+ generating, - drawing) and,
     // for batteries, how full (0 to 1; -1 for other buildings).
@@ -563,6 +570,7 @@ struct Snapshot {
     uint64_t roofCollapses = 0;
     std::vector<ProjectileView> projectiles;  // sorted by id
     std::vector<PawnLooksView> looks;      // see ThingView::looks
+    std::vector<WoundView> wounds;         // see ThingView::firstWound
     std::vector<PowerNetView> powerNets;   // by id - 1, see ThingView::powerNet
     std::vector<ResearchView> research;    // every project, in def order
     std::vector<TalentView> talents;       // see TalentView
