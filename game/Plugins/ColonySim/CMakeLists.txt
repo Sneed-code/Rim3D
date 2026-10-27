@@ -31,7 +31,7 @@ target_include_directories(colonysim SYSTEM PUBLIC ThirdParty)
 add_library(colonysim_thirdparty INTERFACE)
 target_include_directories(colonysim_thirdparty SYSTEM INTERFACE ThirdParty)
 
-add_executable(simrun Tools/simrun/main.cpp Tools/simrun/ColonyScenario.cpp Tools/simrun/HouseScenario.cpp Tools/simrun/PowerScenario.cpp Tools/simrun/RaidSoak.cpp Tools/simrun/WorldMap.cpp)
+add_executable(simrun Tools/simrun/main.cpp Tools/simrun/ColonyScenario.cpp Tools/simrun/HouseScenario.cpp Tools/simrun/PowerScenario.cpp Tools/simrun/RaidSoak.cpp Tools/simrun/WorldMap.cpp Tools/simrun/PerfScenario.cpp)
 target_link_libraries(simrun PRIVATE colonysim colonysim_thirdparty)
 target_compile_definitions(simrun PRIVATE COLONY_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../data")
 
@@ -70,6 +70,8 @@ add_test(NAME simrun_raid_soak COMMAND simrun --seed 1 --raid-soak 3)
 # The world map (docs/design/world-map.md): a planet of tiles with biomes, rivers, roads and settlements; the picture is the check.
 add_test(NAME simrun_world COMMAND simrun --seed 42 --world ${CMAKE_BINARY_DIR}/world.png --check)
 add_test(NAME simrun_world_seed7 COMMAND simrun --seed 7 --world ${CMAKE_BINARY_DIR}/world7.png --world-size 180x90 --check)
+# The game on a world (W2): the Crashlanded colonists land on the seed's suggested temperate forest tile and live a day.
+add_test(NAME simrun_on_world COMMAND simrun --seed 42 --size 128 --days 1 --on-world --start Crashlanded --check)
 
 # Temperature (E2, docs/design/temperature.md): the Crashlanded colonists live two days in 4 degrees weather
 # (just above the safe range their T-shirts and pants give them) and nobody falls ill or dies.
@@ -154,3 +156,8 @@ add_test(NAME simrun_fire COMMAND simrun --seed 42 --size 256 --days 1 --start C
 # Pathfinding load test (S3): 100 pawns hauling on a 1 km map for a day, no failed job or search.
 add_test(NAME simrun_paths COMMAND simrun --seed 42 --size 1024 --days 1 --pawns 100 --items 2000 --check
          --data ${CMAKE_CURRENT_SOURCE_DIR}/Tests/data)
+
+# The sim cost check (S9, docs/design/sim-cost.md): 30 colonists and 300 tame animals on a 1 km map. Two game
+# minutes' worth here keeps CI quick and only catches a step that has become several times dearer; the nightly
+# workflow runs a whole day against the real budget.
+add_test(NAME simrun_perf COMMAND simrun --perf --days 0.02 --budget 10)

@@ -37,8 +37,8 @@ struct COLONY_API ResearchRules {
     bool present = false;
     double pointsPerTick = 0.00825;     // one pawn at 100% speed, per RimWorld tick
     double secondsPerTick = 1.44;       // one RimWorld tick is this many sim seconds
-    double skillSpeedBase = 0.2;        // research speed = base + perLevel x Intellectual level
-    double skillSpeedPerLevel = 0.1;
+    double skillSpeedBase = 0.08;       // research speed = base + perLevel x Intellectual level
+    double skillSpeedPerLevel = 0.115;
     int defaultSkillLevel = 8;          // for a worker with no skills (a test pawn)
 
     static ResearchRules read(const DefDatabase& defs);
