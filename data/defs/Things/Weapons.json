@@ -1,13 +1,13 @@
 [
   {
-    "defName": "GunBase", "visual": {"parts": [{"shape": "box", "size": [0.55, 0.05, 0.05], "at": [0.1, 0, 0.04], "color": [0.15, 0.15, 0.17]}, {"shape": "box", "size": [0.22, 0.06, 0.1], "at": [-0.22, 0, 0.02], "color": [0.4, 0.27, 0.15]}]}, "abstract": true, "source": "RimWorld wiki",
+    "defName": "GunBase", "visual": {"sound": {"reload": "Gun_Reload", "switch": "Gun_Switch"},"parts": [{"shape": "box", "size": [0.55, 0.05, 0.05], "at": [0.1, 0, 0.04], "color": [0.15, 0.15, 0.17]}, {"shape": "box", "size": [0.22, 0.06, 0.1], "at": [-0.22, 0, 0.02], "color": [0.4, 0.27, 0.15]}]}, "abstract": true, "source": "RimWorld wiki",
     "category": "Item", "stackLimit": 1, "equipmentType": "Primary",
     "stats": { "maxHitPoints": 100 },
     "unverified": ["stats.maxHitPoints"],
     "ours": ["recoilPerShot", "recoilKicks", "magazineSize", "reloadTime", "weaponSlot"]
   },
   {
-    "defName": "Gun_Revolver", "parent": "GunBase", "label": "revolver", "weaponSlot": "Sidearm",
+    "defName": "Gun_Revolver", "researchPrerequisite": "Gunsmithing", "visual": {"sound": {"shot": "Shot_Revolver"}}, "parent": "GunBase", "label": "revolver", "weaponSlot": "Sidearm",
     "stats": { "mass": 1.4, "rangedWeaponCooldown": 48, "accuracyTouch": 0.8, "accuracyShort": 0.75, "accuracyMedium": 0.55, "accuracyLong": 0.4 },
     "verbs": [ { "range": 25.9, "warmupTime": 9, "burstShotCount": 1, "defaultProjectile": "Bullet_Revolver" } ],
     "recoilPerShot": 0.015,
@@ -15,7 +15,7 @@
     "magazineSize": 6, "reloadTime": 120
   },
   {
-    "defName": "Gun_Autopistol", "parent": "GunBase", "label": "autopistol", "weaponSlot": "Sidearm",
+    "defName": "Gun_Autopistol", "researchPrerequisite": "BlowbackOperation", "visual": {"sound": {"shot": "Shot_Pistol"}}, "parent": "GunBase", "label": "autopistol", "weaponSlot": "Sidearm",
     "stats": { "mass": 1.2, "rangedWeaponCooldown": 30, "accuracyTouch": 0.8, "accuracyShort": 0.7, "accuracyMedium": 0.4, "accuracyLong": 0.3 },
     "verbs": [ { "range": 25.9, "warmupTime": 9, "burstShotCount": 1, "defaultProjectile": "Bullet_Autopistol" } ],
     "recoilPerShot": 0.012,
@@ -23,7 +23,7 @@
     "magazineSize": 15, "reloadTime": 60
   },
   {
-    "defName": "Gun_BoltActionRifle", "parent": "GunBase", "label": "bolt-action rifle",
+    "defName": "Gun_BoltActionRifle", "researchPrerequisite": "Gunsmithing", "visual": {"sound": {"shot": "Shot_Rifle"}}, "parent": "GunBase", "label": "bolt-action rifle",
     "stats": { "mass": 3.5, "rangedWeaponCooldown": 45, "accuracyTouch": 0.65, "accuracyShort": 0.8, "accuracyMedium": 0.9, "accuracyLong": 0.8 },
     "verbs": [ { "range": 36.9, "warmupTime": 51, "burstShotCount": 1, "defaultProjectile": "Bullet_BoltActionRifle" } ],
     "recoilPerShot": 0.02,
@@ -31,7 +31,7 @@
     "magazineSize": 5, "reloadTime": 105
   },
   {
-    "defName": "Gun_PumpShotgun", "parent": "GunBase", "label": "pump shotgun",
+    "defName": "Gun_PumpShotgun", "researchPrerequisite": "Gunsmithing", "visual": {"sound": {"shot": "Shot_Shotgun"}}, "parent": "GunBase", "label": "pump shotgun",
     "stats": { "mass": 3.4, "rangedWeaponCooldown": 37.5, "accuracyTouch": 0.8, "accuracyShort": 0.87, "accuracyMedium": 0.77, "accuracyLong": 0.64 },
     "verbs": [ { "range": 15.9, "warmupTime": 27, "burstShotCount": 1, "defaultProjectile": "Bullet_Shotgun" } ],
     "recoilPerShot": 0.03,
@@ -39,7 +39,7 @@
     "magazineSize": 6, "reloadTime": 150
   },
   {
-    "defName": "Gun_AssaultRifle", "parent": "GunBase", "label": "assault rifle",
+    "defName": "Gun_AssaultRifle", "researchPrerequisite": "PrecisionRifling", "visual": {"sound": {"shot": "Shot_AssaultRifle"}}, "parent": "GunBase", "label": "assault rifle",
     "stats": { "mass": 3.5, "rangedWeaponCooldown": 51, "accuracyTouch": 0.6, "accuracyShort": 0.7, "accuracyMedium": 0.65, "accuracyLong": 0.55 },
     "verbs": [ { "range": 30.9, "warmupTime": 30, "burstShotCount": 3, "secondsBetweenBurstShots": 5, "defaultProjectile": "Bullet_AssaultRifle" } ],
     "recoilPerShot": 0.01,
