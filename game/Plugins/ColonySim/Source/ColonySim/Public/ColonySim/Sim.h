@@ -62,6 +62,7 @@ class SocialSystem;
 class ResearchSystem;
 class ResonanceSystem;
 class TalentSystem;
+class TravelSystem;
 class NeedsSystem;
 class RaidSystem;
 class FieldCare;
@@ -416,6 +417,9 @@ public:
     // Good-mood colonists get inspired: a legendary craft, a recruitment, a shooting frenzy (docs/design/inspirations.md).
     InspirationSystem& inspirations() { return *inspirations_; }
     const InspirationSystem& inspirations() const { return *inspirations_; }
+    // Night skip and fast travel (docs/design/skip-travel.md).
+    TravelSystem& travel() { return *travel_; }
+    const TravelSystem& travel() const { return *travel_; }
 
     // Blueprints, frames and taking buildings down (docs/design/construction.md).
     Construction& construction() { return *construction_; }
@@ -449,6 +453,8 @@ private:
     Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, EmptyStart);
 
     void applyCommand(const Command& command, uint64_t id);
+    // One game second. `keepEvents`: the events of the steps before it in this Sim::step stay (a skip's batch).
+    void stepOnce(bool keepEvents);
     void commandFailed(uint64_t id, std::string message);
     // ClimbCommand (U17): sets the controlled pawn off up or down the stairs or ladder at its cell.
     bool startClimb(Entity pawn, float dx, float dy, std::string& error);
@@ -544,6 +550,7 @@ private:
     std::unique_ptr<DisasterSystem> disasters_;  // T3, after the narrator and everything it touches
     std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
     std::unique_ptr<ResonanceSystem> resonance_;  // after the fighters and the job system it holds
+    std::unique_ptr<TravelSystem> travel_;    // after nearly everything: it asks the others about threats
 };
 
 }  // namespace colony
