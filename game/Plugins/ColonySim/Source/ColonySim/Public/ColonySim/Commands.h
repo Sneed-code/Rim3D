@@ -375,6 +375,15 @@ struct StartRaidCommand {
     int edge = -1;
 };
 
+// Chitinid and Remnant threats (docs/design/monsters.md). `kind` is "Infestation" (brood mounds grow
+// near the colony and their insects hunt) or "RemnantCluster" (mechanoids walk in at `edge`, as for
+// StartRaidCommand), worth `points` (0: what the colony is worth now).
+struct StartThreatCommand {
+    std::string kind = "Infestation";
+    float points = 0.0f;
+    int edge = -1;
+};
+
 // The colony alarm: on calls every colonist to its defense role, off sends them back to work. It
 // also sounds by itself when a colonist spots an enemy, and stops when the enemies are gone or
 // fleeing; one the player sounded stays on until the player stops it. Fails if it already is.
@@ -743,6 +752,21 @@ struct StartStrategyRaidCommand {
     float hour = -1.0f;
 };
 
+// Surgery (task H3, docs/design/surgery.md): plans an operation on a patient. `recipe` is a Recipes defName with a `surgery`
+// block (AmputateLimb, RemoveBodyPart, InstallPegLeg...), `part` the body part's index in the patient's Bodies def. Fails if the
+// operation can't be done on that part, is planned already, or isn't researched.
+struct AddOperationCommand {
+    Entity pawn = kNoEntity;
+    std::string recipe;
+    int part = 0;
+};
+
+// Takes a planned operation off the patient.
+struct RemoveOperationCommand {
+    Entity pawn = kNoEntity;
+    uint32_t operation = 0;
+};
+
 // P5 (docs/design/skip-travel.md). Skips the night: game time runs on in batches until the sleeping hours end, with the
 // narrator held. Fails in daytime, when a colonist who should be asleep isn't in bed yet, when nobody is asleep, and
 // while anything threatens the colony (a raid, an enemy, a fire, a mental break). The colonist under control is let go.
@@ -771,7 +795,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ReloadCommand, AddBillCommand,
                              RemoveBillCommand, SetBillCommand, HandsOnCommand, FlickCommand, ShortCircuitCommand,
                              PlaceFloorCommand, AddFilthCommand,
-                             SetResearchCommand, UnlockResearchCommand, StartRaidCommand, SoundAlarmCommand,
+                             SetResearchCommand, UnlockResearchCommand, StartRaidCommand, StartThreatCommand, SoundAlarmCommand,
                              SetDefenseRoleCommand, MarkShelterCommand, ThrowCommand, ExplodeCommand,
                              MeleeCommand, DodgeRollCommand,
                              SetOutfitCommand, EditOutfitCommand, AddOutfitCommand, RemoveOutfitCommand,
@@ -785,7 +809,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
                              MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand,
                              SetNarratorCommand, FireIncidentCommand, ContractDiseaseCommand, StartStrategyRaidCommand,
-                             ShipCommand, QuestCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand>;
+                             ShipCommand, QuestCommand, AddOperationCommand, RemoveOperationCommand, SkipNightCommand,
+                             FastTravelCommand, CancelSkipCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

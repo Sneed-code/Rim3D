@@ -75,6 +75,7 @@ struct CombatModel {
         // hit on that hitbox can land on (by their share of the body), e.g. a hand and its fingers.
         std::vector<std::vector<int>> landsOn;  // by part index
         std::vector<BodyPartInfo> parts;
+        float natural[3] = {0, 0, 0};  // race.armor sharp, blunt, heat: a hide or hull under any apparel
     };
 
     std::vector<Gun> guns;          // by Things DefId value
@@ -368,6 +369,9 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
             const Def* boxes = defs.find("Hitboxes", def.text("race.hitboxes"));
             Kind& k = kinds[id.value];
             k.parts = health.bodyParts(id);
+            k.natural[0] = static_cast<float>(def.number("race.armor.sharp", 0.0));
+            k.natural[1] = static_cast<float>(def.number("race.armor.blunt", 0.0));
+            k.natural[2] = static_cast<float>(def.number("race.armor.heat", 0.0));
             if (boxes == nullptr || k.parts.empty()) {
                 continue;
             }
@@ -1409,11 +1413,11 @@ PawnHitResult CombatSystem::armorPass(Entity pawn, int part, DefId damageType, f
     const CombatModel::ArmorKind armorKind =
         damageType.value < model_->armorKind.size() ? model_->armorKind[damageType.value] : CombatModel::ArmorKind::None;
     const Gear* gear = reg.try_get<Gear>(pawn);
-    if (gear == nullptr || armorKind == CombatModel::ArmorKind::None) {
+    if (armorKind == CombatModel::ArmorKind::None) {
         return result;
     }
     std::vector<std::pair<int, Entity>> layers;
-    for (const Entity worn : gear->apparel) {
+    for (const Entity worn : gear != nullptr ? gear->apparel : std::vector<Entity>{}) {
         const CombatModel::Apparel* a = model_->wear(reg.get<Thing>(worn).def);
         if (a == nullptr) {
             continue;
@@ -1452,6 +1456,20 @@ PawnHitResult CombatSystem::armorPass(Entity pawn, int part, DefId damageType, f
         }
         if (roll < armor) {
             wearOut(worn, result.amount);
+            result.amount *= 0.5f;
+            if (armorKind == CombatModel::ArmorKind::Sharp && model_->bluntDamage.valid()) {
+                result.damageType = model_->bluntDamage;
+            }
+        }
+    }
+    // The body's own armor (mechanoid hulls, chitin) is the innermost layer; nothing wears out.
+    const float natural = std::max(0.0f, kind->natural[static_cast<size_t>(armorType)] - penetration);
+    if (natural > 0.0f) {
+        const float roll = rng.unit();
+        if (roll < natural * 0.5f) {
+            result.deflected = true;
+            result.amount = 0.0f;
+        } else if (roll < natural) {
             result.amount *= 0.5f;
             if (armorKind == CombatModel::ArmorKind::Sharp && model_->bluntDamage.valid()) {
                 result.damageType = model_->bluntDamage;

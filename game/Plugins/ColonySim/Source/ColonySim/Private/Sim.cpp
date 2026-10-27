@@ -34,6 +34,7 @@
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Social.h"
 #include "ColonySim/Medicine.h"
+#include "ColonySim/Surgery.h"
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Quests.h"
 #include "ColonySim/Ship.h"
@@ -50,11 +51,13 @@
 #include "ColonySim/RoomStats.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Snapshot.h"
+#include "ColonySim/Monsters.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/RoofCollapse.h"
 #include "ColonySim/UpperFloors.h"
 #include "ColonySim/Weather.h"
 #include "ColonySim/Zones.h"
+#include "ColonySim/Disasters.h"
 #include "ColonySim/Narrator.h"
 #include "MovementSystem.h"
 
@@ -224,6 +227,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     recreation_->setRooms(rooms_.get());
     research_ = std::make_unique<ResearchSystem>(*things_, *defs_);
     medicine_ = std::make_unique<MedicineSystem>(*things_, *defs_);
+    surgery_ = std::make_unique<SurgerySystem>(*things_, *defs_, *health_, research_.get());
     talents_ = std::make_unique<TalentSystem>(*things_, *defs_);
     temperature_ = std::make_unique<TemperatureSystem>(map_, *things_, *rooms_, *health_, *defs_,
                                                        splitMix64(settings.seed ^ 0x74656D70ULL));
@@ -269,6 +273,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setRooms(rooms_.get());
     jobs_->setResearch(research_.get());
     jobs_->setMedicine(medicine_.get());
+    jobs_->setSurgery(surgery_.get());
+    jobs_->setRoomStats(roomStats_.get());
     jobs_->setTalents(talents_.get());
     jobs_->setFilth(filth_.get());
     jobs_->setApparel(apparel_.get());
@@ -320,6 +326,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     raids_ = std::make_unique<RaidSystem>(*things_, map_, *rooms_, *combat_, *health_, *jobs_, *fighters_, *defs_, time_, rng_);
     raids_->setEventLog(&events_);
     raids_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
+    monsters_ = std::make_unique<MonsterSystem>(*things_, map_, *combat_, *health_, *fighters_, *raids_, *animals_, *defs_, time_, rng_);
     prisoners_ = std::make_unique<PrisonerSystem>(*things_, map_, *combat_, *health_, *jobs_, *fighters_, *raids_, *defs_, time_, rng_);
     prisoners_->setEventLog(&events_);
     jobs_->setPrisoners(prisoners_.get());
@@ -358,7 +365,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
                                            splitMix64(settings.seed ^ 0x6D656C6565ULL));
     melee_->setEventLog(&events_);
     fighters_->setMelee(melee_.get());
-    upperFloors_ = std::make_unique<UpperFloors>(map_, *rooms_, *things_);
+    upperFloors_ = std::make_unique<UpperFloors>(map_, *rooms_, *things_, plants_.get());
     roofCollapse_ = std::make_unique<RoofCollapse>(map_, *rooms_, *things_, *health_, *defs_);
     roofCollapse_->setEventLog(&events_);
     roofCollapse_->setInterruptHandler([this](Entity pawn, const std::string& why) { jobs_->interrupt(pawn, why); });
@@ -376,6 +383,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     fighters_->setDefense(defense_.get());
     narrator_ = std::make_unique<NarratorSystem>(*raids_, *defs_, time_, settings.seed);
     narrator_->setEventLog(&events_);
+    disasters_ = std::make_unique<DisasterSystem>(*narrator_, *power_, *weather_, *plants_, *farming_, *things_, *health_, *mood_,
+                                                  *animals_, *fire_, *combat_, map_, *defs_, time_, settings.seed);
+    disasters_->setEventLog(&events_);
     narrator_->setWorker("QuestOffer", [this](IncidentFiring& f) {
         uint32_t id = 0;
         if (!quests_->offerRandom(id, f.error)) {
@@ -768,7 +778,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         PrisonerMode mode = PrisonerMode::NoInteraction;
         std::string why;
         if (!prisonerModeFromName(prisonerMode->mode, mode)) {
-            commandFailed(id, "no prisoner mode '" + prisonerMode->mode + "' (NoInteraction, ReduceResistance, AttemptRecruit or Release)");
+            commandFailed(id, "no prisoner mode '" + prisonerMode->mode + "' (NoInteraction, ReduceResistance, AttemptRecruit, Release or Execute)");
         } else if (!prisoners_->setMode(prisonerMode->pawn, mode, why)) {
             commandFailed(id, why);
         }
@@ -1135,6 +1145,14 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         } else if (!jobs_->bills().setOptions(billOptions->building, billOptions->bill, options, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* addOperation = std::get_if<AddOperationCommand>(&command)) {
+        if (surgery_->add(addOperation->pawn, addOperation->recipe, addOperation->part, error) == 0) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* removeOperation = std::get_if<RemoveOperationCommand>(&command)) {
+        if (!surgery_->remove(removeOperation->pawn, removeOperation->operation, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* moveBill = std::get_if<MoveBillCommand>(&command)) {
         if (!jobs_->bills().moveBill(moveBill->building, moveBill->bill, moveBill->index, error)) {
             commandFailed(id, error);
@@ -1169,6 +1187,13 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
     } else if (const auto* raid = std::get_if<StartRaidCommand>(&command)) {
         if (!raids_->startRaid(raid->faction, raid->points, raid->edge, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* threat = std::get_if<StartThreatCommand>(&command)) {
+        const bool ok = threat->kind == "Infestation"      ? monsters_->infest(threat->points, error)
+                        : threat->kind == "RemnantCluster" ? monsters_->remnantCluster(threat->points, threat->edge, error)
+                                                           : (error = "no such threat '" + threat->kind + "'", false);
+        if (!ok) {
             commandFailed(id, error);
         }
     } else if (const auto* alarm = std::get_if<SoundAlarmCommand>(&command)) {
@@ -1365,6 +1390,7 @@ void Sim::stepOnce(bool keepEvents) {
     explosives_->step(rng_);
     animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
     defense_->step(rng_);
+    monsters_->step(events_, 0);  // mounds make jelly, brood and spread; insects hunt (docs/design/monsters.md)
     {
         // Blasts of Burn damage start fires; a pawn that catches fire stops what it was doing.
         fire_->step(time_.seconds, 0);
@@ -1402,6 +1428,7 @@ void Sim::stepOnce(bool keepEvents) {
     }
     if (!travel_->skipping()) {
         narrator_->step();  // after the clock: incidents come on the narrator's checks (T1)
+        disasters_->step();  // T3: conditions end, work and strike (held while skipping, like the narrator)
     }
     travel_->afterStep();
     narrator_->postpone(travel_->takeHold());  // a skip that ended (here or by a command) held the narrator back
@@ -1999,6 +2026,7 @@ uint64_t Sim::stateHash() const {
     roofCollapse_->hashState(h);
     spoilage_->hashState(h);
     narrator_->hashState(h);
+    disasters_->hashState(h);
     travel_->hashState(h);
     crafting_->hashState(h);
     farming_->hashState(h);
@@ -2300,11 +2328,17 @@ uint64_t Sim::stateHash() const {
                 h.add(static_cast<int>(missing.part));
                 h.add(missing.tendQuality);
             }
+            h.add(static_cast<uint64_t>(health->added.size()));
+            for (const AddedPart& added : health->added) {
+                h.add(static_cast<int>(added.part));
+                h.add(added.hediff.value);
+            }
             h.add(health->bloodLoss);
             h.add(health->dead);
             h.add(static_cast<int>(health->cause));
         }
         medicine_->hashPawn(e, h);
+        surgery_->hashPawn(e, h);
         combat_->hashThing(e, h);
         explosives_->hashThing(e, h);
         fighters_->hashThing(e, h);
