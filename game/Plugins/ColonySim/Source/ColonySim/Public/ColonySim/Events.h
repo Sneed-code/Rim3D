@@ -60,6 +60,8 @@ enum class EventType : uint8_t {
     MeleeHit,        // the hit moment of a swing: `message` says "hit", "deflected", "blocked", "dodged" or "missed"
     PawnTended,      // a doctor finished tending a patient (docs/design/medicine.md)
     PawnScarred,     // a healed injury left a scar or an old wound (docs/design/medicine.md)
+    PawnSick,        // a pawn caught a disease, or a wound turned infected (docs/design/diseases.md)
+    PawnRecovered,   // a pawn's disease ran its course (docs/design/diseases.md)
     ApparelDestroyed,  // a worn piece wore out or was shot to pieces: `thing` the wearer, `def` the piece's def (docs/design/apparel.md)
     WeatherChanged,  // the weather began to change into another kind (docs/design/weather.md)
     SeasonChanged,   // a new season began
@@ -73,6 +75,9 @@ enum class EventType : uint8_t {
     TrapRearmed,     // a sprung trap was set again
     WeaponSwitched,  // a pawn finished switching weapons (P1, docs/design/weapons.md): `thing` the pawn, `def` the weapon now in its hands, `target` that weapon
     PlantSown,       // a colonist sowed a crop in a growing zone: `cell`, `def` the crop (docs/design/farming.md)
+    Letter,          // the narrator sent an incident (docs/design/narrator.md): `def` the Incidents def, `message` the
+                     // letter's text, `count` its LetterKind, `amount` its threat points, `cell` where (if it has a
+                     // place), `squad` a raid's squad
     FireStarted,     // a fire began in a cell (docs/design/fire.md)
     FireOut,         // a fire went out: burnt out, rained out or beaten out
     PawnCaughtFire,  // a pawn is on fire
@@ -95,6 +100,37 @@ enum class EventType : uint8_t {
     PawnMentalBreakEnded,  // it ended: `message` says how ("recovered", "downed", "died", "stopped")
     PawnInsulted,          // a pawn in an insulting spree insulted another
     PawnLeftColony,        // a pawn gave up and walked off the map for good
+    VisitArrived,          // visitors, a trade caravan or an orbital trader came (C23, docs/design/trade.md): `squad` the visit id, `thing` the trader pawn (none for visitors and a ship), `amount` the VisitKind (0 visitors, 1 caravan, 2 orbital), `message` the Factions defName
+    VisitLeft,             // a visit is over and gone: `squad` the visit id, `amount` its VisitKind, `message` the faction
+    TradeDone,             // the colony traded: `squad` the visit id, `thing` the trader, `amount` the silver the colony got (minus: paid), `message` the faction (and what was given free)
+    GoodwillChanged,       // a faction's goodwill moved: `amount` by how much, `message` the Factions defName
+    PawnTookDrug,          // a pawn took a dose of a drug (docs/design/drugs.md): `thing` the pawn, `def` the drug's Things def, `amount` the high's severity now, `cell` where
+    PawnAddicted,          // it became addicted: `thing` the pawn, `def` the Chemicals def, `message` its defName, `amount` the need
+    AddictionCured,        // an addiction healed away: the same fields
+    DrugOverdose,          // a dose took the overdose past minor (0.5), major (0.75) or fatal (1): `thing` the pawn, `def` the drug, `amount` the severity, `message` "minor", "major" or "fatal"
+    DisasterStarted,       // a disaster condition began (T3, docs/design/disasters.md): `message` its name ("solar flare", "toxic fallout", "volcanic winter", "flashstorm", "psychic drone", "psychic soothe"), `count` its DisasterKind, `amount` its length in game hours, `cell` a flashstorm's centre
+    DisasterEnded,         // it is over (same fields)
+    LightningStrike,       // a flashstorm's bolt hit `cell` at (x, y, z); the blast and fires that follow are their own events
+    QuestOffered,          // a quest was offered (docs/design/quests.md): `count` its id, `def` its Quests def, `message` the def's name
+    QuestAccepted,         // the player accepted it
+    QuestDeclined,         // the player declined it
+    QuestExpired,          // nobody answered in time (or, once accepted, the raid could not be sent): `message` says which
+    QuestCompleted,        // it was done and paid: `message` says how ("joined", "delivered", "the raid is over", "no raid came"); `squad` the raid
+    QuestFailed,           // it went wrong: `message` says why
+    DropPodLanded,         // a raider's pod came down (F12, docs/design/raid-strategies.md): `thing` the raider, `cell` where, `squad`
+    SappersBreaking,       // raiders began digging through a wall (F12): `cell` the wall, `squad`, `count` how many dig
+    ItemStolen,            // a thief lifted loose items (F12): `thing` the thief, `target` the item it carries, `def` its def, `count`
+    PawnKidnapped,         // a raider lifted a downed colonist (F12): `thing` the kidnapper, `target` the colonist. `message` "left the map" when it got away with it
+    InspirationStarted,    // a colonist became inspired (docs/design/inspirations.md): `thing` the pawn, `message` the Inspirations defName, `amount` its days
+    InspirationEnded,      // it ended: `message` "why:defName" (used, expired, dismissed), `amount` how many game seconds it lasted
+    ShipReactorStarted,    // the ship reactor began its activation (docs/design/ship.md): `thing` the reactor, `amount` days it takes
+    ShipWave,              // a wave of raiders came because of the reactor: `amount` the wave number (the raid's own events follow)
+    ShipReactorReady,      // the activation finished: the ship can launch
+    ShipReactorLost,       // the reactor was destroyed or taken down: the activation is lost, `message` says which
+    ShipLaunched,          // the ship left and the game is won: `amount` how many pawns went (a PawnLeftMap each)
+    PrisonerExecuted,      // a warden executed a prisoner (docs/design/prisoners.md): `thing` the prisoner (dead), `target` the warden, `message` "guilty" or "innocent"
+    OrganHarvested,        // an organ was taken from a living pawn: `thing` the victim, `target` the surgeon, `part` the body part, `message` "colonist" or "prisoner" (anyone who is not one of ours)
+    OperationDone,      // a doctor finished an operation (H3, docs/design/surgery.md): `thing` the doctor, `target` the patient, `def` the Recipes def, `part` the body part, `amount` the success chance, `message` "success", "failed" or "the patient died"
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -144,6 +180,7 @@ enum class PawnAction : uint8_t {
     DropCorpse,   // put the carried `target`, a corpse, down in `cell`
     Rearm,        // started setting the sprung trap `target` again (once per job; the work goes on until its JobEnded)
     Punch,        // swung a fist at `target`, a pawn or a thing (a tantrum or berserk break: docs/design/mental-breaks.md)
+    Operate,      // started an operation on `target`, a patient in bed (once per job; the work goes on until its JobEnded)
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
@@ -181,6 +218,8 @@ struct Event {
     // PawnTended: `thing` the doctor, `target` the patient, `def` the medicine used (none if there was none),
     // `amount` the tend quality (0 to 1.3), `message` "medicine" or "no medicine", "self" if the doctor tended itself.
     // PawnScarred: `thing` the pawn, `def` the Scar or OldWound hediff, `part` the body part, `amount` its severity.
+    // PawnSick: `thing` the pawn, `def` the Disease hediff, `part` the wound's body part for an infection (-1 otherwise),
+    // `amount` its severity. PawnRecovered: `thing` the pawn, `def` the disease, `part` as above.
     // AnimalTamed, AnimalReleased, AnimalSlaughtered, AnimalStarved: `thing` the animal, `target` the colonist
     // (none for a release or a starving), `cell` where. AnimalTrained: also `message` the trick (Trainable name),
     // `amount` the steps it has now and `part` the steps it needs. AnimalAttemptFailed: `message` "tame" or the

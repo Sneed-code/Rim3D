@@ -1,13 +1,13 @@
 [
   { "defName": "DamageTypeBase", "abstract": true, "source": "RimWorld wiki", "hediffSolid": "Crack", "ours": ["reachesInside"], "unverified": ["hediffSolid"], "reachesInside": false, "armorCategory": "Sharp" },
-  { "defName": "Bullet", "parent": "DamageTypeBase", "reachesInside": true, "label": "bullet", "hediff": "Gunshot" },
-  { "defName": "Cut", "parent": "DamageTypeBase", "reachesInside": true, "label": "cut", "hediff": "Cut" },
-  { "defName": "Stab", "parent": "DamageTypeBase", "reachesInside": true, "label": "stab", "hediff": "Stab" },
-  { "defName": "Scratch", "parent": "DamageTypeBase", "label": "scratch", "hediff": "Scratch" },
-  { "defName": "Bite", "parent": "DamageTypeBase", "label": "bite", "hediff": "Bite" },
-  { "defName": "Blunt", "parent": "DamageTypeBase", "label": "blunt", "armorCategory": "Blunt", "hediff": "Bruise" },
-  { "defName": "Crush", "parent": "DamageTypeBase", "label": "crush", "armorCategory": "Blunt", "hediff": "Crush" },
-  { "defName": "Bomb", "parent": "DamageTypeBase", "label": "bomb", "hediff": "Shredded", "source": "RimWorld wiki",
+  { "defName": "Bullet", "visual": {"sound": {"hit": "Flesh_Bullet"}}, "parent": "DamageTypeBase", "reachesInside": true, "label": "bullet", "hediff": "Gunshot" },
+  { "defName": "Cut", "visual": {"sound": {"hit": "Flesh_Cut"}}, "parent": "DamageTypeBase", "reachesInside": true, "label": "cut", "hediff": "Cut" },
+  { "defName": "Stab", "visual": {"sound": {"hit": "Flesh_Stab"}}, "parent": "DamageTypeBase", "reachesInside": true, "label": "stab", "hediff": "Stab" },
+  { "defName": "Scratch", "visual": {"sound": {"hit": "Flesh_Bite"}}, "parent": "DamageTypeBase", "label": "scratch", "hediff": "Scratch" },
+  { "defName": "Bite", "visual": {"sound": {"hit": "Flesh_Bite"}}, "parent": "DamageTypeBase", "label": "bite", "hediff": "Bite" },
+  { "defName": "Blunt", "visual": {"sound": {"hit": "Flesh_Blunt"}}, "parent": "DamageTypeBase", "label": "blunt", "armorCategory": "Blunt", "hediff": "Bruise" },
+  { "defName": "Crush", "visual": {"sound": {"hit": "Flesh_Blunt"}}, "parent": "DamageTypeBase", "label": "crush", "armorCategory": "Blunt", "hediff": "Crush" },
+  { "defName": "Bomb", "visual": {"sound": {"hit": "Flesh_Blunt", "explosion": "Explosion_Blast"}}, "parent": "DamageTypeBase", "label": "bomb", "hediff": "Shredded", "source": "RimWorld wiki",
     "explosion": { "buildingFactor": 2, "impassableFactor": 2, "wallFactor": 2, "fragmentsMin": 2, "fragmentsMax": 4, "fragmentMinDamage": 15 } },
-  { "defName": "Burn", "parent": "DamageTypeBase", "label": "burn", "armorCategory": "Heat", "hediff": "Burn", "hediffSolid": "Burn" }
+  { "defName": "Burn", "visual": {"sound": {"hit": "Flesh_Burn", "explosion": "Explosion_Fire"}}, "parent": "DamageTypeBase", "label": "burn", "armorCategory": "Heat", "hediff": "Burn", "hediffSolid": "Burn" }
 ]

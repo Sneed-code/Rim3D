@@ -2,7 +2,7 @@
   {
     "defName": "Gun_MiniTurret", "label": "mini-turret gun", "source": "RimWorld wiki",
     "category": "Item", "stackLimit": 1, "turretGun": true,
-    "visual": {"parts": [{"shape": "box", "size": [0.5, 0.06, 0.06], "at": [0.1, 0, 0.04], "color": [0.2, 0.2, 0.22]}]},
+    "visual": {"sound": {"shot": "Shot_Turret"},"parts": [{"shape": "box", "size": [0.5, 0.06, 0.06], "at": [0.1, 0, 0.04], "color": [0.2, 0.2, 0.22]}]},
     "stats": { "maxHitPoints": 100, "rangedWeaponCooldown": 144, "accuracyTouch": 0.85, "accuracyShort": 0.8, "accuracyMedium": 0.7, "accuracyLong": 0.6 },
     "verbs": [ { "range": 28.9, "warmupTime": 30, "burstShotCount": 3, "secondsBetweenBurstShots": 5, "defaultProjectile": "Bullet_MiniTurret" } ],
     "unverified": ["stats", "verbs"],
@@ -24,10 +24,10 @@
   },
   {
     "defName": "FoamTurret", "parent": "BuildingBase", "label": "foam turret", "source": "RimWorld wiki",
-    "researchPrerequisite": "Firefoam",
+    "researchPrerequisite": "FoamTurret",
     "size": [1, 1], "passability": "Impassable", "fillPercent": 0.4, "designationCategory": "Security",
     "costs": { "Steel": 100, "ComponentIndustrial": 2 },
-    "visual": { "parts": [{"shape": "box", "size": [0.7, 0.7, 0.35], "color": [0.75, 0.15, 0.12]}, {"shape": "cylinder", "radius": 0.2, "height": 0.2, "at": [0, 0, 0.35], "color": [0.85, 0.85, 0.88]}, {"shape": "box", "size": [0.12, 0.6, 0.12], "at": [0, 0.25, 0.45], "color": [0.85, 0.85, 0.88]}] },
+    "visual": {"sound": {"shot": "Shot_Foam"}, "parts": [{"shape": "box", "size": [0.7, 0.7, 0.35], "color": [0.75, 0.15, 0.12]}, {"shape": "cylinder", "radius": 0.2, "height": 0.2, "at": [0, 0, 0.35], "color": [0.85, 0.85, 0.88]}, {"shape": "box", "size": [0.12, 0.6, 0.12], "at": [0, 0.25, 0.45], "color": [0.85, 0.85, 0.88]}] },
     "stats": { "maxHitPoints": 100, "workToBuild": 1200, "flammability": 0.0 },
     "power": { "consumption": 100 },
     "firefoamTurret": { "range": 20, "radius": 2.5, "cooldown": 10 },
@@ -46,7 +46,7 @@
   },
   {
     "defName": "TrapIEDExplosive", "parent": "BuildingBase", "label": "IED trap", "source": "RimWorld wiki",
-    "researchPrerequisite": "Machining",
+    "researchPrerequisite": "IEDs",
     "size": [1, 1], "designationCategory": "Security",
     "costs": { "Steel": 7 },
     "visual": { "parts": [{"shape": "cylinder", "radius": 0.25, "height": 0.12, "color": [0.35, 0.3, 0.2]}, {"shape": "box", "size": [0.12, 0.12, 0.05], "at": [0, 0, 0.12], "color": [0.7, 0.15, 0.1]}] },

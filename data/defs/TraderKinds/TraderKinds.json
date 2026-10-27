@@ -26,7 +26,7 @@
   {
     "defName": "ShamanMerchant", "source": "RimWorld wiki", "label": "clan shaman",
     "silver": [400, 900],
-    "stock": [ { "thing": "WoodLog", "count": [300, 600] }, { "thing": "Steel", "count": [100, 200] }, { "thing": "MedicineIndustrial", "count": [5, 15] }, { "thing": "RawBerries", "count": [100, 300] } ],
+    "stock": [ { "thing": "WoodLog", "count": [300, 600] }, { "thing": "Steel", "count": [100, 200] }, { "thing": "MedicineIndustrial", "count": [5, 15] }, { "thing": "RawBerries", "count": [100, 300] }, { "thing": "Pemmican", "count": [50, 150] } ],
     "buys": ["Neolithic", "Herbs", "Drugs", "Medicine"], "sells": ["Neolithic", "Herbs", "Drugs", "Medicine"],
     "unverified": ["silver", "stock", "buys", "sells"],
     "notes": "Tribal, lower-tech goods: herbs and leaf drugs, and some high-tech medicine. Wood 500 to 600 is the wiki's neolithic base figure; the rest is ours."
