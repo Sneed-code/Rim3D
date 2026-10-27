@@ -30,6 +30,8 @@ run (power) but burns no fuel. One colonist at a time per bench.
 | item with `stats.workToMake` and `costStuffCount` (clothes, melee weapons) | `workToMake` x 0.25 | `costStuffCount` x 0.25 of the stuff it is made of |
 | anything else (guns, flak vest, helmets) | 300 per kg of mass | 3 per kg of Steel (weapons) or Cloth (apparel) |
 
+**Apparel is cheaper since 2026-10-27** (sneed): a tenth instead of a quarter, rounded down, 1 cloth and 100 work per kg for apparel with no stuff, and the share lost is the bigger of lost hit points and lost durability; one repair brings both back ([apparel-durability.md](apparel-durability.md)). The table and the vest example below are the weapon numbers and the old apparel ones.
+
 A part-damaged item takes the share it lacks (`(max - current) / max`), the work rounded up, the material rounded up to
 at least 1. A flak vest (4 kg) at half hit points: 600 s of work and 6 cloth. A rifle (3.5 kg) at 40 of 100: 630 s and 7 steel.
 

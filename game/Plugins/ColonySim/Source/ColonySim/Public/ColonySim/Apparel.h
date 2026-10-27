@@ -44,6 +44,13 @@ struct Quality {
     uint8_t level = 2;
 };
 
+// How worn a piece of apparel is, apart from its hit points (docs/design/apparel-durability.md): a share of full,
+// 0 to 1, capped by the item's hit-point share (`ApparelStats::condition`). Wearing it and the hits its armor
+// takes wear this down, not the hit points; at 0 the piece is tattered and needs repair. No component: full.
+struct Durability {
+    float share = 1.0f;
+};
+
 // Worn by a human as they died: taints the clothes for good (RimWorld wiki, "Tainted").
 struct Tainted {};
 
@@ -58,8 +65,8 @@ struct PawnOutfit {
     int64_t nextCheck = 0;
 };
 
-// An outfit policy: which apparel a pawn may wear. A def is allowed unless it is listed; the hit points
-// (as a share of the maximum) and quality must be in range. Ids are 1, 2, 3... in the order made.
+// An outfit policy: which apparel a pawn may wear. A def is allowed unless it is listed; the durability
+// (ApparelStats::condition; the fields keep their old names) and quality must be in range. Ids are 1, 2, 3... in the order made.
 struct OutfitPolicy {
     uint32_t id = 0;
     std::string name;
@@ -72,12 +79,12 @@ struct OutfitPolicy {
 
 // The numbers from the ApparelRules def (RimWorld's where the wiki gives them, the rest ours).
 struct COLONY_API ApparelRules {
-    float absorbDamageDivisor = 4.0f;       // apparel loses 1 hit point per this much damage it absorbs
-    float wearHpLossChancePerDay = 0.4f;    // each worn piece: chance per day to lose 1 hit point
-    float deathHpLossMin = 0.15f;           // worn apparel loses this share of its hit points when the wearer dies...
+    float absorbDamageDivisor = 4.0f;       // apparel wears 1 hit point's worth of durability per this much damage it absorbs
+    float wearHpLossChancePerDay = 0.4f;    // each worn piece: hit points' worth of durability worn per day (RimWorld's chance)
+    float wearFactor = 1.0f;                // times that (ours, to tune)
+    float deathHpLossMin = 0.15f;           // worn apparel loses this share of its durability when the wearer dies...
     float deathHpLossMax = 0.40f;           // ...up to this share
-    float rattyBelow = 0.5f;                // a worn piece at or under this share of its hit points: ratty
-    float tatteredBelow = 0.25f;            // under this share: tattered
+    float tatteredBenefitFactor = 0.8f;     // a piece at 0 durability gives this share of its armor and insulation (ours)
     int taintedStageCap = 4;
     std::string defaultOutfit = "Anything";
     int wearSteps = 60;                     // putting on or taking off one piece
@@ -117,6 +124,14 @@ public:
     int maxHitPoints(DefId def, DefId stuff) const;
     // A share of its maximum, 1 when it has no hit points.
     static float hitPointShare(const entt::registry& reg, Entity item);
+    // The item's durability, 0 to 1: its own wear, capped by its hit-point share (an item at 70% of its hit points
+    // is at most 70% durable). 1 for an item with neither.
+    static float condition(const entt::registry& reg, Entity item);
+    // At 0 durability: tattered, worth `tatteredBenefitFactor` of its armor and insulation.
+    static bool tattered(const entt::registry& reg, Entity item);
+    // Basic clothes (`apparel.fragile`): worn at 0 durability, further wear takes hit points and can destroy them.
+    bool fragile(DefId def) const { return isApparel(def) && apparel_[def.value].fragile; }
+    float tatteredFactor() const { return tatteredFactor_; }
 
     int qualityLevels() const { return static_cast<int>(qualityArmor_.size()); }
     int defaultQuality() const { return defaultQuality_; }
@@ -127,6 +142,7 @@ private:
     struct Apparel {
         bool valid = false;
         bool stuffRequired = false;
+        bool fragile = false;
         float fixedArmor[3] = {0.0f, 0.0f, 0.0f};
         float armorMultiplier = 1.0f;
         float coldMultiplier = 0.0f;
@@ -151,6 +167,7 @@ private:
     std::vector<float> qualityInsulation_;
     std::vector<std::string> qualityNames_;
     int defaultQuality_ = 2;
+    float tatteredFactor_ = 0.8f;
     std::vector<std::string> none_;
     std::string noName_;
 };
@@ -209,8 +226,10 @@ public:
     const std::vector<Entity>& worn(Entity pawn) const;
     // Total insulation of everything worn, degrees (E2 adds it to the comfortable range).
     void insulation(Entity pawn, float& cold, float& heat) const;
-    // The share of its hit points the worst worn piece has left; 1 when it wears nothing.
+    // The durability (ApparelStats::condition) of the worst worn piece; 1 when it wears nothing.
     float worstCondition(Entity pawn) const;
+    // Wears a piece down by a share of its full durability (never below 0; hit points are not touched).
+    void wearDown(Entity item, float share);
 
     // ---- Strip marks --------------------------------------------------------------------------
     bool markStrip(Entity target, bool on, std::string& error);
@@ -227,7 +246,7 @@ public:
     // Registers the situations "noApparel", "apparelOnNudist", "apparelTattered", "apparelTainted" and "apparelHumanLeather".
     void registerSituations(MoodSystem& mood) const;
 
-    // One step, after combat: the dead lose hit points on their clothes and taint it, worn clothes wear
+    // One step, after combat: the dead wear their clothes down and taint them, worn clothes wear
     // (once an hour), marks on pawns that need no stripping go. `now` is the game second of the step.
     void step(int64_t now, Rng& rng, const std::vector<Event>& events);
 
