@@ -36,6 +36,7 @@ namespace colony { class Map; }
  * fire (the sim's lamps and fires as lights, flames, embers and smoke; burning pawns; burnt ground and ash),
  * levels (upper floors, stairs and ladders drawn, the overseer's Page Up / Page Down cutaway and picking, climbing stairs in direct mode),
  * perf (G3: the 1 km performance colony at 3x with rain, a fire and a 40-pirate raid; frame, GPU and sim cost).
+ * sound (V20: the cues and their files, the voice budget, walls muffling, footsteps, loops, ambience, weather, music, the mixer).
  * Optional: -SmokeTimeout=<seconds> (default 300) fails a run that hangs.
  * To add a test: write a Build<Name>Phases() and add a branch in OnWorldBeginPlay.
  * Run it with tools/smoke.ps1.
@@ -105,6 +106,7 @@ private:
 	void BuildFirePhases();         // SmokeTestFire.cpp
 	void BuildPerfPhases();         // SmokeTestPerf.cpp
 	void BuildFacesPhases();        // SmokeTestFaces.cpp
+	void BuildSoundPhases();        // SmokeTestSound.cpp
 	void StartPhase(int32 Index);
 	void FinishPhase();
 	void WriteResultsAndQuit();

@@ -26,5 +26,8 @@ public class Rim3D : ModuleRules
 
 		// Smoke tests (SmokeTest.cpp).
 		PrivateDependencyModuleNames.AddRange(new string[] { "AIModule", "ProceduralMeshComponent", "Json", "RenderCore", "RHI" });
+
+		// Sound (V20): the procedural voice waves.
+		PrivateDependencyModuleNames.Add("AudioExtensions");
 	}
 }
