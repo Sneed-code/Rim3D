@@ -326,6 +326,8 @@ private:
     // Tame animals (AnimalCare.cpp).
     void decideTamed(Entity e, Animal& a, const Kind& kind, Rng& rng);
     bool tamedMayStand(const AnimalCare* care, CellPos cell) const;
+    // Obedience: walks to the nearest drafted colonist; false if none is near.
+    bool followDrafted(Entity e, Animal& a, const Kind& kind, AnimalCare& care);
     bool findTamedFood(Entity e, Animal& a, const Kind& kind, const AnimalCare& care, Rng& rng, CellPos& out,
                        bool& isItem, bool& blocked) const;
     Entity edibleItemAt(Entity animal, CellPos cell) const;

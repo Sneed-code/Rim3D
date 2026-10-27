@@ -1635,6 +1635,8 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
+    ar.require(job.type <= JobType::RearmTrap, "the save file has a bad job");
+    ar.require(job.type <= JobType::Party, "the save file has a bad job");
     ar.require(job.type <= JobType::StandBy, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
