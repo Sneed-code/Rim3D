@@ -382,6 +382,17 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["breakDef"] = c.breakDef;
+            } else if constexpr (std::is_same_v<Type, CreateAreaCommand>) {
+                j["name"] = c.name;
+            } else if constexpr (std::is_same_v<Type, PaintAreaCommand>) {
+                j["id"] = c.area;
+                j["area"] = replayRectJson(c.rect);
+                j["add"] = c.add;
+            } else if constexpr (std::is_same_v<Type, DeleteAreaCommand>) {
+                j["id"] = c.area;
+            } else if constexpr (std::is_same_v<Type, AssignAreaCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["id"] = c.area;
             } else if constexpr (std::is_same_v<Type, ContractDiseaseCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["disease"] = c.disease;
@@ -1394,6 +1405,32 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.pawn = static_cast<Entity>(pawn);
         out.command = std::move(c);
+    } else if (type == "CreateArea") {
+        CreateAreaCommand c;
+        if (!r.text(j, "name", c.name, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "PaintArea") {
+        PaintAreaCommand c;
+        if (!r.integer(j, "id", c.area, where) || !replayReadRect(r, j, where, c.rect) || !r.flag(j, "add", c.add, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "DeleteArea") {
+        DeleteAreaCommand c;
+        if (!r.integer(j, "id", c.area, where)) {
+            return false;
+        }
+        out.command = c;
+    } else if (type == "AssignArea") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        AssignAreaCommand c;
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "id", c.area, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = c;
     } else if (type == "ContractDisease") {
         uint32_t pawn = entt::to_integral(kNoEntity);
         ContractDiseaseCommand c;
