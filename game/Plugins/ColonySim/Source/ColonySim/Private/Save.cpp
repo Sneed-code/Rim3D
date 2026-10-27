@@ -1594,7 +1594,7 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
     }
     ar.value("dead", h.dead);
     ar.value("cause", h.cause);
-    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Surgery), "the save file has a bad cause of death");
+    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Executed), "the save file has a bad cause of death");
 
 }
 
@@ -2937,13 +2937,16 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.list("home", d.fire.home, [&](int& cell) { ar.value("cell", cell); });
         saveParts(ar, "burning", e, &SaveEntity::burning, [&](Burning& b) { ar.value("until", b.until); });
     });
-    ar.section("prisoners", 1, [&] {
+    ar.section("prisoners", 2, [&] {
         saveParts(ar, "prisoner", e, &SaveEntity::prisoner, [&](Prisoner& p) {
             ar.value("mode", p.mode);
             ar.value("resistance", p.resistance);
             ar.value("capturedAt", p.capturedAt);
             ar.value("nextChat", p.nextChat);
-            ar.require(static_cast<int>(p.mode) <= static_cast<int>(PrisonerMode::Release), "the save file has a bad prisoner mode");
+            if (ar.sectionVersion() >= 2) {  // executions
+                ar.value("guiltyUntil", p.guiltyUntil);
+            }
+            ar.require(static_cast<int>(p.mode) <= static_cast<int>(PrisonerMode::Execute), "the save file has a bad prisoner mode");
         });
         saveParts(ar, "prisonBed", e, &SaveEntity::prisonBed, [&](PrisonBed& b) { ar.value("marked", b.marked); });
     });
