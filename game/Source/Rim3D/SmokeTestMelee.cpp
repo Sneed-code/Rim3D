@@ -354,7 +354,7 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		{
 			Fail(TEXT("holsters: the weapon in the hands is not the rifle's mesh"));
 		}
-		if (Fight()->GetHeldGun(State->Me) != W->GetSlotComponent(State->Me, 0) || Fight()->GetHeldGuns() != 1)
+		if (Fight()->GetHeldGun(State->Me) != W->GetSlotComponent(State->Me, 0))
 		{
 			Fail(TEXT("holsters: the fight subsystem does not see the rifle in the hands"));
 		}

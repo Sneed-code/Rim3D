@@ -2,6 +2,7 @@
 // (docs/design/temperature.md "Seeking warmth", docs/design/weapons.md "Picking weapons up").
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
+#include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
@@ -153,4 +154,27 @@ TEST_CASE("Weapons: a colonist picks up a loose weapon for a slot it has nothing
     sim->stepMany(2500);  // a colonist looks for clothes and weapons every 1,200 steps when it finds none
     CHECK_FALSE(sim->things().spawned(shotgun));
     CHECK(sim->things().spawned(knife));
+}
+
+TEST_CASE("Weapons: an equip order takes a loose gun from a colonist that is only walking over to pick it up") {
+    auto sim = coldArmsSim(15.0f);
+    const Entity walker = coldArmsColonist(*sim, 20, 10);
+    const Entity player = sim->things().spawn("Human", CellPos{40, 40, 0});
+    const Entity rifle = sim->things().spawn("Gun_BoltActionRifle", CellPos{20, 50, 0});
+    COLDARMS_REQUIRE(rifle != kNoEntity);
+    const auto walking = [&] {
+        const Job& job = sim->things().registry().get<Worker>(walker).job;
+        return job.type == JobType::EquipWeapon && job.thing == rifle;
+    };
+    for (int i = 0; i < 600 && !walking(); ++i) {
+        sim->step();
+    }
+    COLDARMS_REQUIRE(walking());
+    sim->submit(EquipCommand{player, rifle});
+    sim->step();
+    CHECK(sim->things().registry().get<Gear>(player).weapon == rifle);
+    CHECK_FALSE(walking());
+    sim->stepMany(300);
+    CHECK(sim->combat().weaponIn(walker, WeaponSlot::Primary) == kNoEntity);
+    CHECK(sim->things().registry().get<Gear>(player).weapon == rifle);
 }
