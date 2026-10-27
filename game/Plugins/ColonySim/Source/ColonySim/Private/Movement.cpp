@@ -34,6 +34,11 @@ float terrainPathCost(Terrain t) {
             return 2.0f;
         case Terrain::Sand:
             return 4.0f;
+        case Terrain::Marsh:  // the Terrain defs: marshy soil, mud and shallow water cost 14, 14 and 30
+        case Terrain::Mud:
+            return 14.0f;
+        case Terrain::ShallowWater:
+            return 30.0f;
         case Terrain::UpperFloor:  // a built floor: no path cost, like RimWorld's constructed floors
             return 0.0f;
         case Terrain::Water:

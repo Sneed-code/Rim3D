@@ -183,7 +183,7 @@ private:
     std::vector<float> qualityBeauty_, qualityValue_;
     int defaultQuality_ = 2;
     std::vector<uint8_t> standable_, impassable_;
-    DefId groundDef_[7];  // by Terrain; Air and UpperFloor have none
+    DefId groundDef_[kTerrainCount];  // by Terrain; Air and UpperFloor have none
     std::vector<std::pair<int, int>> sightOffsets_;  // within the sight radius, row order
     std::vector<RoomStatValues> stats_;              // by room id
     std::vector<uint8_t> hasStats_;                  // by room id

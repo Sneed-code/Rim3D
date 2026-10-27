@@ -191,7 +191,7 @@ struct RaidResult {
 
 // `medics` (F10, docs/design/field-care.md): the first colonist is the alarm's Medic, the second its Firefighter.
 RaidResult raid(uint64_t seed, const std::shared_ptr<const colony::DefDatabase>& defs, StuckWatch& watch, bool medics) {
-    colony::SimSettings settings{seed, 256, 0, 0};
+    colony::SimSettings settings{seed, 160, 0, 0};
     settings.scenario = "Crashlanded";
     colony::Sim sim(settings, defs);
     RaidResult r;

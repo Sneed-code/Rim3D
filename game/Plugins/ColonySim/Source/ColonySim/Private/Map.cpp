@@ -47,9 +47,28 @@ float mapGenValueNoise(uint64_t seed, float fx, float fy, float cellSize, uint64
 constexpr int kMapGenOctaves = 5;
 constexpr float kMapGenBaseCell = 128.0f;  // metres between the largest hills
 constexpr float kMapGenMaxHeight = 60.0f;  // metres
-constexpr float kWaterBelow = 0.22f;       // fractions of max height
+constexpr float kDeepBelow = 0.195f;       // fractions of max height
+constexpr float kWaterBelow = 0.22f;       // below this: water, shallow near the shore
 constexpr float kSandBelow = 0.26f;
 constexpr float kRockAbove = 0.62f;
+
+// Rivers (docs/design/mapgen.md). Distances are metres from the river's middle line.
+constexpr float kRiverDeepBed = 0.17f;     // fractions of max height
+constexpr float kRiverShallowBed = 0.20f;
+constexpr float kRiverBank = 6.0f;         // the ground slopes up to its old height over this far
+constexpr int kMapGenWorldMin = 192;       // maps smaller than this (test maps) are made as before S8: no
+                                           // shallow shores, rivers, marsh or mud
+constexpr float kRiverFordHalf = 8.0f;     // along the river: no deep water this far from the ford
+constexpr float kRiverFordFade = 12.0f;
+
+// Marsh and mud: low ground where a slow noise is high, and the shores of water.
+constexpr float kMarshBelow = 0.34f;       // fractions of max height
+constexpr float kMarshAbove = 0.58f;       // wetness times the biome's marsh, from here it is marsh
+constexpr float kMudAbove = 0.72f;
+constexpr float kShoreMarshAbove = 0.35f;
+constexpr float kShoreMudAbove = 0.55f;
+
+float mapGenClamp01(float v) { return std::min(1.0f, std::max(0.0f, v)); }
 
 }  // namespace
 
@@ -66,7 +85,9 @@ Map::Map(const MapSettings& settings)
       chunksX_((settings.width + kUpperChunk - 1) / kUpperChunk),
       chunksY_((settings.height + kUpperChunk - 1) / kUpperChunk),
       regions_(std::make_unique<Regions>(*this)),
-      cover_(std::make_unique<Cover>(*this)) {
+      cover_(std::make_unique<Cover>(*this)),
+      river_(settings.river),
+      marsh_(settings.marsh) {
     if (!settings.flat) {
         generate();
     }
@@ -280,6 +301,7 @@ uint64_t Map::upperFloorHash() const {
 }
 
 void Map::generate() {
+    const bool world = std::min(width_, height_) >= kMapGenWorldMin;
     for (int y = 0; y < height_; ++y) {
         for (int x = 0; x < width_; ++x) {
             float sum = 0.0f;
@@ -296,8 +318,10 @@ void Map::generate() {
             const float h = sum / total;
             const size_t i = static_cast<size_t>(index(CellPos{x, y, 0}));
             groundHeight_[i] = h * kMapGenMaxHeight;
-            if (h < kWaterBelow) {
+            if (h < kDeepBelow || (h < kWaterBelow && !world)) {
                 terrain_[i] = Terrain::Water;
+            } else if (h < kWaterBelow) {
+                terrain_[i] = Terrain::ShallowWater;
             } else if (h < kSandBelow) {
                 terrain_[i] = Terrain::Sand;
             } else if (h > kRockAbove) {
@@ -305,6 +329,132 @@ void Map::generate() {
                 roof_[i] = Roof::Thick;
             } else {
                 terrain_[i] = Terrain::Soil;
+            }
+        }
+    }
+    if (world) {
+        carveRivers();
+        addWetlands();
+    }
+}
+
+void Map::carveRivers() {
+    const int shortSide = std::min(width_, height_);
+    if (river_ <= 0.0f) {
+        return;
+    }
+    const int count = shortSide >= 768 ? 2 : 1;
+    const bool alongY = (mapGenHash(seed_, 0, 0, 100) & 1) == 0;  // all rivers of a map run the same way
+    const int length = alongY ? height_ : width_;
+    const int across = alongY ? width_ : height_;
+    std::vector<float> centre(static_cast<size_t>(length));
+    std::vector<float> deepHalf(static_cast<size_t>(length));
+    std::vector<float> shallowHalf(static_cast<size_t>(length));
+    float firstShare = 0.5f;
+    for (int r = 0; r < count; ++r) {
+        const uint64_t id = 100 + static_cast<uint64_t>(r) * 10;
+        const float jitter = mapGenLattice(seed_, r, 1, id);
+        float share = 0.2f + 0.6f * jitter;
+        if (r == 0) {
+            firstShare = share;
+        } else {
+            // The second river keeps well away from the first.
+            share = firstShare < 0.5f ? firstShare + 0.3f + 0.1f * jitter : firstShare - 0.3f - 0.1f * jitter;
+        }
+        const float fordAt = static_cast<float>(length) * (0.25f + 0.5f * mapGenLattice(seed_, r, 2, id));
+        const float acrossF = static_cast<float>(across);
+        for (int a = 0; a < length; ++a) {
+            const float af = static_cast<float>(a);
+            const float meander = (mapGenValueNoise(seed_, af, 0.0f, 200.0f, id + 1) - 0.5f) * 0.30f * acrossF +
+                                  (mapGenValueNoise(seed_, af, 0.0f, 50.0f, id + 2) - 0.5f) * 40.0f;
+            centre[static_cast<size_t>(a)] = std::min(acrossF - 13.0f, std::max(12.0f, acrossF * share + meander));
+            const float width = mapGenValueNoise(seed_, af, 0.0f, 90.0f, id + 3);
+            const float ford = mapGenClamp01((std::fabs(af - fordAt) - kRiverFordHalf) / kRiverFordFade);
+            const float deep = width < 0.38f ? 0.0f : (width - 0.38f) * 6.0f * river_ * ford;
+            deepHalf[static_cast<size_t>(a)] = deep;
+            shallowHalf[static_cast<size_t>(a)] = deep + (2.0f + 2.0f * mapGenValueNoise(seed_, af, 0.0f, 60.0f, id + 4)) * river_;
+        }
+        for (int a = 0; a < length; ++a) {
+            const float mid = centre[static_cast<size_t>(a)];
+            const float deepH = deepHalf[static_cast<size_t>(a)];
+            const float shallowH = shallowHalf[static_cast<size_t>(a)];
+            const float reach = shallowH + kRiverBank;
+            const int from = std::max(0, static_cast<int>(std::floor(mid - reach)));
+            const int to = std::min(across - 1, static_cast<int>(std::ceil(mid + reach)));
+            for (int c = from; c <= to; ++c) {
+                const float d = std::fabs(static_cast<float>(c) + 0.5f - mid);
+                if (d > reach) {
+                    continue;
+                }
+                const int x = alongY ? c : a;
+                const int y = alongY ? a : c;
+                const size_t i = static_cast<size_t>(y * width_ + x);
+                const float old = groundHeight_[i];
+                if (d <= shallowH) {
+                    const bool deep = d <= deepH;
+                    const float bed = (deep ? kRiverDeepBed : kRiverShallowBed) * kMapGenMaxHeight;
+                    groundHeight_[i] = std::min(old, bed);
+                    terrain_[i] = deep ? Terrain::Water : Terrain::ShallowWater;
+                    roof_[i] = Roof::None;
+                } else {
+                    const float t = 1.0f - mapGenSmooth(mapGenClamp01((d - shallowH) / kRiverBank));
+                    const float bed = kRiverShallowBed * kMapGenMaxHeight;
+                    groundHeight_[i] = old + (std::min(old, bed) - old) * t;
+                    if (terrain_[i] == Terrain::Rock && t > 0.2f) {
+                        terrain_[i] = Terrain::Soil;  // the river cuts a valley through the mountain
+                        roof_[i] = Roof::None;
+                    }
+                }
+            }
+        }
+    }
+}
+
+void Map::addWetlands() {
+    if (marsh_ <= 0.0f) {
+        return;
+    }
+    const std::vector<Terrain> before = terrain_;
+    const auto wet = [this](int x, int y) {
+        const float fx = static_cast<float>(x);
+        const float fy = static_cast<float>(y);
+        return 0.65f * mapGenValueNoise(seed_, fx, fy, 48.0f, 30) + 0.35f * mapGenValueNoise(seed_, fx, fy, 16.0f, 31);
+    };
+    const auto isWater = [&before](Terrain t) { return t == Terrain::Water || t == Terrain::ShallowWater; };
+    for (int y = 0; y < height_; ++y) {
+        for (int x = 0; x < width_; ++x) {
+            const size_t i = static_cast<size_t>(y * width_ + x);
+            if (before[i] != Terrain::Soil && before[i] != Terrain::Sand) {
+                continue;
+            }
+            const float w = wet(x, y) * marsh_;
+            if (before[i] == Terrain::Soil && groundHeight_[i] < kMarshBelow * kMapGenMaxHeight) {
+                if (w > kMudAbove) {
+                    terrain_[i] = Terrain::Mud;
+                    continue;
+                }
+                if (w > kMarshAbove) {
+                    terrain_[i] = Terrain::Marsh;
+                    continue;
+                }
+            }
+            if (w <= kShoreMarshAbove) {
+                continue;
+            }
+            bool shore = false;
+            for (int dy = -1; dy <= 1 && !shore; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    const int nx = x + dx;
+                    const int ny = y + dy;
+                    if (nx >= 0 && ny >= 0 && nx < width_ && ny < height_ &&
+                        isWater(before[static_cast<size_t>(ny * width_ + nx)])) {
+                        shore = true;
+                        break;
+                    }
+                }
+            }
+            if (shore) {
+                terrain_[i] = w > kShoreMudAbove ? Terrain::Mud : Terrain::Marsh;
             }
         }
     }

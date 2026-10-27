@@ -26,7 +26,7 @@ struct FSimStartOptions
 	/** Folder holding defs/ and tuning.json. Empty: <repo>/data, or -SimData=<folder>. */
 	FString DataRoot;
 	uint64 Seed = 42;
-	int32 MapSize = 256;
+	int32 MapSize = 1024;
 	int32 Pawns = 0;
 	int32 Items = 0;
 	bool bFlatMap = false;

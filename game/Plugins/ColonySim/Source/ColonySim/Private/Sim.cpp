@@ -51,6 +51,7 @@
 #include "ColonySim/Needs.h"
 #include "ColonySim/Genes.h"
 #include "ColonySim/Looks.h"
+#include "ColonySim/MapFeatures.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Plants.h"
@@ -147,6 +148,16 @@ std::optional<WorldSite> simStartSite(const World* world) {
     return world->siteFor(world->startTile());
 }
 
+// The map's size and seed, and how wet the biome makes it (`mapGen` in the Biomes def).
+MapSettings simMapSettings(const SimSettings& settings, uint64_t mapSeed, const std::string& biomeName, const DefDatabase& defs) {
+    MapSettings map{settings.mapSize, settings.mapSize, mapSeed, settings.flatMap};
+    if (const Def* biome = defs.find("Biomes", biomeName)) {
+        map.river = static_cast<float>(biome->number("mapGen.river", 1.0));
+        map.marsh = static_cast<float>(biome->number("mapGen.marsh", 1.0));
+    }
+    return map;
+}
+
 void simHashCell(StateHasher& h, CellPos c) {
     h.add(c.x);
     h.add(c.y);
@@ -181,6 +192,9 @@ Sim::Sim(const SimSettings& settings) : Sim(settings, nullptr) {}
 
 Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
     : Sim(settings, std::move(defs), EmptyStart{}) {
+    if (!settings_.flatMap) {
+        placeMapFeatures(map_, *things_, splitMix64(settings_.seed ^ 0x66656174ULL));
+    }
     placeStockpileAndThings();
     if (!settings_.scenario.empty()) {
         startScenario();
@@ -200,8 +214,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       site_(simStartSite(world_.get())),
       biome_(site_ && !site_->biome.empty() ? site_->biome : std::string("TemperateForest")),
       // On a world the start tile seeds the map, so the same world and tile always give the same map.
-      map_(MapSettings{settings.mapSize, settings.mapSize, site_ ? site_->mapSeed : splitMix64(settings.seed ^ 0x6D6170ULL),
-                       settings.flatMap}),
+      map_(simMapSettings(settings, site_ ? site_->mapSeed : splitMix64(settings.seed ^ 0x6D6170ULL), biome_, *defs_)),
       pathfinder_(map_),
       zones_(std::make_unique<Zones>(map_)),
       things_(std::make_unique<Things>(map_, defs_)),

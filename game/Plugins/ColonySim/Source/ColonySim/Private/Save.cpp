@@ -3533,7 +3533,7 @@ std::unique_ptr<Sim> SimSaveAccess::makeEmpty(const SaveData& data, std::shared_
         return nullptr;
     }
     if (sim->groundHash_ != data.groundHash) {
-        error = "the map generator gives a different map for this seed than when the save was made";
+        error = "the map generator gives a different map for this seed than when the save was made (the world generator changed in Stage 2, task S8), so this save can no longer be loaded";
         return nullptr;
     }
     return sim;

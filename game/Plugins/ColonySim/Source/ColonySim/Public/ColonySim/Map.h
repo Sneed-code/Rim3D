@@ -20,8 +20,11 @@ class Rooms;
 // it is mined (docs/design/mining.md), and leaves RoughStone: walkable, nothing grows on it.
 // The last two are only ever on upper levels (docs/design/levels.md): Air where nothing has been
 // built, UpperFloor where an upper floor is laid and can be walked and built on.
+// `Water` is deep water (nobody crosses it). Shallow water, marsh and mud can be walked, slowly; the
+// `Terrain` defs of the same names carry their path costs (docs/design/mapgen.md).
 // New values go at the end.
-enum class Terrain : uint8_t { Water, Sand, Soil, Rock, RoughStone, Air, UpperFloor };
+enum class Terrain : uint8_t { Water, Sand, Soil, Rock, RoughStone, Air, UpperFloor, ShallowWater, Marsh, Mud };
+constexpr int kTerrainCount = 10;
 
 // How the building in a cell affects movement. A door can be walked through but is a region of
 // its own (docs/design/regions.md).
@@ -61,6 +64,9 @@ struct MapSettings {
     int height = 512;  // cells, 1 m each
     uint64_t seed = 0;
     bool flat = false;  // every cell soil at height 0, for tests
+    // How much river and how much marsh the biome gets, as multiples of the usual (0: none).
+    float river = 1.0f;
+    float marsh = 1.0f;
 };
 
 // The map grid: one flat array per layer, generated from a seed.
@@ -273,6 +279,8 @@ private:
     Roof& roofSlot(CellPos c);
 
     void generate();
+    void carveRivers();
+    void addWetlands();
 
     int width_;
     int height_;
@@ -296,6 +304,8 @@ private:
     std::vector<LevelLink> levelLinks_;
     std::unique_ptr<Regions> regions_;
     std::unique_ptr<Cover> cover_;
+    float river_;
+    float marsh_;
 };
 
 }  // namespace colony
