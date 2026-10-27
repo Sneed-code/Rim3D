@@ -16,7 +16,8 @@ class USimSubsystem;
  *
  * Keys: W A S D or the arrows pan (Shift is faster), Q and E turn, the mouse wheel zooms, holding
  * the middle button and moving the mouse turns and tilts, Home resets the view, F centres on the
- * selection, Esc clears the selection, the left button selects (a pawn, thing or ground cell).
+ * selection, Esc clears the selection, the left button selects (a pawn, thing or ground cell),
+ * Page Up and Page Down choose the level looked at (the ones above are cut away, docs/design/levels-draw.md).
  * The methods below are what the keys call, so tests can drive the camera without a keyboard.
  */
 UCLASS()
@@ -42,6 +43,8 @@ public:
 	void ResetView();
 	/** Jumps to where the camera is easing to, and puts the body there now. */
 	void SnapCamera();
+	/** Looks at the level above (+1) or below (-1), the focus rising or falling with it (Page Up, Page Down). */
+	void StepLevel(int32 Delta);
 
 	/** What is under a screen point (viewport pixels). */
 	FSimPick PickAtScreenPosition(const FVector2D& ScreenPosition) const;
@@ -70,6 +73,8 @@ private:
 	void OnTakeControlPressed();
 	void OnZoomIn() { Zoom(1.0f); }
 	void OnZoomOut() { Zoom(-1.0f); }
+	void OnLevelUp() { StepLevel(1); }
+	void OnLevelDown() { StepLevel(-1); }
 
 	USimSubsystem* GetBridge() const;
 	APlayerController* GetPlayerController() const;
