@@ -189,6 +189,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildFirePhases();
 	}
+	else if (TestName == TEXT("perf"))
+	{
+		BuildPerfPhases();
+	}
 	else
 	{
 		Fail(FString::Printf(TEXT("Unknown smoke test '%s'"), *TestName));
@@ -1204,6 +1208,11 @@ void USmokeTestSubsystem::Tick(float DeltaTime)
 	}
 	if (PhaseTime < Phase.WarmupSeconds)
 	{
+		if (Phase.bScreenshotInWarmup && !bScreenshotTaken && PhaseTime >= Phase.WarmupSeconds - 0.5f)
+		{
+			bScreenshotTaken = true;
+			FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke") / TestName / (Phase.Name + TEXT(".png")), false, false);
+		}
 		return;
 	}
 	Samples.Add({DeltaTime * 1000.0f, static_cast<float>(FPlatformTime::ToMilliseconds(GGameThreadTime)),
@@ -1248,6 +1257,11 @@ void USmokeTestSubsystem::FinishPhase()
 	Result->SetNumberField(TEXT("medianGpuMs"), SmokePercentile(Gpu, 0.5));
 	Result->SetNumberField(TEXT("actors"), Spawned.Num());
 	Result->SetStringField(TEXT("screenshot"), TestName / (Phases[PhaseIndex].Name + TEXT(".png")));
+	for (const TPair<FString, double>& Number : PhaseNumbers)
+	{
+		Result->SetNumberField(Number.Key, Number.Value);
+	}
+	PhaseNumbers.Reset();
 	if (Frame.IsEmpty())
 	{
 		Fail(FString::Printf(TEXT("Phase %s produced no frames"), *Phases[PhaseIndex].Name));
