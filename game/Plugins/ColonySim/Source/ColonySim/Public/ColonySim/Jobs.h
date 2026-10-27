@@ -179,6 +179,7 @@ class FuelSystem;
 class DefDatabase;
 class DrugSystem;
 class Farming;
+class FieldCare;
 class Filth;
 class Fire;
 class DefenseSystem;
@@ -288,6 +289,9 @@ public:
     // Ends the pawn's job, if it has one, as interrupted for `why`: reservations let go, what it
     // carried put down. Used when the player takes the pawn over (ControlPawnCommand).
     void interrupt(Entity pawn, const std::string& why);
+    // Pawns that can't work for a moment (stunned, or winding up a power, X2): their job waits, they stand
+    // still and don't think, and they go on where they were when it says no more.
+    void setPauseGate(std::function<bool(Entity)> gate) { pauseGate_ = std::move(gate); }
     // A party (PartyJobs.cpp, docs/design/social.md): the pawn drops what it is doing, walks to `cell` and stays
     // there until game second `until`, gaining `joyPerHour` of its recreation need. Refused for a pawn that is
     // not a free colonist (player-controlled, lying down, no way to the cell).
@@ -345,6 +349,9 @@ public:
     // beds are ordinary beds.
     void setPrisoners(PrisonerSystem* prisoners) { prisoners_ = prisoners; }
     PrisonerSystem* prisoners() const { return prisoners_; }
+    // Medics and firefighters on duty while the alarm is on (FieldCareJobs.cpp, docs/design/field-care.md). Without it
+    // they work as usual.
+    void setFieldCare(FieldCare* fieldCare) { fieldCare_ = fieldCare; }
 
     // Call before a thing is destroyed: ends the jobs that carry it or are done by it.
     void forget(Entity thing);
@@ -398,7 +405,7 @@ public:
     // The bed building under a pawn standing in its cell, or kNoEntity.
     Entity bedUnder(Entity pawn) const;
     bool isMedicalBed(Entity bed) const;
-    // A downed colonist on its own side, or a downed prisoner, that no bed holds.
+    // A downed colonist on its own side, or a downed prisoner, that no bed holds and no fighter is fetching to cover (F10).
     bool needsRescue(Entity pawn) const;
     // The food a warden should carry to a hungry prisoner: the best the prisoner may eat, the nearest of that kind, with how
     // many to bring. Fills `out` as a FeedPrisoner job; false if there is none.
@@ -422,6 +429,7 @@ public:
     // set (some tests) nothing needs power.
     void setPower(const PowerGrid* power) { power_ = power; }
     bool buildingRuns(Entity building) const;
+    float unpoweredSpeed(Entity building) const;
     int64_t now() const;
 
     // The pawn holding a target, or kNoEntity.
@@ -525,8 +533,12 @@ private:
     bool thinkSchedule(Entity pawn, Job& out);
     bool thinkApparel(Entity pawn, Job& out);
     bool thinkWork(Entity pawn, Job& out);
-    // thinkWork's scan; `urgentOnly` asks only the emergency work types (doctor, patient...).
-    bool thinkWorkPass(Entity pawn, Job& out, bool urgentOnly);
+    // thinkWork's scan; `urgentOnly` asks only the emergency work types (doctor, patient...). With `dutyWork` (an
+    // index in workTypes_) it asks only that work type, whatever its priority, and only targets FieldCare allows.
+    bool thinkWorkPass(Entity pawn, Job& out, bool urgentOnly, int dutyWork = -1);
+    // A Medic or Firefighter on duty (FieldCareJobs.cpp) instead of the think list: its duty's work on safe targets,
+    // else StandBy at its place behind the line; a job it had that isn't its duty ends.
+    void dutyStep(Entity pawn, int dutyWork);
     // Every few seconds a pawn on a job it may drop (idling, hauling, cleaning, mining...) looks for emergency work:
     // a patient to tend, a downed colonist to carry to a bed.
     void interruptForEmergency(Entity pawn);
@@ -636,6 +648,8 @@ private:
 
     // Firefighting (FireJobs.cpp).
     bool failCheckExtinguish(Entity pawn, Job& job, std::string& why);
+    // Standing by on duty (FieldCareJobs.cpp): ends when the pawn is off duty.
+    bool failCheckStandBy(Entity pawn, Job& job, std::string& why);
     StepResult extinguishWork(Entity pawn, Job& job, std::string& why);
     // Rearming sprung traps (DefenseJobs.cpp).
     bool failCheckRearm(Entity pawn, Job& job, std::string& why);
@@ -717,6 +731,7 @@ private:
     CombatSystem* combat_ = nullptr;
     TemperatureSystem* temperature_ = nullptr;
     std::function<bool(Entity)> animalGate_;
+    std::function<bool(Entity)> pauseGate_;
     InspirationSystem* inspirations_ = nullptr;
     const TalentSystem* talents_ = nullptr;  // build speed and carrying capacity (docs/design/talents.md)
     RecreationRules recreation_;
@@ -764,6 +779,7 @@ private:
     Filth* filth_ = nullptr;
     Fire* fire_ = nullptr;
     DefenseSystem* defense_ = nullptr;
+    FieldCare* fieldCare_ = nullptr;
     SpoilageSystem* spoilage_ = nullptr;
     DrugSystem* drugs_ = nullptr;
     CraftingSystem* crafting_ = nullptr;
