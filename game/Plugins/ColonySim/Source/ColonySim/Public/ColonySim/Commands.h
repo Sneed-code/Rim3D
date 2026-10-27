@@ -375,6 +375,15 @@ struct StartRaidCommand {
     int edge = -1;
 };
 
+// Chitinid and Remnant threats (docs/design/monsters.md). `kind` is "Infestation" (brood mounds grow
+// near the colony and their insects hunt) or "RemnantCluster" (mechanoids walk in at `edge`, as for
+// StartRaidCommand), worth `points` (0: what the colony is worth now).
+struct StartThreatCommand {
+    std::string kind = "Infestation";
+    float points = 0.0f;
+    int edge = -1;
+};
+
 // The colony alarm: on calls every colonist to its defense role, off sends them back to work. It
 // also sounds by itself when a colonist spots an enemy, and stops when the enemies are gone or
 // fleeing; one the player sounded stays on until the player stops it. Fails if it already is.
@@ -722,6 +731,15 @@ struct EndMentalBreakCommand {
     Entity pawn = kNoEntity;
 };
 
+// Quests (task Q1, docs/design/quests.md). `action` is "offer" (a dev command and the narrator's hook: `kind` is a Quests defName, or
+// empty for one chosen by weight), "accept" or "decline" (`quest` is the quest's number). Fails if the action is not one of those, there
+// is no such open offer, or it can't be carried out (too many under way, nobody could reach the colony, no room for the goods).
+struct QuestCommand {
+    std::string action;
+    uint32_t quest = 0;
+    std::string kind;
+};
+
 // A raid with a strategy (F12, docs/design/raid-strategies.md), the narrator's way to send one. `strategy` is
 // "Assault", "Sappers", "DropPods", "Thieves", "Kidnappers", or "Auto" to pick by the rules' weights; `hour` 0 to
 // 23.99 holds the raid until that hour of the day (a night attack), -1 sends it now. Fails like StartRaid, and for
@@ -732,6 +750,21 @@ struct StartStrategyRaidCommand {
     int edge = -1;
     std::string strategy = "Auto";
     float hour = -1.0f;
+};
+
+// Surgery (task H3, docs/design/surgery.md): plans an operation on a patient. `recipe` is a Recipes defName with a `surgery`
+// block (AmputateLimb, RemoveBodyPart, InstallPegLeg...), `part` the body part's index in the patient's Bodies def. Fails if the
+// operation can't be done on that part, is planned already, or isn't researched.
+struct AddOperationCommand {
+    Entity pawn = kNoEntity;
+    std::string recipe;
+    int part = 0;
+};
+
+// Takes a planned operation off the patient.
+struct RemoveOperationCommand {
+    Entity pawn = kNoEntity;
+    uint32_t operation = 0;
 };
 
 // New commands go at the end: a save names a command by its place in this list.
@@ -745,7 +778,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ReloadCommand, AddBillCommand,
                              RemoveBillCommand, SetBillCommand, HandsOnCommand, FlickCommand, ShortCircuitCommand,
                              PlaceFloorCommand, AddFilthCommand,
-                             SetResearchCommand, UnlockResearchCommand, StartRaidCommand, SoundAlarmCommand,
+                             SetResearchCommand, UnlockResearchCommand, StartRaidCommand, StartThreatCommand, SoundAlarmCommand,
                              SetDefenseRoleCommand, MarkShelterCommand, ThrowCommand, ExplodeCommand,
                              MeleeCommand, DodgeRollCommand,
                              SetOutfitCommand, EditOutfitCommand, AddOutfitCommand, RemoveOutfitCommand,
@@ -759,7 +792,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
                              MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand,
                              SetNarratorCommand, FireIncidentCommand, ContractDiseaseCommand, StartStrategyRaidCommand,
-                             ShipCommand>;
+                             ShipCommand, QuestCommand,
+                             AddOperationCommand, RemoveOperationCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

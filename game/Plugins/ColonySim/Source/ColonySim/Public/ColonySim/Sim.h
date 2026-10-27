@@ -52,16 +52,19 @@ class Mineables;
 class MovementSystem;
 class MoodSystem;
 class MedicineSystem;
+class SurgerySystem;
 class RecreationSystem;
 class SocialSystem;
 class ResearchSystem;
 class TalentSystem;
 class NeedsSystem;
 class RaidSystem;
+class MonsterSystem;
 class Plants;
 class PowerGrid;
 class Regions;
 class PrisonerSystem;
+class QuestSystem;
 class ShipSystem;
 class Rooms;
 class TemperatureSystem;
@@ -200,6 +203,9 @@ public:
     // Medicine: tend quality, medical care settings (docs/design/medicine.md).
     MedicineSystem& medicine() { return *medicine_; }
     const MedicineSystem& medicine() const { return *medicine_; }
+    // Surgery: operations planned on patients, their success chances (docs/design/surgery.md).
+    SurgerySystem& surgery() { return *surgery_; }
+    const SurgerySystem& surgery() const { return *surgery_; }
     // The protagonist's talent XP, points and ranks (docs/design/talents.md).
     TalentSystem& talents() { return *talents_; }
     const TalentSystem& talents() const { return *talents_; }
@@ -320,6 +326,9 @@ public:
     RaidSystem& raids() { return *raids_; }
     const RaidSystem& raids() const { return *raids_; }
 
+    // Brood mounds and Remnant clusters (docs/design/monsters.md).
+    MonsterSystem& monsters() { return *monsters_; }
+
     // The narrator, incidents and threat points (docs/design/narrator.md).
     NarratorSystem& narrator() { return *narrator_; }
     const NarratorSystem& narrator() const { return *narrator_; }
@@ -333,6 +342,9 @@ public:
     const ShipSystem& ship() const { return *ship_; }
     PrisonerSystem& prisoners() { return *prisoners_; }
     const PrisonerSystem& prisoners() const { return *prisoners_; }
+    // Quests: offers, answers, rewards (docs/design/quests.md). The narrator offers them with `quests().offerRandom`.
+    QuestSystem& quests() { return *quests_; }
+    const QuestSystem& quests() const { return *quests_; }
 
     // Taming, training, animal zones and pens (docs/design/husbandry.md).
     Husbandry& husbandry() { return *husbandry_; }
@@ -384,6 +396,7 @@ private:
     void pruneDesignations();
     void startScenario();
     // Gives a new pawn its looks if it is humanlike (its def names no other intelligence).
+    Entity makeJoiner(CellPos cell, uint64_t seed);
     void giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& lineage);
     // Makes (again) the genes of a pawn that has looks, from its lineage.
     void giveGenes(Entity pawn);
@@ -418,6 +431,7 @@ private:
     std::unique_ptr<RecreationSystem> recreation_;
     std::unique_ptr<ResearchSystem> research_;
     std::unique_ptr<MedicineSystem> medicine_;
+    std::unique_ptr<SurgerySystem> surgery_;
     std::unique_ptr<TalentSystem> talents_;
     std::unique_ptr<CombatSystem> combat_;
     std::unique_ptr<ExplosiveSystem> explosives_;  // after combat_ and health_
@@ -440,7 +454,9 @@ private:
     std::unique_ptr<UpperFloors> upperFloors_;  // M1
     std::unique_ptr<RoofCollapse> roofCollapse_;  // M3, after the rooms and the job system
     std::unique_ptr<RaidSystem> raids_;        // after the fighters
+    std::unique_ptr<MonsterSystem> monsters_;  // after raids_ and animals_
     std::unique_ptr<PrisonerSystem> prisoners_;  // after the raids
+    std::unique_ptr<QuestSystem> quests_;        // after the raids
     std::unique_ptr<ShipSystem> ship_;           // after the raids
     std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system
     std::unique_ptr<Breeding> breeding_;    // after husbandry_

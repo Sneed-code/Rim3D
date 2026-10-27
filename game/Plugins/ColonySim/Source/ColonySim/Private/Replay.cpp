@@ -200,6 +200,13 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["building"] = entt::to_integral(c.building);
                 j["bill"] = c.bill;
                 j["index"] = c.index;
+            } else if constexpr (std::is_same_v<Type, AddOperationCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["recipe"] = c.recipe;
+                j["part"] = c.part;
+            } else if constexpr (std::is_same_v<Type, RemoveOperationCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["operation"] = c.operation;
             } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
                 j["thing"] = entt::to_integral(c.thing);
             } else if constexpr (std::is_same_v<Type, SetResearchCommand>) {
@@ -220,6 +227,10 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["penetration"] = static_cast<double>(c.penetration);
             } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
                 j["faction"] = c.faction;
+                j["points"] = static_cast<double>(c.points);
+                j["edge"] = c.edge;
+            } else if constexpr (std::is_same_v<Type, StartThreatCommand>) {
+                j["kind"] = c.kind;
                 j["points"] = static_cast<double>(c.points);
                 j["edge"] = c.edge;
             } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
@@ -353,11 +364,15 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["edge"] = c.edge;
                 j["strategy"] = c.strategy;
                 j["hour"] = static_cast<double>(c.hour);
-            } else {
-                static_assert(std::is_same_v<Type, ShipCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, ShipCommand>) {
                 j["action"] = c.action;
                 j["thing"] = entt::to_integral(c.thing);
                 j["pawn"] = entt::to_integral(c.pawn);
+            } else {
+                static_assert(std::is_same_v<Type, QuestCommand>, "write every command type");
+                j["action"] = c.action;
+                j["quest"] = c.quest;
+                j["kind"] = c.kind;
             }
         },
         logged.command);
@@ -880,6 +895,22 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.building = static_cast<Entity>(building);
         out.command = c;
+    } else if (type == "AddOperation") {
+        AddOperationCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "recipe", c.recipe, where) || !r.integer(j, "part", c.part, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "RemoveOperation") {
+        RemoveOperationCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "operation", c.operation, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
     } else if (type == "SetRefuel") {
         SetRefuelCommand c;
         uint32_t building = entt::to_integral(kNoEntity);
@@ -1267,6 +1298,13 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = c;
+    } else if (type == "StartThreat") {
+        StartThreatCommand c;
+        if (!r.text(j, "kind", c.kind, where) || !r.number(j, "points", c.points, where) ||
+            !r.integer(j, "edge", c.edge, where)) {
+            return false;
+        }
+        out.command = c;
     } else if (type == "SoundAlarm") {
         SoundAlarmCommand c;
         if (!r.flag(j, "on", c.on, where)) {
@@ -1343,6 +1381,12 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.thing = static_cast<Entity>(thing);
         c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "Quest") {
+        QuestCommand c;
+        if (!r.text(j, "action", c.action, where) || !r.integer(j, "quest", c.quest, where) || !r.text(j, "kind", c.kind, where)) {
+            return false;
+        }
         out.command = std::move(c);
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");

@@ -1,6 +1,7 @@
 # Backlog
 
 Ideas parked for later. Newest first. Move an item into a stage plan when it's picked up.
+- Monsters (found in the mechanoid thread): a "destroy the hive" order so colonists attack mounds, dormant cave hives, jelly as food and recreation, centipede burner and gunner, termite, EMP stun and fire immunity for mechs, machine bodies with their own parts, insects that path round walls, letters for infestations and Remnant clusters, T3 narrator calls to `sim.monsters()`.
 
 - Disasters (T3, `docs/design/disasters.md` "Not yet"): halved wildlife in a volcanic winter, toxic fallout's permanent damage and sun-lamp protection, blight that spreads over days, the extreme psychic drone, and Unreal drawing any of it (dark sky, bolts, haze).
 - World map (found in W2): the default world of seed 42 has no desert, extreme desert, swamps, cold bog or sea ice tiles at all (`simrun --seed 42 --world - --check` lists the counts); the biome rules or rainfall bands in `WorldGen/Default` may need tuning so every biome shows up on a normal world. The tile's rainfall does not change the map's weather yet (only its temperature does).

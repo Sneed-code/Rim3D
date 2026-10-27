@@ -38,7 +38,8 @@ enum class DeathCause : uint8_t {
     Heatstroke,
     Environment,    // any other Environment hediff
     Slaughtered,    // a colonist killed a tame animal (Husbandry.h)
-    Disease         // a disease reached its lethal severity (H2, docs/design/diseases.md)
+    Disease,        // a disease reached its lethal severity (H2, docs/design/diseases.md)
+    Surgery         // an operation went wrong (Surgery.h)
 };
 
 COLONY_API const char* deathCauseName(DeathCause cause);
@@ -53,6 +54,23 @@ struct Injury {
     float peak = 0.0f;          // the most severity it has had; set when healing starts (H1: scars)
     int64_t infectAt = -1;      // game second the wound turns infected (H2); below 0: it won't. Tending can take it away
     bool tended() const { return tendQuality >= 0.0f; }
+};
+
+// An artificial part fitted to the body (task H3, docs/design/surgery.md): a Hediffs def of class AddedPart (peg leg, bionic
+// arm...) on a body part. It stands for the whole part and everything under it, with its own efficiency instead of the
+// natural one (damage on the part still lowers it).
+struct AddedPart {
+    uint16_t part = 0;
+    DefId hediff;
+};
+
+// What a body part is, for surgery (HealthSystem::partCondition).
+enum class PartCondition : uint8_t {
+    Whole,    // there, with or without wounds
+    Missing,  // lost; a prosthetic can be fitted here
+    Under,    // under a lost part
+    Covered,  // under a fitted artificial part, which stands for it
+    Fitted    // an artificial part is on it
 };
 
 // A severity-based illness from the surroundings (hypothermia, heatstroke...): a Hediffs def of class
@@ -95,6 +113,7 @@ struct Health {
     RestKind rest = RestKind::Ground;
     std::vector<Injury> injuries;    // in the order they happened
     std::vector<MissingPart> missing;  // in the order they were lost
+    std::vector<AddedPart> added;      // artificial parts, in the order they were fitted (H3)
     float bloodLoss = 0.0f;          // severity of the BloodLoss hediff, 0 to 1 (1 is death)
     std::vector<EnvironmentHediff> environment;  // by def id, only those above 0
     std::vector<Disease> diseases;       // by def id, then part (H2)
@@ -153,7 +172,13 @@ struct HealthReport {
     float bleedPerDay = 0.0f;
     float bloodLoss = 0.0f;
     std::vector<InjuryLine> injuries;
-    std::vector<std::string> missingParts;  // "left hand"
+    std::vector<std::string> missingParts;  // "left hand"; one with an artificial part on it is not listed
+    struct AddedLine {
+        std::string part;     // "left leg"
+        std::string label;    // "peg leg"
+        float efficiency = 1.0f;
+    };
+    std::vector<AddedLine> addedParts;
     std::vector<EnvironmentLine> environment;
     std::vector<DiseaseLine> diseases;
     std::vector<CapacityLine> capacities;
@@ -290,6 +315,34 @@ public:
     // them), by part index, in body order.
     std::vector<int> partsOfDef(DefId pawnDef, const std::string& partDef) const;
 
+    // ---- Surgery (task H3, docs/design/surgery.md) ---------------------------------------------------
+    // What a part is now. `ok` (if given) is false for a pawn without a body or a part number the body doesn't have.
+    PartCondition partCondition(Entity pawn, int part, bool* ok = nullptr) const;
+    // The part's Bodies part def ("Leg"), "" if it has none.
+    std::string partDef(Entity pawn, int part) const;
+    // True for the parts the limb capacities are built from (arm, hand, fingers, leg, foot, toes).
+    bool partIsLimb(Entity pawn, int part) const;
+    // Whether an operation may take the natural part off: it is Whole, can be destroyed, and neither it nor anything
+    // under it keeps the pawn alive.
+    bool canRemovePart(Entity pawn, int part) const;
+    // The artificial part on `part` (an invalid id if none), and its Hediffs def's numbers.
+    DefId addedAt(Entity pawn, int part) const;
+    // The Hediffs def of an AddedPart: the Bodies part def it goes on, the item it comes from and goes back to, and
+    // its efficiency. False if the def is not an AddedPart.
+    bool addedInfo(DefId hediff, std::string& partDef, DefId& item, float& efficiency) const;
+    // Fits an artificial part on a Whole or Missing part with none: wounds on the part go (it is replaced), a lost part
+    // is tended with `tendQuality` (so it stops bleeding). False, changing nothing, if that can't be done.
+    bool installPart(Entity pawn, int part, DefId hediff, float tendQuality);
+    // Takes the artificial part off `part`: returns its Hediffs def (invalid if there was none). The part under it is
+    // then lost (if it wasn't already), tended with `tendQuality`.
+    DefId uninstallPart(Entity pawn, int part, float tendQuality);
+    // Takes a natural part off in an operation (canRemovePart): it becomes a lost part tended with `tendQuality`, and
+    // any artificial part on it is gone with it. False, changing nothing, if that can't be done.
+    bool removePart(Entity pawn, int part, float tendQuality);
+    // Hurts a part by an operation gone wrong, as a cut of `fraction` of its hit points (the nearest part above it that
+    // is there, if it is missing). A cut never destroys the part.
+    void botch(Entity pawn, int part, float fraction);
+
     // Hit points of a part right now (0 if it is missing), and with no damage.
     float partHitPoints(Entity pawn, int part) const;
     float partMaxHitPoints(Entity pawn, int part) const;
@@ -306,7 +359,7 @@ private:
 
     // Works out pain, bleeding, capacities and what they mean (the death cause and whether the
     // pawn should be downed) into `health`'s derived fields. Changes nothing else.
-    void derive(int body, float healthScale, Health& health, DeathCause& cause, bool& shouldBeDown) const;
+    void derive(int body, float healthScale, bool mechanical, Health& health, DeathCause& cause, bool& shouldBeDown) const;
     void recompute(Entity pawn, Health& health, bool announce);
     void emit(EventType type, Entity pawn, DefId def = DefId{}, int part = -1, float amount = 0.0f,
               const char* message = nullptr);
