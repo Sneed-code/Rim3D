@@ -183,6 +183,21 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
                 j["kind"] = c.kind;
                 j["layers"] = c.layers;
+            } else if constexpr (std::is_same_v<Type, TakeDrugCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["thing"] = entt::to_integral(c.thing);
+            } else if constexpr (std::is_same_v<Type, SetDrugPolicyCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["policy"] = c.policy;
+            } else if constexpr (std::is_same_v<Type, SetDrugPolicyEntryCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["drug"] = c.drug;
+                j["forAddiction"] = c.forAddiction;
+                j["forJoy"] = c.forJoy;
+                j["scheduled"] = c.scheduled;
+                j["daysFrequency"] = c.daysFrequency;
+                j["moodBelow"] = c.moodBelow;
+                j["joyBelow"] = c.joyBelow;
             } else if constexpr (std::is_same_v<Type, SetRefuelCommand>) {
                 j["building"] = entt::to_integral(c.building);
                 j["autoRefuel"] = c.autoRefuel;
@@ -894,6 +909,35 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         c.building = static_cast<Entity>(building);
+        out.command = c;
+    } else if (type == "TakeDrug") {
+        TakeDrugCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        uint32_t thing = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "thing", thing, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        c.thing = static_cast<Entity>(thing);
+        out.command = c;
+    } else if (type == "SetDrugPolicy") {
+        SetDrugPolicyCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "policy", c.policy, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = c;
+    } else if (type == "SetDrugPolicyEntry") {
+        SetDrugPolicyEntryCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "drug", c.drug, where) || !r.flag(j, "forAddiction", c.forAddiction, where) ||
+            !r.flag(j, "forJoy", c.forJoy, where) || !r.flag(j, "scheduled", c.scheduled, where) ||
+            !r.number(j, "daysFrequency", c.daysFrequency, where) || !r.number(j, "moodBelow", c.moodBelow, where) ||
+            !r.number(j, "joyBelow", c.joyBelow, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
         out.command = c;
     } else if (type == "AddOperation") {
         AddOperationCommand c;

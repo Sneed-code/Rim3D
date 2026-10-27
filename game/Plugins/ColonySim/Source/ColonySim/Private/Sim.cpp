@@ -3,6 +3,7 @@
 #include "ColonySim/Animals.h"
 #include "ColonySim/Breeding.h"
 #include "ColonySim/Apparel.h"
+#include "ColonySim/Drugs.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
@@ -200,6 +201,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     construction_ = std::make_unique<Construction>(map_, *things_, *plants_, *defs_, rng_, events_);
     needs_ = std::make_unique<NeedsSystem>(*things_, *health_, *defs_);
     mood_ = std::make_unique<MoodSystem>(*things_, *needs_, *defs_);
+    drugs_ = std::make_unique<DrugSystem>(*things_, *health_, *defs_);
+    drugs_->setEventLog(&events_);
+    drugs_->registerThoughts(*mood_);
+    needs_->setRestFallFactor([this](Entity pawn) { return drugs_->restFallFactor(pawn); });
     apparel_ = std::make_unique<ApparelSystem>(*things_, *combat_, *health_, *defs_);
     apparel_->registerSituations(*mood_);
     health_->registerSituations(*mood_);
@@ -272,6 +277,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setRooms(rooms_.get());
     jobs_->setResearch(research_.get());
     jobs_->setMedicine(medicine_.get());
+    jobs_->setDrugs(drugs_.get());
     jobs_->setSurgery(surgery_.get());
     jobs_->setRoomStats(roomStats_.get());
     jobs_->setTalents(talents_.get());
@@ -1251,6 +1257,26 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!jobs_->fuel().setRefuel(refuel->building, refuel->autoRefuel, refuel->fillNow, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* takeDrug = std::get_if<TakeDrugCommand>(&command)) {
+        if (!jobs_->orderTakeDrug(takeDrug->pawn, takeDrug->thing, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* drugPolicy = std::get_if<SetDrugPolicyCommand>(&command)) {
+        if (!drugs_->setPolicy(drugPolicy->pawn, drugPolicy->policy, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* drugEntry = std::get_if<SetDrugPolicyEntryCommand>(&command)) {
+        DrugPolicyEntry entry;
+        entry.drug = drugEntry->drug;
+        entry.forAddiction = drugEntry->forAddiction;
+        entry.forJoy = drugEntry->forJoy;
+        entry.scheduled = drugEntry->scheduled;
+        entry.daysFrequency = drugEntry->daysFrequency;
+        entry.moodBelow = drugEntry->moodBelow;
+        entry.joyBelow = drugEntry->joyBelow;
+        if (!drugs_->setEntry(drugEntry->pawn, entry, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* startBreak = std::get_if<StartMentalBreakCommand>(&command)) {
         if (!mentalBreaks_->start(startBreak->pawn, startBreak->breakDef, rng_, error)) {
             commandFailed(id, error);
@@ -1348,6 +1374,10 @@ void Sim::step() {
     quests_->step();
     ship_->step();
     recreation_->step();
+    drugs_->step(time_.seconds);
+    if (time_.seconds % kSecondsPerHour == 0) {
+        drugs_->prune();
+    }
     animals_->step();
     husbandry_->step();
     breeding_->step();
@@ -1964,6 +1994,7 @@ uint64_t Sim::stateHash() const {
     quests_->hashState(h);
     ship_->hashState(h);
     talents_->hashState(h);
+    drugs_->hashState(h);
     pathfinder_.hashState(h);
     zones_->hashState(h);
     floors_->hashState(h);
@@ -2287,6 +2318,13 @@ uint64_t Sim::stateHash() const {
             h.add(health->bloodLoss);
             h.add(health->dead);
             h.add(static_cast<int>(health->cause));
+            if (!health->environment.empty()) {
+                h.add(static_cast<uint64_t>(health->environment.size()));
+                for (const EnvironmentHediff& env : health->environment) {
+                    h.add(env.def.value);
+                    h.add(env.severity);
+                }
+            }
         }
         medicine_->hashPawn(e, h);
         surgery_->hashPawn(e, h);

@@ -85,6 +85,12 @@ const char* commandName(const Command& command) {
                 return "PlaceFloor";
             } else if constexpr (std::is_same_v<Type, AddFilthCommand>) {
                 return "AddFilth";
+            } else if constexpr (std::is_same_v<Type, TakeDrugCommand>) {
+                return "TakeDrug";
+            } else if constexpr (std::is_same_v<Type, SetDrugPolicyCommand>) {
+                return "SetDrugPolicy";
+            } else if constexpr (std::is_same_v<Type, SetDrugPolicyEntryCommand>) {
+                return "SetDrugPolicyEntry";
             } else if constexpr (std::is_same_v<Type, SetRefuelCommand>) {
                 return "SetRefuel";
             } else if constexpr (std::is_same_v<Type, SetBillOptionsCommand>) {
@@ -314,6 +320,10 @@ const char* eventTypeName(EventType type) {
         case EventType::PawnMentalBreakEnded: return "PawnMentalBreakEnded";
         case EventType::PawnInsulted: return "PawnInsulted";
         case EventType::PawnLeftColony: return "PawnLeftColony";
+        case EventType::PawnTookDrug: return "PawnTookDrug";
+        case EventType::PawnAddicted: return "PawnAddicted";
+        case EventType::AddictionCured: return "AddictionCured";
+        case EventType::DrugOverdose: return "DrugOverdose";
         case EventType::DisasterStarted: return "DisasterStarted";
         case EventType::DisasterEnded: return "DisasterEnded";
         case EventType::LightningStrike: return "LightningStrike";
