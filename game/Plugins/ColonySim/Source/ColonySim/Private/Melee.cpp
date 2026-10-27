@@ -119,7 +119,7 @@ int meleeWindup(const MeleeRules& r, int cooldown) {
 
 bool meleeAble(const entt::registry& reg, Entity pawn) {
     const Health* h = reg.try_get<Health>(pawn);
-    return h == nullptr || !h->incapacitated();
+    return (h == nullptr || !h->incapacitated()) && !reg.all_of<Stunned>(pawn);  // a stunned pawn can't swing, block or dodge (X2)
 }
 
 }  // namespace

@@ -37,6 +37,8 @@ struct FSimPick
  * Picking against the sim, not against Unreal collision: the sim decides what is where, and the
  * art (U3, U4, U5) can change without changing what a click means. Things are boxes around their
  * blended position; the ground is the sim's height map, the same surface the terrain mesh shows.
+ * Upper floors (docs/design/levels-draw.md) are surfaces too, up to the highest level shown: in the
+ * overseer view the levels above the one looked at are cut away, and so are their things.
  */
 namespace SimPicking
 {
@@ -45,13 +47,16 @@ namespace SimPicking
 	 *  placeholders until the buildings' meshes (U4) say how tall they are. */
 	bool ThingBox(const USimSubsystem& Bridge, const colony::ThingView& View, FBox& OutBox);
 
-	/** Where a ray first meets the sim's ground, if it does within the map. */
-	bool RayHitGround(const USimSubsystem& Bridge, const FVector& Origin, const FVector& Direction, double& OutDistance);
+	/** Where a ray first meets a surface within the map. `Level` 0 or more: that level's floor height everywhere (the ground on
+	 *  level 0), laid or not. -1: the ground, or the highest upper floor at most `TopLevel` over it; `OutLevel` says which. */
+	bool RayHitGround(const USimSubsystem& Bridge, const FVector& Origin, const FVector& Direction, double& OutDistance,
+		int32 Level = 0, int32 TopLevel = 0, int32* OutLevel = nullptr);
 
-	/** The nearest thing along the ray; else the ground cell it lands on; else nothing. */
+	/** The nearest thing along the ray; else the cell of the ground or upper floor it lands on; else nothing. Things and floors
+	 *  above the highest level shown (ULevelsSubsystem) are not hit. */
 	FSimPick PickFromRay(const USimSubsystem& Bridge, const FVector& Origin, const FVector& Direction);
 
-	/** The ground cell the ray lands on, ignoring every thing in the way (a cell for a drag of the architect menu, docs/design/orders.md);
-	 *  a Cell pick with its Location, or none. */
-	FSimPick PickGroundFromRay(const USimSubsystem& Bridge, const FVector& Origin, const FVector& Direction);
+	/** The cell the ray lands on at the height of level `Level`, ignoring every thing in the way (a cell for a drag of the architect
+	 *  menu on the level looked at, docs/design/orders.md); a Cell pick with its Location, or none. */
+	FSimPick PickGroundFromRay(const USimSubsystem& Bridge, const FVector& Origin, const FVector& Direction, int32 Level = 0);
 }

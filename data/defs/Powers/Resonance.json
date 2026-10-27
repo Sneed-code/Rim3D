@@ -1,0 +1,17 @@
+[
+  {"defName": "PowerBase", "abstract": true, "source": "RimWorld wiki (Royalty psycasts)", "needsSight": true, "warmup": 8,
+   "note": "Our names for RimWorld's psycasts (docs/design/naming.md). Ticks become steps (/2), tiles become metres. `strain` is RimWorld's neural heat, `focusCost` its psyfocus cost (a share, 0.01 is 1%). The warm-up is RimWorld's 15 ticks, 7.5 steps rounded up."},
+  {"defName": "Stun", "parent": "PowerBase", "label": "stun", "rimworld": "Stun", "level": 1, "strain": 12, "focusCost": 0.01, "range": 24.9,
+   "hostile": true, "effect": {"kind": "stun", "duration": 90, "bySensitivity": true},
+   "note": "The target can't move or act for 180 ticks times its resonance sensitivity.", "ours": ["warmup"]},
+  {"defName": "Numb", "parent": "PowerBase", "label": "numb", "rimworld": "Painblock", "level": 1, "strain": 8, "focusCost": 0.02, "range": 24.9,
+   "self": true, "effect": {"kind": "painFactor", "value": 0.1, "duration": 3600, "bySensitivity": true},
+   "note": "RimWorld's psychic anesthesia: pain times 10% for 7,200 ticks times the target's sensitivity.", "ours": ["warmup"], "unverified": ["needsSight"]},
+  {"defName": "Burden", "parent": "PowerBase", "label": "burden", "rimworld": "Burden", "level": 1, "strain": 8, "focusCost": 0.01, "range": 29.9,
+   "hostile": true, "effect": {"kind": "movingMax", "value": 0.4, "duration": 600, "bySensitivity": false},
+   "note": "RimWorld's psychic burden: Moving capped at 40% for 1,200 ticks; sensitivity changes neither.", "ours": ["warmup"]},
+  {"defName": "Jump", "parent": "PowerBase", "label": "jump", "rimworld": "Skip", "level": 4, "strain": 25, "focusCost": 0.02, "range": 27.9,
+   "self": true, "effect": {"kind": "jump", "maxBodySize": 3.5},
+   "note": "RimWorld's skip, a level 4 psycast: the target pawn (the caster itself, or another) is moved at once to a cell it can see within range of the caster.",
+   "ours": ["warmup"], "unverified": ["needsSight"]}
+]
