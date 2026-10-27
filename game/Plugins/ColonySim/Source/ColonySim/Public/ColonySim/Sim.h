@@ -66,6 +66,7 @@ class Plants;
 class PowerGrid;
 class Regions;
 class PrisonerSystem;
+class TradeSystem;
 class QuestSystem;
 class ShipSystem;
 class Rooms;
@@ -351,6 +352,10 @@ public:
     QuestSystem& quests() { return *quests_; }
     const QuestSystem& quests() const { return *quests_; }
 
+    // Faction goodwill, visitors, trade caravans, orbital traders and trade (docs/design/trade.md).
+    TradeSystem& trade() { return *trade_; }
+    const TradeSystem& trade() const { return *trade_; }
+
     // Taming, training, animal zones and pens (docs/design/husbandry.md).
     Husbandry& husbandry() { return *husbandry_; }
     // Fire, burning pawns, burnt ground and the home area (docs/design/fire.md).
@@ -467,6 +472,7 @@ private:
     std::unique_ptr<RaidSystem> raids_;        // after the fighters
     std::unique_ptr<MonsterSystem> monsters_;  // after raids_ and animals_
     std::unique_ptr<PrisonerSystem> prisoners_;  // after the raids
+    std::unique_ptr<TradeSystem> trade_;         // after the raids
     std::unique_ptr<QuestSystem> quests_;        // after the raids
     std::unique_ptr<ShipSystem> ship_;           // after the raids
     std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system

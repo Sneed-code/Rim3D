@@ -1,6 +1,7 @@
 // Prisoners (task C22, docs/design/prisoners.md): the component, the numbers, capture and what a warden's talk does.
 // The jobs that carry, feed and talk are in PrisonerJobs.cpp.
 #include "ColonySim/Prisoners.h"
+#include "ColonySim/Trade.h"
 
 #include "ColonySim/Animals.h"
 #include "ColonySim/Clock.h"
@@ -180,7 +181,7 @@ bool PrisonerSystem::capturable(Entity pawn) const {
     }
     const Health& health = reg.get<Health>(pawn);
     const FactionId side = fighters_.factionOf(pawn);
-    return health.downed && !health.dead && side != kPlayerFaction && side != kWildFaction;
+    return health.downed && !health.dead && side != kPlayerFaction && side != kWildFaction && !things_.registry().all_of<Visitor>(pawn);
 }
 
 bool PrisonerSystem::findPrisonBed(Entity pawn, Entity helper, Entity& bed, CellPos& cell) const {
@@ -529,7 +530,8 @@ void PrisonerSystem::step() {
     const int w = map_.width();
     const int h = map_.height();
     for (const auto [pawn, fighter, faction, pos] : reg.view<const Fighter, const Faction, const Position>().each()) {
-        if (fighter.mode != FightMode::Flee || faction.id == kPlayerFaction || reg.all_of<Raider>(pawn) || reg.all_of<Animal>(pawn)) {
+        if (fighter.mode != FightMode::Flee || faction.id == kPlayerFaction || reg.all_of<Raider>(pawn) || reg.all_of<Animal>(pawn) ||
+            reg.all_of<Visitor>(pawn)) {
             continue;
         }
         const CellPos c = cellOf(pos);

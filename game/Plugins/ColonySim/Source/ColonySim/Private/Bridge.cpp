@@ -185,6 +185,14 @@ const char* commandName(const Command& command) {
                 return "SetPrisonerMode";
             } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
                 return "SetPrisonBed";
+            } else if constexpr (std::is_same_v<Type, StartVisitCommand>) {
+                return "StartVisit";
+            } else if constexpr (std::is_same_v<Type, TradeCommand>) {
+                return "Trade";
+            } else if constexpr (std::is_same_v<Type, AdjustGoodwillCommand>) {
+                return "AdjustGoodwill";
+            } else if constexpr (std::is_same_v<Type, GiftCommand>) {
+                return "Gift";
             } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
                 return "PlaceUpperFloor";
             } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
@@ -326,6 +334,10 @@ const char* eventTypeName(EventType type) {
         case EventType::PawnMentalBreakEnded: return "PawnMentalBreakEnded";
         case EventType::PawnInsulted: return "PawnInsulted";
         case EventType::PawnLeftColony: return "PawnLeftColony";
+        case EventType::VisitArrived: return "VisitArrived";
+        case EventType::VisitLeft: return "VisitLeft";
+        case EventType::TradeDone: return "TradeDone";
+        case EventType::GoodwillChanged: return "GoodwillChanged";
         case EventType::PawnTookDrug: return "PawnTookDrug";
         case EventType::PawnAddicted: return "PawnAddicted";
         case EventType::AddictionCured: return "AddictionCured";
