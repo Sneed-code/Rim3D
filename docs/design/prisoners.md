@@ -83,6 +83,34 @@ with its faction; **neither is here** (goodwill waits for C23).
 (they run for the edge; RimWorld's escapees fight) and sends a `PrisonBreak` event with `count`. `prisoners()` and `count()`
 say who and how many there are. The `PrisonBreak` incident def has `needsPrisoners`.
 
+## Executions
+
+`SetPrisonerModeCommand{pawn, "Execute"}` marks a prisoner for execution (a fifth mode). The Warden work type's
+`ChatWithPrisoners` offers it like a talk; the warden walks up, works `executeWorkSeconds` (60, **ours**; RimWorld's is
+instant), and `PrisonerSystem::execute` kills it at once (`DeathCause::Executed`). A downed prisoner can be executed. The
+prisoner stops being a prisoner and its bed is free. Switch the mode back before the cut and nothing happens. The warden gets
+no Social experience.
+
+**Guilty or not** (RimWorld wiki: guilty if it harmed the colony in the past 24 hours): a prisoner captured out of a raid
+(it carried `Raider`) has `Prisoner::guiltyUntil` = capture time + `guiltyHours` (24); anyone else was only caught and is
+innocent. `PrisonerSystem::guilty`. Ours: there is no "harmed the colony" record, so a raider counts as guilty until a day
+after the capture.
+
+Event `PrisonerExecuted` (`thing` the prisoner, `target` the warden, `message` "guilty" or "innocent") comes before the
+death. Every living colonist except Psychopath, Bloodlust and Cannibal ones remembers it: `KnowPrisonerExecutedGuilty` (-2,
+6 days) or `KnowPrisonerExecuted` (-5, 6 days) (RimWorld wiki, Thoughts/Memory Death). The wiki has no faction goodwill loss
+for an execution, so there is none (goodwill itself waits for C23).
+
+## Organ harvesting
+
+Surgery (H3, PR #119) is not merged yet, so only the hook is here: `PrisonerSystem::noteOrganHarvested(victim, surgeon, part)`
+raises `OrganHarvested` (`message` "colonist" for one of ours, "prisoner" for anyone else), to be called by the operation
+that takes a healthy organ from a living pawn (not a prosthetic). The colony's moods are in (RimWorld wiki): the victim, if
+a colonist, gets `MyOrganHarvested` (-30, 8 days); other colonists get `KnowColonistOrganHarvested` (-6, 6 days; not
+Psychopath or Bloodlust) for a colonist victim, or `KnowGuestOrganHarvested` (-6, 6 days; not Psychopath, Bloodlust or
+Cannibal) for anyone else; a Bloodlust colonist gets `BloodlustOrganHarvested` (+4, 4 days) instead. The wiki's two pages
+disagree on the stranger's thought (-5 for 8 days against -6 for 6); the second is used. Tests `ExecutionTests`.
+
 ## Thoughts
 
 `Thoughts3.json`, all ours (RimWorld's prisoner thoughts are mostly about colonists): `Captive` (-3 while a prisoner, a situation
@@ -91,13 +119,13 @@ feeds the two mood factors above.
 
 ## Save
 
-Section `prisoners` (version 1): the `prisoner` part of every prisoner (mode, resistance, `capturedAt`, `nextChat`) and the
+Section `prisoners` (version 2, adds `guiltyUntil`): the `prisoner` part of every prisoner (mode, resistance, `capturedAt`, `nextChat`) and the
 `prisonBed` part of every marked bed. The jobs are saved in the job (`JobType` check now ends at `WardenInteract`; the three
 jobs reuse `thing`, `site`, `chair`, `cell`, `count`). Commands `SetPrisonerMode` and `SetPrisonBed` by name.
 
 ## Not here
 
-Arresting colonists (and the "was imprisoned" thought), execution, selling prisoners, organ harvesting, slaves, a prison cell
+Arresting colonists (and the "was imprisoned" thought), euthanasia, the "innocent prisoner died" thought, selling prisoners, the surgery that harvests (waits for H3), slaves, a prison cell
 that must be enclosed, wardens escorting a freed prisoner out, goodwill from a release, prisoners eating from a dispenser or
 food lying in their cell, the warden's opinion in the resistance formula and prisoner traits (C20), the prisoner tab in the
 panels (U18), prisoners breaking out by themselves (T3 calls `breakOut`), a prisoner's mental breaks (C19).

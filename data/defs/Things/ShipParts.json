@@ -1,0 +1,193 @@
+[
+ {
+  "defName": "ShipStructuralBeam",
+  "parent": "BuildingBase",
+  "label": "ship structural beam",
+  "size": [
+   2,
+   6
+  ],
+  "costs": {
+   "Steel": 200,
+   "Plasteel": 40,
+   "ComponentIndustrial": 3,
+   "ComponentSpacer": 1
+  },
+  "researchPrerequisite": "StarflightBasics",
+  "fillPercent": 1.0,
+  "designationCategory": "Ship",
+  "stats": {
+   "maxHitPoints": 400,
+   "workToBuild": 11520.0,
+   "flammability": 0
+  },
+  "ship": {
+   "part": "Beam"
+  },
+  "source": "RimWorld wiki",
+  "unverified": [
+   "fillPercent",
+   "stats.flammability"
+  ]
+ },
+ {
+  "defName": "ShipCryptosleepCasket",
+  "parent": "BuildingBase",
+  "label": "ship cryptosleep casket",
+  "size": [
+   1,
+   2
+  ],
+  "costs": {
+   "Steel": 120,
+   "Uranium": 14,
+   "ComponentIndustrial": 3,
+   "ComponentSpacer": 3
+  },
+  "researchPrerequisite": "ShipCryptosleep",
+  "fillPercent": 1.0,
+  "designationCategory": "Ship",
+  "stats": {
+   "maxHitPoints": 200,
+   "workToBuild": 11520.0,
+   "flammability": 0
+  },
+  "ship": {
+   "part": "Casket"
+  },
+  "source": "RimWorld wiki",
+  "unverified": [
+   "fillPercent",
+   "stats.flammability"
+  ]
+ },
+ {
+  "defName": "ShipReactor",
+  "parent": "BuildingBase",
+  "label": "ship reactor",
+  "size": [
+   6,
+   7
+  ],
+  "costs": {
+   "Steel": 350,
+   "Plasteel": 280,
+   "Uranium": 70,
+   "ComponentSpacer": 8
+  },
+  "researchPrerequisite": "StarshipReactor",
+  "fillPercent": 1.0,
+  "designationCategory": "Ship",
+  "stats": {
+   "maxHitPoints": 500,
+   "workToBuild": 93600.0,
+   "flammability": 0
+  },
+  "ship": {
+   "part": "Reactor"
+  },
+  "source": "RimWorld wiki",
+  "unverified": [
+   "fillPercent",
+   "stats.flammability"
+  ],
+  "power": {
+   "output": 1000
+  }
+ },
+ {
+  "defName": "ShipEngine",
+  "parent": "BuildingBase",
+  "label": "ship engine",
+  "size": [
+   3,
+   4
+  ],
+  "costs": {
+   "Steel": 260,
+   "Plasteel": 140,
+   "Uranium": 70,
+   "ComponentSpacer": 6
+  },
+  "researchPrerequisite": "ShipDrive",
+  "fillPercent": 1.0,
+  "designationCategory": "Ship",
+  "stats": {
+   "maxHitPoints": 400,
+   "workToBuild": 72000.0,
+   "flammability": 0
+  },
+  "ship": {
+   "part": "Engine"
+  },
+  "source": "RimWorld wiki",
+  "unverified": [
+   "fillPercent",
+   "stats.flammability"
+  ]
+ },
+ {
+  "defName": "ShipComputerCore",
+  "parent": "BuildingBase",
+  "label": "ship computer core",
+  "size": [
+   2,
+   2
+  ],
+  "costs": {
+   "Steel": 150,
+   "Gold": 70,
+   "ComponentSpacer": 4,
+   "SleeperShard": 1
+  },
+  "researchPrerequisite": "SleeperPersuasion",
+  "fillPercent": 1.0,
+  "designationCategory": "Ship",
+  "stats": {
+   "maxHitPoints": 150,
+   "workToBuild": 23040.0,
+   "flammability": 0
+  },
+  "ship": {
+   "part": "Core"
+  },
+  "source": "RimWorld wiki",
+  "unverified": [
+   "fillPercent",
+   "stats.flammability"
+  ]
+ },
+ {
+  "defName": "ShipSensorCluster",
+  "parent": "BuildingBase",
+  "label": "ship sensor cluster",
+  "size": [
+   2,
+   2
+  ],
+  "costs": {
+   "Steel": 100,
+   "Plasteel": 40,
+   "Gold": 20,
+   "ComponentSpacer": 2
+  },
+  "researchPrerequisite": "StarflightBasics",
+  "fillPercent": 1.0,
+  "designationCategory": "Ship",
+  "stats": {
+   "maxHitPoints": 200,
+   "workToBuild": 17280.0,
+   "flammability": 0
+  },
+  "ship": {
+   "part": "Sensor"
+  },
+  "source": "RimWorld wiki",
+  "unverified": [
+   "costs",
+   "size",
+   "stats",
+   "fillPercent"
+  ]
+ }
+]

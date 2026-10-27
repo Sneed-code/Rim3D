@@ -50,3 +50,5 @@ The first run found that an upper corner wall is unreachable once its two neighb
 colonists can only stand on a floor, and outside the upper ring there is none. The script now builds the
 corners first. A player's colonists do the same only if told to, so U17's tools may want to plan corners
 first, or a corner should be buildable from a diagonal.
+
+Update: `Construction::workCell` now builds an upper wall with no standable neighbour on its own level from the level below, so corners can be planned in any order; the script keeps building them first.
