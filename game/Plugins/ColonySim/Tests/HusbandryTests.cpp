@@ -8,6 +8,7 @@
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
@@ -18,6 +19,7 @@
 #include <doctest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
@@ -54,6 +56,10 @@ SimSettings husbSettings(int size = 64) {
     s.flatMap = true;
     s.checkpointEvery = 0;
     return s;
+}
+
+float distanceBetween(const Position& a, const Position& b) {
+    return std::hypot(a.x - b.x, a.y - b.y);
 }
 
 struct HusbFixture {
@@ -629,4 +635,60 @@ TEST_CASE("Husbandry: a door is a gate to a tame animal") {
         crossed += f.cellOfThing(cow).x >= 33 ? 1 : 0;
     }
     CHECK(crossed == 0);
+}
+
+TEST_CASE("Husbandry: an obedient animal follows a drafted colonist, one without Obedience does not") {
+    HusbFixture f;
+    const Entity pawn = f.addColonist(CellPos{10, 10, 0}, 10);
+    const Entity obedient = f.animal("Husky", CellPos{30, 10, 0});
+    const Entity plain = f.animal("Husky", CellPos{10, 30, 0});
+    HUSB_REQUIRE(f.tameNow(obedient));
+    HUSB_REQUIRE(f.tameNow(plain));
+    for (int i = 0; i < 10; ++i) {
+        f.hu().finishTrain(pawn, obedient, Trainable::Obedience, 20);
+    }
+    HUSB_REQUIRE(f.hu().learned(obedient, Trainable::Obedience));
+    f.sim.stepMany(60);
+    CHECK(distanceBetween(f.reg().get<Position>(obedient), f.reg().get<Position>(pawn)) > 15.0f);  // not drafted: it wanders
+    std::string error;
+    HUSB_REQUIRE(f.sim.fighters().draft(pawn, true, error));
+    bool near = f.runUntil(600, [&] { return distanceBetween(f.reg().get<Position>(obedient), f.reg().get<Position>(pawn)) < 7.0f; });
+    CHECK(near);
+    CHECK(distanceBetween(f.reg().get<Position>(plain), f.reg().get<Position>(pawn)) > 10.0f);
+    // Undrafted, it goes back to its own business.
+    HUSB_REQUIRE(f.sim.fighters().draft(pawn, false, error));
+}
+
+TEST_CASE("Husbandry: an animal trained to Rescue carries a downed colonist to a bed, and tends nobody") {
+    HusbFixture f;
+    f.sim.mentalBreaks().setNatural(false);
+    const Entity bed = f.sim.things().spawn("Bed", CellPos{20, 20, 0});
+    HUSB_REQUIRE(bed != kNoEntity);
+    const Entity trainer = f.addColonist(CellPos{10, 10, 0}, 20);
+    f.sim.submit(SetWorkPriorityCommand{trainer, "Doctor", 0});
+    const Entity patient = f.sim.things().spawn("Human", CellPos{30, 30, 0});
+    f.sim.jobs().addWorker(patient);
+    f.sim.submit(SetWorkPriorityCommand{patient, "Doctor", 0});
+    const Entity husky = f.animal("Husky", CellPos{28, 28, 0});
+    HUSB_REQUIRE(f.tameNow(husky));
+    for (int i = 0; i < 10; ++i) {
+        f.hu().finishTrain(trainer, husky, Trainable::Obedience, 20);
+    }
+    CHECK_FALSE(f.reg().all_of<Worker>(husky));
+    for (int i = 0; i < 20; ++i) {
+        f.hu().finishTrain(trainer, husky, Trainable::Rescue, 20);
+    }
+    HUSB_REQUIRE(f.hu().learned(husky, Trainable::Rescue));
+    CHECK(f.reg().all_of<Worker>(husky));
+    f.sim.stepMany(5);
+    for (const char* part : {"torso", "left leg", "right leg", "left arm"}) {
+        Rng rng(99);
+        const std::vector<std::string> labels = f.sim.health().partLabels(f.reg().get<Thing>(patient).def);
+        const int idx = static_cast<int>(std::find(labels.begin(), labels.end(), part) - labels.begin());
+        f.sim.health().applyDamage(patient, f.sim.health().damageTypeId("Blunt"), 20.0f, idx, rng);
+    }
+    HUSB_REQUIRE(f.reg().get<Health>(patient).downed);
+    const bool laid = f.runUntil(4000, [&] { return f.sim.jobs().bedUnder(patient) == bed; });
+    CHECK(laid);
+    CHECK(f.cellOfThing(patient) == CellPos{20, 20, 0});
 }
