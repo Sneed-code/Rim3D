@@ -229,7 +229,8 @@ TEST_CASE("defs: the real data folder loads") {
 
     // Animals (D5, docs/design/animals.md): the 15 races, their bodies, and what they leave behind.
     const char* const animals[] = {"Hare", "Squirrel", "Deer", "WildBoar", "Muffalo", "Alpaca", "Cow", "Chicken",
-                                   "Husky", "Cat", "TimberWolf", "GrizzlyBear", "Cougar", "Boomalope", "Thrumbo"};
+                                   "Husky", "Cat", "TimberWolf", "GrizzlyBear", "Cougar", "Boomalope", "Thrumbo", "Sheep", "Goat", "Yak",
+                                   "Duck", "Goose", "Turkey"};
     for (const char* name : animals) {
         const Def* animal = db.find("Things", name);
         if (animal == nullptr) { CHECK(false); MESSAGE(name); continue; }
@@ -334,5 +335,5 @@ TEST_CASE("defs: medicine and disease data (D7)") {
     CHECK(hospital->number("stats.medicalTendQualityOffset") > 0.0);
     const Def* healthRules = db.find("Rules", "HealthRules");
     CHECK(healthRules->number("restHealBonusPerDay.HospitalBed") > healthRules->number("restHealBonusPerDay.Bed"));
-    CHECK(db.find("Rules", "MedicineRules")->count("tendQualityBySkill") == 5);
+    CHECK(db.find("Rules", "MedicineRules")->count("tendQualityBySkill") == 21);
 }
