@@ -42,6 +42,7 @@
 #include "ColonySim/Mood.h"
 #include "ColonySim/Medicine.h"
 #include "ColonySim/Prisoners.h"
+#include "ColonySim/Quests.h"
 #include "ColonySim/Ship.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Social.h"
@@ -457,6 +458,7 @@ struct SaveData {
     int wildAnimals = 0;               // section "animals": SimSettings::wildAnimals
     AnimalSaved animals;               // section "animals": the system's own state
     RaidState raids;                   // section "raids" (F6)
+    QuestSystemState quests;           // section "quests" (Q1)
     HusbandrySaved husbandry;          // section "husbandry": animal zones and counters
     BreedingStats breeding;            // section "breeding": the counters (N4)
     FireSaved fire;                    // section "fire": fires, burnt ground, the home area (E4)
@@ -472,6 +474,8 @@ struct SaveData {
     SaveWeather weather;
     bool hasNarrator = false;          // section "narrator" (T1); older saves keep the narrator off
     NarratorState narrator;
+    WorldSettings world;               // section "world" (W2): SimSettings::world; older saves have no world
+    uint64_t worldHash = 0;            // the world's hash when saved, checked against the one made again
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -1007,6 +1011,10 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.text("action", c.action);
         ar.value("thing", c.thing);
         ar.value("pawn", c.pawn);
+    } else if constexpr (std::is_same_v<Type, QuestCommand>) {
+        ar.text("action", c.action);
+        ar.value("quest", c.quest);
+        ar.text("kind", c.kind);
     } else {
         static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
     }
@@ -2379,6 +2387,33 @@ void saveLegacyData(Ar& ar, SaveData& d) {
 }
 
 template <typename Ar>
+void saveQuests(Ar& ar, QuestSystemState& q) {
+    ar.value("next", q.next);
+    ar.list("quests", q.quests, [&](Quest& quest) {
+        ar.value("id", quest.id);
+        ar.text("kind", quest.kind);
+        ar.value("state", quest.state);
+        ar.require(static_cast<int>(quest.state) <= static_cast<int>(QuestState::Expired), "the save file has a bad quest state");
+        ar.value("offeredAt", quest.offeredAt);
+        ar.value("expiresAt", quest.expiresAt);
+        ar.value("acceptedAt", quest.acceptedAt);
+        ar.value("launchAt", quest.launchAt);
+        ar.value("deadline", quest.deadline);
+        ar.value("launched", quest.launched);
+        ar.value("count", quest.count);
+        ar.value("points", quest.points);
+        ar.text("faction", quest.faction);
+        ar.value("squad", quest.squad);
+        ar.list("people", quest.people, [&](Entity& p) { ar.value(nullptr, p); });
+        ar.list("rewards", quest.rewards, [&](Quest::Reward& r) {
+            ar.text("thing", r.thing);
+            ar.value("count", r.count);
+        });
+    });
+    ar.require(q.next > 0, "the save file has a bad quest counter");
+}
+
+template <typename Ar>
 void saveRaids(Ar& ar, RaidState& r) {
     ar.list("factions", r.factions, [&](std::string& f) { ar.text(nullptr, f); });
     ar.list("squads", r.squads, [&](Squad& s) {
@@ -2429,6 +2464,14 @@ void saveRaids(Ar& ar, RaidState& r) {
     ar.value("hasShelter", r.hasShelter);
     ar.group("shelter", [&] { saveCell(ar, r.shelter); });
     ar.value("nextAlarmThink", r.nextAlarmThink);
+    if (ar.sectionVersion() >= 2) {
+        ar.value("adaptDays", r.adaptDays);
+        ar.value("nextAdaptGrowth", r.nextAdaptGrowth);
+        ar.list("adaptPawns", r.adaptPawns, [&](RaidState::AdaptPawn& p) {
+            ar.value("pawn", p.pawn);
+            ar.value("downed", p.downed);
+        });
+    }
 }
 
 // ---- Sections (format 20 on) -----------------------------------------------------------------
@@ -2862,12 +2905,21 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("mentalBreaks", 1, [&] {
         saveParts(ar, "mentalBreaker", e, &SaveEntity::mentalBreaker, [&](MentalBreaker& b) { saveMentalBreakerPart(ar, b); });
     });
+    ar.section("quests", 1, [&] { saveQuests(ar, d.quests); });
     ar.section("inspirations", 1, [&] {
         saveParts(ar, "inspired", e, &SaveEntity::inspired, [&](Inspired& i) {
             ar.text("def", i.def);
             ar.value("startedAt", i.startedAt);
             ar.value("endsAt", i.endsAt);
         });
+    });
+    ar.section("world", 1, [&] {
+        ar.value("enabled", d.world.enabled);
+        ar.value("seed", d.world.seed);
+        ar.value("width", d.world.width);
+        ar.value("height", d.world.height);
+        ar.value("startTile", d.world.startTile);
+        ar.value("hash", d.worldHash);
     });
     // New sections go here, at the end.
 }
@@ -2963,7 +3015,16 @@ std::unique_ptr<Sim> SimSaveAccess::makeEmpty(const SaveData& data, std::shared_
                                               std::string& error) {
     SimSettings settings = data.settings;
     settings.wildAnimals = data.wildAnimals;  // saved in the animals section, not the sim section
+    settings.world = data.world;              // and the world in its own
     auto sim = std::unique_ptr<Sim>(new Sim(settings, std::move(defs), Sim::EmptyStart{}));
+    if (sim->worldHash_ != data.worldHash) {
+        error = "the world generator gives a different world for this seed than when the save was made";
+        return nullptr;
+    }
+    if (data.world.enabled && sim->world_->startTile() != data.world.startTile) {
+        error = "the save's start tile can't start a colony on this world";
+        return nullptr;
+    }
     if (sim->groundHash_ != data.groundHash) {
         error = "the map generator gives a different map for this seed than when the save was made";
         return nullptr;
@@ -2977,6 +3038,8 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.defsHash = sim.defs_->contentHash();
     d.settings = sim.settings_;
     d.wildAnimals = sim.settings_.wildAnimals;
+    d.world = sim.settings_.world;
+    d.worldHash = sim.worldHash_;
     d.animals = sim.animals_->saved();
     d.husbandry = sim.husbandry_->saved();
     d.farming = sim.farming_->saved();
@@ -3361,6 +3424,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.upperFloors = sim.map_.upperFloorCells();
     d.roofs = sim.roofCollapse_->state();
     d.raids = sim.raids_->state();
+    d.quests = sim.quests_->state();
     d.spoilageState = sim.spoilage_->state();
     d.craftingState = sim.crafting_->state();
     {
@@ -4088,6 +4152,11 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.raids_->restore(std::move(d.raids), error)) {
         return false;
     }
+    for (Quest& quest : d.quests.quests) {
+        quest.people.erase(std::remove_if(quest.people.begin(), quest.people.end(), [&](Entity p) { return !reg.valid(p); }),
+                           quest.people.end());
+    }
+    sim.quests_->state() = std::move(d.quests);
     if (!sim.ship_->restore(std::move(d.ship), error)) {
         return false;
     }
@@ -4205,7 +4274,7 @@ SaveLoadResult loadSim(const std::vector<uint8_t>& bytes, std::shared_ptr<const 
     }
     const SimSettings& s = data.settings;
     if (s.mapSize <= 0 || s.mapSize > 4096 || s.pawns < 0 || s.items < 0 || s.checkpointEvery < 0 || s.pathBudget <= 0 ||
-        data.seconds < 0) {
+        data.seconds < 0 || !worldSettingsValid(data.world)) {
         result.error = "the save file has impossible settings";
         return result;
     }
