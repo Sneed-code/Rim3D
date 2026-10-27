@@ -144,6 +144,10 @@ inline constexpr uint8_t kDoBillDepositStep = 3;
 // Refuel has four: go to the fuel, pick it up, carry it beside the building, put it in (the work
 // takes FuelSystem::kRefuelWorkSeconds). The pawn carries the fuel from the third on.
 inline constexpr uint8_t kRefuelPickUpStep = 1;
+// Operate: the DoBill steps with the patient for the work building. `thing` is the part or medicine being fetched (none when
+// there is nothing to fetch), `site` the patient, `bill` the operation's id, `cell` where the doctor stands.
+inline constexpr uint8_t kOperatePickUpStep = 1;
+inline constexpr uint8_t kOperateDepositStep = 3;
 // Ingest has four: go to the food, pick it up, go to the eating spot, eat. The pawn carries the
 // food from the third on.
 inline constexpr uint8_t kIngestPickUpStep = 1;
@@ -182,6 +186,8 @@ struct Bill;
 struct Recipe;
 class HealthSystem;
 class MedicineSystem;
+class SurgerySystem;
+class RoomStats;
 class PrisonerSystem;
 class Husbandry;
 class Lights;
@@ -322,6 +328,11 @@ public:
     // Medicine and medical care (MedicineJobs.cpp, docs/design/medicine.md); without it nobody tends or rescues.
     void setMedicine(MedicineSystem* medicine) { medicine_ = medicine; }
     MedicineSystem* medicine() const { return medicine_; }
+    // Operations (SurgeryJobs.cpp, docs/design/surgery.md); without it nobody operates and patients don't wait in bed for surgery.
+    // The room stats give the cleanliness of the room the patient lies in.
+    void setSurgery(SurgerySystem* surgery) { surgery_ = surgery; }
+    SurgerySystem* surgery() const { return surgery_; }
+    void setRoomStats(RoomStats* roomStats) { roomStats_ = roomStats; }
     void setTalents(const TalentSystem* talents) { talents_ = talents; }
     // Inspired colonists craft better and tend for free (docs/design/inspirations.md).
     void setInspirations(InspirationSystem* inspirations) { inspirations_ = inspirations; }
@@ -361,6 +372,15 @@ public:
     // The medicine a patient's care setting allows, for `doctor` to fetch: the strongest, then the nearest, that no
     // other pawn holds and the doctor can reach. kNoEntity if there is none.
     Entity findMedicine(Entity doctor, Entity patient) const;
+    // ---- Surgery (SurgeryJobs.cpp) -------------------------------------------------------------
+    // Whether a pawn belongs in a bed: it needs to rest (HealthSystem::needsRest) or has an operation planned.
+    bool needsBedRest(Entity pawn) const;
+    // Whether the patient lies in a bed now (downed on it, or resting or sleeping in it): where operations are done.
+    bool lyingInBed(Entity patient) const;
+    // The nearest part item of a def that nobody holds and `doctor` can reach, or kNoEntity.
+    Entity findPartItem(Entity doctor, DefId def) const;
+    // The first operation planned on `patient` that `doctor` can do now (skilled enough, part and medicine to hand), as a job.
+    bool planOperation(Entity doctor, Entity patient, Job& out);
     // A bed slot `patient` can lie in, as seen by `helper` (who must be able to reach it): medical beds first, then
     // the patient's own bed, then a free unowned one; the nearest to the patient within each. `medicalOnly` leaves
     // out the rest. Beds nobody owns that aren't medical are not claimed.
@@ -543,6 +563,12 @@ private:
     bool failCheckTend(Entity pawn, Job& job, std::string& why);
     bool failCheckRescue(Entity pawn, Job& job, std::string& why);
     bool failCheckBedRest(Entity pawn, Job& job, std::string& why);
+    bool failCheckOperate(Entity pawn, Job& job, std::string& why);
+    StepResult operateGoto(Entity pawn, Job& job, std::string& why);
+    StepResult operatePickUp(Entity pawn, Job& job, std::string& why);
+    StepResult operateDeposit(Entity pawn, Job& job, std::string& why);
+    StepResult operateWork(Entity pawn, Job& job, std::string& why);
+    StepResult operateFinish(Entity pawn, Job& job, std::string& why);
     StepResult walkToMedicine(Entity pawn, Job& job, std::string& why);
     StepResult pickUpMedicine(Entity pawn, Job& job, std::string& why);
     StepResult walkToPatient(Entity pawn, Job& job, std::string& why);
@@ -670,6 +696,8 @@ private:
     Rooms* rooms_ = nullptr;
     ResearchSystem* research_ = nullptr;
     MedicineSystem* medicine_ = nullptr;
+    SurgerySystem* surgery_ = nullptr;
+    RoomStats* roomStats_ = nullptr;
     PrisonerSystem* prisoners_ = nullptr;
     Husbandry* husbandry_ = nullptr;
     Breeding* breeding_ = nullptr;

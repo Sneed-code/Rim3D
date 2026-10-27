@@ -11,7 +11,7 @@
   },
   {
     "defName": "Doctor", "parent": "WorkTypeBase", "label": "doctor", "naturalPriority": 1200,
-    "relevantSkills": ["Medicine"], "workTags": ["Caring"], "tasks": ["TendPatients", "Rescue", "FeedPatients"]
+    "relevantSkills": ["Medicine"], "workTags": ["Caring"], "tasks": ["TendPatients", "Rescue", "Operate", "FeedPatients"]
   },
   {
     "defName": "PatientBedRest", "parent": "WorkTypeBase", "label": "bed rest", "naturalPriority": 1150,

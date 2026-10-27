@@ -79,6 +79,11 @@ enum class JobStepKind : uint8_t {
     DropCorpse,     // put the carried corpse down in the job's cell
     ButcherWork,    // cut the corpse up at the butcher table
     ButcherFinish,  // the meat and leather appear and the corpse is gone
+    OperateGoto,     // operations (SurgeryJobs.cpp)
+    OperatePickUp,
+    OperateDeposit,
+    OperateWork,
+    OperateFinish,
     PartyWork       // stand at the party spot until it ends, gaining joy (PartyJobs.cpp)
 };
 
@@ -133,6 +138,9 @@ constexpr JobStepKind kJobsHaulCorpseSteps[] = {JobStepKind::TendGotoPatient, Jo
                                                 JobStepKind::DropCorpse};
 constexpr JobStepKind kJobsButcherSteps[] = {JobStepKind::TendGotoPatient, JobStepKind::LiftPawn, JobStepKind::CarryPawn,
                                              JobStepKind::ButcherWork, JobStepKind::ButcherFinish};
+constexpr JobStepKind kJobsOperateSteps[] = {JobStepKind::OperateGoto,    JobStepKind::OperatePickUp, JobStepKind::CarryToCell,
+                                             JobStepKind::OperateDeposit, JobStepKind::OperateWork,   JobStepKind::OperateFinish};
+static_assert(kOperatePickUpStep == 1 && kOperateDepositStep == 3, "the Operate steps moved");
 
 // The most steps one pawn's job may run in one game second (guards against a loop of steps that
 // all end at once).
@@ -192,6 +200,7 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::Butcher: return {kJobsButcherSteps, static_cast<int>(std::size(kJobsButcherSteps))};
         case JobType::Party: return {kJobsPartySteps, static_cast<int>(std::size(kJobsPartySteps))};
         case JobType::SeekShelter: return {kJobsShelterSteps, static_cast<int>(std::size(kJobsShelterSteps))};
+        case JobType::Operate: return {kJobsOperateSteps, static_cast<int>(std::size(kJobsOperateSteps))};
     }
     return {nullptr, 0};
 }
@@ -218,6 +227,7 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::RefuelWork:
         case JobStepKind::ButcherWork:
         case JobStepKind::PartyWork:
+        case JobStepKind::OperateWork:
         case JobStepKind::Eat:
         case JobStepKind::Lie:
         case JobStepKind::BedRestLie:
@@ -292,6 +302,7 @@ const char* jobTypeName(JobType type) {
         case JobType::Butcher: return "Butcher";
         case JobType::Party: return "Party";
         case JobType::SeekShelter: return "SeekShelter";
+        case JobType::Operate: return "Operate";
     }
     return "?";
 }
@@ -536,6 +547,20 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
             }
             out[0] = keyOf(JobTarget{kNoEntity, job.cell});
             return 1;
+        case JobType::Operate: {
+            // The patient, the stack being fetched and the stacks still to fetch.
+            int n = 0;
+            out[n++] = keyOf(JobTarget{job.site, CellPos{}});
+            if (job.thing != kNoEntity) {
+                out[n++] = keyOf(JobTarget{job.thing, CellPos{}});
+            }
+            for (const BillPick& pick : job.picks) {
+                if (n < kMaxReservations) {
+                    out[n++] = keyOf(JobTarget{pick.item, CellPos{}});
+                }
+            }
+            return n;
+        }
         case JobType::TendPatient: {
             int n = 0;
             out[n++] = keyOf(JobTarget{job.thing, CellPos{}});
@@ -1061,6 +1086,9 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::TendPatient) {
         return failCheckTend(pawn, job, why);
     }
+    if (job.type == JobType::Operate) {
+        return failCheckOperate(pawn, job, why);
+    }
     if (job.type == JobType::Rescue) {
         return failCheckRescue(pawn, job, why);
     }
@@ -1210,6 +1238,16 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return billWork(pawn, job, why);
         case JobStepKind::RefuelWork:
             return refuelWork(pawn, job, why);
+        case JobStepKind::OperateGoto:
+            return operateGoto(pawn, job, why);
+        case JobStepKind::OperatePickUp:
+            return operatePickUp(pawn, job, why);
+        case JobStepKind::OperateDeposit:
+            return operateDeposit(pawn, job, why);
+        case JobStepKind::OperateWork:
+            return operateWork(pawn, job, why);
+        case JobStepKind::OperateFinish:
+            return operateFinish(pawn, job, why);
         case JobStepKind::BillFinish:
             return billFinish(pawn, job, why);
         case JobStepKind::Play:
@@ -1573,7 +1611,7 @@ void JobSystem::endJob(Entity pawn, JobEnd end, const std::string& why) {
         mover.next = 0;
     }
     dropCarried(pawn);
-    if (job.type == JobType::DoBill && end != JobEnd::Done) {
+    if ((job.type == JobType::DoBill || job.type == JobType::Operate) && end != JobEnd::Done) {
         returnIngredients(pawn, job);
     }
     if (jobIsLyingDown(job) || job.type == JobType::BedRest) {
@@ -1763,6 +1801,16 @@ bool JobSystem::afterLoad(std::string& error) {
                 (job.step <= kDoBillDepositStep && job.thing == kNoEntity) ||
                 job.picks.size() + 1 > static_cast<size_t>(kMaxReservations)) {
                 error = "the save has a bill job that doesn't match what the pawn carries";
+                return false;
+            }
+        }
+        if (job.type == JobType::Operate) {
+            const Carrying* carrying = reg.try_get<Carrying>(pawn);
+            const bool carries = carrying != nullptr && carrying->thing == job.thing && job.thing != kNoEntity;
+            const bool shouldCarry = job.step > kOperatePickUpStep && job.step <= kOperateDepositStep && job.thing != kNoEntity;
+            if (job.site == kNoEntity || job.bill == 0 || shouldCarry != carries ||
+                job.picks.size() + 1 > static_cast<size_t>(kMaxReservations)) {
+                error = "the save has an operation job that doesn't match what the pawn carries";
                 return false;
             }
         }

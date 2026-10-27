@@ -91,6 +91,10 @@ const char* commandName(const Command& command) {
                 return "SetBillOptions";
             } else if constexpr (std::is_same_v<Type, MoveBillCommand>) {
                 return "MoveBill";
+            } else if constexpr (std::is_same_v<Type, AddOperationCommand>) {
+                return "AddOperation";
+            } else if constexpr (std::is_same_v<Type, RemoveOperationCommand>) {
+                return "RemoveOperation";
             } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
                 return "ShortCircuit";
             } else if constexpr (std::is_same_v<Type, SetResearchCommand>) {
@@ -183,9 +187,11 @@ const char* commandName(const Command& command) {
                 return "EndMentalBreak";
             } else if constexpr (std::is_same_v<Type, StartStrategyRaidCommand>) {
                 return "StartStrategyRaid";
-            } else {
-                static_assert(std::is_same_v<Type, ShipCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, ShipCommand>) {
                 return "Ship";
+            } else {
+                static_assert(std::is_same_v<Type, QuestCommand>, "name every command type");
+                return "Quest";
             }
         },
         command);
@@ -304,6 +310,12 @@ const char* eventTypeName(EventType type) {
         case EventType::PawnMentalBreakEnded: return "PawnMentalBreakEnded";
         case EventType::PawnInsulted: return "PawnInsulted";
         case EventType::PawnLeftColony: return "PawnLeftColony";
+        case EventType::QuestOffered: return "QuestOffered";
+        case EventType::QuestAccepted: return "QuestAccepted";
+        case EventType::QuestDeclined: return "QuestDeclined";
+        case EventType::QuestExpired: return "QuestExpired";
+        case EventType::QuestCompleted: return "QuestCompleted";
+        case EventType::QuestFailed: return "QuestFailed";
         case EventType::InspirationStarted: return "InspirationStarted";
         case EventType::InspirationEnded: return "InspirationEnded";
         case EventType::ShipReactorStarted: return "ShipReactorStarted";
@@ -311,6 +323,7 @@ const char* eventTypeName(EventType type) {
         case EventType::ShipReactorReady: return "ShipReactorReady";
         case EventType::ShipReactorLost: return "ShipReactorLost";
         case EventType::ShipLaunched: return "ShipLaunched";
+        case EventType::OperationDone: return "OperationDone";
     }
     return "?";
 }
@@ -349,6 +362,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Butcher: return "Butcher";
         case PawnAction::DropCorpse: return "DropCorpse";
         case PawnAction::Punch: return "Punch";
+        case PawnAction::Operate: return "Operate";
     }
     return "?";
 }
