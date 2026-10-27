@@ -232,7 +232,7 @@ bool UProtagonistSubsystem::EnterDirectMode(colony::Entity Pawn)
 			Pawns->FindPawn(Controlled)->SetBodyHidden(false);
 		}
 	}
-	Body->Begin(Pawn, FVector2D(View->x, View->y), Cruise, Yaw);
+	Body->Begin(Pawn, FVector2D(View->x, View->y), Cruise, Yaw, View->level);
 	Controlled = Pawn;
 	LastSim = Bridge->GetSim();
 	if (!bDirect)
@@ -364,6 +364,13 @@ void UProtagonistSubsystem::OnBeforeStep()
 	{
 		return;
 	}
+	// Walked into stairs or a ladder: the sim climbs them (U17). Its DirectMove after this is ignored until the climb is over.
+	FVector2D ClimbDirection;
+	if (Body->TakeClimbRequest(ClimbDirection))
+	{
+		Bridge->Submit(colony::ClimbCommand{Controlled, static_cast<float>(ClimbDirection.X), static_cast<float>(ClimbDirection.Y)});
+		++ClimbsSent;
+	}
 	const FVector2D& Position = Body->GetSimPosition();
 	Bridge->Submit(colony::DirectMoveCommand{Controlled, static_cast<float>(Position.X), static_cast<float>(Position.Y)});
 	++MovesSent;
@@ -464,10 +471,14 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 		ExitDirectMode();
 		return;
 	}
-	// The sim has the last word: once it has taken control, the local position follows it.
-	if (Bridge->GetSim()->controlledPawn() == Controlled && Body->Reconcile(FVector2D(View->x, View->y)))
+	// The sim has the last word: once it has taken control, the local position follows it, up and down stairs too.
+	if (Bridge->GetSim()->controlledPawn() == Controlled)
 	{
-		++ReconcileCount;
+		Body->FollowSim(FVector2D(View->x, View->y), View->level, View->climb > 0.0f);
+		if (!Body->IsClimbing() && Body->Reconcile(FVector2D(View->x, View->y)))
+		{
+			++ReconcileCount;
+		}
 	}
 	ApplyBodyVisibility();
 	DrawHud(*Bridge);

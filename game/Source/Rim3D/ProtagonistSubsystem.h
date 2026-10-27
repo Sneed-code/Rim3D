@@ -73,6 +73,8 @@ public:
 	int32 GetReconcileCount() const { return ReconcileCount; }
 	/** DirectMove commands sent so far. */
 	int64 GetMovesSent() const { return MovesSent; }
+	/** Climbs of stairs and ladders asked of the sim (U17). */
+	int64 GetClimbsSent() const { return ClimbsSent; }
 
 protected:
 	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
@@ -98,4 +100,5 @@ private:
 	int32 HudFramesDrawn = 0;
 	int32 ReconcileCount = 0;
 	int64 MovesSent = 0;
+	int64 ClimbsSent = 0;
 };

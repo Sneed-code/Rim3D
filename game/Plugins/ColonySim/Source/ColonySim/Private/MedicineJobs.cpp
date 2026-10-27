@@ -96,7 +96,7 @@ bool JobSystem::needsRescue(Entity pawn) const {
         return false;  // a raider is carrying it off
     }
     return health.downed && !health.dead && (faction == nullptr || faction->id == kPlayerFaction || reg.all_of<Prisoner>(pawn)) &&
-           bedUnder(pawn) == kNoEntity;
+           bedUnder(pawn) == kNoEntity && rescuerOf(reg, pawn) == kNoEntity;  // a fighter fetching it to cover (F10)
 }
 
 bool JobSystem::findPatientBed(Entity patient, Entity helper, bool medicalOnly, Entity& bed, CellPos& cell) const {
@@ -480,7 +480,7 @@ bool JobSystem::failCheckBedRest(Entity pawn, Job& job, std::string& why) {
 
 JobSystem::StepResult JobSystem::bedRest(Entity pawn, Job& job, std::string&) {
     entt::registry& reg = things_.registry();
-    if (!health_.needsRest(pawn)) {
+    if (!needsBedRest(pawn)) {
         return StepResult::Next;
     }
     if (Health* health = reg.try_get<Health>(pawn)) {

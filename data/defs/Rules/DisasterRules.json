@@ -1,0 +1,18 @@
+[
+  {
+    "defName": "DisasterRules", "source": "RimWorld wiki",
+    "solarFlare": { "durationDays": [0.15, 0.5] },
+    "toxicFallout": { "durationDays": [2.5, 10.5], "plantKillPerHour": 0.6, "animalShare": 0.5 },
+    "volcanicWinter": { "durationDays": [7.5, 40], "temperatureOffset": -7, "glowLoss": 0.3, "rampHours": 20 },
+    "flashstorm": { "durationHours": [6, 14], "radius": 21, "strikeSeconds": 240, "damage": 30, "blastRadius": 2.0 },
+    "psychicDrone": { "durationDays": [0.75, 1.75] },
+    "psychicSoothe": { "durationDays": [1.5, 3.0] },
+    "blight": { "killChance": 0.7, "radius": [10, 20] },
+    "manhunterPack": { "durationHours": [24, 54], "powerPerBodySize": 100, "powerMin": 20, "maxAnimals": 30 },
+    "madAnimal": { "durationHours": [2, 4], "range": 60 },
+    "shortCircuit": { "blastPerRootWd": 0.1, "blastMin": 1.0, "blastMax": 5.0, "fireChance": 0.5 },
+    "unverified": ["toxicFallout.plantKillPerHour", "flashstorm", "blight", "manhunterPack.powerPerBodySize", "madAnimal", "shortCircuit"],
+    "ours": ["flashstorm", "blight.radius", "madAnimal", "shortCircuit", "manhunterPack.powerPerBodySize", "manhunterPack.powerMin", "manhunterPack.maxAnimals"],
+    "notes": "T3's disasters (docs/design/disasters.md). Durations and the winter's -7 degrees and 30% less light, the fallout's 40% buildup a day (Hediffs ToxicBuildup), the manhunter pack's 40% extra points (Incidents ManhunterPack factor 1.4) and its 24 to 54 hours are the wiki's. The psychic waves' mood offsets are in Thoughts (the drone's low to extreme are recalled; the soothe's +16 is the wiki's)."
+  }
+]

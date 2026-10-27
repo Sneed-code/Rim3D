@@ -132,6 +132,13 @@ struct KnockedDown {
     Stance before = Stance::Standing;
 };
 
+// On a stunned pawn (resonance's Stun, X2, docs/design/resonance.md): it can't walk, shoot, throw,
+// swing, block, cast or work until the steps run out; its stance stays as it was. ResonanceSystem
+// counts it down.
+struct Stunned {
+    int stepsLeft = 0;
+};
+
 // An explosion (CombatSystem::explode): a blast of `damage` that falls off to `edgeFactor` of it at
 // `radius`, is stopped by walls and cover, and reaches pawns as 2 to 4 fragments each.
 struct Explosion {
@@ -171,6 +178,7 @@ struct Projectile {
     int age = 0;            // steps in flight
     CellPos startCell;      // the shooter's cell: buildings there never stop the shot (a doorway)
     uint64_t seed = 0;      // where the hit's choices (part, armor) come from
+    float damageFactor = 1.0f;  // the gun's quality: times the bullet's damage and armor penetration
 };
 
 // A hitbox in the world, for the debug view (CombatSystem::hitboxesOf).
@@ -401,6 +409,12 @@ public:
     float spreadRadiusFor(float chance) const;
     // Things defs that go in a pawn's hands: a melee weapon (an item with `tools`, F8) or a gun.
     bool isMeleeWeapon(DefId def) const;
+    // What a weapon item's quality and stuff make of it, from QualityRules and the stuff's statFactors:
+    // 1 for a normal weapon of no stuff. The melee factor is by the blow's damage type (sharp or blunt
+    // stuff factor times the quality's) and applies to damage and armor penetration alike.
+    float meleeDamageFactor(Entity weapon, DefId damageType) const;
+    float rangedAccuracyFactor(Entity weapon) const;
+    float rangedDamageFactor(Entity weapon) const;
     bool isGun(DefId def) const;
 
 private:

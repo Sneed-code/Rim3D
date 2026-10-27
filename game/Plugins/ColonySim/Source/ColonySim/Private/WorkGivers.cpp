@@ -17,6 +17,7 @@
 #include "ColonySim/Map.h"
 #include "ColonySim/Medicine.h"
 #include "ColonySim/MentalBreaks.h"
+#include "ColonySim/Surgery.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Plants.h"
@@ -213,15 +214,18 @@ private:
 };
 
 // Frames with all their materials (RimWorld's WorkGiver_ConstructFinishFrames).
-class ConstructFinishGiver final : public WorkGiver {
+class ConstructFinishGiver : public WorkGiver {
 public:
     const char* task() const override { return "ConstructFinishFrames"; }
+    // Sculptures are art: the Art work type's giver builds those, this one every other frame.
+    virtual bool wantsArt() const { return false; }
 
     void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
         const entt::registry& reg = jobs.things().registry();
         const Position& at = reg.get<Position>(pawn);
         reg.view<const ConstructionSite, const Position>().each([&](Entity site, const ConstructionSite& s, const Position& pos) {
-            if (s.stage != ConstructionStage::Frame || !s.hasAllMaterials()) {
+            if (s.stage != ConstructionStage::Frame || !s.hasAllMaterials() ||
+                jobs.construction().isArt(reg.get<Thing>(site).def) != wantsArt()) {
                 return;
             }
             CellPos stand;
@@ -239,6 +243,13 @@ public:
         out.cell = candidate.reach;
         return true;
     }
+};
+
+// Sculptures (docs/design/art.md): the same frames, built by artists.
+class ConstructArtGiver final : public ConstructFinishGiver {
+public:
+    const char* task() const override { return "BuildArt"; }
+    bool wantsArt() const override { return true; }
 };
 
 // Buildings marked to be taken down (RimWorld's WorkGiver_Deconstruct).
@@ -758,6 +769,32 @@ public:
     }
 };
 
+// Operate (RimWorld's surgery bills, task H3, docs/design/surgery.md): a patient lying in bed with an operation planned that this
+// pawn is skilled enough for and can fetch the part and a medicine for.
+class OperateGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "Operate"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        if (jobs.surgery() == nullptr || jobs.medicine() == nullptr || !jobs.canUseHands(pawn)) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        for (const auto [patient, health, pos] : reg.view<const Health, const Position>().each()) {
+            if (patient == pawn || pos.level != at.level || !medicalColonist(reg, patient) || !jobs.surgery()->pending(patient) ||
+                !jobs.lyingInBed(patient)) {
+                continue;
+            }
+            out.push_back(WorkCandidate{JobTarget{patient, CellPos{}}, workGiverDistSq(at, pos), 0, 0, false, CellPos{}});
+        }
+    }
+
+    bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
+        return jobs.planOperation(pawn, candidate.target.thing, out);
+    }
+};
+
 // A patient that isn't down goes to bed to heal: GoToMedicalBed only to a medical bed, RestToHeal to any bed.
 class BedRestGiver : public WorkGiver {
 public:
@@ -765,7 +802,7 @@ public:
 
     void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
         const entt::registry& reg = jobs.things().registry();
-        if (!reg.all_of<Health, Worker>(pawn) || reg.get<Health>(pawn).downed || !jobs.health().needsRest(pawn)) {
+        if (!reg.all_of<Health, Worker>(pawn) || reg.get<Health>(pawn).downed || !jobs.needsBedRest(pawn)) {
             return;
         }
         const Entity under = jobs.bedUnder(pawn);
@@ -783,7 +820,7 @@ public:
     }
 
     bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
-        if (!jobs.health().needsRest(pawn)) {
+        if (!jobs.needsBedRest(pawn)) {
             return false;
         }
         out = Job{};
@@ -1011,6 +1048,7 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<HaulToStockpileGiver>());
     givers.push_back(std::make_unique<ConstructDeliverGiver>());
     givers.push_back(std::make_unique<ConstructFinishGiver>());
+    givers.push_back(std::make_unique<ConstructArtGiver>());
     givers.push_back(std::make_unique<DeconstructGiver>());
     givers.push_back(std::make_unique<MineGiver>());
     givers.push_back(std::make_unique<CutOrHarvestPlantsGiver>());
@@ -1018,13 +1056,14 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<SowCropsGiver>());
     for (const char* task :
          {"DoBillsCookStove", "DoBillsButcher", "DoBillsSmithy", "DoBillsTailor", "DoBillsCraftingSpot", "DoBillsStonecut", "DoBillsSmelt",
-          "DoBillsCremate"}) {
+          "DoBillsCremate", "DoBillsDrugLab", "DoBillsBrew"}) {
         givers.push_back(std::make_unique<DoBillsGiver>(task));
     }
     givers.push_back(std::make_unique<ResearchGiver>());
     givers.push_back(std::make_unique<CleanFilthGiver>());
     givers.push_back(std::make_unique<TendPatientsGiver>());
     givers.push_back(std::make_unique<RescueGiver>());
+    givers.push_back(std::make_unique<OperateGiver>());
     givers.push_back(std::make_unique<GoToMedicalBedGiver>());
     givers.push_back(std::make_unique<RestToHealGiver>());
     givers.push_back(std::make_unique<ExtinguishFiresGiver>());

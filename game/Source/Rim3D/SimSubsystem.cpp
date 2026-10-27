@@ -762,13 +762,58 @@ bool USimSubsystem::GetBlendedLocation(colony::Entity Thing, FVector& OutLocatio
 	float Y = Newest->y;
 	// A thing that appeared this step has no earlier position to blend from.
 	const colony::ThingView* Older = Previous.find(Thing);
-	if (Older && Older->level == Newest->level)
+	if (Older && (Older->level != Newest->level || Older->climb > 0.0f || Newest->climb > 0.0f))
+	{
+		// On stairs or a ladder, or just off them: between the two places drawn.
+		OutLocation = FMath::Lerp(GetViewLocation(*Older), GetViewLocation(*Newest), static_cast<double>(BlendAlpha));
+		return true;
+	}
+	if (Older)
 	{
 		X = FMath::Lerp(Older->x, Newest->x, BlendAlpha);
 		Y = FMath::Lerp(Older->y, Newest->y, BlendAlpha);
 	}
 	OutLocation = SimToWorld(X, Y, Newest->level);
 	return true;
+}
+
+FVector USimSubsystem::GetViewLocation(const colony::ThingView& View) const
+{
+	if (View.climb <= 0.0f || !Sim)
+	{
+		return SimToWorld(View.x, View.y, View.level);
+	}
+	// The link the pawn is on: one end on its level, and the pawn on the line between the two ends' middles.
+	const FVector2D At(View.x, View.y);
+	const colony::LevelLink* Best = nullptr;
+	double BestDistance = 0.75;
+	for (const colony::LevelLink& Link : Sim->map().levelLinks())
+	{
+		if (Link.low.level != View.level && Link.high.level != View.level)
+		{
+			continue;
+		}
+		const FVector2D Low(Link.low.x + 0.5, Link.low.y + 0.5);
+		const FVector2D High(Link.high.x + 0.5, Link.high.y + 0.5);
+		const FVector2D Closest = FMath::ClosestPointOnSegment2D(At, Low, High);
+		const double Distance = FVector2D::Distance(Closest, At);
+		if (Distance < BestDistance)
+		{
+			Best = &Link;
+			BestDistance = Distance;
+		}
+	}
+	if (!Best)
+	{
+		return SimToWorld(View.x, View.y, View.level);
+	}
+	// How far along from the foot: the climb rises over the building between the two end cells, flat for the half
+	// metre in each end cell (a ladder, one cell long, is a steep one).
+	const FVector2D Low(Best->low.x + 0.5, Best->low.y + 0.5);
+	const double Length = FVector2D::Distance(Low, FVector2D(Best->high.x + 0.5, Best->high.y + 0.5));
+	const double FromLow = FMath::Clamp(FVector2D::Distance(Low, At), 0.0, Length);
+	const double Rise = Length > 1.0 ? FMath::Clamp((FromLow - 0.5) / (Length - 1.0), 0.0, 1.0) : FromLow / FMath::Max(Length, 0.01);
+	return SimToWorld(View.x, View.y, Best->low.level) + FVector(0.0, 0.0, Rise * SimBridgeLevelHeightM * 100.0 * (Best->high.level - Best->low.level));
 }
 
 FVector USimSubsystem::SimToWorld(float X, float Y, int32 Level) const

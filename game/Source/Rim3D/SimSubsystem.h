@@ -168,8 +168,12 @@ public:
 	float GetBlendAlpha() const { return BlendAlpha; }
 
 	/** Where a thing is now, blended between the last two snapshots, in Unreal world units (cm).
-	 *  False if it is not on the map. */
+	 *  False if it is not on the map. A pawn on stairs or a ladder rides up their slope (GetViewLocation). */
 	bool GetBlendedLocation(colony::Entity Thing, FVector& OutLocation) const;
+
+	/** Where a thing of one snapshot is drawn: on its level, or a climbing pawn on the slope of its stairs or ladder
+	 *  (flat at both ends, rising over the building itself; docs/design/levels-draw.md). */
+	FVector GetViewLocation(const colony::ThingView& View) const;
 
 	/** Sim metres on a level (x, y) to Unreal centimetres, with Z up from the ground. */
 	FVector SimToWorld(float X, float Y, int32 Level) const;

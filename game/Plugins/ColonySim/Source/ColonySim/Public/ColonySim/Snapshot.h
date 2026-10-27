@@ -163,7 +163,14 @@ struct ThingView {
     bool prisoner = false;
     uint8_t prisonerMode = 0;
     float resistance = 0.0f;
+    // Visitors (docs/design/trade.md): a pawn of a visit (a VisitorRole number: 0 visitor, 1 trader, 2 guard) and the visit's id.
+    bool visitor = false;
+    uint8_t visitRole = 0;
+    uint32_t visit = 0;
     bool prisonBed = false;
+    // F10 (docs/design/field-care.md): defenseRole 3 is Medic and 4 Firefighter; a fighter carrying a downed friend
+    // to cover has it in `rescuing` (the friend's position follows the fighter's after the LiftPawn action).
+    Entity rescuing = kNoEntity;
     // Humanlike pawns: their looks, Snapshot::looks[looks]; -1 for other things.
     int32_t looks = -1;
     // Buildings with a power part (docs/design/power.md): whether they have power, the net they are
@@ -222,6 +229,13 @@ struct ThingView {
     uint32_t apparelCount = 0;
     int quality = -1;
     bool tainted = false;
+    // Resonance (docs/design/resonance.md). Pawns: steps left of a stun (0: not stunned), whether a numb or burden
+    // is on them, and for a pawn winding up a power, the Powers def and the steps until it goes off.
+    int stunnedFor = 0;
+    bool numbed = false;
+    bool burdened = false;
+    DefId castPower;
+    int castStepsLeft = 0;
     // Pawns in a mental break (docs/design/mental-breaks.md): its MentalBreaks def, invalid when not in one.
     DefId mentalBreak;
 };
@@ -256,6 +270,34 @@ struct SquadView {
     CellPos breach;          // ...this one
 };
 
+// A thing in a trader's stock.
+struct StockView {
+    std::string thing;  // Things defName
+    int count = 0;
+};
+
+// Visitors, a trade caravan or an orbital trader on the map (docs/design/trade.md). `kind` is a VisitKind (0 visitors, 1 caravan,
+// 2 orbital), `phase` a VisitPhase (0 staying, 1 leaving). The trader's `stock` is what the colony may buy; send a TradeCommand to trade.
+struct VisitView {
+    uint32_t id = 0;
+    uint8_t kind = 0;
+    uint8_t phase = 0;
+    std::string faction;
+    std::string traderKind;
+    Entity trader = kNoEntity;  // the pawn to trade with, none for a ship
+    int64_t leaveAt = 0;        // game second
+    int silver = 0;             // what the trader can pay with
+    int members = 0;
+    CellPos spot;               // where they gather and where goods are put down
+    std::vector<StockView> stock;
+};
+
+// What a faction thinks of the colony: goodwill from -100 to 100 and its relation (0 hostile, 1 neutral, 2 ally).
+struct GoodwillView {
+    std::string faction;
+    float goodwill = 0.0f;
+    uint8_t relation = 1;
+};
 // A quest, offered or finished (docs/design/quests.md): `state` is a QuestState (0 Offered, 1 Active, 2 Completed, 3 Failed, 4 Declined,
 // 5 Expired), `expiresAt` the game second an unanswered offer lapses, `deadline` the game second an active raid quest fails
 // (0 for none), `people` how many come, `points` the raid's points (0 for none), `rewards` the defName and count of each reward item.
@@ -299,6 +341,17 @@ struct PawnLooksView {
     float height = 1.0f;  // times 1.80 m
     LooksColor skin;
     LooksColor hair;
+    // V1 (docs/design/looks.md): the face, hair style, beard, body hair and skin marks.
+    float faceShape = 0.5f;
+    float brow = 0.5f;
+    float nose = 0.5f;
+    float jaw = 0.5f;
+    LooksColor eyes;
+    std::string hairStyle;  // empty for a pawn from an older save
+    std::string beard;
+    float bodyHair = 0.0f;
+    std::vector<LooksMark> tattoos;
+    std::vector<LooksMark> scars;
 };
 
 // One bill on a work building, in the building's order (first is tried first).
@@ -457,6 +510,16 @@ struct TalentView {
     std::vector<TalentRankView> ranks;  // in Talents def order
 };
 
+// An attuned pawn (docs/design/resonance.md). One entry per attuned pawn, in id order.
+struct AttunedView {
+    Entity pawn = kNoEntity;
+    int level = 0;
+    float strain = 0.0f;       // RimWorld's neural heat
+    float strainLimit = 0.0f;
+    float focus = 0.0f;        // RimWorld's psyfocus, 0 to 1
+    std::vector<DefId> powers;  // the Powers defs it knows
+};
+
 struct Snapshot {
     int64_t gameSeconds = 0;  // Sim::time().seconds when it was written
     int mapWidth = 0;
@@ -504,10 +567,13 @@ struct Snapshot {
     bool alarm = false;
     bool alarmManual = false;
     std::vector<SquadView> squads;
+    std::vector<VisitView> visits;         // visitors and traders here now (docs/design/trade.md)
+    std::vector<GoodwillView> goodwill;    // every faction's goodwill with the colony
     std::vector<QuestView> quests;         // offered, active and recently finished quests, by id
     std::vector<ApparelView> apparel;      // worn apparel, see ThingView
     std::vector<OutfitView> outfits;       // the outfit policies, by id
     WeatherView weather;
+    std::vector<AttunedView> attuned;      // see AttunedView
     ShipView ship;
     NarratorView narrator;
 

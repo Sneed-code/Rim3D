@@ -11,7 +11,7 @@
   },
   {
     "defName": "Doctor", "parent": "WorkTypeBase", "label": "doctor", "naturalPriority": 1200,
-    "relevantSkills": ["Medicine"], "workTags": ["Caring"], "tasks": ["TendPatients", "Rescue", "FeedPatients"]
+    "relevantSkills": ["Medicine"], "workTags": ["Caring"], "tasks": ["TendPatients", "Rescue", "Operate", "FeedPatients"]
   },
   {
     "defName": "PatientBedRest", "parent": "WorkTypeBase", "label": "bed rest", "naturalPriority": 1150,
@@ -32,7 +32,7 @@
   {
     "defName": "Cooking", "parent": "WorkTypeBase", "label": "cook", "naturalPriority": 950,
     "relevantSkills": ["Cooking"], "workTags": ["ManualSkilled", "Cooking"], "inPrototype": true,
-    "tasks": ["DoBillsCookStove", "DoBillsButcher"]
+    "tasks": ["DoBillsCookStove", "DoBillsButcher", "DoBillsBrew"]
   },
   {
     "defName": "Hunting", "parent": "WorkTypeBase", "label": "hunt", "naturalPriority": 900,
@@ -66,11 +66,11 @@
   },
   {
     "defName": "Art", "parent": "WorkTypeBase", "label": "art", "naturalPriority": 450,
-    "relevantSkills": ["Artistic"], "workTags": ["Artistic"], "tasks": ["DoBillsSculpt"]
+    "relevantSkills": ["Artistic"], "workTags": ["Artistic"], "tasks": ["BuildArt", "DoBillsSculpt"]
   },
   {
     "defName": "Crafting", "parent": "WorkTypeBase", "label": "craft", "naturalPriority": 400,
-    "relevantSkills": ["Crafting"], "workTags": ["ManualSkilled", "Crafting"], "tasks": ["DoBillsCraftingSpot", "DoBillsStonecut", "DoBillsSmelt"]
+    "relevantSkills": ["Crafting"], "workTags": ["ManualSkilled", "Crafting"], "tasks": ["DoBillsCraftingSpot", "DoBillsStonecut", "DoBillsSmelt", "DoBillsDrugLab"]
   },
   {
     "defName": "Hauling", "parent": "WorkTypeBase", "label": "haul", "naturalPriority": 300,

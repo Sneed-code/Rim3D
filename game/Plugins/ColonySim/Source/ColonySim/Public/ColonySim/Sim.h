@@ -33,6 +33,7 @@ class ApparelSystem;
 class Construction;
 class DefDatabase;
 class DefenseSystem;
+class DrugSystem;
 class Filth;
 class Floors;
 class RoomStats;
@@ -52,16 +53,21 @@ class Mineables;
 class MovementSystem;
 class MoodSystem;
 class MedicineSystem;
+class SurgerySystem;
 class RecreationSystem;
 class SocialSystem;
 class ResearchSystem;
+class ResonanceSystem;
 class TalentSystem;
 class NeedsSystem;
 class RaidSystem;
+class FieldCare;
+class MonsterSystem;
 class Plants;
 class PowerGrid;
 class Regions;
 class PrisonerSystem;
+class TradeSystem;
 class QuestSystem;
 class ShipSystem;
 class Rooms;
@@ -75,6 +81,7 @@ class Weather;
 class Zones;
 class Farming;
 class NarratorSystem;
+class DisasterSystem;
 struct Snapshot;
 class SimSaveAccess;
 
@@ -130,6 +137,24 @@ struct Checkpoint {
     uint64_t hash = 0;
 };
 
+// Wall time spent in each system of a step, summed over the steps run while it is set on a Sim
+// (`simrun --perf`, docs/design/sim-cost.md). Names are string literals.
+struct StepProfile {
+    std::vector<const char*> names;
+    std::vector<double> ms;
+    int64_t steps = 0;
+    void add(const char* name, double elapsedMs) {
+        for (size_t i = 0; i < names.size(); ++i) {
+            if (names[i] == name) {
+                ms[i] += elapsedMs;
+                return;
+            }
+        }
+        names.push_back(name);
+        ms.push_back(elapsedMs);
+    }
+};
+
 // The whole game state and its rules. Unreal sends commands, reads events and snapshots, and
 // never changes sim state directly (docs/design/bridge.md).
 class COLONY_API Sim {
@@ -147,6 +172,9 @@ public:
     // then runs every system.
     void step();
     void stepMany(int64_t steps);
+    // Times each system of the following steps into `profile` (null: off, the default). Not saved,
+    // not hashed.
+    void setProfile(StepProfile* profile) { profile_ = profile; }
 
     // Queues a command for the start of the next step. Returns its id: 1, 2, 3... in submit
     // order, which a CommandFailed event names.
@@ -194,12 +222,18 @@ public:
     // Recreation, comfort and the outdoors need (docs/design/recreation.md).
     RecreationSystem& recreation() { return *recreation_; }
     const RecreationSystem& recreation() const { return *recreation_; }
+    // Drugs, tolerance, addiction, withdrawal and drug policies (docs/design/drugs.md).
+    DrugSystem& drugs() { return *drugs_; }
+    const DrugSystem& drugs() const { return *drugs_; }
     // Research projects and what they unlock (docs/design/research.md).
     ResearchSystem& research() { return *research_; }
     const ResearchSystem& research() const { return *research_; }
     // Medicine: tend quality, medical care settings (docs/design/medicine.md).
     MedicineSystem& medicine() { return *medicine_; }
     const MedicineSystem& medicine() const { return *medicine_; }
+    // Surgery: operations planned on patients, their success chances (docs/design/surgery.md).
+    SurgerySystem& surgery() { return *surgery_; }
+    const SurgerySystem& surgery() const { return *surgery_; }
     // The protagonist's talent XP, points and ranks (docs/design/talents.md).
     TalentSystem& talents() { return *talents_; }
     const TalentSystem& talents() const { return *talents_; }
@@ -319,10 +353,20 @@ public:
     // Raids, raid squads and the colony alarm with its defense roles (docs/design/raids.md).
     RaidSystem& raids() { return *raids_; }
     const RaidSystem& raids() const { return *raids_; }
+    // Medics, firefighters and rescue under fire (F10, docs/design/field-care.md).
+    FieldCare& fieldCare() { return *fieldCare_; }
+    const FieldCare& fieldCare() const { return *fieldCare_; }
+
+    // Brood mounds and Remnant clusters (docs/design/monsters.md).
+    MonsterSystem& monsters() { return *monsters_; }
 
     // The narrator, incidents and threat points (docs/design/narrator.md).
     NarratorSystem& narrator() { return *narrator_; }
     const NarratorSystem& narrator() const { return *narrator_; }
+    // Disasters and bad events: solar flare, toxic fallout, volcanic winter, flashstorm, psychic waves, blight,
+    // manhunters, short circuits (docs/design/disasters.md).
+    DisasterSystem& disasters() { return *disasters_; }
+    const DisasterSystem& disasters() const { return *disasters_; }
     // Prisoners: capture, feeding, warden talks, recruiting and release (docs/design/prisoners.md).
     // The spaceship ending: parts, reactor, siege waves, launch (docs/design/ship.md).
     ShipSystem& ship() { return *ship_; }
@@ -332,6 +376,10 @@ public:
     // Quests: offers, answers, rewards (docs/design/quests.md). The narrator offers them with `quests().offerRandom`.
     QuestSystem& quests() { return *quests_; }
     const QuestSystem& quests() const { return *quests_; }
+
+    // Faction goodwill, visitors, trade caravans, orbital traders and trade (docs/design/trade.md).
+    TradeSystem& trade() { return *trade_; }
+    const TradeSystem& trade() const { return *trade_; }
 
     // Taming, training, animal zones and pens (docs/design/husbandry.md).
     Husbandry& husbandry() { return *husbandry_; }
@@ -353,6 +401,10 @@ public:
     // Blueprints, frames and taking buildings down (docs/design/construction.md).
     Construction& construction() { return *construction_; }
     const Construction& construction() const { return *construction_; }
+
+    // Attunement, strain, focus and the powers of resonance (docs/design/resonance.md).
+    ResonanceSystem& resonance() { return *resonance_; }
+    const ResonanceSystem& resonance() const { return *resonance_; }
 
     // Power nets, generators, batteries and who has power (docs/design/power.md). Stepped at the end
     // of every step, after rooms (the sun needs roofs).
@@ -379,6 +431,8 @@ private:
 
     void applyCommand(const Command& command, uint64_t id);
     void commandFailed(uint64_t id, std::string message);
+    // ClimbCommand (U17): sets the controlled pawn off up or down the stairs or ladder at its cell.
+    bool startClimb(Entity pawn, float dx, float dy, std::string& error);
     void placeStockpileAndThings();
     void pruneDesignations();
     void startScenario();
@@ -411,13 +465,16 @@ private:
     std::unique_ptr<Farming> farming_;                // after temperature_, lights_ and zones_
     std::unique_ptr<SpoilageSystem> spoilage_;        // after temperature_ and roomStats_
     std::optional<float> outdoorOverride_;
+    StepProfile* profile_ = nullptr;
     DoorNumbers doorNumbers_;  // for the snapshot's door animation
     std::unique_ptr<HealthSystem> health_;
     std::unique_ptr<NeedsSystem> needs_;
     std::unique_ptr<MoodSystem> mood_;
     std::unique_ptr<RecreationSystem> recreation_;
+    std::unique_ptr<DrugSystem> drugs_;  // after health_, needs_ and mood_
     std::unique_ptr<ResearchSystem> research_;
     std::unique_ptr<MedicineSystem> medicine_;
+    std::unique_ptr<SurgerySystem> surgery_;
     std::unique_ptr<TalentSystem> talents_;
     std::unique_ptr<CombatSystem> combat_;
     std::unique_ptr<ExplosiveSystem> explosives_;  // after combat_ and health_
@@ -440,7 +497,9 @@ private:
     std::unique_ptr<UpperFloors> upperFloors_;  // M1
     std::unique_ptr<RoofCollapse> roofCollapse_;  // M3, after the rooms and the job system
     std::unique_ptr<RaidSystem> raids_;        // after the fighters
+    std::unique_ptr<MonsterSystem> monsters_;  // after raids_ and animals_
     std::unique_ptr<PrisonerSystem> prisoners_;  // after the raids
+    std::unique_ptr<TradeSystem> trade_;         // after the raids
     std::unique_ptr<QuestSystem> quests_;        // after the raids
     std::unique_ptr<ShipSystem> ship_;           // after the raids
     std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system
@@ -456,8 +515,11 @@ private:
     std::vector<Checkpoint> checkpoints_;
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
+    std::unique_ptr<FieldCare> fieldCare_;    // after the raids, the fighters and the jobs, which hold a pointer to it
     std::unique_ptr<NarratorSystem> narrator_;  // after raids_
+    std::unique_ptr<DisasterSystem> disasters_;  // T3, after the narrator and everything it touches
     std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
+    std::unique_ptr<ResonanceSystem> resonance_;  // after the fighters and the job system it holds
 };
 
 }  // namespace colony

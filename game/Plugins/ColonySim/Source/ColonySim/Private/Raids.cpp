@@ -16,6 +16,7 @@
 #include "ColonySim/Random.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Rooms.h"
+#include "ColonySim/Trade.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -140,6 +141,8 @@ const char* defenseRoleName(DefenseRole role) {
         case DefenseRole::Defender: return "Defender";
         case DefenseRole::Shelter: return "Shelter";
         case DefenseRole::KeepWorking: return "KeepWorking";
+        case DefenseRole::Medic: return "Medic";
+        case DefenseRole::Firefighter: return "Firefighter";
     }
     return "?";
 }
@@ -682,7 +685,7 @@ bool RaidSystem::soundAlarm(bool on, std::string& error) {
     // Enemies still about: don't sound it again by itself until they are gone.
     const entt::registry& reg = things_.registry();
     for (const auto [pawn, faction] : reg.view<const Faction>().each()) {
-        if (faction.id != kPlayerFaction && !reg.all_of<Animal>(pawn) && !reg.all_of<Prisoner>(pawn) && things_.spawned(pawn) &&
+        if (faction.id != kPlayerFaction && !reg.all_of<Animal>(pawn) && !reg.all_of<Prisoner>(pawn) && !reg.all_of<Visitor>(pawn) && things_.spawned(pawn) &&
             !health_.incapacitated(pawn)) {
             state_.suppressed = true;
             break;
@@ -698,9 +701,20 @@ bool RaidSystem::setRole(Entity pawn, DefenseRole role, bool hasSpot, CellPos sp
         error = "that isn't one of the colony's pawns";
         return false;
     }
-    if (static_cast<int>(role) > static_cast<int>(DefenseRole::KeepWorking)) {
+    if (static_cast<int>(role) > static_cast<int>(DefenseRole::Firefighter)) {
         error = "no such defense role";
         return false;
+    }
+    // A Medic does Doctor work and a Firefighter Firefighter work: a colonist incapable of it can't take the role.
+    if (role == DefenseRole::Medic || role == DefenseRole::Firefighter) {
+        const char* work = role == DefenseRole::Medic ? "Doctor" : "Firefighter";
+        const int index = jobs_.workTypeIndex(defs_.idOf("WorkTypes", work));
+        const WorkSettings* settings = reg.try_get<WorkSettings>(pawn);
+        if (index < 0 || settings == nullptr || static_cast<size_t>(index) >= settings->entries.size() ||
+            settings->entries[static_cast<size_t>(index)].disabled) {
+            error = std::string("it can't do ") + work + " work";
+            return false;
+        }
     }
     if (hasSpot && (role != DefenseRole::Defender || !map_.walkable(spot))) {
         error = role != DefenseRole::Defender ? "only a Defender has a defense spot" : "nobody can stand there";
@@ -1690,7 +1704,7 @@ void RaidSystem::thinkAlarm() {
         // Wild animals aren't enemies (Animals.h) until they hunt, fight back or go manhunter (N5).
         const Animal* wild = reg.try_get<Animal>(pawn);
         if (faction.id == kPlayerFaction || (wild != nullptr && wild->temper == AnimalTemper::Calm) || health_.incapacitated(pawn) ||
-            reg.all_of<Prisoner>(pawn)) {
+            reg.all_of<Prisoner>(pawn) || reg.all_of<Visitor>(pawn)) {
             continue;
         }
         const Fighter* f = reg.try_get<Fighter>(pawn);
@@ -1768,6 +1782,9 @@ void RaidSystem::callUp(Entity pawn, const std::vector<Entity>& spotted) {
     }
     const DefensePlan* plan = reg.try_get<DefensePlan>(pawn);
     DefenseRole role = plan != nullptr ? plan->role : DefenseRole::Defender;
+    if (role == DefenseRole::Medic || role == DefenseRole::Firefighter) {
+        return;  // FieldCare gives it its duty, and calls it to fight only when an enemy comes close (field-care.md)
+    }
     // A colonist with no plan of its own and nothing in its hands runs for shelter instead of punching a wolf
     // (RimWorld's default hostility response: an unarmed colonist flees); an armed one defends.
     if (plan == nullptr) {
@@ -1817,6 +1834,9 @@ void RaidSystem::callUp(Entity pawn, const std::vector<Entity>& spotted) {
         fighter.anchor = point;
         fighter.leash = plan != nullptr && plan->hasSpot ? rules_.spotLeash : rules_.defenderLeash;
         return;
+    }
+    if (f->mode == FightMode::Rescue) {
+        return;  // carrying a downed friend to cover (F10): back on the line when it has laid it down
     }
     const bool hasSpot = plan != nullptr && plan->hasSpot;
     // In contact: a Defender with no spot of its own is let off the line and fights like any
