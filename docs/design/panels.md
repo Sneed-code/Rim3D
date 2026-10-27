@@ -57,3 +57,17 @@ Code: `game/Source/Rim3D/TradePanelSubsystem.*`. Smoke test: `trade`. Sim side: 
 Prices come from `TradeSystem::unitPrice` with the negotiator's `priceImprovement`, so the window and the sim agree. The window closes when the visit leaves. Not here yet: trading with a caravan trader by selecting the pawn, selling from a stockpile only, animals as trade lines (they are not items), a hostile faction's "make peace" gifts as a quest.
 
 Smoke test `trade` (about 20 s): a trade ship starts; buying 40 steel pays silver and puts the steel on the map; selling 100 steel brings exactly the quoted silver; a buy of the whole stock is flagged unaffordable; a gift raises goodwill by the amount the window promised; the factions window lists the factions; the thermostat slider's calls set, clamp (500 becomes 50) and reset a heater's target, and a stove refuses one.
+
+## Quests (quest panel, the Unreal side of Q1)
+
+Code: `game/Source/Rim3D/QuestPanelSubsystem.*`. Smoke test: `quests`. Sim side: [quests.md](quests.md). Also ImGui, overseer view only; `Quests.UI 0` hides the window, `Quests.Open` opens or closes it.
+
+| Where | What |
+| --- | --- |
+| Top left, in the menu row | **Quests** button after Log: `Quests (2)` while offers wait for an answer, amber until the window has been opened since the newest offer |
+| Middle | **Quest window**, three parts. *Waiting for an answer*: each offer's label, the def's `text`, what comes of it (how many join, the raiders' faction and points, goods landing at once), the rewards and how long the offer stands, with **Accept** and **Decline** (`QuestCommand`). *Under way*: when the raiders come (the snapshot's `deadline` less the def's `deadlineHours`) and then how long is left to beat them. *Finished*, newest first: done, failed, declined or lapsed, with how it ended (the last quest event's message) |
+| Right, the message log | A line when a quest is offered, accepted, declined, done, failed or lapsed |
+
+A refused accept (too many under way, no room for the goods, nobody could reach the colony) shows as "Refused" in the log and the offer stays open. Not here yet: a letter that opens the window, jumping the camera to a quest's raid or its people, and the narrator's quests on the world map (Stage 3).
+
+Smoke test `quests` (about 10 s), on the Crashlanded start (paused): a wanderer and a supply cache are offered (the button counts 2 unseen offers, opening the window marks them seen, the log says so); accepting both puts the cache's steel on the map and one more colonist in the colony, and a second answer to either is not sent; a second wanderer is declined (nobody joins) and a new cache is left waiting for the picture. Not covered: a quest under way (Refugees and Defend need day 5 and day 8).
