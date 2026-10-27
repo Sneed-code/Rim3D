@@ -2423,6 +2423,14 @@ void saveRaids(Ar& ar, RaidState& r) {
     ar.value("hasShelter", r.hasShelter);
     ar.group("shelter", [&] { saveCell(ar, r.shelter); });
     ar.value("nextAlarmThink", r.nextAlarmThink);
+    if (ar.sectionVersion() >= 2) {
+        ar.value("adaptDays", r.adaptDays);
+        ar.value("nextAdaptGrowth", r.nextAdaptGrowth);
+        ar.list("adaptPawns", r.adaptPawns, [&](RaidState::AdaptPawn& p) {
+            ar.value("pawn", p.pawn);
+            ar.value("downed", p.downed);
+        });
+    }
 }
 
 // ---- Sections (format 20 on) -----------------------------------------------------------------

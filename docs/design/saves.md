@@ -297,6 +297,7 @@ Every section is version 1 at format 20. A task that changes a section adds a li
 - `roomstats` 1 (C17): floors, filth, carried filth, the filth rng, beauty needs ([room-stats.md](room-stats.md)). Commands `PlaceFloor` and `AddFilth` by name.
 - `health` 2 (E2): each pawn's environment hediffs (hypothermia, heatstroke...), a list of def name and severity before `dead`. Version 1 files load with none.
 - `prisoners` 1 (C22): new section, see the table. Commands `SetPrisonerMode` and `SetPrisonBed` by name; the job check now accepts `CapturePrisoner`, `FeedPrisoner` and `WardenInteract`.
+- `raids` 2 (adaptation): AdaptDays, the next growth time and the colonists watched, after the alarm values; version 1 loads as 0 and an empty list.
 - `raids` 1 (F6): new section, see the table. Commands `StartRaid`, `SoundAlarm`, `SetDefenseRole`, `MarkShelter` by name.
 - `raids` 2 (F12): per squad `strategy`, `hasBreach`, `breach`, `breachFrom`; the raids waiting for their hour (`pending`); per raider `goalThing`, `loot`, `sparesDowned`; a `kidnapped` part on a colonist a raider carries ([raid-strategies.md](raid-strategies.md)). Version 1 files load with Assault squads and nothing waiting. Command `StartStrategyRaid` by name.
 - `fighters` 2 (F6): a fighter's `mode`, `defending`, `squad`, `hasGoal`, `goal`, `retreat` after `dodgeUntil`. Version 1 files load them as a plain fighter.
