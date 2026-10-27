@@ -97,6 +97,8 @@ const char* commandName(const Command& command) {
                 return "SetBillOptions";
             } else if constexpr (std::is_same_v<Type, MoveBillCommand>) {
                 return "MoveBill";
+            } else if constexpr (std::is_same_v<Type, ClimbCommand>) {
+                return "Climb";
             } else if constexpr (std::is_same_v<Type, AddOperationCommand>) {
                 return "AddOperation";
             } else if constexpr (std::is_same_v<Type, RemoveOperationCommand>) {
