@@ -6,6 +6,7 @@
 #include "ColonySim/Bills.h"
 #include "ColonySim/Crafting.h"
 #include "ColonySim/Construction.h"
+#include "ColonySim/Defense.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Farming.h"
@@ -1021,6 +1022,40 @@ public:
     }
 };
 
+// Rearming (RimWorld's WorkGiver_RearmTraps, in Construction): every sprung trap that can be used again, nearest first.
+// One colonist per trap.
+class RearmTrapsGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "RearmTraps"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        DefenseSystem* defense = jobs.defense();
+        if (defense == nullptr || !jobs.canUseHands(pawn)) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        reg.view<const Trap, const Position>().each([&](Entity trap, const Trap& state, const Position& pos) {
+            if (!state.sprung || pos.level != at.level || !defense->needsRearm(trap) || jobs.reservedByOther(JobTarget{trap, CellPos{}}, pawn)) {
+                return;
+            }
+            out.push_back(WorkCandidate{JobTarget{trap, CellPos{}}, workGiverDistSq(at, pos), 0, 0, false, CellPos{}});
+        });
+    }
+
+    bool makeJob(JobSystem& jobs, Entity, const WorkCandidate& candidate, Job& out) override {
+        const Entity trap = candidate.target.thing;
+        if (jobs.defense() == nullptr || !jobs.defense()->needsRearm(trap)) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::RearmTrap;
+        out.thing = trap;
+        out.cell = cellOf(jobs.things().registry().get<Position>(trap));
+        return true;
+    }
+};
+
 }  // namespace
 
 bool makeHaulJob(JobSystem& jobs, Entity pawn, Entity item, Job& out) {
@@ -1067,6 +1102,7 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<GoToMedicalBedGiver>());
     givers.push_back(std::make_unique<RestToHealGiver>());
     givers.push_back(std::make_unique<ExtinguishFiresGiver>());
+    givers.push_back(std::make_unique<RearmTrapsGiver>());
     givers.push_back(std::make_unique<StripGiver>());
     addHusbandryWorkGivers(givers);
     addHuntWorkGivers(givers);

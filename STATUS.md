@@ -93,6 +93,8 @@ Stage 2 U17 done: upper floors, stairs and ladders on screen. Upper floors are d
 Stage 2 C24 done: carrying is by mass (capacity over item mass), a hauler takes neighbouring stacks of the same def in one trip, a load slows walking up to 25% (`docs/design/jobs.md`).
 Stage 2 U22 done: melee and weapon switching on screen. In direct mode the left mouse button swings a melee weapon (or fists), the right holds it up to block, Q brings up the next carried weapon; every carried weapon is drawn (rifle on the back, sidearm and melee weapon on the hips); swings are procedural poses timed to the sim's hit step, with hit-stop, flinch, blood and sparks, a dipping sidestep and a raised blade for blocks (`docs/design/melee-draw.md`, smoke test `melee`). No human melee animations exist yet, so the arms do not move.
 
+Stage 2 defense extras done: colonists with the Construction work type now rearm sprung spike traps by themselves (new `RearmTrap` job, 13 s of work, never an IED), and a spike trap's stabs go through the victim's armor like bullets, so vests and helmets turn them away and wear (`docs/design/defense.md`, tests `DefenseTests`). Sim only.
+
 ## Where we are
 
 Stage 0 (foundation) is done. Stage 1 (the playable prototype) is planned and starting.
