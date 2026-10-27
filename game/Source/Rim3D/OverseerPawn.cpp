@@ -6,6 +6,7 @@
 #include "GameFramework/PlayerController.h"
 #include "InputCoreTypes.h"
 
+#include "LevelsSubsystem.h"
 #include "OrdersSubsystem.h"
 #include "OverseerSubsystem.h"
 #include "ProtagonistSubsystem.h"
@@ -66,6 +67,17 @@ void AOverseerPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	PlayerInputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &AOverseerPawn::OnTakeControlPressed);
 	PlayerInputComponent->BindKey(EKeys::MouseScrollUp, IE_Pressed, this, &AOverseerPawn::OnZoomIn);
 	PlayerInputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed, this, &AOverseerPawn::OnZoomOut);
+	PlayerInputComponent->BindKey(EKeys::PageUp, IE_Pressed, this, &AOverseerPawn::OnLevelUp);
+	PlayerInputComponent->BindKey(EKeys::PageDown, IE_Pressed, this, &AOverseerPawn::OnLevelDown);
+}
+
+void AOverseerPawn::StepLevel(int32 Delta)
+{
+	if (ULevelsSubsystem* Levels = GetWorld() ? GetWorld()->GetSubsystem<ULevelsSubsystem>() : nullptr)
+	{
+		Levels->StepViewLevel(Delta);
+		KeepFocusOnMap();
+	}
 }
 
 void AOverseerPawn::Tick(float DeltaTime)
@@ -154,7 +166,7 @@ void AOverseerPawn::SnapCamera()
 	PlaceBody();
 }
 
-// The focus stays on the map and rides the ground's height.
+// The focus stays on the map and rides the ground's height, 3 m a level up on the level looked at.
 void AOverseerPawn::KeepFocusOnMap()
 {
 	const USimSubsystem* Bridge = GetBridge();
@@ -166,7 +178,8 @@ void AOverseerPawn::KeepFocusOnMap()
 	const FVector Origin = Bridge->GetWorldOrigin();
 	const float XMetres = FMath::Clamp(static_cast<float>((Focus.X - Origin.X) / 100.0), 0.0f, static_cast<float>(Map.width() - 1));
 	const float YMetres = FMath::Clamp(static_cast<float>((Focus.Y - Origin.Y) / 100.0), 0.0f, static_cast<float>(Map.height() - 1));
-	Focus = Bridge->SimToWorld(XMetres, YMetres, 0);
+	const ULevelsSubsystem* Levels = GetWorld() ? GetWorld()->GetSubsystem<ULevelsSubsystem>() : nullptr;
+	Focus = Bridge->SimToWorld(XMetres, YMetres, Levels ? Levels->GetViewLevel() : 0);
 }
 
 void AOverseerPawn::PlaceBody()
