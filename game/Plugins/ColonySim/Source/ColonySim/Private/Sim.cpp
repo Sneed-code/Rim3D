@@ -65,6 +65,7 @@
 #include "ColonySim/Disasters.h"
 #include "ColonySim/Narrator.h"
 #include "MovementSystem.h"
+#include "WoundViews.h"
 
 #include <algorithm>
 #include <chrono>
@@ -220,6 +221,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     }
     things_->setEventLog(&events_);
     health_->setEventLog(&events_);
+    woundViews_ = std::make_unique<WoundViews>(*defs_, *health_);
+    weather_ = std::make_unique<Weather>(map_, *defs_, splitMix64(settings.seed ^ 0x636C696D617465ULL), "TemperateForest");
     health_->setWorld(&time_.seconds, settings.seed);
     // The start tile's own yearly mean temperature; the seasons and the daily swing are its biome's.
     weather_ = std::make_unique<Weather>(map_, *defs_, splitMix64(settings.seed ^ 0x636C696D617465ULL), biome_,
@@ -1584,6 +1587,8 @@ void Sim::step() {
     { SimLap lap(profile_, "filth"); filth_->step(); }
     { SimLap lap(profile_, "roomStats"); roomStats_->step(time_.seconds); }
     { SimLap lap(profile_, "temperature"); temperature_->step(time_.seconds); }
+    // From the weather as it is now, not left over from the last step: a loaded game has not had a last step.
+    spoilage_->setOutdoorFactor(weather_->deteriorationFactor());
     spoilage_->setOutdoorFactor(weather_->deteriorationFactor());  // not saved: the weather says it, also on the first step after a load
     { SimLap lap(profile_, "spoilage"); spoilage_->step(time_.seconds); }
     if (time_.seconds % kBillUpkeepSeconds == 0) {
@@ -1662,6 +1667,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.growingZoneCells.clear();
     out.animalZoneCells.clear();
     out.looks.clear();
+    out.wounds.clear();
     out.research.clear();
     out.attuned.clear();
     {
@@ -1833,6 +1839,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Health* health = reg.try_get<Health>(entity)) {
             view.downed = health->downed;
             view.dead = health->dead;
+            view.bloodLoss = health->bloodLoss;
+            view.bleedPerDay = health->bleedPerDay;
+            view.firstWound = static_cast<uint32_t>(out.wounds.size());
+            if (!health->injuries.empty() || !health->missing.empty() || !health->diseases.empty()) {
+                woundViews_->append(entity, thing.def, *health, out.wounds);
+            }
+            view.woundCount = static_cast<uint32_t>(out.wounds.size()) - view.firstWound;
         }
         if (const PawnLooks* looks = reg.try_get<PawnLooks>(entity)) {
             PawnLooksView l;
