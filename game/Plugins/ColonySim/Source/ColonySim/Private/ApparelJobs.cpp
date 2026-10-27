@@ -7,8 +7,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 
 namespace colony {
+
+namespace {
+constexpr int kMaxArmedColonists = 3;  // ours
+}  // namespace
 
 // The think node: take off what the outfit doesn't allow, else put on the clothes that gain most.
 // Once nothing is found a pawn doesn't look again for ApparelRules.checkEverySteps (it keeps looking
@@ -47,8 +52,83 @@ bool JobSystem::thinkApparel(Entity pawn, Job& out) {
         out.cell = cellOf(reg.get<Position>(best));
         return true;
     }
+    if (findLooseWeapon(pawn, out)) {
+        return true;
+    }
     own.nextCheck = now() + apparel_->rules().checkEverySteps;
     return false;
+}
+
+// A colonist with no gun in a gun slot picks up the nearest gun lying about that fits it (rifles first, then sidearms): the
+// guns left at the landing and what a fallen colonist dropped arm the rest of the colony. Weapons already carried are never
+// swapped for better ones. Melee weapons are left lying: a colonist with only a knife stands and fights a wolf, and a
+// berserk one with a knife kills its friends. Ours.
+bool JobSystem::findLooseWeapon(Entity pawn, Job& out) {
+    if (combat_ == nullptr) {
+        return false;
+    }
+    entt::registry& reg = things_.registry();
+    if (!reg.all_of<Colonist>(pawn) || health_.incapacitated(pawn)) {
+        return false;
+    }
+    bool free[kWeaponSlotCount];
+    for (int slot = 0; slot < kWeaponSlotCount; ++slot) {
+        free[slot] = combat_->weaponIn(pawn, static_cast<WeaponSlot>(slot)) == kNoEntity;
+    }
+    // At most kMaxArmedColonists carry a gun: a colonist with a revolver goes to meet three wolves (the year run lost most of
+    // its colonists that way, and to berserk ones with guns), while one with none shelters.
+    bool armed = false;
+    for (int slot = 0; slot < kWeaponSlotCount; ++slot) {
+        armed = armed || !free[slot];
+    }
+    if (!armed) {
+        int others = 0;
+        for (const auto [other, colonist] : reg.view<const Colonist>().each()) {
+            (void)colonist;
+            if (other != pawn && !health_.incapacitated(other) &&
+                (combat_->weaponIn(other, WeaponSlot::Primary) != kNoEntity || combat_->weaponIn(other, WeaponSlot::Sidearm) != kNoEntity)) {
+                ++others;
+            }
+        }
+        if (others >= kMaxArmedColonists) {
+            return false;
+        }
+    }
+    const CellPos at = cellOf(reg.get<Position>(pawn));
+    Entity best = kNoEntity;
+    int bestSlot = 0;
+    float bestDist = 0.0f;
+    for (const auto [item, thing, position] : reg.view<const Thing, const Position>().each()) {
+        WeaponSlot slot = WeaponSlot::Primary;
+        if (thing.category != ThingCategory::Item || reg.all_of<EquippedBy>(item) || !combat_->weaponSlot(thing.def, slot) ||
+            slot == WeaponSlot::Melee || !free[static_cast<int>(slot)] || !things_.spawned(item) || position.level != at.level) {
+            continue;
+        }
+        const JobTarget target{item, CellPos{}};
+        if (reservedByOther(target, pawn) || avoiding(pawn, target)) {
+            continue;
+        }
+        const float dx = position.x - (static_cast<float>(at.x) + 0.5f);
+        const float dy = position.y - (static_cast<float>(at.y) + 0.5f);
+        const float dist = dx * dx + dy * dy;
+        if (best != kNoEntity && (static_cast<int>(slot) > bestSlot || (static_cast<int>(slot) == bestSlot && dist >= bestDist))) {
+            continue;
+        }
+        if (!canReach(at, cellOf(position))) {
+            continue;
+        }
+        best = item;
+        bestSlot = static_cast<int>(slot);
+        bestDist = dist;
+    }
+    if (best == kNoEntity) {
+        return false;
+    }
+    out = Job{};
+    out.type = JobType::EquipWeapon;
+    out.thing = best;
+    out.cell = cellOf(reg.get<Position>(best));
+    return true;
 }
 
 bool JobSystem::failCheckApparel(Entity pawn, Job& job, std::string& why) {
@@ -56,6 +136,13 @@ bool JobSystem::failCheckApparel(Entity pawn, Job& job, std::string& why) {
     if (apparel_ == nullptr) {
         why = "there is no clothing system";
         return false;
+    }
+    if (job.type == JobType::EquipWeapon) {
+        if (!things_.spawned(job.thing) || reg.all_of<EquippedBy>(job.thing)) {
+            why = "the weapon is gone";
+            return false;
+        }
+        return true;
     }
     if (job.type == JobType::WearApparel) {
         if (job.count != 0) {
@@ -100,6 +187,19 @@ JobSystem::StepResult JobSystem::apparelWork(Entity pawn, Job& job, std::string&
         return StepResult::Running;
     }
     std::string error;
+    if (job.type == JobType::EquipWeapon) {
+        WeaponSlot slot = WeaponSlot::Primary;
+        const bool primary = combat_->weaponSlot(reg.get<Thing>(job.thing).def, slot) && slot == WeaponSlot::Primary;
+        if (!combat_->carryWeapon(pawn, job.thing, &error)) {
+            why = error;
+            return StepResult::Failed;
+        }
+        // The rifle in the hands, the sidearm on the belt, whichever came first.
+        if (primary && combat_->weaponIn(pawn, WeaponSlot::Primary) == job.thing && reg.get<Gear>(pawn).weapon != job.thing) {
+            combat_->switchWeapon(pawn, WeaponSlot::Primary);
+        }
+        return StepResult::Next;
+    }
     const bool ok = job.count != 0 ? apparel_->takeOff(pawn, job.thing, error) : apparel_->putOn(pawn, job.thing, error);
     if (!ok) {
         why = error;

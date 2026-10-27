@@ -45,6 +45,9 @@ enum class JobType : uint8_t {
     Butcher,           // carry a corpse to a butcher table and cut it up into meat and leather (docs/design/hunting.md)
     SeekShelter,       // walk to a place with a safe temperature and stay a while (docs/design/temperature.md)
     Operate,           // fetch the part to fit and a medicine, walk to a patient in bed and do a planned operation (docs/design/surgery.md)
+    SeekWarmth,        // walk to a warm room and stay until the cold has let go of the pawn (docs/design/temperature.md)
+    EquipWeapon,       // walk to a weapon lying on the map and pick it up (docs/design/weapons.md)
+    FeedPatient,       // fetch food, walk to a hungry downed colonist and feed it (docs/design/medicine.md)
 };
 
 COLONY_API const char* jobTypeName(JobType type);

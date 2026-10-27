@@ -500,6 +500,8 @@ struct SaveData {
     SaveDesignations designations;     // format 12 on
     ResearchState research;            // section "research"
     ShipState ship;                    // section "ship"
+    float moodWealth = 0.0f;           // section "expectations": the wealth the mood system measured, and when
+    int64_t moodWealthAt = -1;
     // Section "talents" (P3): per protagonist, parallel lists in pawn order.
     std::vector<Entity> talentPawns;
     std::vector<int64_t> talentXp;
@@ -1566,7 +1568,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::Operate, "the save file has a bad job");
+    ar.require(job.type <= JobType::FeedPatient, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -3154,6 +3156,10 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("startTile", d.world.startTile);
         ar.value("hash", d.worldHash);
     });
+    ar.section("expectations", 1, [&] {
+        ar.value("wealth", d.moodWealth);
+        ar.value("at", d.moodWealthAt);
+    });
     // New sections go here, at the end.
 }
 
@@ -3665,6 +3671,8 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     }
     d.research = sim.research_->state();
     d.ship = sim.ship_->state();
+    d.moodWealth = sim.mood_->wealth();
+    d.moodWealthAt = sim.mood_->wealthAt();
     for (const auto& [pawn, s] : sim.talents_->states()) {
         d.talentPawns.push_back(pawn);
         d.talentXp.push_back(s.xp);
@@ -4475,6 +4483,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.ship_->restore(std::move(d.ship), error)) {
         return false;
     }
+    sim.mood_->restoreWealth(d.moodWealth, d.moodWealthAt);  // an older save measures it again at once
     sim.apparel_->restoreOutfits(std::move(d.outfits), d.nextOutfitId);
     if (d.hasWeather) {
         WeatherState state;

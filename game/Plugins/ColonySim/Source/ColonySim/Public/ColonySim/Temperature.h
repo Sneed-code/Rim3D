@@ -44,6 +44,9 @@ struct COLONY_API TemperatureNumbers {
     float rock = 0.004f;       // a rock cell round the room, towards the ground temperature
     float safeMarginC = 10.0f; // the safe range is the comfortable range this much wider
     float frostbiteSeverity = 3.0f;
+    // A colonist walks to a warm room when its hypothermia reaches the first and stays until it is under the second.
+    float seekWarmthSeverity = 0.12f;
+    float warmEnoughSeverity = 0.03f;
 
     static TemperatureNumbers read(const DefDatabase& defs);
 };

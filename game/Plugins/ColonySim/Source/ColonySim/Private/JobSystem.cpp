@@ -83,10 +83,13 @@ enum class JobStepKind : uint8_t {
     OperatePickUp,
     OperateDeposit,
     OperateWork,
-    OperateFinish
+    OperateFinish,
+    WarmWait        // stay put in a warm room until the cold has let go (NeedJobs.cpp)
 };
 
 constexpr JobStepKind kJobsWaitSteps[] = {JobStepKind::Wait};
+constexpr JobStepKind kJobsSeekWarmthSteps[] = {JobStepKind::WalkToSpot, JobStepKind::WarmWait};
+constexpr JobStepKind kJobsEquipSteps[] = {JobStepKind::ApparelGoto, JobStepKind::ApparelWork};
 constexpr JobStepKind kJobsHaulSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::CarryToCell,
                                           JobStepKind::Place};
 constexpr JobStepKind kJobsIngestSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::WalkToSpot,
@@ -176,6 +179,8 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::HarvestPlant: return {kJobsPlantSteps, static_cast<int>(std::size(kJobsPlantSteps))};
         case JobType::DoBill: return {kJobsDoBillSteps, static_cast<int>(std::size(kJobsDoBillSteps))};
         case JobType::Recreate: return {kJobsRecreateSteps, static_cast<int>(std::size(kJobsRecreateSteps))};
+        case JobType::SeekWarmth: return {kJobsSeekWarmthSteps, static_cast<int>(std::size(kJobsSeekWarmthSteps))};
+        case JobType::EquipWeapon: return {kJobsEquipSteps, static_cast<int>(std::size(kJobsEquipSteps))};
         case JobType::Research: return {kJobsResearchSteps, static_cast<int>(std::size(kJobsResearchSteps))};
         case JobType::CleanFilth: return {kJobsCleanSteps, static_cast<int>(std::size(kJobsCleanSteps))};
         case JobType::BedRest: return {kJobsBedRestSteps, static_cast<int>(std::size(kJobsBedRestSteps))};
@@ -190,6 +195,7 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::GatherAnimal: return {kJobsHandleSteps, static_cast<int>(std::size(kJobsHandleSteps))};
         case JobType::ExtinguishFire: return {kJobsExtinguishSteps, static_cast<int>(std::size(kJobsExtinguishSteps))};
         case JobType::CapturePrisoner: return {kJobsRescueSteps, static_cast<int>(std::size(kJobsRescueSteps))};
+        case JobType::FeedPatient:
         case JobType::FeedPrisoner: return {kJobsFeedPrisonerSteps, static_cast<int>(std::size(kJobsFeedPrisonerSteps))};
         case JobType::WardenInteract: return {kJobsChatSteps, static_cast<int>(std::size(kJobsChatSteps))};
         case JobType::Refuel: return {kJobsRefuelSteps, static_cast<int>(std::size(kJobsRefuelSteps))};
@@ -227,6 +233,7 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::Eat:
         case JobStepKind::Lie:
         case JobStepKind::BedRestLie:
+        case JobStepKind::WarmWait:
         case JobStepKind::TendWork:
             return true;
         case JobStepKind::Play:
@@ -275,6 +282,8 @@ const char* jobTypeName(JobType type) {
         case JobType::HarvestPlant: return "HarvestPlant";
         case JobType::DoBill: return "DoBill";
         case JobType::Recreate: return "Recreate";
+        case JobType::SeekWarmth: return "SeekWarmth";
+        case JobType::EquipWeapon: return "EquipWeapon";
         case JobType::Research: return "Research";
         case JobType::CleanFilth: return "CleanFilth";
         case JobType::BedRest: return "BedRest";
@@ -291,6 +300,7 @@ const char* jobTypeName(JobType type) {
         case JobType::ExtinguishFire: return "ExtinguishFire";
         case JobType::CapturePrisoner: return "CapturePrisoner";
         case JobType::FeedPrisoner: return "FeedPrisoner";
+        case JobType::FeedPatient: return "FeedPatient";
         case JobType::WardenInteract: return "WardenInteract";
         case JobType::Refuel: return "Refuel";
         case JobType::Hunt: return "Hunt";
@@ -572,8 +582,9 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
             out[0] = keyOf(JobTarget{job.thing, CellPos{}});
             out[1] = keyOf(JobTarget{kNoEntity, job.cell});
             return 2;
+        case JobType::FeedPatient:
         case JobType::FeedPrisoner: {
-            // The prisoner, and the food being fetched or carried to it.
+            // The prisoner (or patient), and the food being fetched or carried to it.
             int n = 0;
             out[n++] = keyOf(JobTarget{job.site, CellPos{}});
             if (job.thing != kNoEntity) {
@@ -591,7 +602,11 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
             out[0] = keyOf(JobTarget{job.thing, CellPos{}});
             return 1;
         case JobType::StripPawn:
+        case JobType::EquipWeapon:
             out[0] = keyOf(JobTarget{job.thing, CellPos{}});
+            return 1;
+        case JobType::SeekWarmth:
+            out[0] = keyOf(JobTarget{kNoEntity, job.cell});
             return 1;
         case JobType::TameAnimal:
         case JobType::TrainAnimal:
@@ -848,10 +863,15 @@ void JobSystem::step() {
     // The think list, in order. Later tasks put theirs in place: emergencies first (downed, on
     // fire: F1 and later), then the defense plan (F6), urgent needs and the schedule (C6), work
     // and finally idling. Player orders don't wait for a think: the command starts them.
-    static constexpr ThinkNode kThinkList[] = {&JobSystem::thinkNeeds, &JobSystem::thinkDrugs, &JobSystem::thinkSchedule, &JobSystem::thinkApparel,
+    static constexpr ThinkNode kThinkList[] = {&JobSystem::thinkNeeds, &JobSystem::thinkTemperature, &JobSystem::thinkDrugs,
+                                               &JobSystem::thinkSchedule, &JobSystem::thinkApparel,
                                                &JobSystem::thinkWork, &JobSystem::thinkJoy, &JobSystem::thinkIdle};
 
     for (const Entity pawn : order_) {
+        // An earlier pawn's job this step may have taken this one off the map or destroyed it (a corpse lifted or butchered).
+        if (!reg.valid(pawn) || !reg.all_of<Worker, Position, Mover>(pawn)) {
+            continue;
+        }
         reg.get<Mover>(pawn).hold = false;
         // The player walks this one (U9): no think, until control is let go. Its only job is a
         // hands-on one the player started (U10), done in place.
@@ -920,6 +940,7 @@ void JobSystem::step() {
                            worker.avoid.end());
         if (worker.job.type != JobType::None) {
             interruptForNeeds(pawn);
+            interruptForCold(pawn);
             interruptForEmergency(pawn);
         }
         if (reg.get<Worker>(pawn).job.type == JobType::None) {
@@ -1089,7 +1110,8 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::Rescue) {
         return failCheckRescue(pawn, job, why);
     }
-    if (job.type == JobType::CapturePrisoner || job.type == JobType::FeedPrisoner || job.type == JobType::WardenInteract) {
+    if (job.type == JobType::CapturePrisoner || job.type == JobType::FeedPrisoner || job.type == JobType::WardenInteract ||
+        job.type == JobType::FeedPatient) {
         return failCheckPrisoner(pawn, job, why);
     }
     if (job.type == JobType::BedRest) {
@@ -1098,7 +1120,7 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::ExtinguishFire) {
         return failCheckExtinguish(pawn, job, why);
     }
-    if (job.type == JobType::WearApparel || job.type == JobType::StripPawn) {
+    if (job.type == JobType::WearApparel || job.type == JobType::StripPawn || job.type == JobType::EquipWeapon) {
         return failCheckApparel(pawn, job, why);
     }
     if (jobIsHandling(job.type)) {
@@ -1246,6 +1268,8 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return billFinish(pawn, job, why);
         case JobStepKind::Play:
             return play(pawn, job, why);
+        case JobStepKind::WarmWait:
+            return warmWait(pawn, job, why);
         case JobStepKind::ResearchWork:
             return researchWork(pawn, job, why);
         case JobStepKind::CleanWork:

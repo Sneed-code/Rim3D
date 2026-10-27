@@ -201,6 +201,7 @@ class ResearchSystem;
 class InspirationSystem;
 class TalentSystem;
 class Rooms;
+class TemperatureSystem;
 class Things;
 class WorkGiver;
 struct GameTime;
@@ -306,6 +307,7 @@ public:
     // Whether a cell is indoors decides where a pawn can stroll or watch the clouds (Recreation); without rooms
     // everywhere is outdoors.
     void setRooms(Rooms* rooms) { rooms_ = rooms; }
+    void setTemperature(TemperatureSystem* temperature) { temperature_ = temperature; }
     void setResearch(ResearchSystem* research) { research_ = research; }
     // Taming, training and feeding animals (HusbandryJobs.cpp, docs/design/husbandry.md). Without it nobody handles animals.
     void setHusbandry(Husbandry* husbandry) { husbandry_ = husbandry; }
@@ -315,8 +317,6 @@ public:
     Breeding* breeding() const { return breeding_; }
     // Hunting (HuntJobs.cpp, docs/design/hunting.md): hunters shoot through the combat system. Without it nobody hunts.
     void setCombat(CombatSystem* combat) { combat_ = combat; }
-    // Where pawns that stand outside their safe temperature look for shelter (docs/design/temperature.md).
-    void setTemperature(TemperatureSystem* temperature) { temperature_ = temperature; }
     CombatSystem* combat() const { return combat_; }
     // An animal that has learned to haul works through the job system with only the Hauling work type on. `on` false
     // takes it off again (ending its job). The gate says whether it may work now (awake, fed, unhurt).
@@ -392,6 +392,8 @@ public:
     bool needsRescue(Entity pawn) const;
     // The food a warden should carry to a hungry prisoner: the best the prisoner may eat, the nearest of that kind, with how
     // many to bring. Fills `out` as a FeedPrisoner job; false if there is none.
+    // A colonist the FeedPatients work brings food to (PrisonerJobs.cpp).
+    bool feedablePatient(Entity patient) const;
     bool findFoodForPrisoner(Entity warden, Entity prisoner, Job& out);
 
     // ---- For scanners and tests -----------------------------------------------------------
@@ -514,6 +516,14 @@ private:
     bool makeShelterJob(Entity pawn, Job& out);
     bool thinkSchedule(Entity pawn, Job& out);
     bool thinkApparel(Entity pawn, Job& out);
+    // Cold (JobSystem temperature, docs/design/temperature.md): a pawn outside its safe range with hypothermia
+    // setting in walks to the nearest room warm enough and stays until it has recovered.
+    bool thinkTemperature(Entity pawn, Job& out);
+    void interruptForCold(Entity pawn);
+    bool seekWarmthJob(Entity pawn, Job& out);
+    // A weapon lying about that the pawn has no weapon of the slot for (ApparelJobs.cpp).
+    bool findLooseWeapon(Entity pawn, Job& out);
+    StepResult warmWait(Entity pawn, Job& job, std::string& why);
     bool thinkWork(Entity pawn, Job& out);
     // thinkWork's scan; `urgentOnly` asks only the emergency work types (doctor, patient...).
     bool thinkWorkPass(Entity pawn, Job& out, bool urgentOnly);
@@ -692,6 +702,7 @@ private:
     std::vector<Event>& events_;
 
     Rooms* rooms_ = nullptr;
+    TemperatureSystem* temperature_ = nullptr;
     ResearchSystem* research_ = nullptr;
     MedicineSystem* medicine_ = nullptr;
     SurgerySystem* surgery_ = nullptr;
@@ -700,7 +711,6 @@ private:
     Husbandry* husbandry_ = nullptr;
     Breeding* breeding_ = nullptr;
     CombatSystem* combat_ = nullptr;
-    TemperatureSystem* temperature_ = nullptr;
     std::function<bool(Entity)> animalGate_;
     InspirationSystem* inspirations_ = nullptr;
     const TalentSystem* talents_ = nullptr;  // build speed and carrying capacity (docs/design/talents.md)

@@ -25,6 +25,15 @@ means "what the pawn fights with now", so shooting, melee, reloading and the sna
 - Death, stripping (`ApparelSystem::strip`, `hasGear`), `unequip` and a raider leaving the map treat the body
   weapons like the one in the hands.
 
+## Picking guns up
+
+A colonist with no gun in a gun slot (`Primary`, `Sidearm`) picks up the nearest loose gun for it (rifles first), in the same
+think node as clothes (`JobSystem::findLooseWeapon`, job `EquipWeapon`, steps walk and `wearSteps` of work, then
+`carryWeapon`); a rifle goes to the hands. Ours: only while fewer than 3 other colonists carry a gun (a colonist with one
+revolver stands and fights three wolves, a colonist with none shelters; the year run lost most of its colonists to the
+first when everybody was armed), melee weapons are never picked up (a berserk colonist with a knife killed its friends),
+weapons are never swapped for better ones. Tests: `ColdAndArmsTests.cpp`.
+
 ## Switching
 
 `SwitchWeaponCommand{pawn, slot}` starts a switch to the weapon carried in that slot. It takes

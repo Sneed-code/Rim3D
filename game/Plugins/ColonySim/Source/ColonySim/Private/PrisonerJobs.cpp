@@ -3,6 +3,7 @@
 #include "ColonySim/Jobs.h"
 
 #include "ColonySim/Animals.h"
+#include "ColonySim/Colonist.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Health.h"
@@ -118,6 +119,36 @@ public:
     }
 };
 
+// FeedPatients (RimWorld's WorkGiver_FeedPatient, Doctor work): a hungry colonist who is down and cannot get to food is fed
+// where it lies, so a colonist with a shot-up leg does not starve beside a full stockpile.
+class FeedPatientsGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "FeedPatients"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        if (jobs.prisoners() == nullptr || !jobs.canUseHands(pawn)) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        for (const auto [patient, colonist, needs, pos] : reg.view<const Colonist, const Needs, const Position>().each()) {
+            (void)colonist;
+            if (patient != pawn && pos.level == at.level && needs.food < jobs.prisoners()->rules().feedBelow &&
+                jobs.feedablePatient(patient)) {
+                out.push_back(WorkCandidate{JobTarget{patient, CellPos{}}, prisonDistSq(at, pos), 0, 0, false, CellPos{}});
+            }
+        }
+    }
+
+    bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
+        if (candidate.target.thing == pawn || !jobs.findFoodForPrisoner(pawn, candidate.target.thing, out)) {
+            return false;
+        }
+        out.type = JobType::FeedPatient;
+        return true;
+    }
+};
+
 // ChatWithPrisoners (WorkGiver_Warden_Chat, also the release): a prisoner whose time for a talk has come.
 class ChatWithPrisonersGiver final : public WorkGiver {
 public:
@@ -158,6 +189,18 @@ void addPrisonerWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers) {
     givers.push_back(std::make_unique<CapturePrisonersGiver>());
     givers.push_back(std::make_unique<FeedPrisonersGiver>());
     givers.push_back(std::make_unique<ChatWithPrisonersGiver>());
+    givers.push_back(std::make_unique<FeedPatientsGiver>());
+}
+
+// A player's colonist (not a prisoner) that is down and alive: it cannot walk to food, so a doctor brings it.
+bool JobSystem::feedablePatient(Entity patient) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(patient) || !reg.all_of<Colonist, Needs>(patient) || reg.all_of<Prisoner>(patient)) {
+        return false;
+    }
+    const Faction* faction = reg.try_get<Faction>(patient);
+    const Health* health = reg.try_get<Health>(patient);
+    return (faction == nullptr || faction->id == kPlayerFaction) && health != nullptr && health->downed && !health->dead;
 }
 
 // ---- Food for a prisoner --------------------------------------------------------------------------
@@ -232,7 +275,12 @@ bool JobSystem::failCheckPrisoner(Entity pawn, Job& job, std::string& why) {
         }
         return true;
     }
-    if (!prisoners_->isPrisoner(job.site) || !things_.spawned(job.site)) {
+    if (job.type == JobType::FeedPatient) {
+        if (!things_.spawned(job.site) || !feedablePatient(job.site)) {
+            why = "the patient needs no feeding now";
+            return false;
+        }
+    } else if (!prisoners_->isPrisoner(job.site) || !things_.spawned(job.site)) {
         why = "the prisoner is gone";
         return false;
     }

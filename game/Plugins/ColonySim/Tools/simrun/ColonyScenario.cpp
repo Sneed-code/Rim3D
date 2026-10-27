@@ -3,6 +3,7 @@
 #include <chrono>
 
 #include "ColonySim/Animals.h"
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
@@ -10,6 +11,7 @@
 #include "ColonySim/Designations.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Farming.h"
+#include "ColonySim/Fuel.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Floors.h"
@@ -46,6 +48,16 @@ namespace colonyscenario {
 namespace {
 
 constexpr int64_t kFieldDay = 13;  // year run: the rice field is laid out on this game day
+constexpr int64_t kWinterDay = 33; // year run: the campfire, the warm clothes and the extra wood come on this game day
+constexpr int kFields = 3;         // year run: rice fields
+constexpr int kWinterTrees = 40;   // ... trees marked then, for the fire
+constexpr int64_t kGreenhouseDay = 15;  // year run: the heated greenhouse is planned on this game day
+// The greenhouse: wood walls round a 10 by 6 footprint with a door in the south wall. Inside (x 1..8, y 1..4):
+// a row of conduits at y = 3 joining six hydroponics basins above it (y = 2), a heater and two standing lamps
+// below it (y = 4) and a wood-fired generator (2 by 2, x 7..8, y 3..4) at the row's east end.
+constexpr int kGreenWidth = 10;
+constexpr int kGreenHeight = 6;
+constexpr int kGreenBasins = 6;
 
 using namespace colony;
 
@@ -144,7 +156,7 @@ bool findRoomSite(Sim& sim, CellPos landing, CellPos& out) {
 
 // The best 14 x 10 patch of ground for the rice field within 40 cells of the landing: the most fertile soil
 // with no rock, water or building in it, outside the room (poor ground grows crops too slowly for a year run).
-CellPos findFieldSite(const Sim& sim, CellPos landing, const CellRect& room) {
+CellPos findFieldSite(const Sim& sim, CellPos landing, const CellRect& room, const std::vector<CellRect>& taken = {}) {
     CellPos best{landing.x + 10, landing.y, 0};
     float bestScore = -1.0f;
     for (int dy = -40; dy <= 40; dy += 2) {
@@ -156,7 +168,8 @@ CellPos findFieldSite(const Sim& sim, CellPos landing, const CellRect& room) {
                 for (int x = 0; x < 14 && ok; ++x) {
                     const CellPos c{origin.x + x, origin.y + y, 0};
                     ok = sim.map().groundWalkable(c) && sim.map().buildingAt(c) == kNoEntity && !room.contains(c) &&
-                         sim.map().terrain(c) == Terrain::Soil;
+                         sim.map().terrain(c) == Terrain::Soil &&
+                         std::none_of(taken.begin(), taken.end(), [&](const CellRect& t) { return t.contains(c); });
                     score += ok ? sim.plants().fertility(c) : 0.0f;
                 }
             }
@@ -167,6 +180,52 @@ CellPos findFieldSite(const Sim& sim, CellPos landing, const CellRect& room) {
         }
     }
     return best;
+}
+
+// A walkable cell with nothing built on it, as near the centre as can be found.
+CellPos freeCellNear(const Sim& sim, CellPos centre) {
+    for (int ring = 0; ring < 30; ++ring) {
+        for (int dy = -ring; dy <= ring; ++dy) {
+            for (int dx = -ring; dx <= ring; ++dx) {
+                const CellPos c{centre.x + dx, centre.y + dy, 0};
+                if (std::max(std::abs(dx), std::abs(dy)) == ring && sim.map().inBounds(c) && sim.map().groundWalkable(c) &&
+                    sim.map().buildingAt(c) == kNoEntity && sim.map().terrain(c) != Terrain::Rock) {
+                    return c;
+                }
+            }
+        }
+    }
+    return centre;
+}
+
+// The nearest spot to the landing for the greenhouse (with a ring of free ground round it), outside the room.
+bool findGreenhouseSite(Sim& sim, CellPos landing, const CellRect& room, CellPos& out) {
+    bool found = false;
+    float best = 0.0f;
+    for (int dy = -30; dy <= 30; ++dy) {
+        for (int dx = -30; dx <= 30; ++dx) {
+            const CellPos origin{landing.x + dx, landing.y + dy, 0};
+            bool ok = true;
+            int trees = 0;
+            for (int y = origin.y - 1; y <= origin.y + kGreenHeight && ok; ++y) {
+                for (int x = origin.x - 1; x <= origin.x + kGreenWidth && ok; ++x) {
+                    const CellPos c{x, y, 0};
+                    ok = sim.map().inBounds(c) && sim.map().groundWalkable(c) && sim.map().buildingAt(c) == kNoEntity &&
+                         sim.farming().zoneAt(c) == kNoGrowingZone &&
+                         !(x >= room.minX - 2 && x < room.minX + room.sizeX + 2 && y >= room.minY - 2 && y < room.minY + room.sizeY + 2);
+                    trees += ok && isTree(sim, sim.plants().defAt(c)) ? 1 : 0;  // cleared when the walls go up, at a cost
+                }
+            }
+            const float score = distSq(origin, landing) + 400.0f * static_cast<float>(trees);
+            ok = ok && sim.regions().canReach(landing, CellPos{origin.x + 1, origin.y - 1, 0});
+            if (ok && (!found || score < best)) {
+                found = true;
+                best = score;
+                out = origin;
+            }
+        }
+    }
+    return found;
 }
 
 size_t ripeCrops(const Sim& sim) {
@@ -242,6 +301,12 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         sim.submit(PlaceBlueprintCommand{p.defName, p.stuff, p.cell, p.rot});
     }
     const CellRect roomRect{origin.x, origin.y, kRoomWidth, kRoomHeight, 0};
+    if (year) {
+        // The player has the colony's research done at the start: hydroponics (and the electricity it needs) is
+        // what the greenhouse is made of.
+        sim.submit(UnlockResearchCommand{"Electricity"});
+        sim.submit(UnlockResearchCommand{"Hydroponics"});
+    }
     if (year) {
         // The year run: a rice field beside the room and a stockpile for its harvest, so the colony can live on.
         sim.submit(CreateStockpileCommand{CellRect{origin.x - 8, origin.y, 6, 6, 0}});
@@ -340,6 +405,17 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         }
     }
 
+    if (year) {
+        // Guns lying about the landing for the others to pick up: a shotgun and two revolvers. Colonists take a gun for each
+        // gun slot they have none for (JobSystem::findLooseWeapon).
+        const char* const loose[] = {"Gun_PumpShotgun", "Gun_Revolver", "Gun_Revolver"};
+        int n = 0;
+        for (const char* def : loose) {
+            sim.submit(SpawnThingCommand{def, freeCellNear(sim, CellPos{origin.x + 2 + n, origin.y + kRoomHeight + 2, 0}), 1});
+            ++n;
+        }
+    }
+
     // Skills under level 10 do not decay: their total experience (levels counted in) shows that the
     // work taught something.
     std::vector<std::pair<Entity, size_t>> learners;
@@ -385,6 +461,8 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     uint64_t commandsFailed = 0;
     uint64_t recreations = 0;  // recreation jobs started
     uint64_t pinGames = 0;     // ... of them at the horseshoes pin
+    uint64_t warmthSeeks = 0;   // times a colonist went to a warm room because of the cold
+    uint64_t weaponsTaken = 0;  // loose weapons colonists picked up
     uint64_t talks = 0;        // interactions between colonists (C20)
     uint64_t fights = 0;       // fights with fists begun
     float minJoy = 1.0f;
@@ -397,6 +475,16 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     float minMood = 100.0f;
     int frostShown = 0;
     bool fieldMade = false;
+    bool winterReady = false;
+    bool greenhousePlanned = false;
+    bool greenZoneMade = false;
+    CellPos greenOrigin{0, 0, 0};
+    std::vector<Plan> greenPlans;
+    float greenMinTemp = 100.0f;
+    float greenMaxTemp = -100.0f;
+    int greenMostCrops = 0;  // most basins with a crop in them at once
+    uint64_t greenCrops = 0;  // hours x crops standing in the basins
+    uint64_t greenRipe = 0;   // hours x ripe crops in the basins
     bool billAdded = false;
     bool butcherBillAdded = false;
     uint64_t butchered = 0;
@@ -435,6 +523,11 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 case EventType::Interaction: ++talks; break;
                 case EventType::SocialFight: fights += e.message == "started" ? 1 : 0; break;
                 case EventType::JobStarted:
+                    if (e.job == JobType::SeekWarmth) {
+                        ++warmthSeeks;
+                    } else if (e.job == JobType::EquipWeapon) {
+                        ++weaponsTaken;
+                    }
                     if (e.job == JobType::Recreate) {
                         ++recreations;
                         pinGames += e.target != kNoEntity ? 1 : 0;
@@ -533,7 +626,8 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 }
                 // Lying down and playing (sitting, watching the clouds) are meant to be still.
                 const bool working = job.type != JobType::None && job.type != JobType::Wait && !jobIsLyingDown(job) &&
-                                     !(job.type == JobType::Recreate && job.step > 0) && !(job.type == JobType::BedRest && job.step > 0);
+                                     !(job.type == JobType::Recreate && job.step > 0) && !(job.type == JobType::BedRest && job.step > 0) &&
+                                     !(job.type == JobType::SeekWarmth && job.step > 0);
                 if (working && fp == s.fingerprint) {
                     ++s.samples;
                     if (s.samples > s.worst) {
@@ -575,12 +669,141 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         if (now % kSecondsPerHour == 0) {
             if (year && !fieldMade && sim.time().day() >= kFieldDay) {
                 // Sown at the start, the crops die in the early spring frosts: the field goes in with the warm weather.
-                const CellPos site = findFieldSite(sim, landing, roomRect);
-                if (verbose) {
-                    std::fprintf(stderr, "rice field at %d,%d\n", site.x, site.y);
+                // Three fields: one feeds the colony for about five days, the stock of survival meals is gone by day 40.
+                std::vector<CellRect> fields;
+                for (int f = 0; f < kFields; ++f) {
+                    const CellPos site = findFieldSite(sim, landing, roomRect, fields);
+                    if (verbose) {
+                        std::fprintf(stderr, "rice field at %d,%d\n", site.x, site.y);
+                    }
+                    fields.push_back(CellRect{site.x, site.y, 14, 10, 0});
+                    sim.submit(CreateGrowingZoneCommand{fields.back(), "Plant_Rice"});
                 }
-                sim.submit(CreateGrowingZoneCommand{CellRect{site.x, site.y, 14, 10, 0}, "Plant_Rice"});
                 fieldMade = true;
+            }
+            if (year && !winterReady && sim.time().day() >= kWinterDay) {
+                // Winter coming: a campfire in the room (colonists with Hauling keep it in wood), more trees marked for it, and the
+                // stock of warm clothes the script has no way to make yet (cloth is not grown): a parka and a tuque for each.
+                winterReady = true;
+                sim.submit(PlaceBlueprintCommand{"Campfire", "", CellPos{origin.x + 1, origin.y + 1, 0}, Rot4::North});
+                int marksNow = 0;
+                for (const Candidate& tree : trees) {
+                    const DefId plant = sim.plants().defAt(tree.cell);
+                    if (marksNow < kWinterTrees && plant.valid() && isTree(sim, plant) && sim.plants().growth(tree.cell) >= 0.95f) {
+                        sim.submit(DesignateCommand{CellRect{tree.cell.x, tree.cell.y, 1, 1, 0}, DesignationKind::CutPlant});
+                        ++marksNow;
+                    }
+                }
+                const DefId cloth = defs->idOf("Things", "Cloth");
+                for (size_t k = 0; k < colonists.size() * 2; ++k) {
+                    std::string why;
+                    sim.apparel().make(defs->idOf("Things", k % 2 == 0 ? "Apparel_Parka" : "Apparel_Tuque"), cloth, -1,
+                                       freeCellNear(sim, CellPos{origin.x + 2 + static_cast<int>(k), origin.y - 2, 0}), &why);
+                }
+            }
+            if (year && !greenhousePlanned && sim.time().day() >= kGreenhouseDay) {
+                greenhousePlanned = true;
+                if (!findGreenhouseSite(sim, landing, roomRect, greenOrigin)) {
+                    std::fprintf(stderr, "colony scenario: no room for the greenhouse\n");
+                    return 2;
+                }
+                if (verbose) {
+                    std::fprintf(stderr, "greenhouse at %d,%d\n", greenOrigin.x, greenOrigin.y);
+                }
+                const auto green = [&](const char* def, const char* stuff, int x, int y) {
+                    greenPlans.push_back(Plan{defs->idOf("Things", def), def, stuff, CellPos{greenOrigin.x + x, greenOrigin.y + y, 0}, Rot4::North});
+                };
+                for (int x = 0; x < kGreenWidth; ++x) {
+                    for (const int y : {0, kGreenHeight - 1}) {
+                        if (y == 0 && x == 1) {
+                            green("Door", "WoodLog", x, y);
+                        } else {
+                            green("Wall", "WoodLog", x, y);
+                        }
+                    }
+                }
+                for (int y = 1; y < kGreenHeight - 1; ++y) {
+                    green("Wall", "WoodLog", 0, y);
+                    green("Wall", "WoodLog", kGreenWidth - 1, y);
+                }
+                for (int x = 1; x <= kGreenBasins; ++x) {
+                    green("PowerConduit", "", x, 3);
+                    green("HydroponicsBasin", "", x, 2);
+                }
+                green("WoodFiredGenerator", "", 7, 3);
+                green("Heater", "", 1, 4);
+                green("StandingLamp", "", 3, 4);
+                green("StandingLamp", "", 5, 4);
+                for (const Plan& p : greenPlans) {
+                    sim.submit(PlaceBlueprintCommand{p.defName, p.stuff, p.cell, p.rot});
+                }
+            }
+            if (year && now % (6 * kSecondsPerHour) == 0 && sim.designations().count() < 6) {
+                // Wood runs out (stove, walls, the greenhouse's generator): keep a few of the nearest trees marked.
+                int wood = 0;
+                for (const auto [item, thing, stack] : sim.things().registry().view<const Thing, const StackCount>().each()) {
+                    wood += defs->get(thing.def).defName() == "WoodLog" ? stack.count : 0;
+                }
+                if (wood < 400) {
+                    std::vector<Candidate> near;
+                    for (int dy = -kMarkRadius; dy <= kMarkRadius; ++dy) {
+                        for (int dx = -kMarkRadius; dx <= kMarkRadius; ++dx) {
+                            const CellPos c{landing.x + dx, landing.y + dy, 0};
+                            const DefId plant = sim.map().inBounds(c) ? sim.plants().defAt(c) : DefId();
+                            if (plant.valid() && sim.plants().growth(c) >= 0.95f && isTree(sim, plant) && touchable(sim, landing, c)) {
+                                near.push_back({c, distSq(c, landing)});
+                            }
+                        }
+                    }
+                    nearest(near);
+                    mark(near, 10, DesignationKind::CutPlant);
+                }
+            }
+            if (greenhousePlanned && !greenZoneMade) {
+                int basins = 0;
+                for (int x = 1; x <= kGreenBasins; ++x) {
+                    const Entity b = sim.map().buildingAt(CellPos{greenOrigin.x + x, greenOrigin.y + 2, 0});
+                    basins += b != kNoEntity ? 1 : 0;  // blueprints and frames are not on the building layer
+                }
+                if (basins == kGreenBasins) {
+                    sim.submit(CreateGrowingZoneCommand{CellRect{greenOrigin.x + 1, greenOrigin.y + 2, kGreenBasins, 1, 0}, "Plant_Rice"});
+                    greenZoneMade = true;
+                    if (verbose) {
+                        std::fprintf(stderr, "    greenhouse basins built, rice zone made\n");
+                    }
+                }
+            }
+            if (greenZoneMade) {
+                const float t = sim.temperature().temperatureAt(CellPos{greenOrigin.x + 3, greenOrigin.y + 2, 0});
+                greenMinTemp = std::min(greenMinTemp, t);
+                greenMaxTemp = std::max(greenMaxTemp, t);
+                int grown = 0;
+                for (int x = 1; x <= kGreenBasins; ++x) {
+                    const CellPos b{greenOrigin.x + x, greenOrigin.y + 2, 0};
+                    if (sim.plants().has(b)) {
+                        ++greenCrops;
+                        greenRipe += sim.farming().readyToHarvest(b) ? 1 : 0;
+                        ++grown;
+                    }
+                }
+                greenMostCrops = std::max(greenMostCrops, grown);
+                if (verbose && now % (12 * kSecondsPerHour) == 0) {
+                    std::fprintf(stderr, "    greenhouse: %.1f C (outside %.1f), %d crops in the basins\n", static_cast<double>(t),
+                                 static_cast<double>(sim.outdoorTemperature()), grown);
+                    const Room* room = sim.rooms().roomOf(CellPos{greenOrigin.x + 3, greenOrigin.y + 2, 0});
+                    const Entity heater = sim.map().buildingAt(CellPos{greenOrigin.x + 1, greenOrigin.y + 4, 0});
+                    const Entity gen = sim.map().buildingAt(CellPos{greenOrigin.x + 7, greenOrigin.y + 3, 0});
+                    int wood = 0;
+                    for (const auto [item, thing, stack] : sim.things().registry().view<const Thing, const StackCount>().each()) {
+                        wood += defs->get(thing.def).defName() == "WoodLog" ? stack.count : 0;
+                    }
+                    const Fuel* genFuel = gen != kNoEntity ? sim.things().registry().try_get<Fuel>(gen) : nullptr;
+                    std::fprintf(stderr, "      wood on the map %d, generator holds %.1f\n", wood, genFuel != nullptr ? static_cast<double>(genFuel->amount) : -1.0);
+                    std::fprintf(stderr, "      room enclosed %d, open roof cells %d; heater powered %d running %d; generator lit %d powered %d\n",
+                                 room != nullptr && room->enclosed(), room != nullptr ? room->openRoofCount : -1,
+                                 heater != kNoEntity && sim.power().powered(heater), heater != kNoEntity && sim.power().running(heater),
+                                 gen != kNoEntity && sim.jobs().fuel().lit(gen), gen != kNoEntity && sim.power().powered(gen));
+                }
             }
             sim.writeSnapshot(snapshot);
             int built = 0;
@@ -640,13 +863,13 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                             }
                         } else if (name == "Deer" || name == "Hare" || name == "Muffalo" || name == "Alpaca") {
                             const float d = std::hypot(pos.x - static_cast<float>(landing.x), pos.y - static_cast<float>(landing.y));
-                            if (d < 45.0f) {
+                            if (d < 70.0f) {
                                 prey.emplace_back(d, animal);
                             }
                         }
                     }
                     std::sort(prey.begin(), prey.end());
-                    for (size_t k = 0; marked < 3 && k < prey.size(); ++k, ++marked) {
+                    for (size_t k = 0; marked < 6 && k < prey.size(); ++k, ++marked) {
                         sim.submit(MarkAnimalCommand{prey[k].second, "Hunt", true});
                     }
                 }
@@ -689,6 +912,31 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 std::fprintf(stderr, "    food: rice %d, meat %d, meals %d; crops ripe %zu; hunted %llu\n", rice, meat, meals, ripeCrops(sim),
                              static_cast<unsigned long long>(sim.husbandry().stats().hunted));
             }
+            if (verbose && year && now % (6 * kSecondsPerHour) == 3 * kSecondsPerHour) {
+                // Each colonist's mood, what makes it and what it is doing, four times a day.
+                for (const Entity pawn : colonists) {
+                    if (!sim.things().registry().valid(pawn)) {
+                        continue;
+                    }
+                    const Mood* mood = sim.things().registry().try_get<Mood>(pawn);
+                    const Health* health = sim.things().registry().try_get<Health>(pawn);
+                    if (mood == nullptr || health == nullptr || health->dead) {
+                        continue;
+                    }
+                    std::string why;
+                    for (const ThoughtView& t : sim.mood().thoughts(pawn, now)) {
+                        char part[96];
+                        std::snprintf(part, sizeof(part), " %s %+.0f", t.def.c_str(), static_cast<double>(t.offset));
+                        why += part;
+                    }
+                    const Worker& worker = sim.things().registry().get<Worker>(pawn);
+                    const Position& at = sim.things().registry().get<Position>(pawn);
+                    std::fprintf(stderr, "    mood %u: %.0f (food %.2f, %s at %.0f,%.0f, %s)%s\n", static_cast<unsigned>(entt::to_integral(pawn)),
+                                 static_cast<double>(mood->level), static_cast<double>(sim.things().registry().get<Needs>(pawn).food),
+                                 jobTypeName(worker.job.type), static_cast<double>(at.x), static_cast<double>(at.y),
+                                 health->downed ? "down" : "up", why.c_str());
+                }
+            }
         }
     }
 
@@ -726,6 +974,10 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     int expectedWalls = 0;
     int expectedDoors = 0;
     for (const Plan& p : plans) {
+        expectedWalls += p.defName == "Wall" ? 1 : 0;
+        expectedDoors += p.defName == "Door" ? 1 : 0;
+    }
+    for (const Plan& p : greenPlans) {
         expectedWalls += p.defName == "Wall" ? 1 : 0;
         expectedDoors += p.defName == "Door" ? 1 : 0;
     }
@@ -778,7 +1030,16 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 static_cast<unsigned long long>(sim.stateHash()));
 
     if (year) {
+        std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"warmthSeeks\":%llu,\"weaponsTaken\":%llu}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), static_cast<unsigned long long>(warmthSeeks), static_cast<unsigned long long>(weaponsTaken));
         std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay));
+        if (greenhousePlanned) {
+            std::printf("{\"greenhouse\":{\"at\":\"%d,%d\",\"basins\":%d,\"generators\":%d,\"heaters\":%d,\"lamps\":%d,\"zoneMade\":%s,"
+                        "\"minTemp\":%.1f,\"maxTemp\":%.1f,\"mostCrops\":%d,\"cropHours\":%llu,\"ripeHours\":%llu,\"unbuilt\":%d}}\n",
+                        greenOrigin.x, greenOrigin.y, builtBy["HydroponicsBasin"], builtBy["WoodFiredGenerator"], builtBy["Heater"],
+                        builtBy["StandingLamp"], greenZoneMade ? "true" : "false", static_cast<double>(greenMinTemp),
+                        static_cast<double>(greenMaxTemp), greenMostCrops, static_cast<unsigned long long>(greenCrops),
+                        static_cast<unsigned long long>(greenRipe), unfinished);
+        }
         const FarmingStats& f = sim.farming().stats();
         double growthSum = 0.0;
         size_t crops = 0;
@@ -878,6 +1139,9 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     }
     if (!(skillXpGained > 0.0)) {
         fail("the work taught nobody anything (%.1f experience gained)", skillXpGained);
+    }
+    if (year && days >= static_cast<double>(kGreenhouseDay) + 12.0 && !greenZoneMade) {
+        fail("%s", "the greenhouse basins were not all built 12 days after it was planned");
     }
     if (commandsFailed > 0 || sim.stats().failedJobs > 0) {
         fail("%llu commands and %llu jobs failed", static_cast<unsigned long long>(commandsFailed),

@@ -67,12 +67,12 @@ std::shared_ptr<const DefDatabase> monsterDefs() {
     return defs;
 }
 
-std::unique_ptr<Sim> monsterSim(uint64_t seed = 11, int size = 128) {
+std::unique_ptr<Sim> monsterSim(uint64_t seed = 11, int size = 128, bool colonists = true) {
     SimSettings settings;
     settings.seed = seed;
     settings.mapSize = size;
     settings.flatMap = true;
-    settings.scenario = "Crashlanded";
+    settings.scenario = colonists ? "Crashlanded" : "";
     return std::make_unique<Sim>(settings, monsterDefs());
 }
 
@@ -181,7 +181,8 @@ TEST_CASE("Monsters: an infestation grows mounds and sends insects after the col
 }
 
 TEST_CASE("Monsters: a destroyed mound leaves 30 jelly, and a mound takes no more than 40 around it") {
-    auto sim = monsterSim();
+    // No colonists: they pick up the landing's guns and shoot the mound down in the first hour.
+    auto sim = monsterSim(11, 128, false);
     const Entity hive = sim->monsters().spawnHive(CellPos{60, 60, 0});
     MONSTER_REQUIRE(hive != kNoEntity);
     sim->stepMany(kSecondsPerDay * 4);

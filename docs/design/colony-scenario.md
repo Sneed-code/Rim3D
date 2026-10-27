@@ -119,5 +119,54 @@ outdoor filth fades, hunting; `farming.md`, `raids.md`, `fighters.md`, `room-sta
 | 7 | 1 of 6 | 0 (260 sown, 260 harvested) | 6 | predator day 24, starvation day 31, predators and a bleed-out later |
 | 42 | 1 of 6 | 0 (128 sown, 128 harvested) | 0 | a predator day 9, then hypothermia on days 50 to 52 (four) |
 
+**Winter fixes** (colonists seek warmth, pick up loose guns; `temperature.md`, `weapons.md`). The year run now also: leaves a
+shotgun and two revolvers at the landing for the others to pick up (at most three colonists end up armed), keeps six game
+animals marked for the hunt within 70 m, lays out three rice fields instead of one (the 32 stacks of survival meals are gone by day
+40 and one field feeds the colony about five days), and on day 33 places a campfire in the room (colonists with Hauling feed it),
+marks 40 more trees for its wood and hands out a parka and a tuque of cloth for each colonist (the script cannot make cloth yet).
+Hunger now interrupts hunting, butchering and corpse hauling.
+
+| Seed | Colonists alive on day 60 | Hypothermia deaths | What killed the rest |
+| --- | --- | --- | --- |
+| 1 | 2 of 6 | 0 | predators and berserk breaks, day 21 to 32 |
+| 7 | 6 of 6 (malnourished, food 0 at the end) | 0 | |
+| 42 | 4 of 6 | 0 | predators, day 24 and 35 |
+
+Not one colonist froze, and no seed is worse than two alive (before: one each). Findings on the way: arming every colonist killed
+them (a revolver against three wolves, a knife in a berserk colonist's hands: that is why only guns, only three of them); a
+`FireSpree` break burned the whole base and killed everyone on seed 42 on day 14 in one run (fires, `BACKLOG.md`); the food
+is now the limit (meals 0 at the end on every seed). `warmthSeeks` stayed 0 in these runs: the campfire room and the parkas kept
+the hypothermia under the 0.12 trigger (`ColdAndArmsTests` covers the job).
+
+**Survival fixes on main (2026-10-27).** Run on main after #159's winter fixes and #169's greenhouse were joined, the year
+run had lost everyone again (0 of 6 alive on day 60 on all three seeds): colonists broke from the first hour (no
+expectations mood), starved beside full stockpiles (a colonist pushed into a wall's cell, a downed colonist nobody fed),
+and the run crashed when a dead colonist was butchered. With the expectations mood (`mood.md`), feeding patients
+(`medicine.md`), the wall guard (`movement.md`) and the crash fix:
+
+| Seed | Colonists alive on day 60 | Mental breaks | What killed the rest |
+| --- | --- | --- | --- |
+| 1 | 5 of 6 | 1 | starvation on day 59 (all food gone) |
+| 7 | 5 of 6 | 1 | an illness on day 33 |
+| 42 | 2 of 6 | 2 | starvation, four on day 53 (all food gone) |
+
+Verbose mode now also prints each colonist's mood, its thoughts, its food, its job and where it stands four times a day.
+Winter food is what is left (`BACKLOG.md`).
+
 Frost no longer kills a single crop, and no seed is dead by day 51 any more (the first runs lost everyone), but the colony
 still does not last the year: see `BACKLOG.md`. The run is not in CTest: it takes about ten minutes.
+
+## The greenhouse (year run)
+
+From day 15 the year run also builds a heated greenhouse on the nearest free 10 x 6 patch (outside the room and the
+field): wood walls and a door, a wood-fired generator, a heater, two standing lamps, six hydroponics basins joined by a
+conduit row, and a rice growing zone over the basins once all six stand. The script unlocks `Electricity` and
+`Hydroponics` at the start (a player would research them). While the year run goes on it keeps ten of the nearest trees
+marked for felling whenever the map holds under 400 wood, since the stove, the walls and the generator (63 wood a day)
+otherwise empty it. Verbose mode prints the greenhouse's temperature, wood on the map and the generator's fuel every
+12 game hours; the output has a `greenhouse` line (temperature range, most crops at once, crop-hours and ripe-hours).
+
+**Seed 42, 100 days:** the room stays at 21 C through the cold (outside down to -5 C), the six basins carry rice
+(6,337 crop-hours, 158 ripe-hours). The room only went cold again after the colonists were dead and nobody refuelled the
+generator. The colonists still die for the reasons above (predators, starvation, hypothermia outdoors), so the greenhouse
+alone does not yet keep the colony alive; only six basins feed few people.
