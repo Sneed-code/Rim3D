@@ -91,6 +91,10 @@ const char* commandName(const Command& command) {
                 return "SetBillOptions";
             } else if constexpr (std::is_same_v<Type, MoveBillCommand>) {
                 return "MoveBill";
+            } else if constexpr (std::is_same_v<Type, AddOperationCommand>) {
+                return "AddOperation";
+            } else if constexpr (std::is_same_v<Type, RemoveOperationCommand>) {
+                return "RemoveOperation";
             } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
                 return "ShortCircuit";
             } else if constexpr (std::is_same_v<Type, SetResearchCommand>) {
@@ -319,6 +323,7 @@ const char* eventTypeName(EventType type) {
         case EventType::ShipReactorReady: return "ShipReactorReady";
         case EventType::ShipReactorLost: return "ShipReactorLost";
         case EventType::ShipLaunched: return "ShipLaunched";
+        case EventType::OperationDone: return "OperationDone";
     }
     return "?";
 }
@@ -357,6 +362,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Butcher: return "Butcher";
         case PawnAction::DropCorpse: return "DropCorpse";
         case PawnAction::Punch: return "Punch";
+        case PawnAction::Operate: return "Operate";
     }
     return "?";
 }

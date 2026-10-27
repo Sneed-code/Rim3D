@@ -117,6 +117,7 @@ enum class EventType : uint8_t {
     ShipReactorReady,      // the activation finished: the ship can launch
     ShipReactorLost,       // the reactor was destroyed or taken down: the activation is lost, `message` says which
     ShipLaunched,          // the ship left and the game is won: `amount` how many pawns went (a PawnLeftMap each)
+    OperationDone,      // a doctor finished an operation (H3, docs/design/surgery.md): `thing` the doctor, `target` the patient, `def` the Recipes def, `part` the body part, `amount` the success chance, `message` "success", "failed" or "the patient died"
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -165,6 +166,7 @@ enum class PawnAction : uint8_t {
     Butcher,      // started cutting up `target`, a corpse (once per job; the work goes on until its JobEnded)
     DropCorpse,   // put the carried `target`, a corpse, down in `cell`
     Punch,        // swung a fist at `target`, a pawn or a thing (a tantrum or berserk break: docs/design/mental-breaks.md)
+    Operate,      // started an operation on `target`, a patient in bed (once per job; the work goes on until its JobEnded)
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.

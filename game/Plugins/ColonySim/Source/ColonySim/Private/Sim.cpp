@@ -33,6 +33,7 @@
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Social.h"
 #include "ColonySim/Medicine.h"
+#include "ColonySim/Surgery.h"
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Quests.h"
 #include "ColonySim/Ship.h"
@@ -223,6 +224,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     recreation_->setRooms(rooms_.get());
     research_ = std::make_unique<ResearchSystem>(*things_, *defs_);
     medicine_ = std::make_unique<MedicineSystem>(*things_, *defs_);
+    surgery_ = std::make_unique<SurgerySystem>(*things_, *defs_, *health_, research_.get());
     talents_ = std::make_unique<TalentSystem>(*things_, *defs_);
     temperature_ = std::make_unique<TemperatureSystem>(map_, *things_, *rooms_, *health_, *defs_,
                                                        splitMix64(settings.seed ^ 0x74656D70ULL));
@@ -268,6 +270,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setRooms(rooms_.get());
     jobs_->setResearch(research_.get());
     jobs_->setMedicine(medicine_.get());
+    jobs_->setSurgery(surgery_.get());
+    jobs_->setRoomStats(roomStats_.get());
     jobs_->setTalents(talents_.get());
     jobs_->setFilth(filth_.get());
     jobs_->setApparel(apparel_.get());
@@ -1129,6 +1133,14 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (billOptions->storeZone != 0 && zones_->find(billOptions->storeZone) == nullptr) {
             commandFailed(id, "there is no stockpile " + std::to_string(billOptions->storeZone));
         } else if (!jobs_->bills().setOptions(billOptions->building, billOptions->bill, options, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* addOperation = std::get_if<AddOperationCommand>(&command)) {
+        if (surgery_->add(addOperation->pawn, addOperation->recipe, addOperation->part, error) == 0) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* removeOperation = std::get_if<RemoveOperationCommand>(&command)) {
+        if (!surgery_->remove(removeOperation->pawn, removeOperation->operation, error)) {
             commandFailed(id, error);
         }
     } else if (const auto* moveBill = std::get_if<MoveBillCommand>(&command)) {
@@ -2251,11 +2263,17 @@ uint64_t Sim::stateHash() const {
                 h.add(static_cast<int>(missing.part));
                 h.add(missing.tendQuality);
             }
+            h.add(static_cast<uint64_t>(health->added.size()));
+            for (const AddedPart& added : health->added) {
+                h.add(static_cast<int>(added.part));
+                h.add(added.hediff.value);
+            }
             h.add(health->bloodLoss);
             h.add(health->dead);
             h.add(static_cast<int>(health->cause));
         }
         medicine_->hashPawn(e, h);
+        surgery_->hashPawn(e, h);
         combat_->hashThing(e, h);
         explosives_->hashThing(e, h);
         fighters_->hashThing(e, h);
