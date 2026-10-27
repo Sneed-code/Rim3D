@@ -359,7 +359,7 @@ private:
 
     // Works out pain, bleeding, capacities and what they mean (the death cause and whether the
     // pawn should be downed) into `health`'s derived fields. Changes nothing else.
-    void derive(int body, float healthScale, Health& health, DeathCause& cause, bool& shouldBeDown) const;
+    void derive(int body, float healthScale, bool mechanical, Health& health, DeathCause& cause, bool& shouldBeDown) const;
     void recompute(Entity pawn, Health& health, bool announce);
     void emit(EventType type, Entity pawn, DefId def = DefId{}, int part = -1, float amount = 0.0f,
               const char* message = nullptr);

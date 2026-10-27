@@ -50,6 +50,7 @@
 #include "ColonySim/RoomStats.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Snapshot.h"
+#include "ColonySim/Monsters.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/RoofCollapse.h"
 #include "ColonySim/UpperFloors.h"
@@ -323,6 +324,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     raids_ = std::make_unique<RaidSystem>(*things_, map_, *rooms_, *combat_, *health_, *jobs_, *fighters_, *defs_, time_, rng_);
     raids_->setEventLog(&events_);
     raids_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
+    monsters_ = std::make_unique<MonsterSystem>(*things_, map_, *combat_, *health_, *fighters_, *raids_, *animals_, *defs_, time_, rng_);
     prisoners_ = std::make_unique<PrisonerSystem>(*things_, map_, *combat_, *health_, *jobs_, *fighters_, *raids_, *defs_, time_, rng_);
     prisoners_->setEventLog(&events_);
     jobs_->setPrisoners(prisoners_.get());
@@ -1179,6 +1181,13 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!raids_->startRaid(raid->faction, raid->points, raid->edge, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* threat = std::get_if<StartThreatCommand>(&command)) {
+        const bool ok = threat->kind == "Infestation"      ? monsters_->infest(threat->points, error)
+                        : threat->kind == "RemnantCluster" ? monsters_->remnantCluster(threat->points, threat->edge, error)
+                                                           : (error = "no such threat '" + threat->kind + "'", false);
+        if (!ok) {
+            commandFailed(id, error);
+        }
     } else if (const auto* alarm = std::get_if<SoundAlarmCommand>(&command)) {
         if (!raids_->soundAlarm(alarm->on, error)) {
             commandFailed(id, error);
@@ -1348,6 +1357,7 @@ void Sim::step() {
     explosives_->step(rng_);
     animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
     defense_->step(rng_);
+    monsters_->step(events_, 0);  // mounds make jelly, brood and spread; insects hunt (docs/design/monsters.md)
     {
         // Blasts of Burn damage start fires; a pawn that catches fire stops what it was doing.
         fire_->step(time_.seconds, 0);

@@ -1029,6 +1029,10 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.text("action", c.action);
         ar.value("thing", c.thing);
         ar.value("pawn", c.pawn);
+    } else if constexpr (std::is_same_v<Type, StartThreatCommand>) {
+        ar.text("kind", c.kind);
+        ar.value("points", c.points);
+        ar.value("edge", c.edge);
     } else if constexpr (std::is_same_v<Type, QuestCommand>) {
         ar.text("action", c.action);
         ar.value("quest", c.quest);

@@ -107,6 +107,8 @@ const char* commandName(const Command& command) {
                 return "Explode";
             } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
                 return "StartRaid";
+            } else if constexpr (std::is_same_v<Type, StartThreatCommand>) {
+                return "StartThreat";
             } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
                 return "SoundAlarm";
             } else if constexpr (std::is_same_v<Type, SetDefenseRoleCommand>) {

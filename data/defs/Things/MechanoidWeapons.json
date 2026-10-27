@@ -1,0 +1,147 @@
+[
+ {
+  "defName": "Gun_ChargeLance",
+  "parent": "GunBase",
+  "label": "charge lance",
+  "source": "RimWorld wiki",
+  "weaponSlot": "Primary",
+  "stats": {
+   "mass": 8,
+   "rangedWeaponCooldown": 81,
+   "accuracyTouch": 0.65,
+   "accuracyShort": 0.85,
+   "accuracyMedium": 0.85,
+   "accuracyLong": 0.75
+  },
+  "verbs": [
+   {
+    "range": 32.9,
+    "warmupTime": 51,
+    "burstShotCount": 1,
+    "defaultProjectile": "Bullet_ChargeLance"
+   }
+  ],
+  "recoilPerShot": 0.01,
+  "recoilKicks": [
+   {
+    "up": 0.5,
+    "side": 0.05
+   }
+  ],
+  "magazineSize": 9999,
+  "reloadTime": 30,
+  "unverified": [
+   "recoilPerShot"
+  ],
+  "ours": [
+   "recoilPerShot",
+   "recoilKicks",
+   "magazineSize",
+   "reloadTime",
+   "weaponSlot"
+  ],
+  "mechOnly": true,
+  "visual": {
+   "sound": {
+    "shot": "Shot_Rifle"
+   }
+  }
+ },
+ {
+  "defName": "Gun_NeedleGun",
+  "parent": "GunBase",
+  "label": "needle gun",
+  "source": "RimWorld wiki",
+  "weaponSlot": "Primary",
+  "stats": {
+   "mass": 2.6,
+   "rangedWeaponCooldown": 63,
+   "accuracyTouch": 0.6,
+   "accuracyShort": 0.8,
+   "accuracyMedium": 0.9,
+   "accuracyLong": 0.85
+  },
+  "verbs": [
+   {
+    "range": 44.9,
+    "warmupTime": 75,
+    "burstShotCount": 1,
+    "defaultProjectile": "Bullet_NeedleGun"
+   }
+  ],
+  "recoilPerShot": 0.01,
+  "recoilKicks": [
+   {
+    "up": 0.5,
+    "side": 0.05
+   }
+  ],
+  "magazineSize": 9999,
+  "reloadTime": 30,
+  "unverified": [
+   "recoilPerShot"
+  ],
+  "ours": [
+   "recoilPerShot",
+   "recoilKicks",
+   "magazineSize",
+   "reloadTime",
+   "weaponSlot"
+  ],
+  "mechOnly": true,
+  "visual": {
+   "sound": {
+    "shot": "Shot_Rifle"
+   }
+  }
+ },
+ {
+  "defName": "Gun_HeavyChargeBlaster",
+  "parent": "GunBase",
+  "label": "heavy charge blaster",
+  "source": "RimWorld wiki",
+  "weaponSlot": "Primary",
+  "stats": {
+   "mass": 22,
+   "rangedWeaponCooldown": 222,
+   "accuracyTouch": 0.18,
+   "accuracyShort": 0.26,
+   "accuracyMedium": 0.26,
+   "accuracyLong": 0.18
+  },
+  "verbs": [
+   {
+    "range": 27,
+    "warmupTime": 38,
+    "burstShotCount": 24,
+    "defaultProjectile": "Bullet_HeavyChargeBlaster",
+    "secondsBetweenBurstShots": 4
+   }
+  ],
+  "recoilPerShot": 0.01,
+  "recoilKicks": [
+   {
+    "up": 0.5,
+    "side": 0.05
+   }
+  ],
+  "magazineSize": 9999,
+  "reloadTime": 30,
+  "unverified": [
+   "recoilPerShot"
+  ],
+  "ours": [
+   "recoilPerShot",
+   "recoilKicks",
+   "magazineSize",
+   "reloadTime",
+   "weaponSlot"
+  ],
+  "mechOnly": true,
+  "visual": {
+   "sound": {
+    "shot": "Shot_Rifle"
+   }
+  }
+ }
+]

@@ -1,0 +1,229 @@
+[
+ {
+  "defName": "Megascarab",
+  "parent": "AnimalBase",
+  "label": "brood scarab",
+  "source": "RimWorld wiki",
+  "stats": {
+   "moveSpeed": 0.125,
+   "marketValue": 100
+  },
+  "race": {
+   "body": "QuadrupedAnimal",
+   "hitboxes": "TinyQuadrupedHitboxes",
+   "baseBodySize": 0.2,
+   "baseHealthScale": 0.4,
+   "lifeExpectancy": 3,
+   "diet": "Carnivore",
+   "foodPerDay": 0.1,
+   "wildness": 1.0,
+   "trainability": "None",
+   "lifeStages": [
+    {
+     "stage": "adult",
+     "minAgeYears": 0,
+     "bodySizeFactor": 1.0,
+     "healthScaleFactor": 1.0,
+     "foodFactor": 1.0
+    }
+   ],
+   "armor": {
+    "sharp": 0.72,
+    "blunt": 0.18
+   },
+   "combatPower": 40,
+   "chitinid": true
+  },
+  "tools": [
+   {
+    "label": "mandibles",
+    "capacities": [
+     "Bite"
+    ],
+    "power": 5,
+    "cooldownTime": 60,
+    "armorPenetration": 0.07
+   },
+   {
+    "label": "head",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 4,
+    "cooldownTime": 60,
+    "armorPenetration": 0.06,
+    "chanceFactor": 0.1
+   }
+  ],
+  "unverified": [
+   "stats",
+   "race",
+   "tools"
+  ],
+  "ours": [
+   "race.chitinid",
+   "race.armor",
+   "race.combatPower",
+   "race.lifeStages"
+  ],
+  "visual": {
+   "sound": {
+    "idle": "Animal_Rodent_Idle",
+    "hurt": "Animal_Rodent_Hurt",
+    "death": "Animal_Rodent_Death",
+    "burning": "Pawn_Burning"
+   }
+  }
+ },
+ {
+  "defName": "Spelopede",
+  "parent": "AnimalBase",
+  "label": "brood delver",
+  "source": "RimWorld wiki",
+  "stats": {
+   "moveSpeed": 0.121667,
+   "marketValue": 200
+  },
+  "race": {
+   "body": "QuadrupedAnimal",
+   "hitboxes": "SmallQuadrupedHitboxes",
+   "baseBodySize": 0.8,
+   "baseHealthScale": 1.7,
+   "lifeExpectancy": 3,
+   "diet": "Carnivore",
+   "foodPerDay": 0.1,
+   "wildness": 1.0,
+   "trainability": "None",
+   "lifeStages": [
+    {
+     "stage": "adult",
+     "minAgeYears": 0,
+     "bodySizeFactor": 1.0,
+     "healthScaleFactor": 1.0,
+     "foodFactor": 1.0
+    }
+   ],
+   "armor": {
+    "sharp": 0.18,
+    "blunt": 0.18
+   },
+   "combatPower": 75,
+   "chitinid": true
+  },
+  "tools": [
+   {
+    "label": "head claw",
+    "capacities": [
+     "Scratch"
+    ],
+    "power": 7,
+    "cooldownTime": 60,
+    "armorPenetration": 0.1
+   },
+   {
+    "label": "head",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 6,
+    "cooldownTime": 60,
+    "armorPenetration": 0.09
+   }
+  ],
+  "unverified": [
+   "stats",
+   "race",
+   "tools"
+  ],
+  "ours": [
+   "race.chitinid",
+   "race.armor",
+   "race.combatPower",
+   "race.lifeStages"
+  ],
+  "visual": {
+   "sound": {
+    "idle": "Animal_Rodent_Idle",
+    "hurt": "Animal_Rodent_Hurt",
+    "death": "Animal_Rodent_Death",
+    "burning": "Pawn_Burning"
+   }
+  }
+ },
+ {
+  "defName": "Megaspider",
+  "parent": "AnimalBase",
+  "label": "brood stalker",
+  "source": "RimWorld wiki",
+  "stats": {
+   "moveSpeed": 0.12,
+   "marketValue": 500
+  },
+  "race": {
+   "body": "QuadrupedAnimal",
+   "hitboxes": "MediumQuadrupedHitboxes",
+   "baseBodySize": 1.2,
+   "baseHealthScale": 2.5,
+   "lifeExpectancy": 3,
+   "diet": "Carnivore",
+   "foodPerDay": 0.1,
+   "wildness": 1.0,
+   "trainability": "None",
+   "lifeStages": [
+    {
+     "stage": "adult",
+     "minAgeYears": 0,
+     "bodySizeFactor": 1.0,
+     "healthScaleFactor": 1.0,
+     "foodFactor": 1.0
+    }
+   ],
+   "armor": {
+    "sharp": 0.27,
+    "blunt": 0.18
+   },
+   "combatPower": 150,
+   "chitinid": true
+  },
+  "tools": [
+   {
+    "label": "head claw",
+    "capacities": [
+     "Scratch"
+    ],
+    "power": 12,
+    "cooldownTime": 78,
+    "armorPenetration": 0.18
+   },
+   {
+    "label": "head",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 7,
+    "cooldownTime": 60,
+    "armorPenetration": 0.1,
+    "chanceFactor": 0.2
+   }
+  ],
+  "unverified": [
+   "stats",
+   "race",
+   "tools"
+  ],
+  "ours": [
+   "race.chitinid",
+   "race.armor",
+   "race.combatPower",
+   "race.lifeStages"
+  ],
+  "visual": {
+   "sound": {
+    "idle": "Animal_Rodent_Idle",
+    "hurt": "Animal_Rodent_Hurt",
+    "death": "Animal_Rodent_Death",
+    "burning": "Pawn_Burning"
+   }
+  }
+ }
+]

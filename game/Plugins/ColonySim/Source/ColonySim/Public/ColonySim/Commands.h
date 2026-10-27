@@ -375,6 +375,15 @@ struct StartRaidCommand {
     int edge = -1;
 };
 
+// Chitinid and Remnant threats (docs/design/monsters.md). `kind` is "Infestation" (brood mounds grow
+// near the colony and their insects hunt) or "RemnantCluster" (mechanoids walk in at `edge`, as for
+// StartRaidCommand), worth `points` (0: what the colony is worth now).
+struct StartThreatCommand {
+    std::string kind = "Infestation";
+    float points = 0.0f;
+    int edge = -1;
+};
+
 // The colony alarm: on calls every colonist to its defense role, off sends them back to work. It
 // also sounds by itself when a colonist spots an enemy, and stops when the enemies are gone or
 // fleeing; one the player sounded stays on until the player stops it. Fails if it already is.
@@ -769,7 +778,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ReloadCommand, AddBillCommand,
                              RemoveBillCommand, SetBillCommand, HandsOnCommand, FlickCommand, ShortCircuitCommand,
                              PlaceFloorCommand, AddFilthCommand,
-                             SetResearchCommand, UnlockResearchCommand, StartRaidCommand, SoundAlarmCommand,
+                             SetResearchCommand, UnlockResearchCommand, StartRaidCommand, StartThreatCommand, SoundAlarmCommand,
                              SetDefenseRoleCommand, MarkShelterCommand, ThrowCommand, ExplodeCommand,
                              MeleeCommand, DodgeRollCommand,
                              SetOutfitCommand, EditOutfitCommand, AddOutfitCommand, RemoveOutfitCommand,
