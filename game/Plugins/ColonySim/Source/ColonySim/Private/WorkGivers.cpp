@@ -16,6 +16,8 @@
 #include "ColonySim/Fire.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Medicine.h"
+#include "ColonySim/MentalBreaks.h"
+#include "ColonySim/Surgery.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Plants.h"
@@ -476,7 +478,7 @@ public:
                 !jobs.fuel().canUse(building, fuelPerProduct * static_cast<float>(recipe->fuelUses()))) {
                 continue;
             }
-            if (recipe->butcher) {
+            if (recipe->butcher || recipe->cremate) {
                 if (makeButcherJob(jobs, pawn, building, bill, candidate.reach, out)) {
                     return true;
                 }
@@ -693,6 +695,12 @@ public:
                 continue;
             }
             const bool bleeds = jobs.health().urgentlyNeedsTending(patient);
+            // One in a mental break walks about and can't be caught up with (a tend takes minutes in reach), so the doctors
+            // would chase it for hours; it is tended when the break is over.
+            const MentalBreaker* breaker = reg.try_get<MentalBreaker>(patient);
+            if (breaker != nullptr && breaker->active) {
+                continue;
+            }
             if (urgent && !bleeds) {
                 continue;
             }
@@ -752,6 +760,32 @@ public:
     }
 };
 
+// Operate (RimWorld's surgery bills, task H3, docs/design/surgery.md): a patient lying in bed with an operation planned that this
+// pawn is skilled enough for and can fetch the part and a medicine for.
+class OperateGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "Operate"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        if (jobs.surgery() == nullptr || jobs.medicine() == nullptr || !jobs.canUseHands(pawn)) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        for (const auto [patient, health, pos] : reg.view<const Health, const Position>().each()) {
+            if (patient == pawn || pos.level != at.level || !medicalColonist(reg, patient) || !jobs.surgery()->pending(patient) ||
+                !jobs.lyingInBed(patient)) {
+                continue;
+            }
+            out.push_back(WorkCandidate{JobTarget{patient, CellPos{}}, workGiverDistSq(at, pos), 0, 0, false, CellPos{}});
+        }
+    }
+
+    bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
+        return jobs.planOperation(pawn, candidate.target.thing, out);
+    }
+};
+
 // A patient that isn't down goes to bed to heal: GoToMedicalBed only to a medical bed, RestToHeal to any bed.
 class BedRestGiver : public WorkGiver {
 public:
@@ -759,7 +793,7 @@ public:
 
     void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
         const entt::registry& reg = jobs.things().registry();
-        if (!reg.all_of<Health, Worker>(pawn) || reg.get<Health>(pawn).downed || !jobs.health().needsRest(pawn)) {
+        if (!reg.all_of<Health, Worker>(pawn) || reg.get<Health>(pawn).downed || !jobs.needsBedRest(pawn)) {
             return;
         }
         const Entity under = jobs.bedUnder(pawn);
@@ -777,7 +811,7 @@ public:
     }
 
     bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
-        if (!jobs.health().needsRest(pawn)) {
+        if (!jobs.needsBedRest(pawn)) {
             return false;
         }
         out = Job{};
@@ -1125,13 +1159,15 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<HarvestCropsGiver>());
     givers.push_back(std::make_unique<SowCropsGiver>());
     for (const char* task :
-         {"DoBillsCookStove", "DoBillsButcher", "DoBillsSmithy", "DoBillsTailor", "DoBillsCraftingSpot", "DoBillsStonecut"}) {
+         {"DoBillsCookStove", "DoBillsButcher", "DoBillsSmithy", "DoBillsTailor", "DoBillsCraftingSpot", "DoBillsStonecut", "DoBillsSmelt",
+          "DoBillsCremate", "DoBillsDrugLab", "DoBillsBrew"}) {
         givers.push_back(std::make_unique<DoBillsGiver>(task));
     }
     givers.push_back(std::make_unique<ResearchGiver>());
     givers.push_back(std::make_unique<CleanFilthGiver>());
     givers.push_back(std::make_unique<TendPatientsGiver>());
     givers.push_back(std::make_unique<RescueGiver>());
+    givers.push_back(std::make_unique<OperateGiver>());
     givers.push_back(std::make_unique<GoToMedicalBedGiver>());
     givers.push_back(std::make_unique<RestToHealGiver>());
     givers.push_back(std::make_unique<ExtinguishFiresGiver>());

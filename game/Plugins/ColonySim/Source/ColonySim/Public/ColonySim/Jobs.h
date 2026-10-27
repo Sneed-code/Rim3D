@@ -147,6 +147,11 @@ inline constexpr uint8_t kRefuelPickUpStep = 1;
 // RepairGear has four as well: go to the gear, pick it up, carry it beside the bench, work. `thing` is the gear, `site` the
 // bench, `cell` where the pawn stands, `bill` 0 for a repair or the upgrade part's def id + 1 for a fitting.
 inline constexpr uint8_t kGearPickUpStep = 1;
+
+// Operate: the DoBill steps with the patient for the work building. `thing` is the part or medicine being fetched (none when
+// there is nothing to fetch), `site` the patient, `bill` the operation's id, `cell` where the doctor stands.
+inline constexpr uint8_t kOperatePickUpStep = 1;
+inline constexpr uint8_t kOperateDepositStep = 3;
 // Ingest has four: go to the food, pick it up, go to the eating spot, eat. The pawn carries the
 // food from the third on.
 inline constexpr uint8_t kIngestPickUpStep = 1;
@@ -176,6 +181,7 @@ class TemperatureSystem;
 class Construction;
 class FuelSystem;
 class DefDatabase;
+class DrugSystem;
 class Farming;
 class RepairSystem;
 class Filth;
@@ -186,6 +192,8 @@ struct Bill;
 struct Recipe;
 class HealthSystem;
 class MedicineSystem;
+class SurgerySystem;
+class RoomStats;
 class PrisonerSystem;
 class Husbandry;
 class Lights;
@@ -195,6 +203,7 @@ class Pathfinder;
 class Plants;
 class PowerGrid;
 class ResearchSystem;
+class InspirationSystem;
 class TalentSystem;
 class Rooms;
 class Things;
@@ -261,6 +270,9 @@ public:
     // A player order: haul this item to the best stockpile now, ending the pawn's current job.
     // Refused for the pawn the player controls directly (PlayerControl).
     bool orderHaul(Entity pawn, Entity thing, std::string& error);
+    // A player order: go and take this drug (an Ingest job; docs/design/drugs.md). Refused for a pawn the player controls.
+    bool orderTakeDrug(Entity pawn, Entity thing, std::string& error);
+    void setDrugs(DrugSystem* drugs) { drugs_ = drugs; }
     // Hands-on work (HandsOnCommand, docs/design/handson.md). What the controlled pawn would do with
     // its hands on this blueprint, frame or item (`thing`), else on the rock or plant in `cell`.
     HandsOnPlan planHandsOn(Entity pawn, Entity thing, CellPos cell) const;
@@ -319,7 +331,14 @@ public:
     // Medicine and medical care (MedicineJobs.cpp, docs/design/medicine.md); without it nobody tends or rescues.
     void setMedicine(MedicineSystem* medicine) { medicine_ = medicine; }
     MedicineSystem* medicine() const { return medicine_; }
+    // Operations (SurgeryJobs.cpp, docs/design/surgery.md); without it nobody operates and patients don't wait in bed for surgery.
+    // The room stats give the cleanliness of the room the patient lies in.
+    void setSurgery(SurgerySystem* surgery) { surgery_ = surgery; }
+    SurgerySystem* surgery() const { return surgery_; }
+    void setRoomStats(RoomStats* roomStats) { roomStats_ = roomStats; }
     void setTalents(const TalentSystem* talents) { talents_ = talents; }
+    // Inspired colonists craft better and tend for free (docs/design/inspirations.md).
+    void setInspirations(InspirationSystem* inspirations) { inspirations_ = inspirations; }
     // Prisoners (PrisonerJobs.cpp, docs/design/prisoners.md); without it nobody captures, feeds or talks to prisoners, and prison
     // beds are ordinary beds.
     void setPrisoners(PrisonerSystem* prisoners) { prisoners_ = prisoners; }
@@ -358,6 +377,15 @@ public:
     // The medicine a patient's care setting allows, for `doctor` to fetch: the strongest, then the nearest, that no
     // other pawn holds and the doctor can reach. kNoEntity if there is none.
     Entity findMedicine(Entity doctor, Entity patient) const;
+    // ---- Surgery (SurgeryJobs.cpp) -------------------------------------------------------------
+    // Whether a pawn belongs in a bed: it needs to rest (HealthSystem::needsRest) or has an operation planned.
+    bool needsBedRest(Entity pawn) const;
+    // Whether the patient lies in a bed now (downed on it, or resting or sleeping in it): where operations are done.
+    bool lyingInBed(Entity patient) const;
+    // The nearest part item of a def that nobody holds and `doctor` can reach, or kNoEntity.
+    Entity findPartItem(Entity doctor, DefId def) const;
+    // The first operation planned on `patient` that `doctor` can do now (skilled enough, part and medicine to hand), as a job.
+    bool planOperation(Entity doctor, Entity patient, Job& out);
     // A bed slot `patient` can lie in, as seen by `helper` (who must be able to reach it): medical beds first, then
     // the patient's own bed, then a free unowned one; the nearest to the patient within each. `medicalOnly` leaves
     // out the rest. Beds nobody owns that aren't medical are not claimed.
@@ -486,6 +514,8 @@ private:
     // The think list: each node may give a job; the first that does wins (docs/design/jobs.md).
     using ThinkNode = bool (JobSystem::*)(Entity pawn, Job& out);
     bool thinkNeeds(Entity pawn, Job& out);
+    // An addict's dose, a scheduled one, or one for joy, as the pawn's drug policy says (DrugJobs.cpp, docs/design/drugs.md).
+    bool thinkDrugs(Entity pawn, Job& out);
     // A SeekShelter job for a pawn outside its safe temperature: to the nearest reachable cell inside its comfortable
     // range (else its safe range). False if it is safe, or nowhere is.
     bool makeShelterJob(Entity pawn, Job& out);
@@ -538,6 +568,12 @@ private:
     bool failCheckTend(Entity pawn, Job& job, std::string& why);
     bool failCheckRescue(Entity pawn, Job& job, std::string& why);
     bool failCheckBedRest(Entity pawn, Job& job, std::string& why);
+    bool failCheckOperate(Entity pawn, Job& job, std::string& why);
+    StepResult operateGoto(Entity pawn, Job& job, std::string& why);
+    StepResult operatePickUp(Entity pawn, Job& job, std::string& why);
+    StepResult operateDeposit(Entity pawn, Job& job, std::string& why);
+    StepResult operateWork(Entity pawn, Job& job, std::string& why);
+    StepResult operateFinish(Entity pawn, Job& job, std::string& why);
     StepResult walkToMedicine(Entity pawn, Job& job, std::string& why);
     StepResult pickUpMedicine(Entity pawn, Job& job, std::string& why);
     StepResult walkToPatient(Entity pawn, Job& job, std::string& why);
@@ -668,12 +704,15 @@ private:
     Rooms* rooms_ = nullptr;
     ResearchSystem* research_ = nullptr;
     MedicineSystem* medicine_ = nullptr;
+    SurgerySystem* surgery_ = nullptr;
+    RoomStats* roomStats_ = nullptr;
     PrisonerSystem* prisoners_ = nullptr;
     Husbandry* husbandry_ = nullptr;
     Breeding* breeding_ = nullptr;
     CombatSystem* combat_ = nullptr;
     TemperatureSystem* temperature_ = nullptr;
     std::function<bool(Entity)> animalGate_;
+    InspirationSystem* inspirations_ = nullptr;
     const TalentSystem* talents_ = nullptr;  // build speed and carrying capacity (docs/design/talents.md)
     RecreationRules recreation_;
     std::unique_ptr<BillSystem> bills_;
@@ -720,6 +759,7 @@ private:
     Filth* filth_ = nullptr;
     Fire* fire_ = nullptr;
     SpoilageSystem* spoilage_ = nullptr;
+    DrugSystem* drugs_ = nullptr;
     CraftingSystem* crafting_ = nullptr;
     Farming* farming_ = nullptr;
     RepairSystem* repair_ = nullptr;

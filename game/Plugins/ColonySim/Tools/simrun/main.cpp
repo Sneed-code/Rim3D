@@ -17,6 +17,9 @@
 //                                     exit 1 if a check fails, docs/design/colony-scenario.md)
 //   simrun --scenario house [--seed 42] [--days 3] [--png house.png] [--verbose]   (the two-storey house, M4: builds, sleeps and hauls
 //                                     across two levels, writes house-level0.png and house-level1.png; docs/design/house-scenario.md)
+//   simrun --world world.png [--seed 42] [--world-size 120x60] [--check]   (the world map: biomes, rivers, roads, settlements; docs/design/world-map.md)
+//   simrun --seed 42 --on-world [--world-tile N] [--world-size WxH] --start Crashlanded --days 1   (the game on a world, W2:
+//                                     the start tile's biome, climate and map seed; prints the tile; docs/design/world-map.md)
 //   simrun --power [--days 3] [--verbose]   (the power check, E5: solar, batteries, lamps and a switch; docs/design/power.md)
 //   simrun --seed 42 --size 1024 --days 3 --animals [--animal-percent 300] --check   (wild animals, N1:
 //                                     herds by biome, a report of them, checks they stay on walkable ground)
@@ -33,6 +36,7 @@
 #include "ColonyScenario.h"
 #include "HouseScenario.h"
 #include "PowerScenario.h"
+#include "WorldMap.h"
 #include "RaidSoak.h"
 #include "ColonySim/Animals.h"
 #include "ColonySim/Breeding.h"
@@ -66,6 +70,7 @@
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
 #include "ColonySim/Weather.h"
+#include "ColonySim/World.h"
 #include "ColonySim/Zones.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -100,6 +105,11 @@ struct Options {
     bool year = false;     // --year: the colony scenario with animals and a farm, for long runs
     bool verbose = false;  // --scenario, --power: an hourly line on stderr
     bool power = false;    // --power: the power check (E5)
+    std::string worldPng;  // --world FILE: make the world map of --seed and draw it (docs/design/world-map.md)
+    int worldWidth = 0;    // --world-size WxH (0: the def's)
+    int worldHeight = 0;
+    bool onWorld = false;  // --on-world: play on a world (SimSettings::world); --world-tile N picks its start tile
+    int worldTile = -1;
     bool check = false;  // exit 1 if a job or a path search failed
     bool weather = false;  // print a line a day of the weather (E1)
     int gather = 0;      // mark rock to mine and plants to harvest this many cells round the middle
@@ -107,6 +117,7 @@ struct Options {
     int farm = 0;        // --farm N: N tame chickens, fed every hour (N4)
     bool fire = false;   // --fire: light a grass fire near the first colonist ten minutes in (E4)
     double raid = -1.0;  // start a pirate raid of this many points at the first step (0: the colony's threat points)
+    std::string raidStrategy = "Assault";  // --raid-strategy NAME: Assault, Sappers, DropPods, Thieves, Kidnappers or Auto (F12)
     int raidSoak = 0;    // --raid-soak N: the F7 soak over N seeds from --seed
     bool armed = false;  // give every colonist an assault rifle first (not a command: not in replays)
     std::string narrator;    // --narrator NAME: a SetNarratorCommand at the first step (T1)
@@ -151,6 +162,15 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.start = argv[++i];
         } else if (std::strcmp(arg, "--scenario") == 0 && hasValue) {
             out.scenario = argv[++i];
+        } else if (std::strcmp(arg, "--world") == 0 && hasValue) {
+            out.worldPng = argv[++i];
+        } else if (std::strcmp(arg, "--world-size") == 0 && hasValue) {
+            std::sscanf(argv[++i], "%dx%d", &out.worldWidth, &out.worldHeight);
+        } else if (std::strcmp(arg, "--on-world") == 0) {
+            out.onWorld = true;
+        } else if (std::strcmp(arg, "--world-tile") == 0 && hasValue) {
+            out.onWorld = true;
+            out.worldTile = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--power") == 0) {
             out.power = true;
         } else if (std::strcmp(arg, "--verbose") == 0) {
@@ -169,6 +189,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.animals = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--raid-soak") == 0 && hasValue) {
             out.raidSoak = std::atoi(argv[++i]);
+        } else if (std::strcmp(arg, "--raid-strategy") == 0 && hasValue) {
+            out.raidStrategy = argv[++i];
         } else if (std::strcmp(arg, "--raid") == 0 && hasValue) {
             out.raid = std::atof(argv[++i]);
         } else if (std::strcmp(arg, "--armed") == 0) {
@@ -209,8 +231,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--scenario colony [--verbose]] [--power] [--raid POINTS] [--armed] [--narrator NAME [--difficulty NAME]] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house [--verbose]] [--power] [--raid POINTS] [--armed] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--scenario colony [--verbose]] [--power] [--raid POINTS [--raid-strategy NAME]] [--armed] [--narrator NAME [--difficulty NAME]] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house [--verbose]] [--power] [--world FILE [--world-size WxH]] [--on-world [--world-tile N]] [--raid POINTS [--raid-strategy NAME]] [--armed] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS]\n");
             return false;
         }
@@ -631,6 +653,11 @@ int main(int argc, char** argv) {
         defs = std::move(loaded);
     }
 
+    // The world map: its own thing, no colony map.
+    if (!options.worldPng.empty()) {
+        return worldmap::run(options.seed, options.worldWidth, options.worldHeight, options.worldPng == "-" ? std::string() : options.worldPng, options.check, defs);
+    }
+
     // The power check (E5): its own small map and script; 3 days unless --days says.
     if (options.power) {
         return powerscenario::run(options.daysGiven ? options.days : 3.0, defs, options.verbose);
@@ -663,6 +690,10 @@ int main(int argc, char** argv) {
     settings.pathBudget = options.pathBudget;
     settings.scenario = options.start;
     settings.wildAnimals = options.animals;
+    settings.world.enabled = options.onWorld;
+    settings.world.width = options.worldWidth;
+    settings.world.height = options.worldHeight;
+    settings.world.startTile = options.worldTile;
     int64_t steps = static_cast<int64_t>(options.days * static_cast<double>(colony::kSecondsPerDay));
     if (!options.replay.empty()) {
         std::string error;
@@ -724,6 +755,14 @@ int main(int argc, char** argv) {
         }
         return 1;
     }
+    if (const colony::WorldSite* site = sim.site()) {
+        const colony::World& world = *sim.world();
+        std::printf("world %llu (%dx%d), tile %d at %d,%d: %s, %s, river %s, road %s, %.1f C, %.0f mm, %d m, map seed %016llx\n",
+                    static_cast<unsigned long long>(world.seed()), world.width(), world.height(), site->tile,
+                    world.tileX(site->tile), world.tileY(site->tile), site->biome.c_str(), colony::hillinessName(site->hilliness),
+                    colony::riverSizeName(site->river), colony::roadKindName(site->road), static_cast<double>(site->temperature),
+                    static_cast<double>(site->rainfall), site->elevation, static_cast<unsigned long long>(site->mapSeed));
+    }
     if (!settings.scenario.empty()) {
         // The colonists the scenario made, one line each.
         sim.things().registry().view<const colony::Colonist>().each([](const colony::Colonist& c) {
@@ -758,7 +797,7 @@ int main(int argc, char** argv) {
         }
     }
     if (options.raid >= 0.0) {
-        sim.submit(colony::StartRaidCommand{"Pirate", static_cast<float>(options.raid), -1});
+        sim.submit(colony::StartStrategyRaidCommand{"Pirate", static_cast<float>(options.raid), -1, options.raidStrategy, -1.0f});
     }
     // --narrator: the narrator sends incidents from the first step (T1, docs/design/narrator.md); each
     // letter is printed as it comes.

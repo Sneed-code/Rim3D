@@ -1,0 +1,114 @@
+[
+ {
+  "defName": "Hive",
+  "parent": "BuildingBase",
+  "label": "brood mound",
+  "source": "RimWorld wiki",
+  "size": [
+   1,
+   1
+  ],
+  "passability": "Impassable",
+  "fillPercent": 0.5,
+  "visual": {
+   "parts": [
+    {
+     "shape": "cylinder",
+     "radius": 0.45,
+     "height": 0.5,
+     "color": [
+      0.45,
+      0.38,
+      0.22
+     ]
+    },
+    {
+     "shape": "sphere",
+     "radius": 0.25,
+     "height": 0.3,
+     "at": [
+      0,
+      0,
+      0.45
+     ],
+     "color": [
+      0.55,
+      0.45,
+      0.25
+     ]
+    }
+   ]
+  },
+  "stats": {
+   "maxHitPoints": 130,
+   "flammability": 0.0,
+   "workToBuild": 1
+  },
+  "hive": {
+   "insects": [
+    "Megascarab",
+    "Spelopede",
+    "Megaspider"
+   ],
+   "jellyAmount": 20,
+   "jellyIntervalDays": [
+    0.433,
+    0.5
+   ],
+   "jellyCap": 40,
+   "destroyJelly": 30,
+   "spreadRange": 10,
+   "maxHives": 30
+  },
+  "unverified": [
+   "stats.maxHitPoints",
+   "hive.spreadRange"
+  ],
+  "ours": [
+   "hive",
+   "visual"
+  ],
+  "costs": {
+   "InsectJelly": 1
+  }
+ },
+ {
+  "defName": "InsectJelly",
+  "parent": "ItemBase",
+  "label": "brood jelly",
+  "source": "RimWorld wiki",
+  "stackLimit": 75,
+  "stats": {
+   "maxHitPoints": 50,
+   "marketValue": 8,
+   "mass": 0.025,
+   "flammability": 0.5,
+   "deteriorationRate": 6,
+   "nutrition": 0.05
+  },
+  "thingCategories": [
+   "FoodRaw",
+   "AnimalProduct"
+  ],
+  "ingestible": {
+   "foodType": "AnimalProduct",
+   "preferability": "RawTasty"
+  },
+  "visual": {
+   "pieces": 3,
+   "layer": 0.1,
+   "parts": [
+    {
+     "shape": "sphere",
+     "radius": 0.07,
+     "height": 0.08,
+     "color": [
+      0.85,
+      0.65,
+      0.15
+     ]
+    }
+   ]
+  }
+ }
+]
