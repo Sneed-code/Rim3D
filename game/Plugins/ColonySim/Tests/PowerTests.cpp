@@ -652,3 +652,57 @@ TEST_CASE("Power: solar panels follow the light grid's sun") {
     CHECK(sim.power().wattsOf(panel) == doctest::Approx(1700.0 * sim.lights().skyGlow()).epsilon(0.001));
     CHECK(sim.power().wattsOf(panel) > 0.0);
 }
+
+TEST_CASE("Power: a chemfuel generator makes 1000 W while it has chemfuel and nothing without") {
+    Sim sim = powerSim();
+    const Entity gen = sim.things().spawn("ChemfuelGenerator", CellPos{10, 10, 0});
+    powerWire(sim, 12, 15, 10);
+    const Entity lamp = powerPut(sim, "StandingLamp", 16, 10);
+    POWER_REQUIRE(gen != kNoEntity);
+    POWER_REQUIRE(lamp != kNoEntity);
+    powerRun(sim, 2);
+    CHECK_FALSE(sim.power().powered(lamp));  // a new generator starts empty
+    sim.jobs().fuel().add(gen, 75);
+    powerRun(sim, 2);
+    CHECK(sim.power().powered(lamp));
+    CHECK(sim.power().wattsOf(gen) == doctest::Approx(1000.0));
+    // 75 chemfuel at 4.5 a day lasts 16.7 days.
+    CHECK(sim.jobs().fuel().specOf(gen).capacity == doctest::Approx(75.0f));
+    CHECK(sim.jobs().fuel().specOf(gen).perSecond * static_cast<float>(kSecondsPerDay) == doctest::Approx(4.5f));
+}
+
+TEST_CASE("Power: a geothermal generator makes 3600 W only over a steam geyser") {
+    Sim sim = powerSim();
+    const Entity gen = powerPut(sim, "GeothermalGenerator", 10, 10);
+    powerWire(sim, 12, 15, 10);
+    const Entity lamp = powerPut(sim, "StandingLamp", 16, 10);
+    POWER_REQUIRE(gen != kNoEntity);
+    POWER_REQUIRE(lamp != kNoEntity);
+    powerRun(sim, 2);
+    CHECK(sim.power().wattsOf(gen) == doctest::Approx(0.0));
+    CHECK_FALSE(sim.power().powered(lamp));
+    sim.editMap().setGeyser(CellPos{11, 11, 0}, true);  // under one cell of the 2x2 footprint
+    powerRun(sim, 2);
+    CHECK(sim.power().wattsOf(gen) == doctest::Approx(3600.0));
+    CHECK(sim.power().powered(lamp));
+    CHECK_FALSE(sim.map().geyser(CellPos{12, 11, 0}));
+}
+
+TEST_CASE("Power: machines that draw power in the data really draw it, and a bench with no power does not work") {
+    Sim sim = powerSim();
+    struct Draw {
+        const char* def;
+        double watts;
+    };
+    // RimWorld wiki numbers.
+    for (const Draw d : {Draw{"ElectricStove", 350}, Draw{"ElectricSmithy", 210}, Draw{"MachiningTable", 250},
+                         Draw{"HiTechResearchBench", 250}, Draw{"HydroponicsBasin", 70},
+                         Draw{"Heater", 175}, Draw{"Cooler", 200}, Draw{"StandingLamp", 30}, Draw{"SunLamp", 2900}}) {
+        const DefId id = sim.defs().idOf("Things", d.def);
+        CHECK_MESSAGE(sim.power().info(id).consumption == doctest::Approx(d.watts), d.def);
+    }
+    const Entity stove = powerPut(sim, "ElectricStove", 20, 20);
+    POWER_REQUIRE(stove != kNoEntity);
+    sim.step();
+    CHECK_FALSE(sim.power().running(stove));  // no generator on its net
+}
