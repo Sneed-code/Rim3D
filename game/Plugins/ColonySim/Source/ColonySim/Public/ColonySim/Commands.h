@@ -805,7 +805,7 @@ struct SetThermostatCommand {
 
 // Changes the details of a bill (task C14, docs/design/crafting.md): the least and most skill a worker may
 // have in the recipe's skill, how far from the building ingredients are taken (metres, 0 anywhere), a stockpile
-// the products are taken to (0: none), the stock an "until you have" bill waits to fall under before it starts
+// the products are taken to (0: none), a stockpile an "until you have" bill counts its stock in (0: the whole map), the stock an "until you have" bill waits to fall under before it starts
 // again (0: as soon as it is under its count) and the item defNames the bill may not use. Replaces all of them.
 // Fails if there is no such bill, a number is out of range, the stockpile does not exist or a name is not an item.
 struct SetBillOptionsCommand {
@@ -815,6 +815,7 @@ struct SetBillOptionsCommand {
     int skillMax = 20;
     float radius = 0.0f;
     uint32_t storeZone = 0;
+    uint32_t countZone = 0;
     int unpauseAt = 0;
     std::vector<std::string> disallowed;
 };

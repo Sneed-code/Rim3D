@@ -782,7 +782,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                         defs->get(t.def).defName() == "ButcherTable") {
                         sim.submit(AddBillCommand{t.id, "ButcherCorpse", BillMode::Forever, 1});
                         // Only corpses within 40 m: with no limit the butcher walks across the map to a wolf's kill.
-                        sim.submit(SetBillOptionsCommand{t.id, 1, 0, 20, 40.0f, 0, 0, {}});
+                        sim.submit(SetBillOptionsCommand{t.id, 1, 0, 20, 40.0f, 0, 0, 0, {}});
                         butcherBillAdded = true;
                     }
                 }

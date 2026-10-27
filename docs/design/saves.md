@@ -100,7 +100,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | Section | Version | Holds |
 | --- | --- | --- |
 | `sim` | 1 | sim version, data files' hash, settings, clock, random stream, the map's hash, the hauling test |
-| `commands` | 1 | the names of the command types used, then queued commands, the command log and the checkpoints |
+| `commands` | 2 | the names of the command types used, then queued commands, the command log and the checkpoints |
 | `things` | 1 | free ids, then every thing: id, def, position, footprint, stack, hit points |
 | `movement` | 2 | `mover` |
 | `jobs` | 1 | `worker` (the job, its bill picks and ingredients, avoid memory), `work` (Work tab), `carrying` |
@@ -108,7 +108,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `health` | 5 | `health` (version 2: environment hediffs such as hypothermia, E2; version 3: each injury's `peak`, for scars, H1; version 4: `infectAt`, `diseases` and `immunities`, H2; version 5: `added`, the artificial parts fitted, H3) |
 | `control` | 1 | `playerControlled`: the ids of controlled pawns |
 | `needs` | 1 | `needs`, `schedule`, `bed` |
-| `bills` | 2 | `bills` on work buildings. Version 2 (C14) adds each bill's skill range, ingredient radius, store stockpile, restart stock, satisfied flag and ingredient filter; version 1 loads with the defaults |
+| `bills` | 3 | `bills` on work buildings. Version 3 adds the bill's count stockpile. Version 2 (C14) adds each bill's skill range, ingredient radius, store stockpile, restart stock, satisfied flag and ingredient filter; version 1 loads with the defaults |
 | `crafting` | 1 | the quality random stream and `storeIn` marks on products bound for a stockpile ([crafting.md](crafting.md)) |
 | `fuel` | 1 | `fuel` on buildings that burn it ([fuel.md](fuel.md)); a building with a fuel part and none saved loads full |
 | `construction` | 1 | `site`, `builtOf`, `marked` |

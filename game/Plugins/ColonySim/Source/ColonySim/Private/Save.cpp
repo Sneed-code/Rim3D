@@ -254,11 +254,12 @@ struct SaveBill {
     BillMode mode = BillMode::Count;
     int count = 0;
     bool suspended = false;
-    // Section "bills" version 2 (C14); older saves have the defaults.
+    // Section "bills" version 2 (C14) and 3 (count stockpile); older saves have the defaults.
     int skillMin = 0;
     int skillMax = 20;
     float radius = 0.0f;
     uint32_t storeZone = 0;
+    uint32_t countZone = 0;  // version 3
     int unpauseAt = 0;
     bool satisfied = false;
     std::vector<std::string> disallowed;  // Things defNames
@@ -1416,6 +1417,9 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("skillMax", c.skillMax);
                 ar.value("radius", c.radius);
                 ar.value("storeZone", c.storeZone);
+                if (ar.sectionVersion() >= 2) {
+                    ar.value("countZone", c.countZone);
+                }
                 ar.value("unpauseAt", c.unpauseAt);
                 ar.list("disallowed", c.disallowed, [&](std::string& name) { ar.text(nullptr, name); });
             } else if constexpr (std::is_same_v<Type, MoveBillCommand>) {
@@ -1639,6 +1643,8 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
+    ar.require(job.type <= JobType::RearmTrap, "the save file has a bad job");
+    ar.require(job.type <= JobType::Party, "the save file has a bad job");
     ar.require(job.type <= JobType::StandBy, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
@@ -1860,6 +1866,9 @@ void saveBillsPart(Ar& ar, SaveBillList& list) {
             ar.value("skillMax", bill.skillMax);
             ar.value("radius", bill.radius);
             ar.value("storeZone", bill.storeZone);
+            if (ar.sectionVersion() >= 3) {
+                ar.value("countZone", bill.countZone);
+            }
             ar.value("unpauseAt", bill.unpauseAt);
             ar.value("satisfied", bill.satisfied);
             ar.list("disallowed", bill.disallowed, [&](std::string& name) { ar.text(nullptr, name); });
@@ -2913,7 +2922,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("repaths", d.repaths);
         ar.list("setupErrors", d.setupErrors, [&](std::string& s) { ar.text(nullptr, s); });
     });
-    ar.section("commands", 1, [&] { saveCommandsSection(ar, d); });
+    ar.section("commands", 2, [&] { saveCommandsSection(ar, d); });
     ar.section("things", 1, [&] { saveThingsSection(ar, d); });
     std::vector<SaveEntity>& e = d.entities;
     ar.section("movement", 2, [&] {
@@ -2953,7 +2962,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "schedule", e, &SaveEntity::schedule, [&](Schedule& s) { saveSchedulePart(ar, s); });
         saveParts(ar, "bed", e, &SaveEntity::bed, [&](Bed& b) { saveBedPart(ar, b); });
     });
-    ar.section("bills", 2, [&] {
+    ar.section("bills", 3, [&] {
         saveParts(ar, "bills", e, &SaveEntity::bills, [&](SaveBillList& list) { saveBillsPart(ar, list); });
     });
     ar.section("construction", 1, [&] {
@@ -3623,6 +3632,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
                 b.skillMax = bill.skillMax;
                 b.radius = bill.radius;
                 b.storeZone = bill.storeZone;
+                b.countZone = bill.countZone;
                 b.unpauseAt = bill.unpauseAt;
                 b.satisfied = bill.satisfied;
                 for (const DefId def : bill.disallowed) {
@@ -4136,6 +4146,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                 bill.skillMax = saved.skillMax;
                 bill.radius = saved.radius;
                 bill.storeZone = saved.storeZone;
+                bill.countZone = saved.countZone;
                 bill.unpauseAt = saved.unpauseAt;
                 bill.satisfied = saved.satisfied;
                 for (const std::string& name : saved.disallowed) {
