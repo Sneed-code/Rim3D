@@ -2,6 +2,8 @@
 // the loaded sim and the original run on side by side and must stay the same. State a system
 // forgets to save shows up as the two drifting apart (docs/design/saves.md, "The audit").
 #include "ColonySim/Animals.h"
+#include "ColonySim/Apparel.h"
+#include "ColonySim/Inspirations.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
@@ -15,6 +17,8 @@
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Travel.h"
+#include "ColonySim/Jobs.h"
 
 #include <doctest.h>
 
@@ -128,6 +132,85 @@ void auditSession(Sim& sim, int64_t from, int64_t to) {
             if (people.size() > 2) {
                 sim.submit(StartMentalBreakCommand{people[2], "WanderSad"});
             }
+        }
+        // Drugs, a quest, an inspiration, worn-out clothes, a harvested organ, an execution, a night skip and a fast travel.
+        if (t == 40) {
+            std::string error;
+            for (size_t k = 0; k < people.size() && k < 3; ++k) {
+                sim.submit(SetDrugPolicyCommand{people[k], "Unrestricted"});
+                sim.submit(TakeDrugCommand{people[k], sim.things().spawn(k == 1 ? "SmokeleafJoint" : "Beer", auditAt(sim, -2 + static_cast<int>(k), 3))});
+            }
+            sim.submit(SetDrugPolicyEntryCommand{people.empty() ? kNoEntity : people.back(), "Beer", true, true, true, 0.25f, 0.9f, 0.9f});
+            sim.submit(SpawnThingCommand{"Beer", auditAt(sim, 1, 1), 4});
+            sim.submit(SpawnThingCommand{"Flake", auditAt(sim, 2, 1), 3});
+            // Worn clothes at different wear, and torn gear lying about to be repaired.
+            for (const Entity pawn : people) {
+                float share = 0.0f;
+                for (const Entity piece : sim.apparel().worn(pawn)) {
+                    sim.things().registry().emplace_or_replace<Durability>(piece, Durability{share});
+                    share += 0.35f;
+                }
+            }
+            for (int k = 0; k < 3; ++k) {
+                const Entity shirt = sim.things().spawn(k == 0 ? "Apparel_Tribalwear" : "Apparel_FlakVest", auditAt(sim, -4 + k, 5));
+                if (shirt != kNoEntity) {
+                    if (auto* hp = sim.things().registry().try_get<HitPoints>(shirt)) {
+                        hp->current = hp->max / 3;
+                    }
+                    sim.things().registry().emplace_or_replace<Durability>(shirt, Durability{0.1f * static_cast<float>(k)});
+                    sim.submit(RepairGearCommand{shirt, true});
+                }
+            }
+        }
+        if (t == 500) {
+            sim.submit(FireIncidentCommand{"QuestOffer", 0.0f});
+            sim.submit(QuestCommand{"offer", 0, "WandererAsks"});
+        }
+        if (t == 520 || t == 2700 || t == 5200) {
+            for (uint32_t id = 1; id <= 4; ++id) {
+                sim.submit(QuestCommand{id % 3 == 0 ? "decline" : "accept", id, ""});
+            }
+        }
+        if (t == 900 || t == 3300) {
+            std::string error;
+            static const char* const kInspirations[] = {"FrenzyShoot", "InspiredCreativity", "InspiredSurgery", "InspiredTrade"};
+            for (size_t k = 0; k < people.size() && k < 4; ++k) {
+                sim.inspirations().start(people[k], kInspirations[(k + static_cast<size_t>(t / 100)) % 4], error);
+            }
+        }
+        if (t == 1100 || t == 4200) {
+            for (const auto [prisoner, state] : sim.things().registry().view<const Prisoner>().each()) {
+                (void)state;
+                const int kidney = [&] {
+                    const std::vector<std::string> labels = sim.health().partLabels(sim.things().registry().get<Thing>(prisoner).def);
+                    return static_cast<int>(std::find(labels.begin(), labels.end(), "left kidney") - labels.begin());
+                }();
+                sim.submit(AddOperationCommand{prisoner, "HarvestOrgan", kidney});
+                break;
+            }
+        }
+        if (t == 2200 || t == 5800) {
+            for (const auto [prisoner, state] : sim.things().registry().view<const Prisoner>().each()) {
+                (void)state;
+                sim.submit(SetPrisonerModeCommand{prisoner, "Execute"});
+                break;
+            }
+        }
+        // The night skip is tried every hour; it only works in the sleeping hours, with nothing threatening.
+        if (t >= 600 && t % 1800 == 0) {
+            sim.submit(SkipNightCommand{});
+        }
+        if (t >= 600 && t % 1800 == 900) {
+            sim.submit(CancelSkipCommand{});
+        }
+        if (t == 3500 && !people.empty()) {
+            sim.submit(ControlPawnCommand{people.back()});
+        }
+        if (t == 3510 && !people.empty()) {
+            sim.submit(DirectMoveCommand{people.back(), static_cast<float>(auditAt(sim, 30, 20).x) + 0.5f, static_cast<float>(auditAt(sim, 30, 20).y) + 0.5f});
+        }
+        if (t == 4000 && !people.empty()) {
+            sim.submit(FastTravelCommand{people.back(), static_cast<float>(auditAt(sim, 0, 0).x) + 0.5f, static_cast<float>(auditAt(sim, 0, 0).y) + 0.5f});
         }
         // Incidents, one every while, so each one's state is live somewhere in the run.
         static const char* const kIncidents[] = {"WandererJoin",   "ResourcePodCrash", "TraderCaravanArrival", "VisitorGroup",
@@ -291,4 +374,66 @@ TEST_CASE("Save audit: a game that never picked a narrator keeps the full adapta
     }
     CHECK(loaded.sim->raids().adaptationFactor() == original.raids().adaptationFactor());
     CHECK(loaded.sim->raids().threatPoints() == original.raids().threatPoints());
+}
+
+// The night skip and the fast travel need a quiet night with everyone in bed, which the busy script never has.
+TEST_CASE("Save audit: saved in the middle of a night skip and of a fast travel") {
+    const auto defs = auditDefs();
+    int skips = 0;
+    int travels = 0;
+    for (uint64_t seed = 1; seed <= 3; ++seed) {
+        Sim sim(auditSettings(seed), defs);
+        const std::vector<Entity> people = auditColonists(sim);
+        if (!sim.setupErrors().empty() || people.empty()) {
+            continue;
+        }
+        gAuditStart = 1000000;  // no script: nothing fires
+        for (size_t k = 0; k < people.size(); ++k) {
+            sim.things().spawn("Bed", auditAt(sim, -4 + 2 * static_cast<int>(k), 12));
+        }
+        auto allLying = [&] {
+            for (const Entity pawn : people) {
+                if (!jobIsLyingDown(sim.things().registry().get<Worker>(pawn).job)) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        for (const Entity pawn : people) {
+            sim.things().registry().get<Needs>(pawn).rest = 0.3f;
+        }
+        for (int i = 0; i < 4000 && !allLying(); ++i) {
+            sim.step();
+        }
+        sim.submit(SkipNightCommand{});
+        sim.step();
+        if (sim.travel().skipping()) {
+            ++skips;
+            sim.stepMany(7);
+            const std::string problem = auditFork(sim, defs, 600);
+            CHECK_MESSAGE(problem.empty(), "seed " << seed << ", in a night skip: " << problem);
+            sim.submit(CancelSkipCommand{});
+            sim.step();
+        }
+        // A fast travel: walk the controlled colonist to a far place, then back to it.
+        const Entity pawn = people.front();
+        sim.submit(ControlPawnCommand{pawn});
+        sim.step();
+        const CellPos here = cellOf(sim.things().registry().get<Position>(pawn));
+        sim.submit(DirectMoveCommand{pawn, static_cast<float>(here.x) + 30.5f, static_cast<float>(here.y) + 0.5f});
+        for (int i = 0; i < 100; ++i) {
+            sim.submit(DirectMoveCommand{pawn, static_cast<float>(here.x) + 0.5f + 0.5f * static_cast<float>(i + 1), static_cast<float>(here.y) + 0.5f});
+            sim.step();
+        }
+        sim.submit(FastTravelCommand{pawn, static_cast<float>(here.x) + 0.5f, static_cast<float>(here.y) + 0.5f});
+        sim.step();
+        if (sim.travel().skipping()) {
+            ++travels;
+            sim.stepMany(5);
+            const std::string problem = auditFork(sim, defs, 600);
+            CHECK_MESSAGE(problem.empty(), "seed " << seed << ", in a fast travel: " << problem);
+        }
+    }
+    CHECK_MESSAGE(skips > 0, "no night skip started, the test checks nothing");
+    CHECK_MESSAGE(travels > 0, "no fast travel started, the test checks nothing");
 }
