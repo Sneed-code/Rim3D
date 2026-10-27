@@ -55,6 +55,14 @@
     "insulationCold": 3,
     "insulationHeat": 0
    }
+  },
+  "deep": {
+   "lumpSize": [
+    2,
+    10
+   ],
+   "commonality": 1.0,
+   "portion": 10
   }
  },
  {
@@ -113,6 +121,14 @@
     "insulationCold": 3,
     "insulationHeat": 0
    }
+  },
+  "deep": {
+   "lumpSize": [
+    4,
+    10
+   ],
+   "commonality": 1.0,
+   "portion": 10
   }
  },
  {
@@ -149,7 +165,15 @@
   "unverified": [
    "stats",
    "stackLimit"
-  ]
+  ],
+  "deep": {
+   "lumpSize": [
+    1,
+    5
+   ],
+   "commonality": 0.5,
+   "portion": 10
+  }
  },
  {
   "defName": "ComponentSpacer",

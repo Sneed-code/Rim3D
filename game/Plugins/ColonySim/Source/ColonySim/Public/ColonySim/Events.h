@@ -85,6 +85,9 @@ enum class EventType : uint8_t {
     Interaction,     // one colonist talked to another (C20, docs/design/social.md): `thing` the talker, `target` the one spoken to, `message` the Interactions def, `count` 1 if it worked, 0 if refused, `amount` the listener's opinion of the talker after
     BondChanged,     // a stored bond formed or ended: `thing` and `target` the two, `message` the bond kind ("Lover", "Spouse", "ExLover", "ExSpouse"), `count` 1 formed, 0 ended
     SocialFight,     // a fight with fists began or ended: `thing` and `target` the two, `message` "started" or "ended: why"
+    PowerCast,       // a resonance power went off (docs/design/resonance.md): `thing` the caster, `def` the Powers def, `target` the pawn it
+                     // was used on, `cell` where a jump took it, (x, y, z) where the target is now, `amount` the caster's strain now,
+                     // `count` the steps the effect lasts (0 for a jump)
     PrisonerCaptured,   // a downed enemy was laid in a prison bed: `thing` the prisoner, `target` the warden (docs/design/prisoners.md)
     PrisonerChatted,    // a warden finished a talk with a prisoner: `thing` the warden, `target` the prisoner, `amount` its resistance now, `message` "reduced", "recruit failed" or "no change"
     PrisonerRecruited,  // a prisoner joined the colony: `thing` the new colonist, `target` the warden
@@ -94,6 +97,8 @@ enum class EventType : uint8_t {
     Refueled,        // a pawn put fuel into a building
     RoofCollapsed,   // a roof or an upper floor fell (M3, docs/design/roofs.md): `cell`, `message` "roof" (a built roof), "mountain" (the thick roof of a mined-out cell) or "floor" (an upper floor), `count` how many things and pawns it hit
     FirefoamPopped,     // a firefoam popper went off (docs/design/fire.md): `thing` the popper (destroyed right after), `def` its def, `cell` its cell, `amount` the foam radius
+    GearRepaired,       // a pawn mended a piece of gear at a bench (docs/design/repair.md): `thing` the pawn, `target` the gear, `def` its def, `cell` where the pawn stood, `amount` the hit points restored
+    WeaponUpgraded,     // a pawn fitted an upgrade part to a gun: `thing` the pawn, `target` the gun, `def` the part's def, `cell` where the pawn stood
     AnimalHunted,       // a hunter's target died (docs/design/hunting.md): `thing` the animal (a corpse now), `target` the hunter, `cell` where
     AnimalButchered,    // a corpse was cut up (docs/design/hunting.md): `thing` the butcher, `def` the animal's def, `target` the table, `cell` where, `amount` the meat, `part` the leather
     PawnMentalBreak,       // a colonist snapped: a mental break began (docs/design/mental-breaks.md)
@@ -131,6 +136,8 @@ enum class EventType : uint8_t {
     PrisonerExecuted,      // a warden executed a prisoner (docs/design/prisoners.md): `thing` the prisoner (dead), `target` the warden, `message` "guilty" or "innocent"
     OrganHarvested,        // an organ was taken from a living pawn: `thing` the victim, `target` the surgeon, `part` the body part, `message` "colonist" or "prisoner" (anyone who is not one of ours)
     OperationDone,      // a doctor finished an operation (H3, docs/design/surgery.md): `thing` the doctor, `target` the patient, `def` the Recipes def, `part` the body part, `amount` the success chance, `message` "success", "failed" or "the patient died"
+    DeepDepositFound,      // a scanner found deep resources (docs/design/deep-mining.md): `def` the item, `cell` the middle of the lump, `count` its cells, `thing` the scanner (none for the long-range hook)
+    DeepPortionDrilled,    // a deep drill finished a portion: `thing` the drill, `def` what came up (a rock chunk if nothing is under it), `amount` how many, `cell` where it was taken from
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -173,13 +180,18 @@ enum class PawnAction : uint8_t {
     Tend,         // started tending `target`, a patient (once per job; the work takes game seconds)
     LiftPawn,     // lifted `target`, a downed pawn, to carry it (its position follows this pawn's until LayPawn)
     LayPawn,      // laid the carried `target` down in a bed (or where it stood, if the bed was lost)
+    Cast,         // started the warm-up of a resonance power (X2) at `target` (a jump: to `cell`); `amount` the steps until it goes off
     Chat,         // started talking to `target`, a prisoner (once per job; the talk takes game seconds)
     FeedPawn,     // started handing food to `target`, a prisoner
     Refuel,       // started putting fuel into `target`, a building (once per refuel job; the work goes on until its JobEnded)
+    Repair,       // started mending gear or fitting a part at `target`, a bench (once per RepairGear job; the work goes on until its JobEnded)
     Butcher,      // started cutting up `target`, a corpse (once per job; the work goes on until its JobEnded)
     DropCorpse,   // put the carried `target`, a corpse, down in `cell`
+    Rearm,        // started setting the sprung trap `target` again (once per job; the work goes on until its JobEnded)
     Punch,        // swung a fist at `target`, a pawn or a thing (a tantrum or berserk break: docs/design/mental-breaks.md)
     Operate,      // started an operation on `target`, a patient in bed (once per job; the work goes on until its JobEnded)
+    Scan,         // started working a ground-penetrating scanner `target` (once per job; the work goes on until its JobEnded)
+    Drill,        // started working a deep drill `target` (once per job; the work goes on until its JobEnded)
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.

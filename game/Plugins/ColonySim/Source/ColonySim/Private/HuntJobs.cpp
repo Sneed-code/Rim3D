@@ -412,10 +412,10 @@ JobSystem::StepResult JobSystem::butcherFinish(Entity pawn, Job& job, std::strin
     // The corpse is gone for good; the meat and leather lie by the pawn, where haulers find them.
     things_.destroy(corpse);
     if (yield.meatCount > 0) {
-        dropNewItems(pawn, yield.meat, yield.meatCount);
+        dropNewItems(pawn, yield.meat, yield.meatCount, nullptr, nullptr, bill->storeZone);
     }
     if (yield.leatherCount > 0) {
-        dropNewItems(pawn, yield.leather, yield.leatherCount);
+        dropNewItems(pawn, yield.leather, yield.leatherCount, nullptr, nullptr, bill->storeZone);
     }
     learnSkill(pawn, "Cooking", husbandry_->rules().butcherXp);
     const DefId recipeDef = recipe->def;

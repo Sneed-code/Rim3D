@@ -70,7 +70,7 @@ chance = recipe.successChance x skillFactor(Medicine level) x Manipulation x Sig
          never above 0.98
 ```
 
-`skillFactor` is `surgerySuccessBySkill` read between its points (0.5 at 0, 0.75 at 5, 1.0 at 10, 1.2 at 15, 1.4 at 20);
+`skillFactor` is `surgerySuccessBySkill` read between its points (the wiki's: 0.1 at level 0, 0.6 at 5, 0.9 at 10, 1.0 at 15, 1.1 at 20);
 `cleanlinessFactor` is `surgeryCleanlinessFactor` (0.85 at -5, 1.0 at 0, 1.07 at 2). The roll comes from the game second, the
 doctor, the patient and the line, not the shared stream, so who is asked first can't change it.
 
@@ -80,6 +80,11 @@ doctor, the patient and the line, not the shared stream, so who is asked first c
   destroyed; the part to fit is lost; and the patient dies with chance `(1 - chance) x surgeryFailDeathChanceFactor` (10%): death cause
   "a failed operation" (`DeathCause::Surgery`).
 - The doctor gets `workSkillXp` (or `surgeryXp`, 1,200) of Medicine experience either way.
+
+**Harvest organ** (`HarvestOrgan`, `surgery.harvests`): a removal of a whole, natural part that has an item named "Organ" plus the
+part def (OrganKidney, OrganLung, OrganStomach, OrganEye, OrganEar). It drops beside the doctor. On success it calls
+`PrisonerSystem::noteOrganHarvested`, so the moods in `prisoners.md` fire. Parts the patient could not live without (heart, liver)
+are refused, like any removal. The 600 s work is a guess.
 
 Event `OperationDone` (`thing` the doctor, `target` the patient, `def` the recipe, `part`, `amount` the chance, `message`
 "success", "failed" or "the patient died"); `PawnAction::Operate` when the work starts.
@@ -98,6 +103,6 @@ and `afterLoad` checks the carried item matches the step. Both are in the state 
 
 ## Not here
 
-Organ transplants and harvesting (no organ items exist), implants (cochlear, joywire...) and other non-limb added parts, surgery on
+Organ transplants (harvested organs exist as items but nothing fits them yet), implants (cochlear, joywire...) and other non-limb added parts, surgery on
 animals, the operation tab on the health panel and a part-picking UI (U18), treating a prosthetic's wear, a doctor operating on itself,
 anaesthetic.

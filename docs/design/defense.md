@@ -47,8 +47,9 @@ A building whose def has a `trap` block gets a `Trap` component (`sprung`, `know
   once its side has *learned* it (below). A pawn that knows a trap springs it only with
   `knownSpringChance` (0, ours). Wild animals are of their own side and spring traps.
 - **Spike trap** (`trap.hits` 5, `damage` 100, `damageDef` Stab): 5 stabs of the total
-  (70% to 130% of 100, random) divided evenly, each on a random outside part picked by health
-  (`applyDamage`); armor is not used for traps yet. After it springs it is `sprung` until rearmed
+  (70% to 130% of 100, random) divided evenly, each on a random outside part picked by size
+  (`CombatSystem::strikePawn`) and through the pawn's armor like a bullet (`trap.armorPenetration` 0.5, ours),
+  so a vest and helmet turn stabs away and wear. After it springs it is `sprung` until rearmed
   (`RearmTrapCommand`, snapshot `trapState` 2) and has `destroyChance` (0.1, ours) to break instead.
   Cost 25 steel (unverified).
 - **IED** (`trap.explodes`, `explosion` Bomb 45 damage, radius 3.9 m, unverified): springing calls
@@ -65,6 +66,14 @@ A building whose def has a `trap` block gets a `Trap` component (`sprung`, `know
   cells of the trap that makes the shortest detour and misses every known trap, up to `detourTries` times.
   A walk with no way round goes through. The colony's own fighters never avoid anything.
 
+## Rearming
+
+The `RearmTraps` giver (Construction work type, `DefenseJobs.cpp`) offers every sprung trap that can be used again,
+nearest first, one colonist per trap. The `RearmTrap` job walks next to the trap and works `trap.rearmSeconds` (13,
+ours: RimWorld's 800 ticks) of game seconds, each second adding the pawn's Manipulation, then calls `DefenseSystem::rearm`
+(event `TrapRearmed`, `PawnAction::Rearm` when the work starts). An IED is never offered. `RearmTrapCommand` still
+works for the player.
+
 ## The snapshot, events and commands
 
 - Snapshot `ThingView`: `turretPhase` (`TurretPhase`: Idle, Warming, Firing, Cooling), `turretTarget`,
@@ -79,11 +88,9 @@ A building whose def has a `trap` block gets a `Trap` component (`sprung`, `know
 
 ## Not done yet
 
-- No colonist job rearms a sprung trap, and no job builds one beyond the usual building jobs: the player's
-  `RearmTrapCommand` is all there is (BACKLOG). RimWorld's rearm is a Construction job.
 - Raiders do not shoot back at turrets: the fighter AI chooses only pawns as targets, so a turret is
   hit only by stray fire, blasts and what T1/F12 add (sappers, mortars).
-- Spikes ignore armor; IEDs wait for chemfuel versions (E4); no EMP, no incendiary traps; no sentry
+- IEDs wait for chemfuel versions (E4); no EMP, no incendiary traps; no sentry
   machine-gun or autocannon turrets, no ammunition (RimWorld's mini-turret has none either).
 - Unreal: the turret mesh and its barrel turning to `turretTarget`, muzzle flash and the trap's spring
   animation.

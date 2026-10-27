@@ -49,6 +49,7 @@ class MentalBreakSystem;
 class JobSystem;
 class Lights;
 class MeleeSystem;
+class DeepResources;
 class Mineables;
 class MovementSystem;
 class MoodSystem;
@@ -57,9 +58,11 @@ class SurgerySystem;
 class RecreationSystem;
 class SocialSystem;
 class ResearchSystem;
+class ResonanceSystem;
 class TalentSystem;
 class NeedsSystem;
 class RaidSystem;
+class FieldCare;
 class MonsterSystem;
 class Plants;
 class PowerGrid;
@@ -72,6 +75,7 @@ class Rooms;
 class TemperatureSystem;
 class SpoilageSystem;
 class CraftingSystem;
+class RepairSystem;
 class Things;
 class UpperFloors;
 class RoofCollapse;
@@ -196,6 +200,8 @@ public:
     const DefDatabase& defs() const { return *defs_; }
     const GameTime& time() const { return time_; }
     const Map& map() const { return map_; }
+    // For map generation and tests that set the world up; the game changes the map through commands.
+    Map& editMap() { return map_; }
     // Regions and reachability (docs/design/regions.md). Queries may rebuild, so not const.
     Regions& regions() { return map_.regions(); }
     // Cover from the eight sides and line of sight (docs/design/cover.md).
@@ -280,6 +286,9 @@ public:
     // has put on rock and plants for colonists to work on.
     Mineables& mineables() { return *mineables_; }
     const Mineables& mineables() const { return *mineables_; }
+    // Deep deposits, the scanner and the deep drill (docs/design/deep-mining.md).
+    DeepResources& deepResources() { return *deepResources_; }
+    const DeepResources& deepResources() const { return *deepResources_; }
     Designations& designations() { return *designations_; }
     const Designations& designations() const { return *designations_; }
 
@@ -311,6 +320,9 @@ public:
     // Quality, stuff and bench speed of what work tables make (docs/design/crafting.md).
     CraftingSystem& crafting() { return *crafting_; }
     const CraftingSystem& crafting() const { return *crafting_; }
+    // Repair of clothes, armor and weapons, and upgrade parts on guns (docs/design/repair.md).
+    RepairSystem& repair() { return *repair_; }
+    const RepairSystem& repair() const { return *repair_; }
     // The temperature in the open right now, in degrees Celsius: the biome's season, the hour of the
     // day and the random drift (Weather::temperatureAt).
     float outdoorTemperature() const;
@@ -351,6 +363,9 @@ public:
     // Raids, raid squads and the colony alarm with its defense roles (docs/design/raids.md).
     RaidSystem& raids() { return *raids_; }
     const RaidSystem& raids() const { return *raids_; }
+    // Medics, firefighters and rescue under fire (F10, docs/design/field-care.md).
+    FieldCare& fieldCare() { return *fieldCare_; }
+    const FieldCare& fieldCare() const { return *fieldCare_; }
 
     // Brood mounds and Remnant clusters (docs/design/monsters.md).
     MonsterSystem& monsters() { return *monsters_; }
@@ -397,6 +412,10 @@ public:
     Construction& construction() { return *construction_; }
     const Construction& construction() const { return *construction_; }
 
+    // Attunement, strain, focus and the powers of resonance (docs/design/resonance.md).
+    ResonanceSystem& resonance() { return *resonance_; }
+    const ResonanceSystem& resonance() const { return *resonance_; }
+
     // Power nets, generators, batteries and who has power (docs/design/power.md). Stepped at the end
     // of every step, after rooms (the sun needs roofs).
     PowerGrid& power() { return *power_; }
@@ -422,6 +441,8 @@ private:
 
     void applyCommand(const Command& command, uint64_t id);
     void commandFailed(uint64_t id, std::string message);
+    // ClimbCommand (U17): sets the controlled pawn off up or down the stairs or ladder at its cell.
+    bool startClimb(Entity pawn, float dx, float dy, std::string& error);
     void placeStockpileAndThings();
     void pruneDesignations();
     void startScenario();
@@ -445,6 +466,7 @@ private:
     std::unique_ptr<Plants> plants_;
     std::unique_ptr<Weather> weather_;
     std::unique_ptr<Mineables> mineables_;
+    std::unique_ptr<DeepResources> deepResources_;
     std::unique_ptr<Designations> designations_;
     std::unique_ptr<MovementSystem> movement_;
     std::unique_ptr<Rooms> rooms_;
@@ -469,6 +491,7 @@ private:
     std::unique_ptr<ExplosiveSystem> explosives_;  // after combat_ and health_
     std::unique_ptr<ApparelSystem> apparel_;  // after combat, which it uses
     std::unique_ptr<CraftingSystem> crafting_;  // after apparel_ and zones_
+    std::unique_ptr<RepairSystem> repair_;      // after apparel_ and combat_
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
     Rng rng_;
@@ -504,9 +527,11 @@ private:
     std::vector<Checkpoint> checkpoints_;
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
+    std::unique_ptr<FieldCare> fieldCare_;    // after the raids, the fighters and the jobs, which hold a pointer to it
     std::unique_ptr<NarratorSystem> narrator_;  // after raids_
     std::unique_ptr<DisasterSystem> disasters_;  // T3, after the narrator and everything it touches
     std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
+    std::unique_ptr<ResonanceSystem> resonance_;  // after the fighters and the job system it holds
 };
 
 }  // namespace colony
