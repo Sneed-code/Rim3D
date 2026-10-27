@@ -39,6 +39,35 @@ and in saves (format 16). Pawns from older saves have none and keep Kellan's loo
 What Unreal draws is under `visual` on the lineage's **genes** (X1, [genes.md](genes.md)), not the lineage: the last gene with `skinColor`, `hairColor` or `horns` counts. Emberkin: red skin, dark hair, horns
 (`length`, base `radius`, `spread` from the middle of the forehead, all metres; `color`).
 
+### Faces, hair, beards, marks (V1)
+
+The same component also holds the face and skin marks, from their own random stream (so the A3
+fields of a seed did not move). All numbers are our own, in `LooksRules`. Nothing in the sim reads
+them; V2 (faces and hair on screen) and V3 (body hair, scars, tattoos on screen) draw them.
+
+| Field | What | From |
+| --- | --- | --- |
+| `faceShape`, `brow`, `nose`, `jaw` | 0 to 1 sliders, 0.5 the average face (Unreal turns them into face morph weights) | the average of two draws; men's brow and jaw shifted up, women's down (`faceGenderShift`) |
+| `eyes` | colour | `eyeColors` by weight |
+| `hairStyle` | name from `hairStyles` (14: Short, Buzz, Crew, SlickBack, Mohawk, Bald, Medium, Bob, Long, Ponytail, Bun, Braids, Curly, Afro) | separate male and female weights |
+| `naturalBeard`, `beard` | name from `beardStyles` (None, Stubble, Moustache, Goatee, Short, Full, Long); women always None | `beardStyles` weights; the lineage's last gene with `visual.beard: false` (Beardless) draws None |
+| `naturalBodyHair`, `bodyHair` | 0 none to 1 thick | `bodyHair` range by gender; a gene with `visual.bodyHair` (Furskin: 1) draws that |
+| `tattoos` | list of marks | 18% of pawns have 1 to 3 (`tattoos`), on regions by weight, style an index into `tattoos.styles` |
+| `scars` | list of marks | one for each Scar or OldWound a healed injury leaves (H1's `PawnScarred`), at most `scars.max` (24) |
+
+A mark is `{region, style, u, v, size}`: the region is Face, Neck, Torso, LeftArm, RightArm,
+LeftLeg or RightLeg (hands count as arms, feet and toes as legs, eyes, ears, nose and jaw as the
+face); `u` and `v` (0 to 1) place it on that region's skin, `size` is a factor. A scar's style is
+picked among the `scars.styles` that list the healed injury (Cut gives Slash or Puncture, Burn gives
+Burn...), else among those that list none (Stitched). Scars on organs and bones leave the
+injury (it is still a scar to the health system) but no mark, because nothing shows on the skin.
+Marks stay if the injury is later removed or the part lost; that is rare and V7/V8 can tidy it.
+
+`setLineage` draws `beard` and `bodyHair` again from the natural values, so a lineage graft is
+undone cleanly. Looks are in the snapshot (`PawnLooksView` has all of the above), in `stateHash`
+and in saves (section `looks` version 2). A pawn from an older save has an empty `hairStyle` and
+average faces; Unreal keeps Kellan's face for those.
+
 ## The looks assets (generated, not in Git)
 
 `UnrealEditor-Cmd.exe game\Rim3D.uproject -run=PawnLooks -unattended -nosplash -nullrhi` (about
@@ -103,7 +132,8 @@ next to nothing. At the default overseer distance horns are about 2 px long and 
 
 ## Not done here
 
-- **Faces.** Every pawn has Kellan's face (women too); only its colour changes. More faces need
+- **Faces.** The sim now has face numbers, eye colour, hair style and beard (V1); drawing them is V2.
+  Until then every pawn has Kellan's face (women too); only its colour changes. More faces need
   MetaHuman Creator characters assembled, which needs the cloud rig and texture download (an Epic
   sign-in), or face morphs made from its presets.
 - **Proportions.** Shorter limbs, narrower shoulders and wider hips are skeleton, which the leader
@@ -111,7 +141,7 @@ next to nothing. At the default overseer distance horns are about 2 px long and 
 - **Clothes.** U16 draws the sim's worn apparel over a skin layer and hides Kellan's own top and trousers
   ([clothes-draw.md](clothes-draw.md); meshes: A5, below). Without the clothes assets Kellan's outfit stays.
 - **Mannequins** (the default look) get height and horns only.
-- **Hair styles and beards** stay Kellan's; their colour follows `hair`.
+- **Hair styles and beards** stay Kellan's until V2; their colour follows `hair`.
 
 ## Apparel meshes (A5)
 

@@ -2,6 +2,7 @@
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Protagonist.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Events.h"
@@ -310,6 +311,11 @@ void MentalBreakSystem::natural(Entity pawn, int64_t now, Rng& rng) {
         }
         pick -= kind->commonality;
     }
+    // The protagonist rolls like anyone (so the random stream, and every game seed, is the same whichever way
+    // the rule is set) but the break is not taken: docs/design/protagonist.md.
+    if (mindIsPlayersOwn(reg, pawn)) {
+        return;
+    }
     begin(pawn, *chosen, band, now, rng);
 }
 
@@ -322,6 +328,10 @@ bool MentalBreakSystem::start(Entity pawn, const std::string& breakDef, Rng& rng
     const entt::registry& reg = things_.registry();
     if (!reg.valid(pawn) || !reg.all_of<Thing, Position, Mover, Worker>(pawn)) {
         error = "that isn't a colonist on the map";
+        return false;
+    }
+    if (mindIsPlayersOwn(reg, pawn)) {
+        error = "the protagonist's mind is the player's own";
         return false;
     }
     if (reg.all_of<PlayerControl>(pawn)) {
