@@ -102,6 +102,7 @@ private:
 	void BuildFeelPhases();         // SmokeTestFeel.cpp
 	void BuildFirePhases();         // SmokeTestFire.cpp
 	void BuildPerfPhases();         // SmokeTestPerf.cpp
+	void BuildFacesPhases();        // SmokeTestFaces.cpp
 	void StartPhase(int32 Index);
 	void FinishPhase();
 	void WriteResultsAndQuit();

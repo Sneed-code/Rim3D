@@ -17,6 +17,9 @@ class USimSubsystem;
 class USkeletalMeshComponent;
 class UMeshComponent;
 class UStaticMeshComponent;
+class UDecalComponent;
+class UMaterialInterface;
+class UTexture;
 namespace colony { struct ThingView; }
 
 /**
@@ -57,6 +60,14 @@ public:
 	const TArray<TObjectPtr<USkeletalMeshComponent>>& GetShapedMeshes() const { return ShapedMeshes; }
 	const TArray<TObjectPtr<USkeletalMeshComponent>>& GetSkinMeshes() const { return SkinMeshes; }
 	const TArray<TObjectPtr<UStaticMeshComponent>>& GetHorns() const { return Horns; }
+	/** V2 (docs/design/looks.md): the MetaHuman's face with the face shape morphs, null without the PawnFaces assets. */
+	USkeletalMeshComponent* GetFaceMesh() const { return FaceMesh; }
+	/** The eye slots of the face (left, right). */
+	const TArray<int32>& GetEyeSlots() const { return EyeSlots; }
+	/** The groom a groom component (Hair, Eyebrows, Mustache, Beard, Eyelashes) draws now: the asset's name, empty for none. */
+	FString GetGroomName(FName Component) const;
+	/** V3: the tattoo, scar and body hair decals on the skin (made only near the camera, at full detail). */
+	const TArray<TObjectPtr<UDecalComponent>>& GetMarkDecals() const { return MarkDecals; }
 
 	/** Dresses the MetaHuman in what the sim says it wears (docs/design/clothes-draw.md): Kellan's own top and trousers are put
 	 *  away, a bare skin layer (the pawn's skin colour) shows what nothing covers, and each worn piece's meshes go on over it, in
@@ -187,6 +198,38 @@ private:
 	/** Colour, wear and morphs of a garment mesh. */
 	void StyleWornMesh(UMeshComponent* Mesh, const FSimWornPiece& Piece);
 	void UpdateHairVisibility();
+	/** Grooms show at full detail, minus hair under a covering hat and grooms with nothing to draw (bald, no beard). */
+	void RefreshGroomVisibility();
+	/** V2: face morphs, eyes and grooms from the looks. */
+	void ApplyFace(USimPawnSubsystem& Pawns);
+	/** Puts a PawnFaces groom (by asset name; empty for none) on a groom component, bound to the shaped face. */
+	void SetGroom(USimPawnSubsystem& Pawns, FName Component, const FString& GroomName);
+	/** V3: remakes the mark decals (only at full detail; otherwise there are none). */
+	void ApplyMarks();
+
+	UPROPERTY()
+	TObjectPtr<USkeletalMeshComponent> FaceMesh;
+
+	TArray<int32> EyeSlots;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UDecalComponent>> MarkDecals;
+
+	/** The mark decal material and textures, kept from Setup (null without the PawnFaces assets). */
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> MarkMaterial;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UTexture>> TattooTextures;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UTexture>> ScarTextures;
+
+	UPROPERTY()
+	TObjectPtr<UTexture> BodyHairTexture;
+
+	/** Groom components (by name) with nothing to draw. */
+	TSet<FName> EmptyGrooms;
 
 	UPROPERTY()
 	TArray<TObjectPtr<UMeshComponent>> WornMeshes;
