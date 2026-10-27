@@ -16,6 +16,7 @@
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Trade.h"
 
 #include <doctest.h>
 
@@ -664,6 +665,60 @@ TEST_CASE("Prisoners: an arrest can be cancelled; the protagonist, raiders and o
     CHECK_FALSE(sim.prisoners().arrestable(colonist));
 }
 
+TEST_CASE("Prisoners: a visitor can be arrested; its faction turns hostile and the rest of its visit leaves") {
+    PriCamp camp;
+    Sim& sim = camp.sim;
+    sim.things().destroy(camp.enemy);
+    uint32_t id = 0;
+    std::string error;
+    PRI_REQUIRE(sim.trade().startVisit("FrayCompact", VisitKind::Visitors, "", -1, id, error));
+    PRI_REQUIRE(sim.trade().find(id) != nullptr);
+    const Entity visitor = sim.trade().find(id)->members.front();
+    const size_t members = sim.trade().find(id)->members.size();
+    CHECK(sim.prisoners().arrestable(visitor));
+    CHECK_FALSE(sim.trade().hostile("FrayCompact"));
+    PriLog log;
+    sim.submit(ArrestCommand{visitor, true});
+    PRI_REQUIRE(priRunUntil(sim, log, 8000, [&] { return sim.prisoners().isPrisoner(visitor); }));
+    const entt::registry& reg = sim.things().registry();
+    CHECK(priCell(sim, visitor) == CellPos{20, 20, 0});
+    CHECK_FALSE(reg.all_of<Visitor>(visitor));
+    CHECK(sim.trade().hostile("FrayCompact"));
+    CHECK(reg.get<Prisoner>(visitor).resistance > 0.0f);  // not one of ours: it can be talked round and recruited
+    CHECK(log.type(EventType::PrisonerCaptured)->message == "arrested");
+    const Visit* visit = sim.trade().find(id);
+    if (visit != nullptr) {
+        CHECK(visit->members.size() == members - 1);
+        CHECK(visit->phase == VisitPhase::Leaving);
+    }
+}
+
+TEST_CASE("Prisoners: a visitor let go after it was seized walks off the map") {
+    PriCamp camp;
+    Sim& sim = camp.sim;
+    sim.things().destroy(camp.enemy);
+    uint32_t id = 0;
+    std::string error;
+    PRI_REQUIRE(sim.trade().startVisit("FrayCompact", VisitKind::Visitors, "", -1, id, error));
+    const Entity visitor = sim.trade().find(id)->members.front();
+    PriLog log;
+    sim.submit(ArrestCommand{visitor, true});
+    PRI_REQUIRE(priRunUntil(sim, log, 8000, [&] {
+        const ArrestOrder* order = sim.things().registry().try_get<ArrestOrder>(visitor);
+        return order != nullptr && order->by == camp.warden;
+    }));
+    CHECK(sim.trade().hostile("FrayCompact"));
+    sim.submit(ArrestCommand{visitor, false});
+    log.step(sim);
+    const entt::registry& reg = sim.things().registry();
+    CHECK_FALSE(reg.all_of<ArrestOrder>(visitor));
+    CHECK_FALSE(reg.all_of<Visitor>(visitor));
+    PRI_REQUIRE(reg.all_of<Fighter>(visitor));
+    CHECK(reg.get<Fighter>(visitor).mode == FightMode::Flee);
+    PRI_REQUIRE(priRunUntil(sim, log, 6000, [&] { return !sim.things().spawned(visitor) || !reg.valid(visitor); }));
+    CHECK_FALSE(sim.prisoners().isPrisoner(visitor));
+}
+
 TEST_CASE("Prisoners: an arrested colonist can be executed, and an arrest in progress saves and loads") {
     PriCamp camp;
     Sim& sim = camp.sim;
@@ -690,10 +745,19 @@ TEST_CASE("Prisoners: an arrested colonist can be executed, and an arrest in pro
     CHECK(copy.prisoners().isPrisoner(colonist));
 
     // Execute mode works on one's own: an innocent prisoner, as main's executions have it.
+    sim.things().registry().emplace_or_replace<Colonist>(camp.warden);  // so the warden's mood hears of it
     sim.submit(SetPrisonerModeCommand{colonist, "Execute"});
     PRI_REQUIRE(priRunUntil(sim, log, 4000, [&] { return log.type(EventType::PrisonerExecuted) != nullptr; }));
     CHECK(log.type(EventType::PrisonerExecuted)->message == "innocent");
     CHECK(sim.things().registry().get<Health>(colonist).dead);
+    // The colony knows one of its own was put to death: "colonist executed", not the stranger's thought.
+    const Mood* mood = sim.things().registry().try_get<Mood>(camp.warden);
+    PRI_REQUIRE(mood != nullptr);
+    const auto remembers = [&](const char* thought) {
+        return std::any_of(mood->memories.begin(), mood->memories.end(), [&](const Memory& m) { return m.def == thought; });
+    };
+    CHECK(remembers("KnowColonistExecuted"));
+    CHECK_FALSE(remembers("KnowPrisonerExecuted"));
 }
 
 TEST_CASE("Prisoners: an arrest is written into a replay and read back") {

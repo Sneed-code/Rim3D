@@ -38,9 +38,9 @@ enemy; raid squads don't count it.
 
 ## Arrest
 
-`ArrestCommand{pawn, on}` orders a colonist arrested (`on` false cancels it). It works on a pawn of the player's side that is not
-the protagonist, not the pawn the player is walking, no animal and no prisoner (`PrisonerSystem::arrestable`); raiders and
-visitors are refused (a raider has to be downed and captured). The pawn gets an `ArrestOrder`. The same `CapturePrisoners`
+`ArrestCommand{pawn, on}` orders a colonist or a visitor arrested (`on` false cancels it). It works on a pawn of the player's side
+that is not the protagonist, not the pawn the player is walking, no animal and no prisoner, and on a visitor or trader of a faction
+(`Visitor`, C23) (`PrisonerSystem::arrestable`); raiders are refused (a raider has to be downed and captured), and so are wild men. The pawn gets an `ArrestOrder`. The same `CapturePrisoners`
 scanner then sends a warden (`carryable` = a downed enemy, or an arrest order), with the same Rescue-job steps and the same
 free, closed prison bed. When the warden lifts the pawn (`PrisonerSystem::seize`) its own job ends, it stands down and the job
 system leaves it alone (`ArrestOrder::by` is the warden carrying it) until the lay-down; if the warden drops the job, the next
@@ -49,6 +49,13 @@ A prisoner of the player's own side starts with **resistance 0 and mode NoIntera
 says otherwise), cannot be set to ReduceResistance or AttemptRecruit, and on `Release` goes back to work (its Work tab row
 returns) instead of walking off the map. `Execute` works on it as on any innocent prisoner. **Nothing here makes a colonist
 resist or break out**, and there is no "was imprisoned" thought beyond `Captured` and `Captive`.
+
+**A visitor arrested.** When the warden lifts a visitor (`seize`), `TradeSystem::noteArrested` takes it out of its visit and
+turns its faction hostile at once: goodwill drops to `hostileAtOrBelow` (-75), as RimWorld's `Faction.Notify_MemberCaptured`
+makes a faction hostile when the player captures one of its people; the rest of its visit then leaves (`sendAwayIfHostile`). It
+keeps its `Visitor` part while it is carried, so turrets and fighters leave it alone, and loses it at the lay-down. It becomes an
+ordinary prisoner of its faction (rolled resistance, can be recruited, released or executed). If the player cancels the arrest
+after the seizing, it is no visitor any more and walks off the map (`PrisonerSystem::letGo`). Tests in `PrisonerTests`.
 
 ## Feeding and rest
 
@@ -115,7 +122,8 @@ after the capture.
 
 Event `PrisonerExecuted` (`thing` the prisoner, `target` the warden, `message` "guilty" or "innocent") comes before the
 death. Every living colonist except Psychopath, Bloodlust and Cannibal ones remembers it: `KnowPrisonerExecutedGuilty` (-2,
-6 days) or `KnowPrisonerExecuted` (-5, 6 days) (RimWorld wiki, Thoughts/Memory Death). The wiki has no faction goodwill loss
+6 days) or `KnowPrisonerExecuted` (-5, 6 days) (RimWorld wiki, Thoughts/Memory Death); for an arrested colonist of the
+colony's own these are `KnowColonistExecutedGuilty` and `KnowColonistExecuted` ("colonist executed"), the same numbers on the wiki. The wiki has no faction goodwill loss
 for an execution; ours is a house rule: `execute` calls `TradeSystem::noteExecuted`, -10 with the prisoner's faction (`trade.md`).
 
 ## Organ harvesting
@@ -143,7 +151,7 @@ jobs reuse `thing`, `site`, `chair`, `cell`, `count`). Commands `SetPrisonerMode
 
 ## Not here
 
-A "was imprisoned" thought of its own, colonists who resist arrest, arresting visitors (it would anger their faction),
+A "was imprisoned" thought of its own, colonists who resist arrest, the rest of an arrested visitor's group turning on the colony (here they just leave),
 euthanasia, the "innocent prisoner died" thought, selling prisoners, slaves, wardens escorting a freed prisoner out, goodwill from a release, prisoners eating from a dispenser or
 food lying in their cell, the warden's opinion in the resistance formula and prisoner traits (C20), the prisoner tab in the
 panels (U18), prisoners breaking out by themselves (T3 calls `breakOut`), a prisoner's mental breaks (C19).

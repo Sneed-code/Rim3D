@@ -487,7 +487,12 @@ void MoodSystem::step(int64_t now, std::vector<Event>& events) {
         }
         if (event.type == EventType::PrisonerExecuted) {
             // The colony knows. Cold-hearted, bloodthirsty and cannibal colonists shrug (RimWorld wiki).
-            const char* trigger = event.message == "guilty" ? "KnowPrisonerExecutedGuilty" : "KnowPrisonerExecuted";
+            // One of the colony's own, arrested and executed, has its own thought (the same numbers in RimWorld).
+            const Faction* side = reg.valid(event.thing) ? reg.try_get<Faction>(event.thing) : nullptr;
+            const bool ours = reg.valid(event.thing) && (side == nullptr || side->id == kPlayerFaction);  // no Faction: the player's
+            const bool guilty = event.message == "guilty";
+            const char* trigger = ours ? (guilty ? "KnowColonistExecutedGuilty" : "KnowColonistExecuted")
+                                       : (guilty ? "KnowPrisonerExecutedGuilty" : "KnowPrisonerExecuted");
             for (const Entity other : pawns) {
                 if (moodIsColonist(reg, other) && !hasTrait(other, "Psychopath") && !hasTrait(other, "Bloodlust") &&
                     !hasTrait(other, "Cannibal")) {

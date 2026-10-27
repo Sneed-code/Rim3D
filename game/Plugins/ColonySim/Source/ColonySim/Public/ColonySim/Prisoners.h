@@ -57,7 +57,7 @@ struct Prisoner {
     int64_t guiltyUntil = 0;   // it harmed the colony (it was captured in a raid) until this game second; an execution before is justified
 };
 
-// On a colonist the player has ordered arrested: a warden takes it to a prison bed. `by` is the warden carrying it, none until
+// On a colonist or visitor the player has ordered arrested: a warden takes it to a prison bed. `by` is the warden carrying it, none until
 // it is lifted; a carried pawn thinks and moves no more.
 struct ArrestOrder {
     Entity by = kNoEntity;
@@ -121,8 +121,8 @@ public:
     // Whether the cell is in a fully enclosed room (walls and doors all round, a roof over every cell): the only place a prison
     // bed takes a prisoner. A door counts as closed; it is not in any room.
     bool cellEnclosed(CellPos cell) const;
-    // Whether the player's order to arrest `pawn` can be carried out: a living colonist of the player's side on the map, not
-    // an animal, a prisoner already, the protagonist or the one the player is walking.
+    // Whether the player's order to arrest `pawn` can be carried out: a living colonist of the player's side, or a visitor or
+    // trader of a faction, on the map; not an animal, a raider, a prisoner already, the protagonist or the one the player is walking.
     bool arrestable(Entity pawn) const;
     // `capturable`, or `arrestable` with an order: what a capture job may carry to a bed.
     bool carryable(Entity pawn) const;
@@ -132,13 +132,14 @@ public:
     // Commands. False, with a reason in plain words, when they can't be done.
     bool setMode(Entity pawn, PrisonerMode mode, std::string& error);
     bool setPrisonBed(Entity bed, bool on, std::string& error);
-    // Orders a colonist arrested (or cancels the order).
+    // Orders a colonist or a visitor arrested (or cancels the order).
     bool setArrest(Entity pawn, bool on, std::string& error);
 
     // The end of a capture: `pawn` becomes the colony's prisoner in `bed` (the bed's slot is its own, its weapons are dropped, it stops
     // fighting and leaves its raid squad). `warden` is only for the event. Also a dev entry point for tests.
     bool imprison(Entity pawn, Entity bed, Entity warden, std::string& error);
-    // A warden has lifted `pawn` for an arrest: it stops what it is doing and goes where the warden goes.
+    // A warden has lifted `pawn` for an arrest: it stops what it is doing and goes where the warden goes. A visitor leaves its
+    // visit and its faction turns hostile (TradeSystem::noteArrested).
     void seize(Entity pawn, Entity warden);
 
     // Whether a warden may start a talk with this prisoner now: it has a mode that wants one, its time has come, it is not
@@ -179,6 +180,8 @@ private:
     int64_t now() const;
     float moodOf(Entity pawn) const;
     CellPos edgeGoal(Entity pawn) const;
+    // A seized visitor whose arrest was cancelled: no longer a visitor, it walks off the map.
+    void letGo(Entity pawn);
     void emit(EventType type, Entity thing, Entity target, float amount, const char* message) const;
 
     Things& things_;
