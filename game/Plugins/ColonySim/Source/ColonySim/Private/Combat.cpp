@@ -1914,6 +1914,23 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
     return result;
 }
 
+bool CombatSystem::damageBuilding(Entity building, int damage) {
+    entt::registry& reg = things_.registry();
+    HitPoints* hp = reg.valid(building) ? reg.try_get<HitPoints>(building) : nullptr;
+    if (hp == nullptr) {
+        return false;
+    }
+    hp->current -= std::max(0, damage);
+    if (hp->current > 0) {
+        return false;
+    }
+    if (beforeDestroy_) {
+        beforeDestroy_(building);
+    }
+    things_.destroy(building);
+    return true;
+}
+
 void CombatSystem::drop(Entity pawn, Entity item) {
     entt::registry& reg = things_.registry();
     if (Gear* gear = reg.try_get<Gear>(pawn)) {

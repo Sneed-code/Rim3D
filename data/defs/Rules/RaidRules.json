@@ -27,9 +27,14 @@
     "lineMoves": 6,
     "shelterSearch": 4000,
     "shelterFlee": 25,
+    "weightAssault": 60, "weightSappers": 12, "weightDropPods": 14, "weightThieves": 8, "weightKidnappers": 6,
+    "blockedBoost": 8, "dropPodsMinPoints": 120, "dropMinDistance": 8, "dropMaxDistance": 24,
+    "sapDamage": 4, "sapReach": 2.2, "sapSearch": 60000, "grabReach": 1.6, "stealMass": 40, "kidnapRange": 90, "seizeRange": 12,
     "unverified": ["fleeLostFraction", "giveUpHoursMin", "giveUpHoursMax", "daysPassedFactor"],
     "ours": ["adaptation", "squadThinkEvery", "advanceRatio", "holdRatio", "hysteresis", "retargetDistance", "edgeDepth", "alarmThinkEvery",
-             "sightRange", "keepWorkingRadius", "defenseLine", "defenderLeash", "spotLeash", "lineMoves", "shelterSearch", "shelterFlee"],
+             "sightRange", "keepWorkingRadius", "defenseLine", "defenderLeash", "spotLeash", "lineMoves", "shelterSearch", "shelterFlee",
+             "weightAssault", "weightSappers", "weightDropPods", "weightThieves", "weightKidnappers", "blockedBoost", "dropPodsMinPoints",
+             "dropMinDistance", "dropMaxDistance", "sapDamage", "sapReach", "sapSearch", "grabReach", "stealMass", "kidnapRange", "seizeRange"],
     "notes": "Raid points from the wiki's Raid points page: wealth points and points per colonist by storyteller wealth, Strive to survive (threat scale 1), the starting factor 0.7 to day 10 and 1 from day 40 (straight line between: unverified), adaptation fixed at its start value 0.8 until adaptation is tracked. fleeLostFraction and the give-up time (RimWorld's 26,000 to 38,000 ticks) are recalled from RimWorld's assault plan."
   }
 ]
