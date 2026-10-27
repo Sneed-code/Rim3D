@@ -165,7 +165,8 @@ float FighterSystem::weaponRange(Entity pawn) const {
         return 0.0f;
     }
     const DefId def = reg.get<Thing>(gear->weapon).def;
-    return def.value < range_.size() ? range_[def.value] : 0.0f;
+    const WeaponMods* mods = reg.try_get<WeaponMods>(gear->weapon);  // upgrade parts (P4)
+    return def.value < range_.size() ? range_[def.value] * (mods != nullptr ? mods->range : 1.0f) : 0.0f;
 }
 
 bool FighterSystem::badlyHurt(Entity pawn) const {
@@ -1011,7 +1012,8 @@ void FighterSystem::chooseWeapon(Entity pawn, const Fighter& f) {
 
     const auto reach = [&](Entity item) {
         const DefId def = reg.get<Thing>(item).def;
-        return def.value < range_.size() ? range_[def.value] : 0.0f;
+        const WeaponMods* mods = reg.try_get<WeaponMods>(item);
+        return def.value < range_.size() ? range_[def.value] * (mods != nullptr ? mods->range : 1.0f) : 0.0f;
     };
     bool found = false;
     WeaponSlot pick = WeaponSlot::Primary;

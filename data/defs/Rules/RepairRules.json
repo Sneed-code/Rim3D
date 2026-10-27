@@ -1,0 +1,27 @@
+[
+{
+ "defName": "RepairRules",
+ "source": "ours",
+ "note": "Repairing clothes, armor and weapons at a bench (task P4; RimWorld cannot repair gear, so every number is ours). A full repair takes workShare of the item's workToMake (workPerKg of its mass when it has none) and materialShare of its costStuffCount (materialPerKg of its mass when it has none) of the stuff it is made of, or of weaponMaterial / apparelMaterial when it is made of none; a part-damaged item takes the share it lacks. The material, or an upgrade part, is taken from the stacks within materialRadius metres of the bench.",
+ "workShare": 0.25,
+ "workPerKg": 300,
+ "materialShare": 0.25,
+ "materialPerKg": 3,
+ "weaponMaterial": "Steel",
+ "apparelMaterial": "Cloth",
+ "materialRadius": 12,
+ "skill": "Crafting",
+ "minSkill": 0,
+ "ours": [
+  "workShare",
+  "workPerKg",
+  "materialShare",
+  "materialPerKg",
+  "weaponMaterial",
+  "apparelMaterial",
+  "materialRadius",
+  "skill",
+  "minSkill"
+ ]
+}
+]

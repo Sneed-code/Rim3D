@@ -49,8 +49,10 @@ class MentalBreakSystem;
 class JobSystem;
 class Lights;
 class MeleeSystem;
+class DeepResources;
 class Mineables;
 class MovementSystem;
+class WoundViews;
 class MoodSystem;
 class MedicineSystem;
 class SurgerySystem;
@@ -75,6 +77,7 @@ class TemperatureSystem;
 class SpoilageSystem;
 class LootSystem;
 class CraftingSystem;
+class RepairSystem;
 class Things;
 class UpperFloors;
 class RoofCollapse;
@@ -199,6 +202,8 @@ public:
     const DefDatabase& defs() const { return *defs_; }
     const GameTime& time() const { return time_; }
     const Map& map() const { return map_; }
+    // For map generation and tests that set the world up; the game changes the map through commands.
+    Map& editMap() { return map_; }
     // Regions and reachability (docs/design/regions.md). Queries may rebuild, so not const.
     Regions& regions() { return map_.regions(); }
     // Cover from the eight sides and line of sight (docs/design/cover.md).
@@ -283,6 +288,9 @@ public:
     // has put on rock and plants for colonists to work on.
     Mineables& mineables() { return *mineables_; }
     const Mineables& mineables() const { return *mineables_; }
+    // Deep deposits, the scanner and the deep drill (docs/design/deep-mining.md).
+    DeepResources& deepResources() { return *deepResources_; }
+    const DeepResources& deepResources() const { return *deepResources_; }
     Designations& designations() { return *designations_; }
     const Designations& designations() const { return *designations_; }
 
@@ -314,6 +322,9 @@ public:
     // Quality, stuff and bench speed of what work tables make (docs/design/crafting.md).
     CraftingSystem& crafting() { return *crafting_; }
     const CraftingSystem& crafting() const { return *crafting_; }
+    // Repair of clothes, armor and weapons, and upgrade parts on guns (docs/design/repair.md).
+    RepairSystem& repair() { return *repair_; }
+    const RepairSystem& repair() const { return *repair_; }
     // The temperature in the open right now, in degrees Celsius: the biome's season, the hour of the
     // day and the random drift (Weather::temperatureAt).
     float outdoorTemperature() const;
@@ -460,6 +471,7 @@ private:
     std::unique_ptr<Plants> plants_;
     std::unique_ptr<Weather> weather_;
     std::unique_ptr<Mineables> mineables_;
+    std::unique_ptr<DeepResources> deepResources_;
     std::unique_ptr<Designations> designations_;
     std::unique_ptr<MovementSystem> movement_;
     std::unique_ptr<Rooms> rooms_;
@@ -472,6 +484,7 @@ private:
     StepProfile* profile_ = nullptr;
     DoorNumbers doorNumbers_;  // for the snapshot's door animation
     std::unique_ptr<HealthSystem> health_;
+    std::unique_ptr<WoundViews> woundViews_;  // for the snapshot's wounds
     std::unique_ptr<NeedsSystem> needs_;
     std::unique_ptr<MoodSystem> mood_;
     std::unique_ptr<RecreationSystem> recreation_;
@@ -484,6 +497,7 @@ private:
     std::unique_ptr<ExplosiveSystem> explosives_;  // after combat_ and health_
     std::unique_ptr<ApparelSystem> apparel_;  // after combat, which it uses
     std::unique_ptr<CraftingSystem> crafting_;  // after apparel_ and zones_
+    std::unique_ptr<RepairSystem> repair_;      // after apparel_ and combat_
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
     Rng rng_;

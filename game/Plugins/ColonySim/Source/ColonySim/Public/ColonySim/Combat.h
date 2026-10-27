@@ -94,6 +94,20 @@ struct Magazine {
     int rounds = 0;
 };
 
+// On a gun item with upgrade parts fitted (P4, docs/design/repair.md): the factors the parts together put on the
+// def's numbers. The gun's range (for the fighter AI), accuracy at every distance, magazine size (at least one
+// round more if it grows), reload time, cooldown after a burst, warm-up (aiming time) and recoil (the spread
+// the shots add and the player's gun kick). Not saved: made again from the fitted parts on load.
+struct WeaponMods {
+    float range = 1.0f;
+    float accuracy = 1.0f;
+    float magazine = 1.0f;
+    float reload = 1.0f;
+    float cooldown = 1.0f;
+    float warmup = 1.0f;
+    float recoil = 1.0f;
+};
+
 // The player's gun kick (P2, docs/design/shooter-feel.md): the shots just fired lift the aim by
 // the weapon's list of kicks, shot by shot; it wears off by itself. Added to a pawn the first time
 // its player trigger fires a gun that has a kick list, and kept. Degrees: `up` raises the aim,

@@ -63,7 +63,7 @@ struct Job {
     Entity site = kNoEntity;   // DeliverResources: the blueprint or frame it brings materials to; DoBill: the
                                // building that holds the bill; TameAnimal, TrainAnimal, SlaughterAnimal, FeedAnimal, GatherAnimal:
                                // the animal (`thing` is the food it fetches, none for slaughter)
-                               // (Refuel: the building to put fuel in)
+                               // (Refuel: the building to put fuel in; RepairGear: the bench)
     float progress = 0.0f;     // Deconstruct: work done so far; Mine: work towards the next pick hit; CutPlant,
                                // HarvestPlant: work done on the plant. For the gather jobs both are game seconds
                                // at 100% work speed (the worker's speed adds to it every second); DoBill: work done
@@ -144,6 +144,10 @@ inline constexpr uint8_t kDoBillDepositStep = 3;
 // Refuel has four: go to the fuel, pick it up, carry it beside the building, put it in (the work
 // takes FuelSystem::kRefuelWorkSeconds). The pawn carries the fuel from the third on.
 inline constexpr uint8_t kRefuelPickUpStep = 1;
+// RepairGear has four as well: go to the gear, pick it up, carry it beside the bench, work. `thing` is the gear, `site` the
+// bench, `cell` where the pawn stands, `bill` 0 for a repair or the upgrade part's def id + 1 for a fitting.
+inline constexpr uint8_t kGearPickUpStep = 1;
+
 // Operate: the DoBill steps with the patient for the work building. `thing` is the part or medicine being fetched (none when
 // there is nothing to fetch), `site` the patient, `bill` the operation's id, `cell` where the doctor stands.
 inline constexpr uint8_t kOperatePickUpStep = 1;
@@ -179,6 +183,7 @@ class FuelSystem;
 class DefDatabase;
 class DrugSystem;
 class Farming;
+class RepairSystem;
 class FieldCare;
 class Filth;
 class Fire;
@@ -199,9 +204,11 @@ class Mineables;
 class Pathfinder;
 class Plants;
 class PowerGrid;
+enum class DeepWorkKind : uint8_t { None, Scan, Drill };
 class ResearchSystem;
 class InspirationSystem;
 class TalentSystem;
+class DeepResources;
 class Rooms;
 class Things;
 class WorkGiver;
@@ -318,6 +325,12 @@ public:
     // everywhere is outdoors.
     void setRooms(Rooms* rooms) { rooms_ = rooms; }
     void setResearch(ResearchSystem* research) { research_ = research; }
+    // Scanners and deep drills (DeepJobs.cpp, docs/design/deep-mining.md). Without it they are never worked.
+    void setDeepResources(DeepResources* deep) { deep_ = deep; }
+    DeepResources* deepResources() const { return deep_; }
+    DeepWorkKind deepKindOf(Entity building) const;
+    // Whether a scanner or drill can be worked now; `why` says what is wrong if not.
+    bool deepWorkable(Entity building, std::string& why) const;
     // Taming, training and feeding animals (HusbandryJobs.cpp, docs/design/husbandry.md). Without it nobody handles animals.
     void setHusbandry(Husbandry* husbandry) { husbandry_ = husbandry; }
     Husbandry* husbandry() const { return husbandry_; }
@@ -368,6 +381,8 @@ public:
     void setCrafting(CraftingSystem* crafting) { crafting_ = crafting; }
     CraftingSystem* crafting() const { return crafting_; }
     void setFarming(Farming* farming) { farming_ = farming; }
+    void setRepair(RepairSystem* repair) { repair_ = repair; }
+    RepairSystem* repair() const { return repair_; }
     Farming* farming() const { return farming_; }
     Filth* filth() const { return filth_; }
     // The fire layer, for the Firefighter work type's job (FireJobs.cpp, docs/design/fire.md). Without it nobody fights fires.
@@ -576,6 +591,10 @@ private:
     StepResult partyWork(Entity pawn, Job& job, std::string& why);
 
     // Research (ResearchJobs.cpp, docs/design/research.md). `site` is the bench, `cell` where the pawn sits.
+    bool failCheckDeepWork(Entity pawn, Job& job, std::string& why);
+    StepResult deepWork(Entity pawn, Job& job, std::string& why);
+    bool deepOpenSky(Entity building) const;
+    double deepDrillRadius(Entity building) const;
     bool failCheckResearch(Entity pawn, Job& job, std::string& why);
     StepResult researchWork(Entity pawn, Job& job, std::string& why);
 
@@ -680,6 +699,9 @@ private:
     // Refuel (FuelJobs.cpp, docs/design/fuel.md): fetch fuel, carry it to the building, put it in.
     StepResult refuelWork(Entity pawn, Job& job, std::string& why);
     bool failCheckRefuel(Entity pawn, Job& job, std::string& why);
+    // RepairGear (GearJobs.cpp, docs/design/repair.md): carry the gear to a bench, mend it or fit a part.
+    StepResult gearWork(Entity pawn, Job& job, std::string& why);
+    bool failCheckGear(Entity pawn, Job& job, std::string& why);
     // Puts the ingredients delivered so far back on the ground near the pawn.
     void returnIngredients(Entity pawn, const Job& job);
     // Makes `count` of an item def and puts it down on the nearest free cell near the pawn.
@@ -722,6 +744,7 @@ private:
 
     Rooms* rooms_ = nullptr;
     ResearchSystem* research_ = nullptr;
+    DeepResources* deep_ = nullptr;
     MedicineSystem* medicine_ = nullptr;
     SurgerySystem* surgery_ = nullptr;
     RoomStats* roomStats_ = nullptr;
@@ -784,6 +807,7 @@ private:
     DrugSystem* drugs_ = nullptr;
     CraftingSystem* crafting_ = nullptr;
     Farming* farming_ = nullptr;
+    RepairSystem* repair_ = nullptr;
     std::vector<Entity> order_;              // scratch: workers this step
     std::vector<WorkCandidate> candidates_;  // scratch: one think
 };
