@@ -90,6 +90,47 @@ bool simJobUses(const JobSystem& jobs, const entt::registry& reg, Entity thing) 
     return false;
 }
 
+// The world of the settings, or null when it is off (docs/design/world-map.md). A start tile of -1
+// is picked here (the scenario's biome, else any tile a colony can start on) and written back into
+// the settings, so saves and replays name it.
+std::unique_ptr<World> simMakeWorld(SimSettings& settings, const DefDatabase& defs) {
+    WorldSettings& w = settings.world;
+    if (!w.enabled) {
+        return nullptr;
+    }
+    if (w.seed == 0) {
+        w.seed = settings.seed;
+    }
+    auto world = std::make_unique<World>(World::generate(defs, w.seed, w.width, w.height));
+    w.width = world->width();
+    w.height = world->height();
+    if (world->empty()) {
+        return world;
+    }
+    if (w.startTile < 0) {
+        StartCriteria criteria;
+        const Def* scenario = settings.scenario.empty() ? nullptr : defs.find("Scenarios", settings.scenario);
+        criteria.biome = scenario != nullptr ? scenario->text("biome", "TemperateForest") : "TemperateForest";
+        criteria.seed = w.seed;
+        w.startTile = world->suggestStartTile(criteria);
+        if (w.startTile < 0) {
+            criteria.biome.clear();
+            w.startTile = world->suggestStartTile(criteria);
+        }
+    }
+    if (w.startTile >= 0) {
+        world->chooseStartTile(w.startTile);  // refused (the tile stays -1) if a colony can't start there
+    }
+    return world;
+}
+
+std::optional<WorldSite> simStartSite(const World* world) {
+    if (world == nullptr || world->startTile() < 0) {
+        return std::nullopt;
+    }
+    return world->siteFor(world->startTile());
+}
+
 void simHashCell(StateHasher& h, CellPos c) {
     h.add(c.x);
     h.add(c.y);
@@ -117,11 +158,16 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     : settings_(settings),
       // No defs: share a static empty database, owned by nobody.
       defs_(defs ? std::move(defs) : std::shared_ptr<const DefDatabase>(std::shared_ptr<const DefDatabase>(), &simEmptyDefs())),
-      map_(MapSettings{settings.mapSize, settings.mapSize, splitMix64(settings.seed ^ 0x6D6170ULL), settings.flatMap}),
+      world_(simMakeWorld(settings_, *defs_)),
+      site_(simStartSite(world_.get())),
+      biome_(site_ && !site_->biome.empty() ? site_->biome : std::string("TemperateForest")),
+      // On a world the start tile seeds the map, so the same world and tile always give the same map.
+      map_(MapSettings{settings.mapSize, settings.mapSize, site_ ? site_->mapSeed : splitMix64(settings.seed ^ 0x6D6170ULL),
+                       settings.flatMap}),
       pathfinder_(map_),
       zones_(std::make_unique<Zones>(map_)),
       things_(std::make_unique<Things>(map_, defs_)),
-      plants_(std::make_unique<Plants>(map_, *defs_, splitMix64(settings.seed ^ 0x706C616E74ULL), "TemperateForest")),
+      plants_(std::make_unique<Plants>(map_, *defs_, splitMix64(settings.seed ^ 0x706C616E74ULL), biome_)),
       mineables_(std::make_unique<Mineables>(map_, *defs_, splitMix64(settings.seed ^ 0x6D696E65ULL))),
       designations_(std::make_unique<Designations>(map_)),
       movement_(std::make_unique<MovementSystem>()),
@@ -130,10 +176,20 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       time_(),
       rng_(splitMix64(settings.seed ^ 0x7061776EULL)),
       groundHash_(map_.contentHash()) {
+    if (world_) {
+        worldHash_ = world_->hash();
+        if (world_->empty()) {
+            setupErrors_.push_back("world: no WorldGen def 'Default'");
+        } else if (!site_) {
+            setupErrors_.push_back("world: tile " + std::to_string(settings_.world.startTile) + " can't start a colony");
+        }
+    }
     things_->setEventLog(&events_);
     health_->setEventLog(&events_);
     health_->setWorld(&time_.seconds, settings.seed);
-    weather_ = std::make_unique<Weather>(map_, *defs_, splitMix64(settings.seed ^ 0x636C696D617465ULL), "TemperateForest");
+    // The start tile's own yearly mean temperature; the seasons and the daily swing are its biome's.
+    weather_ = std::make_unique<Weather>(map_, *defs_, splitMix64(settings.seed ^ 0x636C696D617465ULL), biome_,
+                                         site_ ? std::optional<double>(site_->temperature) : std::nullopt);
     weather_->setEventLog(&events_);
     movement_->setWeather(weather_.get());
     combat_->setWeather(weather_.get());
@@ -242,9 +298,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     combat_->setTalents(talents_.get());
     explosives_->setEventLog(&events_);
     fighters_->setEventLog(&events_);
-    // The biome is the one the plants use; both move to the settings together.
     animals_ = std::make_unique<AnimalSystem>(*things_, map_, *plants_, *health_, *defs_, time_,
-                                              splitMix64(settings.seed ^ 0x616E696D616C73ULL), "TemperateForest");
+                                              splitMix64(settings.seed ^ 0x616E696D616C73ULL), biome_);
     animals_->setEventLog(&events_);
     husbandry_ = std::make_unique<Husbandry>(*things_, map_, *animals_, *health_, *defs_, time_, settings.seed);
     husbandry_->setEventLog(&events_);
@@ -1790,6 +1845,10 @@ uint64_t Sim::stateHash() const {
     // follows from the buildings' footprints, hashed below. Map layers that change in play
     // (mining, plants, roofs) must keep their own running hash: hashing a 1 km map takes ~10 ms.
     h.add(groundHash_);
+    if (world_) {  // the world doesn't change in play: its hash is taken once
+        h.add(worldHash_);
+        h.add(world_->startTile());
+    }
     h.add(rng_.state());
     h.add(rng_.increment());
     h.add(stockpileCell_.has_value());

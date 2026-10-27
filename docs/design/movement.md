@@ -123,3 +123,10 @@ and queue round each other at the stockpile.
   is one number for now).
 - **Doors** are in the movement system since C5: a pawn waits at the edge of a closed door's cell until
   it has opened (23 steps), and an open door is walked through like open ground ([rooms.md](rooms.md)).
+
+## Carried bodies
+
+A pawn that carries a downed pawn or a corpse (rescue, corpse hauling, butcher job) has it moved to its own position every
+step, so the body lies exactly where the carrier stands. A body that cannot move (Moving capacity 0) at exactly that spot is
+left out of the carrier's neighbours; before this the carrier steered round its own load and froze for hours on a walk to the
+butcher table (found by the year run).

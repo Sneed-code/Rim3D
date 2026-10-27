@@ -471,6 +471,8 @@ struct SaveData {
     SaveWeather weather;
     bool hasNarrator = false;          // section "narrator" (T1); older saves keep the narrator off
     NarratorState narrator;
+    WorldSettings world;               // section "world" (W2): SimSettings::world; older saves have no world
+    uint64_t worldHash = 0;            // the world's hash when saved, checked against the one made again
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -2423,6 +2425,14 @@ void saveRaids(Ar& ar, RaidState& r) {
     ar.value("hasShelter", r.hasShelter);
     ar.group("shelter", [&] { saveCell(ar, r.shelter); });
     ar.value("nextAlarmThink", r.nextAlarmThink);
+    if (ar.sectionVersion() >= 2) {
+        ar.value("adaptDays", r.adaptDays);
+        ar.value("nextAdaptGrowth", r.nextAdaptGrowth);
+        ar.list("adaptPawns", r.adaptPawns, [&](RaidState::AdaptPawn& p) {
+            ar.value("pawn", p.pawn);
+            ar.value("downed", p.downed);
+        });
+    }
 }
 
 // ---- Sections (format 20 on) -----------------------------------------------------------------
@@ -2863,6 +2873,14 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.value("endsAt", i.endsAt);
         });
     });
+    ar.section("world", 1, [&] {
+        ar.value("enabled", d.world.enabled);
+        ar.value("seed", d.world.seed);
+        ar.value("width", d.world.width);
+        ar.value("height", d.world.height);
+        ar.value("startTile", d.world.startTile);
+        ar.value("hash", d.worldHash);
+    });
     // New sections go here, at the end.
 }
 
@@ -2957,7 +2975,16 @@ std::unique_ptr<Sim> SimSaveAccess::makeEmpty(const SaveData& data, std::shared_
                                               std::string& error) {
     SimSettings settings = data.settings;
     settings.wildAnimals = data.wildAnimals;  // saved in the animals section, not the sim section
+    settings.world = data.world;              // and the world in its own
     auto sim = std::unique_ptr<Sim>(new Sim(settings, std::move(defs), Sim::EmptyStart{}));
+    if (sim->worldHash_ != data.worldHash) {
+        error = "the world generator gives a different world for this seed than when the save was made";
+        return nullptr;
+    }
+    if (data.world.enabled && sim->world_->startTile() != data.world.startTile) {
+        error = "the save's start tile can't start a colony on this world";
+        return nullptr;
+    }
     if (sim->groundHash_ != data.groundHash) {
         error = "the map generator gives a different map for this seed than when the save was made";
         return nullptr;
@@ -2971,6 +2998,8 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.defsHash = sim.defs_->contentHash();
     d.settings = sim.settings_;
     d.wildAnimals = sim.settings_.wildAnimals;
+    d.world = sim.settings_.world;
+    d.worldHash = sim.worldHash_;
     d.animals = sim.animals_->saved();
     d.husbandry = sim.husbandry_->saved();
     d.farming = sim.farming_->saved();
@@ -4193,7 +4222,7 @@ SaveLoadResult loadSim(const std::vector<uint8_t>& bytes, std::shared_ptr<const 
     }
     const SimSettings& s = data.settings;
     if (s.mapSize <= 0 || s.mapSize > 4096 || s.pawns < 0 || s.items < 0 || s.checkpointEvery < 0 || s.pathBudget <= 0 ||
-        data.seconds < 0) {
+        data.seconds < 0 || !worldSettingsValid(data.world)) {
         result.error = "the save file has impossible settings";
         return result;
     }
