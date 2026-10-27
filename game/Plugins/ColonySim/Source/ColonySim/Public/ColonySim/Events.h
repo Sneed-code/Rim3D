@@ -138,6 +138,8 @@ enum class EventType : uint8_t {
     OperationDone,      // a doctor finished an operation (H3, docs/design/surgery.md): `thing` the doctor, `target` the patient, `def` the Recipes def, `part` the body part, `amount` the success chance, `message` "success", "failed" or "the patient died"
     DeepDepositFound,      // a scanner found deep resources (docs/design/deep-mining.md): `def` the item, `cell` the middle of the lump, `count` its cells, `thing` the scanner (none for the long-range hook)
     DeepPortionDrilled,    // a deep drill finished a portion: `thing` the drill, `def` what came up (a rock chunk if nothing is under it), `amount` how many, `cell` where it was taken from
+    SkipStarted,           // a night skip or fast travel began (P5, docs/design/skip-travel.md): `message` "night" or "travel", `thing` the colonist, `amount` the game seconds it will run
+    SkipEnded,             // it ended: `message` "night: why" or "travel: why" (morning, arrived, cancelled, or the threat), `thing` the colonist (take control again), `amount` the game seconds skipped, (x, y) where the colonist is
 };
 
 // What stopped a projectile (ProjectileHit).

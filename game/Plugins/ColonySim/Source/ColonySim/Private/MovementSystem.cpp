@@ -568,6 +568,25 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
                 bestVy = 0.0f;
             }
         }
+        // The wall costs only steer, so a pawn squeezed by others (or walking through them) could still be pushed into a
+        // wall's cell and be shut in there for good, starving (found by the year run). Never into a cell it cannot stand in:
+        // keep the part along one axis that stays out, else stand still.
+        if (map.walkable(here)) {
+            const auto standsIn = [&](float vx, float vy) {
+                const CellPos c{static_cast<int>(std::floor(a.x + vx)), static_cast<int>(std::floor(a.y + vy)), a.level};
+                return c == here || (map.inBounds(c) && map.walkable(c));
+            };
+            if (!standsIn(bestVx, bestVy)) {
+                if (standsIn(bestVx, 0.0f)) {
+                    bestVy = 0.0f;
+                } else if (standsIn(0.0f, bestVy)) {
+                    bestVx = 0.0f;
+                } else {
+                    bestVx = 0.0f;
+                    bestVy = 0.0f;
+                }
+            }
+        }
         a.newVx = bestVx;
         a.newVy = bestVy;
 

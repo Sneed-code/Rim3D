@@ -96,6 +96,13 @@ public:
     void setRoomStats(RoomStats* roomStats) { roomStats_ = roomStats; }
     // Where the temperature thoughts (Cold, Hot) get the degrees outside a pawn's comfort from.
     void setTemperature(TemperatureSystem* temperature) { temperature_ = temperature; }
+    // The colony's wealth, for the expectations thought (condition `colonyWealth`). It is asked once a game hour and the
+    // answer kept (and saved), so a loaded game goes on with the same number. Without it there are no expectations.
+    void setWealth(std::function<float()> wealth) { wealthFn_ = std::move(wealth); }
+    // The kept wealth and the game second it was measured (-1: not yet).
+    float wealth() const { return wealth_; }
+    int64_t wealthAt() const { return wealthAt_; }
+    void restoreWealth(float wealth, int64_t at) { wealth_ = wealth; wealthAt_ = at; }
 
     // Which skill a pawn's job is using right now (Skills `defName`), or empty: passion for it
     // lifts the mood while the work goes on (docs/design/skills.md). Without one, no work thoughts.
@@ -190,6 +197,9 @@ private:
     std::function<std::string(Entity)> activeSkill_;
     std::vector<StagedThought> staged_;
     std::vector<Situation> situations_;
+    std::function<float()> wealthFn_;
+    float wealth_ = 0.0f;
+    int64_t wealthAt_ = -1;
     mutable std::map<std::string, std::vector<TraitDegree>, std::less<>> traitDegrees_;  // by trait def name
 };
 
