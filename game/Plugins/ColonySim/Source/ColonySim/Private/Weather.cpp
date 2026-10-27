@@ -44,7 +44,8 @@ const char* seasonName(int season) {
     return season >= 0 && season < kSeasonsPerYear ? kWeatherSeasonNames[season] : "?";
 }
 
-Weather::Weather(const Map& map, const DefDatabase& defs, uint64_t seed, const std::string& biome)
+Weather::Weather(const Map& map, const DefDatabase& defs, uint64_t seed, const std::string& biome,
+                 std::optional<double> yearMean)
     : map_(map),
       seed_(seed),
       rng_(splitMix64(seed ^ 0x7765617468ULL)),
@@ -98,6 +99,12 @@ Weather::Weather(const Map& map, const DefDatabase& defs, uint64_t seed, const s
         }
     } else {
         driftAmplitude_ = 0.0;  // no biome: a constant temperature
+    }
+    if (yearMean) {
+        const double shift = *yearMean - yearMeanTemperature();
+        for (double& mean : seasonMean_) {
+            mean += shift;
+        }
     }
 
     kindOfDef_.assign(defs.size(), -1);
@@ -169,7 +176,8 @@ double Weather::drift(int64_t seconds) const {
 
 double Weather::temperatureAt(int64_t seconds) const {
     const double dayPercent = static_cast<double>(seconds % kSecondsPerDay) / static_cast<double>(kSecondsPerDay);
-    return seasonalMean(seconds) + weatherCosTurns(dayPercent + dayCyclePhase_) * dailySwing_ * 0.5 + drift(seconds);
+    return seasonalMean(seconds) + weatherCosTurns(dayPercent + dayCyclePhase_) * dailySwing_ * 0.5 + drift(seconds) +
+           (offset_ ? offset_(seconds) : 0.0);
 }
 
 // ---- Weather ---------------------------------------------------------------------------------
@@ -190,7 +198,9 @@ WeatherEffects Weather::effects() const {
     const Kind* before = kindOf(state_.previous);
     const float t = transition();
     if (before == nullptr || before == now || t >= 1.0f) {
-        return now->effects;
+        WeatherEffects steady = now->effects;
+        steady.skyGlow *= glowScale_;
+        return steady;
     }
     const WeatherEffects& a = before->effects;
     const WeatherEffects& b = now->effects;
@@ -205,6 +215,7 @@ WeatherEffects Weather::effects() const {
     out.wetness = weatherLerp(a.wetness, b.wetness, t);
     out.extinguishesFire = t >= 0.5f ? b.extinguishesFire : a.extinguishesFire;
     out.lightning = t >= 0.5f ? b.lightning : a.lightning;
+    out.skyGlow *= glowScale_;
     return out;
 }
 

@@ -1,12 +1,14 @@
 #include "ColonySim/UpperFloors.h"
 
 #include "ColonySim/Map.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Things.h"
 
 namespace colony {
 
-UpperFloors::UpperFloors(Map& map, Rooms& rooms, Things& things) : map_(map), rooms_(rooms), things_(things) {}
+UpperFloors::UpperFloors(Map& map, Rooms& rooms, Things& things, Plants* plants)
+    : map_(map), rooms_(rooms), things_(things), plants_(plants) {}
 
 std::string UpperFloors::whyNotLay(CellPos c) const {
     if (!map_.inBounds(c) || c.level < 1) {
@@ -53,7 +55,13 @@ bool UpperFloors::lay(CellPos c, std::string* why) {
         }
         return false;
     }
-    return map_.setUpperFloor(c, true);
+    if (!map_.setUpperFloor(c, true)) {
+        return false;
+    }
+    if (plants_ != nullptr) {
+        plants_->remove(CellPos{c.x, c.y, 0});  // no light under a floor
+    }
+    return true;
 }
 
 bool UpperFloors::remove(CellPos c, std::string* why) {

@@ -6,7 +6,14 @@
     "daysPassedFactor": [[10, 0.7], [40, 1.0]],
     "buildingWealthFactor": 0.5,
     "threatScale": 1.0,
-    "adaptation": 0.8,
+    "adaptGrowth": [[-60, 3], [0, 1], [60, 0.5], [120, 0.25]],
+    "adaptFactor": [[-30, 0.4], [0, 0.8], [30, 1.0], [60, 1.2], [120, 1.6], [180, 2.0]],
+    "adaptDeath": [[0, 30], [11, 30], [20, 20]],
+    "adaptDowned": [[1, 8], [2, 6], [3, 6], [11, 5], [20, 3.5]],
+    "adaptMin": -60,
+    "adaptMax": 100,
+    "adaptGraceDays": 30,
+    "adaptGrowthHours": 12,
     "minPoints": 35,
     "maxPoints": 10000,
     "fleeLostFraction": 0.5,
@@ -30,11 +37,12 @@
     "weightAssault": 60, "weightSappers": 12, "weightDropPods": 14, "weightThieves": 8, "weightKidnappers": 6,
     "blockedBoost": 8, "dropPodsMinPoints": 120, "dropMinDistance": 8, "dropMaxDistance": 24,
     "sapDamage": 4, "sapReach": 2.2, "sapSearch": 60000, "grabReach": 1.6, "stealMass": 40, "kidnapRange": 90, "seizeRange": 12,
-    "unverified": ["fleeLostFraction", "giveUpHoursMin", "giveUpHoursMax", "daysPassedFactor"],
-    "ours": ["adaptation", "squadThinkEvery", "advanceRatio", "holdRatio", "hysteresis", "retargetDistance", "edgeDepth", "alarmThinkEvery",
+    "unverified": ["adaptGrowth", "fleeLostFraction", "giveUpHoursMin", "giveUpHoursMax", "daysPassedFactor"],
+    "ours": ["squadThinkEvery", "advanceRatio", "holdRatio", "hysteresis", "retargetDistance", "edgeDepth", "alarmThinkEvery",
              "sightRange", "keepWorkingRadius", "defenseLine", "defenderLeash", "spotLeash", "lineMoves", "shelterSearch", "shelterFlee",
              "weightAssault", "weightSappers", "weightDropPods", "weightThieves", "weightKidnappers", "blockedBoost", "dropPodsMinPoints",
              "dropMinDistance", "dropMaxDistance", "sapDamage", "sapReach", "sapSearch", "grabReach", "stealMass", "kidnapRange", "seizeRange"],
-    "notes": "Raid points from the wiki's Raid points page: wealth points and points per colonist by storyteller wealth, Strive to survive (threat scale 1), the starting factor 0.7 to day 10 and 1 from day 40 (straight line between: unverified), adaptation fixed at its start value 0.8 until adaptation is tracked. fleeLostFraction and the give-up time (RimWorld's 26,000 to 38,000 ticks) are recalled from RimWorld's assault plan."
+    "notes": "Raid points from the wiki's Raid points page: wealth points and points per colonist by storyteller wealth, Strive to survive (threat scale 1), the starting factor 0.7 to day 10 and 1 from day 40 (straight line between: unverified), adaptation from the wiki: AdaptDays start at 0 (factor 0.8), cannot pass 0 in the first 30 days, grow every 12 hours by the step list (the wiki's table halved; whether its numbers are per check or per day is unclear, we took per day), fall by 30 (6 to 11 colonists) when a colonist dies and by 8 to 3.5 when one goes down, stay between -60 and 100; the factor curve is blended with 1 by the difficulty's adaptationImpact and grows by its adaptationGrowth. fleeLostFraction and the give-up time (RimWorld's 26,000 to 38,000 ticks) are recalled from RimWorld's assault plan."
+
   }
 ]

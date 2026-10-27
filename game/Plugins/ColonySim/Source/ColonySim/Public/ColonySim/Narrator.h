@@ -194,6 +194,7 @@ private:
     bool fireCategory(IncidentCategory category);
     bool happen(const Incident& incident, float points, bool forced, std::string& error);
     float pointsFor(const Incident& incident, float points, bool roll);
+    void applyAdaptation();
     void planCycle(int64_t start);
     void check();
     bool raidWorker(IncidentFiring& firing);

@@ -78,7 +78,14 @@ void raidReadRules(const DefDatabase& defs, RaidRules& r) {
     raidReadCurve(*def, "daysPassedFactor", r.daysPassedFactor);
     num("buildingWealthFactor", r.buildingWealthFactor);
     num("threatScale", r.threatScale);
-    num("adaptation", r.adaptation);
+    raidReadCurve(*def, "adaptGrowth", r.adaptGrowth);
+    raidReadCurve(*def, "adaptFactor", r.adaptFactor);
+    raidReadCurve(*def, "adaptDeath", r.adaptDeath);
+    raidReadCurve(*def, "adaptDowned", r.adaptDowned);
+    num("adaptMin", r.adaptMin);
+    num("adaptMax", r.adaptMax);
+    num("adaptGraceDays", r.adaptGraceDays);
+    num("adaptGrowthHours", r.adaptGrowthHours);
     num("minPoints", r.minPoints);
     num("maxPoints", r.maxPoints);
     num("fleeLostFraction", r.fleeLostFraction);
@@ -118,6 +125,8 @@ void raidReadRules(const DefDatabase& defs, RaidRules& r) {
     r.squadThinkEvery = std::max(1, r.squadThinkEvery);
     r.alarmThinkEvery = std::max(1, r.alarmThinkEvery);
     r.edgeDepth = std::max(0, r.edgeDepth);
+    r.adaptGrowthHours = std::max(0.1f, r.adaptGrowthHours);
+    r.adaptMax = std::max(r.adaptMin, r.adaptMax);
     r.giveUpHoursMax = std::max(r.giveUpHoursMin, r.giveUpHoursMax);
 }
 
@@ -232,6 +241,84 @@ float RaidSystem::colonyWealth() const {
     return static_cast<float>(items + buildings * rules_.buildingWealthFactor);
 }
 
+float RaidSystem::adaptationFactor() const {
+    return 1.0f + (raidCurve(rules_.adaptFactor, state_.adaptDays) - 1.0f) * adaptImpact_;
+}
+
+void RaidSystem::setAdaptation(float growth, float impact) {
+    adaptGrowthRate_ = std::max(0.0f, growth);
+    adaptImpact_ = std::clamp(impact, 0.0f, 1.0f);
+}
+
+// Every 12 hours the days grow by the step list; whenever a colonist goes down or dies they fall.
+void RaidSystem::thinkAdaptation() {
+    const entt::registry& reg = things_.registry();
+    const int64_t interval = static_cast<int64_t>(rules_.adaptGrowthHours * 3600.0f);
+    int guard = 0;
+    while (now() >= state_.nextAdaptGrowth && guard++ < 1000) {
+        state_.nextAdaptGrowth += interval;
+        float add = 0.0f;
+        for (const RaidRules::Point& p : rules_.adaptGrowth) {
+            if (state_.adaptDays >= p.x) {
+                add = p.y;
+            }
+        }
+        add *= 0.5f * adaptGrowthRate_ * (rules_.adaptGrowthHours / 12.0f);
+        const float graceDays = static_cast<float>(state_.nextAdaptGrowth - interval) / static_cast<float>(kSecondsPerDay);
+        float days = state_.adaptDays + add;
+        if (graceDays < rules_.adaptGraceDays) {
+            days = std::min(days, std::max(state_.adaptDays, 0.0f));
+        }
+        state_.adaptDays = std::clamp(days, rules_.adaptMin, rules_.adaptMax);
+    }
+    // Who is on the colony's books now, in id order.
+    std::vector<Entity> live;
+    for (const Entity e : reg.view<const Colonist>()) {
+        const Health* h = reg.try_get<Health>(e);
+        if (things_.spawned(e) && fighters_.factionOf(e) == kPlayerFaction && (h == nullptr || !h->dead)) {
+            live.push_back(e);
+        }
+    }
+    std::sort(live.begin(), live.end());
+    const float population = static_cast<float>(std::max<size_t>(live.size(), state_.adaptPawns.size()));
+    std::vector<RaidState::AdaptPawn> next;
+    size_t known = 0;
+    float lost = 0.0f;
+    for (const Entity e : live) {
+        const Health* h = reg.try_get<Health>(e);
+        const bool downed = h != nullptr && h->downed;
+        while (known < state_.adaptPawns.size() && state_.adaptPawns[known].pawn < e) {
+            // Gone from the books: dead (it loses the most) or just gone (nothing).
+            const Entity gone = state_.adaptPawns[known].pawn;
+            const Health* gh = reg.valid(gone) ? reg.try_get<Health>(gone) : nullptr;
+            if (gh != nullptr && gh->dead) {
+                lost += raidCurve(rules_.adaptDeath, population);
+            }
+            ++known;
+        }
+        bool wasDowned = downed;  // somebody new is not counted as going down
+        if (known < state_.adaptPawns.size() && state_.adaptPawns[known].pawn == e) {
+            wasDowned = state_.adaptPawns[known].downed;
+            ++known;
+        }
+        if (downed && !wasDowned) {
+            lost += raidCurve(rules_.adaptDowned, population);
+        }
+        next.push_back(RaidState::AdaptPawn{e, downed});
+    }
+    for (; known < state_.adaptPawns.size(); ++known) {
+        const Entity gone = state_.adaptPawns[known].pawn;
+        const Health* gh = reg.valid(gone) ? reg.try_get<Health>(gone) : nullptr;
+        if (gh != nullptr && gh->dead) {
+            lost += raidCurve(rules_.adaptDeath, population);
+        }
+    }
+    state_.adaptPawns = std::move(next);
+    if (lost > 0.0f) {
+        state_.adaptDays = std::clamp(state_.adaptDays - lost, rules_.adaptMin, rules_.adaptMax);
+    }
+}
+
 int RaidSystem::colonistCount() const {
     const entt::registry& reg = things_.registry();
     int count = 0;
@@ -249,7 +336,7 @@ float RaidSystem::threatPoints(float scale) const {
     const float pawnPoints = static_cast<float>(colonistCount()) * raidCurve(rules_.pointsPerColonist, wealth);
     float points = raidCurve(rules_.wealthPoints, wealth) + pawnPoints;
     const float days = static_cast<float>(now()) / static_cast<float>(kSecondsPerDay);
-    points *= rules_.threatScale * raidCurve(rules_.daysPassedFactor, days) * rules_.adaptation * scale;
+    points *= rules_.threatScale * raidCurve(rules_.daysPassedFactor, days) * adaptationFactor() * scale;
     return std::clamp(points, rules_.minPoints, rules_.maxPoints);
 }
 
@@ -657,6 +744,9 @@ DefenseRole RaidSystem::roleOf(Entity pawn) const {
 // ---- Each step --------------------------------------------------------------------------------
 
 void RaidSystem::step() {
+    if (now() % 5 == 0) {
+        thinkAdaptation();
+    }
     for (Squad& squad : state_.squads) {
         if (now() >= squad.nextThink) {
             squad.nextThink = now() + rules_.squadThinkEvery;
@@ -1935,6 +2025,13 @@ void RaidSystem::hashState(StateHasher& h) const {
     h.add(state_.shelter.y);
     h.add(state_.shelter.level);
     h.add(state_.nextAlarmThink);
+    h.add(state_.adaptDays);
+    h.add(state_.nextAdaptGrowth);
+    h.add(static_cast<uint64_t>(state_.adaptPawns.size()));
+    for (const RaidState::AdaptPawn& p : state_.adaptPawns) {
+        h.add(entt::to_integral(p.pawn));
+        h.add(p.downed);
+    }
 }
 
 void RaidSystem::hashThing(Entity e, StateHasher& h) const {
