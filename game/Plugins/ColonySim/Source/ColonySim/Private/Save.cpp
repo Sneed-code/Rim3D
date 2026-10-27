@@ -351,6 +351,8 @@ struct SaveRepair {
     bool marked = false;
     std::string order;  // Things defName, empty for none
     std::vector<std::string> parts;
+};
+
 // X2's resonance (section "resonance"): an attuned pawn and a cast under way, their powers by defName.
 struct SaveAttunement {
     int level = 1;
