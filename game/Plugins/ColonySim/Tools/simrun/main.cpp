@@ -55,6 +55,7 @@
 #include "ColonySim/Designations.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Pathfinder.h"
+#include "ColonySim/FieldCare.h"
 #include "ColonySim/Narrator.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Combat.h"
@@ -127,6 +128,7 @@ struct Options {
     std::string raidStrategy = "Assault";  // --raid-strategy NAME: Assault, Sappers, DropPods, Thieves, Kidnappers or Auto (F12)
     int raidSoak = 0;    // --raid-soak N: the F7 soak over N seeds from --seed
     bool armed = false;  // give every colonist an assault rifle first (not a command: not in replays)
+    bool medics = false; // --medics: the first colonist is the alarm's Medic, the second its Firefighter (F10)
     std::string narrator;    // --narrator NAME: a SetNarratorCommand at the first step (T1)
     std::string difficulty;  // --difficulty NAME: with it
     std::string png;
@@ -209,6 +211,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.raid = std::atof(argv[++i]);
         } else if (std::strcmp(arg, "--armed") == 0) {
             out.armed = true;
+        } else if (std::strcmp(arg, "--medics") == 0) {
+            out.medics = true;
         } else if (std::strcmp(arg, "--narrator") == 0 && hasValue) {
             out.narrator = argv[++i];
         } else if (std::strcmp(arg, "--difficulty") == 0 && hasValue) {
@@ -246,7 +250,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
                          "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--scenario colony [--verbose]] [--power] [--raid POINTS [--raid-strategy NAME]] [--armed] [--narrator NAME [--difficulty NAME]] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house [--verbose]] [--power] [--perf [--budget MS]] [--world FILE [--world-size WxH]] [--on-world [--world-tile N]] [--raid POINTS [--raid-strategy NAME]] [--armed] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house [--verbose]] [--power] [--perf [--budget MS]] [--world FILE [--world-size WxH]] [--on-world [--world-tile N]] [--raid POINTS [--raid-strategy NAME]] [--armed] [--medics] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS]\n");
             return false;
         }
@@ -833,6 +837,19 @@ int main(int argc, char** argv) {
     if (options.raid >= 0.0) {
         sim.submit(colony::StartStrategyRaidCommand{"Pirate", static_cast<float>(options.raid), -1, options.raidStrategy, -1.0f});
     }
+    // --medics (F10, docs/design/field-care.md): the first colonist tends and rescues the downed during the fight,
+    // the second puts out fires; the rest defend.
+    if (options.medics) {
+        std::vector<colony::Entity> crew;
+        for (const auto [pawn, colonist] : sim.things().registry().view<const colony::Colonist>().each()) {
+            crew.push_back(pawn);
+        }
+        std::sort(crew.begin(), crew.end());
+        for (size_t c = 0; c < crew.size() && c < 2; ++c) {
+            const colony::DefenseRole role = c == 0 ? colony::DefenseRole::Medic : colony::DefenseRole::Firefighter;
+            sim.submit(colony::SetDefenseRoleCommand{crew[c], static_cast<uint8_t>(role), false, colony::CellPos{}});
+        }
+    }
     // --narrator: the narrator sends incidents from the first step (T1, docs/design/narrator.md); each
     // letter is printed as it comes.
     if (!options.narrator.empty()) {
@@ -857,6 +874,9 @@ int main(int argc, char** argv) {
         uint64_t raiderShots = 0;
         uint64_t colonyShots = 0;
         std::string states;
+        int tendedInFight = 0;  // --medics: tends while the alarm was on
+        int dragged = 0;        // downed colonists a fighter carried to cover
+        int letGo = 0;          // carries that ended early
     } raid;
 
     // --farm: tame, grown chickens on a grid in the middle of the map (N4, docs/design/breeding.md).
@@ -1008,6 +1028,13 @@ int main(int argc, char** argv) {
                     case colony::EventType::PawnDowned: ++(ours ? raid.colonistsDowned : raid.raidersDowned); break;
                     case colony::EventType::PawnDied: ++(ours ? raid.colonistsDied : raid.raidersDied); break;
                     case colony::EventType::ShotFired: ++(ours ? raid.colonyShots : raid.raiderShots); break;
+                    case colony::EventType::PawnTended: raid.tendedInFight += sim.raids().state().alarm ? 1 : 0; break;
+                    case colony::EventType::PawnAction:
+                        if (e.action == colony::PawnAction::LayPawn && sim.things().exists(e.thing) &&
+                            sim.things().registry().all_of<colony::Fighter>(e.thing)) {
+                            ++(e.message == "safe" ? raid.dragged : raid.letGo);
+                        }
+                        break;
                     default: break;
                 }
             }
@@ -1244,6 +1271,12 @@ int main(int argc, char** argv) {
                     static_cast<long long>(raid.alarmOn), static_cast<long long>(raid.alarmOff), static_cast<long long>(raid.ended),
                     raid.states.c_str(), raid.left, raid.raidersDowned, raid.raidersDied, raid.colonistsDowned, raid.colonistsDied,
                     static_cast<unsigned long long>(raid.raiderShots), static_cast<unsigned long long>(raid.colonyShots));
+        if (options.medics) {
+            // Medics, firefighters and rescue under fire (docs/design/field-care.md).
+            std::printf("{\"fieldCare\":{\"tendedInFight\":%d,\"dragsStarted\":%llu,\"dragged\":%d,\"letGo\":%d,\"givenUp\":%llu}}\n",
+                        raid.tendedInFight, static_cast<unsigned long long>(sim.fieldCare().drags()), raid.dragged, raid.letGo,
+                        static_cast<unsigned long long>(sim.fieldCare().givenUp()));
+        }
         if (options.check && options.raid >= 0.0 && (raid.arrived < 0 || raid.ended < 0 || raid.raiderShots + raid.colonyShots == 0)) {
             std::fprintf(stderr, "check failed: the raid didn't arrive, didn't end, or nobody fired a shot\n");
             return 1;

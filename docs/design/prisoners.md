@@ -99,12 +99,12 @@ after the capture.
 Event `PrisonerExecuted` (`thing` the prisoner, `target` the warden, `message` "guilty" or "innocent") comes before the
 death. Every living colonist except Psychopath, Bloodlust and Cannibal ones remembers it: `KnowPrisonerExecutedGuilty` (-2,
 6 days) or `KnowPrisonerExecuted` (-5, 6 days) (RimWorld wiki, Thoughts/Memory Death). The wiki has no faction goodwill loss
-for an execution, so there is none (goodwill itself waits for C23).
+for an execution; ours is a house rule: `execute` calls `TradeSystem::noteExecuted`, -10 with the prisoner's faction (`trade.md`).
 
 ## Organ harvesting
 
-Surgery (H3, PR #119) is not merged yet, so only the hook is here: `PrisonerSystem::noteOrganHarvested(victim, surgeon, part)`
-raises `OrganHarvested` (`message` "colonist" for one of ours, "prisoner" for anyone else), to be called by the operation
+The surgery `HarvestOrgan` (`surgery.md`) calls `PrisonerSystem::noteOrganHarvested(victim, surgeon, part)` when it works. It
+raises `OrganHarvested` (`message` "colonist" for one of ours, "prisoner" for anyone else), the operation
 that takes a healthy organ from a living pawn (not a prosthetic). The colony's moods are in (RimWorld wiki): the victim, if
 a colonist, gets `MyOrganHarvested` (-30, 8 days); other colonists get `KnowColonistOrganHarvested` (-6, 6 days; not
 Psychopath or Bloodlust) for a colonist victim, or `KnowGuestOrganHarvested` (-6, 6 days; not Psychopath, Bloodlust or
@@ -125,7 +125,7 @@ jobs reuse `thing`, `site`, `chair`, `cell`, `count`). Commands `SetPrisonerMode
 
 ## Not here
 
-Arresting colonists (and the "was imprisoned" thought), euthanasia, the "innocent prisoner died" thought, selling prisoners, the surgery that harvests (waits for H3), slaves, a prison cell
+Arresting colonists (and the "was imprisoned" thought), euthanasia, the "innocent prisoner died" thought, selling prisoners, slaves, a prison cell
 that must be enclosed, wardens escorting a freed prisoner out, goodwill from a release, prisoners eating from a dispenser or
 food lying in their cell, the warden's opinion in the resistance formula and prisoner traits (C20), the prisoner tab in the
 panels (U18), prisoners breaking out by themselves (T3 calls `breakOut`), a prisoner's mental breaks (C19).
