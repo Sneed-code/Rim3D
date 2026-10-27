@@ -77,6 +77,7 @@ class Weather;
 class Zones;
 class Farming;
 class NarratorSystem;
+class DisasterSystem;
 struct Snapshot;
 class SimSaveAccess;
 
@@ -331,6 +332,10 @@ public:
     // The narrator, incidents and threat points (docs/design/narrator.md).
     NarratorSystem& narrator() { return *narrator_; }
     const NarratorSystem& narrator() const { return *narrator_; }
+    // Disasters and bad events: solar flare, toxic fallout, volcanic winter, flashstorm, psychic waves, blight,
+    // manhunters, short circuits (docs/design/disasters.md).
+    DisasterSystem& disasters() { return *disasters_; }
+    const DisasterSystem& disasters() const { return *disasters_; }
     // Prisoners: capture, feeding, warden talks, recruiting and release (docs/design/prisoners.md).
     // The spaceship ending: parts, reactor, siege waves, launch (docs/design/ship.md).
     ShipSystem& ship() { return *ship_; }
@@ -467,6 +472,7 @@ private:
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<NarratorSystem> narrator_;  // after raids_
+    std::unique_ptr<DisasterSystem> disasters_;  // T3, after the narrator and everything it touches
     std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
 };
 

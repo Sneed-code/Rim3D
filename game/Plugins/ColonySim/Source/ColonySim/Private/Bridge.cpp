@@ -312,6 +312,9 @@ const char* eventTypeName(EventType type) {
         case EventType::PawnMentalBreakEnded: return "PawnMentalBreakEnded";
         case EventType::PawnInsulted: return "PawnInsulted";
         case EventType::PawnLeftColony: return "PawnLeftColony";
+        case EventType::DisasterStarted: return "DisasterStarted";
+        case EventType::DisasterEnded: return "DisasterEnded";
+        case EventType::LightningStrike: return "LightningStrike";
         case EventType::QuestOffered: return "QuestOffered";
         case EventType::QuestAccepted: return "QuestAccepted";
         case EventType::QuestDeclined: return "QuestDeclined";
