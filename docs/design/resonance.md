@@ -82,8 +82,11 @@ this order, and uses the first that fits (all thresholds ours, in `ResonanceRule
 
 1. **Numb** the friend (itself included) in the most pain, if it is 35% or more (`aiNumbPain`) and not
    numbed already.
-2. **Jump** to its spot when falling back with an able enemy within 4 m (`aiJumpThreat`) and the spot
-   5 m or more away (`aiJumpMin`).
+2. **Jump** away when it wants out and an able enemy is within 4 m (`aiJumpThreat`). It wants out when
+   it falls back, or would (outnumbered or badly hurt, the fighters' own test) but stands and fights
+   because the enemy is at arm's length and nobody gets away on foot ([melee.md](melee.md)). It goes to its
+   fall-back spot if that is 5 m or more away (`aiJumpMin`), else 12 m (`aiJumpEscape`, then less, down
+   to 5 m) straight away from the enemies close by, or up to 90 degrees to either side.
 3. **Stun** a known able enemy within 4 m of one of its side (`aiStunReach`), else one that is aiming
    or firing; nearest first.
 4. **Burden** a known able enemy within 12 m (`aiBurdenRange`) that is walking.

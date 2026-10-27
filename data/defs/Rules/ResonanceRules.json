@@ -17,7 +17,8 @@
     "aiBurdenRange": 12,
     "aiJumpThreat": 4,
     "aiJumpMin": 5,
+    "aiJumpEscape": 12,
     "note": "Strain limit is (strainLimitBase + level) x strainLimitPerLevel x the pawn's resonance sensitivity: 30 at level 1. Strain falls 0.54 a real second (0.018 a step) at level 1, 12.5% faster a level, and 3x pain faster again. Focus decays by the band it is in, per game day. minFocusByLevel is indexed by the power's level. The ai numbers are when a fighter uses a power (docs/design/resonance.md).",
-    "ours": ["startFocus", "aiEvery", "aiNumbPain", "aiStunReach", "aiBurdenRange", "aiJumpThreat", "aiJumpMin"]
+    "ours": ["startFocus", "aiEvery", "aiNumbPain", "aiStunReach", "aiBurdenRange", "aiJumpThreat", "aiJumpMin", "aiJumpEscape"]
   }
 ]

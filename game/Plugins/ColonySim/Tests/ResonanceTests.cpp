@@ -349,7 +349,7 @@ TEST_CASE("Resonance: an attuned fighter stuns an enemy at a friend's side and n
     CHECK(numbed);
 }
 
-TEST_CASE("Resonance: a fighter falling back from an enemy at arm's length jumps to its spot") {
+TEST_CASE("Resonance: an outnumbered fighter with enemies at arm's length jumps away") {
     auto sim = resoSim(3);
     const Entity caster = resoPawn(*sim, 40, 40, "Gun_Revolver");
     std::vector<Entity> raiders;
@@ -360,7 +360,7 @@ TEST_CASE("Resonance: a fighter falling back from an enemy at arm's length jumps
     }
     sim->submit(AttuneCommand{caster, 4});  // a level 1 power at random, and the jump
     sim->step();
-    sim->submit(SetFactionCommand{caster, 3});  // an AI fighter of its own side, outnumbered: it falls back
+    sim->submit(SetFactionCommand{caster, 3});  // an AI fighter of its own side, outnumbered, too close to run
     bool jumped = false;
     for (int i = 0; i < 200 && !jumped; ++i) {
         for (const Entity r : raiders) {

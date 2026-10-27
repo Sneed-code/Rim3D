@@ -96,6 +96,7 @@ struct COLONY_API ResonanceRules {
     float aiBurdenRange = 12.0f;
     float aiJumpThreat = 4.0f;
     float aiJumpMin = 5.0f;
+    float aiJumpEscape = 12.0f;
 
     static ResonanceRules read(const DefDatabase& defs);
 };
@@ -165,6 +166,7 @@ private:
     void jump(Entity pawn, CellPos cell);
     void effectsChanged(Entity pawn);
     void think(Entity pawn);
+    bool escapeCell(Entity pawn, const PowerDef& p, float awayX, float awayY, CellPos& cell) const;
     int64_t now() const;
 };
 

@@ -73,6 +73,7 @@ ResonanceRules ResonanceRules::read(const DefDatabase& defs) {
     r.aiBurdenRange = static_cast<float>(d->number("aiBurdenRange", r.aiBurdenRange));
     r.aiJumpThreat = static_cast<float>(d->number("aiJumpThreat", r.aiJumpThreat));
     r.aiJumpMin = static_cast<float>(d->number("aiJumpMin", r.aiJumpMin));
+    r.aiJumpEscape = static_cast<float>(d->number("aiJumpEscape", r.aiJumpEscape));
     return r;
 }
 
@@ -621,8 +622,41 @@ void ResonanceSystem::step() {
     }
 }
 
+// Where a jump away goes when there is no fall-back spot: aiJumpEscape metres (then less, down to aiJumpMin)
+// straight away from the enemies close by, else up to 90 degrees to either side; the first cell the
+// jump may go to. No trigonometry, so every platform picks the same cell.
+bool ResonanceSystem::escapeCell(Entity pawn, const PowerDef& p, float awayX, float awayY, CellPos& cell) const {
+    const Position& self = things_.registry().get<Position>(pawn);
+    float len = std::sqrt(awayX * awayX + awayY * awayY);
+    if (len < 1e-3f) {
+        awayX = 1.0f;
+        awayY = 0.0f;
+        len = 1.0f;
+    }
+    const float ux = awayX / len;
+    const float uy = awayY / len;
+    constexpr float kRoot3Half = 0.8660254f;
+    // (cos, sin) of 0, +-30, +-60 and +-90 degrees.
+    constexpr float kTurns[7][2] = {{1.0f, 0.0f}, {kRoot3Half, 0.5f}, {kRoot3Half, -0.5f}, {0.5f, kRoot3Half},
+                                    {0.5f, -kRoot3Half}, {0.0f, 1.0f}, {0.0f, -1.0f}};
+    const float reach = std::min(rules_.aiJumpEscape, p.range);
+    std::string why;
+    for (const float d : {reach, (reach + rules_.aiJumpMin) * 0.5f, rules_.aiJumpMin}) {
+        for (const auto& t : kTurns) {
+            const float dx = ux * t[0] - uy * t[1];
+            const float dy = ux * t[1] + uy * t[0];
+            const CellPos c{static_cast<int>(std::floor(self.x + dx * d)), static_cast<int>(std::floor(self.y + dy * d)), self.level};
+            if (checkTarget(pawn, p, pawn, c, why)) {
+                cell = c;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 // The fighter AI's use of powers (docs/design/resonance.md): numb a friend (or itself) in pain, jump away
-// to its spot when falling back from an enemy at arm's length, stun an enemy that is about to hit a
+// from an enemy at arm's length when it wants out (to its fall-back spot if it has one), stun an enemy that is about to hit a
 // friend or is shooting, burden one closing in. One power per look, in that order.
 void ResonanceSystem::think(Entity pawn) {
     entt::registry& reg = things_.registry();
@@ -711,10 +745,39 @@ void ResonanceSystem::think(Entity pawn) {
         return x.priority != y.priority ? x.priority > y.priority : (x.distance != y.distance ? x.distance < y.distance : x.pawn < y.pawn);
     });
 
-    // Falling back with an enemy at arm's length: away first.
-    if (const PowerDef* p = usable(PowerDef::Kind::Jump)) {
-        if (f.fallingBack && nearest <= rules_.aiJumpThreat && f.hasSpot && resoCellDist(self, f.spot) >= rules_.aiJumpMin &&
-            checkTarget(pawn, *p, pawn, f.spot, why) && cast(pawn, p->def, pawn, f.spot, false, why)) {
+    // Wanting out with an enemy at arm's length: away first. It wants out when it falls back, or would
+    // (outnumbered or badly hurt, the fighters' own test) but stands because nobody gets away on foot (F8).
+    if (const PowerDef* p = usable(PowerDef::Kind::Jump); p != nullptr && nearest <= rules_.aiJumpThreat) {
+        const FighterRules& fr = fighters_.rules();
+        int enemiesNear = 0;
+        float awayX = 0.0f;
+        float awayY = 0.0f;
+        for (const Foe& foe : foes) {
+            enemiesNear += foe.distance <= fr.countRadius ? 1 : 0;
+            if (foe.distance <= rules_.aiJumpThreat) {
+                const Position& at = reg.get<Position>(foe.pawn);
+                awayX += self.x - at.x;
+                awayY += self.y - at.y;
+            }
+        }
+        int friendsNear = 0;
+        for (const Entity e : friends) {
+            const Position& fp = reg.get<Position>(e);
+            friendsNear += reg.all_of<Fighter>(e) && !health_.incapacitated(e) && fp.level == self.level &&
+                                   resoDist(fp.x, fp.y, self.x, self.y) <= fr.countRadius
+                               ? 1
+                               : 0;
+        }
+        const bool wantsOut = f.fallingBack || f.retreat ||
+                              static_cast<float>(enemiesNear) >= fr.outnumberedRatio * static_cast<float>(friendsNear) ||
+                              fighters_.badlyHurt(pawn);
+        CellPos to;
+        const bool toSpot = f.fallingBack && f.hasSpot && resoCellDist(self, f.spot) >= rules_.aiJumpMin &&
+                            checkTarget(pawn, *p, pawn, f.spot, why);
+        if (toSpot) {
+            to = f.spot;
+        }
+        if (wantsOut && (toSpot || escapeCell(pawn, *p, awayX, awayY, to)) && cast(pawn, p->def, pawn, to, false, why)) {
             return;
         }
     }
