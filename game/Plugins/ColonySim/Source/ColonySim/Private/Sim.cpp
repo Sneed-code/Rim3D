@@ -64,6 +64,7 @@
 #include "WoundViews.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <utility>
@@ -143,6 +144,28 @@ void simHashCell(StateHasher& h, CellPos c) {
     h.add(c.y);
     h.add(c.level);
 }
+
+// Times its scope into the profile, if there is one.
+class SimLap {
+public:
+    SimLap(StepProfile* profile, const char* name) : profile_(profile), name_(name) {
+        if (profile_ != nullptr) {
+            start_ = std::chrono::steady_clock::now();
+        }
+    }
+    ~SimLap() {
+        if (profile_ != nullptr) {
+            profile_->add(name_, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start_).count());
+        }
+    }
+    SimLap(const SimLap&) = delete;
+    SimLap& operator=(const SimLap&) = delete;
+
+private:
+    StepProfile* profile_;
+    const char* name_;
+    std::chrono::steady_clock::time_point start_;
+};
 
 }  // namespace
 
@@ -1365,6 +1388,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
 }
 
 void Sim::step() {
+    SimLap total(profile_, "total");
+    if (profile_ != nullptr) {
+        ++profile_->steps;
+    }
     events_.clear();
     // A controlled pawn only has a velocity in the steps it was moved.
     for (const auto [pawn, mover] : things_->registry().view<Mover, const PlayerControl>().each()) {
@@ -1382,8 +1409,8 @@ void Sim::step() {
     pending_.swap(applying);
 
     temperature_->setOutdoor(outdoorTemperature());
-    health_->step(time_.seconds, settings_.seed);
-    needs_->step();
+    { SimLap lap(profile_, "health"); health_->step(time_.seconds, settings_.seed); }
+    { SimLap lap(profile_, "needs"); needs_->step(); }
     // A controlled colonist who goes down or dies is let go: the player can't walk it any more.
     {
         entt::registry& reg = things_->registry();
@@ -1395,75 +1422,76 @@ void Sim::step() {
         }
     }
     const size_t eventsBefore = events_.size();
-    jobs_->fuel().step();
-    jobs_->step();
-    raids_->step();
+    { SimLap lap(profile_, "jobs"); jobs_->fuel().step(); }
+    { SimLap lap(profile_, "jobs"); jobs_->step(); }
+    { SimLap lap(profile_, "raids"); raids_->step(); }
     {
         std::vector<Event> gained;
         talents_->awardJobXp(events_, eventsBefore, gained);
         events_.insert(events_.end(), gained.begin(), gained.end());
     }
-    fighters_->step();
-    prisoners_->step();
-    trade_->step(events_);
-    quests_->step();
-    ship_->step();
-    recreation_->step();
-    drugs_->step(time_.seconds);
+    { SimLap lap(profile_, "fighters"); fighters_->step(); }
+    { SimLap lap(profile_, "prisoners"); prisoners_->step(); }
+    { SimLap lap(profile_, "trade"); trade_->step(events_); }
+    { SimLap lap(profile_, "quests"); quests_->step(); }
+    { SimLap lap(profile_, "ship"); ship_->step(); }
+    { SimLap lap(profile_, "recreation"); recreation_->step(); }
+    { SimLap lap(profile_, "drugs"); drugs_->step(time_.seconds); }
     if (time_.seconds % kSecondsPerHour == 0) {
         drugs_->prune();
     }
-    animals_->step();
-    husbandry_->step();
-    breeding_->step();
-    social_->step(time_.seconds);
-    mentalBreaks_->step(time_.seconds, rng_);  // before the mood system, which turns its events into memories
-    mood_->step(time_.seconds, events_);
-    inspirations_->step(time_.seconds);
-    movement_->step(things_->registry(), map_);
-    melee_->step();
-    combat_->step(rng_);
-    explosives_->step(rng_);
+    { SimLap lap(profile_, "animals"); animals_->step(); }
+    { SimLap lap(profile_, "husbandry"); husbandry_->step(); }
+    { SimLap lap(profile_, "breeding"); breeding_->step(); }
+    { SimLap lap(profile_, "social"); social_->step(time_.seconds); }
+    { SimLap lap(profile_, "mentalBreaks"); mentalBreaks_->step(time_.seconds, rng_); }  // before the mood system, which turns its events into memories
+    { SimLap lap(profile_, "mood"); mood_->step(time_.seconds, events_); }
+    { SimLap lap(profile_, "inspirations"); inspirations_->step(time_.seconds); }
+    { SimLap lap(profile_, "movement"); movement_->step(things_->registry(), map_); }
+    { SimLap lap(profile_, "melee"); melee_->step(); }
+    { SimLap lap(profile_, "combat"); combat_->step(rng_); }
+    { SimLap lap(profile_, "explosives"); explosives_->step(rng_); }
     animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
-    defense_->step(rng_);
-    monsters_->step(events_, 0);  // mounds make jelly, brood and spread; insects hunt (docs/design/monsters.md)
+    { SimLap lap(profile_, "defense"); defense_->step(rng_); }
+    { SimLap lap(profile_, "monsters"); monsters_->step(events_, 0); }  // mounds make jelly, brood and spread; insects hunt (docs/design/monsters.md)
     {
         // Blasts of Burn damage start fires; a pawn that catches fire stops what it was doing.
-        fire_->step(time_.seconds, 0);
+        { SimLap lap(profile_, "fire"); fire_->step(time_.seconds, 0); }
         for (size_t i = 0; i < events_.size(); ++i) {
             if (events_[i].type == EventType::PawnCaughtFire) {
                 jobs_->interrupt(events_[i].thing, "it caught fire");
             }
         }
     }
-    apparel_->step(time_.seconds, rng_, events_);
-    pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
-    rooms_->update();
-    roofCollapse_->step(rng_);  // roofs and floors that lost their holders fall
-    power_->step(time_);
-    lights_->update();
-    filth_->step();
-    roomStats_->step(time_.seconds);
-    temperature_->step(time_.seconds);
-    spoilage_->step(time_.seconds);
+    { SimLap lap(profile_, "apparel"); apparel_->step(time_.seconds, rng_, events_); }
+    { SimLap lap(profile_, "pathfinder"); pathfinder_.update(settings_.pathBudget); }  // paths asked for this step are ready next step at the earliest
+    { SimLap lap(profile_, "rooms"); rooms_->update(); }
+    { SimLap lap(profile_, "roofCollapse"); roofCollapse_->step(rng_); }  // roofs and floors that lost their holders fall
+    { SimLap lap(profile_, "power"); power_->step(time_); }
+    { SimLap lap(profile_, "lights"); lights_->update(); }
+    { SimLap lap(profile_, "filth"); filth_->step(); }
+    { SimLap lap(profile_, "roomStats"); roomStats_->step(time_.seconds); }
+    { SimLap lap(profile_, "temperature"); temperature_->step(time_.seconds); }
+    { SimLap lap(profile_, "spoilage"); spoilage_->step(time_.seconds); }
     if (time_.seconds % kBillUpkeepSeconds == 0) {
         jobs_->bills().step();
         crafting_->step();
     }
     time_.seconds += 1;
-    weather_->step(time_.seconds);
+    { SimLap lap(profile_, "weather"); weather_->step(time_.seconds); }
     spoilage_->setOutdoorFactor(weather_->deteriorationFactor());
     if (time_.seconds % kSecondsPerDay == 0) {
         jobs_->skillsNewDay();
     }
     if (time_.seconds % kSecondsPerHour == 0) {
+        SimLap lap(profile_, "hourly");
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
         farming_->growHour(time_.seconds);
         filth_->fadeHour(weather_->effects().rainRate);
         pruneDesignations();
     }
-    narrator_->step();  // after the clock: incidents come on the narrator's checks (T1)
-    disasters_->step();  // T3: conditions end, work and strike
+    { SimLap lap(profile_, "narrator"); narrator_->step(); }  // after the clock: incidents come on the narrator's checks (T1)
+    { SimLap lap(profile_, "disasters"); disasters_->step(); }  // T3: conditions end, work and strike
     if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
         checkpoints_.push_back(Checkpoint{time_.seconds, stateHash()});
     }
