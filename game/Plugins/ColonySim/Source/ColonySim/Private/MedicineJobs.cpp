@@ -324,7 +324,7 @@ JobSystem::StepResult JobSystem::tendWork(Entity pawn, Job& job, std::string& wh
     }
     const MedicineRules& rules = medicine_->rules();
     const double manipulation = health_.capacityValue(pawn, "Manipulation");
-    const double speed = manipulation * lightWorkFactor(pawn);
+    const double speed = manipulation * workFactor(pawn);
     if (speed <= 0.0) {
         why = "it can't see to work";
         return StepResult::Failed;

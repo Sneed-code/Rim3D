@@ -1532,7 +1532,7 @@ JobSystem::StepResult JobSystem::place(Entity pawn, Job& job, std::string& why) 
 
 float JobSystem::constructionSpeed(Entity pawn, const char* skillName) const {
     const float talent = talents_ != nullptr ? static_cast<float>(talents_->statFactor(pawn, "buildSpeed")) : 1.0f;
-    return construction_.skillSpeed(pawn, skillName) * health_.capacityValue(pawn, "Manipulation") * lightWorkFactor(pawn) * talent;
+    return construction_.skillSpeed(pawn, skillName) * health_.capacityValue(pawn, "Manipulation") * workFactor(pawn) * talent;
 }
 
 JobSystem::StepResult JobSystem::deliver(Entity pawn, Job& job, std::string& why) {

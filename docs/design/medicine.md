@@ -21,7 +21,7 @@ reach, and the doctors used to chase one for hours (185 re-paths in the narrator
 `JobType::TendPatient`: walk to the medicine, pick one up, walk to the patient, work, tend. The medicine is the one the
 patient's **care setting** allows (below), the strongest first, then the nearest, that nobody else holds. With none the
 doctor tends by hand. The work takes `tendWorkSeconds` (864 = RimWorld's 600 ticks) at 100% speed; speed is Manipulation
-times the light (`lightWorkFactor`). A patient who walks off is followed (a few times, `maxRepaths`). At the end
+times the light (`workFactor`). A patient who walks off is followed (a few times, `maxRepaths`). At the end
 `HealthSystem::tendAll(patient, quality)` tends every untended injury and lost part at once (so they stop bleeding and
 heal faster), the medicine is used up if anything was tended, the doctor gets `tendXp` (500) of Medicine experience, and a
 `PawnTended` event comes out (`thing` the doctor, `target` the patient, `def` the medicine, `amount` the quality).

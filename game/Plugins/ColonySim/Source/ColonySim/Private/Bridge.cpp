@@ -386,6 +386,8 @@ const char* eventTypeName(EventType type) {
         case EventType::ShipReactorLost: return "ShipReactorLost";
         case EventType::ShipLaunched: return "ShipLaunched";
         case EventType::OperationDone: return "OperationDone";
+        case EventType::DrugBinge: return "DrugBinge";
+        case EventType::ChemicalDamage: return "ChemicalDamage";
         case EventType::SkipStarted: return "SkipStarted";
         case EventType::SkipEnded: return "SkipEnded";
     }
