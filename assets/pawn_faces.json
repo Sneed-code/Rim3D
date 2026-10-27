@@ -4,6 +4,11 @@
     "female": ["Ada", "Aera", "Aoi", "Asha", "Celeste", "Etta", "Grace", "Jelena", "Lani", "Sook-ja", "Sunita", "Tuya", "Vivian", "Zuri"],
     "male": ["Bo", "Bruce", "Cameron", "Dominic", "Isaiah", "Jorge", "Kelvin", "Lorenzo", "Mateo", "Mikel", "Omari", "Orlando", "Trey", "Victor", "Walter"]
   },
+  "skins": {
+    "comment": "V2b face skins: each preset's own face colour and normal map from the plugin's texture synthesis model (its skin settings). Women pick among the female ones; men among the male ones and Kellan's. Aoi is left out: the model marks her skin texture as heavy stubble.",
+    "female": ["Ada", "Aera", "Asha", "Celeste", "Etta", "Grace", "Jelena", "Lani", "Sook-ja", "Sunita", "Tuya", "Vivian", "Zuri"],
+    "male": ["Bo", "Bruce", "Cameron", "Dominic", "Isaiah", "Jorge", "Kelvin", "Lorenzo", "Mateo", "Mikel", "Omari", "Orlando", "Trey", "Victor", "Walter"]
+  },
   "hair": {
     "Short": "Hair_S_Casual",
     "Buzz": "Hair_S_BuzzCut",

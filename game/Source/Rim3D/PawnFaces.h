@@ -59,6 +59,15 @@ inline const FName PawnFacesParamOpacity(TEXT("Opacity"));
 /** Skin meshes write this custom stencil value; marks only draw where the nearest surface is skin. */
 constexpr int32 PawnFacesSkinStencil = 77;
 
+/** V2b: face skins from the Creator presets (Kellan's face texture is a man's): MI_FaceSkin_F0.. for women, MI_FaceSkin_M0..
+ *  for men, each our skin material with one preset's synthesized face colour and normal map. */
+inline FString PawnFacesSkinName(bool bFemale, int32 Index)
+{
+	return FString::Printf(TEXT("MI_FaceSkin_%s%d"), bFemale ? TEXT("F") : TEXT("M"), Index);
+}
+/** V2b: the skin under the clothes (U16's bare layer), lit like the face; the pawn sets SkinColor on a dynamic instance. */
+inline const TCHAR* const PawnFacesBareSkinMaterial = TEXT("M_PawnBareSkin");
+
 /** "/Game/Rim3D/Generated/PawnFaces/Name.Name" */
 inline FString PawnFacesAssetPath(const FString& Name)
 {

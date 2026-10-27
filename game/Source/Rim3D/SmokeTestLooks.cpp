@@ -163,7 +163,10 @@ void USmokeTestSubsystem::BuildLooksPhases()
 				bool bOurs = false;
 				for (int32 Slot = 0; Slot < Mesh->GetNumMaterials(); ++Slot)
 				{
-					bOurs = bOurs || (Mesh->GetMaterial(Slot) && Mesh->GetMaterial(Slot)->GetPathName().StartsWith(PawnLooksFolder));
+					// Our skin material: PawnLooks' instances, or (V2b) a PawnFaces face skin on it.
+					const UMaterialInterface* Material = Mesh->GetMaterial(Slot);
+					bOurs = bOurs || (Material && Material->GetMaterial() && Material->GetMaterial()->GetPathName().StartsWith(PawnLooksFolder)
+						&& Material->GetMaterial()->GetName() == PawnLooksSkinMaterial);
 				}
 				const TArray<float>& Data = Mesh->GetCustomPrimitiveData().Data;
 				const bool bColour = Data.Num() >= 3 && FMath::IsNearlyEqual(Data[0], Wanted.Skin.R, 1.0e-4f)

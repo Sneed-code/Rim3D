@@ -16,6 +16,7 @@
 #include "GroomComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "Misc/Crc.h"
 #include "PhysicsEngine/PhysicsAsset.h"
 
 #include "PawnFaces.h"
@@ -141,6 +142,10 @@ void ASimPawnActor::Setup(USimPawnSubsystem& Pawns, colony::Entity InThing, floa
 					{
 						Mesh->SetMaterial(Slot, Skin);
 						bSkin = true;
+						if (Mesh == FaceMesh)
+						{
+							FaceSkinSlots.Add(Slot, Skin);  // V2b: a face skin of the pawn's gender replaces it (ApplyFace)
+						}
 					}
 					else if (UMaterialInterface* Cloth = Pawns.GetClothMaterial(Current))
 					{
@@ -391,6 +396,10 @@ void ASimPawnActor::ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& In
 	}
 
 	// The clothes and the skin under them share the body's shape and the pawn's skin colour.
+	for (UMaterialInstanceDynamic* BareSkin : BareSkins)
+	{
+		BareSkin->SetVectorParameterValue(PawnLooksParamSkinColor, Looks.Skin);
+	}
 	for (USkeletalMeshComponent* Layer : BareLayer)
 	{
 		Layer->SetCustomPrimitiveDataVector3(0, FVector(Looks.Skin.R, Looks.Skin.G, Looks.Skin.B));
@@ -467,6 +476,22 @@ void ASimPawnActor::ApplyFace(USimPawnSubsystem& Pawns)
 		}
 	}
 
+	// V2b: the face texture, one of the gender's Creator preset skins picked by the face sliders (so it never changes for
+	// a pawn); men can also keep Kellan's. Without the skins everyone keeps Kellan's.
+	int32 Skins = 0;
+	while (Skins < 64 && Pawns.GetFacesAsset(PawnFacesSkinName(Looks.bFemale, Skins)))
+	{
+		++Skins;
+	}
+	const float Sliders[] = {Looks.FaceShape, Looks.Brow, Looks.Nose, Looks.Jaw};
+	const int32 Choices = Skins + (Looks.bFemale ? 0 : 1);
+	const int32 SkinPick = Choices > 0 ? static_cast<int32>(FCrc::MemCrc32(Sliders, sizeof(Sliders)) % static_cast<uint32>(Choices)) : 0;
+	UMaterialInterface* FaceSkin = SkinPick < Skins ? Cast<UMaterialInterface>(Pawns.GetFacesAsset(PawnFacesSkinName(Looks.bFemale, SkinPick))) : nullptr;
+	for (const TPair<int32, TObjectPtr<UMaterialInterface>>& Slot : FaceSkinSlots)
+	{
+		FaceMesh->SetMaterial(Slot.Key, FaceSkin ? FaceSkin : Slot.Value.Get());
+	}
+
 	SetGroom(Pawns, TEXT("Hair"), Looks.HairStyle == TEXT("Bald") ? FString() : PawnFacesGroomName(TEXT("Hair"), Looks.HairStyle));
 	const bool bBeard = !Looks.Beard.IsEmpty() && Looks.Beard != TEXT("None");
 	SetGroom(Pawns, TEXT("Beard"), bBeard ? PawnFacesGroomName(TEXT("Beard"), Looks.Beard) : FString());
@@ -484,6 +509,15 @@ void ASimPawnActor::ApplyFace(USimPawnSubsystem& Pawns)
 		SetGroom(Pawns, TEXT("Eyebrows"), PawnFacesGroomName(TEXT("Brows"), FString::Printf(TEXT("%s%d"), Gender, Pick)));
 	}
 	RefreshGroomVisibility();
+}
+
+UMaterialInterface* ASimPawnActor::GetFaceSkin() const
+{
+	for (const TPair<int32, TObjectPtr<UMaterialInterface>>& Slot : FaceSkinSlots)
+	{
+		return FaceMesh ? FaceMesh->GetMaterial(Slot.Key) : nullptr;
+	}
+	return nullptr;
 }
 
 void ASimPawnActor::SetGroom(USimPawnSubsystem& Pawns, FName Component, const FString& GroomName)
@@ -742,6 +776,7 @@ void ASimPawnActor::EnsureBareLayer(USimPawnSubsystem& Pawns)
 				Layer->DestroyComponent();
 			}
 			BareLayer.Reset();
+			BareSkins.Reset();
 			return;
 		}
 		USkeletalMeshComponent* Layer = NewObject<USkeletalMeshComponent>(MetaHuman);
@@ -754,6 +789,17 @@ void ASimPawnActor::EnsureBareLayer(USimPawnSubsystem& Pawns)
 		const FLinearColor Skin = bHasLooks ? Looks.Skin : FLinearColor(0.4f, 0.28f, 0.22f);
 		Layer->SetCustomPrimitiveDataVector3(PawnClothColorIndex, FVector(Skin.R, Skin.G, Skin.B));
 		Layer->SetCustomPrimitiveDataFloat(PawnClothWearIndex, 0.0f);
+		// V2b: lit like the face and hands (subsurface skin) and in the pawn's skin colour, on its own dynamic instance.
+		if (UMaterialInterface* BareSkin = Cast<UMaterialInterface>(Pawns.GetFacesAsset(PawnFacesBareSkinMaterial)))
+		{
+			UMaterialInstanceDynamic* Instance = UMaterialInstanceDynamic::Create(BareSkin, Layer);
+			Instance->SetVectorParameterValue(PawnLooksParamSkinColor, Skin);
+			for (int32 Slot = 0; Slot < Layer->GetNumMaterials(); ++Slot)
+			{
+				Layer->SetMaterial(Slot, Instance);
+			}
+			BareSkins.Add(Instance);
+		}
 		Layer->SetRenderCustomDepth(!MarkDecals.IsEmpty());  // skin marks land on it (ApplyMarks)
 		if (bHasLooks)
 		{

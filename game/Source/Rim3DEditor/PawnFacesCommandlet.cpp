@@ -17,6 +17,7 @@
 #include "MetaHumanCharacter.h"
 #include "MetaHumanCharacterIdentity.h"
 #include "MetaHumanCommonDataUtils.h"
+#include "MetaHumanFaceTextureSynthesizer.h"
 #include "MetaHumanRigEvaluatedState.h"
 #include "SkelMeshDNAUtils.h"
 #include "SkeletalMeshAttributes.h"
@@ -38,6 +39,7 @@
 #include "Materials/MaterialExpressionAbs.h"
 #include "Materials/MaterialExpressionComponentMask.h"
 #include "Materials/MaterialExpressionConstant.h"
+#include "Materials/MaterialExpressionConstant3Vector.h"
 #include "Materials/MaterialExpressionMultiply.h"
 #include "Materials/MaterialExpressionOneMinus.h"
 #include "Materials/MaterialExpressionSaturate.h"
@@ -45,6 +47,7 @@
 #include "Materials/MaterialExpressionSceneDepth.h"
 #include "Materials/MaterialExpressionSceneTexture.h"
 #include "Materials/MaterialExpressionSubtract.h"
+#include "Materials/MaterialExpressionTextureCoordinate.h"
 #include "Materials/MaterialExpressionTextureSampleParameter2D.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
 #include "Materials/MaterialInstanceConstant.h"
@@ -293,6 +296,7 @@ namespace
 	const TCHAR* const FacesHairMaterial = TEXT("/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair");
 	const TCHAR* const FacesKellanEye = TEXT("/Game/MetaHumans/Kellan/Face/Materials/MI_MetaHumanEye_Simplified.MI_MetaHumanEye_Simplified");
 	const TCHAR* const FacesIrisChart = TEXT("/Game/MetaHumans/Common/Face/Textures/T_iris_color_picker.T_iris_color_picker");
+	const TCHAR* const FacesMicroNormal = TEXT("/Game/MetaHumans/Common/Face/Textures/T_SkinMicroNormal001.T_SkinMicroNormal001");
 	// The DNA meshes of the face model's LOD 0, in order; Kellan's mesh sections are found by these names.
 	const TCHAR* const FacesParts[] = {TEXT("head"), TEXT("teeth"), TEXT("saliva"), TEXT("eyeLeft"), TEXT("eyeRight"), TEXT("eyeshell"),
 		TEXT("eyelashes"), TEXT("eyeEdge"), TEXT("cartilage")};
@@ -1625,6 +1629,197 @@ namespace
 		return Failures;
 	}
 
+	// ---------------------------------------------------------------------------------------------------------------
+	// Face skins (V2b): Kellan's face texture is a man's (stubble, a man's brow), so each Creator preset named in "skins"
+	// gets its own face colour and normal map from the plugin's texture synthesis model (offline, 1024 px), from the
+	// preset's own skin settings. Each goes on our skin material like Kellan's, so the pawn's skin colour still drives it.
+
+	const TCHAR* const FacesSynthesisModel = TEXT("Optional/TextureSynthesis/TS-1.3-F_UE_res-1024_nchr-153");
+
+	UTexture2D* FacesSaveImage(const FString& Name, const FImage& Image, bool bColor)
+	{
+		UPackage* Package = CreatePackage(*(FString(PawnFacesFolder) / Name));
+		UTexture2D* Texture = NewObject<UTexture2D>(Package, *Name, RF_Public | RF_Standalone);
+		Texture->PreEditChange(nullptr);
+		Texture->Source.Init(Image);
+		Texture->SetModernSettingsForNewOrChangedTexture();
+		Texture->CompressionSettings = bColor ? TC_Default : TC_Normalmap;
+		Texture->LODGroup = bColor ? TEXTUREGROUP_Character : TEXTUREGROUP_CharacterNormalMap;
+		Texture->SRGB = bColor;
+		Texture->MipGenSettings = TMGS_FromTextureGroup;
+		Texture->PostEditChange();
+		return FacesSave(Texture) ? Texture : nullptr;
+	}
+
+	// The same average PawnLooks takes of Kellan's textures (LooksAverageColor): linear, skipping the black outside
+	// the UV islands and the brightest texels.
+	FLinearColor FacesAverageColor(const FImage& Image)
+	{
+		FImage Linear;
+		Image.CopyTo(Linear, ERawImageFormat::RGBA32F, EGammaSpace::Linear);
+		const TArrayView64<FLinearColor> Pixels = Linear.AsRGBA32F();
+		FLinearColor Sum(0, 0, 0, 0);
+		int64 Count = 0;
+		for (int64 i = 0; i < Pixels.Num(); i += 7)
+		{
+			const float Luminance = Pixels[i].GetLuminance();
+			if (Luminance > 0.02f && Luminance < 0.9f)
+			{
+				Sum += Pixels[i];
+				++Count;
+			}
+		}
+		const FLinearColor Average = Count ? Sum / static_cast<float>(Count) : FLinearColor(0.5f, 0.5f, 0.5f);
+		return FLinearColor(Average.R, Average.G, Average.B, 1.0f);
+	}
+
+	int32 FacesMakeSkins(IAssetTools& Tools, const TSharedPtr<FJsonObject>& Config)
+	{
+		// Kellan's face skin instance (PawnLooks made it) is the template: our skin material, his roughness and specular.
+		USkeletalMesh* Kellan = LoadObject<USkeletalMesh>(nullptr, FacesKellanFace);
+		UMaterialInstanceConstant* Template = nullptr;
+		for (const FSkeletalMaterial& Slot : Kellan ? Kellan->GetMaterials() : TArray<FSkeletalMaterial>())
+		{
+			const FString Name = Slot.MaterialInterface ? PawnLooksSkinInstanceName(Slot.MaterialInterface->GetName()) : FString();
+			if (!Template && !Name.IsEmpty() && FPackageName::DoesPackageExist(FString(PawnLooksFolder) / Name))
+			{
+				Template = LoadObject<UMaterialInstanceConstant>(nullptr, *PawnLooksAssetPath(Name));
+			}
+		}
+		const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("MetaHumanCharacter"));
+		FMetaHumanFaceTextureSynthesizer Synthesizer;
+		if (!Template || !Template->Parent || !Plugin || !Synthesizer.Init(Plugin->GetContentDir() / FacesSynthesisModel, 6))
+		{
+			UE_LOG(LogPawnFaces, Error, TEXT("Face skins need Kellan's skin instance (run PawnLooks first) and the plugin's texture synthesis model"));
+			return 1;
+		}
+		UE_LOG(LogPawnFaces, Display, TEXT("Texture synthesis: %dx%d, %d skin textures, template %s"), Synthesizer.GetTextureSizeX(),
+			Synthesizer.GetTextureSizeY(), Synthesizer.GetMaxHighFrequencyIndex(), *Template->GetName());
+		const FMetaHumanFaceTextureAttributeMap& Attributes = Synthesizer.GetFaceTextureAttributeMap();
+
+		const TSharedPtr<FJsonObject>* Skins = nullptr;
+		Config->TryGetObjectField(TEXT("skins"), Skins);
+		int32 Failures = 0;
+		for (const bool bFemale : {true, false})
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Names = nullptr;
+			if (!Skins || !(*Skins)->TryGetArrayField(bFemale ? TEXT("female") : TEXT("male"), Names))
+			{
+				continue;
+			}
+			int32 Index = 0;
+			for (const TSharedPtr<FJsonValue>& Value : *Names)
+			{
+				const FString Name = Value->AsString();
+				const UMetaHumanCharacter* Preset = LoadObject<UMetaHumanCharacter>(nullptr, *FString::Printf(TEXT("%s/%s.%s"), FacesPresetFolder, *Name, *Name));
+				if (!Preset)
+				{
+					UE_LOG(LogPawnFaces, Warning, TEXT("Preset %s did not load; no skin from it"), *Name);
+					++Failures;
+					continue;
+				}
+				const FMetaHumanCharacterSkinProperties& Skin = Preset->SkinSettings.Skin;
+				FMetaHumanFaceTextureSynthesizer::FTextureSynthesisParams Params{FVector2f(Skin.U, Skin.V),
+					FMath::Clamp(Skin.FaceTextureIndex, 0, Synthesizer.GetMaxHighFrequencyIndex() - 1), FMetaHumanFaceTextureSynthesizer::EMapType::Base};
+				FImage Color(Synthesizer.GetTextureSizeX(), Synthesizer.GetTextureSizeY(), Synthesizer.GetTextureFormat(), Synthesizer.GetTextureColorSpace());
+				FImage Normal(Synthesizer.GetTextureSizeX(), Synthesizer.GetTextureSizeY(), Synthesizer.GetTextureFormat(), EGammaSpace::Linear);
+				if (!Synthesizer.SynthesizeAlbedo(Params, Color) || !Synthesizer.SelectNormal(Params, Normal))
+				{
+					UE_LOG(LogPawnFaces, Warning, TEXT("Preset %s: texture synthesis failed"), *Name);
+					++Failures;
+					continue;
+				}
+				FString Traits;
+				for (int32 A = 0; A < Attributes.NumAttributes(); ++A)
+				{
+					const TArray<int32>& Values = Attributes.GetAttributeValues(A);
+					const TArray<FString>& ValueNames = Attributes.GetAttributeValueNames(A);
+					const int32 V = Values.IsValidIndex(Params.HighFrequencyIndex) ? Values[Params.HighFrequencyIndex] : -1;
+					Traits += FString::Printf(TEXT(", %s %s"), *Attributes.GetAttributeName(A), ValueNames.IsValidIndex(V) ? *ValueNames[V] : TEXT("?"));
+				}
+				const FString Set = FString::Printf(TEXT("%s%d"), bFemale ? TEXT("F") : TEXT("M"), Index);
+				UTexture2D* ColorTexture = FacesSaveImage(FString::Printf(TEXT("T_FaceSkin_%s_BaseColor"), *Set), Color, true);
+				UTexture2D* NormalTexture = FacesSaveImage(FString::Printf(TEXT("T_FaceSkin_%s_Normal"), *Set), Normal, false);
+				auto* Factory = NewObject<UMaterialInstanceConstantFactoryNew>();
+				Factory->InitialParent = Template->Parent;
+				auto* Instance = Cast<UMaterialInstanceConstant>(Tools.CreateAsset(PawnFacesSkinName(bFemale, Index), PawnFacesFolder,
+					UMaterialInstanceConstant::StaticClass(), Factory));
+				if (!ColorTexture || !NormalTexture || !Instance)
+				{
+					++Failures;
+					continue;
+				}
+				const FLinearColor Average = FacesAverageColor(Color);
+				Instance->CopyMaterialUniformParametersEditorOnly(Template, true);
+				Instance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(PawnLooksParamBaseColor), ColorTexture);
+				Instance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(PawnLooksParamNormal), NormalTexture);
+				Instance->SetVectorParameterValueEditorOnly(FMaterialParameterInfo(PawnLooksParamSourceAverage), Average);
+				Instance->PostEditChange();
+				Failures += FacesSave(Instance) ? 0 : 1;
+				UE_LOG(LogPawnFaces, Display, TEXT("Face skin %s from %s: texture %d, tone (%.2f, %.2f), average %s%s"), *Set, *Name, Params.HighFrequencyIndex,
+					Skin.U, Skin.V, *Average.ToString(), *Traits);
+				++Index;
+			}
+		}
+		return Failures;
+	}
+
+	// The skin under the clothes (U16's bare layer) on a skin material lit like the face and hands (subsurface, their
+	// roughness and specular) in the pawn's skin colour, with a fine tiled skin normal: its UVs are the hoodie's, so no
+	// skin texture fits it. The pawn sets SkinColor on a dynamic instance.
+	int32 FacesMakeBareSkin(IAssetTools& Tools)
+	{
+		const UMaterial* Skin = LoadObject<UMaterial>(nullptr, *PawnLooksAssetPath(PawnLooksSkinMaterial));
+		UTexture* Micro = LoadObject<UTexture>(nullptr, FacesMicroNormal);
+		UMaterial* Material = Skin && Micro ? Cast<UMaterial>(Tools.CreateAsset(PawnFacesBareSkinMaterial, PawnFacesFolder, UMaterial::StaticClass(),
+			NewObject<UMaterialFactoryNew>())) : nullptr;
+		if (!Material)
+		{
+			UE_LOG(LogPawnFaces, Error, TEXT("The bare skin material needs M_PawnSkin (run PawnLooks first) and %s"), FacesMicroNormal);
+			return 1;
+		}
+		Material->SetShadingModel(MSM_SubsurfaceProfile);
+		Material->SubsurfaceProfile = Skin->SubsurfaceProfile;
+		Material->TwoSided = true;  // the cut edges at the neck, wrists and ankles show the inside
+		bool bRecompile = false;
+		UMaterialEditingLibrary::SetMaterialUsage(Material, MATUSAGE_SkeletalMesh, bRecompile);
+		UMaterialEditingLibrary::SetMaterialUsage(Material, MATUSAGE_MorphTargets, bRecompile);
+
+		auto* Color = FacesNode<UMaterialExpressionVectorParameter>(Material, -500, -100);
+		Color->ParameterName = PawnLooksParamSkinColor;
+		Color->DefaultValue = FLinearColor(0.15f, 0.08f, 0.06f);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Color, TEXT("RGB"), MP_BaseColor);
+
+		auto* Uv = FacesNode<UMaterialExpressionTextureCoordinate>(Material, -900, 200);
+		Uv->UTiling = Uv->VTiling = 40.0f;
+		auto* Normal = FacesNode<UMaterialExpressionTextureSampleParameter2D>(Material, -700, 200);
+		Normal->ParameterName = PawnLooksParamNormal;
+		Normal->Texture = Micro;
+		Normal->SamplerType = SAMPLERTYPE_Normal;
+		FacesConnect(Uv, TEXT(""), Normal, TEXT("UVs"));
+		auto* Flatten = FacesNode<UMaterialExpressionMultiply>(Material, -400, 200);
+		Flatten->ConstB = 1.0f;
+		auto* Strength = FacesNode<UMaterialExpressionConstant3Vector>(Material, -600, 350);
+		Strength->Constant = FLinearColor(0.3f, 0.3f, 1.0f);
+		FacesConnect(Normal, TEXT("RGB"), Flatten, TEXT("A"));
+		FacesConnect(Strength, TEXT(""), Flatten, TEXT("B"));
+		UMaterialEditingLibrary::ConnectMaterialProperty(Flatten, TEXT(""), MP_Normal);
+
+		// Roughness and specular as the face and hands have them (M_PawnSkin's defaults).
+		const auto Scalar = [&](const TCHAR* Name, float Default, int32 Y, EMaterialProperty Property)
+		{
+			Skin->GetScalarParameterDefaultValue(FHashedMaterialParameterInfo(Name), Default);
+			auto* Parameter = FacesNode<UMaterialExpressionScalarParameter>(Material, -400, Y);
+			Parameter->ParameterName = Name;
+			Parameter->DefaultValue = Default;
+			UMaterialEditingLibrary::ConnectMaterialProperty(Parameter, TEXT(""), Property);
+		};
+		Scalar(TEXT("Roughness"), 0.55f, 450, MP_Roughness);
+		Scalar(TEXT("Specular"), 0.35f, 550, MP_Specular);
+		Material->PostEditChange();
+		return FacesSave(Material) ? 0 : 1;
+	}
+
 	int32 FacesGenerate()
 	{
 		IAssetRegistry::GetChecked().SearchAllAssets(true);
@@ -1650,6 +1845,8 @@ namespace
 		int32 Failures = FacesMakeEyes(Tools);
 		Failures += FacesMakeGrooms(Tools, Config, Face, ModelToKellan);
 		Failures += FacesMakeMarks(Tools);
+		Failures += FacesMakeSkins(Tools, Config);
+		Failures += FacesMakeBareSkin(Tools);
 		UE_LOG(LogPawnFaces, Display, TEXT("Pawn faces: done, %d problems"), Failures);
 		return Failures == 0 ? 0 : 1;
 	}

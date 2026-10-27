@@ -11,6 +11,7 @@
 #include "GroomComponent.h"
 #include "HAL/IConsoleManager.h"
 #include "Materials/Material.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 
 #include "PawnActor.h"
@@ -160,6 +161,27 @@ void USmokeTestSubsystem::BuildFacesPhases()
 			{
 				State->Error(TEXT("a woman has a beard or moustache"));
 			}
+			// V2b: a woman's face texture is one of the female Creator skins; a man's a male one or Kellan's.
+			const UMaterialInterface* FaceSkin = Pawn->GetFaceSkin();
+			const FString SkinName = FaceSkin ? FaceSkin->GetName() : FString();
+			const bool bOtherGender = SkinName.StartsWith(PawnFacesSkinName(!Wanted.bFemale, 0).LeftChop(1));
+			if (!FaceSkin || bOtherGender || (Wanted.bFemale && !SkinName.StartsWith(PawnFacesSkinName(true, 0).LeftChop(1))))
+			{
+				State->Error(FString::Printf(TEXT("a %s's face skin is %s"), Wanted.bFemale ? TEXT("woman") : TEXT("man"), FaceSkin ? *SkinName : TEXT("missing")));
+			}
+			// V2b: the skin under the clothes is the skin material in the pawn's own colour.
+			if (Pawn->GetBareSkins().Num() != Pawn->GetBareLayer().Num() || Pawn->GetBareSkins().IsEmpty())
+			{
+				State->Error(FString::Printf(TEXT("%d bare skin materials for %d bare layers"), Pawn->GetBareSkins().Num(), Pawn->GetBareLayer().Num()));
+			}
+			for (const UMaterialInstanceDynamic* BareSkin : Pawn->GetBareSkins())
+			{
+				FLinearColor Color;
+				if (!BareSkin || !BareSkin->GetVectorParameterValue(FHashedMaterialParameterInfo(TEXT("SkinColor")), Color) || !Color.Equals(Wanted.Skin, 1.0e-4f))
+				{
+					State->Error(TEXT("the bare skin is not the pawn's skin colour"));
+				}
+			}
 			// Marks: at full detail one decal per tattoo and scar, and for body hair four (forearms and shins), six on men (chest and belly).
 			if (Pawn->GetDetail() == ESimPawnDetail::Full)
 			{
@@ -281,7 +303,7 @@ void USmokeTestSubsystem::BuildFacesPhases()
 			Fail(FString::Printf(TEXT("faces_lineup: %d pawns in the row, not %d"), State->Row.Num(), FacesSmokeRow));
 		}
 		const colony::Snapshot& Snapshot = B->GetCurrentSnapshot();
-		TSet<FString> Looks, Hair, Eyes;
+		TSet<FString> Looks, Hair, Eyes, Skins;
 		int32 Women = 0, Bearded = 0;
 		double Closest = 9.0;
 		TArray<FSimPawnLooks> All;
@@ -303,13 +325,16 @@ void USmokeTestSubsystem::BuildFacesPhases()
 			Eyes.Add(L.Eyes.ToHex());
 			Women += L.bFemale ? 1 : 0;
 			Bearded += FacesSmokeHasBeard(L) ? 1 : 0;
+			const ASimPawnActor* Pawn = PawnsOf() ? PawnsOf()->FindPawn(Thing) : nullptr;
+			const UMaterialInterface* FaceSkin = Pawn ? Pawn->GetFaceSkin() : nullptr;
+			Skins.Add(FaceSkin ? FaceSkin->GetName() : FString());
 			Notes.Add(FString::Printf(TEXT("  %s, %s hair, beard %s, eyes #%s, face %.2f brow %.2f nose %.2f jaw %.2f, body hair %.2f, %d tattoos, %d scars"),
 				L.bFemale ? TEXT("woman") : TEXT("man"), *L.HairStyle, *L.Beard, *L.Eyes.ToHex().Left(6), L.FaceShape, L.Brow, L.Nose, L.Jaw, L.BodyHair,
 				L.Tattoos.Num(), L.Scars.Num()));
 		}
-		Notes.Add(FString::Printf(TEXT("faces_lineup: %d different looks of %d, %d hair styles, %d eye colours, %d women, %d with beards, closest faces %.2f apart (sliders)"),
-			Looks.Num(), All.Num(), Hair.Num(), Eyes.Num(), Women, Bearded, Closest));
-		if (Looks.Num() != All.Num() || Hair.Num() < 5 || Eyes.Num() < 3 || Women == 0 || Bearded == 0)
+		Notes.Add(FString::Printf(TEXT("faces_lineup: %d different looks of %d, %d hair styles, %d eye colours, %d face skins (%s), %d women, %d with beards, closest faces %.2f apart (sliders)"),
+			Looks.Num(), All.Num(), Hair.Num(), Eyes.Num(), Skins.Num(), *FString::Join(Skins.Array(), TEXT(" ")), Women, Bearded, Closest));
+		if (Looks.Num() != All.Num() || Hair.Num() < 5 || Eyes.Num() < 3 || Skins.Num() < 4 || Women == 0 || Bearded == 0)
 		{
 			Fail(TEXT("faces_lineup: the pawns look too alike"));
 		}
@@ -415,8 +440,8 @@ void USmokeTestSubsystem::BuildFacesPhases()
 		Phases.Add(MoveTemp(Portrait));
 	}
 
-	// Looks at one pawn's chest from in front of it, Distance cm away, with the lamp beside the camera.
-	const auto LookAtPawn = [=, this](colony::Entity Thing, float Distance)
+	// Looks at one pawn from in front of it, Distance cm away, at Drop cm under the head (30: the chest), with the lamp beside the camera.
+	const auto LookAtPawn = [=, this](colony::Entity Thing, float Distance, float Drop)
 	{
 		USimPawnSubsystem* Pawns = PawnsOf();
 		const ASimPawnActor* Pawn = Pawns ? Pawns->FindPawn(Thing) : nullptr;
@@ -425,7 +450,7 @@ void USmokeTestSubsystem::BuildFacesPhases()
 		{
 			return;
 		}
-		const FVector Chest = Face->GetSocketLocation(TEXT("head")) - FVector(0.0, 0.0, 30.0);
+		const FVector Chest = Face->GetSocketLocation(TEXT("head")) - FVector(0.0, 0.0, Drop);
 		const FVector From = Chest + (Pawn->GetActorForwardVector() + Pawn->GetActorRightVector() * 0.3) * Distance;
 		ViewFrom(From, (Chest - From).Rotation());
 		if (!State->Light.IsValid())
@@ -441,6 +466,55 @@ void USmokeTestSubsystem::BuildFacesPhases()
 			Light->PointLightComponent->SetAttenuationRadius(500.0f);
 		}
 	};
+
+	// 4b. Skin (V2b): the first woman of the row, then the darkest-skinned pawn, face, neck and bare shoulders in one view, so
+	// a woman's face texture and the bare skin against the face and hands can be seen.
+	for (const bool bWoman : {true, false})
+	{
+		FPhase Skin;
+		Skin.Name = bWoman ? TEXT("faces_skin_woman") : TEXT("faces_skin_dark");
+		Skin.WarmupSeconds = 2.5f;
+		Skin.MeasureSeconds = 1.0f;
+		Skin.Setup = [=, this]()
+		{
+			USimSubsystem* B = Bridge();
+			USimPawnSubsystem* Pawns = PawnsOf();
+			if (!B || !Pawns)
+			{
+				return;
+			}
+			colony::Entity Pick = colony::kNoEntity;
+			float Darkest = 9.0f;
+			for (const colony::Entity Thing : State->Row)
+			{
+				const ASimPawnActor* Pawn = Pawns->FindPawn(Thing);
+				if (!Pawn || !Pawn->HasLooks())
+				{
+					continue;
+				}
+				const FSimPawnLooks& L = Pawn->GetLooks();
+				if (bWoman ? (L.bFemale && Pick == colony::kNoEntity) : (L.Skin.GetLuminance() < Darkest))
+				{
+					Pick = Thing;
+					Darkest = L.Skin.GetLuminance();
+				}
+			}
+			if (Pick == colony::kNoEntity)
+			{
+				Fail(FString::Printf(TEXT("%s: no such pawn in the row"), bWoman ? TEXT("faces_skin_woman") : TEXT("faces_skin_dark")));
+				return;
+			}
+			const ASimPawnActor* Pawn = Pawns->FindPawn(Pick);
+			const UMaterialInterface* FaceSkin = Pawn->GetFaceSkin();
+			Notes.Add(FString::Printf(TEXT("%s: pawn %d of the row, skin %s, face skin %s"), bWoman ? TEXT("faces_skin_woman") : TEXT("faces_skin_dark"),
+				State->Row.IndexOfByKey(Pick), *Pawn->GetLooks().Skin.ToFColorSRGB().ToHex().Left(6), FaceSkin ? *FaceSkin->GetName() : TEXT("none")));
+			LookAtPawn(Pick, 95.0f, 12.0f);
+			State->Reset();
+		};
+		Skin.OnFrame = CheckFrame;
+		Skin.Verify = [=, this]() { VerifyFrames(bWoman ? TEXT("faces_skin_woman") : TEXT("faces_skin_dark")); };
+		Phases.Add(MoveTemp(Skin));
+	}
 
 	// 5. Marks: the first of the row (bare: it wears nothing) and a clothed colonist get tattoos and scars on every region
 	// and thick body hair. They show on the bare skin, never on the clothes.
@@ -476,7 +550,7 @@ void USmokeTestSubsystem::BuildFacesPhases()
 			}
 		}
 		B->StepOnce();
-		LookAtPawn(State->Row[0], 110.0f);
+		LookAtPawn(State->Row[0], 110.0f, 30.0f);
 		State->Reset();
 	};
 	Marks.OnFrame = CheckFrame;
@@ -504,7 +578,7 @@ void USmokeTestSubsystem::BuildFacesPhases()
 			Fail(TEXT("faces_marks_clothed: no clothed colonist"));
 			return;
 		}
-		LookAtPawn(State->Clothed, 110.0f);
+		LookAtPawn(State->Clothed, 110.0f, 30.0f);
 		USimPawnSubsystem* Pawns = PawnsOf();
 		const ASimPawnActor* Pawn = Pawns ? Pawns->FindPawn(State->Clothed) : nullptr;
 		Notes.Add(FString::Printf(TEXT("faces_marks_clothed: the colonist wears %d meshes and has %d mark decals"), Pawn ? Pawn->GetWornMeshes().Num() : -1,

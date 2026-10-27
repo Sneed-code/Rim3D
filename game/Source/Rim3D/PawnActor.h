@@ -19,6 +19,7 @@ class UMeshComponent;
 class UStaticMeshComponent;
 class UDecalComponent;
 class UMaterialInterface;
+class UMaterialInstanceDynamic;
 class UTexture;
 namespace colony { struct ThingView; }
 
@@ -82,6 +83,9 @@ public:
 	const TArray<uint32>& GetWornMeshItems() const { return WornMeshItems; }
 	/** The bare skin layer (torso and arms, legs); empty while the clothes assets are missing. */
 	const TArray<TObjectPtr<USkeletalMeshComponent>>& GetBareLayer() const { return BareLayer; }
+	const TArray<TObjectPtr<UMaterialInstanceDynamic>>& GetBareSkins() const { return BareSkins; }
+	/** V2b: the material on the face's first skin slot (a MI_FaceSkin_* or Kellan's), null without the shaped face. */
+	UMaterialInterface* GetFaceSkin() const;
 	/** Kellan's own top and trousers (hidden while the clothes are drawn); null for a mannequin. */
 	USkeletalMeshComponent* GetDefaultTop() const { return DefaultTop; }
 	USkeletalMeshComponent* GetDefaultTrousers() const { return DefaultTrousers; }
@@ -212,6 +216,10 @@ private:
 
 	TArray<int32> EyeSlots;
 
+	/** V2b: the face's skin slots and the skin instance PawnLooks gave each (Kellan's texture). */
+	UPROPERTY()
+	TMap<int32, TObjectPtr<UMaterialInterface>> FaceSkinSlots;
+
 	UPROPERTY()
 	TArray<TObjectPtr<UDecalComponent>> MarkDecals;
 
@@ -238,6 +246,10 @@ private:
 
 	UPROPERTY()
 	TArray<TObjectPtr<USkeletalMeshComponent>> BareLayer;
+
+	/** V2b: the bare layer's skin material instances (empty without the PawnFaces assets: then it keeps the garment colour). */
+	UPROPERTY()
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> BareSkins;
 
 	UPROPERTY()
 	TObjectPtr<USkeletalMeshComponent> DefaultTop;
