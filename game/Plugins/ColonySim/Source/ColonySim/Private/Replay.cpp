@@ -202,6 +202,10 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["building"] = entt::to_integral(c.building);
                 j["autoRefuel"] = c.autoRefuel;
                 j["fillNow"] = c.fillNow;
+            } else if constexpr (std::is_same_v<Type, SetThermostatCommand>) {
+                j["building"] = entt::to_integral(c.building);
+                j["celsius"] = c.celsius;
+                j["clear"] = c.clear;
             } else if constexpr (std::is_same_v<Type, SetBillOptionsCommand>) {
                 j["building"] = entt::to_integral(c.building);
                 j["bill"] = c.bill;
@@ -1009,6 +1013,15 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         uint32_t building = entt::to_integral(kNoEntity);
         if (!r.integer(j, "building", building, where) || !r.flag(j, "autoRefuel", c.autoRefuel, where) ||
             !r.flag(j, "fillNow", c.fillNow, where)) {
+            return false;
+        }
+        c.building = static_cast<Entity>(building);
+        out.command = c;
+    } else if (type == "SetThermostat") {
+        SetThermostatCommand c;
+        uint32_t building = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "building", building, where) || !r.number(j, "celsius", c.celsius, where) ||
+            !r.flag(j, "clear", c.clear, where)) {
             return false;
         }
         c.building = static_cast<Entity>(building);

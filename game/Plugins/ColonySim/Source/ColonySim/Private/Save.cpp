@@ -536,6 +536,7 @@ struct SaveData {
     BreedingStats breeding;            // section "breeding": the counters (N4)
     FireSaved fire;                    // section "fire": fires, burnt ground, the home area (E4)
     std::vector<RoomTemperature> roomTemperatures;  // section "temperature" (E2)
+    std::vector<Thermostat> thermostats;            // section "thermostats"
     std::vector<CellPos> upperFloors;  // section "levels" (M1), by level then row
     RoofCollapseSaved roofs;           // section "roofs" (M3)
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
@@ -1413,6 +1414,10 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("building", c.building);
                 ar.value("bill", c.bill);
                 ar.value("index", c.index);
+            } else if constexpr (std::is_same_v<Type, SetThermostatCommand>) {
+                ar.value("building", c.building);
+                ar.value("celsius", c.celsius);
+                ar.value("clear", c.clear);
             } else if constexpr (std::is_same_v<Type, ClimbCommand>) {
                 ar.value("pawn", c.pawn);
                 ar.value("dx", c.dx);
@@ -3056,6 +3061,33 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(t.celsius > -500.0f && t.celsius < 1000.0f, "the save file has an impossible room temperature");
         });
     });
+    ar.section("thermostats", 1, [&] {
+        ar.list("thermostats", d.thermostats, [&](Thermostat& t) {
+            ar.value("building", t.building);
+            ar.value("celsius", t.celsius);
+        });
+    });
+    ar.section("raids", 1, [&] {
+        saveRaids(ar, d.raids);
+        saveParts(ar, "defense", e, &SaveEntity::defense, [&](DefensePlan& p) {
+            ar.value("role", p.role);
+            ar.require(static_cast<int>(p.role) <= static_cast<int>(DefenseRole::Firefighter), "the save file has a bad defense role");
+            ar.value("hasSpot", p.hasSpot);
+            ar.group("spot", [&] { saveCell(ar, p.spot); });
+        });
+        saveParts(ar, "raider", e, &SaveEntity::raider, [&](Raider& r) {
+            ar.value("squad", r.squad);
+            ar.text("kind", r.kind);
+            if (ar.sectionVersion() >= 2) {  // F12
+                ar.value("goalThing", r.goalThing);
+                ar.value("loot", r.loot);
+                ar.value("sparesDowned", r.sparesDowned);
+            }
+        });
+        if (ar.sectionVersion() >= 2) {
+            saveParts(ar, "kidnapped", e, &SaveEntity::kidnapped, [&](Kidnapped& k) { ar.value("by", k.by); });
+        }
+    });
     ar.section("raids", 2, [&] {
         saveRaids(ar, d.raids);
         saveParts(ar, "defense", e, &SaveEntity::defense, [&](DefensePlan& p) {
@@ -3810,6 +3842,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.filth = sim.filth_->state();
     d.roomStats = sim.roomStats_->state();
     d.roomTemperatures = sim.temperature_->roomTemperatures();
+    d.thermostats = sim.temperature_->thermostats();
     d.upperFloors = sim.map_.upperFloorCells();
     d.roofs = sim.roofCollapse_->state();
     d.raids = sim.raids_->state();
@@ -4751,6 +4784,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     sim.power_->update();
     sim.roomStats_->refresh();
     sim.temperature_->setOutdoor(sim.outdoorTemperature());
+    sim.temperature_->restoreThermostats(d.thermostats);
     sim.temperature_->restore(d.roomTemperatures);
     sim.spoilage_->restore(d.spoilageState);
     if (!sim.roofCollapse_->restore(d.roofs)) {
