@@ -68,6 +68,15 @@ inline FString PawnFacesSkinName(bool bFemale, int32 Index)
 /** V2b: the skin under the clothes (U16's bare layer), lit like the face; the pawn sets SkinColor on a dynamic instance. */
 inline const TCHAR* const PawnFacesBareSkinMaterial = TEXT("M_PawnBareSkin");
 
+/** V2b: hair cards for far pawns (strands draw only at full detail): a static mesh per hair style in the face's head bone space,
+ *  and the material its instances share (one colour, `HairColor`, cut by the cards' coverage). */
+inline FString PawnFacesHairCardsName(const FString& Style)
+{
+	return TEXT("SM_HairCards_") + Style;
+}
+inline const TCHAR* const PawnFacesHairCardsMaterial = TEXT("M_PawnHairCards");
+inline const FName PawnFacesParamHairColor(TEXT("HairColor"));
+
 /** "/Game/Rim3D/Generated/PawnFaces/Name.Name" */
 inline FString PawnFacesAssetPath(const FString& Name)
 {

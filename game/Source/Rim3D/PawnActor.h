@@ -84,6 +84,7 @@ public:
 	/** The bare skin layer (torso and arms, legs); empty while the clothes assets are missing. */
 	const TArray<TObjectPtr<USkeletalMeshComponent>>& GetBareLayer() const { return BareLayer; }
 	const TArray<TObjectPtr<UMaterialInstanceDynamic>>& GetBareSkins() const { return BareSkins; }
+	const UStaticMeshComponent* GetHairCards() const { return HairCards; }
 	/** V2b: the material on the face's first skin slot (a MI_FaceSkin_* or Kellan's), null without the shaped face. */
 	UMaterialInterface* GetFaceSkin() const;
 	/** Kellan's own top and trousers (hidden while the clothes are drawn); null for a mannequin. */
@@ -206,6 +207,8 @@ private:
 	void RefreshGroomVisibility();
 	/** V2: face morphs, eyes and grooms from the looks. */
 	void ApplyFace(USimPawnSubsystem& Pawns);
+	/** V2b: the hair style's cards for far pawns, on the face's head bone, in the hair colour. */
+	void SetHairCards(USimPawnSubsystem& Pawns);
 	/** Puts a PawnFaces groom (by asset name; empty for none) on a groom component, bound to the shaped face. */
 	void SetGroom(USimPawnSubsystem& Pawns, FName Component, const FString& GroomName);
 	/** V3: remakes the mark decals (only at full detail; otherwise there are none). */
@@ -235,6 +238,13 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UTexture> BodyHairTexture;
+
+	/** V2b: hair cards (static mesh on the head bone), shown instead of the hair strands away from full detail. */
+	UPROPERTY()
+	TObjectPtr<UStaticMeshComponent> HairCards;
+
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> HairCardsMaterial;
 
 	/** Groom components (by name) with nothing to draw. */
 	TSet<FName> EmptyGrooms;

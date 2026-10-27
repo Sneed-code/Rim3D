@@ -5,6 +5,8 @@
 #include "Components/PointLightComponent.h"
 #include "Engine/PointLight.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "GameFramework/PlayerController.h"
 #include "GroomAsset.h"
 #include "GroomBindingAsset.h"
@@ -43,13 +45,14 @@ namespace
 		colony::Entity Clothed = colony::kNoEntity;
 		int32 MarkPawns = 0;
 		int32 MarkDecals = 0;
+		int32 CardsShown = 0;
 
 		void Reset()
 		{
 			Frames = 0;
 			Errors = 0;
 			FirstError.Reset();
-			MarkPawns = MarkDecals = 0;
+			MarkPawns = MarkDecals = CardsShown = 0;
 		}
 
 		void Error(const FString& Message)
@@ -168,6 +171,22 @@ void USmokeTestSubsystem::BuildFacesPhases()
 			if (!FaceSkin || bOtherGender || (Wanted.bFemale && !SkinName.StartsWith(PawnFacesSkinName(true, 0).LeftChop(1))))
 			{
 				State->Error(FString::Printf(TEXT("a %s's face skin is %s"), Wanted.bFemale ? TEXT("woman") : TEXT("man"), FaceSkin ? *SkinName : TEXT("missing")));
+			}
+			// V2b: away from full detail the hair style's cards stand in for the strands (none for bald or under a covering hat).
+			if (const UStaticMeshComponent* Cards = Pawn->GetHairCards())
+			{
+				const bool bWant = Pawn->GetDetail() != ESimPawnDetail::Full && Wanted.HairStyle != TEXT("Bald") && Hair.IsEmpty() == false;
+				const FString CardsMesh = Cards->GetStaticMesh() ? Cards->GetStaticMesh()->GetName() : FString();
+				if (Cards->IsVisible() != (bWant && !CardsMesh.IsEmpty()) || (!CardsMesh.IsEmpty() && CardsMesh != PawnFacesHairCardsName(Wanted.HairStyle)))
+				{
+					State->Error(FString::Printf(TEXT("hair cards %s visible %d at %s detail for %s hair"), *CardsMesh, Cards->IsVisible(),
+						Pawn->GetDetail() == ESimPawnDetail::Full ? TEXT("full") : TEXT("simple"), *Wanted.HairStyle));
+				}
+				State->CardsShown += Cards->IsVisible() ? 1 : 0;
+			}
+			else if (Wanted.HairStyle != TEXT("Bald"))
+			{
+				State->Error(TEXT("a pawn with hair has no hair cards component (are the PawnFaces assets made?)"));
 			}
 			// V2b: the skin under the clothes is the skin material in the pawn's own colour.
 			if (Pawn->GetBareSkins().Num() != Pawn->GetBareLayer().Num() || Pawn->GetBareSkins().IsEmpty())
@@ -586,6 +605,36 @@ void USmokeTestSubsystem::BuildFacesPhases()
 	};
 	Clothed.Verify = [=, this]() {};
 	Phases.Add(MoveTemp(Clothed));
+
+	// 5c. Hair cards (V2b): with no pawn at full detail, the row from 5 m shows the cards instead of the strands.
+	FPhase Cards;
+	Cards.Name = TEXT("faces_cards");
+	Cards.WarmupSeconds = 2.5f;
+	Cards.MeasureSeconds = 1.0f;
+	Cards.Setup = [=, this]()
+	{
+		if (IConsoleVariable* Full = IConsoleManager::Get().FindConsoleVariable(TEXT("Pawns.FullDetail")))
+		{
+			Full->Set(0, ECVF_SetByCode);
+		}
+		LookAtRow(0, 5, 500.0f, 150.0f);
+		State->Reset();
+	};
+	Cards.OnFrame = CheckFrame;
+	Cards.Verify = [=, this]()
+	{
+		VerifyFrames(TEXT("faces_cards"));
+		Notes.Add(FString::Printf(TEXT("faces_cards: %d pawns with hair cards a frame on average"), State->Frames ? State->CardsShown / static_cast<int32>(State->Frames) : 0));
+		if (State->CardsShown == 0)
+		{
+			Fail(TEXT("faces_cards: no hair cards shown"));
+		}
+		if (IConsoleVariable* Full = IConsoleManager::Get().FindConsoleVariable(TEXT("Pawns.FullDetail")))
+		{
+			Full->Set(20, ECVF_SetByCode);
+		}
+	};
+	Phases.Add(MoveTemp(Cards));
 
 	// 6. What it costs: 100 MetaHumans with faces and hair walking about, from further off.
 	FPhase Crowd;

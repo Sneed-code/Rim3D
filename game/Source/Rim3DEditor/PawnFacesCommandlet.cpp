@@ -21,6 +21,12 @@
 #include "MetaHumanRigEvaluatedState.h"
 #include "SkelMeshDNAUtils.h"
 #include "SkeletalMeshAttributes.h"
+#include "AnimationRuntime.h"
+#include "Engine/StaticMesh.h"
+#include "StaticMeshAttributes.h"
+#include "StaticMeshOperations.h"
+#include "Materials/MaterialExpressionDotProduct.h"
+#include "GroomAssetCards.h"
 #include "AssetToolsModule.h"
 #include "Dom/JsonObject.h"
 #include "Factories/MaterialInstanceConstantFactoryNew.h"
@@ -1083,23 +1089,25 @@ namespace
 
 	// A copy of one of the Creator's grooms for one of our styles: strands only (no cards or helmet meshes, which
 	// live in the plugin), on Kellan's hair material, no simulation, bound to the shaped face.
-	bool FacesCopyGroom(IAssetTools& Tools, const FString& Source, const FString& Kind, const FString& Style, USkeletalMesh* Face, UMaterialInterface* HairMaterial,
-		const FTransform& ModelToKellan)
+	template <typename T>
+	T* FacesNode(UMaterial* Material, int32 X, int32 Y)
 	{
-		UGroomAsset* Original = FacesFindGroom(Source);
-		if (!Original)
+		return Cast<T>(UMaterialEditingLibrary::CreateMaterialExpression(Material, T::StaticClass(), X, Y));
+	}
+
+	void FacesConnect(UMaterialExpression* From, const TCHAR* FromPin, UMaterialExpression* To, const TCHAR* ToPin)
+	{
+		if (!UMaterialEditingLibrary::ConnectMaterialExpressions(From, FromPin, To, ToPin))
 		{
-			UE_LOG(LogPawnFaces, Error, TEXT("Groom %s not found under %s"), *Source, FacesGroomRoot);
-			return false;
+			UE_LOG(LogPawnFaces, Error, TEXT("Could not connect %s to %s pin '%s'"), *From->GetName(), *To->GetName(), ToPin);
 		}
-		UGroomAsset* Copy = Cast<UGroomAsset>(Tools.DuplicateAsset(PawnFacesGroomName(Kind, Style), PawnFacesFolder, Original));
-		if (!Copy)
-		{
-			return false;
-		}
-		// Each Creator groom was made on one of two heads: Legacy02 is Kellan's (same place and size), Legacy01 is the
-		// face model's average head, lower and smaller. Strands made on another head are moved onto Kellan's by the
-		// scale and offset that best fit that head's vertices onto Legacy02's (same layout, vertex by vertex).
+	}
+
+	// Each Creator groom was made on one of two heads: Legacy02 is Kellan's (same place and size), Legacy01 is the
+	// face model's average head, lower and smaller. Strands made on another head are moved onto Kellan's by the
+	// scale and offset that best fit that head's vertices onto Legacy02's (same layout, vertex by vertex).
+	FTransform FacesGroomToKellan(const FString& Source, const FTransform& ModelToKellan)
+	{
 		FTransform ToKellan = FTransform::Identity;
 		USkeletalMesh* Head = FacesGroomHead(Source);
 		USkeletalMesh* KellanHead = LoadObject<USkeletalMesh>(nullptr, FacesKellanGroomHead);
@@ -1133,6 +1141,24 @@ namespace
 					*ToKellan.GetLocation().ToString());
 			}
 		}
+		return ToKellan;
+	}
+
+	bool FacesCopyGroom(IAssetTools& Tools, const FString& Source, const FString& Kind, const FString& Style, USkeletalMesh* Face, UMaterialInterface* HairMaterial,
+		const FTransform& ModelToKellan)
+	{
+		UGroomAsset* Original = FacesFindGroom(Source);
+		if (!Original)
+		{
+			UE_LOG(LogPawnFaces, Error, TEXT("Groom %s not found under %s"), *Source, FacesGroomRoot);
+			return false;
+		}
+		UGroomAsset* Copy = Cast<UGroomAsset>(Tools.DuplicateAsset(PawnFacesGroomName(Kind, Style), PawnFacesFolder, Original));
+		if (!Copy)
+		{
+			return false;
+		}
+		const FTransform ToKellan = FacesGroomToKellan(Source, ModelToKellan);
 		for (const EHairDescriptionType Type : ToKellan.Equals(FTransform::Identity) ? TArray<EHairDescriptionType>() : TArray<EHairDescriptionType>{EHairDescriptionType::Source, EHairDescriptionType::Edit})
 		{
 			FHairDescription Description = Copy->LoadHairDescription(Type);
@@ -1180,10 +1206,153 @@ namespace
 		return FacesSave(Copy) && FacesBind(Copy, Face, PawnFacesBindingName(Copy->GetName()));
 	}
 
+	// Far pawns (V2b): strands draw only at full detail, so each hair style also gets hair cards, its Creator groom's own
+	// (one card LOD, every group in one static mesh), moved onto Kellan's head like the strands and into the face's head
+	// bone space, on one masked material: the pawn's hair colour, cut by the cards' coverage texture.
+	UMaterial* FacesMakeCardsMaterial(IAssetTools& Tools)
+	{
+		UMaterial* Material = Cast<UMaterial>(Tools.CreateAsset(PawnFacesHairCardsMaterial, PawnFacesFolder, UMaterial::StaticClass(), NewObject<UMaterialFactoryNew>()));
+		if (!Material)
+		{
+			return nullptr;
+		}
+		Material->BlendMode = BLEND_Masked;
+		Material->TwoSided = true;
+		Material->OpacityMaskClipValue = 0.4f;
+		auto* Color = FacesNode<UMaterialExpressionVectorParameter>(Material, -500, -100);
+		Color->ParameterName = PawnFacesParamHairColor;
+		Color->DefaultValue = FLinearColor(0.02f, 0.015f, 0.01f);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Color, TEXT("RGB"), MP_BaseColor);
+		auto* Coverage = FacesNode<UMaterialExpressionTextureSampleParameter2D>(Material, -800, 200);
+		Coverage->ParameterName = TEXT("Coverage");
+		Coverage->SamplerType = SAMPLERTYPE_LinearColor;
+		auto* Channel = FacesNode<UMaterialExpressionVectorParameter>(Material, -800, 450);
+		Channel->ParameterName = TEXT("CoverageChannel");  // which channel of the texture holds the coverage
+		Channel->DefaultValue = FLinearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		auto* Pick = FacesNode<UMaterialExpressionDotProduct>(Material, -450, 250);
+		FacesConnect(Coverage, TEXT("RGBA"), Pick, TEXT("A"));
+		FacesConnect(Channel, TEXT("RGBA"), Pick, TEXT("B"));
+		UMaterialEditingLibrary::ConnectMaterialProperty(Pick, TEXT(""), MP_OpacityMask);
+		auto* Roughness = FacesNode<UMaterialExpressionConstant>(Material, -300, 450);
+		Roughness->R = 0.6f;
+		UMaterialEditingLibrary::ConnectMaterialProperty(Roughness, TEXT(""), MP_Roughness);
+		Material->PostEditChange();
+		return FacesSave(Material) ? Material : nullptr;
+	}
+
+	bool FacesMakeHairCards(IAssetTools& Tools, const FString& Source, const FString& Style, const FTransform& ToKellan, const FTransform& HeadBone,
+		UMaterial* CardsMaterial, int32 WantedLod)
+	{
+		const UGroomAsset* Original = FacesFindGroom(Source);
+		if (!Original || !CardsMaterial)
+		{
+			return false;
+		}
+		// Per group, the card LOD nearest the wanted one (at most it).
+		TMap<int32, const FHairGroupsCardsSourceDescription*> Picked;
+		for (const FHairGroupsCardsSourceDescription& Cards : Original->GetHairGroupsCards())
+		{
+			const FHairGroupsCardsSourceDescription*& Best = Picked.FindOrAdd(Cards.GroupIndex);
+			if (Cards.ImportedMesh && Cards.LODIndex <= WantedLod && (!Best || Cards.LODIndex > Best->LODIndex))
+			{
+				Best = &Cards;
+			}
+		}
+		const FString Name = PawnFacesHairCardsName(Style);
+		UStaticMesh* Mesh = NewObject<UStaticMesh>(CreatePackage(*(FString(PawnFacesFolder) / Name)), *Name, RF_Public | RF_Standalone);
+		Mesh->SetNumSourceModels(1);
+		FMeshDescription* Description = Mesh->CreateMeshDescription(0);
+		FStaticMeshAttributes Attributes(*Description);
+		Attributes.Register();
+		UTexture2D* CoverageTexture = nullptr;
+		FLinearColor CoverageChannel(0.0f, 0.0f, 0.0f, 1.0f);
+		int32 Groups = 0;
+		for (const TPair<int32, const FHairGroupsCardsSourceDescription*>& Group : Picked)
+		{
+			const FMeshDescription* From = Group.Value ? Group.Value->ImportedMesh->GetMeshDescription(0) : nullptr;
+			if (!From)
+			{
+				continue;
+			}
+			FStaticMeshOperations::FAppendSettings Settings;
+			FStaticMeshOperations::AppendMeshDescription(*From, *Description, Settings);
+			++Groups;
+			UE_LOG(LogPawnFaces, Display, TEXT("  %s cards: group %d LOD %d, %d vertices, %d triangles"), *Source, Group.Key, Group.Value->LODIndex,
+				From->Vertices().Num(), From->Triangles().Num());
+			// The coverage: its own texture in the full layouts, a channel of a packed one in the compact layouts.
+			const FHairGroupCardsTextures& Textures = Group.Value->Textures;
+			const int32 Index = Textures.Layout == EHairTextureLayout::Layout3 ? 2 : 1;
+			if (!CoverageTexture && Textures.Textures.IsValidIndex(Index) && Textures.Textures[Index])
+			{
+				CoverageChannel = Textures.Layout == EHairTextureLayout::Layout3 ? FLinearColor(0, 0, 0, 1) : FLinearColor(1, 0, 0, 0);
+				CoverageTexture = Cast<UTexture2D>(Tools.DuplicateAsset(Name.Replace(TEXT("SM_"), TEXT("T_")) + TEXT("_Coverage"), PawnFacesFolder,
+					Textures.Textures[Index]));
+			}
+		}
+		if (Groups == 0 || !CoverageTexture)
+		{
+			UE_LOG(LogPawnFaces, Display, TEXT("  %s has no hair cards (or no coverage texture): far pawns with %s hair draw none"), *Source, *Style);
+			return true;  // the Creator's buzz cut has none
+		}
+		// Onto Kellan's head, then into the head bone's space (the pawn attaches the cards to the face's head bone).
+		TVertexAttributesRef<FVector3f> Positions = Attributes.GetVertexPositions();
+		TVertexInstanceAttributesRef<FVector3f> Normals = Attributes.GetVertexInstanceNormals();
+		TVertexInstanceAttributesRef<FVector3f> Tangents = Attributes.GetVertexInstanceTangents();
+		FBox Box(ForceInit);
+		for (const FVertexID V : Description->Vertices().GetElementIDs())
+		{
+			const FVector P = ToKellan.TransformPosition(FVector(Positions[V]));
+			Box += P;
+			Positions[V] = FVector3f(HeadBone.InverseTransformPosition(P));
+		}
+		for (const FVertexInstanceID I : Description->VertexInstances().GetElementIDs())
+		{
+			Normals[I] = FVector3f(HeadBone.InverseTransformVector(FVector(Normals[I])).GetSafeNormal());
+			Tangents[I] = FVector3f(HeadBone.InverseTransformVector(FVector(Tangents[I])).GetSafeNormal());
+		}
+		// One material slot for every group.
+		for (const FPolygonGroupID Group : Description->PolygonGroups().GetElementIDs())
+		{
+			Attributes.GetPolygonGroupMaterialSlotNames()[Group] = TEXT("Cards");
+		}
+		Mesh->GetStaticMaterials().Add(FStaticMaterial(nullptr, TEXT("Cards"), TEXT("Cards")));
+		const int32 Triangles = Description->Triangles().Num();
+		Mesh->CommitMeshDescription(0);
+		auto* Factory = NewObject<UMaterialInstanceConstantFactoryNew>();
+		Factory->InitialParent = CardsMaterial;
+		auto* Instance = Cast<UMaterialInstanceConstant>(Tools.CreateAsset(Name.Replace(TEXT("SM_"), TEXT("MI_")), PawnFacesFolder,
+			UMaterialInstanceConstant::StaticClass(), Factory));
+		if (!Instance)
+		{
+			return false;
+		}
+		Instance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(TEXT("Coverage")), CoverageTexture);
+		Instance->SetVectorParameterValueEditorOnly(FMaterialParameterInfo(TEXT("CoverageChannel")), CoverageChannel);
+		Instance->PostEditChange();
+		Mesh->SetMaterial(0, Instance);
+		Mesh->NaniteSettings.bEnabled = false;
+		FStaticMeshSourceModel& Model = Mesh->GetSourceModel(0);
+		Model.BuildSettings.bRecomputeNormals = false;
+		Model.BuildSettings.bRecomputeTangents = false;
+		Mesh->Build(true);
+		Mesh->PostEditChange();
+		UE_LOG(LogPawnFaces, Display, TEXT("Hair cards %s from %s: %d groups, %d triangles, on Kellan's head %s"), *Name, *Source, Groups, Triangles,
+			*Box.ToString());
+		return FacesSave(CoverageTexture) && FacesSave(Instance) && FacesSave(Mesh);
+	}
+
 	int32 FacesMakeGrooms(IAssetTools& Tools, const TSharedPtr<FJsonObject>& Config, USkeletalMesh* Face, const FTransform& ModelToKellan)
 	{
 		UMaterialInterface* HairMaterial = LoadObject<UMaterialInterface>(nullptr, FacesHairMaterial);
 		int32 Failures = 0;
+		// Hair cards for far pawns: the face's head bone in its reference pose, and which card LOD ("hairCardsLod").
+		UMaterial* CardsMaterial = FacesMakeCardsMaterial(Tools);
+		const FReferenceSkeleton& Skeleton = Face->GetRefSkeleton();
+		const int32 HeadIndex = Skeleton.FindBoneIndex(TEXT("head"));
+		const FTransform HeadBone = HeadIndex == INDEX_NONE ? FTransform::Identity : FAnimationRuntime::GetComponentSpaceTransformRefPose(Skeleton, HeadIndex);
+		int32 CardsLod = 2;
+		Config->TryGetNumberField(TEXT("hairCardsLod"), CardsLod);
+		Failures += CardsMaterial && HeadIndex != INDEX_NONE ? 0 : 1;
 		const TSharedPtr<FJsonObject>* Hair = nullptr;
 		if (Config->TryGetObjectField(TEXT("hair"), Hair))
 		{
@@ -1192,6 +1361,8 @@ namespace
 				if (!Style.Value->AsString().IsEmpty())
 				{
 					Failures += FacesCopyGroom(Tools, Style.Value->AsString(), TEXT("Hair"), Style.Key, Face, HairMaterial, ModelToKellan) ? 0 : 1;
+					Failures += FacesMakeHairCards(Tools, Style.Value->AsString(), Style.Key, FacesGroomToKellan(Style.Value->AsString(), ModelToKellan),
+						HeadBone, CardsMaterial, CardsLod) ? 0 : 1;
 				}
 			}
 		}
@@ -1531,20 +1702,6 @@ namespace
 		Texture->SRGB = false;
 		Texture->PostEditChange();
 		return FacesSave(Texture) ? Texture : nullptr;
-	}
-
-	template <typename T>
-	T* FacesNode(UMaterial* Material, int32 X, int32 Y)
-	{
-		return Cast<T>(UMaterialEditingLibrary::CreateMaterialExpression(Material, T::StaticClass(), X, Y));
-	}
-
-	void FacesConnect(UMaterialExpression* From, const TCHAR* FromPin, UMaterialExpression* To, const TCHAR* ToPin)
-	{
-		if (!UMaterialEditingLibrary::ConnectMaterialExpressions(From, FromPin, To, ToPin))
-		{
-			UE_LOG(LogPawnFaces, Error, TEXT("Could not connect %s to %s pin '%s'"), *From->GetName(), *To->GetName(), ToPin);
-		}
 	}
 
 	// The mark decal: a mask texture's coverage times an opacity, in one colour, and only where the skin (which the pawn

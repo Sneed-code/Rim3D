@@ -32,8 +32,8 @@
       "source": "Made by the PawnFaces commandlet from the engine's MetaHuman Creator plugin (MetaHumanCharacter: its face model and preset faces, and the grooms listed in assets/pawn_faces.json) and the Game Animation Sample's Kellan; tattoo, scar and body hair masks drawn in code",
       "licence": "Derived from engine and Epic sample content, usable in Unreal Engine projects; the masks are our own",
       "version": "UE 5.8",
-      "installedTo": "game/Content/Rim3D/Generated/PawnFaces/ (about 460 MB, not in Git); the plugin is enabled for the editor only in game/Rim3D.uproject",
-      "usedFor": "seeded face shapes, eye colours, hair styles, beards and eyebrows, tattoos, scars and body hair; V2b: face skins (colour and normal maps synthesized offline by the plugin's texture synthesis model from the presets listed under skins in assets/pawn_faces.json) and the bare skin material (docs/design/looks.md)",
+      "installedTo": "game/Content/Rim3D/Generated/PawnFaces/ (about 660 MB, not in Git); the plugin is enabled for the editor only in game/Rim3D.uproject",
+      "usedFor": "seeded face shapes, eye colours, hair styles, beards and eyebrows, tattoos, scars and body hair; V2b: face skins (colour and normal maps synthesized offline by the plugin's texture synthesis model from the presets listed under skins in assets/pawn_faces.json) the bare skin material, and hair cards for far pawns (each hair groom's own card meshes and coverage texture, copied) (docs/design/looks.md)",
       "reinstall": "\"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" game\\Rim3D.uproject -run=PawnFaces -unattended -nosplash -nullrhi (after PawnLooks)"
     },
     {

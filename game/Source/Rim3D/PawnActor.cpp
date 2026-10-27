@@ -12,6 +12,7 @@
 #include "Engine/Texture.h"
 #include "Engine/World.h"
 #include "GroomAsset.h"
+#include "HAL/IConsoleManager.h"
 #include "GroomBindingAsset.h"
 #include "GroomComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -32,6 +33,9 @@
 
 namespace
 {
+	TAutoConsoleVariable<int32> GPawnsHairCards(
+		TEXT("Pawns.HairCards"), 1, TEXT("1 draws hair cards on pawns away from full detail (their strands only show at full detail), 0 none."), ECVF_Default);
+
 	// How fast a pawn turns to face where it walks, degrees per second at 1x.
 	constexpr float PawnTurnRate = 720.0f;
 	// Slower than this (cm/s) a pawn keeps facing the way it faced.
@@ -394,6 +398,10 @@ void ASimPawnActor::ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& In
 			Mesh->SetScalarParameterValueOnMaterials(TEXT("HairRedness"), Redness);
 		}
 	}
+	if (HairCardsMaterial)
+	{
+		HairCardsMaterial->SetVectorParameterValue(PawnFacesParamHairColor, Looks.Hair);
+	}
 
 	// The clothes and the skin under them share the body's shape and the pawn's skin colour.
 	for (UMaterialInstanceDynamic* BareSkin : BareSkins)
@@ -493,6 +501,7 @@ void ASimPawnActor::ApplyFace(USimPawnSubsystem& Pawns)
 	}
 
 	SetGroom(Pawns, TEXT("Hair"), Looks.HairStyle == TEXT("Bald") ? FString() : PawnFacesGroomName(TEXT("Hair"), Looks.HairStyle));
+	SetHairCards(Pawns);
 	const bool bBeard = !Looks.Beard.IsEmpty() && Looks.Beard != TEXT("None");
 	SetGroom(Pawns, TEXT("Beard"), bBeard ? PawnFacesGroomName(TEXT("Beard"), Looks.Beard) : FString());
 	SetGroom(Pawns, TEXT("Mustache"), bBeard ? PawnFacesGroomName(TEXT("Moustache"), Looks.Beard) : FString());
@@ -518,6 +527,31 @@ UMaterialInterface* ASimPawnActor::GetFaceSkin() const
 		return FaceMesh ? FaceMesh->GetMaterial(Slot.Key) : nullptr;
 	}
 	return nullptr;
+}
+
+void ASimPawnActor::SetHairCards(USimPawnSubsystem& Pawns)
+{
+	// V2b: far pawns draw the style's hair cards (strands only show at full detail); none for bald, or without the assets.
+	UStaticMesh* Mesh = Looks.HairStyle == TEXT("Bald") ? nullptr : Cast<UStaticMesh>(Pawns.GetFacesAsset(PawnFacesHairCardsName(Looks.HairStyle)));
+	if (Mesh && !HairCards && FaceMesh)
+	{
+		HairCards = NewObject<UStaticMeshComponent>(this, TEXT("HairCards"));
+		HairCards->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		HairCards->SetCanEverAffectNavigation(false);
+		HairCards->SetCastShadow(false);
+		HairCards->SetupAttachment(FaceMesh, TEXT("head"));
+		HairCards->RegisterComponent();
+	}
+	if (HairCards)
+	{
+		HairCards->SetStaticMesh(Mesh);
+		if (Mesh && Mesh->GetMaterial(0))
+		{
+			HairCardsMaterial = UMaterialInstanceDynamic::Create(Mesh->GetMaterial(0), HairCards);
+			HairCardsMaterial->SetVectorParameterValue(PawnFacesParamHairColor, Looks.Hair);
+			HairCards->SetMaterial(0, HairCardsMaterial);
+		}
+	}
 }
 
 void ASimPawnActor::SetGroom(USimPawnSubsystem& Pawns, FName Component, const FString& GroomName)
@@ -574,6 +608,11 @@ void ASimPawnActor::RefreshGroomVisibility()
 			const bool bCovered = bHairHidden && Groom->GetName().Contains(TEXT("Hair"));
 			Groom->SetVisibility(Detail == ESimPawnDetail::Full && !bCovered && !EmptyGrooms.Contains(Groom->GetFName()));
 		}
+	}
+	// Hair cards stand in for the hair strands away from full detail.
+	if (HairCards)
+	{
+		HairCards->SetVisibility(Detail != ESimPawnDetail::Full && !bHairHidden && HairCards->GetStaticMesh() != nullptr && GPawnsHairCards.GetValueOnGameThread() != 0);
 	}
 }
 

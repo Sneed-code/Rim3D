@@ -155,8 +155,8 @@ Measured (`faces`, editor build, offscreen 888x500): twelve pawns in a row all l
 colours, no two faces closer than 0.18 on the four sliders); 100 MetaHumans with faces and hair, 19.7 ms game thread, 8.0 ms
 GPU at 888x500 (the `looks` crowd on the same build: 18.2 ms and 2.4 ms, a smaller scene). Close-ups and portraits at 1080p.
 
-Not done: far pawns have no hair at all (as before; the plan's hair cards for them are still to do), hair does not follow
-the face morphs where they meet (the morphs stay off the scalp), and eyebrows and beards do not move with expressions.
+Not done: hair does not follow the face morphs where they meet (the morphs stay off the scalp), far pawns have no
+beards or brows (hair cards, V2b below, cover the hair only), and eyebrows and beards do not move with expressions.
 
 ## Face skins and the bare skin (V2b)
 
@@ -180,6 +180,16 @@ Two gaps V2 left. Code: the same files (`FacesMakeSkins`, `FacesMakeBareSkin` in
   `M_PawnBareSkin`: subsurface skin with M_PawnSkin's profile, roughness and specular, a fine tiled skin normal (the
   hoodie's UVs fit no skin texture), and `SkinColor` set on a dynamic instance per layer (`BareSkins`), so the torso,
   arms and legs match the face and hands. Without the PawnFaces assets it keeps the garment colour.
+- **Hair cards for far pawns.** Strands draw only at full detail (the nearest 20), so the rest were bald. Each hair style
+  now also gets `SM_HairCards_<Style>`: its Creator groom's own card meshes at card LOD `hairCardsLod` (3; the nearest at
+  or under it, every group in one mesh, 2,500 to 17,000 triangles, the afro the most), moved onto Kellan's head like the
+  strands and into the face's head bone space, and `MI_HairCards_<Style>` on `M_PawnHairCards` (masked, two-sided, one
+  colour `HairColor`, cut by the cards' coverage texture `T_HairCards_<Style>_Coverage`, copied from the plugin). The
+  pawn attaches it to the face's `head` bone, sets its hair colour on a dynamic instance, and shows it whenever it is not
+  at full detail (not under a covering hat). `Pawns.HairCards 0` turns them off. The Creator's buzz cut has no cards, so
+  far pawns with Buzz hair draw none. The generated folder is about 660 MB now (the coverage textures are most of the
+  growth). Measured (`faces`, 1080p, 100 pawns, about 80 of them with cards): 22.2 ms game thread and 9.9 ms GPU, against
+  21.7 ms and 9.5 ms with `Pawns.HairCards 0`.
 
 ## In Unreal
 

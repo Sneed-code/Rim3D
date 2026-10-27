@@ -9,6 +9,8 @@
     "female": ["Ada", "Aera", "Asha", "Celeste", "Etta", "Grace", "Jelena", "Lani", "Sook-ja", "Sunita", "Tuya", "Vivian", "Zuri"],
     "male": ["Bo", "Bruce", "Cameron", "Dominic", "Isaiah", "Jorge", "Kelvin", "Lorenzo", "Mateo", "Mikel", "Omari", "Orlando", "Trey", "Victor", "Walter"]
   },
+  "hairCardsLod": 3,
+  "hairCardsComment": "V2b: far pawns draw their hair style's Creator hair cards at this card LOD (0 finest, 4 coarsest; the nearest at or under it), instead of strands.",
   "hair": {
     "Short": "Hair_S_Casual",
     "Buzz": "Hair_S_BuzzCut",
