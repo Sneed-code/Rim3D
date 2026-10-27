@@ -35,6 +35,7 @@
 #include "ColonySim/Medicine.h"
 #include "ColonySim/Surgery.h"
 #include "ColonySim/Prisoners.h"
+#include "ColonySim/Quests.h"
 #include "ColonySim/Ship.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Talents.h"
@@ -325,6 +326,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     prisoners_ = std::make_unique<PrisonerSystem>(*things_, map_, *combat_, *health_, *jobs_, *fighters_, *raids_, *defs_, time_, rng_);
     prisoners_->setEventLog(&events_);
     jobs_->setPrisoners(prisoners_.get());
+    quests_ = std::make_unique<QuestSystem>(*things_, map_, *raids_, *fighters_, *health_, *defs_, time_, rng_);
+    quests_->setEventLog(&events_);
+    quests_->setJoinMaker([this](CellPos cell, uint64_t seed) { return makeJoiner(cell, seed); });
     ship_ = std::make_unique<ShipSystem>(*things_, *raids_, *defs_, time_);
     ship_->setEventLog(&events_);
     mood_->addSituation("isPrisoner", [this](Entity pawn) { return prisoners_->isPrisoner(pawn) ? 0 : -1; });
@@ -375,6 +379,16 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     fighters_->setDefense(defense_.get());
     narrator_ = std::make_unique<NarratorSystem>(*raids_, *defs_, time_, settings.seed);
     narrator_->setEventLog(&events_);
+    narrator_->setWorker("QuestOffer", [this](IncidentFiring& f) {
+        uint32_t id = 0;
+        if (!quests_->offerRandom(id, f.error)) {
+            return false;
+        }
+        const Quest* quest = quests_->find(id);
+        const Def* questDef = quest != nullptr ? defs_->find("Quests", quest->kind) : nullptr;
+        f.text = "Quest: " + (questDef != nullptr ? questDef->text("text") : std::string("someone has an offer for the colony."));
+        return true;
+    });
     social_ = std::make_unique<SocialSystem>(*things_, *rooms_, *health_, *melee_, *mood_, *jobs_, *defs_, time_,
                                              splitMix64(settings.seed ^ 0x736F6369616CULL));
     social_->setEventLog(&events_);
@@ -485,6 +499,24 @@ void Sim::placeStockpileAndThings() {
         const uint64_t looksSeed = splitMix64(settings_.seed ^ 0x6861756C6572ULL) + static_cast<uint64_t>(i);
         giveLooks(pawn, looksSeed, (splitMix64(looksSeed) & 1) != 0, "Baseline");
     }
+}
+
+// A new colonist who walks in from outside (a quest's refugee or wanderer): a whole person working for the player.
+Entity Sim::makeJoiner(CellPos cell, uint64_t seed) {
+    Colonist colonist;
+    std::string error;
+    if (!generateColonist(*defs_, seed, false, colonist, error)) {
+        return kNoEntity;
+    }
+    const Entity pawn = things_->spawn("Human", cell);
+    if (pawn == kNoEntity || !things_->registry().all_of<Mover>(pawn)) {
+        things_->destroy(pawn);
+        return kNoEntity;
+    }
+    jobs_->addWorker(pawn, colonist.disabledWorkTags);
+    giveLooks(pawn, seed, colonist.female, "Baseline");
+    things_->registry().emplace<Colonist>(pawn, std::move(colonist));
+    return pawn;
 }
 
 void Sim::giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& lineage) {
@@ -1241,6 +1273,21 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
                 commandFailed(id, error);
             }
         }
+    } else if (const auto* quest = std::get_if<QuestCommand>(&command)) {
+        uint32_t made = 0;
+        bool ok = false;
+        if (quest->action == "offer") {
+            ok = quest->kind.empty() ? quests_->offerRandom(made, error) : quests_->offer(quest->kind, made, error);
+        } else if (quest->action == "accept") {
+            ok = quests_->accept(quest->quest, error);
+        } else if (quest->action == "decline") {
+            ok = quests_->decline(quest->quest, error);
+        } else {
+            error = "no quest action '" + quest->action + "' (offer, accept or decline)";
+        }
+        if (!ok) {
+            commandFailed(id, error);
+        }
     }
 }
 
@@ -1285,6 +1332,7 @@ void Sim::step() {
     }
     fighters_->step();
     prisoners_->step();
+    quests_->step();
     ship_->step();
     recreation_->step();
     animals_->step();
@@ -1742,6 +1790,24 @@ void Sim::writeSnapshot(Snapshot& out) const {
                                        static_cast<uint8_t>(squad.strategy), squad.hasBreach, squad.breach});
     }
 
+    out.quests.clear();
+    for (const Quest& quest : quests_->state().quests) {
+        QuestView view;
+        view.id = quest.id;
+        view.kind = quest.kind;
+        const Def* questDef = defs_->find("Quests", quest.kind);
+        view.label = questDef != nullptr ? questDef->label() : quest.kind;
+        view.state = static_cast<uint8_t>(quest.state);
+        view.expiresAt = quest.expiresAt;
+        view.deadline = quest.deadline;
+        view.people = quest.count;
+        view.points = quest.points;
+        for (const Quest::Reward& reward : quest.rewards) {
+            view.rewards.emplace_back(reward.thing, reward.count);
+        }
+        out.quests.push_back(std::move(view));
+    }
+
     out.rooms.clear();
     for (const Room& room : rooms_->rooms()) {
         if (!room.enclosed()) {
@@ -1880,6 +1946,7 @@ uint64_t Sim::stateHash() const {
     designations_->hashState(h);
     research_->hashState(h);
     raids_->hashState(h);
+    quests_->hashState(h);
     ship_->hashState(h);
     talents_->hashState(h);
     pathfinder_.hashState(h);
