@@ -444,6 +444,13 @@ struct DesignationView {
     DesignationKind kind = DesignationKind::None;
 };
 
+// One cell of deep resources a scanner found (docs/design/deep-mining.md).
+struct DeepCellView {
+    CellPos cell;
+    DefId def;       // the item under it
+    int units = 0;
+};
+
 // One research project and where it stands (docs/design/research.md).
 struct ResearchView {
     DefId project;          // a Research def
@@ -561,6 +568,9 @@ struct Snapshot {
     uint64_t fireChanges = ~0ULL;
     std::vector<CellPos> burnt;
     uint64_t burntChanges = ~0ULL;
+    // Deep resources found by scanners, in cell order; rewritten when `deepChanges` moves (drills take units out).
+    std::vector<DeepCellView> deepResources;
+    uint64_t deepChanges = ~0ULL;
     std::vector<CellPos> homeArea;
     uint64_t homeChanges = ~0ULL;
     // The colony alarm (docs/design/raids.md): on, and whether the player sounded it (only the
