@@ -43,6 +43,8 @@ struct SurgeryRecipe {
     // A removal: takes any part off (or the artificial part on it, which comes back as an item).
     bool removes = false;
     bool limbsOnly = false;
+    // A harvest: a removal of a healthy organ that comes back as an item ("Organ" + the part def, e.g. OrganKidney).
+    bool harvests = false;
 };
 
 // One line on a patient. Ids count up per patient and are never reused.
@@ -88,6 +90,8 @@ struct SurgeryResult {
     bool success = false;
     bool died = false;     // the patient died of it
     DefId returned;        // an artificial part taken off, as the item to put on the map
+    DefId harvested;       // the organ taken from a living body, as the item to put on the map (the body part is `harvestedPart`)
+    int harvestedPart = -1;
 };
 
 // A line as a panel shows it.
@@ -112,6 +116,8 @@ public:
     // ---- What can be done --------------------------------------------------------------------
     // Whether `recipe` can be done on this part of this patient now; `why` says what is wrong in plain words.
     bool eligible(Entity patient, const SurgeryRecipe& recipe, int part, std::string& why) const;
+    // The organ item a harvest of this part gives (Things "Organ" + the part def), invalid if there is none.
+    DefId organItem(Entity patient, int part) const;
     // Every part of the patient the recipe can be done on now, in body order.
     std::vector<int> targets(Entity patient, const SurgeryRecipe& recipe) const;
 
