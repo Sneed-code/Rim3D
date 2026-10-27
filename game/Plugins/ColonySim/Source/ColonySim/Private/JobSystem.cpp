@@ -4,7 +4,9 @@
 #include "ColonySim/Bills.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Construction.h"
+#include "ColonySim/Crafting.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/FieldCare.h"
 #include "ColonySim/Fighters.h"
@@ -867,7 +869,7 @@ void JobSystem::step() {
         // The player walks this one (U9): no think, until control is let go. Its only job is a
         // hands-on one the player started (U10), done in place.
         if (reg.all_of<PlayerControl>(pawn)) {
-            if (reg.get<Worker>(pawn).job.type != JobType::None) {
+            if (reg.get<Worker>(pawn).job.type != JobType::None && !(pauseGate_ && pauseGate_(pawn))) {
                 tickJob(pawn);
             }
             continue;
@@ -907,6 +909,11 @@ void JobSystem::step() {
                 !(lying.type == JobType::BedRest && lying.step >= 1)) {
                 health->rest = RestKind::Ground;
             }
+        }
+        // Stunned or winding up a power (X2): the job waits where it is.
+        if (pauseGate_ && pauseGate_(pawn)) {
+            reg.get<Mover>(pawn).hold = true;
+            continue;
         }
         // A prisoner sleeps and rests in its cell and does nothing else (PrisonerJobs.cpp).
         if (reg.all_of<Prisoner>(pawn)) {
@@ -1457,9 +1464,9 @@ JobSystem::StepResult JobSystem::place(Entity pawn, Job& job, std::string& why) 
 // Construction (docs/design/construction.md). Work steps use `job.walk` as "started": 0 until the
 // pawn's first second of work, which sends the PawnAction.
 
-float JobSystem::constructionSpeed(Entity pawn) const {
+float JobSystem::constructionSpeed(Entity pawn, const char* skillName) const {
     const float talent = talents_ != nullptr ? static_cast<float>(talents_->statFactor(pawn, "buildSpeed")) : 1.0f;
-    return construction_.skillSpeed(pawn) * health_.capacityValue(pawn, "Manipulation") * lightWorkFactor(pawn) * talent;
+    return construction_.skillSpeed(pawn, skillName) * health_.capacityValue(pawn, "Manipulation") * lightWorkFactor(pawn) * talent;
 }
 
 JobSystem::StepResult JobSystem::deliver(Entity pawn, Job& job, std::string& why) {
@@ -1497,8 +1504,10 @@ JobSystem::StepResult JobSystem::buildWork(Entity pawn, Job& job, std::string& w
         pawnDid(pawn, PawnAction::Build, job.thing);
     }
     ConstructionSite& site = reg.get<ConstructionSite>(job.thing);
-    site.workDone += constructionSpeed(pawn) * static_cast<float>(construction_.numbers().buildWorkPerSecond);
-    learnSkill(pawn, "Construction", gather_.constructionXpPerSecond);
+    const bool art = construction_.isArt(reg.get<Thing>(job.thing).def);
+    const char* skillName = art ? "Artistic" : "Construction";
+    site.workDone += constructionSpeed(pawn, skillName) * static_cast<float>(construction_.numbers().buildWorkPerSecond);
+    learnSkill(pawn, skillName, gather_.constructionXpPerSecond);
     if (site.workDone < site.workTotal) {
         return StepResult::Running;
     }
@@ -1517,6 +1526,11 @@ JobSystem::StepResult JobSystem::buildWork(Entity pawn, Job& job, std::string& w
     if (building == kNoEntity) {
         why = "the building can't stand there any more";
         return StepResult::Failed;
+    }
+    if (art && crafting_ != nullptr) {
+        // A sculpture has the quality its sculptor's Artistic skill rolls (RimWorld's table, as for crafting).
+        const int quality = crafting_->rollQuality(skillLevel(pawn, "Artistic"));
+        reg.emplace_or_replace<Quality>(building, Quality{static_cast<uint8_t>(quality)});
     }
     release(pawn, job);
     job.thing = building;

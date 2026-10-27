@@ -85,6 +85,9 @@ enum class EventType : uint8_t {
     Interaction,     // one colonist talked to another (C20, docs/design/social.md): `thing` the talker, `target` the one spoken to, `message` the Interactions def, `count` 1 if it worked, 0 if refused, `amount` the listener's opinion of the talker after
     BondChanged,     // a stored bond formed or ended: `thing` and `target` the two, `message` the bond kind ("Lover", "Spouse", "ExLover", "ExSpouse"), `count` 1 formed, 0 ended
     SocialFight,     // a fight with fists began or ended: `thing` and `target` the two, `message` "started" or "ended: why"
+    PowerCast,       // a resonance power went off (docs/design/resonance.md): `thing` the caster, `def` the Powers def, `target` the pawn it
+                     // was used on, `cell` where a jump took it, (x, y, z) where the target is now, `amount` the caster's strain now,
+                     // `count` the steps the effect lasts (0 for a jump)
     PrisonerCaptured,   // a downed enemy was laid in a prison bed: `thing` the prisoner, `target` the warden (docs/design/prisoners.md)
     PrisonerChatted,    // a warden finished a talk with a prisoner: `thing` the warden, `target` the prisoner, `amount` its resistance now, `message` "reduced", "recruit failed" or "no change"
     PrisonerRecruited,  // a prisoner joined the colony: `thing` the new colonist, `target` the warden
@@ -173,6 +176,7 @@ enum class PawnAction : uint8_t {
     Tend,         // started tending `target`, a patient (once per job; the work takes game seconds)
     LiftPawn,     // lifted `target`, a downed pawn, to carry it (its position follows this pawn's until LayPawn)
     LayPawn,      // laid the carried `target` down in a bed (or where it stood, if the bed was lost)
+    Cast,         // started the warm-up of a resonance power (X2) at `target` (a jump: to `cell`); `amount` the steps until it goes off
     Chat,         // started talking to `target`, a prisoner (once per job; the talk takes game seconds)
     FeedPawn,     // started handing food to `target`, a prisoner
     Refuel,       // started putting fuel into `target`, a building (once per refuel job; the work goes on until its JobEnded)

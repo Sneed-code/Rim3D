@@ -164,6 +164,8 @@ public:
     FighterSystem& operator=(const FighterSystem&) = delete;
 
     const FighterRules& rules() const { return rules_; }
+    // Hurt badly enough to fall back: pain, blood loss or Moving past the FighterRules limits.
+    bool badlyHurt(Entity pawn) const;
     void setEventLog(std::vector<Event>* events) { events_ = events; }
     // Grenades (F9): fighters throw the ones on their belts and dive away from ones about to go off.
     void setExplosives(ExplosiveSystem* explosives) { explosives_ = explosives; }
@@ -262,7 +264,6 @@ private:
     void stop(Entity pawn, Fighter& f);
     const PawnInfo* info(Entity pawn) const;
     float weaponRange(Entity pawn) const;
-    bool badlyHurt(Entity pawn) const;
     int64_t now() const;
     void planCharge(Entity pawn, Fighter& f, CellPos goal);
     bool meleeAct(Entity pawn, Fighter& f);
