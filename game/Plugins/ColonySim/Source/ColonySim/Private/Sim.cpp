@@ -180,7 +180,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       defs_(defs ? std::move(defs) : std::shared_ptr<const DefDatabase>(std::shared_ptr<const DefDatabase>(), &simEmptyDefs())),
       world_(simMakeWorld(settings_, *defs_)),
       site_(simStartSite(world_.get())),
-      biome_(site_ && !site_->biome.empty() ? site_->biome : std::string("TemperateForest")),
+      biome_(site_ && !site_->biome.empty() ? site_->biome : settings.biome),
       // On a world the start tile seeds the map, so the same world and tile always give the same map.
       map_(simMapSettings(settings, site_ ? site_->mapSeed : splitMix64(settings.seed ^ 0x6D6170ULL), biome_, *defs_)),
       pathfinder_(map_),
