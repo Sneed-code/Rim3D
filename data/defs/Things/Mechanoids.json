@@ -1,0 +1,321 @@
+[
+ {
+  "defName": "Mech_Scyther",
+  "label": "remnant reaper",
+  "source": "RimWorld wiki",
+  "category": "Pawn",
+  "stats": {
+   "moveSpeed": 0.156667,
+   "marketValue": 1200,
+   "mass": 100.0,
+   "filthRate": 0,
+   "comfyTemperatureMin": -270,
+   "comfyTemperatureMax": 1000
+  },
+  "race": {
+   "intelligence": "Mechanoid",
+   "mechanical": true,
+   "body": "Human",
+   "hitboxes": "HumanHitboxes",
+   "baseBodySize": 1.0,
+   "baseHealthScale": 1.32,
+   "armor": {
+    "sharp": 0.4,
+    "blunt": 0.2,
+    "heat": 2.0
+   },
+   "combatPower": 150,
+   "weapon": null
+  },
+  "tools": [
+   {
+    "label": "left blade",
+    "capacities": [
+     "Cut"
+    ],
+    "power": 20,
+    "cooldownTime": 60,
+    "armorPenetration": 0.3
+   },
+   {
+    "label": "left blade",
+    "capacities": [
+     "Stab"
+    ],
+    "power": 20,
+    "cooldownTime": 60,
+    "armorPenetration": 0.3
+   },
+   {
+    "label": "right blade",
+    "capacities": [
+     "Cut"
+    ],
+    "power": 20,
+    "cooldownTime": 60,
+    "armorPenetration": 0.3
+   },
+   {
+    "label": "right blade",
+    "capacities": [
+     "Stab"
+    ],
+    "power": 20,
+    "cooldownTime": 60,
+    "armorPenetration": 0.3
+   },
+   {
+    "label": "head",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 9,
+    "cooldownTime": 60,
+    "armorPenetration": 0.13,
+    "chanceFactor": 0.2
+   }
+  ],
+  "unverified": [
+   "stats",
+   "race",
+   "tools",
+   "marketValue"
+  ],
+  "ours": [
+   "race.mechanical",
+   "race.armor",
+   "race.combatPower",
+   "race.weapon",
+   "stats.mass"
+  ],
+  "visual": {
+   "sound": {
+    "idle": "Hum_Generator",
+    "hurt": "Impact_Armor",
+    "death": "Explosion_Blast",
+    "burning": "Pawn_Burning"
+   }
+  }
+ },
+ {
+  "defName": "Mech_Lancer",
+  "label": "remnant striker",
+  "source": "RimWorld wiki",
+  "category": "Pawn",
+  "stats": {
+   "moveSpeed": 0.156667,
+   "marketValue": 1000,
+   "mass": 100.0,
+   "filthRate": 0,
+   "comfyTemperatureMin": -270,
+   "comfyTemperatureMax": 1000
+  },
+  "race": {
+   "intelligence": "Mechanoid",
+   "mechanical": true,
+   "body": "Human",
+   "hitboxes": "HumanHitboxes",
+   "baseBodySize": 1.0,
+   "baseHealthScale": 0.72,
+   "armor": {
+    "sharp": 0.4,
+    "blunt": 0.2,
+    "heat": 2.0
+   },
+   "combatPower": 190,
+   "weapon": "Gun_ChargeLance"
+  },
+  "tools": [
+   {
+    "label": "left fist",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 12,
+    "cooldownTime": 60,
+    "armorPenetration": 0.18
+   },
+   {
+    "label": "right fist",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 12,
+    "cooldownTime": 60,
+    "armorPenetration": 0.18
+   },
+   {
+    "label": "head",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 8.5,
+    "cooldownTime": 60,
+    "armorPenetration": 0.13,
+    "chanceFactor": 0.2
+   }
+  ],
+  "unverified": [
+   "stats",
+   "race",
+   "tools",
+   "marketValue"
+  ],
+  "ours": [
+   "race.mechanical",
+   "race.armor",
+   "race.combatPower",
+   "race.weapon",
+   "stats.mass"
+  ],
+  "visual": {
+   "sound": {
+    "idle": "Hum_Generator",
+    "hurt": "Impact_Armor",
+    "death": "Explosion_Blast",
+    "burning": "Pawn_Burning"
+   }
+  }
+ },
+ {
+  "defName": "Mech_Pikeman",
+  "label": "remnant ranger",
+  "source": "RimWorld wiki",
+  "category": "Pawn",
+  "stats": {
+   "moveSpeed": 0.083333,
+   "marketValue": 800,
+   "mass": 100.0,
+   "filthRate": 0,
+   "comfyTemperatureMin": -270,
+   "comfyTemperatureMax": 1000
+  },
+  "race": {
+   "intelligence": "Mechanoid",
+   "mechanical": true,
+   "body": "QuadrupedAnimal",
+   "hitboxes": "MediumQuadrupedHitboxes",
+   "baseBodySize": 1.0,
+   "baseHealthScale": 0.85,
+   "armor": {
+    "sharp": 0.4,
+    "blunt": 0.2,
+    "heat": 2.0
+   },
+   "combatPower": 110,
+   "weapon": "Gun_NeedleGun"
+  },
+  "tools": [
+   {
+    "label": "front left leg",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 12,
+    "cooldownTime": 60,
+    "armorPenetration": 0.18
+   },
+   {
+    "label": "front right leg",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 12,
+    "cooldownTime": 60,
+    "armorPenetration": 0.18
+   },
+   {
+    "label": "head",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 8.5,
+    "cooldownTime": 60,
+    "armorPenetration": 0.13,
+    "chanceFactor": 0.2
+   }
+  ],
+  "unverified": [
+   "stats",
+   "race",
+   "tools",
+   "marketValue"
+  ],
+  "ours": [
+   "race.mechanical",
+   "race.armor",
+   "race.combatPower",
+   "race.weapon",
+   "stats.mass"
+  ],
+  "visual": {
+   "sound": {
+    "idle": "Hum_Generator",
+    "hurt": "Impact_Armor",
+    "death": "Explosion_Blast",
+    "burning": "Pawn_Burning"
+   }
+  }
+ },
+ {
+  "defName": "Mech_Centipede",
+  "label": "remnant crawler",
+  "source": "RimWorld wiki",
+  "category": "Pawn",
+  "stats": {
+   "moveSpeed": 0.063333,
+   "marketValue": 2000,
+   "mass": 300.0,
+   "filthRate": 0,
+   "comfyTemperatureMin": -270,
+   "comfyTemperatureMax": 1000
+  },
+  "race": {
+   "intelligence": "Mechanoid",
+   "mechanical": true,
+   "body": "QuadrupedAnimal",
+   "hitboxes": "LargeQuadrupedHitboxes",
+   "baseBodySize": 3.0,
+   "baseHealthScale": 4.32,
+   "armor": {
+    "sharp": 0.72,
+    "blunt": 0.22,
+    "heat": 2.0
+   },
+   "combatPower": 400,
+   "weapon": "Gun_HeavyChargeBlaster"
+  },
+  "tools": [
+   {
+    "label": "head",
+    "capacities": [
+     "Blunt"
+    ],
+    "power": 17,
+    "cooldownTime": 78,
+    "armorPenetration": 0.25
+   }
+  ],
+  "unverified": [
+   "stats",
+   "race",
+   "tools",
+   "marketValue"
+  ],
+  "ours": [
+   "race.mechanical",
+   "race.armor",
+   "race.combatPower",
+   "race.weapon",
+   "stats.mass"
+  ],
+  "visual": {
+   "sound": {
+    "idle": "Hum_Generator",
+    "hurt": "Impact_Armor",
+    "death": "Explosion_Blast",
+    "burning": "Pawn_Burning"
+   }
+  }
+ }
+]

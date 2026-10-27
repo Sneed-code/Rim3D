@@ -1,5 +1,7 @@
 # Medicine, doctors and rescue
 
+Surgery and prosthetics (H3) build on this: [surgery.md](surgery.md).
+
 Code: `ColonySim/Medicine.h`, `Private/Medicine.cpp` (the numbers and the tend quality), `Private/MedicineJobs.cpp`
 (the three jobs and the bed and medicine searches), the four scanners in `Private/WorkGivers.cpp`, scars in
 `Private/Health.cpp`. Tests: `Tests/MedicineTests.cpp`. Task H1. Data: D7 ([medicine-data.md](medicine-data.md)); the
@@ -92,6 +94,5 @@ type (it stopped at `Research`, so a save made while someone was cleaning filth 
 
 ## Not here
 
-Infections, diseases and immunity are built ([diseases.md](diseases.md)). Not here: surgery and prosthetics (H3, which would let a patient with a lost leg stand
-again), feeding patients, medicine stock policy, the health tab's care setting and bed buttons (U8 follow-up), a
+Infections, diseases and immunity are built ([diseases.md](diseases.md)), and so are surgery and prosthetics ([surgery.md](surgery.md)). Not here: feeding patients, medicine stock policy, the health tab's care setting and bed buttons (U8 follow-up), a
 carried pawn shown in a rescuer's arms (Unreal draws it where the sim puts it), self-tend toggle, tending animals.

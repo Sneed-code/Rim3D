@@ -49,6 +49,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Talents (section `talents`) | per protagonist: pawn, XP and ranks by talent **`defName`** ([talents.md](talents.md)) |
 | Farming (section `farming`) | growing zones: id, crop **by `defName`**, cells; the next zone id and the counters ([farming.md](farming.md)) |
 | Prisoners (section `prisoners`) | each prisoner's mode, resistance, capture time and next talk; each prison-marked bed ([prisoners.md](prisoners.md)) |
+| World (section `world`) | `SimSettings::world` (on, seed, width, height, start tile) and the world's hash; the world itself is made again from them and checked against the hash ([world-map.md](world-map.md)) |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
@@ -102,7 +103,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `movement` | 2 | `mover` |
 | `jobs` | 1 | `worker` (the job, its bill picks and ingredients, avoid memory), `work` (Work tab), `carrying` |
 | `colonists` | 2 | `colonist` (2: each skill's `xpToday`, C12) |
-| `health` | 4 | `health` (version 2: environment hediffs such as hypothermia, E2; version 3: each injury's `peak`, for scars, H1; version 4: `infectAt`, `diseases` and `immunities`, H2) |
+| `health` | 5 | `health` (version 2: environment hediffs such as hypothermia, E2; version 3: each injury's `peak`, for scars, H1; version 4: `infectAt`, `diseases` and `immunities`, H2; version 5: `added`, the artificial parts fitted, H3) |
 | `control` | 1 | `playerControlled`: the ids of controlled pawns |
 | `needs` | 1 | `needs`, `schedule`, `bed` |
 | `bills` | 2 | `bills` on work buildings. Version 2 (C14) adds each bill's skill range, ingredient radius, store stockpile, restart stock, satisfied flag and ingredient filter; version 1 loads with the defaults |
@@ -131,7 +132,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `apparel` | 1 | `apparel`: the stuff and quality of an item, taint, a strip mark, a pawn's outfit and next look; the outfit policies ([apparel.md](apparel.md)) |
 | `feel` | 1 | `kick` (the player's gun kick and its spray) and `roll` (a dodge roll's phase, steps, direction, wait) ([shooter-feel.md](shooter-feel.md)) |
 | `levels` | 1 | the upper floors, by level then row; put back before the buildings on them (M1) |
-| `medicine` | 1 | `medical`: the medical care setting of each pawn that has one (H1, [medicine.md](medicine.md)) |
+| `medicine` | 2 | `medical`: the medical care setting of each pawn that has one (H1, [medicine.md](medicine.md)); version 2: `operations`, the operations planned on a patient (H3, [surgery.md](surgery.md)) |
 | `weapons` | 1 | `stowed` (the weapons a pawn carries on its body besides the one in its hands) and `switch` (a weapon switch under way) ([weapons.md](weapons.md)) |
 | `weather` | 1 | the current and previous weather by `defName`, when it began and ends, its random stream, the snow depth of each cell with snow ([weather.md](weather.md)) |
 | `narrator` | 1 | the narrator and difficulty by `defName`, its random stream, the threat cycle's start and planned threats, when each incident last happened, the count, the last wealth and points ([narrator.md](narrator.md), T1) |
@@ -298,7 +299,9 @@ Every section is version 1 at format 20. A task that changes a section adds a li
 
 - `roomstats` 1 (C17): floors, filth, carried filth, the filth rng, beauty needs ([room-stats.md](room-stats.md)). Commands `PlaceFloor` and `AddFilth` by name.
 - `health` 2 (E2): each pawn's environment hediffs (hypothermia, heatstroke...), a list of def name and severity before `dead`. Version 1 files load with none.
+- `world` 1 (W2): new section, see the table. Saves without it have no world.
 - `prisoners` 1 (C22): new section, see the table. Commands `SetPrisonerMode` and `SetPrisonBed` by name; the job check now accepts `CapturePrisoner`, `FeedPrisoner` and `WardenInteract`.
+- `raids` 2 (adaptation): AdaptDays, the next growth time and the colonists watched, after the alarm values; version 1 loads as 0 and an empty list.
 - `raids` 1 (F6): new section, see the table. Commands `StartRaid`, `SoundAlarm`, `SetDefenseRole`, `MarkShelter` by name.
 - `raids` 2 (F12): per squad `strategy`, `hasBreach`, `breach`, `breachFrom`; the raids waiting for their hour (`pending`); per raider `goalThing`, `loot`, `sparesDowned`; a `kidnapped` part on a colonist a raider carries ([raid-strategies.md](raid-strategies.md)). Version 1 files load with Assault squads and nothing waiting. Command `StartStrategyRaid` by name.
 - `fighters` 2 (F6): a fighter's `mode`, `defending`, `squad`, `hasGoal`, `goal`, `retreat` after `dodgeUntil`. Version 1 files load them as a plain fighter.

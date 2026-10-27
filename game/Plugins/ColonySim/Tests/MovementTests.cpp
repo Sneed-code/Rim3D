@@ -1,3 +1,4 @@
+#include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Pathfinder.h"
@@ -485,4 +486,23 @@ TEST_CASE("Movement: a pawn held in place (working) is not shoved by one walking
     // The walker came up to it and was kept out of it.
     CHECK(moveTestPos(sim, walker).x > 18.0f);
     CHECK(moveTestDistance(sim, walker, worker) >= 0.4f);
+}
+
+TEST_CASE("Movement: a pawn carrying a downed pawn walks on, the carried one lying exactly where it stands") {
+    Sim sim = moveTestSim(64);
+    const Entity carrier = moveTestPawn(sim, 5, 30);
+    const Entity carried = moveTestPawn(sim, 5, 30);
+    Health downed;
+    downed.movingFactor = 0.0f;  // downed (or a corpse)
+    sim.things().registry().emplace_or_replace<Health>(carried, downed);
+    moveTestWalk(sim, carrier, {CellPos{35, 30, 0}});
+    int steps = 0;
+    while (!moveTestMover(sim, carrier).arrived() && steps < 1000) {
+        // The job system puts the carried pawn where the carrier stands every step.
+        sim.things().registry().get<Position>(carried) = moveTestPos(sim, carrier);
+        sim.step();
+        ++steps;
+    }
+    CHECK(moveTestPos(sim, carrier).x > 34.0f);
+    CHECK(steps < static_cast<int>(30.0f / kMoveTestSpeed) + 40);
 }

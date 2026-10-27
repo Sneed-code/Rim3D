@@ -30,13 +30,14 @@ const char* prisonerModeName(PrisonerMode mode) {
         case PrisonerMode::ReduceResistance: return "ReduceResistance";
         case PrisonerMode::AttemptRecruit: return "AttemptRecruit";
         case PrisonerMode::Release: return "Release";
+        case PrisonerMode::Execute: return "Execute";
     }
     return "?";
 }
 
 bool prisonerModeFromName(const std::string& name, PrisonerMode& out) {
     for (const PrisonerMode mode : {PrisonerMode::NoInteraction, PrisonerMode::ReduceResistance, PrisonerMode::AttemptRecruit,
-                                    PrisonerMode::Release}) {
+                                    PrisonerMode::Release, PrisonerMode::Execute}) {
         if (name == prisonerModeName(mode)) {
             out = mode;
             return true;
@@ -69,6 +70,8 @@ PrisonerRules PrisonerRules::read(const DefDatabase& defs) {
     num("negotiationPerLevel", r.negotiationPerLevel);
     r.defaultSkillLevel = static_cast<int>(rules->integer("defaultSkillLevel", r.defaultSkillLevel));
     r.chatIntervalSeconds = std::max<int64_t>(1, rules->integer("chatIntervalSeconds", r.chatIntervalSeconds));
+    r.executeWorkSeconds = std::max<int64_t>(1, rules->integer("executeWorkSeconds", r.executeWorkSeconds));
+    r.guiltyHours = std::max<int64_t>(0, rules->integer("guiltyHours", r.guiltyHours));
     r.chatWorkSeconds = std::max<int64_t>(1, rules->integer("chatWorkSeconds", r.chatWorkSeconds));
     r.feedWorkSeconds = std::max<int64_t>(1, rules->integer("feedWorkSeconds", r.feedWorkSeconds));
     num("chatXp", r.chatXp);
@@ -284,6 +287,8 @@ bool PrisonerSystem::imprison(Entity pawn, Entity bed, Entity warden, std::strin
     prisoner.resistance = rng_.range(rules_.initialResistanceMin, rules_.initialResistanceMax);
     prisoner.capturedAt = now();
     prisoner.nextChat = now();
+    // A raider harmed the colony just now (the wiki's 24 hours); anyone else was only caught.
+    prisoner.guiltyUntil = reg.all_of<Raider>(pawn) ? now() + rules_.guiltyHours * kSecondsPerHour : 0;
     reg.emplace<Prisoner>(pawn, prisoner);
     if (!jobs_.assignBed(bed, pawn, error)) {
         reg.remove<Prisoner>(pawn);
@@ -333,6 +338,9 @@ bool PrisonerSystem::chatDue(Entity prisoner) const {
     }
     const Prisoner& p = reg.get<Prisoner>(prisoner);
     const Health& health = reg.get<Health>(prisoner);
+    if (p.mode == PrisonerMode::Execute) {
+        return !health.dead;  // a warden executes at once, a downed prisoner too
+    }
     if (p.mode == PrisonerMode::NoInteraction || now() < p.nextChat || health.downed || health.dead) {
         return false;
     }
@@ -348,6 +356,10 @@ void PrisonerSystem::interact(Entity warden, Entity prisoner) {
         return;
     }
     Prisoner& p = reg.get<Prisoner>(prisoner);
+    if (p.mode == PrisonerMode::Execute) {
+        execute(prisoner, warden);
+        return;
+    }
     p.nextChat = now() + rules_.chatIntervalSeconds;
     if (p.mode == PrisonerMode::Release) {
         release(prisoner, warden);
@@ -434,6 +446,40 @@ CellPos PrisonerSystem::edgeGoal(Entity pawn) const {
     return here;
 }
 
+bool PrisonerSystem::guilty(Entity prisoner) const {
+    return isPrisoner(prisoner) && now() < things_.registry().get<Prisoner>(prisoner).guiltyUntil;
+}
+
+bool PrisonerSystem::execute(Entity prisoner, Entity warden) {
+    entt::registry& reg = things_.registry();
+    if (!isPrisoner(prisoner) || !reg.all_of<Health>(prisoner) || reg.get<Health>(prisoner).dead) {
+        return false;
+    }
+    const bool wasGuilty = guilty(prisoner);
+    // The event comes first: the colony's moods read it, and the pawn's own death follows.
+    emit(EventType::PrisonerExecuted, prisoner, warden, 0.0f, wasGuilty ? "guilty" : "innocent");
+    if (!health_.kill(prisoner, DeathCause::Executed)) {
+        return false;
+    }
+    // The dead are no prisoners: the bed is free again.
+    reg.remove<Prisoner>(prisoner);
+    prisonerLeaveBed(reg, prisoner);
+    return true;
+}
+
+void PrisonerSystem::noteOrganHarvested(Entity victim, Entity surgeon, int part) {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(victim)) {
+        return;
+    }
+    const Faction* faction = reg.try_get<Faction>(victim);
+    const bool ours = !isPrisoner(victim) && (faction == nullptr || faction->id == kPlayerFaction);
+    emit(EventType::OrganHarvested, victim, surgeon, 0.0f, ours ? "colonist" : "prisoner");
+    if (events_ != nullptr && !events_->empty()) {
+        events_->back().part = part;
+    }
+}
+
 bool PrisonerSystem::release(Entity prisoner, Entity warden) {
     entt::registry& reg = things_.registry();
     if (!isPrisoner(prisoner) || !things_.spawned(prisoner) || reg.get<Health>(prisoner).downed) {
@@ -504,6 +550,7 @@ void PrisonerSystem::hashThing(Entity e, StateHasher& h) const {
         h.add(p->resistance);
         h.add(p->capturedAt);
         h.add(p->nextChat);
+        h.add(p->guiltyUntil);
     }
     if (const PrisonBed* bed = reg.try_get<PrisonBed>(e)) {
         h.add(bed->marked);
