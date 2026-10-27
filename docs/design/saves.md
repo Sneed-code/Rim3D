@@ -115,7 +115,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `combat` | 1 | `posture`, `gear`, `equippedBy`, `shooter`, `projectile`, `magazine` |
 | `doors` | 1 | `door` |
 | `fighters` | 2 | `faction`, `fighter` (version 2: its mode, `defending`, squad, goal and `retreat`, F6) |
-| `looks` | 1 | `looks` |
+| `looks` | 2 | `looks`. Version 2 (V1) adds the face sliders, eyes, hair style, beard, body hair, tattoos and scars; version 1 loads with the defaults |
 | `paths` | 1 | the path queue |
 | `zones` | 1 | next zone id, stockpile zones |
 | `plants` | 1 | the plant layer |
@@ -311,6 +311,7 @@ Every section is version 1 at format 20. A task that changes a section adds a li
 - `husbandry` 2 (N2): per animal care record `markHunt` and `collect` after `markSlaughter`, and the `hunted` counter after `starved`. Version 1 files load with none. The job check now accepts `Hunt`, `HaulCorpse` and `Butcher`.
 - `apparel` 1 (C15): item stuff and quality, taint, strip marks, outfits ([apparel.md](apparel.md)). Commands `SetOutfit`, `EditOutfit`, `AddOutfit`, `RemoveOutfit` and `Strip` by name.
 - `movement` 2 (M2): each mover's `climbed` (metres up stairs or a ladder) after `gaveUp`. Version 1 files load with none; stairs and ladders need nothing saved (their links come from the buildings), stockpiles on upper levels were already saved with their level.
+- `looks` 2 (V1): after `hair`, the face sliders, `eyes`, `hairStyle`, `naturalBeard`, `beard`, `naturalBodyHair`, `bodyHair` and the lists `tattoos` and `scars` (region, style, u, v, size). Version 1 files load with an empty `hairStyle` and average faces.
 - `fire` 1 (E4): new section, see the table. Commands `Ignite` and `SetHomeArea` by name; the job check now accepts `ExtinguishFire`. Older saves load with no fires and a home area made at the first step.
 
 ## Why the state hash changed in S6

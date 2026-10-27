@@ -1781,6 +1781,16 @@ void Sim::writeSnapshot(Snapshot& out) const {
             l.height = looks->height;
             l.skin = looks->skin;
             l.hair = looks->hair;
+            l.faceShape = looks->faceShape;
+            l.brow = looks->brow;
+            l.nose = looks->nose;
+            l.jaw = looks->jaw;
+            l.eyes = looks->eyes;
+            l.hairStyle = looks->hairStyle;
+            l.beard = looks->beard;
+            l.bodyHair = looks->bodyHair;
+            l.tattoos = looks->tattoos;
+            l.scars = looks->scars;
             view.looks = static_cast<int32_t>(out.looks.size());
             out.looks.push_back(l);
         }
@@ -2309,10 +2319,29 @@ uint64_t Sim::stateHash() const {
             h.add(looks->weight);
             h.add(looks->height);
             h.add(looks->melanin);
-            for (const LooksColor* c : {&looks->naturalHair, &looks->skin, &looks->hair}) {
+            for (const LooksColor* c : {&looks->naturalHair, &looks->skin, &looks->hair, &looks->eyes}) {
                 h.add(c->r);
                 h.add(c->g);
                 h.add(c->b);
+            }
+            h.add(looks->faceShape);
+            h.add(looks->brow);
+            h.add(looks->nose);
+            h.add(looks->jaw);
+            h.add(looks->hairStyle.data(), looks->hairStyle.size());
+            h.add(looks->naturalBeard.data(), looks->naturalBeard.size());
+            h.add(looks->beard.data(), looks->beard.size());
+            h.add(looks->naturalBodyHair);
+            h.add(looks->bodyHair);
+            for (const std::vector<LooksMark>* marks : {&looks->tattoos, &looks->scars}) {
+                h.add(static_cast<uint64_t>(marks->size()));
+                for (const LooksMark& m : *marks) {
+                    h.add(static_cast<int>(m.region));
+                    h.add(static_cast<int>(m.style));
+                    h.add(m.u);
+                    h.add(m.v);
+                    h.add(m.size);
+                }
             }
         }
         if (const BillList* list = reg.try_get<BillList>(e)) {
