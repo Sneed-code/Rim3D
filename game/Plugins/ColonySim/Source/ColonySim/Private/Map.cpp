@@ -97,6 +97,16 @@ Roof& Map::roofSlot(CellPos c) {
     return c.level == 0 ? roof_[static_cast<size_t>(index(c))] : upperChunkFor(c).roof[upperSlot(c)];
 }
 
+void Map::setGeyser(CellPos c, bool present) {
+    if (!onGround(c)) {
+        return;
+    }
+    if (geyser_.empty()) {
+        geyser_.assign(static_cast<size_t>(width_) * static_cast<size_t>(height_), 0);
+    }
+    geyser_[static_cast<size_t>(index(c))] = present ? 1 : 0;
+}
+
 void Map::setBuilding(CellPos c, Entity building, Passage passage, uint8_t obstacleDm) {
     ++buildingChanges_;
     if (c.level != 0) {

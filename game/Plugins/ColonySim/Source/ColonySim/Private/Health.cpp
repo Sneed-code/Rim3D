@@ -997,7 +997,7 @@ void HealthSystem::recompute(Entity pawn, Health& health, bool announce) {
     if (!health.dead) {
         const bool wasDowned = health.downed;
         health.downed = shouldBeDown;
-        if (shouldBeDown && !wasDowned) {
+        if (shouldBeDown && !wasDowned && !restoring_) {
             stopWalking(pawn);
         }
         if (announce && shouldBeDown != wasDowned) {
@@ -1021,9 +1021,13 @@ void HealthSystem::refresh(Entity pawn) {
 
 void HealthSystem::refreshAll() {
     entt::registry& reg = things_.registry();
+    // `downed` is not saved, so every downed pawn looks newly downed here. It was downed before the
+    // save, and whatever path it holds now it held then.
+    restoring_ = true;
     for (const auto [entity, health] : reg.view<Health>().each()) {
         recompute(entity, health, false);
     }
+    restoring_ = false;
 }
 
 // ---- Damage ---------------------------------------------------------------------------------------
@@ -1154,7 +1158,7 @@ std::vector<BodyPartInfo> HealthSystem::bodyParts(DefId pawnDef) const {
     std::vector<BodyPartInfo> out;
     if (const HealthModel::Kind* kind = model_->kindOf(pawnDef)) {
         for (const HealthModel::Part& p : model_->bodies[static_cast<size_t>(kind->body)].parts) {
-            out.push_back(BodyPartInfo{p.label, p.parent, p.inside, p.ownOutside, p.groups});
+            out.push_back(BodyPartInfo{p.label, p.parent, p.inside, p.ownOutside, p.groups, p.def});
         }
     }
     return out;
