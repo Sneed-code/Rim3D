@@ -220,6 +220,7 @@
   "heatPusher": {
    "heatPerSecond": 21,
    "maxTemp": 21,
+   "adjustable": true,
    "switchesOffAbove": true
   },
   "unverified": [
@@ -251,7 +252,8 @@
   },
   "heatPusher": {
    "heatPerSecond": -21,
-   "minTemp": 10
+   "minTemp": 10,
+   "adjustable": true
   },
   "unverified": [
    "costs",

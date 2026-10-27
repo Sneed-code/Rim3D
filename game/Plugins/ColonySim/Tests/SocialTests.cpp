@@ -596,6 +596,18 @@ TEST_CASE("Social: a wedding is a party: the guests and the couple get their tho
     CHECK(sim.social().stats().weddingGuests == 1);
 }
 
+TEST_CASE("Social: an insult never starts a fight with the protagonist") {
+    Sim sim = socSim();
+    const Entity a = socPawn(sim, CellPos{20, 20, 0});
+    const Entity b = socPawn(sim, CellPos{21, 20, 0});
+    sim.things().registry().get<Colonist>(b).protagonist = true;
+    socStartQuiet(sim);
+    SOC_REQUIRE(socTalk(sim, a, b, "Insult", 1));
+    CHECK(socCountEvents(sim, EventType::SocialFight, "started") == 0);
+    CHECK_FALSE(sim.social().fighting(a));
+    CHECK_FALSE(sim.social().fighting(b));
+}
+
 TEST_CASE("Social: wedding guests walk to the couple and stay for the party") {
     Sim sim = socSim();
     const Entity a = socPawn(sim, CellPos{20, 20, 0});
