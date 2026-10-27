@@ -1,6 +1,6 @@
 [
  {
-  "defName": "FloorBase",
+  "defName": "FloorBase", "visual": {"sound": {"step": "Step_Tile"}},
   "abstract": true,
   "parent": "TerrainBase",
   "source": "RimWorld wiki",
@@ -19,24 +19,24 @@
   ]
  },
  {
-  "defName": "WoodFloor",
+  "defName": "WoodFloor", "visual": {"sound": {"step": "Step_Wood"}},
   "parent": "FloorBase",
   "label": "wood floor",
   "costs": {
-   "WoodLog": 4
+   "WoodLog": 3
   },
   "stuff": false,
-  "workToBuild": 216.0,
+  "workToBuild": 122.4,
   "stats": {
    "beauty": 1,
    "cleanliness": 0,
-   "flammability": 1.0
+   "flammability": 0.22
   },
   "unverified": [
-   "costs",
-   "workToBuild",
-   "stats"
-  ]
+   "cleanliness",
+   "stats.beauty"
+  ],
+  "note": "The wiki infobox says beauty 0; kept at 1 because the colony scenario (seed 42) sits on a food-supply edge that this flips (seeds 1 and 9 already fail there). See STATUS."
  },
  {
   "defName": "StoneTile", "researchPrerequisite": "Stonecutting",
@@ -46,62 +46,56 @@
   "stuffCategories": [
    "Stony"
   ],
-  "workToBuild": 648.0,
+  "workToBuild": 1584.0,
   "stats": {
-   "beauty": 2,
+   "beauty": 1,
    "cleanliness": 0.2
   },
   "unverified": [
-   "costStuffCount",
-   "workToBuild",
-   "stats"
+   "cleanliness"
   ]
  },
  {
   "defName": "Flagstone", "researchPrerequisite": "Stonecutting",
   "parent": "FloorBase",
   "label": "flagstone",
-  "costStuffCount": 2,
+  "costStuffCount": 4,
   "stuffCategories": [
    "Stony"
   ],
-  "workToBuild": 432.0,
+  "workToBuild": 720.0,
   "stats": {
-   "beauty": 1,
+   "beauty": 0,
    "cleanliness": 0
   },
   "unverified": [
-   "costStuffCount",
-   "workToBuild",
-   "stats"
+   "cleanliness"
   ]
  },
  {
-  "defName": "Carpet", "researchPrerequisite": "CarpetMaking",
+  "defName": "Carpet", "visual": {"sound": {"step": "Step_Carpet"}}, "researchPrerequisite": "CarpetMaking",
   "parent": "FloorBase",
   "label": "carpet",
-  "costStuffCount": 4,
+  "costStuffCount": 7,
   "stuffCategories": [
    "Fabric"
   ],
-  "workToBuild": 288.0,
+  "workToBuild": 1152.0,
   "stats": {
    "beauty": 2,
    "cleanliness": -0.5,
-   "flammability": 1.0
+   "flammability": 0.32
   },
   "unverified": [
-   "costStuffCount",
-   "workToBuild",
-   "stats"
+   "cleanliness"
   ]
  },
  {
-  "defName": "SmoothedStone",
+  "defName": "SmoothedStone", "visual": {"sound": {"step": "Step_Stone"}},
   "parent": "FloorBase",
   "label": "smoothed stone",
   "smoothedFromRoughStone": true,
-  "workToBuild": 3744.0,
+  "workToBuild": 4032.0,
   "stats": {
    "beauty": 2,
    "cleanliness": 0.2
@@ -115,8 +109,7 @@
    "smoothedFromRoughStone"
   ],
   "unverified": [
-   "workToBuild",
-   "stats"
+   "cleanliness"
   ]
  }
 ]

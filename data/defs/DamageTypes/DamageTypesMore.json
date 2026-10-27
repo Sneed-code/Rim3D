@@ -1,0 +1,3 @@
+[
+  {"defName": "Arrow", "parent": "DamageTypeBase", "label": "arrow", "reachesInside": true, "hediff": "Stab", "source": "RimWorld wiki"}
+]

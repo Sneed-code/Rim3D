@@ -263,7 +263,44 @@ TEST_CASE("Skills: midnight starts the day's total again and high skills decay, 
 
     sim.stepMany(static_cast<int>(kSecondsPerDay) - static_cast<int>(sim.time().seconds));
     const SkillRecord& after = skillsOf(sim, pawn);
-    CHECK(after.xpToday == 0.0f);
+    CHECK(after.xpToday == doctest::Approx(-120.0f));  // the day starts with the decay already counted
     CHECK(after.xp == doctest::Approx(880.0f));  // level 12 loses 120 a day
     CHECK(after.level == 12);
+}
+
+TEST_CASE("Skills: the daily cap counts net experience, so decay lets a master learn a little more") {
+    const SkillRules rules = skillsRules();
+    SkillRecord master = skillsRecord(20, Passion::Minor, 0.0f);
+    skillDayPassed(rules, master);
+    CHECK(master.xpToday == doctest::Approx(-3600.0f));  // level 20 loses 3,600 a day
+    // 7,600 earns at full rate until the net total reaches the 4,000 cap, then a fifth.
+    learnSkillXp(rules, master, 7600.0);
+    CHECK(master.xpToday == doctest::Approx(4000.0f));
+    CHECK(learnSkillXp(rules, master, 100.0) == doctest::Approx(20.0));
+    // Below level 10 nothing decays, so the day starts at 0.
+    SkillRecord novice = skillsRecord(5, Passion::None, 0.0f);
+    skillDayPassed(rules, novice);
+    CHECK(novice.xpToday == 0.0f);
+}
+
+TEST_CASE("Skills: the xp, decay and passion numbers are the wiki's") {
+    const SkillRules rules = skillsRules();
+    SKILLS_REQUIRE(rules.maxLevel() == 20);
+    double total = 0.0;
+    for (int level = 0; level < 20; ++level) {
+        total += rules.xpToNextLevel[static_cast<size_t>(level)];
+    }
+    CHECK(total == doctest::Approx(265000.0));  // total XP for level 20
+    CHECK(rules.xpToNextLevel[9] == 10000.0);
+    CHECK(rules.xpToNextLevel[10] == 12000.0);
+    CHECK(rules.xpToNextLevel[20] == 32000.0);
+    CHECK(rules.decayXpPerDay[10] == 30.0);
+    CHECK(rules.decayXpPerDay[15] == 540.0);
+    CHECK(rules.decayXpPerDay[20] == 3600.0);
+    CHECK(rules.decayXpPerDay[9] == 0.0);
+    CHECK(rules.passionLearn[0] == doctest::Approx(0.35));
+    CHECK(rules.passionLearn[1] == doctest::Approx(1.0));
+    CHECK(rules.passionLearn[2] == doctest::Approx(1.5));
+    CHECK(rules.passionMood[1] == 8.0);
+    CHECK(rules.passionMood[2] == 14.0);
 }
