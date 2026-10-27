@@ -8,6 +8,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 
+#include "LevelsSubsystem.h"
 #include "SimSubsystem.h"
 #include "TerrainDraw.h"
 
@@ -95,9 +96,9 @@ namespace
 	{
 		const int32 X = FMath::FloorToInt32(View.x);
 		const int32 Y = FMath::FloorToInt32(View.y);
-		const auto Wall = [&Map](int32 CX, int32 CY)
+		const auto Wall = [&Map, &View](int32 CX, int32 CY)
 		{
-			const colony::CellPos Cell{CX, CY, 0};
+			const colony::CellPos Cell{CX, CY, View.level};
 			return Map.inBounds(Cell) && Map.passage(Cell) == colony::Passage::Blocked;
 		};
 		const bool bWallsEastWest = Wall(X - 1, Y) || Wall(X + 1, Y);
@@ -161,6 +162,7 @@ void UBuildingSubsystem::Teardown()
 	BuiltSim = nullptr;
 	BuiltGeneration = -1;
 	LastSeconds = -1;
+	ShownTop = -1;
 	const int32 FullBuilds = Stats.FullBuilds;
 	Stats = FBuildingStats();
 	Stats.FullBuilds = FullBuilds;
@@ -168,7 +170,39 @@ void UBuildingSubsystem::Teardown()
 
 int32 UBuildingSubsystem::GetChunkInstances(int32 ChunkX, int32 ChunkY) const
 {
-	return bBuilt && ChunkX >= 0 && ChunkY >= 0 && ChunkX < ChunksX && ChunkY < ChunksY ? Chunks[ChunkIndex(ChunkX, ChunkY)].Instances : 0;
+	if (!bBuilt || ChunkX < 0 || ChunkY < 0 || ChunkX >= ChunksX || ChunkY >= ChunksY)
+	{
+		return 0;
+	}
+	int32 Count = 0;
+	for (int32 Level = 0; Level < colony::Map::kLevels; ++Level)
+	{
+		Count += Chunks[ChunkIndex(Level, ChunkX, ChunkY)].Instances;
+	}
+	return Count;
+}
+
+int32 UBuildingSubsystem::GetLevelInstances(int32 Level, bool bVisibleOnly) const
+{
+	int32 Count = 0;
+	if (!bBuilt || Level < 0 || Level >= colony::Map::kLevels)
+	{
+		return 0;
+	}
+	for (int32 CY = 0; CY < ChunksY; ++CY)
+	{
+		for (int32 CX = 0; CX < ChunksX; ++CX)
+		{
+			for (const TPair<int32, UInstancedStaticMeshComponent*>& Pair : Chunks[ChunkIndex(Level, CX, CY)].Components)
+			{
+				if (Pair.Value && (!bVisibleOnly || Pair.Value->IsVisible()))
+				{
+					Count += Pair.Value->GetInstanceCount();
+				}
+			}
+		}
+	}
+	return Count;
 }
 
 float UBuildingSubsystem::GetDoorShown(colony::Entity Door) const
@@ -220,13 +254,14 @@ bool UBuildingSubsystem::GetPlacedTransform(colony::DefId Def, colony::CellPos C
 	}
 	const colony::Map& Map = BuiltSim->map();
 	const colony::CellRect Rect = colony::footprintRect(Cell, FMath::RoundToInt32(Look->FootprintCm.X / 100.0f), FMath::RoundToInt32(Look->FootprintCm.Y / 100.0f), Rot);
-	// The lowest ground under the footprint, as the built building stands.
+	// The lowest ground under the footprint, as the built building stands (an upper floor runs 3 m a level above it).
+	const int32 Level = FMath::Clamp(Cell.level, 0, colony::Map::kLevels - 1);
 	float Base = 1.0e9f;
 	for (int32 Y = Rect.minY; Y <= Rect.minY + Rect.sizeY; ++Y)
 	{
 		for (int32 X = Rect.minX; X <= Rect.minX + Rect.sizeX; ++X)
 		{
-			Base = FMath::Min(Base, Map.groundHeight(FMath::Clamp(X, 0, Map.width() - 1), FMath::Clamp(Y, 0, Map.height() - 1)));
+			Base = FMath::Min(Base, Map.groundHeight(colony::CellPos{FMath::Clamp(X, 0, Map.width() - 1), FMath::Clamp(Y, 0, Map.height() - 1), Level}));
 		}
 	}
 	const FVector Local((static_cast<float>(Rect.minX) + static_cast<float>(Rect.sizeX) * 0.5f) * 100.0f, (static_cast<float>(Rect.minY) + static_cast<float>(Rect.sizeY) * 0.5f) * 100.0f, Base * 100.0f);
@@ -423,8 +458,8 @@ void UBuildingSubsystem::RebuildAll()
 	}
 	ReadDefs(Core);
 
-	Chunks.SetNum(ChunksX * ChunksY);
-	ScanLists.SetNum(ChunksX * ChunksY);
+	Chunks.SetNum(colony::Map::kLevels * ChunksX * ChunksY);
+	ScanLists.SetNum(colony::Map::kLevels * ChunksX * ChunksY);
 	bBuilt = true;
 	++Stats.FullBuilds;
 	Refresh();
@@ -457,7 +492,7 @@ void UBuildingSubsystem::Refresh()
 		const FDefLook* Look = LookOfDef(View.def);
 		const int32 CX = BldChunkOf(View.x);
 		const int32 CY = BldChunkOf(View.y);
-		if (!Look || CX < 0 || CY < 0 || CX >= ChunksX || CY >= ChunksY)
+		if (!Look || CX < 0 || CY < 0 || CX >= ChunksX || CY >= ChunksY || View.level < 0 || View.level >= colony::Map::kLevels)
 		{
 			continue;
 		}
@@ -491,7 +526,7 @@ void UBuildingSubsystem::Refresh()
 				H = BldCombine(H, BldDoorAlongY(Map, View) ? 1ULL : 2ULL);
 			}
 		}
-		const int32 Chunk = ChunkIndex(CX, CY);
+		const int32 Chunk = ChunkIndex(View.level, CX, CY);
 		ScanSignatures[Chunk] += H;
 		ScanLists[Chunk].Add(I);
 	}
@@ -501,24 +536,52 @@ void UBuildingSubsystem::Refresh()
 	Stats.Items = Items;
 	Stats.Doors = Doors;
 
-	for (int32 CY = 0; CY < ChunksY; ++CY)
+	bool bRebuilt = false;
+	for (int32 Level = 0; Level < colony::Map::kLevels; ++Level)
 	{
-		for (int32 CX = 0; CX < ChunksX; ++CX)
+		for (int32 CY = 0; CY < ChunksY; ++CY)
 		{
-			const int32 Chunk = ChunkIndex(CX, CY);
-			if (ScanSignatures[Chunk] != Chunks[Chunk].Signature)
+			for (int32 CX = 0; CX < ChunksX; ++CX)
 			{
-				RebuildChunk(CX, CY, ScanLists[Chunk], Snapshot);
-				Chunks[Chunk].Signature = ScanSignatures[Chunk];
+				const int32 Chunk = ChunkIndex(Level, CX, CY);
+				if (ScanSignatures[Chunk] != Chunks[Chunk].Signature)
+				{
+					RebuildChunk(Level, CX, CY, ScanLists[Chunk], Snapshot);
+					Chunks[Chunk].Signature = ScanSignatures[Chunk];
+					bRebuilt = true;
+				}
+			}
+		}
+	}
+	// A rebuilt chunk may have new components, which start shown.
+	ApplyCut(bRebuilt);
+}
+
+void UBuildingSubsystem::ApplyCut(bool bForce)
+{
+	const int32 Top = ULevelsSubsystem::TopShownLevel(GetWorld());
+	if (!bForce && Top == ShownTop)
+	{
+		return;
+	}
+	ShownTop = Top;
+	for (int32 Index = 0; Index < Chunks.Num(); ++Index)
+	{
+		const bool bShow = LevelOfChunk(Index) <= Top;
+		for (TPair<int32, UInstancedStaticMeshComponent*>& Pair : Chunks[Index].Components)
+		{
+			if (Pair.Value && Pair.Value->IsVisible() != bShow)
+			{
+				Pair.Value->SetVisibility(bShow);
 			}
 		}
 	}
 }
 
-void UBuildingSubsystem::RebuildChunk(int32 ChunkX, int32 ChunkY, const TArray<int32>& ThingIndexes, const colony::Snapshot& Snapshot)
+void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, const TArray<int32>& ThingIndexes, const colony::Snapshot& Snapshot)
 {
 	const double Start = FPlatformTime::Seconds();
-	FChunk& Chunk = Chunks[ChunkIndex(ChunkX, ChunkY)];
+	FChunk& Chunk = Chunks[ChunkIndex(Level, ChunkX, ChunkY)];
 	const colony::Map& Map = BuiltSim->map();
 
 	TMap<int32, FBldBatch> Batches;
@@ -578,7 +641,8 @@ void UBuildingSubsystem::RebuildChunk(int32 ChunkX, int32 ChunkY, const TArray<i
 			continue;
 		}
 
-		// A building, a blueprint or a frame: standing on the lowest ground under its footprint, so a slope never leaves a gap.
+		// A building, a blueprint or a frame: standing on the lowest ground under its footprint, so a slope never leaves a gap
+		// (upstairs, on the floor 3 m a level above that ground).
 		const int32 OriginX = FMath::RoundToInt32(View.x - static_cast<float>(View.sizeX) * 0.5f);
 		const int32 OriginY = FMath::RoundToInt32(View.y - static_cast<float>(View.sizeY) * 0.5f);
 		float Base = View.z;
@@ -586,7 +650,7 @@ void UBuildingSubsystem::RebuildChunk(int32 ChunkX, int32 ChunkY, const TArray<i
 		{
 			for (int32 X = OriginX; X <= OriginX + View.sizeX; ++X)
 			{
-				Base = FMath::Min(Base, Map.groundHeight(FMath::Clamp(X, 0, Map.width() - 1), FMath::Clamp(Y, 0, Map.height() - 1)));
+				Base = FMath::Min(Base, Map.groundHeight(colony::CellPos{FMath::Clamp(X, 0, Map.width() - 1), FMath::Clamp(Y, 0, Map.height() - 1), Level}));
 			}
 		}
 		const bool bDoorBuilt = DefLook->bDoor && View.stage == colony::ConstructionStage::Built;
@@ -738,5 +802,6 @@ void UBuildingSubsystem::Tick(float DeltaTime)
 		BuiltOrigin = Sim->GetWorldOrigin();
 		DrawActor->SetActorLocation(BuiltOrigin);
 	}
+	ApplyCut(false);
 	AnimateDoors();
 }

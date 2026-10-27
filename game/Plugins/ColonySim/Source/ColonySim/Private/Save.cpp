@@ -1413,6 +1413,10 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("building", c.building);
                 ar.value("bill", c.bill);
                 ar.value("index", c.index);
+            } else if constexpr (std::is_same_v<Type, ClimbCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.value("dx", c.dx);
+                ar.value("dy", c.dy);
             } else if constexpr (std::is_same_v<Type, AddOperationCommand>) {
                 ar.value("pawn", c.pawn);
                 ar.text("recipe", c.recipe);
@@ -1518,6 +1522,32 @@ void saveLooks(Ar& ar, PawnLooks& l) {
     saveLooksColor(ar, "naturalHair", l.naturalHair);
     saveLooksColor(ar, "skin", l.skin);
     saveLooksColor(ar, "hair", l.hair);
+    if (ar.sectionVersion() >= 2) {  // V1: faces, hair styles and marks
+        ar.value("faceShape", l.faceShape);
+        ar.value("brow", l.brow);
+        ar.value("nose", l.nose);
+        ar.value("jaw", l.jaw);
+        saveLooksColor(ar, "eyes", l.eyes);
+        ar.text("hairStyle", l.hairStyle);
+        ar.text("naturalBeard", l.naturalBeard);
+        ar.text("beard", l.beard);
+        ar.value("naturalBodyHair", l.naturalBodyHair);
+        ar.value("bodyHair", l.bodyHair);
+        ar.require(l.faceShape >= 0.0f && l.faceShape <= 1.0f && l.brow >= 0.0f && l.brow <= 1.0f && l.nose >= 0.0f &&
+                       l.nose <= 1.0f && l.jaw >= 0.0f && l.jaw <= 1.0f && l.bodyHair >= 0.0f && l.bodyHair <= 1.0f &&
+                       l.naturalBodyHair >= 0.0f && l.naturalBodyHair <= 1.0f,
+                   "the save file has an impossible face");
+        for (std::vector<LooksMark>* marks : {&l.tattoos, &l.scars}) {
+            ar.list(marks == &l.tattoos ? "tattoos" : "scars", *marks, [&](LooksMark& m) {
+                ar.value("region", m.region);
+                ar.require(static_cast<int>(m.region) < kBodyRegionCount, "the save file has a mark on no body region");
+                ar.value("style", m.style);
+                ar.value("u", m.u);
+                ar.value("v", m.v);
+                ar.value("size", m.size);
+            });
+        }
+    }
 }
 
 template <typename Ar>
@@ -2916,7 +2946,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "faction", e, &SaveEntity::faction, [&](Faction& f) { saveFactionPart(ar, f); });
         saveParts(ar, "fighter", e, &SaveEntity::fighter, [&](Fighter& f) { saveFighterPart(ar, f); });
     });
-    ar.section("looks", 1, [&] {
+    ar.section("looks", 2, [&] {
         saveParts(ar, "looks", e, &SaveEntity::looks, [&](PawnLooks& l) { saveLooksPart(ar, l); });
     });
     ar.section("paths", 1, [&] { savePaths(ar, d.paths); });

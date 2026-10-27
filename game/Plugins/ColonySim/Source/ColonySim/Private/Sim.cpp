@@ -635,6 +635,61 @@ void Sim::commandFailed(uint64_t id, std::string message) {
     events_.push_back(std::move(event));
 }
 
+bool Sim::startClimb(Entity pawn, float dx, float dy, std::string& error) {
+    entt::registry& reg = things_->registry();
+    if (!things_->exists(pawn) || !reg.all_of<PlayerControl, Position, Mover>(pawn)) {
+        error = "that pawn isn't under direct control";
+        return false;
+    }
+    if (health_->incapacitated(pawn)) {
+        error = "that colonist is downed or dead";
+        return false;
+    }
+    if (combat_->rollLocked(pawn)) {
+        error = "that colonist is rolling";
+        return false;
+    }
+    const Position& pos = reg.get<Position>(pawn);
+    Mover& mover = reg.get<Mover>(pawn);
+    if (mover.climbing(pos.level)) {
+        error = "that colonist is climbing already";
+        return false;
+    }
+    // The link from this cell whose other end lies most nearly the way the player pushes.
+    const CellPos here = cellOf(pos);
+    const float want = std::sqrt(dx * dx + dy * dy);
+    const bool anyWay = !std::isfinite(want) || want < 1.0e-4f;
+    const LevelLink* best = nullptr;
+    CellPos to;
+    float bestDot = 0.5f;  // within 60 degrees
+    for (const LevelLink& link : map_.levelLinks()) {
+        if (link.low != here && link.high != here) {
+            continue;
+        }
+        const CellPos other = link.low == here ? link.high : link.low;
+        const float ox = static_cast<float>(other.x - here.x);
+        const float oy = static_cast<float>(other.y - here.y);
+        const float along = std::sqrt(ox * ox + oy * oy);
+        const float dot = anyWay || along <= 0.0f ? 1.0f : (ox * dx + oy * dy) / (along * want);
+        if (dot >= bestDot && (best == nullptr || dot > bestDot)) {
+            best = &link;
+            to = other;
+            bestDot = dot;
+            if (anyWay) {
+                break;
+            }
+        }
+    }
+    if (best == nullptr) {
+        error = "there are no stairs or ladder that way";
+        return false;
+    }
+    mover.walkTo(pos.x, pos.y, std::vector<CellPos>{to});
+    mover.vx = 0.0f;
+    mover.vy = 0.0f;
+    return true;
+}
+
 void Sim::applyCommand(const Command& command, uint64_t id) {
     std::string error;
     // A colonist in a mental break takes no orders: it isn't the player's to command until it is over.
@@ -1035,6 +1090,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         } else if (combat_->rollLocked(move->pawn) || reg.any_of<Stunned, Casting>(move->pawn)) {
             // Rolling (P2), stunned or winding up a power (X2): the player's position is ignored, without a failure
             // because Unreal sends one every step.
+        } else if (reg.get<Mover>(move->pawn).climbing(reg.get<Position>(move->pawn).level)) {
+            // Climbing (U17): the movement system takes it up or down; the same, no failure.
         } else {
             Position& pos = reg.get<Position>(move->pawn);
             Mover& mover = reg.get<Mover>(move->pawn);
@@ -1061,8 +1118,16 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             mover.vx = moveX;
             mover.vy = moveY;
         }
+    } else if (const auto* climb = std::get_if<ClimbCommand>(&command)) {
+        if (!startClimb(climb->pawn, climb->dx, climb->dy, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* roll = std::get_if<DodgeRollCommand>(&command)) {
-        if (!combat_->dodgeRoll(roll->pawn, roll->dx, roll->dy, &error)) {
+        const entt::registry& reg = things_->registry();
+        if (things_->exists(roll->pawn) && reg.all_of<Mover, Position>(roll->pawn) &&
+            reg.get<Mover>(roll->pawn).climbing(reg.get<Position>(roll->pawn).level)) {
+            commandFailed(id, "that pawn is climbing");
+        } else if (!combat_->dodgeRoll(roll->pawn, roll->dx, roll->dy, &error)) {
             commandFailed(id, error);
         }
     } else if (const auto* schedule = std::get_if<SetScheduleCommand>(&command)) {
@@ -1746,6 +1811,16 @@ void Sim::writeSnapshot(Snapshot& out) const {
             l.height = looks->height;
             l.skin = looks->skin;
             l.hair = looks->hair;
+            l.faceShape = looks->faceShape;
+            l.brow = looks->brow;
+            l.nose = looks->nose;
+            l.jaw = looks->jaw;
+            l.eyes = looks->eyes;
+            l.hairStyle = looks->hairStyle;
+            l.beard = looks->beard;
+            l.bodyHair = looks->bodyHair;
+            l.tattoos = looks->tattoos;
+            l.scars = looks->scars;
             view.looks = static_cast<int32_t>(out.looks.size());
             out.looks.push_back(l);
         }
@@ -1859,6 +1934,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
             // Weapons and other crafted things with a quality: made of a stuff and of a quality like clothes.
             if (const MadeOf* made = reg.try_get<MadeOf>(entity)) {
                 view.stuff = made->stuff;
+            }
+            view.quality = apparel_->stats().qualityOf(reg, entity);
+        }
+        if (view.category == ThingCategory::Building && construction_->isArt(thing.def) && !reg.all_of<ConstructionSite>(entity)) {
+            // A sculpture: made of a stuff and of a quality the artist's skill rolled.
+            if (const BuiltOf* built = reg.try_get<BuiltOf>(entity)) {
+                view.stuff = built->stuff;
             }
             view.quality = apparel_->stats().qualityOf(reg, entity);
         }
@@ -2278,10 +2360,29 @@ uint64_t Sim::stateHash() const {
             h.add(looks->weight);
             h.add(looks->height);
             h.add(looks->melanin);
-            for (const LooksColor* c : {&looks->naturalHair, &looks->skin, &looks->hair}) {
+            for (const LooksColor* c : {&looks->naturalHair, &looks->skin, &looks->hair, &looks->eyes}) {
                 h.add(c->r);
                 h.add(c->g);
                 h.add(c->b);
+            }
+            h.add(looks->faceShape);
+            h.add(looks->brow);
+            h.add(looks->nose);
+            h.add(looks->jaw);
+            h.add(looks->hairStyle.data(), looks->hairStyle.size());
+            h.add(looks->naturalBeard.data(), looks->naturalBeard.size());
+            h.add(looks->beard.data(), looks->beard.size());
+            h.add(looks->naturalBodyHair);
+            h.add(looks->bodyHair);
+            for (const std::vector<LooksMark>* marks : {&looks->tattoos, &looks->scars}) {
+                h.add(static_cast<uint64_t>(marks->size()));
+                for (const LooksMark& m : *marks) {
+                    h.add(static_cast<int>(m.region));
+                    h.add(static_cast<int>(m.style));
+                    h.add(m.u);
+                    h.add(m.v);
+                    h.add(m.size);
+                }
             }
         }
         if (const BillList* list = reg.try_get<BillList>(e)) {
