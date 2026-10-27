@@ -33,6 +33,7 @@
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Lights.h"
 #include "ColonySim/Inspirations.h"
+#include "ColonySim/Travel.h"
 #include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
@@ -494,6 +495,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setInspirations(inspirations_.get());
     combat_->setInspirations(inspirations_.get());
     prisoners_->setInspirations(inspirations_.get());
+    travel_ = std::make_unique<TravelSystem>(*things_, map_, *jobs_, *raids_, *fire_, *animals_, *fighters_, *mentalBreaks_,
+                                             *health_, *needs_, *defs_, time_);
+    travel_->setEventLog(&events_);
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -1518,6 +1522,18 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!mentalBreaks_->end(endBreak->pawn, error)) {
             commandFailed(id, error);
         }
+    } else if (std::get_if<SkipNightCommand>(&command) != nullptr) {
+        if (!travel_->startNight(error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* fastTravel = std::get_if<FastTravelCommand>(&command)) {
+        if (!travel_->startTravel(fastTravel->pawn, fastTravel->x, fastTravel->y, error)) {
+            commandFailed(id, error);
+        }
+    } else if (std::get_if<CancelSkipCommand>(&command) != nullptr) {
+        if (!travel_->cancel("cancelled", error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* strategyRaid = std::get_if<StartStrategyRaidCommand>(&command)) {
         RaidStrategy strategy = RaidStrategy::Assault;
         if (strategyRaid->strategy != "Auto" && !raidStrategyFromName(strategyRaid->strategy, strategy)) {
@@ -1550,11 +1566,21 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
 }
 
 void Sim::step() {
+    stepOnce(false);
+    // A skip (P5) runs on inside this call, a batch of steps at a time, so the game's own loop sees time jump.
+    for (int left = travel_->batch() - 1; left > 0 && travel_->skipping(); --left) {
+        stepOnce(true);
+    }
+}
+
+void Sim::stepOnce(bool keepEvents) {
     SimLap total(profile_, "total");
     if (profile_ != nullptr) {
         ++profile_->steps;
     }
-    events_.clear();
+    if (!keepEvents) {
+        events_.clear();
+    }
     // A controlled pawn only has a velocity in the steps it was moved.
     for (const auto [pawn, mover] : things_->registry().view<Mover, const PlayerControl>().each()) {
         mover.vx = 0.0f;
@@ -1605,14 +1631,17 @@ void Sim::step() {
     if (time_.seconds % kSecondsPerHour == 0) {
         drugs_->prune();
     }
-    { SimLap lap(profile_, "animals"); animals_->step(); }
-    { SimLap lap(profile_, "husbandry"); husbandry_->step(); }
-    { SimLap lap(profile_, "breeding"); breeding_->step(); }
+    if (!travel_->freezingAnimals()) {
+        { SimLap lap(profile_, "animals"); animals_->step(); }
+        { SimLap lap(profile_, "husbandry"); husbandry_->step(); }
+        { SimLap lap(profile_, "breeding"); breeding_->step(); }
+    }
     { SimLap lap(profile_, "social"); social_->step(time_.seconds); }
     { SimLap lap(profile_, "mentalBreaks"); mentalBreaks_->step(time_.seconds, rng_); }  // before the mood system, which turns its events into memories
     { SimLap lap(profile_, "mood"); mood_->step(time_.seconds, events_); }
     { SimLap lap(profile_, "inspirations"); inspirations_->step(time_.seconds); }
     { SimLap lap(profile_, "movement"); movement_->step(things_->registry(), map_); }
+    travel_->noteVisits();
     { SimLap lap(profile_, "melee"); melee_->step(); }
     { SimLap lap(profile_, "combat"); combat_->step(rng_); }
     { SimLap lap(profile_, "explosives"); explosives_->step(rng_); }
@@ -1658,8 +1687,12 @@ void Sim::step() {
         filth_->fadeHour(weather_->effects().rainRate);
         pruneDesignations();
     }
-    { SimLap lap(profile_, "narrator"); narrator_->step(); }  // after the clock: incidents come on the narrator's checks (T1)
-    { SimLap lap(profile_, "disasters"); disasters_->step(); }  // T3: conditions end, work and strike
+    if (!travel_->skipping()) {
+        { SimLap lap(profile_, "narrator"); narrator_->step(); }  // after the clock: incidents come on the narrator's checks (T1)
+        { SimLap lap(profile_, "disasters"); disasters_->step(); }  // T3: conditions end, work and strike (held while skipping, like the narrator)
+    }
+    travel_->afterStep();
+    narrator_->postpone(travel_->takeHold());  // a skip that ended (here or by a command) held the narrator back
     if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
         checkpoints_.push_back(Checkpoint{time_.seconds, stateHash()});
     }
@@ -2291,6 +2324,21 @@ void Sim::writeSnapshot(Snapshot& out) const {
         n.threatPoints = state.points;
         n.incidents = state.incidents;
     }
+    {
+        TravelView& t = out.travel;
+        t.skipKind = static_cast<uint8_t>(travel_->kind());
+        t.skipEndsAt = travel_->progress().endsAt;
+        t.canSkipNight = travel_->skipping() ? false : travel_->canSkipNight(t.skipWhy);
+        if (travel_->skipping()) {
+            t.skipWhy = "time is already being skipped";
+        } else if (t.canSkipNight) {
+            t.skipWhy.clear();
+        }
+        t.nights = travel_->progress().nights;
+        t.travels = travel_->progress().travels;
+        t.visitedBlocks = static_cast<uint32_t>(travel_->visitedCount());
+        t.visitedBlockSize = travel_->rules().visitedBlock;
+    }
 }
 
 uint64_t Sim::stateHash() const {
@@ -2345,6 +2393,7 @@ uint64_t Sim::stateHash() const {
     spoilage_->hashState(h);
     narrator_->hashState(h);
     disasters_->hashState(h);
+    travel_->hashState(h);
     crafting_->hashState(h);
     farming_->hashState(h);
 
