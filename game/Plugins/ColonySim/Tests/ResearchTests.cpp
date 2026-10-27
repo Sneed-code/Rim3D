@@ -77,7 +77,7 @@ TEST_CASE("Research: the projects load and a project can only be picked when its
     Sim sim = resSim();
     const ResearchSystem& research = sim.research();
     RES_REQUIRE(research.rules().present);
-    CHECK(research.projects().size() == 28);
+    CHECK(research.projects().size() == 33);
     CHECK(research.rules().pointsPerSecond() == doctest::Approx(0.00825 / 1.44));
 
     sim.submit(SetResearchCommand{"NoSuchProject"});
@@ -230,7 +230,7 @@ TEST_CASE("Research: the snapshot lists every project") {
     sim.step();
     Snapshot snap;
     sim.writeSnapshot(snap);
-    CHECK(snap.research.size() == 28);
+    CHECK(snap.research.size() == 33);
     int current = 0;
     for (const ResearchView& v : snap.research) {
         const std::string& name = sim.defs().get(v.project).defName();

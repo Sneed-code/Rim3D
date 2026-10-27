@@ -1,0 +1,11 @@
+[
+  {
+    "defName": "InspirationRules",
+    "source": "RimWorld wiki (Inspiration), numbers as recalled",
+    "checkEverySeconds": 2880,
+    "minMood": 50,
+    "meanDaysByMood": [[50, 210], [100, 15]],
+    "defaultDurationDays": 2.5,
+    "unverified": ["meanDaysByMood", "defaultDurationDays", "minMood"]
+  }
+]
