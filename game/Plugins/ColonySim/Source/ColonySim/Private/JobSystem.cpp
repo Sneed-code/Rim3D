@@ -1,6 +1,7 @@
 #include "ColonySim/Jobs.h"
 
 #include "ColonySim/Animals.h"
+#include "ColonySim/Areas.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
@@ -1039,6 +1040,9 @@ bool JobSystem::thinkWorkPass(Entity pawn, Job& out, bool urgentOnly, int dutyWo
                                            : c.target.thing != kNoEntity ? cellOf(reg.get<Position>(c.target.thing))
                                                                          : c.target.cell;
                 // Rock can't be walked into: the pawn works from a cell next to it.
+                if (areas_ != nullptr && !areas_->allows(pawn, targetCell)) {
+                    continue;
+                }
                 CellPos stand;
                 if (map_.walkable(targetCell) ? !canReach(at, targetCell) : !touchCell(at, targetCell, stand)) {
                     continue;

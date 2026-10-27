@@ -27,6 +27,7 @@
 #include "ColonySim/Repair.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Hash.h"
+#include "ColonySim/Areas.h"
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Lights.h"
@@ -412,6 +413,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     melee_->setEventLog(&events_);
     fighters_->setMelee(melee_.get());
     upperFloors_ = std::make_unique<UpperFloors>(map_, *rooms_, *things_, plants_.get());
+    areas_ = std::make_unique<Areas>();
+    jobs_->setAreas(areas_.get());
     roofCollapse_ = std::make_unique<RoofCollapse>(map_, *rooms_, *things_, *health_, *defs_);
     roofCollapse_->setEventLog(&events_);
     roofCollapse_->setInterruptHandler([this](Entity pawn, const std::string& why) { jobs_->interrupt(pawn, why); });
@@ -862,6 +865,24 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             jobs_->forget(circuit->thing);
             fighters_->forget(circuit->thing);
             things_->destroy(circuit->thing);
+        }
+    } else if (const auto* createArea = std::get_if<CreateAreaCommand>(&command)) {
+        areas_->create(createArea->name);
+    } else if (const auto* paintArea = std::get_if<PaintAreaCommand>(&command)) {
+        if (areas_->find(paintArea->area) == nullptr) {
+            commandFailed(id, "no such area");
+        } else if (areas_->paint(paintArea->area, paintArea->rect, paintArea->add) == 0) {
+            commandFailed(id, paintArea->add ? "those cells are in the area already" : "none of those cells are in the area");
+        }
+    } else if (const auto* deleteArea = std::get_if<DeleteAreaCommand>(&command)) {
+        if (!areas_->remove(deleteArea->area)) {
+            commandFailed(id, "no such area");
+        }
+    } else if (const auto* assignArea = std::get_if<AssignAreaCommand>(&command)) {
+        if (!things_->exists(assignArea->pawn)) {
+            commandFailed(id, "no such pawn");
+        } else if (!areas_->assign(assignArea->pawn, assignArea->area, error)) {
+            commandFailed(id, error);
         }
     } else if (const auto* contract = std::get_if<ContractDiseaseCommand>(&command)) {
         const DefId disease = health_->diseaseId(contract->disease);
@@ -1737,6 +1758,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
                                      static_cast<uint32_t>(zone.cells.size())});
         out.zoneCells.insert(out.zoneCells.end(), zone.cells.begin(), zone.cells.end());
     }
+    for (const Area& area : areas_->areas()) {
+        const std::vector<CellPos> cells = areas_->cellsIn(area.id);
+        out.areas.push_back(AreaView{area.id, area.name, static_cast<uint32_t>(out.areaCells.size()), static_cast<uint32_t>(cells.size())});
+        out.areaCells.insert(out.areaCells.end(), cells.begin(), cells.end());
+    }
     for (const AnimalZone& zone : husbandry_->zones()) {
         out.animalZones.push_back(AnimalZoneView{zone.id, static_cast<uint32_t>(out.animalZoneCells.size()),
                                                  static_cast<uint32_t>(zone.cells.size()), husbandry_->isPen(zone.id)});
@@ -1871,6 +1897,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
         }
         if (const Worker* worker = reg.try_get<Worker>(entity)) {
             view.job = worker->job.type;
+            view.area = areas_->areaOf(entity);
             view.jobTarget = worker->job.thing;
             view.jobProgress = worker->job.type != JobType::None ? jobs_->jobProgress(entity) : 0.0f;
         }
@@ -2285,6 +2312,7 @@ uint64_t Sim::stateHash() const {
     temperature_->hashState(h);
     h.add(map_.upperFloorHash());
     roofCollapse_->hashState(h);
+    areas_->hashState(h);
     spoilage_->hashState(h);
     narrator_->hashState(h);
     disasters_->hashState(h);
