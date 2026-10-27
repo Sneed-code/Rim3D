@@ -375,6 +375,10 @@ public:
     // enough hit knocks the pawn down and pushes it away; buildings in the radius lose hit points
     // (walls the most). Events: PawnInjured... and one Explosion.
     ExplosionResult explode(const Explosion& explosion);
+    // Takes `damage` hit points off a building (a raider digging through a wall, F12); at none it goes through the
+    // before-destroy hook and is destroyed. True if it was destroyed; false for a thing without hit points or one
+    // that still stands.
+    bool damageBuilding(Entity building, int damage);
     // Steps left of a pawn's knock-down (0: not knocked down).
     int knockedDownFor(Entity pawn) const;
 
