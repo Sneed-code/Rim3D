@@ -100,6 +100,8 @@ stream and the `StoreIn` marks.
 
 - Butchering was left to N2 and is done: [hunting.md](hunting.md).
 - Skill experience from crafting (`workSkillXp` is read and unused, as for cooking).
+- Inspirations (quality shift), art, sculpting, smelting, the machining table's other recipes.
+- Damage and hit points of melee weapons from their stuff and quality.
 - Art, sculpting, smelting, the machining table's other recipes.
 - Damage and hit points of melee weapons from their stuff and quality (P4).
 - "Take from this stockpile only" and a per-bill ingredient quality
