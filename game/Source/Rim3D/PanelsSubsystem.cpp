@@ -6,6 +6,7 @@
 #include <imgui.h>
 
 #include "OverseerSubsystem.h"
+#include "QuestPanelSubsystem.h"
 #include "SimSubsystem.h"
 
 #include "ColonySim/Bills.h"
@@ -349,6 +350,27 @@ void UPanelsSubsystem::OnSimEvent(const colony::Event& Event)
 			AddLog(FString::Printf(TEXT("%s finished: %s%s."), *NameOf(Event.thing), *What, Event.message.empty() ? TEXT("") : TEXT(" (bill done)")), 3, Event.thing);
 			break;
 		}
+		case colony::EventType::QuestOffered:
+		case colony::EventType::QuestAccepted:
+		case colony::EventType::QuestDeclined:
+		case colony::EventType::QuestExpired:
+		case colony::EventType::QuestCompleted:
+		case colony::EventType::QuestFailed:
+		{
+			// Quests (docs/design/quests.md); the quest window is UQuestPanelSubsystem.
+			const FString What = PCapital(Event.def.valid() ? Sim.defs().get(Event.def).label() : Event.message);
+			const FString Why = UTF8_TO_TCHAR(Event.message.c_str());
+			switch (Event.type)
+			{
+				case colony::EventType::QuestOffered: AddLog(FString::Printf(TEXT("Quest offered: %s. Open Quests to answer."), *What), 0); break;
+				case colony::EventType::QuestAccepted: AddLog(FString::Printf(TEXT("Quest accepted: %s."), *What), 0); break;
+				case colony::EventType::QuestDeclined: AddLog(FString::Printf(TEXT("Quest declined: %s."), *What), 0); break;
+				case colony::EventType::QuestExpired: AddLog(FString::Printf(TEXT("Quest lapsed: %s."), *What), 1); break;
+				case colony::EventType::QuestCompleted: AddLog(FString::Printf(TEXT("Quest done: %s (%s)."), *What, *Why), 3); break;
+				default: AddLog(FString::Printf(TEXT("Quest failed: %s (%s)."), *What, *Why), 2); break;
+			}
+			break;
+		}
 		default:
 			break;
 	}
@@ -566,6 +588,25 @@ void UPanelsSubsystem::DrawMenuAndColonistBar(USimSubsystem& Bridge, float Scale
 		if (PButton(TEXT("Log"), bLogOpen))
 		{
 			bLogOpen = !bLogOpen;
+		}
+		if (UQuestPanelSubsystem* Quests = GetWorld()->GetSubsystem<UQuestPanelSubsystem>())
+		{
+			// "Quests (2)" while offers wait for an answer; amber until the window has been opened since the newest one.
+			ImGui::SameLine();
+			const int32 Waiting = Quests->CountOffered();
+			const bool bUnseen = Quests->HasUnseenOffer();
+			if (bUnseen)
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.75f, 0.55f, 0.15f, 1.0f));
+			}
+			if (PButton(Waiting > 0 ? FString::Printf(TEXT("Quests (%d)"), Waiting) : FString(TEXT("Quests")), Quests->IsOpen()))
+			{
+				Quests->SetOpen(!Quests->IsOpen());
+			}
+			if (bUnseen)
+			{
+				ImGui::PopStyleColor();
+			}
 		}
 
 		// The colonists, coloured by mood; downed ones are grey.
