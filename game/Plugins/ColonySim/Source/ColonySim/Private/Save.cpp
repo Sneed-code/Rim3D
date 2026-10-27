@@ -1,6 +1,7 @@
 #include "ColonySim/Save.h"
 
 #include "ColonySim/Animals.h"
+#include "ColonySim/Areas.h"
 #include "ColonySim/Breeding.h"
 #include "ColonySim/Apparel.h"
 #include "ColonySim/Husbandry.h"
@@ -30,6 +31,7 @@
 #include "ColonySim/Hash.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Weather.h"
+#include "ColonySim/DeepResources.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/RoofCollapse.h"
 #include "ColonySim/RoomStats.h"
@@ -38,8 +40,10 @@
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Spoilage.h"
 #include "ColonySim/Crafting.h"
+#include "ColonySim/Repair.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Inspirations.h"
+#include "ColonySim/Travel.h"
 #include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Medicine.h"
@@ -58,6 +62,7 @@
 #include "ColonySim/Zones.h"
 
 #include <algorithm>
+#include <unordered_map>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -222,6 +227,8 @@ struct SaveHealth {
     std::vector<SaveImmunity> immunities;            // health section 4 on
     bool dead = false;
     DeathCause cause = DeathCause::None;
+    bool downed = false;  // health section 5 on: with `dirty`, so a wound not yet worked out is still pending after a load
+    bool dirty = false;
 };
 
 // An item's rot and wear and what a meal was cooked from, by defName (section "spoilage").
@@ -345,6 +352,14 @@ struct SaveApparel {
     int64_t nextCheck = 0;
 };
 
+// What the repair system keeps on an item: the repair mark, the upgrade part ordered fitted and the parts fitted, by
+// defName (section "repair", P4).
+struct SaveRepair {
+    bool marked = false;
+    std::string order;  // Things defName, empty for none
+    std::vector<std::string> parts;
+};
+
 // X2's resonance (section "resonance"): an attuned pawn and a cast under way, their powers by defName.
 struct SaveAttunement {
     int level = 1;
@@ -425,6 +440,7 @@ struct SaveEntity {
     std::optional<PrisonBed> prisonBed;     // section "prisoners" (C22)
     std::optional<Fuel> fuel;               // "fuel" section (C11)
     std::optional<StoreIn> storeIn;         // "crafting" section (C14)
+    std::optional<SaveRepair> repair;       // "repair" section (P4)
     std::optional<MentalBreaker> mentalBreaker;  // section "mentalBreaks" (C19)
     std::optional<Visitor> visitor;         // section "trade" (C23)
     std::optional<Inspired> inspired;            // section "inspirations" (C25)
@@ -454,6 +470,21 @@ struct SaveMineables {
     std::vector<uint32_t> cells;    // cell index in the map
     std::vector<uint32_t> defIndex;  // into `defs`
     std::vector<uint32_t> hitPoints;
+};
+
+// Deep resources (section "deep", docs/design/deep-mining.md): the item defNames, then one entry per cell in cell order,
+// then the work scanners and drills have done.
+struct SaveDeep {
+    std::vector<std::string> defs;
+    std::vector<uint32_t> cells;
+    std::vector<uint32_t> defIndex;
+    std::vector<uint32_t> units;
+    std::vector<CellPos> workAt;
+    std::vector<double> work;
+    uint64_t rngState = 0;
+    uint64_t rngIncrement = 1;
+    uint64_t found = 0;
+    uint64_t portions = 0;
 };
 
 // The player's marks on rock and plants (format 10 on), in cell order.
@@ -519,6 +550,9 @@ struct SaveData {
     SaveDesignations designations;     // format 12 on
     ResearchState research;            // section "research"
     ShipState ship;                    // section "ship"
+    float moodWealth = 0.0f;           // section "expectations": the wealth the mood system measured, and when
+    int64_t moodWealthAt = -1;
+    TravelState travel;                // section "travel" (P5)
     // Section "talents" (P3): per protagonist, parallel lists in pawn order.
     std::vector<Entity> talentPawns;
     std::vector<int64_t> talentXp;
@@ -540,6 +574,8 @@ struct SaveData {
     std::vector<Thermostat> thermostats;            // section "thermostats"
     std::vector<CellPos> upperFloors;  // section "levels" (M1), by level then row
     RoofCollapseSaved roofs;           // section "roofs" (M3)
+    AreasSaved areas;                  // section "areas": allowed areas and who is limited to one
+    SaveDeep deep;                     // section "deep"
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
     uint32_t nextOutfitId = 1;
     SpoilageState spoilageState;                    // section "spoilage" (C16)
@@ -936,10 +972,31 @@ struct SaveCommandNames {
 template <typename>
 inline constexpr bool kSaveNoSuchCommand = false;
 
+// The area commands, one branch of the tail below.
+template <typename Ar, typename Type>
+void saveAreaCommand(Ar& ar, Type& c) {
+    if constexpr (std::is_same_v<Type, CreateAreaCommand>) {
+        ar.text("name", c.name);
+    } else if constexpr (std::is_same_v<Type, PaintAreaCommand>) {
+        ar.value("area", c.area);
+        ar.group("rect", [&] { saveRect(ar, c.rect); });
+        ar.value("add", c.add);
+    } else if constexpr (std::is_same_v<Type, DeleteAreaCommand>) {
+        ar.value("area", c.area);
+    } else {
+        static_assert(std::is_same_v<Type, AssignAreaCommand>, "save every area command here");
+        ar.value("pawn", c.pawn);
+        ar.value("area", c.area);
+    }
+}
+
 // Second half of the command chain, split out because MSVC stops at 127 nested else-if blocks (C1061).
 template <typename Ar, typename Type>
 void saveCommandTail(Ar& ar, Type& c) {
-    if constexpr (std::is_same_v<Type, StartRaidCommand>) {
+    if constexpr (std::is_same_v<Type, CreateAreaCommand> || std::is_same_v<Type, PaintAreaCommand> ||
+                  std::is_same_v<Type, DeleteAreaCommand> || std::is_same_v<Type, AssignAreaCommand>) {
+        saveAreaCommand(ar, c);
+    } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
         ar.text("faction", c.faction);
         ar.value("points", c.points);
         ar.value("edge", c.edge);
@@ -1112,6 +1169,13 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.text("action", c.action);
         ar.value("quest", c.quest);
         ar.text("kind", c.kind);
+    } else if constexpr (std::is_same_v<Type, RepairGearCommand>) {
+        ar.value("thing", c.thing);
+        ar.value("repair", c.repair);
+    } else if constexpr (std::is_same_v<Type, FitUpgradeCommand>) {
+        ar.value("thing", c.thing);
+        ar.text("part", c.part);
+        ar.value("fit", c.fit);
     } else if constexpr (std::is_same_v<Type, AttuneCommand>) {
         ar.value("pawn", c.pawn);
         ar.value("level", c.level);
@@ -1124,6 +1188,12 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.value("target", c.target);
         ar.group("cell", [&] { saveCell(ar, c.cell); });
         ar.value("player", c.player);
+    } else if constexpr (std::is_same_v<Type, FastTravelCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("x", c.x);
+        ar.value("y", c.y);
+    } else if constexpr (std::is_same_v<Type, SkipNightCommand> || std::is_same_v<Type, CancelSkipCommand>) {
+        // no fields
     } else {
         static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
     }
@@ -1635,9 +1705,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::RearmTrap, "the save file has a bad job");
-    ar.require(job.type <= JobType::Party, "the save file has a bad job");
-    ar.require(job.type <= JobType::StandBy, "the save file has a bad job");
+    ar.require(job.type <= JobType::FeedPatient, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -1757,7 +1825,10 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
     ar.value("dead", h.dead);
     ar.value("cause", h.cause);
     ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Withdrawal), "the save file has a bad cause of death");
-
+    if (ar.sectionVersion() >= 6) {
+        ar.value("downed", h.downed);
+        ar.value("dirty", h.dirty);
+    }
 }
 
 template <typename Ar>
@@ -2529,6 +2600,21 @@ void saveShip(Ar& ar, ShipState& s) {
 }
 
 template <typename Ar>
+void saveTravel(Ar& ar, TravelState& s) {
+    ar.value("kind", s.kind);
+    ar.require(static_cast<int>(s.kind) <= static_cast<int>(SkipKind::Travel), "the save file has a bad skip kind");
+    ar.value("startedAt", s.startedAt);
+    ar.value("endsAt", s.endsAt);
+    ar.value("pawn", s.pawn);
+    ar.value("destX", s.destX);
+    ar.value("destY", s.destY);
+    ar.value("nights", s.nights);
+    ar.value("travels", s.travels);
+    ar.value("skipped", s.skipped);
+    ar.list("visited", s.visited, [&](uint32_t& index) { ar.value(nullptr, index); });
+}
+
+template <typename Ar>
 void saveDrugs(Ar& ar, SaveData& d) {
     ar.list("pawns", d.drugPawns, [&](SaveDrugPawn& p) {
         ar.value("pawn", p.pawn);
@@ -2913,7 +2999,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("colonists", 2, [&] {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
-    ar.section("health", 5, [&] {
+    ar.section("health", 6, [&] {
         saveParts(ar, "health", e, &SaveEntity::health, [&](SaveHealth& h) { saveHealthPart(ar, h); });
     });
     ar.section("control", 1, [&] {
@@ -3075,27 +3161,6 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.value("building", t.building);
             ar.value("celsius", t.celsius);
         });
-    });
-    ar.section("raids", 1, [&] {
-        saveRaids(ar, d.raids);
-        saveParts(ar, "defense", e, &SaveEntity::defense, [&](DefensePlan& p) {
-            ar.value("role", p.role);
-            ar.require(static_cast<int>(p.role) <= static_cast<int>(DefenseRole::Firefighter), "the save file has a bad defense role");
-            ar.value("hasSpot", p.hasSpot);
-            ar.group("spot", [&] { saveCell(ar, p.spot); });
-        });
-        saveParts(ar, "raider", e, &SaveEntity::raider, [&](Raider& r) {
-            ar.value("squad", r.squad);
-            ar.text("kind", r.kind);
-            if (ar.sectionVersion() >= 2) {  // F12
-                ar.value("goalThing", r.goalThing);
-                ar.value("loot", r.loot);
-                ar.value("sparesDowned", r.sparesDowned);
-            }
-        });
-        if (ar.sectionVersion() >= 2) {
-            saveParts(ar, "kidnapped", e, &SaveEntity::kidnapped, [&](Kidnapped& k) { ar.value("by", k.by); });
-        }
     });
     ar.section("raids", 2, [&] {
         saveRaids(ar, d.raids);
@@ -3266,6 +3331,33 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("fuel", 1, [&] {
         saveParts(ar, "fuel", e, &SaveEntity::fuel, [&](Fuel& f) { saveFuelPart(ar, f); });
     });
+    ar.section("areas", 1, [&] {
+        ar.value("nextId", d.areas.nextId);
+        ar.list("areas", d.areas.areas, [&](Area& a) {
+            ar.value("id", a.id);
+            ar.text("name", a.name);
+            ar.list("cells", a.cells, [&](CellPos& c) { saveCell(ar, c); });
+        });
+        ar.list("assigned", d.areas.assigned, [&](std::pair<Entity, AreaId>& p) {
+            ar.value("pawn", p.first);
+            ar.value("area", p.second);
+        });
+    });
+    ar.section("deep", 1, [&] {
+        ar.list("defs", d.deep.defs, [&](std::string& s) { ar.text(nullptr, s); });
+        ar.list("cells", d.deep.cells, [&](uint32_t& v) { ar.value(nullptr, v); });
+        ar.list("defIndex", d.deep.defIndex, [&](uint32_t& v) { ar.value(nullptr, v); });
+        ar.list("units", d.deep.units, [&](uint32_t& v) { ar.value(nullptr, v); });
+        ar.require(d.deep.cells.size() == d.deep.defIndex.size() && d.deep.cells.size() == d.deep.units.size(),
+                   "the save file's deep resource lists don't match");
+        ar.list("workAt", d.deep.workAt, [&](CellPos& c) { saveCell(ar, c); });
+        ar.list("work", d.deep.work, [&](double& v) { ar.value(nullptr, v); });
+        ar.require(d.deep.workAt.size() == d.deep.work.size(), "the save file's machine work lists don't match");
+        ar.value("rngState", d.deep.rngState);
+        ar.value("rngIncrement", d.deep.rngIncrement);
+        ar.value("found", d.deep.found);
+        ar.value("portions", d.deep.portions);
+    });
     ar.section("roofs", 1, [&] {
         ar.value("collapses", d.roofs.collapses);
         ar.list("thin", d.roofs.thin, [&](CellPos& c) { saveCell(ar, c); });
@@ -3276,6 +3368,13 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("rngState", d.craftingState.rngState);
         ar.value("rngIncrement", d.craftingState.rngIncrement);
         saveParts(ar, "storeIn", e, &SaveEntity::storeIn, [&](StoreIn& s) { ar.value("zone", s.zone); });
+    });
+    ar.section("repair", 1, [&] {
+        saveParts(ar, "repair", e, &SaveEntity::repair, [&](SaveRepair& r) {
+            ar.value("marked", r.marked);
+            ar.text("order", r.order);
+            ar.list("parts", r.parts, [&](std::string& name) { ar.text(nullptr, name); });
+        });
     });
     ar.section("mentalBreaks", 1, [&] {
         saveParts(ar, "mentalBreaker", e, &SaveEntity::mentalBreaker, [&](MentalBreaker& b) { saveMentalBreakerPart(ar, b); });
@@ -3304,6 +3403,11 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("startTile", d.world.startTile);
         ar.value("hash", d.worldHash);
     });
+    ar.section("expectations", 1, [&] {
+        ar.value("wealth", d.moodWealth);
+        ar.value("at", d.moodWealthAt);
+    });
+    ar.section("travel", 1, [&] { saveTravel(ar, d.travel); });
     // New sections go here, at the end.
 }
 
@@ -3624,6 +3728,19 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const StoreIn* store = reg.try_get<StoreIn>(e)) {
             out.storeIn = *store;
         }
+        if (reg.all_of<RepairMark>(e) || reg.all_of<FitOrder>(e) || reg.all_of<FittedParts>(e)) {
+            SaveRepair saved;
+            saved.marked = reg.all_of<RepairMark>(e);
+            if (const FitOrder* order = reg.try_get<FitOrder>(e)) {
+                saved.order = sim.defs_->get(order->part).defName();
+            }
+            if (const FittedParts* parts = reg.try_get<FittedParts>(e)) {
+                for (const DefId part : parts->parts) {
+                    saved.parts.push_back(sim.defs_->get(part).defName());
+                }
+            }
+            out.repair = std::move(saved);
+        }
         if (const Health* health = reg.try_get<Health>(e)) {
             SaveHealth saved;
             saved.protagonist = health->protagonist;
@@ -3649,6 +3766,8 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             }
             saved.dead = health->dead;
             saved.cause = health->cause;
+            saved.downed = health->downed;
+            saved.dirty = health->dirty;
             out.health = std::move(saved);
         }
         if (const Posture* posture = reg.try_get<Posture>(e)) {
@@ -3835,6 +3954,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     }
     d.research = sim.research_->state();
     d.ship = sim.ship_->state();
+    d.moodWealth = sim.mood_->wealth();
+    d.moodWealthAt = sim.mood_->wealthAt();
+    d.travel = sim.travel_->state();
     for (const auto& [pawn, s] : sim.talents_->states()) {
         d.talentPawns.push_back(pawn);
         d.talentXp.push_back(s.xp);
@@ -3855,6 +3977,33 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.thermostats = sim.temperature_->thermostats();
     d.upperFloors = sim.map_.upperFloorCells();
     d.roofs = sim.roofCollapse_->state();
+    d.areas = sim.areas_->saved();
+    {
+        const DeepResourcesSaved deep = sim.deepResources_->saved();
+        std::unordered_map<uint32_t, uint32_t> indexOf;
+        for (const DeepCell& c : deep.cells) {
+            const auto it = indexOf.find(c.def.value);
+            uint32_t index = 0;
+            if (it == indexOf.end()) {
+                index = static_cast<uint32_t>(d.deep.defs.size());
+                indexOf[c.def.value] = index;
+                d.deep.defs.push_back(sim.defs_->get(c.def).defName());
+            } else {
+                index = it->second;
+            }
+            d.deep.cells.push_back(static_cast<uint32_t>(c.cell));
+            d.deep.defIndex.push_back(index);
+            d.deep.units.push_back(c.units);
+        }
+        for (const DeepWork& w : deep.work) {
+            d.deep.workAt.push_back(w.at);
+            d.deep.work.push_back(w.work);
+        }
+        d.deep.rngState = deep.rngState;
+        d.deep.rngIncrement = deep.rngIncrement;
+        d.deep.found = deep.found;
+        d.deep.portions = deep.portions;
+    }
     d.raids = sim.raids_->state();
     d.quests = sim.quests_->state();
     d.spoilageState = sim.spoilage_->state();
@@ -4140,6 +4289,31 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.storeIn) {
             reg.emplace<StoreIn>(entity, *e.storeIn);
         }
+        if (e.repair) {
+            if (e.repair->marked) {
+                reg.emplace<RepairMark>(entity);
+            }
+            if (!e.repair->order.empty()) {
+                const DefId part = sim.defs_->idOf("Things", e.repair->order);
+                if (!part.valid()) {
+                    error = "the save has an upgrade order for a part that no longer exists: " + e.repair->order;
+                    return false;
+                }
+                reg.emplace<FitOrder>(entity, FitOrder{part});
+            }
+            if (!e.repair->parts.empty()) {
+                FittedParts fitted;
+                for (const std::string& name : e.repair->parts) {
+                    const DefId part = sim.defs_->idOf("Things", name);
+                    if (!part.valid()) {
+                        error = "the save has a gun with a part that no longer exists: " + name;
+                        return false;
+                    }
+                    fitted.parts.push_back(part);
+                }
+                reg.emplace<FittedParts>(entity, std::move(fitted));
+            }
+        }
         if (e.fuel) {
             reg.emplace<Fuel>(entity, *e.fuel);
         } else if (e.thing && e.thing->category == ThingCategory::Building && !e.site) {
@@ -4208,6 +4382,8 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                       [](const EnvironmentHediff& a, const EnvironmentHediff& b) { return a.def.value < b.def.value; });
             health.dead = e.health->dead;
             health.cause = e.health->cause;
+            health.downed = e.health->downed;  // with `dirty`: a wound not yet worked out stays pending (refreshAll)
+            health.dirty = e.health->dirty;
             const int parts = e.thing ? sim.health_->partCount(reg.get<Thing>(entity).def) : 0;
             for (const Injury& injury : health.injuries) {
                 if (injury.part >= parts) {
@@ -4678,6 +4854,10 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.ship_->restore(std::move(d.ship), error)) {
         return false;
     }
+    sim.mood_->restoreWealth(d.moodWealth, d.moodWealthAt);  // an older save measures it again at once
+    if (!sim.travel_->restore(std::move(d.travel), error)) {
+        return false;
+    }
     sim.apparel_->restoreOutfits(std::move(d.outfits), d.nextOutfitId);
     if (d.hasWeather) {
         WeatherState state;
@@ -4786,6 +4966,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             return false;
         }
     }
+    if (!sim.areas_->restore(d.areas, error)) {
+        return false;
+    }
     if (!sim.rooms_->restoreThinRoofs(d.roofs.thin)) {
         error = "the save has a roof outside the map";
         return false;
@@ -4798,11 +4981,37 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     sim.temperature_->restoreThermostats(d.thermostats);
     sim.temperature_->restore(d.roomTemperatures);
     sim.spoilage_->restore(d.spoilageState);
+    {
+        DeepResourcesSaved deep;
+        for (size_t i = 0; i < d.deep.cells.size(); ++i) {
+            if (d.deep.defIndex[i] >= d.deep.defs.size() || d.deep.units[i] > 65535) {
+                error = "the save has deep resources that don't fit";
+                return false;
+            }
+            deep.cells.push_back(DeepCell{static_cast<int>(d.deep.cells[i]),
+                                          sim.defs_->idOf("Things", d.deep.defs[d.deep.defIndex[i]]),
+                                          static_cast<uint16_t>(d.deep.units[i])});
+        }
+        for (size_t i = 0; i < d.deep.work.size(); ++i) {
+            deep.work.push_back(DeepWork{d.deep.workAt[i], d.deep.work[i]});
+        }
+        deep.rngState = d.deep.rngState;
+        deep.rngIncrement = d.deep.rngIncrement;
+        deep.found = d.deep.found;
+        deep.portions = d.deep.portions;
+        if (d.deep.cells.empty() && d.deep.rngState == 0) {
+            // An older save without the section: a fresh layer, with the stream the map started with.
+        } else if (!sim.deepResources_->restore(deep)) {
+            error = "the save has deep resources outside the map";
+            return false;
+        }
+    }
     if (!sim.roofCollapse_->restore(d.roofs)) {
         error = "the save has a fallen roof outside the map";
         return false;
     }
     sim.crafting_->restore(d.craftingState);
+    sim.repair_->restoreMods();
     if (!sim.fire_->restore(d.fire, error)) {
         return false;
     }

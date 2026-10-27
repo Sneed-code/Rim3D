@@ -1,0 +1,27 @@
+[
+ {
+  "defName": "TravelRules",
+  "source": "ours",
+  "visitedBlock": 8,
+  "visitedRadius": 16,
+  "minDistance": 20,
+  "detour": 1.3,
+  "defaultSpeed": 0.15333,
+  "nightBatch": 1200,
+  "travelBatch": 120,
+  "threatCheckSeconds": 10,
+  "freezeAnimals": true,
+  "ours": [
+   "visitedBlock",
+   "visitedRadius",
+   "minDistance",
+   "detour",
+   "defaultSpeed",
+   "nightBatch",
+   "travelBatch",
+   "threatCheckSeconds",
+   "freezeAnimals"
+  ],
+  "notes": "Night skip and fast travel (P5) are Palworld's, not RimWorld's, so every number is ours. A visited block is 8 m wide and the controlled colonist marks the blocks within 16 m of it. Fast travel takes the walk's time (the straight line times 1.3 at the colonist's own speed, in game seconds) and refuses places closer than 20 m. A skip runs 1200 (night) or 120 (travel) game seconds per Sim::step and looks for a threat every 10 game seconds. Animals stand still in a night skip."
+ }
+]

@@ -1,0 +1,13 @@
+[
+  {
+    "defName": "LootRules",
+    "referencePoints": 100,
+    "minScale": 0.5,
+    "maxScale": 4,
+    "dropRadius": 6,
+    "podMinDistance": 10,
+    "podMaxDistance": 40,
+    "ours": ["referencePoints", "minScale", "maxScale", "dropRadius", "podMinDistance", "podMaxDistance"],
+    "note": "Loot tables (data/defs/LootTables). Points-scaled tables give their plain amounts at 100 raid points."
+  }
+]

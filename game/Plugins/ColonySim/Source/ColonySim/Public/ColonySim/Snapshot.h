@@ -12,6 +12,7 @@
 #include "ColonySim/Melee.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Rooms.h"
+#include "ColonySim/Wounds.h"
 #include "ColonySim/Zones.h"
 
 #include <cstdint>
@@ -63,6 +64,7 @@ struct ThingView {
     bool dead = false;
     // Pawns: the job they are on (docs/design/jobs.md) and what it is about, and what they carry.
     JobType job = JobType::None;
+    uint32_t area = 0;  // the allowed area a pawn is limited to (AreaView::id), 0 for none
     Entity jobTarget = kNoEntity;
     float jobProgress = 0.0f;  // 0 to 1: a swing of the pick, a plant being cut, a frame being built (hands-on work, U10)
     DefId carriedDef;
@@ -173,6 +175,12 @@ struct ThingView {
     Entity rescuing = kNoEntity;
     // Humanlike pawns: their looks, Snapshot::looks[looks]; -1 for other things.
     int32_t looks = -1;
+    // Pawns with a body (docs/design/wounds.md): their wounds and lost parts that show on the skin, `woundCount` from
+    // Snapshot::wounds[firstWound]; blood lost (0 to 1, 1 is death) and how fast it is going (blood loss a day).
+    uint32_t firstWound = 0;
+    uint32_t woundCount = 0;
+    float bloodLoss = 0.0f;
+    float bleedPerDay = 0.0f;
     // Buildings with a power part (docs/design/power.md): whether they have power, the net they are
     // in (Snapshot::powerNets[powerNet - 1]; 0 for none), watts now (+ generating, - drawing) and,
     // for batteries, how full (0 to 1; -1 for other buildings).
@@ -229,6 +237,13 @@ struct ThingView {
     uint32_t apparelCount = 0;
     int quality = -1;
     bool tainted = false;
+    // Repair and upgrades (docs/design/repair.md). Apparel and weapons on the map: whether a colonist is to repair them.
+    // Guns: the part ordered fitted (invalid for none) and the parts already fitted, `fittedCount` of them from
+    // Snapshot::fittedParts[firstFitted], in the order fitted.
+    bool repairMarked = false;
+    DefId fitOrder;
+    uint32_t firstFitted = 0;
+    uint32_t fittedCount = 0;
     // Resonance (docs/design/resonance.md). Pawns: steps left of a stun (0: not stunned), whether a numb or burden
     // is on them, and for a pawn winding up a power, the Powers def and the steps until it goes off.
     int stunnedFor = 0;
@@ -388,6 +403,14 @@ struct AnimalZoneView {
     bool pen = false;
 };
 
+// One allowed area (docs/design/areas.md): `cellCount` cells from Snapshot::areaCells[firstCell].
+struct AreaView {
+    uint32_t id = 0;
+    std::string name;
+    uint32_t firstCell = 0;
+    uint32_t cellCount = 0;
+};
+
 // One growing zone (C13): `cellCount` cells from Snapshot::growingZoneCells[firstCell], growing `crop`.
 struct GrowingZoneView {
     uint32_t id = 0;
@@ -444,6 +467,13 @@ struct DesignationView {
     DesignationKind kind = DesignationKind::None;
 };
 
+// One cell of deep resources a scanner found (docs/design/deep-mining.md).
+struct DeepCellView {
+    CellPos cell;
+    DefId def;       // the item under it
+    int units = 0;
+};
+
 // One research project and where it stands (docs/design/research.md).
 struct ResearchView {
     DefId project;          // a Research def
@@ -496,6 +526,18 @@ struct NarratorView {
     uint32_t incidents = 0;
 };
 
+// Night skip and fast travel (docs/design/skip-travel.md). `skipKind` is a SkipKind number (0 none, 1 night, 2 travel).
+struct TravelView {
+    uint8_t skipKind = 0;
+    int64_t skipEndsAt = 0;       // game second the running skip ends
+    bool canSkipNight = false;    // a night skip could start now
+    std::string skipWhy;          // when it could not: why, in plain words
+    uint32_t nights = 0;          // night skips that ran to the end
+    uint32_t travels = 0;         // fast travels that arrived
+    uint32_t visitedBlocks = 0;   // places visited
+    int visitedBlockSize = 8;     // metres per visited block
+};
+
 // A talent rank the protagonist has bought (docs/design/talents.md).
 struct TalentRankView {
     DefId talent;  // a Talents def
@@ -532,6 +574,8 @@ struct Snapshot {
     std::vector<CellPos> zoneCells;        // the zones' cells, see ZoneView
     std::vector<AnimalZoneView> animalZones;  // animal zones and pens (N3)
     std::vector<CellPos> animalZoneCells;     // their cells, see AnimalZoneView
+    std::vector<AreaView> areas;                // allowed areas, by id
+    std::vector<CellPos> areaCells;             // their cells, see AreaView
     std::vector<GrowingZoneView> growingZones;  // growing zones (C13)
     std::vector<CellPos> growingZoneCells;      // their cells, see GrowingZoneView
     std::vector<DesignationView> designations;  // every mark, in cell order
@@ -547,6 +591,7 @@ struct Snapshot {
     uint64_t roofCollapses = 0;
     std::vector<ProjectileView> projectiles;  // sorted by id
     std::vector<PawnLooksView> looks;      // see ThingView::looks
+    std::vector<WoundView> wounds;         // see ThingView::firstWound
     std::vector<PowerNetView> powerNets;   // by id - 1, see ThingView::powerNet
     std::vector<ResearchView> research;    // every project, in def order
     std::vector<TalentView> talents;       // see TalentView
@@ -561,6 +606,9 @@ struct Snapshot {
     uint64_t fireChanges = ~0ULL;
     std::vector<CellPos> burnt;
     uint64_t burntChanges = ~0ULL;
+    // Deep resources found by scanners, in cell order; rewritten when `deepChanges` moves (drills take units out).
+    std::vector<DeepCellView> deepResources;
+    uint64_t deepChanges = ~0ULL;
     std::vector<CellPos> homeArea;
     uint64_t homeChanges = ~0ULL;
     // The colony alarm (docs/design/raids.md): on, and whether the player sounded it (only the
@@ -572,11 +620,13 @@ struct Snapshot {
     std::vector<GoodwillView> goodwill;    // every faction's goodwill with the colony
     std::vector<QuestView> quests;         // offered, active and recently finished quests, by id
     std::vector<ApparelView> apparel;      // worn apparel, see ThingView
+    std::vector<DefId> fittedParts;        // upgrade parts fitted to guns, see ThingView
     std::vector<OutfitView> outfits;       // the outfit policies, by id
     WeatherView weather;
     std::vector<AttunedView> attuned;      // see AttunedView
     ShipView ship;
     NarratorView narrator;
+    TravelView travel;
 
     // The thing with this id, or null if it is not on the map. Binary search.
     COLONY_API const ThingView* find(Entity id) const;

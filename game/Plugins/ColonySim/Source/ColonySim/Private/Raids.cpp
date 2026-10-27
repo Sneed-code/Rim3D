@@ -211,7 +211,7 @@ int64_t RaidSystem::now() const {
 
 // ---- Raid points ------------------------------------------------------------------------------
 
-float RaidSystem::colonyWealth() const {
+float RaidSystem::colonyWealth(float buildingFactor) const {
     const entt::registry& reg = things_.registry();
     double items = 0.0;
     double buildings = 0.0;
@@ -240,7 +240,7 @@ float RaidSystem::colonyWealth() const {
             items += h != nullptr && h->dead ? 0.0 : static_cast<double>(value);
         }
     }
-    return static_cast<float>(items + buildings * rules_.buildingWealthFactor);
+    return static_cast<float>(items + buildings * buildingFactor);
 }
 
 float RaidSystem::adaptationFactor() const {
