@@ -312,6 +312,16 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         (void)colonist;
         colonists.push_back(pawn);
     }
+    // F10 (docs/design/field-care.md): one colonist is the alarm's Medic and one its Firefighter. With no raid the
+    // roles change nothing: they work as everyone does.
+    {
+        std::vector<Entity> crew = colonists;
+        std::sort(crew.begin(), crew.end());
+        for (size_t c = 0; c < crew.size() && c < 2; ++c) {
+            const DefenseRole role = c == 0 ? DefenseRole::Medic : DefenseRole::Firefighter;
+            sim.submit(SetDefenseRoleCommand{crew[c], static_cast<uint8_t>(role), false, CellPos{}});
+        }
+    }
 
     if (year) {
         // The player arms the best shot with the landing's rifle and revolver (colonists do not equip loose weapons

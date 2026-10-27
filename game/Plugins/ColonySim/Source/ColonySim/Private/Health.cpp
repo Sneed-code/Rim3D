@@ -918,11 +918,11 @@ void HealthSystem::die(Entity pawn, Health& health, DeathCause cause, bool annou
     }
 }
 
-void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, Health& health, DeathCause& cause, bool& shouldBeDown) const {
+void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, const HealthMods& mods, Health& health, DeathCause& cause, bool& shouldBeDown) const {
     const HealthModel::Body& body = model_->bodies[static_cast<size_t>(bodyIndex)];
     HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
     eval.workOutPainAndBleeding();
-    health.pain = mechanical ? 0.0f : eval.pain / healthScale;
+    health.pain = mechanical ? 0.0f : eval.pain / healthScale * mods.painFactor;
     for (const Disease& disease : health.diseases) {
         const HealthModel::DiseaseDef* def = model_->diseaseOf(disease.def);
         const int stage = def != nullptr ? HealthModel::stageIn(def->stages, disease.severity) : -1;
@@ -937,6 +937,10 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, Hea
     health.capacities.resize(model_->capacities.size());
     for (size_t i = 0; i < model_->capacities.size(); ++i) {
         health.capacities[i] = eval.capacity(static_cast<int>(i));
+    }
+    if (model_->movingCapacity >= 0 && mods.movingMax < 1.0f) {
+        float& moving = health.capacities[static_cast<size_t>(model_->movingCapacity)];
+        moving = std::min(moving, mods.movingMax);  // a cap, not a factor: a pawn already slower is unaffected
     }
 
     cause = DeathCause::None;
@@ -981,7 +985,11 @@ void HealthSystem::recompute(Entity pawn, Health& health, bool announce) {
     }
     DeathCause cause = DeathCause::None;
     bool shouldBeDown = false;
-    derive(kind->body, kind->healthScale, kind->mechanical, health, cause, shouldBeDown);
+    HealthMods mods;
+    if (mods_) {
+        mods_(pawn, mods);
+    }
+    derive(kind->body, kind->healthScale, kind->mechanical, mods, health, cause, shouldBeDown);
 
     if (!health.dead && cause != DeathCause::None) {
         die(pawn, health, cause, announce);
@@ -2143,7 +2151,11 @@ bool HealthSystem::report(Entity pawn, HealthReport& out) const {
     if (health.dirty) {
         DeathCause cause = DeathCause::None;
         bool shouldBeDown = false;
-        derive(kind->body, kind->healthScale, kind->mechanical, health, cause, shouldBeDown);
+        HealthMods mods;
+        if (mods_) {
+            mods_(pawn, mods);
+        }
+        derive(kind->body, kind->healthScale, kind->mechanical, mods, health, cause, shouldBeDown);
         if (!health.dead && cause != DeathCause::None) {
             health.dead = true;
             health.cause = cause;

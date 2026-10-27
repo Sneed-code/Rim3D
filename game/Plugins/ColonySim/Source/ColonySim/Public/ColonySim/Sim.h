@@ -57,9 +57,11 @@ class SurgerySystem;
 class RecreationSystem;
 class SocialSystem;
 class ResearchSystem;
+class ResonanceSystem;
 class TalentSystem;
 class NeedsSystem;
 class RaidSystem;
+class FieldCare;
 class MonsterSystem;
 class Plants;
 class PowerGrid;
@@ -355,6 +357,9 @@ public:
     // Raids, raid squads and the colony alarm with its defense roles (docs/design/raids.md).
     RaidSystem& raids() { return *raids_; }
     const RaidSystem& raids() const { return *raids_; }
+    // Medics, firefighters and rescue under fire (F10, docs/design/field-care.md).
+    FieldCare& fieldCare() { return *fieldCare_; }
+    const FieldCare& fieldCare() const { return *fieldCare_; }
 
     // Brood mounds and Remnant clusters (docs/design/monsters.md).
     MonsterSystem& monsters() { return *monsters_; }
@@ -400,6 +405,10 @@ public:
     // Blueprints, frames and taking buildings down (docs/design/construction.md).
     Construction& construction() { return *construction_; }
     const Construction& construction() const { return *construction_; }
+
+    // Attunement, strain, focus and the powers of resonance (docs/design/resonance.md).
+    ResonanceSystem& resonance() { return *resonance_; }
+    const ResonanceSystem& resonance() const { return *resonance_; }
 
     // Power nets, generators, batteries and who has power (docs/design/power.md). Stepped at the end
     // of every step, after rooms (the sun needs roofs).
@@ -511,9 +520,11 @@ private:
     std::vector<Checkpoint> checkpoints_;
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
+    std::unique_ptr<FieldCare> fieldCare_;    // after the raids, the fighters and the jobs, which hold a pointer to it
     std::unique_ptr<NarratorSystem> narrator_;  // after raids_
     std::unique_ptr<DisasterSystem> disasters_;  // T3, after the narrator and everything it touches
     std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
+    std::unique_ptr<ResonanceSystem> resonance_;  // after the fighters and the job system it holds
 };
 
 }  // namespace colony
