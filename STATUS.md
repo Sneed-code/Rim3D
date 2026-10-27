@@ -1,6 +1,8 @@
 # Status
 
-Updated 2026-10-26.
+Updated 2026-10-27.
+
+Stage 2 U19 part done (trade and thermostat): a trade strip under the clock, a trade window (buy from the trader, sell what lies on the map, prices at the chosen negotiator's Social skill, `TradeCommand`), a gift window (`GiftCommand`, shows the goodwill it earns), a factions window with every faction's goodwill, and a heater/cooler thermostat slider (`SetThermostatCommand`) (`docs/design/panels.md`, smoke test `trade`). **U19's animals tab, outfits, power, temperature and beauty overlays are still to do.**
 
 Stage 2 animal training effects done: an animal that has learned Obedience keeps close to the nearest drafted colonist, and one that has learned Rescue carries a downed colonist to a free bed (it never tends); Haul, decay and the trainer's Animals skill were already in (`docs/design/husbandry.md`, tests `HusbandryTests`). The Release trick still only counts steps. Sim only, no save change.
 Stage 2 hydroponics done: a powered hydroponics basin (new research `Hydroponics`, 100 steel + 1 component, 70 W) gives its cell fertility 2.8 and takes a growing zone, plant pots count as fertility 1.0 spots, and a powered sun lamp within 5.5 m lets a lit crop grow through the night as well, so a heated, roofed room with basins and a sun lamp feeds the colony through winter (`docs/design/farming.md`, tests `HydroponicsTests`). Sim only. Numbers wiki-checked 2026-10-26.

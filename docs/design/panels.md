@@ -16,6 +16,7 @@ While the game is paused a command makes the sim step once, so a click shows at 
 | Middle | **Work tab**: a row per colonist, a column per kind of work that has a scanner in the sim. A cell shows 1 (done first) to 4 (last), `-` for never, `X` for work the colonist can never do. Left click goes `0 > 1 > 2 > 3 > 4 > 0`, right click goes back. Hover shows the work and the colonist's level in its skill. Sends `SetWorkPriorityCommand` |
 | Middle | **Schedule tab**: a row per colonist, 24 hour columns, each A (anything), W (work), J (joy) or S (sleep); the current hour is marked `>h<`. Left click goes forward, right click back. Sends `SetScheduleCommand` |
 | Left, under the bar | With a **colonist** selected: name, age, backstories, traits, what they are doing, food and rest bars, the mood bar with the three break levels and every thought with its offset (memories show how long they last), their bed (button to free it, list to assign another: `AssignBedCommand`), skills with passions (`*` minor, `**` major) and the health report (pain, bleeding, blood lost, injuries, missing parts, abilities). With a **stove** (any finished building with recipes) selected: its bills in order, each with mode, count (`-10 -1 +1 +10`), Pause/Resume and Remove, and a form to add one. Sends `AddBillCommand`, `SetBillCommand`, `RemoveBillCommand` |
+| Left, under the bar | With a **heater or cooler** selected (task U19): the thermostat panel, a slider for its target (-50 to 50 C, sent as `SetThermostatCommand` when the mouse is let go), `-5 -1 +1 +5` buttons, the room's temperature now and **Reset** (back to the building's own limit). It replaces the bills panel for these buildings |
 | Right, under the alarm | **Message log**: the last 5 lines, or 40 with the Log button on. Colonist deaths, going down and getting up, wounds, lost parts, mood trouble (crossing a break threshold, calming down), finished bills, and orders the sim refused. Time stamped; a line about a colonist selects and centres them when clicked. 300 lines kept, cleared when the sim is replaced |
 
 ## Notes
@@ -41,3 +42,18 @@ Driven by the calls the buttons make, on the Crashlanded start (paused).
 6. `panels_log`: a bill on a colonist is refused by the sim and the log says "Refused"; the open log drew.
 
 Screenshots are in `game/Saved/Smoke/panels/`. Not covered (needs a person): the mouse itself, the combo boxes, and layout at 4K.
+
+## Trade window, gifts and factions (task U19)
+
+Code: `game/Source/Rim3D/TradePanelSubsystem.*`. Smoke test: `trade`. Sim side: [trade.md](trade.md). Also ImGui, overseer view only; `Trade.UI 0` hides it, `Trade.Factions` toggles the factions window.
+
+| Where | What |
+| --- | --- |
+| Top middle, under the clock | **Strip**: a **Factions** button and a line per visit here (faction, visitors / trade caravan / trade ship, hours left) with **Trade** (caravans and ships) and **Gift** buttons |
+| Middle | **Trade window**: the negotiator (combo, default the best haggler who can act) and the price improvement; the colony's silver on the map and the trader's. Left: what the trader sells, each with its price and a `-10 -1 +1 +10` count. Right: what lies on the map that this trader takes, same. Under it what the colony pays and gets, who pays the difference, a warning when the colony is short of silver or the trader can't pay all it owes, and **Make the trade** (off when nothing is chosen or the colony can't pay; sends `TradeCommand`) and **Clear** |
+| Middle | **Gift window**: silver and anything lying on the map with counts, the goodwill the gift earns (value / `giftSilverPerPoint`), **Give the gift** (`GiftCommand`) |
+| Middle | **Factions window**: every faction's goodwill and relation (hostile red, ally green) |
+
+Prices come from `TradeSystem::unitPrice` with the negotiator's `priceImprovement`, so the window and the sim agree. The window closes when the visit leaves. Not here yet: trading with a caravan trader by selecting the pawn, selling from a stockpile only, animals as trade lines (they are not items), a hostile faction's "make peace" gifts as a quest.
+
+Smoke test `trade` (about 20 s): a trade ship starts; buying 40 steel pays silver and puts the steel on the map; selling 100 steel brings exactly the quoted silver; a buy of the whole stock is flagged unaffordable; a gift raises goodwill by the amount the window promised; the factions window lists the factions; the thermostat slider's calls set, clamp (500 becomes 50) and reset a heater's target, and a stove refuses one.
