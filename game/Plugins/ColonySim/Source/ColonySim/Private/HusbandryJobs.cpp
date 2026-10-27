@@ -422,10 +422,18 @@ void JobSystem::setAnimalHauler(Entity animal, bool on) {
         return;
     }
     if (on) {
-        addWorker(animal, {}, false);
+        // A hauler (Haul) takes the Hauling work type, a rescuer (Rescue) the Doctor one, which for an animal is only
+        // carrying the downed to a bed.
+        if (!reg.all_of<Worker>(animal)) {
+            addWorker(animal, {}, false);
+        }
+        const bool haul = husbandry_ != nullptr && husbandry_->learned(animal, Trainable::Haul);
+        const bool rescue = husbandry_ != nullptr && husbandry_->learned(animal, Trainable::Rescue);
         WorkSettings& settings = reg.get<WorkSettings>(animal);
         for (size_t w = 0; w < settings.entries.size() && w < workTypes_.size(); ++w) {
-            settings.entries[w].priority = workTypes_[w].defName == "Hauling" ? static_cast<uint8_t>(kDefaultPriority) : uint8_t{0};
+            const std::string& work = workTypes_[w].defName;
+            const bool takes = (haul && work == "Hauling") || (rescue && work == "Doctor");
+            settings.entries[w].priority = takes ? static_cast<uint8_t>(kDefaultPriority) : uint8_t{0};
         }
     } else if (reg.all_of<Worker>(animal)) {
         if (reg.get<Worker>(animal).job.type != JobType::None && reg.all_of<Position>(animal)) {
