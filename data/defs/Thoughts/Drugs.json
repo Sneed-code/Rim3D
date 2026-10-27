@@ -1,0 +1,14 @@
+[
+  {"defName": "DrunkBeer", "label": "drunk", "source": "RimWorld wiki", "situation": {"condition": "drug:BeerHigh"}, "stages": [{"label": "warm", "moodOffset": 10}, {"label": "tipsy", "moodOffset": 14}, {"label": "drunk", "moodOffset": 20}, {"label": "hammered", "moodOffset": 26}, {"label": "blackout", "moodOffset": 26}], "note": "Stage follows the alcohol high's stage. Blackout's +26 is assumed."},
+  {"defName": "Stoned", "label": "stoned", "source": "RimWorld wiki", "situation": {"condition": "drug:SmokeleafHigh"}, "stages": [{"label": "stoned", "moodOffset": 13}]},
+  {"defName": "PsychiteTeaMood", "label": "psychite tea", "source": "RimWorld wiki", "situation": {"condition": "drug:PsychiteTeaHigh"}, "stages": [{"label": "psychite tea", "moodOffset": 12}]},
+  {"defName": "FlakeMood", "label": "flake high", "source": "RimWorld wiki", "situation": {"condition": "drug:FlakeHigh"}, "stages": [{"label": "flake", "moodOffset": 35}]},
+  {"defName": "YayoMood", "label": "yayo high", "source": "RimWorld wiki", "situation": {"condition": "drug:YayoHigh"}, "stages": [{"label": "yayo", "moodOffset": 35}]},
+  {"defName": "GoJuiceMood", "label": "go-juice high", "source": "RimWorld wiki", "situation": {"condition": "drug:GoJuiceHigh"}, "stages": [{"label": "go-juice", "moodOffset": 5}]},
+  {"defName": "HangoverMood", "label": "hangover", "source": "RimWorld wiki", "situation": {"condition": "drug:Hangover"}, "stages": [{"label": "mild hangover", "moodOffset": -3}, {"label": "serious hangover", "moodOffset": -6}, {"label": "pounding hangover", "moodOffset": -12}]},
+  {"defName": "AlcoholWithdrawalMood", "label": "alcohol withdrawal", "source": "RimWorld wiki", "situation": {"condition": "drug:AlcoholWithdrawal"}, "stages": [{"label": "alcohol withdrawal", "moodOffset": -35}]},
+  {"defName": "SmokeleafWithdrawalMood", "label": "smokeleaf withdrawal", "source": "RimWorld wiki", "situation": {"condition": "drug:SmokeleafWithdrawal"}, "stages": [{"label": "smokeleaf withdrawal", "moodOffset": -20}]},
+  {"defName": "PsychiteWithdrawalMood", "label": "psychite withdrawal", "source": "RimWorld wiki", "situation": {"condition": "drug:PsychiteWithdrawal"}, "stages": [{"label": "psychite withdrawal", "moodOffset": -35}]},
+  {"defName": "GoJuiceWithdrawalMood", "label": "go-juice withdrawal", "source": "RimWorld wiki", "situation": {"condition": "drug:GoJuiceWithdrawal"}, "stages": [{"label": "go-juice withdrawal", "moodOffset": -22}]},
+  {"defName": "WakeUpWithdrawalMood", "label": "wake-up withdrawal", "source": "RimWorld wiki", "situation": {"condition": "drug:WakeUpWithdrawal"}, "stages": [{"label": "wake-up withdrawal", "moodOffset": -22}]}
+]

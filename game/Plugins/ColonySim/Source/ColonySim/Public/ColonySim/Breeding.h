@@ -7,6 +7,7 @@
 #include "ColonySim/Entity.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Grid.h"
+#include "ColonySim/Things.h"
 
 #include <cstdint>
 #include <string>
@@ -53,6 +54,11 @@ struct Hatching {
     int64_t hatchAt = 0;
 };
 
+// On a young animal born to a tame mother (not one hatched from an egg): it keeps near her until it is grown up.
+struct Young {
+    Entity mother = kNoEntity;
+};
+
 // The numbers (BreedingRules in data/defs/Rules/BreedingRules.json; the file marks each as RimWorld's
 // from memory or ours).
 struct BreedingRules {
@@ -72,6 +78,10 @@ struct BreedingRules {
     double birthSpread = 1.5;         // metres round the mother the young are placed
     double hatchMinTemp = 0.0;        // a fertilized egg only warms towards hatching between these degrees
     double hatchMaxTemp = 50.0;
+    double gestationMinTemp = -10.0;  // a mother only carries her young further between these degrees (ours)
+    double gestationMaxTemp = 45.0;
+    double followRadius = 4.0;        // a young animal walks back to its mother when it is further off than this
+    double hatcheryRadius = 2.5;      // a hatchery keeps the fertilized eggs within this many metres warm
 };
 
 struct BreedingStats {
@@ -161,6 +171,7 @@ private:
         int eggCount = 1;
         DefId eggUnfertilized;
         DefId eggFertilized;
+        bool eggFertilizedOnly = false;  // no `unfertilizedThing`: the timer stops at half until she has mated
         double milkIntervalSeconds = 0.0;
         int milkAmount = 0;
         DefId milkThing;
@@ -168,6 +179,7 @@ private:
         int woolAmount = 0;
         DefId woolThing;
     };
+    bool warmByHatchery(const Position& at) const;
     struct Hatch {
         DefId into;
         double seconds = 0.0;
@@ -195,6 +207,8 @@ private:
     void emit(EventType type, Entity thing, Entity target, DefId def, CellPos cell, const char* message = nullptr,
               float amount = 0.0f);
 
+    std::vector<uint8_t> hatchery_;      // per def: a building that keeps eggs warm (`hatchery`)
+    std::vector<Position> hatcheries_;   // built hatcheries, found again every pass
     Things& things_;
     const Map& map_;
     AnimalSystem& animals_;

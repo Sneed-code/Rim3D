@@ -595,3 +595,28 @@ TEST_CASE("Social: a wedding is a party: the guests and the couple get their tho
     CHECK_FALSE(socThoughtHas(sim, a, "AttendedWedding"));
     CHECK(sim.social().stats().weddingGuests == 1);
 }
+
+TEST_CASE("Social: wedding guests walk to the couple and stay for the party") {
+    Sim sim = socSim();
+    const Entity a = socPawn(sim, CellPos{20, 20, 0});
+    const Entity b = socPawn(sim, CellPos{22, 20, 0});
+    const Entity guest = socPawn(sim, CellPos{30, 30, 0});
+    socStartQuiet(sim);
+    SOC_REQUIRE(socTalk(sim, a, b, "RomanceAttempt", 1));
+    SOC_REQUIRE(socTalk(sim, a, b, "MarriageProposal", 1));
+    CHECK(sim.social().stats().partyGuests == 3);
+    const Worker& w = sim.things().registry().get<Worker>(guest);
+    CHECK(w.job.type == JobType::Party);
+    for (int i = 0; i < 120; ++i) {
+        sim.step();
+    }
+    const Position& pos = sim.things().registry().get<Position>(guest);
+    CHECK(std::abs(pos.x - 20.5f) < 4.0f);
+    CHECK(std::abs(pos.y - 20.5f) < 4.0f);
+    CHECK(sim.things().registry().get<Worker>(guest).job.type == JobType::Party);
+    // The party ends after its hour.
+    for (int i = 0; i < 3700; ++i) {
+        sim.step();
+    }
+    CHECK(sim.things().registry().get<Worker>(guest).job.type != JobType::Party);
+}
