@@ -353,11 +353,15 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["edge"] = c.edge;
                 j["strategy"] = c.strategy;
                 j["hour"] = static_cast<double>(c.hour);
-            } else {
-                static_assert(std::is_same_v<Type, ShipCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, ShipCommand>) {
                 j["action"] = c.action;
                 j["thing"] = entt::to_integral(c.thing);
                 j["pawn"] = entt::to_integral(c.pawn);
+            } else {
+                static_assert(std::is_same_v<Type, QuestCommand>, "write every command type");
+                j["action"] = c.action;
+                j["quest"] = c.quest;
+                j["kind"] = c.kind;
             }
         },
         logged.command);
@@ -1343,6 +1347,12 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.thing = static_cast<Entity>(thing);
         c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "Quest") {
+        QuestCommand c;
+        if (!r.text(j, "action", c.action, where) || !r.integer(j, "quest", c.quest, where) || !r.text(j, "kind", c.kind, where)) {
+            return false;
+        }
         out.command = std::move(c);
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");

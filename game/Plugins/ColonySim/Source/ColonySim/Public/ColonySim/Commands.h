@@ -722,6 +722,15 @@ struct EndMentalBreakCommand {
     Entity pawn = kNoEntity;
 };
 
+// Quests (task Q1, docs/design/quests.md). `action` is "offer" (a dev command and the narrator's hook: `kind` is a Quests defName, or
+// empty for one chosen by weight), "accept" or "decline" (`quest` is the quest's number). Fails if the action is not one of those, there
+// is no such open offer, or it can't be carried out (too many under way, nobody could reach the colony, no room for the goods).
+struct QuestCommand {
+    std::string action;
+    uint32_t quest = 0;
+    std::string kind;
+};
+
 // A raid with a strategy (F12, docs/design/raid-strategies.md), the narrator's way to send one. `strategy` is
 // "Assault", "Sappers", "DropPods", "Thieves", "Kidnappers", or "Auto" to pick by the rules' weights; `hour` 0 to
 // 23.99 holds the raid until that hour of the day (a night attack), -1 sends it now. Fails like StartRaid, and for
@@ -759,7 +768,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
                              MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand,
                              SetNarratorCommand, FireIncidentCommand, ContractDiseaseCommand, StartStrategyRaidCommand,
-                             ShipCommand>;
+                             ShipCommand, QuestCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.
