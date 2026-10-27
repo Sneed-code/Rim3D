@@ -171,7 +171,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | T1 | **Narrator, incidents and threat points.** Colony wealth; threat points from wealth and colonists by RimWorld's curves; an incident system (weights, cooldowns, earliest day); Orrin, Maren and Jinx as RimWorld's three storytellers; letters as events; F6's raid becomes the first incident. | Cloud | Opus, high | 90 min | F6, D10 |
 | | T2 | **Events: nature and good news.** Wanderer joins, cargo pods, crashed pod with a downed survivor, herd migration, animal joins, cold snap, heat wave, eclipse, aurora, berry or healroot bloom. | Cloud | Sonnet, medium | 90 min | T1, E1, E3, N1 |
-| | T3 | **Events: trouble.** (Done: solar flare, toxic fallout, volcanic winter, flashstorm, psychic drone and soothe, short circuit, blight, manhunter pack, mad animal; left: disease outbreaks, infestation, prison break.) Manhunter pack, mad animal, disease outbreaks, blight, short circuit, solar flare, lightning fires, toxic fallout, resonance drone, prison break. | Cloud | Sonnet, medium | 90 min | T1, N5, H2, E4, E5, C13 |
+| ✓ | T3 | **Events: trouble.** (Done: solar flare, toxic fallout, volcanic winter, flashstorm, psychic drone and soothe, short circuit, blight, manhunter pack, mad animal, disease outbreaks, infestation, remnant cluster, prison break.) Manhunter pack, mad animal, disease outbreaks, blight, short circuit, solar flare, lightning fires, toxic fallout, resonance drone, prison break. | Cloud | Sonnet, medium | 90 min | T1, N5, H2, E4, E5, C13 |
 
 ### Expansion pieces (X), when a thread is free
 

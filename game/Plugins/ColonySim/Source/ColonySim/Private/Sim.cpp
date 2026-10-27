@@ -480,6 +480,61 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         f.text = "Quest: " + (questDef != nullptr ? questDef->text("text") : std::string("someone has an offer for the colony."));
         return true;
     });
+    // Trouble that other systems carry out (T3): diseases (H2), chitinid infestations and remnant clusters (monsters),
+    // and prison breaks (C22). The narrator picks them by their Incidents defs.
+    for (const char* name : {"Disease_Flu", "Disease_Plague", "Disease_Malaria", "Disease_SleepingSickness", "Disease_GutWorms",
+                             "Disease_MuscleParasites"}) {
+        narrator_->setWorker(name, [this, name, seed = settings.seed](IncidentFiring& f) {
+            const Def* incident = defs_->find("Incidents", name);
+            const DefId disease = health_->diseaseId(incident != nullptr ? incident->text("hediff") : std::string());
+            if (!disease.valid()) {
+                f.error = "the defs have no such disease";
+                return false;
+            }
+            std::vector<Entity> people;
+            for (const auto [pawn, colonist, pos] : things_->registry().view<const Colonist, const Position>().each()) {
+                if (fighters_->factionOf(pawn) == kPlayerFaction) {
+                    people.push_back(pawn);
+                }
+            }
+            const double fraction = incident->number("maxVictimsFraction", 0.3);
+            const int victims = std::max(1, static_cast<int>(std::lround(static_cast<double>(people.size()) * fraction)));
+            Rng rng(splitMix64(seed ^ 0x6469736561736ULL ^ static_cast<uint64_t>(time_.seconds)));
+            const std::vector<Entity> caught = health_->outbreak(disease, people, victims, rng);
+            if (caught.empty()) {
+                f.error = "nobody can catch it";
+                return false;
+            }
+            const Position& at = things_->registry().get<Position>(caught.front());
+            f.hasCell = true;
+            f.cell = cellOf(at);
+            f.text = std::string(incident->label()) + ": " + std::to_string(caught.size()) +
+                     (caught.size() == 1 ? " colonist has fallen ill." : " colonists have fallen ill.");
+            return true;
+        });
+    }
+    narrator_->setWorker("Infestation", [this](IncidentFiring& f) {
+        if (!monsters_->infest(f.points, f.error)) {
+            return false;
+        }
+        f.text = "Infestation: chitinids are tunnelling up from under the roofs.";
+        return true;
+    });
+    narrator_->setWorker("RemnantCluster", [this](IncidentFiring& f) {
+        if (!monsters_->remnantCluster(f.points, -1, f.error)) {
+            return false;
+        }
+        f.text = "Remnant cluster: mechanoids are coming for the colony.";
+        return true;
+    });
+    narrator_->setWorker("PrisonBreak", [this](IncidentFiring& f) {
+        if (prisoners_->breakOut("prison break") == 0) {
+            f.error = "no prisoner can walk out";
+            return false;
+        }
+        f.text = "Prison break: the prisoners are out of their cells and running.";
+        return true;
+    });
     social_ = std::make_unique<SocialSystem>(*things_, *rooms_, *health_, *melee_, *mood_, *jobs_, *defs_, time_,
                                              splitMix64(settings.seed ^ 0x736F6369616CULL));
     social_->setEventLog(&events_);

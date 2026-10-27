@@ -40,6 +40,15 @@ Kept in `DisasterSystem` (saved as section `disasters`, in the state hash), one 
   come in at a random edge as manhunters for 24 to 54 hours, the first set on a random colonist.
 - **`MadAnimal`**: one adult animal, wild or tame, within 60 m of a colonist turns manhunter for 2 to 4 hours.
 
+## Workers that call other systems
+
+Registered in `Sim.cpp` (they need the health, monster and prisoner systems): `Disease_Flu`, `_Plague`, `_Malaria`,
+`_SleepingSickness`, `_GutWorms`, `_MuscleParasites` give the incident's `hediff` to `max(1, round(colonists x
+maxVictimsFraction))` colonists through `HealthSystem::outbreak` (fraction 0.5 for plague, 0.3 for the rest, unverified;
+animals are not struck); `Infestation` and `RemnantCluster` call `MonsterSystem::infest` / `remnantCluster` with the
+incident's points (a map with no roofed place fails in words); `PrisonBreak` calls `PrisonerSystem::breakOut` and fails
+with no prisoner able to walk. Tests: the last two cases of `DisasterTests.cpp`.
+
 ## Numbers
 
 All in `DisasterRules`, with the `unverified` and `ours` lists naming the guesses. From the wiki: the
@@ -56,4 +65,4 @@ animal power, the short circuit's blast, the mad animal's range and length, the 
   power cut (they are powered buildings, so they do stop); lightning on tall buildings; the extreme drone
   (a ship part's). Zzzt is the same event as `ShortCircuit`.
 - Unreal draws none of it yet (U20's letters; a dark sky for the flare and winter, bolts, a fallout haze).
-- Disease outbreaks, infestation and the prison break are other tasks (H2, F12, C22 hooks).
+
