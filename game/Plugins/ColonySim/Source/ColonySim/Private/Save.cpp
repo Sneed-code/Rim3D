@@ -226,6 +226,8 @@ struct SaveHealth {
     std::vector<SaveImmunity> immunities;            // health section 4 on
     bool dead = false;
     DeathCause cause = DeathCause::None;
+    bool downed = false;  // health section 5 on: with `dirty`, so a wound not yet worked out is still pending after a load
+    bool dirty = false;
 };
 
 // An item's rot and wear and what a meal was cooked from, by defName (section "spoilage").
@@ -547,6 +549,8 @@ struct SaveData {
     SaveDesignations designations;     // format 12 on
     ResearchState research;            // section "research"
     ShipState ship;                    // section "ship"
+    float moodWealth = 0.0f;           // section "expectations": the wealth the mood system measured, and when
+    int64_t moodWealthAt = -1;
     // Section "talents" (P3): per protagonist, parallel lists in pawn order.
     std::vector<Entity> talentPawns;
     std::vector<int64_t> talentXp;
@@ -1693,7 +1697,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::RepairGear, "the save file has a bad job");
+    ar.require(job.type <= JobType::FeedPatient, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -1813,7 +1817,10 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
     ar.value("dead", h.dead);
     ar.value("cause", h.cause);
     ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Withdrawal), "the save file has a bad cause of death");
-
+    if (ar.sectionVersion() >= 6) {
+        ar.value("downed", h.downed);
+        ar.value("dirty", h.dirty);
+    }
 }
 
 template <typename Ar>
@@ -2969,7 +2976,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("colonists", 2, [&] {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
-    ar.section("health", 5, [&] {
+    ar.section("health", 6, [&] {
         saveParts(ar, "health", e, &SaveEntity::health, [&](SaveHealth& h) { saveHealthPart(ar, h); });
     });
     ar.section("control", 1, [&] {
@@ -3373,6 +3380,10 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("startTile", d.world.startTile);
         ar.value("hash", d.worldHash);
     });
+    ar.section("expectations", 1, [&] {
+        ar.value("wealth", d.moodWealth);
+        ar.value("at", d.moodWealthAt);
+    });
     // New sections go here, at the end.
 }
 
@@ -3731,6 +3742,8 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             }
             saved.dead = health->dead;
             saved.cause = health->cause;
+            saved.downed = health->downed;
+            saved.dirty = health->dirty;
             out.health = std::move(saved);
         }
         if (const Posture* posture = reg.try_get<Posture>(e)) {
@@ -3917,6 +3930,8 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     }
     d.research = sim.research_->state();
     d.ship = sim.ship_->state();
+    d.moodWealth = sim.mood_->wealth();
+    d.moodWealthAt = sim.mood_->wealthAt();
     for (const auto& [pawn, s] : sim.talents_->states()) {
         d.talentPawns.push_back(pawn);
         d.talentXp.push_back(s.xp);
@@ -4342,6 +4357,8 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                       [](const EnvironmentHediff& a, const EnvironmentHediff& b) { return a.def.value < b.def.value; });
             health.dead = e.health->dead;
             health.cause = e.health->cause;
+            health.downed = e.health->downed;  // with `dirty`: a wound not yet worked out stays pending (refreshAll)
+            health.dirty = e.health->dirty;
             const int parts = e.thing ? sim.health_->partCount(reg.get<Thing>(entity).def) : 0;
             for (const Injury& injury : health.injuries) {
                 if (injury.part >= parts) {
@@ -4812,6 +4829,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.ship_->restore(std::move(d.ship), error)) {
         return false;
     }
+    sim.mood_->restoreWealth(d.moodWealth, d.moodWealthAt);  // an older save measures it again at once
     sim.apparel_->restoreOutfits(std::move(d.outfits), d.nextOutfitId);
     if (d.hasWeather) {
         WeatherState state;

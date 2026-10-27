@@ -1021,11 +1021,18 @@ void HealthSystem::refresh(Entity pawn) {
 
 void HealthSystem::refreshAll() {
     entt::registry& reg = things_.registry();
-    // `downed` is not saved, so every downed pawn looks newly downed here. It was downed before the
-    // save, and whatever path it holds now it held then.
+    // Saves before health section 6 do not hold `downed`, so every downed pawn looks newly downed here. It was
+    // downed before the save, and whatever path it holds now it held then. A wound still waiting to be worked
+    // out (`dirty`, saved) keeps its saved downed flag and stays pending, so the next step downs and announces it.
     restoring_ = true;
     for (const auto [entity, health] : reg.view<Health>().each()) {
+        const bool pending = health.dirty;
+        const bool downed = health.downed;
         recompute(entity, health, false);
+        if (pending) {
+            health.downed = downed;
+            health.dirty = true;
+        }
     }
     restoring_ = false;
 }

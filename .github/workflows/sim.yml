@@ -110,6 +110,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check data files
         run: python3 tools/check_defs.py
+      - name: Check save sections
+        run: python3 tools/check_save_sections.py
       - name: Check sound sources
         run: python3 tools/sound_assets.py --check
       - name: Importer tests
