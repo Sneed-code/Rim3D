@@ -15,6 +15,11 @@ public class Rim3DEditor : ModuleRules
 			"Json", "MeshDescription", "SkeletalMeshDescription", "StaticMeshDescription", "RigLogicModule", "MaterialEditor", "ImageCore", "RHI",
 			"Rim3D",
 		});
+		// PawnFaces: faces from the MetaHuman Creator presets, and its grooms (an editor-only plugin in Rim3D.uproject).
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
+			"MetaHumanCharacter", "MetaHumanCharacterEditor", "MetaHumanCoreTech", "MetaHumanCoreTechLib", "HairStrandsCore", "Projects",
+		});
 		// PawnLooks.h: names shared with the game module.
 		PrivateIncludePaths.Add(Path.Combine(ModuleDirectory, "..", "Rim3D"));
 	}

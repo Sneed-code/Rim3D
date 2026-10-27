@@ -19,15 +19,17 @@ factor. Without a stuff a `stuffRequired` garment is worth nothing.
 
 **Combat** uses the same rule for every piece: per covered part, outermost layer first, a roll under
 half the armor deflects, under all of it halves the damage (F2, `combat.md`). Every layer that
-absorbs damage loses 1 hit point per 4 damage absorbed (random rounding). Bullets and melee blows (F8) share `CombatSystem::hitPawn`, which lists the pieces that absorbed (`PawnHitResult::wear`); the caller applies it with `wearApparel`. At 0 hit points the piece
-is destroyed (`ApparelDestroyed` event).
+absorbs damage wears 1 hit point's worth of **durability** per 4 damage absorbed (random rounding). Bullets and melee blows (F8) share `CombatSystem::hitPawn`, which lists the pieces that absorbed (`PawnHitResult::wear`); the caller applies it with `wearApparel`. Worn
+pieces are not destroyed, except basic clothes past 0 durability: see [apparel-durability.md](apparel-durability.md).
 
 ## Wear and tear, tattered, dead men's clothes
 
-- Each worn piece loses 1 hit point with a 0.4 chance per day (checked hourly).
-- Under 50% of its hit points a worn piece is ratty (thought -3), under 25% tattered (-5): the worst
-  piece counts (`TatteredApparel`, RimWorld wiki).
-- When a human dies wearing something it loses 15 to 40% of its hit points and is `Tainted` for good.
+**Changed 2026-10-27** (sneed): worn apparel wears its durability, not its hit points, and is tattered only at 0
+durability (-1, -20% armor and insulation). The rules are in [apparel-durability.md](apparel-durability.md); in short:
+
+- Each worn piece wears 0.4 hit points' worth of durability a day (checked hourly).
+- At 0 durability it is tattered: thought -1 (`TatteredApparel`), 80% of its armor and insulation.
+- When a human dies wearing something it loses 15 to 40% of its durability and is `Tainted` for good.
   Wearing tainted clothes gives "wearing a dead man's clothes": -5, -8, -11, -14 for 1, 2, 3, 4 or
   more tainted pieces, with no duration; Bloodlust pawns don't mind. Taking the clothes off ends it.
 - Naked (RimWorld's "psychologically nude": a man with his legs uncovered, a woman with her legs or
@@ -68,12 +70,12 @@ nothing is left, or the pawn gets up.
 - E2 (temperature): `ApparelSystem::insulation(pawn, cold, heat)` gives the degrees the comfortable
   range widens.
 - C14 (crafting) makes apparel with `ApparelSystem::make(def, stuff, quality, cell)`.
-- P4 (repair) mends hit points; U16 draws `Snapshot::apparel` layers, torn by `hitPointShare`
+- P4 (repair) mends hit points and durability; U16 draws `Snapshot::apparel` layers, torn by `hitPointShare`
   ([clothes-draw.md](clothes-draw.md)). Apparel defs may say `apparel.hidesHair: true` (tuque, simple helmet) so the
   hair is not drawn through them.
 
 ## Save and hash
 
-Section `apparel` 1: per thing `SaveApparel` (stuff, quality, tainted, strip mark, outfit,
+Section `apparel` 2 (2 adds durability): per thing `SaveApparel` (stuff, quality, tainted, strip mark, outfit,
 `nextCheck`), the outfits and the next outfit id. The five commands are saved by name. Worn items are
 saved as before through `Gear`.

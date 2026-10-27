@@ -3,21 +3,28 @@
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimSequence.h"
 #include "AnimationRuntime.h"
+#include "Components/DecalComponent.h"
 #include "Components/MeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/Texture.h"
 #include "Engine/World.h"
+#include "GroomAsset.h"
+#include "GroomBindingAsset.h"
+#include "GroomComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "PhysicsEngine/PhysicsAsset.h"
 
+#include "PawnFaces.h"
 #include "PawnLooks.h"
 #include "PawnSubsystem.h"
 #include "SimSubsystem.h"
 
 #include "ColonySim/Clock.h"
+#include "ColonySim/Looks.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
@@ -112,6 +119,15 @@ void ASimPawnActor::Setup(USimPawnSubsystem& Pawns, colony::Entity InThing, floa
 					Mesh->SetSkeletalMeshAsset(Shaped);
 					ShapedMeshes.Add(Mesh);
 				}
+				// V2: the face with the face shape morphs.
+				else if (Mesh->GetName() == TEXT("Face") && Mesh->GetSkeletalMeshAsset())
+				{
+					if (USkeletalMesh* Face = Cast<USkeletalMesh>(Pawns.GetFacesAsset(PawnFacesMeshName(Mesh->GetSkeletalMeshAsset()->GetName()))))
+					{
+						Mesh->SetSkeletalMeshAsset(Face);
+						FaceMesh = Mesh;
+					}
+				}
 				bool bSkin = false;
 				for (int32 Slot = 0; Slot < Mesh->GetNumMaterials(); ++Slot)
 				{
@@ -136,12 +152,51 @@ void ASimPawnActor::Setup(USimPawnSubsystem& Pawns, colony::Entity InThing, floa
 					SkinMeshes.Add(Mesh);
 				}
 			}
-			// Strand hair (HairStrands plugin), found by class name so the module needn't be linked.
-			if (Component->GetClass()->GetName() == TEXT("GroomComponent"))
+			// Strand hair (HairStrands plugin).
+			if (Cast<UGroomComponent>(Component))
 			{
 				Grooms.Add(Component);
 			}
 		}
+	}
+	if (FaceMesh)
+	{
+		// The eyes go on a copy of their material that may be used with morph targets (one per eye colour); until
+		// the looks come, Kellan's colour. Kellan's own grooms are bound to the shaped face too.
+		UMaterialInterface* Eye = Cast<UMaterialInterface>(Pawns.GetFacesAsset(PawnFacesEyeDefault));
+		const TArray<FSkeletalMaterial>& Slots = FaceMesh->GetSkeletalMeshAsset()->GetMaterials();
+		for (int32 Slot = 0; Slot < Slots.Num(); ++Slot)
+		{
+			const FString Name = Slots[Slot].MaterialSlotName.ToString();
+			if (Name.Contains(TEXT("eyeLeft")) || Name.Contains(TEXT("eyeRight")))
+			{
+				EyeSlots.Add(Slot);
+				if (Eye)
+				{
+					FaceMesh->SetMaterial(Slot, Eye);
+				}
+			}
+		}
+		for (USceneComponent* Component : Grooms)
+		{
+			UGroomComponent* Groom = Cast<UGroomComponent>(Component);
+			UGroomBindingAsset* Binding = Groom && Groom->GroomAsset
+				? Cast<UGroomBindingAsset>(Pawns.GetFacesAsset(PawnFacesKellanBindingName(Groom->GroomAsset->GetName()))) : nullptr;
+			if (Binding)
+			{
+				Groom->SetGroomAsset(Groom->GroomAsset, Binding);
+			}
+		}
+		MarkMaterial = Cast<UMaterialInterface>(Pawns.GetFacesAsset(PawnFacesMarkMaterial));
+		for (int32 Style = 0; UTexture* Texture = Cast<UTexture>(Pawns.GetFacesAsset(PawnFacesTattooTexture(Style))); ++Style)
+		{
+			TattooTextures.Add(Texture);
+		}
+		for (int32 Style = 0; UTexture* Texture = Cast<UTexture>(Pawns.GetFacesAsset(PawnFacesScarTexture(Style))); ++Style)
+		{
+			ScarTextures.Add(Texture);
+		}
+		BodyHairTexture = Cast<UTexture>(Pawns.GetFacesAsset(PawnFacesBodyHairTexture));
 	}
 }
 
@@ -265,13 +320,11 @@ void ASimPawnActor::SetDetail(ESimPawnDetail InDetail, float TickInterval)
 	if (Detail != InDetail)
 	{
 		Detail = InDetail;
-		for (USceneComponent* Groom : Grooms)
+		RefreshGroomVisibility();
+		// Skin marks only near the camera.
+		if (bHasLooks && (!MarkDecals.IsEmpty() || Detail == ESimPawnDetail::Full))
 		{
-			if (Groom)
-			{
-				// Hair under a helmet or a tuque stays hidden at every detail.
-				Groom->SetVisibility(Detail == ESimPawnDetail::Full && !(bHairHidden && Groom->GetName().Contains(TEXT("Hair"))));
-			}
+			ApplyMarks();
 		}
 	}
 	if (!FMath::IsNearlyEqual(Body->GetComponentTickInterval(), TickInterval))
@@ -319,6 +372,10 @@ void ASimPawnActor::ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& In
 	for (USkeletalMeshComponent* Mesh : SkinMeshes)
 	{
 		Mesh->SetCustomPrimitiveDataVector3(PawnLooksSkinDataIndex, Skin);
+	}
+	if (FaceMesh)
+	{
+		ApplyFace(Pawns);
 	}
 	// Strand hair, eyebrows and beards: the MetaHuman hair material is coloured by melanin and redness.
 	const float Lightness = Looks.Hair.GetLuminance();
@@ -385,6 +442,243 @@ void ASimPawnActor::ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& In
 			Horn->SetCustomPrimitiveDataVector3(PawnLooksSkinDataIndex, FVector(Looks.HornColor.R, Looks.HornColor.G, Looks.HornColor.B));
 			Horns.Add(Horn);
 		}
+	}
+	ApplyMarks();
+}
+
+// ---------------------------------------------------------------------------
+// Faces, hair and marks (V2, V3; docs/design/looks.md).
+
+void ASimPawnActor::ApplyFace(USimPawnSubsystem& Pawns)
+{
+	if (!Looks.HasFace())
+	{
+		return;  // a pawn from an older save keeps Kellan's face, eyes and grooms
+	}
+	for (const TPair<FName, float>& Morph : Looks.FaceMorphWeights())
+	{
+		FaceMesh->SetMorphTarget(Morph.Key, Morph.Value);
+	}
+	if (UMaterialInterface* Eye = Cast<UMaterialInterface>(Pawns.GetFacesAsset(PawnFacesEyeInstanceName(Looks.Eyes))))
+	{
+		for (const int32 Slot : EyeSlots)
+		{
+			FaceMesh->SetMaterial(Slot, Eye);
+		}
+	}
+
+	SetGroom(Pawns, TEXT("Hair"), Looks.HairStyle == TEXT("Bald") ? FString() : PawnFacesGroomName(TEXT("Hair"), Looks.HairStyle));
+	const bool bBeard = !Looks.Beard.IsEmpty() && Looks.Beard != TEXT("None");
+	SetGroom(Pawns, TEXT("Beard"), bBeard ? PawnFacesGroomName(TEXT("Beard"), Looks.Beard) : FString());
+	SetGroom(Pawns, TEXT("Mustache"), bBeard ? PawnFacesGroomName(TEXT("Moustache"), Looks.Beard) : FString());
+	// Eyebrows: the brow slider picks among the gender's styles (finer first for women, plainer first for men).
+	const TCHAR* Gender = Looks.bFemale ? TEXT("F") : TEXT("M");
+	int32 Brows = 0;
+	while (Brows < 16 && Pawns.GetFacesAsset(PawnFacesGroomName(TEXT("Brows"), FString::Printf(TEXT("%s%d"), Gender, Brows))))
+	{
+		++Brows;
+	}
+	if (Brows > 0)
+	{
+		const int32 Pick = FMath::Clamp(FMath::FloorToInt32(Looks.Brow * Brows), 0, Brows - 1);
+		SetGroom(Pawns, TEXT("Eyebrows"), PawnFacesGroomName(TEXT("Brows"), FString::Printf(TEXT("%s%d"), Gender, Pick)));
+	}
+	RefreshGroomVisibility();
+}
+
+void ASimPawnActor::SetGroom(USimPawnSubsystem& Pawns, FName Component, const FString& GroomName)
+{
+	UGroomComponent* Groom = nullptr;
+	for (USceneComponent* Candidate : Grooms)
+	{
+		if (Candidate && Candidate->GetFName() == Component)
+		{
+			Groom = Cast<UGroomComponent>(Candidate);
+		}
+	}
+	if (!Groom)
+	{
+		return;
+	}
+	// A style the commandlet made no groom for (a moustache has no beard) draws none.
+	UGroomAsset* Asset = GroomName.IsEmpty() ? nullptr : Cast<UGroomAsset>(Pawns.GetFacesAsset(GroomName));
+	UGroomBindingAsset* Binding = Asset ? Cast<UGroomBindingAsset>(Pawns.GetFacesAsset(PawnFacesBindingName(GroomName))) : nullptr;
+	if (Groom->GroomAsset != Asset || Groom->BindingAsset != Binding)
+	{
+		Groom->SetGroomAsset(Asset, Binding);
+	}
+	if (Asset)
+	{
+		EmptyGrooms.Remove(Component);
+	}
+	else
+	{
+		EmptyGrooms.Add(Component);
+	}
+}
+
+FString ASimPawnActor::GetGroomName(FName Component) const
+{
+	for (const USceneComponent* Candidate : Grooms)
+	{
+		const UGroomComponent* Groom = Cast<UGroomComponent>(Candidate);
+		if (Groom && Groom->GetFName() == Component)
+		{
+			return Groom->GroomAsset && !EmptyGrooms.Contains(Component) ? Groom->GroomAsset->GetName() : FString();
+		}
+	}
+	return FString();
+}
+
+void ASimPawnActor::RefreshGroomVisibility()
+{
+	for (USceneComponent* Groom : Grooms)
+	{
+		if (Groom)
+		{
+			// Hair under a helmet or a tuque stays hidden at every detail.
+			const bool bCovered = bHairHidden && Groom->GetName().Contains(TEXT("Hair"));
+			Groom->SetVisibility(Detail == ESimPawnDetail::Full && !bCovered && !EmptyGrooms.Contains(Groom->GetFName()));
+		}
+	}
+}
+
+namespace
+{
+	// Where marks go on the MetaHuman body (its reference pose, mesh space: cm, +Y forward, +Z up): a region is a chain of
+	// bones the mark's `v` runs along, with the body's radius there; `u` goes once around (0 the front).
+	struct FPawnMarkRegion
+	{
+		TArray<FName> Bones;
+		TArray<float> Radius;  // at each bone
+	};
+
+	const FPawnMarkRegion& PawnMarkRegion(uint8 Region)
+	{
+		static const FPawnMarkRegion Regions[] = {
+			{{TEXT("neck_02"), TEXT("head")}, {8.5f, 9.0f}},                                     // Face (front half only)
+			{{TEXT("neck_01"), TEXT("neck_02")}, {6.0f, 5.5f}},                                  // Neck
+			{{TEXT("spine_01"), TEXT("spine_03"), TEXT("spine_05")}, {14.0f, 14.0f, 15.0f}},     // Torso
+			{{TEXT("upperarm_l"), TEXT("lowerarm_l"), TEXT("hand_l")}, {5.5f, 4.2f, 3.2f}},      // LeftArm
+			{{TEXT("upperarm_r"), TEXT("lowerarm_r"), TEXT("hand_r")}, {5.5f, 4.2f, 3.2f}},      // RightArm
+			{{TEXT("thigh_l"), TEXT("calf_l"), TEXT("foot_l")}, {8.5f, 5.8f, 4.5f}},             // LeftLeg
+			{{TEXT("thigh_r"), TEXT("calf_r"), TEXT("foot_r")}, {8.5f, 5.8f, 4.5f}},             // RightLeg
+		};
+		return Regions[FMath::Min<int32>(Region, UE_ARRAY_COUNT(Regions) - 1)];
+	}
+
+	constexpr float PawnTattooHalfSize = 4.0f;   // cm, before the mark's size
+	constexpr float PawnScarHalfSize = 3.0f;
+	const FLinearColor PawnTattooInk(0.012f, 0.016f, 0.03f);
+	// Marks fade out when the pawn is smaller than this share of the screen.
+	constexpr float PawnMarkFadeScreenSize = 0.004f;
+}
+
+void ASimPawnActor::ApplyMarks()
+{
+	for (UDecalComponent* Decal : MarkDecals)
+	{
+		if (Decal)
+		{
+			Decal->DestroyComponent();
+		}
+	}
+	MarkDecals.Reset();
+	USkeletalMeshComponent* Skin = MetaHumanBody.Get();
+	const USkeletalMesh* SkinMesh = Skin ? Skin->GetSkeletalMeshAsset() : nullptr;
+	const bool bAny = bHasLooks && Looks.HasFace() && (Looks.BodyHair > 0.05f || !Looks.Tattoos.IsEmpty() || !Looks.Scars.IsEmpty());
+	// The skin draws into custom depth so the marks land only where skin is the nearest surface (not on clothes).
+	const bool bDraw = bAny && MarkMaterial && SkinMesh && Detail == ESimPawnDetail::Full;
+	for (USkeletalMeshComponent* Mesh : TArray<USkeletalMeshComponent*>{MetaHumanBody.Get(), FaceMesh.Get()})
+	{
+		if (Mesh)
+		{
+			Mesh->SetRenderCustomDepth(bDraw);
+		}
+	}
+	for (USkeletalMeshComponent* Layer : BareLayer)
+	{
+		Layer->SetRenderCustomDepth(bDraw);
+	}
+	if (!bDraw)
+	{
+		return;
+	}
+
+	const FReferenceSkeleton& Ref = SkinMesh->GetRefSkeleton();
+	const auto Place = [&](uint8 Region, float U, float V, float HalfSize, UTexture* Mask, const FLinearColor& Color, float Opacity)
+	{
+		const FPawnMarkRegion& Chain = PawnMarkRegion(Region);
+		TArray<int32> Bones;
+		for (const FName& Name : Chain.Bones)
+		{
+			Bones.Add(Ref.FindBoneIndex(Name));
+		}
+		if (!Mask || Bones.Contains(INDEX_NONE))
+		{
+			return;
+		}
+		// Along the chain: which segment, and how far along it.
+		const float Along = FMath::Clamp(V, 0.0f, 1.0f) * (Bones.Num() - 1);
+		const int32 Segment = FMath::Min(FMath::FloorToInt32(Along), Bones.Num() - 2);
+		const float T = Along - Segment;
+		const FTransform A = FAnimationRuntime::GetComponentSpaceTransformRefPose(Ref, Bones[Segment]);
+		const FTransform B = FAnimationRuntime::GetComponentSpaceTransformRefPose(Ref, Bones[Segment + 1]);
+		const FVector Axis = (B.GetLocation() - A.GetLocation()).GetSafeNormal();
+		const FVector OnAxis = FMath::Lerp(A.GetLocation(), B.GetLocation(), T);
+		const float Radius = FMath::Lerp(Chain.Radius[Segment], Chain.Radius[Segment + 1], T);
+		// Around: the face only has a front half; elsewhere u goes once around, 0 at the front (+Y).
+		const float Angle = Region == static_cast<uint8>(colony::BodyRegion::Face) ? (U - 0.5f) * PI : U * 2.0f * PI;
+		FVector Front = FVector::YAxisVector - Axis * FVector::DotProduct(FVector::YAxisVector, Axis);
+		Front = Front.IsNearlyZero() ? FVector::ZAxisVector : Front.GetSafeNormal();
+		const FVector Side = FVector::CrossProduct(Axis, Front);
+		const FVector Out = Front * FMath::Cos(Angle) + Side * FMath::Sin(Angle);
+		// The decal projects along its X: into the body, centred on the skin, deep enough for a heavy body's belly.
+		const FMatrix Frame = FRotationMatrix::MakeFromXZ(-Out, Axis);
+		const FTransform InMesh(Frame.Rotator(), OnAxis + Out * Radius);
+		UDecalComponent* Decal = NewObject<UDecalComponent>(this);
+		Decal->SetupAttachment(Skin, Chain.Bones[Segment]);
+		Decal->SetRelativeTransform(InMesh.GetRelativeTransform(A));
+		Decal->DecalSize = FVector(Radius * 0.9f + 4.0f, HalfSize, HalfSize);
+		Decal->SetFadeScreenSize(PawnMarkFadeScreenSize);
+		UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(MarkMaterial, Decal);
+		Material->SetTextureParameterValue(PawnFacesParamMask, Mask);
+		Material->SetVectorParameterValue(PawnFacesParamColor, Color);
+		Material->SetScalarParameterValue(PawnFacesParamOpacity, Opacity);
+		Decal->SetDecalMaterial(Material);
+		Decal->RegisterComponent();
+		MarkDecals.Add(Decal);
+	};
+
+	// Body hair: forearms and shins, and on men chest and belly, as dense as the pawn's amount, in its hair colour.
+	if (Looks.BodyHair > 0.05f && BodyHairTexture)
+	{
+		const float Opacity = FMath::Clamp(Looks.BodyHair, 0.0f, 1.0f) * 0.7f;
+		const uint8 Torso = static_cast<uint8>(colony::BodyRegion::Torso);
+		if (!Looks.bFemale)
+		{
+			Place(Torso, 0.0f, 0.82f, 11.0f, BodyHairTexture, Looks.Hair, Opacity);
+			Place(Torso, 0.0f, 0.3f, 9.0f, BodyHairTexture, Looks.Hair, Opacity * 0.8f);
+		}
+		for (const colony::BodyRegion Limb : {colony::BodyRegion::LeftArm, colony::BodyRegion::RightArm})
+		{
+			Place(static_cast<uint8>(Limb), 0.25f, 0.72f, 7.0f, BodyHairTexture, Looks.Hair, Opacity);
+		}
+		for (const colony::BodyRegion Limb : {colony::BodyRegion::LeftLeg, colony::BodyRegion::RightLeg})
+		{
+			Place(static_cast<uint8>(Limb), 0.0f, 0.68f, 10.0f, BodyHairTexture, Looks.Hair, Opacity);
+		}
+	}
+	// Scars: paler and pinker than the skin around them.
+	const FLinearColor ScarColor = FLinearColor::LerpUsingHSV(Looks.Skin, FLinearColor(0.55f, 0.32f, 0.3f), 0.45f);
+	for (const FSimPawnMark& Mark : Looks.Scars)
+	{
+		Place(Mark.Region, Mark.U, Mark.V, PawnScarHalfSize * Mark.Size, ScarTextures.IsValidIndex(Mark.Style) ? ScarTextures[Mark.Style].Get() : nullptr, ScarColor, 0.75f);
+	}
+	for (const FSimPawnMark& Mark : Looks.Tattoos)
+	{
+		Place(Mark.Region, Mark.U, Mark.V, PawnTattooHalfSize * Mark.Size, TattooTextures.IsValidIndex(Mark.Style) ? TattooTextures[Mark.Style].Get() : nullptr,
+			PawnTattooInk, 0.85f);
 	}
 }
 
@@ -460,6 +754,7 @@ void ASimPawnActor::EnsureBareLayer(USimPawnSubsystem& Pawns)
 		const FLinearColor Skin = bHasLooks ? Looks.Skin : FLinearColor(0.4f, 0.28f, 0.22f);
 		Layer->SetCustomPrimitiveDataVector3(PawnClothColorIndex, FVector(Skin.R, Skin.G, Skin.B));
 		Layer->SetCustomPrimitiveDataFloat(PawnClothWearIndex, 0.0f);
+		Layer->SetRenderCustomDepth(!MarkDecals.IsEmpty());  // skin marks land on it (ApplyMarks)
 		if (bHasLooks)
 		{
 			for (const TPair<FName, float>& Morph : Looks.MorphWeights())
@@ -515,13 +810,7 @@ void ASimPawnActor::UpdateHairVisibility()
 		bHide = bHide || Piece.bHidesHair;
 	}
 	bHairHidden = bHide;
-	for (USceneComponent* Groom : Grooms)
-	{
-		if (Groom && Groom->GetName().Contains(TEXT("Hair")))
-		{
-			Groom->SetVisibility(!bHide && Detail == ESimPawnDetail::Full);
-		}
-	}
+	RefreshGroomVisibility();
 }
 
 void ASimPawnActor::ApplyApparel(USimPawnSubsystem& Pawns, const FSimPawnApparel& Wanted, uint64 Key)

@@ -18,6 +18,9 @@ public class Rim3D : ModuleRules
 		// Pawn animation (PawnAnimInstance.cpp): motion matching and the blend stack, all native.
 		PrivateDependencyModuleNames.AddRange(new string[] { "AnimGraphRuntime", "BlendStack", "Chooser", "PoseSearch" });
 
+		// Seeded hair styles and beards (PawnActor.cpp): groom components.
+		PrivateDependencyModuleNames.Add("HairStrandsCore");
+
 		// Terrain and plants (TerrainSubsystem.cpp): chunk meshes, and plant meshes made at run time.
 		PrivateDependencyModuleNames.AddRange(new string[] { "MeshDescription", "StaticMeshDescription" });
 

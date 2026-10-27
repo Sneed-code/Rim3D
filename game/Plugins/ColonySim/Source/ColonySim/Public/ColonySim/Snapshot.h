@@ -58,6 +58,7 @@ struct ThingView {
     float rot = 0.0f;       // items that rot: 0 fresh to 1 rotted away (docs/design/spoilage.md)
     int hitPoints = 0;   // 0 and 0 when the thing has no hit points
     int maxHitPoints = 0;
+    float durability = 1.0f;  // apparel: 0 to 1, capped by the hit-point share (docs/design/apparel-durability.md)
     // Pawns with a body: can't act (pain shock, unconscious, can't move), and dead. A dead pawn
     // stays where it fell. A full health report is `Sim::healthReport`.
     bool downed = false;
@@ -262,6 +263,7 @@ struct ApparelView {
     DefId stuff;      // invalid for none
     int quality = 2;
     float hitPointShare = 1.0f;  // 0 to 1
+    float durability = 1.0f;     // 0 to 1, capped by hitPointShare; 0 is tattered (docs/design/apparel-durability.md)
     bool tainted = false;
 };
 
