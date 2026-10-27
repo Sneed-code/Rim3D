@@ -22,6 +22,7 @@
 #include "ColonySim/Farming.h"
 #include "ColonySim/Disasters.h"
 #include "ColonySim/Narrator.h"
+#include "ColonySim/NatureEvents.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Filth.h"
@@ -595,6 +596,8 @@ struct SaveData {
     DisasterState disasters;
     WorldSettings world;               // section "world" (W2): SimSettings::world; older saves have no world
     uint64_t worldHash = 0;            // the world's hash when saved, checked against the one made again
+    bool hasNature = false;            // section "nature" (T2)
+    NatureState nature;
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -3300,6 +3303,17 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.value("nextStrike", c.nextStrike);
         });
     });
+    ar.section("nature", 1, [&] {
+        d.hasNature = true;
+        NatureState& n = d.nature;
+        ar.value("rngState", n.rngState);
+        ar.value("rngIncrement", n.rngIncrement);
+        ar.list("conditions", n.conditions, [&](NatureCondition& c) {
+            ar.text("incident", c.incident);
+            ar.value("startsAt", c.startsAt);
+            ar.value("endsAt", c.endsAt);
+        });
+    });
     ar.section("fire", 1, [&] {
         ar.value("started", d.fire.started);
         ar.value("burntUp", d.fire.burntUp);
@@ -3553,6 +3567,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.breeding = sim.breeding_->saved();
     d.narrator = sim.narrator_->state();
     d.disasters = sim.disasters_->state();
+    d.nature = sim.nature_->state();
     d.fire = sim.fire_->saved();
     d.seconds = sim.time_.seconds;
     d.rngState = sim.rng_.state();
@@ -4672,6 +4687,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     }
     if (d.hasDisasters) {
         sim.disasters_->restore(d.disasters);
+    }
+    if (d.hasNature) {
+        sim.nature_->restore(d.nature);
     }
     if (!sim.farming_->restore(d.farming, error)) {
         return false;

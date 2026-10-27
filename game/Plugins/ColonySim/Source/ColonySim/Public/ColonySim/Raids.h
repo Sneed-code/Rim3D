@@ -258,6 +258,9 @@ public:
     // reaches the colony, drop pods only from dropPodsMinPoints, thieves only when loose items exist, kidnappers
     // only when colonists do. Draws from the sim's Rng, so call it from the sim.
     RaidStrategy pickStrategy(float points);
+    // Where outsiders walk in: `target` is the player's colonist nearest the middle (else the middle) and `entry` a cell
+    // near a map edge (`edge` 0 to 3, or -1 for any) that can reach it. False, with a reason, if there is no way in.
+    bool findEntry(int edge, CellPos& target, CellPos& entry, std::string& error);
     bool soundAlarm(bool on, std::string& error);
     bool setRole(Entity pawn, DefenseRole role, bool hasSpot, CellPos spot, std::string& error);
     // The room at `cell` is where Shelter colonists go; `clear` takes the mark off.

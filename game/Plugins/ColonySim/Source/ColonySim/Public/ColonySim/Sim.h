@@ -47,6 +47,7 @@ class Areas;
 class Husbandry;
 class InspirationSystem;
 class MentalBreakSystem;
+class NatureEvents;
 class JobSystem;
 class Lights;
 class MeleeSystem;
@@ -378,6 +379,8 @@ public:
     MonsterSystem& monsters() { return *monsters_; }
 
     // The narrator, incidents and threat points (docs/design/narrator.md).
+    NatureEvents& nature() { return *nature_; }
+    const NatureEvents& nature() const { return *nature_; }
     NarratorSystem& narrator() { return *narrator_; }
     const NarratorSystem& narrator() const { return *narrator_; }
     // Loot tables: what raiders drop, cargo pods, ancient stashes (docs/design/loot.md).
@@ -461,6 +464,8 @@ private:
     void placeStockpileAndThings();
     void pruneDesignations();
     void startScenario();
+    // A newcomer made like the scenario's colonists (Scenario.cpp); kNoEntity if it can't be placed.
+    Entity joinColonist(CellPos cell, uint64_t seed);
     // Gives a new pawn its looks if it is humanlike (its def names no other intelligence).
     Entity makeJoiner(CellPos cell, uint64_t seed);
     void giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& lineage);
@@ -548,6 +553,7 @@ private:
     std::unique_ptr<NarratorSystem> narrator_;  // after raids_
     std::unique_ptr<LootSystem> loot_;          // after the narrator, whose cargo pod it carries out
     std::unique_ptr<DisasterSystem> disasters_;  // T3, after the narrator and everything it touches
+    std::unique_ptr<NatureEvents> nature_;      // after narrator_ (T2)
     std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
     std::unique_ptr<ResonanceSystem> resonance_;  // after the fighters and the job system it holds
     std::unique_ptr<TravelSystem> travel_;    // after nearly everything: it asks the others about threats

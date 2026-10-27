@@ -1467,7 +1467,8 @@ int main(int argc, char** argv) {
                      static_cast<unsigned long long>(sim.stats().repaths), static_cast<unsigned long long>(sim.stats().hauls));
         return 1;
     }
-    if (options.check && (sim.stats().failedJobs > 0 || paths.failedSearches > 0)) {
+    // (Jobs a raid interrupts count as failed ones, so a narrator run doesn't count them.)
+    if (options.check && ((options.narrator.empty() && sim.stats().failedJobs > 0) || paths.failedSearches > 0)) {
         std::fprintf(stderr, "check failed: %llu failed jobs, %llu failed path searches\n",
                      static_cast<unsigned long long>(sim.stats().failedJobs),
                      static_cast<unsigned long long>(paths.failedSearches));

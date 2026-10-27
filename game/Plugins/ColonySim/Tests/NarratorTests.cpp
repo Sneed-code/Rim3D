@@ -295,11 +295,11 @@ TEST_CASE("Narrator: a raid comes as the first incident, with its letter") {
     sim->submit(FireIncidentCommand{"Meteorite", 0.0f});
     sim->step();
     CHECK(narratorTestEvent(*sim, EventType::CommandFailed) != nullptr);
-    sim->submit(FireIncidentCommand{"Aurora", 0.0f});
+    sim->submit(FireIncidentCommand{"Blight", 0.0f});
     sim->step();
     const Event* failed = narratorTestEvent(*sim, EventType::CommandFailed);
     NARRATOR_REQUIRE(failed != nullptr);
-    CHECK(failed->message.find("aurora") != std::string::npos);
+    CHECK(failed->message.find("blight") != std::string::npos);
 }
 
 TEST_CASE("Narrator: saves and loads, and both games go on the same") {
