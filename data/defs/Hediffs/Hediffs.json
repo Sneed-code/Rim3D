@@ -4,43 +4,43 @@
     "injuryProps": { "painPerSeverity": 0.0125, "averagePainPerSeverityPermanent": 0.00625, "bleedRate": 0, "canMerge": false }
   },
   {
-    "defName": "Cut", "parent": "InjuryBase", "label": "cut", "infectionChance": 0.15,
+    "defName": "Cut", "woundKind": "Cut", "parent": "InjuryBase", "label": "cut", "infectionChance": 0.15,
     "injuryProps": { "bleedRate": 0.06, "destroyedLabel": "cut off", "destroyedOutLabel": "cut out" }
   },
   {
-    "defName": "Stab", "parent": "InjuryBase", "label": "stab", "infectionChance": 0.15,
+    "defName": "Stab", "woundKind": "Cut", "parent": "InjuryBase", "label": "stab", "infectionChance": 0.15,
     "injuryProps": { "bleedRate": 0.06, "destroyedLabel": "cut off", "destroyedOutLabel": "cut out" }
   },
   {
-    "defName": "Gunshot", "parent": "InjuryBase", "label": "gunshot", "infectionChance": 0.15,
+    "defName": "Gunshot", "woundKind": "Gunshot", "parent": "InjuryBase", "label": "gunshot", "infectionChance": 0.15,
     "injuryProps": { "bleedRate": 0.06, "destroyedLabel": "shot off", "destroyedOutLabel": "shot out" }
   },
   {
-    "defName": "Scratch", "parent": "InjuryBase", "label": "scratch", "infectionChance": 0.15,
+    "defName": "Scratch", "woundKind": "Cut", "parent": "InjuryBase", "label": "scratch", "infectionChance": 0.15,
     "injuryProps": { "bleedRate": 0.06, "destroyedLabel": "torn off", "destroyedOutLabel": "torn out" }
   },
   {
-    "defName": "Bite", "parent": "InjuryBase", "label": "bite", "infectionChance": 0.3,
+    "defName": "Bite", "woundKind": "Bite", "parent": "InjuryBase", "label": "bite", "infectionChance": 0.3,
     "injuryProps": { "bleedRate": 0.06, "destroyedLabel": "bitten off", "destroyedOutLabel": "bitten out" }
   },
   {
-    "defName": "Shredded", "parent": "InjuryBase", "label": "shredded", "infectionChance": 0.2,
+    "defName": "Shredded", "woundKind": "Bite", "parent": "InjuryBase", "label": "shredded", "infectionChance": 0.2,
     "injuryProps": { "bleedRate": 0.06, "canMerge": true, "destroyedLabel": "torn off", "destroyedOutLabel": "torn out" }
   },
   {
-    "defName": "Crush", "parent": "InjuryBase", "label": "crush", "infectionChance": 0.15,
+    "defName": "Crush", "woundKind": "Bruise", "parent": "InjuryBase", "label": "crush", "infectionChance": 0.15,
     "injuryProps": { "bleedRate": 0.01, "canMerge": true, "destroyedLabel": "crushed" }
   },
   {
-    "defName": "Bruise", "parent": "InjuryBase", "label": "bruise", "neverScars": true, "tendable": false,
+    "defName": "Bruise", "woundKind": "Bruise", "parent": "InjuryBase", "label": "bruise", "neverScars": true, "tendable": false,
     "injuryProps": { "destroyedLabel": "destroyed" }
   },
   {
-    "defName": "Crack", "parent": "InjuryBase", "label": "crack",
+    "defName": "Crack", "woundKind": "Bruise", "parent": "InjuryBase", "label": "crack",
     "injuryProps": { "painPerSeverity": 0.01, "destroyedLabel": "shattered" }
   },
   {
-    "defName": "Burn", "parent": "InjuryBase", "label": "burn", "infectionChance": 0.3,
+    "defName": "Burn", "woundKind": "Burn", "parent": "InjuryBase", "label": "burn", "infectionChance": 0.3,
     "injuryProps": { "painPerSeverity": 0.01875, "canMerge": true, "destroyedLabel": "burned off", "destroyedOutLabel": "burned out" }
   },
   {
@@ -68,10 +68,10 @@
   {"defName": "FoodPoisoning", "parent": "DiseaseBase", "label": "food poisoning", "tendable": false, "lethalSeverity": 0, "initialSeverity": 1.0, "immunity": {"gainPerDaySick": 0, "severityPerDayNotImmune": -0.8, "severityPerDayImmune": -0.8}, "stages": [{"minSeverity": 0, "label": "initial", "capacityOffsets": {"Digestion": -0.3, "Consciousness": -0.05, "Eating": -0.2}}, {"minSeverity": 0.5, "label": "major", "painOffset": 0.1, "capacityOffsets": {"Digestion": -0.5, "Consciousness": -0.1, "Eating": -0.4}}], "unverified": ["immunity", "stages", "initialSeverity"], "ours": ["immunity"]},
   {"defName": "Hypothermia", "source": "RimWorld wiki", "hediffClass": "Environment", "label": "hypothermia", "lethalSeverity": 1.0, "severityPerDay": {"coldBelowComfortMinC": 0.08, "recoverPerDay": -0.9, "startsAtBodyTempBelowC": 35.0}, "stages": [{"minSeverity": 0, "label": "shivering", "capacityOffsets": {"Manipulation": -0.1}}, {"minSeverity": 0.04, "label": "shivering", "capacityOffsets": {"Moving": -0.1, "Manipulation": -0.2}}, {"minSeverity": 0.35, "label": "major", "capacityOffsets": {"Moving": -0.3, "Manipulation": -0.5, "Consciousness": -0.1}}, {"minSeverity": 0.62, "label": "extreme", "lifeThreatening": true, "capacityOffsets": {"Consciousness": -0.4, "Moving": -0.5, "Manipulation": -0.7}}, {"minSeverity": 0.82, "label": "near death", "lifeThreatening": true, "capacityOffsets": {"Consciousness": -0.6, "Moving": -0.7}}], "unverified": ["severityPerDay", "stages"]},
   {"defName": "Heatstroke", "source": "RimWorld wiki", "hediffClass": "Environment", "label": "heatstroke", "lethalSeverity": 1.0, "severityPerDay": {"hotAboveComfortMaxC": 0.08, "recoverPerDay": -0.9, "startsAtBodyTempAboveC": 37.5}, "stages": [{"minSeverity": 0, "label": "initial", "visible": false}, {"minSeverity": 0.04, "label": "minor", "capacityOffsets": {"Consciousness": -0.05}}, {"minSeverity": 0.35, "label": "serious", "capacityOffsets": {"Consciousness": -0.15, "Moving": -0.1}}, {"minSeverity": 0.62, "label": "extreme", "lifeThreatening": true, "capacityOffsets": {"Consciousness": -0.4, "Moving": -0.3}}, {"minSeverity": 0.82, "label": "near death", "lifeThreatening": true, "capacityOffsets": {"Consciousness": -0.6, "Moving": -0.5}}], "unverified": ["severityPerDay", "stages"]},
-  {"defName": "Frostbite", "source": "RimWorld wiki", "hediffClass": "Injury", "label": "frostbite", "neverScars": true, "injuryProps": {"painPerSeverity": 0.01, "destroyedLabel": "frozen off"}, "extremities": true, "appliesBelowC": -10, "chancePerHourBelow": 0.0004, "unverified": ["appliesBelowC", "chancePerHourBelow"], "ours": ["extremities"]},
+  {"defName": "Frostbite", "woundKind": "Burn", "source": "RimWorld wiki", "hediffClass": "Injury", "label": "frostbite", "neverScars": true, "injuryProps": {"painPerSeverity": 0.01, "destroyedLabel": "frozen off"}, "extremities": true, "appliesBelowC": -10, "chancePerHourBelow": 0.0004, "unverified": ["appliesBelowC", "chancePerHourBelow"], "ours": ["extremities"]},
   {"defName": "ToxicBuildup", "source": "RimWorld wiki", "hediffClass": "Environment", "label": "toxic buildup", "lethalSeverity": 1.0, "severityPerDay": {"outdoorsInFallout": 0.4, "recoverPerDay": -0.1}, "stages": [{"minSeverity": 0, "label": "initial", "visible": false}, {"minSeverity": 0.04, "label": "minor", "capacityOffsets": {"Consciousness": -0.05, "Eating": -0.05}}, {"minSeverity": 0.2, "label": "moderate", "capacityOffsets": {"Consciousness": -0.1, "Eating": -0.1, "Breathing": -0.1}}, {"minSeverity": 0.4, "label": "serious", "capacityOffsets": {"Consciousness": -0.2, "Eating": -0.2, "Breathing": -0.2}}, {"minSeverity": 0.6, "label": "extreme", "lifeThreatening": true, "capacityOffsets": {"Consciousness": -0.4, "Breathing": -0.4}}, {"minSeverity": 0.8, "label": "near death", "lifeThreatening": true, "capacityOffsets": {"Consciousness": -0.6, "Breathing": -0.6}}], "unverified": ["severityPerDay", "stages"]},
-  {"defName": "Scar", "source": "RimWorld wiki", "hediffClass": "Scar", "label": "scar", "permanent": true, "injuryProps": {"painPerSeverity": 0, "destroyedLabel": "destroyed"}, "note": "What a healed injury may leave on its part (HealthRules.scarChance). Severity is hit points the part stays down; no pain, no bleeding."},
-  {"defName": "OldWound", "source": "RimWorld wiki", "hediffClass": "Scar", "label": "old wound", "permanent": true, "injuryProps": {"painPerSeverity": 0.00625}, "note": "A permanent injury that still aches: a healed injury of a type with averagePainPerSeverityPermanent keeps its severity as an old wound, with that pain. Bruises never become one."},
+  {"defName": "Scar", "woundKind": "Scar", "source": "RimWorld wiki", "hediffClass": "Scar", "label": "scar", "permanent": true, "injuryProps": {"painPerSeverity": 0, "destroyedLabel": "destroyed"}, "note": "What a healed injury may leave on its part (HealthRules.scarChance). Severity is hit points the part stays down; no pain, no bleeding."},
+  {"defName": "OldWound", "woundKind": "Scar", "source": "RimWorld wiki", "hediffClass": "Scar", "label": "old wound", "permanent": true, "injuryProps": {"painPerSeverity": 0.00625}, "note": "A permanent injury that still aches: a healed injury of a type with averagePainPerSeverityPermanent keeps its severity as an old wound, with that pain. Bruises never become one."},
   {"defName": "PegLeg", "source": "RimWorld wiki", "hediffClass": "AddedPart", "label": "peg leg", "addedPart": {"part": "Leg", "item": "PegLeg", "efficiency": 0.6}, "unverified": ["addedPart.efficiency"]},
   {"defName": "WoodenFoot", "source": "RimWorld wiki", "hediffClass": "AddedPart", "label": "wooden foot", "addedPart": {"part": "Foot", "item": "WoodenFoot", "efficiency": 0.6}, "unverified": ["addedPart.efficiency"]},
   {"defName": "WoodenHand", "source": "RimWorld wiki", "hediffClass": "AddedPart", "label": "wooden hand", "addedPart": {"part": "Hand", "item": "WoodenHand", "efficiency": 0.6}, "unverified": ["addedPart.efficiency"]},

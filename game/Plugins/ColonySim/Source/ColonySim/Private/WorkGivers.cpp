@@ -26,6 +26,7 @@
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Regions.h"
+#include "ColonySim/Repair.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Things.h"
@@ -1068,6 +1069,120 @@ public:
     }
 };
 
+// Repairs and upgrades (task P4, docs/design/repair.md): a bench that repairs this giver's kind of gear (Weapons under
+// Smithing, Apparel under Tailoring) gets the nearest marked piece of gear, or gun with a part ordered, that the
+// pawn is skilled enough for and whose material (or part) lies near the bench; the gear is carried to a cell
+// beside the bench. One worker at a time per bench.
+class RepairGearGiver final : public WorkGiver {
+public:
+    RepairGearGiver(const char* task, const char* kind) : task_(task), kind_(kind) {}
+
+    const char* task() const override { return task_; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        const RepairSystem* repair = jobs.repair();
+        const entt::registry& reg = jobs.things().registry();
+        if (repair == nullptr || !jobs.canUseHands(pawn)) {
+            return;
+        }
+        const auto marks = reg.view<const RepairMark>();
+        const auto orders = reg.view<const FitOrder>();
+        if (marks.begin() == marks.end() && orders.begin() == orders.end()) {
+            return;
+        }
+        const Position& at = reg.get<Position>(pawn);
+        reg.view<const Thing, const Footprint, const Position>().each(
+            [&](Entity bench, const Thing& thing, const Footprint& footprint, const Position& pos) {
+                if (pos.level != at.level || !repair->benchRepairs(thing.def, kind_) || reg.all_of<ConstructionSite>(bench) ||
+                    reg.all_of<MarkedForDeconstruct>(bench) || !jobs.buildingRuns(bench) ||
+                    jobs.deliveryReservedByOther(bench, pawn)) {
+                    return;
+                }
+                CellPos stand;
+                if (!jobs.construction().workCell(footprint.rect(), cellOf(at), stand)) {
+                    return;
+                }
+                out.push_back(WorkCandidate{JobTarget{bench, CellPos{}}, workGiverDistSq(at, pos), 0, 0, true, stand});
+            });
+    }
+
+    bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
+        const RepairSystem* repair = jobs.repair();
+        const entt::registry& reg = jobs.things().registry();
+        const Entity bench = candidate.target.thing;
+        if (repair == nullptr || jobs.deliveryReservedByOther(bench, pawn)) {
+            return false;
+        }
+        const Position& benchPos = reg.get<Position>(bench);
+        const CellPos benchCell = cellOf(benchPos);
+        const bool fits = repair->benchFits(reg.get<Thing>(bench).def);
+        const Position& at = reg.get<Position>(pawn);
+        const CellPos from = cellOf(at);
+        const int skill = jobs.bills().skillLevel(pawn, repair->numbers().skill);
+        Entity best = kNoEntity;
+        float bestDist = 0.0f;
+        uint32_t bestBill = 0;
+        const auto consider = [&](Entity item, const Thing& thing, const Position& pos) {
+            if (pos.level != at.level || repair->kindOf(thing.def) != kind_) {
+                return;
+            }
+            uint32_t bill = 0;
+            bool ok = false;
+            if (reg.all_of<RepairMark>(item) && skill >= repair->repairMinSkill()) {
+                const RepairCost cost = repair->costOf(item);
+                ok = cost.count > 0 && repair->stockNear(cost.material, benchCell, benchPos.level) >= cost.count;
+            }
+            if (!ok && fits) {
+                if (const FitOrder* order = reg.try_get<FitOrder>(item)) {
+                    const UpgradeSpec* spec = repair->upgrade(order->part);
+                    if (spec != nullptr && skill >= spec->minSkill && repair->fitBlocker(item, order->part).empty() &&
+                        repair->stockNear(order->part, benchCell, benchPos.level) >= 1) {
+                        ok = true;
+                        bill = order->part.value + 1;
+                    }
+                }
+            }
+            if (!ok) {
+                return;
+            }
+            const float dist = workGiverDistSq(at, pos);
+            if (best != kNoEntity && (dist > bestDist || (dist == bestDist && item > best))) {
+                return;
+            }
+            const JobTarget target{item, CellPos{}};
+            if (jobs.reservedByOther(target, pawn) || jobs.avoiding(pawn, target) || !jobs.canReach(from, cellOf(pos))) {
+                return;
+            }
+            best = item;
+            bestDist = dist;
+            bestBill = bill;
+        };
+        reg.view<const Thing, const Position, const RepairMark>().each(
+            [&](Entity item, const Thing& thing, const Position& pos) { consider(item, thing, pos); });
+        reg.view<const Thing, const Position, const FitOrder>().each(
+            [&](Entity item, const Thing& thing, const Position& pos, const FitOrder&) {
+                if (!reg.all_of<RepairMark>(item)) {
+                    consider(item, thing, pos);
+                }
+            });
+        if (best == kNoEntity) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::RepairGear;
+        out.thing = best;
+        out.site = bench;
+        out.cell = candidate.reach;
+        out.count = 1;
+        out.bill = bestBill;
+        return true;
+    }
+
+private:
+    const char* task_;
+    const char* kind_;
+};
+
 // Rearming (RimWorld's WorkGiver_RearmTraps, in Construction): every sprung trap that can be used again, nearest first.
 // One colonist per trap.
 class RearmTrapsGiver final : public WorkGiver {
@@ -1159,6 +1274,8 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     addHuntWorkGivers(givers);
     addPrisonerWorkGivers(givers);
     givers.push_back(std::make_unique<RefuelGiver>());
+    givers.push_back(std::make_unique<RepairGearGiver>("RepairWeapons", "Weapons"));
+    givers.push_back(std::make_unique<RepairGearGiver>("RepairApparel", "Apparel"));
     return givers;
 }
 

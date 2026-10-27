@@ -316,6 +316,13 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, StripCommand>) {
                 j["thing"] = entt::to_integral(c.thing);
                 j["strip"] = c.strip;
+            } else if constexpr (std::is_same_v<Type, RepairGearCommand>) {
+                j["thing"] = entt::to_integral(c.thing);
+                j["repair"] = c.repair;
+            } else if constexpr (std::is_same_v<Type, FitUpgradeCommand>) {
+                j["thing"] = entt::to_integral(c.thing);
+                j["part"] = c.part;
+                j["fit"] = c.fit;
             } else if constexpr (std::is_same_v<Type, InteractCommand>) {
                 j["initiator"] = entt::to_integral(c.initiator);
                 j["recipient"] = entt::to_integral(c.recipient);
@@ -1116,6 +1123,22 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         StripCommand c;
         uint32_t thing = entt::to_integral(kNoEntity);
         if (!r.integer(j, "thing", thing, where) || !r.flag(j, "strip", c.strip, where)) {
+            return false;
+        }
+        c.thing = static_cast<Entity>(thing);
+        out.command = c;
+    } else if (type == "RepairGear") {
+        RepairGearCommand c;
+        uint32_t thing = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "thing", thing, where) || !r.flag(j, "repair", c.repair, where)) {
+            return false;
+        }
+        c.thing = static_cast<Entity>(thing);
+        out.command = c;
+    } else if (type == "FitUpgrade") {
+        FitUpgradeCommand c;
+        uint32_t thing = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "thing", thing, where) || !r.text(j, "part", c.part, where) || !r.flag(j, "fit", c.fit, where)) {
             return false;
         }
         c.thing = static_cast<Entity>(thing);

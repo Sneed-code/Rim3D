@@ -155,6 +155,10 @@ const char* commandName(const Command& command) {
                 return "RemoveOutfit";
             } else if constexpr (std::is_same_v<Type, StripCommand>) {
                 return "Strip";
+            } else if constexpr (std::is_same_v<Type, RepairGearCommand>) {
+                return "RepairGear";
+            } else if constexpr (std::is_same_v<Type, FitUpgradeCommand>) {
+                return "FitUpgrade";
             } else if constexpr (std::is_same_v<Type, InteractCommand>) {
                 return "Interact";
             } else if constexpr (std::is_same_v<Type, SetWeatherCommand>) {
@@ -341,6 +345,8 @@ const char* eventTypeName(EventType type) {
         case EventType::OutOfFuel: return "OutOfFuel";
         case EventType::Refueled: return "Refueled";
         case EventType::FirefoamPopped: return "FirefoamPopped";
+        case EventType::GearRepaired: return "GearRepaired";
+        case EventType::WeaponUpgraded: return "WeaponUpgraded";
         case EventType::AnimalHunted: return "AnimalHunted";
         case EventType::AnimalButchered: return "AnimalButchered";
         case EventType::DeepDepositFound: return "DeepDepositFound";
@@ -410,6 +416,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Chat: return "Chat";
         case PawnAction::FeedPawn: return "FeedPawn";
         case PawnAction::Refuel: return "Refuel";
+        case PawnAction::Repair: return "Repair";
         case PawnAction::Butcher: return "Butcher";
         case PawnAction::DropCorpse: return "DropCorpse";
         case PawnAction::Rearm: return "Rearm";

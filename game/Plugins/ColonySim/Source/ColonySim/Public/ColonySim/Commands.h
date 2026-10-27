@@ -827,6 +827,23 @@ struct MoveBillCommand {
     int index = 0;
 };
 
+// Repair (task P4, docs/design/repair.md): marks a piece of apparel or a weapon lying on the map for repair at a
+// bench by a colonist (`repair` true), or takes the mark off. Fails if it is neither apparel nor a weapon, is
+// worn or carried, or is not damaged.
+struct RepairGearCommand {
+    Entity thing = kNoEntity;
+    bool repair = true;
+};
+
+// Orders the Things upgrade part `part` fitted to a gun lying on the map by a colonist at a machining table
+// (`fit` true), or cancels the gun's order (`part` is then ignored). Fails if the thing is not a gun on the map,
+// the part is unknown or does not fit that gun, or the gun already has a part in its slot.
+struct FitUpgradeCommand {
+    Entity thing = kNoEntity;
+    std::string part;
+    bool fit = true;
+};
+
 // Dev command: the colonist has a mental break now (a MentalBreaks defName, docs/design/mental-breaks.md),
 // whatever its mood. Fails for a pawn that isn't a colonist on the map, is controlled by the player,
 // downed, dead or in a break already; for a break that needs something the game doesn't have yet
@@ -929,7 +946,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              TakeDrugCommand, SetDrugPolicyCommand, SetDrugPolicyEntryCommand,
                              StartVisitCommand, TradeCommand, AdjustGoodwillCommand, GiftCommand, ClimbCommand,
                              AttuneCommand, LearnPowerCommand, CastPowerCommand,
-                             SetThermostatCommand,
+                             SetThermostatCommand, RepairGearCommand, FitUpgradeCommand,
                              CreateAreaCommand, PaintAreaCommand, DeleteAreaCommand, AssignAreaCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was

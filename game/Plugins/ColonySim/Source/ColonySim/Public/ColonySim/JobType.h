@@ -49,6 +49,7 @@ enum class JobType : uint8_t {
     Party,             // walk to a party spot and stay for the party, gaining joy (docs/design/social.md)
     StandBy,           // a Medic or Firefighter on duty walks to its place behind the line and waits (docs/design/field-care.md)
     DeepWork,          // work a ground-penetrating scanner until it finds a deposit, or a deep drill for one portion (docs/design/deep-mining.md)
+    RepairGear,        // carry a marked piece of gear to a bench and mend it, or fit an upgrade part to a gun (repair.md)
 };
 
 COLONY_API const char* jobTypeName(JobType type);
