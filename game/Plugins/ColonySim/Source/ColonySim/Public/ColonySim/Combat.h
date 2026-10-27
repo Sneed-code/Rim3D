@@ -19,6 +19,7 @@ namespace colony {
 
 class ApparelStats;
 class HealthSystem;
+class InspirationSystem;
 class TalentSystem;
 class Map;
 class StateHasher;
@@ -170,6 +171,7 @@ struct Projectile {
     int age = 0;            // steps in flight
     CellPos startCell;      // the shooter's cell: buildings there never stop the shot (a doorway)
     uint64_t seed = 0;      // where the hit's choices (part, armor) come from
+    float damageFactor = 1.0f;  // the gun's quality: times the bullet's damage and armor penetration
 };
 
 // A hitbox in the world, for the debug view (CombatSystem::hitboxesOf).
@@ -229,6 +231,8 @@ public:
     void setWeather(const Weather* weather) { weather_ = weather; }
     // The protagonist's talents make the spread of its shots smaller (docs/design/talents.md).
     void setTalents(const TalentSystem* talents) { talents_ = talents; }
+    // A shooting frenzy narrows the spread and shortens the cooldown (docs/design/inspirations.md).
+    void setInspirations(const InspirationSystem* inspirations) { inspirations_ = inspirations; }
     // Called before combat destroys a thing (a building shot to pieces), so jobs can let go of it.
     void setBeforeDestroy(std::function<void(Entity)> hook) { beforeDestroy_ = std::move(hook); }
     // Called when a bullet or a melee blow hurt a pawn (`victim`, `attacker`): animals react (N5, docs/design/animal-fights.md).
@@ -372,6 +376,10 @@ public:
     // enough hit knocks the pawn down and pushes it away; buildings in the radius lose hit points
     // (walls the most). Events: PawnInjured... and one Explosion.
     ExplosionResult explode(const Explosion& explosion);
+    // Takes `damage` hit points off a building (a raider digging through a wall, F12); at none it goes through the
+    // before-destroy hook and is destroyed. True if it was destroyed; false for a thing without hit points or one
+    // that still stands.
+    bool damageBuilding(Entity building, int damage);
     // Steps left of a pawn's knock-down (0: not knocked down).
     int knockedDownFor(Entity pawn) const;
 
@@ -394,6 +402,12 @@ public:
     float spreadRadiusFor(float chance) const;
     // Things defs that go in a pawn's hands: a melee weapon (an item with `tools`, F8) or a gun.
     bool isMeleeWeapon(DefId def) const;
+    // What a weapon item's quality and stuff make of it, from QualityRules and the stuff's statFactors:
+    // 1 for a normal weapon of no stuff. The melee factor is by the blow's damage type (sharp or blunt
+    // stuff factor times the quality's) and applies to damage and armor penetration alike.
+    float meleeDamageFactor(Entity weapon, DefId damageType) const;
+    float rangedAccuracyFactor(Entity weapon) const;
+    float rangedDamageFactor(Entity weapon) const;
     bool isGun(DefId def) const;
 
 private:
@@ -405,6 +419,7 @@ private:
     std::vector<Event>* events_ = nullptr;
     const Weather* weather_ = nullptr;
     const TalentSystem* talents_ = nullptr;
+    const InspirationSystem* inspirations_ = nullptr;
     std::function<void(Entity)> beforeDestroy_;
     std::function<void(Entity, Entity)> hurtHook_;
     std::vector<Entity> scratch_;

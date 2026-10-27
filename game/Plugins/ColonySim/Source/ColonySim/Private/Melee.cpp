@@ -156,7 +156,7 @@ MeleeSystem::MeleeSystem(Things& things, Map& map, CombatSystem& combat, HealthS
             }
         }
         set.reach = rules_.bodyReach;
-        if (!weapon && def.text("race.intelligence") == "Animal") {
+        if (!weapon && (def.text("race.intelligence") == "Animal" || def.text("race.intelligence") == "Mechanoid")) {
             set.reach = rules_.animalReachBase +
                         rules_.animalReachPerRoot * std::sqrt(static_cast<float>(std::max(0.1, def.number("race.baseBodySize", 1.0))));
         }
@@ -675,6 +675,14 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
     if (tool == nullptr || !reg.all_of<Position>(pawn)) {
         return;  // the weapon is gone
     }
+    // A weapon's quality and stuff scale the blow (damage and armor penetration); fists and claws never.
+    float blow = 1.0f;
+    if (m.weaponTool) {
+        const Gear* held = reg.try_get<Gear>(pawn);
+        blow = held != nullptr ? combat_.meleeDamageFactor(held->weapon, tool->damageType) : 1.0f;
+    }
+    const float power = tool->power * blow;
+    const float penetration = tool->penetration * blow;
     const Position& pos = reg.get<Position>(pawn);
     const float ox = pos.x;
     const float oy = pos.y;
@@ -747,14 +755,14 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
             }
         } else if (hit.part < 0) {
             Rng rng(splitMix64(m.seed ^ 0xB0D7ULL));
-            health_.applyDamage(victim, tool->damageType, tool->power, -1, rng);
+            health_.applyDamage(victim, tool->damageType, power, -1, rng);
             e.message = "hit";
-            e.amount = tool->power;
+            e.amount = power;
             ++hits_;
             combat_.noteHurt(victim, pawn);
         } else {
             const PawnHitResult result =
-                combat_.hitPawn(victim, hit.part, tool->damageType, tool->power, tool->penetration, splitMix64(m.seed ^ 0x417ULL));
+                combat_.hitPawn(victim, hit.part, tool->damageType, power, penetration, splitMix64(m.seed ^ 0x417ULL));
             e.part = result.part;
             if (result.deflected) {
                 e.hit = ProjectileHitKind::Armor;

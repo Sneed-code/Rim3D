@@ -44,7 +44,8 @@ const char* seasonName(int season) {
     return season >= 0 && season < kSeasonsPerYear ? kWeatherSeasonNames[season] : "?";
 }
 
-Weather::Weather(const Map& map, const DefDatabase& defs, uint64_t seed, const std::string& biome)
+Weather::Weather(const Map& map, const DefDatabase& defs, uint64_t seed, const std::string& biome,
+                 std::optional<double> yearMean)
     : map_(map),
       seed_(seed),
       rng_(splitMix64(seed ^ 0x7765617468ULL)),
@@ -98,6 +99,12 @@ Weather::Weather(const Map& map, const DefDatabase& defs, uint64_t seed, const s
         }
     } else {
         driftAmplitude_ = 0.0;  // no biome: a constant temperature
+    }
+    if (yearMean) {
+        const double shift = *yearMean - yearMeanTemperature();
+        for (double& mean : seasonMean_) {
+            mean += shift;
+        }
     }
 
     kindOfDef_.assign(defs.size(), -1);
