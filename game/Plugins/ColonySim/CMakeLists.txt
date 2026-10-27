@@ -64,6 +64,8 @@ add_test(NAME simrun_raid_soak COMMAND simrun --seed 1 --raid-soak 3)
 # The world map (docs/design/world-map.md): a planet of tiles with biomes, rivers, roads and settlements; the picture is the check.
 add_test(NAME simrun_world COMMAND simrun --seed 42 --world ${CMAKE_BINARY_DIR}/world.png --check)
 add_test(NAME simrun_world_seed7 COMMAND simrun --seed 7 --world ${CMAKE_BINARY_DIR}/world7.png --world-size 180x90 --check)
+# The game on a world (W2): the Crashlanded colonists land on the seed's suggested temperate forest tile and live a day.
+add_test(NAME simrun_on_world COMMAND simrun --seed 42 --size 128 --days 1 --on-world --start Crashlanded --check)
 
 # Temperature (E2, docs/design/temperature.md): the Crashlanded colonists live two days in 4 degrees weather
 # (just above the safe range their T-shirts and pants give them) and nobody falls ill or dies.

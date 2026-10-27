@@ -480,7 +480,7 @@ bool JobSystem::failCheckBedRest(Entity pawn, Job& job, std::string& why) {
 
 JobSystem::StepResult JobSystem::bedRest(Entity pawn, Job& job, std::string&) {
     entt::registry& reg = things_.registry();
-    if (!health_.needsRest(pawn)) {
+    if (!needsBedRest(pawn)) {
         return StepResult::Next;
     }
     if (Health* health = reg.try_get<Health>(pawn)) {
