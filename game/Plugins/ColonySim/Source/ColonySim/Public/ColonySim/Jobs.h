@@ -460,6 +460,8 @@ public:
     void setLights(const Lights* lights) { lights_ = lights; }
     // The factor on a pawn's work speed from the light where it stands (1 in daylight) and from its drugs (wake-up).
     float workFactor(Entity pawn) const;
+    // The old name (work started before drugs also used it): the same factor.
+    float lightWorkFactor(Entity pawn) const { return workFactor(pawn); }
     // How fast a pawn builds and takes down: its Construction skill's speed times its Manipulation.
     float constructionSpeed(Entity pawn, const char* skillName = "Construction") const;
     bool avoiding(Entity pawn, const JobTarget& target) const;
