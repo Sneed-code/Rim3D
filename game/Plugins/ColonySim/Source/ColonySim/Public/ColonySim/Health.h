@@ -40,7 +40,9 @@ enum class DeathCause : uint8_t {
     Slaughtered,    // a colonist killed a tame animal (Husbandry.h)
     Disease,        // a disease reached its lethal severity (H2, docs/design/diseases.md)
     Surgery,        // an operation went wrong (Surgery.h)
-    Executed        // a warden executed a prisoner (Prisoners.h)
+    Executed,       // a warden executed a prisoner (Prisoners.h)
+    Overdose,       // the Overdose hediff reached its lethal severity (Drugs.h)
+    Withdrawal      // a withdrawal hediff did (luciferium)
 };
 
 COLONY_API const char* deathCauseName(DeathCause cause);

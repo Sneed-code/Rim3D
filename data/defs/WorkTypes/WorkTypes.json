@@ -32,7 +32,7 @@
   {
     "defName": "Cooking", "parent": "WorkTypeBase", "label": "cook", "naturalPriority": 950,
     "relevantSkills": ["Cooking"], "workTags": ["ManualSkilled", "Cooking"], "inPrototype": true,
-    "tasks": ["DoBillsCookStove", "DoBillsButcher"]
+    "tasks": ["DoBillsCookStove", "DoBillsButcher", "DoBillsBrew"]
   },
   {
     "defName": "Hunting", "parent": "WorkTypeBase", "label": "hunt", "naturalPriority": 900,
@@ -70,7 +70,7 @@
   },
   {
     "defName": "Crafting", "parent": "WorkTypeBase", "label": "craft", "naturalPriority": 400,
-    "relevantSkills": ["Crafting"], "workTags": ["ManualSkilled", "Crafting"], "tasks": ["DoBillsCraftingSpot", "DoBillsStonecut", "DoBillsSmelt"]
+    "relevantSkills": ["Crafting"], "workTags": ["ManualSkilled", "Crafting"], "tasks": ["DoBillsCraftingSpot", "DoBillsStonecut", "DoBillsSmelt", "DoBillsDrugLab"]
   },
   {
     "defName": "Hauling", "parent": "WorkTypeBase", "label": "haul", "naturalPriority": 300,

@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <utility>
 #include <vector>
 
 namespace colony {
@@ -113,6 +114,8 @@ public:
 
     // Pawns that sleep somewhere off the map (a caravan resting for the night): they rest as on the ground.
     void setRestingElsewhere(std::function<bool(Entity)> resting) { restingElsewhere_ = std::move(resting); }
+    // What a pawn's rest falls by is multiplied by this (drugs: a stimulant slows it, a withdrawal speeds it).
+    void setRestFallFactor(std::function<float(Entity)> factor) { restFallFactor_ = std::move(factor); }
 
     void step();
 
@@ -122,6 +125,7 @@ private:
     HealthSystem& health_;
     const DefDatabase& defs_;
     NeedRules rules_;
+    std::function<float(Entity)> restFallFactor_;
 };
 
 }  // namespace colony

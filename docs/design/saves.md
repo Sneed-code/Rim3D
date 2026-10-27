@@ -43,10 +43,13 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Combat (format 12) | per pawn its posture (stance, facing), gear (gun and apparel ids) and trigger (phase, steps, burst, aim, recoil); `EquippedBy` on gear; every projectile in flight with its defs **by `defName`** ([combat.md](combat.md)) |
 | Pawn looks (format 16) | each humanlike pawn's lineage (by `defName`), gender, body type, weight, height, melanin and colours; `SetLineage` commands in the log ([looks.md](looks.md)). Older files load with pawns that have no looks |
 | Aiming (format 17) | rounds left in each gun that has been fired (`Magazine`), the trigger's reloading phase, a fighter's reaction and dodge times ([aiming.md](aiming.md)) |
+| Raids (section `raids`, `fighters` 2) | the raid squads (faction, points, state, target, members, when they give up), the alarm and its threat and home points, the shelter mark, the factions met so far; per pawn its `Raider` squad and kind and its `DefensePlan`; a fighter's mode, goal, squad, `defending` and `retreat` ([raids.md](raids.md)) |
+| Drugs (section `drugs`) | per pawn: policy, own policy entries, chemical states (tolerance, addicted, need, progress), last dose of each drug **by `defName`**, search wait ([drugs.md](drugs.md)) |
 | Raids (section `raids` 2, `fighters` 2) | the raid squads (faction, points, state, target, members, when they give up), the alarm and its threat and home points, the shelter mark, the factions met so far; per pawn its `Raider` squad and kind and its `DefensePlan`; a fighter's mode, goal, squad, `defending` and `retreat` ([raids.md](raids.md)) |
 | Talents (section `talents`) | per protagonist: pawn, XP and ranks by talent **`defName`** ([talents.md](talents.md)) |
 | Farming (section `farming`) | growing zones: id, crop **by `defName`**, cells; the next zone id and the counters ([farming.md](farming.md)) |
 | Prisoners (section `prisoners`) | each prisoner's mode, resistance, capture time and next talk; each prison-marked bed ([prisoners.md](prisoners.md)) |
+| Trade (section `trade`) | the visits (kind, phase, faction, trader kind, times, spot, trader silver, stock by **`defName`**, members and trader pawn), the factions whose goodwill changed, the visit counter and the last drift day; per pawn its `Visitor` visit and role ([trade.md](trade.md)) |
 | World (section `world`) | `SimSettings::world` (on, seed, width, height, start tile) and the world's hash; the world itself is made again from them and checked against the hash ([world-map.md](world-map.md)) |
 | Caravans (section `caravans`) | the next id; each caravan's state, members (walk state, tries, path ticket), items, tile, came-from, destination, path, progress, cost, exit cell, formed time ([caravans.md](caravans.md)) |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
@@ -301,6 +304,7 @@ Every section is version 1 at format 20. A task that changes a section adds a li
 - `world` 1 (W2): new section, see the table. Saves without it have no world.
 - `caravans` 1 (W4): new section, see the table. Command `Caravan` by name.
 - `prisoners` 1 (C22): new section, see the table. Commands `SetPrisonerMode` and `SetPrisonBed` by name; the job check now accepts `CapturePrisoner`, `FeedPrisoner` and `WardenInteract`.
+- `trade` 1 (C23): new section, see the table. Commands `StartVisit`, `Trade`, `Gift` and `AdjustGoodwill` by name.
 - `raids` 2 (adaptation): AdaptDays, the next growth time and the colonists watched, after the alarm values; version 1 loads as 0 and an empty list.
 - `raids` 1 (F6): new section, see the table. Commands `StartRaid`, `SoundAlarm`, `SetDefenseRole`, `MarkShelter` by name.
 - `raids` 2 (F12): per squad `strategy`, `hasBreach`, `breach`, `breachFrom`; the raids waiting for their hour (`pending`); per raider `goalThing`, `loot`, `sparesDowned`; a `kidnapped` part on a colonist a raider carries ([raid-strategies.md](raid-strategies.md)). Version 1 files load with Assault squads and nothing waiting. Command `StartStrategyRaid` by name.
