@@ -1923,6 +1923,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const HitPoints* hp = reg.try_get<HitPoints>(entity)) {
             view.hitPoints = hp->current;
             view.maxHitPoints = hp->max;
+            view.durability = ApparelStats::condition(reg, entity);
         }
         if (const Health* health = reg.try_get<Health>(entity)) {
             view.downed = health->downed;
@@ -2050,6 +2051,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 }
                 worn.quality = apparel_->stats().qualityOf(reg, piece);
                 worn.hitPointShare = ApparelStats::hitPointShare(reg, piece);
+                worn.durability = ApparelStats::condition(reg, piece);
                 worn.tainted = reg.all_of<Tainted>(piece);
                 out.apparel.push_back(worn);
             }

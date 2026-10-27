@@ -350,6 +350,8 @@ struct SaveApparel {
     bool hasOutfit = false;
     uint32_t outfit = 0;
     int64_t nextCheck = 0;
+    bool hasDurability = false;  // section version 2 on (docs/design/apparel-durability.md)
+    float durability = 1.0f;
 };
 
 // What the repair system keeps on an item: the repair mark, the upgrade part ordered fitted and the parts fitted, by
@@ -1889,6 +1891,11 @@ void saveApparelPart(Ar& ar, SaveApparel& a) {
     ar.value("hasOutfit", a.hasOutfit);
     ar.value("outfit", a.outfit);
     ar.value("nextCheck", a.nextCheck);
+    if (ar.sectionVersion() >= 2) {
+        ar.value("hasDurability", a.hasDurability);
+        ar.value("durability", a.durability);
+        ar.require(a.durability >= 0.0f && a.durability <= 1.0f, "the save file has an impossible durability");
+    }
 }
 
 template <typename Ar>
@@ -3201,7 +3208,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "social", e, &SaveEntity::social, [&](Social& social) { saveSocialPart(ar, social); });
         saveParts(ar, "fight", e, &SaveEntity::socialFight, [&](SocialFight& f) { saveSocialFightPart(ar, f); });
     });
-    ar.section("apparel", 1, [&] {
+    ar.section("apparel", 2, [&] {
         saveParts(ar, "apparel", e, &SaveEntity::apparel, [&](SaveApparel& a) { saveApparelPart(ar, a); });
         ar.value("nextOutfitId", d.nextOutfitId);
         ar.list("outfits", d.outfits, [&](OutfitPolicy& o) { saveOutfitPolicy(ar, o); });
@@ -3686,7 +3693,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             const MadeOf* made = reg.try_get<MadeOf>(e);
             const Quality* quality = reg.try_get<Quality>(e);
             const PawnOutfit* outfit = reg.try_get<PawnOutfit>(e);
-            if (made != nullptr || quality != nullptr || outfit != nullptr || reg.all_of<Tainted>(e) || reg.all_of<StripMark>(e)) {
+            const Durability* durability = reg.try_get<Durability>(e);
+            if (made != nullptr || quality != nullptr || outfit != nullptr || durability != nullptr || reg.all_of<Tainted>(e) ||
+                reg.all_of<StripMark>(e)) {
                 SaveApparel a;
                 a.stuff = made != nullptr && made->stuff.valid() ? sim.defs_->get(made->stuff).defName() : std::string();
                 a.quality = quality != nullptr ? static_cast<int>(quality->level) : -1;
@@ -3695,6 +3704,8 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
                 a.hasOutfit = outfit != nullptr;
                 a.outfit = outfit != nullptr ? outfit->outfit : 0;
                 a.nextCheck = outfit != nullptr ? outfit->nextCheck : 0;
+                a.hasDurability = durability != nullptr;
+                a.durability = durability != nullptr ? durability->share : 1.0f;
                 out.apparel = std::move(a);
             }
         }
@@ -4236,6 +4247,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             }
             if (a.hasOutfit) {
                 reg.emplace<PawnOutfit>(entity, PawnOutfit{a.outfit, a.nextCheck});
+            }
+            if (a.hasDurability) {
+                reg.emplace<Durability>(entity, Durability{a.durability});
             }
         }
         if (e.looks) {

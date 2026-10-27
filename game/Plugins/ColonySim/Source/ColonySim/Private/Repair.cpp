@@ -34,6 +34,10 @@ RepairSystem::RepairSystem(Things& things, ApparelSystem& apparel, CombatSystem&
         numbers_.workPerKg = static_cast<float>(rules->number("workPerKg", numbers_.workPerKg));
         numbers_.materialShare = static_cast<float>(rules->number("materialShare", numbers_.materialShare));
         numbers_.materialPerKg = static_cast<float>(rules->number("materialPerKg", numbers_.materialPerKg));
+        numbers_.apparelWorkShare = static_cast<float>(rules->number("apparelWorkShare", numbers_.apparelWorkShare));
+        numbers_.apparelWorkPerKg = static_cast<float>(rules->number("apparelWorkPerKg", numbers_.apparelWorkPerKg));
+        numbers_.apparelMaterialShare = static_cast<float>(rules->number("apparelMaterialShare", numbers_.apparelMaterialShare));
+        numbers_.apparelMaterialPerKg = static_cast<float>(rules->number("apparelMaterialPerKg", numbers_.apparelMaterialPerKg));
         numbers_.weaponMaterial = rules->text("weaponMaterial", numbers_.weaponMaterial);
         numbers_.apparelMaterial = rules->text("apparelMaterial", numbers_.apparelMaterial);
         numbers_.materialRadius = static_cast<float>(rules->number("materialRadius", numbers_.materialRadius));
@@ -111,8 +115,7 @@ bool RepairSystem::markRepair(Entity item, bool on, std::string& error) {
         error = "take it off or put it down first: only gear lying on the ground can be repaired";
         return false;
     }
-    const HitPoints* hp = reg.try_get<HitPoints>(item);
-    if (hp == nullptr || hp->current >= hp->max) {
+    if (!reg.all_of<HitPoints>(item) || ApparelStats::condition(reg, item) >= 1.0f) {
         error = "that isn't damaged";
         return false;
     }
@@ -179,23 +182,30 @@ RepairCost RepairSystem::costOf(Entity item) const {
     const entt::registry& reg = things_.registry();
     RepairCost cost;
     const HitPoints* hp = reg.valid(item) ? reg.try_get<HitPoints>(item) : nullptr;
-    if (hp == nullptr || hp->max <= 0 || hp->current >= hp->max) {
+    if (hp == nullptr || hp->max <= 0) {
+        return cost;
+    }
+    // Hit points and durability cost the same: the bigger loss counts (condition is the smaller of the two).
+    const float missing = 1.0f - ApparelStats::condition(reg, item);
+    if (missing <= 0.0f) {
         return cost;
     }
     const Def& def = defs_.get(reg.get<Thing>(item).def);
-    const float missing = static_cast<float>(hp->max - hp->current) / static_cast<float>(hp->max);
+    const bool apparel = kindOf(reg.get<Thing>(item).def) == "Apparel";
     const float mass = static_cast<float>(def.number("stats.mass", 1.0));
-    const float fullWork = def.has("stats.workToMake") ? static_cast<float>(def.number("stats.workToMake")) * numbers_.workShare
-                                                       : mass * numbers_.workPerKg;
+    const float fullWork =
+        def.has("stats.workToMake") ? static_cast<float>(def.number("stats.workToMake")) * (apparel ? numbers_.apparelWorkShare : numbers_.workShare)
+                                    : mass * (apparel ? numbers_.apparelWorkPerKg : numbers_.workPerKg);
     cost.work = std::max(1.0f, std::ceil(fullWork * missing));
     const MadeOf* made = reg.try_get<MadeOf>(item);
-    const float fullMaterial = def.has("costStuffCount") ? static_cast<float>(def.number("costStuffCount")) * numbers_.materialShare
-                                                         : mass * numbers_.materialPerKg;
-    cost.material = made != nullptr && made->stuff.valid()
-                        ? made->stuff
-                        : defs_.idOf("Things", kindOf(reg.get<Thing>(item).def) == "Weapons" ? numbers_.weaponMaterial
-                                                                                              : numbers_.apparelMaterial);
-    cost.count = std::max(1, static_cast<int>(std::ceil(fullMaterial * missing - 1.0e-4f)));
+    const float fullMaterial =
+        def.has("costStuffCount")
+            ? static_cast<float>(def.number("costStuffCount")) * (apparel ? numbers_.apparelMaterialShare : numbers_.materialShare)
+            : mass * (apparel ? numbers_.apparelMaterialPerKg : numbers_.materialPerKg);
+    cost.material = made != nullptr && made->stuff.valid() ? made->stuff
+                                                           : defs_.idOf("Things", apparel ? numbers_.apparelMaterial : numbers_.weaponMaterial);
+    const float units = fullMaterial * missing;
+    cost.count = std::max(1, static_cast<int>(apparel ? std::floor(units + 1.0e-4f) : std::ceil(units - 1.0e-4f)));
     return cost;
 }
 
@@ -276,6 +286,7 @@ int RepairSystem::finishRepair(Entity item) {
     }
     const int restored = std::max(0, hp->max - hp->current);
     hp->current = hp->max;
+    reg.remove<Durability>(item);
     reg.remove<RepairMark>(item);
     return restored;
 }
@@ -322,8 +333,7 @@ void RepairSystem::step() {
     entt::registry& reg = things_.registry();
     std::vector<Entity> done;
     for (const Entity item : reg.view<RepairMark>()) {
-        const HitPoints* hp = reg.try_get<HitPoints>(item);
-        if (hp == nullptr || hp->current >= hp->max) {
+        if (!reg.all_of<HitPoints>(item) || ApparelStats::condition(reg, item) >= 1.0f) {
             done.push_back(item);
         }
     }

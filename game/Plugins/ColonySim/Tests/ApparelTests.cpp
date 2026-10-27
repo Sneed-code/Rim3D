@@ -119,6 +119,12 @@ int apparelHitPoints(const Sim& sim, Entity item) {
     return sim.things().registry().get<HitPoints>(item).current;
 }
 
+float apparelDurability(const Sim& sim, Entity item) { return ApparelStats::condition(sim.things().registry(), item); }
+
+void apparelSetDurability(Sim& sim, Entity item, float share) {
+    sim.things().registry().emplace_or_replace<Durability>(item, Durability{share});
+}
+
 bool apparelWearing(const Sim& sim, Entity pawn, Entity item) {
     const std::vector<Entity>& worn = sim.apparel().worn(pawn);
     return std::find(worn.begin(), worn.end(), item) != worn.end();
@@ -204,17 +210,35 @@ TEST_CASE("Apparel: what a pawn wears adds up its insulation and layers as RimWo
     CHECK_FALSE(sim->apparel().covered(pawn, "UpperHead"));
 }
 
-TEST_CASE("Apparel: armor wears down as it takes hits, and a piece at no hit points is gone") {
+TEST_CASE("Apparel: hits wear a worn piece's durability, not its hit points; only basic clothes can be shot to pieces") {
     auto sim = apparelTestSim();
     const Entity target = apparelColonist(*sim, 18, 30);
     const Entity vest = apparelWear(*sim, target, "Apparel_FlakVest");
     const Entity shirt = apparelWear(*sim, target, "Apparel_TShirt");
+    const Entity duster = apparelWear(*sim, target, "Apparel_Duster");
     CombatSystem& combat = sim->combat();
 
-    // Damage direct: 5 points off, then enough to destroy it.
+    // 5 hit points' worth of wear on a 100 hit point shirt: 5% durability, the hit points stay.
     combat.damageApparel(target, shirt, 5);
-    CHECK(apparelHitPoints(*sim, shirt) == 95);
+    CHECK(apparelHitPoints(*sim, shirt) == 100);
+    CHECK(apparelDurability(*sim, shirt) == doctest::Approx(0.95f));
+
+    // A duster is not a basic piece: worn right through it stays on, tattered, at full hit points.
+    const int dusterHp = apparelHitPoints(*sim, duster);
+    combat.damageApparel(target, duster, 100000);
+    CHECK(sim->things().exists(duster));
+    CHECK(apparelWearing(*sim, target, duster));
+    CHECK(apparelHitPoints(*sim, duster) == dusterHp);
+    CHECK(apparelDurability(*sim, duster) == doctest::Approx(0.0f));
+    CHECK(ApparelStats::tattered(sim->things().registry(), duster));
+    std::string error;
+    CHECK(sim->apparel().takeOff(target, duster, error));
+
+    // A T-shirt is basic (`apparel.fragile`): past 0 durability the rest comes off its hit points.
     sim->step();
+    combat.damageApparel(target, shirt, 95 + 30);
+    CHECK(apparelDurability(*sim, shirt) == doctest::Approx(0.0f));
+    CHECK(apparelHitPoints(*sim, shirt) == 70);
     combat.damageApparel(target, shirt, 500);
     bool destroyedEvent = false;
     for (const Event& e : sim->events()) {
@@ -224,15 +248,15 @@ TEST_CASE("Apparel: armor wears down as it takes hits, and a piece at no hit poi
     CHECK_FALSE(sim->things().exists(shirt));
     CHECK(sim->apparel().worn(target).size() == 1);
 
-    // Shot at: the vest takes 1 hit point for every 4 points of damage it absorbs, rounded at random.
+    // Shot at: the vest wears 1 hit point's worth for every 4 points of damage it absorbs, and is never destroyed.
     const Entity shooter = sim->things().spawn("Human", CellPos{10, 30, 0});
     combat.equip(shooter, sim->things().make(apparelDef(*sim, "Gun_Revolver")));
     Rng rng(4);
     int armorEvents = 0;
     bool vestGone = false;
-    int lostBeforeGone = 0;
-    for (int shot = 0; shot < 400 && !vestGone; ++shot) {
-        const int before = apparelHitPoints(*sim, vest);
+    const int vestMax = sim->things().registry().get<HitPoints>(vest).max;
+    for (int shot = 0; shot < 400; ++shot) {
+        const float before = apparelDurability(*sim, vest);
         combat.fire(shooter, 18.5f, 30.5f, 1.15f, 0.0f, rng);
         for (int s = 0; s < 20; ++s) {
             sim->step();
@@ -244,19 +268,56 @@ TEST_CASE("Apparel: armor wears down as it takes hits, and a piece at no hit poi
                 break;
             }
         }
-        if (!vestGone) {
-            lostBeforeGone += before - apparelHitPoints(*sim, vest);
-            CHECK(before - apparelHitPoints(*sim, vest) <= 8);  // one revolver bullet is about 12 damage
-        }
+        CHECK(before - apparelDurability(*sim, vest) <= 8.0f / static_cast<float>(vestMax) + 1.0e-3f);  // a bullet is about 12 damage
         sim->health().refresh(target);
         sim->things().registry().replace<Health>(target, Health{});
         sim->health().refresh(target);
     }
     CHECK(armorEvents > 10);
-    CHECK(lostBeforeGone > 0);
-    CHECK(vestGone);
-    CHECK_FALSE(sim->things().exists(vest));
-    CHECK(sim->apparel().worn(target).empty());
+    CHECK_FALSE(vestGone);
+    CHECK(sim->things().exists(vest));
+    CHECK(apparelWearing(*sim, target, vest));
+    CHECK(apparelHitPoints(*sim, vest) == vestMax);
+    CHECK(apparelDurability(*sim, vest) < 0.9f);
+}
+
+TEST_CASE("Apparel: durability is capped by hit points, and a tattered piece gives 80% of its armor and warmth") {
+    auto sim = apparelTestSim();
+    const Entity pawn = apparelColonist(*sim, 20, 20);
+    const Entity parka = apparelWear(*sim, pawn, "Apparel_Parka");
+    const entt::registry& reg = sim->things().registry();
+    const int max = reg.get<HitPoints>(parka).max;
+    const float armor = sim->apparel().stats().armor(reg, parka, ArmorType::Sharp);
+    const float cold = sim->apparel().stats().insulationCold(reg, parka);
+    APPAREL_REQUIRE(cold > 0.0f);
+
+    // An item at 70% of its hit points is at most 70% durable.
+    apparelSetHitPoints(*sim, parka, max * 7 / 10);
+    CHECK(apparelDurability(*sim, parka) == doctest::Approx(0.7f).epsilon(0.02));
+    apparelSetDurability(*sim, parka, 0.5f);
+    CHECK(apparelDurability(*sim, parka) == doctest::Approx(0.5f));
+    CHECK(sim->apparel().stats().armor(reg, parka, ArmorType::Sharp) == doctest::Approx(armor));
+
+    apparelSetDurability(*sim, parka, 0.0f);
+    CHECK(sim->apparel().stats().armor(reg, parka, ArmorType::Sharp) == doctest::Approx(armor * 0.8f));
+    CHECK(sim->apparel().stats().insulationCold(reg, parka) == doctest::Approx(cold * 0.8f));
+    float c = 0.0f;
+    float h = 0.0f;
+    sim->apparel().insulation(pawn, c, h);
+    CHECK(c == doctest::Approx(cold * 0.8f));
+
+    // The snapshot carries it.
+    Snapshot snapshot;
+    sim->writeSnapshot(snapshot);
+    bool seen = false;
+    for (const ApparelView& worn : snapshot.apparel) {
+        if (worn.item == parka) {
+            seen = true;
+            CHECK(worn.durability == doctest::Approx(0.0f));
+            CHECK(worn.hitPointShare == doctest::Approx(0.7f).epsilon(0.02));
+        }
+    }
+    CHECK(seen);
 }
 
 TEST_CASE("Apparel: cloth stops nothing against a revolver, a devilstrand duster stops some") {
@@ -288,6 +349,7 @@ TEST_CASE("Apparel: cloth stops nothing against a revolver, a devilstrand duster
             const std::vector<Entity>& worn = sim->apparel().worn(target);
             for (const Entity piece : worn) {
                 apparelSetHitPoints(*sim, piece, sim->things().registry().get<HitPoints>(piece).max);
+                sim->things().registry().remove<Durability>(piece);
             }
         }
         if (duster) {
@@ -298,45 +360,47 @@ TEST_CASE("Apparel: cloth stops nothing against a revolver, a devilstrand duster
     }
 }
 
-TEST_CASE("Apparel: worn clothes lose hit points slowly, about 0.4 a day each") {
+TEST_CASE("Apparel: worn clothes wear slowly, 0.4 hit points' worth a day, and never lose hit points by it") {
     auto sim = apparelTestSim();
     const Entity pawn = apparelColonist(*sim, 20, 20);
     std::vector<Entity> pieces = {apparelWear(*sim, pawn, "Apparel_TShirt"), apparelWear(*sim, pawn, "Apparel_Pants"),
                                   apparelWear(*sim, pawn, "Apparel_Duster"), apparelWear(*sim, pawn, "Apparel_CowboyHat")};
-    int before = 0;
+    std::vector<int> hitPoints;
     for (const Entity p : pieces) {
-        before += apparelHitPoints(*sim, p);
+        hitPoints.push_back(apparelHitPoints(*sim, p));
     }
     Rng rng(3);
     const std::vector<Event> none;
     for (int hour = 0; hour < 24 * 20; ++hour) {
         sim->apparel().step(static_cast<int64_t>(hour) * 3600, rng, none);
     }
-    int after = 0;
-    for (const Entity p : pieces) {
-        after += apparelHitPoints(*sim, p);
+    // 20 days x 0.4 = 8 hit points' worth each, as a share of the piece's maximum.
+    for (size_t i = 0; i < pieces.size(); ++i) {
+        CHECK(apparelHitPoints(*sim, pieces[i]) == hitPoints[i]);
+        CHECK(apparelDurability(*sim, pieces[i]) == doctest::Approx(1.0f - 8.0f / static_cast<float>(hitPoints[i])).epsilon(0.001));
     }
-    // 4 pieces x 20 days x 0.4 = 32 hit points, give or take chance.
-    CHECK(before - after >= 15);
-    CHECK(before - after <= 55);
     // Not at all between the hours.
-    const int now = after;
+    const float now = apparelDurability(*sim, pieces[0]);
     for (int i = 0; i < 50; ++i) {
         sim->apparel().step(3600 * 1000 + 1 + i, rng, none);
     }
-    int later = 0;
-    for (const Entity p : pieces) {
-        later += apparelHitPoints(*sim, p);
+    CHECK(apparelDurability(*sim, pieces[0]) == now);
+
+    // A whole year (60 days) of wear leaves a 100 hit point shirt well over half: 76%.
+    for (int hour = 24 * 20; hour < 24 * 60; ++hour) {
+        sim->apparel().step(static_cast<int64_t>(hour) * 3600, rng, none);
     }
-    CHECK(later == now);
+    CHECK(apparelDurability(*sim, pieces[0]) == doctest::Approx(0.76f).epsilon(0.002));
+    CHECK(apparelDurability(*sim, pieces[3]) > 0.5f);  // the cowboy hat, 80 hit points: 70%
 }
 
-TEST_CASE("Apparel: a human's clothes lose hit points and are tainted when they die") {
+TEST_CASE("Apparel: a human's clothes are worn down and tainted when they die") {
     auto sim = apparelTestSim();
     const Entity pawn = apparelSpawnHuman(*sim, 20, 20);
     APPAREL_REQUIRE(pawn != kNoEntity);
     const Entity shirt = apparelWear(*sim, pawn, "Apparel_TShirt");
     const Entity vest = apparelWear(*sim, pawn, "Apparel_FlakVest");
+    const int vestMax = sim->things().registry().get<HitPoints>(vest).max;
     sim->submit(DamagePawnCommand{pawn, "Cut", 60.0f, 0});  // the torso
     sim->step();
     bool died = false;
@@ -344,18 +408,19 @@ TEST_CASE("Apparel: a human's clothes lose hit points and are tainted when they 
         died = died || (e.type == EventType::PawnDied && e.thing == pawn);
     }
     APPAREL_REQUIRE(died);
-    const int shirtHp = apparelHitPoints(*sim, shirt);
-    const int vestHp = apparelHitPoints(*sim, vest);
-    CHECK(shirtHp <= 85);  // 15% to 40% of what it had
-    CHECK(shirtHp >= 60);
-    CHECK(vestHp <= 170);
-    CHECK(vestHp >= 120);
+    CHECK(apparelHitPoints(*sim, shirt) == 100);
+    CHECK(apparelHitPoints(*sim, vest) == vestMax);
+    const float shirtDurability = apparelDurability(*sim, shirt);
+    CHECK(shirtDurability <= 0.851f);  // 15% to 40% of what it had
+    CHECK(shirtDurability >= 0.599f);
+    CHECK(apparelDurability(*sim, vest) <= 0.851f);
+    CHECK(apparelDurability(*sim, vest) >= 0.599f);
     CHECK(sim->things().registry().all_of<Tainted>(shirt));
     CHECK(sim->things().registry().all_of<Tainted>(vest));
     // Not again on later steps.
     sim->step();
     sim->step();
-    CHECK(apparelHitPoints(*sim, shirt) == shirtHp);
+    CHECK(apparelDurability(*sim, shirt) == shirtDurability);
 
     // Something that isn't a person (no looks, no colonist record) taints nothing.
     const Entity beast = sim->things().spawn("Human", CellPos{30, 30, 0});
@@ -365,7 +430,7 @@ TEST_CASE("Apparel: a human's clothes lose hit points and are tainted when they 
     CHECK_FALSE(sim->things().registry().all_of<Tainted>(coat));
 }
 
-TEST_CASE("Apparel: thoughts about nakedness, nudists, ratty and dead men's clothes") {
+TEST_CASE("Apparel: thoughts about nakedness, nudists, tattered and dead men's clothes") {
     auto sim = apparelTestSim();
     // A man: naked until his legs are covered.
     const Entity man = apparelColonist(*sim, 20, 20);
@@ -399,17 +464,17 @@ TEST_CASE("Apparel: thoughts about nakedness, nudists, ratty and dead men's clot
     CHECK(apparelThought(dressed, "NudistWearingClothes")->offset == doctest::Approx(-3.0f));
     CHECK(apparelThought(apparelThoughts(*sim, man), "NudistWearingClothes") == nullptr);
 
-    // Ratty at half its hit points, tattered under a quarter.
+    // Tattered only at 0 durability, and only -1; worn but not worn out is fine.
     CHECK(apparelThought(apparelThoughts(*sim, man), "TatteredApparel") == nullptr);
-    apparelSetHitPoints(*sim, pants, 50);
-    const ThoughtView* ratty = apparelThought(apparelThoughts(*sim, man), "TatteredApparel");
-    APPAREL_REQUIRE(ratty != nullptr);
-    CHECK(ratty->offset == doctest::Approx(-3.0f));
-    apparelSetHitPoints(*sim, pants, 24);
+    apparelSetHitPoints(*sim, pants, 10);
+    apparelSetDurability(*sim, pants, 0.05f);
+    CHECK(apparelThought(apparelThoughts(*sim, man), "TatteredApparel") == nullptr);
+    apparelSetDurability(*sim, pants, 0.0f);
     const ThoughtView* tattered = apparelThought(apparelThoughts(*sim, man), "TatteredApparel");
     APPAREL_REQUIRE(tattered != nullptr);
-    CHECK(tattered->offset == doctest::Approx(-5.0f));
-    apparelSetHitPoints(*sim, pants, 51);
+    CHECK(tattered->offset == doctest::Approx(-1.0f));
+    sim->things().registry().remove<Durability>(pants);
+    apparelSetHitPoints(*sim, pants, 100);
     CHECK(apparelThought(apparelThoughts(*sim, man), "TatteredApparel") == nullptr);
 
     // Dead men's clothes: -5, -8, -11, -14 by how many pieces; the bloodlusty don't mind.
@@ -719,6 +784,7 @@ TEST_CASE("Apparel: saving and loading keeps stuff, quality, taint, outfits and 
     const Entity pawn = apparelColonist(*sim, 20, 20);
     const Entity pants = apparelWear(*sim, pawn, "Apparel_Pants", 4);
     sim->things().registry().emplace<Tainted>(pants);
+    apparelSetDurability(*sim, pants, 0.375f);
     const Entity lying = apparelLying(*sim, 22, 20, "Apparel_Duster", 1, "DevilstrandCloth");
     sim->submit(AddOutfitCommand{"Mine"});
     sim->step();
@@ -759,6 +825,7 @@ TEST_CASE("Apparel: saving and loading keeps stuff, quality, taint, outfits and 
     CHECK(copy.apparel().outfitOf(pawn) == edit.outfit);
     CHECK(copy.things().registry().get<Quality>(pants).level == 4);
     CHECK(copy.things().registry().all_of<Tainted>(pants));
+    CHECK(copy.things().registry().get<Durability>(pants).share == sim->things().registry().get<Durability>(pants).share);
     CHECK(copy.things().registry().get<MadeOf>(lying).stuff == apparelDef(copy, "DevilstrandCloth"));
     CHECK(copy.apparel().stripMarked(dead) == sim->apparel().stripMarked(dead));
 

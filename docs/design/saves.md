@@ -136,7 +136,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `raids` | 2 | the raid state (factions met, squads, the alarm, threat and home points, the shelter mark), then the `defense` and `raider` parts ([raids.md](raids.md), F6) |
 | `melee` | 1 | `melee`: each pawn's swing, its defense against one, its block (F8, [melee.md](melee.md)) |
 | `social` | 1 | `social` (a colonist's opinion memories, stored bonds, next talk, mourned) and `fight` (a fight with fists in progress) per pawn (C20, [social.md](social.md)) |
-| `apparel` | 1 | `apparel`: the stuff and quality of an item, taint, a strip mark, a pawn's outfit and next look; the outfit policies ([apparel.md](apparel.md)) |
+| `apparel` | 2 | `apparel`: the stuff and quality of an item, taint, a strip mark, a pawn's outfit and next look, and from version 2 its durability; the outfit policies ([apparel.md](apparel.md), [apparel-durability.md](apparel-durability.md)) |
 | `feel` | 1 | `kick` (the player's gun kick and its spray) and `roll` (a dodge roll's phase, steps, direction, wait) ([shooter-feel.md](shooter-feel.md)) |
 | `levels` | 1 | the upper floors, by level then row; put back before the buildings on them (M1) |
 | `medicine` | 2 | `medical`: the medical care setting of each pawn that has one (H1, [medicine.md](medicine.md)); version 2: `operations`, the operations planned on a patient (H3, [surgery.md](surgery.md)) |
@@ -342,6 +342,7 @@ Every section is version 1 at format 20. A task that changes a section adds a li
 - `breeding` 1 (N4): new section, see the table: the counters, per animal its `AnimalBreed` (pregnancy, litter, mating wait, milk, wool and egg timers, the female a male is walking to), per fertilized egg its `Hatching` time ([breeding.md](breeding.md)). The job check now accepts the animal jobs (it stopped at `StripPawn`, so a save made mid-taming would not load).
 - `husbandry` 2 (N2): per animal care record `markHunt` and `collect` after `markSlaughter`, and the `hunted` counter after `starved`. Version 1 files load with none. The job check now accepts `Hunt`, `HaulCorpse` and `Butcher`.
 - `apparel` 1 (C15): item stuff and quality, taint, strip marks, outfits ([apparel.md](apparel.md)). Commands `SetOutfit`, `EditOutfit`, `AddOutfit`, `RemoveOutfit` and `Strip` by name.
+- `apparel` 2 (durability): per item `hasDurability` and `durability` after `nextCheck` ([apparel-durability.md](apparel-durability.md)). Version 1 files load with every piece at full durability.
 - `movement` 2 (M2): each mover's `climbed` (metres up stairs or a ladder) after `gaveUp`. Version 1 files load with none; stairs and ladders need nothing saved (their links come from the buildings), stockpiles on upper levels were already saved with their level.
 - `looks` 2 (V1): after `hair`, the face sliders, `eyes`, `hairStyle`, `naturalBeard`, `beard`, `naturalBodyHair`, `bodyHair` and the lists `tattoos` and `scars` (region, style, u, v, size). Version 1 files load with an empty `hairStyle` and average faces.
 - `fire` 1 (E4): new section, see the table. Commands `Ignite` and `SetHomeArea` by name; the job check now accepts `ExtinguishFire`. Older saves load with no fires and a home area made at the first step.
