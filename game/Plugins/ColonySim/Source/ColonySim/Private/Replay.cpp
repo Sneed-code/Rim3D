@@ -215,6 +215,10 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["building"] = entt::to_integral(c.building);
                 j["bill"] = c.bill;
                 j["index"] = c.index;
+            } else if constexpr (std::is_same_v<Type, ClimbCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["dx"] = static_cast<double>(c.dx);
+                j["dy"] = static_cast<double>(c.dy);
             } else if constexpr (std::is_same_v<Type, AddOperationCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["recipe"] = c.recipe;
@@ -1129,6 +1133,21 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.x = (*point)[0].get<float>();
         c.y = (*point)[1].get<float>();
+        out.command = c;
+    } else if (type == "Climb") {
+        ClimbCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        for (const auto& [key, field] : {std::pair<const char*, float*>{"dx", &c.dx}, std::pair<const char*, float*>{"dy", &c.dy}}) {
+            const auto it = j.find(key);
+            if (it == j.end() || !it->is_number()) {
+                return r.fail(where + "." + key + " must be a number");
+            }
+            *field = static_cast<float>(it->get<double>());
+        }
         out.command = c;
     } else if (type == "DodgeRoll") {
         DodgeRollCommand c;

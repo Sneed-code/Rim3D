@@ -2,7 +2,9 @@
 
 Updated 2026-10-26.
 
-Stage 2 defense extras done: colonists with the Construction work type now rearm sprung spike traps by themselves (new `RearmTrap` job, 13 s of work, never an IED), and a spike trap's stabs go through the victim's armor like bullets, so vests and helmets turn them away and wear (`docs/design/defense.md`, tests `DefenseTests`). Sim only.
+Art stage V1 done: every humanlike pawn now has a seeded face (face shape, brow, nose and jaw sliders, eye colour), one of 14 hair styles, a beard (men only; Emberkin are beardless), a body hair amount (Frostkin furry), and 0 to 3 tattoos for about one pawn in five; a healed injury that leaves a scar on the skin adds a scar mark on that body region (Slash, Claw, Burn, Puncture, Ragged, Stitched by injury). It is in the snapshot, the state hash and saves (`looks` 2) and the numbers are in `LooksRules` (`docs/design/looks.md`, tests `LooksTests`). Sim only; V2 and V3 draw it.
+
+
 
 Stage 2 art done: sculptures (small, large and grand, in `Art.json`) are planned like buildings and built by colonists with the Art work type and the Artistic skill, which learns from it; the finished piece rolls a quality from the artist's skill (awful to legendary) and its beauty and value scale by it (-0.1 up to 8 times beauty, 0.5 up to 5 times value) from the wiki's 50, 100 and 400, so a sculpture lifts a room's beauty, wealth and impressiveness. Stone stuffs got the wiki's work factors and marble's 1.35 beauty plus 0.5 (`docs/design/art.md`, tests `ArtTests`). Sim only. The room stats, beauty need and their mood thoughts were already in since C17.
 
@@ -78,8 +80,11 @@ Stage 2 D10 done: narrators (Orrin, Maren, Jinx), difficulty levels, 30 incident
 Stage 2 F11 done: turrets and traps (`docs/design/defense.md`).
 Stage 2 C13 done: growing zones with a chosen crop, colonists sow and harvest them (Growing work), crops grow by light and temperature, frost and heat kill them (`docs/design/farming.md`).
 Stage 2 C22 done: wardens carry downed enemies to prison beds, feed prisoners, talk their resistance down and recruit or release them; `PrisonerSystem::breakOut` is the hook for T3's prison break (`docs/design/prisoners.md`).
+Stage 2 U17 done: upper floors, stairs and ladders on screen. Upper floors are drawn as board floors with a ceiling under them, rooms upstairs get their roofs, buildings, items and pawns stand on the floor, stairs are drawn as steps and ladders as steep ladders, and climbing pawns ride up the slope. In the overseer view Page Up and Page Down choose the level looked at and cut away everything above it; clicks, the inspect panel, move orders and the architect's tools work on that level (the upper floor tool lays floors over open air). In direct mode walking into stairs or a ladder climbs them (new `ClimbCommand`). No floor is drawn over stairs (a stairwell on screen only: the sim keeps the floor there so the upper room stays closed). `docs/design/levels-draw.md`, smoke test `levels`; `ULevelsSubsystem`.
 Stage 2 C24 done: carrying is by mass (capacity over item mass), a hauler takes neighbouring stacks of the same def in one trip, a load slows walking up to 25% (`docs/design/jobs.md`).
 Stage 2 U22 done: melee and weapon switching on screen. In direct mode the left mouse button swings a melee weapon (or fists), the right holds it up to block, Q brings up the next carried weapon; every carried weapon is drawn (rifle on the back, sidearm and melee weapon on the hips); swings are procedural poses timed to the sim's hit step, with hit-stop, flinch, blood and sparks, a dipping sidestep and a raised blade for blocks (`docs/design/melee-draw.md`, smoke test `melee`). No human melee animations exist yet, so the arms do not move.
+
+Stage 2 defense extras done: colonists with the Construction work type now rearm sprung spike traps by themselves (new `RearmTrap` job, 13 s of work, never an IED), and a spike trap's stabs go through the victim's armor like bullets, so vests and helmets turn them away and wear (`docs/design/defense.md`, tests `DefenseTests`). Sim only.
 
 ## Where we are
 
