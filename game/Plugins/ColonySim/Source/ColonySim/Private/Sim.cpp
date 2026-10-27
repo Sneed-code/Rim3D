@@ -308,6 +308,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setLights(lights_.get());
     jobs_->setPower(power_.get());
     jobs_->setRooms(rooms_.get());
+    jobs_->setTemperature(temperature_.get());
     jobs_->setResearch(research_.get());
     jobs_->setDeepResources(deepResources_.get());
     jobs_->setMedicine(medicine_.get());
@@ -361,10 +362,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     combat_->setHurtHook([this](Entity victim, Entity attacker) { animals_->hurt(victim, attacker); });
     jobs_->setHusbandry(husbandry_.get());
     jobs_->setCombat(combat_.get());
-    jobs_->setTemperature(temperature_.get());
     husbandry_->setHaulerHook([this](Entity animal, bool on) { jobs_->setAnimalHauler(animal, on); });
     jobs_->setAnimalWorkGate([this](Entity animal) { return animals_->mayWork(animal); });
     raids_ = std::make_unique<RaidSystem>(*things_, map_, *rooms_, *combat_, *health_, *jobs_, *fighters_, *defs_, time_, rng_);
+    mood_->setWealth([this] { return raids_->colonyWealth(1.0f); });
     raids_->setEventLog(&events_);
     raids_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
     monsters_ = std::make_unique<MonsterSystem>(*things_, map_, *combat_, *health_, *fighters_, *raids_, *animals_, *defs_, time_, rng_);

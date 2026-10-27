@@ -8,6 +8,7 @@
 #include "ColonySim/Map.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Prisoners.h"
+#include "ColonySim/Rooms.h"
 #include "ColonySim/Spoilage.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Things.h"
@@ -172,6 +173,7 @@ void JobSystem::interruptForNeeds(Entity pawn) {
     }
     if (current.forced || (current.type != JobType::Wait && current.type != JobType::HaulToCell &&
                            current.type != JobType::Recreate && current.type != JobType::BedRest &&
+                           current.type != JobType::Butcher && current.type != JobType::HaulCorpse && current.type != JobType::Hunt &&
                            !jobIsGather(current.type))) {
         return;
     }
@@ -191,6 +193,130 @@ void JobSystem::interruptForNeeds(Entity pawn) {
     }
     endJob(pawn, JobEnd::Interrupted, job.type == JobType::Ingest ? "hungry" : "tired");
     startJob(pawn, std::move(job));
+}
+
+// ---- Cold --------------------------------------------------------------------------------------
+
+namespace {
+
+// Jobs a pawn may drop when the cold gets to it (outdoor work, hauling, idling). The rest are short or in the middle
+// of something (eating, sleeping, tending, refuelling the fire) and finish first. Ours.
+bool needJobsYieldsToCold(JobType type) {
+    switch (type) {
+        case JobType::Wait:
+        case JobType::HaulToCell:
+        case JobType::Recreate:
+        case JobType::Mine:
+        case JobType::CutPlant:
+        case JobType::HarvestPlant:
+        case JobType::SowCrop:
+        case JobType::DeliverResources:
+        case JobType::BuildFrame:
+        case JobType::Deconstruct:
+        case JobType::CleanFilth:
+        case JobType::Hunt:
+        case JobType::HaulCorpse:
+            return true;
+        default:
+            return false;
+    }
+}
+
+}  // namespace
+
+// RimWorld's SeekSafeTemperature, cold side: a pawn outside its safe range (its comfortable range widened by 10 degrees)
+// whose hypothermia has set in (`seekWarmthSeverity`) goes to the nearest enclosed room warm enough to recover in and
+// stays there until the hypothermia is under `warmEnoughSeverity`. Out of the safe range the illness grows, in it
+// shrinks (temperature.md), so a pawn with no warm room near just carries on. Heat is not looked after yet.
+bool JobSystem::seekWarmthJob(Entity pawn, Job& out) {
+    if (temperature_ == nullptr || rooms_ == nullptr) {
+        return false;
+    }
+    entt::registry& reg = things_.registry();
+    float comfyMin = 0.0f;
+    float comfyMax = 0.0f;
+    if (!reg.all_of<Colonist>(pawn) || !temperature_->comfortRange(pawn, comfyMin, comfyMax)) {
+        return false;
+    }
+    const DefId hypothermia = defs_.idOf("Hediffs", "Hypothermia");
+    const TemperatureNumbers& numbers = temperature_->numbers();
+    const float safeMin = comfyMin - numbers.safeMarginC;
+    const float ambient = temperature_->ambientOf(pawn);
+    if (!hypothermia.valid() || ambient >= safeMin + 3.0f ||
+        health_.environmentSeverity(pawn, hypothermia) < numbers.seekWarmthSeverity) {
+        return false;
+    }
+    const Position& at = reg.get<Position>(pawn);
+    const CellPos from = cellOf(at);
+    bool found = false;
+    float bestDist = 0.0f;
+    CellPos best;
+    for (const Room& room : rooms_->rooms()) {
+        if (!room.enclosed() || room.outdoors() || room.bounds.level != from.level) {
+            continue;
+        }
+        const float warmth = temperature_->roomTemperature(room.id);
+        if (warmth < safeMin + 4.0f || warmth < ambient + 3.0f) {
+            continue;
+        }
+        for (const CellPos c : rooms_->cellsOf(room)) {
+            if (!map_.walkable(c) || reservedByOther(JobTarget{kNoEntity, c}, pawn) || avoiding(pawn, JobTarget{kNoEntity, c})) {
+                continue;
+            }
+            const float dist = needJobsDistSq(at, c);
+            if ((!found || dist < bestDist) && canReach(from, c)) {
+                found = true;
+                bestDist = dist;
+                best = c;
+            }
+        }
+    }
+    if (!found) {
+        return false;
+    }
+    out = Job{};
+    out.type = JobType::SeekWarmth;
+    out.cell = best;
+    out.until = now() + 8 * kSecondsPerHour;
+    return true;
+}
+
+bool JobSystem::thinkTemperature(Entity pawn, Job& out) {
+    return seekWarmthJob(pawn, out);
+}
+
+// Every 15 steps a pawn on a job it may drop looks at the cold.
+void JobSystem::interruptForCold(Entity pawn) {
+    if (temperature_ == nullptr || (static_cast<uint64_t>(now()) + entt::to_integral(pawn)) % 15 != 0) {
+        return;
+    }
+    const Job& current = things_.registry().get<Worker>(pawn).job;
+    if (current.forced || !needJobsYieldsToCold(current.type)) {
+        return;
+    }
+    Job job;
+    if (seekWarmthJob(pawn, job)) {
+        endJob(pawn, JobEnd::Interrupted, "cold");
+        startJob(pawn, std::move(job));
+    }
+}
+
+// Stands in the warm room until the hypothermia is nearly gone, the eight hours are up or the room has gone cold.
+JobSystem::StepResult JobSystem::warmWait(Entity pawn, Job& job, std::string& why) {
+    (void)why;
+    if (temperature_ == nullptr || now() >= job.until) {
+        return StepResult::Next;
+    }
+    const DefId hypothermia = defs_.idOf("Hediffs", "Hypothermia");
+    const TemperatureNumbers& numbers = temperature_->numbers();
+    float comfyMin = 0.0f;
+    float comfyMax = 0.0f;
+    if (!hypothermia.valid() || health_.environmentSeverity(pawn, hypothermia) <= numbers.warmEnoughSeverity ||
+        !temperature_->comfortRange(pawn, comfyMin, comfyMax) ||
+        temperature_->ambientOf(pawn) < comfyMin - numbers.safeMarginC) {
+        return StepResult::Next;
+    }
+    return StepResult::Running;
 }
 
 // ---- Eating -----------------------------------------------------------------------------------
