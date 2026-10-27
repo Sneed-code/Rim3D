@@ -1822,6 +1822,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
             }
             view.quality = apparel_->stats().qualityOf(reg, entity);
         }
+        if (view.category == ThingCategory::Building && construction_->isArt(thing.def) && !reg.all_of<ConstructionSite>(entity)) {
+            // A sculpture: made of a stuff and of a quality the artist's skill rolled.
+            if (const BuiltOf* built = reg.try_get<BuiltOf>(entity)) {
+                view.stuff = built->stuff;
+            }
+            view.quality = apparel_->stats().qualityOf(reg, entity);
+        }
         if (view.category == ThingCategory::Pawn) {
             view.faction = fighters_->factionOf(entity);
         }
