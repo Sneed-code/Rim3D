@@ -2,6 +2,10 @@
 
 Updated 2026-10-26.
 
+Art stage V1 done: every humanlike pawn now has a seeded face (face shape, brow, nose and jaw sliders, eye colour), one of 14 hair styles, a beard (men only; Emberkin are beardless), a body hair amount (Frostkin furry), and 0 to 3 tattoos for about one pawn in five; a healed injury that leaves a scar on the skin adds a scar mark on that body region (Slash, Claw, Burn, Puncture, Ragged, Stitched by injury). It is in the snapshot, the state hash and saves (`looks` 2) and the numbers are in `LooksRules` (`docs/design/looks.md`, tests `LooksTests`). Sim only; V2 and V3 draw it.
+
+
+
 Stage 2 art done: sculptures (small, large and grand, in `Art.json`) are planned like buildings and built by colonists with the Art work type and the Artistic skill, which learns from it; the finished piece rolls a quality from the artist's skill (awful to legendary) and its beauty and value scale by it (-0.1 up to 8 times beauty, 0.5 up to 5 times value) from the wiki's 50, 100 and 400, so a sculpture lifts a room's beauty, wealth and impressiveness. Stone stuffs got the wiki's work factors and marble's 1.35 beauty plus 0.5 (`docs/design/art.md`, tests `ArtTests`). Sim only. The room stats, beauty need and their mood thoughts were already in since C17.
 
 Stage 2 S9 done: a sim step on the Stage 2 colony costs 0.66 ms, down from 0.96 (`simrun --perf`, `docs/design/sim-cost.md`, budget in `docs/decisions/0006-sim-cost-budget.md`, nightly).
