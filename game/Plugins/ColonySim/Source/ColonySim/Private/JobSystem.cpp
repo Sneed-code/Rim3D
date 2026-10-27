@@ -83,7 +83,8 @@ enum class JobStepKind : uint8_t {
     OperatePickUp,
     OperateDeposit,
     OperateWork,
-    OperateFinish
+    OperateFinish,
+    PartyWork       // stand at the party spot until it ends, gaining joy (PartyJobs.cpp)
 };
 
 constexpr JobStepKind kJobsWaitSteps[] = {JobStepKind::Wait};
@@ -131,6 +132,7 @@ constexpr JobStepKind kJobsChatSteps[] = {JobStepKind::ApproachPrisoner, JobStep
 constexpr JobStepKind kJobsRefuelSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::CarryToCell,
                                             JobStepKind::RefuelWork};
 static_assert(kRefuelPickUpStep == 1, "the Refuel steps moved");
+constexpr JobStepKind kJobsPartySteps[] = {JobStepKind::WalkToSpot, JobStepKind::PartyWork};
 constexpr JobStepKind kJobsHuntSteps[] = {JobStepKind::HuntWork};
 constexpr JobStepKind kJobsHaulCorpseSteps[] = {JobStepKind::TendGotoPatient, JobStepKind::LiftPawn, JobStepKind::CarryPawn,
                                                 JobStepKind::DropCorpse};
@@ -196,6 +198,7 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::Hunt: return {kJobsHuntSteps, static_cast<int>(std::size(kJobsHuntSteps))};
         case JobType::HaulCorpse: return {kJobsHaulCorpseSteps, static_cast<int>(std::size(kJobsHaulCorpseSteps))};
         case JobType::Butcher: return {kJobsButcherSteps, static_cast<int>(std::size(kJobsButcherSteps))};
+        case JobType::Party: return {kJobsPartySteps, static_cast<int>(std::size(kJobsPartySteps))};
         case JobType::SeekShelter: return {kJobsShelterSteps, static_cast<int>(std::size(kJobsShelterSteps))};
         case JobType::Operate: return {kJobsOperateSteps, static_cast<int>(std::size(kJobsOperateSteps))};
     }
@@ -223,6 +226,7 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::ChatWork:
         case JobStepKind::RefuelWork:
         case JobStepKind::ButcherWork:
+        case JobStepKind::PartyWork:
         case JobStepKind::OperateWork:
         case JobStepKind::Eat:
         case JobStepKind::Lie:
@@ -296,6 +300,7 @@ const char* jobTypeName(JobType type) {
         case JobType::Hunt: return "Hunt";
         case JobType::HaulCorpse: return "HaulCorpse";
         case JobType::Butcher: return "Butcher";
+        case JobType::Party: return "Party";
         case JobType::SeekShelter: return "SeekShelter";
         case JobType::Operate: return "Operate";
     }
@@ -619,6 +624,7 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
             return 2;
         case JobType::None:
         case JobType::Wait:
+        case JobType::Party:  // a party spot is open ground, not reserved
         case JobType::SeekShelter:
         case JobType::ExtinguishFire:  // colonists fight a fire together: nothing is reserved
             return 0;
@@ -1116,6 +1122,9 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::Butcher) {
         return failCheckButcher(pawn, job, why);
     }
+    if (job.type == JobType::Party) {
+        return failCheckParty(pawn, job, why);
+    }
     entt::registry& reg = things_.registry();
     if (job.type == JobType::DeliverResources) {
         const ConstructionSite* site = reg.valid(job.site) ? reg.try_get<ConstructionSite>(job.site) : nullptr;
@@ -1292,6 +1301,8 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return butcherWork(pawn, job, why);
         case JobStepKind::ButcherFinish:
             return butcherFinish(pawn, job, why);
+        case JobStepKind::PartyWork:
+            return partyWork(pawn, job, why);
     }
     return StepResult::Failed;
 }
