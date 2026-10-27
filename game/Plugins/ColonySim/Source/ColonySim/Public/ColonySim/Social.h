@@ -141,6 +141,11 @@ struct COLONY_API SocialRules {
     float jealousFightChance = 0.25f;    // the betrayed one fights the new lover (not a Wimp or a Kind one)
     std::string cheatedThought;          // mood thought triggers; empty for none
     std::string weddingGuestThought, weddingPartyThought;
+    // The wedding party (ours): colonists within `partyMaxDistance` metres walk to the couple and stay `partyMinutes`,
+    // each gaining `partyJoyPerHour` of recreation.
+    float partyMinutes = 60.0f;
+    float partyJoyPerHour = 0.4f;
+    float partyMaxDistance = 80.0f;
     float fightOffset = -20.0f;          // each one's opinion of the other afterwards...
     float fightDays = 30.0f;             // ...for this long
     std::vector<SocialInteraction> interactions;
@@ -203,6 +208,7 @@ public:
         uint64_t fights = 0;
         uint64_t cheats = 0;          // romances begun by somebody who already had a partner
         uint64_t weddingGuests = 0;   // thoughts of a wedding party given to the others
+        uint64_t partyGuests = 0;     // colonists sent to a wedding party spot (the couple too)
     };
     const Stats& stats() const { return stats_; }
     Stats& stats() { return stats_; }
@@ -232,6 +238,7 @@ private:
     void learn(Entity pawn, double xp);
     void jealousy(Entity betrayed, Entity cheater, Entity newLover);
     void weddingParty(Entity a, Entity b);
+    void gatherParty(Entity a, Entity b, const std::vector<Entity>& pawns);
     float skillFactor(Entity pawn, float perLevel) const;
     void startFight(Entity a, Entity b);
     void endFight(Entity a, Entity b, const char* why);

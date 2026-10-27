@@ -1,6 +1,6 @@
 [
   {
-    "defName": "Human", "source": "RimWorld wiki", "label": "human", "category": "Pawn",
+    "defName": "Human", "visual": {"sound": {"hurt": "Pawn_Hurt", "death": "Pawn_Death", "downed": "Pawn_Downed", "burning": "Pawn_Burning"}}, "source": "RimWorld wiki", "label": "human", "category": "Pawn",
     "stats": {
       "moveSpeed": 0.153333, "marketValue": 1750, "mass": 60, "carryingCapacity": 75,
       "comfyTemperatureMin": 16, "comfyTemperatureMax": 26, "filthRate": 1

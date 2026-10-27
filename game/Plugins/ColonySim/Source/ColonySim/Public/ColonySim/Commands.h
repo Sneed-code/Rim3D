@@ -7,6 +7,7 @@
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Trade.h"
 #include "ColonySim/WeaponSlot.h"
 #include "ColonySim/Zones.h"
 
@@ -375,6 +376,15 @@ struct StartRaidCommand {
     int edge = -1;
 };
 
+// Chitinid and Remnant threats (docs/design/monsters.md). `kind` is "Infestation" (brood mounds grow
+// near the colony and their insects hunt) or "RemnantCluster" (mechanoids walk in at `edge`, as for
+// StartRaidCommand), worth `points` (0: what the colony is worth now).
+struct StartThreatCommand {
+    std::string kind = "Infestation";
+    float points = 0.0f;
+    int edge = -1;
+};
+
 // The colony alarm: on calls every colonist to its defense role, off sends them back to work. It
 // also sounds by itself when a colonist spots an enemy, and stops when the enemies are gone or
 // fleeing; one the player sounded stays on until the player stops it. Fails if it already is.
@@ -553,6 +563,59 @@ struct SetPrisonBedCommand {
     bool on = true;
 };
 
+// Trade (task C23, docs/design/trade.md). StartVisitCommand: visitors, a trade caravan or an orbital trader of `faction` (a Factions
+// defName) come; `kind` is Visitors, Caravan or Orbital (visitKindName), `traderKind` a TraderKinds defName (empty: one of the
+// faction's), `edge` 0 north, 1 east, 2 south, 3 west, -1 any. T1's incidents do the same through TradeSystem::startVisit. Fails for
+// a faction that can't do that, is hostile, or has no way in.
+struct StartVisitCommand {
+    std::string faction;
+    std::string kind = "Visitors";
+    std::string traderKind;
+    int edge = -1;
+};
+
+// The colony trades with a visit's trader: it buys the `buy` lines from the trader's stock and sells the `sell` lines from what lies
+// on the map, the difference paid in silver items; `negotiator` (a colonist) sets the prices by Social skill and talents. All or
+// nothing; fails with the reason in plain words.
+struct TradeCommand {
+    uint32_t visit = 0;
+    Entity negotiator = kNoEntity;
+    std::vector<TradeLine> buy;
+    std::vector<TradeLine> sell;
+};
+
+// The colony gives a visit's faction a gift: the `items` are taken from what lies on the map and the faction's goodwill rises by
+// their market value over `giftSilverPerPoint` (FactionRules). A caravan's trader or a ship adds the goods to its stock. Works on any
+// visit that is still here, hostile faction or not. Fails with the reason in plain words.
+struct GiftCommand {
+    uint32_t visit = 0;
+    std::vector<TradeLine> items;
+};
+
+// Dev command: changes a faction's goodwill by `delta` (within -100 to 100).
+struct AdjustGoodwillCommand {
+    std::string faction;
+    float delta = 0.0f;
+};
+
+// Dev command (task H2, docs/design/diseases.md): the pawn catches a disease (a Hediffs def of class Disease, by
+// defName) at `severity` (below 0: the def's initial severity); an infection needs the wound's body part in `part`.
+// Fails for a pawn without a body, a name that is not a disease, or when the pawn already has it or is immune.
+struct ContractDiseaseCommand {
+    Entity pawn = kNoEntity;
+    std::string disease;
+    float severity = -1.0f;
+    int part = -1;
+};
+
+// The spaceship ending (docs/design/ship.md). `action` is "StartReactor" (`thing` a finished ship reactor), "Board" (`pawn` rides
+// in the ship cryptosleep casket `thing`; no pawn empties the casket) or "Launch". Fails with the reason in plain words.
+struct ShipCommand {
+    std::string action;
+    Entity thing = kNoEntity;
+    Entity pawn = kNoEntity;
+};
+
 // Dev command: the weather becomes this Weathers def now (by defName, e.g. "Rain") and lasts `hours`
 // game hours (0: its usual length), then the next is chosen as usual (docs/design/weather.md).
 // Fails if no Weathers def has the name.
@@ -616,6 +679,21 @@ struct SetGrowingZoneCropCommand {
     std::string crop;
 };
 
+// Picks the narrator (a Narrators defName: "Orrin", "Maren", "Jinx"; "" turns the narrator off) and
+// the difficulty (a Difficulties defName; "" keeps it). The narrator is off until this is sent: the
+// game sends it at the start (docs/design/narrator.md). Fails for an unknown name.
+struct SetNarratorCommand {
+    std::string narrator = "Orrin";
+    std::string difficulty;
+};
+
+// A dev command: makes an incident (an Incidents defName, like "RaidEnemy") happen now, whatever its
+// timing, with `points` threat points (0: the colony's). Fails if it is unknown or can't happen now.
+struct FireIncidentCommand {
+    std::string incident;
+    float points = 0.0f;
+};
+
 // Fire (task E4, docs/design/fire.md). Dev command: starts a fire of `size` (the start size if 0) in a cell, or sets `pawn`
 // alight if it names one. Fails if nothing could burn: no fuel, wet ground, water or rock, a fire already there, a pawn
 // that is dead or fire-resistant. `force` lights even a cell with nothing to burn (it dies away in a moment).
@@ -641,6 +719,34 @@ struct SetHomeAreaCommand {
 struct PlaceUpperFloorCommand {
     CellRect area;
     bool remove = false;
+};
+
+// Drugs (docs/design/drugs.md): the pawn goes and takes this drug now (an item on the map). Fails for a pawn that
+// can't take drugs, an item that is no drug or can't be reached.
+struct TakeDrugCommand {
+    Entity pawn = kNoEntity;
+    Entity thing = kNoEntity;
+};
+
+// Gives a colonist a drug policy, a DrugPolicies defName (NoDrugs, Social, OneDrinkPerDay, Unrestricted...), and
+// clears the changes it had made to its old one.
+struct SetDrugPolicyCommand {
+    Entity pawn = kNoEntity;
+    std::string policy;
+};
+
+// Changes one drug in a colonist's own policy: `drug` is a Things defName; the three boxes (for addiction, for
+// recreation, scheduled) and the schedule's frequency in days and the mood and recreation limits (0 to 1; above 1
+// means no limit).
+struct SetDrugPolicyEntryCommand {
+    Entity pawn = kNoEntity;
+    std::string drug;
+    bool forAddiction = true;
+    bool forJoy = false;
+    bool scheduled = false;
+    float daysFrequency = 1.0f;
+    float moodBelow = 1.01f;
+    float joyBelow = 1.01f;
 };
 
 // Fuel (task C11, docs/design/fuel.md): whether colonists refuel the building by themselves when it
@@ -690,6 +796,42 @@ struct EndMentalBreakCommand {
     Entity pawn = kNoEntity;
 };
 
+// Quests (task Q1, docs/design/quests.md). `action` is "offer" (a dev command and the narrator's hook: `kind` is a Quests defName, or
+// empty for one chosen by weight), "accept" or "decline" (`quest` is the quest's number). Fails if the action is not one of those, there
+// is no such open offer, or it can't be carried out (too many under way, nobody could reach the colony, no room for the goods).
+struct QuestCommand {
+    std::string action;
+    uint32_t quest = 0;
+    std::string kind;
+};
+
+// A raid with a strategy (F12, docs/design/raid-strategies.md), the narrator's way to send one. `strategy` is
+// "Assault", "Sappers", "DropPods", "Thieves", "Kidnappers", or "Auto" to pick by the rules' weights; `hour` 0 to
+// 23.99 holds the raid until that hour of the day (a night attack), -1 sends it now. Fails like StartRaid, and for
+// a strategy with nothing to go for (thieves with no loose items, kidnappers with no colonist).
+struct StartStrategyRaidCommand {
+    std::string faction = "Pirate";
+    float points = 0.0f;
+    int edge = -1;
+    std::string strategy = "Auto";
+    float hour = -1.0f;
+};
+
+// Surgery (task H3, docs/design/surgery.md): plans an operation on a patient. `recipe` is a Recipes defName with a `surgery`
+// block (AmputateLimb, RemoveBodyPart, InstallPegLeg...), `part` the body part's index in the patient's Bodies def. Fails if the
+// operation can't be done on that part, is planned already, or isn't researched.
+struct AddOperationCommand {
+    Entity pawn = kNoEntity;
+    std::string recipe;
+    int part = 0;
+};
+
+// Takes a planned operation off the patient.
+struct RemoveOperationCommand {
+    Entity pawn = kNoEntity;
+    uint32_t operation = 0;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -701,7 +843,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ReloadCommand, AddBillCommand,
                              RemoveBillCommand, SetBillCommand, HandsOnCommand, FlickCommand, ShortCircuitCommand,
                              PlaceFloorCommand, AddFilthCommand,
-                             SetResearchCommand, UnlockResearchCommand, StartRaidCommand, SoundAlarmCommand,
+                             SetResearchCommand, UnlockResearchCommand, StartRaidCommand, StartThreatCommand, SoundAlarmCommand,
                              SetDefenseRoleCommand, MarkShelterCommand, ThrowCommand, ExplodeCommand,
                              MeleeCommand, DodgeRollCommand,
                              SetOutfitCommand, EditOutfitCommand, AddOutfitCommand, RemoveOutfitCommand,
@@ -713,7 +855,12 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              RemoveGrowingZoneCellsCommand, SetGrowingZoneCropCommand, IgniteCommand,
                              SetHomeAreaCommand, SetMedicalCareCommand, InteractCommand, SetPrisonerModeCommand,
                              SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
-                             MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand>;
+                             MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand,
+                             SetNarratorCommand, FireIncidentCommand, ContractDiseaseCommand, StartStrategyRaidCommand,
+                             ShipCommand, QuestCommand,
+                             AddOperationCommand, RemoveOperationCommand,
+                             TakeDrugCommand, SetDrugPolicyCommand, SetDrugPolicyEntryCommand,
+                             StartVisitCommand, TradeCommand, AdjustGoodwillCommand, GiftCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

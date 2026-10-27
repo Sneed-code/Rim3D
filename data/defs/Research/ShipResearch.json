@@ -1,0 +1,98 @@
+[
+ {
+  "defName": "StarflightBasics",
+  "label": "starflight basics",
+  "techLevel": "Spacer",
+  "baseCost": 4000,
+  "prerequisites": [
+   "Fabrication"
+  ],
+  "benchTier": 2,
+  "unlocks": {
+   "Things": [
+    "ShipStructuralBeam",
+    "ShipSensorCluster"
+   ]
+  },
+  "unverified": [
+   "baseCost",
+   "prerequisites"
+  ]
+ },
+ {
+  "defName": "ShipCryptosleep",
+  "label": "ship cryptosleep",
+  "techLevel": "Spacer",
+  "baseCost": 2000,
+  "prerequisites": [
+   "StarflightBasics"
+  ],
+  "benchTier": 2,
+  "unlocks": {
+   "Things": [
+    "ShipCryptosleepCasket"
+   ]
+  },
+  "unverified": [
+   "baseCost",
+   "prerequisites"
+  ]
+ },
+ {
+  "defName": "StarshipReactor",
+  "label": "starship reactor",
+  "techLevel": "Spacer",
+  "baseCost": 5000,
+  "prerequisites": [
+   "StarflightBasics"
+  ],
+  "benchTier": 2,
+  "unlocks": {
+   "Things": [
+    "ShipReactor"
+   ]
+  },
+  "unverified": [
+   "baseCost",
+   "prerequisites"
+  ]
+ },
+ {
+  "defName": "ShipDrive",
+  "label": "ship drive",
+  "techLevel": "Spacer",
+  "baseCost": 5000,
+  "prerequisites": [
+   "StarflightBasics"
+  ],
+  "benchTier": 2,
+  "unlocks": {
+   "Things": [
+    "ShipEngine"
+   ]
+  },
+  "unverified": [
+   "baseCost",
+   "prerequisites"
+  ]
+ },
+ {
+  "defName": "SleeperPersuasion",
+  "label": "Sleeper persuasion",
+  "techLevel": "Spacer",
+  "baseCost": 3000,
+  "prerequisites": [
+   "Fabrication"
+  ],
+  "benchTier": 2,
+  "unlocks": {
+   "Things": [
+    "ShipComputerCore"
+   ]
+  },
+  "unverified": [
+   "baseCost",
+   "prerequisites"
+  ]
+ }
+]

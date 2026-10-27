@@ -392,6 +392,21 @@ JobSystem::StepResult JobSystem::butcherFinish(Entity pawn, Job& job, std::strin
         return StepResult::Failed;
     }
     const Entity corpse = job.thing;
+    if (recipe->cremate) {
+        // Ash: no meat, no leather, no butcher's memory.
+        things_.destroy(corpse);
+        const bool burntLast = bills_->iterationDone(job.site, job.bill);
+        Event burnt;
+        burnt.type = EventType::RecipeDone;
+        burnt.thing = pawn;
+        burnt.def = recipe->def;
+        burnt.target = job.site;
+        burnt.cell = job.cell;
+        burnt.amount = 1.0f;
+        burnt.message = burntLast ? "bill finished" : std::string();
+        events_.push_back(std::move(burnt));
+        return StepResult::Next;
+    }
     const DefId animalDef = reg.get<Thing>(corpse).def;
     const Husbandry::ButcherYield yield = husbandry_->butcherYield(corpse, butcherEfficiency(pawn));
     // The corpse is gone for good; the meat and leather lie by the pawn, where haulers find them.
