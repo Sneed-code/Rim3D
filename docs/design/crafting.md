@@ -23,6 +23,8 @@ A building def names the work giver that offers its bills with `workGiver`. The 
 | `DoBillsTailor` | Tailoring | hand tailor bench, electric tailor bench | clothes |
 | `DoBillsCraftingSpot` | Crafting | crafting spot | prosthetics (wood), knife, club, spear |
 | `DoBillsStonecut` | Crafting | stonecutter's table | stone blocks from chunks |
+| `DoBillsSmelt` | Crafting | electric smelter (Electricity, 170 steel, 2 components, 700 W) | smelt or destroy weapons and clothes |
+| `DoBillsCremate` | Hauling | electric crematorium (Electricity, 150 stone, 20 steel, 2 components, 200 W) | cremate corpses, burn weapons and clothes |
 
 A recipe lists the buildings that can make it (`recipeUsers`); the cooking recipes now include the electric stove.
 A new bench needs only its `workGiver` and its recipes. The check `Tests/CraftingTests.cpp` fails when a
@@ -105,3 +107,16 @@ stream and the `StoreIn` marks.
 ## Fuel per run and long-lasting foods
 
 A stove burns `fuel.perUse` wood per product, unless the recipe has `fuelUses`: then the run burns that many uses. `MakeKibble` (50 kibble), `MakePemmican` (16) and `CookMealSurvival` (1) have `fuelUses: 1`. Pemmican keeps 150 days, the packaged survival meal 60, kibble 50 (simple meal 4); rot follows `docs/design/spoilage.md`. `Pemmican` research unlocks its recipe.
+
+## Smelter and crematorium
+
+`SmeltWeapon` and `SmeltApparel` (2304 s of work, RimWorld's 1600 ticks) give back 25% of the metal in the recipe that makes the thing,
+rounded down per metal, whatever its quality or hit points. A recipe with `smelt: 0.25` does this: when the ingredient goes into the
+smelter `BillSystem::smeltYield` finds the recipe that makes it and keeps the metals (the thing's own stuff for a stuff ingredient, a
+named metal as it is); components, cloth, leather and wood are lost. An interrupted run drops the metal, not the weapon. `DestroyWeapon`,
+`DestroyApparel` (576 s) and the crematorium's `BurnWeapon`, `BurnApparel` (86 s) eat the thing and make nothing. `CremateCorpse`
+(`cremate: true`, 259 s) is the butcher's job with no meat, leather or memory: the corpse just goes. The ingredient filter now knows the
+pseudo-category `Apparel` (any item with an `apparel` block). Tests `SmeltingTests`, `HuntingTests`.
+
+Not yet: steel slag chunks (nothing leaves slag in this game), "burn drugs" (waits for the drug items), the fabrication bench's component
+recipes and gear (PR 170), the drug lab and brewery (PR 163), sculpting (PR 155).

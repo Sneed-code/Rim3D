@@ -14,6 +14,7 @@
 #include "ColonySim/Pathfinder.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/ThreatMap.h"
+#include "ColonySim/World.h"
 
 #include <cstdint>
 #include <map>
@@ -77,6 +78,26 @@ class DisasterSystem;
 struct Snapshot;
 class SimSaveAccess;
 
+// The planet the game is on (docs/design/world-map.md). Off (the default), there is no world: the map is
+// made from SimSettings::seed in the temperate forest, as before W2. On, the sim makes the world from
+// these settings and the colony's map is the start tile's: its biome, climate and map seed.
+struct WorldSettings {
+    bool enabled = false;
+    uint64_t seed = 0;   // 0: the sim's seed
+    int width = 0;       // tiles; 0 takes the WorldGen def's
+    int height = 0;
+    // The colony's tile. -1: picked when the sim is made, by the scenario's biome, and then stored
+    // here, so a save or replay always names the tile.
+    int startTile = -1;
+};
+
+// Sizes a world can have (0 takes the def's) and a start tile that is a tile or -1. Saves and replays
+// refuse other settings.
+inline bool worldSettingsValid(const WorldSettings& w) {
+    return w.width >= 0 && w.width <= 1000 && w.height >= 0 && w.height <= 500 && w.startTile >= -1 &&
+           (w.startTile < 0 || w.width == 0 || w.height == 0 || w.startTile < w.width * w.height);
+}
+
 struct SimSettings {
     uint64_t seed = 0;
     int mapSize = 512;  // cells per side
@@ -94,6 +115,7 @@ struct SimSettings {
     // Wild animals when the map is made (docs/design/animal-life.md): 0 for none, else the biome's
     // animal density in percent (100 = as the biome says). Needs the Biomes and animal defs.
     int wildAnimals = 0;
+    WorldSettings world{};  // saved in its own section, "world"
 };
 
 struct SimStats {
@@ -208,6 +230,15 @@ public:
     // The plant layer: wild plants from map generation, growing hourly (docs/design/plants.md).
     Plants& plants() { return *plants_; }
     const Plants& plants() const { return *plants_; }
+
+    // The world map, or null when SimSettings::world is off (docs/design/world-map.md). It does not
+    // change in play: made from its settings when the sim is made and again when a save loads.
+    const World* world() const { return world_.get(); }
+    // What the world says about the colony's tile (biome, hills, river, road, climate, map seed),
+    // or null without a world. The map generator (S8) and other maps (W5) read it.
+    const WorldSite* site() const { return site_ ? &*site_ : nullptr; }
+    // The biome the plants, animals and weather use: the start tile's, or the temperate forest.
+    const std::string& biome() const { return biome_; }
 
     // Seasons, outdoor temperature, weather and snow (docs/design/weather.md).
     Weather& weather() { return *weather_; }
@@ -359,6 +390,11 @@ private:
 
     SimSettings settings_;
     std::shared_ptr<const DefDatabase> defs_;
+    // The world, its start tile's site and the biome come before the map: the map's seed is the site's.
+    std::unique_ptr<World> world_;
+    uint64_t worldHash_ = 0;
+    std::optional<WorldSite> site_;
+    std::string biome_;
     Map map_;
     Pathfinder pathfinder_;
     std::unique_ptr<Zones> zones_;
