@@ -74,6 +74,6 @@ the half-done pick. Commands 20 and 21. See `saves.md`.
 ## Not yet
 
 - Mining away roofs and the collapse of unsupported ones (C5 adds roofs).
-- Deep ore (ground-penetrating scanner), wall stones for building (blocks), stone cutting.
+- Deep ore is in [deep-mining.md](deep-mining.md). Stone blocks are cut at the stonecutter's table from chunks (crafting.md).
 - Pawns choosing a cheaper cell to mine from; the nearest reachable cell is used.
 - Hauling the dropped chunks happens through the normal hauling job once a stockpile exists.

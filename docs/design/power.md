@@ -26,6 +26,7 @@ def's numbers are read once per def (`PowerGrid::info`):
 | `power.switchable` | a switch: open means it joins nothing |
 | `power.output` | watts a generator makes |
 | `power.scalesWithSun` | output follows the sun and the share of the footprint with no roof |
+| `power.needsGeyser` | output only while a steam geyser (`Map::geyser`) lies under the footprint: the geothermal generator, 3600 W |
 | `power.scalesWithWind`, `windBlockRadius` | output follows the wind and how clear the air is at both ends |
 | `fuel` (on a generator) | needs fuel; see the hooks below |
 | `power.consumption` | watts a consumer draws while on |
@@ -107,7 +108,16 @@ campfire) shine while they have fuel ([fuel.md](fuel.md)).
   and watts are made again on loading. Saves from before the section load with every power building
   on and unpowered until the first step. All four are in the state hash.
 
+## Generators and consumers (checked against RimWorld, task: power audit)
+
+Wood-fired 1000 W (63 wood a day), chemfuel 1000 W (75 capacity, 4.5 a day, unverified), solar 1700 W, wind
+1700 W (blocked by obstacles), geothermal 3600 W (needs a geyser). Battery 1000 Wd, half kept. The electric
+stove (350 W), smithy (210), machining table (250) and hi-tech research bench (250) draw power and do nothing
+without it. Geysers are set with `Map::setGeyser`; S8 map generation places them and they are not saved.
+
 ## Not here
+
+Watermill (needs flowing rivers, S8), chemfuel making (refinery, drums), the electric tailor bench's draw (crafting.md),
 
 Fuel use (C11), the wind source (E1), heaters and coolers pushing room temperature (E2),
 the short-circuit event itself (T3), the overlay and power panel

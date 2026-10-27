@@ -8,6 +8,7 @@
 #include "ColonySim/Crafting.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Defense.h"
+#include "ColonySim/DeepResources.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Farming.h"
@@ -24,6 +25,7 @@
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Regions.h"
+#include "ColonySim/Repair.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Things.h"
@@ -674,6 +676,49 @@ public:
     }
 };
 
+// Scanners and drills (docs/design/deep-mining.md): a ground-penetrating scanner is worked in the Research work type
+// (RimWorld: Intellectual), a deep drill in Mining. The pawn sits at a cell beside the machine, with nobody else at it.
+class DeepWorkGiver final : public WorkGiver {
+public:
+    DeepWorkGiver(const char* task, DeepWorkKind kind) : task_(task), kind_(kind) {}
+    const char* task() const override { return task_; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        if (jobs.deepResources() == nullptr) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        if (kind_ == DeepWorkKind::Drill && !jobs.canUseHands(pawn)) {
+            return;
+        }
+        reg.view<const Thing, const Footprint, const Position>().each(
+            [&](Entity machine, const Thing&, const Footprint& footprint, const Position& pos) {
+                std::string why;
+                if (pos.level != at.level || jobs.deepKindOf(machine) != kind_ || !jobs.deepWorkable(machine, why)) {
+                    return;
+                }
+                CellPos stand;
+                if (!jobs.construction().workCell(footprint.rect(), cellOf(at), stand)) {
+                    return;
+                }
+                out.push_back(WorkCandidate{JobTarget{machine, CellPos{}}, workGiverDistSq(at, pos), 0, 0, true, stand});
+            });
+    }
+
+    bool makeJob(JobSystem&, Entity, const WorkCandidate& candidate, Job& out) override {
+        out = Job{};
+        out.type = JobType::DeepWork;
+        out.site = candidate.target.thing;
+        out.cell = candidate.reach;
+        return true;
+    }
+
+private:
+    const char* task_;
+    DeepWorkKind kind_;
+};
+
 // Medicine (task H1, docs/design/medicine.md). RimWorld's doctor tasks: tend whoever needs it (the bleeding first),
 // carry the downed to a bed; and the patient's own: go to a medical bed, rest in any bed.
 
@@ -1023,6 +1068,120 @@ public:
     }
 };
 
+// Repairs and upgrades (task P4, docs/design/repair.md): a bench that repairs this giver's kind of gear (Weapons under
+// Smithing, Apparel under Tailoring) gets the nearest marked piece of gear, or gun with a part ordered, that the
+// pawn is skilled enough for and whose material (or part) lies near the bench; the gear is carried to a cell
+// beside the bench. One worker at a time per bench.
+class RepairGearGiver final : public WorkGiver {
+public:
+    RepairGearGiver(const char* task, const char* kind) : task_(task), kind_(kind) {}
+
+    const char* task() const override { return task_; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        const RepairSystem* repair = jobs.repair();
+        const entt::registry& reg = jobs.things().registry();
+        if (repair == nullptr || !jobs.canUseHands(pawn)) {
+            return;
+        }
+        const auto marks = reg.view<const RepairMark>();
+        const auto orders = reg.view<const FitOrder>();
+        if (marks.begin() == marks.end() && orders.begin() == orders.end()) {
+            return;
+        }
+        const Position& at = reg.get<Position>(pawn);
+        reg.view<const Thing, const Footprint, const Position>().each(
+            [&](Entity bench, const Thing& thing, const Footprint& footprint, const Position& pos) {
+                if (pos.level != at.level || !repair->benchRepairs(thing.def, kind_) || reg.all_of<ConstructionSite>(bench) ||
+                    reg.all_of<MarkedForDeconstruct>(bench) || !jobs.buildingRuns(bench) ||
+                    jobs.deliveryReservedByOther(bench, pawn)) {
+                    return;
+                }
+                CellPos stand;
+                if (!jobs.construction().workCell(footprint.rect(), cellOf(at), stand)) {
+                    return;
+                }
+                out.push_back(WorkCandidate{JobTarget{bench, CellPos{}}, workGiverDistSq(at, pos), 0, 0, true, stand});
+            });
+    }
+
+    bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
+        const RepairSystem* repair = jobs.repair();
+        const entt::registry& reg = jobs.things().registry();
+        const Entity bench = candidate.target.thing;
+        if (repair == nullptr || jobs.deliveryReservedByOther(bench, pawn)) {
+            return false;
+        }
+        const Position& benchPos = reg.get<Position>(bench);
+        const CellPos benchCell = cellOf(benchPos);
+        const bool fits = repair->benchFits(reg.get<Thing>(bench).def);
+        const Position& at = reg.get<Position>(pawn);
+        const CellPos from = cellOf(at);
+        const int skill = jobs.bills().skillLevel(pawn, repair->numbers().skill);
+        Entity best = kNoEntity;
+        float bestDist = 0.0f;
+        uint32_t bestBill = 0;
+        const auto consider = [&](Entity item, const Thing& thing, const Position& pos) {
+            if (pos.level != at.level || repair->kindOf(thing.def) != kind_) {
+                return;
+            }
+            uint32_t bill = 0;
+            bool ok = false;
+            if (reg.all_of<RepairMark>(item) && skill >= repair->repairMinSkill()) {
+                const RepairCost cost = repair->costOf(item);
+                ok = cost.count > 0 && repair->stockNear(cost.material, benchCell, benchPos.level) >= cost.count;
+            }
+            if (!ok && fits) {
+                if (const FitOrder* order = reg.try_get<FitOrder>(item)) {
+                    const UpgradeSpec* spec = repair->upgrade(order->part);
+                    if (spec != nullptr && skill >= spec->minSkill && repair->fitBlocker(item, order->part).empty() &&
+                        repair->stockNear(order->part, benchCell, benchPos.level) >= 1) {
+                        ok = true;
+                        bill = order->part.value + 1;
+                    }
+                }
+            }
+            if (!ok) {
+                return;
+            }
+            const float dist = workGiverDistSq(at, pos);
+            if (best != kNoEntity && (dist > bestDist || (dist == bestDist && item > best))) {
+                return;
+            }
+            const JobTarget target{item, CellPos{}};
+            if (jobs.reservedByOther(target, pawn) || jobs.avoiding(pawn, target) || !jobs.canReach(from, cellOf(pos))) {
+                return;
+            }
+            best = item;
+            bestDist = dist;
+            bestBill = bill;
+        };
+        reg.view<const Thing, const Position, const RepairMark>().each(
+            [&](Entity item, const Thing& thing, const Position& pos) { consider(item, thing, pos); });
+        reg.view<const Thing, const Position, const FitOrder>().each(
+            [&](Entity item, const Thing& thing, const Position& pos, const FitOrder&) {
+                if (!reg.all_of<RepairMark>(item)) {
+                    consider(item, thing, pos);
+                }
+            });
+        if (best == kNoEntity) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::RepairGear;
+        out.thing = best;
+        out.site = bench;
+        out.cell = candidate.reach;
+        out.count = 1;
+        out.bill = bestBill;
+        return true;
+    }
+
+private:
+    const char* task_;
+    const char* kind_;
+};
+
 // Rearming (RimWorld's WorkGiver_RearmTraps, in Construction): every sprung trap that can be used again, nearest first.
 // One colonist per trap.
 class RearmTrapsGiver final : public WorkGiver {
@@ -1096,6 +1255,8 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
         givers.push_back(std::make_unique<DoBillsGiver>(task));
     }
     givers.push_back(std::make_unique<ResearchGiver>());
+    givers.push_back(std::make_unique<DeepWorkGiver>("ScanDeep", DeepWorkKind::Scan));
+    givers.push_back(std::make_unique<DeepWorkGiver>("DrillDeep", DeepWorkKind::Drill));
     givers.push_back(std::make_unique<CleanFilthGiver>());
     givers.push_back(std::make_unique<TendPatientsGiver>());
     givers.push_back(std::make_unique<RescueGiver>());
@@ -1109,6 +1270,8 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     addHuntWorkGivers(givers);
     addPrisonerWorkGivers(givers);
     givers.push_back(std::make_unique<RefuelGiver>());
+    givers.push_back(std::make_unique<RepairGearGiver>("RepairWeapons", "Weapons"));
+    givers.push_back(std::make_unique<RepairGearGiver>("RepairApparel", "Apparel"));
     return givers;
 }
 

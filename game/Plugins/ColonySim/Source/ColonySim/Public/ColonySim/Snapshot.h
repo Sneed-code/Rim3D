@@ -229,6 +229,13 @@ struct ThingView {
     uint32_t apparelCount = 0;
     int quality = -1;
     bool tainted = false;
+    // Repair and upgrades (docs/design/repair.md). Apparel and weapons on the map: whether a colonist is to repair them.
+    // Guns: the part ordered fitted (invalid for none) and the parts already fitted, `fittedCount` of them from
+    // Snapshot::fittedParts[firstFitted], in the order fitted.
+    bool repairMarked = false;
+    DefId fitOrder;
+    uint32_t firstFitted = 0;
+    uint32_t fittedCount = 0;
     // Resonance (docs/design/resonance.md). Pawns: steps left of a stun (0: not stunned), whether a numb or burden
     // is on them, and for a pawn winding up a power, the Powers def and the steps until it goes off.
     int stunnedFor = 0;
@@ -444,6 +451,13 @@ struct DesignationView {
     DesignationKind kind = DesignationKind::None;
 };
 
+// One cell of deep resources a scanner found (docs/design/deep-mining.md).
+struct DeepCellView {
+    CellPos cell;
+    DefId def;       // the item under it
+    int units = 0;
+};
+
 // One research project and where it stands (docs/design/research.md).
 struct ResearchView {
     DefId project;          // a Research def
@@ -561,6 +575,9 @@ struct Snapshot {
     uint64_t fireChanges = ~0ULL;
     std::vector<CellPos> burnt;
     uint64_t burntChanges = ~0ULL;
+    // Deep resources found by scanners, in cell order; rewritten when `deepChanges` moves (drills take units out).
+    std::vector<DeepCellView> deepResources;
+    uint64_t deepChanges = ~0ULL;
     std::vector<CellPos> homeArea;
     uint64_t homeChanges = ~0ULL;
     // The colony alarm (docs/design/raids.md): on, and whether the player sounded it (only the
@@ -572,6 +589,7 @@ struct Snapshot {
     std::vector<GoodwillView> goodwill;    // every faction's goodwill with the colony
     std::vector<QuestView> quests;         // offered, active and recently finished quests, by id
     std::vector<ApparelView> apparel;      // worn apparel, see ThingView
+    std::vector<DefId> fittedParts;        // upgrade parts fitted to guns, see ThingView
     std::vector<OutfitView> outfits;       // the outfit policies, by id
     WeatherView weather;
     std::vector<AttunedView> attuned;      // see AttunedView
