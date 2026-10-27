@@ -685,6 +685,34 @@ struct PlaceUpperFloorCommand {
     bool remove = false;
 };
 
+// Drugs (docs/design/drugs.md): the pawn goes and takes this drug now (an item on the map). Fails for a pawn that
+// can't take drugs, an item that is no drug or can't be reached.
+struct TakeDrugCommand {
+    Entity pawn = kNoEntity;
+    Entity thing = kNoEntity;
+};
+
+// Gives a colonist a drug policy, a DrugPolicies defName (NoDrugs, Social, OneDrinkPerDay, Unrestricted...), and
+// clears the changes it had made to its old one.
+struct SetDrugPolicyCommand {
+    Entity pawn = kNoEntity;
+    std::string policy;
+};
+
+// Changes one drug in a colonist's own policy: `drug` is a Things defName; the three boxes (for addiction, for
+// recreation, scheduled) and the schedule's frequency in days and the mood and recreation limits (0 to 1; above 1
+// means no limit).
+struct SetDrugPolicyEntryCommand {
+    Entity pawn = kNoEntity;
+    std::string drug;
+    bool forAddiction = true;
+    bool forJoy = false;
+    bool scheduled = false;
+    float daysFrequency = 1.0f;
+    float moodBelow = 1.01f;
+    float joyBelow = 1.01f;
+};
+
 // Fuel (task C11, docs/design/fuel.md): whether colonists refuel the building by themselves when it
 // is low (`autoRefuel`), and `fillNow`, an order to fill it to the top regardless. Fails if the thing
 // is not a finished building that burns fuel.
@@ -809,7 +837,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
                              MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand,
                              SetNarratorCommand, FireIncidentCommand, ContractDiseaseCommand, StartStrategyRaidCommand,
-                             ShipCommand, QuestCommand, AddOperationCommand, RemoveOperationCommand, SkipNightCommand,
+                             ShipCommand, QuestCommand, AddOperationCommand, RemoveOperationCommand,
+                             TakeDrugCommand, SetDrugPolicyCommand, SetDrugPolicyEntryCommand, SkipNightCommand,
                              FastTravelCommand, CancelSkipCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
