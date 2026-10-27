@@ -334,5 +334,5 @@ TEST_CASE("defs: medicine and disease data (D7)") {
     CHECK(hospital->number("stats.medicalTendQualityOffset") > 0.0);
     const Def* healthRules = db.find("Rules", "HealthRules");
     CHECK(healthRules->number("restHealBonusPerDay.HospitalBed") > healthRules->number("restHealBonusPerDay.Bed"));
-    CHECK(db.find("Rules", "MedicineRules")->count("tendQualityBySkill") == 5);
+    CHECK(db.find("Rules", "MedicineRules")->count("tendQualityBySkill") == 21);
 }

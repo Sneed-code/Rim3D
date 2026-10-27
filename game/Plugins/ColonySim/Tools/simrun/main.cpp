@@ -17,6 +17,7 @@
 //                                     exit 1 if a check fails, docs/design/colony-scenario.md)
 //   simrun --scenario house [--seed 42] [--days 3] [--png house.png] [--verbose]   (the two-storey house, M4: builds, sleeps and hauls
 //                                     across two levels, writes house-level0.png and house-level1.png; docs/design/house-scenario.md)
+//   simrun --world world.png [--seed 42] [--world-size 120x60] [--check]   (the world map: biomes, rivers, roads, settlements; docs/design/world-map.md)
 //   simrun --power [--days 3] [--verbose]   (the power check, E5: solar, batteries, lamps and a switch; docs/design/power.md)
 //   simrun --seed 42 --size 1024 --days 3 --animals [--animal-percent 300] --check   (wild animals, N1:
 //                                     herds by biome, a report of them, checks they stay on walkable ground)
@@ -33,6 +34,7 @@
 #include "ColonyScenario.h"
 #include "HouseScenario.h"
 #include "PowerScenario.h"
+#include "WorldMap.h"
 #include "RaidSoak.h"
 #include "ColonySim/Animals.h"
 #include "ColonySim/Breeding.h"
@@ -66,6 +68,7 @@
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
 #include "ColonySim/Weather.h"
+#include "ColonySim/World.h"
 #include "ColonySim/Zones.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -100,6 +103,9 @@ struct Options {
     bool year = false;     // --year: the colony scenario with animals and a farm, for long runs
     bool verbose = false;  // --scenario, --power: an hourly line on stderr
     bool power = false;    // --power: the power check (E5)
+    std::string worldPng;  // --world FILE: make the world map of --seed and draw it (docs/design/world-map.md)
+    int worldWidth = 0;    // --world-size WxH (0: the def's)
+    int worldHeight = 0;
     bool check = false;  // exit 1 if a job or a path search failed
     bool weather = false;  // print a line a day of the weather (E1)
     int gather = 0;      // mark rock to mine and plants to harvest this many cells round the middle
@@ -152,6 +158,10 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.start = argv[++i];
         } else if (std::strcmp(arg, "--scenario") == 0 && hasValue) {
             out.scenario = argv[++i];
+        } else if (std::strcmp(arg, "--world") == 0 && hasValue) {
+            out.worldPng = argv[++i];
+        } else if (std::strcmp(arg, "--world-size") == 0 && hasValue) {
+            std::sscanf(argv[++i], "%dx%d", &out.worldWidth, &out.worldHeight);
         } else if (std::strcmp(arg, "--power") == 0) {
             out.power = true;
         } else if (std::strcmp(arg, "--verbose") == 0) {
@@ -213,7 +223,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
                          "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--scenario colony [--verbose]] [--power] [--raid POINTS [--raid-strategy NAME]] [--armed] [--narrator NAME [--difficulty NAME]] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house [--verbose]] [--power] [--raid POINTS [--raid-strategy NAME]] [--armed] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house [--verbose]] [--power] [--world FILE [--world-size WxH]] [--raid POINTS [--raid-strategy NAME]] [--armed] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS]\n");
             return false;
         }
@@ -632,6 +642,11 @@ int main(int argc, char** argv) {
             return 1;
         }
         defs = std::move(loaded);
+    }
+
+    // The world map: its own thing, no colony map.
+    if (!options.worldPng.empty()) {
+        return worldmap::run(options.seed, options.worldWidth, options.worldHeight, options.worldPng == "-" ? std::string() : options.worldPng, options.check, defs);
     }
 
     // The power check (E5): its own small map and script; 3 days unless --days says.

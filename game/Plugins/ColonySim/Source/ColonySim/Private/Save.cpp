@@ -948,6 +948,163 @@ void saveCommandTail(Ar& ar, Type& c) {
         static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
     }
 }
+// Second half of the command chain, split out because MSVC stops at 127 nested else-if blocks (C1061).
+template <typename Ar, typename Type>
+void saveCommandTail(Ar& ar, Type& c) {
+    if constexpr (std::is_same_v<Type, StartRaidCommand>) {
+        ar.text("faction", c.faction);
+        ar.value("points", c.points);
+        ar.value("edge", c.edge);
+    } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
+        ar.value("on", c.on);
+    } else if constexpr (std::is_same_v<Type, SetDefenseRoleCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("role", c.role);
+        ar.value("hasSpot", c.hasSpot);
+        ar.group("spot", [&] { saveCell(ar, c.spot); });
+    } else if constexpr (std::is_same_v<Type, MarkShelterCommand>) {
+        ar.group("cell", [&] { saveCell(ar, c.cell); });
+        ar.value("clear", c.clear);
+    } else if constexpr (std::is_same_v<Type, MarkAnimalCommand>) {
+        ar.value("animal", c.animal);
+        ar.text("mark", c.mark);
+        ar.value("on", c.on);
+    } else if constexpr (std::is_same_v<Type, MarkAnimalsInAreaCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+        ar.text("mark", c.mark);
+        ar.value("on", c.on);
+    } else if constexpr (std::is_same_v<Type, SetAnimalNameCommand>) {
+        ar.value("animal", c.animal);
+        ar.text("name", c.name);
+    } else if constexpr (std::is_same_v<Type, SetTrainingCommand>) {
+        ar.value("animal", c.animal);
+        ar.text("trainable", c.trainable);
+        ar.value("wanted", c.wanted);
+    } else if constexpr (std::is_same_v<Type, CreateAnimalZoneCommand> || std::is_same_v<Type, RemoveAnimalZoneCellsCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+    } else if constexpr (std::is_same_v<Type, AssignAnimalZoneCommand>) {
+        ar.value("animal", c.animal);
+        ar.value("zone", c.zone);
+    } else if constexpr (std::is_same_v<Type, SetBreedingCommand>) {
+        ar.value("animal", c.animal);
+        ar.value("zone", c.zone);
+        ar.value("allow", c.allow);
+    } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
+        auto* melee = &c;
+        ar.value("pawn", melee->pawn);
+        ar.value("target", melee->target);
+        ar.value("mode", melee->mode);
+        ar.require(melee->mode <= MeleeMode::Block, "the save file has a bad melee mode");
+    } else if constexpr (std::is_same_v<Type, SetOutfitCommand>) {
+        auto* setOutfit = &c;
+        ar.value("pawn", setOutfit->pawn);
+        ar.value("outfit", setOutfit->outfit);
+    } else if constexpr (std::is_same_v<Type, EditOutfitCommand>) {
+        auto* edit = &c;
+        ar.value("outfit", edit->outfit);
+        ar.list("disallowed", edit->disallowed, [&](std::string& name) { ar.text(nullptr, name); });
+        ar.value("hitPointsMin", edit->hitPointsMin);
+        ar.value("hitPointsMax", edit->hitPointsMax);
+        ar.value("qualityMin", edit->qualityMin);
+        ar.value("qualityMax", edit->qualityMax);
+    } else if constexpr (std::is_same_v<Type, AddOutfitCommand>) {
+        auto* addOutfit = &c;
+        ar.text("name", addOutfit->name);
+    } else if constexpr (std::is_same_v<Type, RemoveOutfitCommand>) {
+        auto* removeOutfit = &c;
+        ar.value("outfit", removeOutfit->outfit);
+    } else if constexpr (std::is_same_v<Type, StripCommand>) {
+        auto* strip = &c;
+        ar.value("thing", strip->thing);
+        ar.value("strip", strip->strip);
+    } else if constexpr (std::is_same_v<Type, InteractCommand>) {
+        ar.value("initiator", c.initiator);
+        ar.value("recipient", c.recipient);
+        ar.text("interaction", c.interaction);
+        ar.value("outcome", c.outcome);
+    } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("dx", c.dx);
+        ar.value("dy", c.dy);
+    } else if constexpr (std::is_same_v<Type, SetMedicalCareCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("care", c.care);
+    } else if constexpr (std::is_same_v<Type, ContractDiseaseCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("disease", c.disease);
+        ar.value("severity", c.severity);
+        ar.value("part", c.part);
+    } else if constexpr (std::is_same_v<Type, SetWeatherCommand>) {
+        auto* setWeather = &c;
+        ar.text("weather", setWeather->weather);
+        ar.value("hours", setWeather->hours);
+    } else if constexpr (std::is_same_v<Type, SpendTalentPointCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("talent", c.talent);
+    } else if constexpr (std::is_same_v<Type, AddTalentXpCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("amount", c.amount);
+    } else if constexpr (std::is_same_v<Type, RearmTrapCommand>) {
+        ar.value("trap", c.trap);
+    } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("item", c.item);
+    } else if constexpr (std::is_same_v<Type, SwitchWeaponCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("slot", c.slot);
+        ar.require(static_cast<int>(c.slot) < kWeaponSlotCount, "the save file has a bad weapon slot");
+    } else if constexpr (std::is_same_v<Type, CreateGrowingZoneCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+        ar.text("crop", c.crop);
+    } else if constexpr (std::is_same_v<Type, RemoveGrowingZoneCellsCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+    } else if constexpr (std::is_same_v<Type, SetGrowingZoneCropCommand>) {
+        ar.value("zone", c.zone);
+        ar.text("crop", c.crop);
+    } else if constexpr (std::is_same_v<Type, SetNarratorCommand>) {
+        ar.text("narrator", c.narrator);
+        ar.text("difficulty", c.difficulty);
+    } else if constexpr (std::is_same_v<Type, FireIncidentCommand>) {
+        ar.text("incident", c.incident);
+        ar.value("points", c.points);
+    } else if constexpr (std::is_same_v<Type, IgniteCommand>) {
+        ar.group("cell", [&] { saveCell(ar, c.cell); });
+        ar.value("size", c.size);
+        ar.value("pawn", c.pawn);
+        ar.value("force", c.force);
+    } else if constexpr (std::is_same_v<Type, SetHomeAreaCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+        ar.value("add", c.add);
+    } else if constexpr (std::is_same_v<Type, SetPrisonerModeCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("mode", c.mode);
+    } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
+        ar.value("bed", c.bed);
+        ar.value("on", c.on);
+    } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+        ar.value("remove", c.remove);
+    } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
+        auto* start = &c;
+        ar.value("pawn", start->pawn);
+        ar.text("breakDef", start->breakDef);
+    } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
+        auto* stop = &c;
+        ar.value("pawn", stop->pawn);
+    } else if constexpr (std::is_same_v<Type, StartStrategyRaidCommand>) {
+        ar.text("faction", c.faction);
+        ar.value("points", c.points);
+        ar.value("edge", c.edge);
+        ar.text("strategy", c.strategy);
+        ar.value("hour", c.hour);
+    } else if constexpr (std::is_same_v<Type, ShipCommand>) {
+        ar.text("action", c.action);
+        ar.value("thing", c.thing);
+        ar.value("pawn", c.pawn);
+    } else {
+        static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
+    }
+}
 
 template <typename Ar>
 void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
@@ -1223,68 +1380,6 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("damage", c.damage);
                 ar.text("damageType", c.damageType);
                 ar.value("penetration", c.penetration);
-            } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
-                ar.text("faction", c.faction);
-                ar.value("points", c.points);
-                ar.value("edge", c.edge);
-            } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
-                ar.value("on", c.on);
-            } else if constexpr (std::is_same_v<Type, SetDefenseRoleCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.value("role", c.role);
-                ar.value("hasSpot", c.hasSpot);
-                ar.group("spot", [&] { saveCell(ar, c.spot); });
-            } else if constexpr (std::is_same_v<Type, MarkShelterCommand>) {
-                ar.group("cell", [&] { saveCell(ar, c.cell); });
-                ar.value("clear", c.clear);
-            } else if constexpr (std::is_same_v<Type, MarkAnimalCommand>) {
-                ar.value("animal", c.animal);
-                ar.text("mark", c.mark);
-                ar.value("on", c.on);
-            } else if constexpr (std::is_same_v<Type, MarkAnimalsInAreaCommand>) {
-                ar.group("area", [&] { saveRect(ar, c.area); });
-                ar.text("mark", c.mark);
-                ar.value("on", c.on);
-            } else if constexpr (std::is_same_v<Type, SetAnimalNameCommand>) {
-                ar.value("animal", c.animal);
-                ar.text("name", c.name);
-            } else if constexpr (std::is_same_v<Type, SetTrainingCommand>) {
-                ar.value("animal", c.animal);
-                ar.text("trainable", c.trainable);
-                ar.value("wanted", c.wanted);
-            } else if constexpr (std::is_same_v<Type, CreateAnimalZoneCommand> || std::is_same_v<Type, RemoveAnimalZoneCellsCommand>) {
-                ar.group("area", [&] { saveRect(ar, c.area); });
-            } else if constexpr (std::is_same_v<Type, AssignAnimalZoneCommand>) {
-                ar.value("animal", c.animal);
-                ar.value("zone", c.zone);
-            } else if constexpr (std::is_same_v<Type, SetBreedingCommand>) {
-                ar.value("animal", c.animal);
-                ar.value("zone", c.zone);
-                ar.value("allow", c.allow);
-            } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
-                auto* melee = &c;
-                ar.value("pawn", melee->pawn);
-                ar.value("target", melee->target);
-                ar.value("mode", melee->mode);
-                ar.require(melee->mode <= MeleeMode::Block, "the save file has a bad melee mode");
-            } else if constexpr (std::is_same_v<Type, SetOutfitCommand>) {
-                auto* setOutfit = &c;
-                ar.value("pawn", setOutfit->pawn);
-                ar.value("outfit", setOutfit->outfit);
-            } else if constexpr (std::is_same_v<Type, EditOutfitCommand>) {
-                auto* edit = &c;
-                ar.value("outfit", edit->outfit);
-                ar.list("disallowed", edit->disallowed, [&](std::string& name) { ar.text(nullptr, name); });
-                ar.value("hitPointsMin", edit->hitPointsMin);
-                ar.value("hitPointsMax", edit->hitPointsMax);
-                ar.value("qualityMin", edit->qualityMin);
-                ar.value("qualityMax", edit->qualityMax);
-            } else if constexpr (std::is_same_v<Type, AddOutfitCommand>) {
-                auto* addOutfit = &c;
-                ar.text("name", addOutfit->name);
-            } else if constexpr (std::is_same_v<Type, RemoveOutfitCommand>) {
-                auto* removeOutfit = &c;
-                ar.value("outfit", removeOutfit->outfit);
             } else {
                 saveCommandTail(ar, c);
             }
@@ -2427,6 +2522,14 @@ void saveRaids(Ar& ar, RaidState& r) {
     ar.value("hasShelter", r.hasShelter);
     ar.group("shelter", [&] { saveCell(ar, r.shelter); });
     ar.value("nextAlarmThink", r.nextAlarmThink);
+    if (ar.sectionVersion() >= 2) {
+        ar.value("adaptDays", r.adaptDays);
+        ar.value("nextAdaptGrowth", r.nextAdaptGrowth);
+        ar.list("adaptPawns", r.adaptPawns, [&](RaidState::AdaptPawn& p) {
+            ar.value("pawn", p.pawn);
+            ar.value("downed", p.downed);
+        });
+    }
 }
 
 // ---- Sections (format 20 on) -----------------------------------------------------------------
