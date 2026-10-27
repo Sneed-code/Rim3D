@@ -89,6 +89,10 @@ public:
     bool comfortRange(Entity pawn, float& min, float& max) const;
     // Degrees under the comfortable minimum or over the maximum at the pawn's cell (0 inside the
     // range or when it has none). Mood reads these.
+    // The pawn's safe range: the comfortable range widened by `safeMarginC` each way. False if it has none.
+    bool safeRange(Entity pawn, float& min, float& max) const;
+    // Whether the pawn stands where hypothermia or heatstroke is building (outside its safe range).
+    bool outsideSafeRange(Entity pawn);
     float degreesBelowComfort(Entity pawn);
     float degreesAboveComfort(Entity pawn);
 

@@ -211,6 +211,25 @@ bool TemperatureSystem::comfortRange(Entity pawn, float& min, float& max) const 
     return true;
 }
 
+bool TemperatureSystem::safeRange(Entity pawn, float& min, float& max) const {
+    if (!comfortRange(pawn, min, max)) {
+        return false;
+    }
+    min -= numbers_.safeMarginC;
+    max += numbers_.safeMarginC;
+    return true;
+}
+
+bool TemperatureSystem::outsideSafeRange(Entity pawn) {
+    float min = 0.0f;
+    float max = 0.0f;
+    if (!safeRange(pawn, min, max)) {
+        return false;
+    }
+    const float ambient = ambientOf(pawn);
+    return ambient < min || ambient > max;
+}
+
 float TemperatureSystem::degreesBelowComfort(Entity pawn) {
     float min = 0.0f;
     float max = 0.0f;

@@ -123,6 +123,16 @@ listed start at the outdoor temperature. Section `health` goes to version 2: a l
 `TemperatureSystem` brings itself up to date with the rooms (`syncRooms`) before it saves, hashes
 or answers, so a save made between steps loads back the same.
 
+## Seeking shelter
+
+A colonist whose cell is outside its safe range (`TemperatureSystem::outsideSafeRange`) looks for shelter, as
+RimWorld's `SeekSafeTemperature` does. `JobSystem::makeShelterJob` searches outwards in rings (30 cells) for the nearest
+reachable walkable cell inside the pawn's comfortable range, else inside its safe range, and starts a
+`SeekShelter` job there: walk, then stand for 120 game seconds. It runs first in the needs think node (before food and
+sleep), and a pawn on a waiting, hauling, recreation or gathering job that isn't forced checks every 30 seconds and drops
+the job. Other work jobs run to their end and the pawn looks when the next think comes. With no such cell it does nothing
+(no endless searching). Numbers in `NeedJobs.cpp` (`kNeedJobsShelter...`) are ours. Test: `ColonistTraitNeedsTests.cpp`.
+
 ## Not yet
 
 - **Seeking coolness**: the cold side is done (below); a colonist with heatstroke just stays where it is.

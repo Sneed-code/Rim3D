@@ -3,11 +3,13 @@
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Events.h"
+#include "ColonySim/Fighters.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Genes.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/RoomStats.h"
 #include "ColonySim/Rooms.h"
@@ -51,18 +53,6 @@ bool moodIsMeal(const std::string& preferability) {
            preferability == "MealLavish";
 }
 
-// The trait degree's def path ("degreeDatas.N") for a colonist's trait, or empty.
-std::string moodDegreePath(const Def& trait, int degree) {
-    const size_t degrees = trait.count("degreeDatas");
-    for (size_t i = 0; i < degrees; ++i) {
-        const std::string path = "degreeDatas." + std::to_string(i);
-        if (trait.integer((path + ".degree").c_str(), 0) == degree) {
-            return path;
-        }
-    }
-    return std::string();
-}
-
 }  // namespace
 
 const char* moodBandName(MoodBand band) {
@@ -89,6 +79,8 @@ MoodRules MoodRules::read(const DefDatabase& defs) {
     r.risePerHour = moodFloat(*def, "risePerHour", r.risePerHour);
     r.fallPerHour = moodFloat(*def, "fallPerHour", r.fallPerHour);
     r.memoryDays = def->number("memoryDays", r.memoryDays);
+    r.nightFromHour = std::clamp(static_cast<int>(def->integer("nightHours.from", r.nightFromHour)), 0, 23);
+    r.nightToHour = std::clamp(static_cast<int>(def->integer("nightHours.to", r.nightToHour)), 0, 23);
     return r;
 }
 
@@ -201,6 +193,31 @@ bool MoodSystem::hasTrait(Entity pawn, const std::string& trait) const {
                        [&](const TraitRecord& record) { return record.def == trait; });
 }
 
+const MoodSystem::TraitDegree* MoodSystem::traitDegree(const TraitRecord& record) const {
+    auto it = traitDegrees_.find(record.def);
+    if (it == traitDegrees_.end()) {
+        std::vector<TraitDegree> degrees;
+        if (const Def* trait = defs_.find("Traits", record.def)) {
+            for (size_t i = 0; i < trait->count("degreeDatas"); ++i) {
+                const std::string path = "degreeDatas." + std::to_string(i);
+                TraitDegree degree;
+                degree.degree = static_cast<int>(trait->integer((path + ".degree").c_str(), 0));
+                degree.moodOffset = moodFloat(*trait, (path + ".moodOffset").c_str(), 0.0f);
+                degree.breakOffset = moodFloat(*trait, (path + ".statOffsets.mentalBreakThreshold").c_str(), 0.0f);
+                degrees.push_back(degree);
+            }
+        }
+        it = traitDegrees_.emplace(record.def, std::move(degrees)).first;
+    }
+    // The first degree that matches, as the def lists them.
+    for (const TraitDegree& degree : it->second) {
+        if (degree.degree == record.degree) {
+            return &degree;
+        }
+    }
+    return nullptr;
+}
+
 float MoodSystem::traitMoodOffset(Entity pawn) const {
     const Colonist* colonist = things_.registry().try_get<Colonist>(pawn);
     float total = 0.0f;
@@ -211,11 +228,8 @@ float MoodSystem::traitMoodOffset(Entity pawn) const {
         return total;
     }
     for (const TraitRecord& record : colonist->traits) {
-        if (const Def* trait = defs_.find("Traits", record.def)) {
-            const std::string path = moodDegreePath(*trait, record.degree);
-            if (!path.empty()) {
-                total += moodFloat(*trait, (path + ".moodOffset").c_str(), 0.0f);
-            }
+        if (const TraitDegree* degree = traitDegree(record)) {
+            total += degree->moodOffset;
         }
     }
     return total;
@@ -228,11 +242,8 @@ float MoodSystem::traitBreakOffset(Entity pawn) const {
         return total;
     }
     for (const TraitRecord& record : colonist->traits) {
-        if (const Def* trait = defs_.find("Traits", record.def)) {
-            const std::string path = moodDegreePath(*trait, record.degree);
-            if (!path.empty()) {
-                total += moodFloat(*trait, (path + ".statOffsets.mentalBreakThreshold").c_str(), 0.0f);
-            }
+        if (const TraitDegree* degree = traitDegree(record)) {
+            total += degree->breakOffset;
         }
     }
     return total;
@@ -245,7 +256,9 @@ void MoodSystem::breakLevels(Entity pawn, float& minor, float& major, float& ext
     extreme = std::clamp(rules_.extremeBreakThreshold + offset, 0.0f, 1.0f) * 100.0f;
 }
 
-std::vector<ThoughtView> MoodSystem::thoughts(Entity pawn, int64_t now) const {
+std::vector<ThoughtView> MoodSystem::thoughts(Entity pawn, int64_t now) const { return thoughtList(pawn, now, true); }
+
+std::vector<ThoughtView> MoodSystem::thoughtList(Entity pawn, int64_t now, bool labels) const {
     std::vector<ThoughtView> out;
     const entt::registry& reg = things_.registry();
     const Needs* needs = reg.try_get<Needs>(pawn);
@@ -262,7 +275,7 @@ std::vector<ThoughtView> MoodSystem::thoughts(Entity pawn, int64_t now) const {
             }
             if (band == thought.band) {
                 const Def& def = defs_.get(thought.def);
-                out.push_back(ThoughtView{def.defName(), def.label(), thought.offset, true, 0});
+                out.push_back(ThoughtView{def.defName(), labels ? def.label() : std::string(), thought.offset, true, 0});
             }
         }
     }
@@ -276,7 +289,8 @@ std::vector<ThoughtView> MoodSystem::thoughts(Entity pawn, int64_t now) const {
             ++stage;
         }
         const Def& def = defs_.get(staged.def);
-        out.push_back(ThoughtView{def.defName(), staged.labels[stage].empty() ? def.label() : staged.labels[stage],
+        out.push_back(ThoughtView{def.defName(),
+                                  !labels ? std::string() : staged.labels[stage].empty() ? def.label() : staged.labels[stage],
                                   staged.offsets[stage], true, 0});
     }
     // Staged situations that read the pawn's room or its beauty need (C17).
@@ -303,7 +317,7 @@ std::vector<ThoughtView> MoodSystem::thoughts(Entity pawn, int64_t now) const {
                 continue;
             }
             const Def& def = defs_.get(thought.def);
-            out.push_back(ThoughtView{def.defName(), def.label() + ": " + picked.label, picked.offset, true, 0});
+            out.push_back(ThoughtView{def.defName(), labels ? def.label() + ": " + picked.label : std::string(), picked.offset, true, 0});
         }
     }
     // Situations judged by other systems (clothes, and later temperature and light).
@@ -328,7 +342,7 @@ std::vector<ThoughtView> MoodSystem::thoughts(Entity pawn, int64_t now) const {
             if (stage >= 0 && static_cast<size_t>(stage) < thought.stages.size()) {
                 const Thought::Stage& s = thought.stages[static_cast<size_t>(stage)];
                 const Def& def = defs_.get(thought.def);
-                out.push_back(ThoughtView{def.defName(), s.label.empty() ? def.label() : s.label, s.offset, true, 0});
+                out.push_back(ThoughtView{def.defName(), !labels ? std::string() : s.label.empty() ? def.label() : s.label, s.offset, true, 0});
             }
         }
     }
@@ -352,7 +366,7 @@ std::vector<ThoughtView> MoodSystem::thoughts(Entity pawn, int64_t now) const {
             }
             const Def* def = defs_.find("Thoughts", memory.def);
             if (def != nullptr) {
-                out.push_back(ThoughtView{def->defName(), def->label(), moodFloat(*def, "moodOffset", 0.0f), false, memory.expires});
+                out.push_back(ThoughtView{def->defName(), labels ? def->label() : std::string(), moodFloat(*def, "moodOffset", 0.0f), false, memory.expires});
             }
         }
     }
@@ -366,7 +380,7 @@ std::vector<ThoughtView> MoodSystem::thoughts(Entity pawn, int64_t now) const {
 
 float MoodSystem::target(Entity pawn, int64_t now) const {
     float total = rules_.baseMood + traitMoodOffset(pawn);
-    for (const ThoughtView& thought : thoughts(pawn, now)) {
+    for (const ThoughtView& thought : thoughtList(pawn, now, false)) {
         total += thought.offset;
     }
     return total;
@@ -395,6 +409,17 @@ void MoodSystem::remember(Entity pawn, const std::string& trigger, int64_t now) 
         addMemory(*mood, trigger, now);
     }
 }
+
+namespace {
+// A pawn of the player's colony (not a prisoner, guest or enemy) that has a mood.
+bool moodIsColonist(entt::registry& reg, Entity pawn) {
+    if (!reg.valid(pawn) || !reg.all_of<Colonist, Mood>(pawn) || reg.all_of<Prisoner>(pawn)) {
+        return false;
+    }
+    const Faction* faction = reg.try_get<Faction>(pawn);
+    return faction == nullptr || faction->id == kPlayerFaction;
+}
+}  // namespace
 
 void MoodSystem::step(int64_t now, std::vector<Event>& events) {
     if (!rules_.present) {
@@ -430,11 +455,59 @@ void MoodSystem::step(int64_t now, std::vector<Event>& events) {
             }
             continue;
         }
+        if (event.type == EventType::PawnDied) {
+            // A colonist died: every other living colonist knows. (Psychopaths shrug, as in RimWorld.)
+            if (moodIsColonist(reg, event.thing)) {
+                for (const Entity other : pawns) {
+                    const Health* health = reg.try_get<Health>(other);
+                    if (other != event.thing && moodIsColonist(reg, other) && (health == nullptr || !health->dead) &&
+                        !hasTrait(other, "Psychopath")) {
+                        addMemory(reg.get<Mood>(other), "KnowColonistDied", now);
+                    }
+                }
+            }
+            continue;
+        }
+        if (event.type == EventType::PrisonerExecuted) {
+            // The colony knows. Cold-hearted, bloodthirsty and cannibal colonists shrug (RimWorld wiki).
+            const char* trigger = event.message == "guilty" ? "KnowPrisonerExecutedGuilty" : "KnowPrisonerExecuted";
+            for (const Entity other : pawns) {
+                if (moodIsColonist(reg, other) && !hasTrait(other, "Psychopath") && !hasTrait(other, "Bloodlust") &&
+                    !hasTrait(other, "Cannibal")) {
+                    addMemory(reg.get<Mood>(other), trigger, now);
+                }
+            }
+            continue;
+        }
+        if (event.type == EventType::OrganHarvested) {
+            // The victim, if one of ours, is scarred by it; everyone else hears. A bloodthirsty colonist enjoys it.
+            const bool ours = event.message == "colonist";
+            if (ours && moodIsColonist(reg, event.thing)) {
+                addMemory(reg.get<Mood>(event.thing), "MyOrganHarvested", now);
+            }
+            for (const Entity other : pawns) {
+                if (other == event.thing || !moodIsColonist(reg, other)) {
+                    continue;
+                }
+                if (hasTrait(other, "Bloodlust")) {
+                    addMemory(reg.get<Mood>(other), "BloodlustOrganHarvested", now);
+                } else if (!hasTrait(other, "Psychopath") && (ours || !hasTrait(other, "Cannibal"))) {
+                    addMemory(reg.get<Mood>(other), ours ? "KnowColonistOrganHarvested" : "KnowGuestOrganHarvested", now);
+                }
+            }
+            continue;
+        }
         if (event.type == EventType::AnimalButchered) {
             // Cutting up a person: only the cold-hearted and the cannibals do not mind.
             Mood* butcher = reg.valid(event.thing) ? reg.try_get<Mood>(event.thing) : nullptr;
             if (butcher != nullptr && defs_.get(event.def).text("race.intelligence") == "Humanlike" && !eatsPeople(event.thing)) {
                 addMemory(*butcher, "ButcheredHumanlikeCorpse", now);
+                // The rest of the colony hears of it, except the butcher and those who do not mind.
+                for (const Entity other : pawns) {
+                    if (other != event.thing && moodIsColonist(reg, other) && !eatsPeople(other)) {
+                        addMemory(reg.get<Mood>(other), "KnowButcheredHumanlikeCorpse", now);
+                    }
+                }
             }
             continue;
         }

@@ -1,0 +1,5 @@
+[
+  {"defName": "PsychicDrone", "label": "psychic drone", "source": "RimWorld wiki", "situation": {"condition": "psychicDrone"}, "stages": [{"label": "low drone", "moodOffset": -12}, {"label": "medium drone", "moodOffset": -22}, {"label": "high drone", "moodOffset": -32}, {"label": "extreme drone", "moodOffset": -42}], "note": "While a psychic drone is on, for colonists of the sex it works on (T3). The stage is the drone's level.", "unverified": ["stages"]},
+  {"defName": "PsychicSoothe", "label": "psychic soothe", "source": "RimWorld wiki", "situation": {"condition": "psychicSoothe"}, "stages": [{"label": "soothed", "moodOffset": 16}], "note": "While a psychic soothe is on, for colonists of the sex it works on (T3)."},
+  {"defName": "ToxicFallout", "label": "toxic fallout", "source": "RimWorld wiki", "situation": {"condition": "toxicFallout"}, "stages": [{"label": "outside in the fallout", "moodOffset": -5}], "note": "A colonist under the open sky while toxic fallout lasts (T3).", "unverified": ["stages"]}
+]

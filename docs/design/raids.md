@@ -20,13 +20,14 @@ colonist is the player's, not the alarm's.
 them). `points` 0 means "what the colony is worth now", RimWorld's rule from the wiki's Raid points
 page:
 
-- **Wealth**: items on the map and the gear the player's pawns carry at their `marketValue`, plus
-  buildings at half theirs (`RaidSystem::colonyWealth`). Defs without a `marketValue` (our guns,
-  apparel and buildings so far) count nothing.
+- **Wealth**: items on the map and the gear the player's pawns carry at their `marketValue`, the
+  player's own pawns (colonists, tame animals; since T1) at theirs, plus buildings at half theirs
+  (`RaidSystem::colonyWealth`). Defs without a `marketValue` count nothing.
 - **Points** = (wealth points + 15 to 200 per colonist, both from the wiki's curves by wealth) x
   the difficulty's threat scale (Strive to survive, 1) x the days-passed factor (0.7 up to day 10,
-  1 from day 40) x adaptation (0.8, its start value; adaptation isn't tracked yet), kept between
-  35 and 10,000. The six Crashlanded colonists on day 0 make about 50 points: one pirate.
+  1 from day 40) x adaptation (starts 0.8, tracked since T1, see narrator.md), kept between
+  35 and 10,000. The six Crashlanded colonists on day 0 make about 65 points: one pirate. The
+  narrator ([narrator.md](narrator.md)) multiplies this by the difficulty and its own factor.
 
 The points **buy pawns**, as RimWorld does: a pawn kind at random by weight among those the points
 left can still pay for (`combatPower`), until none can; at least one. The **Pirate** faction (a
@@ -47,7 +48,9 @@ a fighter that knows no enemy walks to its goal. That is how raiders "know where
 Each squad thinks once a real second (`squadThinkEvery`, 30 steps):
 
 1. **Rout** (RimWorld's rule, recalled): when half its pawns (`fleeLostFraction`) are downed, dead or
-   gone, or when its time is up (`giveUpHours`, RimWorld's 26,000 to 38,000 ticks: 10.4 to 15.2 game
+   gone, with the wounded counted as part lost (ours, from the F7 soak: an able pawn counts as
+   (1 - pain) x Moving, at most 1, so a squad of hurt pawns that are all still on their feet adds up
+   to less and runs too), or when its time is up (`giveUpHours`, RimWorld's 26,000 to 38,000 ticks: 10.4 to 15.2 game
    hours), it runs. Every member that can still walk gets `FightMode::Flee`: no more looking or
    shooting, just the nearest edge cell it can reach. At the edge it **leaves the map** with its gear
    (`PawnLeftMap`, then `ThingDestroyed`). Downed raiders stay where they fell.
@@ -121,12 +124,17 @@ off the map. On open ground with no cover the shooting is slow and both sides lo
 pawns in the open are hit about 1 shot in 100 at 20 to 30 m in these fights, and downed colonists
 bleed out because nobody rescues or tends them yet. F7 measures and tunes this over many seeds.
 
+## Strategies
+
+How a raid comes (walking in, drop pods, at night) and what it goes for (the colony, a wall to dig
+through, loose items, downed colonists) is F12's: [raid-strategies.md](raid-strategies.md).
+
 ## Not done yet
 
 - The narrator sending raids by itself, raid warnings and other strategies (siege, sappers, drop
   pods, kidnapping and stealing); RimWorld's `PawnGroupMaker` subtleties (the most expensive pawn
   limited by the points).
-- Adaptation (the factor stays at 0.8), market values for guns, apparel and buildings.
+- Market values for guns, apparel and buildings.
 - Medic and Firefighter roles (with medicine and fire, Stage 2), rescuing the downed, fallback lines
   and using the F3 threat map to choose the safe side.
 - Raiders don't yet use squad-level tactics like flanking; each fighter picks its own cover.
