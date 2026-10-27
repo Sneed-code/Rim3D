@@ -11,6 +11,7 @@
 #include "ColonySim/Random.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Save.h"
+#include "ColonySim/Rooms.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Trade.h"
 #include "ColonySim/Things.h"
@@ -55,6 +56,15 @@ struct ExecFixture {
     ExecFixture() : sim(SimSettings{7, 64, 0, 0, true}, execDefs()) {
         sim.things().spawn("MealSurvivalPack", CellPos{14, 14, 0}, 60);  // so nobody starves in the day-long test
         warden = colonist(CellPos{10, 10, 0});
+        // A prison cell must be a closed room: walls round x 17..23, y 17..23, a door at (20, 23).
+        for (int y = 17; y <= 23; ++y) {
+            for (int x = 17; x <= 23; ++x) {
+                if (x == 17 || x == 23 || y == 17 || y == 23) {
+                    sim.things().spawn(x == 20 && y == 23 ? "Door" : "Wall", CellPos{x, y, 0});
+                }
+            }
+        }
+        sim.rooms().update();
         const Entity bed = sim.things().spawn("Bed", CellPos{20, 20, 0});
         sim.submit(SetPrisonBedCommand{bed, true});
         prisoner = sim.things().spawn("Human", CellPos{30, 30, 0});

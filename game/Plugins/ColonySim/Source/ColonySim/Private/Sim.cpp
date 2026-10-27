@@ -374,6 +374,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     monsters_ = std::make_unique<MonsterSystem>(*things_, map_, *combat_, *health_, *fighters_, *raids_, *animals_, *defs_, time_, rng_);
     prisoners_ = std::make_unique<PrisonerSystem>(*things_, map_, *combat_, *health_, *jobs_, *fighters_, *raids_, *defs_, time_, rng_);
     prisoners_->setEventLog(&events_);
+    prisoners_->setRooms(rooms_.get());
     trade_ = std::make_unique<TradeSystem>(*things_, map_, *combat_, *fighters_, *health_, *jobs_, *raids_, *defs_, time_, rng_, settings.seed);
     trade_->setEventLog(&events_);
     trade_->setTalents(talents_.get());
@@ -972,6 +973,11 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     } else if (const auto* prisonBed = std::get_if<SetPrisonBedCommand>(&command)) {
         std::string why;
         if (!prisoners_->setPrisonBed(prisonBed->bed, prisonBed->on, why)) {
+            commandFailed(id, why);
+        }
+    } else if (const auto* arrest = std::get_if<ArrestCommand>(&command)) {
+        std::string why;
+        if (!prisoners_->setArrest(arrest->pawn, arrest->on, why)) {
             commandFailed(id, why);
         }
     } else if (const auto* throwCommand = std::get_if<ThrowCommand>(&command)) {

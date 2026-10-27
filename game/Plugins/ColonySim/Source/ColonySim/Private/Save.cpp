@@ -442,6 +442,7 @@ struct SaveEntity {
     std::optional<ResonanceEffects> resonanceFx;  // section "resonance"
     std::optional<Prisoner> prisoner;       // section "prisoners" (C22)
     std::optional<PrisonBed> prisonBed;     // section "prisoners" (C22)
+    std::optional<ArrestOrder> arrest;      // section "prisoners" version 3
     std::optional<Fuel> fuel;               // "fuel" section (C11)
     std::optional<StoreIn> storeIn;         // "crafting" section (C14)
     std::optional<SaveRepair> repair;       // "repair" section (P4)
@@ -1129,6 +1130,9 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.text("mode", c.mode);
     } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
         ar.value("bed", c.bed);
+        ar.value("on", c.on);
+    } else if constexpr (std::is_same_v<Type, ArrestCommand>) {
+        ar.value("pawn", c.pawn);
         ar.value("on", c.on);
     } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
         ar.group("area", [&] { saveRect(ar, c.area); });
@@ -3322,7 +3326,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "stunned", e, &SaveEntity::stunned, [&](Stunned& s) { ar.value("stepsLeft", s.stepsLeft); });
         saveParts(ar, "effects", e, &SaveEntity::resonanceFx, [&](ResonanceEffects& fx) { saveResonanceFxPart(ar, fx); });
     });
-    ar.section("prisoners", 2, [&] {
+    ar.section("prisoners", 3, [&] {
         saveParts(ar, "prisoner", e, &SaveEntity::prisoner, [&](Prisoner& p) {
             ar.value("mode", p.mode);
             ar.value("resistance", p.resistance);
@@ -3334,6 +3338,9 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(static_cast<int>(p.mode) <= static_cast<int>(PrisonerMode::Execute), "the save file has a bad prisoner mode");
         });
         saveParts(ar, "prisonBed", e, &SaveEntity::prisonBed, [&](PrisonBed& b) { ar.value("marked", b.marked); });
+        if (ar.sectionVersion() >= 3) {  // arrests
+            saveParts(ar, "arrest", e, &SaveEntity::arrest, [&](ArrestOrder& a) { ar.value("by", a.by); });
+        }
     });
     ar.section("levels", 1, [&] {
         ar.list("upperFloors", d.upperFloors, [&](CellPos& c) {
@@ -3837,6 +3844,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const PrisonBed* prisonBed = reg.try_get<PrisonBed>(e)) {
             out.prisonBed = *prisonBed;
+        }
+        if (const ArrestOrder* arrest = reg.try_get<ArrestOrder>(e)) {
+            out.arrest = *arrest;
         }
         if (const Operations* operations = reg.try_get<Operations>(e)) {
             SaveOperations saved;
@@ -4560,6 +4570,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.prisonBed) {
             reg.emplace<PrisonBed>(entity, *e.prisonBed);
+        }
+        if (e.arrest) {
+            reg.emplace<ArrestOrder>(entity, *e.arrest);
         }
         if (e.defense) {
             reg.emplace<DefensePlan>(entity, *e.defense);

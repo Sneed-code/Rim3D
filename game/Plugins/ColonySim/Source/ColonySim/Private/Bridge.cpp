@@ -193,6 +193,8 @@ const char* commandName(const Command& command) {
                 return "SetPrisonerMode";
             } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
                 return "SetPrisonBed";
+            } else if constexpr (std::is_same_v<Type, ArrestCommand>) {
+                return "Arrest";
             } else if constexpr (std::is_same_v<Type, StartVisitCommand>) {
                 return "StartVisit";
             } else if constexpr (std::is_same_v<Type, TradeCommand>) {

@@ -426,6 +426,9 @@ JobSystem::StepResult JobSystem::liftPawn(Entity pawn, Job& job, std::string&) {
     there.y = at.y;
     there.level = at.level;
     pawnDid(pawn, PawnAction::LiftPawn, job.thing);
+    if (job.type == JobType::CapturePrisoner && prisoners_ != nullptr) {
+        prisoners_->seize(job.thing, pawn);  // an arrest: the pawn stops what it is doing and is carried
+    }
     return StepResult::Next;
 }
 
