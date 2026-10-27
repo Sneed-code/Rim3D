@@ -1,0 +1,31 @@
+[
+  {
+    "defName": "RefugeesChased", "source": "ours", "label": "refugees on the run", "questType": "Refugees",
+    "text": "A few travellers are running for your camp with raiders on their heels. Take them in and stand with them.",
+    "weight": 1.0, "earliestDay": 5, "minColonists": 2, "offerDays": [1, 3],
+    "people": [1, 3], "faction": "Pirate", "points": [120, 450], "delayHours": [1, 3], "deadlineHours": 24,
+    "rewards": [{"thing": "Silver", "count": [60, 180]}],
+    "notes": "The refugees walk in when you accept; the raiders follow after delayHours. Done when the raid is over; fails if every refugee dies. All numbers ours."
+  },
+  {
+    "defName": "WandererAsks", "source": "ours", "label": "a wanderer asks to join", "questType": "Wanderer",
+    "text": "A lone traveller has seen your fires and asks for a place at them.",
+    "weight": 1.5, "earliestDay": 0, "minColonists": 1, "offerDays": [1, 3],
+    "notes": "Accepting brings one colonist in at a map edge. Same person the WandererJoin incident would bring, but you can say no."
+  },
+  {
+    "defName": "SupplyCache", "source": "ours", "label": "a supply cache", "questType": "Stash",
+    "text": "A dead courier's route marker says where a cache was left for whoever could use it. A drop pod brings it to your door.",
+    "weight": 1.0, "earliestDay": 0, "minColonists": 1, "offerDays": [2, 5],
+    "rewards": [{"thing": "Steel", "count": [80, 200]}, {"thing": "ComponentIndustrial", "count": [2, 6]}],
+    "notes": "Accepting drops the goods near the colony's middle at once."
+  },
+  {
+    "defName": "HoldTheLine", "source": "ours", "label": "hold the line", "questType": "Defend",
+    "text": "Scouts say a raiding party is heading for the valley. Whoever stands against it will be paid by the people who live downriver.",
+    "weight": 1.0, "earliestDay": 8, "minColonists": 3, "offerDays": [1, 3],
+    "faction": "Pirate", "points": [200, 700], "delayHours": [6, 12], "deadlineHours": 24,
+    "rewards": [{"thing": "Silver", "count": [150, 400]}],
+    "notes": "Accepting sends a raid of the given points after delayHours; paid when it is over, failed if it is still there at the deadline."
+  }
+]

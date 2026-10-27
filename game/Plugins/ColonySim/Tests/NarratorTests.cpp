@@ -234,11 +234,13 @@ TEST_CASE("Narrator: threat points follow the difficulty and the narrator; wealt
     sim->submit(SetNarratorCommand{"Orrin", "LosingIsFun"});
     sim->step();
     CHECK(narratorTestEvent(*sim, EventType::CommandFailed) == nullptr);
-    CHECK(sim->narrator().threatPoints() == doctest::Approx(base * 2.2f).epsilon(0.01));
+    // Losing is fun's adaptation impact 0.4 blends the start factor 0.8 toward 1: 0.92.
+    const float adapted = 0.92f / 0.8f;
+    CHECK(sim->narrator().threatPoints() == doctest::Approx(base * 2.2f * adapted).epsilon(0.01));
     sim->submit(SetNarratorCommand{"Maren", ""});  // keeps the difficulty
     sim->step();
     CHECK(sim->narrator().state().difficulty == "LosingIsFun");
-    CHECK(sim->narrator().threatPoints() == doctest::Approx(base * 2.2f * 0.85f).epsilon(0.01));
+    CHECK(sim->narrator().threatPoints() == doctest::Approx(base * 2.2f * adapted * 0.85f).epsilon(0.01));
     sim->submit(SetNarratorCommand{"Orrin", "Peaceful"});
     sim->step();
     CHECK(sim->narrator().threatPoints() == doctest::Approx(35.0f));  // 0.1 of it is under the minimum
