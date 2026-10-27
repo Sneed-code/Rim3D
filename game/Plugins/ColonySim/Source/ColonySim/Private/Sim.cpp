@@ -24,6 +24,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Spoilage.h"
 #include "ColonySim/Crafting.h"
+#include "ColonySim/Repair.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Husbandry.h"
@@ -64,6 +65,7 @@
 #include "ColonySim/Disasters.h"
 #include "ColonySim/Narrator.h"
 #include "MovementSystem.h"
+#include "WoundViews.h"
 
 #include <algorithm>
 #include <chrono>
@@ -219,6 +221,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     }
     things_->setEventLog(&events_);
     health_->setEventLog(&events_);
+    woundViews_ = std::make_unique<WoundViews>(*defs_, *health_);
+    weather_ = std::make_unique<Weather>(map_, *defs_, splitMix64(settings.seed ^ 0x636C696D617465ULL), "TemperateForest");
     health_->setWorld(&time_.seconds, settings.seed);
     // The start tile's own yearly mean temperature; the seasons and the daily swing are its biome's.
     weather_ = std::make_unique<Weather>(map_, *defs_, splitMix64(settings.seed ^ 0x636C696D617465ULL), biome_,
@@ -315,6 +319,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setSpoilage(spoilage_.get());
     crafting_ = std::make_unique<CraftingSystem>(*things_, *apparel_, *zones_, *defs_, settings.seed);
     jobs_->setCrafting(crafting_.get());
+    repair_ = std::make_unique<RepairSystem>(*things_, *apparel_, *combat_, *defs_);
+    jobs_->setRepair(repair_.get());
     jobs_->setFarming(farming_.get());
     fire_ = std::make_unique<Fire>(map_, *things_, *plants_, *floors_, *filth_, *rooms_, *temperature_, *health_, *weather_, *defs_,
                                    settings.seed);
@@ -1382,6 +1388,14 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!apparel_->markStrip(strip->thing, strip->strip, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* repairGear = std::get_if<RepairGearCommand>(&command)) {
+        if (!repair_->markRepair(repairGear->thing, repairGear->repair, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* fitUpgrade = std::get_if<FitUpgradeCommand>(&command)) {
+        if (!repair_->orderFit(fitUpgrade->thing, fitUpgrade->part, fitUpgrade->fit, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* interact = std::get_if<InteractCommand>(&command)) {
         if (!social_->interact(interact->initiator, interact->recipient, interact->interaction, interact->outcome, error)) {
             commandFailed(id, error);
@@ -1573,11 +1587,13 @@ void Sim::step() {
     { SimLap lap(profile_, "filth"); filth_->step(); }
     { SimLap lap(profile_, "roomStats"); roomStats_->step(time_.seconds); }
     { SimLap lap(profile_, "temperature"); temperature_->step(time_.seconds); }
+    // From the weather as it is now, not left over from the last step: a loaded game has not had a last step.
     spoilage_->setOutdoorFactor(weather_->deteriorationFactor());  // not saved: the weather says it, also on the first step after a load
     { SimLap lap(profile_, "spoilage"); spoilage_->step(time_.seconds); }
     if (time_.seconds % kBillUpkeepSeconds == 0) {
         jobs_->bills().step();
         crafting_->step();
+        repair_->step();
     }
     time_.seconds += 1;
     { SimLap lap(profile_, "weather"); weather_->step(time_.seconds); }
@@ -1650,6 +1666,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.growingZoneCells.clear();
     out.animalZoneCells.clear();
     out.looks.clear();
+    out.wounds.clear();
     out.research.clear();
     out.attuned.clear();
     {
@@ -1705,6 +1722,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
         s.escaped = ship_->state().escaped;
     }
     out.apparel.clear();
+    out.fittedParts.clear();
     out.outfits.clear();
     for (const OutfitPolicy& outfit : apparel_->outfits()) {
         out.outfits.push_back(OutfitView{outfit.id, outfit.name});
@@ -1820,6 +1838,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Health* health = reg.try_get<Health>(entity)) {
             view.downed = health->downed;
             view.dead = health->dead;
+            view.bloodLoss = health->bloodLoss;
+            view.bleedPerDay = health->bleedPerDay;
+            view.firstWound = static_cast<uint32_t>(out.wounds.size());
+            if (!health->injuries.empty() || !health->missing.empty() || !health->diseases.empty()) {
+                woundViews_->append(entity, thing.def, *health, out.wounds);
+            }
+            view.woundCount = static_cast<uint32_t>(out.wounds.size()) - view.firstWound;
         }
         if (const PawnLooks* looks = reg.try_get<PawnLooks>(entity)) {
             PawnLooksView l;
@@ -1955,6 +1980,17 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 view.stuff = made->stuff;
             }
             view.quality = apparel_->stats().qualityOf(reg, entity);
+        }
+        if (view.category == ThingCategory::Item) {
+            view.repairMarked = reg.all_of<RepairMark>(entity);
+            if (const FitOrder* order = reg.try_get<FitOrder>(entity)) {
+                view.fitOrder = order->part;
+            }
+            if (const FittedParts* parts = reg.try_get<FittedParts>(entity)) {
+                view.firstFitted = static_cast<uint32_t>(out.fittedParts.size());
+                out.fittedParts.insert(out.fittedParts.end(), parts->parts.begin(), parts->parts.end());
+                view.fittedCount = static_cast<uint32_t>(parts->parts.size());
+            }
         }
         if (view.category == ThingCategory::Building && construction_->isArt(thing.def) && !reg.all_of<ConstructionSite>(entity)) {
             // A sculpture: made of a stuff and of a quality the artist's skill rolled.
@@ -2436,6 +2472,17 @@ uint64_t Sim::stateHash() const {
         }
         if (const StoreIn* store = reg.try_get<StoreIn>(e)) {
             h.add(store->zone);
+        }
+        if (reg.all_of<RepairMark>(e)) {
+            h.add(0x5250u);
+        }
+        if (const FitOrder* order = reg.try_get<FitOrder>(e)) {
+            h.add(order->part.value);
+        }
+        if (const FittedParts* parts = reg.try_get<FittedParts>(e)) {
+            for (const DefId part : parts->parts) {
+                h.add(part.value);
+            }
         }
         if (const Fuel* fuel = reg.try_get<Fuel>(e)) {
             h.add(fuel->amount);
