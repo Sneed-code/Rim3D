@@ -85,6 +85,8 @@ const char* commandName(const Command& command) {
                 return "PlaceFloor";
             } else if constexpr (std::is_same_v<Type, AddFilthCommand>) {
                 return "AddFilth";
+            } else if constexpr (std::is_same_v<Type, SetThermostatCommand>) {
+                return "SetThermostat";
             } else if constexpr (std::is_same_v<Type, TakeDrugCommand>) {
                 return "TakeDrug";
             } else if constexpr (std::is_same_v<Type, SetDrugPolicyCommand>) {
@@ -207,9 +209,15 @@ const char* commandName(const Command& command) {
                 return "StartStrategyRaid";
             } else if constexpr (std::is_same_v<Type, ShipCommand>) {
                 return "Ship";
-            } else {
-                static_assert(std::is_same_v<Type, QuestCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, QuestCommand>) {
                 return "Quest";
+            } else if constexpr (std::is_same_v<Type, AttuneCommand>) {
+                return "Attune";
+            } else if constexpr (std::is_same_v<Type, LearnPowerCommand>) {
+                return "LearnPower";
+            } else {
+                static_assert(std::is_same_v<Type, CastPowerCommand>, "name every command type");
+                return "CastPower";
             }
         },
         command);
@@ -321,6 +329,7 @@ const char* eventTypeName(EventType type) {
         case EventType::Interaction: return "Interaction";
         case EventType::BondChanged: return "BondChanged";
         case EventType::SocialFight: return "SocialFight";
+        case EventType::PowerCast: return "PowerCast";
         case EventType::OutOfFuel: return "OutOfFuel";
         case EventType::Refueled: return "Refueled";
         case EventType::FirefoamPopped: return "FirefoamPopped";
@@ -374,6 +383,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Reload: return "Reload";
         case PawnAction::Dodge: return "Dodge";
         case PawnAction::Roll: return "Roll";
+        case PawnAction::Cast: return "Cast";
         case PawnAction::Switch: return "Switch";
         case PawnAction::Extinguish: return "Extinguish";
         case PawnAction::Cook: return "Cook";
@@ -392,6 +402,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Refuel: return "Refuel";
         case PawnAction::Butcher: return "Butcher";
         case PawnAction::DropCorpse: return "DropCorpse";
+        case PawnAction::Rearm: return "Rearm";
         case PawnAction::Punch: return "Punch";
         case PawnAction::Operate: return "Operate";
     }

@@ -103,6 +103,10 @@ public:
     // Rearms a sprung trap. False, with a reason, if it is not a trap, is armed already, or can't be used again
     // (an IED is gone once it goes off).
     bool rearm(Entity trap, std::string* why = nullptr);
+    // A sprung trap that can be used again: what the Rearm job (colonists, Construction work type) looks for.
+    bool needsRearm(Entity trap) const;
+    // Seconds of work the trap's rearming takes (0 for a thing that is not a trap).
+    float rearmSeconds(Entity trap) const;
 
     // Whether a pawn knows where a trap is: pawns of its side, and pawns of a side that learned of it.
     bool knows(Entity pawn, Entity trap) const;

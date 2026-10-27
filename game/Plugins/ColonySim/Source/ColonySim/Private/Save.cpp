@@ -51,6 +51,7 @@
 #include "ColonySim/Social.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Talents.h"
+#include "ColonySim/Resonance.h"
 #include "ColonySim/Trade.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
@@ -254,11 +255,12 @@ struct SaveBill {
     BillMode mode = BillMode::Count;
     int count = 0;
     bool suspended = false;
-    // Section "bills" version 2 (C14); older saves have the defaults.
+    // Section "bills" version 2 (C14) and 3 (count stockpile); older saves have the defaults.
     int skillMin = 0;
     int skillMax = 20;
     float radius = 0.0f;
     uint32_t storeZone = 0;
+    uint32_t countZone = 0;  // version 3
     int unpauseAt = 0;
     bool satisfied = false;
     std::vector<std::string> disallowed;  // Things defNames
@@ -345,6 +347,18 @@ struct SaveApparel {
     int64_t nextCheck = 0;
 };
 
+// X2's resonance (section "resonance"): an attuned pawn and a cast under way, their powers by defName.
+struct SaveAttunement {
+    int level = 1;
+    float strain = 0.0f;
+    float focus = 0.0f;
+    std::vector<std::string> powers;
+};
+struct SaveCasting {
+    std::string power;
+    Casting c;
+};
+
 struct SaveEntity {
     uint32_t id = 0;
     std::optional<SaveThing> thing;
@@ -405,6 +419,10 @@ struct SaveEntity {
     std::optional<WeaponSwitch> weaponSwitch;   // section "weapons"
     std::optional<Turret> turret;           // section "defense" (F11)
     std::optional<Trap> trap;               // section "defense" (F11)
+    std::optional<SaveAttunement> attunement;   // section "resonance" (X2)
+    std::optional<SaveCasting> casting;         // section "resonance"
+    std::optional<Stunned> stunned;             // section "resonance"
+    std::optional<ResonanceEffects> resonanceFx;  // section "resonance"
     std::optional<Prisoner> prisoner;       // section "prisoners" (C22)
     std::optional<PrisonBed> prisonBed;     // section "prisoners" (C22)
     std::optional<Fuel> fuel;               // "fuel" section (C11)
@@ -521,6 +539,7 @@ struct SaveData {
     BreedingStats breeding;            // section "breeding": the counters (N4)
     FireSaved fire;                    // section "fire": fires, burnt ground, the home area (E4)
     std::vector<RoomTemperature> roomTemperatures;  // section "temperature" (E2)
+    std::vector<Thermostat> thermostats;            // section "thermostats"
     std::vector<CellPos> upperFloors;  // section "levels" (M1), by level then row
     RoofCollapseSaved roofs;           // section "roofs" (M3)
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
@@ -1096,6 +1115,18 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.text("action", c.action);
         ar.value("quest", c.quest);
         ar.text("kind", c.kind);
+    } else if constexpr (std::is_same_v<Type, AttuneCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("level", c.level);
+    } else if constexpr (std::is_same_v<Type, LearnPowerCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("power", c.power);
+    } else if constexpr (std::is_same_v<Type, CastPowerCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("power", c.power);
+        ar.value("target", c.target);
+        ar.group("cell", [&] { saveCell(ar, c.cell); });
+        ar.value("player", c.player);
     } else {
         static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
     }
@@ -1381,12 +1412,19 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("skillMax", c.skillMax);
                 ar.value("radius", c.radius);
                 ar.value("storeZone", c.storeZone);
+                if (ar.sectionVersion() >= 2) {
+                    ar.value("countZone", c.countZone);
+                }
                 ar.value("unpauseAt", c.unpauseAt);
                 ar.list("disallowed", c.disallowed, [&](std::string& name) { ar.text(nullptr, name); });
             } else if constexpr (std::is_same_v<Type, MoveBillCommand>) {
                 ar.value("building", c.building);
                 ar.value("bill", c.bill);
                 ar.value("index", c.index);
+            } else if constexpr (std::is_same_v<Type, SetThermostatCommand>) {
+                ar.value("building", c.building);
+                ar.value("celsius", c.celsius);
+                ar.value("clear", c.clear);
             } else if constexpr (std::is_same_v<Type, ClimbCommand>) {
                 ar.value("pawn", c.pawn);
                 ar.value("dx", c.dx);
@@ -1496,6 +1534,32 @@ void saveLooks(Ar& ar, PawnLooks& l) {
     saveLooksColor(ar, "naturalHair", l.naturalHair);
     saveLooksColor(ar, "skin", l.skin);
     saveLooksColor(ar, "hair", l.hair);
+    if (ar.sectionVersion() >= 2) {  // V1: faces, hair styles and marks
+        ar.value("faceShape", l.faceShape);
+        ar.value("brow", l.brow);
+        ar.value("nose", l.nose);
+        ar.value("jaw", l.jaw);
+        saveLooksColor(ar, "eyes", l.eyes);
+        ar.text("hairStyle", l.hairStyle);
+        ar.text("naturalBeard", l.naturalBeard);
+        ar.text("beard", l.beard);
+        ar.value("naturalBodyHair", l.naturalBodyHair);
+        ar.value("bodyHair", l.bodyHair);
+        ar.require(l.faceShape >= 0.0f && l.faceShape <= 1.0f && l.brow >= 0.0f && l.brow <= 1.0f && l.nose >= 0.0f &&
+                       l.nose <= 1.0f && l.jaw >= 0.0f && l.jaw <= 1.0f && l.bodyHair >= 0.0f && l.bodyHair <= 1.0f &&
+                       l.naturalBodyHair >= 0.0f && l.naturalBodyHair <= 1.0f,
+                   "the save file has an impossible face");
+        for (std::vector<LooksMark>* marks : {&l.tattoos, &l.scars}) {
+            ar.list(marks == &l.tattoos ? "tattoos" : "scars", *marks, [&](LooksMark& m) {
+                ar.value("region", m.region);
+                ar.require(static_cast<int>(m.region) < kBodyRegionCount, "the save file has a mark on no body region");
+                ar.value("style", m.style);
+                ar.value("u", m.u);
+                ar.value("v", m.v);
+                ar.value("size", m.size);
+            });
+        }
+    }
 }
 
 template <typename Ar>
@@ -1574,7 +1638,9 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
+    ar.require(job.type <= JobType::RearmTrap, "the save file has a bad job");
     ar.require(job.type <= JobType::Party, "the save file has a bad job");
+    ar.require(job.type <= JobType::StandBy, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -1798,6 +1864,9 @@ void saveBillsPart(Ar& ar, SaveBillList& list) {
             ar.value("skillMax", bill.skillMax);
             ar.value("radius", bill.radius);
             ar.value("storeZone", bill.storeZone);
+            if (ar.sectionVersion() >= 3) {
+                ar.value("countZone", bill.countZone);
+            }
             ar.value("unpauseAt", bill.unpauseAt);
             ar.value("satisfied", bill.satisfied);
             ar.list("disallowed", bill.disallowed, [&](std::string& name) { ar.text(nullptr, name); });
@@ -2085,6 +2154,34 @@ void saveThrowerPart(Ar& ar, SaveThrower& st) {
 }
 
 template <typename Ar>
+void saveAttunementPart(Ar& ar, SaveAttunement& a) {
+    ar.value("level", a.level);
+    ar.require(a.level >= 1 && a.level <= 99, "the save file has a bad attunement level");
+    ar.value("strain", a.strain);
+    ar.value("focus", a.focus);
+    ar.require(a.strain >= 0.0f && a.strain < 1e6f && a.focus >= 0.0f && a.focus <= 1.0f, "the save file has impossible strain or focus");
+    ar.list("powers", a.powers, [&](std::string& name) { ar.text(nullptr, name); });
+}
+
+template <typename Ar>
+void saveCastingPart(Ar& ar, SaveCasting& s) {
+    ar.text("power", s.power);
+    ar.value("target", s.c.target);
+    ar.group("cell", [&] { saveCell(ar, s.c.cell); });
+    ar.value("stepsLeft", s.c.stepsLeft);
+    ar.value("player", s.c.player);
+}
+
+template <typename Ar>
+void saveResonanceFxPart(Ar& ar, ResonanceEffects& fx) {
+    ar.value("numbSteps", fx.numbSteps);
+    ar.value("painFactor", fx.painFactor);
+    ar.value("burdenSteps", fx.burdenSteps);
+    ar.value("movingMax", fx.movingMax);
+    ar.require(fx.numbSteps >= 0 && fx.burdenSteps >= 0, "the save file has a resonance effect with negative time");
+}
+
+template <typename Ar>
 void saveKnockedPart(Ar& ar, KnockedDown& k) {
     ar.value("stepsLeft", k.stepsLeft);
     ar.value("before", k.before);
@@ -2150,12 +2247,17 @@ void saveFighterPart(Ar& ar, Fighter& f) {
     }
     if (ar.sectionVersion() >= 2) {  // F6: what the alarm or a raid has it do
         ar.value("mode", f.mode);
-        ar.require(static_cast<int>(f.mode) <= static_cast<int>(FightMode::Seize), "the save file has a bad fighter mode");
+        ar.require(static_cast<int>(f.mode) <= static_cast<int>(FightMode::Rescue), "the save file has a bad fighter mode");
         ar.value("defending", f.defending);
         ar.value("squad", f.squad);
         ar.value("hasGoal", f.hasGoal);
         ar.group("goal", [&] { saveCell(ar, f.goal); });
         ar.value("retreat", f.retreat);
+    }
+    if (ar.sectionVersion() >= 3) {  // F10: carrying a downed friend to cover
+        ar.value("rescuing", f.rescuing);
+        ar.value("lifted", f.lifted);
+        ar.group("rescueTo", [&] { saveCell(ar, f.rescueTo); });
     }
 
 }
@@ -2803,7 +2905,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("repaths", d.repaths);
         ar.list("setupErrors", d.setupErrors, [&](std::string& s) { ar.text(nullptr, s); });
     });
-    ar.section("commands", 1, [&] { saveCommandsSection(ar, d); });
+    ar.section("commands", 2, [&] { saveCommandsSection(ar, d); });
     ar.section("things", 1, [&] { saveThingsSection(ar, d); });
     std::vector<SaveEntity>& e = d.entities;
     ar.section("movement", 2, [&] {
@@ -2844,7 +2946,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "schedule", e, &SaveEntity::schedule, [&](Schedule& s) { saveSchedulePart(ar, s); });
         saveParts(ar, "bed", e, &SaveEntity::bed, [&](Bed& b) { saveBedPart(ar, b); });
     });
-    ar.section("bills", 2, [&] {
+    ar.section("bills", 3, [&] {
         saveParts(ar, "bills", e, &SaveEntity::bills, [&](SaveBillList& list) { saveBillsPart(ar, list); });
     });
     ar.section("construction", 1, [&] {
@@ -2866,11 +2968,11 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("doors", 1, [&] {
         saveParts(ar, "door", e, &SaveEntity::door, [&](Door& door) { saveDoorPart(ar, door); });
     });
-    ar.section("fighters", 2, [&] {
+    ar.section("fighters", 3, [&] {
         saveParts(ar, "faction", e, &SaveEntity::faction, [&](Faction& f) { saveFactionPart(ar, f); });
         saveParts(ar, "fighter", e, &SaveEntity::fighter, [&](Fighter& f) { saveFighterPart(ar, f); });
     });
-    ar.section("looks", 1, [&] {
+    ar.section("looks", 2, [&] {
         saveParts(ar, "looks", e, &SaveEntity::looks, [&](PawnLooks& l) { saveLooksPart(ar, l); });
     });
     ar.section("paths", 1, [&] { savePaths(ar, d.paths); });
@@ -2975,11 +3077,38 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(t.celsius > -500.0f && t.celsius < 1000.0f, "the save file has an impossible room temperature");
         });
     });
+    ar.section("thermostats", 1, [&] {
+        ar.list("thermostats", d.thermostats, [&](Thermostat& t) {
+            ar.value("building", t.building);
+            ar.value("celsius", t.celsius);
+        });
+    });
+    ar.section("raids", 1, [&] {
+        saveRaids(ar, d.raids);
+        saveParts(ar, "defense", e, &SaveEntity::defense, [&](DefensePlan& p) {
+            ar.value("role", p.role);
+            ar.require(static_cast<int>(p.role) <= static_cast<int>(DefenseRole::Firefighter), "the save file has a bad defense role");
+            ar.value("hasSpot", p.hasSpot);
+            ar.group("spot", [&] { saveCell(ar, p.spot); });
+        });
+        saveParts(ar, "raider", e, &SaveEntity::raider, [&](Raider& r) {
+            ar.value("squad", r.squad);
+            ar.text("kind", r.kind);
+            if (ar.sectionVersion() >= 2) {  // F12
+                ar.value("goalThing", r.goalThing);
+                ar.value("loot", r.loot);
+                ar.value("sparesDowned", r.sparesDowned);
+            }
+        });
+        if (ar.sectionVersion() >= 2) {
+            saveParts(ar, "kidnapped", e, &SaveEntity::kidnapped, [&](Kidnapped& k) { ar.value("by", k.by); });
+        }
+    });
     ar.section("raids", 2, [&] {
         saveRaids(ar, d.raids);
         saveParts(ar, "defense", e, &SaveEntity::defense, [&](DefensePlan& p) {
             ar.value("role", p.role);
-            ar.require(static_cast<int>(p.role) <= static_cast<int>(DefenseRole::KeepWorking), "the save file has a bad defense role");
+            ar.require(static_cast<int>(p.role) <= static_cast<int>(DefenseRole::Firefighter), "the save file has a bad defense role");
             ar.value("hasSpot", p.hasSpot);
             ar.group("spot", [&] { saveCell(ar, p.spot); });
         });
@@ -3115,6 +3244,12 @@ void saveSections(Ar& ar, SaveData& d) {
         });
         ar.list("home", d.fire.home, [&](int& cell) { ar.value("cell", cell); });
         saveParts(ar, "burning", e, &SaveEntity::burning, [&](Burning& b) { ar.value("until", b.until); });
+    });
+    ar.section("resonance", 1, [&] {
+        saveParts(ar, "attunement", e, &SaveEntity::attunement, [&](SaveAttunement& a) { saveAttunementPart(ar, a); });
+        saveParts(ar, "casting", e, &SaveEntity::casting, [&](SaveCasting& c) { saveCastingPart(ar, c); });
+        saveParts(ar, "stunned", e, &SaveEntity::stunned, [&](Stunned& s) { ar.value("stepsLeft", s.stepsLeft); });
+        saveParts(ar, "effects", e, &SaveEntity::resonanceFx, [&](ResonanceEffects& fx) { saveResonanceFxPart(ar, fx); });
     });
     ar.section("prisoners", 2, [&] {
         saveParts(ar, "prisoner", e, &SaveEntity::prisoner, [&](Prisoner& p) {
@@ -3480,6 +3615,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
                 b.skillMax = bill.skillMax;
                 b.radius = bill.radius;
                 b.storeZone = bill.storeZone;
+                b.countZone = bill.countZone;
                 b.unpauseAt = bill.unpauseAt;
                 b.satisfied = bill.satisfied;
                 for (const DefId def : bill.disallowed) {
@@ -3607,6 +3743,22 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const Trap* trap = reg.try_get<Trap>(e)) {
             out.trap = *trap;
         }
+        if (const Attunement* a = reg.try_get<Attunement>(e)) {
+            SaveAttunement saved{a->level, a->strain, a->focus, {}};
+            for (const DefId p : a->powers) {
+                saved.powers.push_back(sim.defs_->get(p).defName());
+            }
+            out.attunement = std::move(saved);
+        }
+        if (const Casting* c = reg.try_get<Casting>(e)) {
+            out.casting = SaveCasting{sim.defs_->get(c->power).defName(), *c};
+        }
+        if (const Stunned* s = reg.try_get<Stunned>(e)) {
+            out.stunned = *s;
+        }
+        if (const ResonanceEffects* fx = reg.try_get<ResonanceEffects>(e)) {
+            out.resonanceFx = *fx;
+        }
         if (const Melee* melee = reg.try_get<Melee>(e)) {
             out.melee = *melee;
         }
@@ -3709,6 +3861,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.filth = sim.filth_->state();
     d.roomStats = sim.roomStats_->state();
     d.roomTemperatures = sim.temperature_->roomTemperatures();
+    d.thermostats = sim.temperature_->thermostats();
     d.upperFloors = sim.map_.upperFloorCells();
     d.roofs = sim.roofCollapse_->state();
     d.raids = sim.raids_->state();
@@ -3977,6 +4130,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                 bill.skillMax = saved.skillMax;
                 bill.radius = saved.radius;
                 bill.storeZone = saved.storeZone;
+                bill.countZone = saved.countZone;
                 bill.unpauseAt = saved.unpauseAt;
                 bill.satisfied = saved.satisfied;
                 for (const std::string& name : saved.disallowed) {
@@ -4280,6 +4434,33 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         } else if (e.footprint && e.thing && sim.defs_->get(reg.get<Thing>(entity).def).has("trap")) {
             reg.emplace<Trap>(entity);
         }
+        if (e.attunement) {
+            Attunement a;
+            a.level = e.attunement->level;
+            a.strain = e.attunement->strain;
+            a.focus = e.attunement->focus;
+            for (const std::string& name : e.attunement->powers) {
+                const DefId power = sim.defs_->idOf("Powers", name);
+                if (power.valid()) {  // a power the data files dropped is forgotten
+                    a.powers.push_back(power);
+                }
+            }
+            std::sort(a.powers.begin(), a.powers.end(), [](DefId x, DefId y) { return x.value < y.value; });
+            reg.emplace<Attunement>(entity, std::move(a));
+        }
+        if (e.casting) {
+            Casting c = e.casting->c;
+            c.power = sim.defs_->idOf("Powers", e.casting->power);
+            if (c.power.valid()) {
+                reg.emplace<Casting>(entity, c);
+            }
+        }
+        if (e.stunned) {
+            reg.emplace<Stunned>(entity, *e.stunned);
+        }
+        if (e.resonanceFx) {
+            reg.emplace<ResonanceEffects>(entity, *e.resonanceFx);
+        }
     }
     sim.animals_->restore(d.animals);
     if (!sim.husbandry_->restore(d.husbandry, error)) {
@@ -4326,7 +4507,8 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if ((e.worker && (!exists(e.worker->job.thing) || !exists(e.worker->job.chair) ||
                           !exists(e.worker->job.site))) ||
-            (e.carrying && !exists(e.carrying->thing)) || !gearExists || (e.equippedBy && !exists(e.equippedBy->pawn))) {
+            (e.carrying && !exists(e.carrying->thing)) || !gearExists || (e.equippedBy && !exists(e.equippedBy->pawn)) ||
+            (e.casting && !exists(e.casting->c.target))) {
             error = "the save has a thing that names another thing that doesn't exist";
             return false;
         }
@@ -4624,6 +4806,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     sim.power_->update();
     sim.roomStats_->refresh();
     sim.temperature_->setOutdoor(sim.outdoorTemperature());
+    sim.temperature_->restoreThermostats(d.thermostats);
     sim.temperature_->restore(d.roomTemperatures);
     sim.spoilage_->restore(d.spoilageState);
     sim.spoilage_->setOutdoorFactor(sim.weather_->deteriorationFactor());  // the step sets it for the next one

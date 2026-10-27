@@ -8,6 +8,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Medicine.h"
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/RoomStats.h"
 #include "ColonySim/Surgery.h"
@@ -247,6 +248,12 @@ JobSystem::StepResult JobSystem::operateFinish(Entity pawn, Job& job, std::strin
     const SurgeryResult result = surgery_->perform(patient, job.bill, chance, success, quality, deathRoll);
     if (result.returned.valid()) {
         dropNewItems(pawn, result.returned, 1);
+    }
+    if (result.harvested.valid()) {
+        dropNewItems(pawn, result.harvested, 1);
+        if (prisoners_ != nullptr) {
+            prisoners_->noteOrganHarvested(patient, pawn, result.harvestedPart);
+        }
     }
     if (result.done) {
         Event event;
