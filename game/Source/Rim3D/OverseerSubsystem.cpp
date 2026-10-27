@@ -15,6 +15,7 @@
 #include "OverseerPawn.h"
 #include "ProtagonistSubsystem.h"
 #include "ShooterFeelSubsystem.h"
+#include "SoundSubsystem.h"
 #include "SimSubsystem.h"
 #include "SkySubsystem.h"
 
@@ -440,6 +441,11 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 	if (UShooterFeelSubsystem* Feel = GetWorld()->GetSubsystem<UShooterFeelSubsystem>())
 	{
 		Feel->DrawSettingsPanel(Viewport->Pos.x + Viewport->Size.x, Scale);
+	}
+	// The sound mixer (V20), folded under it.
+	if (USoundSubsystem* Sound = GetWorld()->GetSubsystem<USoundSubsystem>())
+	{
+		Sound->DrawMixerPanel(Viewport->Pos.x + Viewport->Size.x, Scale);
 	}
 
 	++PanelFramesDrawn;
