@@ -10,6 +10,7 @@
 #include "SimSubsystem.h"
 
 #include "ColonySim/Clock.h"
+#include "ColonySim/Colonist.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Sim.h"
@@ -521,6 +522,7 @@ void UShipPanelSubsystem::DrawEnding(USimSubsystem& Bridge)
 		return;
 	}
 	const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
+	ImGui::GetStyle().FontScaleMain = 1.2f * Scale;
 	const colony::ShipView& Ship = Bridge.GetCurrentSnapshot().ship;
 
 	// A dark veil over the world, then the words in the middle.
@@ -530,9 +532,9 @@ void UShipPanelSubsystem::DrawEnding(USimSubsystem& Bridge)
 	if (ImGui::Begin("##ShipEnding", nullptr, SpFlags()))
 	{
 		++Stats.EndingFrames;
-		ImGui::GetStyle().FontScaleMain = 2.0f * Scale;
+		ImGui::PushFont(nullptr, ImGui::GetStyle().FontSizeBase * 1.8f);
 		SpText(TEXT("The ship has launched"));
-		ImGui::GetStyle().FontScaleMain = 1.2f * Scale;
+		ImGui::PopFont();
 		ImGui::Spacing();
 		FString Who;
 		for (const FString& Name : EscapedNames)
@@ -547,6 +549,8 @@ void UShipPanelSubsystem::DrawEnding(USimSubsystem& Bridge)
 		{
 			SpTextWrapped(ImVec4(0.9f, 0.9f, 0.9f, 1.0f), Who.IsEmpty()
 				? FString::Printf(TEXT("%d asleep in its caskets rise out of the sky, bound for a far star. The voyage will take longer than any of them has lived."), Ship.escaped)
+				: EscapedNames.Num() == 1
+				? FString::Printf(TEXT("%s, asleep in a casket, rises out of the sky, bound for a far star. The voyage will take longer than %s has lived."), *Who, *Who)
 				: FString::Printf(TEXT("%s, asleep in the caskets, rise out of the sky, bound for a far star. The voyage will take longer than any of them has lived."), *Who));
 		}
 		ImGui::Spacing();
