@@ -60,6 +60,8 @@ rest (place blueprint, designate, draft, actions) come with the tasks that build
 | `AddOutfitCommand{name}` | a new outfit allowing everything | empty or taken name |
 | `RemoveOutfitCommand{outfit}` | removes it; pawns on it go back to the first | no such outfit; the first one |
 | `StripCommand{thing, strip}` | marks a downed or dead pawn to be stripped of clothes and weapon by a colonist with Hauling work, or takes the mark off | not a pawn on the map; not downed or dead; nothing on it |
+| `RepairGearCommand{thing, repair}` | marks apparel or a weapon lying on the map for repair at a bench, or takes the mark off ([repair.md](repair.md)) | not apparel or a weapon; worn or carried; not damaged |
+| `FitUpgradeCommand{thing, part, fit}` | orders an upgrade part (a Things defName) fitted to a gun lying on the map at a machining table, or (`fit` false) cancels the gun's order ([repair.md](repair.md)) | not a gun on the map; unknown part; the part does not fit that gun; its slot is taken |
 | `SetScheduleCommand{pawn, hour, kind}` | the pawn's schedule for one hour (0 to 23): Anything, Work, Joy or Sleep ([needs.md](needs.md)) | the pawn has no schedule; bad hour |
 | `DesignateCommand{area, kind}` | marks rock (`Mine`), plants (`CutPlant`) or ripe plants (`HarvestPlant`) in the rectangle for work ([mining.md](mining.md)) | `kind` is None; nothing in `area` suits |
 | `CancelDesignationsCommand{area, kind}` | takes marks off, `None` for every kind, and ends the jobs on them | nothing marked in `area` |
@@ -72,8 +74,12 @@ rest (place blueprint, designate, draft, actions) come with the tasks that build
 | `AttackOrderCommand{pawn, target}` | a drafted pawn shoots this one whenever it can; `kNoEntity` lets it choose | not drafted; target not a living pawn on the map |
 | `SetFactionCommand{pawn, faction}` | dev until raids (F6): puts a pawn on a side (1 is the player's); any other side fights at once | faction 0; not a pawn |
 | `SetLineageCommand{pawn, lineage}` | dev command: the pawn's looks become another lineage's (skin, hair, horns), the body stays ([looks.md](looks.md)) | the thing has no looks; unknown lineage |
+| `ClimbCommand{pawn, dx, dy}` | the controlled colonist climbs the stairs or ladder at its cell whose other end lies most nearly along (dx, dy) (zero: the first); `DirectMove` waits till it is off ([levels.md](levels.md), U17) | not the colonist under direct control; downed or dead; rolling; climbing already; no link from its cell within 60 degrees of that way |
 | `DodgeRollCommand{pawn, dx, dy}` | `CombatSystem::dodgeRoll`: the protagonist's roll, direction any length (zero or not a number: a backstep); start-up, a hit-proof roll, recovery, a short wait ([shooter-feel.md](shooter-feel.md)) | not a colonist under direct control; downed; prone; rolling already or waiting out the last roll |
 | `CarryWeaponCommand{pawn, item}` | `CombatSystem::carryWeapon`: a weapon into the hands if empty, else on the body; the weapon in its slot is dropped ([weapons.md](weapons.md)) | no body or dead; not a weapon; someone else's |
+| `AttuneCommand{pawn, level}` | sets the attunement level, 0 to 6 (0 takes it away); each new level teaches one power of that level at random ([resonance.md](resonance.md)) | not a living pawn; bad level; deaf to resonance |
+| `LearnPowerCommand{pawn, power}` | teaches a Powers def of the pawn's level or lower | not attuned; no such power; level too low; known already |
+| `CastPowerCommand{pawn, power, target, cell, player}` | `ResonanceSystem::cast`: a power on `target` (itself for none), a jump to `cell`; warm-up, then it goes off | doesn't know it; can't act; not enough focus; too much strain; target or cell out of range or sight |
 | `SwitchWeaponCommand{pawn, slot}` | `CombatSystem::switchWeapon`: bring up the weapon carried in slot 0 Primary, 1 Sidearm or 2 Melee; no shooting or swinging for the slot's switch time | nothing in the slot or in the hands already; downed, rolling, knocked down, switching, mid-shot or mid-swing |
 | `SetRefuelCommand{building, autoRefuel, fillNow}` | allow auto refuel on or off, and `fillNow` orders a fill to the top ([fuel.md](fuel.md)) | not a finished building with a fuel part |
 | `StartMentalBreakCommand{pawn, breakDef}` | dev command: a mental break now, whatever the mood ([mental-breaks.md](mental-breaks.md)) | not a colonist on the map; walked by the player; downed or dead; in a break already; an unknown break; one that needs fire; one with nothing to do (no food to binge on) |
@@ -119,7 +125,7 @@ starts, so read it after every step. Before the first step it holds what setting
 | `ThingDespawned` | `thing`, `def` | a thing leaves the map but still exists (picked up) |
 | `ThingDestroyed` | `thing`, `def` | a thing stops existing; comes after `ThingDespawned` if it was on the map |
 | `CommandFailed` | `command`, `message` | a command couldn't be applied |
-| `PawnAction` | `thing` (the pawn), `def`, `action`, `target` | a pawn did something Unreal animates: `PickUp`, `PutDown` (U5, [pawns.md](pawns.md)), `Eat`, `LieDown`, `GetUp` (C6); `Build` and `Deconstruct` (C4) when work on `target` begins; `Cook` (C7) when a run of a bill begins at the stove `target`; `Clean` (C17) when a layer of filth at `target`'s cell starts to be cleaned; `Tend` (H1) when a doctor starts tending `target`, `LiftPawn` and `LayPawn` when a rescuer lifts the downed pawn `target` and lays it in a bed (until `LayPawn` its position follows the rescuer's); `Reload` (`target` the gun) and `Dodge` (`target` the projectile, `cell` where it steps) (F5); `Dodge` (`target` the attacker) and `Block` (`target` the attacker, none for the player's own block) against a melee swing (F8); `Roll` (P2) when a dodge roll starts: `cell` where it began, (`x`, `y`) its unit direction, `amount` the steps from start-up to the end of recovery, for stretching the animation; `Switch` (P1) when a weapon switch starts: `target` the weapon coming to the hands, `amount` the steps; `Throw` (a grenade wind-up begins) and `Dive` (`target` the grenade, `cell` where the pawn runs) (F9) |
+| `PawnAction` | `thing` (the pawn), `def`, `action`, `target` | a pawn did something Unreal animates: `PickUp`, `PutDown` (U5, [pawns.md](pawns.md)), `Eat`, `LieDown`, `GetUp` (C6); `Build` and `Deconstruct` (C4) when work on `target` begins; `Cook` (C7) when a run of a bill begins at the stove `target`; `Clean` (C17) when a layer of filth at `target`'s cell starts to be cleaned; `Tend` (H1) when a doctor starts tending `target`, `LiftPawn` and `LayPawn` when a rescuer lifts the downed pawn `target` and lays it in a bed (until `LayPawn` its position follows the rescuer's); `Reload` (`target` the gun) and `Dodge` (`target` the projectile, `cell` where it steps) (F5); `Dodge` (`target` the attacker) and `Block` (`target` the attacker, none for the player's own block) against a melee swing (F8); `Roll` (P2) when a dodge roll starts: `cell` where it began, (`x`, `y`) its unit direction, `amount` the steps from start-up to the end of recovery, for stretching the animation; `Switch` (P1) when a weapon switch starts: `target` the weapon coming to the hands, `amount` the steps; `Throw` (a grenade wind-up begins) and `Dive` (`target` the grenade, `cell` where the pawn runs) (F9); `Cast` (X2) when a power's warm-up begins: `target`, `cell` a jump's, `amount` the steps |
 | `PawnTended` | `thing` (the doctor), `target` (the patient), `def` (the medicine, none if by hand), `amount` (quality), `message` | a doctor finished tending ([medicine.md](medicine.md)) |
 | `PawnScarred` | `thing`, `def` (Scar or OldWound), `part`, `amount` | a healed injury left a permanent scar ([medicine.md](medicine.md)) |
 | `PawnSick` | `thing`, `def` (the disease), `part` (an infection's wound, else -1), `amount` (severity) | a pawn caught a disease or a wound turned infected ([diseases.md](diseases.md)) |
@@ -127,6 +133,8 @@ starts, so read it after every step. Before the first step it holds what setting
 | `FrameStarted` | `thing` (the plan), `def` (the building), `cell` | a blueprint got its first materials and is a frame now; the plan itself came with a `ThingSpawned` |
 | `OutOfFuel` | `thing` (the building), `def`, `cell` | a building's fuel reached 0 ([fuel.md](fuel.md)) |
 | `Refueled` | `thing`, `def`, `cell`, `amount` (items in) | a colonist put fuel in a building |
+| `GearRepaired` | `thing` (pawn), `target` (the gear), `def`, `cell`, `amount` (hit points restored) | a colonist mended gear at a bench ([repair.md](repair.md)) |
+| `WeaponUpgraded` | `thing` (pawn), `target` (the gun), `def` (the part), `cell` | a colonist fitted an upgrade part to a gun |
 | `RecipeDone` | `thing` (the cook), `def` (the Recipes def), `target` (the stove), `cell`, `amount` (products made), `message` | one run of a bill is done; `message` is "bill finished" when a "do X times" bill reached 0 and went ([bills.md](bills.md)) |
 | `PawnInjured` | `thing`, `def` (the injury), `part`, `amount`, `cell` | a pawn got an injury (F1) |
 | `PawnPartLost` | `thing`, `def` (MissingBodyPart), `part`, `amount`, `cell` | a pawn lost a body part |
@@ -166,6 +174,7 @@ starts, so read it after every step. Before the first step it holds what setting
 | `Interaction` | `thing` (talker), `target` (listener), `message` (the Interactions def), `count` (1 worked, 0 refused), `amount` (the listener's opinion after) | one colonist talked to another (C20, [social.md](social.md)) |
 | `BondChanged` | `thing`, `target`, `message` (Lover, Spouse, ExLover, ExSpouse), `count` (1 formed) | a stored bond formed |
 | `SocialFight` | `thing`, `target`, `message` ("started", "ended: why") | a fight with fists began or ended |
+| `PowerCast` | `thing` (caster), `def` (Powers def), `target`, `cell` (a jump's), `x, y, z` (where the target is now), `amount` (caster's strain), `count` (steps the effect lasts) | a resonance power went off (X2, [resonance.md](resonance.md)) |
 | `MeleeHit` | `thing`, `def`, `target`, `hit`, `part`, `amount`, `x, y, z`, `cell`, `message` ("hit", "deflected", "blocked", "dodged", "missed") | the hit moment of a swing |
 
 `Things` reports its own spawns and despawns once the sim points it at the event list
@@ -194,6 +203,7 @@ Since F2 pawns also have
 Since E5 a building with a power part has `power`, `powerNet`, `powerWatts` and `batteryFill`, and the snapshot has `powerNets` ([power.md](power.md)). Since C5 a door's `ThingView` has `doorOpen` (0 to 1) and the snapshot has `rooms` (the enclosed rooms with role and
 size), `roofCells` (the thin roof) and `roofChanges` ([rooms.md](rooms.md)). Since C3 the snapshot lists the `designations`
 (cell and kind of every mine, cut and harvest mark; [mining.md](mining.md)).
+Since V7 pawns with a body also have `bloodLoss`, `bleedPerDay` and their visible wounds, `woundCount` from `Snapshot::wounds[firstWound]` (kind, skin region, size, bandaged, bleeding; [wounds.md](wounds.md)).
 Later tasks add what they draw and show: pawn info, the work tab.
 
 Unreal reads only snapshots and events, never the registry or `Things.h`. That lets the sim move to

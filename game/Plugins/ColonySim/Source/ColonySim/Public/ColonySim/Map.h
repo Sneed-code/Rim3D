@@ -202,6 +202,12 @@ public:
     // building layer can tell its picture is stale (Rooms).
     uint64_t buildingChanges() const { return buildingChanges_; }
 
+    // Steam geysers (ground level): a geothermal generator over one makes power (docs/design/power.md).
+    // Map generation (S8) places them from the seed; they are not saved, so whoever places them must do
+    // it again the same way after a load.
+    void setGeyser(CellPos c, bool present);
+    bool geyser(CellPos c) const { return c.level == 0 && inBounds(c) && !geyser_.empty() && geyser_[static_cast<size_t>(index(c))] != 0; }
+
     // The roof over a cell. Thick over the rock the map was generated with (and over it for good,
     // even once mined out); Thin where Rooms roofed an enclosed room or where the cell above has an
     // upper floor; else None. The cell must be in bounds.
@@ -285,6 +291,7 @@ private:
     uint64_t upperFloorChanges_ = 0;
     uint64_t buildingChanges_ = 0;
     uint64_t rockChanges_ = 0;
+    std::vector<uint8_t> geyser_;  // 1 where a steam geyser vents
     std::vector<int> hollow_;  // mined-out ground cells that still have the thick roof
     std::vector<LevelLink> levelLinks_;
     std::unique_ptr<Regions> regions_;

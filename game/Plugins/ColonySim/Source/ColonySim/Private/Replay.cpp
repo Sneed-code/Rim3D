@@ -202,6 +202,10 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["building"] = entt::to_integral(c.building);
                 j["autoRefuel"] = c.autoRefuel;
                 j["fillNow"] = c.fillNow;
+            } else if constexpr (std::is_same_v<Type, SetThermostatCommand>) {
+                j["building"] = entt::to_integral(c.building);
+                j["celsius"] = c.celsius;
+                j["clear"] = c.clear;
             } else if constexpr (std::is_same_v<Type, SetBillOptionsCommand>) {
                 j["building"] = entt::to_integral(c.building);
                 j["bill"] = c.bill;
@@ -209,12 +213,17 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["skillMax"] = c.skillMax;
                 j["radius"] = c.radius;
                 j["storeZone"] = c.storeZone;
+                j["countZone"] = c.countZone;
                 j["unpauseAt"] = c.unpauseAt;
                 j["disallowed"] = c.disallowed;
             } else if constexpr (std::is_same_v<Type, MoveBillCommand>) {
                 j["building"] = entt::to_integral(c.building);
                 j["bill"] = c.bill;
                 j["index"] = c.index;
+            } else if constexpr (std::is_same_v<Type, ClimbCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["dx"] = static_cast<double>(c.dx);
+                j["dy"] = static_cast<double>(c.dy);
             } else if constexpr (std::is_same_v<Type, AddOperationCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["recipe"] = c.recipe;
@@ -307,6 +316,13 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, StripCommand>) {
                 j["thing"] = entt::to_integral(c.thing);
                 j["strip"] = c.strip;
+            } else if constexpr (std::is_same_v<Type, RepairGearCommand>) {
+                j["thing"] = entt::to_integral(c.thing);
+                j["repair"] = c.repair;
+            } else if constexpr (std::is_same_v<Type, FitUpgradeCommand>) {
+                j["thing"] = entt::to_integral(c.thing);
+                j["part"] = c.part;
+                j["fit"] = c.fit;
             } else if constexpr (std::is_same_v<Type, InteractCommand>) {
                 j["initiator"] = entt::to_integral(c.initiator);
                 j["recipient"] = entt::to_integral(c.recipient);
@@ -416,11 +432,23 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["action"] = c.action;
                 j["thing"] = entt::to_integral(c.thing);
                 j["pawn"] = entt::to_integral(c.pawn);
-            } else {
-                static_assert(std::is_same_v<Type, QuestCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, QuestCommand>) {
                 j["action"] = c.action;
                 j["quest"] = c.quest;
                 j["kind"] = c.kind;
+            } else if constexpr (std::is_same_v<Type, AttuneCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["level"] = c.level;
+            } else if constexpr (std::is_same_v<Type, LearnPowerCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["power"] = c.power;
+            } else {
+                static_assert(std::is_same_v<Type, CastPowerCommand>, "write every command type");
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["power"] = c.power;
+                j["target"] = entt::to_integral(c.target);
+                j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
+                j["player"] = c.player;
             }
         },
         logged.command);
@@ -917,7 +945,7 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         if (!r.integer(j, "building", building, where) || !r.integer(j, "bill", c.bill, where) ||
             !r.integer(j, "skillMin", c.skillMin, where) || !r.integer(j, "skillMax", c.skillMax, where) ||
             !r.number(j, "radius", c.radius, where) || !r.integer(j, "storeZone", c.storeZone, where) ||
-            !r.integer(j, "unpauseAt", c.unpauseAt, where)) {
+            !r.integer(j, "unpauseAt", c.unpauseAt, where) || !r.integer(j, "countZone", c.countZone, where)) {
             return false;
         }
         const auto list = j.find("disallowed");
@@ -993,6 +1021,15 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         uint32_t building = entt::to_integral(kNoEntity);
         if (!r.integer(j, "building", building, where) || !r.flag(j, "autoRefuel", c.autoRefuel, where) ||
             !r.flag(j, "fillNow", c.fillNow, where)) {
+            return false;
+        }
+        c.building = static_cast<Entity>(building);
+        out.command = c;
+    } else if (type == "SetThermostat") {
+        SetThermostatCommand c;
+        uint32_t building = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "building", building, where) || !r.number(j, "celsius", c.celsius, where) ||
+            !r.flag(j, "clear", c.clear, where)) {
             return false;
         }
         c.building = static_cast<Entity>(building);
@@ -1079,6 +1116,22 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.thing = static_cast<Entity>(thing);
         out.command = c;
+    } else if (type == "RepairGear") {
+        RepairGearCommand c;
+        uint32_t thing = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "thing", thing, where) || !r.flag(j, "repair", c.repair, where)) {
+            return false;
+        }
+        c.thing = static_cast<Entity>(thing);
+        out.command = c;
+    } else if (type == "FitUpgrade") {
+        FitUpgradeCommand c;
+        uint32_t thing = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "thing", thing, where) || !r.text(j, "part", c.part, where) || !r.flag(j, "fit", c.fit, where)) {
+            return false;
+        }
+        c.thing = static_cast<Entity>(thing);
+        out.command = c;
     } else if (type == "Interact") {
         InteractCommand c;
         uint32_t initiator = entt::to_integral(kNoEntity);
@@ -1129,6 +1182,21 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.x = (*point)[0].get<float>();
         c.y = (*point)[1].get<float>();
+        out.command = c;
+    } else if (type == "Climb") {
+        ClimbCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        for (const auto& [key, field] : {std::pair<const char*, float*>{"dx", &c.dx}, std::pair<const char*, float*>{"dy", &c.dy}}) {
+            const auto it = j.find(key);
+            if (it == j.end() || !it->is_number()) {
+                return r.fail(where + "." + key + " must be a number");
+            }
+            *field = static_cast<float>(it->get<double>());
+        }
         out.command = c;
     } else if (type == "DodgeRoll") {
         DodgeRollCommand c;
@@ -1259,6 +1327,33 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         c.trap = static_cast<Entity>(trap);
+        out.command = std::move(c);
+    } else if (type == "Attune") {
+        AttuneCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "level", c.level, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = c;
+    } else if (type == "LearnPower") {
+        LearnPowerCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "power", c.power, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "CastPower") {
+        CastPowerCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        uint32_t target = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "power", c.power, where) || !r.integer(j, "target", target, where) ||
+            !replayCell(r, j, "cell", c.cell, where) || !r.flag(j, "player", c.player, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        c.target = static_cast<Entity>(target);
         out.command = std::move(c);
     } else if (type == "CarryWeapon") {
         CarryWeaponCommand c;

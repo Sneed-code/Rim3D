@@ -2,6 +2,7 @@
 // climb them, climbing speed, upper floors built with work and materials, and stockpiles, doors and
 // work on upper levels.
 
+#include "ColonySim/Colonist.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Defs.h"
@@ -11,6 +12,7 @@
 #include "ColonySim/Movement.h"
 #include "ColonySim/Pathfinder.h"
 #include "ColonySim/Regions.h"
+#include "ColonySim/Replay.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
@@ -442,6 +444,148 @@ TEST_CASE("Stairs: colonists haul to a stockpile upstairs, up the stairs, and wa
     STAIRS_REQUIRE(loaded.sim != nullptr);
     CHECK(loaded.sim->zones().zoneAt(CellPos{11, 12, 1}) == zone);
     CHECK(loaded.sim->stateHash() == sim->stateHash());
+}
+
+namespace {
+
+// The player's colonist (U17): a colonist under direct control standing at `cell`.
+Entity stairsControlled(Sim& sim, CellPos cell) {
+    const Entity pawn = sim.things().spawn("Human", cell);
+    sim.things().registry().emplace<Colonist>(pawn);
+    sim.jobs().addWorker(pawn);
+    sim.submit(ControlPawnCommand{pawn});
+    sim.step();
+    return pawn;
+}
+
+bool stairsFailed(const Sim& sim, uint64_t command) {
+    for (const Event& e : sim.events()) {
+        if (e.type == EventType::CommandFailed && e.command == command) {
+            return true;
+        }
+    }
+    return false;
+}
+
+}  // namespace
+
+TEST_CASE("Stairs: the player's colonist climbs the stairs or ladder it pushes towards, up and down, and DirectMove waits till it is off") {
+    for (const std::string climb : {"Stairs", "Ladder"}) {
+        CAPTURE(climb);
+        auto sim = stairsSim();
+        STAIRS_REQUIRE(stairsHouse(*sim, climb.c_str()) != kNoEntity);
+        STAIRS_REQUIRE(sim->map().levelLinks().size() == 1);
+        const LevelLink link = sim->map().levelLinks()[0];
+        const Entity pawn = stairsControlled(*sim, link.low);
+        STAIRS_REQUIRE(pawn != kNoEntity);
+        entt::registry& reg = sim->things().registry();
+        STAIRS_REQUIRE(reg.all_of<PlayerControl>(pawn));
+
+        // Sideways is not up the stairs; nor is a cell with no link, or a pawn nobody controls.
+        uint64_t id = sim->submit(ClimbCommand{pawn, 1.0f, 0.0f});
+        sim->step();
+        CHECK(stairsFailed(*sim, id));
+        const Entity other = sim->things().spawn("Human", CellPos{5, 5, 0});
+        id = sim->submit(ClimbCommand{other, 0.0f, 1.0f});
+        sim->step();
+        CHECK(stairsFailed(*sim, id));
+
+        // Up: the climb takes the link's time, the position the player sends meanwhile is ignored.
+        id = sim->submit(ClimbCommand{pawn, 0.1f, 1.0f});
+        sim->step();
+        CHECK(!stairsFailed(*sim, id));
+        CHECK(reg.get<Mover>(pawn).climbing(0));
+        CHECK(sim->submit(ClimbCommand{pawn, 0.0f, 1.0f}) != 0);
+        sim->step();
+        CHECK(reg.get<Mover>(pawn).climbing(0));  // climbing already: the second one failed and changed nothing
+        const float speed = reg.get<Mover>(pawn).metresPerStep;
+        int steps = 2;
+        bool sawClimb = false;
+        for (; steps < 600 && reg.get<Position>(pawn).level == 0; ++steps) {
+            const Position before = reg.get<Position>(pawn);
+            const uint64_t move = sim->submit(DirectMoveCommand{pawn, before.x - 0.4f, before.y});
+            sim->step();
+            CHECK(!stairsFailed(*sim, move));
+            if (reg.get<Position>(pawn).level == 0) {
+                CHECK(reg.get<Position>(pawn).x == before.x);
+                Snapshot snap;
+                sim->writeSnapshot(snap);
+                for (const ThingView& view : snap.things) {
+                    if (view.id == pawn && view.climb > 0.2f) {
+                        sawClimb = true;
+                    }
+                }
+            }
+        }
+        CHECK(sawClimb);
+        STAIRS_REQUIRE(reg.get<Position>(pawn).level == 1);
+        CHECK(cellOf(reg.get<Position>(pawn)) == link.high);
+        CHECK(reg.all_of<PlayerControl>(pawn));
+        const int expected = static_cast<int>(std::ceil(link.length / (speed * link.speedFactor)));
+        CHECK(steps >= expected - 2);
+        CHECK(steps <= expected * 5 / 4 + 4);
+
+        // Off the top it walks again on the upper floor.
+        const Position top = reg.get<Position>(pawn);
+        sim->submit(DirectMoveCommand{pawn, top.x - 0.3f, top.y});
+        sim->step();
+        CHECK(reg.get<Position>(pawn).x == doctest::Approx(top.x - 0.3f));
+        CHECK(reg.get<Position>(pawn).level == 1);
+        sim->submit(DirectMoveCommand{pawn, top.x, top.y});
+        sim->step();
+
+        // Down again: pushing back the way it came.
+        id = sim->submit(ClimbCommand{pawn, 0.0f, -1.0f});
+        sim->step();
+        CHECK(!stairsFailed(*sim, id));
+        for (int step = 0; step < 600 && reg.get<Position>(pawn).level == 1; ++step) {
+            sim->step();
+        }
+        CHECK(reg.get<Position>(pawn).level == 0);
+        CHECK(cellOf(reg.get<Position>(pawn)) == link.low);
+    }
+}
+
+TEST_CASE("Stairs: the player's climb survives a save, plays back from a replay, and the climb command goes through the replay text") {
+    auto sim = stairsSim();
+    STAIRS_REQUIRE(stairsHouse(*sim) != kNoEntity);
+    const Entity pawn = stairsControlled(*sim, kStairsLow);
+    STAIRS_REQUIRE(pawn != kNoEntity);
+    sim->submit(ClimbCommand{pawn, 0.0f, 2.0f});
+    for (int i = 0; i < 4; ++i) {
+        sim->step();
+    }
+    entt::registry& reg = sim->things().registry();
+    STAIRS_REQUIRE(reg.get<Mover>(pawn).climbed > 0.0f);
+    const SaveLoadResult loaded = loadSim(saveSim(*sim), stairsDefs());
+    STAIRS_REQUIRE(loaded.sim != nullptr);
+    Sim& copy = *loaded.sim;
+    CHECK(copy.stateHash() == sim->stateHash());
+    for (int i = 0; i < 200; ++i) {
+        sim->step();
+        copy.step();
+    }
+    CHECK(reg.get<Position>(pawn).level == 1);
+    CHECK(copy.things().registry().get<Position>(pawn).level == 1);
+    CHECK(copy.stateHash() == sim->stateHash());
+
+    Replay replay;
+    LoggedCommand logged;
+    logged.step = 3;
+    logged.command = ClimbCommand{static_cast<Entity>(7), 0.25f, -1.0f};
+    replay.commands = {logged};
+    Replay read;
+    std::string error;
+    CHECK(readReplay(writeReplay(replay), read, error));
+    CHECK(error.empty());
+    STAIRS_REQUIRE(read.commands.size() == 1);
+    const auto* got = std::get_if<ClimbCommand>(&read.commands[0].command);
+    STAIRS_REQUIRE(got != nullptr);
+    CHECK(got->dx == doctest::Approx(0.25f));
+    CHECK(got->dy == doctest::Approx(-1.0f));
+    Command named;
+    CHECK(commandFromName("Climb", named));
+    CHECK(std::get_if<ClimbCommand>(&named) != nullptr);
 }
 
 TEST_CASE("Stairs: an upper corner wall whose two sides stand is built from the ground beside it") {

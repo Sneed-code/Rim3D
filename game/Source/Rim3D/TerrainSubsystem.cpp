@@ -594,7 +594,8 @@ void UTerrainSubsystem::ReadThinRoof(bool& bOutChanged)
 	Cells.Reserve(static_cast<int32>(Snapshot.roofCells.size()));
 	for (const colony::CellPos& Cell : Snapshot.roofCells)
 	{
-		if (Map.inBounds(Cell))
+		// The roofs of rooms upstairs are drawn with the upper floors (ULevelsSubsystem).
+		if (Map.onGround(Cell))
 		{
 			const int32 Index = Map.index(Cell);
 			Flags[Index] = 1;

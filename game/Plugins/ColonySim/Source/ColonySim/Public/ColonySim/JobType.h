@@ -43,9 +43,13 @@ enum class JobType : uint8_t {
     Hunt,              // walk up to a wild animal marked for the hunt and shoot it dead (docs/design/hunting.md)
     HaulCorpse,        // carry a hunted or slaughtered animal's corpse to a stockpile (docs/design/hunting.md)
     Butcher,           // carry a corpse to a butcher table and cut it up into meat and leather (docs/design/hunting.md)
+    RearmTrap,         // walk next to a sprung trap and set it again (docs/design/defense.md)
     SeekShelter,       // walk to a place with a safe temperature and stay a while (docs/design/temperature.md)
     Operate,           // fetch the part to fit and a medicine, walk to a patient in bed and do a planned operation (docs/design/surgery.md)
     Party,             // walk to a party spot and stay for the party, gaining joy (docs/design/social.md)
+    StandBy,           // a Medic or Firefighter on duty walks to its place behind the line and waits (docs/design/field-care.md)
+    DeepWork,          // work a ground-penetrating scanner until it finds a deposit, or a deep drill for one portion (docs/design/deep-mining.md)
+    RepairGear,        // carry a marked piece of gear to a bench and mend it, or fit an upgrade part to a gun (repair.md)
 };
 
 COLONY_API const char* jobTypeName(JobType type);

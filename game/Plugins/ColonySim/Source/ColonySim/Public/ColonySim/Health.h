@@ -137,6 +137,14 @@ struct Health {
     bool incapacitated() const { return downed || dead; }
 };
 
+// Changes to pain and capacities from outside the body (resonance's numb and burden, X2): pain is
+// multiplied by `painFactor`, the Moving capacity is capped at `movingMax`. Not saved: the system
+// that causes them is asked again (HealthSystem::setMods) whenever health is worked out.
+struct HealthMods {
+    float painFactor = 1.0f;
+    float movingMax = 1.0f;
+};
+
 // Everything a health panel shows, with names instead of ids. Filled by HealthSystem::report.
 struct HealthReport {
     struct InjuryLine {
@@ -194,6 +202,7 @@ struct BodyPartInfo {
     bool inside = false;     // an organ or bone under another part
     float ownOutside = 0.0f;  // its share of hits from outside (its area minus its outside children's)
     std::vector<std::string> groups;  // BodyPartGroups defs, which apparel covers
+    std::string def;         // its BodyParts def name: "Arm", "Hand"...
 };
 
 // The rules. Owned by the sim, which calls `step` once per game second; damage comes in through
@@ -207,6 +216,9 @@ public:
 
     // Where events go; null (the default) reports none.
     void setEventLog(std::vector<Event>* events) { events_ = events; }
+    // Where HealthMods come from for a pawn (resonance). Without it there are none. Set `Health::dirty` on a pawn
+    // when its mods change, so the next step works it out again (and it may get up or go down).
+    void setMods(std::function<void(Entity, HealthMods&)> mods) { mods_ = std::move(mods); }
 
     // True if the pawn has a Health the system understands (its body def is known).
     bool tracks(Entity pawn) const;
@@ -358,11 +370,14 @@ private:
     uint64_t seed_ = 0;
     std::function<float(Entity)> cleanliness_;
     std::vector<Entity> active_;  // scratch for step
+    bool restoring_ = false;      // inside refreshAll: working out what a loaded save already was, so nobody stops walking for it
     std::vector<size_t> healable_;  // scratch for step: the injuries that can heal
+    std::function<void(Entity, HealthMods&)> mods_;
 
     // Works out pain, bleeding, capacities and what they mean (the death cause and whether the
     // pawn should be downed) into `health`'s derived fields. Changes nothing else.
-    void derive(int body, float healthScale, bool mechanical, Health& health, DeathCause& cause, bool& shouldBeDown) const;
+    void derive(int body, float healthScale, bool mechanical, const HealthMods& mods, Health& health, DeathCause& cause,
+                bool& shouldBeDown) const;
     void recompute(Entity pawn, Health& health, bool announce);
     void emit(EventType type, Entity pawn, DefId def = DefId{}, int part = -1, float amount = 0.0f,
               const char* message = nullptr);

@@ -151,7 +151,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | F8 | **Melee.** Melee weapons and fists from D8 with wind-up, hit moment and recovery in the sim; reach checked against hitboxes; blocks and dodges with timing (Melee skill); the fighter AI charges only when armed for it or the trait says so (Brawler). | Cloud | Opus, high | 90 min | S7, D8 |
 | ✓ | F9 | **Explosives and grenades.** An explosion system (radius, falloff, damage to pawns and buildings, knock-down); frag grenades thrown as arcing projectiles; fighters throw them at groups in cover and dive away from them (F5's sidestep grown into a dive). Molotovs once E4 is in. | Cloud | Sonnet, high | 90 min | S7 |
-| | F10 | **Medics, firefighters and rescue under fire.** The alarm's Medic and Firefighter roles from `game-design.md`; fighters drag downed friends to safety when the route is reasonably safe; scenario checks in F7's nightly run. | Cloud | Opus, high | 90 min | F6, H1, E4 |
+| ✓ | F10 | **Medics, firefighters and rescue under fire.** The alarm's Medic and Firefighter roles from `game-design.md`; fighters drag downed friends to safety when the route is reasonably safe; scenario checks in F7's nightly run. | Cloud | Opus, high | 90 min | F6, H1, E4 |
 | ✓ | F11 | **Turrets and traps.** Powered mini-turret (F2's guns, auto targeting, blows up when destroyed), spike trap and IED trap; the fighter AI avoids known traps. | Cloud | Sonnet, medium | 60 min | E5, F9 |
 | ✓ | F12 | **Raid strategies.** Sappers who dig or blast through walls, drop-pod raids landing inside the base, raiders who steal or kidnap and run, staged attacks at night; picked by T1's points. | Cloud | Opus, high | 120 min | T1, F9 |
 
@@ -162,7 +162,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | ✓ | P1 | **Several weapons.** Carry a rifle, a sidearm and a melee weapon; a switch command with a switch time; the fighter AI picks by range; weight counts (C24 if merged). | Cloud | Sonnet, high | 90 min | F8 |
 | ✓ | P2 | **Recoil kicks and dodge roll.** Per-weapon recoil kick lists in weapon defs for the player's shots; a dodge-roll command with start-up, a short no-hit window and recovery, moved by the sim (`shooter-feel.md`). | Cloud | Sonnet, high | 60 min | S7 |
 | ✓ | P3 | **Talent tree.** Talent XP and points for the protagonist, perks from data (`Talents/`, numbers `ours`: faster building, steadier aim, more carry weight, better trading), applied as stat changes; a spend-point command. | Cloud | Sonnet, medium | 60 min | S7 |
-| | P4 | **Repair and weapon upgrades.** Repair clothes, armor and weapons at a bench; upgrade parts (scope, longer magazine, better barrel; `ours`) fitted by recipe and changing the weapon's stats. | Cloud | Sonnet, high | 90 min | C14, C15 |
+| ✓ | P4 | **Repair and weapon upgrades.** Repair clothes, armor and weapons at a bench; upgrade parts (scope, longer magazine, better barrel; `ours`) fitted by recipe and changing the weapon's stats. | Cloud | Sonnet, high | 90 min | C14, C15 |
 | | P5 | **Night skip and fast travel.** Skip to morning when everyone off night shift is asleep and no threat is active, moving needs, growth and healing forward in one go and holding the narrator; fast travel to visited places when no threat. Same seed and commands still give the same game. | Cloud | Opus, high | 90 min | T1, E1 |
 
 ### Narrator and events (T)
@@ -178,7 +178,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | X1 | **Genes and lineages.** Genes as defs with stat effects; Emberkin, Frostkin, Warbred, Ashborn and Delver as gene sets; starting colonists can roll a lineage; looks (A3) read the genes. | Cloud | Sonnet, high | 90 min | S7 |
-| | X2 | **Resonance, first powers.** Attunement levels, resonance strain and focus (names added to `naming.md`), four powers from Royalty's first level (stun, painblock, burden, short jump) through the sim's commands and the fighter AI. | Cloud | Opus, high | 90 min | S7, F9 |
+| ✓ | X2 | **Resonance, first powers.** Attunement levels, resonance strain and focus (names added to `naming.md`), four powers from Royalty's first level (stun, painblock, burden, short jump) through the sim's commands and the fighter AI. | Cloud | Opus, high | 90 min | S7, F9 |
 
 ### Unreal side (U)
 
@@ -188,7 +188,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | ✓ | U14 | **Light and fire on screen.** Lamps, torches and campfires as real lights from the sim's light sources; Niagara fire, smoke and embers from the fire layer; burnt ground and ash. | PC Unreal | Sonnet, high | 90 min | E3, E4 |
 | ✓ | U15 | **Animals on screen.** Animal actors on shared skeletons with animation by distance (as U5); far herds as cheap instanced meshes with baked animation. | PC Unreal | Sonnet, high | 90 min | N1, A4 |
 | ✓ | U16 | **Clothes on pawns.** Each worn layer drawn on the MetaHuman body with the body-type shapes, torn look from hit points, clothes that come off when destroyed. | PC Unreal | Sonnet, high | 90 min | C15, A5 |
-| | U17 | **Upper floors on screen.** Upper levels, stairs and ladders drawn; the overseer view cuts away levels above the chosen one (Page Up and Page Down); direct mode climbs stairs and ladders through the sim. | PC Unreal | Opus, high | 90 min | M2, M3 |
+| ✓ | U17 | **Upper floors on screen.** Upper levels, stairs and ladders drawn; the overseer view cuts away levels above the chosen one (Page Up and Page Down); direct mode climbs stairs and ladders through the sim. | PC Unreal | Opus, high | 90 min | M2, M3 |
 | | U18 | **Panels 2.** Health tab with operations, research tab, room stats in the inspect panel, prisoner tab, growing zone and home area tools. | PC Unreal | Sonnet, medium | 90 min | H3, C21, C17, C22, C13 |
 | | U19 | **Panels 3.** Animals tab, outfits, trade window, power, temperature and beauty overlays. | PC Unreal | Sonnet, medium | 90 min | N3, C15, C23, E5, E2 |
 | | U20 | **Letters and the narrator.** Letters (raids, events) with a jump-to button, an alert list, choosing the narrator and difficulty at game start. | PC Unreal | Sonnet, medium | 60 min | T1 |

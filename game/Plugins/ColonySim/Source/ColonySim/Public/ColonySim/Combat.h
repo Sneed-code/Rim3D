@@ -94,6 +94,20 @@ struct Magazine {
     int rounds = 0;
 };
 
+// On a gun item with upgrade parts fitted (P4, docs/design/repair.md): the factors the parts together put on the
+// def's numbers. The gun's range (for the fighter AI), accuracy at every distance, magazine size (at least one
+// round more if it grows), reload time, cooldown after a burst, warm-up (aiming time) and recoil (the spread
+// the shots add and the player's gun kick). Not saved: made again from the fitted parts on load.
+struct WeaponMods {
+    float range = 1.0f;
+    float accuracy = 1.0f;
+    float magazine = 1.0f;
+    float reload = 1.0f;
+    float cooldown = 1.0f;
+    float warmup = 1.0f;
+    float recoil = 1.0f;
+};
+
 // The player's gun kick (P2, docs/design/shooter-feel.md): the shots just fired lift the aim by
 // the weapon's list of kicks, shot by shot; it wears off by itself. Added to a pawn the first time
 // its player trigger fires a gun that has a kick list, and kept. Degrees: `up` raises the aim,
@@ -130,6 +144,13 @@ struct DodgeRoll {
 struct KnockedDown {
     int stepsLeft = 0;
     Stance before = Stance::Standing;
+};
+
+// On a stunned pawn (resonance's Stun, X2, docs/design/resonance.md): it can't walk, shoot, throw,
+// swing, block, cast or work until the steps run out; its stance stays as it was. ResonanceSystem
+// counts it down.
+struct Stunned {
+    int stepsLeft = 0;
 };
 
 // An explosion (CombatSystem::explode): a blast of `damage` that falls off to `edgeFactor` of it at
@@ -392,6 +413,10 @@ public:
     // the caller does (HealthSystem::applyHit), so bullets and melee strikes land the same way (F8).
     PawnHitResult hitPawn(Entity pawn, int hitboxPart, DefId damageType, float amount, float penetration,
                           uint64_t seed) const;
+    // One blow that comes from no gun or hand (a spike trap's stab): lands on an outside part picked
+    // by size, goes through the pawn's armor like a bullet (so armor wears) and hurts what is left.
+    // A pawn with no hitboxes takes it on a part health picks.
+    void strikePawn(Entity pawn, DefId damageType, float amount, float penetration, Rng& rng);
     // Damage of a kind with no aim behind it (flames): a random outside part, through the armor that
     // covers it (heat armor for Burn), worn pieces losing hit points. False if the pawn can't be hurt.
     bool hurtPawn(Entity pawn, DefId damageType, float amount, Rng& rng);

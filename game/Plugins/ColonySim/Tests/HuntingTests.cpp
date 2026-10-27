@@ -15,6 +15,7 @@
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
+#include "ColonySim/Crafting.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Zones.h"
 
@@ -465,6 +466,45 @@ TEST_CASE("Hunting: the hunt mark is a command that goes into the replay file") 
     std::string error;
     HUNT_REQUIRE(readReplay(writeReplay(recorded), loaded, error));
     CHECK(loaded.commands.size() == recorded.commands.size());
+}
+
+TEST_CASE("Butchering: a bill's store stockpile takes the meat and leather there") {
+    HuntFixture f;
+    f.addColonist(CellPos{10, 10, 0}, 8, false);
+    const Entity table = f.building("ButcherTable", CellPos{12, 10, 0});
+    const Entity deer = f.animal("Deer", CellPos{18, 12, 0});
+    HUNT_REQUIRE(table != kNoEntity && deer != kNoEntity);
+    f.sim.submit(CreateStockpileCommand{CellRect{30, 30, 3, 3, 0}, StoragePriority::Normal});
+    f.sim.step();
+    HUNT_REQUIRE(f.sim.zones().stockpiles().size() == 1);
+    const uint32_t zone = f.sim.zones().stockpiles()[0].id;
+    f.kill(deer);
+    f.sim.submit(AddBillCommand{table, "ButcherCorpse", BillMode::Count, 1});
+    f.sim.step();
+    SetBillOptionsCommand options;
+    options.building = table;
+    options.bill = f.sim.jobs().bills().billsOf(table)->bills.back().id;
+    options.storeZone = zone;
+    f.sim.submit(options);
+    f.sim.step();
+    HUNT_REQUIRE(!f.sawEvent(EventType::CommandFailed));
+    HUNT_REQUIRE(f.runUntil(5000, [&] { return !f.reg().valid(deer); }));
+    f.sim.stepMany(5);
+    int marked = 0;
+    for (const auto [item, store] : f.reg().view<const StoreIn>().each()) {
+        marked += store.zone == zone ? 1 : 0;
+    }
+    CHECK(marked >= 2);  // meat and leather
+    const auto stored = [&] {
+        int inside = 0;
+        for (const char* name : {"Meat_Deer", "Leather_Plain"}) {
+            f.reg().view<const Thing, const Position>().each([&](const Thing& thing, const Position& pos) {
+                inside += thing.def == f.def(name) && f.sim.zones().zoneAt(cellOf(pos)) == zone ? 1 : 0;
+            });
+        }
+        return inside >= 2;
+    };
+    CHECK(f.runUntil(8000, stored));
 }
 
 TEST_CASE("Hunting: hunters keep away from animals that turn on them, and take the safe mark instead") {
