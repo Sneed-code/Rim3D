@@ -254,11 +254,12 @@ struct SaveBill {
     BillMode mode = BillMode::Count;
     int count = 0;
     bool suspended = false;
-    // Section "bills" version 2 (C14); older saves have the defaults.
+    // Section "bills" version 2 (C14) and 3 (count stockpile); older saves have the defaults.
     int skillMin = 0;
     int skillMax = 20;
     float radius = 0.0f;
     uint32_t storeZone = 0;
+    uint32_t countZone = 0;  // version 3
     int unpauseAt = 0;
     bool satisfied = false;
     std::vector<std::string> disallowed;  // Things defNames
@@ -537,6 +538,7 @@ struct SaveData {
     BreedingStats breeding;            // section "breeding": the counters (N4)
     FireSaved fire;                    // section "fire": fires, burnt ground, the home area (E4)
     std::vector<RoomTemperature> roomTemperatures;  // section "temperature" (E2)
+    std::vector<Thermostat> thermostats;            // section "thermostats"
     std::vector<CellPos> upperFloors;  // section "levels" (M1), by level then row
     RoofCollapseSaved roofs;           // section "roofs" (M3)
     AreasSaved areas;                  // section "areas": allowed areas and who is limited to one
@@ -1430,12 +1432,19 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("skillMax", c.skillMax);
                 ar.value("radius", c.radius);
                 ar.value("storeZone", c.storeZone);
+                if (ar.sectionVersion() >= 2) {
+                    ar.value("countZone", c.countZone);
+                }
                 ar.value("unpauseAt", c.unpauseAt);
                 ar.list("disallowed", c.disallowed, [&](std::string& name) { ar.text(nullptr, name); });
             } else if constexpr (std::is_same_v<Type, MoveBillCommand>) {
                 ar.value("building", c.building);
                 ar.value("bill", c.bill);
                 ar.value("index", c.index);
+            } else if constexpr (std::is_same_v<Type, SetThermostatCommand>) {
+                ar.value("building", c.building);
+                ar.value("celsius", c.celsius);
+                ar.value("clear", c.clear);
             } else if constexpr (std::is_same_v<Type, ClimbCommand>) {
                 ar.value("pawn", c.pawn);
                 ar.value("dx", c.dx);
@@ -1649,7 +1658,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::Party, "the save file has a bad job");
+    ar.require(job.type <= JobType::StandBy, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -1870,6 +1879,9 @@ void saveBillsPart(Ar& ar, SaveBillList& list) {
             ar.value("skillMax", bill.skillMax);
             ar.value("radius", bill.radius);
             ar.value("storeZone", bill.storeZone);
+            if (ar.sectionVersion() >= 3) {
+                ar.value("countZone", bill.countZone);
+            }
             ar.value("unpauseAt", bill.unpauseAt);
             ar.value("satisfied", bill.satisfied);
             ar.list("disallowed", bill.disallowed, [&](std::string& name) { ar.text(nullptr, name); });
@@ -2250,12 +2262,17 @@ void saveFighterPart(Ar& ar, Fighter& f) {
     }
     if (ar.sectionVersion() >= 2) {  // F6: what the alarm or a raid has it do
         ar.value("mode", f.mode);
-        ar.require(static_cast<int>(f.mode) <= static_cast<int>(FightMode::Seize), "the save file has a bad fighter mode");
+        ar.require(static_cast<int>(f.mode) <= static_cast<int>(FightMode::Rescue), "the save file has a bad fighter mode");
         ar.value("defending", f.defending);
         ar.value("squad", f.squad);
         ar.value("hasGoal", f.hasGoal);
         ar.group("goal", [&] { saveCell(ar, f.goal); });
         ar.value("retreat", f.retreat);
+    }
+    if (ar.sectionVersion() >= 3) {  // F10: carrying a downed friend to cover
+        ar.value("rescuing", f.rescuing);
+        ar.value("lifted", f.lifted);
+        ar.group("rescueTo", [&] { saveCell(ar, f.rescueTo); });
     }
 
 }
@@ -2903,7 +2920,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("repaths", d.repaths);
         ar.list("setupErrors", d.setupErrors, [&](std::string& s) { ar.text(nullptr, s); });
     });
-    ar.section("commands", 1, [&] { saveCommandsSection(ar, d); });
+    ar.section("commands", 2, [&] { saveCommandsSection(ar, d); });
     ar.section("things", 1, [&] { saveThingsSection(ar, d); });
     std::vector<SaveEntity>& e = d.entities;
     ar.section("movement", 2, [&] {
@@ -2943,7 +2960,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "schedule", e, &SaveEntity::schedule, [&](Schedule& s) { saveSchedulePart(ar, s); });
         saveParts(ar, "bed", e, &SaveEntity::bed, [&](Bed& b) { saveBedPart(ar, b); });
     });
-    ar.section("bills", 2, [&] {
+    ar.section("bills", 3, [&] {
         saveParts(ar, "bills", e, &SaveEntity::bills, [&](SaveBillList& list) { saveBillsPart(ar, list); });
     });
     ar.section("construction", 1, [&] {
@@ -2965,7 +2982,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("doors", 1, [&] {
         saveParts(ar, "door", e, &SaveEntity::door, [&](Door& door) { saveDoorPart(ar, door); });
     });
-    ar.section("fighters", 2, [&] {
+    ar.section("fighters", 3, [&] {
         saveParts(ar, "faction", e, &SaveEntity::faction, [&](Faction& f) { saveFactionPart(ar, f); });
         saveParts(ar, "fighter", e, &SaveEntity::fighter, [&](Fighter& f) { saveFighterPart(ar, f); });
     });
@@ -3074,11 +3091,17 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(t.celsius > -500.0f && t.celsius < 1000.0f, "the save file has an impossible room temperature");
         });
     });
+    ar.section("thermostats", 1, [&] {
+        ar.list("thermostats", d.thermostats, [&](Thermostat& t) {
+            ar.value("building", t.building);
+            ar.value("celsius", t.celsius);
+        });
+    });
     ar.section("raids", 2, [&] {
         saveRaids(ar, d.raids);
         saveParts(ar, "defense", e, &SaveEntity::defense, [&](DefensePlan& p) {
             ar.value("role", p.role);
-            ar.require(static_cast<int>(p.role) <= static_cast<int>(DefenseRole::KeepWorking), "the save file has a bad defense role");
+            ar.require(static_cast<int>(p.role) <= static_cast<int>(DefenseRole::Firefighter), "the save file has a bad defense role");
             ar.value("hasSpot", p.hasSpot);
             ar.group("spot", [&] { saveCell(ar, p.spot); });
         });
@@ -3597,6 +3620,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
                 b.skillMax = bill.skillMax;
                 b.radius = bill.radius;
                 b.storeZone = bill.storeZone;
+                b.countZone = bill.countZone;
                 b.unpauseAt = bill.unpauseAt;
                 b.satisfied = bill.satisfied;
                 for (const DefId def : bill.disallowed) {
@@ -3840,6 +3864,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.filth = sim.filth_->state();
     d.roomStats = sim.roomStats_->state();
     d.roomTemperatures = sim.temperature_->roomTemperatures();
+    d.thermostats = sim.temperature_->thermostats();
     d.upperFloors = sim.map_.upperFloorCells();
     d.roofs = sim.roofCollapse_->state();
     d.areas = sim.areas_->saved();
@@ -4109,6 +4134,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                 bill.skillMax = saved.skillMax;
                 bill.radius = saved.radius;
                 bill.storeZone = saved.storeZone;
+                bill.countZone = saved.countZone;
                 bill.unpauseAt = saved.unpauseAt;
                 bill.satisfied = saved.satisfied;
                 for (const std::string& name : saved.disallowed) {
@@ -4785,6 +4811,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     sim.power_->update();
     sim.roomStats_->refresh();
     sim.temperature_->setOutdoor(sim.outdoorTemperature());
+    sim.temperature_->restoreThermostats(d.thermostats);
     sim.temperature_->restore(d.roomTemperatures);
     sim.spoilage_->restore(d.spoilageState);
     if (!sim.roofCollapse_->restore(d.roofs)) {

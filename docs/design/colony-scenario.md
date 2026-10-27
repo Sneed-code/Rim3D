@@ -121,3 +121,18 @@ outdoor filth fades, hunting; `farming.md`, `raids.md`, `fighters.md`, `room-sta
 
 Frost no longer kills a single crop, and no seed is dead by day 51 any more (the first runs lost everyone), but the colony
 still does not last the year: see `BACKLOG.md`. The run is not in CTest: it takes about ten minutes.
+
+## The greenhouse (year run)
+
+From day 15 the year run also builds a heated greenhouse on the nearest free 10 x 6 patch (outside the room and the
+field): wood walls and a door, a wood-fired generator, a heater, two standing lamps, six hydroponics basins joined by a
+conduit row, and a rice growing zone over the basins once all six stand. The script unlocks `Electricity` and
+`Hydroponics` at the start (a player would research them). While the year run goes on it keeps ten of the nearest trees
+marked for felling whenever the map holds under 400 wood, since the stove, the walls and the generator (63 wood a day)
+otherwise empty it. Verbose mode prints the greenhouse's temperature, wood on the map and the generator's fuel every
+12 game hours; the output has a `greenhouse` line (temperature range, most crops at once, crop-hours and ripe-hours).
+
+**Seed 42, 100 days:** the room stays at 21 C through the cold (outside down to -5 C), the six basins carry rice
+(6,337 crop-hours, 158 ripe-hours). The room only went cold again after the colonists were dead and nobody refuelled the
+generator. The colonists still die for the reasons above (predators, starvation, hypothermia outdoors), so the greenhouse
+alone does not yet keep the colony alive; only six basins feed few people.

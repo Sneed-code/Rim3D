@@ -179,8 +179,10 @@ class FuelSystem;
 class DefDatabase;
 class DrugSystem;
 class Farming;
+class FieldCare;
 class Filth;
 class Fire;
+class DefenseSystem;
 class SpoilageSystem;
 class CraftingSystem;
 struct Bill;
@@ -351,6 +353,9 @@ public:
     // beds are ordinary beds.
     void setPrisoners(PrisonerSystem* prisoners) { prisoners_ = prisoners; }
     PrisonerSystem* prisoners() const { return prisoners_; }
+    // Medics and firefighters on duty while the alarm is on (FieldCareJobs.cpp, docs/design/field-care.md). Without it
+    // they work as usual.
+    void setFieldCare(FieldCare* fieldCare) { fieldCare_ = fieldCare; }
 
     // Call before a thing is destroyed: ends the jobs that carry it or are done by it.
     void forget(Entity thing);
@@ -372,6 +377,9 @@ public:
     // The fire layer, for the Firefighter work type's job (FireJobs.cpp, docs/design/fire.md). Without it nobody fights fires.
     void setFire(Fire* fire) { fire_ = fire; }
     Fire* fire() const { return fire_; }
+    // The turrets and traps, for the Rearm job (DefenseJobs.cpp, docs/design/defense.md). Without it nobody rearms traps.
+    void setDefense(DefenseSystem* defense) { defense_ = defense; }
+    DefenseSystem* defense() const { return defense_; }
     Rooms* rooms() const { return rooms_; }
     // How fast a pawn cleans (1 is 100%): FilthRules.cleaningSpeed times its Manipulation.
     double cleaningSpeed(Entity pawn) const;
@@ -401,7 +409,7 @@ public:
     // The bed building under a pawn standing in its cell, or kNoEntity.
     Entity bedUnder(Entity pawn) const;
     bool isMedicalBed(Entity bed) const;
-    // A downed colonist on its own side, or a downed prisoner, that no bed holds.
+    // A downed colonist on its own side, or a downed prisoner, that no bed holds and no fighter is fetching to cover (F10).
     bool needsRescue(Entity pawn) const;
     // The food a warden should carry to a hungry prisoner: the best the prisoner may eat, the nearest of that kind, with how
     // many to bring. Fills `out` as a FeedPrisoner job; false if there is none.
@@ -425,6 +433,7 @@ public:
     // set (some tests) nothing needs power.
     void setPower(const PowerGrid* power) { power_ = power; }
     bool buildingRuns(Entity building) const;
+    float unpoweredSpeed(Entity building) const;
     int64_t now() const;
 
     // The pawn holding a target, or kNoEntity.
@@ -528,8 +537,12 @@ private:
     bool thinkSchedule(Entity pawn, Job& out);
     bool thinkApparel(Entity pawn, Job& out);
     bool thinkWork(Entity pawn, Job& out);
-    // thinkWork's scan; `urgentOnly` asks only the emergency work types (doctor, patient...).
-    bool thinkWorkPass(Entity pawn, Job& out, bool urgentOnly);
+    // thinkWork's scan; `urgentOnly` asks only the emergency work types (doctor, patient...). With `dutyWork` (an
+    // index in workTypes_) it asks only that work type, whatever its priority, and only targets FieldCare allows.
+    bool thinkWorkPass(Entity pawn, Job& out, bool urgentOnly, int dutyWork = -1);
+    // A Medic or Firefighter on duty (FieldCareJobs.cpp) instead of the think list: its duty's work on safe targets,
+    // else StandBy at its place behind the line; a job it had that isn't its duty ends.
+    void dutyStep(Entity pawn, int dutyWork);
     // Every few seconds a pawn on a job it may drop (idling, hauling, cleaning, mining...) looks for emergency work:
     // a patient to tend, a downed colonist to carry to a bed.
     void interruptForEmergency(Entity pawn);
@@ -639,7 +652,12 @@ private:
 
     // Firefighting (FireJobs.cpp).
     bool failCheckExtinguish(Entity pawn, Job& job, std::string& why);
+    // Standing by on duty (FieldCareJobs.cpp): ends when the pawn is off duty.
+    bool failCheckStandBy(Entity pawn, Job& job, std::string& why);
     StepResult extinguishWork(Entity pawn, Job& job, std::string& why);
+    // Rearming sprung traps (DefenseJobs.cpp).
+    bool failCheckRearm(Entity pawn, Job& job, std::string& why);
+    StepResult rearmWork(Entity pawn, Job& job, std::string& why);
 
     void startJob(Entity pawn, Job job);
     void tickJob(Entity pawn);
@@ -765,6 +783,8 @@ private:
     uint8_t defaultPriority_ = kDefaultPriority;
     Filth* filth_ = nullptr;
     Fire* fire_ = nullptr;
+    DefenseSystem* defense_ = nullptr;
+    FieldCare* fieldCare_ = nullptr;
     SpoilageSystem* spoilage_ = nullptr;
     DrugSystem* drugs_ = nullptr;
     CraftingSystem* crafting_ = nullptr;
