@@ -55,8 +55,8 @@ names, adults only, nudity yes and sex no (`game-design.md` "Content rules")._
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | V1 | **Looks seed, part 2 (sim).** Add to `PawnLooks` a face seed (face shape, eye colour, brow, nose, jaw, each a small number), hair style, beard (men), body-hair amount, tattoo and scar slots; filled from the seed and the lineage genes, saved, hashed and tested like A3. Scars come from healed injuries (`PawnInjured` healing into a scar, `ours`). | Cloud | Sonnet, high | 90 min | A3 |
-| | V2 | **Faces and hair on screen.** Free face variety: MetaHuman face morph targets mixed by the face seed (same DNA route as A3's bodies), eye colour, brows, 8 or more groom hair styles and beards from MetaHuman's own grooms; far pawns use hair cards. Ten colonists side by side must not look alike. | PC Unreal | Opus, high | 120 min (two sittings) | V1 |
-| | V3 | **Body hair, scars, tattoos.** Body hair as a texture layer in `M_PawnSkin` (chest, arms, legs, by amount and hair colour, fading with distance), scars and tattoos as decal layers on the skin material by body part. | PC Unreal | Sonnet, high | 90 min | V1 |
+| ✓ | V2 | **Faces and hair on screen.** Free face variety: MetaHuman face morph targets mixed by the face seed (same DNA route as A3's bodies), eye colour, brows, 8 or more groom hair styles and beards from MetaHuman's own grooms; far pawns use hair cards. Ten colonists side by side must not look alike. | PC Unreal | Opus, high | 120 min (two sittings) | V1 |
+| ✓ | V3 | **Body hair, scars, tattoos.** Body hair as a texture layer in `M_PawnSkin` (chest, arms, legs, by amount and hair colour, fading with distance), scars and tattoos as decal layers on the skin material by body part. | PC Unreal | Sonnet, high | 90 min | V1 |
 
 ### Nudity and anatomy (V4 to V6)
 
