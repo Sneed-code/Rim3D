@@ -3,6 +3,7 @@
 #include "ColonySim/Combat.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Repair.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -101,7 +102,8 @@ bool JobSystem::findLooseWeapon(Entity pawn, Job& out) {
     for (const auto [item, thing, position] : reg.view<const Thing, const Position>().each()) {
         WeaponSlot slot = WeaponSlot::Primary;
         if (thing.category != ThingCategory::Item || reg.all_of<EquippedBy>(item) || !combat_->weaponSlot(thing.def, slot) ||
-            slot == WeaponSlot::Melee || !free[static_cast<int>(slot)] || !things_.spawned(item) || position.level != at.level) {
+            slot == WeaponSlot::Melee || !free[static_cast<int>(slot)] || !things_.spawned(item) || position.level != at.level ||
+            reg.any_of<RepairMark, FitOrder>(item)) {  // marked for the bench: leave it for the crafter
             continue;
         }
         const JobTarget target{item, CellPos{}};

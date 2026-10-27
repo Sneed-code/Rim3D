@@ -91,6 +91,7 @@ const PowerInfo& PowerGrid::info(DefId id) const {
         p.sun = def.flag("power.scalesWithSun");
         p.wind = def.flag("power.scalesWithWind");
         p.windBlockRadius = std::max(0, static_cast<int>(def.integer("windBlockRadius")));
+        p.geyser = def.flag("power.needsGeyser");
         p.fuelled = p.output > 0.0 && def.has("fuel");
         p.consumption = std::max(0.0, def.number("power.consumption"));
         p.battery = std::max(0.0, def.number("power.battery"));
@@ -352,6 +353,13 @@ void PowerGrid::balance(const GameTime& time) {
                 }
                 if (m.info->wind) {
                     factor *= wind * windOpen_[i];
+                }
+                if (m.info->geyser) {
+                    bool vents = false;
+                    for (const CellPos c : m.cells) {
+                        vents = vents || map_.geyser(c);
+                    }
+                    factor *= vents ? 1.0 : 0.0;
                 }
                 if (m.info->fuelled && fuel_ && !fuel_(m.entity)) {
                     factor = 0.0;

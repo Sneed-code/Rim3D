@@ -32,7 +32,8 @@ think node as clothes (`JobSystem::findLooseWeapon`, job `EquipWeapon`, steps wa
 `carryWeapon`); a rifle goes to the hands. Ours: only while fewer than 3 other colonists carry a gun (a colonist with one
 revolver stands and fights three wolves, a colonist with none shelters; the year run lost most of its colonists to the
 first when everybody was armed), melee weapons are never picked up (a berserk colonist with a knife killed its friends),
-weapons are never swapped for better ones. Tests: `ColdAndArmsTests.cpp`.
+weapons are never swapped for better ones, and a gun marked for repair or an upgrade (`RepairMark`, `FitOrder`) is left for
+the crafter. Tests: `ColdAndArmsTests.cpp`, `RepairTests.cpp`.
 
 ## Switching
 

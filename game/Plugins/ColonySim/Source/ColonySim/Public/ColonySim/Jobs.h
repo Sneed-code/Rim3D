@@ -63,7 +63,7 @@ struct Job {
     Entity site = kNoEntity;   // DeliverResources: the blueprint or frame it brings materials to; DoBill: the
                                // building that holds the bill; TameAnimal, TrainAnimal, SlaughterAnimal, FeedAnimal, GatherAnimal:
                                // the animal (`thing` is the food it fetches, none for slaughter)
-                               // (Refuel: the building to put fuel in)
+                               // (Refuel: the building to put fuel in; RepairGear: the bench)
     float progress = 0.0f;     // Deconstruct: work done so far; Mine: work towards the next pick hit; CutPlant,
                                // HarvestPlant: work done on the plant. For the gather jobs both are game seconds
                                // at 100% work speed (the worker's speed adds to it every second); DoBill: work done
@@ -144,6 +144,10 @@ inline constexpr uint8_t kDoBillDepositStep = 3;
 // Refuel has four: go to the fuel, pick it up, carry it beside the building, put it in (the work
 // takes FuelSystem::kRefuelWorkSeconds). The pawn carries the fuel from the third on.
 inline constexpr uint8_t kRefuelPickUpStep = 1;
+// RepairGear has four as well: go to the gear, pick it up, carry it beside the bench, work. `thing` is the gear, `site` the
+// bench, `cell` where the pawn stands, `bill` 0 for a repair or the upgrade part's def id + 1 for a fitting.
+inline constexpr uint8_t kGearPickUpStep = 1;
+
 // Operate: the DoBill steps with the patient for the work building. `thing` is the part or medicine being fetched (none when
 // there is nothing to fetch), `site` the patient, `bill` the operation's id, `cell` where the doctor stands.
 inline constexpr uint8_t kOperatePickUpStep = 1;
@@ -179,6 +183,7 @@ class FuelSystem;
 class DefDatabase;
 class DrugSystem;
 class Farming;
+class RepairSystem;
 class FieldCare;
 class Filth;
 class Fire;
@@ -376,6 +381,8 @@ public:
     void setCrafting(CraftingSystem* crafting) { crafting_ = crafting; }
     CraftingSystem* crafting() const { return crafting_; }
     void setFarming(Farming* farming) { farming_ = farming; }
+    void setRepair(RepairSystem* repair) { repair_ = repair; }
+    RepairSystem* repair() const { return repair_; }
     Farming* farming() const { return farming_; }
     Filth* filth() const { return filth_; }
     // The fire layer, for the Firefighter work type's job (FireJobs.cpp, docs/design/fire.md). Without it nobody fights fires.
@@ -702,6 +709,9 @@ private:
     // Refuel (FuelJobs.cpp, docs/design/fuel.md): fetch fuel, carry it to the building, put it in.
     StepResult refuelWork(Entity pawn, Job& job, std::string& why);
     bool failCheckRefuel(Entity pawn, Job& job, std::string& why);
+    // RepairGear (GearJobs.cpp, docs/design/repair.md): carry the gear to a bench, mend it or fit a part.
+    StepResult gearWork(Entity pawn, Job& job, std::string& why);
+    bool failCheckGear(Entity pawn, Job& job, std::string& why);
     // Puts the ingredients delivered so far back on the ground near the pawn.
     void returnIngredients(Entity pawn, const Job& job);
     // Makes `count` of an item def and puts it down on the nearest free cell near the pawn.
@@ -807,6 +817,7 @@ private:
     DrugSystem* drugs_ = nullptr;
     CraftingSystem* crafting_ = nullptr;
     Farming* farming_ = nullptr;
+    RepairSystem* repair_ = nullptr;
     std::vector<Entity> order_;              // scratch: workers this step
     std::vector<WorkCandidate> candidates_;  // scratch: one think
 };

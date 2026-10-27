@@ -39,6 +39,7 @@
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Spoilage.h"
 #include "ColonySim/Crafting.h"
+#include "ColonySim/Repair.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Inspirations.h"
 #include "ColonySim/MentalBreaks.h"
@@ -347,6 +348,14 @@ struct SaveApparel {
     int64_t nextCheck = 0;
 };
 
+// What the repair system keeps on an item: the repair mark, the upgrade part ordered fitted and the parts fitted, by
+// defName (section "repair", P4).
+struct SaveRepair {
+    bool marked = false;
+    std::string order;  // Things defName, empty for none
+    std::vector<std::string> parts;
+};
+
 // X2's resonance (section "resonance"): an attuned pawn and a cast under way, their powers by defName.
 struct SaveAttunement {
     int level = 1;
@@ -427,6 +436,7 @@ struct SaveEntity {
     std::optional<PrisonBed> prisonBed;     // section "prisoners" (C22)
     std::optional<Fuel> fuel;               // "fuel" section (C11)
     std::optional<StoreIn> storeIn;         // "crafting" section (C14)
+    std::optional<SaveRepair> repair;       // "repair" section (P4)
     std::optional<MentalBreaker> mentalBreaker;  // section "mentalBreaks" (C19)
     std::optional<Visitor> visitor;         // section "trade" (C23)
     std::optional<Inspired> inspired;            // section "inspirations" (C25)
@@ -1132,6 +1142,13 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.text("action", c.action);
         ar.value("quest", c.quest);
         ar.text("kind", c.kind);
+    } else if constexpr (std::is_same_v<Type, RepairGearCommand>) {
+        ar.value("thing", c.thing);
+        ar.value("repair", c.repair);
+    } else if constexpr (std::is_same_v<Type, FitUpgradeCommand>) {
+        ar.value("thing", c.thing);
+        ar.text("part", c.part);
+        ar.value("fit", c.fit);
     } else if constexpr (std::is_same_v<Type, AttuneCommand>) {
         ar.value("pawn", c.pawn);
         ar.value("level", c.level);
@@ -3289,6 +3306,13 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("rngIncrement", d.craftingState.rngIncrement);
         saveParts(ar, "storeIn", e, &SaveEntity::storeIn, [&](StoreIn& s) { ar.value("zone", s.zone); });
     });
+    ar.section("repair", 1, [&] {
+        saveParts(ar, "repair", e, &SaveEntity::repair, [&](SaveRepair& r) {
+            ar.value("marked", r.marked);
+            ar.text("order", r.order);
+            ar.list("parts", r.parts, [&](std::string& name) { ar.text(nullptr, name); });
+        });
+    });
     ar.section("mentalBreaks", 1, [&] {
         saveParts(ar, "mentalBreaker", e, &SaveEntity::mentalBreaker, [&](MentalBreaker& b) { saveMentalBreakerPart(ar, b); });
     });
@@ -3639,6 +3663,19 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const StoreIn* store = reg.try_get<StoreIn>(e)) {
             out.storeIn = *store;
+        }
+        if (reg.all_of<RepairMark>(e) || reg.all_of<FitOrder>(e) || reg.all_of<FittedParts>(e)) {
+            SaveRepair saved;
+            saved.marked = reg.all_of<RepairMark>(e);
+            if (const FitOrder* order = reg.try_get<FitOrder>(e)) {
+                saved.order = sim.defs_->get(order->part).defName();
+            }
+            if (const FittedParts* parts = reg.try_get<FittedParts>(e)) {
+                for (const DefId part : parts->parts) {
+                    saved.parts.push_back(sim.defs_->get(part).defName());
+                }
+            }
+            out.repair = std::move(saved);
         }
         if (const Health* health = reg.try_get<Health>(e)) {
             SaveHealth saved;
@@ -4183,6 +4220,31 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.storeIn) {
             reg.emplace<StoreIn>(entity, *e.storeIn);
+        }
+        if (e.repair) {
+            if (e.repair->marked) {
+                reg.emplace<RepairMark>(entity);
+            }
+            if (!e.repair->order.empty()) {
+                const DefId part = sim.defs_->idOf("Things", e.repair->order);
+                if (!part.valid()) {
+                    error = "the save has an upgrade order for a part that no longer exists: " + e.repair->order;
+                    return false;
+                }
+                reg.emplace<FitOrder>(entity, FitOrder{part});
+            }
+            if (!e.repair->parts.empty()) {
+                FittedParts fitted;
+                for (const std::string& name : e.repair->parts) {
+                    const DefId part = sim.defs_->idOf("Things", name);
+                    if (!part.valid()) {
+                        error = "the save has a gun with a part that no longer exists: " + name;
+                        return false;
+                    }
+                    fitted.parts.push_back(part);
+                }
+                reg.emplace<FittedParts>(entity, std::move(fitted));
+            }
         }
         if (e.fuel) {
             reg.emplace<Fuel>(entity, *e.fuel);
@@ -4873,6 +4935,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         return false;
     }
     sim.crafting_->restore(d.craftingState);
+    sim.repair_->restoreMods();
     if (!sim.fire_->restore(d.fire, error)) {
         return false;
     }
