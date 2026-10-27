@@ -152,6 +152,10 @@ public:
     // happens); a ShortCircuit event carries it for the explosion and fire that follow (F9, E4).
     // False, with `error`, if `at` has no power part.
     bool shortCircuit(Entity at, double& released, std::string& error);
+    // A solar flare (T3): while on, no generator makes power and no battery gives any; every net is dark. Not saved:
+    // the disaster system that owns the flare sets it again every step.
+    void setBlackout(bool on) { blackout_ = on; }
+    bool blackout() const { return blackout_; }
 
 private:
     struct Member {
@@ -186,6 +190,7 @@ private:
     std::function<void()> onChange_;
 
     bool dirty_ = true;
+    bool blackout_ = false;
     uint64_t buildingChanges_ = 0;
     uint64_t rebuilds_ = 0;
     std::vector<Member> members_;           // buildings with power parts, in entity id order

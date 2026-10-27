@@ -33,7 +33,9 @@
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Social.h"
 #include "ColonySim/Medicine.h"
+#include "ColonySim/Surgery.h"
 #include "ColonySim/Prisoners.h"
+#include "ColonySim/Quests.h"
 #include "ColonySim/Ship.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Talents.h"
@@ -48,11 +50,13 @@
 #include "ColonySim/RoomStats.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Snapshot.h"
+#include "ColonySim/Monsters.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/RoofCollapse.h"
 #include "ColonySim/UpperFloors.h"
 #include "ColonySim/Weather.h"
 #include "ColonySim/Zones.h"
+#include "ColonySim/Disasters.h"
 #include "ColonySim/Narrator.h"
 #include "MovementSystem.h"
 
@@ -222,6 +226,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     recreation_->setRooms(rooms_.get());
     research_ = std::make_unique<ResearchSystem>(*things_, *defs_);
     medicine_ = std::make_unique<MedicineSystem>(*things_, *defs_);
+    surgery_ = std::make_unique<SurgerySystem>(*things_, *defs_, *health_, research_.get());
     talents_ = std::make_unique<TalentSystem>(*things_, *defs_);
     temperature_ = std::make_unique<TemperatureSystem>(map_, *things_, *rooms_, *health_, *defs_,
                                                        splitMix64(settings.seed ^ 0x74656D70ULL));
@@ -267,6 +272,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setRooms(rooms_.get());
     jobs_->setResearch(research_.get());
     jobs_->setMedicine(medicine_.get());
+    jobs_->setSurgery(surgery_.get());
+    jobs_->setRoomStats(roomStats_.get());
     jobs_->setTalents(talents_.get());
     jobs_->setFilth(filth_.get());
     jobs_->setApparel(apparel_.get());
@@ -318,9 +325,13 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     raids_ = std::make_unique<RaidSystem>(*things_, map_, *rooms_, *combat_, *health_, *jobs_, *fighters_, *defs_, time_, rng_);
     raids_->setEventLog(&events_);
     raids_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
+    monsters_ = std::make_unique<MonsterSystem>(*things_, map_, *combat_, *health_, *fighters_, *raids_, *animals_, *defs_, time_, rng_);
     prisoners_ = std::make_unique<PrisonerSystem>(*things_, map_, *combat_, *health_, *jobs_, *fighters_, *raids_, *defs_, time_, rng_);
     prisoners_->setEventLog(&events_);
     jobs_->setPrisoners(prisoners_.get());
+    quests_ = std::make_unique<QuestSystem>(*things_, map_, *raids_, *fighters_, *health_, *defs_, time_, rng_);
+    quests_->setEventLog(&events_);
+    quests_->setJoinMaker([this](CellPos cell, uint64_t seed) { return makeJoiner(cell, seed); });
     ship_ = std::make_unique<ShipSystem>(*things_, *raids_, *defs_, time_);
     ship_->setEventLog(&events_);
     mood_->addSituation("isPrisoner", [this](Entity pawn) { return prisoners_->isPrisoner(pawn) ? 0 : -1; });
@@ -353,7 +364,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
                                            splitMix64(settings.seed ^ 0x6D656C6565ULL));
     melee_->setEventLog(&events_);
     fighters_->setMelee(melee_.get());
-    upperFloors_ = std::make_unique<UpperFloors>(map_, *rooms_, *things_);
+    upperFloors_ = std::make_unique<UpperFloors>(map_, *rooms_, *things_, plants_.get());
     roofCollapse_ = std::make_unique<RoofCollapse>(map_, *rooms_, *things_, *health_, *defs_);
     roofCollapse_->setEventLog(&events_);
     roofCollapse_->setInterruptHandler([this](Entity pawn, const std::string& why) { jobs_->interrupt(pawn, why); });
@@ -371,6 +382,19 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     fighters_->setDefense(defense_.get());
     narrator_ = std::make_unique<NarratorSystem>(*raids_, *defs_, time_, settings.seed);
     narrator_->setEventLog(&events_);
+    disasters_ = std::make_unique<DisasterSystem>(*narrator_, *power_, *weather_, *plants_, *farming_, *things_, *health_, *mood_,
+                                                  *animals_, *fire_, *combat_, map_, *defs_, time_, settings.seed);
+    disasters_->setEventLog(&events_);
+    narrator_->setWorker("QuestOffer", [this](IncidentFiring& f) {
+        uint32_t id = 0;
+        if (!quests_->offerRandom(id, f.error)) {
+            return false;
+        }
+        const Quest* quest = quests_->find(id);
+        const Def* questDef = quest != nullptr ? defs_->find("Quests", quest->kind) : nullptr;
+        f.text = "Quest: " + (questDef != nullptr ? questDef->text("text") : std::string("someone has an offer for the colony."));
+        return true;
+    });
     social_ = std::make_unique<SocialSystem>(*things_, *rooms_, *health_, *melee_, *mood_, *jobs_, *defs_, time_,
                                              splitMix64(settings.seed ^ 0x736F6369616CULL));
     social_->setEventLog(&events_);
@@ -481,6 +505,24 @@ void Sim::placeStockpileAndThings() {
         const uint64_t looksSeed = splitMix64(settings_.seed ^ 0x6861756C6572ULL) + static_cast<uint64_t>(i);
         giveLooks(pawn, looksSeed, (splitMix64(looksSeed) & 1) != 0, "Baseline");
     }
+}
+
+// A new colonist who walks in from outside (a quest's refugee or wanderer): a whole person working for the player.
+Entity Sim::makeJoiner(CellPos cell, uint64_t seed) {
+    Colonist colonist;
+    std::string error;
+    if (!generateColonist(*defs_, seed, false, colonist, error)) {
+        return kNoEntity;
+    }
+    const Entity pawn = things_->spawn("Human", cell);
+    if (pawn == kNoEntity || !things_->registry().all_of<Mover>(pawn)) {
+        things_->destroy(pawn);
+        return kNoEntity;
+    }
+    jobs_->addWorker(pawn, colonist.disabledWorkTags);
+    giveLooks(pawn, seed, colonist.female, "Baseline");
+    things_->registry().emplace<Colonist>(pawn, std::move(colonist));
+    return pawn;
 }
 
 void Sim::giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& lineage) {
@@ -1099,6 +1141,14 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         } else if (!jobs_->bills().setOptions(billOptions->building, billOptions->bill, options, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* addOperation = std::get_if<AddOperationCommand>(&command)) {
+        if (surgery_->add(addOperation->pawn, addOperation->recipe, addOperation->part, error) == 0) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* removeOperation = std::get_if<RemoveOperationCommand>(&command)) {
+        if (!surgery_->remove(removeOperation->pawn, removeOperation->operation, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* moveBill = std::get_if<MoveBillCommand>(&command)) {
         if (!jobs_->bills().moveBill(moveBill->building, moveBill->bill, moveBill->index, error)) {
             commandFailed(id, error);
@@ -1133,6 +1183,13 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
     } else if (const auto* raid = std::get_if<StartRaidCommand>(&command)) {
         if (!raids_->startRaid(raid->faction, raid->points, raid->edge, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* threat = std::get_if<StartThreatCommand>(&command)) {
+        const bool ok = threat->kind == "Infestation"      ? monsters_->infest(threat->points, error)
+                        : threat->kind == "RemnantCluster" ? monsters_->remnantCluster(threat->points, threat->edge, error)
+                                                           : (error = "no such threat '" + threat->kind + "'", false);
+        if (!ok) {
             commandFailed(id, error);
         }
     } else if (const auto* alarm = std::get_if<SoundAlarmCommand>(&command)) {
@@ -1229,6 +1286,21 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
                 commandFailed(id, error);
             }
         }
+    } else if (const auto* quest = std::get_if<QuestCommand>(&command)) {
+        uint32_t made = 0;
+        bool ok = false;
+        if (quest->action == "offer") {
+            ok = quest->kind.empty() ? quests_->offerRandom(made, error) : quests_->offer(quest->kind, made, error);
+        } else if (quest->action == "accept") {
+            ok = quests_->accept(quest->quest, error);
+        } else if (quest->action == "decline") {
+            ok = quests_->decline(quest->quest, error);
+        } else {
+            error = "no quest action '" + quest->action + "' (offer, accept or decline)";
+        }
+        if (!ok) {
+            commandFailed(id, error);
+        }
     }
 }
 
@@ -1273,6 +1345,7 @@ void Sim::step() {
     }
     fighters_->step();
     prisoners_->step();
+    quests_->step();
     ship_->step();
     recreation_->step();
     animals_->step();
@@ -1288,6 +1361,7 @@ void Sim::step() {
     explosives_->step(rng_);
     animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
     defense_->step(rng_);
+    monsters_->step(events_, 0);  // mounds make jelly, brood and spread; insects hunt (docs/design/monsters.md)
     {
         // Blasts of Burn damage start fires; a pawn that catches fire stops what it was doing.
         fire_->step(time_.seconds, 0);
@@ -1324,6 +1398,7 @@ void Sim::step() {
         pruneDesignations();
     }
     narrator_->step();  // after the clock: incidents come on the narrator's checks (T1)
+    disasters_->step();  // T3: conditions end, work and strike
     if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
         checkpoints_.push_back(Checkpoint{time_.seconds, stateHash()});
     }
@@ -1730,6 +1805,24 @@ void Sim::writeSnapshot(Snapshot& out) const {
                                        static_cast<uint8_t>(squad.strategy), squad.hasBreach, squad.breach});
     }
 
+    out.quests.clear();
+    for (const Quest& quest : quests_->state().quests) {
+        QuestView view;
+        view.id = quest.id;
+        view.kind = quest.kind;
+        const Def* questDef = defs_->find("Quests", quest.kind);
+        view.label = questDef != nullptr ? questDef->label() : quest.kind;
+        view.state = static_cast<uint8_t>(quest.state);
+        view.expiresAt = quest.expiresAt;
+        view.deadline = quest.deadline;
+        view.people = quest.count;
+        view.points = quest.points;
+        for (const Quest::Reward& reward : quest.rewards) {
+            view.rewards.emplace_back(reward.thing, reward.count);
+        }
+        out.quests.push_back(std::move(view));
+    }
+
     out.rooms.clear();
     for (const Room& room : rooms_->rooms()) {
         if (!room.enclosed()) {
@@ -1868,6 +1961,7 @@ uint64_t Sim::stateHash() const {
     designations_->hashState(h);
     research_->hashState(h);
     raids_->hashState(h);
+    quests_->hashState(h);
     ship_->hashState(h);
     talents_->hashState(h);
     pathfinder_.hashState(h);
@@ -1884,6 +1978,7 @@ uint64_t Sim::stateHash() const {
     roofCollapse_->hashState(h);
     spoilage_->hashState(h);
     narrator_->hashState(h);
+    disasters_->hashState(h);
     crafting_->hashState(h);
     farming_->hashState(h);
 
@@ -2184,11 +2279,17 @@ uint64_t Sim::stateHash() const {
                 h.add(static_cast<int>(missing.part));
                 h.add(missing.tendQuality);
             }
+            h.add(static_cast<uint64_t>(health->added.size()));
+            for (const AddedPart& added : health->added) {
+                h.add(static_cast<int>(added.part));
+                h.add(added.hediff.value);
+            }
             h.add(health->bloodLoss);
             h.add(health->dead);
             h.add(static_cast<int>(health->cause));
         }
         medicine_->hashPawn(e, h);
+        surgery_->hashPawn(e, h);
         combat_->hashThing(e, h);
         explosives_->hashThing(e, h);
         fighters_->hashThing(e, h);

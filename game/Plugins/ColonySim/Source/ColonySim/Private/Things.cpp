@@ -289,8 +289,9 @@ void Things::despawn(Entity thing) {
     if (registry_.all_of<StackCount>(thing)) {
         indexItem(thing, cellOf(registry_.get<Position>(thing)), false);
     }
+    const CellPos was = cellOf(registry_.get<Position>(thing));
     registry_.remove<Position>(thing);
-    report(EventType::ThingDespawned, thing);
+    report(EventType::ThingDespawned, thing, was);  // the cell it left (a building's origin cell, an item's own)
 }
 
 void Things::indexItem(Entity thing, CellPos cell, bool add) {

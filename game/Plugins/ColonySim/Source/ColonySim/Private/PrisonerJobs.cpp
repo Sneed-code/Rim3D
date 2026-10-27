@@ -401,7 +401,7 @@ void JobSystem::stepPrisoner(Entity pawn) {
         const Needs* needs = reg.try_get<Needs>(pawn);
         if (needs != nullptr && needs->rest < sleepBelow(scheduleNow(pawn))) {
             have = makeSleepJob(pawn, job);
-        } else if (health_.needsRest(pawn)) {
+        } else if (needsBedRest(pawn)) {
             const Entity bed = bedOf(pawn);
             CellPos cell;
             if (bed != kNoEntity && bedSlotCell(bed, pawn, cell)) {
