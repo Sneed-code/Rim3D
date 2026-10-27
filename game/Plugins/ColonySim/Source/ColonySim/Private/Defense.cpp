@@ -7,6 +7,8 @@
 #include "ColonySim/Map.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Power.h"
+#include "ColonySim/Prisoners.h"
+#include "ColonySim/Trade.h"
 
 #include <algorithm>
 #include <cmath>
@@ -164,7 +166,7 @@ void DefenseSystem::collectPawns() {
         p.y = pos.y;
         p.level = pos.level;
         p.able = h == nullptr || !h->downed;
-        p.animal = reg.all_of<Animal>(e);
+        p.animal = reg.all_of<Animal>(e) || reg.all_of<Prisoner>(e) || reg.all_of<Visitor>(e);  // turrets leave prisoners (C22) and visitors (C23) alone
         p.fighter = reg.all_of<Fighter>(e);
         pawns_.push_back(p);
     }

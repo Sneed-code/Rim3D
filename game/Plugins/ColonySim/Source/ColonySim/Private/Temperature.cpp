@@ -98,9 +98,6 @@ void TemperatureSystem::syncRooms() {
         return;
     }
     seenRebuilds_ = rooms_.rebuilds();
-    if (cellTemp_.empty()) {
-        cellTemp_.assign(static_cast<size_t>(map_.width()) * static_cast<size_t>(map_.height()), kTempNone);
-    }
     const std::vector<Room>& list = rooms_.rooms();
     std::vector<float> fresh(list.size(), outdoor_);
     for (const Room& room : list) {
@@ -110,7 +107,8 @@ void TemperatureSystem::syncRooms() {
         double sum = 0.0;
         const auto cells = rooms_.cellsOf(room);
         for (const CellPos& c : cells) {
-            const float v = cellTemp_[static_cast<size_t>(map_.index(c))];
+            const float* slot = cellTempOf(c, false);
+            const float v = slot != nullptr ? *slot : kTempNone;
             sum += v == kTempNone ? outdoor_ : v;
         }
         if (!cells.empty()) {
@@ -121,10 +119,24 @@ void TemperatureSystem::syncRooms() {
     storeCells();
 }
 
+float* TemperatureSystem::cellTempOf(CellPos c, bool make) {
+    if (cellTemp_.empty()) {
+        cellTemp_.resize(static_cast<size_t>(map_.levels()));
+    }
+    std::vector<float>& level = cellTemp_[static_cast<size_t>(c.level)];
+    if (level.empty()) {
+        if (!make) {
+            return nullptr;
+        }
+        level.assign(static_cast<size_t>(map_.width()) * static_cast<size_t>(map_.height()), kTempNone);
+    }
+    return &level[static_cast<size_t>(map_.index(c))];
+}
+
 // cellTemp_ always holds the temperature of the room each cell is in now.
 void TemperatureSystem::storeCells() {
-    for (const int index : storedCells_) {
-        cellTemp_[static_cast<size_t>(index)] = kTempNone;
+    for (const CellPos& c : storedCells_) {
+        *cellTempOf(c, true) = kTempNone;
     }
     storedCells_.clear();
     for (const Room& room : rooms_.rooms()) {
@@ -132,9 +144,8 @@ void TemperatureSystem::storeCells() {
             continue;
         }
         for (const CellPos& c : rooms_.cellsOf(room)) {
-            const int index = map_.index(c);
-            cellTemp_[static_cast<size_t>(index)] = roomTemp_[room.id];
-            storedCells_.push_back(index);
+            *cellTempOf(c, true) = roomTemp_[room.id];
+            storedCells_.push_back(c);
         }
     }
 }
@@ -198,6 +209,25 @@ bool TemperatureSystem::comfortRange(Entity pawn, float& min, float& max) const 
     return true;
 }
 
+bool TemperatureSystem::safeRange(Entity pawn, float& min, float& max) const {
+    if (!comfortRange(pawn, min, max)) {
+        return false;
+    }
+    min -= numbers_.safeMarginC;
+    max += numbers_.safeMarginC;
+    return true;
+}
+
+bool TemperatureSystem::outsideSafeRange(Entity pawn) {
+    float min = 0.0f;
+    float max = 0.0f;
+    if (!safeRange(pawn, min, max)) {
+        return false;
+    }
+    const float ambient = ambientOf(pawn);
+    return ambient < min || ambient > max;
+}
+
 float TemperatureSystem::degreesBelowComfort(Entity pawn) {
     float min = 0.0f;
     float max = 0.0f;
@@ -232,7 +262,9 @@ void TemperatureSystem::addHeat(CellPos cell, double heatPerSecond, double secon
     t = std::min(maxTemp, t + dt);
     if (!cellTemp_.empty()) {
         for (const CellPos& c : rooms_.cellsOf(*room)) {
-            cellTemp_[static_cast<size_t>(map_.index(c))] = t;
+            if (float* stored = cellTempOf(c, false)) {
+                *stored = t;
+            }
         }
     }
 }
@@ -277,6 +309,14 @@ float TemperatureSystem::temperatureBeyond(CellPos cell) {
     return outdoor_;
 }
 
+float TemperatureSystem::temperatureThroughFloor(CellPos cell) {
+    const RoomId id = rooms_.roomAt(cell);
+    if (id == kNoRoom) {
+        return kTempNone;
+    }
+    return usesRoomTemperature(rooms_.room(id)) ? frozen_[id] : outdoor_;
+}
+
 void TemperatureSystem::exchange() {
     refreshSources();
     const std::vector<Room>& list = rooms_.rooms();
@@ -294,10 +334,23 @@ void TemperatureSystem::exchange() {
         double sum = 0.0;
         for (const CellPos& c : rooms_.cellsOf(room)) {
             const Roof roof = map_.roof(c);
-            if (roof == Roof::Thin) {
+            if (map_.floorAbove(c)) {
+                // An upper floor is a thin roof between this room and what is above it.
+                const float above = temperatureThroughFloor(CellPos{c.x, c.y, c.level + 1});
+                if (above != kTempNone) {
+                    sum += numbers_.roofThin * (above - t);
+                }
+            } else if (roof == Roof::Thin) {
                 sum += numbers_.roofThin * (outdoor_ - t);
             } else if (roof == Roof::Thick) {
                 sum += numbers_.roofThick * (ground_ - t);
+            }
+            if (c.level > 0) {
+                // And the floor under an upper room, the same way from this side.
+                const float below = temperatureThroughFloor(CellPos{c.x, c.y, c.level - 1});
+                if (below != kTempNone) {
+                    sum += numbers_.roofThin * (below - t);
+                }
             }
             for (const auto& side : kTempSides) {
                 const CellPos n{c.x + side[0], c.y + side[1], c.level};
@@ -456,7 +509,7 @@ std::vector<RoomTemperature> TemperatureSystem::roomTemperatures() {
         }
     }
     std::sort(out.begin(), out.end(), [&](const RoomTemperature& a, const RoomTemperature& b) {
-        return map_.index(a.anchor) < map_.index(b.anchor);
+        return a.anchor.level != b.anchor.level ? a.anchor.level < b.anchor.level : map_.index(a.anchor) < map_.index(b.anchor);
     });
     return out;
 }
@@ -482,6 +535,9 @@ void TemperatureSystem::hashState(StateHasher& hasher) {
     for (const RoomTemperature& t : temperatures) {
         hasher.add(t.anchor.x);
         hasher.add(t.anchor.y);
+        if (t.anchor.level != 0) {
+            hasher.add(t.anchor.level);
+        }
         hasher.add(t.celsius);
     }
 }

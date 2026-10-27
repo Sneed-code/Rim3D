@@ -17,6 +17,7 @@ class Map;
 class Plants;
 class Rng;
 class Things;
+class UpperFloors;
 
 // Building: blueprints, frames, materials, finished buildings and taking them down. See
 // docs/design/construction.md.
@@ -82,6 +83,11 @@ public:
                  std::vector<Event>& events);
 
     const ConstructionNumbers& numbers() const { return numbers_; }
+    // Upper floors (task M2, docs/design/levels.md): a def with `building.upperFloor` is planned,
+    // delivered to and built like any building, one cell at a time, and when it is done the floor
+    // is laid (UpperFloors::lay) instead of a building spawned. Without this, none can be planned.
+    void setUpperFloors(UpperFloors* floors) { upperFloors_ = floors; }
+    bool isUpperFloor(DefId def) const;
 
     // ---- What a building costs --------------------------------------------------------------
     // True if the def is a Things def of category Building that can be built (it has
@@ -111,7 +117,8 @@ public:
     // Hands over materials. Returns how many of `count` the site took (none if it needs no more
     // of that item). The first delivery turns a blueprint into a frame.
     int deliver(Entity site, DefId item, int count);
-    // Turns a frame with all its materials into the finished building: pawns standing in the way
+    // Turns a frame with all its materials into the finished building (an upper floor's frame lays
+    // its floor and returns kNoEntity; if it can't be laid any more the materials drop below): pawns standing in the way
     // of a building that blocks movement are moved out, items lying on it are moved off, then it
     // is built (full hit points) and the plants under it are gone. Returns the building, or kNoEntity if it can't stand there any
     // more (the materials are given back).
@@ -126,7 +133,9 @@ public:
     // Work the job at a site or building needs: total game seconds at speed 1.
     float deconstructWork(Entity building) const;
     // A walkable cell beside the rect (sharing a side, never a corner) that `from` can reach,
-    // nearest to `from`; false if there is none. Where a pawn stands to build or take down.
+    // nearest to `from`; false if there is none. Where a pawn stands to build or take down. A rect
+    // over open air on an upper level (an upper floor) can also be worked from the level below,
+    // under it or beside that.
     bool workCell(const CellRect& rect, CellPos from, CellPos& out) const;
     // Construction speed from the pawn's Construction skill (`skillSpeedBase` + `skillSpeedPerLevel`
     // x level); `defaultSkillLevel` if it has no skills.
@@ -150,6 +159,7 @@ private:
     Rng& rng_;
     std::vector<Event>& events_;
     ConstructionNumbers numbers_;
+    UpperFloors* upperFloors_ = nullptr;
     std::unordered_map<uint64_t, Entity> siteAt_;  // by packed cell; looked up only, never iterated
 };
 

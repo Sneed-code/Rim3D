@@ -19,6 +19,7 @@ namespace colony {
 
 class ApparelStats;
 class HealthSystem;
+class InspirationSystem;
 class TalentSystem;
 class Map;
 class StateHasher;
@@ -236,6 +237,8 @@ public:
     void setWeather(const Weather* weather) { weather_ = weather; }
     // The protagonist's talents make the spread of its shots smaller (docs/design/talents.md).
     void setTalents(const TalentSystem* talents) { talents_ = talents; }
+    // A shooting frenzy narrows the spread and shortens the cooldown (docs/design/inspirations.md).
+    void setInspirations(const InspirationSystem* inspirations) { inspirations_ = inspirations; }
     // Called before combat destroys a thing (a building shot to pieces), so jobs can let go of it.
     void setBeforeDestroy(std::function<void(Entity)> hook) { beforeDestroy_ = std::move(hook); }
     // Called when a bullet or a melee blow hurt a pawn (`victim`, `attacker`): animals react (N5, docs/design/animal-fights.md).
@@ -379,6 +382,10 @@ public:
     // enough hit knocks the pawn down and pushes it away; buildings in the radius lose hit points
     // (walls the most). Events: PawnInjured... and one Explosion.
     ExplosionResult explode(const Explosion& explosion);
+    // Takes `damage` hit points off a building (a raider digging through a wall, F12); at none it goes through the
+    // before-destroy hook and is destroyed. True if it was destroyed; false for a thing without hit points or one
+    // that still stands.
+    bool damageBuilding(Entity building, int damage);
     // Steps left of a pawn's knock-down (0: not knocked down).
     int knockedDownFor(Entity pawn) const;
 
@@ -391,6 +398,9 @@ public:
     // the caller does (HealthSystem::applyHit), so bullets and melee strikes land the same way (F8).
     PawnHitResult hitPawn(Entity pawn, int hitboxPart, DefId damageType, float amount, float penetration,
                           uint64_t seed) const;
+    // Damage of a kind with no aim behind it (flames): a random outside part, through the armor that
+    // covers it (heat armor for Burn), worn pieces losing hit points. False if the pawn can't be hurt.
+    bool hurtPawn(Entity pawn, DefId damageType, float amount, Rng& rng);
     // Takes the hit points off the pieces `result.wear` names; a piece at none is destroyed.
     void wearApparel(Entity pawn, const PawnHitResult& result);
     // The radius around a standing man's chest, seen from the front, in which a point picked evenly
@@ -409,6 +419,7 @@ private:
     std::vector<Event>* events_ = nullptr;
     const Weather* weather_ = nullptr;
     const TalentSystem* talents_ = nullptr;
+    const InspirationSystem* inspirations_ = nullptr;
     std::function<void(Entity)> beforeDestroy_;
     std::function<void(Entity, Entity)> hurtHook_;
     std::vector<Entity> scratch_;

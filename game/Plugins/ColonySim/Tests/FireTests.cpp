@@ -1,4 +1,5 @@
 // Fire and firefighting (task E4, docs/design/fire.md).
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
@@ -485,4 +486,165 @@ TEST_CASE("Fire: a game with nothing alight stays quiet") {
     CHECK(f.fire().count() == 0);
     CHECK(f.fire().burningPawns() == 0);
     CHECK(f.fire().started() == 0);
+}
+
+TEST_CASE("Fire: a burning colonist runs about in panic instead of working, and stops when the fire is out") {
+    FireFixture f;
+    const CellPos start{30, 30, 0};
+    const Entity pawn = f.colonist(start);
+    f.fire().setPawnAlight(pawn, f.sim.time().seconds, true);
+    FIRE_REQUIRE(f.fire().pawnBurning(pawn));
+    std::vector<CellPos> cells;
+    for (int i = 0; i < 40 && f.fire().pawnBurning(pawn); ++i) {
+        f.run(1);
+        const CellPos c = cellOf(f.reg().get<Position>(pawn));
+        if (cells.empty() || cells.back() != c) {
+            cells.push_back(c);
+        }
+    }
+    CHECK(cells.size() > 4);  // it moved about
+    CHECK(f.reg().get<Worker>(pawn).job.type == JobType::None);
+    // Put out, it thinks again and stands still (nothing to do).
+    f.fire().putOutPawn(pawn);
+    f.run(3);
+    const CellPos still = cellOf(f.reg().get<Position>(pawn));
+    f.run(10);
+    CHECK(cellOf(f.reg().get<Position>(pawn)) == still);
+}
+
+TEST_CASE("Fire: a firefoam popper puts out every fire and burning pawn round it, and is used up") {
+    FireFixture f;
+    const CellPos at{30, 30, 0};
+    const Entity popper = f.sim.things().spawn("FirefoamPopper", at);
+    FIRE_REQUIRE(f.reg().valid(popper));
+    // Fires near and far, a burning pawn inside the foam, and a fire outside it.
+    f.grassPatch(32, 30, 3, 3);
+    f.grassPatch(36, 36, 2, 2);
+    f.grassPatch(50, 50, 2, 2);
+    const Entity pawn = f.sim.things().spawn("Human", CellPos{34, 34, 0});
+    f.fire().ignite(CellPos{32, 30, 0});
+    f.fire().ignite(CellPos{36, 36, 0});
+    f.fire().ignite(CellPos{50, 50, 0});
+    f.fire().setPawnAlight(pawn, f.sim.time().seconds, true);
+    f.run(2);
+    CHECK(!f.reg().valid(popper));
+    CHECK(f.fire().poppersUsed() == 1);
+    CHECK(!f.fire().burning(CellPos{32, 30, 0}));
+    CHECK(!f.fire().burning(CellPos{36, 36, 0}));
+    CHECK(f.fire().burning(CellPos{50, 50, 0}));
+    CHECK(!f.fire().pawnBurning(pawn));
+    CHECK(f.seenOf(EventType::FireOut, "foamed") == 2);
+}
+
+TEST_CASE("Fire: a firefoam popper stays quiet while the fire is out of its reach") {
+    FireFixture f;
+    const Entity popper = f.sim.things().spawn("FirefoamPopper", CellPos{30, 30, 0});
+    f.grassPatch(40, 30, 2, 2);
+    f.fire().ignite(CellPos{40, 30, 0});
+    f.run(2);
+    CHECK(f.reg().valid(popper));
+    CHECK(f.fire().poppersUsed() == 0);
+}
+
+TEST_CASE("Fire: a firefoam popper leaves foam on the ground that nothing catches on, until it fades") {
+    FireFixture f;
+    f.sim.things().spawn("FirefoamPopper", CellPos{30, 30, 0});
+    f.grassPatch(32, 30, 3, 3);
+    f.fire().ignite(CellPos{32, 30, 0});
+    f.run(2);
+    const CellPos foamed{33, 31, 0};
+    FIRE_REQUIRE(f.sim.filth().has(foamed));
+    CHECK(!f.fire().ignite(foamed));
+    CHECK(!f.fire().ignite(foamed, 0.1f, false));
+    CHECK(!f.sim.filth().has(CellPos{45, 45, 0}));  // outside the radius
+    // It fades over hours.
+    f.run(2 * 24 * 3600);
+    CHECK(!f.sim.filth().has(foamed));
+}
+
+TEST_CASE("Fire: a firefoam popper that is destroyed bursts even with no fire near") {
+    FireFixture f;
+    const Entity popper = f.sim.things().spawn("FirefoamPopper", CellPos{30, 30, 0});
+    FIRE_REQUIRE(f.reg().valid(popper));
+    const Entity pawn = f.sim.things().spawn("Human", CellPos{32, 32, 0});
+    f.fire().setPawnAlight(pawn, f.sim.time().seconds, true);
+    f.fire().onDestroy(popper);
+    CHECK(f.fire().poppersUsed() == 1);
+    CHECK(!f.fire().pawnBurning(pawn));
+    CHECK(f.sim.filth().has(CellPos{31, 30, 0}));
+}
+
+TEST_CASE("Fire: a foam turret shoots a fire in range, lays foam and does not touch fires out of range") {
+    FireFixture f;
+    const Entity turret = f.sim.things().spawn("FoamTurret", CellPos{30, 30, 0});
+    FIRE_REQUIRE(f.reg().valid(turret));
+    f.fire().setRunning([](Entity) { return true; });
+    f.grassPatch(40, 30, 2, 2);
+    f.grassPatch(60, 30, 2, 2);
+    f.fire().ignite(CellPos{40, 30, 0});
+    f.fire().ignite(CellPos{60, 30, 0});
+    f.run(12);
+    CHECK(!f.fire().burning(CellPos{40, 30, 0}));
+    CHECK(f.sim.filth().has(CellPos{40, 30, 0}));
+    CHECK(f.fire().burning(CellPos{60, 30, 0}));
+    CHECK(f.reg().valid(turret));  // not used up
+}
+
+TEST_CASE("Fire: a foam turret without power stays quiet") {
+    FireFixture f;
+    f.sim.things().spawn("FoamTurret", CellPos{30, 30, 0});
+    f.fire().setRunning([](Entity) { return false; });
+    f.grassPatch(40, 30, 2, 2);
+    f.fire().ignite(CellPos{40, 30, 0});
+    f.run(12);
+    CHECK(f.fire().burning(CellPos{40, 30, 0}));
+}
+
+TEST_CASE("Fire: a burning colonist runs to water and jumps in") {
+    FireFixture f;
+    for (int y = 28; y <= 32; ++y) {
+        const_cast<Map&>(f.sim.map()).setTerrain(CellPos{36, y, 0}, Terrain::Water);
+    }
+    const Entity pawn = f.colonist(CellPos{30, 30, 0});
+    f.fire().setPawnAlight(pawn, f.sim.time().seconds, true);
+    FIRE_REQUIRE(f.fire().pawnBurning(pawn));
+    for (int i = 0; i < 150 && f.fire().pawnBurning(pawn); ++i) {
+        f.run(1);
+    }
+    CHECK(!f.fire().pawnBurning(pawn));
+    CHECK(cellOf(f.reg().get<Position>(pawn)).x >= 34);  // it ran east, to the water
+}
+
+TEST_CASE("Fire: heat armor on a burning pawn turns flames aside and the clothes wear") {
+    // Two pawns burn for the same time; one wears a hyperweave duster and cowboy hat (heat armor 0.86 and 1.4).
+    FireFixture f;
+    const Entity bare = f.sim.things().spawn("Human", CellPos{10, 10, 0});
+    const Entity clad = f.sim.things().spawn("Human", CellPos{40, 40, 0});
+    FIRE_REQUIRE(bare != kNoEntity);
+    FIRE_REQUIRE(clad != kNoEntity);
+    const auto wear = [&](const char* name) -> Entity {
+        const DefId def = f.sim.defs().idOf("Things", name);
+        const Entity item = f.sim.apparel().make(def, f.sim.defs().idOf("Things", "Hyperweave"), -1, CellPos{40, 40, 0});
+        std::string why;
+        CHECK(item != kNoEntity);
+        CHECK(f.sim.apparel().putOn(clad, item, why));
+        return item;
+    };
+    const Entity duster = wear("Apparel_Duster");
+    wear("Apparel_CowboyHat");
+    const int hpBefore = f.reg().get<HitPoints>(duster).current;
+    CHECK(f.fire().setPawnAlight(bare, f.sim.time().seconds, true));
+    CHECK(f.fire().setPawnAlight(clad, f.sim.time().seconds, true));
+    f.run(30 * 60);
+    const auto total = [&](Entity pawn) {
+        float sum = 0.0f;
+        for (const Injury& injury : f.reg().get<Health>(pawn).injuries) {
+            sum += injury.severity;
+        }
+        return sum;
+    };
+    CHECK(total(bare) > 0.0f);
+    CHECK(total(clad) < total(bare) * 0.7f);
+    const HitPoints* after = f.reg().try_get<HitPoints>(duster);
+    CHECK((after == nullptr || after->current < hpBefore));
 }

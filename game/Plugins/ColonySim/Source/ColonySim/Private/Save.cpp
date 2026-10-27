@@ -5,6 +5,8 @@
 #include "ColonySim/Apparel.h"
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Bills.h"
+#include "ColonySim/Fuel.h"
+#include "ColonySim/Lights.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Looks.h"
@@ -12,10 +14,13 @@
 #include "ColonySim/Melee.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Drugs.h"
 #include "ColonySim/Doors.h"
 #include "ColonySim/Explosives.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Farming.h"
+#include "ColonySim/Disasters.h"
+#include "ColonySim/Narrator.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Filth.h"
@@ -26,19 +31,28 @@
 #include "ColonySim/Plants.h"
 #include "ColonySim/Weather.h"
 #include "ColonySim/Designations.h"
+#include "ColonySim/RoofCollapse.h"
 #include "ColonySim/RoomStats.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Spoilage.h"
+#include "ColonySim/Crafting.h"
 #include "ColonySim/Temperature.h"
+#include "ColonySim/Inspirations.h"
+#include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Medicine.h"
+#include "ColonySim/Surgery.h"
+#include "ColonySim/Prisoners.h"
+#include "ColonySim/Quests.h"
+#include "ColonySim/Ship.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Social.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Talents.h"
 #include "ColonySim/Resonance.h"
+#include "ColonySim/Trade.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
 #include "ColonySim/Zones.h"
@@ -127,6 +141,52 @@ struct SaveInjury {
     float severity = 0.0f;
     float tendQuality = -1.0f;
     float peak = 0.0f;  // health section 3 on
+    int64_t infectAt = -1;  // health section 4 on
+};
+
+struct SaveDisease {  // health section 4 on
+    std::string hediff;  // defName of a Hediffs def of class Disease
+    float severity = 0.0f;
+    float tendQuality = -1.0f;
+    int64_t tendedUntil = 0;
+    float tendTotal = 0.0f;
+    int32_t part = -1;
+};
+
+struct SaveImmunity {  // health section 4 on
+    std::string hediff;
+    float level = 0.0f;
+};
+
+// Section "drugs" (Drugs.h): one record per pawn that has taken a drug or been given a policy.
+struct SaveDrugEntry {
+    std::string drug;
+    bool forAddiction = true;
+    bool forJoy = false;
+    bool scheduled = false;
+    float daysFrequency = 1.0f;
+    float moodBelow = 1.01f;
+    float joyBelow = 1.01f;
+};
+struct SaveDrugChemical {
+    std::string chemical;  // Chemicals defName
+    float tolerance = 0.0f;
+    bool addicted = false;
+    float need = 0.0f;
+    float progress = 0.0f;
+    bool armed = false;
+};
+struct SaveDrugDose {
+    std::string drug;  // Things defName
+    int64_t at = 0;
+};
+struct SaveDrugPawn {
+    Entity pawn = kNoEntity;
+    std::string policy;
+    int64_t searchAfter = 0;
+    std::vector<SaveDrugEntry> edits;
+    std::vector<SaveDrugChemical> chemicals;
+    std::vector<SaveDrugDose> last;
 };
 
 struct SaveEnvironmentHediff {
@@ -134,13 +194,32 @@ struct SaveEnvironmentHediff {
     float severity = 0.0f;
 };
 
+struct SaveAddedPart {  // health section 4 on (H3)
+    uint16_t part = 0;
+    std::string hediff;  // defName of a Hediffs def of class AddedPart
+};
+
+struct SaveOperation {  // medicine section 2 on (H3)
+    uint32_t id = 0;
+    std::string recipe;  // defName of a surgery Recipes def
+    uint16_t part = 0;
+};
+
+struct SaveOperations {
+    uint32_t nextId = 1;
+    std::vector<SaveOperation> list;
+};
+
 struct SaveHealth {
     bool protagonist = false;
     RestKind rest = RestKind::Ground;
     std::vector<SaveInjury> injuries;
     std::vector<MissingPart> missing;
+    std::vector<SaveAddedPart> added;  // health section 4 on
     float bloodLoss = 0.0f;
     std::vector<SaveEnvironmentHediff> environment;  // health section 2 on
+    std::vector<SaveDisease> diseases;               // health section 4 on
+    std::vector<SaveImmunity> immunities;            // health section 4 on
     bool dead = false;
     DeathCause cause = DeathCause::None;
 };
@@ -174,6 +253,14 @@ struct SaveBill {
     BillMode mode = BillMode::Count;
     int count = 0;
     bool suspended = false;
+    // Section "bills" version 2 (C14); older saves have the defaults.
+    int skillMin = 0;
+    int skillMax = 20;
+    float radius = 0.0f;
+    uint32_t storeZone = 0;
+    int unpauseAt = 0;
+    bool satisfied = false;
+    std::vector<std::string> disallowed;  // Things defNames
 };
 
 struct SaveBillList {
@@ -306,6 +393,7 @@ struct SaveEntity {
     std::optional<Animal> animal;           // section "animals"
     std::optional<DefensePlan> defense;     // section "raids"
     std::optional<Raider> raider;           // section "raids"
+    std::optional<Kidnapped> kidnapped;     // section "raids" 2 (F12)
     std::optional<AnimalCare> care;         // section "husbandry"
     std::optional<AnimalBreed> breed;       // section "breeding" (N4)
     std::optional<Hatching> hatching;       // section "breeding" (N4)
@@ -322,6 +410,7 @@ struct SaveEntity {
     std::optional<RecoilKick> kick;         // section "feel"
     std::optional<DodgeRoll> roll;          // section "feel"
     std::optional<MedicalSettings> medical;  // section "medicine"
+    std::optional<SaveOperations> operations;  // section "medicine" (H3, version 2 on)
     std::optional<std::vector<Entity>> stowed;  // section "weapons" (P1): Gear::stowed
     std::optional<WeaponSwitch> weaponSwitch;   // section "weapons"
     std::optional<Turret> turret;           // section "defense" (F11)
@@ -330,6 +419,13 @@ struct SaveEntity {
     std::optional<SaveCasting> casting;         // section "resonance"
     std::optional<Stunned> stunned;             // section "resonance"
     std::optional<ResonanceEffects> resonanceFx;  // section "resonance"
+    std::optional<Prisoner> prisoner;       // section "prisoners" (C22)
+    std::optional<PrisonBed> prisonBed;     // section "prisoners" (C22)
+    std::optional<Fuel> fuel;               // "fuel" section (C11)
+    std::optional<StoreIn> storeIn;         // "crafting" section (C14)
+    std::optional<MentalBreaker> mentalBreaker;  // section "mentalBreaks" (C19)
+    std::optional<Visitor> visitor;         // section "trade" (C23)
+    std::optional<Inspired> inspired;            // section "inspirations" (C25)
 };
 
 // A stockpile zone, with its filter by defName.
@@ -416,8 +512,11 @@ struct SaveData {
     SavePlants plants;                 // format 10 on
     bool hasRock = false;              // the file has the rock layer (format 12 on); older saves keep the generated one
     SaveMineables mineables;           // format 12 on
+    std::vector<SaveDrugPawn> drugPawns;  // section "drugs"
+
     SaveDesignations designations;     // format 12 on
     ResearchState research;            // section "research"
+    ShipState ship;                    // section "ship"
     // Section "talents" (P3): per protagonist, parallel lists in pawn order.
     std::vector<Entity> talentPawns;
     std::vector<int64_t> talentXp;
@@ -431,16 +530,27 @@ struct SaveData {
     int wildAnimals = 0;               // section "animals": SimSettings::wildAnimals
     AnimalSaved animals;               // section "animals": the system's own state
     RaidState raids;                   // section "raids" (F6)
+    QuestSystemState quests;           // section "quests" (Q1)
     HusbandrySaved husbandry;          // section "husbandry": animal zones and counters
     BreedingStats breeding;            // section "breeding": the counters (N4)
     FireSaved fire;                    // section "fire": fires, burnt ground, the home area (E4)
     std::vector<RoomTemperature> roomTemperatures;  // section "temperature" (E2)
+    std::vector<CellPos> upperFloors;  // section "levels" (M1), by level then row
+    RoofCollapseSaved roofs;           // section "roofs" (M3)
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
     uint32_t nextOutfitId = 1;
     SpoilageState spoilageState;                    // section "spoilage" (C16)
+    CraftingState craftingState;                    // section "crafting" (C14)
     FarmingSaved farming;                           // section "farming" (C13)
     bool hasWeather = false;           // the file has the weather section; older saves start it fresh
     SaveWeather weather;
+    TradeState trade;                  // section "trade" (C23)
+    bool hasNarrator = false;          // section "narrator" (T1); older saves keep the narrator off
+    NarratorState narrator;
+    bool hasDisasters = false;         // section "disasters" (T3); older saves have none on
+    DisasterState disasters;
+    WorldSettings world;               // section "world" (W2): SimSettings::world; older saves have no world
+    uint64_t worldHash = 0;            // the world's hash when saved, checked against the one made again
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -823,6 +933,236 @@ struct SaveCommandNames {
 template <typename>
 inline constexpr bool kSaveNoSuchCommand = false;
 
+// Second half of the command chain, split out because MSVC stops at 127 nested else-if blocks (C1061).
+template <typename Ar, typename Type>
+void saveCommandTail(Ar& ar, Type& c) {
+    if constexpr (std::is_same_v<Type, StartRaidCommand>) {
+        ar.text("faction", c.faction);
+        ar.value("points", c.points);
+        ar.value("edge", c.edge);
+    } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
+        ar.value("on", c.on);
+    } else if constexpr (std::is_same_v<Type, SetDefenseRoleCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("role", c.role);
+        ar.value("hasSpot", c.hasSpot);
+        ar.group("spot", [&] { saveCell(ar, c.spot); });
+    } else if constexpr (std::is_same_v<Type, MarkShelterCommand>) {
+        ar.group("cell", [&] { saveCell(ar, c.cell); });
+        ar.value("clear", c.clear);
+    } else if constexpr (std::is_same_v<Type, MarkAnimalCommand>) {
+        ar.value("animal", c.animal);
+        ar.text("mark", c.mark);
+        ar.value("on", c.on);
+    } else if constexpr (std::is_same_v<Type, MarkAnimalsInAreaCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+        ar.text("mark", c.mark);
+        ar.value("on", c.on);
+    } else if constexpr (std::is_same_v<Type, SetAnimalNameCommand>) {
+        ar.value("animal", c.animal);
+        ar.text("name", c.name);
+    } else if constexpr (std::is_same_v<Type, SetTrainingCommand>) {
+        ar.value("animal", c.animal);
+        ar.text("trainable", c.trainable);
+        ar.value("wanted", c.wanted);
+    } else if constexpr (std::is_same_v<Type, CreateAnimalZoneCommand> || std::is_same_v<Type, RemoveAnimalZoneCellsCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+    } else if constexpr (std::is_same_v<Type, AssignAnimalZoneCommand>) {
+        ar.value("animal", c.animal);
+        ar.value("zone", c.zone);
+    } else if constexpr (std::is_same_v<Type, SetBreedingCommand>) {
+        ar.value("animal", c.animal);
+        ar.value("zone", c.zone);
+        ar.value("allow", c.allow);
+    } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
+        auto* melee = &c;
+        ar.value("pawn", melee->pawn);
+        ar.value("target", melee->target);
+        ar.value("mode", melee->mode);
+        ar.require(melee->mode <= MeleeMode::Block, "the save file has a bad melee mode");
+    } else if constexpr (std::is_same_v<Type, SetOutfitCommand>) {
+        auto* setOutfit = &c;
+        ar.value("pawn", setOutfit->pawn);
+        ar.value("outfit", setOutfit->outfit);
+    } else if constexpr (std::is_same_v<Type, EditOutfitCommand>) {
+        auto* edit = &c;
+        ar.value("outfit", edit->outfit);
+        ar.list("disallowed", edit->disallowed, [&](std::string& name) { ar.text(nullptr, name); });
+        ar.value("hitPointsMin", edit->hitPointsMin);
+        ar.value("hitPointsMax", edit->hitPointsMax);
+        ar.value("qualityMin", edit->qualityMin);
+        ar.value("qualityMax", edit->qualityMax);
+    } else if constexpr (std::is_same_v<Type, AddOutfitCommand>) {
+        auto* addOutfit = &c;
+        ar.text("name", addOutfit->name);
+    } else if constexpr (std::is_same_v<Type, RemoveOutfitCommand>) {
+        auto* removeOutfit = &c;
+        ar.value("outfit", removeOutfit->outfit);
+    } else if constexpr (std::is_same_v<Type, StripCommand>) {
+        auto* strip = &c;
+        ar.value("thing", strip->thing);
+        ar.value("strip", strip->strip);
+    } else if constexpr (std::is_same_v<Type, InteractCommand>) {
+        ar.value("initiator", c.initiator);
+        ar.value("recipient", c.recipient);
+        ar.text("interaction", c.interaction);
+        ar.value("outcome", c.outcome);
+    } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("dx", c.dx);
+        ar.value("dy", c.dy);
+    } else if constexpr (std::is_same_v<Type, SetMedicalCareCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("care", c.care);
+    } else if constexpr (std::is_same_v<Type, ContractDiseaseCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("disease", c.disease);
+        ar.value("severity", c.severity);
+        ar.value("part", c.part);
+    } else if constexpr (std::is_same_v<Type, SetWeatherCommand>) {
+        auto* setWeather = &c;
+        ar.text("weather", setWeather->weather);
+        ar.value("hours", setWeather->hours);
+    } else if constexpr (std::is_same_v<Type, SpendTalentPointCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("talent", c.talent);
+    } else if constexpr (std::is_same_v<Type, AddTalentXpCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("amount", c.amount);
+    } else if constexpr (std::is_same_v<Type, RearmTrapCommand>) {
+        ar.value("trap", c.trap);
+    } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("item", c.item);
+    } else if constexpr (std::is_same_v<Type, SwitchWeaponCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("slot", c.slot);
+        ar.require(static_cast<int>(c.slot) < kWeaponSlotCount, "the save file has a bad weapon slot");
+    } else if constexpr (std::is_same_v<Type, CreateGrowingZoneCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+        ar.text("crop", c.crop);
+    } else if constexpr (std::is_same_v<Type, RemoveGrowingZoneCellsCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+    } else if constexpr (std::is_same_v<Type, SetGrowingZoneCropCommand>) {
+        ar.value("zone", c.zone);
+        ar.text("crop", c.crop);
+    } else if constexpr (std::is_same_v<Type, SetNarratorCommand>) {
+        ar.text("narrator", c.narrator);
+        ar.text("difficulty", c.difficulty);
+    } else if constexpr (std::is_same_v<Type, FireIncidentCommand>) {
+        ar.text("incident", c.incident);
+        ar.value("points", c.points);
+    } else if constexpr (std::is_same_v<Type, IgniteCommand>) {
+        ar.group("cell", [&] { saveCell(ar, c.cell); });
+        ar.value("size", c.size);
+        ar.value("pawn", c.pawn);
+        ar.value("force", c.force);
+    } else if constexpr (std::is_same_v<Type, SetHomeAreaCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+        ar.value("add", c.add);
+    } else if constexpr (std::is_same_v<Type, SetPrisonerModeCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("mode", c.mode);
+    } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
+        ar.value("bed", c.bed);
+        ar.value("on", c.on);
+    } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+        ar.value("remove", c.remove);
+    } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
+        auto* start = &c;
+        ar.value("pawn", start->pawn);
+        ar.text("breakDef", start->breakDef);
+    } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
+        auto* stop = &c;
+        ar.value("pawn", stop->pawn);
+    } else if constexpr (std::is_same_v<Type, StartStrategyRaidCommand>) {
+        ar.text("faction", c.faction);
+        ar.value("points", c.points);
+        ar.value("edge", c.edge);
+        ar.text("strategy", c.strategy);
+        ar.value("hour", c.hour);
+    } else if constexpr (std::is_same_v<Type, ShipCommand>) {
+        ar.text("action", c.action);
+        ar.value("thing", c.thing);
+        ar.value("pawn", c.pawn);
+    } else if constexpr (std::is_same_v<Type, TakeDrugCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("thing", c.thing);
+    } else if constexpr (std::is_same_v<Type, SetDrugPolicyCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("policy", c.policy);
+    } else if constexpr (std::is_same_v<Type, SetDrugPolicyEntryCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("drug", c.drug);
+        ar.value("forAddiction", c.forAddiction);
+        ar.value("forJoy", c.forJoy);
+        ar.value("scheduled", c.scheduled);
+        ar.value("daysFrequency", c.daysFrequency);
+        ar.value("moodBelow", c.moodBelow);
+        ar.value("joyBelow", c.joyBelow);
+    } else if constexpr (std::is_same_v<Type, StartThreatCommand>) {
+        ar.text("kind", c.kind);
+        ar.value("points", c.points);
+        ar.value("edge", c.edge);
+    } else if constexpr (std::is_same_v<Type, QuestCommand>) {
+        ar.text("action", c.action);
+        ar.value("quest", c.quest);
+        ar.text("kind", c.kind);
+    } else if constexpr (std::is_same_v<Type, AttuneCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("level", c.level);
+    } else if constexpr (std::is_same_v<Type, LearnPowerCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("power", c.power);
+    } else if constexpr (std::is_same_v<Type, CastPowerCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("power", c.power);
+        ar.value("target", c.target);
+        ar.group("cell", [&] { saveCell(ar, c.cell); });
+        ar.value("player", c.player);
+    } else {
+        static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
+    }
+}
+
+template <typename Ar>
+void saveTradeLine(Ar& ar, TradeLine& l) {
+    ar.text("thing", l.thing);
+    ar.value("count", l.count);
+}
+
+template <typename Type>
+inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitCommand> || std::is_same_v<Type, TradeCommand> ||
+                                            std::is_same_v<Type, AdjustGoodwillCommand> || std::is_same_v<Type, GiftCommand>;
+
+// The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
+template <typename Ar, typename Type>
+void saveTradeCommand(Ar& ar, Type& c) {
+    if constexpr (std::is_same_v<Type, StartVisitCommand>) {
+        auto* visit = &c;
+        ar.text("faction", visit->faction);
+        ar.text("kind", visit->kind);
+        ar.text("traderKind", visit->traderKind);
+        ar.value("edge", visit->edge);
+    } else if constexpr (std::is_same_v<Type, TradeCommand>) {
+        auto* deal = &c;
+        ar.value("visit", deal->visit);
+        ar.value("negotiator", deal->negotiator);
+        ar.list("buy", deal->buy, [&](TradeLine& l) { saveTradeLine(ar, l); });
+        ar.list("sell", deal->sell, [&](TradeLine& l) { saveTradeLine(ar, l); });
+    } else if constexpr (std::is_same_v<Type, AdjustGoodwillCommand>) {
+        auto* goodwill = &c;
+        ar.text("faction", goodwill->faction);
+        ar.value("delta", goodwill->delta);
+    } else {
+        static_assert(std::is_same_v<Type, GiftCommand>, "save every trade command here");
+        auto* gift = &c;
+        ar.value("visit", gift->visit);
+        ar.list("items", gift->items, [&](TradeLine& l) { saveTradeLine(ar, l); });
+    }
+}
+
 template <typename Ar>
 void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
     if (names != nullptr) {
@@ -1059,6 +1399,31 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("on", c.on);
             } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
                 ar.value("thing", c.thing);
+            } else if constexpr (std::is_same_v<Type, SetBillOptionsCommand>) {
+                ar.value("building", c.building);
+                ar.value("bill", c.bill);
+                ar.value("skillMin", c.skillMin);
+                ar.value("skillMax", c.skillMax);
+                ar.value("radius", c.radius);
+                ar.value("storeZone", c.storeZone);
+                ar.value("unpauseAt", c.unpauseAt);
+                ar.list("disallowed", c.disallowed, [&](std::string& name) { ar.text(nullptr, name); });
+            } else if constexpr (std::is_same_v<Type, MoveBillCommand>) {
+                ar.value("building", c.building);
+                ar.value("bill", c.bill);
+                ar.value("index", c.index);
+            } else if constexpr (std::is_same_v<Type, AddOperationCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.text("recipe", c.recipe);
+                ar.value("part", c.part);
+            } else if constexpr (std::is_same_v<Type, RemoveOperationCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.value("operation", c.operation);
+            } else if constexpr (std::is_same_v<Type, SetRefuelCommand>) {
+                auto* refuel = &c;
+                ar.value("building", refuel->building);
+                ar.value("autoRefuel", refuel->autoRefuel);
+                ar.value("fillNow", refuel->fillNow);
             } else if constexpr (std::is_same_v<Type, SetResearchCommand> || std::is_same_v<Type, UnlockResearchCommand>) {
                 ar.text("project", c.project);
             } else if constexpr (std::is_same_v<Type, ThrowCommand>) {
@@ -1075,122 +1440,10 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("damage", c.damage);
                 ar.text("damageType", c.damageType);
                 ar.value("penetration", c.penetration);
-            } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
-                ar.text("faction", c.faction);
-                ar.value("points", c.points);
-                ar.value("edge", c.edge);
-            } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
-                ar.value("on", c.on);
-            } else if constexpr (std::is_same_v<Type, SetDefenseRoleCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.value("role", c.role);
-                ar.value("hasSpot", c.hasSpot);
-                ar.group("spot", [&] { saveCell(ar, c.spot); });
-            } else if constexpr (std::is_same_v<Type, MarkShelterCommand>) {
-                ar.group("cell", [&] { saveCell(ar, c.cell); });
-                ar.value("clear", c.clear);
-            } else if constexpr (std::is_same_v<Type, MarkAnimalCommand>) {
-                ar.value("animal", c.animal);
-                ar.text("mark", c.mark);
-                ar.value("on", c.on);
-            } else if constexpr (std::is_same_v<Type, SetTrainingCommand>) {
-                ar.value("animal", c.animal);
-                ar.text("trainable", c.trainable);
-                ar.value("wanted", c.wanted);
-            } else if constexpr (std::is_same_v<Type, CreateAnimalZoneCommand> || std::is_same_v<Type, RemoveAnimalZoneCellsCommand>) {
-                ar.group("area", [&] { saveRect(ar, c.area); });
-            } else if constexpr (std::is_same_v<Type, AssignAnimalZoneCommand>) {
-                ar.value("animal", c.animal);
-                ar.value("zone", c.zone);
-            } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
-                auto* melee = &c;
-                ar.value("pawn", melee->pawn);
-                ar.value("target", melee->target);
-                ar.value("mode", melee->mode);
-                ar.require(melee->mode <= MeleeMode::Block, "the save file has a bad melee mode");
-            } else if constexpr (std::is_same_v<Type, SetOutfitCommand>) {
-                auto* setOutfit = &c;
-                ar.value("pawn", setOutfit->pawn);
-                ar.value("outfit", setOutfit->outfit);
-            } else if constexpr (std::is_same_v<Type, EditOutfitCommand>) {
-                auto* edit = &c;
-                ar.value("outfit", edit->outfit);
-                ar.list("disallowed", edit->disallowed, [&](std::string& name) { ar.text(nullptr, name); });
-                ar.value("hitPointsMin", edit->hitPointsMin);
-                ar.value("hitPointsMax", edit->hitPointsMax);
-                ar.value("qualityMin", edit->qualityMin);
-                ar.value("qualityMax", edit->qualityMax);
-            } else if constexpr (std::is_same_v<Type, AddOutfitCommand>) {
-                auto* addOutfit = &c;
-                ar.text("name", addOutfit->name);
-            } else if constexpr (std::is_same_v<Type, RemoveOutfitCommand>) {
-                auto* removeOutfit = &c;
-                ar.value("outfit", removeOutfit->outfit);
-            } else if constexpr (std::is_same_v<Type, StripCommand>) {
-                auto* strip = &c;
-                ar.value("thing", strip->thing);
-                ar.value("strip", strip->strip);
-            } else if constexpr (std::is_same_v<Type, InteractCommand>) {
-                ar.value("initiator", c.initiator);
-                ar.value("recipient", c.recipient);
-                ar.text("interaction", c.interaction);
-                ar.value("outcome", c.outcome);
-            } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.value("dx", c.dx);
-                ar.value("dy", c.dy);
-            } else if constexpr (std::is_same_v<Type, SetMedicalCareCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.text("care", c.care);
-            } else if constexpr (std::is_same_v<Type, SetWeatherCommand>) {
-                auto* setWeather = &c;
-                ar.text("weather", setWeather->weather);
-                ar.value("hours", setWeather->hours);
-            } else if constexpr (std::is_same_v<Type, SpendTalentPointCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.text("talent", c.talent);
-            } else if constexpr (std::is_same_v<Type, AddTalentXpCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.value("amount", c.amount);
-            } else if constexpr (std::is_same_v<Type, RearmTrapCommand>) {
-                ar.value("trap", c.trap);
-            } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.value("item", c.item);
-            } else if constexpr (std::is_same_v<Type, SwitchWeaponCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.value("slot", c.slot);
-                ar.require(static_cast<int>(c.slot) < kWeaponSlotCount, "the save file has a bad weapon slot");
-            } else if constexpr (std::is_same_v<Type, CreateGrowingZoneCommand>) {
-                ar.group("area", [&] { saveRect(ar, c.area); });
-                ar.text("crop", c.crop);
-            } else if constexpr (std::is_same_v<Type, RemoveGrowingZoneCellsCommand>) {
-                ar.group("area", [&] { saveRect(ar, c.area); });
-            } else if constexpr (std::is_same_v<Type, SetGrowingZoneCropCommand>) {
-                ar.value("zone", c.zone);
-                ar.text("crop", c.crop);
-            } else if constexpr (std::is_same_v<Type, IgniteCommand>) {
-                ar.group("cell", [&] { saveCell(ar, c.cell); });
-                ar.value("size", c.size);
-                ar.value("pawn", c.pawn);
-                ar.value("force", c.force);
-            } else if constexpr (std::is_same_v<Type, SetHomeAreaCommand>) {
-                ar.group("area", [&] { saveRect(ar, c.area); });
-                ar.value("add", c.add);
-            } else if constexpr (std::is_same_v<Type, AttuneCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.value("level", c.level);
-            } else if constexpr (std::is_same_v<Type, LearnPowerCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.text("power", c.power);
-            } else if constexpr (std::is_same_v<Type, CastPowerCommand>) {
-                ar.value("pawn", c.pawn);
-                ar.text("power", c.power);
-                ar.value("target", c.target);
-                ar.group("cell", [&] { saveCell(ar, c.cell); });
-                ar.value("player", c.player);
+            } else if constexpr (kSaveIsTradeCommand<Type>) {
+                saveTradeCommand(ar, c);
             } else {
-                static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
+                saveCommandTail(ar, c);
             }
         },
         command);
@@ -1232,6 +1485,9 @@ void saveColonist(Ar& ar, Colonist& c) {
         ar.value("level", s.level);
         ar.value("passion", s.passion);
         ar.value("xp", s.xp);
+        if (ar.sectionVersion() >= 2) {
+            ar.value("xpToday", s.xpToday);
+        }
         ar.value("disabled", s.disabled);
         ar.require(static_cast<int>(s.passion) <= static_cast<int>(Passion::Major), "the save file has a bad passion");
     });
@@ -1324,6 +1580,9 @@ void saveMoverPart(Ar& ar, Mover& m, const std::optional<Position>& position) {
         ar.value("ghostSteps", m.ghostSteps);
         ar.value("heldSteps", m.heldSteps);
         ar.value("gaveUp", m.gaveUp);
+        if (ar.sectionVersion() >= 2) {  // M2: stairs and ladders
+            ar.value("climbed", m.climbed);
+        }
     } else if (position) {
         // Older saves: a pawn mid-walk sets off along the line from where it stands.
         m.fromX = position->x;
@@ -1336,7 +1595,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::Rescue, "the save file has a bad job");
+    ar.require(job.type <= JobType::Party, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -1408,6 +1667,10 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
             ar.value("peak", i.peak);
             ar.require(i.peak >= 0.0f && i.peak < 1.0e6f, "the save file has an impossible injury");
         }
+        if (ar.sectionVersion() >= 4) {
+            ar.value("infectAt", i.infectAt);
+            ar.require(i.infectAt >= -1, "the save file has an impossible infection time");
+        }
         ar.require(i.severity >= 0.0f && i.severity < 1.0e6f, "the save file has an impossible injury");
         ar.require(i.tendQuality >= -1.0f && i.tendQuality < 1.0e3f, "the save file has an impossible tend quality");
     });
@@ -1416,6 +1679,12 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
         ar.value("tendQuality", m.tendQuality);
         ar.require(m.tendQuality >= -1.0f && m.tendQuality < 1.0e3f, "the save file has an impossible tend quality");
     });
+    if (ar.sectionVersion() >= 5) {
+        ar.list("added", h.added, [&](SaveAddedPart& a) {
+            ar.value("part", a.part);
+            ar.text("hediff", a.hediff);
+        });
+    }
     ar.value("bloodLoss", h.bloodLoss);
     ar.require(h.bloodLoss >= 0.0f && h.bloodLoss <= 1000.0f, "the save file has impossible blood loss");
     if (ar.sectionVersion() >= 2) {
@@ -1425,9 +1694,27 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
             ar.require(env.severity > 0.0f && env.severity < 1.0e3f, "the save file has an impossible environment hediff");
         });
     }
+    if (ar.sectionVersion() >= 4) {
+        ar.list("diseases", h.diseases, [&](SaveDisease& d) {
+            ar.text("hediff", d.hediff);
+            ar.value("severity", d.severity);
+            ar.value("tendQuality", d.tendQuality);
+            ar.value("tendedUntil", d.tendedUntil);
+            ar.value("tendTotal", d.tendTotal);
+            ar.value("part", d.part);
+            ar.require(d.severity > 0.0f && d.severity <= 1.0f, "the save file has an impossible disease");
+            ar.require(d.tendQuality >= -1.0f && d.tendQuality < 1.0e3f, "the save file has an impossible tend quality");
+            ar.require(d.part >= -1 && d.part < 4096, "the save file has a disease on an impossible body part");
+        });
+        ar.list("immunities", h.immunities, [&](SaveImmunity& m) {
+            ar.text("hediff", m.hediff);
+            ar.value("level", m.level);
+            ar.require(m.level >= 0.0f && m.level <= 1.0f, "the save file has an impossible immunity");
+        });
+    }
     ar.value("dead", h.dead);
     ar.value("cause", h.cause);
-    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Slaughtered), "the save file has a bad cause of death");
+    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Withdrawal), "the save file has a bad cause of death");
 
 }
 
@@ -1506,6 +1793,14 @@ void saveOutfitPolicy(Ar& ar, OutfitPolicy& o) {
 }
 
 template <typename Ar>
+void saveFuelPart(Ar& ar, Fuel& fuel) {
+    ar.value("amount", fuel.amount);
+    ar.value("autoRefuel", fuel.autoRefuel);
+    ar.value("fillOrdered", fuel.fillOrdered);
+    ar.require(fuel.amount >= 0.0f && fuel.amount <= 1.0e6f, "the save file has an impossible amount of fuel");
+}
+
+template <typename Ar>
 void saveBillsPart(Ar& ar, SaveBillList& list) {
     ar.value("nextId", list.nextId);
     ar.list("bills", list.bills, [&](SaveBill& bill) {
@@ -1516,6 +1811,18 @@ void saveBillsPart(Ar& ar, SaveBillList& list) {
         ar.value("count", bill.count);
         ar.require(bill.count >= 0 && bill.count <= 1000000, "the save file has an impossible bill count");
         ar.value("suspended", bill.suspended);
+        if (ar.sectionVersion() >= 2) {
+            ar.value("skillMin", bill.skillMin);
+            ar.value("skillMax", bill.skillMax);
+            ar.value("radius", bill.radius);
+            ar.value("storeZone", bill.storeZone);
+            ar.value("unpauseAt", bill.unpauseAt);
+            ar.value("satisfied", bill.satisfied);
+            ar.list("disallowed", bill.disallowed, [&](std::string& name) { ar.text(nullptr, name); });
+            ar.require(bill.skillMin >= 0 && bill.skillMax <= 20 && bill.skillMin <= bill.skillMax && bill.radius >= 0.0f &&
+                           bill.unpauseAt >= 0,
+                       "the save file has an impossible bill setting");
+        }
         ar.require(bill.id != 0 && bill.id < list.nextId, "the save file has a bill with a bad id");
     });
 
@@ -1617,6 +1924,13 @@ template <typename Ar>
 void saveCarePart(Ar& ar, AnimalCare& c) {
     ar.value("markTame", c.markTame);
     ar.value("markSlaughter", c.markSlaughter);
+    if (ar.sectionVersion() >= 2) {  // N2: hunting
+        ar.value("markHunt", c.markHunt);
+        ar.value("collect", c.collect);
+    }
+    if (ar.sectionVersion() >= 3) {  // animal names
+        ar.text("name", c.name);
+    }
     ar.value("zone", c.zone);
     ar.value("hasHome", c.hasHome);
     ar.group("home", [&] { saveCell(ar, c.home); });
@@ -1650,6 +1964,9 @@ void saveBreedPart(Ar& ar, AnimalBreed& b) {
     ar.value("eggSince", b.eggSince);
     ar.value("courting", b.courting);
     ar.value("courtUntil", b.courtUntil);
+    if (ar.sectionVersion() >= 2) {
+        ar.value("breedingOff", b.breedingOff);
+    }
 }
 
 template <typename Ar>
@@ -1872,7 +2189,7 @@ void saveFighterPart(Ar& ar, Fighter& f) {
     }
     if (ar.sectionVersion() >= 2) {  // F6: what the alarm or a raid has it do
         ar.value("mode", f.mode);
-        ar.require(static_cast<int>(f.mode) <= static_cast<int>(FightMode::Flee), "the save file has a bad fighter mode");
+        ar.require(static_cast<int>(f.mode) <= static_cast<int>(FightMode::Seize), "the save file has a bad fighter mode");
         ar.value("defending", f.defending);
         ar.value("squad", f.squad);
         ar.value("hasGoal", f.hasGoal);
@@ -1949,6 +2266,30 @@ void saveTrapPart(Ar& ar, Trap& t) {
         ar.require(f != 0, "the save file has faction 0");
     });
     ar.require(std::is_sorted(t.known.begin(), t.known.end()), "the save file has a trap's sides out of order");
+}
+
+template <typename Ar>
+void saveMentalBreakerPart(Ar& ar, MentalBreaker& b) {
+    ar.value("active", b.active);
+    ar.text("def", b.def);
+    ar.value("state", b.state);
+    ar.require(static_cast<int>(b.state) <= static_cast<int>(BreakState::FireSpree), "the save file has a bad mental break state");
+    ar.value("startedAt", b.startedAt);
+    ar.value("endsAfter", b.endsAfter);
+    ar.value("hardEnd", b.hardEnd);
+    ar.value("recoverLevel", b.recoverLevel);
+    ar.value("lastEnded", b.lastEnded);
+    ar.value("walk", b.walk);
+    ar.value("repaths", b.repaths);
+    ar.value("pathSlot", b.path.slot);
+    ar.value("pathSerial", b.path.serial);
+    ar.value("hasGoal", b.hasGoal);
+    ar.group("goal", [&] { saveCell(ar, b.goal); });
+    ar.value("target", b.target);
+    ar.value("done", b.done);
+    ar.value("nextAct", b.nextAct);
+    ar.value("nextHit", b.nextHit);
+    ar.list("visited", b.visited, [&](Entity& e) { ar.value(nullptr, e); });
 }
 
 template <typename Ar>
@@ -2117,6 +2458,54 @@ void saveResearch(Ar& ar, ResearchState& r) {
 }
 
 template <typename Ar>
+void saveShip(Ar& ar, ShipState& s) {
+    ar.value("phase", s.phase);
+    ar.require(static_cast<int>(s.phase) <= static_cast<int>(ShipPhase::Launched), "the save file has a bad ship phase");
+    ar.value("reactor", s.reactor);
+    ar.value("startedAt", s.startedAt);
+    ar.value("nextWave", s.nextWave);
+    ar.value("waves", s.waves);
+    ar.value("escaped", s.escaped);
+    ar.value("launchedAt", s.launchedAt);
+    ar.list("caskets", s.caskets, [&](Entity& e) { ar.value(nullptr, e); });
+    ar.list("riders", s.riders, [&](Entity& e) { ar.value(nullptr, e); });
+}
+
+template <typename Ar>
+void saveDrugs(Ar& ar, SaveData& d) {
+    ar.list("pawns", d.drugPawns, [&](SaveDrugPawn& p) {
+        ar.value("pawn", p.pawn);
+        ar.text("policy", p.policy);
+        ar.value("searchAfter", p.searchAfter);
+        ar.list("edits", p.edits, [&](SaveDrugEntry& e) {
+            ar.text("drug", e.drug);
+            ar.value("forAddiction", e.forAddiction);
+            ar.value("forJoy", e.forJoy);
+            ar.value("scheduled", e.scheduled);
+            ar.value("daysFrequency", e.daysFrequency);
+            ar.value("moodBelow", e.moodBelow);
+            ar.value("joyBelow", e.joyBelow);
+            ar.require(e.daysFrequency > 0.0f && e.daysFrequency <= 1000.0f, "the save file has an impossible drug frequency");
+        });
+        ar.list("chemicals", p.chemicals, [&](SaveDrugChemical& c) {
+            ar.text("chemical", c.chemical);
+            ar.value("tolerance", c.tolerance);
+            ar.value("addicted", c.addicted);
+            ar.value("need", c.need);
+            ar.value("progress", c.progress);
+            ar.value("armed", c.armed);
+            ar.require(c.tolerance >= 0.0f && c.tolerance <= 1.0f && c.need >= 0.0f && c.need <= 1.0f && c.progress >= 0.0f &&
+                           c.progress <= 1.0f,
+                       "the save file has an impossible drug record");
+        });
+        ar.list("last", p.last, [&](SaveDrugDose& dose) {
+            ar.text("drug", dose.drug);
+            ar.value("at", dose.at);
+        });
+    });
+}
+
+template <typename Ar>
 void saveTalents(Ar& ar, SaveData& d) {
     ar.list("pawns", d.talentPawns, [&](Entity& pawn) { ar.value(nullptr, pawn); });
     ar.list("xp", d.talentXp, [&](int64_t& xp) { ar.value(nullptr, xp); });
@@ -2213,6 +2602,33 @@ void saveLegacyData(Ar& ar, SaveData& d) {
 }
 
 template <typename Ar>
+void saveQuests(Ar& ar, QuestSystemState& q) {
+    ar.value("next", q.next);
+    ar.list("quests", q.quests, [&](Quest& quest) {
+        ar.value("id", quest.id);
+        ar.text("kind", quest.kind);
+        ar.value("state", quest.state);
+        ar.require(static_cast<int>(quest.state) <= static_cast<int>(QuestState::Expired), "the save file has a bad quest state");
+        ar.value("offeredAt", quest.offeredAt);
+        ar.value("expiresAt", quest.expiresAt);
+        ar.value("acceptedAt", quest.acceptedAt);
+        ar.value("launchAt", quest.launchAt);
+        ar.value("deadline", quest.deadline);
+        ar.value("launched", quest.launched);
+        ar.value("count", quest.count);
+        ar.value("points", quest.points);
+        ar.text("faction", quest.faction);
+        ar.value("squad", quest.squad);
+        ar.list("people", quest.people, [&](Entity& p) { ar.value(nullptr, p); });
+        ar.list("rewards", quest.rewards, [&](Quest::Reward& r) {
+            ar.text("thing", r.thing);
+            ar.value("count", r.count);
+        });
+    });
+    ar.require(q.next > 0, "the save file has a bad quest counter");
+}
+
+template <typename Ar>
 void saveRaids(Ar& ar, RaidState& r) {
     ar.list("factions", r.factions, [&](std::string& f) { ar.text(nullptr, f); });
     ar.list("squads", r.squads, [&](Squad& s) {
@@ -2225,6 +2641,13 @@ void saveRaids(Ar& ar, RaidState& r) {
         ar.value("giveUpAt", s.giveUpAt);
         ar.value("state", s.state);
         ar.require(static_cast<int>(s.state) <= static_cast<int>(SquadState::Rout), "the save file has a bad squad state");
+        if (ar.sectionVersion() >= 2) {  // F12
+            ar.value("strategy", s.strategy);
+            ar.require(static_cast<int>(s.strategy) < kRaidStrategyCount, "the save file has a bad raid strategy");
+            ar.value("hasBreach", s.hasBreach);
+            ar.group("breach", [&] { saveCell(ar, s.breach); });
+            ar.group("breachFrom", [&] { saveCell(ar, s.breachFrom); });
+        }
         ar.value("gaveUp", s.gaveUp);
         ar.group("entry", [&] { saveCell(ar, s.entry); });
         ar.value("hasTarget", s.hasTarget);
@@ -2233,6 +2656,16 @@ void saveRaids(Ar& ar, RaidState& r) {
         ar.list("members", s.members, [&](Entity& m) { ar.value(nullptr, m); });
     });
     ar.value("nextSquad", r.nextSquad);
+    if (ar.sectionVersion() >= 2) {  // F12: raids waiting for their hour
+        ar.list("pending", r.pending, [&](PendingRaid& p) {
+            ar.text("faction", p.faction);
+            ar.value("points", p.points);
+            ar.value("edge", p.edge);
+            ar.value("strategy", p.strategy);
+            ar.require(static_cast<int>(p.strategy) < kRaidStrategyCount, "the save file has a bad raid strategy");
+            ar.value("at", p.at);
+        });
+    }
     ar.value("alarm", r.alarm);
     ar.value("manual", r.manual);
     ar.value("suppressed", r.suppressed);
@@ -2246,6 +2679,45 @@ void saveRaids(Ar& ar, RaidState& r) {
     ar.value("hasShelter", r.hasShelter);
     ar.group("shelter", [&] { saveCell(ar, r.shelter); });
     ar.value("nextAlarmThink", r.nextAlarmThink);
+    if (ar.sectionVersion() >= 2) {
+        ar.value("adaptDays", r.adaptDays);
+        ar.value("nextAdaptGrowth", r.nextAdaptGrowth);
+        ar.list("adaptPawns", r.adaptPawns, [&](RaidState::AdaptPawn& p) {
+            ar.value("pawn", p.pawn);
+            ar.value("downed", p.downed);
+        });
+    }
+}
+
+template <typename Ar>
+void saveTrade(Ar& ar, TradeState& t) {
+    ar.value("nextVisit", t.nextVisit);
+    ar.value("lastDrift", t.lastDrift);
+    ar.list("standings", t.standings, [&](Standing& s) {
+        ar.text("faction", s.faction);
+        ar.value("goodwill", s.goodwill);
+        ar.require(std::isfinite(s.goodwill), "the save file has an impossible goodwill");
+    });
+    ar.list("visits", t.visits, [&](Visit& v) {
+        ar.value("id", v.id);
+        ar.value("kind", v.kind);
+        ar.require(static_cast<int>(v.kind) <= static_cast<int>(VisitKind::Orbital), "the save file has a bad visit kind");
+        ar.value("phase", v.phase);
+        ar.require(static_cast<int>(v.phase) <= static_cast<int>(VisitPhase::Leaving), "the save file has a bad visit phase");
+        ar.text("faction", v.faction);
+        ar.text("traderKind", v.traderKind);
+        ar.value("side", v.side);
+        ar.value("arrivedAt", v.arrivedAt);
+        ar.value("leaveAt", v.leaveAt);
+        ar.value("nextWander", v.nextWander);
+        ar.group("entry", [&] { saveCell(ar, v.entry); });
+        ar.group("spot", [&] { saveCell(ar, v.spot); });
+        ar.value("silver", v.silver);
+        ar.value("started", v.started);
+        ar.value("trader", v.trader);
+        ar.list("stock", v.stock, [&](TradeLine& l) { saveTradeLine(ar, l); });
+        ar.list("members", v.members, [&](Entity& m) { ar.value(nullptr, m); });
+    });
 }
 
 // ---- Sections (format 20 on) -----------------------------------------------------------------
@@ -2373,7 +2845,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("commands", 1, [&] { saveCommandsSection(ar, d); });
     ar.section("things", 1, [&] { saveThingsSection(ar, d); });
     std::vector<SaveEntity>& e = d.entities;
-    ar.section("movement", 1, [&] {
+    ar.section("movement", 2, [&] {
         saveParts(ar, "mover", e, &SaveEntity::mover, [&](Mover& m) { saveMoverPart(ar, m, std::nullopt); });
     });
     ar.section("jobs", 1, [&] {
@@ -2381,10 +2853,10 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "work", e, &SaveEntity::work, [&](SaveWorkSettings& w) { saveWorkPart(ar, w); });
         saveParts(ar, "carrying", e, &SaveEntity::carrying, [&](Carrying& c) { saveCarryingPart(ar, c); });
     });
-    ar.section("colonists", 1, [&] {
+    ar.section("colonists", 2, [&] {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
-    ar.section("health", 3, [&] {
+    ar.section("health", 5, [&] {
         saveParts(ar, "health", e, &SaveEntity::health, [&](SaveHealth& h) { saveHealthPart(ar, h); });
     });
     ar.section("control", 1, [&] {
@@ -2410,7 +2882,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "schedule", e, &SaveEntity::schedule, [&](Schedule& s) { saveSchedulePart(ar, s); });
         saveParts(ar, "bed", e, &SaveEntity::bed, [&](Bed& b) { saveBedPart(ar, b); });
     });
-    ar.section("bills", 1, [&] {
+    ar.section("bills", 2, [&] {
         saveParts(ar, "bills", e, &SaveEntity::bills, [&](SaveBillList& list) { saveBillsPart(ar, list); });
     });
     ar.section("construction", 1, [&] {
@@ -2457,13 +2929,26 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "joy", e, &SaveEntity::joy, [&](SaveJoy& j) { saveJoyPart(ar, j); });
     });
     ar.section("research", 1, [&] { saveResearch(ar, d.research); });
-    ar.section("medicine", 1, [&] {
+    ar.section("ship", 1, [&] { saveShip(ar, d.ship); });
+    ar.section("medicine", 2, [&] {
         saveParts(ar, "medical", e, &SaveEntity::medical, [&](MedicalSettings& m) {
             ar.value("care", m.care);
             ar.require(static_cast<int>(m.care) <= static_cast<int>(MedicalCare::Best), "the save file has a bad medical care setting");
         });
+        if (ar.sectionVersion() >= 2) {
+            saveParts(ar, "operations", e, &SaveEntity::operations, [&](SaveOperations& ops) {
+                ar.value("nextId", ops.nextId);
+                ar.list("list", ops.list, [&](SaveOperation& op) {
+                    ar.value("id", op.id);
+                    ar.text("recipe", op.recipe);
+                    ar.value("part", op.part);
+                    ar.require(op.id > 0 && op.id < ops.nextId, "the save file has an operation with a bad number");
+                });
+            });
+        }
     });
     ar.section("talents", 1, [&] { saveTalents(ar, d); });
+    ar.section("drugs", 1, [&] { saveDrugs(ar, d); });
     ar.section("roomstats", 1, [&] { saveRoomStatsSection(ar, d); });
     ar.section("animals", 2, [&] {
         ar.value("wildAnimals", d.wildAnimals);
@@ -2488,11 +2973,14 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.require(d.wildAnimals >= 0 && d.animals.percent >= 0, "the save file has a bad wild animal density");
         saveParts(ar, "animal", e, &SaveEntity::animal, [&](Animal& a) { saveAnimalPart(ar, a); });
     });
-    ar.section("husbandry", 1, [&] {
+    ar.section("husbandry", 3, [&] {
         ar.value("nextZone", d.husbandry.nextZone);
         ar.list("zones", d.husbandry.zones, [&](AnimalZone& z) {
             ar.value("id", z.id);
             ar.list("cells", z.cells, [&](CellPos& c) { saveCell(ar, c); });
+            if (ar.sectionVersion() >= 2) {
+                ar.value("breedingOff", z.breedingOff);
+            }
         });
         ar.value("tamed", d.husbandry.stats.tamed);
         ar.value("tameFailed", d.husbandry.stats.tameFailed);
@@ -2501,6 +2989,9 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("slaughtered", d.husbandry.stats.slaughtered);
         ar.value("fed", d.husbandry.stats.fed);
         ar.value("starved", d.husbandry.stats.starved);
+        if (ar.sectionVersion() >= 2) {
+            ar.value("hunted", d.husbandry.stats.hunted);
+        }
         saveParts(ar, "care", e, &SaveEntity::care, [&](AnimalCare& c) { saveCarePart(ar, c); });
     });
     ar.section("farming", 1, [&] {
@@ -2522,7 +3013,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(t.celsius > -500.0f && t.celsius < 1000.0f, "the save file has an impossible room temperature");
         });
     });
-    ar.section("raids", 1, [&] {
+    ar.section("raids", 2, [&] {
         saveRaids(ar, d.raids);
         saveParts(ar, "defense", e, &SaveEntity::defense, [&](DefensePlan& p) {
             ar.value("role", p.role);
@@ -2533,7 +3024,15 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "raider", e, &SaveEntity::raider, [&](Raider& r) {
             ar.value("squad", r.squad);
             ar.text("kind", r.kind);
+            if (ar.sectionVersion() >= 2) {  // F12
+                ar.value("goalThing", r.goalThing);
+                ar.value("loot", r.loot);
+                ar.value("sparesDowned", r.sparesDowned);
+            }
         });
+        if (ar.sectionVersion() >= 2) {
+            saveParts(ar, "kidnapped", e, &SaveEntity::kidnapped, [&](Kidnapped& k) { ar.value("by", k.by); });
+        }
     });
     ar.section("spoilage", 1, [&] {
         ar.value("rngState", d.spoilageState.rngState);
@@ -2576,7 +3075,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "grenade", e, &SaveEntity::grenade, [&](SaveGrenade& g) { saveGrenadePart(ar, g); });
         saveParts(ar, "knockedDown", e, &SaveEntity::knocked, [&](KnockedDown& k) { saveKnockedPart(ar, k); });
     });
-    ar.section("breeding", 1, [&] {
+    ar.section("breeding", 2, [&] {
         ar.value("matings", d.breeding.matings);
         ar.value("pregnancies", d.breeding.pregnancies);
         ar.value("born", d.breeding.born);
@@ -2590,6 +3089,47 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("defense", 1, [&] {
         saveParts(ar, "turret", e, &SaveEntity::turret, [&](Turret& t) { saveTurretPart(ar, t); });
         saveParts(ar, "trap", e, &SaveEntity::trap, [&](Trap& t) { saveTrapPart(ar, t); });
+    });
+    ar.section("narrator", 1, [&] {
+        d.hasNarrator = true;
+        NarratorState& n = d.narrator;
+        ar.text("narrator", n.narrator);
+        ar.text("difficulty", n.difficulty);
+        ar.value("rngState", n.rngState);
+        ar.value("rngIncrement", n.rngIncrement);
+        ar.value("cycleStart", n.cycleStart);
+        ar.list("threats", n.threats, [&](int64_t& t) { ar.value(nullptr, t); });
+        ar.list("fired", n.fired, [&](IncidentFired& f) {
+            ar.text("incident", f.incident);
+            ar.value("at", f.at);
+        });
+        ar.value("incidents", n.incidents);
+        ar.value("wealth", n.wealth);
+        ar.value("points", n.points);
+    });
+    ar.section("disasters", 1, [&] {
+        d.hasDisasters = true;
+        DisasterState& s = d.disasters;
+        ar.value("rngState", s.rngState);
+        ar.value("rngIncrement", s.rngIncrement);
+        ar.value("started", s.started);
+        ar.list("active", s.active, [&](DisasterCondition& c) {
+            uint8_t kind = static_cast<uint8_t>(c.kind);
+            ar.value("kind", kind);
+            ar.require(kind < kDisasterKindCount, "the save file has a disaster that does not exist");
+            c.kind = static_cast<DisasterKind>(kind);
+            ar.value("startedAt", c.startedAt);
+            ar.value("endsAt", c.endsAt);
+            ar.value("level", c.level);
+            ar.value("female", c.female);
+            ar.value("centreX", c.centre.x);
+            ar.value("centreY", c.centre.y);
+            ar.value("centreLevel", c.centre.level);
+            int radius = static_cast<int>(c.radius);  // metres, whole
+            ar.value("radius", radius);
+            c.radius = static_cast<float>(radius);
+            ar.value("nextStrike", c.nextStrike);
+        });
     });
     ar.section("fire", 1, [&] {
         ar.value("started", d.fire.started);
@@ -2616,6 +3156,66 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "casting", e, &SaveEntity::casting, [&](SaveCasting& c) { saveCastingPart(ar, c); });
         saveParts(ar, "stunned", e, &SaveEntity::stunned, [&](Stunned& s) { ar.value("stepsLeft", s.stepsLeft); });
         saveParts(ar, "effects", e, &SaveEntity::resonanceFx, [&](ResonanceEffects& fx) { saveResonanceFxPart(ar, fx); });
+    });
+    ar.section("prisoners", 2, [&] {
+        saveParts(ar, "prisoner", e, &SaveEntity::prisoner, [&](Prisoner& p) {
+            ar.value("mode", p.mode);
+            ar.value("resistance", p.resistance);
+            ar.value("capturedAt", p.capturedAt);
+            ar.value("nextChat", p.nextChat);
+            if (ar.sectionVersion() >= 2) {  // executions
+                ar.value("guiltyUntil", p.guiltyUntil);
+            }
+            ar.require(static_cast<int>(p.mode) <= static_cast<int>(PrisonerMode::Execute), "the save file has a bad prisoner mode");
+        });
+        saveParts(ar, "prisonBed", e, &SaveEntity::prisonBed, [&](PrisonBed& b) { ar.value("marked", b.marked); });
+    });
+    ar.section("levels", 1, [&] {
+        ar.list("upperFloors", d.upperFloors, [&](CellPos& c) {
+            saveCell(ar, c);
+            ar.require(c.level >= 1, "the save file has an upper floor on the ground");
+        });
+    });
+    ar.section("fuel", 1, [&] {
+        saveParts(ar, "fuel", e, &SaveEntity::fuel, [&](Fuel& f) { saveFuelPart(ar, f); });
+    });
+    ar.section("roofs", 1, [&] {
+        ar.value("collapses", d.roofs.collapses);
+        ar.list("thin", d.roofs.thin, [&](CellPos& c) { saveCell(ar, c); });
+        ar.list("fallenThick", d.roofs.fallenThick, [&](int& cell) { ar.value("cell", cell); });
+        ar.list("pending", d.roofs.pending, [&](CellPos& c) { saveCell(ar, c); });
+    });
+    ar.section("crafting", 1, [&] {
+        ar.value("rngState", d.craftingState.rngState);
+        ar.value("rngIncrement", d.craftingState.rngIncrement);
+        saveParts(ar, "storeIn", e, &SaveEntity::storeIn, [&](StoreIn& s) { ar.value("zone", s.zone); });
+    });
+    ar.section("mentalBreaks", 1, [&] {
+        saveParts(ar, "mentalBreaker", e, &SaveEntity::mentalBreaker, [&](MentalBreaker& b) { saveMentalBreakerPart(ar, b); });
+    });
+    ar.section("trade", 1, [&] {
+        saveTrade(ar, d.trade);
+        saveParts(ar, "visitor", e, &SaveEntity::visitor, [&](Visitor& v) {
+            ar.value("visit", v.visit);
+            ar.value("role", v.role);
+            ar.require(static_cast<int>(v.role) <= static_cast<int>(VisitorRole::Guard), "the save file has a bad visitor role");
+        });
+    });
+    ar.section("quests", 1, [&] { saveQuests(ar, d.quests); });
+    ar.section("inspirations", 1, [&] {
+        saveParts(ar, "inspired", e, &SaveEntity::inspired, [&](Inspired& i) {
+            ar.text("def", i.def);
+            ar.value("startedAt", i.startedAt);
+            ar.value("endsAt", i.endsAt);
+        });
+    });
+    ar.section("world", 1, [&] {
+        ar.value("enabled", d.world.enabled);
+        ar.value("seed", d.world.seed);
+        ar.value("width", d.world.width);
+        ar.value("height", d.world.height);
+        ar.value("startTile", d.world.startTile);
+        ar.value("hash", d.worldHash);
     });
     // New sections go here, at the end.
 }
@@ -2711,7 +3311,16 @@ std::unique_ptr<Sim> SimSaveAccess::makeEmpty(const SaveData& data, std::shared_
                                               std::string& error) {
     SimSettings settings = data.settings;
     settings.wildAnimals = data.wildAnimals;  // saved in the animals section, not the sim section
+    settings.world = data.world;              // and the world in its own
     auto sim = std::unique_ptr<Sim>(new Sim(settings, std::move(defs), Sim::EmptyStart{}));
+    if (sim->worldHash_ != data.worldHash) {
+        error = "the world generator gives a different world for this seed than when the save was made";
+        return nullptr;
+    }
+    if (data.world.enabled && sim->world_->startTile() != data.world.startTile) {
+        error = "the save's start tile can't start a colony on this world";
+        return nullptr;
+    }
     if (sim->groundHash_ != data.groundHash) {
         error = "the map generator gives a different map for this seed than when the save was made";
         return nullptr;
@@ -2725,10 +3334,14 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.defsHash = sim.defs_->contentHash();
     d.settings = sim.settings_;
     d.wildAnimals = sim.settings_.wildAnimals;
+    d.world = sim.settings_.world;
+    d.worldHash = sim.worldHash_;
     d.animals = sim.animals_->saved();
     d.husbandry = sim.husbandry_->saved();
     d.farming = sim.farming_->saved();
     d.breeding = sim.breeding_->saved();
+    d.narrator = sim.narrator_->state();
+    d.disasters = sim.disasters_->state();
     d.fire = sim.fire_->saved();
     d.seconds = sim.time_.seconds;
     d.rngState = sim.rng_.state();
@@ -2847,6 +3460,15 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const PawnLooks* looks = reg.try_get<PawnLooks>(e)) {
             out.looks = *looks;
         }
+        if (const MentalBreaker* breaker = reg.try_get<MentalBreaker>(e)) {
+            out.mentalBreaker = *breaker;
+        }
+        if (const Visitor* visitor = reg.try_get<Visitor>(e)) {
+            out.visitor = *visitor;
+        }
+        if (const Inspired* inspired = reg.try_get<Inspired>(e)) {
+            out.inspired = *inspired;
+        }
         out.playerControlled = reg.all_of<PlayerControl>(e);
         if (const ConstructionSite* site = reg.try_get<ConstructionSite>(e)) {
             SaveSite s;
@@ -2889,9 +3511,30 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             SaveBillList saved;
             saved.nextId = list->nextId;
             for (const Bill& bill : list->bills) {
-                saved.bills.push_back(SaveBill{bill.id, sim.defs_->get(bill.recipe).defName(), bill.mode, bill.count, bill.suspended});
+                SaveBill b;
+                b.id = bill.id;
+                b.recipe = sim.defs_->get(bill.recipe).defName();
+                b.mode = bill.mode;
+                b.count = bill.count;
+                b.suspended = bill.suspended;
+                b.skillMin = bill.skillMin;
+                b.skillMax = bill.skillMax;
+                b.radius = bill.radius;
+                b.storeZone = bill.storeZone;
+                b.unpauseAt = bill.unpauseAt;
+                b.satisfied = bill.satisfied;
+                for (const DefId def : bill.disallowed) {
+                    b.disallowed.push_back(sim.defs_->get(def).defName());
+                }
+                saved.bills.push_back(std::move(b));
             }
             out.bills = std::move(saved);
+        }
+        if (const Fuel* fuel = reg.try_get<Fuel>(e)) {
+            out.fuel = *fuel;
+        }
+        if (const StoreIn* store = reg.try_get<StoreIn>(e)) {
+            out.storeIn = *store;
         }
         if (const Health* health = reg.try_get<Health>(e)) {
             SaveHealth saved;
@@ -2899,9 +3542,19 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             saved.rest = health->rest;
             for (const Injury& injury : health->injuries) {
                 saved.injuries.push_back(SaveInjury{injury.part, sim.defs_->get(injury.hediff).defName(), injury.severity,
-                                                    injury.tendQuality, injury.peak});
+                                                    injury.tendQuality, injury.peak, injury.infectAt});
+            }
+            for (const Disease& disease : health->diseases) {
+                saved.diseases.push_back(SaveDisease{sim.defs_->get(disease.def).defName(), disease.severity, disease.tendQuality,
+                                                     disease.tendedUntil, disease.tendTotal, disease.part});
+            }
+            for (const Immunity& immunity : health->immunities) {
+                saved.immunities.push_back(SaveImmunity{sim.defs_->get(immunity.def).defName(), immunity.level});
             }
             saved.missing = health->missing;
+            for (const AddedPart& added : health->added) {
+                saved.added.push_back(SaveAddedPart{added.part, sim.defs_->get(added.hediff).defName()});
+            }
             saved.bloodLoss = health->bloodLoss;
             for (const EnvironmentHediff& env : health->environment) {
                 saved.environment.push_back(SaveEnvironmentHediff{sim.defs_->get(env.def).defName(), env.severity});
@@ -2937,6 +3590,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         if (const Raider* raider = reg.try_get<Raider>(e)) {
             out.raider = *raider;
         }
+        if (const Kidnapped* kidnapped = reg.try_get<Kidnapped>(e)) {
+            out.kidnapped = *kidnapped;
+        }
         if (const RecoilKick* kick = reg.try_get<RecoilKick>(e)) {
             out.kick = *kick;
         }
@@ -2951,6 +3607,20 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const Animal* animal = reg.try_get<Animal>(e)) {
             out.animal = *animal;
+        }
+        if (const Prisoner* prisoner = reg.try_get<Prisoner>(e)) {
+            out.prisoner = *prisoner;
+        }
+        if (const PrisonBed* prisonBed = reg.try_get<PrisonBed>(e)) {
+            out.prisonBed = *prisonBed;
+        }
+        if (const Operations* operations = reg.try_get<Operations>(e)) {
+            SaveOperations saved;
+            saved.nextId = operations->nextId;
+            for (const Operation& op : operations->list) {
+                saved.list.push_back(SaveOperation{op.id, sim.defs_->get(op.recipe).defName(), op.part});
+            }
+            out.operations = std::move(saved);
         }
         if (const MedicalSettings* medical = reg.try_get<MedicalSettings>(e)) {
             out.medical = *medical;
@@ -3031,6 +3701,22 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         z.cells = zone.cells;
         d.zones.push_back(std::move(z));
     }
+    for (const auto& [pawn, s] : sim.drugs_->states()) {
+        SaveDrugPawn saved;
+        saved.pawn = pawn;
+        saved.policy = s.policy;
+        saved.searchAfter = s.searchAfter;
+        for (const DrugPolicyEntry& e : s.edits) {
+            saved.edits.push_back(SaveDrugEntry{e.drug, e.forAddiction, e.forJoy, e.scheduled, e.daysFrequency, e.moodBelow, e.joyBelow});
+        }
+        for (const ChemicalState& c : s.chemicals) {
+            saved.chemicals.push_back(SaveDrugChemical{c.chemical, c.tolerance, c.addicted, c.need, c.progress, c.armed});
+        }
+        for (const DrugDose& dose : s.last) {
+            saved.last.push_back(SaveDrugDose{dose.drug, dose.at});
+        }
+        d.drugPawns.push_back(std::move(saved));
+    }
     std::vector<uint32_t> defIndexOf(sim.defs_->size(), UINT32_MAX);
     for (const PlantRecord& r : sim.plants_->records()) {
         if (defIndexOf[r.def.value] == UINT32_MAX) {
@@ -3057,6 +3743,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         d.designations.kinds.push_back(static_cast<uint8_t>(kind));
     }
     d.research = sim.research_->state();
+    d.ship = sim.ship_->state();
     for (const auto& [pawn, s] : sim.talents_->states()) {
         d.talentPawns.push_back(pawn);
         d.talentXp.push_back(s.xp);
@@ -3074,8 +3761,13 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.filth = sim.filth_->state();
     d.roomStats = sim.roomStats_->state();
     d.roomTemperatures = sim.temperature_->roomTemperatures();
+    d.upperFloors = sim.map_.upperFloorCells();
+    d.roofs = sim.roofCollapse_->state();
     d.raids = sim.raids_->state();
+    d.quests = sim.quests_->state();
     d.spoilageState = sim.spoilage_->state();
+    d.craftingState = sim.crafting_->state();
+    d.trade = sim.trade_->state();
     {
         const WeatherState state = sim.weather_->state();
         const auto nameOf = [&](DefId def) { return def.valid() ? sim.defs_->get(def).defName() : std::string(); };
@@ -3309,6 +4001,15 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             reg.emplace<PawnLooks>(entity, std::move(*e.looks));
             sim.giveGenes(entity);  // genes follow the lineage and are not saved (docs/design/genes.md)
         }
+        if (e.mentalBreaker) {
+            reg.emplace<MentalBreaker>(entity, std::move(*e.mentalBreaker));
+        }
+        if (e.visitor) {
+            reg.emplace<Visitor>(entity, *e.visitor);
+        }
+        if (e.inspired) {
+            reg.emplace<Inspired>(entity, std::move(*e.inspired));
+        }
         if (e.bills) {
             BillList list;
             list.nextId = e.bills->nextId;
@@ -3318,9 +4019,43 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                     error = "the save has a bill for '" + saved.recipe + "', which the data files no longer have";
                     return false;
                 }
-                list.bills.push_back(Bill{saved.id, recipe->id(), saved.mode, saved.count, saved.suspended});
+                Bill bill;
+                bill.id = saved.id;
+                bill.recipe = recipe->id();
+                bill.mode = saved.mode;
+                bill.count = saved.count;
+                bill.suspended = saved.suspended;
+                bill.skillMin = saved.skillMin;
+                bill.skillMax = saved.skillMax;
+                bill.radius = saved.radius;
+                bill.storeZone = saved.storeZone;
+                bill.unpauseAt = saved.unpauseAt;
+                bill.satisfied = saved.satisfied;
+                for (const std::string& name : saved.disallowed) {
+                    const Def* item = sim.defs_->find("Things", name);
+                    if (item == nullptr) {
+                        error = "the save has a bill that refuses '" + name + "', which the data files no longer have";
+                        return false;
+                    }
+                    bill.disallowed.push_back(item->id());
+                }
+                std::sort(bill.disallowed.begin(), bill.disallowed.end(), [](DefId a, DefId b) { return a.value < b.value; });
+                list.bills.push_back(std::move(bill));
             }
             reg.emplace<BillList>(entity, std::move(list));
+        }
+        if (e.storeIn) {
+            reg.emplace<StoreIn>(entity, *e.storeIn);
+        }
+        if (e.fuel) {
+            reg.emplace<Fuel>(entity, *e.fuel);
+        } else if (e.thing && e.thing->category == ThingCategory::Building && !e.site) {
+            // A building saved before fuel existed: it burns fuel now, and starts full (a stove that
+            // cooked for free keeps cooking until it first runs low).
+            const FuelSpec fuelSpec = readFuelSpec(*sim.defs_, *sim.defs_->find(kSaveThingsKind, e.thing->def));
+            if (fuelSpec.present) {
+                reg.emplace<Fuel>(entity, Fuel{fuelSpec.capacity});
+            }
         }
         if (e.health) {
             Health health;
@@ -3332,9 +4067,41 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                     error = "the save has an injury of '" + injury.hediff + "', which the data files no longer have";
                     return false;
                 }
-                health.injuries.push_back(Injury{injury.part, hediff->id(), injury.severity, injury.tendQuality, injury.peak});
+                health.injuries.push_back(Injury{injury.part, hediff->id(), injury.severity, injury.tendQuality, injury.peak, injury.infectAt});
             }
+            for (const SaveDisease& disease : e.health->diseases) {
+                const Def* hediff = sim.defs_->find("Hediffs", disease.hediff);
+                if (hediff == nullptr || !sim.health_->isDisease(hediff->id())) {
+                    error = "the save has the disease '" + disease.hediff + "', which the data files no longer have";
+                    return false;
+                }
+                health.diseases.push_back(Disease{hediff->id(), disease.severity, disease.tendQuality, disease.tendedUntil, disease.tendTotal, disease.part});
+            }
+            for (const SaveImmunity& immunity : e.health->immunities) {
+                const Def* hediff = sim.defs_->find("Hediffs", immunity.hediff);
+                if (hediff == nullptr || !sim.health_->isDisease(hediff->id())) {
+                    error = "the save has an immunity to '" + immunity.hediff + "', which the data files no longer have";
+                    return false;
+                }
+                health.immunities.push_back(Immunity{hediff->id(), immunity.level});
+            }
+            std::sort(health.diseases.begin(), health.diseases.end(), [](const Disease& a, const Disease& b) {
+                return a.def.value != b.def.value ? a.def.value < b.def.value : a.part < b.part;
+            });
+            std::sort(health.immunities.begin(), health.immunities.end(),
+                      [](const Immunity& a, const Immunity& b) { return a.def.value < b.def.value; });
             health.missing = e.health->missing;
+            for (const SaveAddedPart& added : e.health->added) {
+                const Def* hediff = sim.defs_->find("Hediffs", added.hediff);
+                std::string partDef;
+                DefId item;
+                float efficiency = 1.0f;
+                if (hediff == nullptr || !sim.health_->addedInfo(hediff->id(), partDef, item, efficiency)) {
+                    error = "the save has the artificial part '" + added.hediff + "', which the data files no longer have";
+                    return false;
+                }
+                health.added.push_back(AddedPart{added.part, hediff->id()});
+            }
             health.bloodLoss = e.health->bloodLoss;
             for (const SaveEnvironmentHediff& env : e.health->environment) {
                 const Def* hediff = sim.defs_->find("Hediffs", env.hediff);
@@ -3358,6 +4125,18 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             for (const MissingPart& missing : health.missing) {
                 if (missing.part >= parts) {
                     error = "the save has a lost body part its pawn doesn't have";
+                    return false;
+                }
+            }
+            for (const AddedPart& added : health.added) {
+                if (added.part >= parts) {
+                    error = "the save has an artificial part on a body part its pawn doesn't have";
+                    return false;
+                }
+            }
+            for (const Disease& disease : health.diseases) {
+                if (disease.part >= parts) {
+                    error = "the save has a disease on a body part its pawn doesn't have";
                     return false;
                 }
             }
@@ -3464,11 +4243,38 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (e.animal) {
             reg.emplace<Animal>(entity, *e.animal);
         }
+        if (e.operations) {
+            Operations operations;
+            operations.nextId = e.operations->nextId;
+            const int parts = e.thing ? sim.health_->partCount(reg.get<Thing>(entity).def) : 0;
+            for (const SaveOperation& saved : e.operations->list) {
+                const SurgeryRecipe* recipe = sim.surgery_->recipe(saved.recipe);
+                if (recipe == nullptr) {
+                    error = "the save has an operation '" + saved.recipe + "', which the data files no longer have";
+                    return false;
+                }
+                if (saved.part >= parts) {
+                    error = "the save has an operation on a body part its patient doesn't have";
+                    return false;
+                }
+                operations.list.push_back(Operation{saved.id, recipe->def, saved.part});
+            }
+            reg.emplace<Operations>(entity, std::move(operations));
+        }
         if (e.medical) {
             reg.emplace<MedicalSettings>(entity, *e.medical);
         }
+        if (e.prisoner) {
+            reg.emplace<Prisoner>(entity, *e.prisoner);
+        }
+        if (e.prisonBed) {
+            reg.emplace<PrisonBed>(entity, *e.prisonBed);
+        }
         if (e.defense) {
             reg.emplace<DefensePlan>(entity, *e.defense);
+        }
+        if (e.kidnapped) {
+            reg.emplace<Kidnapped>(entity, *e.kidnapped);
         }
         if (e.raider) {
             reg.emplace<Raider>(entity, *e.raider);
@@ -3554,10 +4360,23 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         return false;
     }
     sim.breeding_->restore(d.breeding);
+    if (d.hasNarrator && !sim.narrator_->restore(d.narrator, error)) {
+        return false;
+    }
+    if (d.hasDisasters) {
+        sim.disasters_->restore(d.disasters);
+    }
     if (!sim.farming_->restore(d.farming, error)) {
         return false;
     }
     sim.health_->refreshAll();
+    // Upper floors before the buildings that stand on them.
+    for (const CellPos& c : d.upperFloors) {
+        if (!sim.map_.setUpperFloor(c, true)) {
+            error = "the save has an upper floor outside the map";
+            return false;
+        }
+    }
     for (const SaveEntity& e : d.entities) {
         if (e.position && !things.relink(static_cast<Entity>(e.id))) {
             error = "the save has a building that no longer fits on the map";
@@ -3649,6 +4468,12 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.fighters_->afterLoad(error)) {
         return false;
     }
+    if (!sim.mentalBreaks_->afterLoad(error)) {
+        return false;
+    }
+    if (!sim.inspirations_->afterLoad(error)) {
+        return false;
+    }
     if (d.stockpile && !sim.map_.inBounds(*d.stockpile)) {
         error = "the save has a stockpile outside the map";
         return false;
@@ -3724,9 +4549,37 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                 error = "the save has a raid squad with a pawn that isn't there";
                 return false;
             }
+            const Raider& raider = reg.get<Raider>(m);
+            if ((raider.loot != kNoEntity && !reg.valid(raider.loot)) || (raider.goalThing != kNoEntity && !reg.valid(raider.goalThing))) {
+                error = "the save has a raider after something that isn't there";
+                return false;
+            }
         }
     }
     if (!sim.raids_->restore(std::move(d.raids), error)) {
+        return false;
+    }
+    for (const Visit& visit : d.trade.visits) {
+        for (const Entity m : visit.members) {
+            if (!reg.valid(m) || !reg.all_of<Visitor>(m)) {
+                error = "the save has a visit with a pawn that isn't there";
+                return false;
+            }
+        }
+        if (visit.trader != kNoEntity && !reg.valid(visit.trader)) {
+            error = "the save has a trader that isn't there";
+            return false;
+        }
+    }
+    if (!sim.trade_->restore(std::move(d.trade), error)) {
+        return false;
+    }
+    for (Quest& quest : d.quests.quests) {
+        quest.people.erase(std::remove_if(quest.people.begin(), quest.people.end(), [&](Entity p) { return !reg.valid(p); }),
+                           quest.people.end());
+    }
+    sim.quests_->state() = std::move(d.quests);
+    if (!sim.ship_->restore(std::move(d.ship), error)) {
         return false;
     }
     sim.apparel_->restoreOutfits(std::move(d.outfits), d.nextOutfitId);
@@ -3754,6 +4607,37 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     } else {
         // A save from before the weather: it begins clear at the time the game had reached.
         sim.weather_->restore(sim.weather_->state(), {}, d.seconds);
+    }
+    {
+        // Drug records of a pawn that is gone are forgotten; so is a policy, chemical or drug the data files dropped.
+        sim.drugs_->states().clear();
+        for (const SaveDrugPawn& saved : d.drugPawns) {
+            if (!sim.things_->exists(saved.pawn)) {
+                continue;
+            }
+            DrugState state;
+            state.policy = sim.drugs_->policyNamed(saved.policy) != nullptr ? saved.policy : std::string();
+            state.searchAfter = saved.searchAfter;
+            for (const SaveDrugEntry& e : saved.edits) {
+                if (sim.drugs_->kindOf(sim.defs_->idOf("Things", e.drug)) != nullptr) {
+                    state.edits.push_back(DrugPolicyEntry{e.drug, e.forAddiction, e.forJoy, e.scheduled, e.daysFrequency, e.moodBelow, e.joyBelow});
+                }
+            }
+            for (const SaveDrugChemical& c : saved.chemicals) {
+                if (sim.drugs_->chemicalIndex(c.chemical) >= 0) {
+                    state.chemicals.push_back(ChemicalState{c.chemical, c.tolerance, c.addicted, c.need, c.progress, c.armed});
+                }
+            }
+            for (const SaveDrugDose& dose : saved.last) {
+                if (sim.drugs_->kindOf(sim.defs_->idOf("Things", dose.drug)) != nullptr) {
+                    state.last.push_back(DrugDose{dose.drug, dose.at});
+                }
+            }
+            std::sort(state.edits.begin(), state.edits.end(), [](const DrugPolicyEntry& a, const DrugPolicyEntry& b) { return a.drug < b.drug; });
+            std::sort(state.chemicals.begin(), state.chemicals.end(), [](const ChemicalState& a, const ChemicalState& b) { return a.chemical < b.chemical; });
+            std::sort(state.last.begin(), state.last.end(), [](const DrugDose& a, const DrugDose& b) { return a.drug < b.drug; });
+            sim.drugs_->states()[saved.pawn] = std::move(state);
+        }
     }
     {
         // Talents of a pawn that is gone, or of a talent the data files dropped, are forgotten.
@@ -3806,6 +4690,10 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             return false;
         }
     }
+    if (!sim.rooms_->restoreThinRoofs(d.roofs.thin)) {
+        error = "the save has a roof outside the map";
+        return false;
+    }
     sim.rooms_->update();
     sim.power_->markDirty();
     sim.power_->update();
@@ -3813,9 +4701,15 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     sim.temperature_->setOutdoor(sim.outdoorTemperature());
     sim.temperature_->restore(d.roomTemperatures);
     sim.spoilage_->restore(d.spoilageState);
+    if (!sim.roofCollapse_->restore(d.roofs)) {
+        error = "the save has a fallen roof outside the map";
+        return false;
+    }
+    sim.crafting_->restore(d.craftingState);
     if (!sim.fire_->restore(d.fire, error)) {
         return false;
     }
+    sim.lights_->update();  // derived from the buildings and roofs, so not saved: the first step must already see it
     sim.events_.clear();
     return true;
 }
@@ -3833,7 +4727,7 @@ SaveLoadResult loadSim(const std::vector<uint8_t>& bytes, std::shared_ptr<const 
     }
     const SimSettings& s = data.settings;
     if (s.mapSize <= 0 || s.mapSize > 4096 || s.pawns < 0 || s.items < 0 || s.checkpointEvery < 0 || s.pathBudget <= 0 ||
-        data.seconds < 0) {
+        data.seconds < 0 || !worldSettingsValid(data.world)) {
         result.error = "the save file has impossible settings";
         return result;
     }

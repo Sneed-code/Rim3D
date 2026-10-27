@@ -156,7 +156,7 @@ MeleeSystem::MeleeSystem(Things& things, Map& map, CombatSystem& combat, HealthS
             }
         }
         set.reach = rules_.bodyReach;
-        if (!weapon && def.text("race.intelligence") == "Animal") {
+        if (!weapon && (def.text("race.intelligence") == "Animal" || def.text("race.intelligence") == "Mechanoid")) {
             set.reach = rules_.animalReachBase +
                         rules_.animalReachPerRoot * std::sqrt(static_cast<float>(std::max(0.1, def.number("race.baseBodySize", 1.0))));
         }

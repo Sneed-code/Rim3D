@@ -16,6 +16,7 @@
 #include "ProtagonistPawn.h"
 #include "SimPicking.h"
 #include "SimSubsystem.h"
+#include "SkySubsystem.h"
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
@@ -402,9 +403,10 @@ void UProtagonistSubsystem::ApplyBodyVisibility()
 	}
 	const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>();
 	ASimPawnActor* Actor = Pawns ? Pawns->FindPawn(Controlled) : nullptr;
-	if (Actor && Actor->IsBodyHidden() != Body->IsFirstPerson())
+	// Hidden when the view is at its eyes: first person, or aimed in with the first person aim view (U21).
+	if (Actor && Actor->IsBodyHidden() != Body->IsBodyHiddenInView())
 	{
-		Actor->SetBodyHidden(Body->IsFirstPerson());
+		Actor->SetBodyHidden(Body->IsBodyHiddenInView());
 	}
 }
 
@@ -502,6 +504,8 @@ void UProtagonistSubsystem::DrawHud(USimSubsystem& Bridge)
 		ProtagonistSpeedButton("Pause", 0, Bridge);
 		ImGui::SameLine();
 		ProtagonistSpeedButton("1x", 1, Bridge);
+		// The date, the temperature and the weather (U13).
+		ProtagonistText(USkySubsystem::DescribeDate(Sim) + TEXT("   ") + USkySubsystem::DescribeClimate(Sim));
 	}
 	ImGui::End();
 

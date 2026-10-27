@@ -71,7 +71,7 @@ times `1 + the target's opinion of the asker / 100`, at most 95%. A romance that
 (the listener also gets the +10). A proposal that works turns the lover bond into **Spouse** and both get
 *got married*; one refused leaves the bond and the asker gets *rejected my proposal*. A breakup makes both
 **ExLover** (both get *broke up*, the listener thinks -30 of the talker for 60 days) and a spouse never breaks
-up. Only one lover or spouse at a time, so a pawn in a bond is not asked and does not ask. There are no
+up. A pawn in a bond is not asked (but may stray, see below). There are no
 orientations yet: anyone may love anyone else (BACKLOG). Adults only (`Colonist.age` of at least 18; pawns
 without a Colonist record count as adults).
 
@@ -93,13 +93,33 @@ or if the listener is Kind). Both pawns get a `SocialFight` (opponent, started, 
   Each then thinks -20 of the other for 30 days ("got in a fight with me"), and neither starts a talk for
   20 minutes. Events `SocialFight` "started" and "ended: why".
 
+## Social skill, cheating, jealousy, wedding parties
+
+Extras after C20 (numbers are ours, in `SocialRules`).
+
+- **Social skill.** A listener's opinion memory from a good chat (a positive offset) is multiplied by
+  `1 + skillOpinionPerLevel (0.05) x the talker's Social level`; a slight or insult is not softened. The
+  chance of a romance or proposal is multiplied by `1 + skillRomancePerLevel (0.02) x level` (still at most 95%).
+- **Cheating.** A pawn with a lover or spouse it thinks less of than `cheatPartnerBelow` (60) may make romance
+  attempts on a free pawn, at `cheatWeightFactor` (0.15) of the usual weight. The new bond forms and the old one
+  stays (`stats.cheats`).
+- **Jealousy.** Each betrayed partner holds *cheated on me* (-40, 60 days) about the cheater and *took my
+  partner* (-20, 60 days) about the new lover, gets the *my partner cheated on me* mood thought, and with
+  `jealousFightChance` (25%) fights the new lover with fists (never a Wimp or a Kind pawn). Event `Interaction`
+  "Cheated" (`thing` the cheater, `target` the betrayed).
+- **Wedding party.** When a proposal works, the couple get *my wedding party* (on top of *got married*) and every
+  other colonist awake and free to talk gets *attended a wedding* (`stats.weddingGuests`; event `Interaction`
+  "WeddingParty", `count` the guests). Every free colonist
+  within 80 m on the same level also gets a `Party` job (`JobSystem::startParty`, `PartyJobs.cpp`): it drops its
+  work, walks to its own cell round the couple, stands there for an hour (`partyMinutes`) gaining 0.4 recreation an
+  hour (`partyJoyPerHour`), chatting with whoever is in earshot, and hunger or tiredness wait until it is over
+  (`stats.partyGuests`). Ours; rules in `SocialRules`.
+
 ## Not yet
 
-- **Social skill effects.** Only experience: RimWorld's Social skill also raises the opinion a chat gives,
-  the chance of romance and, later, trade and recruiting (C22, C23). The experience rate follows the D9
-  numbers (10 to 30 an interaction), which is slow against `SkillRules.xpToNextLevel`; revisit with C12.
-- Orientations, attractiveness, cheating, jealousy and the wedding party, ideology-style rivalry, and the
-  "mutual friend" thoughts; mood effects of seeing a friend die in front of you.
+- Orientations and attractiveness, ideology-style rivalry, the "mutual friend" thoughts, and mood effects of
+  seeing a friend die in front of you. Social skill for trade and recruiting (C22, C23). The experience rate
+  follows the D9 numbers (10 to 30 an interaction), slow against `SkillRules.xpToNextLevel`; revisit with C12.
 - The colonist panel's relations tab and the bond lines (U task; the data is `opinionLines` and
   `partner`, and the snapshot's `partner` and `socialFight`).
 - Prisoners and recruiting (C22), mental-break insults (C19: an insulting spree can call `interact`).

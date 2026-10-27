@@ -6,9 +6,12 @@
 #include "ColonySim/Events.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Inspirations.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Medicine.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Prisoners.h"
+#include "ColonySim/Raids.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
@@ -89,7 +92,10 @@ bool JobSystem::needsRescue(Entity pawn) const {
     }
     const Health& health = reg.get<Health>(pawn);
     const Faction* faction = reg.try_get<Faction>(pawn);
-    return health.downed && !health.dead && (faction == nullptr || faction->id == kPlayerFaction) &&
+    if (reg.all_of<Kidnapped>(pawn)) {
+        return false;  // a raider is carrying it off
+    }
+    return health.downed && !health.dead && (faction == nullptr || faction->id == kPlayerFaction || reg.all_of<Prisoner>(pawn)) &&
            bedUnder(pawn) == kNoEntity;
 }
 
@@ -110,6 +116,10 @@ bool JobSystem::findPatientBed(Entity patient, Entity helper, bool medicalOnly, 
         }
         const bool medical = isMedical_[thing.def.value] != 0;
         if (medicalOnly && !medical) {
+            continue;
+        }
+        // Prison beds are for prisoners and nobody else.
+        if (reg.all_of<PrisonBed>(candidate) != reg.all_of<Prisoner>(patient)) {
             continue;
         }
         const int slots = std::max(1, static_cast<int>(defs_.get(thing.def).integer("building.sleepingSlots", 1)));
@@ -340,13 +350,21 @@ JobSystem::StepResult JobSystem::tendWork(Entity pawn, Job& job, std::string& wh
                                                  patient == pawn, rng.unit());
     const int tended = health_.tendAll(patient, quality);
     DefId used;
+    // An inspired doctor's tend uses no medicine (the inspiration is used up).
+    const bool free = tended > 0 && medicineItem != kNoEntity && inspirations_ != nullptr && inspirations_->takeFreeMedicine(pawn);
     if (tended > 0 && medicineItem != kNoEntity) {
         used = reg.get<Thing>(medicineItem).def;
+    }
+    if (tended > 0 && medicineItem != kNoEntity) {
         release(pawn, job);
         job.site = kNoEntity;
         reserve(pawn, job);
-        reg.remove<Carrying>(pawn);
-        things_.destroy(medicineItem);
+        if (free) {
+            dropCarried(pawn);  // kept: it lies where the doctor stands
+        } else {
+            reg.remove<Carrying>(pawn);
+            things_.destroy(medicineItem);
+        }
     }
     if (tended > 0) {
         Event event;
@@ -370,6 +388,10 @@ bool JobSystem::failCheckRescue(Entity, Job& job, std::string& why) {
     if (!things_.spawned(job.thing) || !reg.all_of<Health>(job.thing) || !reg.get<Health>(job.thing).downed ||
         reg.get<Health>(job.thing).dead) {
         why = "the patient is up or gone";
+        return false;
+    }
+    if (reg.all_of<Kidnapped>(job.thing)) {
+        why = "a raider carried the patient off";
         return false;
     }
     if (!things_.spawned(job.chair) || !reg.all_of<Bed>(job.chair)) {
@@ -418,7 +440,7 @@ JobSystem::StepResult JobSystem::carryPawn(Entity pawn, Job& job, std::string& w
     return walkTo(pawn, job, job.cell, why);
 }
 
-JobSystem::StepResult JobSystem::layPawn(Entity pawn, Job& job, std::string&) {
+JobSystem::StepResult JobSystem::layPawn(Entity pawn, Job& job, std::string& why) {
     entt::registry& reg = things_.registry();
     Position& there = reg.get<Position>(job.thing);
     there.x = static_cast<float>(job.cell.x) + 0.5f;
@@ -428,6 +450,13 @@ JobSystem::StepResult JobSystem::layPawn(Entity pawn, Job& job, std::string&) {
         health->rest = isMedicalBed(job.chair) ? RestKind::HospitalBed : RestKind::Bed;
     }
     pawnDid(pawn, PawnAction::LayPawn, job.thing);
+    if (job.type == JobType::CapturePrisoner) {
+        std::string error;
+        if (prisoners_ == nullptr || !prisoners_->imprison(job.thing, job.chair, pawn, error)) {
+            why = error.empty() ? "there are no prisoners here" : error;
+            return StepResult::Failed;
+        }
+    }
     return StepResult::Next;
 }
 
@@ -451,7 +480,7 @@ bool JobSystem::failCheckBedRest(Entity pawn, Job& job, std::string& why) {
 
 JobSystem::StepResult JobSystem::bedRest(Entity pawn, Job& job, std::string&) {
     entt::registry& reg = things_.registry();
-    if (!health_.needsRest(pawn)) {
+    if (!needsBedRest(pawn)) {
         return StepResult::Next;
     }
     if (Health* health = reg.try_get<Health>(pawn)) {

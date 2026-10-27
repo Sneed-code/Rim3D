@@ -69,7 +69,7 @@
   ]
  },
  {
-  "defName": "WoodFiredGenerator", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_WoodFiredGenerator.SM_WoodFiredGenerator" }, "researchPrerequisite": "Electricity",
+  "defName": "WoodFiredGenerator", "visual": {"sound": {"loop": "Hum_Generator"}, "mesh": "/Game/Rim3D/Generated/Art/SM_WoodFiredGenerator.SM_WoodFiredGenerator" }, "researchPrerequisite": "Electricity",
   "parent": "PowerBase",
   "label": "wood-fired generator",
   "size": [
@@ -128,7 +128,7 @@
   ]
  },
  {
-  "defName": "WindTurbine", "researchPrerequisite": "Electricity",
+  "defName": "WindTurbine", "visual": {"sound": {"loop": "Hum_Wind"}}, "researchPrerequisite": "Electricity",
   "parent": "PowerBase",
   "label": "wind turbine",
   "size": [
@@ -199,7 +199,7 @@
   ]
  },
  {
-  "defName": "Heater", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Heater.SM_Heater" }, "researchPrerequisite": "Electricity",
+  "defName": "Heater", "visual": {"sound": {"loop": "Hum_Climate"}, "mesh": "/Game/Rim3D/Generated/Art/SM_Heater.SM_Heater" }, "researchPrerequisite": "Electricity",
   "parent": "ClimateBase",
   "label": "heater",
   "size": [
@@ -230,7 +230,7 @@
   ]
  },
  {
-  "defName": "Cooler", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Cooler.SM_Cooler" }, "researchPrerequisite": "AirConditioning",
+  "defName": "Cooler", "visual": {"sound": {"loop": "Hum_Climate"}, "mesh": "/Game/Rim3D/Generated/Art/SM_Cooler.SM_Cooler" }, "researchPrerequisite": "AirConditioning",
   "parent": "ClimateBase",
   "label": "cooler",
   "size": [
@@ -316,7 +316,7 @@
   ]
  },
  {
-  "defName": "Campfire", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Campfire.SM_Campfire" },
+  "defName": "Campfire", "visual": {"sound": {"loop": "Fire_Campfire"}, "mesh": "/Game/Rim3D/Generated/Art/SM_Campfire.SM_Campfire", "flame": { "lift": 0.18, "size": 0.45 } },
   "parent": "ClimateBase",
   "label": "campfire",
   "size": [
@@ -343,6 +343,7 @@
   },
   "glower": {
    "radius": 10.0,
+   "lift": 0.3,
    "color": [
     1.0,
     0.65,
@@ -394,6 +395,7 @@
   },
   "glower": {
    "radius": 10.0,
+   "lift": 1.4,
    "color": [
     0.84,
     0.84,
@@ -428,6 +430,7 @@
   },
   "glower": {
    "radius": 10.0,
+   "lift": 2.1,
    "color": [
     0.8,
     0.8,
@@ -447,7 +450,7 @@
   ]
  },
  {
-  "defName": "TorchLamp", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_TorchLamp.SM_TorchLamp" },
+  "defName": "TorchLamp", "visual": {"sound": {"loop": "Fire_Torch"}, "mesh": "/Game/Rim3D/Generated/Art/SM_TorchLamp.SM_TorchLamp", "flame": { "lift": 0.34, "size": 0.14 } },
   "parent": "LampBase",
   "label": "torch lamp",
   "size": [
@@ -463,6 +466,7 @@
   },
   "glower": {
    "radius": 10.0,
+   "lift": 0.35,
    "color": [
     0.8,
     0.55,

@@ -156,7 +156,7 @@ void Lights::rebuild() {
         for (int dy = -reach; dy <= reach; ++dy) {
             for (int dx = -reach; dx <= reach; ++dx) {
                 const CellPos c{s.cell.x + dx, s.cell.y + dy, 0};
-                if (!map_.inBounds(c)) {
+                if (!map_.onGround(c)) {
                     continue;
                 }
                 const float dist = std::sqrt(static_cast<float>(dx * dx + dy * dy));
@@ -182,16 +182,18 @@ float Lights::skyGlow() const {
     return LightNumbers::eval(numbers_.skyGlowByHour, hour) * (weather_ != nullptr ? weather_->skyGlow() : 1.0f);
 }
 
+float Lights::clearSkyGlowAtHour(float hour) const { return LightNumbers::eval(numbers_.skyGlowByHour, hour); }
+
 bool Lights::underOpenSky(CellPos c) const {
-    return map_.inBounds(c) && map_.roof(c) == Roof::None;
+    return map_.onGround(c) && map_.roof(c) == Roof::None;
 }
 
 float Lights::lampLightAt(CellPos c) const {
-    return map_.inBounds(c) ? lamp_[static_cast<size_t>(map_.index(c))] : 0.0f;
+    return map_.onGround(c) ? lamp_[static_cast<size_t>(map_.index(c))] : 0.0f;
 }
 
 float Lights::lightAt(CellPos c) const {
-    if (!map_.inBounds(c)) {
+    if (!map_.onGround(c)) {
         return 0.0f;
     }
     const float lamp = lamp_[static_cast<size_t>(map_.index(c))];

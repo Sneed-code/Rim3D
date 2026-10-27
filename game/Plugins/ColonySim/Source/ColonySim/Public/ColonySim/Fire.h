@@ -83,6 +83,9 @@ struct COLONY_API FireNumbers {
     float burntFadeDays = 6.0f;
     int autoHomeRadius = 5;
     int startHomeRadius = 12;
+    float foamFadeHours = 12.0f;     // each hour a layer of firefoam on the ground goes with chance 1 / this
+    int waterRunRadius = 12;         // a burning pawn runs for water within this many cells
+    bool panic = true;               // a burning colonist runs about at random until it is put out or burns out
 
     static FireNumbers read(const DefDatabase& defs);
 };
@@ -120,6 +123,12 @@ public:
     void setEventLog(std::vector<Event>* events) { events_ = events; }
     const FireNumbers& numbers() const { return numbers_; }
     // Set by the sim: a pawn's flammability factor from its genes (0 for fire-resistant skin).
+    // Whether a powered building is running (a foam turret needs power).
+    void setRunning(std::function<bool(Entity)> running) { running_ = std::move(running); }
+    // The hook for buildings destroyed by damage (CombatSystem::setBeforeDestroy): a popper bursts and lays its foam.
+    void onDestroy(Entity building);
+    // Set by the sim: hurts a pawn through its armor (CombatSystem::hurtPawn); without it flames hit bare.
+    void setPawnHurt(std::function<bool(Entity, DefId, float, Rng&)> hurt) { pawnHurt_ = std::move(hurt); }
     void setPawnFactor(std::function<float(Entity)> factor) { pawnFactor_ = std::move(factor); }
 
     // One game second, `now` the game second. The sim's event list (set with setEventLog) holds this step's
@@ -138,6 +147,9 @@ public:
     bool setPawnAlight(Entity pawn, int64_t now, bool force = false);
     // Puts out a burning pawn.
     bool putOutPawn(Entity pawn);
+    // A burning pawn's panic: when it has stopped, it takes one step to a random walkable neighbour cell, preferring one
+    // that isn't alight. Called by the job system instead of thinking. False if it isn't burning (or panic is off).
+    bool panicStep(Entity pawn, int64_t now);
 
     // ---- Questions
     bool burning(CellPos cell) const;
@@ -162,7 +174,7 @@ public:
     // ---- Putting out
     // Beats `amount` of size off the fire in a cell; a fire at nothing is out, and so is any pawn burning there.
     // Returns true when the fire is out.
-    bool extinguish(CellPos cell, float amount);
+    bool extinguish(CellPos cell, float amount, const char* how = "beaten");
     // Size a colonist at full speed beats out in one game second.
     float beatPerSecond() const { return static_cast<float>(numbers_.beatPerTick / numbers_.ticksToSeconds); }
 
@@ -182,6 +194,7 @@ public:
     uint64_t started() const { return started_; }
     uint64_t burntUp() const { return burntUp_; }
     uint64_t pawnsBurnt() const { return pawnsBurnt_; }
+    uint64_t poppersUsed() const { return poppersUsed_; }
 
     // Saving, loading and the state hash (docs/design/saves.md).
     FireSaved saved() const;
@@ -195,6 +208,12 @@ private:
     float thingFlammability(Entity thing) const;
     float defFlammability(DefId def) const;
     void pass(int64_t now);
+    void popperStep(int64_t now);
+    void turretStep(int64_t now);
+    void foamFadeStep(int64_t now);
+    // Puts out every fire and burning pawn within `radius` of a point and lays firefoam on the ground there.
+    void foamBurst(float x, float y, int level, float radius);
+    bool foamAt(CellPos c) const;
     void burnThings(CellPos c, FireCell& fire, float damage, Rng& rng);
     void spreadFrom(CellPos c, const FireCell& fire, int64_t now, int index, std::vector<int>& ignitions, Rng& rng);
     void catchPawns(int64_t now);
@@ -218,9 +237,20 @@ private:
     std::vector<float> flammability_;  // by DefId.value: the def's stats.flammability
     std::vector<float> stuffFactor_;   // by DefId.value: stuffProps.statFactors.flammability
     std::vector<float> maxHp_;         // by DefId.value
+    std::vector<float> popperRadius_;  // by DefId.value: `firefoam.radius`, 0 for what isn't a popper
+    std::vector<float> popperTrigger_; // `firefoam.triggerRadius`
+    struct TurretInfo {
+        float range = 0.0f;     // `firefoamTurret.range`; 0 for what isn't a foam turret
+        float radius = 0.0f;    // the foam each shot lays
+        int cooldown = 10;      // game seconds between shots
+    };
+    std::vector<TurretInfo> turretInfo_;  // by DefId.value
+    int foamKind_ = -1;                   // Filth kind index of `FireFoam`
+    std::function<bool(Entity)> running_;
     DefId burnType_;
     DefId ashKind_;
     std::function<float(Entity)> pawnFactor_;
+    std::function<bool(Entity, DefId, float, Rng&)> pawnHurt_;
     std::vector<Event>* events_ = nullptr;
 
     std::map<int, FireCell> fires_;
@@ -237,6 +267,7 @@ private:
     uint64_t started_ = 0;
     uint64_t burntUp_ = 0;
     uint64_t pawnsBurnt_ = 0;
+    uint64_t poppersUsed_ = 0;
     std::vector<int> scratch_;
 };
 

@@ -208,6 +208,8 @@ public:
     // Something hurt `victim`: a hurt animal runs, fights back or turns manhunter; its herd runs.
     // Called by the combat code the moment the hit lands.
     void hurt(Entity victim, Entity attacker);
+    // The chance a wild animal turns manhunter when hurt (0 for a non-animal); hunters weigh it.
+    float manhunterChanceOf(Entity animal) const;
     // Calm animals near the shots and blows among `events[from..]` run from them.
     void scare(const std::vector<Event>& events, size_t from);
     // Makes the animal an enemy of `target` (and of every colonist if `temper` is Manhunter) at once;
@@ -215,6 +217,23 @@ public:
     bool enrage(Entity animal, AnimalTemper temper, Entity target);
     // Whether the fighter AI takes the animal for an enemy.
     bool hostile(Entity animal) const;
+
+    // ---- Incidents (T3, docs/design/disasters.md)
+    // The kinds this biome has wild animals of, in def order (a manhunter pack picks among them).
+    struct WildKind {
+        DefId def;
+        float bodySize = 1.0f;
+        bool predator = false;
+        double commonality = 0.0;
+    };
+    std::vector<WildKind> wildKinds() const;
+    // Brings `count` adults of `def` in at a random map edge, all manhunters for `hours` game hours, the first one's
+    // chase set on `target` (a colonist; the rest follow their own sight). Returns how many came, and the first one's
+    // cell in `where`.
+    int spawnManhunters(DefId def, int count, double hours, Entity target, CellPos& where);
+    // Turns one living adult animal, wild or tame, within `range` metres of any of the `anchors` (colonists' cells)
+    // manhunter for `hours` game hours, picked by `rng`. Returns it, or kNoEntity if none is near.
+    Entity goMad(const std::vector<CellPos>& anchors, float range, double hours, Rng& rng);
 
     // ---- Tame animals (AnimalCare.cpp, docs/design/husbandry.md)
     // Husbandry says where a tame animal may be and what it eats; the pathfinder lets it walk round walls
@@ -266,6 +285,7 @@ private:
     struct Stage {
         int64_t minAgeSeconds = 0;
         float bodySizeFactor = 1.0f;
+        float healthFactor = 1.0f;  // `healthScaleFactor`: the share of its adult hit points
         float foodFactor = 1.0f;
     };
     struct Kind {
@@ -287,6 +307,7 @@ private:
     };
 
     const Kind* kindOf(Entity animal) const;
+    float manhunterChance(const Kind& kind) const;
     int stageAt(const Kind& kind, int64_t ageSeconds) const;
     float capacity(const Kind& kind, int64_t ageSeconds) const;
     float foodFallPerSecond(const Kind& kind, int64_t ageSeconds) const;

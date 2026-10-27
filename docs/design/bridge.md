@@ -78,6 +78,9 @@ rest (place blueprint, designate, draft, actions) come with the tasks that build
 | `LearnPowerCommand{pawn, power}` | teaches a Powers def of the pawn's level or lower | not attuned; no such power; level too low; known already |
 | `CastPowerCommand{pawn, power, target, cell, player}` | `ResonanceSystem::cast`: a power on `target` (itself for none), a jump to `cell`; warm-up, then it goes off | doesn't know it; can't act; not enough focus; too much strain; target or cell out of range or sight |
 | `SwitchWeaponCommand{pawn, slot}` | `CombatSystem::switchWeapon`: bring up the weapon carried in slot 0 Primary, 1 Sidearm or 2 Melee; no shooting or swinging for the slot's switch time | nothing in the slot or in the hands already; downed, rolling, knocked down, switching, mid-shot or mid-swing |
+| `SetRefuelCommand{building, autoRefuel, fillNow}` | allow auto refuel on or off, and `fillNow` orders a fill to the top ([fuel.md](fuel.md)) | not a finished building with a fuel part |
+| `StartMentalBreakCommand{pawn, breakDef}` | dev command: a mental break now, whatever the mood ([mental-breaks.md](mental-breaks.md)) | not a colonist on the map; walked by the player; downed or dead; in a break already; an unknown break; one that needs fire; one with nothing to do (no food to binge on) |
+| `EndMentalBreakCommand{pawn}` | dev command: ends the break at once, no catharsis | not in a break |
 | `ReloadCommand{pawn}` | `CombatSystem::reload`: a new magazine now (the protagonist's reload key, [aiming.md](aiming.md)) | no gun with a magazine; full; downed, mid-shot or reloading |
 | `StartRaidCommand{faction, points, edge}` | dev until the narrator: a raid of a Factions def worth `points` (0: the colony's raid points) walks in at `edge` (0 N, 1 E, 2 S, 3 W, -1 any) ([raids.md](raids.md)) | unknown faction or edge; no way in from that edge |
 | `SoundAlarmCommand{on}` | the colony alarm on (every colonist to its defense role; stays on until the player stops it) or off (back to work) | on (off) already |
@@ -122,7 +125,11 @@ starts, so read it after every step. Before the first step it holds what setting
 | `PawnAction` | `thing` (the pawn), `def`, `action`, `target` | a pawn did something Unreal animates: `PickUp`, `PutDown` (U5, [pawns.md](pawns.md)), `Eat`, `LieDown`, `GetUp` (C6); `Build` and `Deconstruct` (C4) when work on `target` begins; `Cook` (C7) when a run of a bill begins at the stove `target`; `Clean` (C17) when a layer of filth at `target`'s cell starts to be cleaned; `Tend` (H1) when a doctor starts tending `target`, `LiftPawn` and `LayPawn` when a rescuer lifts the downed pawn `target` and lays it in a bed (until `LayPawn` its position follows the rescuer's); `Reload` (`target` the gun) and `Dodge` (`target` the projectile, `cell` where it steps) (F5); `Dodge` (`target` the attacker) and `Block` (`target` the attacker, none for the player's own block) against a melee swing (F8); `Roll` (P2) when a dodge roll starts: `cell` where it began, (`x`, `y`) its unit direction, `amount` the steps from start-up to the end of recovery, for stretching the animation; `Switch` (P1) when a weapon switch starts: `target` the weapon coming to the hands, `amount` the steps; `Throw` (a grenade wind-up begins) and `Dive` (`target` the grenade, `cell` where the pawn runs) (F9); `Cast` (X2) when a power's warm-up begins: `target`, `cell` a jump's, `amount` the steps |
 | `PawnTended` | `thing` (the doctor), `target` (the patient), `def` (the medicine, none if by hand), `amount` (quality), `message` | a doctor finished tending ([medicine.md](medicine.md)) |
 | `PawnScarred` | `thing`, `def` (Scar or OldWound), `part`, `amount` | a healed injury left a permanent scar ([medicine.md](medicine.md)) |
+| `PawnSick` | `thing`, `def` (the disease), `part` (an infection's wound, else -1), `amount` (severity) | a pawn caught a disease or a wound turned infected ([diseases.md](diseases.md)) |
+| `PawnRecovered` | `thing`, `def`, `part` | a disease ran its course or was cured |
 | `FrameStarted` | `thing` (the plan), `def` (the building), `cell` | a blueprint got its first materials and is a frame now; the plan itself came with a `ThingSpawned` |
+| `OutOfFuel` | `thing` (the building), `def`, `cell` | a building's fuel reached 0 ([fuel.md](fuel.md)) |
+| `Refueled` | `thing`, `def`, `cell`, `amount` (items in) | a colonist put fuel in a building |
 | `RecipeDone` | `thing` (the cook), `def` (the Recipes def), `target` (the stove), `cell`, `amount` (products made), `message` | one run of a bill is done; `message` is "bill finished" when a "do X times" bill reached 0 and went ([bills.md](bills.md)) |
 | `PawnInjured` | `thing`, `def` (the injury), `part`, `amount`, `cell` | a pawn got an injury (F1) |
 | `PawnPartLost` | `thing`, `def` (MissingBodyPart), `part`, `amount`, `cell` | a pawn lost a body part |
@@ -141,6 +148,12 @@ starts, so read it after every step. Before the first step it holds what setting
 | `AlarmChanged` | `message` ("on: why", "off: why") | the colony alarm went on or off |
 | `PawnLeftMap` | `thing`, `def`, `cell`, `squad` | a routed raider walked off the map; its `ThingDestroyed` follows |
 | `PawnMoodBand` | `thing`, `amount` (its mood), `message` ("stable", "minor", "major" or "extreme") | a pawn's mood crossed a mental break threshold (C9, [mood.md](mood.md)) |
+| `PawnMentalBreak` | `thing`, `message` (the MentalBreaks defName), `amount` (its mood) | a colonist snapped (C19, [mental-breaks.md](mental-breaks.md)) |
+| `PawnMentalBreakEnded` | `thing`, `message` ("recovered", "downed", "died" or "stopped"), `amount` (seconds it lasted) | the break is over |
+| `PawnInsulted` | `thing` (the one insulting), `target` | an insulting spree insulted someone |
+| `InspirationStarted` | `thing`, `message` (the def), `amount` (days) | a colonist became inspired ([inspirations.md](inspirations.md)) |
+| `InspirationEnded` | `thing`, `message` (`why:def`), `amount` (seconds it lasted) | it was used, expired or dismissed |
+| `PawnLeftColony` | `thing`, `message` (the break) | a colonist gave up and walked off the map; a `ThingDestroyed` follows for it and what it took |
 | `ShotFired` | `thing` (shooter), `def` (gun), `target` (projectile), `x, y, z` (muzzle) | a pawn fired (F2, [combat.md](combat.md)) |
 | `PowerChanged` | `thing`, `def`, `cell`, `message` ("on" or "off") | a generator, consumer or battery gained or lost power (E5, [power.md](power.md)); conduits are not announced |
 | `ShortCircuit` | `thing`, `def`, `cell`, `amount` (Wd released) | a short circuit emptied a net's batteries (E5) |
