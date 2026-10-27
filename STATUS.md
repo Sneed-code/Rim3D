@@ -2,6 +2,7 @@
 
 Updated 2026-10-26.
 
+Stage 2 year-run greenhouse done: `simrun --scenario colony --year` now builds a heated greenhouse from day 15 (wood walls, wood-fired generator, heater, two lamps, six hydroponics basins with a rice zone) and keeps trees marked so the generator has wood; on seed 42 it holds 21 C in the cold and grows rice, but the colonists still die of predators and hunger, so the colony does not last the year yet (`docs/design/colony-scenario.md`). Scenario only, no sim changes.
 Stage 2 F10 done: the alarm's Medic and Firefighter roles (they tend, rescue and put out fires only where the enemy can't see, and wait behind the line otherwise), and fighters drag downed friends out of the line of fire when the way is reasonably safe (`docs/design/field-care.md`).
 Stage 2 X2 done: resonance, the setting's magic: attuned pawns with an attunement level, strain and focus, and four powers (stun, numb, burden, and jump at level 4 as in RimWorld) through commands and the fighter AI; a stunned pawn can't move or act (`Stunned`, checked by every system that acts) (`docs/design/resonance.md`).
 Stage 2 protagonist mind rules done: the protagonist never has a mental break, never gets into a social or jealousy fistfight (a steered protagonist never panics when burning either; one the sim runs still does, to survive), because mood must not take the player's character away (mood is still tracked); one rule function `mindIsPlayersOwn` so it is easy to change later (`docs/design/protagonist.md`).
