@@ -3,6 +3,7 @@
 #include "ColonySim/Animals.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Protagonist.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
@@ -114,6 +115,9 @@ SocialRules SocialRules::read(const DefDatabase& defs) {
     r.cheatedThought = socTrigger(defs, rules->text("cheatedThought"));
     r.weddingGuestThought = socTrigger(defs, rules->text("weddingGuestThought"));
     r.weddingPartyThought = socTrigger(defs, rules->text("weddingPartyThought"));
+    r.partyMinutes = std::max(1.0f, socFloat(*rules, "partyMinutes", r.partyMinutes));
+    r.partyJoyPerHour = socFloat(*rules, "partyJoyPerHour", r.partyJoyPerHour);
+    r.partyMaxDistance = socFloat(*rules, "partyMaxDistance", r.partyMaxDistance);
     r.fightLabel = rules->text("fight.label", r.fightLabel);
     r.fightOffset = socFloat(*rules, "fight.offset", r.fightOffset);
     r.fightDays = socFloat(*rules, "fight.days", r.fightDays);
@@ -637,7 +641,8 @@ void SocialSystem::jealousy(Entity betrayed, Entity cheater, Entity newLover) {
 }
 
 // The colony celebrates: every colonist who is awake and free to talk gets the guest thought, the couple the
-// party thought. Guests do not walk to a spot yet (a party job is a later step).
+// party thought, and everyone within reach walks to a spot beside the couple and stays for the party (Party job).
+// Guests stand on the free cells nearest the spot, one each where there is room.
 void SocialSystem::weddingParty(Entity a, Entity b) {
     entt::registry& reg = things_.registry();
     std::vector<Entity> pawns(reg.view<Social>().begin(), reg.view<Social>().end());
@@ -652,11 +657,60 @@ void SocialSystem::weddingParty(Entity a, Entity b) {
         }
     }
     stats_.weddingGuests += static_cast<uint64_t>(guests);
+    gatherParty(a, b, pawns);
     push(EventType::Interaction, a, b, "WeddingParty", guests, 0.0f);
+}
+
+void SocialSystem::gatherParty(Entity a, Entity b, const std::vector<Entity>& pawns) {
+    entt::registry& reg = things_.registry();
+    if (!things_.spawned(a)) {
+        return;
+    }
+    const Position& pa = reg.get<Position>(a);
+    const CellPos spot = cellOf(pa);
+    const int64_t until = time_.seconds + static_cast<int64_t>(std::llround(static_cast<double>(rules_.partyMinutes) * 60.0));
+    std::vector<CellPos> taken;
+    const float maxSq = rules_.partyMaxDistance * rules_.partyMaxDistance;
+    std::string error;
+    for (const Entity pawn : pawns) {
+        if (!(pawn == a || pawn == b || canTalk(pawn)) || !things_.spawned(pawn)) {
+            continue;
+        }
+        const Position& pp = reg.get<Position>(pawn);
+        const float dx = pp.x - pa.x;
+        const float dy = pp.y - pa.y;
+        if (pp.level != pa.level || dx * dx + dy * dy > maxSq) {
+            continue;
+        }
+        // The nearest cell to the spot nobody else was given: rings of growing size.
+        CellPos stand = cellOf(pp);
+        bool found = false;
+        for (int radius = 0; radius <= 6 && !found; ++radius) {
+            for (int oy = -radius; oy <= radius && !found; ++oy) {
+                for (int ox = -radius; ox <= radius && !found; ++ox) {
+                    if (std::max(std::abs(ox), std::abs(oy)) != radius) {
+                        continue;
+                    }
+                    const CellPos c{spot.x + ox, spot.y + oy, spot.level};
+                    if (std::find(taken.begin(), taken.end(), c) == taken.end() && jobs_.partyCellOk(pawn, c)) {
+                        stand = c;
+                        found = true;
+                    }
+                }
+            }
+        }
+        if (found && jobs_.startParty(pawn, stand, until, rules_.partyJoyPerHour, error)) {
+            taken.push_back(stand);
+            ++stats_.partyGuests;
+        }
+    }
 }
 
 void SocialSystem::startFight(Entity a, Entity b) {
     entt::registry& reg = things_.registry();
+    if (mindIsPlayersOwn(reg, a) || mindIsPlayersOwn(reg, b)) {
+        return;  // the protagonist never gets into a fight they didn't pick
+    }
     if (reg.all_of<SocialFight>(a) || reg.all_of<SocialFight>(b)) {
         return;
     }

@@ -117,8 +117,10 @@ FHandsOnTarget UHandsOnSubsystem::FindTarget(const USimSubsystem& Bridge, const 
 
 	// Nothing behind the player's head counts (the third person camera hangs behind it).
 	const double Start = FMath::Max(0.0, FVector::DotProduct(Head - Origin, Direction) - 30.0);
+	// The ground, or an upper floor (every level is shown in direct mode).
 	double GroundT = 0.0;
-	const bool bGround = SimPicking::RayHitGround(Bridge, Origin, Direction, GroundT);
+	int32 GroundLevel = 0;
+	const bool bGround = SimPicking::RayHitGround(Bridge, Origin, Direction, GroundT, -1, colony::Map::kLevels - 1, &GroundLevel);
 	const double End = bGround ? FMath::Min(GroundT, Start + HandsLookCm) : Start + HandsLookCm;
 	// The ray meets a rock block at the edge of its cell: look a little past the ground hit so the march gets inside it.
 	const double MarchEnd = End + 20.0;
@@ -127,7 +129,7 @@ FHandsOnTarget UHandsOnSubsystem::FindTarget(const USimSubsystem& Bridge, const 
 	if (bGround)
 	{
 		const FVector Local = (Origin + Direction * GroundT - Bridge.GetWorldOrigin()) / 100.0;
-		const colony::CellPos Cell{FMath::FloorToInt32(Local.X), FMath::FloorToInt32(Local.Y), 0};
+		const colony::CellPos Cell{FMath::FloorToInt32(Local.X), FMath::FloorToInt32(Local.Y), GroundLevel};
 		if (Map.inBounds(Cell))
 		{
 			Result.Cell = Cell;
@@ -402,8 +404,9 @@ void UHandsOnSubsystem::Tick(float DeltaTime)
 	}
 	else
 	{
-		// The ground behind what is looked at, for the ghost and for putting down.
-		const FSimPick Ground = SimPicking::PickGroundFromRay(*Bridge, Origin, Direction);
+		// The ground behind what is looked at (on the player's level), for the ghost and for putting down.
+		const colony::ThingView* Self = Bridge->GetCurrentSnapshot().find(Protagonist->GetControlled());
+		const FSimPick Ground = SimPicking::PickGroundFromRay(*Bridge, Origin, Direction, Self ? Self->level : 0);
 		bHasAim = Ground.Kind == ESimPickKind::Cell;
 		AimCell = Ground.Cell;
 	}

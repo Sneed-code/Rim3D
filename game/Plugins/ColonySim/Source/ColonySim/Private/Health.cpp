@@ -2,6 +2,7 @@
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Genes.h"
+#include "ColonySim/Looks.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Things.h"
 
@@ -47,8 +48,12 @@ const char* deathCauseName(DeathCause cause) {
         case DeathCause::Hypothermia: return "hypothermia";
         case DeathCause::Heatstroke: return "heatstroke";
         case DeathCause::Environment: return "exposure";
+        case DeathCause::Overdose: return "overdose";
+        case DeathCause::Withdrawal: return "withdrawal";
         case DeathCause::Slaughtered: return "slaughtered";
         case DeathCause::Disease: return "illness";
+        case DeathCause::Surgery: return "a failed operation";
+        case DeathCause::Executed: return "executed";
     }
     return "";
 }
@@ -158,6 +163,7 @@ public:
     struct Kind {  // a pawn def's body
         int body = -1;
         float healthScale = 1.0f;
+        bool mechanical = false;  // `race.mechanical`: no blood, no pain (mechanoids)
     };
 
     explicit HealthModel(const DefDatabase& defs);
@@ -183,6 +189,13 @@ public:
     std::vector<std::pair<DefId, float>> onsetMtbDays;  // MedicineRules.diseaseOnsetMtbDays
     int bloodFiltrationCapacity = -1;
     DefId missingHediff;
+    struct AddedDef {  // a Hediffs def of class AddedPart (H3)
+        bool valid = false;
+        std::string part;  // the Bodies part def it goes on
+        DefId item;
+        float efficiency = 1.0f;
+    };
+    std::vector<AddedDef> addedDefs;      // by DefId value
     std::vector<Hediff> hediffs;          // by DefId value
     std::vector<DamageType> damageTypes;  // by DefId value
     std::vector<Kind> kinds;              // by DefId value of a Things def
@@ -427,6 +440,7 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
     if (const auto found = capacityOf.find("BloodFiltration"); found != capacityOf.end()) {
         bloodFiltrationCapacity = found->second;
     }
+    addedDefs.assign(defs.size(), AddedDef{});
     for (const DefId id : defs.idsOfKind(kHealthHediffsKind)) {
         const Def& def = defs.get(id);
         Hediff& h = hediffs[id.value];
@@ -442,6 +456,13 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
         } else if (def.defName() == "OldWound") {
             oldWoundHediff = id;
         }
+        if (def.text("hediffClass") == "AddedPart") {
+            AddedDef& a = addedDefs[id.value];
+            a.valid = true;
+            a.part = def.text("addedPart.part");
+            a.item = defs.idOf(kHealthThingsKind, def.text("addedPart.item"));
+            a.efficiency = static_cast<float>(def.number("addedPart.efficiency", 1.0));
+        }
         if (def.defName() == "MissingBodyPart") {
             missingHediff = id;
         } else if (def.defName() == "BloodLoss") {
@@ -453,7 +474,9 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
             e.lethal = static_cast<float>(def.number("lethalSeverity", 1.0));
             e.cause = def.defName() == "Hypothermia"  ? DeathCause::Hypothermia
                       : def.defName() == "Heatstroke" ? DeathCause::Heatstroke
-                                                      : DeathCause::Environment;
+                                                      : def.text("deathCause") == "Overdose"     ? DeathCause::Overdose
+                                                      : def.text("deathCause") == "Withdrawal"   ? DeathCause::Withdrawal
+                                                                                                 : DeathCause::Environment;
             e.stages = readStages(def, capacityOf, &e.lifeThreatening);
         } else if (def.text("hediffClass") == "Disease") {
             DiseaseDef& d = diseaseDefs[id.value];
@@ -495,6 +518,7 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
         if (found != bodyIndex.end()) {
             kinds[id.value].body = found->second;
             kinds[id.value].healthScale = std::max(0.01f, static_cast<float>(def.number("race.baseHealthScale", 1.0)));
+            kinds[id.value].mechanical = def.flag("race.mechanical");
         }
     }
 
@@ -555,7 +579,9 @@ struct HealthEval {
     const Health& health;
     float hpFactor;
     std::vector<float> damage;   // hit points lost per part
-    std::vector<uint8_t> gone;   // missing, or under a missing part
+    std::vector<uint8_t> gone;   // missing, or under a missing part, or under a fitted artificial part
+    std::vector<uint8_t> covered;  // under a fitted artificial part: it stands for them, so they work at full
+    std::vector<float> added;    // efficiency of the artificial part fitted on each part, 0 for none
     std::vector<float> value;    // capacity values, as they are worked out
     std::vector<uint8_t> state;  // 0 not yet, 1 in progress, 2 done
     float pain = 0.0f;
@@ -563,13 +589,30 @@ struct HealthEval {
 
     HealthEval(const HealthModel& m, const HealthModel::Body& b, const Health& h, float factor)
         : model(m), body(b), health(h), hpFactor(factor), damage(b.parts.size(), 0.0f), gone(b.parts.size(), 0),
-          value(m.capacities.size(), 1.0f), state(m.capacities.size(), 0) {
+          covered(b.parts.size(), 0), added(b.parts.size(), 0.0f), value(m.capacities.size(), 1.0f), state(m.capacities.size(), 0) {
         for (const MissingPart& missing : h.missing) {
             if (missing.part < body.parts.size()) {
                 const int end = body.parts[missing.part].end;
                 for (int i = missing.part; i < end; ++i) {
                     gone[static_cast<size_t>(i)] = 1;
                 }
+            }
+        }
+        // A fitted artificial part works whether or not the natural one is there, and stands for everything under it.
+        for (const AddedPart& a : h.added) {
+            if (a.part >= body.parts.size() || !a.hediff.valid() || a.hediff.value >= model.addedDefs.size()) {
+                continue;
+            }
+            added[a.part] = std::max(0.0f, model.addedDefs[a.hediff.value].efficiency);
+            const int end = body.parts[a.part].end;
+            for (int i = a.part + 1; i < end; ++i) {
+                gone[static_cast<size_t>(i)] = 1;
+                covered[static_cast<size_t>(i)] = 1;
+            }
+        }
+        for (const AddedPart& a : h.added) {
+            if (a.part < body.parts.size() && added[a.part] > 0.0f) {
+                gone[a.part] = 0;
             }
         }
         for (const Injury& injury : h.injuries) {
@@ -580,12 +623,22 @@ struct HealthEval {
     }
 
     float maxHp(int part) const { return body.parts[static_cast<size_t>(part)].hitPoints * hpFactor; }
-    float efficiency(int part) const {
+    // The share of its hit points a part has left, 0 if it is gone.
+    float hpFraction(int part) const {
         if (gone[static_cast<size_t>(part)] != 0) {
             return 0.0f;
         }
         const float max = maxHp(part);
         return std::clamp((max - damage[static_cast<size_t>(part)]) / max, 0.0f, 1.0f);
+    }
+    // How well a part works. An artificial part has its own number, which a bionic one puts above 1.
+    float efficiency(int part) const {
+        const size_t i = static_cast<size_t>(part);
+        if (covered[i] != 0) {
+            return 1.0f;
+        }
+        const float fraction = hpFraction(part);
+        return added[i] > 0.0f ? added[i] * fraction : fraction;
     }
 
     // Efficiencies of every part of a def in the body, or of those under `core` (exclusive).
@@ -865,11 +918,11 @@ void HealthSystem::die(Entity pawn, Health& health, DeathCause cause, bool annou
     }
 }
 
-void HealthSystem::derive(int bodyIndex, float healthScale, Health& health, DeathCause& cause, bool& shouldBeDown) const {
+void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, const HealthMods& mods, Health& health, DeathCause& cause, bool& shouldBeDown) const {
     const HealthModel::Body& body = model_->bodies[static_cast<size_t>(bodyIndex)];
     HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
     eval.workOutPainAndBleeding();
-    health.pain = eval.pain / healthScale;
+    health.pain = mechanical ? 0.0f : eval.pain / healthScale * mods.painFactor;
     for (const Disease& disease : health.diseases) {
         const HealthModel::DiseaseDef* def = model_->diseaseOf(disease.def);
         const int stage = def != nullptr ? HealthModel::stageIn(def->stages, disease.severity) : -1;
@@ -877,13 +930,17 @@ void HealthSystem::derive(int bodyIndex, float healthScale, Health& health, Deat
             health.pain += def->stages[static_cast<size_t>(stage)].painOffset;
         }
     }
-    health.bleedPerDay = eval.bleedPerDay;
+    health.bleedPerDay = mechanical ? 0.0f : eval.bleedPerDay;
     health.bloodStage = model_->stageOf(health.bloodLoss);
     // Pain feeds the capacities, so they get the divided value.
     eval.pain = health.pain;
     health.capacities.resize(model_->capacities.size());
     for (size_t i = 0; i < model_->capacities.size(); ++i) {
         health.capacities[i] = eval.capacity(static_cast<int>(i));
+    }
+    if (model_->movingCapacity >= 0 && mods.movingMax < 1.0f) {
+        float& moving = health.capacities[static_cast<size_t>(model_->movingCapacity)];
+        moving = std::min(moving, mods.movingMax);  // a cap, not a factor: a pawn already slower is unaffected
     }
 
     cause = DeathCause::None;
@@ -928,7 +985,11 @@ void HealthSystem::recompute(Entity pawn, Health& health, bool announce) {
     }
     DeathCause cause = DeathCause::None;
     bool shouldBeDown = false;
-    derive(kind->body, kind->healthScale, health, cause, shouldBeDown);
+    HealthMods mods;
+    if (mods_) {
+        mods_(pawn, mods);
+    }
+    derive(kind->body, kind->healthScale, kind->mechanical, mods, health, cause, shouldBeDown);
 
     if (!health.dead && cause != DeathCause::None) {
         die(pawn, health, cause, announce);
@@ -1185,6 +1246,9 @@ void HealthSystem::destroyPart(Entity pawn, Health& health, int part, float amou
     health.missing.erase(std::remove_if(health.missing.begin(), health.missing.end(),
                                         [&](const MissingPart& m) { return inside(m.part); }),
                          health.missing.end());
+    health.added.erase(std::remove_if(health.added.begin(), health.added.end(),
+                                      [&](const AddedPart& a) { return inside(a.part); }),
+                       health.added.end());
     health.diseases.erase(std::remove_if(health.diseases.begin(), health.diseases.end(),
                                          [&](const Disease& d) { return d.part >= 0 && inside(d.part); }),
                           health.diseases.end());
@@ -1420,6 +1484,28 @@ void HealthSystem::leaveScar(Entity pawn, Health& health, const Injury& healed, 
     scar.peak = model_->scarSeverity;
     health.injuries.push_back(scar);
     emit(EventType::PawnScarred, pawn, def, healed.part, scar.severity);
+
+    // V1: a scar on the skin shows. The part's own def and the side come from its chain of parents.
+    if (PawnLooks* looks = things_.registry().try_get<PawnLooks>(pawn)) {
+        const HealthModel::Kind* kind = healthKindOf(*model_, things_.registry(), pawn);
+        if (kind != nullptr) {
+            const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+            BodyRegion region = BodyRegion::Torso;
+            bool left = false;
+            bool found = false;
+            for (int p = healed.part; p >= 0 && !found; p = body.parts[static_cast<size_t>(p)].parent) {
+                const HealthModel::Part& part = body.parts[static_cast<size_t>(p)];
+                left = left || part.label.rfind("left ", 0) == 0;
+                found = bodyRegionOfPart(part.def, left, region) && !part.inside;
+                if (!found && part.inside) {
+                    break;  // an organ or bone: nothing shows on the skin
+                }
+            }
+            if (found) {
+                addScarMark(things_.defs(), *looks, region, things_.defs().get(healed.hediff).defName(), rng);
+            }
+        }
+    }
 }
 
 // ---- Infections and diseases (H2) --------------------------------------------------------------------
@@ -1815,6 +1901,215 @@ float HealthSystem::partMaxHitPoints(Entity pawn, int part) const {
     return body.parts[static_cast<size_t>(part)].hitPoints * healthHpFactor(*model_, reg.get<Health>(pawn));
 }
 
+// ---- Surgery (task H3) ------------------------------------------------------------------------------
+
+PartCondition HealthSystem::partCondition(Entity pawn, int part, bool* ok) const {
+    const entt::registry& reg = things_.registry();
+    const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);
+    if (ok != nullptr) {
+        *ok = false;
+    }
+    if (kind == nullptr) {
+        return PartCondition::Whole;
+    }
+    const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+    if (part < 0 || static_cast<size_t>(part) >= body.parts.size()) {
+        return PartCondition::Whole;
+    }
+    if (ok != nullptr) {
+        *ok = true;
+    }
+    const Health& health = reg.get<Health>(pawn);
+    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
+    const size_t i = static_cast<size_t>(part);
+    if (eval.covered[i] != 0) {
+        return PartCondition::Covered;
+    }
+    if (eval.added[i] > 0.0f) {
+        return PartCondition::Fitted;
+    }
+    if (eval.gone[i] == 0) {
+        return PartCondition::Whole;
+    }
+    const bool exact = std::any_of(health.missing.begin(), health.missing.end(),
+                                   [part](const MissingPart& m) { return m.part == part; });
+    return exact ? PartCondition::Missing : PartCondition::Under;
+}
+
+std::string HealthSystem::partDef(Entity pawn, int part) const {
+    const entt::registry& reg = things_.registry();
+    const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);
+    if (kind == nullptr || part < 0) {
+        return std::string();
+    }
+    const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+    return static_cast<size_t>(part) < body.parts.size() ? body.parts[static_cast<size_t>(part)].def : std::string();
+}
+
+bool HealthSystem::partIsLimb(Entity pawn, int part) const {
+    const std::string def = partDef(pawn, part);
+    if (def.empty()) {
+        return false;
+    }
+    for (const HealthModel::Capacity& c : model_->capacities) {
+        if (!c.limbs.present) {
+            continue;
+        }
+        if (def == c.limbs.core || def == c.limbs.digit ||
+            std::find(c.limbs.segments.begin(), c.limbs.segments.end(), def) != c.limbs.segments.end()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool HealthSystem::canRemovePart(Entity pawn, int part) const {
+    const entt::registry& reg = things_.registry();
+    const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);
+    if (kind == nullptr || reg.get<Health>(pawn).dead || partCondition(pawn, part) != PartCondition::Whole) {
+        return false;
+    }
+    const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+    const HealthModel::Part& p = body.parts[static_cast<size_t>(part)];
+    if (!p.destroyable) {
+        return false;
+    }
+    for (int i = part; i < p.end; ++i) {
+        if (body.parts[static_cast<size_t>(i)].lethal) {
+            return false;
+        }
+    }
+    return true;
+}
+
+DefId HealthSystem::addedAt(Entity pawn, int part) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || !reg.all_of<Health>(pawn)) {
+        return DefId{};
+    }
+    for (const AddedPart& a : reg.get<Health>(pawn).added) {
+        if (a.part == part) {
+            return a.hediff;
+        }
+    }
+    return DefId{};
+}
+
+bool HealthSystem::addedInfo(DefId hediff, std::string& partDef, DefId& item, float& efficiency) const {
+    if (!hediff.valid() || hediff.value >= model_->addedDefs.size() || !model_->addedDefs[hediff.value].valid) {
+        return false;
+    }
+    const HealthModel::AddedDef& a = model_->addedDefs[hediff.value];
+    partDef = a.part;
+    item = a.item;
+    efficiency = a.efficiency;
+    return true;
+}
+
+bool HealthSystem::installPart(Entity pawn, int part, DefId hediff, float tendQuality) {
+    entt::registry& reg = things_.registry();
+    const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);
+    if (kind == nullptr || !hediff.valid() || hediff.value >= model_->addedDefs.size() || !model_->addedDefs[hediff.value].valid) {
+        return false;
+    }
+    Health& health = reg.get<Health>(pawn);
+    const PartCondition condition = partCondition(pawn, part);
+    if (health.dead || (condition != PartCondition::Whole && condition != PartCondition::Missing) ||
+        model_->bodies[static_cast<size_t>(kind->body)].parts[static_cast<size_t>(part)].def != model_->addedDefs[hediff.value].part) {
+        return false;
+    }
+    const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+    const int end = body.parts[static_cast<size_t>(part)].end;
+    // The natural part and what is under it are replaced: their wounds go.
+    health.injuries.erase(std::remove_if(health.injuries.begin(), health.injuries.end(),
+                                         [&](const Injury& i) { return i.part >= part && i.part < end; }),
+                          health.injuries.end());
+    for (MissingPart& m : health.missing) {
+        if (m.part == part && !m.tended()) {
+            m.tendQuality = std::max(0.0f, tendQuality);
+        }
+    }
+    // Lost parts under the one that was lost are covered by the new part.
+    health.missing.erase(std::remove_if(health.missing.begin(), health.missing.end(),
+                                        [&](const MissingPart& m) { return m.part > part && m.part < end; }),
+                         health.missing.end());
+    health.added.push_back(AddedPart{static_cast<uint16_t>(part), hediff});
+    recompute(pawn, health, true);
+    return true;
+}
+
+DefId HealthSystem::uninstallPart(Entity pawn, int part, float tendQuality) {
+    entt::registry& reg = things_.registry();
+    const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);
+    if (kind == nullptr || part < 0) {
+        return DefId{};
+    }
+    Health& health = reg.get<Health>(pawn);
+    const auto found = std::find_if(health.added.begin(), health.added.end(), [part](const AddedPart& a) { return a.part == part; });
+    if (health.dead || found == health.added.end()) {
+        return DefId{};
+    }
+    const DefId hediff = found->hediff;
+    health.added.erase(found);
+    const bool lost = std::any_of(health.missing.begin(), health.missing.end(),
+                                  [part](const MissingPart& m) { return m.part == part; });
+    if (!lost) {
+        destroyPart(pawn, health, part, 0.0f);
+    }
+    for (MissingPart& m : health.missing) {
+        if (m.part == part) {
+            m.tendQuality = std::max(0.0f, tendQuality);
+        }
+    }
+    recompute(pawn, health, true);
+    return hediff;
+}
+
+bool HealthSystem::removePart(Entity pawn, int part, float tendQuality) {
+    if (!canRemovePart(pawn, part)) {
+        return false;
+    }
+    Health& health = things_.registry().get<Health>(pawn);
+    destroyPart(pawn, health, part, 0.0f);
+    for (MissingPart& m : health.missing) {
+        if (m.part == part) {
+            m.tendQuality = std::max(0.0f, tendQuality);
+        }
+    }
+    recompute(pawn, health, true);
+    return true;
+}
+
+void HealthSystem::botch(Entity pawn, int part, float fraction) {
+    entt::registry& reg = things_.registry();
+    const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);
+    if (kind == nullptr || part < 0 || !(fraction > 0.0f)) {
+        return;
+    }
+    Health& health = reg.get<Health>(pawn);
+    const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+    if (health.dead || static_cast<size_t>(part) >= body.parts.size()) {
+        return;
+    }
+    int target = part;
+    while (target > 0 && partCondition(pawn, target) != PartCondition::Whole && partCondition(pawn, target) != PartCondition::Fitted) {
+        target = body.parts[static_cast<size_t>(target)].parent;
+    }
+    const DefId cut = damageTypeId("Cut");
+    if (!cut.valid() || target < 0) {
+        return;
+    }
+    // A cut never destroys the part: it leaves one hit point at least.
+    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
+    const float room = eval.maxHp(target) - eval.damage[static_cast<size_t>(target)] - 1.0f;
+    if (room <= 0.0f) {
+        return;
+    }
+    const DefId hediff = model_->damageTypes[cut.value].hediff;
+    damagePart(pawn, health, target, hediff, std::min(fraction * eval.maxHp(target), room));
+    recompute(pawn, health, true);
+}
+
 float HealthSystem::partHitPoints(Entity pawn, int part) const {
     const entt::registry& reg = things_.registry();
     const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);
@@ -1827,7 +2122,7 @@ float HealthSystem::partHitPoints(Entity pawn, int part) const {
     }
     const Health& health = reg.get<Health>(pawn);
     const HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
-    return eval.efficiency(part) * eval.maxHp(part);
+    return eval.hpFraction(part) * eval.maxHp(part);
 }
 
 float HealthSystem::capacityValue(Entity pawn, const std::string& capacity) const {
@@ -1856,7 +2151,11 @@ bool HealthSystem::report(Entity pawn, HealthReport& out) const {
     if (health.dirty) {
         DeathCause cause = DeathCause::None;
         bool shouldBeDown = false;
-        derive(kind->body, kind->healthScale, health, cause, shouldBeDown);
+        HealthMods mods;
+        if (mods_) {
+            mods_(pawn, mods);
+        }
+        derive(kind->body, kind->healthScale, kind->mechanical, mods, health, cause, shouldBeDown);
         if (!health.dead && cause != DeathCause::None) {
             health.dead = true;
             health.cause = cause;
@@ -1882,7 +2181,17 @@ bool HealthSystem::report(Entity pawn, HealthReport& out) const {
         out.injuries.push_back(std::move(line));
     }
     for (const MissingPart& missing : health.missing) {
-        out.missingParts.push_back(body.parts[missing.part].label);
+        const bool fitted = std::any_of(health.added.begin(), health.added.end(),
+                                        [&](const AddedPart& a) { return a.part == missing.part; });
+        if (!fitted) {
+            out.missingParts.push_back(body.parts[missing.part].label);
+        }
+    }
+    for (const AddedPart& a : health.added) {
+        if (a.part < body.parts.size() && a.hediff.valid() && a.hediff.value < model_->addedDefs.size()) {
+            out.addedParts.push_back(HealthReport::AddedLine{body.parts[a.part].label, things_.defs().get(a.hediff).label(),
+                                                             model_->addedDefs[a.hediff.value].efficiency});
+        }
     }
     for (const EnvironmentHediff& env : health.environment) {
         const HealthModel::EnvironmentDef* def = model_->environmentOf(env.def);

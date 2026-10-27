@@ -56,8 +56,10 @@ struct KnownEnemy {
 };
 
 // What a fighter is doing (F6, docs/design/raids.md): fighting, hiding in a shelter (the alarm's
-// Shelter role) or running off the map (a routed raider). Only Fight looks for enemies and shoots.
-enum class FightMode : uint8_t { Fight, Shelter, Flee };
+// Shelter role), running off the map (a routed raider), or (F12, docs/design/raid-strategies.md) going
+// for loot or a downed colonist whatever is about: Seize walks to the goal like the other two and doesn't
+// shoot. Only Fight looks for enemies and shoots.
+enum class FightMode : uint8_t { Fight, Shelter, Flee, Seize };
 
 // On a pawn that fights instead of working: a drafted colonist, a colonist the colony alarm called
 // up, or every pawn of another faction. The job system leaves it alone. Every field is saved.
@@ -153,6 +155,8 @@ public:
     FighterSystem& operator=(const FighterSystem&) = delete;
 
     const FighterRules& rules() const { return rules_; }
+    // Hurt badly enough to fall back: pain, blood loss or Moving past the FighterRules limits.
+    bool badlyHurt(Entity pawn) const;
     void setEventLog(std::vector<Event>* events) { events_ = events; }
     // Grenades (F9): fighters throw the ones on their belts and dive away from ones about to go off.
     void setExplosives(ExplosiveSystem* explosives) { explosives_ = explosives; }
@@ -248,7 +252,6 @@ private:
     void stop(Entity pawn, Fighter& f);
     const PawnInfo* info(Entity pawn) const;
     float weaponRange(Entity pawn) const;
-    bool badlyHurt(Entity pawn) const;
     int64_t now() const;
     void planCharge(Entity pawn, Fighter& f, CellPos goal);
     bool meleeAct(Entity pawn, Fighter& f);

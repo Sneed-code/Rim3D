@@ -11,10 +11,12 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Needs.h"
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Rooms.h"
+#include "ColonySim/Trade.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -76,7 +78,14 @@ void raidReadRules(const DefDatabase& defs, RaidRules& r) {
     raidReadCurve(*def, "daysPassedFactor", r.daysPassedFactor);
     num("buildingWealthFactor", r.buildingWealthFactor);
     num("threatScale", r.threatScale);
-    num("adaptation", r.adaptation);
+    raidReadCurve(*def, "adaptGrowth", r.adaptGrowth);
+    raidReadCurve(*def, "adaptFactor", r.adaptFactor);
+    raidReadCurve(*def, "adaptDeath", r.adaptDeath);
+    raidReadCurve(*def, "adaptDowned", r.adaptDowned);
+    num("adaptMin", r.adaptMin);
+    num("adaptMax", r.adaptMax);
+    num("adaptGraceDays", r.adaptGraceDays);
+    num("adaptGrowthHours", r.adaptGrowthHours);
     num("minPoints", r.minPoints);
     num("maxPoints", r.maxPoints);
     num("fleeLostFraction", r.fleeLostFraction);
@@ -97,9 +106,27 @@ void raidReadRules(const DefDatabase& defs, RaidRules& r) {
     num("lineMoves", r.lineMoves);
     whole("shelterSearch", r.shelterSearch);
     num("shelterFlee", r.shelterFlee);
+    num("weightAssault", r.weightAssault);
+    num("weightSappers", r.weightSappers);
+    num("weightDropPods", r.weightDropPods);
+    num("weightThieves", r.weightThieves);
+    num("weightKidnappers", r.weightKidnappers);
+    num("blockedBoost", r.blockedBoost);
+    num("dropPodsMinPoints", r.dropPodsMinPoints);
+    num("dropMinDistance", r.dropMinDistance);
+    num("dropMaxDistance", r.dropMaxDistance);
+    num("sapDamage", r.sapDamage);
+    num("sapReach", r.sapReach);
+    whole("sapSearch", r.sapSearch);
+    num("grabReach", r.grabReach);
+    num("stealMass", r.stealMass);
+    num("kidnapRange", r.kidnapRange);
+    num("seizeRange", r.seizeRange);
     r.squadThinkEvery = std::max(1, r.squadThinkEvery);
     r.alarmThinkEvery = std::max(1, r.alarmThinkEvery);
     r.edgeDepth = std::max(0, r.edgeDepth);
+    r.adaptGrowthHours = std::max(0.1f, r.adaptGrowthHours);
+    r.adaptMax = std::max(r.adaptMin, r.adaptMax);
     r.giveUpHoursMax = std::max(r.giveUpHoursMin, r.giveUpHoursMax);
 }
 
@@ -126,6 +153,28 @@ const char* squadStateName(SquadState state) {
         case SquadState::Rout: return "Rout";
     }
     return "?";
+}
+
+const char* raidStrategyName(RaidStrategy strategy) {
+    switch (strategy) {
+        case RaidStrategy::Assault: return "Assault";
+        case RaidStrategy::Sappers: return "Sappers";
+        case RaidStrategy::DropPods: return "DropPods";
+        case RaidStrategy::Thieves: return "Thieves";
+        case RaidStrategy::Kidnappers: return "Kidnappers";
+    }
+    return "?";
+}
+
+bool raidStrategyFromName(const std::string& name, RaidStrategy& out) {
+    for (int i = 0; i < kRaidStrategyCount; ++i) {
+        const RaidStrategy candidate = static_cast<RaidStrategy>(i);
+        if (name == raidStrategyName(candidate)) {
+            out = candidate;
+            return true;
+        }
+    }
+    return false;
 }
 
 RaidSystem::RaidSystem(Things& things, Map& map, Rooms& rooms, CombatSystem& combat, HealthSystem& health, JobSystem& jobs,
@@ -192,6 +241,84 @@ float RaidSystem::colonyWealth() const {
     return static_cast<float>(items + buildings * rules_.buildingWealthFactor);
 }
 
+float RaidSystem::adaptationFactor() const {
+    return 1.0f + (raidCurve(rules_.adaptFactor, state_.adaptDays) - 1.0f) * adaptImpact_;
+}
+
+void RaidSystem::setAdaptation(float growth, float impact) {
+    adaptGrowthRate_ = std::max(0.0f, growth);
+    adaptImpact_ = std::clamp(impact, 0.0f, 1.0f);
+}
+
+// Every 12 hours the days grow by the step list; whenever a colonist goes down or dies they fall.
+void RaidSystem::thinkAdaptation() {
+    const entt::registry& reg = things_.registry();
+    const int64_t interval = static_cast<int64_t>(rules_.adaptGrowthHours * 3600.0f);
+    int guard = 0;
+    while (now() >= state_.nextAdaptGrowth && guard++ < 1000) {
+        state_.nextAdaptGrowth += interval;
+        float add = 0.0f;
+        for (const RaidRules::Point& p : rules_.adaptGrowth) {
+            if (state_.adaptDays >= p.x) {
+                add = p.y;
+            }
+        }
+        add *= 0.5f * adaptGrowthRate_ * (rules_.adaptGrowthHours / 12.0f);
+        const float graceDays = static_cast<float>(state_.nextAdaptGrowth - interval) / static_cast<float>(kSecondsPerDay);
+        float days = state_.adaptDays + add;
+        if (graceDays < rules_.adaptGraceDays) {
+            days = std::min(days, std::max(state_.adaptDays, 0.0f));
+        }
+        state_.adaptDays = std::clamp(days, rules_.adaptMin, rules_.adaptMax);
+    }
+    // Who is on the colony's books now, in id order.
+    std::vector<Entity> live;
+    for (const Entity e : reg.view<const Colonist>()) {
+        const Health* h = reg.try_get<Health>(e);
+        if (things_.spawned(e) && fighters_.factionOf(e) == kPlayerFaction && (h == nullptr || !h->dead)) {
+            live.push_back(e);
+        }
+    }
+    std::sort(live.begin(), live.end());
+    const float population = static_cast<float>(std::max<size_t>(live.size(), state_.adaptPawns.size()));
+    std::vector<RaidState::AdaptPawn> next;
+    size_t known = 0;
+    float lost = 0.0f;
+    for (const Entity e : live) {
+        const Health* h = reg.try_get<Health>(e);
+        const bool downed = h != nullptr && h->downed;
+        while (known < state_.adaptPawns.size() && state_.adaptPawns[known].pawn < e) {
+            // Gone from the books: dead (it loses the most) or just gone (nothing).
+            const Entity gone = state_.adaptPawns[known].pawn;
+            const Health* gh = reg.valid(gone) ? reg.try_get<Health>(gone) : nullptr;
+            if (gh != nullptr && gh->dead) {
+                lost += raidCurve(rules_.adaptDeath, population);
+            }
+            ++known;
+        }
+        bool wasDowned = downed;  // somebody new is not counted as going down
+        if (known < state_.adaptPawns.size() && state_.adaptPawns[known].pawn == e) {
+            wasDowned = state_.adaptPawns[known].downed;
+            ++known;
+        }
+        if (downed && !wasDowned) {
+            lost += raidCurve(rules_.adaptDowned, population);
+        }
+        next.push_back(RaidState::AdaptPawn{e, downed});
+    }
+    for (; known < state_.adaptPawns.size(); ++known) {
+        const Entity gone = state_.adaptPawns[known].pawn;
+        const Health* gh = reg.valid(gone) ? reg.try_get<Health>(gone) : nullptr;
+        if (gh != nullptr && gh->dead) {
+            lost += raidCurve(rules_.adaptDeath, population);
+        }
+    }
+    state_.adaptPawns = std::move(next);
+    if (lost > 0.0f) {
+        state_.adaptDays = std::clamp(state_.adaptDays - lost, rules_.adaptMin, rules_.adaptMax);
+    }
+}
+
 int RaidSystem::colonistCount() const {
     const entt::registry& reg = things_.registry();
     int count = 0;
@@ -209,7 +336,7 @@ float RaidSystem::threatPoints(float scale) const {
     const float pawnPoints = static_cast<float>(colonistCount()) * raidCurve(rules_.pointsPerColonist, wealth);
     float points = raidCurve(rules_.wealthPoints, wealth) + pawnPoints;
     const float days = static_cast<float>(now()) / static_cast<float>(kSecondsPerDay);
-    points *= rules_.threatScale * raidCurve(rules_.daysPassedFactor, days) * rules_.adaptation * scale;
+    points *= rules_.threatScale * raidCurve(rules_.daysPassedFactor, days) * adaptationFactor() * scale;
     return std::clamp(points, rules_.minPoints, rules_.maxPoints);
 }
 
@@ -226,6 +353,11 @@ FactionId RaidSystem::factionId(const std::string& faction) {
 }
 
 bool RaidSystem::startRaid(const std::string& faction, float points, int edge, std::string& error) {
+    return startRaid(faction, points, edge, RaidStrategy::Assault, -1.0f, error);
+}
+
+bool RaidSystem::startRaid(const std::string& faction, float points, int edge, RaidStrategy strategy, float hour,
+                           std::string& error) {
     const Def* factionDef = defs_.find("Factions", faction);
     if (factionDef == nullptr) {
         error = "no Factions def '" + faction + "'";
@@ -238,6 +370,20 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, s
     if (!(points >= 0.0f) || points > 1e6f) {
         error = "raid points must be 0 (from the colony) or more";
         return false;
+    }
+    if (!(hour < 24.0f) || (hour < 0.0f && hour != -1.0f)) {
+        error = "the hour must be -1 (now) or 0 up to 24";
+        return false;
+    }
+    if (hour >= 0.0f) {
+        // Held until that hour of the day: the next one, today or tomorrow.
+        const int64_t dayStart = now() - now() % kSecondsPerDay;
+        int64_t at = dayStart + static_cast<int64_t>(hour * static_cast<float>(kSecondsPerHour));
+        if (at <= now()) {
+            at += kSecondsPerDay;
+        }
+        state_.pending.push_back(PendingRaid{faction, points, edge, strategy, at});
+        return true;
     }
     // The kinds it can send, with their weights.
     std::vector<PawnKind> kinds;
@@ -296,31 +442,35 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, s
         return false;
     }
 
-    // Where it walks in: a cell near the chosen edge that can reach the target.
-    const int w = map_.width();
-    const int h = map_.height();
-    const int firstSide = edge >= 0 ? edge : static_cast<int>(rng_.below(4));
-    Regions& regions = map_.regions();
-    bool found = false;
+    // Where it comes: a cell near the chosen edge that can reach the target (sappers settle for one that can't when
+    // walls shut the colony off), or, for drop pods, round the target.
     CellPos entry;
-    // A raid with no chosen edge tries the others in turn when the first has no way in (water, rock).
-    for (int attempt = 0; attempt < (edge >= 0 ? 40 : 160) && !found; ++attempt) {
-        const int side = (firstSide + attempt / 40) % 4;
-        const int along = static_cast<int>(rng_.below(static_cast<uint32_t>(side % 2 == 0 ? w : h)));
-        const int d = rules_.edgeDepth;
-        const CellPos guess = side == 0 ? CellPos{along, h - 1 - d, 0}
-                            : side == 1 ? CellPos{w - 1 - d, along, 0}
-                            : side == 2 ? CellPos{along, d, 0}
-                                        : CellPos{d, along, 0};
-        CellPos c;
-        if (nearestFree(raidCentre(guess.x), raidCentre(guess.y), 0, CellPos{-1, -1, 0}, 6, c) && regions.canReach(c, target)) {
-            entry = c;
-            found = true;
+    bool found = false;
+    if (strategy == RaidStrategy::DropPods) {
+        entry = target;
+        found = true;
+    } else {
+        found = pickEntry(edge, target, true, entry);
+        if (!found && strategy == RaidStrategy::Sappers) {
+            found = pickEntry(edge, target, false, entry);
         }
     }
     if (!found) {
         error = "no way in from that edge to the colony";
         return false;
+    }
+    if (strategy == RaidStrategy::Thieves) {
+        bool loose = false;
+        for (const auto [item, thing, pos, stack] : reg.view<const Thing, const Position, const StackCount>().each()) {
+            if (thing.category == ThingCategory::Item) {
+                loose = true;
+                break;
+            }
+        }
+        if (!loose) {
+            error = "there is nothing lying about for thieves to steal";
+            return false;
+        }
     }
 
     // Buy raiders with the points, as RimWorld does: a kind at random by weight among those the
@@ -363,9 +513,31 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, s
         chosen.push_back(cheapest);
     }
 
-    // Cells for them around the entry, a metre apart (every other cell).
+    // Cells for them: round the target for drop pods, else around the entry, a metre apart (every other cell).
     std::vector<CellPos> cells;
-    {
+    if (strategy == RaidStrategy::DropPods) {
+        const float tx = raidCentre(target.x);
+        const float ty = raidCentre(target.y);
+        for (size_t i = 0; i < chosen.size(); ++i) {
+            for (int attempt = 0; attempt < 120; ++attempt) {
+                const float dx = (rng_.unit() * 2.0f - 1.0f) * rules_.dropMaxDistance;
+                const float dy = (rng_.unit() * 2.0f - 1.0f) * rules_.dropMaxDistance;
+                const float d = std::sqrt(dx * dx + dy * dy);
+                if (d < rules_.dropMinDistance || d > rules_.dropMaxDistance) {
+                    continue;
+                }
+                const CellPos c{static_cast<int>(std::floor(tx + dx)), static_cast<int>(std::floor(ty + dy)), 0};
+                if (map_.onGround(c) && map_.walkable(c) && map_.obstacleDm(c) == 0 && map_.buildingAt(c) == kNoEntity &&
+                    std::find(cells.begin(), cells.end(), c) == cells.end()) {
+                    cells.push_back(c);
+                    break;
+                }
+            }
+        }
+        if (!cells.empty()) {
+            entry = cells.front();
+        }
+    } else {
         std::vector<CellPos> open{entry};
         std::set<int> seen{map_.index(entry)};
         for (size_t head = 0; head < open.size() && cells.size() < chosen.size() && open.size() < 20000; ++head) {
@@ -382,7 +554,7 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, s
         }
     }
     if (cells.size() < chosen.size()) {
-        error = "no room at the edge for the raid";
+        error = strategy == RaidStrategy::DropPods ? "no room for the drop pods near the colony" : "no room at the edge for the raid";
         return false;
     }
 
@@ -391,9 +563,10 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, s
     squad.faction = faction;
     squad.side = factionId(faction);
     squad.points = points;
+    squad.strategy = strategy;
     squad.arrivedAt = now();
-    const float hour = static_cast<float>(kSecondsPerHour);
-    squad.giveUpAt = now() + static_cast<int64_t>((rules_.giveUpHoursMin + rng_.unit() * (rules_.giveUpHoursMax - rules_.giveUpHoursMin)) * hour);
+    const float hourSeconds = static_cast<float>(kSecondsPerHour);
+    squad.giveUpAt = now() + static_cast<int64_t>((rules_.giveUpHoursMin + rng_.unit() * (rules_.giveUpHoursMax - rules_.giveUpHoursMin)) * hourSeconds);
     squad.entry = entry;
     squad.hasTarget = true;
     squad.target = target;
@@ -423,7 +596,7 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, s
         }
         reg.emplace<Colonist>(pawn, std::move(person));
         reg.emplace<Faction>(pawn, Faction{squad.side});
-        reg.emplace<Raider>(pawn, Raider{squad.id, kind.defName});
+        reg.emplace<Raider>(pawn, Raider{squad.id, kind.defName, kNoEntity, kNoEntity, strategy == RaidStrategy::Kidnappers});
         if (!kind.weapons.empty()) {
             const std::string& gun = kind.weapons[rng_.below(static_cast<uint32_t>(kind.weapons.size()))];
             const Entity item = things_.spawn(gun, cell);
@@ -445,6 +618,15 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, s
         f.hasGoal = true;
         f.goal = target;
         squad.members.push_back(pawn);
+        if (strategy == RaidStrategy::DropPods && events_ != nullptr) {
+            Event landed;
+            landed.type = EventType::DropPodLanded;
+            landed.thing = pawn;
+            landed.def = reg.get<Thing>(pawn).def;
+            landed.cell = cell;
+            landed.squad = squad.id;
+            events_->push_back(std::move(landed));
+        }
     }
     std::sort(squad.members.begin(), squad.members.end());
     squad.started = static_cast<int>(squad.members.size());
@@ -455,6 +637,30 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, s
     squadEvent(squad, EventType::RaidArrived, faction);
     state_.squads.push_back(std::move(squad));
     return true;
+}
+
+// A cell near the chosen edge (-1: any) where a raid can walk in, that can reach `target` when `needReach`. A raid
+// with no chosen edge tries the others in turn when the first has no way in (water, rock).
+bool RaidSystem::pickEntry(int edge, CellPos target, bool needReach, CellPos& entry) {
+    const int w = map_.width();
+    const int h = map_.height();
+    const int firstSide = edge >= 0 ? edge : static_cast<int>(rng_.below(4));
+    Regions& regions = map_.regions();
+    for (int attempt = 0; attempt < (edge >= 0 ? 40 : 160); ++attempt) {
+        const int side = (firstSide + attempt / 40) % 4;
+        const int along = static_cast<int>(rng_.below(static_cast<uint32_t>(side % 2 == 0 ? w : h)));
+        const int d = rules_.edgeDepth;
+        const CellPos guess = side == 0 ? CellPos{along, h - 1 - d, 0}
+                            : side == 1 ? CellPos{w - 1 - d, along, 0}
+                            : side == 2 ? CellPos{along, d, 0}
+                                        : CellPos{d, along, 0};
+        CellPos c;
+        if (nearestFree(raidCentre(guess.x), raidCentre(guess.y), 0, CellPos{-1, -1, 0}, 6, c) && (!needReach || regions.canReach(c, target))) {
+            entry = c;
+            return true;
+        }
+    }
+    return false;
 }
 
 bool RaidSystem::soundAlarm(bool on, std::string& error) {
@@ -477,7 +683,7 @@ bool RaidSystem::soundAlarm(bool on, std::string& error) {
     // Enemies still about: don't sound it again by itself until they are gone.
     const entt::registry& reg = things_.registry();
     for (const auto [pawn, faction] : reg.view<const Faction>().each()) {
-        if (faction.id != kPlayerFaction && !reg.all_of<Animal>(pawn) && !reg.all_of<Prisoner>(pawn) && things_.spawned(pawn) &&
+        if (faction.id != kPlayerFaction && !reg.all_of<Animal>(pawn) && !reg.all_of<Prisoner>(pawn) && !reg.all_of<Visitor>(pawn) && things_.spawned(pawn) &&
             !health_.incapacitated(pawn)) {
             state_.suppressed = true;
             break;
@@ -538,6 +744,9 @@ DefenseRole RaidSystem::roleOf(Entity pawn) const {
 // ---- Each step --------------------------------------------------------------------------------
 
 void RaidSystem::step() {
+    if (now() % 5 == 0) {
+        thinkAdaptation();
+    }
     for (Squad& squad : state_.squads) {
         if (now() >= squad.nextThink) {
             squad.nextThink = now() + rules_.squadThinkEvery;
@@ -547,6 +756,7 @@ void RaidSystem::step() {
             leaveAtEdge(squad);
         }
     }
+    stepStrategies();
     // A squad with nobody left standing on the map is over (its downed stay where they fell).
     state_.squads.erase(std::remove_if(state_.squads.begin(), state_.squads.end(),
                                        [&](const Squad& s) {
@@ -685,6 +895,15 @@ void RaidSystem::thinkSquad(Squad& squad) {
 
     const bool changed = next != squad.state;
     squad.state = next;
+    if (next != SquadState::Rout) {
+        switch (squad.strategy) {
+            case RaidStrategy::Sappers: thinkBreach(squad); break;
+            case RaidStrategy::Thieves: thinkLoot(squad); break;
+            case RaidStrategy::Kidnappers: thinkKidnap(squad); break;
+            case RaidStrategy::Assault:
+            case RaidStrategy::DropPods: break;
+        }
+    }
     for (const Entity m : squad.members) {
         Fighter* f = reg.try_get<Fighter>(m);
         if (f == nullptr || !things_.spawned(m)) {
@@ -698,14 +917,40 @@ void RaidSystem::thinkSquad(Squad& squad) {
             fighters_.replan(m);
             continue;
         }
+        const Raider& raider = reg.get<Raider>(m);
+        if (raider.loot != kNoEntity) {
+            // Loaded with loot: it runs for the edge whatever the odds.
+            if (f->mode != FightMode::Flee) {
+                flee(m, squad);
+            }
+            continue;
+        }
         f->advances = next == SquadState::Advance;
         if (f->retreat != (next == SquadState::FallBack)) {
             f->retreat = next == SquadState::FallBack;
             f->nextPlan = std::min(f->nextPlan, now());
         }
-        if (squad.hasTarget && f->goal != squad.target) {
+        // Where it heads while it knows no enemy: the squad's target, the wall it digs through, or what it is after.
+        CellPos goal = squad.target;
+        bool hasGoal = squad.hasTarget;
+        if (squad.hasBreach) {
+            goal = squad.breachFrom;
+            hasGoal = true;
+        } else if (raider.goalThing != kNoEntity && things_.spawned(raider.goalThing)) {
+            goal = cellOf(reg.get<Position>(raider.goalThing));
+            hasGoal = true;
+        }
+        if (hasGoal && (!f->hasGoal || f->goal != goal)) {
             f->hasGoal = true;
-            f->goal = squad.target;
+            f->goal = goal;
+        }
+        if (squad.strategy == RaidStrategy::Thieves) {
+            // A thief goes for its loot whatever is about, and fights like the rest when there is none.
+            const bool seizing = raider.goalThing != kNoEntity && things_.spawned(raider.goalThing);
+            if (seizing != (f->mode == FightMode::Seize)) {
+                f->mode = seizing ? FightMode::Seize : FightMode::Fight;
+                fighters_.replan(m);
+            }
         }
     }
     if (changed) {
@@ -767,6 +1012,28 @@ void RaidSystem::leaveAtEdge(Squad& squad) {
 
 void RaidSystem::leaveMap(Entity pawn) {
     entt::registry& reg = things_.registry();
+    // What it carries goes with it: a stolen item vanishes, a kidnapped colonist is gone for good.
+    if (Raider* raider = reg.try_get<Raider>(pawn); raider != nullptr && raider->loot != kNoEntity) {
+        const Entity loot = raider->loot;
+        raider->loot = kNoEntity;
+        if (reg.valid(loot) && reg.all_of<Kidnapped>(loot)) {
+            if (events_ != nullptr) {
+                Event e;
+                e.type = EventType::PawnKidnapped;
+                e.thing = pawn;
+                e.target = loot;
+                e.def = reg.get<Thing>(loot).def;
+                e.cell = cellOf(reg.get<Position>(pawn));
+                e.squad = raider->squad;
+                e.message = "left the map";
+                events_->push_back(std::move(e));
+            }
+            removeForGood(loot);
+        } else if (reg.valid(loot)) {
+            reg.remove<Carrying>(pawn);
+            things_.destroy(loot);
+        }
+    }
     if (events_ != nullptr) {
         Event e;
         e.type = EventType::PawnLeftMap;
@@ -793,6 +1060,530 @@ void RaidSystem::leaveMap(Entity pawn) {
     things_.destroy(pawn);
 }
 
+// ---- Strategies (F12, docs/design/raid-strategies.md) ----------------------------------------------
+
+// The lowest-id able colonist of the player, else none.
+static Entity raidFirstColonist(const entt::registry& reg, const FighterSystem& fighters, const HealthSystem& health) {
+    Entity first = kNoEntity;
+    for (const auto [pawn, colonist, pos] : reg.view<const Colonist, const Position>().each()) {
+        if (fighters.factionOf(pawn) != kPlayerFaction || health.incapacitated(pawn)) {
+            continue;
+        }
+        if (first == kNoEntity || pawn < first) {
+            first = pawn;
+        }
+    }
+    return first;
+}
+
+// True when no edge's middle can reach the colony: walls (or water) shut it off.
+bool RaidSystem::colonyWalledOff() {
+    const entt::registry& reg = things_.registry();
+    const Entity colonist = raidFirstColonist(reg, fighters_, health_);
+    if (colonist == kNoEntity) {
+        return false;
+    }
+    const CellPos target = cellOf(reg.get<Position>(colonist));
+    const int w = map_.width();
+    const int h = map_.height();
+    const int d = rules_.edgeDepth;
+    const CellPos mids[4] = {{w / 2, h - 1 - d, 0}, {w - 1 - d, h / 2, 0}, {w / 2, d, 0}, {d, h / 2, 0}};
+    Regions& regions = map_.regions();
+    for (const CellPos& mid : mids) {
+        CellPos c;
+        if (nearestFree(raidCentre(mid.x), raidCentre(mid.y), 0, CellPos{-1, -1, 0}, 30, c) && regions.canReach(c, target)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+RaidStrategy RaidSystem::pickStrategy(float points) {
+    if (!(points > 0.0f)) {
+        points = threatPoints();
+    }
+    const entt::registry& reg = things_.registry();
+    float weight[kRaidStrategyCount] = {rules_.weightAssault, rules_.weightSappers, rules_.weightDropPods, rules_.weightThieves,
+                                        rules_.weightKidnappers};
+    if (colonyWalledOff()) {
+        weight[static_cast<int>(RaidStrategy::Assault)] = 0.0f;
+        weight[static_cast<int>(RaidStrategy::Thieves)] = 0.0f;
+        weight[static_cast<int>(RaidStrategy::Kidnappers)] = 0.0f;
+        weight[static_cast<int>(RaidStrategy::Sappers)] *= rules_.blockedBoost;
+    }
+    if (points < rules_.dropPodsMinPoints) {
+        weight[static_cast<int>(RaidStrategy::DropPods)] = 0.0f;
+    }
+    bool loose = false;
+    for (const auto [item, thing, pos, stack] : reg.view<const Thing, const Position, const StackCount>().each()) {
+        if (thing.category == ThingCategory::Item) {
+            loose = true;
+            break;
+        }
+    }
+    if (!loose) {
+        weight[static_cast<int>(RaidStrategy::Thieves)] = 0.0f;
+    }
+    if (raidFirstColonist(reg, fighters_, health_) == kNoEntity) {
+        weight[static_cast<int>(RaidStrategy::Kidnappers)] = 0.0f;
+    }
+    float total = 0.0f;
+    for (const float w : weight) {
+        total += w;
+    }
+    if (!(total > 0.0f)) {
+        return RaidStrategy::Assault;
+    }
+    float pick = rng_.unit() * total;
+    for (int i = 0; i < kRaidStrategyCount; ++i) {
+        if (weight[i] <= 0.0f) {
+            continue;
+        }
+        if (pick < weight[i]) {
+            return static_cast<RaidStrategy>(i);
+        }
+        pick -= weight[i];
+    }
+    return RaidStrategy::Assault;
+}
+
+bool RaidSystem::blockedFromColony(CellPos from, CellPos target) const {
+    return !map_.regions().canReach(from, target);
+}
+
+// The wall to dig through: of the buildings that block the way and touch the ground the raiders can walk on, the one
+// nearest the target, walls before anything else. `approach` is the cell beside it they dig from.
+bool RaidSystem::findBreach(const Squad& squad, CellPos from, CellPos& wall, CellPos& approach) const {
+    if (!map_.onGround(from) || !squad.hasTarget) {
+        return false;
+    }
+    const entt::registry& reg = things_.registry();
+    const int w = map_.width();
+    const int h = map_.height();
+    std::vector<uint8_t> seen(static_cast<size_t>(w) * static_cast<size_t>(h), 0);
+    std::vector<CellPos> open{from};
+    seen[static_cast<size_t>(map_.index(from))] = 1;
+    bool have[2] = {false, false};
+    float best[2] = {0.0f, 0.0f};
+    CellPos wallAt[2];
+    CellPos fromAt[2];
+    for (size_t head = 0; head < open.size() && head < static_cast<size_t>(rules_.sapSearch); ++head) {
+        const CellPos c = open[head];
+        const CellPos around[4] = {{c.x + 1, c.y, 0}, {c.x - 1, c.y, 0}, {c.x, c.y + 1, 0}, {c.x, c.y - 1, 0}};
+        for (const CellPos& n : around) {
+            if (!map_.onGround(n)) {
+                continue;
+            }
+            if (map_.walkable(n)) {
+                uint8_t& mark = seen[static_cast<size_t>(map_.index(n))];
+                if (mark == 0) {
+                    mark = 1;
+                    open.push_back(n);
+                }
+                continue;
+            }
+            const Entity building = map_.buildingAt(n);
+            if (building == kNoEntity || !reg.all_of<HitPoints>(building) || map_.passage(n) != Passage::Blocked) {
+                continue;
+            }
+            const int tier = defs_.get(reg.get<Thing>(building).def).flag("building.holdsRoof") ? 0 : 1;
+            const float dx = static_cast<float>(n.x - squad.target.x);
+            const float dy = static_cast<float>(n.y - squad.target.y);
+            const float d = dx * dx + dy * dy;
+            if (!have[tier] || d < best[tier]) {
+                have[tier] = true;
+                best[tier] = d;
+                wallAt[tier] = n;
+                fromAt[tier] = c;
+            }
+        }
+    }
+    const int tier = have[0] ? 0 : have[1] ? 1 : -1;
+    if (tier < 0) {
+        return false;
+    }
+    wall = wallAt[tier];
+    approach = fromAt[tier];
+    return true;
+}
+
+// Sappers: when walls shut the colony off from where the squad stands, pick the wall to dig through.
+void RaidSystem::thinkBreach(Squad& squad) {
+    entt::registry& reg = things_.registry();
+    if (squad.hasBreach) {
+        if (map_.buildingAt(squad.breach) != kNoEntity) {
+            return;
+        }
+        squad.hasBreach = false;
+    }
+    if (!squad.hasTarget) {
+        return;
+    }
+    Entity lead = kNoEntity;
+    for (const Entity m : squad.members) {
+        if (things_.spawned(m) && !health_.incapacitated(m) && reg.get<Raider>(m).loot == kNoEntity) {
+            lead = m;
+            break;
+        }
+    }
+    if (lead == kNoEntity) {
+        return;
+    }
+    const CellPos from = cellOf(reg.get<Position>(lead));
+    if (!blockedFromColony(from, squad.target)) {
+        return;
+    }
+    CellPos wall;
+    CellPos approach;
+    if (!findBreach(squad, from, wall, approach)) {
+        return;
+    }
+    squad.hasBreach = true;
+    squad.breach = wall;
+    squad.breachFrom = approach;
+    if (events_ != nullptr) {
+        Event e;
+        e.type = EventType::SappersBreaking;
+        e.cell = wall;
+        e.squad = squad.id;
+        e.count = static_cast<int>(squad.members.size());
+        events_->push_back(std::move(e));
+    }
+}
+
+// Thieves: each one without a haul goes for the most valuable loose item nobody else is going for that it can reach.
+void RaidSystem::thinkLoot(Squad& squad) {
+    entt::registry& reg = things_.registry();
+    std::vector<Entity> claimed;
+    for (const Entity m : squad.members) {
+        const Raider& r = reg.get<Raider>(m);
+        if (r.goalThing != kNoEntity && things_.spawned(r.goalThing)) {
+            claimed.push_back(r.goalThing);
+        }
+    }
+    std::sort(claimed.begin(), claimed.end());
+    struct Candidate {
+        float value;
+        Entity item;
+    };
+    std::vector<Candidate> candidates;
+    bool listed = false;
+    Regions& regions = map_.regions();
+    for (const Entity m : squad.members) {
+        Raider& r = reg.get<Raider>(m);
+        if (r.loot != kNoEntity || !things_.spawned(m) || health_.incapacitated(m)) {
+            continue;
+        }
+        if (r.goalThing != kNoEntity && things_.spawned(r.goalThing)) {
+            continue;
+        }
+        r.goalThing = kNoEntity;
+        if (!listed) {
+            listed = true;
+            for (const auto [item, thing, pos, stack] : reg.view<const Thing, const Position, const StackCount>().each()) {
+                if (thing.category != ThingCategory::Item || std::binary_search(claimed.begin(), claimed.end(), item)) {
+                    continue;
+                }
+                const float market = thing.def.value < marketValue_.size() ? marketValue_[thing.def.value] : 0.0f;
+                candidates.push_back(Candidate{(market > 0.0f ? market : 0.1f) * static_cast<float>(stack.count), item});
+            }
+            std::sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) {
+                return a.value != b.value ? a.value > b.value : a.item < b.item;
+            });
+        }
+        const CellPos here = cellOf(reg.get<Position>(m));
+        for (size_t i = 0; i < candidates.size() && i < 12; ++i) {
+            if (candidates[i].item == kNoEntity) {
+                continue;
+            }
+            const CellPos there = cellOf(reg.get<Position>(candidates[i].item));
+            if (regions.canReach(here, there)) {
+                r.goalThing = candidates[i].item;
+                candidates[i].item = kNoEntity;  // taken
+                break;
+            }
+        }
+    }
+}
+
+// Kidnappers: each one without a captive goes for the nearest downed colonist (never the protagonist) in range.
+void RaidSystem::thinkKidnap(Squad& squad) {
+    entt::registry& reg = things_.registry();
+    std::vector<Entity> claimed;
+    for (const Entity m : squad.members) {
+        const Raider& r = reg.get<Raider>(m);
+        if (r.goalThing != kNoEntity) {
+            claimed.push_back(r.goalThing);
+        }
+    }
+    Regions& regions = map_.regions();
+    for (const Entity m : squad.members) {
+        Raider& r = reg.get<Raider>(m);
+        if (r.loot != kNoEntity || !things_.spawned(m) || health_.incapacitated(m)) {
+            continue;
+        }
+        if (r.goalThing != kNoEntity) {
+            const Entity v = r.goalThing;
+            const Health* vh = reg.valid(v) ? reg.try_get<Health>(v) : nullptr;
+            if (vh != nullptr && vh->downed && !vh->dead && things_.spawned(v) && !reg.all_of<Kidnapped>(v)) {
+                continue;
+            }
+            claimed.erase(std::remove(claimed.begin(), claimed.end(), v), claimed.end());
+            r.goalThing = kNoEntity;
+        }
+        const Position& mp = reg.get<Position>(m);
+        const CellPos here = cellOf(mp);
+        Entity best = kNoEntity;
+        float bestD = 0.0f;
+        for (const auto [pawn, colonist, pos, health] : reg.view<const Colonist, const Position, const Health>().each()) {
+            if (!health.downed || health.dead || colonist.protagonist || fighters_.factionOf(pawn) != kPlayerFaction ||
+                reg.all_of<Kidnapped>(pawn) || reg.all_of<Animal>(pawn) ||
+                std::find(claimed.begin(), claimed.end(), pawn) != claimed.end()) {
+                continue;
+            }
+            const float d = raidDist(pos.x, pos.y, mp.x, mp.y);
+            if (d > rules_.kidnapRange || (best != kNoEntity && (d > bestD || (d == bestD && pawn > best)))) {
+                continue;
+            }
+            if (!regions.canReach(here, cellOf(pos))) {
+                continue;
+            }
+            best = pawn;
+            bestD = d;
+        }
+        if (best != kNoEntity) {
+            r.goalThing = best;
+            claimed.push_back(best);
+        }
+    }
+}
+
+// A raider can't carry on (down, dead): the stolen item lies where it fell, the colonist is put down.
+void RaidSystem::dropLoot(Entity pawn) {
+    entt::registry& reg = things_.registry();
+    Raider* r = reg.try_get<Raider>(pawn);
+    if (r == nullptr || r->loot == kNoEntity) {
+        return;
+    }
+    const Entity loot = r->loot;
+    r->loot = kNoEntity;
+    if (!reg.valid(loot)) {
+        return;
+    }
+    if (reg.all_of<Kidnapped>(loot)) {
+        reg.remove<Kidnapped>(loot);
+        return;
+    }
+    if (const Carrying* carrying = reg.try_get<Carrying>(pawn); carrying != nullptr && carrying->thing == loot) {
+        reg.remove<Carrying>(pawn);
+    }
+    if (!things_.spawnAt(loot, cellOf(reg.get<Position>(pawn)))) {
+        things_.destroy(loot);
+    }
+}
+
+// Runs for the nearest edge it can reach.
+void RaidSystem::flee(Entity pawn, Squad& squad) {
+    Fighter* f = things_.registry().try_get<Fighter>(pawn);
+    if (f == nullptr) {
+        return;
+    }
+    f->mode = FightMode::Flee;
+    f->hasGoal = true;
+    f->goal = exitCell(pawn, squad);
+    f->retreat = false;
+    fighters_.replan(pawn);
+}
+
+// Every second: night raids start when their hour comes, sappers dig, thieves and kidnappers lift what they came
+// for, carry it, and leave the map with it.
+void RaidSystem::stepStrategies() {
+    entt::registry& reg = things_.registry();
+    for (size_t i = 0; i < state_.pending.size();) {
+        if (now() < state_.pending[i].at) {
+            ++i;
+            continue;
+        }
+        const PendingRaid pending = state_.pending[i];
+        state_.pending.erase(state_.pending.begin() + static_cast<std::ptrdiff_t>(i));
+        std::string error;
+        if (!startRaid(pending.faction, pending.points, pending.edge, pending.strategy, -1.0f, error) && events_ != nullptr) {
+            Event e;
+            e.type = EventType::CommandFailed;
+            e.message = "the " + std::string(raidStrategyName(pending.strategy)) + " raid waiting for its hour couldn't start: " + error;
+            events_->push_back(std::move(e));
+        }
+    }
+    const int w = map_.width();
+    const int h = map_.height();
+    for (Squad& squad : state_.squads) {
+        if (squad.hasBreach) {
+            const Entity wall = map_.buildingAt(squad.breach);
+            if (wall == kNoEntity) {
+                squad.hasBreach = false;
+                squad.nextThink = now();
+            } else {
+                int diggers = 0;
+                const float cx = raidCentre(squad.breach.x);
+                const float cy = raidCentre(squad.breach.y);
+                for (const Entity m : squad.members) {
+                    if (!things_.spawned(m) || health_.incapacitated(m)) {
+                        continue;
+                    }
+                    const Position& p = reg.get<Position>(m);
+                    if (p.level == squad.breach.level && raidDist(p.x, p.y, cx, cy) <= rules_.sapReach) {
+                        ++diggers;
+                    }
+                }
+                if (diggers > 0 && combat_.damageBuilding(wall, static_cast<int>(std::lround(static_cast<float>(diggers) * rules_.sapDamage)))) {
+                    squad.hasBreach = false;
+                    squad.nextThink = now();
+                }
+            }
+        }
+        const std::vector<Entity> members = squad.members;
+        for (const Entity m : members) {
+            Raider* r = reg.valid(m) ? reg.try_get<Raider>(m) : nullptr;
+            if (r == nullptr || !things_.spawned(m)) {
+                continue;
+            }
+            const bool down = health_.incapacitated(m);
+            if (r->loot != kNoEntity) {
+                if (down) {
+                    dropLoot(m);
+                    continue;
+                }
+                const Position& p = reg.get<Position>(m);
+                if (things_.spawned(r->loot) && reg.all_of<Kidnapped>(r->loot)) {
+                    Position& v = reg.get<Position>(r->loot);
+                    v.x = p.x;
+                    v.y = p.y;
+                    v.level = p.level;
+                }
+                const CellPos c = cellOf(p);
+                if (c.x <= 1 || c.y <= 1 || c.x >= w - 2 || c.y >= h - 2) {
+                    squad.members.erase(std::find(squad.members.begin(), squad.members.end(), m));
+                    leaveMap(m);
+                }
+                continue;
+            }
+            if (r->goalThing == kNoEntity || down) {
+                continue;
+            }
+            const Entity goal = r->goalThing;
+            const Position& p = reg.get<Position>(m);
+            if (!things_.spawned(goal)) {
+                r->goalThing = kNoEntity;
+                squad.nextThink = now();
+                continue;
+            }
+            const Position& gp = reg.get<Position>(goal);
+            const float away = gp.level != p.level ? 1e9f : raidDist(gp.x, gp.y, p.x, p.y);
+            if (squad.strategy == RaidStrategy::Kidnappers) {
+                // Close to the downed colonist it stops fighting and goes to lift it; further off it fights again.
+                Fighter* kf = reg.try_get<Fighter>(m);
+                if (kf != nullptr && away <= rules_.seizeRange && kf->mode == FightMode::Fight) {
+                    kf->mode = FightMode::Seize;
+                    kf->hasGoal = true;
+                    kf->goal = cellOf(gp);
+                    fighters_.replan(m);
+                } else if (kf != nullptr && away > rules_.seizeRange + 3.0f && kf->mode == FightMode::Seize) {
+                    kf->mode = FightMode::Fight;
+                    fighters_.replan(m);
+                }
+            }
+            if (away > rules_.grabReach) {
+                continue;
+            }
+            if (squad.strategy == RaidStrategy::Thieves) {
+                const DefId def = reg.get<Thing>(goal).def;
+                const int stack = reg.get<StackCount>(goal).count;
+                const double mass = std::max(0.001, defs_.get(def).number("stats.mass", 1.0));
+                const int count = std::clamp(static_cast<int>(static_cast<double>(rules_.stealMass) / mass), 1, stack);
+                Entity carried = goal;
+                if (count < stack) {
+                    carried = things_.splitOff(goal, count);
+                } else {
+                    things_.despawn(goal);
+                }
+                r->goalThing = kNoEntity;
+                if (carried == kNoEntity) {
+                    squad.nextThink = now();
+                    continue;
+                }
+                reg.emplace_or_replace<Carrying>(m, Carrying{carried});
+                r->loot = carried;
+                if (events_ != nullptr) {
+                    Event e;
+                    e.type = EventType::ItemStolen;
+                    e.thing = m;
+                    e.target = carried;
+                    e.def = def;
+                    e.cell = cellOf(p);
+                    e.squad = squad.id;
+                    e.count = count;
+                    events_->push_back(std::move(e));
+                }
+                flee(m, squad);
+            } else if (squad.strategy == RaidStrategy::Kidnappers) {
+                const Health* vh = reg.try_get<Health>(goal);
+                if (vh == nullptr || !vh->downed || vh->dead || reg.all_of<Kidnapped>(goal)) {
+                    r->goalThing = kNoEntity;
+                    squad.nextThink = now();
+                    continue;
+                }
+                reg.emplace<Kidnapped>(goal, Kidnapped{m});
+                r->loot = goal;
+                r->goalThing = kNoEntity;
+                if (events_ != nullptr) {
+                    Event e;
+                    e.type = EventType::PawnKidnapped;
+                    e.thing = m;
+                    e.target = goal;
+                    e.def = reg.get<Thing>(goal).def;
+                    e.cell = cellOf(p);
+                    e.squad = squad.id;
+                    e.message = "lifted";
+                    events_->push_back(std::move(e));
+                }
+                flee(m, squad);
+            }
+        }
+    }
+}
+
+// A colonist carried off the map: its gear, bed and jobs go with it.
+void RaidSystem::removeForGood(Entity pawn) {
+    entt::registry& reg = things_.registry();
+    std::vector<Entity> belongings;
+    if (const Carrying* carrying = reg.try_get<Carrying>(pawn)) {
+        belongings.push_back(carrying->thing);
+        reg.remove<Carrying>(pawn);
+    }
+    if (const Gear* gear = reg.try_get<Gear>(pawn)) {
+        belongings.insert(belongings.end(), gear->apparel.begin(), gear->apparel.end());
+        belongings.insert(belongings.end(), gear->stowed.begin(), gear->stowed.end());
+        if (gear->weapon != kNoEntity) {
+            belongings.push_back(gear->weapon);
+        }
+        reg.remove<Gear>(pawn);
+    }
+    for (const Entity item : belongings) {
+        if (reg.valid(item)) {
+            reg.remove<EquippedBy>(item);
+            things_.destroy(item);
+        }
+    }
+    for (const auto [bed, owners] : reg.view<Bed>().each()) {
+        owners.owners.erase(std::remove(owners.owners.begin(), owners.owners.end(), pawn), owners.owners.end());
+    }
+    reg.remove<Kidnapped>(pawn);
+    jobs_.forget(pawn);
+    fighters_.forget(pawn);
+    forget(pawn);
+    things_.destroy(pawn);
+}
+
 void RaidSystem::squadEvent(const Squad& squad, EventType type, std::string message) {
     if (events_ == nullptr) {
         return;
@@ -808,8 +1599,22 @@ void RaidSystem::squadEvent(const Squad& squad, EventType type, std::string mess
 }
 
 void RaidSystem::forget(Entity thing) {
+    entt::registry& reg = things_.registry();
+    // A raider that goes while carrying a colonist puts it down.
+    if (reg.valid(thing)) {
+        if (const Raider* gone = reg.try_get<Raider>(thing); gone != nullptr && gone->loot != kNoEntity && reg.valid(gone->loot)) {
+            reg.remove<Kidnapped>(gone->loot);
+        }
+    }
     for (Squad& squad : state_.squads) {
         squad.members.erase(std::remove(squad.members.begin(), squad.members.end(), thing), squad.members.end());
+        for (const Entity m : squad.members) {
+            Raider* r = reg.valid(m) ? reg.try_get<Raider>(m) : nullptr;
+            if (r != nullptr) {
+                r->goalThing = r->goalThing == thing ? kNoEntity : r->goalThing;
+                r->loot = r->loot == thing ? kNoEntity : r->loot;
+            }
+        }
     }
 }
 
@@ -886,7 +1691,7 @@ void RaidSystem::thinkAlarm() {
         // Wild animals aren't enemies (Animals.h) until they hunt, fight back or go manhunter (N5).
         const Animal* wild = reg.try_get<Animal>(pawn);
         if (faction.id == kPlayerFaction || (wild != nullptr && wild->temper == AnimalTemper::Calm) || health_.incapacitated(pawn) ||
-            reg.all_of<Prisoner>(pawn)) {
+            reg.all_of<Prisoner>(pawn) || reg.all_of<Visitor>(pawn)) {
             continue;
         }
         const Fighter* f = reg.try_get<Fighter>(pawn);
@@ -1153,6 +1958,12 @@ bool RaidSystem::restore(RaidState state, std::string& error) {
             return false;
         }
     }
+    for (const PendingRaid& p : state.pending) {
+        if (defs_.find("Factions", p.faction) == nullptr || static_cast<int>(p.strategy) >= kRaidStrategyCount) {
+            error = "the save has a waiting raid that doesn't fit the defs";
+            return false;
+        }
+    }
     state_ = std::move(state);
     return true;
 }
@@ -1163,10 +1974,24 @@ void RaidSystem::hashState(StateHasher& h) const {
         h.add(f.data(), f.size());
     }
     h.add(state_.nextSquad);
+    h.add(static_cast<uint64_t>(state_.pending.size()));
+    for (const PendingRaid& p : state_.pending) {
+        h.add(p.faction.data(), p.faction.size());
+        h.add(p.points);
+        h.add(p.edge);
+        h.add(static_cast<int>(p.strategy));
+        h.add(p.at);
+    }
     h.add(static_cast<uint64_t>(state_.squads.size()));
     for (const Squad& s : state_.squads) {
         h.add(s.id);
         h.add(s.faction.data(), s.faction.size());
+        h.add(static_cast<int>(s.strategy));
+        h.add(s.hasBreach);
+        h.add(s.breach.x);
+        h.add(s.breach.y);
+        h.add(s.breachFrom.x);
+        h.add(s.breachFrom.y);
         h.add(s.side);
         h.add(s.points);
         h.add(s.started);
@@ -1200,6 +2025,13 @@ void RaidSystem::hashState(StateHasher& h) const {
     h.add(state_.shelter.y);
     h.add(state_.shelter.level);
     h.add(state_.nextAlarmThink);
+    h.add(state_.adaptDays);
+    h.add(state_.nextAdaptGrowth);
+    h.add(static_cast<uint64_t>(state_.adaptPawns.size()));
+    for (const RaidState::AdaptPawn& p : state_.adaptPawns) {
+        h.add(entt::to_integral(p.pawn));
+        h.add(p.downed);
+    }
 }
 
 void RaidSystem::hashThing(Entity e, StateHasher& h) const {
@@ -1216,6 +2048,13 @@ void RaidSystem::hashThing(Entity e, StateHasher& h) const {
         h.add(uint64_t{0x4A1D});
         h.add(r->squad);
         h.add(r->kind.data(), r->kind.size());
+        h.add(entt::to_integral(r->goalThing));
+        h.add(entt::to_integral(r->loot));
+        h.add(r->sparesDowned);
+    }
+    if (const Kidnapped* k = reg.try_get<Kidnapped>(e)) {
+        h.add(uint64_t{0x4B1D});
+        h.add(entt::to_integral(k->by));
     }
 }
 

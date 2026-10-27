@@ -114,6 +114,9 @@ public:
     NarratorSystem& operator=(const NarratorSystem&) = delete;
 
     void setEventLog(std::vector<Event>* events) { events_ = events; }
+    // Says whether a Factions defName is the colony's enemy by goodwill (C23), so a faction that is not a permanent enemy but has
+    // fallen to -75 or less can raid too. Without it only permanent enemies raid.
+    void setHostileCheck(std::function<bool(const std::string&)> check) { hostile_ = std::move(check); }
     const NarratorRules& rules() const { return rules_; }
 
     // The worker that carries out an incident (replaces any before it). The raid's is built in.
@@ -191,6 +194,7 @@ private:
     bool fireCategory(IncidentCategory category);
     bool happen(const Incident& incident, float points, bool forced, std::string& error);
     float pointsFor(const Incident& incident, float points, bool roll);
+    void applyAdaptation();
     void planCycle(int64_t start);
     void check();
     bool raidWorker(IncidentFiring& firing);
@@ -209,6 +213,7 @@ private:
     Rng rng_;
     NarratorState state_;  // the random stream in it is only filled in by state()
     std::vector<Event>* events_ = nullptr;
+    std::function<bool(const std::string&)> hostile_;
 };
 
 COLONY_API const char* letterKindName(LetterKind kind);
