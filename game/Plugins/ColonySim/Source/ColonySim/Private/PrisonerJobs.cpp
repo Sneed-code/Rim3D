@@ -363,6 +363,19 @@ JobSystem::StepResult JobSystem::chatWork(Entity pawn, Job& job, std::string& wh
         why = "the prisoner moved away";
         return StepResult::Failed;
     }
+    if (reg.get<Prisoner>(prisoner).mode == PrisonerMode::Execute) {
+        // An execution: the same walk up, a short job, and no Social experience.
+        if (job.walk == 0) {
+            job.walk = 2;
+            pawnDid(pawn, PawnAction::Slaughter, prisoner);
+        }
+        job.progress += 1.0f;
+        if (job.progress < static_cast<float>(prisoners_->rules().executeWorkSeconds)) {
+            return StepResult::Running;
+        }
+        prisoners_->execute(prisoner, pawn);
+        return StepResult::Next;
+    }
     if (job.walk == 0) {
         job.walk = 2;
         pawnDid(pawn, PawnAction::Chat, prisoner);
@@ -388,7 +401,7 @@ void JobSystem::stepPrisoner(Entity pawn) {
         const Needs* needs = reg.try_get<Needs>(pawn);
         if (needs != nullptr && needs->rest < sleepBelow(scheduleNow(pawn))) {
             have = makeSleepJob(pawn, job);
-        } else if (health_.needsRest(pawn)) {
+        } else if (needsBedRest(pawn)) {
             const Entity bed = bedOf(pawn);
             CellPos cell;
             if (bed != kNoEntity && bedSlotCell(bed, pawn, cell)) {

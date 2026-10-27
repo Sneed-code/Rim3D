@@ -188,7 +188,10 @@ void NeedsSystem::step() {
                 case RestBand::Tired: fall = rules_.restFallPerDayTired; break;
                 case RestBand::Exhausted: fall = rules_.restFallPerDayExhausted; break;
             }
-            needs.rest = std::max(0.0f, needs.rest - fall * health_.restFallFactor(pawn) * kPerSecond);  // sleeping sickness
+            if (restFallFactor_) {
+                fall *= restFallFactor_(pawn);
+            }
+            needs.rest = std::max(0.0f, needs.rest - fall * health_.restFallFactor(pawn) * kPerSecond);  // sleeping sickness and drugs
         }
 
         if (needs.malnutrition >= 1.0f) {
