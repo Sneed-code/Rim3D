@@ -100,6 +100,15 @@ enum class EventType : uint8_t {
     PawnMentalBreakEnded,  // it ended: `message` says how ("recovered", "downed", "died", "stopped")
     PawnInsulted,          // a pawn in an insulting spree insulted another
     PawnLeftColony,        // a pawn gave up and walked off the map for good
+    DisasterStarted,       // a disaster condition began (T3, docs/design/disasters.md): `message` its name ("solar flare", "toxic fallout", "volcanic winter", "flashstorm", "psychic drone", "psychic soothe"), `count` its DisasterKind, `amount` its length in game hours, `cell` a flashstorm's centre
+    DisasterEnded,         // it is over (same fields)
+    LightningStrike,       // a flashstorm's bolt hit `cell` at (x, y, z); the blast and fires that follow are their own events
+    QuestOffered,          // a quest was offered (docs/design/quests.md): `count` its id, `def` its Quests def, `message` the def's name
+    QuestAccepted,         // the player accepted it
+    QuestDeclined,         // the player declined it
+    QuestExpired,          // nobody answered in time (or, once accepted, the raid could not be sent): `message` says which
+    QuestCompleted,        // it was done and paid: `message` says how ("joined", "delivered", "the raid is over", "no raid came"); `squad` the raid
+    QuestFailed,           // it went wrong: `message` says why
     DropPodLanded,         // a raider's pod came down (F12, docs/design/raid-strategies.md): `thing` the raider, `cell` where, `squad`
     SappersBreaking,       // raiders began digging through a wall (F12): `cell` the wall, `squad`, `count` how many dig
     ItemStolen,            // a thief lifted loose items (F12): `thing` the thief, `target` the item it carries, `def` its def, `count`
@@ -111,6 +120,9 @@ enum class EventType : uint8_t {
     ShipReactorReady,      // the activation finished: the ship can launch
     ShipReactorLost,       // the reactor was destroyed or taken down: the activation is lost, `message` says which
     ShipLaunched,          // the ship left and the game is won: `amount` how many pawns went (a PawnLeftMap each)
+    PrisonerExecuted,      // a warden executed a prisoner (docs/design/prisoners.md): `thing` the prisoner (dead), `target` the warden, `message` "guilty" or "innocent"
+    OrganHarvested,        // an organ was taken from a living pawn: `thing` the victim, `target` the surgeon, `part` the body part, `message` "colonist" or "prisoner" (anyone who is not one of ours)
+    OperationDone,      // a doctor finished an operation (H3, docs/design/surgery.md): `thing` the doctor, `target` the patient, `def` the Recipes def, `part` the body part, `amount` the success chance, `message` "success", "failed" or "the patient died"
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -159,6 +171,7 @@ enum class PawnAction : uint8_t {
     Butcher,      // started cutting up `target`, a corpse (once per job; the work goes on until its JobEnded)
     DropCorpse,   // put the carried `target`, a corpse, down in `cell`
     Punch,        // swung a fist at `target`, a pawn or a thing (a tantrum or berserk break: docs/design/mental-breaks.md)
+    Operate,      // started an operation on `target`, a patient in bed (once per job; the work goes on until its JobEnded)
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
