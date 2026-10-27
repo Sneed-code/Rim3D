@@ -465,33 +465,6 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         f.text = "Quest: " + (questDef != nullptr ? questDef->text("text") : std::string("someone has an offer for the colony."));
         return true;
     });
-    loot_ = std::make_unique<LootSystem>(*things_, map_, *defs_, settings.seed);
-    narrator_->setWorker("ResourcePodCrash", [this](IncidentFiring& f) {
-        // Lands near the colony: the middle of the player's colonists, else of the map.
-        float sx = 0.0f;
-        float sy = 0.0f;
-        int n = 0;
-        for (const auto [pawn, colonist, pos] : things_->registry().view<const Colonist, const Position>().each()) {
-            if (fighters_->factionOf(pawn) == kPlayerFaction && pos.level == 0) {
-                sx += pos.x;
-                sy += pos.y;
-                ++n;
-            }
-        }
-        const CellPos centre = n > 0 ? CellPos{static_cast<int>(sx / static_cast<float>(n)), static_cast<int>(sy / static_cast<float>(n)), 0}
-                                     : CellPos{map_.width() / 2, map_.width() / 2, 0};
-        Rng rng = loot_->rngFor(0x706F64ULL, time_.seconds);
-        std::vector<LootItem> items;
-        CellPos where;
-        if (!loot_->cargoPod("CargoPod", centre, rng, where, items)) {
-            f.error = "no open ground for a cargo pod";
-            return false;
-        }
-        f.hasCell = true;
-        f.cell = where;
-        f.text = "A cargo pod has crashed nearby, with " + loot_->describe(items) + ".";
-        return true;
-    });
     social_ = std::make_unique<SocialSystem>(*things_, *rooms_, *health_, *melee_, *mood_, *jobs_, *defs_, time_,
                                              splitMix64(settings.seed ^ 0x736F6369616CULL));
     social_->setEventLog(&events_);
@@ -1616,17 +1589,6 @@ void Sim::step() {
             }
         }
     }
-    apparel_->step(time_.seconds, rng_, events_);
-    loot_->step(events_, 0, raids_->state(), time_.seconds);  // raiders killed this step drop their packs
-    pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
-    rooms_->update();
-    roofCollapse_->step(rng_);  // roofs and floors that lost their holders fall
-    power_->step(time_);
-    lights_->update();
-    filth_->step();
-    roomStats_->step(time_.seconds);
-    temperature_->step(time_.seconds);
-    spoilage_->step(time_.seconds);
     { SimLap lap(profile_, "apparel"); apparel_->step(time_.seconds, rng_, events_); }
     { SimLap lap(profile_, "loot"); loot_->step(events_, 0, raids_->state(), time_.seconds); }  // raiders killed this step drop their packs
     { SimLap lap(profile_, "pathfinder"); pathfinder_.update(settings_.pathBudget); }  // paths asked for this step are ready next step at the earliest
