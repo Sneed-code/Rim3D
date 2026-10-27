@@ -545,7 +545,9 @@ bool NarratorSystem::restore(NarratorState s, std::string& error) {
     std::sort(s.threats.begin(), s.threats.end());
     rng_.restore(s.rngState, s.rngIncrement);
     state_ = std::move(s);
-    applyAdaptation();
+    if (!state_.narrator.empty()) {
+        applyAdaptation();  // only setNarrator does this, so a game that never picked one keeps the full impact
+    }
     return true;
 }
 

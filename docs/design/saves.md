@@ -199,7 +199,9 @@ parallel tasks merge cleanly.
    nothing about it goes in the frozen table for formats 6 to 19.
 6. **Entity references** inside components (like a job's target) are saved as the id; ids come back
    exactly, so they stay valid. `restore` checks that what they name exists.
-7. **Test**: add the new state to the session in `Tests/SaveTests.cpp` (`saveTestSession`) so the
+7. **Test**: add the new state to the busy colony in `Tests/SaveAuditTests.cpp` (`auditSession`: the
+   commands, and the incident list if your task adds an incident; `auditRun`: anything that has to
+   exist before the first step) so the audit (below) exercises it. Also add it to the session in `Tests/SaveTests.cpp` (`saveTestSession`) so the
    "load and run on gives the same game" test exercises it, or a save round trip in your own test
    file. A cache needs no save, but it must be rebuilt by whatever asks for it, and nothing that
    changes game state may read it stale.
@@ -300,12 +302,34 @@ sneed's whole job for a bug is: press F8, then send the folder (zip it, or drop 
 - **20** (S7): named sections, each with its own version, and commands by name (above). The last
   format number: from here on, sections change instead.
 
+### The audit (`Tests/SaveAuditTests.cpp`)
+
+One generic test finds state a system forgot to save, without knowing the systems. It runs a busy
+colony (Crashlanded on real defs: the narrator, raids, caravans, diseases, fire, mental breaks,
+hunting, taming, a prisoner, bills, farming, research, talents), saves it at many moments, loads the
+file and runs the original and the loaded copy side by side with the same commands. Right after the
+load, and every 150 seconds for 900 seconds, the state hash and the whole saved file must be equal. State a
+system keeps but does not save makes the two drift apart, and a file the loader refuses is caught
+too. Run it as part of `unit`; a task that adds a system adds its commands and incidents to
+`auditSession` so the audit reaches it.
+
+- **Soak**: `AUDIT_SOAK=60 ./build/colonysim_tests -tc="Save audit: soak"` plays seeds 1 to 60, saving each
+  about twenty times (a few minutes). Use it after adding state. `AUDIT_SEED=n` runs one seed,
+  `AUDIT_BLOCK=1` compares every second to find the first second a drift starts, and
+  `AUDIT_DUMP=/some/folder` writes both sims' JSON dumps (`a.json`, `b.json`) when they differ, for a diff.
+- **Typical causes**: a flag that is derived on loading but was "pending" when saved (health's
+  `downed`), a value one system sets for the *next* step (the weathering factor), a check in the
+  loader stricter than the sim's own rules (two jobs on one bed cell).
+- What the audit cannot see: state that never reaches the saved file or the hash (a cache that
+  changes behaviour). Caches must be rebuilt by whatever reads them.
+
 ### Section versions
 
 Every section is version 1 at format 20. A task that changes a section adds a line here, e.g.
 "`fighters` 2 (F9): ...". New sections are listed in the table above.
 
 - `roomstats` 1 (C17): floors, filth, carried filth, the filth rng, beauty needs ([room-stats.md](room-stats.md)). Commands `PlaceFloor` and `AddFilth` by name.
+- The loader accepts two jobs on one cell (the later one keeps the reservation) instead of refusing the file (audit).
 - `health` 2 (E2): each pawn's environment hediffs (hypothermia, heatstroke...), a list of def name and severity before `dead`. Version 1 files load with none.
 - `world` 1 (W2): new section, see the table. Saves without it have no world.
 - `prisoners` 1 (C22): new section, see the table. Commands `SetPrisonerMode` and `SetPrisonBed` by name; the job check now accepts `CapturePrisoner`, `FeedPrisoner` and `WardenInteract`.

@@ -1668,7 +1668,6 @@ void Sim::stepOnce(bool keepEvents) {
     { SimLap lap(profile_, "roomStats"); roomStats_->step(time_.seconds); }
     { SimLap lap(profile_, "temperature"); temperature_->step(time_.seconds); }
     // From the weather as it is now, not left over from the last step: a loaded game has not had a last step.
-    spoilage_->setOutdoorFactor(weather_->deteriorationFactor());
     spoilage_->setOutdoorFactor(weather_->deteriorationFactor());  // not saved: the weather says it, also on the first step after a load
     { SimLap lap(profile_, "spoilage"); spoilage_->step(time_.seconds); }
     if (time_.seconds % kBillUpkeepSeconds == 0) {
