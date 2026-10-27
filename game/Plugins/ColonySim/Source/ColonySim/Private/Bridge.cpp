@@ -227,9 +227,15 @@ const char* commandName(const Command& command) {
                 return "Attune";
             } else if constexpr (std::is_same_v<Type, LearnPowerCommand>) {
                 return "LearnPower";
-            } else {
-                static_assert(std::is_same_v<Type, CastPowerCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, CastPowerCommand>) {
                 return "CastPower";
+            } else if constexpr (std::is_same_v<Type, SkipNightCommand>) {
+                return "SkipNight";
+            } else if constexpr (std::is_same_v<Type, FastTravelCommand>) {
+                return "FastTravel";
+            } else {
+                static_assert(std::is_same_v<Type, CancelSkipCommand>, "name every command type");
+                return "CancelSkip";
             }
         },
         command);
@@ -382,6 +388,8 @@ const char* eventTypeName(EventType type) {
         case EventType::OperationDone: return "OperationDone";
         case EventType::DrugBinge: return "DrugBinge";
         case EventType::ChemicalDamage: return "ChemicalDamage";
+        case EventType::SkipStarted: return "SkipStarted";
+        case EventType::SkipEnded: return "SkipEnded";
     }
     return "?";
 }

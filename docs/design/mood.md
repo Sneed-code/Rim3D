@@ -62,6 +62,19 @@ A thought def with `situation.condition` `coldBelowComfort` or `hotAboveComfort`
 counts while the pawn is outside its comfortable temperature range; its `stages` are picked by the degrees
 outside it ([temperature.md](temperature.md)). The thought's label in the panel is the stage's (`chilly`,
 `freezing`, `warm`, `scorching`). Like the food and rest situations it exists only while it holds.
+
+## Expectations
+
+RimWorld's expectations thought: what the colonists expect rises with the colony's wealth, so a poor young colony is
+content with little. The `Expectations` thought (condition `colonyWealth`, `Thoughts2.json`) is +30 under 15,000 wealth
+(extremely low), +24 to 31,000, +18 to 81,000, +12 to 182,000, +6 to 308,000 and 0 above (sky-high) (wiki pages
+Expectations and Wealth). Only the player's colonists have it, not prisoners or other pawns. The wealth is
+`RaidSystem::colonyWealth(1.0)`: items on the map and carried, buildings at full value and the player's own pawns. The
+mood system asks for it once a game hour (`MoodSystem::setWealth`), keeps the answer and saves it (section
+`expectations` 1), so a loaded game goes on with the same number; an older save measures it again at once. Without it
+the year run's colonists broke from the first day (all six dead by day 37 to 48 on seeds 1, 7 and 42). Royal titles'
+expectations are not in. Tests `SurvivalTests.cpp`.
+
 ## Trait situations
 
 Three staged thoughts in `Thoughts3.json` are limited to a trait (`situation.trait`) and judged in `Sim.cpp`:

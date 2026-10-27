@@ -87,6 +87,7 @@ private:
 	void BuildBuildingsPhases();    // SmokeTestBuildings.cpp
 	void BuildOrdersPhases();       // SmokeTestOrders.cpp
 	void BuildPanelsPhases();       // SmokeTestPanels.cpp
+	void BuildWorldMapPhases();     // SmokeTestWorldMap.cpp
 	void BuildFightsPhases();       // SmokeTestFights.cpp
 	void BuildHandsOnPhases();      // SmokeTestHandsOn.cpp
 	void BuildAnimalsPhases();      // SmokeTestAnimals.cpp
