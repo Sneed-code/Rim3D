@@ -1429,7 +1429,14 @@ void Sim::step() {
     }
     { SimLap lap(profile_, "fighters"); fighters_->step(); }
     { SimLap lap(profile_, "prisoners"); prisoners_->step(); }
+    { SimLap lap(profile_, "trade"); trade_->step(events_); }
+    { SimLap lap(profile_, "quests"); quests_->step(); }
+    { SimLap lap(profile_, "ship"); ship_->step(); }
     { SimLap lap(profile_, "recreation"); recreation_->step(); }
+    { SimLap lap(profile_, "drugs"); drugs_->step(time_.seconds); }
+    if (time_.seconds % kSecondsPerHour == 0) {
+        drugs_->prune();
+    }
     { SimLap lap(profile_, "animals"); animals_->step(); }
     { SimLap lap(profile_, "husbandry"); husbandry_->step(); }
     { SimLap lap(profile_, "breeding"); breeding_->step(); }
@@ -1443,33 +1450,10 @@ void Sim::step() {
     { SimLap lap(profile_, "explosives"); explosives_->step(rng_); }
     animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
     { SimLap lap(profile_, "defense"); defense_->step(rng_); }
-    fighters_->step();
-    prisoners_->step();
-    trade_->step(events_);
-    quests_->step();
-    ship_->step();
-    recreation_->step();
-    drugs_->step(time_.seconds);
-    if (time_.seconds % kSecondsPerHour == 0) {
-        drugs_->prune();
-    }
-    animals_->step();
-    husbandry_->step();
-    breeding_->step();
-    social_->step(time_.seconds);
-    mentalBreaks_->step(time_.seconds, rng_);  // before the mood system, which turns its events into memories
-    mood_->step(time_.seconds, events_);
-    inspirations_->step(time_.seconds);
-    movement_->step(things_->registry(), map_);
-    melee_->step();
-    combat_->step(rng_);
-    explosives_->step(rng_);
-    animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
-    defense_->step(rng_);
-    monsters_->step(events_, 0);  // mounds make jelly, brood and spread; insects hunt (docs/design/monsters.md)
+    { SimLap lap(profile_, "monsters"); monsters_->step(events_, 0); }  // mounds make jelly, brood and spread; insects hunt (docs/design/monsters.md)
     {
         // Blasts of Burn damage start fires; a pawn that catches fire stops what it was doing.
-        fire_->step(time_.seconds, 0);
+        { SimLap lap(profile_, "fire"); fire_->step(time_.seconds, 0); }
         for (size_t i = 0; i < events_.size(); ++i) {
             if (events_[i].type == EventType::PawnCaughtFire) {
                 jobs_->interrupt(events_[i].thing, "it caught fire");
@@ -1478,10 +1462,10 @@ void Sim::step() {
     }
     { SimLap lap(profile_, "apparel"); apparel_->step(time_.seconds, rng_, events_); }
     { SimLap lap(profile_, "pathfinder"); pathfinder_.update(settings_.pathBudget); }  // paths asked for this step are ready next step at the earliest
-    rooms_->update();
+    { SimLap lap(profile_, "rooms"); rooms_->update(); }
     { SimLap lap(profile_, "roofCollapse"); roofCollapse_->step(rng_); }  // roofs and floors that lost their holders fall
     { SimLap lap(profile_, "power"); power_->step(time_); }
-    lights_->update();
+    { SimLap lap(profile_, "lights"); lights_->update(); }
     { SimLap lap(profile_, "filth"); filth_->step(); }
     { SimLap lap(profile_, "roomStats"); roomStats_->step(time_.seconds); }
     { SimLap lap(profile_, "temperature"); temperature_->step(time_.seconds); }
@@ -1503,8 +1487,8 @@ void Sim::step() {
         filth_->fadeHour(weather_->effects().rainRate);
         pruneDesignations();
     }
-    narrator_->step();  // after the clock: incidents come on the narrator's checks (T1)
-    disasters_->step();  // T3: conditions end, work and strike
+    { SimLap lap(profile_, "narrator"); narrator_->step(); }  // after the clock: incidents come on the narrator's checks (T1)
+    { SimLap lap(profile_, "disasters"); disasters_->step(); }  // T3: conditions end, work and strike
     if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
         checkpoints_.push_back(Checkpoint{time_.seconds, stateHash()});
     }
