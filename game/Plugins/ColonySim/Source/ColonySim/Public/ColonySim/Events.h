@@ -134,6 +134,8 @@ enum class EventType : uint8_t {
     PrisonerExecuted,      // a warden executed a prisoner (docs/design/prisoners.md): `thing` the prisoner (dead), `target` the warden, `message` "guilty" or "innocent"
     OrganHarvested,        // an organ was taken from a living pawn: `thing` the victim, `target` the surgeon, `part` the body part, `message` "colonist" or "prisoner" (anyone who is not one of ours)
     OperationDone,      // a doctor finished an operation (H3, docs/design/surgery.md): `thing` the doctor, `target` the patient, `def` the Recipes def, `part` the body part, `amount` the success chance, `message` "success", "failed" or "the patient died"
+    DeepDepositFound,      // a scanner found deep resources (docs/design/deep-mining.md): `def` the item, `cell` the middle of the lump, `count` its cells, `thing` the scanner (none for the long-range hook)
+    DeepPortionDrilled,    // a deep drill finished a portion: `thing` the drill, `def` what came up (a rock chunk if nothing is under it), `amount` how many, `cell` where it was taken from
     // Caravans (docs/design/caravans.md): `count` is the caravan's id in all of them.
     CaravanFormed,         // a caravan was formed: its members walk to `cell`, the exit at the map edge; `amount` how many
     CaravanMemberLost,     // `thing` left the caravan: `message` why ("can't walk", "left behind", "died", "mental break"...)
@@ -193,6 +195,8 @@ enum class PawnAction : uint8_t {
     Rearm,        // started setting the sprung trap `target` again (once per job; the work goes on until its JobEnded)
     Punch,        // swung a fist at `target`, a pawn or a thing (a tantrum or berserk break: docs/design/mental-breaks.md)
     Operate,      // started an operation on `target`, a patient in bed (once per job; the work goes on until its JobEnded)
+    Scan,         // started working a ground-penetrating scanner `target` (once per job; the work goes on until its JobEnded)
+    Drill,        // started working a deep drill `target` (once per job; the work goes on until its JobEnded)
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.

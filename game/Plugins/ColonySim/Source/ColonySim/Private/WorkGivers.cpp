@@ -1,4 +1,5 @@
 // The work scanners, one per task name in the WorkTypes defs (docs/design/jobs.md).
+#include "ColonySim/Animals.h"
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Jobs.h"
 
@@ -7,6 +8,7 @@
 #include "ColonySim/Crafting.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Defense.h"
+#include "ColonySim/DeepResources.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Farming.h"
@@ -673,6 +675,49 @@ public:
     }
 };
 
+// Scanners and drills (docs/design/deep-mining.md): a ground-penetrating scanner is worked in the Research work type
+// (RimWorld: Intellectual), a deep drill in Mining. The pawn sits at a cell beside the machine, with nobody else at it.
+class DeepWorkGiver final : public WorkGiver {
+public:
+    DeepWorkGiver(const char* task, DeepWorkKind kind) : task_(task), kind_(kind) {}
+    const char* task() const override { return task_; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        if (jobs.deepResources() == nullptr) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        if (kind_ == DeepWorkKind::Drill && !jobs.canUseHands(pawn)) {
+            return;
+        }
+        reg.view<const Thing, const Footprint, const Position>().each(
+            [&](Entity machine, const Thing&, const Footprint& footprint, const Position& pos) {
+                std::string why;
+                if (pos.level != at.level || jobs.deepKindOf(machine) != kind_ || !jobs.deepWorkable(machine, why)) {
+                    return;
+                }
+                CellPos stand;
+                if (!jobs.construction().workCell(footprint.rect(), cellOf(at), stand)) {
+                    return;
+                }
+                out.push_back(WorkCandidate{JobTarget{machine, CellPos{}}, workGiverDistSq(at, pos), 0, 0, true, stand});
+            });
+    }
+
+    bool makeJob(JobSystem&, Entity, const WorkCandidate& candidate, Job& out) override {
+        out = Job{};
+        out.type = JobType::DeepWork;
+        out.site = candidate.target.thing;
+        out.cell = candidate.reach;
+        return true;
+    }
+
+private:
+    const char* task_;
+    DeepWorkKind kind_;
+};
+
 // Medicine (task H1, docs/design/medicine.md). RimWorld's doctor tasks: tend whoever needs it (the bleeding first),
 // carry the downed to a bed; and the patient's own: go to a medical bed, rest in any bed.
 
@@ -692,8 +737,8 @@ public:
     const char* task() const override { return "TendPatients"; }
 
     void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
-        if (jobs.medicine() == nullptr || !jobs.canUseHands(pawn)) {
-            return;
+        if (jobs.medicine() == nullptr || !jobs.canUseHands(pawn) || jobs.things().registry().all_of<Animal>(pawn)) {
+            return;  // a rescuing animal carries the downed to bed but cannot tend
         }
         const entt::registry& reg = jobs.things().registry();
         const Position& at = reg.get<Position>(pawn);
@@ -1095,6 +1140,8 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
         givers.push_back(std::make_unique<DoBillsGiver>(task));
     }
     givers.push_back(std::make_unique<ResearchGiver>());
+    givers.push_back(std::make_unique<DeepWorkGiver>("ScanDeep", DeepWorkKind::Scan));
+    givers.push_back(std::make_unique<DeepWorkGiver>("DrillDeep", DeepWorkKind::Drill));
     givers.push_back(std::make_unique<CleanFilthGiver>());
     givers.push_back(std::make_unique<TendPatientsGiver>());
     givers.push_back(std::make_unique<RescueGiver>());

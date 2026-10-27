@@ -49,6 +49,7 @@ class MentalBreakSystem;
 class JobSystem;
 class Lights;
 class MeleeSystem;
+class DeepResources;
 class Mineables;
 class MovementSystem;
 class MoodSystem;
@@ -283,6 +284,9 @@ public:
     // has put on rock and plants for colonists to work on.
     Mineables& mineables() { return *mineables_; }
     const Mineables& mineables() const { return *mineables_; }
+    // Deep deposits, the scanner and the deep drill (docs/design/deep-mining.md).
+    DeepResources& deepResources() { return *deepResources_; }
+    const DeepResources& deepResources() const { return *deepResources_; }
     Designations& designations() { return *designations_; }
     const Designations& designations() const { return *designations_; }
 
@@ -460,6 +464,7 @@ private:
     std::unique_ptr<Plants> plants_;
     std::unique_ptr<Weather> weather_;
     std::unique_ptr<Mineables> mineables_;
+    std::unique_ptr<DeepResources> deepResources_;
     std::unique_ptr<Designations> designations_;
     std::unique_ptr<MovementSystem> movement_;
     std::unique_ptr<Rooms> rooms_;
