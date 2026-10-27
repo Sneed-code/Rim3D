@@ -4,7 +4,8 @@ Code: `ColonySim/Map.h` (levels, upper chunks, `setUpperFloor`, `floorAbove`, `L
 `Private/UpperFloors.cpp`; level handling in `Private/Regions.cpp`, `Private/Rooms.cpp` and
 `Private/Temperature.cpp`; stairs and ladders in `Things.h` (`levelLinksOf`), `Private/Regions.cpp`
 (`linkLevels`), `Private/Pathfinder.cpp` and `Private/MovementSystem.cpp`. Command `PlaceUpperFloorCommand`.
-Tests: `Tests/LevelsTests.cpp` (M1), `Tests/StairsTests.cpp` (M2). Tasks M1 and M2, of M1 to M4 and U17. The whole thing together is checked by the [house scenario](house-scenario.md) (M4).
+Tests: `Tests/LevelsTests.cpp` (M1), `Tests/StairsTests.cpp` (M2, U17). Tasks M1 and M2, of M1 to M4 and U17. The whole thing
+together is checked by the [house scenario](house-scenario.md) (M4). On screen: [levels-draw](levels-draw.md).
 Builds on [regions](regions.md) and [rooms](rooms.md).
 
 ## Levels
@@ -81,7 +82,11 @@ no levels):
   side by side, so a staircase against a wall leads onto the floor that wall holds up. The building
   itself blocks walking: it is only climbed. Neither end needs to be walkable when it is built; the
   link counts once both are. Nothing is planned on the top level (there is nothing to climb to).
-  Nothing stops a floor over the stairs for now; U17 may want a stairwell rule. An upper wall with open air on its outside cannot be reached once the walls on its two inner sides stand (see the house scenario).
+  An upper wall with open air on its outside (a corner whose two sides stand) is built from the level below, standing on any of the eight cells round it (`Construction::workCell`), so corners need no special order. No plant grows under an upper floor: laying one clears the plant in the cell below, `Plants::place` refuses there and `growHour` kills any left (no light).
+  Nothing stops a floor over the stairs: the house scenario lays one, so that the upper room is closed (open air
+  beside a room makes it outdoors). U17 draws no floor over stairs and ladders, and walking into that cell from the
+  head climbs down ([levels-draw](levels-draw.md)). A real stairwell rule needs rooms to join the room above and the
+  one below through it.
 - **The map** keeps the links (`Map::levelLinks`, `LevelLink{low, high, building, length, speedFactor}`,
   sorted by cell) in step with the buildings (`Things` adds them on spawn and load, removes them on
   despawn), and marks the regions at both ends dirty.
@@ -102,6 +107,10 @@ no levels):
 - **Unreal sees** a climbing pawn in the snapshot at `climb` (0 to 1) of the way along: its `x`, `y`
   and `z` are already moved that share towards the other end, its `level` is the one it started on.
   U17 draws stairs and ladders and the climb.
+- **The player's colonist** (U17) climbs with `ClimbCommand{pawn, dx, dy}`: standing in the cell at either end of a
+  link and pushing within 60 degrees of the way to its other end, it is set off along that link the same way
+  (`Mover::walkTo` with the other end as its only waypoint); the movement system climbs a controlled pawn only while it
+  climbs, and `DirectMove` is ignored until it stands at the other end. A dodge roll is refused on the way.
 
 ## Work across levels (M2)
 
@@ -122,8 +131,8 @@ take heights from the ground. Animals live on the ground. Each will take levels 
 ## Unreal sees
 
 `Map::upperFloorCells()` (by level, then row) and `Map::upperFloorChanges()` to know when to redraw;
-buildings and items on upper levels come through the snapshot with their `level` and `z`. Nothing is
-drawn yet: U17 does that, with the overseer cutting away levels above the chosen one. `simrun --png`
+buildings and items on upper levels come through the snapshot with their `level` and `z`. U17 draws them, with the
+overseer cutting away the levels above the one looked at ([levels-draw](levels-draw.md)). `simrun --png`
 tints the ground pale blue under upper floors.
 
 ## Saves and hashes
@@ -135,7 +144,5 @@ pawn's `climbed`; the state hash adds it only while a pawn climbs, so older hash
 
 ## Not yet
 
-- Direct mode climbing stairs and ladders, and the orders bar's upper floor and stairs tools (U17).
 - Raiders, fighters and animals using stairs: they path over them already, but combat, cover and the
   defence plans still look at one level at a time.
-- Upper levels on screen (U17).
