@@ -43,6 +43,7 @@
 #include "ColonySim/Repair.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Inspirations.h"
+#include "ColonySim/Travel.h"
 #include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Medicine.h"
@@ -349,6 +350,8 @@ struct SaveApparel {
     bool hasOutfit = false;
     uint32_t outfit = 0;
     int64_t nextCheck = 0;
+    bool hasDurability = false;  // section version 2 on (docs/design/apparel-durability.md)
+    float durability = 1.0f;
 };
 
 // What the repair system keeps on an item: the repair mark, the upgrade part ordered fitted and the parts fitted, by
@@ -551,6 +554,7 @@ struct SaveData {
     ShipState ship;                    // section "ship"
     float moodWealth = 0.0f;           // section "expectations": the wealth the mood system measured, and when
     int64_t moodWealthAt = -1;
+    TravelState travel;                // section "travel" (P5)
     // Section "talents" (P3): per protagonist, parallel lists in pawn order.
     std::vector<Entity> talentPawns;
     std::vector<int64_t> talentXp;
@@ -1186,6 +1190,12 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.value("target", c.target);
         ar.group("cell", [&] { saveCell(ar, c.cell); });
         ar.value("player", c.player);
+    } else if constexpr (std::is_same_v<Type, FastTravelCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("x", c.x);
+        ar.value("y", c.y);
+    } else if constexpr (std::is_same_v<Type, SkipNightCommand> || std::is_same_v<Type, CancelSkipCommand>) {
+        // no fields
     } else {
         static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
     }
@@ -1881,6 +1891,11 @@ void saveApparelPart(Ar& ar, SaveApparel& a) {
     ar.value("hasOutfit", a.hasOutfit);
     ar.value("outfit", a.outfit);
     ar.value("nextCheck", a.nextCheck);
+    if (ar.sectionVersion() >= 2) {
+        ar.value("hasDurability", a.hasDurability);
+        ar.value("durability", a.durability);
+        ar.require(a.durability >= 0.0f && a.durability <= 1.0f, "the save file has an impossible durability");
+    }
 }
 
 template <typename Ar>
@@ -2592,6 +2607,21 @@ void saveShip(Ar& ar, ShipState& s) {
 }
 
 template <typename Ar>
+void saveTravel(Ar& ar, TravelState& s) {
+    ar.value("kind", s.kind);
+    ar.require(static_cast<int>(s.kind) <= static_cast<int>(SkipKind::Travel), "the save file has a bad skip kind");
+    ar.value("startedAt", s.startedAt);
+    ar.value("endsAt", s.endsAt);
+    ar.value("pawn", s.pawn);
+    ar.value("destX", s.destX);
+    ar.value("destY", s.destY);
+    ar.value("nights", s.nights);
+    ar.value("travels", s.travels);
+    ar.value("skipped", s.skipped);
+    ar.list("visited", s.visited, [&](uint32_t& index) { ar.value(nullptr, index); });
+}
+
+template <typename Ar>
 void saveDrugs(Ar& ar, SaveData& d) {
     ar.list("pawns", d.drugPawns, [&](SaveDrugPawn& p) {
         ar.value("pawn", p.pawn);
@@ -3178,7 +3208,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "social", e, &SaveEntity::social, [&](Social& social) { saveSocialPart(ar, social); });
         saveParts(ar, "fight", e, &SaveEntity::socialFight, [&](SocialFight& f) { saveSocialFightPart(ar, f); });
     });
-    ar.section("apparel", 1, [&] {
+    ar.section("apparel", 2, [&] {
         saveParts(ar, "apparel", e, &SaveEntity::apparel, [&](SaveApparel& a) { saveApparelPart(ar, a); });
         ar.value("nextOutfitId", d.nextOutfitId);
         ar.list("outfits", d.outfits, [&](OutfitPolicy& o) { saveOutfitPolicy(ar, o); });
@@ -3384,6 +3414,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("wealth", d.moodWealth);
         ar.value("at", d.moodWealthAt);
     });
+    ar.section("travel", 1, [&] { saveTravel(ar, d.travel); });
     // New sections go here, at the end.
 }
 
@@ -3662,7 +3693,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             const MadeOf* made = reg.try_get<MadeOf>(e);
             const Quality* quality = reg.try_get<Quality>(e);
             const PawnOutfit* outfit = reg.try_get<PawnOutfit>(e);
-            if (made != nullptr || quality != nullptr || outfit != nullptr || reg.all_of<Tainted>(e) || reg.all_of<StripMark>(e)) {
+            const Durability* durability = reg.try_get<Durability>(e);
+            if (made != nullptr || quality != nullptr || outfit != nullptr || durability != nullptr || reg.all_of<Tainted>(e) ||
+                reg.all_of<StripMark>(e)) {
                 SaveApparel a;
                 a.stuff = made != nullptr && made->stuff.valid() ? sim.defs_->get(made->stuff).defName() : std::string();
                 a.quality = quality != nullptr ? static_cast<int>(quality->level) : -1;
@@ -3671,6 +3704,8 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
                 a.hasOutfit = outfit != nullptr;
                 a.outfit = outfit != nullptr ? outfit->outfit : 0;
                 a.nextCheck = outfit != nullptr ? outfit->nextCheck : 0;
+                a.hasDurability = durability != nullptr;
+                a.durability = durability != nullptr ? durability->share : 1.0f;
                 out.apparel = std::move(a);
             }
         }
@@ -3932,6 +3967,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.ship = sim.ship_->state();
     d.moodWealth = sim.mood_->wealth();
     d.moodWealthAt = sim.mood_->wealthAt();
+    d.travel = sim.travel_->state();
     for (const auto& [pawn, s] : sim.talents_->states()) {
         d.talentPawns.push_back(pawn);
         d.talentXp.push_back(s.xp);
@@ -4211,6 +4247,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             }
             if (a.hasOutfit) {
                 reg.emplace<PawnOutfit>(entity, PawnOutfit{a.outfit, a.nextCheck});
+            }
+            if (a.hasDurability) {
+                reg.emplace<Durability>(entity, Durability{a.durability});
             }
         }
         if (e.looks) {
@@ -4830,6 +4869,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         return false;
     }
     sim.mood_->restoreWealth(d.moodWealth, d.moodWealthAt);  // an older save measures it again at once
+    if (!sim.travel_->restore(std::move(d.travel), error)) {
+        return false;
+    }
     sim.apparel_->restoreOutfits(std::move(d.outfits), d.nextOutfitId);
     if (d.hasWeather) {
         WeatherState state;

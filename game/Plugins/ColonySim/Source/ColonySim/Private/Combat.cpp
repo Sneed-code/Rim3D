@@ -2176,7 +2176,17 @@ void CombatSystem::damageApparel(Entity pawn, Entity item, int hitPoints) {
     if (hp == nullptr || hitPoints <= 0) {
         return;
     }
-    hp->current = std::max(0, hp->current - hitPoints);
+    // Worn apparel wears its durability, not its hit points (docs/design/apparel-durability.md): `hitPoints` of
+    // wear is that share of the maximum. At 0 durability it stays on, tattered; only fragile basic clothes then
+    // take the rest off their hit points and can be destroyed.
+    const float before = ApparelStats::condition(reg, item);
+    const float wear = static_cast<float>(hitPoints) / static_cast<float>(std::max(1, hp->max));
+    reg.emplace_or_replace<Durability>(item, Durability{std::max(0.0f, before - wear)});
+    if (wear <= before || !apparelStats_->fragile(reg.get<Thing>(item).def)) {
+        return;
+    }
+    const int excess = std::max(1, static_cast<int>(std::lround((wear - before) * static_cast<float>(hp->max))));
+    hp->current = std::max(0, hp->current - excess);
     if (hp->current > 0) {
         return;
     }
