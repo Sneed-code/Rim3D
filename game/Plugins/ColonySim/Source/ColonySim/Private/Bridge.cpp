@@ -205,6 +205,14 @@ const char* commandName(const Command& command) {
                 return "PlaceUpperFloor";
             } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
                 return "StartMentalBreak";
+            } else if constexpr (std::is_same_v<Type, CreateAreaCommand>) {
+                return "CreateArea";
+            } else if constexpr (std::is_same_v<Type, PaintAreaCommand>) {
+                return "PaintArea";
+            } else if constexpr (std::is_same_v<Type, DeleteAreaCommand>) {
+                return "DeleteArea";
+            } else if constexpr (std::is_same_v<Type, AssignAreaCommand>) {
+                return "AssignArea";
             } else if constexpr (std::is_same_v<Type, ContractDiseaseCommand>) {
                 return "ContractDisease";
             } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {

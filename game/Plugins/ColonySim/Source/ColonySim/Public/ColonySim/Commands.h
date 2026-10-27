@@ -858,6 +858,28 @@ struct EndMentalBreakCommand {
     Entity pawn = kNoEntity;
 };
 
+// Allowed areas (docs/design/areas.md). CreateArea makes an empty named area (ids count 1, 2, 3); PaintArea adds the
+// rectangle to it or takes it off (fails for an unknown area or if no cell changed); DeleteArea frees the pawns limited to it;
+// AssignArea limits a pawn to an area, or frees it with area 0.
+struct CreateAreaCommand {
+    std::string name;
+};
+
+struct PaintAreaCommand {
+    uint32_t area = 0;
+    CellRect rect;
+    bool add = true;
+};
+
+struct DeleteAreaCommand {
+    uint32_t area = 0;
+};
+
+struct AssignAreaCommand {
+    Entity pawn = kNoEntity;
+    uint32_t area = 0;
+};
+
 // Quests (task Q1, docs/design/quests.md). `action` is "offer" (a dev command and the narrator's hook: `kind` is a Quests defName, or
 // empty for one chosen by weight), "accept" or "decline" (`quest` is the quest's number). Fails if the action is not one of those, there
 // is no such open offer, or it can't be carried out (too many under way, nobody could reach the colony, no room for the goods).
@@ -940,7 +962,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              TakeDrugCommand, SetDrugPolicyCommand, SetDrugPolicyEntryCommand, StartVisitCommand,
                              TradeCommand, AdjustGoodwillCommand, GiftCommand, ClimbCommand, AttuneCommand,
                              LearnPowerCommand, CastPowerCommand, SetThermostatCommand, RepairGearCommand,
-                             FitUpgradeCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand>;
+                             FitUpgradeCommand, CreateAreaCommand, PaintAreaCommand, DeleteAreaCommand,
+                             AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

@@ -1,6 +1,7 @@
 #include "ColonySim/Save.h"
 
 #include "ColonySim/Animals.h"
+#include "ColonySim/Areas.h"
 #include "ColonySim/Breeding.h"
 #include "ColonySim/Apparel.h"
 #include "ColonySim/Husbandry.h"
@@ -569,6 +570,7 @@ struct SaveData {
     std::vector<Thermostat> thermostats;            // section "thermostats"
     std::vector<CellPos> upperFloors;  // section "levels" (M1), by level then row
     RoofCollapseSaved roofs;           // section "roofs" (M3)
+    AreasSaved areas;                  // section "areas": allowed areas and who is limited to one
     SaveDeep deep;                     // section "deep"
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
     uint32_t nextOutfitId = 1;
@@ -966,10 +968,31 @@ struct SaveCommandNames {
 template <typename>
 inline constexpr bool kSaveNoSuchCommand = false;
 
+// The area commands, one branch of the tail below.
+template <typename Ar, typename Type>
+void saveAreaCommand(Ar& ar, Type& c) {
+    if constexpr (std::is_same_v<Type, CreateAreaCommand>) {
+        ar.text("name", c.name);
+    } else if constexpr (std::is_same_v<Type, PaintAreaCommand>) {
+        ar.value("area", c.area);
+        ar.group("rect", [&] { saveRect(ar, c.rect); });
+        ar.value("add", c.add);
+    } else if constexpr (std::is_same_v<Type, DeleteAreaCommand>) {
+        ar.value("area", c.area);
+    } else {
+        static_assert(std::is_same_v<Type, AssignAreaCommand>, "save every area command here");
+        ar.value("pawn", c.pawn);
+        ar.value("area", c.area);
+    }
+}
+
 // Second half of the command chain, split out because MSVC stops at 127 nested else-if blocks (C1061).
 template <typename Ar, typename Type>
 void saveCommandTail(Ar& ar, Type& c) {
-    if constexpr (std::is_same_v<Type, StartRaidCommand>) {
+    if constexpr (std::is_same_v<Type, CreateAreaCommand> || std::is_same_v<Type, PaintAreaCommand> ||
+                  std::is_same_v<Type, DeleteAreaCommand> || std::is_same_v<Type, AssignAreaCommand>) {
+        saveAreaCommand(ar, c);
+    } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
         ar.text("faction", c.faction);
         ar.value("points", c.points);
         ar.value("edge", c.edge);
@@ -3301,6 +3324,18 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("fuel", 1, [&] {
         saveParts(ar, "fuel", e, &SaveEntity::fuel, [&](Fuel& f) { saveFuelPart(ar, f); });
     });
+    ar.section("areas", 1, [&] {
+        ar.value("nextId", d.areas.nextId);
+        ar.list("areas", d.areas.areas, [&](Area& a) {
+            ar.value("id", a.id);
+            ar.text("name", a.name);
+            ar.list("cells", a.cells, [&](CellPos& c) { saveCell(ar, c); });
+        });
+        ar.list("assigned", d.areas.assigned, [&](std::pair<Entity, AreaId>& p) {
+            ar.value("pawn", p.first);
+            ar.value("area", p.second);
+        });
+    });
     ar.section("deep", 1, [&] {
         ar.list("defs", d.deep.defs, [&](std::string& s) { ar.text(nullptr, s); });
         ar.list("cells", d.deep.cells, [&](uint32_t& v) { ar.value(nullptr, v); });
@@ -3927,6 +3962,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.thermostats = sim.temperature_->thermostats();
     d.upperFloors = sim.map_.upperFloorCells();
     d.roofs = sim.roofCollapse_->state();
+    d.areas = sim.areas_->saved();
     {
         const DeepResourcesSaved deep = sim.deepResources_->saved();
         std::unordered_map<uint32_t, uint32_t> indexOf;
@@ -4911,6 +4947,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (!sim.filth_->restore(d.filth, error) || !sim.roomStats_->restore(d.roomStats, error)) {
             return false;
         }
+    }
+    if (!sim.areas_->restore(d.areas, error)) {
+        return false;
     }
     if (!sim.rooms_->restoreThinRoofs(d.roofs.thin)) {
         error = "the save has a roof outside the map";
