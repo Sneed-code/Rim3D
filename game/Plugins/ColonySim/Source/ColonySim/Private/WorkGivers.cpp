@@ -214,15 +214,18 @@ private:
 };
 
 // Frames with all their materials (RimWorld's WorkGiver_ConstructFinishFrames).
-class ConstructFinishGiver final : public WorkGiver {
+class ConstructFinishGiver : public WorkGiver {
 public:
     const char* task() const override { return "ConstructFinishFrames"; }
+    // Sculptures are art: the Art work type's giver builds those, this one every other frame.
+    virtual bool wantsArt() const { return false; }
 
     void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
         const entt::registry& reg = jobs.things().registry();
         const Position& at = reg.get<Position>(pawn);
         reg.view<const ConstructionSite, const Position>().each([&](Entity site, const ConstructionSite& s, const Position& pos) {
-            if (s.stage != ConstructionStage::Frame || !s.hasAllMaterials()) {
+            if (s.stage != ConstructionStage::Frame || !s.hasAllMaterials() ||
+                jobs.construction().isArt(reg.get<Thing>(site).def) != wantsArt()) {
                 return;
             }
             CellPos stand;
@@ -240,6 +243,13 @@ public:
         out.cell = candidate.reach;
         return true;
     }
+};
+
+// Sculptures (docs/design/art.md): the same frames, built by artists.
+class ConstructArtGiver final : public ConstructFinishGiver {
+public:
+    const char* task() const override { return "BuildArt"; }
+    bool wantsArt() const override { return true; }
 };
 
 // Buildings marked to be taken down (RimWorld's WorkGiver_Deconstruct).
@@ -1038,6 +1048,7 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<HaulToStockpileGiver>());
     givers.push_back(std::make_unique<ConstructDeliverGiver>());
     givers.push_back(std::make_unique<ConstructFinishGiver>());
+    givers.push_back(std::make_unique<ConstructArtGiver>());
     givers.push_back(std::make_unique<DeconstructGiver>());
     givers.push_back(std::make_unique<MineGiver>());
     givers.push_back(std::make_unique<CutOrHarvestPlantsGiver>());

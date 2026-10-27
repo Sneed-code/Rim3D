@@ -106,6 +106,10 @@ struct RoomStatsState {
 
 class COLONY_API RoomStats {
 public:
+    // The beauty of a finished building by itself: its def's beauty times its stuff's factor plus the
+    // stuff's flat offset, and for art times its quality's factor (awful -0.1 up to legendary 8).
+    float buildingBeauty(Entity building, bool outdoors) const;
+
     RoomStats(Map& map, Things& things, Rooms& rooms, const Floors& floors, const Filth& filth, const Plants& plants,
               const DefDatabase& defs);
 
@@ -171,6 +175,13 @@ private:
     // Per def id: beauty indoors and outdoors, cleanliness, market value of the materials and work,
     // and whether a building can be stood on.
     std::vector<float> beautyIndoors_, beautyOutdoors_, cleanliness_, baseValue_, stuffBeauty_, stuffCount_;
+    // Per def id: the flat beauty a stuff adds after its factor (gold, silver, jade, marble) and whether
+    // the building is art, whose quality scales its beauty and value (Art.h notes in docs/design/art.md).
+    std::vector<float> stuffBeautyOffset_;
+    std::vector<uint8_t> art_;
+    // Per quality level (QualityRules.levels): the factor on an art building's beauty and market value.
+    std::vector<float> qualityBeauty_, qualityValue_;
+    int defaultQuality_ = 2;
     std::vector<uint8_t> standable_, impassable_;
     DefId groundDef_[7];  // by Terrain; Air and UpperFloor have none
     std::vector<std::pair<int, int>> sightOffsets_;  // within the sight radius, row order

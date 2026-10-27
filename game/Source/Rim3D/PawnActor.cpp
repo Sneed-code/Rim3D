@@ -163,8 +163,14 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 
 	// Metres per step to cm per second at 1x, blended like the position.
 	const float Alpha = Bridge.GetBlendAlpha();
-	const float Vx = Before ? FMath::Lerp(Before->vx, Now.vx, Alpha) : Now.vx;
-	const float Vy = Before ? FMath::Lerp(Before->vy, Now.vy, Alpha) : Now.vy;
+	float Vx = Before ? FMath::Lerp(Before->vx, Now.vx, Alpha) : Now.vx;
+	float Vy = Before ? FMath::Lerp(Before->vy, Now.vy, Alpha) : Now.vy;
+	// On stairs or a ladder the sim's velocity is nought while the pawn moves along the climb: it walks (and faces) that way.
+	if (Before && (Now.climb > 0.0f || Before->climb > 0.0f))
+	{
+		Vx = Now.x - Before->x;
+		Vy = Now.y - Before->y;
+	}
 	const FVector Velocity(Vx * colony::kStepsPerRealSecondAt1x * 100.0f, Vy * colony::kStepsPerRealSecondAt1x * 100.0f, 0.0f);
 
 	if (Velocity.Size2D() > PawnTurnSpeed)
@@ -840,10 +846,21 @@ USkeletalMeshComponent* ASimPawnActor::GetDecalMesh() const
 
 void ASimPawnActor::SetBodyHidden(bool bHide)
 {
-	SetActorHiddenInGame(bHide);
+	bBodyHidden = bHide;
+	const bool bAnyHidden = bBodyHidden || bCutAway;
+	SetActorHiddenInGame(bAnyHidden);
 	if (MetaHuman)
 	{
-		MetaHuman->SetActorHiddenInGame(bHide);
+		MetaHuman->SetActorHiddenInGame(bAnyHidden);
+	}
+}
+
+void ASimPawnActor::SetCutAway(bool bCut)
+{
+	if (bCut != bCutAway)
+	{
+		bCutAway = bCut;
+		SetBodyHidden(bBodyHidden);
 	}
 }
 

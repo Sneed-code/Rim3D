@@ -1386,6 +1386,10 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("building", c.building);
                 ar.value("bill", c.bill);
                 ar.value("index", c.index);
+            } else if constexpr (std::is_same_v<Type, ClimbCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.value("dx", c.dx);
+                ar.value("dy", c.dy);
             } else if constexpr (std::is_same_v<Type, AddOperationCommand>) {
                 ar.value("pawn", c.pawn);
                 ar.text("recipe", c.recipe);
