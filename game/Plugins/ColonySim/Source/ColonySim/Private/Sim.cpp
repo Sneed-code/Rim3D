@@ -364,6 +364,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     trade_->setEventLog(&events_);
     trade_->setTalents(talents_.get());
     trade_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
+    prisoners_->setTrade(trade_.get());
     jobs_->setPrisoners(prisoners_.get());
     quests_ = std::make_unique<QuestSystem>(*things_, map_, *raids_, *fighters_, *health_, *defs_, time_, rng_);
     quests_->setEventLog(&events_);
