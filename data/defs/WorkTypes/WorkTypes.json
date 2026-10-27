@@ -58,11 +58,11 @@
   },
   {
     "defName": "Smithing", "parent": "WorkTypeBase", "label": "smith", "naturalPriority": 470,
-    "relevantSkills": ["Crafting"], "workTags": ["ManualSkilled", "Crafting"], "tasks": ["DoBillsSmithy"]
+    "relevantSkills": ["Crafting"], "workTags": ["ManualSkilled", "Crafting"], "tasks": ["DoBillsSmithy", "RepairWeapons"]
   },
   {
     "defName": "Tailoring", "parent": "WorkTypeBase", "label": "tailor", "naturalPriority": 460,
-    "relevantSkills": ["Crafting"], "workTags": ["ManualSkilled", "Crafting"], "tasks": ["DoBillsTailor"]
+    "relevantSkills": ["Crafting"], "workTags": ["ManualSkilled", "Crafting"], "tasks": ["DoBillsTailor", "RepairApparel"]
   },
   {
     "defName": "Art", "parent": "WorkTypeBase", "label": "art", "naturalPriority": 450,

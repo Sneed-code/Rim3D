@@ -78,6 +78,7 @@ enum class JobStepKind : uint8_t {
     FeedWork,          // hand the carried food over
     ChatWork,          // talk to it
     RefuelWork,
+    GearWork,          // mend the carried gear or fit a part to it, beside the bench (GearJobs.cpp)
     HuntWork,       // walk up to the job's animal and shoot it dead (HuntJobs.cpp)
     DropCorpse,     // put the carried corpse down in the job's cell
     ButcherWork,    // cut the corpse up at the butcher table
@@ -138,6 +139,9 @@ constexpr JobStepKind kJobsStandBySteps[] = {JobStepKind::WalkToSpot, JobStepKin
 constexpr JobStepKind kJobsRefuelSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::CarryToCell,
                                             JobStepKind::RefuelWork};
 static_assert(kRefuelPickUpStep == 1, "the Refuel steps moved");
+constexpr JobStepKind kJobsGearSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::CarryToCell,
+                                          JobStepKind::GearWork};
+static_assert(kGearPickUpStep == 1, "the RepairGear steps moved");
 constexpr JobStepKind kJobsPartySteps[] = {JobStepKind::WalkToSpot, JobStepKind::PartyWork};
 constexpr JobStepKind kJobsHuntSteps[] = {JobStepKind::HuntWork};
 constexpr JobStepKind kJobsHaulCorpseSteps[] = {JobStepKind::TendGotoPatient, JobStepKind::LiftPawn, JobStepKind::CarryPawn,
@@ -202,6 +206,7 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::WardenInteract: return {kJobsChatSteps, static_cast<int>(std::size(kJobsChatSteps))};
         case JobType::StandBy: return {kJobsStandBySteps, static_cast<int>(std::size(kJobsStandBySteps))};
         case JobType::Refuel: return {kJobsRefuelSteps, static_cast<int>(std::size(kJobsRefuelSteps))};
+        case JobType::RepairGear: return {kJobsGearSteps, static_cast<int>(std::size(kJobsGearSteps))};
         case JobType::Hunt: return {kJobsHuntSteps, static_cast<int>(std::size(kJobsHuntSteps))};
         case JobType::HaulCorpse: return {kJobsHaulCorpseSteps, static_cast<int>(std::size(kJobsHaulCorpseSteps))};
         case JobType::Butcher: return {kJobsButcherSteps, static_cast<int>(std::size(kJobsButcherSteps))};
@@ -233,6 +238,7 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::FeedWork:
         case JobStepKind::ChatWork:
         case JobStepKind::RefuelWork:
+        case JobStepKind::GearWork:
         case JobStepKind::ButcherWork:
         case JobStepKind::RearmWork:
         case JobStepKind::PartyWork:
@@ -307,6 +313,7 @@ const char* jobTypeName(JobType type) {
         case JobType::WardenInteract: return "WardenInteract";
         case JobType::StandBy: return "StandBy";
         case JobType::Refuel: return "Refuel";
+        case JobType::RepairGear: return "RepairGear";
         case JobType::Hunt: return "Hunt";
         case JobType::HaulCorpse: return "HaulCorpse";
         case JobType::Butcher: return "Butcher";
@@ -517,6 +524,7 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
             return 1;
         case JobType::DeliverResources:
         case JobType::Refuel:
+        case JobType::RepairGear:
             out[0] = keyOf(JobTarget{job.thing, CellPos{}});
             out[1] = keyOf(JobTarget{job.site, CellPos{}}, 1);
             return 2;
@@ -1153,6 +1161,9 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::Refuel) {
         return failCheckRefuel(pawn, job, why);
     }
+    if (job.type == JobType::RepairGear) {
+        return failCheckGear(pawn, job, why);
+    }
     if (job.type == JobType::Hunt) {
         return failCheckHunt(pawn, job, why);
     }
@@ -1284,6 +1295,8 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return billWork(pawn, job, why);
         case JobStepKind::RefuelWork:
             return refuelWork(pawn, job, why);
+        case JobStepKind::GearWork:
+            return gearWork(pawn, job, why);
         case JobStepKind::OperateGoto:
             return operateGoto(pawn, job, why);
         case JobStepKind::OperatePickUp:
@@ -1869,12 +1882,14 @@ bool JobSystem::afterLoad(std::string& error) {
                 return false;
             }
         }
-        if (job.type == JobType::HaulToCell || job.type == JobType::DeliverResources || job.type == JobType::Refuel) {
+        if (job.type == JobType::HaulToCell || job.type == JobType::DeliverResources || job.type == JobType::Refuel ||
+            job.type == JobType::RepairGear) {
             const Carrying* carrying = reg.try_get<Carrying>(pawn);
             const bool carries = carrying != nullptr && carrying->thing == job.thing;
             const uint8_t pickUpStep = job.type == JobType::HaulToCell        ? kJobsHaulPickUpStep
                                        : job.type == JobType::DeliverResources ? kJobsDeliverPickUpStep
-                                                                               : kRefuelPickUpStep;
+                                                                               : job.type == JobType::Refuel ? kRefuelPickUpStep
+                                                                                                              : kGearPickUpStep;
             if (job.thing == kNoEntity || (job.step > pickUpStep) != carries) {
                 error = "the save has a carrying job that doesn't match what the pawn carries";
                 return false;
@@ -1884,7 +1899,8 @@ bool JobSystem::afterLoad(std::string& error) {
             error = "the save has a building job with nothing to work on";
             return false;
         }
-        if ((job.type == JobType::DeliverResources || job.type == JobType::Refuel) && job.site == kNoEntity) {
+        if ((job.type == JobType::DeliverResources || job.type == JobType::Refuel || job.type == JobType::RepairGear) &&
+            job.site == kNoEntity) {
             error = "the save has a delivery with nowhere to deliver";
             return false;
         }

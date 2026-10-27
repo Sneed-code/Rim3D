@@ -60,6 +60,8 @@ rest (place blueprint, designate, draft, actions) come with the tasks that build
 | `AddOutfitCommand{name}` | a new outfit allowing everything | empty or taken name |
 | `RemoveOutfitCommand{outfit}` | removes it; pawns on it go back to the first | no such outfit; the first one |
 | `StripCommand{thing, strip}` | marks a downed or dead pawn to be stripped of clothes and weapon by a colonist with Hauling work, or takes the mark off | not a pawn on the map; not downed or dead; nothing on it |
+| `RepairGearCommand{thing, repair}` | marks apparel or a weapon lying on the map for repair at a bench, or takes the mark off ([repair.md](repair.md)) | not apparel or a weapon; worn or carried; not damaged |
+| `FitUpgradeCommand{thing, part, fit}` | orders an upgrade part (a Things defName) fitted to a gun lying on the map at a machining table, or (`fit` false) cancels the gun's order ([repair.md](repair.md)) | not a gun on the map; unknown part; the part does not fit that gun; its slot is taken |
 | `SetScheduleCommand{pawn, hour, kind}` | the pawn's schedule for one hour (0 to 23): Anything, Work, Joy or Sleep ([needs.md](needs.md)) | the pawn has no schedule; bad hour |
 | `DesignateCommand{area, kind}` | marks rock (`Mine`), plants (`CutPlant`) or ripe plants (`HarvestPlant`) in the rectangle for work ([mining.md](mining.md)) | `kind` is None; nothing in `area` suits |
 | `CancelDesignationsCommand{area, kind}` | takes marks off, `None` for every kind, and ends the jobs on them | nothing marked in `area` |
@@ -131,6 +133,8 @@ starts, so read it after every step. Before the first step it holds what setting
 | `FrameStarted` | `thing` (the plan), `def` (the building), `cell` | a blueprint got its first materials and is a frame now; the plan itself came with a `ThingSpawned` |
 | `OutOfFuel` | `thing` (the building), `def`, `cell` | a building's fuel reached 0 ([fuel.md](fuel.md)) |
 | `Refueled` | `thing`, `def`, `cell`, `amount` (items in) | a colonist put fuel in a building |
+| `GearRepaired` | `thing` (pawn), `target` (the gear), `def`, `cell`, `amount` (hit points restored) | a colonist mended gear at a bench ([repair.md](repair.md)) |
+| `WeaponUpgraded` | `thing` (pawn), `target` (the gun), `def` (the part), `cell` | a colonist fitted an upgrade part to a gun |
 | `RecipeDone` | `thing` (the cook), `def` (the Recipes def), `target` (the stove), `cell`, `amount` (products made), `message` | one run of a bill is done; `message` is "bill finished" when a "do X times" bill reached 0 and went ([bills.md](bills.md)) |
 | `PawnInjured` | `thing`, `def` (the injury), `part`, `amount`, `cell` | a pawn got an injury (F1) |
 | `PawnPartLost` | `thing`, `def` (MissingBodyPart), `part`, `amount`, `cell` | a pawn lost a body part |

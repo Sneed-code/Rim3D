@@ -74,6 +74,7 @@ class Rooms;
 class TemperatureSystem;
 class SpoilageSystem;
 class CraftingSystem;
+class RepairSystem;
 class Things;
 class UpperFloors;
 class RoofCollapse;
@@ -313,6 +314,9 @@ public:
     // Quality, stuff and bench speed of what work tables make (docs/design/crafting.md).
     CraftingSystem& crafting() { return *crafting_; }
     const CraftingSystem& crafting() const { return *crafting_; }
+    // Repair of clothes, armor and weapons, and upgrade parts on guns (docs/design/repair.md).
+    RepairSystem& repair() { return *repair_; }
+    const RepairSystem& repair() const { return *repair_; }
     // The temperature in the open right now, in degrees Celsius: the biome's season, the hour of the
     // day and the random drift (Weather::temperatureAt).
     float outdoorTemperature() const;
@@ -480,6 +484,7 @@ private:
     std::unique_ptr<ExplosiveSystem> explosives_;  // after combat_ and health_
     std::unique_ptr<ApparelSystem> apparel_;  // after combat, which it uses
     std::unique_ptr<CraftingSystem> crafting_;  // after apparel_ and zones_
+    std::unique_ptr<RepairSystem> repair_;      // after apparel_ and combat_
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
     Rng rng_;

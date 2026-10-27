@@ -57,6 +57,7 @@ struct ThingView {
     float rot = 0.0f;       // items that rot: 0 fresh to 1 rotted away (docs/design/spoilage.md)
     int hitPoints = 0;   // 0 and 0 when the thing has no hit points
     int maxHitPoints = 0;
+    float durability = 1.0f;  // apparel: 0 to 1, capped by the hit-point share (docs/design/apparel-durability.md)
     // Pawns with a body: can't act (pain shock, unconscious, can't move), and dead. A dead pawn
     // stays where it fell. A full health report is `Sim::healthReport`.
     bool downed = false;
@@ -229,6 +230,13 @@ struct ThingView {
     uint32_t apparelCount = 0;
     int quality = -1;
     bool tainted = false;
+    // Repair and upgrades (docs/design/repair.md). Apparel and weapons on the map: whether a colonist is to repair them.
+    // Guns: the part ordered fitted (invalid for none) and the parts already fitted, `fittedCount` of them from
+    // Snapshot::fittedParts[firstFitted], in the order fitted.
+    bool repairMarked = false;
+    DefId fitOrder;
+    uint32_t firstFitted = 0;
+    uint32_t fittedCount = 0;
     // Resonance (docs/design/resonance.md). Pawns: steps left of a stun (0: not stunned), whether a numb or burden
     // is on them, and for a pawn winding up a power, the Powers def and the steps until it goes off.
     int stunnedFor = 0;
@@ -247,6 +255,7 @@ struct ApparelView {
     DefId stuff;      // invalid for none
     int quality = 2;
     float hitPointShare = 1.0f;  // 0 to 1
+    float durability = 1.0f;     // 0 to 1, capped by hitPointShare; 0 is tattered (docs/design/apparel-durability.md)
     bool tainted = false;
 };
 
@@ -572,6 +581,7 @@ struct Snapshot {
     std::vector<GoodwillView> goodwill;    // every faction's goodwill with the colony
     std::vector<QuestView> quests;         // offered, active and recently finished quests, by id
     std::vector<ApparelView> apparel;      // worn apparel, see ThingView
+    std::vector<DefId> fittedParts;        // upgrade parts fitted to guns, see ThingView
     std::vector<OutfitView> outfits;       // the outfit policies, by id
     WeatherView weather;
     std::vector<AttunedView> attuned;      // see AttunedView
