@@ -53,6 +53,7 @@ enum class JobType : uint8_t {
     SeekWarmth,        // walk to a warm room and stay until the cold has let go of the pawn (docs/design/temperature.md)
     EquipWeapon,       // walk to a weapon lying on the map and pick it up (docs/design/weapons.md)
     FeedPatient,       // fetch food, walk to a hungry downed colonist and feed it (docs/design/medicine.md)
+    MendWorn,          // walk to a tailor bench and mend a piece of one's own clothes while wearing it (apparel-durability.md)
 };
 
 COLONY_API const char* jobTypeName(JobType type);

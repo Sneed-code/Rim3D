@@ -59,8 +59,15 @@ apparel (all ours, `RepairRules`):
 - apparel with no stuff (flak vest, helmets): 1 unit of cloth (`apparelMaterialPerKg`) and 100 work
   (`apparelWorkPerKg`) per kg for a full repair.
 
-Weapons keep the P4 numbers (a quarter). A piece must still be put down to be marked (P4); a worn-out piece is marked
-like any damaged one.
+Weapons keep the P4 numbers (a quarter).
+
+**Mending what you wear** (job `MendWorn`, `JobSystem::thinkMendWorn` in `Private/GearJobs.cpp`). Clothes don't have to
+come off. A colonist whose worn piece is tattered (durability at or under `RepairRules.mendWornAtOrBelow`, 0), or that
+the player marked with `RepairGearCommand` while it is worn, walks to the nearest running tailor bench that has the
+material within 12 m, and mends it there while wearing it: the same work, cost and speed as the P4 job, by its own
+Crafting skill. It is part of changing clothes (`thinkApparel`, after the outfit checks), so every colonist does it,
+whatever its work types, and it waits the usual 1,200 steps when there is no bench or material. Other gear (weapons, and
+clothes lying about) still goes through the P4 job by a tailor or smith.
 
 ## Save and hash
 
@@ -69,5 +76,5 @@ every piece fully durable. Durability is in the state hash.
 
 ## Not yet
 
-- Colonists taking off a tattered piece by themselves to have it mended, or a "repair everything worn" order.
+- A "repair everything under X%" setting per outfit (the line is one number for everyone, in the data).
 - A tattered look (sneed: not for now).

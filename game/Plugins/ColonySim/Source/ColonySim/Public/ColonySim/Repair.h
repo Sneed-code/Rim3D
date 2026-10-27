@@ -71,6 +71,9 @@ struct RepairNumbers {
     float apparelWorkPerKg = 100.0f;
     float apparelMaterialShare = 0.1f;
     float apparelMaterialPerKg = 1.0f;
+    // A worn piece at or under this durability (0: tattered) is mended by its wearer at a tailor bench while worn,
+    // without a mark; a marked worn piece is mended at any durability (docs/design/apparel-durability.md).
+    float mendWornAtOrBelow = 0.0f;
     std::string weaponMaterial = "Steel";   // for a weapon not made of a stuff
     std::string apparelMaterial = "Cloth";  // for apparel not made of a stuff
     float materialRadius = 12.0f;   // metres round the bench the material and the part are taken from
@@ -88,8 +91,9 @@ public:
     const UpgradeSpec* upgrade(DefId part) const;
 
     // ---- Commands ----------------------------------------------------------------------------
-    // Marks an item lying on the map for repair, or takes the mark off. Fails for a thing that is not apparel or a
-    // weapon, one that is worn or carried, and one that is not damaged (turning the mark off never fails).
+    // Marks an item lying on the map, or apparel someone wears (its wearer mends it at a bench while wearing it), for
+    // repair, or takes the mark off. Fails for a thing that is not apparel or a weapon, a carried or held weapon, and
+    // one that is not damaged (turning the mark off never fails).
     bool markRepair(Entity item, bool on, std::string& error);
     // Orders a part (a Things defName) fitted to a gun lying on the map, or with `on` false cancels the order.
     // Fails if it is not a gun, not on the map, the part is unknown, does not fit that sort of gun, or its slot
