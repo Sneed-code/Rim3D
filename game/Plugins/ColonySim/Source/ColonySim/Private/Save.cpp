@@ -51,6 +51,7 @@
 #include "ColonySim/Social.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Talents.h"
+#include "ColonySim/Resonance.h"
 #include "ColonySim/Trade.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
@@ -343,6 +344,18 @@ struct SaveApparel {
     int64_t nextCheck = 0;
 };
 
+// X2's resonance (section "resonance"): an attuned pawn and a cast under way, their powers by defName.
+struct SaveAttunement {
+    int level = 1;
+    float strain = 0.0f;
+    float focus = 0.0f;
+    std::vector<std::string> powers;
+};
+struct SaveCasting {
+    std::string power;
+    Casting c;
+};
+
 struct SaveEntity {
     uint32_t id = 0;
     std::optional<SaveThing> thing;
@@ -403,6 +416,10 @@ struct SaveEntity {
     std::optional<WeaponSwitch> weaponSwitch;   // section "weapons"
     std::optional<Turret> turret;           // section "defense" (F11)
     std::optional<Trap> trap;               // section "defense" (F11)
+    std::optional<SaveAttunement> attunement;   // section "resonance" (X2)
+    std::optional<SaveCasting> casting;         // section "resonance"
+    std::optional<Stunned> stunned;             // section "resonance"
+    std::optional<ResonanceEffects> resonanceFx;  // section "resonance"
     std::optional<Prisoner> prisoner;       // section "prisoners" (C22)
     std::optional<PrisonBed> prisonBed;     // section "prisoners" (C22)
     std::optional<Fuel> fuel;               // "fuel" section (C11)
@@ -1093,6 +1110,18 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.text("action", c.action);
         ar.value("quest", c.quest);
         ar.text("kind", c.kind);
+    } else if constexpr (std::is_same_v<Type, AttuneCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("level", c.level);
+    } else if constexpr (std::is_same_v<Type, LearnPowerCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("power", c.power);
+    } else if constexpr (std::is_same_v<Type, CastPowerCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("power", c.power);
+        ar.value("target", c.target);
+        ar.group("cell", [&] { saveCell(ar, c.cell); });
+        ar.value("player", c.player);
     } else {
         static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
     }
@@ -2102,6 +2131,34 @@ void saveThrowerPart(Ar& ar, SaveThrower& st) {
     ar.value("aimX", st.t.aimX);
     ar.value("aimY", st.t.aimY);
     ar.value("player", st.t.player);
+}
+
+template <typename Ar>
+void saveAttunementPart(Ar& ar, SaveAttunement& a) {
+    ar.value("level", a.level);
+    ar.require(a.level >= 1 && a.level <= 99, "the save file has a bad attunement level");
+    ar.value("strain", a.strain);
+    ar.value("focus", a.focus);
+    ar.require(a.strain >= 0.0f && a.strain < 1e6f && a.focus >= 0.0f && a.focus <= 1.0f, "the save file has impossible strain or focus");
+    ar.list("powers", a.powers, [&](std::string& name) { ar.text(nullptr, name); });
+}
+
+template <typename Ar>
+void saveCastingPart(Ar& ar, SaveCasting& s) {
+    ar.text("power", s.power);
+    ar.value("target", s.c.target);
+    ar.group("cell", [&] { saveCell(ar, s.c.cell); });
+    ar.value("stepsLeft", s.c.stepsLeft);
+    ar.value("player", s.c.player);
+}
+
+template <typename Ar>
+void saveResonanceFxPart(Ar& ar, ResonanceEffects& fx) {
+    ar.value("numbSteps", fx.numbSteps);
+    ar.value("painFactor", fx.painFactor);
+    ar.value("burdenSteps", fx.burdenSteps);
+    ar.value("movingMax", fx.movingMax);
+    ar.require(fx.numbSteps >= 0 && fx.burdenSteps >= 0, "the save file has a resonance effect with negative time");
 }
 
 template <typename Ar>
@@ -3135,6 +3192,12 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.list("home", d.fire.home, [&](int& cell) { ar.value("cell", cell); });
         saveParts(ar, "burning", e, &SaveEntity::burning, [&](Burning& b) { ar.value("until", b.until); });
     });
+    ar.section("resonance", 1, [&] {
+        saveParts(ar, "attunement", e, &SaveEntity::attunement, [&](SaveAttunement& a) { saveAttunementPart(ar, a); });
+        saveParts(ar, "casting", e, &SaveEntity::casting, [&](SaveCasting& c) { saveCastingPart(ar, c); });
+        saveParts(ar, "stunned", e, &SaveEntity::stunned, [&](Stunned& s) { ar.value("stepsLeft", s.stepsLeft); });
+        saveParts(ar, "effects", e, &SaveEntity::resonanceFx, [&](ResonanceEffects& fx) { saveResonanceFxPart(ar, fx); });
+    });
     ar.section("prisoners", 2, [&] {
         saveParts(ar, "prisoner", e, &SaveEntity::prisoner, [&](Prisoner& p) {
             ar.value("mode", p.mode);
@@ -3623,6 +3686,22 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const Trap* trap = reg.try_get<Trap>(e)) {
             out.trap = *trap;
+        }
+        if (const Attunement* a = reg.try_get<Attunement>(e)) {
+            SaveAttunement saved{a->level, a->strain, a->focus, {}};
+            for (const DefId p : a->powers) {
+                saved.powers.push_back(sim.defs_->get(p).defName());
+            }
+            out.attunement = std::move(saved);
+        }
+        if (const Casting* c = reg.try_get<Casting>(e)) {
+            out.casting = SaveCasting{sim.defs_->get(c->power).defName(), *c};
+        }
+        if (const Stunned* s = reg.try_get<Stunned>(e)) {
+            out.stunned = *s;
+        }
+        if (const ResonanceEffects* fx = reg.try_get<ResonanceEffects>(e)) {
+            out.resonanceFx = *fx;
         }
         if (const Melee* melee = reg.try_get<Melee>(e)) {
             out.melee = *melee;
@@ -4295,6 +4374,33 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         } else if (e.footprint && e.thing && sim.defs_->get(reg.get<Thing>(entity).def).has("trap")) {
             reg.emplace<Trap>(entity);
         }
+        if (e.attunement) {
+            Attunement a;
+            a.level = e.attunement->level;
+            a.strain = e.attunement->strain;
+            a.focus = e.attunement->focus;
+            for (const std::string& name : e.attunement->powers) {
+                const DefId power = sim.defs_->idOf("Powers", name);
+                if (power.valid()) {  // a power the data files dropped is forgotten
+                    a.powers.push_back(power);
+                }
+            }
+            std::sort(a.powers.begin(), a.powers.end(), [](DefId x, DefId y) { return x.value < y.value; });
+            reg.emplace<Attunement>(entity, std::move(a));
+        }
+        if (e.casting) {
+            Casting c = e.casting->c;
+            c.power = sim.defs_->idOf("Powers", e.casting->power);
+            if (c.power.valid()) {
+                reg.emplace<Casting>(entity, c);
+            }
+        }
+        if (e.stunned) {
+            reg.emplace<Stunned>(entity, *e.stunned);
+        }
+        if (e.resonanceFx) {
+            reg.emplace<ResonanceEffects>(entity, *e.resonanceFx);
+        }
     }
     sim.animals_->restore(d.animals);
     if (!sim.husbandry_->restore(d.husbandry, error)) {
@@ -4341,7 +4447,8 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if ((e.worker && (!exists(e.worker->job.thing) || !exists(e.worker->job.chair) ||
                           !exists(e.worker->job.site))) ||
-            (e.carrying && !exists(e.carrying->thing)) || !gearExists || (e.equippedBy && !exists(e.equippedBy->pawn))) {
+            (e.carrying && !exists(e.carrying->thing)) || !gearExists || (e.equippedBy && !exists(e.equippedBy->pawn)) ||
+            (e.casting && !exists(e.casting->c.target))) {
             error = "the save has a thing that names another thing that doesn't exist";
             return false;
         }

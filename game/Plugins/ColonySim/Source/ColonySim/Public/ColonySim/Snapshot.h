@@ -226,6 +226,13 @@ struct ThingView {
     uint32_t apparelCount = 0;
     int quality = -1;
     bool tainted = false;
+    // Resonance (docs/design/resonance.md). Pawns: steps left of a stun (0: not stunned), whether a numb or burden
+    // is on them, and for a pawn winding up a power, the Powers def and the steps until it goes off.
+    int stunnedFor = 0;
+    bool numbed = false;
+    bool burdened = false;
+    DefId castPower;
+    int castStepsLeft = 0;
     // Pawns in a mental break (docs/design/mental-breaks.md): its MentalBreaks def, invalid when not in one.
     DefId mentalBreak;
 };
@@ -500,6 +507,16 @@ struct TalentView {
     std::vector<TalentRankView> ranks;  // in Talents def order
 };
 
+// An attuned pawn (docs/design/resonance.md). One entry per attuned pawn, in id order.
+struct AttunedView {
+    Entity pawn = kNoEntity;
+    int level = 0;
+    float strain = 0.0f;       // RimWorld's neural heat
+    float strainLimit = 0.0f;
+    float focus = 0.0f;        // RimWorld's psyfocus, 0 to 1
+    std::vector<DefId> powers;  // the Powers defs it knows
+};
+
 struct Snapshot {
     int64_t gameSeconds = 0;  // Sim::time().seconds when it was written
     int mapWidth = 0;
@@ -553,6 +570,7 @@ struct Snapshot {
     std::vector<ApparelView> apparel;      // worn apparel, see ThingView
     std::vector<OutfitView> outfits;       // the outfit policies, by id
     WeatherView weather;
+    std::vector<AttunedView> attuned;      // see AttunedView
     ShipView ship;
     NarratorView narrator;
 

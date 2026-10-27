@@ -280,6 +280,9 @@ bool ExplosiveSystem::throwAt(Entity pawn, DefId item, Entity target, float x, f
     if (reg.all_of<KnockedDown>(pawn)) {
         return fail("that pawn is knocked down");
     }
+    if (reg.all_of<Stunned>(pawn)) {
+        return fail("that pawn is stunned");
+    }
     if (const Shooter* shooter = reg.try_get<Shooter>(pawn);
         shooter != nullptr && (shooter->phase == ShotPhase::Aiming || shooter->phase == ShotPhase::Firing)) {
         return fail("that pawn is shooting");
@@ -675,7 +678,7 @@ void ExplosiveSystem::step(Rng& rng) {
             continue;
         }
         // Winding up: a pawn that can't throw drops the grenade back on its belt.
-        if (!things_.spawned(pawn) || health_.incapacitated(pawn) || reg.all_of<KnockedDown>(pawn)) {
+        if (!things_.spawned(pawn) || health_.incapacitated(pawn) || reg.any_of<KnockedDown, Stunned>(pawn)) {
             t.phase = ThrowPhase::Ready;
             t.stepsLeft = 0;
             continue;
