@@ -443,3 +443,33 @@ TEST_CASE("Stairs: colonists haul to a stockpile upstairs, up the stairs, and wa
     CHECK(loaded.sim->zones().zoneAt(CellPos{11, 12, 1}) == zone);
     CHECK(loaded.sim->stateHash() == sim->stateHash());
 }
+
+TEST_CASE("Stairs: an upper corner wall whose two sides stand is built from the ground beside it") {
+    auto sim = stairsSim();
+    for (int y = 10; y <= 16; ++y) {
+        for (int x = 10; x <= 16; ++x) {
+            if (x == 10 || x == 16 || y == 10 || y == 16) {
+                STAIRS_REQUIRE(sim->things().spawn("Wall", CellPos{x, y, 0}) != kNoEntity);
+            }
+        }
+    }
+    sim->rooms().update();
+    for (int y = 10; y <= 16; ++y) {
+        for (int x = 10; x <= 16; ++x) {
+            STAIRS_REQUIRE(sim->upperFloors().lay(CellPos{x, y, 1}));
+        }
+    }
+    STAIRS_REQUIRE(sim->things().spawn("Wall", CellPos{11, 10, 1}) != kNoEntity);
+    STAIRS_REQUIRE(sim->things().spawn("Wall", CellPos{10, 11, 1}) != kNoEntity);
+    std::string error;
+    const DefDatabase& defs = sim->defs();
+    STAIRS_REQUIRE(sim->construction().placeBlueprint(defs.idOf("Things", "Wall"), defs.idOf("Things", "WoodLog"),
+                                                      CellPos{10, 10, 1}, Rot4::North, error) != kNoEntity);
+    const Entity site = sim->construction().siteAt(CellPos{10, 10, 1});
+    STAIRS_REQUIRE(site != kNoEntity);
+    CellPos stand;
+    STAIRS_REQUIRE(sim->construction().workCell(sim->things().registry().get<ConstructionSite>(site).rect(), CellPos{20, 5, 0}, stand));
+    CHECK(stand.level == 0);
+    CHECK(std::abs(stand.x - 10) <= 1);
+    CHECK(std::abs(stand.y - 10) <= 1);
+}
