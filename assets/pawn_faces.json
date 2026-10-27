@@ -1,0 +1,36 @@
+{
+  "comment": "V2 faces and hair (docs/design/looks.md). The PawnFaces commandlet reads this: face shape morphs from the MetaHuman Creator's preset faces (engine plugin MetaHumanCharacter, Optional/Presets), and copies of its grooms (Optional/Grooms/GroomAssets) for each of the sim's hair styles and beards (LooksRules in data/defs/Rules/Rules.json). Groom names are the plugin's; style names are ours. Bald and None draw no groom.",
+  "presets": {
+    "female": ["Ada", "Aera", "Aoi", "Asha", "Celeste", "Etta", "Grace", "Jelena", "Lani", "Sook-ja", "Sunita", "Tuya", "Vivian", "Zuri"],
+    "male": ["Bo", "Bruce", "Cameron", "Dominic", "Isaiah", "Jorge", "Kelvin", "Lorenzo", "Mateo", "Mikel", "Omari", "Orlando", "Trey", "Victor", "Walter"]
+  },
+  "hair": {
+    "Short": "Hair_S_Casual",
+    "Buzz": "Hair_S_BuzzCut",
+    "Crew": "Hair_S_Clean",
+    "SlickBack": "Hair_S_SlickBack",
+    "Mohawk": "Hair_M_Mohawk",
+    "Bald": "",
+    "Medium": "Hair_M_SideSweptFringe",
+    "Bob": "Hair_M_BobStraight",
+    "Long": "Hair_L_Straight",
+    "Ponytail": "Hair_S_LowPonytail",
+    "Bun": "Hair_S_UpdoBuns",
+    "Braids": "Hair_S_UpdoBraids",
+    "Curly": "Hair_M_BobCurly",
+    "Afro": "Hair_L_AfroCurly"
+  },
+  "beards": {
+    "None": {"beard": "", "moustache": ""},
+    "Stubble": {"beard": "Beard_S_Stubble", "moustache": "Mustache_S_Stubble"},
+    "Moustache": {"beard": "", "moustache": "Mustache_S_Full"},
+    "Goatee": {"beard": "Goatee_M_Pointed", "moustache": "Mustache_S_Full"},
+    "Short": {"beard": "Beard_S_Full", "moustache": "Mustache_S_Full"},
+    "Full": {"beard": "Beard_L_Full", "moustache": "Mustache_L_Full"},
+    "Long": {"beard": "Beard_L_Messy", "moustache": "Mustache_L_Messy"}
+  },
+  "eyebrows": {
+    "female": ["Eyebrows_M_Fine", "Eyebrows_M_Thin", "Eyebrows_M_SlightArch", "Eyebrows_M_Natural", "Eyebrows_S_FlatThin"],
+    "male": ["Eyebrows_M_Natural", "Eyebrows_M_Full", "Eyebrows_M_Dense", "Eyebrows_M_Thick", "Eyebrows_M_Messy", "Eyebrows_M_FlatThick"]
+  }
+}
