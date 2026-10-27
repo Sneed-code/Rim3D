@@ -58,6 +58,7 @@ enum class JobStepKind : uint8_t {
     BillWork,
     BillFinish,
     Play,  // recreation: stay for the activity's time (RecreationJobs.cpp)
+    DeepWork,      // scanner or drill: one second of work (DeepJobs.cpp)
     ResearchWork,  // research: add points to the current project (ResearchJobs.cpp)
     CleanWork,
     TendMedicine,      // medicine jobs (MedicineJobs.cpp)
@@ -114,6 +115,7 @@ constexpr JobStepKind kJobsDoBillSteps[] = {JobStepKind::GotoThing, JobStepKind:
 static_assert(kDoBillPickUpStep == 1 && kDoBillDepositStep == 3, "the DoBill steps moved");
 constexpr JobStepKind kJobsRecreateSteps[] = {JobStepKind::WalkToSpot, JobStepKind::Play};
 constexpr JobStepKind kJobsResearchSteps[] = {JobStepKind::GotoCell, JobStepKind::ResearchWork};
+constexpr JobStepKind kJobsDeepSteps[] = {JobStepKind::GotoCell, JobStepKind::DeepWork};
 constexpr JobStepKind kJobsBedRestSteps[] = {JobStepKind::WalkToSpot, JobStepKind::BedRestLie};
 constexpr JobStepKind kJobsTendSteps[] = {JobStepKind::TendMedicine, JobStepKind::TendPickUp, JobStepKind::TendGotoPatient,
                                           JobStepKind::TendWork};
@@ -209,6 +211,7 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::Party: return {kJobsPartySteps, static_cast<int>(std::size(kJobsPartySteps))};
         case JobType::SeekShelter: return {kJobsShelterSteps, static_cast<int>(std::size(kJobsShelterSteps))};
         case JobType::Operate: return {kJobsOperateSteps, static_cast<int>(std::size(kJobsOperateSteps))};
+        case JobType::DeepWork: return {kJobsDeepSteps, static_cast<int>(std::size(kJobsDeepSteps))};
     }
     return {nullptr, 0};
 }
@@ -226,6 +229,7 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::PlantWork:
         case JobStepKind::BillWork:
         case JobStepKind::ResearchWork:
+        case JobStepKind::DeepWork:
         case JobStepKind::CleanWork:
         case JobStepKind::ApparelWork:
         case JobStepKind::StripWork:
@@ -314,6 +318,7 @@ const char* jobTypeName(JobType type) {
         case JobType::Party: return "Party";
         case JobType::SeekShelter: return "SeekShelter";
         case JobType::Operate: return "Operate";
+        case JobType::DeepWork: return "DeepWork";
     }
     return "?";
 }
@@ -554,6 +559,7 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
             out[0] = keyOf(JobTarget{kNoEntity, job.cell});
             return 1;
         case JobType::Research:
+        case JobType::DeepWork:
             out[0] = keyOf(JobTarget{job.site, CellPos{}});
             return 1;
         case JobType::BedRest:
@@ -1120,6 +1126,9 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::Research) {
         return failCheckResearch(pawn, job, why);
     }
+    if (job.type == JobType::DeepWork) {
+        return failCheckDeepWork(pawn, job, why);
+    }
     if (job.type == JobType::CleanFilth) {
         return failCheckClean(pawn, job, why);
     }
@@ -1300,6 +1309,8 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return play(pawn, job, why);
         case JobStepKind::ResearchWork:
             return researchWork(pawn, job, why);
+        case JobStepKind::DeepWork:
+            return deepWork(pawn, job, why);
         case JobStepKind::CleanWork:
             return cleanWork(pawn, job, why);
         case JobStepKind::TendMedicine:

@@ -136,6 +136,8 @@ enum class EventType : uint8_t {
     OperationDone,      // a doctor finished an operation (H3, docs/design/surgery.md): `thing` the doctor, `target` the patient, `def` the Recipes def, `part` the body part, `amount` the success chance, `message` "success", "failed" or "the patient died"
     DrugBinge,             // a pawn started (`message` "start", `amount` hours) or ended ("end") a drug binge: `thing` the pawn, `def` the Chemicals def
     ChemicalDamage,        // heavy use hurt an organ for good: `thing` the pawn, `def` the Chemicals def (invalid: a major overdose), `message` the part ("liver", "heart"...), `amount` hit points lost
+    DeepDepositFound,      // a scanner found deep resources (docs/design/deep-mining.md): `def` the item, `cell` the middle of the lump, `count` its cells, `thing` the scanner (none for the long-range hook)
+    DeepPortionDrilled,    // a deep drill finished a portion: `thing` the drill, `def` what came up (a rock chunk if nothing is under it), `amount` how many, `cell` where it was taken from
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -187,6 +189,8 @@ enum class PawnAction : uint8_t {
     Rearm,        // started setting the sprung trap `target` again (once per job; the work goes on until its JobEnded)
     Punch,        // swung a fist at `target`, a pawn or a thing (a tantrum or berserk break: docs/design/mental-breaks.md)
     Operate,      // started an operation on `target`, a patient in bed (once per job; the work goes on until its JobEnded)
+    Scan,         // started working a ground-penetrating scanner `target` (once per job; the work goes on until its JobEnded)
+    Drill,        // started working a deep drill `target` (once per job; the work goes on until its JobEnded)
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
