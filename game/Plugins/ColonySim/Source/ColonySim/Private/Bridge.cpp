@@ -404,6 +404,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Refuel: return "Refuel";
         case PawnAction::Butcher: return "Butcher";
         case PawnAction::DropCorpse: return "DropCorpse";
+        case PawnAction::Rearm: return "Rearm";
         case PawnAction::Punch: return "Punch";
         case PawnAction::Operate: return "Operate";
         case PawnAction::Scan: return "Scan";

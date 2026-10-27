@@ -40,9 +40,9 @@
     "costs": { "Steel": 25 },
     "visual": { "parts": [{"shape": "box", "size": [0.9, 0.9, 0.05], "color": [0.3, 0.3, 0.32]}, {"shape": "cylinder", "radius": 0.04, "height": 0.2, "at": [-0.25, -0.25, 0.05], "color": [0.55, 0.55, 0.58]}, {"shape": "cylinder", "radius": 0.04, "height": 0.2, "at": [0.25, 0.25, 0.05], "color": [0.55, 0.55, 0.58]}, {"shape": "cylinder", "radius": 0.04, "height": 0.2, "at": [-0.25, 0.25, 0.05], "color": [0.55, 0.55, 0.58]}, {"shape": "cylinder", "radius": 0.04, "height": 0.2, "at": [0.25, -0.25, 0.05], "color": [0.55, 0.55, 0.58]}] },
     "stats": { "maxHitPoints": 40, "workToBuild": 900, "flammability": 1.0 },
-    "trap": { "hits": 5, "damage": 100, "damageDef": "Stab", "damageFactorLow": 0.7, "damageFactorHigh": 1.3, "destroyChance": 0.1, "rearmable": true },
+    "trap": { "hits": 5, "damage": 100, "damageDef": "Stab", "damageFactorLow": 0.7, "damageFactorHigh": 1.3, "destroyChance": 0.1, "armorPenetration": 0.5, "rearmSeconds": 13, "rearmable": true },
     "unverified": ["costs", "stats", "trap.hits", "trap.damage", "trap.damageFactorLow", "trap.damageFactorHigh"],
-    "ours": ["trap.destroyChance", "visual"]
+    "ours": ["trap.destroyChance", "trap.armorPenetration", "trap.rearmSeconds", "visual"]
   },
   {
     "defName": "TrapIEDExplosive", "parent": "BuildingBase", "label": "IED trap", "source": "RimWorld wiki",

@@ -51,9 +51,15 @@ A command that can't be done fails with a reason in plain words (a `CommandFaile
 - **Haul** makes the animal a worker of the job system with only the Hauling work type, so it carries
   things to stockpiles while it is awake, over 30% fed and unhurt (`AnimalSystem::mayWork`). Releasing it,
   or its death, takes the worker off again.
-- **Obedience, Release and Rescue** only count steps in N3. What they do (come when called, go wild
-  on command, carry a downed colonist to a bed) comes with the drafted-animal and rescue work later
-  (BACKLOG).
+- **Rescue** makes the animal a worker with only the Doctor work type, and for an animal that means the
+  Rescue task alone: it lifts a downed colonist no bed holds and carries it to a free bed, like a doctor
+  does. It never tends (`TendPatientsGiver` skips animals). It works under the same conditions as a hauler
+  (`AnimalSystem::mayWork`); an animal with both Haul and Rescue does both.
+- **Obedience**: while any colonist is drafted, the animal keeps within 4 m of the nearest one (within 40 m
+  of it; numbers ours), over its zone and food walks except when hungry. Undrafted, it returns to its own
+  life. No master is stored, so there is no new save data.
+- **Release** only counts steps: the `MarkAnimal` `Release` command (go wild) works on any tame animal
+  already. "Come when called" is not done.
 
 ## Zones and pens
 

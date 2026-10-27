@@ -184,6 +184,7 @@ enum class PawnAction : uint8_t {
     Refuel,       // started putting fuel into `target`, a building (once per refuel job; the work goes on until its JobEnded)
     Butcher,      // started cutting up `target`, a corpse (once per job; the work goes on until its JobEnded)
     DropCorpse,   // put the carried `target`, a corpse, down in `cell`
+    Rearm,        // started setting the sprung trap `target` again (once per job; the work goes on until its JobEnded)
     Punch,        // swung a fist at `target`, a pawn or a thing (a tantrum or berserk break: docs/design/mental-breaks.md)
     Operate,      // started an operation on `target`, a patient in bed (once per job; the work goes on until its JobEnded)
     Scan,         // started working a ground-penetrating scanner `target` (once per job; the work goes on until its JobEnded)
