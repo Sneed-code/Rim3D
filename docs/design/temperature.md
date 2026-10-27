@@ -111,6 +111,15 @@ listed start at the outdoor temperature. Section `health` goes to version 2: a l
 `TemperatureSystem` brings itself up to date with the rooms (`syncRooms`) before it saves, hashes
 or answers, so a save made between steps loads back the same.
 
+## Thermostats
+
+A building whose def has `heatPusher.adjustable` (the heater and the cooler) holds its room at its own
+target instead of the def's `maxTemp` / `minTemp`. `SetThermostatCommand{building, celsius, clear}`
+sets it (`TemperatureSystem::setThermostat`), refused for a thing without a thermostat or a target
+outside `thermostatRangeC` in the rules (-50 to 50, ours); `clear` goes back to the def's limit.
+`thermostat(building)` answers the target in force. They save in section `thermostats` (version 1)
+and are in the state hash only when some are set. A destroyed building's setting is dropped. The
+panel that edits it is U19.
 ## Seeking shelter
 
 A colonist whose cell is outside its safe range (`TemperatureSystem::outsideSafeRange`) looks for shelter, as
@@ -127,5 +136,3 @@ the job. Other work jobs run to their end and the pawn looks when the next think
   insulation (stone walls hold better than wood) isn't separate from the wall conductance.
 - **Food rot, crops, plants dying of frost and heat stroke in animals' habits** read the room
   temperature or `outdoor()` in their own tasks (C16, D4's crop numbers).
-- **Thermostat settings**: heaters and coolers use their def's limit; a per-building target is for
-  the panels (U19).
