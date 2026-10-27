@@ -568,3 +568,80 @@ TEST_CASE("Temperature: three days of deep winter, a heated room keeps its peopl
     CHECK(frozen.dead);
     CHECK(frozen.cause == DeathCause::Hypothermia);
 }
+
+TEST_CASE("Temperature: a thermostat sets what a heater or cooler holds, and it saves and replays") {
+    const auto make = [](Entity& heater, Entity& cooler) {
+        auto sim = tempSim(-10.0f, 48, false);
+        sim->temperature().setSourceRunning([](Entity) { return true; });
+        tempRing(*sim, 10, 10, 16, 16);
+        tempRing(*sim, 16, 10, 22, 16);
+        heater = sim->things().spawn("Heater", CellPos{12, 12, 0});
+        cooler = sim->things().spawn("Cooler", CellPos{19, 12, 0});
+        sim->rooms().update();
+        return sim;
+    };
+    Entity heater = kNoEntity;
+    Entity cooler = kNoEntity;
+    auto sim = make(heater, cooler);
+    TEMP_REQUIRE(heater != kNoEntity && cooler != kNoEntity);
+
+    // Without a setting the def's limits hold: the heater 21, the cooler 10.
+    CHECK_FALSE(sim->temperature().hasThermostat(heater));
+    CHECK(sim->temperature().thermostat(heater) == 21.0f);
+    CHECK(sim->temperature().thermostat(cooler) == 10.0f);
+    tempClock = 0;
+    tempHours(*sim, 12.0);
+    CHECK(tempAt(*sim, 13, 13) == doctest::Approx(21.0f).epsilon(0.02));
+
+    // A lower target holds the room there (the heater stops, the room drifts down to it, the heater keeps it).
+    sim->submit(SetThermostatCommand{heater, 15.0f, false});
+    sim->step();
+    CHECK(sim->temperature().thermostat(heater) == 15.0f);
+    tempHours(*sim, 24.0);
+    CHECK(tempAt(*sim, 13, 13) == doctest::Approx(15.0f).epsilon(0.03));
+    // A higher one than the def's works too.
+    sim->submit(SetThermostatCommand{heater, 26.0f, false});
+    sim->step();
+    tempHours(*sim, 12.0);
+    CHECK(tempAt(*sim, 13, 13) == doctest::Approx(26.0f).epsilon(0.02));
+    // The cooler takes a target as well: set to 18 in a 20 degree outdoors it pulls the room down to it.
+    sim->setOutdoorOverride(30.0f);
+    sim->submit(SetThermostatCommand{cooler, 18.0f, false});
+    sim->step();
+    tempHours(*sim, 30.0);
+    CHECK(tempAt(*sim, 19, 13) == doctest::Approx(18.0f).epsilon(0.03));
+
+    // Refusals: no thermostat on a wall or a campfire, a target out of range, not a number.
+    const Entity wall = sim->map().buildingAt(CellPos{10, 10, 0});
+    const Entity campfire = sim->things().spawn("Campfire", CellPos{30, 30, 0});
+    std::string why;
+    CHECK_FALSE(sim->temperature().setThermostat(wall, 20.0f, &why));
+    CHECK_FALSE(why.empty());
+    CHECK_FALSE(sim->temperature().setThermostat(campfire, 20.0f));
+    CHECK_FALSE(sim->temperature().setThermostat(heater, 80.0f));
+    CHECK_FALSE(sim->temperature().setThermostat(heater, std::nanf("")));
+    CHECK(sim->temperature().thermostat(heater) == 26.0f);
+
+    // Clearing goes back to the def's limit.
+    sim->submit(SetThermostatCommand{heater, 0.0f, true});
+    sim->step();
+    CHECK_FALSE(sim->temperature().hasThermostat(heater));
+    CHECK(sim->temperature().thermostat(heater) == 21.0f);
+    sim->submit(SetThermostatCommand{heater, 24.0f, false});
+    sim->step();
+
+    // A save loads back with the thermostats and the same hash; a wall-less heater that is destroyed forgets its setting.
+    const std::vector<uint8_t> bytes = saveSim(*sim);
+    SaveLoadResult loaded = loadSim(bytes, tempDefs());
+    TEMP_REQUIRE(loaded.error.empty());
+    TEMP_REQUIRE(loaded.sim != nullptr);
+    loaded.sim->setOutdoorOverride(30.0f);
+    CHECK(loaded.sim->temperature().thermostat(heater) == 24.0f);
+    CHECK(loaded.sim->temperature().thermostat(cooler) == 18.0f);
+    CHECK(loaded.sim->stateHash() == sim->stateHash());
+    CHECK(saveSim(*loaded.sim) == bytes);
+    CHECK(saveToJson(*sim).find("\"thermostats\"") != std::string::npos);
+    sim->things().destroy(heater);
+    sim->step();
+    CHECK(sim->temperature().thermostats().size() == 1);
+}

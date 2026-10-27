@@ -227,8 +227,63 @@
       { "color": [0.55, 0.22, 0.09], "weight": 8 },
       { "color": [0.62, 0.60, 0.58], "weight": 7 }
     ],
+    "faceGenderShift": { "male": 0.08, "female": -0.08 },
+    "eyeColors": [
+      { "color": [0.17, 0.10, 0.06], "weight": 40 },
+      { "color": [0.30, 0.19, 0.09], "weight": 20 },
+      { "color": [0.25, 0.24, 0.10], "weight": 10 },
+      { "color": [0.18, 0.30, 0.17], "weight": 8 },
+      { "color": [0.22, 0.34, 0.52], "weight": 15 },
+      { "color": [0.42, 0.45, 0.47], "weight": 7 }
+    ],
+    "hairStyles": [
+      { "name": "Short", "male": 25, "female": 5 },
+      { "name": "Buzz", "male": 15, "female": 2 },
+      { "name": "Crew", "male": 15, "female": 2 },
+      { "name": "SlickBack", "male": 10, "female": 1 },
+      { "name": "Mohawk", "male": 3, "female": 1 },
+      { "name": "Bald", "male": 6, "female": 0.5 },
+      { "name": "Medium", "male": 10, "female": 18 },
+      { "name": "Bob", "male": 1, "female": 16 },
+      { "name": "Long", "male": 4, "female": 22 },
+      { "name": "Ponytail", "male": 3, "female": 14 },
+      { "name": "Bun", "male": 2, "female": 10 },
+      { "name": "Braids", "male": 1, "female": 8 },
+      { "name": "Curly", "male": 5, "female": 8 },
+      { "name": "Afro", "male": 3, "female": 4 }
+    ],
+    "beardStyles": [
+      { "name": "None", "weight": 45 },
+      { "name": "Stubble", "weight": 18 },
+      { "name": "Moustache", "weight": 7 },
+      { "name": "Goatee", "weight": 8 },
+      { "name": "Short", "weight": 12 },
+      { "name": "Full", "weight": 8 },
+      { "name": "Long", "weight": 2 }
+    ],
+    "bodyHair": { "male": [0.2, 1.0], "female": [0.0, 0.4] },
+    "tattoos": {
+      "chance": 0.18, "max": 3, "sizeRange": [0.7, 1.3],
+      "styles": ["Tribal", "Stripes", "Anchor", "Rose", "Sun", "Skull", "Chain", "Wings", "Dragon", "Knot"],
+      "regions": [
+        { "region": "Torso", "weight": 30 }, { "region": "LeftArm", "weight": 22 }, { "region": "RightArm", "weight": 22 },
+        { "region": "LeftLeg", "weight": 8 }, { "region": "RightLeg", "weight": 8 }, { "region": "Neck", "weight": 6 },
+        { "region": "Face", "weight": 4 }
+      ]
+    },
+    "scars": {
+      "max": 24, "sizeRange": [0.6, 1.4],
+      "styles": [
+        { "name": "Slash", "hediffs": ["Cut", "Stab"] },
+        { "name": "Claw", "hediffs": ["Scratch", "Bite"] },
+        { "name": "Burn", "hediffs": ["Burn"] },
+        { "name": "Puncture", "hediffs": ["Gunshot", "Stab"] },
+        { "name": "Ragged", "hediffs": ["Shredded", "Bite", "Crush"] },
+        { "name": "Stitched" }
+      ]
+    },
     "ours": ["bodyTypeWeights", "weightRange", "heightMale", "heightFemale", "hulkHeightBonus", "melaninRange",
-             "skinColors", "hairColors"]
+             "skinColors", "hairColors", "faceGenderShift", "eyeColors", "hairStyles", "beardStyles", "bodyHair", "tattoos", "scars"]
   },
   {
     "defName": "BillRules", "source": "RimWorld wiki",
@@ -260,9 +315,10 @@
     "defName": "ApparelRules", "source": "RimWorld wiki",
     "absorbDamageDivisor": 4,
     "wearHpLossChancePerDay": 0.4,
+    "wearFactor": 1.0,
     "deathHpLoss": [0.15, 0.4],
-    "rattyBelow": 0.5,
-    "tatteredBelow": 0.25,
+    "tatteredBenefitFactor": 0.8,
+    "durabilityNote": "Worn apparel wears its durability, not its hit points (sneed, 2026-10-27; docs/design/apparel-durability.md). wearHpLossChancePerDay is RimWorld's daily hit point loss, here a steady rate of durability (that many hit points' worth a day, times wearFactor); absorbed damage wears 1 hit point's worth per absorbDamageDivisor; deathHpLoss is the share of durability lost when the wearer dies. At 0 durability a piece is tattered: tatteredBenefitFactor of its armor and insulation.",
     "taintedStageCap": 4,
     "defaultOutfit": "Anything",
     "wearSteps": 60,
@@ -277,7 +333,7 @@
     "taintedScorePenalty": 0.2,
     "minGain": 0.05,
     "unverified": ["wearSteps", "stripStepsPerPiece"],
-    "ours": ["defaultOutfit", "wearSteps", "stripStepsPerPiece", "checkEverySteps", "scoreBase", "scoreSharp", "scoreBlunt", "scoreHeat", "scoreInsulationPerDegree", "scoreHpFloor", "taintedScorePenalty", "minGain"]
+    "ours": ["wearFactor", "tatteredBenefitFactor", "durabilityNote", "defaultOutfit", "wearSteps", "stripStepsPerPiece", "checkEverySteps", "scoreBase", "scoreSharp", "scoreBlunt", "scoreHeat", "scoreInsulationPerDegree", "scoreHpFloor", "taintedScorePenalty", "minGain"]
   },
   {
     "defName": "MedicineRules", "source": "RimWorld wiki",
@@ -317,9 +373,10 @@
    "skillOpinionPerLevel": 0.05, "skillRomancePerLevel": 0.02,
    "cheatWeightFactor": 0.15, "cheatPartnerBelow": 60, "jealousFightChance": 0.25,
    "cheated": {"label": "cheated on me", "offset": -40, "days": 60}, "tookPartner": {"label": "took my partner", "offset": -20, "days": 60},
-   "cheatedThought": "CheatedOnMe", "weddingGuestThought": "AttendedWedding", "weddingPartyThought": "WeddingParty",
+   "cheatedThought": "CheatedOnMe", "witnessThought": "SawDeath", "witnessRadius": 12,
+   "orientation": {"straight": 0.7, "gay": 0.1, "bisexual": 0.15, "asexual": 0.05}, "weddingGuestThought": "AttendedWedding", "weddingPartyThought": "WeddingParty",
    "partyMinutes": 60, "partyJoyPerHour": 0.4, "partyMaxDistance": 80,
    "traitWeights": {"Kind": {"Slight": 0, "Insult": 0}, "Abrasive": {"Slight": 3, "Insult": 3}},
    "note": "C20 (docs/design/social.md). interactionMeanHours: a pawn with somebody in earshot starts a talk about this often; at a table or a game beside another pawn, tableChatMeanMinutes. traitWeights multiply an interaction's selectionWeight for the talker. A trait degree's `opinionOfMe` (Traits) is what everyone else thinks of its owner.",
-   "unverified": ["interactionMeanHours", "maxDistance"], "ours": ["opinionMin", "opinionMax", "socialSkillXpPerInteraction", "deadMansApparelDays", "minGapMinutes", "tableChatMeanMinutes", "compatibilityMax", "stackLimit", "kindWordsMoodBelow", "romanceOpinionScale", "adultAge", "fightChance", "fightPain", "fightBloodLoss", "fightMaxMinutes", "fightWalkEvery", "fight", "traitWeights", "skillOpinionPerLevel", "skillRomancePerLevel", "cheatWeightFactor", "cheatPartnerBelow", "jealousFightChance", "cheated", "tookPartner", "cheatedThought", "weddingGuestThought", "weddingPartyThought", "partyMinutes", "partyJoyPerHour", "partyMaxDistance"]}
+   "unverified": ["interactionMeanHours", "maxDistance"], "ours": ["opinionMin", "opinionMax", "socialSkillXpPerInteraction", "deadMansApparelDays", "minGapMinutes", "tableChatMeanMinutes", "compatibilityMax", "stackLimit", "kindWordsMoodBelow", "romanceOpinionScale", "adultAge", "fightChance", "fightPain", "fightBloodLoss", "fightMaxMinutes", "fightWalkEvery", "fight", "traitWeights", "skillOpinionPerLevel", "skillRomancePerLevel", "cheatWeightFactor", "cheatPartnerBelow", "jealousFightChance", "cheated", "tookPartner", "cheatedThought", "witnessThought", "witnessRadius", "orientation", "weddingGuestThought", "weddingPartyThought", "partyMinutes", "partyJoyPerHour", "partyMaxDistance"]}
 ]

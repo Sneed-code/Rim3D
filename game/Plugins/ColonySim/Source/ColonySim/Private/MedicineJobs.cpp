@@ -96,7 +96,7 @@ bool JobSystem::needsRescue(Entity pawn) const {
         return false;  // a raider is carrying it off
     }
     return health.downed && !health.dead && (faction == nullptr || faction->id == kPlayerFaction || reg.all_of<Prisoner>(pawn)) &&
-           bedUnder(pawn) == kNoEntity;
+           bedUnder(pawn) == kNoEntity && rescuerOf(reg, pawn) == kNoEntity;  // a fighter fetching it to cover (F10)
 }
 
 bool JobSystem::findPatientBed(Entity patient, Entity helper, bool medicalOnly, Entity& bed, CellPos& cell) const {
@@ -202,7 +202,7 @@ void JobSystem::interruptForEmergency(Entity pawn) {
     const Job& current = reg.get<Worker>(pawn).job;
     if (medicine_ == nullptr || current.forced || current.handsOn != 0 ||
         (current.type != JobType::Wait && current.type != JobType::HaulToCell && current.type != JobType::Recreate &&
-         current.type != JobType::Research && current.type != JobType::CleanFilth && !jobIsGather(current.type))) {
+         current.type != JobType::Research && current.type != JobType::DeepWork && current.type != JobType::CleanFilth && !jobIsGather(current.type))) {
         return;
     }
     if ((now() + static_cast<int64_t>(entt::to_integral(pawn))) % kMedEmergencyEvery != 0) {
@@ -324,7 +324,7 @@ JobSystem::StepResult JobSystem::tendWork(Entity pawn, Job& job, std::string& wh
     }
     const MedicineRules& rules = medicine_->rules();
     const double manipulation = health_.capacityValue(pawn, "Manipulation");
-    const double speed = manipulation * lightWorkFactor(pawn);
+    const double speed = manipulation * workFactor(pawn);
     if (speed <= 0.0) {
         why = "it can't see to work";
         return StepResult::Failed;

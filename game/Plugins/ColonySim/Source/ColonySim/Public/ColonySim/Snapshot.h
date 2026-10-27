@@ -12,6 +12,7 @@
 #include "ColonySim/Melee.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Rooms.h"
+#include "ColonySim/Wounds.h"
 #include "ColonySim/Zones.h"
 
 #include <cstdint>
@@ -57,12 +58,14 @@ struct ThingView {
     float rot = 0.0f;       // items that rot: 0 fresh to 1 rotted away (docs/design/spoilage.md)
     int hitPoints = 0;   // 0 and 0 when the thing has no hit points
     int maxHitPoints = 0;
+    float durability = 1.0f;  // apparel: 0 to 1, capped by the hit-point share (docs/design/apparel-durability.md)
     // Pawns with a body: can't act (pain shock, unconscious, can't move), and dead. A dead pawn
     // stays where it fell. A full health report is `Sim::healthReport`.
     bool downed = false;
     bool dead = false;
     // Pawns: the job they are on (docs/design/jobs.md) and what it is about, and what they carry.
     JobType job = JobType::None;
+    uint32_t area = 0;  // the allowed area a pawn is limited to (AreaView::id), 0 for none
     Entity jobTarget = kNoEntity;
     float jobProgress = 0.0f;  // 0 to 1: a swing of the pick, a plant being cut, a frame being built (hands-on work, U10)
     DefId carriedDef;
@@ -168,8 +171,17 @@ struct ThingView {
     uint8_t visitRole = 0;
     uint32_t visit = 0;
     bool prisonBed = false;
+    // F10 (docs/design/field-care.md): defenseRole 3 is Medic and 4 Firefighter; a fighter carrying a downed friend
+    // to cover has it in `rescuing` (the friend's position follows the fighter's after the LiftPawn action).
+    Entity rescuing = kNoEntity;
     // Humanlike pawns: their looks, Snapshot::looks[looks]; -1 for other things.
     int32_t looks = -1;
+    // Pawns with a body (docs/design/wounds.md): their wounds and lost parts that show on the skin, `woundCount` from
+    // Snapshot::wounds[firstWound]; blood lost (0 to 1, 1 is death) and how fast it is going (blood loss a day).
+    uint32_t firstWound = 0;
+    uint32_t woundCount = 0;
+    float bloodLoss = 0.0f;
+    float bleedPerDay = 0.0f;
     // Buildings with a power part (docs/design/power.md): whether they have power, the net they are
     // in (Snapshot::powerNets[powerNet - 1]; 0 for none), watts now (+ generating, - drawing) and,
     // for batteries, how full (0 to 1; -1 for other buildings).
@@ -226,6 +238,20 @@ struct ThingView {
     uint32_t apparelCount = 0;
     int quality = -1;
     bool tainted = false;
+    // Repair and upgrades (docs/design/repair.md). Apparel and weapons on the map: whether a colonist is to repair them.
+    // Guns: the part ordered fitted (invalid for none) and the parts already fitted, `fittedCount` of them from
+    // Snapshot::fittedParts[firstFitted], in the order fitted.
+    bool repairMarked = false;
+    DefId fitOrder;
+    uint32_t firstFitted = 0;
+    uint32_t fittedCount = 0;
+    // Resonance (docs/design/resonance.md). Pawns: steps left of a stun (0: not stunned), whether a numb or burden
+    // is on them, and for a pawn winding up a power, the Powers def and the steps until it goes off.
+    int stunnedFor = 0;
+    bool numbed = false;
+    bool burdened = false;
+    DefId castPower;
+    int castStepsLeft = 0;
     // Pawns in a mental break (docs/design/mental-breaks.md): its MentalBreaks def, invalid when not in one.
     DefId mentalBreak;
 };
@@ -237,6 +263,7 @@ struct ApparelView {
     DefId stuff;      // invalid for none
     int quality = 2;
     float hitPointShare = 1.0f;  // 0 to 1
+    float durability = 1.0f;     // 0 to 1, capped by hitPointShare; 0 is tattered (docs/design/apparel-durability.md)
     bool tainted = false;
 };
 
@@ -331,6 +358,17 @@ struct PawnLooksView {
     float height = 1.0f;  // times 1.80 m
     LooksColor skin;
     LooksColor hair;
+    // V1 (docs/design/looks.md): the face, hair style, beard, body hair and skin marks.
+    float faceShape = 0.5f;
+    float brow = 0.5f;
+    float nose = 0.5f;
+    float jaw = 0.5f;
+    LooksColor eyes;
+    std::string hairStyle;  // empty for a pawn from an older save
+    std::string beard;
+    float bodyHair = 0.0f;
+    std::vector<LooksMark> tattoos;
+    std::vector<LooksMark> scars;
 };
 
 // One bill on a work building, in the building's order (first is tried first).
@@ -345,6 +383,7 @@ struct BillView {
     int skillMax = 20;
     float radius = 0.0f;     // metres from the building ingredients are taken from; 0 anywhere
     uint32_t storeZone = 0;  // the stockpile the products go to; 0 none
+    uint32_t countZone = 0;  // the stockpile an "until you have" bill counts in; 0 the whole map
     int unpauseAt = 0;
     bool satisfied = false;  // an "until you have" bill waiting for the stock to fall to `unpauseAt`
     std::vector<DefId> disallowed;  // ingredient item defs it may not use
@@ -364,6 +403,14 @@ struct AnimalZoneView {
     uint32_t firstCell = 0;
     uint32_t cellCount = 0;
     bool pen = false;
+};
+
+// One allowed area (docs/design/areas.md): `cellCount` cells from Snapshot::areaCells[firstCell].
+struct AreaView {
+    uint32_t id = 0;
+    std::string name;
+    uint32_t firstCell = 0;
+    uint32_t cellCount = 0;
 };
 
 // One growing zone (C13): `cellCount` cells from Snapshot::growingZoneCells[firstCell], growing `crop`.
@@ -422,6 +469,13 @@ struct DesignationView {
     DesignationKind kind = DesignationKind::None;
 };
 
+// One cell of deep resources a scanner found (docs/design/deep-mining.md).
+struct DeepCellView {
+    CellPos cell;
+    DefId def;       // the item under it
+    int units = 0;
+};
+
 // One research project and where it stands (docs/design/research.md).
 struct ResearchView {
     DefId project;          // a Research def
@@ -443,6 +497,8 @@ struct ShipView {
     std::string problem;         // why not, in plain words
     bool won = false;
     int escaped = 0;
+    Entity reactor = kNoEntity;  // the reactor warming up or active (none when idle)
+    std::vector<std::pair<Entity, Entity>> aboard;  // casket and its rider, in boarding order (riders not yet checked for a beam)
 };
 
 // The date, the weather and the sky's mood (docs/design/weather.md). Snow per cell is not here:
@@ -474,6 +530,18 @@ struct NarratorView {
     uint32_t incidents = 0;
 };
 
+// Night skip and fast travel (docs/design/skip-travel.md). `skipKind` is a SkipKind number (0 none, 1 night, 2 travel).
+struct TravelView {
+    uint8_t skipKind = 0;
+    int64_t skipEndsAt = 0;       // game second the running skip ends
+    bool canSkipNight = false;    // a night skip could start now
+    std::string skipWhy;          // when it could not: why, in plain words
+    uint32_t nights = 0;          // night skips that ran to the end
+    uint32_t travels = 0;         // fast travels that arrived
+    uint32_t visitedBlocks = 0;   // places visited
+    int visitedBlockSize = 8;     // metres per visited block
+};
+
 // A talent rank the protagonist has bought (docs/design/talents.md).
 struct TalentRankView {
     DefId talent;  // a Talents def
@@ -489,6 +557,16 @@ struct TalentView {
     std::vector<TalentRankView> ranks;  // in Talents def order
 };
 
+// An attuned pawn (docs/design/resonance.md). One entry per attuned pawn, in id order.
+struct AttunedView {
+    Entity pawn = kNoEntity;
+    int level = 0;
+    float strain = 0.0f;       // RimWorld's neural heat
+    float strainLimit = 0.0f;
+    float focus = 0.0f;        // RimWorld's psyfocus, 0 to 1
+    std::vector<DefId> powers;  // the Powers defs it knows
+};
+
 struct Snapshot {
     int64_t gameSeconds = 0;  // Sim::time().seconds when it was written
     int mapWidth = 0;
@@ -500,6 +578,8 @@ struct Snapshot {
     std::vector<CellPos> zoneCells;        // the zones' cells, see ZoneView
     std::vector<AnimalZoneView> animalZones;  // animal zones and pens (N3)
     std::vector<CellPos> animalZoneCells;     // their cells, see AnimalZoneView
+    std::vector<AreaView> areas;                // allowed areas, by id
+    std::vector<CellPos> areaCells;             // their cells, see AreaView
     std::vector<GrowingZoneView> growingZones;  // growing zones (C13)
     std::vector<CellPos> growingZoneCells;      // their cells, see GrowingZoneView
     std::vector<DesignationView> designations;  // every mark, in cell order
@@ -515,6 +595,7 @@ struct Snapshot {
     uint64_t roofCollapses = 0;
     std::vector<ProjectileView> projectiles;  // sorted by id
     std::vector<PawnLooksView> looks;      // see ThingView::looks
+    std::vector<WoundView> wounds;         // see ThingView::firstWound
     std::vector<PowerNetView> powerNets;   // by id - 1, see ThingView::powerNet
     std::vector<ResearchView> research;    // every project, in def order
     std::vector<TalentView> talents;       // see TalentView
@@ -529,6 +610,9 @@ struct Snapshot {
     uint64_t fireChanges = ~0ULL;
     std::vector<CellPos> burnt;
     uint64_t burntChanges = ~0ULL;
+    // Deep resources found by scanners, in cell order; rewritten when `deepChanges` moves (drills take units out).
+    std::vector<DeepCellView> deepResources;
+    uint64_t deepChanges = ~0ULL;
     std::vector<CellPos> homeArea;
     uint64_t homeChanges = ~0ULL;
     // The colony alarm (docs/design/raids.md): on, and whether the player sounded it (only the
@@ -540,10 +624,13 @@ struct Snapshot {
     std::vector<GoodwillView> goodwill;    // every faction's goodwill with the colony
     std::vector<QuestView> quests;         // offered, active and recently finished quests, by id
     std::vector<ApparelView> apparel;      // worn apparel, see ThingView
+    std::vector<DefId> fittedParts;        // upgrade parts fitted to guns, see ThingView
     std::vector<OutfitView> outfits;       // the outfit policies, by id
     WeatherView weather;
+    std::vector<AttunedView> attuned;      // see AttunedView
     ShipView ship;
     NarratorView narrator;
+    TravelView travel;
 
     // The thing with this id, or null if it is not on the map. Binary search.
     COLONY_API const ThingView* find(Entity id) const;

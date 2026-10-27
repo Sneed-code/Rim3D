@@ -15,6 +15,7 @@
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
+#include "ColonySim/Social.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -355,6 +356,13 @@ TEST_CASE("Mental breaks: an insulting spree insults three colonists in turn and
     }
     CHECK(insulted.size() == 3);
     CHECK(insulted.count(entt::to_integral(pawn)) == 0);
+    // The social system saw them: each one insulted thinks worse of the insulter (-20 on top of the first impression).
+    CHECK(sim.social().stats().insults >= 3);
+    for (const Entity other : others) {
+        if (insulted.count(entt::to_integral(other)) == 1) {
+            CHECK(sim.social().opinion(other, pawn) < -10.0f);
+        }
+    }
     for (const Entity other : others) {
         CHECK(breakHasMemory(sim, other, "Insulted") == (insulted.count(entt::to_integral(other)) == 1));
     }
@@ -520,4 +528,21 @@ TEST_CASE("Mental breaks: the break commands replay to the same game") {
     playReplay(loaded, replayed, loaded.endStep);
     CHECK(replayed.stateHash() == sim.stateHash());
     CHECK(checkReplay(loaded, replayed).matched());
+}
+
+TEST_CASE("Mental breaks: the protagonist never snaps, even at the lowest mood, and cannot be made to") {
+    Sim sim = breakSim();
+    const Entity pawn = breakColonist(sim, CellPos{24, 24, 0});
+    sim.things().registry().get<Colonist>(pawn).protagonist = true;
+    sim.step();
+    BreakLog log;
+    std::string error;
+    CHECK_FALSE(breakStart(sim, pawn, "WanderSad", &error));
+    for (int i = 0; i < 3 * 24 * 3600 / 10; ++i) {
+        breakMood(sim, pawn).level = 0.0f;
+        breakRun(sim, log, 10);
+    }
+    CHECK(log.count(EventType::PawnMentalBreak) == 0);
+    CHECK_FALSE(sim.mentalBreaks().active(pawn));
+    CHECK(breakMood(sim, pawn).level <= 5.0f);  // mood is still tracked
 }

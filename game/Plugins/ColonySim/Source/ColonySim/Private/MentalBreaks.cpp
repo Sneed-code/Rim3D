@@ -2,6 +2,7 @@
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Protagonist.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Events.h"
@@ -18,6 +19,7 @@
 #include "ColonySim/Random.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Rooms.h"
+#include "ColonySim/Social.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -310,6 +312,11 @@ void MentalBreakSystem::natural(Entity pawn, int64_t now, Rng& rng) {
         }
         pick -= kind->commonality;
     }
+    // The protagonist rolls like anyone (so the random stream, and every game seed, is the same whichever way
+    // the rule is set) but the break is not taken: docs/design/protagonist.md.
+    if (mindIsPlayersOwn(reg, pawn)) {
+        return;
+    }
     begin(pawn, *chosen, band, now, rng);
 }
 
@@ -322,6 +329,10 @@ bool MentalBreakSystem::start(Entity pawn, const std::string& breakDef, Rng& rng
     const entt::registry& reg = things_.registry();
     if (!reg.valid(pawn) || !reg.all_of<Thing, Position, Mover, Worker>(pawn)) {
         error = "that isn't a colonist on the map";
+        return false;
+    }
+    if (mindIsPlayersOwn(reg, pawn)) {
+        error = "the protagonist's mind is the player's own";
         return false;
     }
     if (reg.all_of<PlayerControl>(pawn)) {
@@ -1113,6 +1124,11 @@ void MentalBreakSystem::tickInsult(Entity pawn, MentalBreaker& b, int64_t now, R
     }
     if (!approach(pawn, b, b.target, rules_.talkReach, now)) {
         return;
+    }
+    if (social_ != nullptr) {
+        // The insult lands like any other (opinion, mood); if the two can't talk it is only the event below.
+        std::string ignored;
+        social_->interact(pawn, b.target, "Insult", -1, ignored);
     }
     if (events_ != nullptr) {
         Event event;

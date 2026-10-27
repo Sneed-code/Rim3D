@@ -1,0 +1,18 @@
+[
+  {
+    "defName": "DeepRules",
+    "source": "RimWorld wiki",
+    "comment": "Deep deposits, the ground-penetrating scanner and the deep drill (docs/design/deep-mining.md). RimWorld ticks are 1.44 game seconds.",
+    "unitsPerCell": 300,
+    "drillCycleSeconds": 20160.0,
+    "scanAverageSeconds": 259200.0,
+    "scanGuaranteedSeconds": 518400.0,
+    "scanSpeedBase": 0.2,
+    "scanSpeedPerLevel": 0.1,
+    "defaultSkillLevel": 8,
+    "drillXpPerSecond": 0.048611,
+    "scanXpPerSecond": 0.0486,
+    "unverified": ["drillXpPerSecond", "scanXpPerSecond"],
+    "ours": ["scanSpeedBase", "scanSpeedPerLevel", "defaultSkillLevel"]
+  }
+]

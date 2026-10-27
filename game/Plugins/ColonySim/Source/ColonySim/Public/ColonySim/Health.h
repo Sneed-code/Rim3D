@@ -128,6 +128,8 @@ struct Health {
     float stageHp = 1.0f;        // young animals: the life stage's healthScaleFactor, set by AnimalSystem (N4 leftovers)
     bool downed = false;
     float pain = 0.0f;
+    float workSpeedFactor = 1.0f;  // product of the stages' `workSpeed` of its environment hediffs (drug highs)
+    float hungerFactor = 1.0f;     // likewise `hunger`: how much faster its food falls
     float bleedPerDay = 0.0f;    // total bleed rate, blood loss per day
     float movingFactor = 1.0f;   // the Moving capacity, 0 while downed or dead; scales walking speed
     std::vector<float> capacities;  // by position in the Capacities defs (by id)
@@ -135,6 +137,14 @@ struct Health {
     int bloodStage = -1;         // current BloodLoss stage, -1 for none
 
     bool incapacitated() const { return downed || dead; }
+};
+
+// Changes to pain and capacities from outside the body (resonance's numb and burden, X2): pain is
+// multiplied by `painFactor`, the Moving capacity is capped at `movingMax`. Not saved: the system
+// that causes them is asked again (HealthSystem::setMods) whenever health is worked out.
+struct HealthMods {
+    float painFactor = 1.0f;
+    float movingMax = 1.0f;
 };
 
 // Everything a health panel shows, with names instead of ids. Filled by HealthSystem::report.
@@ -194,6 +204,7 @@ struct BodyPartInfo {
     bool inside = false;     // an organ or bone under another part
     float ownOutside = 0.0f;  // its share of hits from outside (its area minus its outside children's)
     std::vector<std::string> groups;  // BodyPartGroups defs, which apparel covers
+    std::string def;         // its BodyParts def name: "Arm", "Hand"...
 };
 
 // The rules. Owned by the sim, which calls `step` once per game second; damage comes in through
@@ -207,6 +218,9 @@ public:
 
     // Where events go; null (the default) reports none.
     void setEventLog(std::vector<Event>* events) { events_ = events; }
+    // Where HealthMods come from for a pawn (resonance). Without it there are none. Set `Health::dirty` on a pawn
+    // when its mods change, so the next step works it out again (and it may get up or go down).
+    void setMods(std::function<void(Entity, HealthMods&)> mods) { mods_ = std::move(mods); }
 
     // True if the pawn has a Health the system understands (its body def is known).
     bool tracks(Entity pawn) const;
@@ -263,6 +277,10 @@ public:
     // A capacity of the pawn (a Capacities defName like "Manipulation") as it is now, 1 for a
     // pawn with no body or a capacity the data doesn't have. Work speed uses it.
     float capacityValue(Entity pawn, const std::string& capacity) const;
+    // The pawn's global work speed and hunger multipliers from its environment hediffs (1 for none): a stage's
+    // `workSpeed` and `hunger` (wake-up +50% work, smokeleaf +30% food). Pain uses `painFactor` the same way.
+    float workSpeedFactor(Entity pawn) const;
+    float hungerFactor(Entity pawn) const;
 
     // Environment hediffs (hypothermia...): the severity of a Hediffs def of class Environment on a
     // pawn (0 if it has none), and setting it (clamped to 0 and up; at 0 the hediff goes). A change
@@ -358,11 +376,14 @@ private:
     uint64_t seed_ = 0;
     std::function<float(Entity)> cleanliness_;
     std::vector<Entity> active_;  // scratch for step
+    bool restoring_ = false;      // inside refreshAll: working out what a loaded save already was, so nobody stops walking for it
     std::vector<size_t> healable_;  // scratch for step: the injuries that can heal
+    std::function<void(Entity, HealthMods&)> mods_;
 
     // Works out pain, bleeding, capacities and what they mean (the death cause and whether the
     // pawn should be downed) into `health`'s derived fields. Changes nothing else.
-    void derive(int body, float healthScale, bool mechanical, Health& health, DeathCause& cause, bool& shouldBeDown) const;
+    void derive(int body, float healthScale, bool mechanical, const HealthMods& mods, Health& health, DeathCause& cause,
+                bool& shouldBeDown) const;
     void recompute(Entity pawn, Health& health, bool announce);
     void emit(EventType type, Entity pawn, DefId def = DefId{}, int part = -1, float amount = 0.0f,
               const char* message = nullptr);
