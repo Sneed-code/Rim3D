@@ -77,7 +77,7 @@ TEST_CASE("Research: the projects load and a project can only be picked when its
     Sim sim = resSim();
     const ResearchSystem& research = sim.research();
     RES_REQUIRE(research.rules().present);
-    CHECK(research.projects().size() == 24);
+    CHECK(research.projects().size() == 76);
     CHECK(research.rules().pointsPerSecond() == doctest::Approx(0.00825 / 1.44));
 
     sim.submit(SetResearchCommand{"NoSuchProject"});
@@ -166,7 +166,7 @@ TEST_CASE("Research: a colonist at a bench finishes the project, at the bench's 
     sim.stepMany(300);
     CHECK(sim.things().registry().get<Worker>(pawn).job.type != JobType::Research);
 
-    // Stonecutting costs 300 at a bench of speed 0.75; a worker without skills counts as level 8: 0.2 + 0.1 x 8 = 1.
+    // Stonecutting costs 300 at a bench of speed 0.75; a worker without skills counts as level 8: 0.08 + 0.115 x 8 = 1.
     sim.submit(SetResearchCommand{"Stonecutting"});
     bool sat = false;
     int64_t doneAt = -1;
@@ -230,7 +230,7 @@ TEST_CASE("Research: the snapshot lists every project") {
     sim.step();
     Snapshot snap;
     sim.writeSnapshot(snap);
-    CHECK(snap.research.size() == 24);
+    CHECK(snap.research.size() == 76);
     int current = 0;
     for (const ResearchView& v : snap.research) {
         const std::string& name = sim.defs().get(v.project).defName();
@@ -282,4 +282,13 @@ TEST_CASE("Research: the state saves and loads, and a loaded game goes on the sa
 
     // The readable dump has the section.
     CHECK(saveToJson(sim).find("\"research\"") != std::string::npos);
+}
+
+TEST_CASE("Research: Intellectual sets research speed as the wiki says, 8% at level 0 to 238% at 20") {
+    Sim sim = resSim();
+    const ResearchRules& rules = sim.research().rules();
+    CHECK(rules.skillSpeedBase + rules.skillSpeedPerLevel * 0 == doctest::Approx(0.08));
+    CHECK(rules.skillSpeedBase + rules.skillSpeedPerLevel * 1 == doctest::Approx(0.195));
+    CHECK(rules.skillSpeedBase + rules.skillSpeedPerLevel * 8 == doctest::Approx(1.0));
+    CHECK(rules.skillSpeedBase + rules.skillSpeedPerLevel * 20 == doctest::Approx(2.38));
 }

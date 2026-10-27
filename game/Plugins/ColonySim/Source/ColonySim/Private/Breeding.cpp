@@ -90,7 +90,9 @@ Breeding::Breeding(Things& things, const Map& map, AnimalSystem& animals, Husban
         if (def.has("race.eggs")) {
             k.eggUnfertilized = defs.idOf("Things", def.text("race.eggs.unfertilizedThing"));
             k.eggFertilized = defs.idOf("Things", def.text("race.eggs.fertilizedThing"));
-            k.eggs = k.eggUnfertilized.valid();
+            k.eggs = k.eggUnfertilized.valid() || k.eggFertilized.valid();
+            // Ostriches, emus and the like have no unfertilized egg: their laying timer waits at half until a male mates.
+            k.eggFertilizedOnly = !k.eggUnfertilized.valid();
             k.eggIntervalSeconds = def.number("race.eggs.intervalDays", 1.0) * static_cast<double>(kSecondsPerDay);
             k.eggCount = std::max(1, static_cast<int>(def.number("race.eggs.count", 1.0)));
         }
@@ -520,6 +522,11 @@ void Breeding::pass(int64_t now, bool everyMaleSeeks) {
         if (kind->eggs && isFemale) {
             if (b.eggSince == kBreedNotStarted) {
                 b.eggSince = now;
+            } else if (kind->eggFertilizedOnly && b.fertilized == 0) {
+                const int64_t half = static_cast<int64_t>(kind->eggIntervalSeconds * 0.5);
+                if (now - b.eggSince > half) {
+                    b.eggSince = now - half;
+                }
             } else if (static_cast<double>(now - b.eggSince) >= kind->eggIntervalSeconds) {
                 const bool fertilized = b.fertilized > 0;
                 if (layEgg(e, fertilized) != kNoEntity && fertilized) {
