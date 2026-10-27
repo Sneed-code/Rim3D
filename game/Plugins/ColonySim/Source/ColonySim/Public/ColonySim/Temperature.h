@@ -86,6 +86,10 @@ public:
     bool comfortRange(Entity pawn, float& min, float& max) const;
     // Degrees under the comfortable minimum or over the maximum at the pawn's cell (0 inside the
     // range or when it has none). Mood reads these.
+    // The pawn's safe range: the comfortable range widened by `safeMarginC` each way. False if it has none.
+    bool safeRange(Entity pawn, float& min, float& max) const;
+    // Whether the pawn stands where hypothermia or heatstroke is building (outside its safe range).
+    bool outsideSafeRange(Entity pawn);
     float degreesBelowComfort(Entity pawn);
     float degreesAboveComfort(Entity pawn);
 
@@ -122,6 +126,11 @@ private:
     void exposePawns(int64_t now);
     bool usesRoomTemperature(const Room& room) const { return room.enclosed() && !room.outdoors(); }
     float temperatureBeyond(CellPos cell);
+    // The temperature on the other side of an upper floor (the room above or below), or -1000 when
+    // no room is there (a wall, water): no heat goes that way.
+    float temperatureThroughFloor(CellPos cell);
+    // The slot of a cell in cellTemp_, making its level's layer first if `make`; null if none.
+    float* cellTempOf(CellPos c, bool make);
     RoomId roomOfSource(Entity source);
     void refreshSources();
 
@@ -147,8 +156,10 @@ private:
     float frostbiteChancePerHour_ = 0.0004f;
 
     std::vector<float> roomTemp_;     // by RoomId; meaningful for rooms that use room temperature
-    std::vector<float> cellTemp_;     // per map cell: the temperature its room had at the last change, NaN if none
-    std::vector<int> storedCells_;    // the cells cellTemp_ holds a number for
+    // Per level, per map cell: the temperature its room had at the last change, NaN if none. An
+    // upper level's layer is made when it first has a room.
+    std::vector<std::vector<float>> cellTemp_;
+    std::vector<CellPos> storedCells_;  // the cells cellTemp_ holds a number for
     uint64_t seenRebuilds_ = ~uint64_t{0};
     uint64_t sourceChanges_ = ~uint64_t{0};
     std::vector<Entity> sources_;     // heaters, coolers, campfires, by entity id

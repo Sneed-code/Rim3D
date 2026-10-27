@@ -57,7 +57,8 @@ type; `CutOrHarvestPlantsGiver` in Plant cutting) and steps `GotoTouch` then `Mi
   at 65% grown, full at 100%; a younger tree gives nothing) and by the same yield curve; cutting
   anything else gives nothing. Picking from a bush sets it back to `harvestAfterGrowth` (30%); a harvest mark
   waits until the plant is 65% grown (`plant.harvestMinGrowth`, unverified).
-- XP: Mining 0.0486 a second and Plants 0.0590 a second, scaled by passion (C8's skill rules).
+- XP: Mining 0.0486 a second and Plants 0.0590 a second, scaled by passion; the daily cap and the decay
+  of high skills are C12's ([skills.md](skills.md)).
 - Needs, a downed pawn or direct control end a gather job like any other (C6's interruption
   covers it). A cancelled mark ends the job with "the order was cancelled".
 - Events: `PawnAction` `Mine`/`Cut`/`Harvest` (for the animation), `CellMined`, `PlantRemoved`

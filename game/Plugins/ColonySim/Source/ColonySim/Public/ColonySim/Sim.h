@@ -14,6 +14,7 @@
 #include "ColonySim/Pathfinder.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/ThreatMap.h"
+#include "ColonySim/World.h"
 
 #include <cstdint>
 #include <map>
@@ -32,6 +33,7 @@ class ApparelSystem;
 class Construction;
 class DefDatabase;
 class DefenseSystem;
+class DrugSystem;
 class Filth;
 class Floors;
 class RoomStats;
@@ -42,6 +44,8 @@ class Designations;
 class ExplosiveSystem;
 class FighterSystem;
 class Husbandry;
+class InspirationSystem;
+class MentalBreakSystem;
 class JobSystem;
 class Lights;
 class MeleeSystem;
@@ -49,6 +53,7 @@ class Mineables;
 class MovementSystem;
 class MoodSystem;
 class MedicineSystem;
+class SurgerySystem;
 class RecreationSystem;
 class SocialSystem;
 class ResearchSystem;
@@ -56,19 +61,48 @@ class TalentSystem;
 class NeedsSystem;
 class RaidSystem;
 class FieldCare;
+class MonsterSystem;
 class Plants;
 class PowerGrid;
 class Regions;
 class PrisonerSystem;
+class TradeSystem;
+class QuestSystem;
+class ShipSystem;
 class Rooms;
 class TemperatureSystem;
 class SpoilageSystem;
+class CraftingSystem;
 class Things;
+class UpperFloors;
+class RoofCollapse;
 class Weather;
 class Zones;
 class Farming;
+class NarratorSystem;
+class DisasterSystem;
 struct Snapshot;
 class SimSaveAccess;
+
+// The planet the game is on (docs/design/world-map.md). Off (the default), there is no world: the map is
+// made from SimSettings::seed in the temperate forest, as before W2. On, the sim makes the world from
+// these settings and the colony's map is the start tile's: its biome, climate and map seed.
+struct WorldSettings {
+    bool enabled = false;
+    uint64_t seed = 0;   // 0: the sim's seed
+    int width = 0;       // tiles; 0 takes the WorldGen def's
+    int height = 0;
+    // The colony's tile. -1: picked when the sim is made, by the scenario's biome, and then stored
+    // here, so a save or replay always names the tile.
+    int startTile = -1;
+};
+
+// Sizes a world can have (0 takes the def's) and a start tile that is a tile or -1. Saves and replays
+// refuse other settings.
+inline bool worldSettingsValid(const WorldSettings& w) {
+    return w.width >= 0 && w.width <= 1000 && w.height >= 0 && w.height <= 500 && w.startTile >= -1 &&
+           (w.startTile < 0 || w.width == 0 || w.height == 0 || w.startTile < w.width * w.height);
+}
 
 struct SimSettings {
     uint64_t seed = 0;
@@ -87,6 +121,7 @@ struct SimSettings {
     // Wild animals when the map is made (docs/design/animal-life.md): 0 for none, else the biome's
     // animal density in percent (100 = as the biome says). Needs the Biomes and animal defs.
     int wildAnimals = 0;
+    WorldSettings world{};  // saved in its own section, "world"
 };
 
 struct SimStats {
@@ -165,12 +200,18 @@ public:
     // Recreation, comfort and the outdoors need (docs/design/recreation.md).
     RecreationSystem& recreation() { return *recreation_; }
     const RecreationSystem& recreation() const { return *recreation_; }
+    // Drugs, tolerance, addiction, withdrawal and drug policies (docs/design/drugs.md).
+    DrugSystem& drugs() { return *drugs_; }
+    const DrugSystem& drugs() const { return *drugs_; }
     // Research projects and what they unlock (docs/design/research.md).
     ResearchSystem& research() { return *research_; }
     const ResearchSystem& research() const { return *research_; }
     // Medicine: tend quality, medical care settings (docs/design/medicine.md).
     MedicineSystem& medicine() { return *medicine_; }
     const MedicineSystem& medicine() const { return *medicine_; }
+    // Surgery: operations planned on patients, their success chances (docs/design/surgery.md).
+    SurgerySystem& surgery() { return *surgery_; }
+    const SurgerySystem& surgery() const { return *surgery_; }
     // The protagonist's talent XP, points and ranks (docs/design/talents.md).
     TalentSystem& talents() { return *talents_; }
     const TalentSystem& talents() const { return *talents_; }
@@ -201,6 +242,15 @@ public:
     // The plant layer: wild plants from map generation, growing hourly (docs/design/plants.md).
     Plants& plants() { return *plants_; }
     const Plants& plants() const { return *plants_; }
+
+    // The world map, or null when SimSettings::world is off (docs/design/world-map.md). It does not
+    // change in play: made from its settings when the sim is made and again when a save loads.
+    const World* world() const { return world_.get(); }
+    // What the world says about the colony's tile (biome, hills, river, road, climate, map seed),
+    // or null without a world. The map generator (S8) and other maps (W5) read it.
+    const WorldSite* site() const { return site_ ? &*site_ : nullptr; }
+    // The biome the plants, animals and weather use: the start tile's, or the temperate forest.
+    const std::string& biome() const { return biome_; }
 
     // Seasons, outdoor temperature, weather and snow (docs/design/weather.md).
     Weather& weather() { return *weather_; }
@@ -238,6 +288,9 @@ public:
     const TemperatureSystem& temperature() const { return *temperature_; }
     SpoilageSystem& spoilage() { return *spoilage_; }
     const SpoilageSystem& spoilage() const { return *spoilage_; }
+    // Quality, stuff and bench speed of what work tables make (docs/design/crafting.md).
+    CraftingSystem& crafting() { return *crafting_; }
+    const CraftingSystem& crafting() const { return *crafting_; }
     // The temperature in the open right now, in degrees Celsius: the biome's season, the hour of the
     // day and the random drift (Weather::temperatureAt).
     float outdoorTemperature() const;
@@ -248,6 +301,12 @@ public:
     // Fixes the outdoor temperature (and so the ground's) for tests and `simrun --outdoor`. Not saved:
     // a loaded game goes back to the biome's own. Pass nullopt to let the biome decide again.
     void setOutdoorOverride(std::optional<float> celsius);
+
+    // Upper floors and the rules for laying them (docs/design/levels.md).
+    UpperFloors& upperFloors() { return *upperFloors_; }
+    const UpperFloors& upperFloors() const { return *upperFloors_; }
+    RoofCollapse& roofCollapse() { return *roofCollapse_; }
+    const RoofCollapse& roofCollapse() const { return *roofCollapse_; }
 
     // Stockpile zones (docs/design/jobs.md).
     const Zones& zones() const { return *zones_; }
@@ -276,9 +335,29 @@ public:
     FieldCare& fieldCare() { return *fieldCare_; }
     const FieldCare& fieldCare() const { return *fieldCare_; }
 
+    // Brood mounds and Remnant clusters (docs/design/monsters.md).
+    MonsterSystem& monsters() { return *monsters_; }
+
+    // The narrator, incidents and threat points (docs/design/narrator.md).
+    NarratorSystem& narrator() { return *narrator_; }
+    const NarratorSystem& narrator() const { return *narrator_; }
+    // Disasters and bad events: solar flare, toxic fallout, volcanic winter, flashstorm, psychic waves, blight,
+    // manhunters, short circuits (docs/design/disasters.md).
+    DisasterSystem& disasters() { return *disasters_; }
+    const DisasterSystem& disasters() const { return *disasters_; }
     // Prisoners: capture, feeding, warden talks, recruiting and release (docs/design/prisoners.md).
+    // The spaceship ending: parts, reactor, siege waves, launch (docs/design/ship.md).
+    ShipSystem& ship() { return *ship_; }
+    const ShipSystem& ship() const { return *ship_; }
     PrisonerSystem& prisoners() { return *prisoners_; }
     const PrisonerSystem& prisoners() const { return *prisoners_; }
+    // Quests: offers, answers, rewards (docs/design/quests.md). The narrator offers them with `quests().offerRandom`.
+    QuestSystem& quests() { return *quests_; }
+    const QuestSystem& quests() const { return *quests_; }
+
+    // Faction goodwill, visitors, trade caravans, orbital traders and trade (docs/design/trade.md).
+    TradeSystem& trade() { return *trade_; }
+    const TradeSystem& trade() const { return *trade_; }
 
     // Taming, training, animal zones and pens (docs/design/husbandry.md).
     Husbandry& husbandry() { return *husbandry_; }
@@ -288,6 +367,14 @@ public:
     Breeding& breeding() { return *breeding_; }
     const Breeding& breeding() const { return *breeding_; }
     const Husbandry& husbandry() const { return *husbandry_; }
+
+    // Colonists who snap when their mood is low: wander, binge, tantrum, berserk, leave (docs/design/mental-breaks.md).
+    MentalBreakSystem& mentalBreaks() { return *mentalBreaks_; }
+    const MentalBreakSystem& mentalBreaks() const { return *mentalBreaks_; }
+
+    // Good-mood colonists get inspired: a legendary craft, a recruitment, a shooting frenzy (docs/design/inspirations.md).
+    InspirationSystem& inspirations() { return *inspirations_; }
+    const InspirationSystem& inspirations() const { return *inspirations_; }
 
     // Blueprints, frames and taking buildings down (docs/design/construction.md).
     Construction& construction() { return *construction_; }
@@ -322,12 +409,18 @@ private:
     void pruneDesignations();
     void startScenario();
     // Gives a new pawn its looks if it is humanlike (its def names no other intelligence).
+    Entity makeJoiner(CellPos cell, uint64_t seed);
     void giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& lineage);
     // Makes (again) the genes of a pawn that has looks, from its lineage.
     void giveGenes(Entity pawn);
 
     SimSettings settings_;
     std::shared_ptr<const DefDatabase> defs_;
+    // The world, its start tile's site and the biome come before the map: the map's seed is the site's.
+    std::unique_ptr<World> world_;
+    uint64_t worldHash_ = 0;
+    std::optional<WorldSite> site_;
+    std::string biome_;
     Map map_;
     Pathfinder pathfinder_;
     std::unique_ptr<Zones> zones_;
@@ -349,12 +442,15 @@ private:
     std::unique_ptr<NeedsSystem> needs_;
     std::unique_ptr<MoodSystem> mood_;
     std::unique_ptr<RecreationSystem> recreation_;
+    std::unique_ptr<DrugSystem> drugs_;  // after health_, needs_ and mood_
     std::unique_ptr<ResearchSystem> research_;
     std::unique_ptr<MedicineSystem> medicine_;
+    std::unique_ptr<SurgerySystem> surgery_;
     std::unique_ptr<TalentSystem> talents_;
     std::unique_ptr<CombatSystem> combat_;
     std::unique_ptr<ExplosiveSystem> explosives_;  // after combat_ and health_
     std::unique_ptr<ApparelSystem> apparel_;  // after combat, which it uses
+    std::unique_ptr<CraftingSystem> crafting_;  // after apparel_ and zones_
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
     Rng rng_;
@@ -369,11 +465,19 @@ private:
     std::unique_ptr<Filth> filth_;
     std::unique_ptr<RoomStats> roomStats_;
     std::unique_ptr<AnimalSystem> animals_;
+    std::unique_ptr<UpperFloors> upperFloors_;  // M1
+    std::unique_ptr<RoofCollapse> roofCollapse_;  // M3, after the rooms and the job system
     std::unique_ptr<RaidSystem> raids_;        // after the fighters
+    std::unique_ptr<MonsterSystem> monsters_;  // after raids_ and animals_
     std::unique_ptr<PrisonerSystem> prisoners_;  // after the raids
+    std::unique_ptr<TradeSystem> trade_;         // after the raids
+    std::unique_ptr<QuestSystem> quests_;        // after the raids
+    std::unique_ptr<ShipSystem> ship_;           // after the raids
     std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system
     std::unique_ptr<Breeding> breeding_;    // after husbandry_
     std::unique_ptr<Fire> fire_;            // after the weather, temperature, rooms, floors, filth, plants and health
+    std::unique_ptr<MentalBreakSystem> mentalBreaks_;  // after the job and fighter systems
+    std::unique_ptr<InspirationSystem> inspirations_;  // after the mood system
     std::vector<std::string> setupErrors_;
     std::vector<std::pair<uint64_t, Command>> pending_;  // id, command
     uint64_t submitted_ = 0;
@@ -383,6 +487,8 @@ private:
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<FieldCare> fieldCare_;    // after the raids, the fighters and the jobs, which hold a pointer to it
+    std::unique_ptr<NarratorSystem> narrator_;  // after raids_
+    std::unique_ptr<DisasterSystem> disasters_;  // T3, after the narrator and everything it touches
     std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
 };
 

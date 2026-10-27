@@ -6,6 +6,7 @@
 #include "ColonySim/Cover.h"
 #include "ColonySim/Defense.h"
 #include "ColonySim/Doors.h"
+#include "ColonySim/Fuel.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Needs.h"
@@ -57,6 +58,58 @@ const std::vector<Entity>& thingNoItems() {
 }
 
 }  // namespace
+
+std::vector<LevelLink> levelLinksOf(const CellRect& rect, Rot4 rot, Entity building, float speedFactor) {
+    std::vector<LevelLink> out;
+    if (rect.level + 1 >= Map::kLevels) {
+        return out;
+    }
+    const bool alongY = rot == Rot4::North || rot == Rot4::South;
+    const int width = alongY ? rect.sizeX : rect.sizeY;
+    const int run = alongY ? rect.sizeY : rect.sizeX;
+    const float flat = static_cast<float>(run + 1);
+    const float length = std::sqrt(flat * flat + Map::kLevelHeightM * Map::kLevelHeightM);
+    for (int k = 0; k < width; ++k) {
+        LevelLink link;
+        link.building = building;
+        link.length = length;
+        link.speedFactor = speedFactor;
+        const int maxX = rect.minX + rect.sizeX - 1;
+        const int maxY = rect.minY + rect.sizeY - 1;
+        switch (rot) {
+            case Rot4::North:
+                link.low = CellPos{rect.minX + k, rect.minY - 1, rect.level};
+                link.high = CellPos{rect.minX + k, maxY + 1, rect.level + 1};
+                break;
+            case Rot4::South:
+                link.low = CellPos{rect.minX + k, maxY + 1, rect.level};
+                link.high = CellPos{rect.minX + k, rect.minY - 1, rect.level + 1};
+                break;
+            case Rot4::East:
+                link.low = CellPos{rect.minX - 1, rect.minY + k, rect.level};
+                link.high = CellPos{maxX + 1, rect.minY + k, rect.level + 1};
+                break;
+            case Rot4::West:
+                link.low = CellPos{maxX + 1, rect.minY + k, rect.level};
+                link.high = CellPos{rect.minX - 1, rect.minY + k, rect.level + 1};
+                break;
+        }
+        out.push_back(link);
+    }
+    return out;
+}
+
+void Things::linkLevels(Entity thing) {
+    const Footprint* footprint = registry_.try_get<Footprint>(thing);
+    const Def& def = defs_->get(registry_.get<Thing>(thing).def);
+    if (footprint == nullptr || !def.has("building.climb")) {
+        return;
+    }
+    const float speed = static_cast<float>(def.number("building.climb.speedFactor", 1.0));
+    for (const LevelLink& link : levelLinksOf(footprint->rect(), footprint->rotation, thing, speed)) {
+        map_.addLevelLink(link);
+    }
+}
 
 Things::Things(Map& map, std::shared_ptr<const DefDatabase> defs) : map_(map), defs_(std::move(defs)) {}
 
@@ -124,6 +177,9 @@ Entity Things::make(DefId defId, int stackCount) {
             if (def.has("trap")) {
                 registry_.emplace<Trap>(thing);
             }
+            if (const FuelSpec fuelSpec = readFuelSpec(*defs_, def); fuelSpec.present) {
+                registry_.emplace<Fuel>(thing, Fuel{fuelSpec.capacity * fuelSpec.initial});  // Fuel.h
+            }
             break;
         }
         case ThingCategory::Pawn: {
@@ -184,6 +240,7 @@ bool Things::spawnAt(Entity thing, CellPos cell, Rot4 rot) {
     placeFootprint(thing, rect, *footprint);
     footprint->origin = cell;
     footprint->rotation = rot;
+    linkLevels(thing);
     registry_.emplace<Position>(thing, Position{static_cast<float>(rect.minX) + 0.5f * static_cast<float>(rect.sizeX),
                                                 static_cast<float>(rect.minY) + 0.5f * static_cast<float>(rect.sizeY),
                                                 rect.level});
@@ -212,6 +269,7 @@ bool Things::relink(Entity thing) {
         }
     }
     placeFootprint(thing, rect, *footprint);
+    linkLevels(thing);
     return true;
 }
 
@@ -226,12 +284,14 @@ void Things::despawn(Entity thing) {
                 map_.clearBuilding(CellPos{x, y, rect.level});
             }
         }
+        map_.removeLevelLinks(thing);
     }
     if (registry_.all_of<StackCount>(thing)) {
         indexItem(thing, cellOf(registry_.get<Position>(thing)), false);
     }
+    const CellPos was = cellOf(registry_.get<Position>(thing));
     registry_.remove<Position>(thing);
-    report(EventType::ThingDespawned, thing);
+    report(EventType::ThingDespawned, thing, was);  // the cell it left (a building's origin cell, an item's own)
 }
 
 void Things::indexItem(Entity thing, CellPos cell, bool add) {

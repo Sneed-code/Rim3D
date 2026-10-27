@@ -7,6 +7,7 @@
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Random.h"
+#include "ColonySim/Temperature.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -61,6 +62,8 @@ Breeding::Breeding(Things& things, const Map& map, AnimalSystem& animals, Husban
         rules_.woolWorkSeconds = r->number("woolWorkSeconds", rules_.woolWorkSeconds);
         rules_.gatherXp = r->number("gatherXp", rules_.gatherXp);
         rules_.birthSpread = r->number("birthSpread", rules_.birthSpread);
+        rules_.hatchMinTemp = r->number("hatchMinTemp", rules_.hatchMinTemp);
+        rules_.hatchMaxTemp = r->number("hatchMaxTemp", rules_.hatchMaxTemp);
     }
     kinds_.assign(defs.size(), Kind{});
     isAnimal_.assign(defs.size(), 0);
@@ -87,7 +90,9 @@ Breeding::Breeding(Things& things, const Map& map, AnimalSystem& animals, Husban
         if (def.has("race.eggs")) {
             k.eggUnfertilized = defs.idOf("Things", def.text("race.eggs.unfertilizedThing"));
             k.eggFertilized = defs.idOf("Things", def.text("race.eggs.fertilizedThing"));
-            k.eggs = k.eggUnfertilized.valid();
+            k.eggs = k.eggUnfertilized.valid() || k.eggFertilized.valid();
+            // Ostriches, emus and the like have no unfertilized egg: their laying timer waits at half until a male mates.
+            k.eggFertilizedOnly = !k.eggUnfertilized.valid();
             k.eggIntervalSeconds = def.number("race.eggs.intervalDays", 1.0) * static_cast<double>(kSecondsPerDay);
             k.eggCount = std::max(1, static_cast<int>(def.number("race.eggs.count", 1.0)));
         }
@@ -442,6 +447,30 @@ bool Breeding::fertileNow(Entity animal, const AnimalBreed& b, int64_t now) cons
     return care == nullptr || care->heldUntil <= now;
 }
 
+bool Breeding::breedingAllowed(Entity animal) const {
+    const AnimalBreed* b = breed(animal);
+    if (b != nullptr && b->breedingOff) {
+        return false;
+    }
+    const AnimalCare* care = husbandry_.care(animal);
+    const AnimalZone* zone = care != nullptr && care->zone != kNoAnimalZone ? husbandry_.findZone(care->zone) : nullptr;
+    return zone == nullptr || !zone->breedingOff;
+}
+
+bool Breeding::setBreeding(Entity animal, bool allow, std::string& error) {
+    entt::registry& reg = things_.registry();
+    if (!reg.valid(animal) || !reg.all_of<Thing, Animal>(animal) || kindOf(animal) == nullptr) {
+        error = "that is no animal";
+        return false;
+    }
+    if (reg.get<Animal>(animal).wild) {
+        error = "only a tame animal can be told not to breed";
+        return false;
+    }
+    reg.get_or_emplace<AnimalBreed>(animal).breedingOff = !allow;
+    return true;
+}
+
 bool Breeding::willing(Entity female, const AnimalBreed& b, const Kind& kind, int64_t now) const {
     (void)kind;
     (void)female;
@@ -493,6 +522,11 @@ void Breeding::pass(int64_t now, bool everyMaleSeeks) {
         if (kind->eggs && isFemale) {
             if (b.eggSince == kBreedNotStarted) {
                 b.eggSince = now;
+            } else if (kind->eggFertilizedOnly && b.fertilized == 0) {
+                const int64_t half = static_cast<int64_t>(kind->eggIntervalSeconds * 0.5);
+                if (now - b.eggSince > half) {
+                    b.eggSince = now - half;
+                }
             } else if (static_cast<double>(now - b.eggSince) >= kind->eggIntervalSeconds) {
                 const bool fertilized = b.fertilized > 0;
                 if (layEgg(e, fertilized) != kNoEntity && fertilized) {
@@ -503,7 +537,7 @@ void Breeding::pass(int64_t now, bool everyMaleSeeks) {
             }
         }
 
-        if ((kind->gestates || kind->eggs) && fertileNow(e, b, now)) {
+        if ((kind->gestates || kind->eggs) && fertileNow(e, b, now) && breedingAllowed(e)) {
             const Position& pos = reg.get<Position>(e);
             const AnimalCare* care = husbandry_.care(e);
             const Candidate c{e, reg.get<Thing>(e).def, care != nullptr ? care->zone : kNoAnimalZone, pos.x, pos.y, pos.level};
@@ -567,8 +601,19 @@ void Breeding::pass(int64_t now, bool everyMaleSeeks) {
 
     // Fertilized eggs hatch where they lie.
     eggs_.clear();
-    for (const auto [e, h] : reg.view<const Hatching>().each()) {
-        if (now >= h.hatchAt && reg.all_of<Position>(e)) {
+    for (auto [e, h] : reg.view<Hatching>().each()) {
+        if (!reg.all_of<Position>(e)) {
+            continue;
+        }
+        // An egg that is too cold or too hot makes no progress: its hatch time moves on with the clock.
+        if (temperature_ != nullptr) {
+            const float degrees = temperature_->temperatureAt(cellOf(reg.get<Position>(e)));
+            if (degrees < rules_.hatchMinTemp || degrees > rules_.hatchMaxTemp) {
+                h.hatchAt += rules_.passSeconds;
+                continue;
+            }
+        }
+        if (now >= h.hatchAt) {
             eggs_.push_back(e);
         }
     }
@@ -596,6 +641,9 @@ void Breeding::hashState(StateHasher& h) const {
 void Breeding::hashThing(Entity e, StateHasher& h) const {
     const entt::registry& reg = things_.registry();
     if (const AnimalBreed* b = reg.try_get<AnimalBreed>(e)) {
+        if (b->breedingOff) {
+            h.add(uint64_t{2});
+        }
         h.add(b->pregnantUntil);
         h.add(static_cast<int>(b->litter));
         h.add(static_cast<int>(b->fertilized));

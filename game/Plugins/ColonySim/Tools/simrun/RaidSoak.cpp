@@ -21,8 +21,10 @@ namespace raidsoak {
 
 namespace {
 
-constexpr int kStuckSteps = 150;     // a fighter that should be walking but stays on one cell this long is stuck
-constexpr double kOpenLimit = 20.0;  // percent
+constexpr int kStuckSteps = 150;      // a fighter that should be walking but gets nowhere this long is stuck
+constexpr float kStuckMetres = 0.5f;  // getting nowhere: less than this far from where it was 150 steps ago
+constexpr double kOpenLimit = 10.0;   // percent: the design rule
+constexpr int kOneIn = 20;            // stuck fighters and raids still on after a quarter day: more than one seed in this many fails
 constexpr int kFirefightSteps = 2400;
 constexpr int kRaidSteps = 21600;    // a quarter of a game day, as the CTest raid
 
@@ -35,7 +37,8 @@ struct Tally {
     int64_t fightSteps = 0;
 };
 
-// Counts fighters that stay on one cell while their plan says they are walking.
+// Counts fighters that should be walking (their plan says so) but get nowhere: under half a metre in 150 steps.
+// A hurt pawn on a steep slope is slow and still gets somewhere; one held up for good does not.
 class StuckWatch {
 public:
     void watch(colony::Sim& sim) {
@@ -44,12 +47,13 @@ public:
                 seen_.erase(pawn);
                 continue;
             }
-            const colony::CellPos at = colony::cellOf(sim.things().registry().get<colony::Position>(pawn));
+            const colony::Position& pos = sim.things().registry().get<colony::Position>(pawn);
             Seen& s = seen_[pawn];
-            if (s.cell != at) {
-                s = Seen{at, 0, s.counted};
-            } else if (++s.steps == kStuckSteps && !s.counted) {
-                s.counted = true;
+            const float dx = pos.x - s.x;
+            const float dy = pos.y - s.y;
+            if (s.steps == 0 || dx * dx + dy * dy >= kStuckMetres * kStuckMetres) {
+                s = Seen{pos.x, pos.y, 1};
+            } else if (++s.steps == kStuckSteps) {
                 ++stuck_;
             }
         }
@@ -58,9 +62,9 @@ public:
 
 private:
     struct Seen {
-        colony::CellPos cell;
+        float x = 0.0f;
+        float y = 0.0f;
         int steps = 0;
-        bool counted = false;
     };
     std::map<colony::Entity, Seen> seen_;
     int stuck_ = 0;
@@ -70,12 +74,15 @@ bool upright(colony::Sim& sim, const std::vector<colony::Entity>& side) {
     return std::any_of(side.begin(), side.end(), [&](colony::Entity p) { return !sim.health().incapacitated(p); });
 }
 
-// Is there a cell within 10 m that is in cover from the enemy at (ex, ey)?
-bool coverNear(colony::Sim& sim, colony::CellPos at, float ex, float ey) {
+// Is there a cell within 10 m that is in cover from the enemy at (ex, ey) and that the fighter may stand on? A drafted
+// fighter keeps within its leash of the place it was drafted, so cover beyond that is no use to it.
+bool coverNear(colony::Sim& sim, const colony::Fighter& f, colony::CellPos at, float ex, float ey) {
     for (int dy = -10; dy <= 10; ++dy) {
         for (int dx = -10; dx <= 10; ++dx) {
             const colony::CellPos c{at.x + dx, at.y + dy, at.level};
-            if (dx * dx + dy * dy <= 100 && sim.map().inBounds(c) &&
+            const float ax = static_cast<float>(c.x - f.anchor.x);
+            const float ay = static_cast<float>(c.y - f.anchor.y);
+            if (dx * dx + dy * dy <= 100 && (f.leash <= 0.0f || ax * ax + ay * ay <= f.leash * f.leash) && sim.map().inBounds(c) &&
                 sim.cover().coverAgainst(c, colony::Stance::Crouching, ex, ey) >= 0.5f) {
                 return true;
             }
@@ -146,7 +153,7 @@ void firefight(uint64_t seed, const std::shared_ptr<const colony::DefDatabase>& 
             if (best < 1.0e9f) {
                 if (sim.cover().coverAgainst(at, colony::Stance::Crouching, ex, ey) >= 0.5f) {
                     ++out.waiting;
-                } else if (coverNear(sim, at, ex, ey)) {
+                } else if (coverNear(sim, f, at, ex, ey)) {
                     ++out.waiting;
                     ++out.inOpen;
                 }  // in the open with no cover within 10 m is not the fighters' fault: not counted
@@ -330,22 +337,18 @@ int run(uint64_t firstSeed, int seeds, std::shared_ptr<const colony::DefDatabase
                 "\"tendedInFight\":%d,\"dragged\":%d,\"stuckFighters\":%d}}\n",
                 careEnded, careOpen, careMissed, careDied, careTended, careDragged, careWatch.stuck());
     bool ok = true;
-    // The design rule is under 10%; the first measurement (this task) was 11.7%, so the run fails at
-    // kOpenLimit and the shortfall is reported until a tuning task closes it.
     if (fights.waiting == 0 || openPercent >= kOpenLimit) {
-        std::fprintf(stderr, "check failed: fighters waited in the open %.1f%% of the time (limit %.0f%%, rule 10%%, %lld pawn-steps)\n",
+        std::fprintf(stderr, "check failed: fighters waited in the open %.1f%% of the time (rule: under %.0f%%, %lld pawn-steps)\n",
                      openPercent, kOpenLimit, static_cast<long long>(fights.waiting));
         ok = false;
-    } else if (openPercent >= 10.0) {
-        std::fprintf(stderr, "note: fighters waited in the open %.1f%% of the time, over the 10%% design rule\n", openPercent);
     }
-    // Fighters that walk but don't move for kStuckSteps: the first run found 0.4 per seed, all in raids. The
-    // run fails past one per seed until a fix task brings it to none.
-    if (stuck > seeds) {
-        std::fprintf(stderr, "check failed: %d fighters stuck (walking but not moving for %d steps)\n", stuck, kStuckSteps);
+    // Fighters that walk but get nowhere for kStuckSteps.
+    if (stuck * kOneIn > seeds) {
+        std::fprintf(stderr, "check failed: %d fighters stuck (walking but getting nowhere for %d steps; at most one seed in %d)\n", stuck,
+                     kStuckSteps, kOneIn);
         ok = false;
     } else if (stuck > 0) {
-        std::fprintf(stderr, "note: %d fighters stuck (walking but not moving for %d steps)\n", stuck, kStuckSteps);
+        std::fprintf(stderr, "note: %d fighters stuck (walking but getting nowhere for %d steps)\n", stuck, kStuckSteps);
     }
     // With two colonists out of the firing line the colony is weaker and more raids hold on (field-care.md): only a raid
     // that never came fails; the rest are numbers to watch.
@@ -355,9 +358,9 @@ int run(uint64_t firstSeed, int seeds, std::shared_ptr<const colony::DefDatabase
     } else if (careOpen > 0) {
         std::fprintf(stderr, "note: with medics, %d raids were still going after a quarter day\n", careOpen);
     }
-    if (raidsMissed > 0 || raidsOpen * 4 > seeds) {
-        std::fprintf(stderr, "check failed: %d raids never came, %d never ended (more than a quarter is too many)\n", raidsMissed,
-                     raidsOpen);
+    if (raidsMissed > 0 || raidsOpen * kOneIn > seeds) {
+        std::fprintf(stderr, "check failed: %d raids never came, %d never ended inside the quarter day (at most one seed in %d)\n", raidsMissed,
+                     raidsOpen, kOneIn);
         ok = false;
     } else if (raidsOpen > 0) {
         std::fprintf(stderr, "note: %d raids were still going after a quarter day\n", raidsOpen);

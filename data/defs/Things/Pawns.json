@@ -1,13 +1,13 @@
 [
   {
-    "defName": "Human", "source": "RimWorld wiki", "label": "human", "category": "Pawn",
+    "defName": "Human", "visual": {"sound": {"hurt": "Pawn_Hurt", "death": "Pawn_Death", "downed": "Pawn_Downed", "burning": "Pawn_Burning"}}, "source": "RimWorld wiki", "label": "human", "category": "Pawn",
     "stats": {
       "moveSpeed": 0.153333, "marketValue": 1750, "mass": 60, "carryingCapacity": 75,
       "comfyTemperatureMin": 16, "comfyTemperatureMax": 26, "filthRate": 1
     },
     "race": {
       "intelligence": "Humanlike", "body": "Human", "hitboxes": "HumanHitboxes", "baseBodySize": 1.0, "baseHealthScale": 1.0,
-      "lifeExpectancy": 80, "foodPerDay": 1.6, "meatAmount": 140, "leatherAmount": 75
+      "lifeExpectancy": 80, "foodPerDay": 1.6, "meatDef": "Meat_Human", "meatAmount": 140, "leatherDef": "Leather_Human", "leatherAmount": 75
     },
     "tools": [
       { "label": "left fist", "capacities": ["Blunt"], "power": 8.2, "cooldownTime": 60 },

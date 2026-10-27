@@ -38,7 +38,7 @@ that the pawn can walk up to. One pawn per bench (the bench is reserved). Each s
 
 ```
 points = pointsPerTick / secondsPerTick          (0.00825 / 1.44 = 0.00573 a second at 100%)
-       x (skillSpeedBase + skillSpeedPerLevel x Intellectual level)    (0.2 + 0.1 x level)
+       x (skillSpeedBase + skillSpeedPerLevel x Intellectual level)    (0.08 + 0.115 x level: 8% at 0, 100% at 8, 238% at 20)
        x bench speedFactor                        (simple 0.75, hi-tech 1.0)
        x Consciousness
 ```

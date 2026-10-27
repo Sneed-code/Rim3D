@@ -29,6 +29,8 @@ constexpr float kFightEatReach = 1.2f; // a predator eats a corpse from this clo
 constexpr float kFightRetarget = 0.5f; // a chaser sets off again when its enemy is this far from the goal
 constexpr int kFightGiveUpWait = 20;   // a chaser that cannot get to its enemy stops for this long
 
+constexpr int64_t kFightSecondsPerYear = kDaysPerYear * kSecondsPerDay;
+
 float fightDist2(float ax, float ay, float bx, float by) { return (ax - bx) * (ax - bx) + (ay - by) * (ay - by); }
 
 // The stream of one decision, as animalRngFor in Animals.cpp but salted so the two never repeat each other.
@@ -110,6 +112,15 @@ void AnimalSystem::beginChase(Entity e, Animal& a, const Kind& kind, Entity enem
 
 // ---- Hurt, scared, running ---------------------------------------------------------------------
 
+float AnimalSystem::manhunterChance(const Kind& kind) const {
+    return kind.tusker ? rules_.manhunterChanceFlagged : (kind.predator ? rules_.manhunterChancePredator : rules_.manhunterChanceOther);
+}
+
+float AnimalSystem::manhunterChanceOf(Entity animal) const {
+    const Kind* kind = kindOf(animal);
+    return kind != nullptr ? manhunterChance(*kind) : 0.0f;
+}
+
 void AnimalSystem::hurt(Entity victim, Entity attacker) {
     entt::registry& reg = things_.registry();
     if (!reg.valid(victim) || !reg.valid(attacker) || victim == attacker || !reg.all_of<Animal, Position>(victim) ||
@@ -161,8 +172,7 @@ void AnimalSystem::hurt(Entity victim, Entity attacker) {
         }
         return;
     }
-    const float chance = kind.tusker ? rules_.manhunterChanceFlagged
-                                     : (kind.predator ? rules_.manhunterChancePredator : rules_.manhunterChanceOther);
+    const float chance = manhunterChance(kind);
     if (rng.unit() < chance) {
         enrage(victim, AnimalTemper::Manhunter, attacker);
     } else if (kind.predator || kind.tusker) {
@@ -296,6 +306,95 @@ void AnimalSystem::startFlee(Entity e, Animal& a, const Kind& kind, float fromX,
 }
 
 // ---- Each look at an animal in a fight ------------------------------------------------------------
+
+std::vector<AnimalSystem::WildKind> AnimalSystem::wildKinds() const {
+    std::vector<WildKind> out;
+    for (const Kind& kind : kinds_) {
+        if (kind.commonality > 0.0) {
+            out.push_back(WildKind{kind.def, kind.bodySize, kind.predator, kind.commonality});
+        }
+    }
+    return out;
+}
+
+int AnimalSystem::spawnManhunters(DefId def, int count, double hours, Entity target, CellPos& where) {
+    entt::registry& reg = things_.registry();
+    const Kind* kind = nullptr;
+    for (const Kind& k : kinds_) {
+        if (k.def == def) {
+            kind = &k;
+        }
+    }
+    CellPos edge;
+    if (kind == nullptr || count <= 0 || !pickEdgeCell(rng_, edge)) {
+        return 0;
+    }
+    const int64_t now = time_.seconds;
+    const int64_t until = now + static_cast<int64_t>(hours * static_cast<double>(kSecondsPerHour));
+    const uint32_t herd = count >= 2 ? saved_.nextHerd++ : 0;
+    const double adultYears = static_cast<double>(kind->adultAgeSeconds) / static_cast<double>(kFightSecondsPerYear);
+    std::vector<CellPos> used;
+    int placed = 0;
+    for (int i = 0; i < count; ++i) {
+        for (int tries = 0; tries < 24; ++tries) {
+            CellPos c = edge;
+            c.x += static_cast<int>(rng_.below(7)) - 3;
+            c.y += static_cast<int>(rng_.below(7)) - 3;
+            if (!map_.walkable(c) || std::find(used.begin(), used.end(), c) != used.end()) {
+                continue;
+            }
+            const Entity e = things_.spawn(kind->def, c);
+            if (e == kNoEntity) {
+                continue;
+            }
+            used.push_back(c);
+            Animal& a = reg.get<Animal>(e);
+            a.herd = herd;
+            a.bornAt = now - static_cast<int64_t>((adultYears + 0.05 + static_cast<double>(rng_.unit()) * 0.5) * static_cast<double>(kFightSecondsPerYear));
+            a.staysUntil = until;  // it does not walk off the edge again before the pack is done
+            if (enrage(e, AnimalTemper::Manhunter, placed == 0 ? target : kNoEntity)) {
+                a.temperUntil = until;
+                if (a.mode == AnimalMode::Chase) {
+                    a.until = std::max(a.until, until);
+                }
+            }
+            if (placed == 0) {
+                where = c;
+            }
+            ++placed;
+            break;
+        }
+    }
+    return placed;
+}
+
+Entity AnimalSystem::goMad(const std::vector<CellPos>& anchors, float range, double hours, Rng& rng) {
+    entt::registry& reg = things_.registry();
+    std::vector<Entity> candidates;
+    for (const auto [e, thing, pos] : reg.view<const Thing, const Position>().each()) {
+        if (thing.category != ThingCategory::Pawn || !reg.all_of<Animal>(e) || !things_.spawned(e) || fightDead(reg, e) ||
+            reg.get<Animal>(e).temper != AnimalTemper::Calm || kindOf(e) == nullptr || !isAdult(e)) {
+            continue;
+        }
+        for (const CellPos& anchor : anchors) {
+            if (anchor.level == pos.level &&
+                fightDist2(pos.x, pos.y, static_cast<float>(anchor.x) + 0.5f, static_cast<float>(anchor.y) + 0.5f) <= range * range) {
+                candidates.push_back(e);
+                break;
+            }
+        }
+    }
+    if (candidates.empty()) {
+        return kNoEntity;
+    }
+    std::sort(candidates.begin(), candidates.end());
+    const Entity pick = candidates[rng.below(static_cast<uint32_t>(candidates.size()))];
+    if (!enrage(pick, AnimalTemper::Manhunter, kNoEntity)) {
+        return kNoEntity;
+    }
+    reg.get<Animal>(pick).temperUntil = time_.seconds + static_cast<int64_t>(hours * static_cast<double>(kSecondsPerHour));
+    return pick;
+}
 
 Entity AnimalSystem::nearestColonist(Entity e, float range) const {
     const entt::registry& reg = things_.registry();

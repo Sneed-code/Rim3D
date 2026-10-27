@@ -4,16 +4,20 @@
 
 #include "ColonySim/Apparel.h"
 #include "ColonySim/Bills.h"
+#include "ColonySim/Crafting.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Farming.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Filth.h"
+#include "ColonySim/Fuel.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Fire.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Medicine.h"
+#include "ColonySim/MentalBreaks.h"
+#include "ColonySim/Surgery.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Plants.h"
@@ -50,12 +54,12 @@ public:
         const entt::registry& reg = jobs.things().registry();
         const Position& at = reg.get<Position>(pawn);
         reg.view<const Position, const StackCount>().each([&](Entity item, const Position& pos, const StackCount&) {
-            if (pos.level != at.level || jobs.storedPriority(item) >= best) {
+            // On any level: stairs and ladders join them (docs/design/levels.md).
+            if (jobs.storedPriority(item) >= best && !wantsOtherZone(jobs, item)) {
                 return;
             }
-            const float dx = pos.x - at.x;
-            const float dy = pos.y - at.y;
-            out.push_back(WorkCandidate{JobTarget{item, CellPos{}}, dx * dx + dy * dy, 0, 0, false, CellPos{}});
+            out.push_back(WorkCandidate{JobTarget{item, CellPos{}}, levelDistSq(pos.x - at.x, pos.y - at.y, pos.level - at.level), 0, 0, false,
+                                        CellPos{}});
         });
     }
 
@@ -64,6 +68,9 @@ public:
         // same def from the same reachability group and storage level: the answer would be the same.
         const entt::registry& reg = jobs.things().registry();
         const Entity item = candidate.target.thing;
+        if (wantsOtherZone(jobs, item)) {
+            return makeHaulJob(jobs, pawn, item, out);  // a product bound for its bill's stockpile: its own answer
+        }
         const DefId def = reg.get<Thing>(item).def;
         const uint32_t group = jobs.map().regions().groupAt(cellOf(reg.get<Position>(item)));
         const auto key = std::make_tuple(def.value, group, static_cast<int>(jobs.storedPriority(item)));
@@ -78,6 +85,14 @@ public:
     }
 
 private:
+    // A product marked for a stockpile (a bill's "store in") that doesn't lie in it yet.
+    static bool wantsOtherZone(JobSystem& jobs, Entity item) {
+        const entt::registry& reg = jobs.things().registry();
+        const StoreIn* store = reg.try_get<StoreIn>(item);
+        return store != nullptr && jobs.zones().find(store->zone) != nullptr &&
+               jobs.zones().zoneAt(cellOf(reg.get<Position>(item))) != store->zone;
+    }
+
     std::vector<std::tuple<uint32_t, uint32_t, int>> noRoom_;  // def, group, stored priority
 };
 
@@ -118,10 +133,9 @@ public:
     }
 };
 
+// Across levels a level counts as kLevelDetourM metres more (docs/design/levels.md).
 float workGiverDistSq(const Position& a, const Position& b) {
-    const float dx = a.x - b.x;
-    const float dy = a.y - b.y;
-    return dx * dx + dy * dy;
+    return levelDistSq(a.x - b.x, a.y - b.y, a.level - b.level);
 }
 
 // Construction (docs/design/construction.md). A pawn builds from a cell beside the footprint, so these
@@ -138,7 +152,7 @@ public:
         const entt::registry& reg = jobs.things().registry();
         const Position& at = reg.get<Position>(pawn);
         reg.view<const ConstructionSite, const Position>().each([&](Entity site, const ConstructionSite& s, const Position& pos) {
-            if (pos.level != at.level || s.hasAllMaterials() || jobs.deliveryReservedByOther(site, pawn)) {
+            if (s.hasAllMaterials() || jobs.deliveryReservedByOther(site, pawn)) {
                 return;
             }
             CellPos stand;
@@ -166,7 +180,7 @@ public:
             float bestDist = 0.0f;
             reg.view<const Thing, const Position, const StackCount>().each(
                 [&](Entity item, const Thing& thing, const Position& pos, const StackCount&) {
-                    if (thing.def != m.item || pos.level != at.level) {
+                    if (thing.def != m.item) {
                         return;
                     }
                     const float dist = workGiverDistSq(at, pos);
@@ -208,7 +222,7 @@ public:
         const entt::registry& reg = jobs.things().registry();
         const Position& at = reg.get<Position>(pawn);
         reg.view<const ConstructionSite, const Position>().each([&](Entity site, const ConstructionSite& s, const Position& pos) {
-            if (pos.level != at.level || s.stage != ConstructionStage::Frame || !s.hasAllMaterials()) {
+            if (s.stage != ConstructionStage::Frame || !s.hasAllMaterials()) {
                 return;
             }
             CellPos stand;
@@ -238,9 +252,6 @@ public:
         const Position& at = reg.get<Position>(pawn);
         reg.view<const MarkedForDeconstruct, const Footprint, const Position>().each(
             [&](Entity building, const Footprint& footprint, const Position& pos) {
-                if (pos.level != at.level) {
-                    return;
-                }
                 CellPos stand;
                 if (!jobs.construction().workCell(footprint.rect(), cellOf(at), stand)) {
                     return;
@@ -409,13 +420,16 @@ public:
     }
 };
 
-// Bills on a stove (RimWorld's WorkGiver_DoBill): the first bill in the building's list that should
+// Bills on a work building (RimWorld's WorkGiver_DoBill): the first bill in the building's list that should
 // be done now, that the pawn is skilled enough for, and whose ingredients it can fetch. The
 // ingredients are the nearest free stacks to the building; the pawn carries them one stack at a
-// time (docs/design/bills.md).
-class DoBillsCookStoveGiver final : public WorkGiver {
+// time (docs/design/bills.md). One giver per bench kind: a building def's `workGiver` names the
+// giver (DoBillsCookStove, DoBillsSmithy, DoBillsTailor...), which the work types list (crafting.md).
+class DoBillsGiver final : public WorkGiver {
 public:
-    const char* task() const override { return "DoBillsCookStove"; }
+    explicit DoBillsGiver(const char* task) : task_(task) {}
+
+    const char* task() const override { return task_; }
 
     void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
         if (!jobs.canUseHands(pawn)) {
@@ -423,9 +437,10 @@ public:
         }
         const entt::registry& reg = jobs.things().registry();
         const Position& at = reg.get<Position>(pawn);
-        reg.view<const BillList, const Footprint, const Position>().each(
-            [&](Entity building, const BillList& list, const Footprint& footprint, const Position& pos) {
-                if (pos.level != at.level || reg.all_of<MarkedForDeconstruct>(building) || !jobs.buildingRuns(building)) {
+        reg.view<const BillList, const Footprint, const Position, const Thing>().each(
+            [&](Entity building, const BillList& list, const Footprint& footprint, const Position& pos, const Thing& thing) {
+                if (pos.level != at.level || reg.all_of<MarkedForDeconstruct>(building) || !jobs.buildingRuns(building) ||
+                    !mine(jobs, thing.def)) {
                     return;
                 }
                 // Cheap check only: some bill that isn't suspended (the stock of an "until you
@@ -434,7 +449,9 @@ public:
                     return !bill.suspended && (bill.mode != BillMode::Count || bill.count > 0);
                 });
                 CellPos stand;
-                if (!any || !jobs.construction().workCell(footprint.rect(), cellOf(at), stand)) {
+                // A stove with less fuel than one use takes is stopped until it is refuelled.
+                if (!any || !jobs.fuel().canUse(building, jobs.fuel().specOf(building).perUse) ||
+                    !jobs.construction().workCell(footprint.rect(), cellOf(at), stand)) {
                     return;
                 }
                 out.push_back(WorkCandidate{JobTarget{building, CellPos{}}, workGiverDistSq(at, pos), 0, 0, true, stand});
@@ -448,15 +465,26 @@ public:
         if (list == nullptr) {
             return false;
         }
+        const float fuelPerProduct = jobs.fuel().specOf(building).perUse;
         const BillSystem& bills = jobs.bills();
         for (const Bill& bill : list->bills) {
             const Recipe* recipe = bills.recipe(bill.recipe);
-            if (recipe == nullptr || recipe->work <= 0.0f || !bills.shouldDo(bill) ||
-                bills.skillLevel(pawn, recipe->skill) < recipe->minSkill) {
+            if (recipe == nullptr || recipe->work <= 0.0f || !bills.shouldDo(bill)) {
+                continue;
+            }
+            const int skill = bills.skillLevel(pawn, recipe->skill);
+            if (skill < recipe->minSkill || skill < bill.skillMin || skill > bill.skillMax ||
+                !jobs.fuel().canUse(building, fuelPerProduct * static_cast<float>(recipe->fuelUses()))) {
+                continue;
+            }
+            if (recipe->butcher || recipe->cremate) {
+                if (makeButcherJob(jobs, pawn, building, bill, candidate.reach, out)) {
+                    return true;
+                }
                 continue;
             }
             std::vector<BillPick> picks;
-            if (!planIngredients(jobs, pawn, building, *recipe, picks)) {
+            if (!planIngredients(jobs, pawn, building, bill, *recipe, picks)) {
                 continue;
             }
             out = Job{};
@@ -478,22 +506,68 @@ private:
         Entity item = kNoEntity;
     };
 
-    // Picks stacks that cover every ingredient of the recipe, nearest to the building first, never
-    // one that is held, avoided or unreachable. False if the map doesn't have enough.
-    static bool planIngredients(JobSystem& jobs, Entity pawn, Entity building, const Recipe& recipe,
-                                std::vector<BillPick>& picks) {
+    // Whether a building def names this giver.
+    bool mine(JobSystem& jobs, DefId def) {
+        if (def.value >= known_.size()) {
+            known_.resize(jobs.defs().size(), kUnknown);
+        }
+        if (known_[def.value] == kUnknown) {
+            known_[def.value] = jobs.defs().get(def).text("workGiver") == task_ ? kYes : kNo;
+        }
+        return known_[def.value] == kYes;
+    }
+
+    // Takes stacks nearest first to cover `left` (nutrition or count). False if they don't.
+    static bool cover(JobSystem& jobs, Entity pawn, const RecipeIngredient& ingredient, const std::vector<Stack>& stacks,
+                      std::vector<BillPick>& picks) {
         const entt::registry& reg = jobs.things().registry();
         const BillSystem& bills = jobs.bills();
+        double left = ingredient.amount;
+        for (const Stack& stack : stacks) {
+            if (left <= 1.0e-6) {
+                break;
+            }
+            const DefId def = reg.get<Thing>(stack.item).def;
+            const double unit = ingredient.byNutrition ? bills.nutritionOf(def) : 1.0;
+            const int wanted = ingredient.byNutrition ? static_cast<int>(std::ceil(left / unit - 1.0e-6))
+                                                      : static_cast<int>(std::lround(left));
+            const int take = std::min({wanted, reg.get<StackCount>(stack.item).count, jobs.carryLimit(pawn, def)});
+            if (take <= 0) {
+                continue;
+            }
+            if (static_cast<int>(picks.size()) >= bills.numbers().maxIngredientStacks) {
+                return false;
+            }
+            picks.push_back(BillPick{stack.item, take});
+            left -= take * unit;
+        }
+        return left <= 1.0e-6;
+    }
+
+    // Picks stacks that cover every ingredient of the recipe, nearest to the building first, never
+    // one that is held, avoided or unreachable, that the bill's filter refuses or that lie farther
+    // from the building than its radius. A recipe whose product is made of its stuff takes the
+    // stuff from one item def only (cloth or leather, not half of each). False if the map doesn't
+    // have enough.
+    static bool planIngredients(JobSystem& jobs, Entity pawn, Entity building, const Bill& bill, const Recipe& recipe,
+                                std::vector<BillPick>& picks) {
+        const entt::registry& reg = jobs.things().registry();
         const Position& at = reg.get<Position>(pawn);
         const Position& stove = reg.get<Position>(building);
         const CellPos from = cellOf(at);
+        const float radiusSq = bill.radius * bill.radius;
         std::vector<Stack> stacks;
         for (const RecipeIngredient& ingredient : recipe.ingredients) {
             stacks.clear();
             reg.view<const Thing, const Position, const StackCount>().each(
                 [&](Entity item, const Thing& thing, const Position& pos, const StackCount&) {
                     if (pos.level != at.level ||
-                        std::find(ingredient.items.begin(), ingredient.items.end(), thing.def) == ingredient.items.end()) {
+                        std::find(ingredient.items.begin(), ingredient.items.end(), thing.def) == ingredient.items.end() ||
+                        !BillSystem::allowsIngredient(bill, thing.def)) {
+                        return;
+                    }
+                    const float distSq = workGiverDistSq(stove, pos);
+                    if (bill.radius > 0.0f && distSq > radiusSq) {
                         return;
                     }
                     const JobTarget target{item, CellPos{}};
@@ -502,36 +576,52 @@ private:
                         !jobs.canReach(from, cellOf(pos))) {
                         return;
                     }
-                    stacks.push_back(Stack{workGiverDistSq(stove, pos), item});
+                    stacks.push_back(Stack{distSq, item});
                 });
             std::sort(stacks.begin(), stacks.end(), [](const Stack& a, const Stack& b) {
                 return a.distSq != b.distSq ? a.distSq < b.distSq : a.item < b.item;
             });
-            double left = ingredient.amount;  // nutrition or count still to cover
-            for (const Stack& stack : stacks) {
-                if (left <= 1.0e-6) {
-                    break;
-                }
-                const DefId def = reg.get<Thing>(stack.item).def;
-                const double unit = ingredient.byNutrition ? bills.nutritionOf(def) : 1.0;
-                const int wanted = ingredient.byNutrition ? static_cast<int>(std::ceil(left / unit - 1.0e-6))
-                                                          : static_cast<int>(std::lround(left));
-                const int take = std::min({wanted, reg.get<StackCount>(stack.item).count, jobs.carryLimit(pawn, def)});
-                if (take <= 0) {
-                    continue;
-                }
-                if (static_cast<int>(picks.size()) >= bills.numbers().maxIngredientStacks) {
+            const size_t before = picks.size();
+            if (!recipe.stuffFromIngredient || ingredient.byNutrition) {
+                if (!cover(jobs, pawn, ingredient, stacks, picks)) {
                     return false;
                 }
-                picks.push_back(BillPick{stack.item, take});
-                left -= take * unit;
+                continue;
             }
-            if (left > 1.0e-6) {
+            // One item def at a time, the def with the nearest stack first.
+            std::vector<DefId> defs;
+            for (const Stack& stack : stacks) {
+                const DefId def = reg.get<Thing>(stack.item).def;
+                if (std::find(defs.begin(), defs.end(), def) == defs.end()) {
+                    defs.push_back(def);
+                }
+            }
+            bool covered = false;
+            for (const DefId def : defs) {
+                std::vector<Stack> ofDef;
+                for (const Stack& stack : stacks) {
+                    if (reg.get<Thing>(stack.item).def == def) {
+                        ofDef.push_back(stack);
+                    }
+                }
+                picks.resize(before);
+                if (cover(jobs, pawn, ingredient, ofDef, picks)) {
+                    covered = true;
+                    break;
+                }
+            }
+            if (!covered) {
                 return false;
             }
         }
         return !picks.empty();
     }
+
+    static constexpr uint8_t kUnknown = 0;
+    static constexpr uint8_t kYes = 1;
+    static constexpr uint8_t kNo = 2;
+    const char* task_;
+    std::vector<uint8_t> known_;  // by building def id
 };
 
 // Research (RimWorld's WorkGiver_Researcher): a research bench that can work on the colony's current
@@ -604,6 +694,12 @@ public:
                 continue;
             }
             const bool bleeds = jobs.health().urgentlyNeedsTending(patient);
+            // One in a mental break walks about and can't be caught up with (a tend takes minutes in reach), so the doctors
+            // would chase it for hours; it is tended when the break is over.
+            const MentalBreaker* breaker = reg.try_get<MentalBreaker>(patient);
+            if (breaker != nullptr && breaker->active) {
+                continue;
+            }
             if (urgent && !bleeds) {
                 continue;
             }
@@ -663,6 +759,32 @@ public:
     }
 };
 
+// Operate (RimWorld's surgery bills, task H3, docs/design/surgery.md): a patient lying in bed with an operation planned that this
+// pawn is skilled enough for and can fetch the part and a medicine for.
+class OperateGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "Operate"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        if (jobs.surgery() == nullptr || jobs.medicine() == nullptr || !jobs.canUseHands(pawn)) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        for (const auto [patient, health, pos] : reg.view<const Health, const Position>().each()) {
+            if (patient == pawn || pos.level != at.level || !medicalColonist(reg, patient) || !jobs.surgery()->pending(patient) ||
+                !jobs.lyingInBed(patient)) {
+                continue;
+            }
+            out.push_back(WorkCandidate{JobTarget{patient, CellPos{}}, workGiverDistSq(at, pos), 0, 0, false, CellPos{}});
+        }
+    }
+
+    bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
+        return jobs.planOperation(pawn, candidate.target.thing, out);
+    }
+};
+
 // A patient that isn't down goes to bed to heal: GoToMedicalBed only to a medical bed, RestToHeal to any bed.
 class BedRestGiver : public WorkGiver {
 public:
@@ -670,7 +792,7 @@ public:
 
     void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
         const entt::registry& reg = jobs.things().registry();
-        if (!reg.all_of<Health, Worker>(pawn) || reg.get<Health>(pawn).downed || !jobs.health().needsRest(pawn)) {
+        if (!reg.all_of<Health, Worker>(pawn) || reg.get<Health>(pawn).downed || !jobs.needsBedRest(pawn)) {
             return;
         }
         const Entity under = jobs.bedUnder(pawn);
@@ -688,7 +810,7 @@ public:
     }
 
     bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
-        if (!jobs.health().needsRest(pawn)) {
+        if (!jobs.needsBedRest(pawn)) {
             return false;
         }
         out = Job{};
@@ -820,6 +942,75 @@ private:
     std::vector<int> rescue_;
 };
 
+// Fuel for buildings (RimWorld's WorkGiver_Refuel): a building that burns fuel and is low on it (or the
+// player ordered a fill) gets the nearest stack of its fuel item, carried to a cell beside it
+// (docs/design/fuel.md). One refueller at a time per building.
+class RefuelGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "Refuel"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        if (!jobs.canUseHands(pawn)) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        reg.view<const Fuel, const Footprint, const Position>().each(
+            [&](Entity building, const Fuel&, const Footprint& footprint, const Position& pos) {
+                if (pos.level != at.level || reg.all_of<ConstructionSite>(building) ||
+                    reg.all_of<MarkedForDeconstruct>(building) || !jobs.fuel().wantsFuel(building) ||
+                    jobs.deliveryReservedByOther(building, pawn)) {
+                    return;
+                }
+                CellPos stand;
+                if (!jobs.construction().workCell(footprint.rect(), cellOf(at), stand)) {
+                    return;
+                }
+                out.push_back(WorkCandidate{JobTarget{building, CellPos{}}, workGiverDistSq(at, pos), 0, 0, true, stand});
+            });
+    }
+
+    bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
+        const entt::registry& reg = jobs.things().registry();
+        const Entity building = candidate.target.thing;
+        const DefId item = jobs.fuel().specOf(building).item;
+        const int room = jobs.fuel().roomFor(building);
+        if (!item.valid() || room < 1 || jobs.deliveryReservedByOther(building, pawn)) {
+            return false;
+        }
+        const Position& at = reg.get<Position>(pawn);
+        const CellPos from = cellOf(at);
+        Entity best = kNoEntity;
+        float bestDist = 0.0f;
+        reg.view<const Thing, const Position, const StackCount>().each(
+            [&](Entity stack, const Thing& thing, const Position& pos, const StackCount&) {
+                if (thing.def != item || pos.level != at.level) {
+                    return;
+                }
+                const float dist = workGiverDistSq(at, pos);
+                if (best != kNoEntity && (dist > bestDist || (dist == bestDist && stack > best))) {
+                    return;
+                }
+                const JobTarget target{stack, CellPos{}};
+                if (jobs.reservedByOther(target, pawn) || jobs.avoiding(pawn, target) || !jobs.canReach(from, cellOf(pos))) {
+                    return;
+                }
+                best = stack;
+                bestDist = dist;
+            });
+        if (best == kNoEntity) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::Refuel;
+        out.thing = best;
+        out.site = building;
+        out.cell = candidate.reach;
+        out.count = std::min({room, jobs.carryLimit(pawn, item), reg.get<StackCount>(best).count});
+        return out.count > 0;
+    }
+};
+
 }  // namespace
 
 bool makeHaulJob(JobSystem& jobs, Entity pawn, Entity item, Job& out) {
@@ -827,7 +1018,11 @@ bool makeHaulJob(JobSystem& jobs, Entity pawn, Entity item, Job& out) {
     const DefId def = reg.get<Thing>(item).def;
     const CellPos from = cellOf(reg.get<Position>(item));
     CellPos cell;
-    if (!jobs.findStorageCell(def, from, jobs.storedPriority(item), pawn, cell)) {
+    // A product made for a stockpile goes there when it can, else to the best one as any item would.
+    const StoreIn* store = reg.try_get<StoreIn>(item);
+    const bool toZone = store != nullptr && jobs.zones().zoneAt(from) != store->zone &&
+                        jobs.findStorageCellIn(store->zone, def, from, pawn, cell);
+    if (!toZone && !jobs.findStorageCell(def, from, jobs.storedPriority(item), pawn, cell)) {
         return false;
     }
     out = Job{};
@@ -848,17 +1043,24 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<CutOrHarvestPlantsGiver>());
     givers.push_back(std::make_unique<HarvestCropsGiver>());
     givers.push_back(std::make_unique<SowCropsGiver>());
-    givers.push_back(std::make_unique<DoBillsCookStoveGiver>());
+    for (const char* task :
+         {"DoBillsCookStove", "DoBillsButcher", "DoBillsSmithy", "DoBillsTailor", "DoBillsCraftingSpot", "DoBillsStonecut", "DoBillsSmelt",
+          "DoBillsCremate", "DoBillsDrugLab", "DoBillsBrew"}) {
+        givers.push_back(std::make_unique<DoBillsGiver>(task));
+    }
     givers.push_back(std::make_unique<ResearchGiver>());
     givers.push_back(std::make_unique<CleanFilthGiver>());
     givers.push_back(std::make_unique<TendPatientsGiver>());
     givers.push_back(std::make_unique<RescueGiver>());
+    givers.push_back(std::make_unique<OperateGiver>());
     givers.push_back(std::make_unique<GoToMedicalBedGiver>());
     givers.push_back(std::make_unique<RestToHealGiver>());
     givers.push_back(std::make_unique<ExtinguishFiresGiver>());
     givers.push_back(std::make_unique<StripGiver>());
     addHusbandryWorkGivers(givers);
+    addHuntWorkGivers(givers);
     addPrisonerWorkGivers(givers);
+    givers.push_back(std::make_unique<RefuelGiver>());
     return givers;
 }
 
