@@ -85,6 +85,8 @@ const char* commandName(const Command& command) {
                 return "PlaceFloor";
             } else if constexpr (std::is_same_v<Type, AddFilthCommand>) {
                 return "AddFilth";
+            } else if constexpr (std::is_same_v<Type, SetThermostatCommand>) {
+                return "SetThermostat";
             } else if constexpr (std::is_same_v<Type, TakeDrugCommand>) {
                 return "TakeDrug";
             } else if constexpr (std::is_same_v<Type, SetDrugPolicyCommand>) {
@@ -402,6 +404,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Refuel: return "Refuel";
         case PawnAction::Butcher: return "Butcher";
         case PawnAction::DropCorpse: return "DropCorpse";
+        case PawnAction::Rearm: return "Rearm";
         case PawnAction::Punch: return "Punch";
         case PawnAction::Operate: return "Operate";
     }

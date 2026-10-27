@@ -202,6 +202,10 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["building"] = entt::to_integral(c.building);
                 j["autoRefuel"] = c.autoRefuel;
                 j["fillNow"] = c.fillNow;
+            } else if constexpr (std::is_same_v<Type, SetThermostatCommand>) {
+                j["building"] = entt::to_integral(c.building);
+                j["celsius"] = c.celsius;
+                j["clear"] = c.clear;
             } else if constexpr (std::is_same_v<Type, SetBillOptionsCommand>) {
                 j["building"] = entt::to_integral(c.building);
                 j["bill"] = c.bill;
@@ -209,6 +213,7 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["skillMax"] = c.skillMax;
                 j["radius"] = c.radius;
                 j["storeZone"] = c.storeZone;
+                j["countZone"] = c.countZone;
                 j["unpauseAt"] = c.unpauseAt;
                 j["disallowed"] = c.disallowed;
             } else if constexpr (std::is_same_v<Type, MoveBillCommand>) {
@@ -933,7 +938,7 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         if (!r.integer(j, "building", building, where) || !r.integer(j, "bill", c.bill, where) ||
             !r.integer(j, "skillMin", c.skillMin, where) || !r.integer(j, "skillMax", c.skillMax, where) ||
             !r.number(j, "radius", c.radius, where) || !r.integer(j, "storeZone", c.storeZone, where) ||
-            !r.integer(j, "unpauseAt", c.unpauseAt, where)) {
+            !r.integer(j, "unpauseAt", c.unpauseAt, where) || !r.integer(j, "countZone", c.countZone, where)) {
             return false;
         }
         const auto list = j.find("disallowed");
@@ -1009,6 +1014,15 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         uint32_t building = entt::to_integral(kNoEntity);
         if (!r.integer(j, "building", building, where) || !r.flag(j, "autoRefuel", c.autoRefuel, where) ||
             !r.flag(j, "fillNow", c.fillNow, where)) {
+            return false;
+        }
+        c.building = static_cast<Entity>(building);
+        out.command = c;
+    } else if (type == "SetThermostat") {
+        SetThermostatCommand c;
+        uint32_t building = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "building", building, where) || !r.number(j, "celsius", c.celsius, where) ||
+            !r.flag(j, "clear", c.clear, where)) {
             return false;
         }
         c.building = static_cast<Entity>(building);

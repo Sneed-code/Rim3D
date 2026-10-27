@@ -1,3 +1,5 @@
+#include "ColonySim/Apparel.h"
+#include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defense.h"
@@ -5,7 +7,9 @@
 #include "ColonySim/Fighters.h"
 #include "FuelTestHelper.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Jobs.h"
 #include "ColonySim/Power.h"
+#include "ColonySim/Random.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
@@ -285,6 +289,79 @@ TEST_CASE("Defense: an enemy that steps on a spike trap is stabbed, the colony's
     sim->submit(RearmTrapCommand{trap});  // armed already
     sim->step();
     CHECK(defnCount(*sim, EventType::CommandFailed) == 1);
+}
+
+TEST_CASE("Defense: a spike trap's stabs go through armor, so a flak vest and helmet take most of them") {
+    auto sim = defnSim();
+    const DefId stab = sim->defs().idOf("DamageTypes", "Stab");
+    const DefId vest = sim->defs().idOf("Things", "Apparel_FlakVest");
+    const DefId pants = sim->defs().idOf("Things", "Apparel_FlakPants");
+    const DefId helmet = sim->defs().idOf("Things", "Apparel_SimpleHelmet");
+    DEFN_REQUIRE(stab.valid());
+    DEFN_REQUIRE(vest.valid());
+    DEFN_REQUIRE(pants.valid());
+    DEFN_REQUIRE(helmet.valid());
+    CHECK(sim->defs().get(sim->defs().idOf("Things", "TrapSpike")).number("trap.armorPenetration") > 0.0);
+    const DefId cloth = sim->defs().idOf("Things", "Cloth");
+    float bare = 0.0f;
+    float armoured = 0.0f;
+    Rng rngBare(5);
+    Rng rngArmoured(5);
+    for (int i = 0; i < 20; ++i) {
+        const Entity a = sim->things().spawn("Human", CellPos{10 + i, 10, 0});
+        const Entity b = sim->things().spawn("Human", CellPos{10 + i, 14, 0});
+        for (const DefId piece : {vest, pants, helmet}) {
+            const bool stuffed = sim->defs().get(piece).flag("stuffRequired");
+            const Entity item = sim->apparel().make(piece, stuffed ? cloth : DefId{}, -1, CellPos{10 + i, 14, 0});
+            std::string why;
+            CHECK(sim->apparel().putOn(b, item, why));
+        }
+        for (int hit = 0; hit < 5; ++hit) {
+            sim->combat().strikePawn(a, stab, 20.0f, 0.5f, rngBare);
+            sim->combat().strikePawn(b, stab, 20.0f, 0.5f, rngArmoured);
+        }
+        bare += defnHurt(*sim, a);
+        armoured += defnHurt(*sim, b);
+    }
+    CHECK(bare > 0.0f);
+    CHECK(armoured < bare * 0.8f);
+}
+
+TEST_CASE("Defense: a colonist with the Construction work type walks to a sprung spike trap and sets it again; an IED is left") {
+    auto sim = defnSim();
+    const Entity trap = sim->things().spawn("TrapSpike", CellPos{20, 20, 0});
+    const Entity colonist = sim->things().spawn("Human", CellPos{26, 20, 0});
+    sim->things().registry().emplace<Colonist>(colonist, Colonist{});
+    sim->jobs().addWorker(colonist, {}, false);
+    sim->submit(SetWorkPriorityCommand{colonist, "Construction", 1});
+    sim->stepMany(120);
+    CHECK_FALSE(sim->things().registry().get<Trap>(trap).sprung);
+    CHECK(defnCount(*sim, EventType::TrapRearmed) == 0);  // nothing to do while it is armed
+
+    sim->things().registry().get<Trap>(trap).sprung = true;
+    const Entity ied = sim->things().spawn("TrapIEDExplosive", CellPos{20, 24, 0});
+    sim->things().registry().get<Trap>(ied).sprung = true;
+    int started = -1;
+    int rearmed = -1;
+    for (int i = 0; i < 600 && rearmed < 0; ++i) {
+        sim->step();
+        for (const Event& e : sim->events()) {
+            if (e.type == EventType::PawnAction && e.action == PawnAction::Rearm && started < 0) {
+                started = i;
+                CHECK(e.thing == colonist);
+            }
+            if (e.type == EventType::TrapRearmed && e.thing == trap) {
+                rearmed = i;
+            }
+        }
+    }
+    DEFN_REQUIRE(started >= 0);
+    DEFN_REQUIRE(rearmed >= 0);
+    CHECK(rearmed - started >= 12);  // the 13 seconds of work
+    CHECK_FALSE(sim->things().registry().get<Trap>(trap).sprung);
+    sim->stepMany(200);
+    CHECK(sim->things().registry().get<Trap>(ied).sprung);  // an IED can't be used again
+    CHECK(defnCount(*sim, EventType::TrapRearmed) == 0);
 }
 
 TEST_CASE("Defense: an IED blows up under the first enemy and is gone; a blast sets it off too") {
