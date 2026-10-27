@@ -3,11 +3,11 @@
 #include "ColonySim/Combat.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Needs.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
 #include <cmath>
-#include <cstdlib>
 
 namespace colony {
 
@@ -52,9 +52,6 @@ bool JobSystem::thinkApparel(Entity pawn, Job& out) {
         out.cell = cellOf(reg.get<Position>(best));
         return true;
     }
-    if (findLooseWeapon(pawn, out)) {
-        return true;
-    }
     own.nextCheck = now() + apparel_->rules().checkEverySteps;
     return false;
 }
@@ -63,6 +60,29 @@ bool JobSystem::thinkApparel(Entity pawn, Job& out) {
 // guns left at the landing and what a fallen colonist dropped arm the rest of the colony. Weapons already carried are never
 // swapped for better ones. Melee weapons are left lying: a colonist with only a knife stands and fights a wolf, and a
 // berserk one with a knife kills its friends. Ours.
+bool JobSystem::thinkArm(Entity pawn, Job& out) {
+    if (apparel_ == nullptr || combat_ == nullptr) {
+        return false;
+    }
+    entt::registry& reg = things_.registry();
+    if (!reg.all_of<PawnOutfit>(pawn)) {
+        reg.emplace<PawnOutfit>(pawn, PawnOutfit{apparel_->outfitOf(pawn), 0, 0});
+    }
+    PawnOutfit& own = reg.get<PawnOutfit>(pawn);
+    if (now() < own.nextArmCheck) {
+        return false;
+    }
+    const Needs* needs = reg.try_get<Needs>(pawn);
+    if (needs != nullptr && (needs->food < 0.5f || needs->rest < 0.3f)) {
+        return false;  // hungry or tired colonists see to that first
+    }
+    if (findLooseWeapon(pawn, out)) {
+        return true;
+    }
+    own.nextArmCheck = now() + apparel_->rules().checkEverySteps;
+    return false;
+}
+
 bool JobSystem::findLooseWeapon(Entity pawn, Job& out) {
     if (combat_ == nullptr) {
         return false;

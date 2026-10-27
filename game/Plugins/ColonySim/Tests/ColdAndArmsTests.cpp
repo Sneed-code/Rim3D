@@ -1,5 +1,4 @@
-// Tests for the year run's survival fixes: colonists go to a warm room when the cold gets to them, and pick up loose weapons
-// (docs/design/temperature.md "Seeking warmth", docs/design/weapons.md "Picking weapons up").
+// Tests for colonists picking up loose guns (docs/design/weapons.md "Picking guns up").
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Defs.h"
@@ -58,74 +57,8 @@ Entity coldArmsColonist(Sim& sim, int x, int y) {
     return pawn;
 }
 
-// A walled room 10..16 square with a door in the south wall, a campfire inside; warmed for a day.
-void coldArmsWarmRoom(Sim& sim, bool fire) {
-    const CellPos door{13, 16, 0};
-    for (int y = 10; y <= 16; ++y) {
-        for (int x = 10; x <= 16; ++x) {
-            if ((x == 10 || x == 16 || y == 10 || y == 16) && !(x == door.x && y == door.y)) {
-                sim.things().spawn("Wall", CellPos{x, y, 0});
-            }
-        }
-    }
-    sim.things().spawn("Door", door);
-    sim.rooms().update();
-    if (fire) {
-        sim.things().spawn("Campfire", CellPos{12, 12, 0});
-    }
-    sim.stepMany(24 * 3600);
-}
-
-JobType coldArmsJob(Sim& sim, Entity pawn) { return sim.things().registry().get<Worker>(pawn).job.type; }
 
 }  // namespace
-
-TEST_CASE("Cold: a colonist with hypothermia setting in walks into the warm room and stays until it has recovered") {
-    auto sim = coldArmsSim(-20.0f);
-    coldArmsWarmRoom(*sim, true);
-    COLDARMS_REQUIRE(sim->temperature().temperatureAt(CellPos{13, 13, 0}) > 20.0f);
-    const Entity pawn = coldArmsColonist(*sim, 24, 24);
-    const DefId hypothermia = sim->defs().idOf("Hediffs", "Hypothermia");
-    COLDARMS_REQUIRE(sim->health().setEnvironmentSeverity(pawn, hypothermia, 0.3f));
-    bool sought = false;
-    for (int i = 0; i < 1200 && !sought; ++i) {
-        sim->step();
-        sought = coldArmsJob(*sim, pawn) == JobType::SeekWarmth;
-    }
-    CHECK(sought);
-    sim->stepMany(900);
-    const Room* room = sim->rooms().roomOf(cellOf(sim->things().registry().get<Position>(pawn)));
-    COLDARMS_REQUIRE(room != nullptr);
-    CHECK(room->enclosed());
-    CHECK(sim->temperature().ambientOf(pawn) > 16.0f);
-    // It recovers (0.9 a day) and then goes about its business; in the end it is alive and its hypothermia gone.
-    sim->stepMany(86400 / 2);
-    CHECK(sim->health().environmentSeverity(pawn, hypothermia) < sim->temperature().numbers().warmEnoughSeverity + 0.001f);
-    CHECK_FALSE(sim->health().incapacitated(pawn));
-}
-
-TEST_CASE("Cold: with no warm room, or a colonist that is not cold enough, nothing is sought") {
-    {
-        auto sim = coldArmsSim(-20.0f);
-        coldArmsWarmRoom(*sim, false);  // the room is as cold as outside
-        const Entity pawn = coldArmsColonist(*sim, 24, 24);
-        const DefId hypothermia = sim->defs().idOf("Hediffs", "Hypothermia");
-        COLDARMS_REQUIRE(sim->health().setEnvironmentSeverity(pawn, hypothermia, 0.3f));
-        for (int i = 0; i < 600; ++i) {
-            sim->step();
-            CHECK(coldArmsJob(*sim, pawn) != JobType::SeekWarmth);
-        }
-    }
-    {
-        auto sim = coldArmsSim(-20.0f);
-        coldArmsWarmRoom(*sim, true);
-        const Entity pawn = coldArmsColonist(*sim, 24, 24);
-        for (int i = 0; i < 100; ++i) {  // the illness has not set in yet: only a little over a game minute outside
-            sim->step();
-            CHECK(coldArmsJob(*sim, pawn) != JobType::SeekWarmth);
-        }
-    }
-}
 
 TEST_CASE("Weapons: a colonist picks up a loose weapon for a slot it has nothing in, once, and two do not fight over one") {
     auto sim = coldArmsSim(15.0f);

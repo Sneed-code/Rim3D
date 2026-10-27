@@ -56,6 +56,7 @@ struct StripMark {};
 struct PawnOutfit {
     uint32_t outfit = 1;
     int64_t nextCheck = 0;
+    int64_t nextArmCheck = 0;  // the same for loose guns (JobSystem::thinkArm)
 };
 
 // An outfit policy: which apparel a pawn may wear. A def is allowed unless it is listed; the hit points

@@ -47,8 +47,6 @@ TemperatureNumbers TemperatureNumbers::read(const DefDatabase& defs) {
     n.rock = tempFloat(*def, "conductancePerHour.rock", n.rock);
     n.safeMarginC = tempFloat(*def, "safeMarginC", n.safeMarginC);
     n.frostbiteSeverity = tempFloat(*def, "frostbiteSeverity", n.frostbiteSeverity);
-    n.seekWarmthSeverity = tempFloat(*def, "seekWarmthSeverity", n.seekWarmthSeverity);
-    n.warmEnoughSeverity = tempFloat(*def, "warmEnoughSeverity", n.warmEnoughSeverity);
     return n;
 }
 

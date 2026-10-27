@@ -520,14 +520,10 @@ private:
     bool makeShelterJob(Entity pawn, Job& out);
     bool thinkSchedule(Entity pawn, Job& out);
     bool thinkApparel(Entity pawn, Job& out);
-    // Cold (JobSystem temperature, docs/design/temperature.md): a pawn outside its safe range with hypothermia
-    // setting in walks to the nearest room warm enough and stays until it has recovered.
-    bool thinkTemperature(Entity pawn, Job& out);
-    void interruptForCold(Entity pawn);
-    bool seekWarmthJob(Entity pawn, Job& out);
     // A weapon lying about that the pawn has no weapon of the slot for (ApparelJobs.cpp).
     bool findLooseWeapon(Entity pawn, Job& out);
-    StepResult warmWait(Entity pawn, Job& job, std::string& why);
+    // After work: a colonist with nothing to do goes to pick up a gun (checked every `checkEverySteps`, like clothes).
+    bool thinkArm(Entity pawn, Job& out);
     bool thinkWork(Entity pawn, Job& out);
     // thinkWork's scan; `urgentOnly` asks only the emergency work types (doctor, patient...).
     bool thinkWorkPass(Entity pawn, Job& out, bool urgentOnly);

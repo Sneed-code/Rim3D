@@ -2,7 +2,7 @@
 
 Updated 2026-10-26.
 
-Stage 2 winter survival done: colonists whose hypothermia sets in walk to a warm room and stay until it is gone (job `SeekWarmth`, `docs/design/temperature.md`), and pick up loose guns (job `EquipWeapon`, at most three armed colonists, `docs/design/weapons.md`); hunger interrupts hunting and butchering. The year run adds a campfire, parkas, extra guns, three rice fields and more hunting. Year runs on seeds 1, 7, 42: 2, 6 and 4 colonists alive on day 60 (before: 1 each), nobody died of cold; food and fire sprees are next (`BACKLOG.md`). Tests `ColdAndArmsTests`. Sim only.
+Stage 2 winter survival done: colonists pick up loose guns (job `EquipWeapon`, at most three armed colonists, `docs/design/weapons.md`); hunger interrupts hunting and butchering. The year run adds a campfire, parkas, extra guns, three rice fields and more hunting. Year runs on seeds 1, 7, 42: 2, 6 and 4 colonists alive on day 60 (before: 1 each), nobody died of cold; food and fire sprees are next (`BACKLOG.md`). Tests `ColdAndArmsTests`. Sim only.
 
 Stage 2 S9 done: a sim step on the Stage 2 colony costs 0.66 ms, down from 0.96 (`simrun --perf`, `docs/design/sim-cost.md`, budget in `docs/decisions/0006-sim-cost-budget.md`, nightly).
 Stage 2 breeding follow-up done: young animals born to a tame mother follow her (they walk back when more than 4 m off), a pregnant mother in the cold (below -10) or heat (above 45) does not get on with her young until it is mild, and a new hatchery building (30 wood) keeps fertilized eggs within 2.5 m warm so they hatch in any weather (`docs/design/breeding.md`, tests `BreedingTests`). Save section `breeding` 3.

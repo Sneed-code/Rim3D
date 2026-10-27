@@ -119,7 +119,7 @@ outdoor filth fades, hunting; `farming.md`, `raids.md`, `fighters.md`, `room-sta
 | 7 | 1 of 6 | 0 (260 sown, 260 harvested) | 6 | predator day 24, starvation day 31, predators and a bleed-out later |
 | 42 | 1 of 6 | 0 (128 sown, 128 harvested) | 0 | a predator day 9, then hypothermia on days 50 to 52 (four) |
 
-**Winter fixes** (colonists seek warmth, pick up loose guns; `temperature.md`, `weapons.md`). The year run now also: leaves a
+**Winter fixes** (colonists pick up loose guns, `weapons.md`; going to shelter from the cold is `temperature.md`'s `SeekShelter`). The year run now also: leaves a
 shotgun and two revolvers at the landing for the others to pick up (at most three colonists end up armed), keeps six game
 animals marked for the hunt within 70 m, lays out three rice fields instead of one (the 32 stacks of survival meals are gone by day
 40 and one field feeds the colony about five days), and on day 33 places a campfire in the room (colonists with Hauling feed it),
@@ -135,8 +135,7 @@ Hunger now interrupts hunting, butchering and corpse hauling.
 Not one colonist froze, and no seed is worse than two alive (before: one each). Findings on the way: arming every colonist killed
 them (a revolver against three wolves, a knife in a berserk colonist's hands: that is why only guns, only three of them); a
 `FireSpree` break burned the whole base and killed everyone on seed 42 on day 14 in one run (fires, `BACKLOG.md`); the food
-is now the limit (meals 0 at the end on every seed). `warmthSeeks` stayed 0 in these runs: the campfire room and the parkas kept
-the hypothermia under the 0.12 trigger (`ColdAndArmsTests` covers the job).
+is now the limit (meals 0 at the end on every seed). The summary line prints `shelterSeeks` (shelter jobs started) and `weaponsTaken`.
 
 Frost no longer kills a single crop, and no seed is dead by day 51 any more (the first runs lost everyone), but the colony
 still does not last the year: see `BACKLOG.md`. The run is not in CTest: it takes about ten minutes.

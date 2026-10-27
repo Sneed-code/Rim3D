@@ -73,7 +73,20 @@ std::unique_ptr<Sim> monsterSim(uint64_t seed = 11, int size = 128) {
     settings.mapSize = size;
     settings.flatMap = true;
     settings.scenario = "Crashlanded";
-    return std::make_unique<Sim>(settings, monsterDefs());
+    auto sim = std::make_unique<Sim>(settings, monsterDefs());
+    // The start kit's guns lie about; colonists pick them up and shoot the mounds. These tests are about the nests, not
+    // the colony's defense, so the guns go.
+    std::vector<Entity> guns;
+    for (const auto [e, thing] : sim->things().registry().view<const Thing>().each()) {
+        WeaponSlot slot = WeaponSlot::Primary;
+        if (thing.category == ThingCategory::Item && sim->combat().weaponSlot(thing.def, slot)) {
+            guns.push_back(e);
+        }
+    }
+    for (const Entity gun : guns) {
+        sim->things().despawn(gun);
+    }
+    return sim;
 }
 
 size_t monsterCount(Sim& sim, const char* def) {
