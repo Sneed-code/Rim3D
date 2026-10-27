@@ -369,6 +369,7 @@ private:
     uint64_t seed_ = 0;
     std::function<float(Entity)> cleanliness_;
     std::vector<Entity> active_;  // scratch for step
+    bool restoring_ = false;      // inside refreshAll: working out what a loaded save already was, so nobody stops walking for it
     std::vector<size_t> healable_;  // scratch for step: the injuries that can heal
     std::function<void(Entity, HealthMods&)> mods_;
 
