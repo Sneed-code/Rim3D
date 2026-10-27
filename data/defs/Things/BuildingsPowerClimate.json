@@ -316,6 +316,19 @@
   ]
  },
  {
+  "defName": "Hatchery",
+  "parent": "ClimateBase",
+  "label": "hatchery",
+  "description": "A warm egg box. Fertilized eggs within 2.5 m of it keep hatching however cold or hot the room is.",
+  "size": [1, 1],
+  "costs": {"WoodLog": 30},
+  "fillPercent": 0.2,
+  "stats": {"maxHitPoints": 60, "workToBuild": 300.0},
+  "hatchery": {"warm": true},
+  "source": "Rim3D",
+  "ours": ["costs", "stats.workToBuild", "hatchery"]
+ },
+ {
   "defName": "Campfire", "visual": {"sound": {"loop": "Fire_Campfire"}, "mesh": "/Game/Rim3D/Generated/Art/SM_Campfire.SM_Campfire", "flame": { "lift": 0.18, "size": 0.45 } },
   "parent": "ClimateBase",
   "label": "campfire",
