@@ -113,3 +113,7 @@ mother), `EggLaid`, `EggHatched`, `AnimalGathered` (`message` "milk" or "wool").
 - Young animals have the adult's health; they do not follow their mother.
 - Hatching ignores temperature. An unfertilized or fertilized egg rots like any food (about five days outdoors), so a fertilized egg left unhauled still hatches at 3.8 days, but one hauled into a freezer-less stockpile is fine too.
 - Animal products are not marked "do not sell" or ranked by quality (RimWorld has none).
+
+## Products checked against the wiki (2026-10-26)
+
+Milk: cow 14/day, yak 11/day, goat 12 per 3 days, caribou 10 per 2 days, dromedary 18 per 2 days (muffalo and muskox give none). Wool: alpaca and sheep 45 per 10 days, muffalo and muskox 120 per 15, with the wiki's insulation offsets. Eggs: chicken and duck daily, goose every 2 days (all three also lay unfertilized), turkey 1.333 days, ostrich 3.33 days; a species with no `unfertilizedThing` (turkey, ostrich) holds its timer at half until a male has mated her, then lays a fertilized egg. Egg nutrition 0.25 (chicken, duck), 0.5 (goose, turkey), 0.6 (ostrich); unfertilized eggs rot after 15 days. Hatch days other than the chicken's are ours.

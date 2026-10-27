@@ -336,7 +336,8 @@ TEST_CASE("Breeding: milk and wool fill over days, a colonist gathers them, and 
     BreedFixture f;
     const Entity cow = f.tame("Cow", CellPos{20, 20, 0}, 1);
     const Entity bull = f.tame("Cow", CellPos{22, 20, 0}, 0);
-    const Entity muffalo = f.tame("Muffalo", CellPos{24, 20, 0}, 1);
+    const Entity muffalo = f.tame("Yak", CellPos{24, 20, 0}, 1);
+    const Entity sheep = f.tame("Sheep", CellPos{26, 20, 0}, 1);
     const Entity wildCow = f.sim.things().spawn("Cow", CellPos{40, 40, 0});
     BREED_REQUIRE(cow != kNoEntity);
     BREED_REQUIRE(bull != kNoEntity);
@@ -346,7 +347,9 @@ TEST_CASE("Breeding: milk and wool fill over days, a colonist gathers them, and 
     CHECK(f.br().fullness(cow, AnimalProduct::Milk) < 0.1f);
     CHECK(f.br().fullness(bull, AnimalProduct::Milk) < 0.0f);     // a bull gives none
     CHECK(f.br().fullness(cow, AnimalProduct::Wool) < 0.0f);      // a cow has no wool
-    CHECK(f.br().fullness(muffalo, AnimalProduct::Wool) >= 0.0f);
+    CHECK(f.br().fullness(muffalo, AnimalProduct::Wool) < 0.0f);  // a yak is milked, not shorn
+    CHECK(f.br().fullness(sheep, AnimalProduct::Wool) >= 0.0f);
+    CHECK(f.br().fullness(sheep, AnimalProduct::Milk) < 0.0f);    // a sheep is shorn, not milked
     CHECK(f.br().fullness(wildCow, AnimalProduct::Milk) < 0.0f);  // wild ones give none
     CHECK_FALSE(f.br().readyToGather(cow, AnimalProduct::Milk));
 
@@ -356,11 +359,11 @@ TEST_CASE("Breeding: milk and wool fill over days, a colonist gathers them, and 
     CHECK(f.br().fullness(cow, AnimalProduct::Milk) == doctest::Approx(1.0f));
     CHECK(f.br().readyToGather(cow, AnimalProduct::Milk));
     CHECK(f.br().productAmount(cow, AnimalProduct::Milk) == 14);
-    CHECK(f.br().productAmount(muffalo, AnimalProduct::Wool) == 40);
-    CHECK_FALSE(f.br().readyToGather(muffalo, AnimalProduct::Wool));  // two weeks to go
+    CHECK(f.br().productAmount(sheep, AnimalProduct::Wool) == 45);
+    CHECK_FALSE(f.br().readyToGather(sheep, AnimalProduct::Wool));  // ten days to go
 
-    // The muffalo's milk (8) is full after the same day: the colonist milks both.
-    CHECK(f.br().productAmount(muffalo, AnimalProduct::Milk) == 8);
+    // The yak's milk (11) is full after the same day: the colonist milks both.
+    CHECK(f.br().productAmount(muffalo, AnimalProduct::Milk) == 11);
     const Entity pawn = f.addColonist(CellPos{10, 20, 0}, 8);
     f.feedAll();
     const int milkBefore = f.itemsOnMap("MilkRaw");
@@ -370,7 +373,7 @@ TEST_CASE("Breeding: milk and wool fill over days, a colonist gathers them, and 
         for (const Event& e : f.seen) {
             if (e.type == EventType::AnimalGathered && e.target == pawn && e.message == "milk") {
                 cowEvent = cowEvent || (e.thing == cow && e.amount == doctest::Approx(14.0f));
-                muffaloEvent = muffaloEvent || (e.thing == muffalo && e.amount == doctest::Approx(8.0f));
+                muffaloEvent = muffaloEvent || (e.thing == muffalo && e.amount == doctest::Approx(11.0f));
             }
         }
         return f.br().stats().milked >= 2;
@@ -378,24 +381,24 @@ TEST_CASE("Breeding: milk and wool fill over days, a colonist gathers them, and 
     BREED_REQUIRE(done);
     CHECK(cowEvent);
     CHECK(muffaloEvent);
-    CHECK(f.itemsOnMap("MilkRaw") - milkBefore == 22);
+    CHECK(f.itemsOnMap("MilkRaw") - milkBefore == 25);
     CHECK(f.br().fullness(cow, AnimalProduct::Milk) < 0.2f);  // it starts to fill again
     CHECK_FALSE(f.br().readyToGather(cow, AnimalProduct::Milk));
     const SkillRecord* skill = f.reg().get<Colonist>(pawn).skill("Animals");
     BREED_REQUIRE(skill != nullptr);
     CHECK((skill->level > 8 || skill->xp > 0.0f));
 
-    // Shearing: the wool is full after 14 days (shifted back here to save the waiting).
-    f.reg().get<AnimalBreed>(muffalo).woolSince -= 14 * kSecondsPerDay;
-    CHECK(f.br().readyToGather(muffalo, AnimalProduct::Wool));
-    const int woolBefore = f.itemsOnMap("WoolMuffalo");
+    // Shearing: the wool is full after 10 days (shifted back here to save the waiting).
+    f.reg().get<AnimalBreed>(sheep).woolSince -= 10 * kSecondsPerDay;
+    CHECK(f.br().readyToGather(sheep, AnimalProduct::Wool));
+    const int woolBefore = f.itemsOnMap("WoolSheep");
     const bool sheared = f.runUntil(5000, [&] {
         f.feedAll();
         return f.br().stats().sheared >= 1;
     });
     BREED_REQUIRE(sheared);
-    CHECK(f.itemsOnMap("WoolMuffalo") - woolBefore == 40);
-    CHECK(f.br().fullness(muffalo, AnimalProduct::Wool) < 0.2f);
+    CHECK(f.itemsOnMap("WoolSheep") - woolBefore == 45);
+    CHECK(f.br().fullness(sheep, AnimalProduct::Wool) < 0.2f);
 }
 
 TEST_CASE("Breeding: nobody gathers unless the animal is full, and a young animal gives nothing") {
@@ -423,8 +426,8 @@ TEST_CASE("Breeding: a hen lays eggs, a fertilized egg hatches into a tame chick
     f.run(120);
     CHECK(f.br().laysEggs(hen));
 
-    // One egg every 1.5 days.
-    f.runFed(kSecondsPerDay);
+    // One egg a day.
+    f.runFed(kSecondsPerDay / 2);
     CHECK(f.itemsOnMap("EggChickenUnfertilized") == 0);
     f.runFed(kSecondsPerDay / 2 + 200);
     CHECK(f.itemsOnMap("EggChickenUnfertilized") == 1);
@@ -782,4 +785,55 @@ TEST_CASE("Breeding: a fertilized egg that is too cold or too hot does not hatch
     CHECK(f.br().stats().hatched == 0);
     runWhole(3 * kSecondsPerHour);
     CHECK(f.br().stats().hatched == 1);
+}
+
+TEST_CASE("Breeding: goats give 12 milk every 3 days, camels 18 every 2, caribou 10 every 2, and a muffalo none") {
+    BreedFixture f;
+    const Entity goat = f.tame("Goat", CellPos{20, 20, 0}, 1);
+    const Entity billy = f.tame("Goat", CellPos{22, 20, 0}, 0);
+    const Entity dromedary = f.tame("Dromedary", CellPos{24, 20, 0}, 1);
+    const Entity caribou = f.tame("Caribou", CellPos{26, 20, 0}, 1);
+    const Entity muffalo = f.tame("Muffalo", CellPos{28, 20, 0}, 1);
+    BREED_REQUIRE(goat != kNoEntity);
+    BREED_REQUIRE(billy != kNoEntity);
+    BREED_REQUIRE(dromedary != kNoEntity);
+    BREED_REQUIRE(caribou != kNoEntity);
+    BREED_REQUIRE(muffalo != kNoEntity);
+    f.run(120);
+    CHECK(f.br().productAmount(goat, AnimalProduct::Milk) == 12);
+    CHECK(f.br().productAmount(dromedary, AnimalProduct::Milk) == 18);
+    CHECK(f.br().productAmount(caribou, AnimalProduct::Milk) == 10);
+    CHECK(f.br().fullness(billy, AnimalProduct::Milk) < 0.0f);
+    CHECK(f.br().fullness(muffalo, AnimalProduct::Milk) < 0.0f);
+    CHECK(f.br().fullness(dromedary, AnimalProduct::Wool) < 0.0f);
+    CHECK(f.br().productAmount(muffalo, AnimalProduct::Wool) == 120);
+    f.feedAll();
+    f.run(2 * kSecondsPerDay);
+    CHECK(f.br().readyToGather(dromedary, AnimalProduct::Milk));
+    CHECK(f.br().readyToGather(caribou, AnimalProduct::Milk));
+    CHECK_FALSE(f.br().readyToGather(goat, AnimalProduct::Milk));  // a third day to go
+    f.feedAll();
+    f.run(kSecondsPerDay);
+    CHECK(f.br().readyToGather(goat, AnimalProduct::Milk));
+}
+
+TEST_CASE("Breeding: a hen of a fertilized-only kind holds her egg at half time until a male has mated her") {
+    BreedFixture f;
+    const Entity hen = f.tame("Ostrich", CellPos{20, 20, 0}, 1);
+    BREED_REQUIRE(hen != kNoEntity);
+    f.run(120);
+    CHECK(f.br().laysEggs(hen));
+    f.runFed(8 * kSecondsPerDay);  // well past her 3.33 days
+    CHECK(f.itemsOnMap("EggOstrichUnfertilized") == 0);
+    CHECK(f.itemsOnMap("EggOstrichFertilized") == 0);
+    CHECK(f.br().stats().eggsLaid == 0);
+
+    // Once she has mated, the egg comes after the rest of the interval, and it is the ostrich's own egg.
+    f.reg().get<AnimalBreed>(hen).fertilized = 1;
+    f.runFed(kSecondsPerDay);
+    CHECK(f.br().stats().eggsLaid == 0);
+    f.runFed(kSecondsPerDay);
+    CHECK(f.itemsOnMap("EggOstrichFertilized") == 1);
+    CHECK(f.sim.defs().find("Things", "EggOstrichFertilized")->text("hatches.into") == "Ostrich");
+    CHECK(f.br().breed(hen)->fertilized == 0);
 }
