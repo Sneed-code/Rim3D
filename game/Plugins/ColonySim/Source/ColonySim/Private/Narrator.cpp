@@ -209,6 +209,13 @@ float NarratorSystem::threatScale() const {
     return d != nullptr ? static_cast<float>(d->number("threatScale", 1.0)) : 1.0f;
 }
 
+// The difficulty's say in how fast and how much the colony adapts (raid points).
+void NarratorSystem::applyAdaptation() {
+    const Def* d = state_.difficulty.empty() ? nullptr : defs_.find("Difficulties", state_.difficulty);
+    raids_.setAdaptation(d != nullptr ? static_cast<float>(d->number("adaptationGrowth", 1.0)) : 1.0f,
+                         d != nullptr ? static_cast<float>(d->number("adaptationImpact", 1.0)) : 1.0f);
+}
+
 float NarratorSystem::diseaseFrequency() const {
     const Def* d = state_.difficulty.empty() ? nullptr : defs_.find("Difficulties", state_.difficulty);
     return d != nullptr ? static_cast<float>(d->number("diseaseFrequency", 1.0)) : 1.0f;
@@ -459,6 +466,7 @@ bool NarratorSystem::setNarrator(const std::string& name, const std::string& dif
         state_.cycleStart = -1;  // the new narrator plans its own cycle at its next check
         state_.threats.clear();
     }
+    applyAdaptation();
     if (!name.empty()) {
         state_.wealth = raids_.colonyWealth();
         state_.points = threatPoints();
@@ -538,6 +546,7 @@ bool NarratorSystem::restore(NarratorState s, std::string& error) {
     std::sort(s.threats.begin(), s.threats.end());
     rng_.restore(s.rngState, s.rngIncrement);
     state_ = std::move(s);
+    applyAdaptation();
     return true;
 }
 

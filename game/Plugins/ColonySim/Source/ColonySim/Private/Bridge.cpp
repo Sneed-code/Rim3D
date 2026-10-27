@@ -185,6 +185,8 @@ const char* commandName(const Command& command) {
                 return "StartStrategyRaid";
             } else if constexpr (std::is_same_v<Type, ShipCommand>) {
                 return "Ship";
+            } else if constexpr (std::is_same_v<Type, QuestCommand>) {
+                return "Quest";
             } else if constexpr (std::is_same_v<Type, SkipNightCommand>) {
                 return "SkipNight";
             } else if constexpr (std::is_same_v<Type, FastTravelCommand>) {
@@ -310,6 +312,12 @@ const char* eventTypeName(EventType type) {
         case EventType::PawnMentalBreakEnded: return "PawnMentalBreakEnded";
         case EventType::PawnInsulted: return "PawnInsulted";
         case EventType::PawnLeftColony: return "PawnLeftColony";
+        case EventType::QuestOffered: return "QuestOffered";
+        case EventType::QuestAccepted: return "QuestAccepted";
+        case EventType::QuestDeclined: return "QuestDeclined";
+        case EventType::QuestExpired: return "QuestExpired";
+        case EventType::QuestCompleted: return "QuestCompleted";
+        case EventType::QuestFailed: return "QuestFailed";
         case EventType::InspirationStarted: return "InspirationStarted";
         case EventType::InspirationEnded: return "InspirationEnded";
         case EventType::ShipReactorStarted: return "ShipReactorStarted";

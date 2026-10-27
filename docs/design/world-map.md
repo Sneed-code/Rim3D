@@ -6,7 +6,7 @@ The planet the colony sits on: a grid of tiles with biome, climate, hills, river
 
 - **A wrapping grid, not RimWorld's icosphere.** `width` by `height` tiles (default 120 by 60 = 7,200); east wraps to west, the top and bottom rows are the poles, a tile has 8 neighbours (`World::neighbour`, directions N, NE, E, SE, S, SW, W, NW). A grid is simple to save, draw, path over and test; the cost is that tiles near the poles are really smaller, which does not matter for a game that walks caravans abstractly.
 - **Made, not stored.** `World::generate(defs, seed, width, height)` is a pure function of the seed, the size and the defs. Only floats `+ - * /` and `sqrt` are used (no pow, exp or trig), so it is identical on Linux and Windows. A save needs only the seed, size and start tile; `World::hash()` fingerprints all of it for tests.
-- **Not in `Sim` yet.** The world is its own object. The sim does not own one, so no save section was added. When it does (the stage 3 map generation task), store seed, size, start tile and whatever settlement state changes (goodwill, destroyed bases) in a `world` save section.
+- **Owned by `Sim` when the settings ask for it (W2).** `SimSettings::world` (`enabled`, `seed`, `width`, `height`, `startTile`) is off by default, and then nothing changes: the map comes from the sim's seed in the temperate forest. On, the sim makes the world before its map (see "The game on a world" below). It never changes in play, so it is made again when a save loads.
 
 ## What a tile has (`WorldTile`)
 
@@ -27,10 +27,19 @@ Elevation (m, negative under water), yearly mean temperature (°C), rainfall (mm
 
 `canStartAt(tile)`: land, a biome, not impassable (`startTile.maxHilliness`), no settlement. `chooseStartTile(tile)` sets it; `suggestStartTile(StartCriteria)` picks one (by seed) that is a given biome, in a temperature range, beside a river or a road (-1 when none). `siteFor(tile)` gives the map generator (S8) what it needs: biome name, hilliness, river size, road, temperature, rainfall, elevation and a `mapSeed` made from the world seed and the tile, so a tile always makes the same 1 km map.
 
+## The game on a world (W2)
+
+- **Start tile.** `world.startTile` names the colony's tile. Left at -1, the sim picks one when it is made: `suggestStartTile` with the scenario's `biome` (Crashlanded: temperate forest; no scenario: temperate forest), else any tile a colony can start on, by the world seed. The picked tile is written back into `settings().world` (and a world seed of 0 becomes the sim's seed), so saves and replays always name it. A tile a colony can't start on (sea, impassable, a settlement) is a setup error and the sim runs without a site. W3's world screen will set `startTile` from the player's pick.
+- **What the tile gives the map.** `Sim::site()` is `world()->siteFor(startTile)`. Its `mapSeed` seeds the map (so the same world and tile give the same map, whatever the sim's own seed), its biome is `Sim::biome()` for the plants, wild animals and weather, and its yearly mean temperature moves the biome's four season temperatures together so they average to it (the seasons' shape and the daily swing stay the biome's). Hills, rivers, roads and the biome's `terrain` mix are for the map generator (S8) to read from `site()`; the S1 generator does not use them yet.
+- **Saves.** Section `world` 1: the five settings and the world's hash. Loading makes the world again from the settings and refuses the save if the hash differs ("the world generator gives a different world...") or the start tile no longer works. Saves without the section have no world. The state hash takes in the world's hash and the start tile.
+- **Replays.** `settings.world` = `{"seed", "width", "height", "startTile"}` when the game is on a world.
+- **Factions.** Settlements name their faction by `Factions` defName, the same names the narrator's goodwill and raids use, so trading (C23), caravans (W4) and other maps (W5) can tie a settlement to its faction. Settlements, goodwill per settlement and destroyed bases are not saved yet: nothing changes them. When something does, it goes in the `world` section (version 2), next to the settings.
+- `simrun --on-world [--world-tile N] [--world-size WxH] --start Crashlanded` plays on a world and prints the tile (CTest `simrun_on_world`).
+
 ## Check it
 
 `simrun --seed 42 --world world.png --check` (CTest `simrun_world`, `simrun_world_seed7` at 180 by 90) prints the numbers and draws it: biome colours (darker for hills), rivers blue, roads brown to black, settlements red, the suggested start yellow. `--world-size WxH` sets the size.
 
 ## Next
 
-Show the world on screen and pick the start tile there (Unreal); the sim owning a `World` and the S8 map generator reading `siteFor`; tile-by-tile faction goodwill and events; caravans travelling the roads; other maps made when visited. Faction relations to tiles (who owns what) are static for now.
+Show the world on screen and pick the start tile there (Unreal, W3); the S8 map generator reading `Sim::site()` for hills, rivers, roads and terrain; tile-by-tile faction goodwill and events; caravans travelling the roads; other maps made when visited. Faction relations to tiles (who owns what) are static for now.
