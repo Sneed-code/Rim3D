@@ -147,11 +147,15 @@ std::vector<Construction::Cost> Construction::costOf(DefId def, DefId stuff) con
     return costs;
 }
 
+bool Construction::isArt(DefId def) const {
+    return def.valid() && def.value < defs_.size() && defs_.get(def).flag("building.art");
+}
+
 float Construction::workToBuild(DefId def, DefId stuff) const {
     const Def& d = defs_.get(def);
     double work = d.number("stats.workToBuild");
     if (stuff.valid()) {
-        work *= defs_.get(stuff).number("stuffProps.statFactors.workToBuild", 1.0);
+        work *= defs_.get(stuff).number(isArt(def) ? "stuffProps.statFactors.workToMake" : "stuffProps.statFactors.workToBuild", 1.0);
     }
     return static_cast<float>(work);
 }
@@ -598,18 +602,28 @@ bool Construction::workCell(const CellRect& rect, CellPos from, CellPos& out) co
             }
         }
     }
+    // An upper wall whose neighbours on its own level cannot be stood on (a corner whose two
+    // sides already stand, with open air beyond the ring) is built from the level below, from
+    // any of the eight cells round it, like the edge of an upper floor.
+    if (!found && rect.level > 0) {
+        for (int y = rect.minY - 1; y <= rect.minY + rect.sizeY; ++y) {
+            for (int x = rect.minX - 1; x <= rect.minX + rect.sizeX; ++x) {
+                considerOn(x, y, rect.level - 1);
+            }
+        }
+    }
     return found;
 }
 
-float Construction::skillSpeed(Entity pawn) const {
+float Construction::skillSpeed(Entity pawn, const char* skillName) const {
     int level = numbers_.defaultSkillLevel;
     if (const Colonist* colonist = things_.registry().try_get<Colonist>(pawn)) {
-        if (const SkillRecord* skill = colonist->skill(kConstructionSkill)) {
+        if (const SkillRecord* skill = colonist->skill(skillName)) {
             level = skill->level;
         }
     }
     if (const PawnGenes* genes = things_.registry().try_get<PawnGenes>(pawn)) {
-        level = std::max(0, level + geneAptitude(*genes, kConstructionSkill));
+        level = std::max(0, level + geneAptitude(*genes, skillName));
     }
     return static_cast<float>(std::max(0.0, numbers_.skillSpeedBase + numbers_.skillSpeedPerLevel * level));
 }

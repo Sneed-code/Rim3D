@@ -87,6 +87,12 @@ RimWorld's lore systems. `RimWorld defName` is the name in RimWorld's files wher
 | psycasts, psychic powers | | resonance | |
 | psylink, psycaster | `PsychicAmplifier` | attunement, attuned | `Attunement` |
 | psychic drone, psychic soothe | `PsychicDrone`, `PsychicSoothe` | resonance drone, resonance calm | `ResonanceDrone`, `ResonanceCalm` |
+| psycast (one power) | | resonance power, power | |
+| neural heat | | strain | |
+| psyfocus | | focus | |
+| psychic sensitivity | `PsychicSensitivity` | resonance sensitivity | `ResonanceSensitivity` |
+| Painblock (psycast) | `Painblock` | numb | `Numb` |
+| Skip (psycast) | `Skip` | jump | `Jump` |
 | ideoligion | | creed | |
 | gravship | | skyhull | |
 

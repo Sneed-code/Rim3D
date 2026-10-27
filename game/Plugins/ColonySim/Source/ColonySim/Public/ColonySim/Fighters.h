@@ -56,8 +56,11 @@ struct KnownEnemy {
 };
 
 // What a fighter is doing (F6, docs/design/raids.md): fighting, hiding in a shelter (the alarm's
-// Shelter role) or running off the map (a routed raider). Only Fight looks for enemies and shoots.
-enum class FightMode : uint8_t { Fight, Shelter, Flee };
+// Shelter role), running off the map (a routed raider), going for loot or a downed colonist whatever is about
+// (F12, docs/design/raid-strategies.md: Seize walks to the goal like the other two and doesn't shoot), or carrying a
+// downed friend to a cell out of the enemies' sight (Rescue, F10, docs/design/field-care.md). Only Fight looks for
+// enemies and shoots.
+enum class FightMode : uint8_t { Fight, Shelter, Flee, Seize, Rescue };
 
 // On a pawn that fights instead of working: a drafted colonist, a colonist the colony alarm called
 // up, or every pawn of another faction. The job system leaves it alone. Every field is saved.
@@ -89,7 +92,15 @@ struct Fighter {
     bool hasGoal = false;    // where it heads while it knows no enemy: the raid's target, a shelter, the way out
     CellPos goal;
     bool retreat = false;    // its squad falls back: it falls back whatever the odds around it
+    // F10 (docs/design/field-care.md), in Rescue mode: the downed friend, whether it has been lifted (its
+    // position follows the fighter's until it is laid down), and the cell it is carried to.
+    Entity rescuing = kNoEntity;
+    bool lifted = false;
+    CellPos rescueTo;
 };
+
+// The fighter going to carry `pawn`, a downed friend, to cover (F10), or kNoEntity.
+COLONY_API Entity rescuerOf(const entt::registry& reg, Entity pawn);
 
 // The numbers (FighterRules in data/defs/Rules/FighterRules.json, all ours: RimWorld has no
 // cover-seeking AI to copy).
@@ -138,6 +149,10 @@ struct FighterRules {
     float switchMeleeRange = 2.5f;    // metres: closer than this to its target it takes up a melee weapon...
     float switchSidearmRange = 9.0f;  // ...closer than this a sidearm, and further off the rifle
     float switchMargin = 2.0f;        // the weapon in the hands is kept this much past its band, so a target on the edge does not flip it
+    // F7 soak (docs/design/raid-soak.md): the walk to a spot counts what it costs this pawn, up a slope or hurt.
+    float walkStayBonus = 3.0f;       // on top of stayBonus while walking to the spot: a pawn on its way doesn't change its mind for a small gain
+    float rangeMargin = 1.0f;         // a spot has to be this far inside the gun's range to count as one it can shoot from
+    float minWalkShare = 0.25f;       // a hurt pawn's walk costs at most this many times more (its Moving capacity, but never under this)
 };
 
 class COLONY_API FighterSystem {
@@ -149,6 +164,8 @@ public:
     FighterSystem& operator=(const FighterSystem&) = delete;
 
     const FighterRules& rules() const { return rules_; }
+    // Hurt badly enough to fall back: pain, blood loss or Moving past the FighterRules limits.
+    bool badlyHurt(Entity pawn) const;
     void setEventLog(std::vector<Event>* events) { events_ = events; }
     // Grenades (F9): fighters throw the ones on their belts and dive away from ones about to go off.
     void setExplosives(ExplosiveSystem* explosives) { explosives_ = explosives; }
@@ -182,6 +199,9 @@ public:
     void standDown(Entity pawn);
     // Drops the fighter's spot and walk, so it plans again in this step (a new goal or mode).
     void replan(Entity pawn);
+    // F10 (FighterRescue.cpp): a fighter of the alarm walks to `patient`, a downed friend, lifts it and carries it
+    // to `to`, then fights on. False if it isn't a fighter that can (fighting, not drafted, not rescuing already).
+    bool startRescue(Entity pawn, Entity patient, CellPos to);
 
     // One step for every fighter, in id order: re-plan when due, walk, crouch, step out and shoot.
     // Runs after the job system and before movement.
@@ -228,6 +248,7 @@ private:
 
     void plan(Entity pawn, Fighter& f);
     void planGoal(Entity pawn, Fighter& f, const PawnInfo& self);
+    void setCourse(Entity pawn, Fighter& f, CellPos at, CellPos goal);
     bool dodge(Entity pawn, Fighter& f);
     bool dive(Entity pawn, Fighter& f);
     bool considerThrow(Entity pawn, const Fighter& f);
@@ -243,10 +264,13 @@ private:
     void stop(Entity pawn, Fighter& f);
     const PawnInfo* info(Entity pawn) const;
     float weaponRange(Entity pawn) const;
-    bool badlyHurt(Entity pawn) const;
     int64_t now() const;
     void planCharge(Entity pawn, Fighter& f, CellPos goal);
     bool meleeAct(Entity pawn, Fighter& f);
+    // Rescue mode (FighterRescue.cpp): lifts the patient once in reach, keeps it with the fighter, lays it down at
+    // the end. `endRescue` lays it where the fighter stands (if lifted) and sends the fighter back to Fight.
+    void rescueStep(Entity pawn, Fighter& f);
+    void endRescue(Entity pawn, Fighter& f, bool laid);
 
     Things& things_;
     Map& map_;

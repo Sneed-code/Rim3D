@@ -74,7 +74,17 @@ struct Recipe {
     // Cuts up a corpse (N2, docs/design/hunting.md): the ingredient is a dead animal, not a stack of items, and the products
     // (meat and leather) come from the animal's def. "Until you have" counts the raw meat on the map.
     bool butcher = false;
+    // Burns a corpse (the crematorium's "cremate corpse"): the job is the butcher's, but nothing comes out and nobody minds.
+    bool cremate = false;
+    // Smelts what it is given (the electric smelter, docs/design/crafting.md): the products are this share of the metal in the
+    // ingredient's own recipe (components and anything not a metal are lost), not the recipe's `products`. 0 = not a smelting recipe.
+    // A recipe with no products and no smelting just destroys the ingredient.
+    double smeltFraction = 0.0;
     // How many things one run makes. A building that burns fuel per product burns this many times its `fuel.perUse`.
+    // `fuelUses` in the def overrides it (0 = one use per product): a stove burns by time worked in RimWorld, so a batch of
+    // 50 kibble must not burn 50 wood.
+    int fuelUsesSet = 0;
+    int fuelUses() const { return fuelUsesSet > 0 ? fuelUsesSet : productCount(); }
     int productCount() const {
         int made = 0;
         for (const RecipeProduct& product : products) {
@@ -154,6 +164,9 @@ public:
     // A bill's times left or stock target after one more iteration is done: Count goes down by one
     // and the bill is removed when it reaches 0. Returns true if the bill was removed.
     bool iterationDone(Entity building, uint32_t bill);
+    // What smelting `count` of an item (made of `stuff`) gives back: `fraction` of the metal in the recipe that makes it, rounded
+    // down per metal. Empty if nothing makes the item or it holds no metal.
+    std::vector<RecipeProduct> smeltYield(DefId item, DefId stuff, double fraction, int count) const;
     // The nutrition of one unit of an item def (0 if it is not food).
     double nutritionOf(DefId item) const;
 

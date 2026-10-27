@@ -54,7 +54,7 @@ names, adults only, nudity yes and sex no (`game-design.md` "Content rules")._
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | V1 | **Looks seed, part 2 (sim).** Add to `PawnLooks` a face seed (face shape, eye colour, brow, nose, jaw, each a small number), hair style, beard (men), body-hair amount, tattoo and scar slots; filled from the seed and the lineage genes, saved, hashed and tested like A3. Scars come from healed injuries (`PawnInjured` healing into a scar, `ours`). | Cloud | Sonnet, high | 90 min | A3 |
+| ✓ | V1 | **Looks seed, part 2 (sim).** Add to `PawnLooks` a face seed (face shape, eye colour, brow, nose, jaw, each a small number), hair style, beard (men), body-hair amount, tattoo and scar slots; filled from the seed and the lineage genes, saved, hashed and tested like A3. Scars come from healed injuries (`PawnInjured` healing into a scar, `ours`). | Cloud | Sonnet, high | 90 min | A3 |
 | | V2 | **Faces and hair on screen.** Free face variety: MetaHuman face morph targets mixed by the face seed (same DNA route as A3's bodies), eye colour, brows, 8 or more groom hair styles and beards from MetaHuman's own grooms; far pawns use hair cards. Ten colonists side by side must not look alike. | PC Unreal | Opus, high | 120 min (two sittings) | V1 |
 | | V3 | **Body hair, scars, tattoos.** Body hair as a texture layer in `M_PawnSkin` (chest, arms, legs, by amount and hair colour, fading with distance), scars and tattoos as decal layers on the skin material by body part. | PC Unreal | Sonnet, high | 90 min | V1 |
 
@@ -106,7 +106,7 @@ retargeter, by commandlet.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | V20 | **Sound system.** Cloud half: `visual.sound` cues in the defs (weapon shots, hits, footsteps by terrain, work, doors, animals, fire, weather) and a `docs/design/sound.md`; Unreal half: a `USoundSubsystem` playing cues from sim events with distance attenuation, a voice budget (32 voices), occlusion by roofs and walls, ambience beds by biome, time of day and weather, a mixer with sliders. Placeholder tones until V21. | Cloud, then PC Unreal | Sonnet, high | 60 min cloud + 90 min PC | U-tasks merged |
+| cloud ✓ | V20 | **Sound system.** Cloud half: `visual.sound` cues in the defs (weapon shots, hits, footsteps by terrain, work, doors, animals, fire, weather) and a `docs/design/sound.md`; Unreal half: a `USoundSubsystem` playing cues from sim events with distance attenuation, a voice budget (32 voices), occlusion by roofs and walls, ambience beds by biome, time of day and weather, a mixer with sliders. Placeholder tones until V21. | Cloud, then PC Unreal | Sonnet, high | 60 min cloud + 90 min PC | U-tasks merged |
 | | V21 | **Sound and music content.** Free CC0 packs (freesound.org CC0, Kenney, Sonniss GDC free bundles, free music such as Kevin MacLeod or Incompetech with attribution logged) downloaded by script and wired to the cues; calm, tense and combat music that follows the narrator's threat. | PC light | Sonnet, medium | 90 min | V20 |
 
 ### Styled UI (V22 to V24)

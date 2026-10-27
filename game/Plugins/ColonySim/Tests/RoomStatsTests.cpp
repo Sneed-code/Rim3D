@@ -129,7 +129,7 @@ TEST_CASE("Room stats: floors raise beauty, cleanliness and wealth") {
     const RoomStatValues* after = rsStats(sim, 13, 13);
     RS_REQUIRE(after != nullptr);
     CHECK(sim.floors().count() == 25);
-    CHECK(after->beauty == doctest::Approx(50.0f / 32.5f));  // 2 a cell
+    CHECK(after->beauty == doctest::Approx(25.0f / 32.5f));  // 1 a cell
     CHECK(after->cleanliness == doctest::Approx(0.2f));
     CHECK(after->wealth > before.wealth);
     CHECK(after->impressiveness > before.impressiveness);
@@ -183,6 +183,50 @@ TEST_CASE("Filth: layers stack to a limit, lower beauty and cleanliness, and cle
     CHECK_FALSE(sim.filth().add(CellPos{10, 10, 0}, "Dirt"));
     CHECK_FALSE(sim.filth().add(CellPos{-1, 0, 0}, "Dirt"));
     CHECK_FALSE(sim.filth().add(cell, "NoSuchFilth"));
+}
+
+TEST_CASE("Filth: layers under the open sky fade over days, quicker in rain, and those under a roof stay") {
+    const auto fill = [](Sim& sim) {
+        rsRing(sim, 10, 10, 16, 16);
+        for (int i = 0; i < 20; ++i) {
+            sim.filth().add(CellPos{20 + i, 30, 0}, "Blood", 3);
+            sim.filth().add(CellPos{20 + i, 20, 0}, "AnimalFilth", 3);
+        }
+        for (int x = 11; x <= 15; ++x) {
+            sim.filth().add(CellPos{x, 13, 0}, "Blood", 3);
+        }
+    };
+    const auto outdoorLayers = [](Sim& sim) {
+        size_t total = 0;
+        for (int i = 0; i < 20; ++i) {
+            for (const int y : {20, 30}) {
+                for (const FilthPile& pile : sim.filth().at(CellPos{20 + i, y, 0})) {
+                    total += pile.thickness;
+                }
+            }
+        }
+        return total;
+    };
+    Sim dry = rsSim();
+    Sim wet = rsSim();
+    fill(dry);
+    fill(wet);
+    const size_t start = outdoorLayers(dry);
+    CHECK(start == 120);
+    for (int hour = 0; hour < 72; ++hour) {
+        dry.filth().fadeHour(0.0f);
+        wet.filth().fadeHour(1.0f);
+    }
+    // After three days of a mean six: some is gone, not all, and rain takes more.
+    CHECK(outdoorLayers(dry) < start);
+    CHECK(outdoorLayers(dry) > start / 5);
+    CHECK(outdoorLayers(wet) < outdoorLayers(dry));
+    for (int hour = 0; hour < 24 * 60; ++hour) {
+        dry.filth().fadeHour(0.0f);
+    }
+    CHECK(outdoorLayers(dry) == 0);
+    // The blood inside the roofed room is still there.
+    CHECK(dry.filth().totalLayers() == 15);
 }
 
 TEST_CASE("Filth: dirt stuck to shoes on bare ground falls off on a floor") {
@@ -282,8 +326,8 @@ TEST_CASE("Beauty need: a colonist starts at what it sees, and filth drags it do
     sim.stepMany(2);
     const BeautyNeed* need = sim.roomStats().beautyNeed(pawn);
     RS_REQUIRE(need != nullptr);
-    // Stone floors (2) in the room and walls round it: it sees a pretty place.
-    CHECK(need->perceived > 1.0f);
+    // Stone floors (1) in the room and walls round it: it sees a nice place.
+    CHECK(need->perceived > 0.5f);
     CHECK(need->level > 0.55f);
     const float start = need->level;
     // The same room under blood and dirt is ugly; the need falls, but no faster than 4% an hour.

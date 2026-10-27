@@ -42,6 +42,9 @@ enum class DefenseRole : uint8_t {
     Defender,     // takes cover on the side the threat comes from, or holds its defense spot
     Shelter,      // goes to the shelter room and stays there
     KeepWorking,  // works on, unless an enemy comes within keepWorkingRadius; then it defends itself
+    // F10 (docs/design/field-care.md): FieldCare gives these their duty.
+    Medic,        // waits behind the line; tends and rescues the downed it can reach without coming under fire
+    Firefighter,  // waits behind the line; puts out fires in the home area once it is safe to go to them
 };
 
 // A colonist's defense plan, on the pawn. A colonist without one is a Defender with no spot.
@@ -51,10 +54,31 @@ struct DefensePlan {
     CellPos spot;
 };
 
+// How a raid comes and what it is after (F12, docs/design/raid-strategies.md).
+enum class RaidStrategy : uint8_t {
+    Assault,    // walks in at an edge and goes for the colony (F6)
+    Sappers,    // walks in; when walls shut the colony off, digs through the nearest wall on the way
+    DropPods,   // lands in pods round the colony, inside its walls if need be
+    Thieves,    // walks in, grabs the most valuable loose items and runs for the edge with them
+    Kidnappers, // walks in, fights, and carries off colonists who go down
+};
+inline constexpr int kRaidStrategyCount = 5;
+
 // On every pawn a raid brought: its squad and pawn kind (PawnKinds defName).
 struct Raider {
     uint32_t squad = 0;
     std::string kind;
+    // F12 (raids section 2): what it is going for, and what it is carrying off. `loot` is a stolen item
+    // (the pawn also has Carrying) or a kidnapped pawn (which has Kidnapped and follows it).
+    Entity goalThing = kNoEntity;
+    Entity loot = kNoEntity;
+    bool sparesDowned = false;  // kidnappers don't shoot the downed: they come to carry them off
+};
+
+// On a colonist a kidnapper carries off: its position follows `by` until it is put down or leaves the map.
+// Rescue and capture jobs leave a kidnapped pawn alone.
+struct Kidnapped {
+    Entity by = kNoEntity;
 };
 
 // How a squad feels about the fight (architecture.md, "Morale and squads").
@@ -74,6 +98,10 @@ struct Squad {
     int64_t arrivedAt = 0;  // game second
     int64_t giveUpAt = 0;   // it leaves at this game second if it hasn't routed before
     SquadState state = SquadState::Advance;
+    RaidStrategy strategy = RaidStrategy::Assault;  // F12 (raids section 2)
+    bool hasBreach = false;  // Sappers: the wall they are digging through, and the cell they dig from
+    CellPos breach;
+    CellPos breachFrom;
     bool gaveUp = false;    // routed because time ran out rather than losses
     CellPos entry;          // where it walked in
     bool hasTarget = false;  // the cell it goes for: the colonist nearest to it
@@ -82,8 +110,18 @@ struct Squad {
     std::vector<Entity> members;  // in id order; the dead and those that left are dropped
 };
 
+// A raid that waits for an hour of the day (a night attack), started with the command's strategy then.
+struct PendingRaid {
+    std::string faction;
+    float points = 0.0f;
+    int edge = -1;
+    RaidStrategy strategy = RaidStrategy::Assault;
+    int64_t at = 0;  // game second
+};
+
 // Everything a raid and the alarm keep between steps; saved as a whole (Save.cpp).
 struct RaidState {
+    std::vector<PendingRaid> pending;   // in the order they were asked for (F12, raids section 2)
     std::vector<std::string> factions;  // Factions defNames; faction id = index + 2 (1 is the player)
     std::vector<Squad> squads;          // in id order
     uint32_t nextSquad = 1;
@@ -100,6 +138,15 @@ struct RaidState {
     bool hasShelter = false;  // the player's shelter room, by a cell in it
     CellPos shelter;
     int64_t nextAlarmThink = 0;
+    // Adaptation (wiki "Raid points"): the days the colony has adapted, and the colonists it keeps
+    // an eye on to see who goes down or dies (section `raids` 2).
+    struct AdaptPawn {
+        Entity pawn = entt::null;
+        bool downed = false;
+    };
+    float adaptDays = 0.0f;
+    int64_t nextAdaptGrowth = 0;  // game second of the next 12-hour growth step
+    std::vector<AdaptPawn> adaptPawns;  // in id order
 };
 
 // The numbers (RaidRules in data/defs/Rules/RaidRules.json).
@@ -109,13 +156,24 @@ struct RaidRules {
     };
     // RimWorld's raid points (wiki "Raid points"): wealth points by storyteller wealth, points per
     // colonist by wealth, the difficulty's threat scale, the days-passed factor, the adaptation
-    // factor (fixed at its start value until adaptation is tracked), and the limits.
+    // factor, and the limits.
     std::vector<Point> wealthPoints{{0, 0}, {14000, 0}, {400000, 2400}, {700000, 3600}, {1000000, 4200}};
     std::vector<Point> pointsPerColonist{{0, 15}, {10000, 15}, {400000, 140}, {1000000, 200}};
     std::vector<Point> daysPassedFactor{{10, 0.7f}, {40, 1.0f}};
     float buildingWealthFactor = 0.5f;
     float threatScale = 1.0f;
-    float adaptation = 0.8f;
+    // Adaptation: AdaptDays go up every `adaptGrowthHours` by the step list's value for where they
+    // are (halved: the wiki's table is per day; never above 0 before `adaptGraceDays`), and down by
+    // the curves when a colonist dies or goes down (by colonists); the factor is the curve of
+    // AdaptDays, blended with 1 by the difficulty's adaptationImpact.
+    std::vector<Point> adaptGrowth{{-60, 3}, {0, 1}, {60, 0.5f}, {120, 0.25f}};  // from AdaptDays: added per day
+    std::vector<Point> adaptFactor{{-30, 0.4f}, {0, 0.8f}, {30, 1.0f}, {60, 1.2f}, {120, 1.6f}, {180, 2.0f}};
+    std::vector<Point> adaptDeath{{0, 30}, {11, 30}, {20, 20}};
+    std::vector<Point> adaptDowned{{1, 8}, {2, 6}, {3, 6}, {11, 5}, {20, 3.5f}};
+    float adaptMin = -60.0f;
+    float adaptMax = 100.0f;
+    float adaptGraceDays = 30.0f;
+    float adaptGrowthHours = 12.0f;
     float minPoints = 35.0f;
     float maxPoints = 10000.0f;
     // When a squad routs or gives up.
@@ -138,6 +196,23 @@ struct RaidRules {
     float lineMoves = 6.0f;        // the line moves when the threat has moved it this far
     int shelterSearch = 4000;      // cells searched for an indoor cell when no shelter is marked
     float shelterFlee = 25.0f;     // no indoor cell: this far from the threat instead
+    // F12 (all ours): which strategy a raid picks when the caller doesn't say, and how each one works.
+    float weightAssault = 60.0f;
+    float weightSappers = 12.0f;   // times blockedBoost when walls shut the colony off from every edge
+    float weightDropPods = 14.0f;
+    float weightThieves = 8.0f;
+    float weightKidnappers = 6.0f;
+    float blockedBoost = 8.0f;
+    float dropPodsMinPoints = 120.0f;  // smaller raids walk
+    float dropMinDistance = 8.0f;      // pods land this far from the target...
+    float dropMaxDistance = 24.0f;     // ...to this far
+    float sapDamage = 4.0f;            // hit points a digging raider takes off its wall each second
+    float sapReach = 2.2f;             // metres from the wall's cell middle a raider digs from
+    int sapSearch = 60000;             // cells searched for the wall to dig through
+    float grabReach = 1.6f;            // metres from the loot or the downed colonist a raider can lift it
+    float stealMass = 40.0f;           // kilograms of items a thief carries off
+    float kidnapRange = 90.0f;         // a kidnapper goes for downed colonists this close
+    float seizeRange = 12.0f;          // and stops fighting to lift one this close
 };
 
 class COLONY_API RaidSystem {
@@ -153,16 +228,33 @@ public:
     // Gives a new raider its looks (Sim::giveLooks): pawn, seed, female.
     void setLooksMaker(std::function<void(Entity, uint64_t, bool)> maker) { looks_ = std::move(maker); }
 
-    // RimWorld's storyteller wealth: items on the map and carried by the player's pawns at their
-    // market value, plus buildings at half theirs. Defs without a marketValue count 0.
+    // RimWorld's storyteller wealth (wiki "Raid points"): items on the map and carried by the
+    // player's pawns, and the player's own pawns (colonists, tame animals), at their market value,
+    // plus buildings at half theirs. Defs without a marketValue count 0.
     float colonyWealth() const;
+    // The adaptation factor now (1 with the impact at 0), and what the difficulty says about it
+    // (its adaptationGrowth and adaptationImpact; the narrator sets them with the difficulty).
+    float adaptationFactor() const;
+    void setAdaptation(float growth, float impact);
     // The raid points a raid would get now (wiki "Raid points"), between minPoints and maxPoints.
-    float threatPoints() const;
+    float threatPoints() const { return threatPoints(1.0f); }
+    // The same with another factor before the limits: the narrator's difficulty and points factor (T1).
+    float threatPoints(float scale) const;
+    // The player's living colonists on the map.
+    int colonistCount() const;
 
     // Commands. False, with a reason in plain words, when they can't be done.
     // A raid of `faction` (a Factions defName) with `points` (0: threatPoints()) walks in at `edge`
     // (0 north, 1 east, 2 south, 3 west, -1 any).
     bool startRaid(const std::string& faction, float points, int edge, std::string& error);
+    // F12: the same with a strategy. `hour` 0 to 23.99 waits for that hour of the day (a raid at night; the
+    // next one, today or tomorrow), -1 comes now. Fails when the strategy has nothing to work with (thieves
+    // with no loose items, kidnappers with no colonist, sappers with no wall in the way are fine).
+    bool startRaid(const std::string& faction, float points, int edge, RaidStrategy strategy, float hour, std::string& error);
+    // The strategy a raid of these points would pick now, by the rules' weights: sappers favoured when no edge
+    // reaches the colony, drop pods only from dropPodsMinPoints, thieves only when loose items exist, kidnappers
+    // only when colonists do. Draws from the sim's Rng, so call it from the sim.
+    RaidStrategy pickStrategy(float points);
     bool soundAlarm(bool on, std::string& error);
     bool setRole(Entity pawn, DefenseRole role, bool hasSpot, CellPos spot, std::string& error);
     // The room at `cell` is where Shelter colonists go; `clear` takes the mark off.
@@ -200,8 +292,21 @@ private:
     };
 
     void thinkSquad(Squad& squad);
+    // F12.
+    bool pickEntry(int edge, CellPos target, bool needReach, CellPos& entry);
+    void stepStrategies();
+    void thinkBreach(Squad& squad);
+    void thinkLoot(Squad& squad);
+    void thinkKidnap(Squad& squad);
+    void dropLoot(Entity pawn);
+    void flee(Entity pawn, Squad& squad);
+    bool findBreach(const Squad& squad, CellPos from, CellPos& wall, CellPos& approach) const;
+    bool blockedFromColony(CellPos from, CellPos target) const;
+    bool colonyWalledOff();
+    void removeForGood(Entity pawn);
     void leaveAtEdge(Squad& squad);
     void thinkAlarm();
+    void thinkAdaptation();
     void setAlarm(bool on, const char* why);
     void callUp(Entity pawn, const std::vector<Entity>& spotted);
     CellPos defensePoint(Entity pawn, const DefensePlan* plan);
@@ -225,6 +330,8 @@ private:
     Rng& rng_;
     RaidRules rules_;
     RaidState state_;
+    float adaptGrowthRate_ = 1.0f;  // the difficulty's, not saved
+    float adaptImpact_ = 1.0f;
     std::vector<float> marketValue_;  // per def id
     std::vector<float> armor_;        // per def id: armorRatingSharp of apparel
     std::vector<Event>* events_ = nullptr;
@@ -233,5 +340,8 @@ private:
 
 COLONY_API const char* defenseRoleName(DefenseRole role);
 COLONY_API const char* squadStateName(SquadState state);
+COLONY_API const char* raidStrategyName(RaidStrategy strategy);
+// The strategy with this name ("Assault", "Sappers", "DropPods", "Thieves", "Kidnappers"); false if there is none.
+COLONY_API bool raidStrategyFromName(const std::string& name, RaidStrategy& out);
 
 }  // namespace colony

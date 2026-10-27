@@ -21,8 +21,10 @@ namespace raidsoak {
 
 namespace {
 
-constexpr int kStuckSteps = 150;     // a fighter that should be walking but stays on one cell this long is stuck
-constexpr double kOpenLimit = 20.0;  // percent
+constexpr int kStuckSteps = 150;      // a fighter that should be walking but gets nowhere this long is stuck
+constexpr float kStuckMetres = 0.5f;  // getting nowhere: less than this far from where it was 150 steps ago
+constexpr double kOpenLimit = 10.0;   // percent: the design rule
+constexpr int kOneIn = 20;            // stuck fighters and raids still on after a quarter day: more than one seed in this many fails
 constexpr int kFirefightSteps = 2400;
 constexpr int kRaidSteps = 21600;    // a quarter of a game day, as the CTest raid
 
@@ -35,7 +37,8 @@ struct Tally {
     int64_t fightSteps = 0;
 };
 
-// Counts fighters that stay on one cell while their plan says they are walking.
+// Counts fighters that should be walking (their plan says so) but get nowhere: under half a metre in 150 steps.
+// A hurt pawn on a steep slope is slow and still gets somewhere; one held up for good does not.
 class StuckWatch {
 public:
     void watch(colony::Sim& sim) {
@@ -44,12 +47,13 @@ public:
                 seen_.erase(pawn);
                 continue;
             }
-            const colony::CellPos at = colony::cellOf(sim.things().registry().get<colony::Position>(pawn));
+            const colony::Position& pos = sim.things().registry().get<colony::Position>(pawn);
             Seen& s = seen_[pawn];
-            if (s.cell != at) {
-                s = Seen{at, 0, s.counted};
-            } else if (++s.steps == kStuckSteps && !s.counted) {
-                s.counted = true;
+            const float dx = pos.x - s.x;
+            const float dy = pos.y - s.y;
+            if (s.steps == 0 || dx * dx + dy * dy >= kStuckMetres * kStuckMetres) {
+                s = Seen{pos.x, pos.y, 1};
+            } else if (++s.steps == kStuckSteps) {
                 ++stuck_;
             }
         }
@@ -58,9 +62,9 @@ public:
 
 private:
     struct Seen {
-        colony::CellPos cell;
+        float x = 0.0f;
+        float y = 0.0f;
         int steps = 0;
-        bool counted = false;
     };
     std::map<colony::Entity, Seen> seen_;
     int stuck_ = 0;
@@ -70,12 +74,15 @@ bool upright(colony::Sim& sim, const std::vector<colony::Entity>& side) {
     return std::any_of(side.begin(), side.end(), [&](colony::Entity p) { return !sim.health().incapacitated(p); });
 }
 
-// Is there a cell within 10 m that is in cover from the enemy at (ex, ey)?
-bool coverNear(colony::Sim& sim, colony::CellPos at, float ex, float ey) {
+// Is there a cell within 10 m that is in cover from the enemy at (ex, ey) and that the fighter may stand on? A drafted
+// fighter keeps within its leash of the place it was drafted, so cover beyond that is no use to it.
+bool coverNear(colony::Sim& sim, const colony::Fighter& f, colony::CellPos at, float ex, float ey) {
     for (int dy = -10; dy <= 10; ++dy) {
         for (int dx = -10; dx <= 10; ++dx) {
             const colony::CellPos c{at.x + dx, at.y + dy, at.level};
-            if (dx * dx + dy * dy <= 100 && sim.map().inBounds(c) &&
+            const float ax = static_cast<float>(c.x - f.anchor.x);
+            const float ay = static_cast<float>(c.y - f.anchor.y);
+            if (dx * dx + dy * dy <= 100 && (f.leash <= 0.0f || ax * ax + ay * ay <= f.leash * f.leash) && sim.map().inBounds(c) &&
                 sim.cover().coverAgainst(c, colony::Stance::Crouching, ex, ey) >= 0.5f) {
                 return true;
             }
@@ -146,7 +153,7 @@ void firefight(uint64_t seed, const std::shared_ptr<const colony::DefDatabase>& 
             if (best < 1.0e9f) {
                 if (sim.cover().coverAgainst(at, colony::Stance::Crouching, ex, ey) >= 0.5f) {
                     ++out.waiting;
-                } else if (coverNear(sim, at, ex, ey)) {
+                } else if (coverNear(sim, f, at, ex, ey)) {
                     ++out.waiting;
                     ++out.inOpen;
                 }  // in the open with no cover within 10 m is not the fighters' fault: not counted
@@ -178,9 +185,12 @@ struct RaidResult {
     int colonistsDied = 0;
     int raidersDowned = 0;
     int raidersDied = 0;
+    int tendedInFight = 0;  // with medics (F10): tends while the alarm was on
+    int dragged = 0;        // downed colonists a fighter carried to cover
 };
 
-RaidResult raid(uint64_t seed, const std::shared_ptr<const colony::DefDatabase>& defs, StuckWatch& watch) {
+// `medics` (F10, docs/design/field-care.md): the first colonist is the alarm's Medic, the second its Firefighter.
+RaidResult raid(uint64_t seed, const std::shared_ptr<const colony::DefDatabase>& defs, StuckWatch& watch, bool medics) {
     colony::SimSettings settings{seed, 256, 0, 0};
     settings.scenario = "Crashlanded";
     colony::Sim sim(settings, defs);
@@ -193,6 +203,15 @@ RaidResult raid(uint64_t seed, const std::shared_ptr<const colony::DefDatabase>&
         sim.combat().equip(pawn, sim.things().make(sim.defs().idOf("Things", "Gun_AssaultRifle")));
     }
     sim.submit(colony::StartRaidCommand{"Pirate", 300.0f, -1});
+    if (medics) {
+        std::vector<colony::Entity> crew(sim.things().registry().view<const colony::Colonist>().begin(),
+                                         sim.things().registry().view<const colony::Colonist>().end());
+        std::sort(crew.begin(), crew.end());
+        for (size_t c = 0; c < crew.size() && c < 2; ++c) {
+            const colony::DefenseRole role = c == 0 ? colony::DefenseRole::Medic : colony::DefenseRole::Firefighter;
+            sim.submit(colony::SetDefenseRoleCommand{crew[c], static_cast<uint8_t>(role), false, colony::CellPos{}});
+        }
+    }
     int64_t arrivedAt = -1;
     for (int64_t i = 0; i < kRaidSteps && !r.ended; ++i) {
         sim.step();
@@ -205,6 +224,10 @@ RaidResult raid(uint64_t seed, const std::shared_ptr<const colony::DefDatabase>&
                 case colony::EventType::PawnDowned: ++(ours ? r.colonistsDowned : r.raidersDowned); break;
                 case colony::EventType::PawnDied: ++(ours ? r.colonistsDied : r.raidersDied); break;
                 case colony::EventType::CommandFailed: r.skipped = !r.arrived; break;  // no way in from any edge: an island start
+                case colony::EventType::PawnTended: r.tendedInFight += sim.raids().state().alarm ? 1 : 0; break;
+                case colony::EventType::PawnAction:
+                    r.dragged += e.action == colony::PawnAction::LayPawn && e.message == "safe" ? 1 : 0;
+                    break;
                 default: break;
             }
         }
@@ -251,12 +274,28 @@ int run(uint64_t firstSeed, int seeds, std::shared_ptr<const colony::DefDatabase
     int raidersDowned = 0;
     int raidersDied = 0;
     StuckWatch raidWatch;
-    std::printf("seed  fight: steps downed died waiting open%%   raid: ended length(min) colonists down/dead  raiders down/dead\n");
+    // The same raid with a Medic and a Firefighter (F10).
+    int careEnded = 0;
+    int careOpen = 0;
+    int careMissed = 0;
+    int careDied = 0;
+    int careTended = 0;
+    int careDragged = 0;
+    StuckWatch careWatch;  // reported, not counted in the stuck rule
+    std::printf("seed  fight: steps downed died waiting open%%   raid: ended length(min) colonists down/dead  raiders down/dead"
+                "   with medics: ended died tended dragged\n");
     for (int k = 0; k < seeds; ++k) {
         const uint64_t seed = firstSeed + static_cast<uint64_t>(k);
         Tally t;
         firefight(seed, defs, t, fightWatch);
-        const RaidResult r = raid(seed, defs, raidWatch);
+        const RaidResult r = raid(seed, defs, raidWatch, false);
+        const RaidResult c = raid(seed, defs, careWatch, true);
+        careEnded += c.ended ? 1 : 0;
+        careOpen += c.arrived && !c.ended && !c.wiped ? 1 : 0;
+        careMissed += c.arrived || c.skipped ? 0 : 1;
+        careDied += c.colonistsDied;
+        careTended += c.tendedInFight;
+        careDragged += c.dragged;
         fights.waiting += t.waiting;
         fights.inOpen += t.inOpen;
         fights.downed += t.downed;
@@ -273,11 +312,13 @@ int run(uint64_t firstSeed, int seeds, std::shared_ptr<const colony::DefDatabase
         colonistsDied += r.colonistsDied;
         raidersDowned += r.raidersDowned;
         raidersDied += r.raidersDied;
-        std::printf("%4llu  %11lld %6d %4d %7lld %5.1f   %17s %11lld %9d/%d %14d/%d\n", static_cast<unsigned long long>(seed),
+        std::printf("%4llu  %11lld %6d %4d %7lld %5.1f   %17s %11lld %9d/%d %14d/%d   %17s %4d %6d %7d\n", static_cast<unsigned long long>(seed),
                     static_cast<long long>(t.fightSteps), t.downed, t.died, static_cast<long long>(t.waiting),
                     t.waiting > 0 ? 100.0 * static_cast<double>(t.inOpen) / static_cast<double>(t.waiting) : 0.0,
                     r.skipped ? "no start room" : r.arrived ? (r.ended ? "yes" : r.wiped ? "colony down" : "NO (still on)") : "NO (never came)",
-                    static_cast<long long>(r.length / 60), r.colonistsDowned, r.colonistsDied, r.raidersDowned, r.raidersDied);
+                    static_cast<long long>(r.length / 60), r.colonistsDowned, r.colonistsDied, r.raidersDowned, r.raidersDied,
+                    c.skipped ? "no start room" : c.arrived ? (c.ended ? "yes" : c.wiped ? "colony down" : "NO (still on)") : "NO (never came)",
+                    c.colonistsDied, c.tendedInFight, c.dragged);
         if (verbose) {
             std::fflush(stdout);
         }
@@ -292,27 +333,34 @@ int run(uint64_t firstSeed, int seeds, std::shared_ptr<const colony::DefDatabase
                 static_cast<double>(fights.fightSteps) / seeds, fights.downed, fights.died, raidsEnded, raidsWiped, raidsOpen,
                 raidsSkipped, raidsMissed, raidsEnded > 0 ? static_cast<double>(raidLength) / raidsEnded / 60.0 : 0.0,
                 static_cast<long long>(longest / 60), colonistsDowned, colonistsDied, raidersDowned, raidersDied, stuck, fightWatch.stuck(), raidWatch.stuck());
+    std::printf("{\"raidSoakMedics\":{\"raidsEnded\":%d,\"raidsStillOn\":%d,\"raidsNeverCame\":%d,\"colonistsDied\":%d,"
+                "\"tendedInFight\":%d,\"dragged\":%d,\"stuckFighters\":%d}}\n",
+                careEnded, careOpen, careMissed, careDied, careTended, careDragged, careWatch.stuck());
     bool ok = true;
-    // The design rule is under 10%; the first measurement (this task) was 11.7%, so the run fails at
-    // kOpenLimit and the shortfall is reported until a tuning task closes it.
     if (fights.waiting == 0 || openPercent >= kOpenLimit) {
-        std::fprintf(stderr, "check failed: fighters waited in the open %.1f%% of the time (limit %.0f%%, rule 10%%, %lld pawn-steps)\n",
+        std::fprintf(stderr, "check failed: fighters waited in the open %.1f%% of the time (rule: under %.0f%%, %lld pawn-steps)\n",
                      openPercent, kOpenLimit, static_cast<long long>(fights.waiting));
         ok = false;
-    } else if (openPercent >= 10.0) {
-        std::fprintf(stderr, "note: fighters waited in the open %.1f%% of the time, over the 10%% design rule\n", openPercent);
     }
-    // Fighters that walk but don't move for kStuckSteps: the first run found 0.4 per seed, all in raids. The
-    // run fails past one per seed until a fix task brings it to none.
-    if (stuck > seeds) {
-        std::fprintf(stderr, "check failed: %d fighters stuck (walking but not moving for %d steps)\n", stuck, kStuckSteps);
+    // Fighters that walk but get nowhere for kStuckSteps.
+    if (stuck * kOneIn > seeds) {
+        std::fprintf(stderr, "check failed: %d fighters stuck (walking but getting nowhere for %d steps; at most one seed in %d)\n", stuck,
+                     kStuckSteps, kOneIn);
         ok = false;
     } else if (stuck > 0) {
-        std::fprintf(stderr, "note: %d fighters stuck (walking but not moving for %d steps)\n", stuck, kStuckSteps);
+        std::fprintf(stderr, "note: %d fighters stuck (walking but getting nowhere for %d steps)\n", stuck, kStuckSteps);
     }
-    if (raidsMissed > 0 || raidsOpen * 4 > seeds) {
-        std::fprintf(stderr, "check failed: %d raids never came, %d never ended (more than a quarter is too many)\n", raidsMissed,
-                     raidsOpen);
+    // With two colonists out of the firing line the colony is weaker and more raids hold on (field-care.md): only a raid
+    // that never came fails; the rest are numbers to watch.
+    if (careMissed > 0) {
+        std::fprintf(stderr, "check failed: with medics, %d raids never came\n", careMissed);
+        ok = false;
+    } else if (careOpen > 0) {
+        std::fprintf(stderr, "note: with medics, %d raids were still going after a quarter day\n", careOpen);
+    }
+    if (raidsMissed > 0 || raidsOpen * kOneIn > seeds) {
+        std::fprintf(stderr, "check failed: %d raids never came, %d never ended inside the quarter day (at most one seed in %d)\n", raidsMissed,
+                     raidsOpen, kOneIn);
         ok = false;
     } else if (raidsOpen > 0) {
         std::fprintf(stderr, "note: %d raids were still going after a quarter day\n", raidsOpen);
