@@ -18,6 +18,7 @@
 #include "ColonySim/Explosives.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Farming.h"
+#include "ColonySim/Disasters.h"
 #include "ColonySim/Narrator.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Raids.h"
@@ -492,6 +493,8 @@ struct SaveData {
     SaveWeather weather;
     bool hasNarrator = false;          // section "narrator" (T1); older saves keep the narrator off
     NarratorState narrator;
+    bool hasDisasters = false;         // section "disasters" (T3); older saves have none on
+    DisasterState disasters;
     WorldSettings world;               // section "world" (W2): SimSettings::world; older saves have no world
     uint64_t worldHash = 0;            // the world's hash when saved, checked against the one made again
 };
@@ -1029,6 +1032,10 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.text("action", c.action);
         ar.value("thing", c.thing);
         ar.value("pawn", c.pawn);
+    } else if constexpr (std::is_same_v<Type, StartThreatCommand>) {
+        ar.text("kind", c.kind);
+        ar.value("points", c.points);
+        ar.value("edge", c.edge);
     } else if constexpr (std::is_same_v<Type, QuestCommand>) {
         ar.text("action", c.action);
         ar.value("quest", c.quest);
@@ -1587,7 +1594,7 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
     }
     ar.value("dead", h.dead);
     ar.value("cause", h.cause);
-    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Surgery), "the save file has a bad cause of death");
+    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Executed), "the save file has a bad cause of death");
 
 }
 
@@ -2886,6 +2893,30 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("wealth", n.wealth);
         ar.value("points", n.points);
     });
+    ar.section("disasters", 1, [&] {
+        d.hasDisasters = true;
+        DisasterState& s = d.disasters;
+        ar.value("rngState", s.rngState);
+        ar.value("rngIncrement", s.rngIncrement);
+        ar.value("started", s.started);
+        ar.list("active", s.active, [&](DisasterCondition& c) {
+            uint8_t kind = static_cast<uint8_t>(c.kind);
+            ar.value("kind", kind);
+            ar.require(kind < kDisasterKindCount, "the save file has a disaster that does not exist");
+            c.kind = static_cast<DisasterKind>(kind);
+            ar.value("startedAt", c.startedAt);
+            ar.value("endsAt", c.endsAt);
+            ar.value("level", c.level);
+            ar.value("female", c.female);
+            ar.value("centreX", c.centre.x);
+            ar.value("centreY", c.centre.y);
+            ar.value("centreLevel", c.centre.level);
+            int radius = static_cast<int>(c.radius);  // metres, whole
+            ar.value("radius", radius);
+            c.radius = static_cast<float>(radius);
+            ar.value("nextStrike", c.nextStrike);
+        });
+    });
     ar.section("fire", 1, [&] {
         ar.value("started", d.fire.started);
         ar.value("burntUp", d.fire.burntUp);
@@ -2906,13 +2937,16 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.list("home", d.fire.home, [&](int& cell) { ar.value("cell", cell); });
         saveParts(ar, "burning", e, &SaveEntity::burning, [&](Burning& b) { ar.value("until", b.until); });
     });
-    ar.section("prisoners", 1, [&] {
+    ar.section("prisoners", 2, [&] {
         saveParts(ar, "prisoner", e, &SaveEntity::prisoner, [&](Prisoner& p) {
             ar.value("mode", p.mode);
             ar.value("resistance", p.resistance);
             ar.value("capturedAt", p.capturedAt);
             ar.value("nextChat", p.nextChat);
-            ar.require(static_cast<int>(p.mode) <= static_cast<int>(PrisonerMode::Release), "the save file has a bad prisoner mode");
+            if (ar.sectionVersion() >= 2) {  // executions
+                ar.value("guiltyUntil", p.guiltyUntil);
+            }
+            ar.require(static_cast<int>(p.mode) <= static_cast<int>(PrisonerMode::Execute), "the save file has a bad prisoner mode");
         });
         saveParts(ar, "prisonBed", e, &SaveEntity::prisonBed, [&](PrisonBed& b) { ar.value("marked", b.marked); });
     });
@@ -3079,6 +3113,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.farming = sim.farming_->saved();
     d.breeding = sim.breeding_->saved();
     d.narrator = sim.narrator_->state();
+    d.disasters = sim.disasters_->state();
     d.fire = sim.fire_->saved();
     d.seconds = sim.time_.seconds;
     d.rngState = sim.rng_.state();
@@ -4033,6 +4068,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     sim.breeding_->restore(d.breeding);
     if (d.hasNarrator && !sim.narrator_->restore(d.narrator, error)) {
         return false;
+    }
+    if (d.hasDisasters) {
+        sim.disasters_->restore(d.disasters);
     }
     if (!sim.farming_->restore(d.farming, error)) {
         return false;

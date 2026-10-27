@@ -50,6 +50,7 @@ const char* deathCauseName(DeathCause cause) {
         case DeathCause::Slaughtered: return "slaughtered";
         case DeathCause::Disease: return "illness";
         case DeathCause::Surgery: return "a failed operation";
+        case DeathCause::Executed: return "executed";
     }
     return "";
 }
@@ -159,6 +160,7 @@ public:
     struct Kind {  // a pawn def's body
         int body = -1;
         float healthScale = 1.0f;
+        bool mechanical = false;  // `race.mechanical`: no blood, no pain (mechanoids)
     };
 
     explicit HealthModel(const DefDatabase& defs);
@@ -511,6 +513,7 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
         if (found != bodyIndex.end()) {
             kinds[id.value].body = found->second;
             kinds[id.value].healthScale = std::max(0.01f, static_cast<float>(def.number("race.baseHealthScale", 1.0)));
+            kinds[id.value].mechanical = def.flag("race.mechanical");
         }
     }
 
@@ -910,11 +913,11 @@ void HealthSystem::die(Entity pawn, Health& health, DeathCause cause, bool annou
     }
 }
 
-void HealthSystem::derive(int bodyIndex, float healthScale, Health& health, DeathCause& cause, bool& shouldBeDown) const {
+void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, Health& health, DeathCause& cause, bool& shouldBeDown) const {
     const HealthModel::Body& body = model_->bodies[static_cast<size_t>(bodyIndex)];
     HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
     eval.workOutPainAndBleeding();
-    health.pain = eval.pain / healthScale;
+    health.pain = mechanical ? 0.0f : eval.pain / healthScale;
     for (const Disease& disease : health.diseases) {
         const HealthModel::DiseaseDef* def = model_->diseaseOf(disease.def);
         const int stage = def != nullptr ? HealthModel::stageIn(def->stages, disease.severity) : -1;
@@ -922,7 +925,7 @@ void HealthSystem::derive(int bodyIndex, float healthScale, Health& health, Deat
             health.pain += def->stages[static_cast<size_t>(stage)].painOffset;
         }
     }
-    health.bleedPerDay = eval.bleedPerDay;
+    health.bleedPerDay = mechanical ? 0.0f : eval.bleedPerDay;
     health.bloodStage = model_->stageOf(health.bloodLoss);
     // Pain feeds the capacities, so they get the divided value.
     eval.pain = health.pain;
@@ -973,7 +976,7 @@ void HealthSystem::recompute(Entity pawn, Health& health, bool announce) {
     }
     DeathCause cause = DeathCause::None;
     bool shouldBeDown = false;
-    derive(kind->body, kind->healthScale, health, cause, shouldBeDown);
+    derive(kind->body, kind->healthScale, kind->mechanical, health, cause, shouldBeDown);
 
     if (!health.dead && cause != DeathCause::None) {
         die(pawn, health, cause, announce);
@@ -2113,7 +2116,7 @@ bool HealthSystem::report(Entity pawn, HealthReport& out) const {
     if (health.dirty) {
         DeathCause cause = DeathCause::None;
         bool shouldBeDown = false;
-        derive(kind->body, kind->healthScale, health, cause, shouldBeDown);
+        derive(kind->body, kind->healthScale, kind->mechanical, health, cause, shouldBeDown);
         if (!health.dead && cause != DeathCause::None) {
             health.dead = true;
             health.cause = cause;

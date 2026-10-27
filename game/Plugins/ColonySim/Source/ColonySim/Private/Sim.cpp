@@ -50,11 +50,13 @@
 #include "ColonySim/RoomStats.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Snapshot.h"
+#include "ColonySim/Monsters.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/RoofCollapse.h"
 #include "ColonySim/UpperFloors.h"
 #include "ColonySim/Weather.h"
 #include "ColonySim/Zones.h"
+#include "ColonySim/Disasters.h"
 #include "ColonySim/Narrator.h"
 #include "MovementSystem.h"
 
@@ -323,6 +325,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     raids_ = std::make_unique<RaidSystem>(*things_, map_, *rooms_, *combat_, *health_, *jobs_, *fighters_, *defs_, time_, rng_);
     raids_->setEventLog(&events_);
     raids_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
+    monsters_ = std::make_unique<MonsterSystem>(*things_, map_, *combat_, *health_, *fighters_, *raids_, *animals_, *defs_, time_, rng_);
     prisoners_ = std::make_unique<PrisonerSystem>(*things_, map_, *combat_, *health_, *jobs_, *fighters_, *raids_, *defs_, time_, rng_);
     prisoners_->setEventLog(&events_);
     jobs_->setPrisoners(prisoners_.get());
@@ -379,6 +382,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     fighters_->setDefense(defense_.get());
     narrator_ = std::make_unique<NarratorSystem>(*raids_, *defs_, time_, settings.seed);
     narrator_->setEventLog(&events_);
+    disasters_ = std::make_unique<DisasterSystem>(*narrator_, *power_, *weather_, *plants_, *farming_, *things_, *health_, *mood_,
+                                                  *animals_, *fire_, *combat_, map_, *defs_, time_, settings.seed);
+    disasters_->setEventLog(&events_);
     narrator_->setWorker("QuestOffer", [this](IncidentFiring& f) {
         uint32_t id = 0;
         if (!quests_->offerRandom(id, f.error)) {
@@ -768,7 +774,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         PrisonerMode mode = PrisonerMode::NoInteraction;
         std::string why;
         if (!prisonerModeFromName(prisonerMode->mode, mode)) {
-            commandFailed(id, "no prisoner mode '" + prisonerMode->mode + "' (NoInteraction, ReduceResistance, AttemptRecruit or Release)");
+            commandFailed(id, "no prisoner mode '" + prisonerMode->mode + "' (NoInteraction, ReduceResistance, AttemptRecruit, Release or Execute)");
         } else if (!prisoners_->setMode(prisonerMode->pawn, mode, why)) {
             commandFailed(id, why);
         }
@@ -1179,6 +1185,13 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!raids_->startRaid(raid->faction, raid->points, raid->edge, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* threat = std::get_if<StartThreatCommand>(&command)) {
+        const bool ok = threat->kind == "Infestation"      ? monsters_->infest(threat->points, error)
+                        : threat->kind == "RemnantCluster" ? monsters_->remnantCluster(threat->points, threat->edge, error)
+                                                           : (error = "no such threat '" + threat->kind + "'", false);
+        if (!ok) {
+            commandFailed(id, error);
+        }
     } else if (const auto* alarm = std::get_if<SoundAlarmCommand>(&command)) {
         if (!raids_->soundAlarm(alarm->on, error)) {
             commandFailed(id, error);
@@ -1348,6 +1361,7 @@ void Sim::step() {
     explosives_->step(rng_);
     animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
     defense_->step(rng_);
+    monsters_->step(events_, 0);  // mounds make jelly, brood and spread; insects hunt (docs/design/monsters.md)
     {
         // Blasts of Burn damage start fires; a pawn that catches fire stops what it was doing.
         fire_->step(time_.seconds, 0);
@@ -1384,6 +1398,7 @@ void Sim::step() {
         pruneDesignations();
     }
     narrator_->step();  // after the clock: incidents come on the narrator's checks (T1)
+    disasters_->step();  // T3: conditions end, work and strike
     if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
         checkpoints_.push_back(Checkpoint{time_.seconds, stateHash()});
     }
@@ -1963,6 +1978,7 @@ uint64_t Sim::stateHash() const {
     roofCollapse_->hashState(h);
     spoilage_->hashState(h);
     narrator_->hashState(h);
+    disasters_->hashState(h);
     crafting_->hashState(h);
     farming_->hashState(h);
 

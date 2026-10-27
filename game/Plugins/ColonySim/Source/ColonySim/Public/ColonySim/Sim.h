@@ -59,6 +59,7 @@ class ResearchSystem;
 class TalentSystem;
 class NeedsSystem;
 class RaidSystem;
+class MonsterSystem;
 class Plants;
 class PowerGrid;
 class Regions;
@@ -76,6 +77,7 @@ class Weather;
 class Zones;
 class Farming;
 class NarratorSystem;
+class DisasterSystem;
 struct Snapshot;
 class SimSaveAccess;
 
@@ -324,9 +326,16 @@ public:
     RaidSystem& raids() { return *raids_; }
     const RaidSystem& raids() const { return *raids_; }
 
+    // Brood mounds and Remnant clusters (docs/design/monsters.md).
+    MonsterSystem& monsters() { return *monsters_; }
+
     // The narrator, incidents and threat points (docs/design/narrator.md).
     NarratorSystem& narrator() { return *narrator_; }
     const NarratorSystem& narrator() const { return *narrator_; }
+    // Disasters and bad events: solar flare, toxic fallout, volcanic winter, flashstorm, psychic waves, blight,
+    // manhunters, short circuits (docs/design/disasters.md).
+    DisasterSystem& disasters() { return *disasters_; }
+    const DisasterSystem& disasters() const { return *disasters_; }
     // Prisoners: capture, feeding, warden talks, recruiting and release (docs/design/prisoners.md).
     // The spaceship ending: parts, reactor, siege waves, launch (docs/design/ship.md).
     ShipSystem& ship() { return *ship_; }
@@ -445,6 +454,7 @@ private:
     std::unique_ptr<UpperFloors> upperFloors_;  // M1
     std::unique_ptr<RoofCollapse> roofCollapse_;  // M3, after the rooms and the job system
     std::unique_ptr<RaidSystem> raids_;        // after the fighters
+    std::unique_ptr<MonsterSystem> monsters_;  // after raids_ and animals_
     std::unique_ptr<PrisonerSystem> prisoners_;  // after the raids
     std::unique_ptr<QuestSystem> quests_;        // after the raids
     std::unique_ptr<ShipSystem> ship_;           // after the raids
@@ -462,6 +472,7 @@ private:
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<NarratorSystem> narrator_;  // after raids_
+    std::unique_ptr<DisasterSystem> disasters_;  // T3, after the narrator and everything it touches
     std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
 };
 

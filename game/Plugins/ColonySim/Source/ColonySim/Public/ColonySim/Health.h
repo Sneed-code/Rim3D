@@ -39,7 +39,8 @@ enum class DeathCause : uint8_t {
     Environment,    // any other Environment hediff
     Slaughtered,    // a colonist killed a tame animal (Husbandry.h)
     Disease,        // a disease reached its lethal severity (H2, docs/design/diseases.md)
-    Surgery         // an operation went wrong (Surgery.h)
+    Surgery,        // an operation went wrong (Surgery.h)
+    Executed        // a warden executed a prisoner (Prisoners.h)
 };
 
 COLONY_API const char* deathCauseName(DeathCause cause);
@@ -359,7 +360,7 @@ private:
 
     // Works out pain, bleeding, capacities and what they mean (the death cause and whether the
     // pawn should be downed) into `health`'s derived fields. Changes nothing else.
-    void derive(int body, float healthScale, Health& health, DeathCause& cause, bool& shouldBeDown) const;
+    void derive(int body, float healthScale, bool mechanical, Health& health, DeathCause& cause, bool& shouldBeDown) const;
     void recompute(Entity pawn, Health& health, bool announce);
     void emit(EventType type, Entity pawn, DefId def = DefId{}, int part = -1, float amount = 0.0f,
               const char* message = nullptr);
