@@ -12,6 +12,7 @@
 #include "Misc/PackageName.h"
 #include "PoseSearch/PoseSearchDatabase.h"
 
+#include "LevelsSubsystem.h"
 #include "PawnActor.h"
 #include "PawnLooks.h"
 #include "SimSubsystem.h"
@@ -445,6 +446,8 @@ void USimPawnSubsystem::Tick(float DeltaTime)
 	const colony::Snapshot& Now = Bridge->GetCurrentSnapshot();
 	const colony::Snapshot& Before = Bridge->GetPreviousSnapshot();
 	const colony::DefDatabase* Defs = Bridge->GetDefs().get();
+	// The levels above the one the overseer looks at are cut away (docs/design/levels-draw.md).
+	const int32 TopLevel = ULevelsSubsystem::TopShownLevel(GetWorld());
 	TSet<uint32> Seen;
 	for (const colony::ThingView& View : Now.things)
 	{
@@ -468,6 +471,7 @@ void USimPawnSubsystem::Tick(float DeltaTime)
 			Pawn->Setup(*this, View.id, Cruise, bMetaHumans);
 		}
 		Pawn->UpdateFromSim(*Bridge, View, Before.find(View.id), DeltaTime, Bridge->GetSpeed());
+		Pawn->SetCutAway(View.level > TopLevel);
 		if (View.looks >= 0 && View.looks < static_cast<int32>(Now.looks.size()))
 		{
 			Pawn->ApplyLooks(*this, MakeLooks(Now.looks[static_cast<size_t>(View.looks)], Defs));
