@@ -4,6 +4,7 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Inspirations.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
@@ -74,6 +75,7 @@ struct CombatModel {
         // hit on that hitbox can land on (by their share of the body), e.g. a hand and its fingers.
         std::vector<std::vector<int>> landsOn;  // by part index
         std::vector<BodyPartInfo> parts;
+        float natural[3] = {0, 0, 0};  // race.armor sharp, blunt, heat: a hide or hull under any apparel
     };
 
     std::vector<Gun> guns;          // by Things DefId value
@@ -82,6 +84,16 @@ struct CombatModel {
     std::vector<ArmorKind> armorKind;  // by DamageTypes DefId value
     std::vector<Kind> kinds;        // by Things DefId value
     std::vector<uint8_t> melee;     // by Things DefId value: 1 for a melee weapon (an item with `tools`, F8)
+    // What a weapon's quality and stuff do to it (QualityRules levels, stuffProps.statFactors).
+    struct WeaponQuality {
+        float melee = 1.0f;     // damage and armor penetration of a blow
+        float accuracy = 1.0f;  // shooting accuracy
+        float damage = 1.0f;    // damage and armor penetration of a bullet
+    };
+    std::vector<WeaponQuality> weaponQuality;  // by quality level
+    int defaultQuality = 2;
+    std::vector<float> stuffSharp;  // by Things DefId value of a stuff: meleeSharpDamage (1 if it says nothing)
+    std::vector<float> stuffBlunt;  // meleeBluntDamage
     std::vector<uint8_t> slot;      // by Things DefId value: the WeaponSlot of a weapon, 255 for none (P1)
     int switchSteps[kWeaponSlotCount] = {36, 18, 27};  // CombatRules weaponSwitchSteps, by the slot switched to
     DefId bluntDamage;
@@ -220,6 +232,8 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
     kinds.resize(defs.size());
     blast.resize(defs.size());
     melee.resize(defs.size(), 0);
+    stuffSharp.resize(defs.size(), 1.0f);
+    stuffBlunt.resize(defs.size(), 1.0f);
     slot.resize(defs.size(), 255);
 
     if (const Def* rules = defs.find("Rules", "ExplosiveRules")) {
@@ -285,6 +299,28 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
 
     if (const Def* rules = defs.find("Rules", "ApparelRules")) {
         absorbDivisor = std::max(0.01f, combatNum(*rules, "absorbDamageDivisor", absorbDivisor));
+    }
+
+    if (const Def* rules = defs.find("Rules", "QualityRules")) {
+        const size_t levels = rules->count("levels");
+        for (size_t i = 0; i < levels; ++i) {
+            const std::string base = "levels." + std::to_string(i);
+            WeaponQuality q;
+            q.melee = combatNum(*rules, base + ".meleeDamageFactor", 1.0f);
+            q.accuracy = combatNum(*rules, base + ".rangedAccuracyFactor", 1.0f);
+            q.damage = combatNum(*rules, base + ".rangedDamageFactor", 1.0f);
+            weaponQuality.push_back(q);
+            if (rules->text(("levels." + std::to_string(i) + ".def").c_str()) == rules->text("defaultLevel")) {
+                defaultQuality = static_cast<int>(i);
+            }
+        }
+    }
+    for (const DefId id : defs.idsOfKind("Things")) {
+        const Def& def = defs.get(id);
+        if (def.has("stuffProps")) {
+            stuffSharp[id.value] = combatNum(def, "stuffProps.statFactors.meleeSharpDamage", 1.0f);
+            stuffBlunt[id.value] = combatNum(def, "stuffProps.statFactors.meleeBluntDamage", 1.0f);
+        }
     }
 
     for (const DefId id : defs.idsOfKind("DamageTypes")) {
@@ -367,6 +403,9 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
             const Def* boxes = defs.find("Hitboxes", def.text("race.hitboxes"));
             Kind& k = kinds[id.value];
             k.parts = health.bodyParts(id);
+            k.natural[0] = static_cast<float>(def.number("race.armor.sharp", 0.0));
+            k.natural[1] = static_cast<float>(def.number("race.armor.blunt", 0.0));
+            k.natural[2] = static_cast<float>(def.number("race.armor.heat", 0.0));
             if (boxes == nullptr || k.parts.empty()) {
                 continue;
             }
@@ -861,8 +900,12 @@ Entity CombatSystem::fire(Entity pawn, float x, float y, float z, float spreadSl
     const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(pawn).def);
     const Stance stance = combatStanceOf(reg, pawn);
     const float muzzle = kind != nullptr ? kind->poses[static_cast<int>(stance)].muzzle : eyeHeight(stance) - 0.15f;
-    return launch(pawn, weaponDef, pos.x, pos.y, map_.heightAt(pos.x, pos.y) + muzzle, pos.level, cellOf(pos), x, y, z,
-                  spreadSlope, rng, kickUp, kickSide, &reg.get<Posture>(pawn));
+    const Entity shot = launch(pawn, weaponDef, pos.x, pos.y, map_.heightAt(pos.x, pos.y) + muzzle, pos.level, cellOf(pos), x, y,
+                               z, spreadSlope, rng, kickUp, kickSide, &reg.get<Posture>(pawn));
+    if (shot != kNoEntity) {
+        reg.get<Projectile>(shot).damageFactor = rangedDamageFactor(weapon);
+    }
+    return shot;
 }
 
 Entity CombatSystem::fireFrom(Entity launcher, DefId weapon, float ox, float oy, float oz, int level, CellPos startCell,
@@ -1114,8 +1157,12 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
     }
     const float accuracyFactor =
         weather_ != nullptr ? weather_->accuracyAt(CellPos{static_cast<int>(std::floor(pos.x)), static_cast<int>(std::floor(pos.y)), pos.level}) : 1.0f;
-    const float steady = talents_ != nullptr ? static_cast<float>(talents_->statFactor(pawn, "aimSpread")) : 1.0f;
-    fire(pawn, fx, fy, fz, spread(weaponDef, skill, distance, s.player, accuracyFactor) * steady + s.recoil, rng, kickUp, kickSide);
+    float steady = talents_ != nullptr ? static_cast<float>(talents_->statFactor(pawn, "aimSpread")) : 1.0f;
+    if (inspirations_ != nullptr) {
+        steady *= inspirations_->statFactor(pawn, "aimSpread");
+    }
+    const float quality = rangedAccuracyFactor(gear->weapon);
+    fire(pawn, fx, fy, fz, spread(weaponDef, skill, distance, s.player, accuracyFactor * quality) * steady + s.recoil, rng, kickUp, kickSide);
     const float skillFactor = std::max(0.0f, 1.0f - model_->recoilSkillReduction * static_cast<float>(skill));
     s.recoil += gun->recoil * skillFactor;
     if (kicks) {
@@ -1143,8 +1190,11 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
         s.stepsLeft = std::max(1, gun->burstGap);
         return;
     }
-    s.phase = gun->cooldown > 0 ? ShotPhase::Cooling : ShotPhase::Ready;
-    s.stepsLeft = gun->cooldown;
+    const int cooldown = inspirations_ != nullptr
+                             ? static_cast<int>(std::lround(static_cast<float>(gun->cooldown) * inspirations_->statFactor(pawn, "fireCooldown")))
+                             : gun->cooldown;
+    s.phase = cooldown > 0 ? ShotPhase::Cooling : ShotPhase::Ready;
+    s.stepsLeft = cooldown;
 }
 
 void CombatSystem::startReload(Entity pawn, Shooter& s, Entity weapon, int extraSteps) {
@@ -1349,7 +1399,7 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
     switch (hit.kind) {
         case ProjectileHitKind::Building: {
             HitPoints* hp = reg.valid(hit.thing) ? reg.try_get<HitPoints>(hit.thing) : nullptr;
-            const int damage = hp != nullptr ? std::max(1, static_cast<int>(std::lround(bullet.damage))) : 0;
+            const int damage = hp != nullptr ? std::max(1, static_cast<int>(std::lround(bullet.damage * p.damageFactor))) : 0;
             emitHit(projectile, p, h, static_cast<float>(damage));
             if (hp != nullptr) {
                 hp->current -= damage;
@@ -1363,7 +1413,7 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
             break;
         }
         case ProjectileHitKind::Pawn: {
-            const PawnHitResult result = hitPawn(hit.thing, hit.part, bullet.damageType, bullet.damage, bullet.penetration, p.seed);
+            const PawnHitResult result = hitPawn(hit.thing, hit.part, bullet.damageType, bullet.damage * p.damageFactor, bullet.penetration * p.damageFactor, p.seed);
             h.part = result.part;
             if (result.deflected) {
                 h.kind = ProjectileHitKind::Armor;
@@ -1402,11 +1452,11 @@ PawnHitResult CombatSystem::armorPass(Entity pawn, int part, DefId damageType, f
     const CombatModel::ArmorKind armorKind =
         damageType.value < model_->armorKind.size() ? model_->armorKind[damageType.value] : CombatModel::ArmorKind::None;
     const Gear* gear = reg.try_get<Gear>(pawn);
-    if (gear == nullptr || armorKind == CombatModel::ArmorKind::None) {
+    if (armorKind == CombatModel::ArmorKind::None) {
         return result;
     }
     std::vector<std::pair<int, Entity>> layers;
-    for (const Entity worn : gear->apparel) {
+    for (const Entity worn : gear != nullptr ? gear->apparel : std::vector<Entity>{}) {
         const CombatModel::Apparel* a = model_->wear(reg.get<Thing>(worn).def);
         if (a == nullptr) {
             continue;
@@ -1445,6 +1495,20 @@ PawnHitResult CombatSystem::armorPass(Entity pawn, int part, DefId damageType, f
         }
         if (roll < armor) {
             wearOut(worn, result.amount);
+            result.amount *= 0.5f;
+            if (armorKind == CombatModel::ArmorKind::Sharp && model_->bluntDamage.valid()) {
+                result.damageType = model_->bluntDamage;
+            }
+        }
+    }
+    // The body's own armor (mechanoid hulls, chitin) is the innermost layer; nothing wears out.
+    const float natural = std::max(0.0f, kind->natural[static_cast<size_t>(armorType)] - penetration);
+    if (natural > 0.0f) {
+        const float roll = rng.unit();
+        if (roll < natural * 0.5f) {
+            result.deflected = true;
+            result.amount = 0.0f;
+        } else if (roll < natural) {
             result.amount *= 0.5f;
             if (armorKind == CombatModel::ArmorKind::Sharp && model_->bluntDamage.valid()) {
                 result.damageType = model_->bluntDamage;
@@ -1528,6 +1592,54 @@ float CombatSystem::spreadRadiusFor(float chance) const {
 
 bool CombatSystem::isMeleeWeapon(DefId def) const {
     return def.valid() && def.value < model_->melee.size() && model_->melee[def.value] != 0;
+}
+
+namespace {
+int combatQualityOf(const entt::registry& reg, Entity item, int fallback, size_t levels) {
+    if (item == kNoEntity || !reg.valid(item)) {
+        return fallback;
+    }
+    const Quality* q = reg.try_get<Quality>(item);
+    return q != nullptr ? std::min(static_cast<int>(q->level), static_cast<int>(levels) - 1) : fallback;
+}
+}  // namespace
+
+float CombatSystem::meleeDamageFactor(Entity weapon, DefId damageType) const {
+    const entt::registry& reg = things_.registry();
+    if (weapon == kNoEntity || !reg.valid(weapon) || model_->weaponQuality.empty()) {
+        return 1.0f;
+    }
+    float factor = model_->weaponQuality[static_cast<size_t>(
+                                             combatQualityOf(reg, weapon, model_->defaultQuality, model_->weaponQuality.size()))]
+                       .melee;
+    if (const MadeOf* made = reg.try_get<MadeOf>(weapon); made != nullptr && made->stuff.valid() && made->stuff.value < model_->stuffSharp.size()) {
+        const CombatModel::ArmorKind kind =
+            damageType.valid() && damageType.value < model_->armorKind.size() ? model_->armorKind[damageType.value] : CombatModel::ArmorKind::None;
+        if (kind == CombatModel::ArmorKind::Sharp) {
+            factor *= model_->stuffSharp[made->stuff.value];
+        } else if (kind == CombatModel::ArmorKind::Blunt) {
+            factor *= model_->stuffBlunt[made->stuff.value];
+        }
+    }
+    return factor;
+}
+
+float CombatSystem::rangedAccuracyFactor(Entity weapon) const {
+    if (model_->weaponQuality.empty()) {
+        return 1.0f;
+    }
+    return model_->weaponQuality[static_cast<size_t>(
+                                     combatQualityOf(things_.registry(), weapon, model_->defaultQuality, model_->weaponQuality.size()))]
+        .accuracy;
+}
+
+float CombatSystem::rangedDamageFactor(Entity weapon) const {
+    if (model_->weaponQuality.empty()) {
+        return 1.0f;
+    }
+    return model_->weaponQuality[static_cast<size_t>(
+                                     combatQualityOf(things_.registry(), weapon, model_->defaultQuality, model_->weaponQuality.size()))]
+        .damage;
 }
 
 bool CombatSystem::isGun(DefId def) const {
@@ -1905,6 +2017,23 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
         }
     }
     return result;
+}
+
+bool CombatSystem::damageBuilding(Entity building, int damage) {
+    entt::registry& reg = things_.registry();
+    HitPoints* hp = reg.valid(building) ? reg.try_get<HitPoints>(building) : nullptr;
+    if (hp == nullptr) {
+        return false;
+    }
+    hp->current -= std::max(0, damage);
+    if (hp->current > 0) {
+        return false;
+    }
+    if (beforeDestroy_) {
+        beforeDestroy_(building);
+    }
+    things_.destroy(building);
+    return true;
 }
 
 void CombatSystem::drop(Entity pawn, Entity item) {

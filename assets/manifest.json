@@ -80,6 +80,15 @@
       "installedTo": "game/Content/ThirdParty/ClothesArt/ and game/Content/Rim3D/Generated/Clothes/ (neither in Git)",
       "usedFor": "worn meshes (visual.worn) of the D6 and F2 apparel defs, per layer (docs/design/looks.md), the skin layer under them and the torn-look material (U16, docs/design/clothes-draw.md; rerun the commandlet after pulling U16)",
       "reinstall": "python tools/clothes_art.py, run the PawnLooks commandlet, then \"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" C:\\Dev\\Rim3D\\game\\Rim3D.uproject -run=ClothesArt -unattended -nosplash -nullrhi"
+    },
+    {
+      "name": "Free sounds and music (V21)",
+      "source": "Listed in assets/sound_sources.json: Kenney (CC0), OpenGameArt (CC0, two CC-BY), Sonniss GameAudioGDC and Freesound CC0 by hand. Downloaded by tools/sound_assets.py",
+      "licence": "per pack, in assets/sound_sources.json; CC-BY ones (congusbongus footsteps, YannZ music) need a credit, written to CREDITS.txt",
+      "version": "as downloaded",
+      "installedTo": "game/Content/ThirdParty/Sounds/<id>/ (not in Git)",
+      "usedFor": "the 140 sound cues of docs/design/sound.md and the music (V21 PC half)",
+      "reinstall": "python tools/sound_assets.py, then fetch the Sonniss and Freesound parts by hand (docs/design/sound.md)"
     }
   ]
 }

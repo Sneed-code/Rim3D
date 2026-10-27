@@ -56,9 +56,14 @@ public:
         }
         const entt::registry& reg = jobs.things().registry();
         const Position& at = reg.get<Position>(pawn);
+        const double avoidChance = jobs.husbandry()->rules().huntAvoidManhunterChance;
         reg.view<const Animal, const AnimalCare, const Position>().each(
             [&](Entity animal, const Animal& a, const AnimalCare& care, const Position& pos) {
                 if (!care.markHunt || !a.wild || pos.level != at.level || huntDead(reg, animal)) {
+                    return;
+                }
+                // A bear or a thrumbo that turns on its hunter is no animal to send a colonist after.
+                if (static_cast<double>(jobs.husbandry()->animals().manhunterChanceOf(animal)) >= avoidChance) {
                     return;
                 }
                 out.push_back(WorkCandidate{JobTarget{animal, CellPos{}}, huntDistSq(at, pos), 0, 0, false, CellPos{}});
@@ -168,7 +173,7 @@ bool makeButcherJob(JobSystem& jobs, Entity pawn, Entity building, const Bill& b
     const CellPos from = cellOf(at);
     Entity best = kNoEntity;
     float bestDist = 0.0f;
-    reg.view<const Animal, const Position>().each([&](Entity corpse, const Animal&, const Position& pos) {
+    reg.view<const Health, const Position>().each([&](Entity corpse, const Health&, const Position& pos) {
         if (pos.level != at.level || !hu->isCorpse(corpse)) {
             return;
         }
@@ -387,6 +392,21 @@ JobSystem::StepResult JobSystem::butcherFinish(Entity pawn, Job& job, std::strin
         return StepResult::Failed;
     }
     const Entity corpse = job.thing;
+    if (recipe->cremate) {
+        // Ash: no meat, no leather, no butcher's memory.
+        things_.destroy(corpse);
+        const bool burntLast = bills_->iterationDone(job.site, job.bill);
+        Event burnt;
+        burnt.type = EventType::RecipeDone;
+        burnt.thing = pawn;
+        burnt.def = recipe->def;
+        burnt.target = job.site;
+        burnt.cell = job.cell;
+        burnt.amount = 1.0f;
+        burnt.message = burntLast ? "bill finished" : std::string();
+        events_.push_back(std::move(burnt));
+        return StepResult::Next;
+    }
     const DefId animalDef = reg.get<Thing>(corpse).def;
     const Husbandry::ButcherYield yield = husbandry_->butcherYield(corpse, butcherEfficiency(pawn));
     // The corpse is gone for good; the meat and leather lie by the pawn, where haulers find them.

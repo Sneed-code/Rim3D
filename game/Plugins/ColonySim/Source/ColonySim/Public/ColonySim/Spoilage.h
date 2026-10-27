@@ -76,6 +76,8 @@ public:
     // `pawn` ate `item` (before it is destroyed): if the stack was poisoned, rolls for food poisoning.
     // Returns true if the pawn got it.
     bool eaten(Entity pawn, Entity item);
+    // Whether a meal was cooked from human flesh (an ingredient with `humanlike` true), for the mood.
+    bool humanlikeIngredient(Entity item) const;
 
     // One game second. Every `intervalSeconds` the rot and wear of every item are brought up to date.
     void step(int64_t now);
