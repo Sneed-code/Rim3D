@@ -14,6 +14,7 @@
 
 #include "LevelsSubsystem.h"
 #include "PawnActor.h"
+#include "PawnFaces.h"
 #include "PawnLooks.h"
 #include "SimSubsystem.h"
 #include "VisualMesh.h"
@@ -179,6 +180,13 @@ TArray<TPair<FName, float>> FSimPawnLooks::MorphWeights() const
 	return {{TEXT("Thin"), Thin}, {TEXT("Heavy"), Heavy}, {TEXT("Female"), 0.0f}, {TEXT("FemaleThin"), 0.0f}, {TEXT("FemaleHeavy"), 0.0f}};
 }
 
+TArray<TPair<FName, float>> FSimPawnLooks::FaceMorphWeights() const
+{
+	const auto Slider = [](float Value) { return FMath::Clamp(Value, 0.0f, 1.0f) * 2.0f - 1.0f; };
+	return {{PawnFacesMorphFemale, bFemale ? 1.0f : 0.0f}, {PawnFacesMorphShape, Slider(FaceShape)}, {PawnFacesMorphBrow, Slider(Brow)},
+		{PawnFacesMorphNose, Slider(Nose)}, {PawnFacesMorphJaw, Slider(Jaw)}};
+}
+
 FSimPawnLooks USimPawnSubsystem::MakeLooks(const colony::PawnLooksView& View, const colony::DefDatabase* Defs)
 {
 	FSimPawnLooks Looks;
@@ -187,6 +195,24 @@ FSimPawnLooks USimPawnSubsystem::MakeLooks(const colony::PawnLooksView& View, co
 	Looks.bFemale = View.female;
 	Looks.Skin = PawnLinear(View.skin);
 	Looks.Hair = PawnLinear(View.hair);
+	Looks.FaceShape = View.faceShape;
+	Looks.Brow = View.brow;
+	Looks.Nose = View.nose;
+	Looks.Jaw = View.jaw;
+	Looks.Eyes = FColor(FMath::RoundToInt32(FMath::Clamp(View.eyes.r, 0.0f, 1.0f) * 255.0f), FMath::RoundToInt32(FMath::Clamp(View.eyes.g, 0.0f, 1.0f) * 255.0f),
+		FMath::RoundToInt32(FMath::Clamp(View.eyes.b, 0.0f, 1.0f) * 255.0f));
+	Looks.HairStyle = UTF8_TO_TCHAR(View.hairStyle.c_str());
+	Looks.Beard = UTF8_TO_TCHAR(View.beard.c_str());
+	Looks.BodyHair = FMath::Clamp(View.bodyHair, 0.0f, 1.0f);
+	const auto Marks = [](const std::vector<colony::LooksMark>& From, TArray<FSimPawnMark>& To)
+	{
+		for (const colony::LooksMark& Mark : From)
+		{
+			To.Add({static_cast<uint8>(Mark.region), Mark.style, Mark.u, Mark.v, Mark.size});
+		}
+	};
+	Marks(View.tattoos, Looks.Tattoos);
+	Marks(View.scars, Looks.Scars);
 	if (Defs && View.lineage.valid())
 	{
 		// Horns are a gene of the lineage (X1): the last of its genes that has them.
@@ -360,6 +386,24 @@ UStaticMesh* USimPawnSubsystem::GetHornMesh()
 		HornMesh = PawnLoadLooksAsset<UStaticMesh>(PawnLooksHornMesh);
 	}
 	return HornMesh;
+}
+
+UObject* USimPawnSubsystem::GetFacesAsset(const FString& Name)
+{
+	if (const TObjectPtr<UObject>* Found = FacesAssets.Find(Name))
+	{
+		return *Found;
+	}
+	const FString Package = FString(PawnFacesFolder) / Name;
+	UObject* Asset = FPackageName::DoesPackageExist(Package) ? LoadObject<UObject>(nullptr, *PawnFacesAssetPath(Name)) : nullptr;
+	FacesAssets.Add(Name, Asset);
+	if (!Asset && !bFacesMissingLogged && Name.StartsWith(TEXT("SK_Face_")))
+	{
+		bFacesMissingLogged = true;
+		UE_LOG(LogSimPawns, Warning, TEXT("No pawn faces assets in %s: run the PawnFaces commandlet (docs/design/looks.md); pawns keep Kellan's face and hair"),
+			PawnFacesFolder);
+	}
+	return Asset;
 }
 
 UAnimSequence* USimPawnSubsystem::GetActionAnimation(colony::PawnAction Action) const
