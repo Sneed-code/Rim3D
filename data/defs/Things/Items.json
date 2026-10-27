@@ -26,12 +26,6 @@
     }
   },
   {
-    "defName": "Chemfuel", "parent": "ItemBase", "label": "chemfuel", "stackLimit": 75,
-    "visual": {"pieces": 4, "layer": 0.1, "parts": [{"shape": "cylinder", "radius": 0.12, "height": 0.25, "color": [0.75, 0.45, 0.15]}]},
-    "stats": { "maxHitPoints": 60, "marketValue": 1.7, "mass": 0.5, "flammability": 1.0 },
-    "unverified": ["stats", "stackLimit"]
-  },
-  {
     "defName": "Silver", "visual": {"pieces": 5, "layer": 0.04, "parts": [{"shape": "box", "size": [0.2, 0.12, 0.04], "color": [0.85, 0.87, 0.92]}]}, "parent": "ItemBase", "label": "silver", "stackLimit": 500,
     "stats": { "marketValue": 1.0, "mass": 0.008 }
   },
