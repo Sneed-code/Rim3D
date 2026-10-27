@@ -120,6 +120,8 @@ enum class EventType : uint8_t {
     ShipReactorReady,      // the activation finished: the ship can launch
     ShipReactorLost,       // the reactor was destroyed or taken down: the activation is lost, `message` says which
     ShipLaunched,          // the ship left and the game is won: `amount` how many pawns went (a PawnLeftMap each)
+    PrisonerExecuted,      // a warden executed a prisoner (docs/design/prisoners.md): `thing` the prisoner (dead), `target` the warden, `message` "guilty" or "innocent"
+    OrganHarvested,        // an organ was taken from a living pawn: `thing` the victim, `target` the surgeon, `part` the body part, `message` "colonist" or "prisoner" (anyone who is not one of ours)
     OperationDone,      // a doctor finished an operation (H3, docs/design/surgery.md): `thing` the doctor, `target` the patient, `def` the Recipes def, `part` the body part, `amount` the success chance, `message` "success", "failed" or "the patient died"
 };
 

@@ -50,6 +50,7 @@ const char* deathCauseName(DeathCause cause) {
         case DeathCause::Slaughtered: return "slaughtered";
         case DeathCause::Disease: return "illness";
         case DeathCause::Surgery: return "a failed operation";
+        case DeathCause::Executed: return "executed";
     }
     return "";
 }

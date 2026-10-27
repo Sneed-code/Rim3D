@@ -829,7 +829,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         PrisonerMode mode = PrisonerMode::NoInteraction;
         std::string why;
         if (!prisonerModeFromName(prisonerMode->mode, mode)) {
-            commandFailed(id, "no prisoner mode '" + prisonerMode->mode + "' (NoInteraction, ReduceResistance, AttemptRecruit or Release)");
+            commandFailed(id, "no prisoner mode '" + prisonerMode->mode + "' (NoInteraction, ReduceResistance, AttemptRecruit, Release or Execute)");
         } else if (!prisoners_->setMode(prisonerMode->pawn, mode, why)) {
             commandFailed(id, why);
         }
