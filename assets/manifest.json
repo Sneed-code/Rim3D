@@ -60,7 +60,7 @@
       "licence": "CC0 (public domain)",
       "version": "as downloaded 2026-10-25",
       "installedTo": "files in game/Content/ThirdParty/TerrainTextures/ and the made textures and material (M_Terrain, MI_Terrain) in game/Content/Rim3D/Generated/Terrain/ (neither in Git)",
-      "usedFor": "the ground, sand, gravel and rock of the runtime terrain (docs/design/terrain.md); Megascans can replace them by setting a layer to \"local\" in the list",
+      "usedFor": "the ground, sand, gravel and rock of the runtime terrain (docs/design/terrain.md); Megascans can replace them by setting a layer to \"local\" in the list. Since U13 the material has a Wetness input (the rain makes the ground dark and shiny, docs/design/sky.md): run the commandlet again after pulling U13, or the ground just stays dry",
       "reinstall": "python tools/terrain_textures.py, then \"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" C:\\Dev\\Rim3D\\game\\Rim3D.uproject -run=TerrainMaterials -unattended -nosplash -AllowCommandletRendering"
     },
     {
@@ -78,8 +78,17 @@
       "licence": "CC0 (hat); the rest derived from Epic sample content, usable in Unreal Engine projects, or our own",
       "version": "as downloaded 2026-10-25, UE 5.8",
       "installedTo": "game/Content/ThirdParty/ClothesArt/ and game/Content/Rim3D/Generated/Clothes/ (neither in Git)",
-      "usedFor": "worn meshes (visual.worn) of the D6 and F2 apparel defs, per layer (docs/design/looks.md)",
+      "usedFor": "worn meshes (visual.worn) of the D6 and F2 apparel defs, per layer (docs/design/looks.md), the skin layer under them and the torn-look material (U16, docs/design/clothes-draw.md; rerun the commandlet after pulling U16)",
       "reinstall": "python tools/clothes_art.py, run the PawnLooks commandlet, then \"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" C:\\Dev\\Rim3D\\game\\Rim3D.uproject -run=ClothesArt -unattended -nosplash -nullrhi"
+    },
+    {
+      "name": "Free sounds and music (V21)",
+      "source": "Listed in assets/sound_sources.json: Kenney (CC0), OpenGameArt (CC0, two CC-BY), Sonniss GameAudioGDC and Freesound CC0 by hand. Downloaded by tools/sound_assets.py",
+      "licence": "per pack, in assets/sound_sources.json; CC-BY ones (congusbongus footsteps, YannZ music) need a credit, written to CREDITS.txt",
+      "version": "as downloaded",
+      "installedTo": "game/Content/ThirdParty/Sounds/<id>/ (not in Git)",
+      "usedFor": "the 140 sound cues of docs/design/sound.md and the music (V21 PC half)",
+      "reinstall": "python tools/sound_assets.py, then fetch the Sonniss and Freesound parts by hand (docs/design/sound.md)"
     }
   ]
 }

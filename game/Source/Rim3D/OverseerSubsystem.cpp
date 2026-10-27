@@ -13,7 +13,9 @@
 #include "OrdersSubsystem.h"
 #include "OverseerPawn.h"
 #include "ProtagonistSubsystem.h"
+#include "ShooterFeelSubsystem.h"
 #include "SimSubsystem.h"
+#include "SkySubsystem.h"
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Map.h"
@@ -66,6 +68,8 @@ namespace
 			case colony::Terrain::ShallowWater: return TEXT("Shallow water");
 			case colony::Terrain::Marsh: return TEXT("Marsh");
 			case colony::Terrain::Mud: return TEXT("Mud");
+			case colony::Terrain::Air: return TEXT("Air");
+			case colony::Terrain::UpperFloor: return TEXT("Upper floor");
 		}
 		return TEXT("?");
 	}
@@ -317,6 +321,8 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 				Bridge.StepOnce();
 			}
 		}
+		// The date, the season's temperature and the weather (U13).
+		OverseerText(USkySubsystem::DescribeDate(Sim) + TEXT("   ") + USkySubsystem::DescribeClimate(Sim));
 	}
 	ImGui::End();
 
@@ -415,6 +421,12 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 		ImGui::TextUnformatted("R draft colonist / turn building   right click order");
 	}
 	ImGui::End();
+
+	// The settings for the shooter feel (shake, blur, kick, aim view), kept folded under the alarm button (U21).
+	if (UShooterFeelSubsystem* Feel = GetWorld()->GetSubsystem<UShooterFeelSubsystem>())
+	{
+		Feel->DrawSettingsPanel(Viewport->Pos.x + Viewport->Size.x, Scale);
+	}
 
 	++PanelFramesDrawn;
 }

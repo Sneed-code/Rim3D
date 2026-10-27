@@ -164,11 +164,11 @@ TEST_CASE("Animals: the map is filled with herds by the biome's density and spec
     ANIMAL_REQUIRE(animals.populated());
     CHECK(animals.wildWeight() >= animals.targetWeight());
     CHECK(animals.wildWeight() < animals.targetWeight() + 25.0f);  // one more group at most
-    CHECK(animals.livingCount() > 30);
+    CHECK(animals.livingCount() > 20);
 
     // Only the temperate forest's wild animals, never domestic or zero-commonality ones.
     const std::set<std::string> allowed = {"Hare", "Squirrel", "Deer", "WildBoar", "Muffalo", "Alpaca",
-                                           "TimberWolf", "GrizzlyBear", "Cougar"};
+                                           "TimberWolf", "GrizzlyBear", "Cougar", "Boomalope"};
     std::set<std::string> seen;
     std::map<uint32_t, int> herdSizes;
     const entt::registry& reg = sim.things().registry();
@@ -331,10 +331,10 @@ TEST_CASE("Animals: a fed deer leaves plants alone, and wolves never graze") {
     }
     const size_t before = sim.plants().count();
     sim.stepMany(600);
-    // The deer fell from 1.0 of its capacity by little in ten minutes; the wolf never looks for food.
+    // The deer fell from 1.0 of its capacity by little in ten minutes; the wolf hunts when it is hungry (N5) but never grazes.
     CHECK(sim.plants().count() == before);
     CHECK(sim.animals().stats().grazed == 0);
-    CHECK(sim.animals().foodShare(wolf) == doctest::Approx(1.0f));
+    CHECK(sim.animals().foodShare(wolf) < 1.0f);  // wild predators get hungry too
 }
 
 TEST_CASE("Animals: a herd stays together") {

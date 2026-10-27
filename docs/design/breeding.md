@@ -61,7 +61,11 @@ mother waits `birthCooldownDays` (2) before mating again. If she dies while preg
 Nothing new is needed: a young animal's stage follows its age (baby, juvenile, adult; a game year is 60 days, so a
 cow grows up in 36 days, a chicken in 6, a boar in 24). While not adult it does not mate, gives no milk, wool or
 eggs, and cannot be a hauler (`AnimalSystem::mayWork`); it eats less (food factor). `isAdult` is the test.
-Health does not scale with age yet (BACKLOG).
+Hit points grow with the stages too: every part has the stage's `healthScaleFactor` share of its adult hit points (baby 0.3, juvenile 0.6), set by `AnimalSystem` when the animal looks round (`Health::stageHp`, not saved).
+
+## Switching breeding off
+
+`SetBreeding` (an animal, or with no animal a zone id, and `allow`) stops mating: a switched-off animal, or one in a switched-off zone, is never listed as a mate. Pregnant females still give birth and hens still lay (unfertilized). The animal's flag is `AnimalBreed::breedingOff`, the zone's `AnimalZone::breedingOff`; save sections `breeding` and `husbandry` are version 2 for them.
 
 ## Eggs
 
@@ -73,7 +77,7 @@ Health does not scale with age yet (BACKLOG).
   `Hatching` part with its hatch time (`hatches.days`, 3.8). `EggLaid` has `message` "fertilized".
 - A fertilized egg lying on the map hatches at that time into the egg's `hatches.into` (a tame chick in the zone it
   lies in, or with its home at the egg). One that is being carried waits until it is put down. `EggHatched`.
-- Temperature does not stop hatching yet (BACKLOG).
+- A fertilized egg lying where the temperature is outside `hatchMinTemp`..`hatchMaxTemp` (0 to 50, ours) makes no progress: every pass pushes its hatch time on by the pass length. Nothing new is saved.
 
 ## Milk and wool
 
@@ -109,3 +113,7 @@ mother), `EggLaid`, `EggHatched`, `AnimalGathered` (`message` "milk" or "wool").
 - Young animals have the adult's health; they do not follow their mother.
 - Hatching ignores temperature. An unfertilized or fertilized egg rots like any food (about five days outdoors), so a fertilized egg left unhauled still hatches at 3.8 days, but one hauled into a freezer-less stockpile is fine too.
 - Animal products are not marked "do not sell" or ranked by quality (RimWorld has none).
+
+## Products checked against the wiki (2026-10-26)
+
+Milk: cow 14/day, yak 11/day, goat 12 per 3 days, caribou 10 per 2 days, dromedary 18 per 2 days (muffalo and muskox give none). Wool: alpaca and sheep 45 per 10 days, muffalo and muskox 120 per 15, with the wiki's insulation offsets. Eggs: chicken and duck daily, goose every 2 days (all three also lay unfertilized), turkey 1.333 days, ostrich 3.33 days; a species with no `unfertilizedThing` (turkey, ostrich) holds its timer at half until a male has mated her, then lays a fertilized egg. Egg nutrition 0.25 (chicken, duck), 0.5 (goose, turkey), 0.6 (ostrich); unfertilized eggs rot after 15 days. Hatch days other than the chicken's are ours.

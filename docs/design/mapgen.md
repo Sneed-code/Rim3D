@@ -4,7 +4,7 @@ Code: `Private/Map.cpp` (`Map::generate`, `carveRivers`, `addWetlands`), `Privat
 (`placeMapFeatures`). Tests: `Tests/MapGenTests.cpp`, one in `SaveTests.cpp`. Task S8.
 
 Look at it with `simrun --seed 42 --days 0 --png map.png` (1,024 m by default now; `--size 512`
-for a quicker look; `--biome AridShrubland` for another biome).
+for a quicker look).
 
 ## Ground
 
@@ -34,9 +34,10 @@ On low ground (under 34% of the top height) where a slow wetness noise (48 m and
 marsh, with mud where it is higher. Along any shore the threshold is lower. The biome's
 `mapGen.marsh` scales the noise. Plants grow on marsh (`MarshyTerrain` fertility), not on mud or water.
 
-Biomes (`data/defs/Biomes`, `mapGen`): temperate forest river 1 / marsh 0.6, boreal forest 1 / 0.8,
-arid shrubland 0.5 / 0.1. `SimSettings::biome` (saved in the `world` section; replays have an
-optional `settings.biome`) names the biome that the map, plants, weather and animals follow.
+Biomes (`data/defs/Biomes`, `mapGen`: `river` and `marsh` multiples): temperate forest 1 / 0.6, boreal
+forest 1 / 0.8, tundra 0.8 / 0.5, cold bog 1 / 1.5, temperate swamp 1 / 1.6, tropical rainforest 1.2 / 1,
+tropical swamp 1.2 / 1.8, arid shrubland 0.5 / 0.1, desert 0.2 / 0, ice sheet 0.2 / 0, extreme desert
+and sea ice none. The biome is the sim's (`Sim::biome()`: the world tile's, else temperate forest).
 
 ## Ruins and geysers
 
@@ -59,5 +60,4 @@ A 1,024 m map is generated in about 0.18 s (Release, one core). On a 512 m map f
 
 The ground is regenerated from the seed, so **every save made before S8 on a map of 192 m or more
 no longer loads**: it is refused with "the map generator gives a different map for this seed ...
-this save can no longer be loaded". Saves and replays on maps under 192 m still load. Saves now have a
-`world` section (version 1): the biome name.
+this save can no longer be loaded". Saves and replays on maps under 192 m still load. 

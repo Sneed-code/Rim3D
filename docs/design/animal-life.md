@@ -2,7 +2,7 @@
 
 Code: `ColonySim/Animals.h`, `Private/Animals.cpp`. Tests: `Tests/AnimalTests.cpp`, the ctest
 `simrun_animals`. Rules: `data/defs/Rules/AnimalRules.json` (all ours). Stage 2 task N1. The animal
-data is [animals.md](animals.md) (D5); hunting, taming, breeding and fighting are N2 to N5.
+data is [animals.md](animals.md) (D5); hunting and butchering are [hunting.md](hunting.md) (N2); taming, breeding and fighting are N3 to N5.
 
 ## What an animal is
 
@@ -50,8 +50,8 @@ the seed, the animal and the second (`animalRngFor`), so the order animals are v
 nothing. Animals are visited in entity id order anyway, because two may want the same plant.
 
 1. **The dead** lie where they fell. The system sees the death within the animal's next look, and the
-   corpse is removed `corpseDays` (15) game days later (`stats.cleared`). Hunting (N2) will carry
-   corpses off and rot (E-tasks) will take over this timer.
+   corpse is removed `corpseDays` (15) game days later (`stats.cleared`). Hunters, haulers and the butcher table
+   (N2, [hunting.md](hunting.md)) carry corpses off and cut them up; rot (E-tasks) will take over this timer.
 2. **Downed** animals do nothing.
 3. **Sleep.** Diurnal animals sleep 21:00 to 05:00, nocturnal ones (the wolf and the cougar, listed
    in the rules) 07:00 to 17:00, each animal's hours shifted 0 to 2 hours later so a herd doesn't
@@ -64,8 +64,8 @@ nothing. Animals are visited in entity id order anyway, because two may want the
    has no `plant.harvestedThingDef` (bushes and crops are the colony's) and is at least 10% grown is
    walked to (straight line only, so never across water or rock) and eaten in 8 s: the plant is
    removed (`PlantRemoved` event with message `grazed`), the animal gains nutrition x growth.
-   Hungry animals with no plant near wander further. **Meat eaters never get hungry yet** (N5 makes
-   them hunt); wild animals don't starve either, because plants don't spread yet, so grass would run
+   Hungry animals with no plant near wander further. Wild predators get hungry and hunt since N5
+   ([animal-fights.md](animal-fights.md)); other meat eaters never do; wild animals don't starve either, because plants don't spread yet, so grass would run
    out in 20 days and the herd with it. N3 starves tamed animals that aren't fed.
 5. **Follow.** A herd member further than 4.5 m from the leader (or from where the leader is going),
    or 9 m from the leader at all, walks back to its side; near it, it shuffles a little.
@@ -78,16 +78,16 @@ nothing. Animals are visited in entity id order anyway, because two may want the
 
 ## Not here
 
-Hunting and the corpse as an item (N2), taming, training, pens (N3, done: [husbandry.md](husbandry.md)), breeding, young growing up,
-milk, wool, eggs (N4, done: [breeding.md](breeding.md)), bites, predators hunting, fleeing, manhunters (N5), animals drawn on screen
-(U15; until then Unreal does not turn `wildAnimals` on, because the pawn drawing would show every
-animal as a person). Animal temperature comfort, the weather and seasons (E tasks) and old age.
+Hunting and butchering (N2, done: [hunting.md](hunting.md)), taming, training, pens (N3, done: [husbandry.md](husbandry.md)), breeding, young growing up,
+milk, wool, eggs (N4, done: [breeding.md](breeding.md)), animals drawn on screen (U15, done: see
+"On screen" below). Animal temperature comfort, the weather and seasons (E tasks) and old age.
 
 ## Fighters and animals
 
-Fighters never take an animal for an enemy on their own (`PawnInfo::animal`; an attack order on one
-still works). The side number 100 is "wild"; N5 decides who is hostile to whom. Code that counts
-"pawns of another faction" as raiders must skip `Animal` (check `registry.all_of<Animal>`).
+Fighters never take a **calm** animal for an enemy on their own (`PawnInfo::animal`; an attack order on
+one still works). One that hunts a pawn, fights back or is a manhunter (`Animal::temper`) is an enemy:
+[animal-fights.md](animal-fights.md) (N5). The side number 100 is "wild". Code that counts "pawns of
+another faction" as raiders must skip a calm `Animal` (check `registry.all_of<Animal>` and `temper`).
 
 ## Save and hash
 
@@ -109,3 +109,16 @@ placed, one stands on ground it can't walk, or the herd is under half its densit
 ## Tame animals
 
 Taming, training, zones, pens, feeding and slaughter (N3) are in [husbandry.md](husbandry.md). A tame animal is still an `Animal`; its modes `WaitPath`, `GoToItem` and `EatItem` are used only by tame animals, and its walking and eating are in `AnimalCare.cpp`.
+
+## On screen (U15)
+
+`USimAnimalSubsystem` (`AnimalSubsystem.h`) draws every pawn whose snapshot `lifeStage` is 0 to 2 as an
+`ASimAnimalActor`; `USimPawnSubsystem` skips those, so animals never show as people. The model and
+size per def come from `assets/animal_art.json` (A4: Quaternius skeletal meshes, each with its own
+skeleton, so no retargeting; a def not in the table is drawn as a Husky). The actor plays the model's
+idle, walk, gallop, eating and death clips as a single-node animation (no Animation Blueprint), chosen
+from the snapshot: dead, `asleep`, speed (gallop above 2.8 m/s), food rising while standing (eating).
+Size is the table's scale times 0.5 / 0.75 / 1 for baby / juvenile / adult.
+Animation cost goes by distance to the camera: every frame within `Animals.NearDistance` (40 m), 8 times
+a second within `Animals.MidDistance` (120 m), a frozen pose (no skeleton update) within
+`Animals.HideDistance` (400 m), not drawn beyond. Smoke test `animals` (`tools\smoke.ps1 -Test animals`).

@@ -253,7 +253,7 @@ double PowerGrid::sunFactor(const Member& m) const {
     }
     int open = 0;
     for (const CellPos c : m.cells) {
-        if (map_.inBounds(c) && map_.roof(c) == Roof::None) {
+        if (map_.onGround(c) && map_.roof(c) == Roof::None) {
             ++open;
         }
     }
@@ -283,7 +283,7 @@ double PowerGrid::windOpenShare(const Member& m) const {
     int blocked = 0;
     const auto look = [&](int x, int y) {
         const CellPos c{x, y, level};
-        if (!map_.inBounds(c)) {
+        if (!map_.onGround(c)) {
             return;  // off the map is open sky
         }
         ++total;
@@ -375,6 +375,16 @@ void PowerGrid::balance(const GameTime& time) {
             }
         }
         view.demand += idleDrain;
+
+        if (blackout_) {
+            // A solar flare: nothing generates and nothing is drawn from the batteries, so the whole net is dark.
+            view.generation = 0.0;
+            view.satisfied = false;
+            for (const uint32_t i : netMembers_[n].members) {
+                reg.get<PowerPart>(members_[i].entity).watts = 0.0;
+            }
+            continue;
+        }
 
         // Who is served this step. A net that can't cover what its consumers want, from the
         // generators and the batteries, goes dark as a whole, as RimWorld's does. Once dark it waits

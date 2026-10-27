@@ -12,7 +12,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Same rules as Unreal: no exceptions, no RTTI. Warnings are errors.
 add_library(colonysim_flags INTERFACE)
 if(MSVC)
-  target_compile_options(colonysim_flags INTERFACE /W4 /WX /permissive- /GR- /EHs-c- /external:W0)
+  # /bigobj: Save.cpp has more sections than a default object file holds (Unreal builds with it too).
+  target_compile_options(colonysim_flags INTERFACE /W4 /WX /permissive- /GR- /EHs-c- /external:W0 /bigobj)
   target_compile_definitions(colonysim_flags INTERFACE _HAS_EXCEPTIONS=0 _CRT_SECURE_NO_WARNINGS)
 else()
   target_compile_options(colonysim_flags INTERFACE -Wall -Wextra -Wpedantic -Wshadow -Werror -fno-exceptions -fno-rtti)
@@ -30,7 +31,7 @@ target_include_directories(colonysim SYSTEM PUBLIC ThirdParty)
 add_library(colonysim_thirdparty INTERFACE)
 target_include_directories(colonysim_thirdparty SYSTEM INTERFACE ThirdParty)
 
-add_executable(simrun Tools/simrun/main.cpp Tools/simrun/ColonyScenario.cpp Tools/simrun/PowerScenario.cpp)
+add_executable(simrun Tools/simrun/main.cpp Tools/simrun/ColonyScenario.cpp Tools/simrun/HouseScenario.cpp Tools/simrun/PowerScenario.cpp Tools/simrun/RaidSoak.cpp Tools/simrun/WorldMap.cpp)
 target_link_libraries(simrun PRIVATE colonysim colonysim_thirdparty)
 target_compile_definitions(simrun PRIVATE COLONY_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../data")
 
@@ -55,6 +56,16 @@ add_test(NAME simrun_needs COMMAND simrun --seed 42 --size 128 --days 3 --start 
 # Raids (F6): pirates walk in, the alarm sounds, the armed colonists fight, and the raid ends
 # (beaten, routed or gone) within a quarter of a day.
 add_test(NAME simrun_raid COMMAND simrun --seed 2 --size 256 --days 0.25 --start Crashlanded --raid 300 --armed --check)
+# Orrin's first big threat, a raid, comes between day 11 and 15.6 of a new colony (T1, docs/design/narrator.md).
+add_test(NAME simrun_narrator COMMAND simrun --seed 42 --size 128 --days 15.7 --start Crashlanded --narrator Orrin --armed --check)
+# Raid soak (F7, docs/design/raid-soak.md): firefights and raids over a few seeds. The nightly workflow runs many more.
+add_test(NAME simrun_raid_soak COMMAND simrun --seed 1 --raid-soak 3)
+
+# The world map (docs/design/world-map.md): a planet of tiles with biomes, rivers, roads and settlements; the picture is the check.
+add_test(NAME simrun_world COMMAND simrun --seed 42 --world ${CMAKE_BINARY_DIR}/world.png --check)
+add_test(NAME simrun_world_seed7 COMMAND simrun --seed 7 --world ${CMAKE_BINARY_DIR}/world7.png --world-size 180x90 --check)
+# The game on a world (W2): the Crashlanded colonists land on the seed's suggested temperate forest tile and live a day.
+add_test(NAME simrun_on_world COMMAND simrun --seed 42 --size 128 --days 1 --on-world --start Crashlanded --check)
 
 # Temperature (E2, docs/design/temperature.md): the Crashlanded colonists live two days in 4 degrees weather
 # (just above the safe range their T-shirts and pants give them) and nobody falls ill or dies.
@@ -65,6 +76,11 @@ add_test(NAME simrun_temperature COMMAND simrun --seed 42 --size 128 --days 2 --
 # A second seed, because the first run on seed 7 found a bug seed 42 did not (S8 moved it to seed 8: the new rivers and marsh changed what seed 7 builds).
 add_test(NAME colony_scenario COMMAND simrun --scenario colony --seed 42 --size 512)
 add_test(NAME colony_scenario_seed8 COMMAND simrun --scenario colony --seed 8 --size 512)
+
+# The two-storey house (M4, docs/design/house-scenario.md): six colonists build a house with stairs and an upper floor,
+# sleep upstairs and haul up and down for three days.
+add_test(NAME house_scenario COMMAND simrun --scenario house --seed 42 --size 512)
+add_test(NAME house_scenario_seed7 COMMAND simrun --scenario house --seed 7 --size 512)
 
 # The power check (E5, docs/design/power.md): solar, batteries, lamps and a switch for three days.
 add_test(NAME power_check COMMAND simrun --power)
@@ -127,6 +143,9 @@ add_test(NAME simrun_animals COMMAND simrun --seed 42 --size 512 --days 2 --anim
 # A chicken farm (N4, docs/design/breeding.md): tame hens and roosters mate, lay and cost the breeding pass next to nothing.
 # (`--farm 500 --days 3` is the nightly one; 100 chickens over a day and a half keep CI quick.)
 add_test(NAME simrun_farm COMMAND simrun --seed 42 --size 128 --days 1.6 --farm 100 --check)
+
+# Fire (E4, docs/design/fire.md): a grass fire lit near the Crashlanded colonists is beaten out, nobody dies.
+add_test(NAME simrun_fire COMMAND simrun --seed 42 --size 256 --days 1 --start Crashlanded --fire --check)
 
 # Pathfinding load test (S3): 100 pawns hauling on a 1 km map for a day, no failed job or search.
 add_test(NAME simrun_paths COMMAND simrun --seed 42 --size 1024 --days 1 --pawns 100 --items 2000 --check

@@ -1,0 +1,50 @@
+[
+  {
+    "defName": "BulkGoods", "source": "RimWorld wiki", "label": "bulk goods trader",
+    "silver": [750, 1200],
+    "stock": [ { "thing": "Steel", "count": [250, 400] }, { "thing": "WoodLog", "count": [200, 400] }, { "thing": "ComponentIndustrial", "count": [30, 40] }, { "thing": "MedicineIndustrial", "count": [10, 25] }, { "thing": "RawBerries", "count": [50, 150] } ],
+    "buys": ["Foods", "Textiles", "Apparel", "Furniture", "Metals", "Stuff", "DomesticAnimals"], "sells": ["Foods", "Textiles", "Apparel", "Furniture", "Metals", "Stuff", "DomesticAnimals"],
+    "unverified": ["silver", "stock", "buys", "sells"],
+    "notes": "Food, basic materials (steel, wood, components, gold, textiles), clothing, furniture and domestic animals. Silver and steel ranges are the wiki's caravan figures; the other counts are ours until more items exist. buys and sells name item categories that later tasks (C23) match against."
+  },
+  {
+    "defName": "CombatSupplier", "source": "RimWorld wiki", "label": "combat supplier",
+    "silver": [750, 1200],
+    "stock": [ { "thing": "Gun_Autopistol", "count": [1, 2] }, { "thing": "Gun_PumpShotgun", "count": [1, 2] }, { "thing": "Gun_BoltActionRifle", "count": [1, 2] }, { "thing": "Gun_AssaultRifle", "count": [0, 1] }, { "thing": "Melee_Longsword", "count": [1, 2] }, { "thing": "Apparel_FlakVest", "count": [1, 2] }, { "thing": "Apparel_SimpleHelmet", "count": [1, 2] }, { "thing": "MedicineIndustrial", "count": [10, 20] } ],
+    "buys": ["Weapons", "Apparel", "Medicine", "Sculptures"], "sells": ["Weapons", "Apparel", "Medicine"], "noPackAnimals": true,
+    "unverified": ["stock", "buys", "sells"],
+    "notes": "Melee and modern weapons, modern armour, non-herbal medicine, sculptures; no pack animals. Silver 750 to 1200 and medicine 10 to 20 are the wiki's."
+  },
+  {
+    "defName": "ExoticGoods", "source": "RimWorld wiki", "label": "exotic goods trader",
+    "silver": [1500, 3000],
+    "stock": [ { "thing": "ComponentIndustrial", "count": [20, 60] }, { "thing": "MedicineLumen", "count": [2, 6] }, { "thing": "BionicArm", "count": [0, 1] }, { "thing": "BionicLeg", "count": [0, 1] }, { "thing": "BionicEye", "count": [0, 1] }, { "thing": "BionicEar", "count": [0, 1] }, { "thing": "ProstheticArm", "count": [0, 2] }, { "thing": "ProstheticLeg", "count": [0, 2] } ],
+    "buys": ["Drugs", "Bionics", "AdvancedComponents", "Artifacts", "Metals"], "sells": ["Drugs", "Bionics", "AdvancedComponents", "Artifacts", "Metals"], "refusesRawPlants": true,
+    "unverified": ["silver", "stock", "buys", "sells"],
+    "notes": "Artifacts, bionics, advanced components, drugs, skill trainers, plasteel, gold, uranium. Does not take raw plant material. The silver range and counts are ours; the wiki page that lists them was cut off."
+  },
+  {
+    "defName": "ShamanMerchant", "source": "RimWorld wiki", "label": "clan shaman",
+    "silver": [400, 900],
+    "stock": [ { "thing": "WoodLog", "count": [300, 600] }, { "thing": "Steel", "count": [100, 200] }, { "thing": "MedicineIndustrial", "count": [5, 15] }, { "thing": "RawBerries", "count": [100, 300] }, { "thing": "Pemmican", "count": [50, 150] } ],
+    "buys": ["Neolithic", "Herbs", "Drugs", "Medicine"], "sells": ["Neolithic", "Herbs", "Drugs", "Medicine"],
+    "unverified": ["silver", "stock", "buys", "sells"],
+    "notes": "Tribal, lower-tech goods: herbs and leaf drugs, and some high-tech medicine. Wood 500 to 600 is the wiki's neolithic base figure; the rest is ours."
+  },
+  {
+    "defName": "Slaver", "source": "RimWorld wiki", "label": "slaver",
+    "silver": [750, 1500],
+    "stock": [ { "thing": "Gun_Revolver", "count": [1, 2] }, { "thing": "Gun_PumpShotgun", "count": [0, 1] }, { "thing": "MedicineIndustrial", "count": [5, 15] }, { "thing": "BionicArm", "count": [0, 1] } ],
+    "buys": ["Prisoners", "Weapons", "Medicine", "Drugs", "BodyParts"], "sells": ["Prisoners", "Weapons", "Medicine", "Drugs", "BodyParts"],
+    "unverified": ["silver", "stock", "buys", "sells"],
+    "notes": "Prisoners (a healthy one is worth about 1000 silver, an injured one down toward 100), weapons, body parts, medicine, drugs. The free hold's own kind of caller."
+  },
+  {
+    "defName": "WarMerchant", "source": "RimWorld wiki", "label": "war merchant",
+    "silver": [400, 900],
+    "stock": [ { "thing": "Melee_Spear", "count": [2, 4] }, { "thing": "Melee_Club", "count": [2, 4] }, { "thing": "Melee_Mace", "count": [1, 2] }, { "thing": "Apparel_Tribalwear", "count": [2, 5] } ],
+    "buys": ["MeleeWeapons", "Neolithic", "PredatorAnimals", "Apparel"], "sells": ["MeleeWeapons", "Neolithic", "PredatorAnimals", "Apparel"], "noPackAnimals": true,
+    "unverified": ["silver", "stock", "buys", "sells"],
+    "notes": "Tribal melee weapons, neolithic ranged weapons, predatory animals, tribal clothing; no pack animals."
+  }
+]

@@ -35,7 +35,10 @@ block by block, with their sides in shade. The material itself:
   the up-facing part of the vertex normal), so hillsides are bare;
 - big soft patches of lighter and darker break up the textures' repeat; each texture's normal map bumps the
   surface's own normal (made in world space, the material has "tangent space normal" off);
-- solid colours (the built, thin roof) use the same material, with the vertex colour's alpha set to 1.
+- solid colours (the built, thin roof) use the same material, with the vertex colour's alpha set to 1;
+- a `Wetness` input (0 to 1, since U13) darkens the ground (x0.55) and makes it shinier (roughness x0.3) in the rain;
+  the terrain subsystem keeps one dynamic instance of the material for all chunks and `SetGroundWetness` sets it
+  ([sky.md](sky.md)). Old generated materials without the input still work; the ground just does not get wet.
 
 The textures are free CC0 ones from Poly Haven and ambientCG, listed in `assets/terrain_textures.json`
 (`forrest_ground_01`, `coast_sand_01`, `gravel_embedded_concrete`, `rock_face_03`, 1k, with how many metres one

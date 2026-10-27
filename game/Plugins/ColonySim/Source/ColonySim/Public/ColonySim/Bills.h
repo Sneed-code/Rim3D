@@ -26,6 +26,14 @@ struct Bill {
     BillMode mode = BillMode::Count;
     int count = 1;  // Count: times left; UntilHave: the stock to reach; Forever: unused
     bool suspended = false;
+    // The details RimWorld's bill dialog adds (task C14, docs/design/crafting.md).
+    int skillMin = 0;        // only a worker whose skill in the recipe's skill is within [skillMin, skillMax] takes it
+    int skillMax = 20;
+    float radius = 0.0f;     // ingredients are taken from within this many metres of the building; 0 is anywhere
+    uint32_t storeZone = 0;  // 0: products stay where the crafter made them; else haulers take them to this stockpile
+    int unpauseAt = 0;       // UntilHave: once `count` is reached the bill waits until the stock is under this (0: restarts under `count`)
+    bool satisfied = false;  // UntilHave with `unpauseAt`: the stock reached `count` and has not fallen under `unpauseAt` since
+    std::vector<DefId> disallowed;  // item defs the bill may not use as ingredients, sorted by value
 };
 
 // On a building that has had a bill added. Bills are tried in list order: the first that should be
@@ -62,6 +70,28 @@ struct Recipe {
     float skillXp = 0.0f;
     std::vector<RecipeIngredient> ingredients;
     std::vector<RecipeProduct> products;
+    bool stuffFromIngredient = false;  // the product is made of the stuff the ingredients are (clothes, weapons)
+    // Cuts up a corpse (N2, docs/design/hunting.md): the ingredient is a dead animal, not a stack of items, and the products
+    // (meat and leather) come from the animal's def. "Until you have" counts the raw meat on the map.
+    bool butcher = false;
+    // Burns a corpse (the crematorium's "cremate corpse"): the job is the butcher's, but nothing comes out and nobody minds.
+    bool cremate = false;
+    // Smelts what it is given (the electric smelter, docs/design/crafting.md): the products are this share of the metal in the
+    // ingredient's own recipe (components and anything not a metal are lost), not the recipe's `products`. 0 = not a smelting recipe.
+    // A recipe with no products and no smelting just destroys the ingredient.
+    double smeltFraction = 0.0;
+    // How many things one run makes. A building that burns fuel per product burns this many times its `fuel.perUse`.
+    // `fuelUses` in the def overrides it (0 = one use per product): a stove burns by time worked in RimWorld, so a batch of
+    // 50 kibble must not burn 50 wood.
+    int fuelUsesSet = 0;
+    int fuelUses() const { return fuelUsesSet > 0 ? fuelUsesSet : productCount(); }
+    int productCount() const {
+        int made = 0;
+        for (const RecipeProduct& product : products) {
+            made += product.count;
+        }
+        return made;
+    }
 };
 
 // The numbers in the BillRules def (with these values when the def is missing).
@@ -92,6 +122,21 @@ public:
     // Changes a bill's mode, count and whether it is suspended (RimWorld's pause).
     bool setBill(Entity building, uint32_t bill, BillMode mode, int count, bool suspended, std::string& error);
 
+    // The bill's details (everything but mode, count and suspended). `skillMin` to `skillMax` is 0 to 20 at the
+    // widest; `radius` is 0 or more metres; `storeZone` is 0 or a stockpile (the caller checks it exists);
+    // `disallowed` are Things item defNames, unknown names fail.
+    struct Options {
+        int skillMin = 0;
+        int skillMax = 20;
+        float radius = 0.0f;
+        uint32_t storeZone = 0;
+        int unpauseAt = 0;
+        std::vector<std::string> disallowed;
+    };
+    bool setOptions(Entity building, uint32_t bill, const Options& options, std::string& error);
+    // Moves a bill to place `index` in the building's list (0 is tried first; past the end is the last place).
+    bool moveBill(Entity building, uint32_t bill, int index, std::string& error);
+
     // ---- Looking up --------------------------------------------------------------------------
     const BillList* billsOf(Entity building) const;
     const Bill* find(Entity building, uint32_t bill) const;
@@ -100,8 +145,16 @@ public:
     // True if the bill is not suspended and still has something to make: Count has times left,
     // UntilHave has fewer than `count` of the first product on the map, Forever always.
     bool shouldDo(const Bill& bill) const;
+    // True if the bill's ingredient filter lets the item def through.
+    static bool allowsIngredient(const Bill& bill, DefId item);
+    // One game minute of upkeep: "until you have" bills with an `unpauseAt` pause at their stock and wake
+    // when it falls.
+    void step();
     // How many of an item def lie on the map (carried and delivered ones are not counted).
     int stockOf(DefId item) const;
+    // The stock an "until you have" bill of the recipe counts: its first product, or for butchering all raw meat.
+    // False if the recipe makes nothing countable.
+    bool stockFor(const Recipe& recipe, int& stock) const;
     // Cooking speed of a pawn for a recipe: (base + perLevel x level of the recipe's skill), 1.0 at
     // level 8. Without a Colonist the default skill level counts.
     float workSpeed(Entity pawn, const Recipe& recipe) const;
@@ -111,6 +164,9 @@ public:
     // A bill's times left or stock target after one more iteration is done: Count goes down by one
     // and the bill is removed when it reaches 0. Returns true if the bill was removed.
     bool iterationDone(Entity building, uint32_t bill);
+    // What smelting `count` of an item (made of `stuff`) gives back: `fraction` of the metal in the recipe that makes it, rounded
+    // down per metal. Empty if nothing makes the item or it holds no metal.
+    std::vector<RecipeProduct> smeltYield(DefId item, DefId stuff, double fraction, int count) const;
     // The nutrition of one unit of an item def (0 if it is not food).
     double nutritionOf(DefId item) const;
 
@@ -120,6 +176,7 @@ private:
     BillNumbers numbers_;
     std::vector<Recipe> recipes_;  // in def id order
     std::vector<double> nutrition_;  // per def id
+    std::vector<uint8_t> rawMeat_;   // per def id: an item in the MeatRaw category
 };
 
 }  // namespace colony

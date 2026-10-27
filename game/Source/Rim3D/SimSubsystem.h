@@ -33,6 +33,9 @@ struct FSimStartOptions
 	/** A Scenarios def to start, e.g. "Crashlanded": the protagonist and colonists near the middle
 	 *  of the map. Empty: none. Command line: -SimScenario=Crashlanded. */
 	FString Scenario;
+	/** Wild animals when the map is made, in percent of the biome's animal density (0: none). The game's own
+	 *  start has 100 (-SimWildAnimals=<percent> to change it); tests start without unless they ask. */
+	int32 WildAnimals = 0;
 };
 
 /** Sim cost, averaged over about a second of real time. */

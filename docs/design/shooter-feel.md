@@ -106,7 +106,12 @@ The snapshot has `rollPhase` (0 none, 1 start-up, 2 rolling, 3 recovery), `rollS
 `PawnAction::Roll` goes out when it starts with the cell, the direction and the total steps (27), so the animation can
 be stretched to fit the sim's timing and played as a montage over the motion-matched body (pitfall 3 above).
 
-### Not done (U21 and later)
+### Done on screen (U21)
+
+The roll key (Left Shift), the camera kick from the snapshot, shake, blur, the aim-hold camera blend, the roll's somersault, grenade and
+blast effects with debris, and the settings: see [shooter-feel-draw.md](shooter-feel-draw.md).
+
+### Not done (later)
 
 The key and the controls (a roll key in direct mode that sends the direction of the movement keys), the roll animation,
 the camera kick from the snapshot, shake, blur and the aim-hold camera blend. Stamina for rolls (none: the wait is the

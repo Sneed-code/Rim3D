@@ -7,6 +7,7 @@
 #include "ColonySim/Random.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/UpperFloors.h"
 
 #include <algorithm>
 #include <cmath>
@@ -200,6 +201,10 @@ void Construction::indexSite(Entity site, bool add) {
     }
 }
 
+bool Construction::isUpperFloor(DefId def) const {
+    return def.valid() && def.value < defs_.size() && defs_.get(def).flag("building.upperFloor");
+}
+
 Entity Construction::placeBlueprint(DefId def, DefId stuff, CellPos cell, Rot4 rot, std::string& error) {
     if (!buildable(def)) {
         error = "that can't be built";
@@ -210,13 +215,32 @@ Entity Construction::placeBlueprint(DefId def, DefId stuff, CellPos cell, Rot4 r
         error = d.count("stuffCategories") == 0 ? "that is not made of anything" : "it can't be made of that";
         return kNoEntity;
     }
-    const int sizeX = std::max(1, static_cast<int>(d.numberAt("size", 0, 1.0)));
-    const int sizeY = std::max(1, static_cast<int>(d.numberAt("size", 1, 1.0)));
+    const bool upperFloor = isUpperFloor(def);
+    const int sizeX = upperFloor ? 1 : std::max(1, static_cast<int>(d.numberAt("size", 0, 1.0)));
+    const int sizeY = upperFloor ? 1 : std::max(1, static_cast<int>(d.numberAt("size", 1, 1.0)));
     const CellRect rect = footprintRect(cell, sizeX, sizeY, rot);
+    if (d.has("building.climb") && rect.level + 1 >= Map::kLevels) {
+        error = "there is no level above " + constructionCellText(cell) + " to climb to";
+        return kNoEntity;
+    }
     for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
         for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
             const CellPos c{x, y, rect.level};
-            if (!map_.inBounds(c) || !map_.groundWalkable(c)) {
+            if (upperFloor) {
+                // An upper floor goes on open air, where it would be held up (docs/design/levels.md).
+                if (upperFloors_ == nullptr || !map_.inBounds(c) || c.level < 1) {
+                    error = "an upper floor goes on a level above the ground";
+                    return kNoEntity;
+                }
+                if (map_.upperFloor(c)) {
+                    error = "there is a floor at " + constructionCellText(c) + " already";
+                    return kNoEntity;
+                }
+                if (const std::string why = upperFloors_->whyNotLay(c); !why.empty()) {
+                    error = why;
+                    return kNoEntity;
+                }
+            } else if (!map_.inBounds(c) || !map_.groundWalkable(c)) {
                 error = "can't build on " + constructionCellText(c);
                 return kNoEntity;
             }
@@ -409,6 +433,18 @@ Entity Construction::complete(Entity frame) {
     const DefId def = reg.get<Thing>(frame).def;
     const Def& d = defs_.get(def);
     const CellRect rect = site.rect();
+    if (isUpperFloor(def)) {
+        // The frame becomes the floor itself, not a building on it.
+        indexSite(frame, false);
+        things_.destroy(frame);
+        if (upperFloors_ == nullptr || !upperFloors_->lay(site.origin)) {
+            const CellRect below{rect.minX, rect.minY, rect.sizeX, rect.sizeY, rect.level - 1};
+            for (const MaterialCount& m : site.materials) {
+                dropNear(m.item, m.have, below);
+            }
+        }
+        return kNoEntity;
+    }
     const bool isDoor = d.text("thingClass") == "Building_Door";
     const bool blocks = !isDoor && d.text("passability") == "Impassable";
     const bool standable = d.text("passability") == "Standable";
@@ -525,21 +561,22 @@ void Construction::dropNear(DefId item, int count, const CellRect& rect, bool sk
 bool Construction::workCell(const CellRect& rect, CellPos from, CellPos& out) const {
     bool found = false;
     float best = 0.0f;
-    const auto consider = [&](int x, int y) {
-        const CellPos c{x, y, rect.level};
+    const auto considerOn = [&](int x, int y, int level) {
+        const CellPos c{x, y, level};
         // Not on a planned building's cells: it may be finished while the pawn stands there.
         if (!map_.walkable(c) || siteAt(c) != kNoEntity || !map_.regions().canReach(from, c)) {
             return;
         }
         const float dx = static_cast<float>(x - from.x);
         const float dy = static_cast<float>(y - from.y);
-        const float dist = dx * dx + dy * dy;
+        const float dist = levelDistSq(dx, dy, level - from.level);
         if (!found || dist < best) {
             found = true;
             best = dist;
             out = c;
         }
     };
+    const auto consider = [&](int x, int y) { considerOn(x, y, rect.level); };
     for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
         consider(rect.minX - 1, y);
         consider(rect.minX + rect.sizeX, y);
@@ -547,6 +584,29 @@ bool Construction::workCell(const CellRect& rect, CellPos from, CellPos& out) co
     for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
         consider(x, rect.minY - 1);
         consider(x, rect.minY + rect.sizeY);
+    }
+    // Something planned over open air (an upper floor) is also built from the level below: from
+    // under it or beside that, as a roof is.
+    const CellPos corner{rect.minX, rect.minY, rect.level};
+    if (rect.level > 0 && map_.inBounds(corner) && map_.terrain(corner) == Terrain::Air) {
+        for (int y = rect.minY - 1; y <= rect.minY + rect.sizeY; ++y) {
+            for (int x = rect.minX - 1; x <= rect.minX + rect.sizeX; ++x) {
+                const bool corner2 = (x < rect.minX || x >= rect.minX + rect.sizeX) && (y < rect.minY || y >= rect.minY + rect.sizeY);
+                if (!corner2) {
+                    considerOn(x, y, rect.level - 1);
+                }
+            }
+        }
+    }
+    // An upper wall whose neighbours on its own level cannot be stood on (a corner whose two
+    // sides already stand, with open air beyond the ring) is built from the level below, from
+    // any of the eight cells round it, like the edge of an upper floor.
+    if (!found && rect.level > 0) {
+        for (int y = rect.minY - 1; y <= rect.minY + rect.sizeY; ++y) {
+            for (int x = rect.minX - 1; x <= rect.minX + rect.sizeX; ++x) {
+                considerOn(x, y, rect.level - 1);
+            }
+        }
     }
     return found;
 }

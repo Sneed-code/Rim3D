@@ -1,0 +1,6 @@
+[
+  {
+    "defName": "QuestRules", "source": "ours",
+    "maxOffered": 4, "maxActive": 3, "historyKept": 20, "rewardSpread": 6, "deliverySearch": 800, "edgeDepth": 2
+  }
+]

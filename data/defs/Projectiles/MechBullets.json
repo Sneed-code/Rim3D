@@ -1,0 +1,35 @@
+[
+ {
+  "defName": "Bullet_ChargeLance",
+  "parent": "BulletBase",
+  "label": "charge lance bolt",
+  "projectile": {
+   "damageAmountBase": 30,
+   "armorPenetrationBase": 0.45,
+   "stoppingPower": 1.5,
+   "speed": 4.0
+  }
+ },
+ {
+  "defName": "Bullet_NeedleGun",
+  "parent": "BulletBase",
+  "label": "needle",
+  "projectile": {
+   "damageAmountBase": 15,
+   "armorPenetrationBase": 0.35,
+   "stoppingPower": 1.5,
+   "speed": 4.0
+  }
+ },
+ {
+  "defName": "Bullet_HeavyChargeBlaster",
+  "parent": "BulletBase",
+  "label": "blaster bolt",
+  "projectile": {
+   "damageAmountBase": 15,
+   "armorPenetrationBase": 0.22,
+   "stoppingPower": 0.5,
+   "speed": 3.0
+  }
+ }
+]

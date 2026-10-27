@@ -8,9 +8,12 @@
 
 #include "HandsOnSubsystem.h"
 #include "ProtagonistSubsystem.h"
+#include "ShooterFeelSubsystem.h"
 #include "SimSubsystem.h"
 
+#include "ColonySim/Defs.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Snapshot.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Sim.h"
 
@@ -31,6 +34,19 @@ namespace
 	constexpr double ProtagonistEyeForward = 12.0;
 	// Third person looks at a point this far above the feet (cm).
 	constexpr double ProtagonistPivotHeight = 150.0;
+	// Aiming (U21): how fast the view blends, the closest the over-the-shoulder camera comes and how far right of the body it sits (cm).
+	constexpr float ProtagonistAimBlendPerSecond = 5.5f;
+	constexpr float ProtagonistAimArm = 120.0f;
+	constexpr float ProtagonistAimShoulder = 42.0f;
+	constexpr float ProtagonistNormalFov = 80.0f;
+	// The engine's default vignette, which the pulses add to.
+	constexpr float ProtagonistBaseVignette = 0.4f;
+
+	float ProtagonistSmooth(float Value)
+	{
+		const float T = FMath::Clamp(Value, 0.0f, 1.0f);
+		return T * T * (3.0f - 2.0f * T);
+	}
 }
 
 AProtagonistPawn::AProtagonistPawn()
@@ -133,7 +149,46 @@ void AProtagonistPawn::Tick(float DeltaTime)
 	{
 		Move(Right, Forward, bWalk, DeltaTime);
 	}
+
+	// Holding aim: the right mouse button with a gun in hand (a melee weapon blocks with it instead).
+	bool bWantAim = false;
+	if (bScriptedAim)
+	{
+		bWantAim = bScriptAimHeld;
+	}
+	else if (const APlayerController* PC = GetPlayerController(); PC && Thing != colony::kNoEntity)
+	{
+		bWantAim = PC->IsInputKeyDown(EKeys::RightMouseButton);
+	}
+	if (bWantAim)
+	{
+		const USimSubsystem* Bridge = GetBridge();
+		const colony::ThingView* View = Bridge && Bridge->GetSim() ? Bridge->GetCurrentSnapshot().find(Thing) : nullptr;
+		bWantAim = View && !View->downed && !View->dead && View->weapon.valid() && Bridge->GetDefs() && Bridge->GetDefs()->get(View->weapon).has("verbs");
+	}
+	bAimHeld = bWantAim;
+	AimBlend = FMath::FInterpConstantTo(AimBlend, bAimHeld ? 1.0f : 0.0f, DeltaTime, ProtagonistAimBlendPerSecond);
 	UpdateCamera();
+}
+
+bool AProtagonistPawn::IsBodyHiddenInView() const
+{
+	return bFirstPerson || (UShooterFeelSubsystem::IsAimFirstPerson() && AimBlend > 0.8f);
+}
+
+float AProtagonistPawn::GetFieldOfView() const
+{
+	return Camera ? Camera->FieldOfView : 80.0f;
+}
+
+FRotator AProtagonistPawn::GetFeelRotation() const
+{
+	return Camera ? Camera->GetRelativeRotation() : FRotator::ZeroRotator;
+}
+
+float AProtagonistPawn::GetMotionBlurAmount() const
+{
+	return Camera ? Camera->PostProcessSettings.MotionBlurAmount : 0.0f;
 }
 
 void AProtagonistPawn::Move(double Right, double Forward, bool bWalk, float DeltaTime)
@@ -239,12 +294,13 @@ void AProtagonistPawn::SetSimPosition(const FVector2D& SimPosition)
 
 FVector AProtagonistPawn::GetViewLocation() const
 {
-	return Camera->GetComponentLocation();
+	// The aim's own place: the camera component is nudged on top of it by the kick and the shake.
+	return GetActorLocation();
 }
 
 FVector AProtagonistPawn::GetViewDirection() const
 {
-	return Camera->GetComponentRotation().Vector();
+	return GetActorRotation().Vector();
 }
 
 // The camera follows where the colonist is drawn (the sim's blended position), so it moves as
@@ -262,15 +318,22 @@ void AProtagonistPawn::UpdateCamera()
 		Feet = Bridge->SimToWorld(static_cast<float>(Position.X), static_cast<float>(Position.Y), 0);
 	}
 	const FRotator Look(Pitch, Yaw, 0.0);
+	const float Blend = ProtagonistSmooth(AimBlend);
+	const FVector Eye = Feet + FVector(0.0, 0.0, kEyeHeight) + FRotator(0.0, Yaw, 0.0).Vector() * ProtagonistEyeForward;
 	FVector Location;
+	EffectiveArm = ArmLength;
 	if (bFirstPerson)
 	{
-		Location = Feet + FVector(0.0, 0.0, kEyeHeight) + FRotator(0.0, Yaw, 0.0).Vector() * ProtagonistEyeForward;
+		Location = Eye;
+		EffectiveArm = 0.0f;
 	}
 	else
 	{
+		// Aimed (over the shoulder): the camera comes in close behind and to the right of the colonist.
 		const FVector Pivot = Feet + FVector(0.0, 0.0, ProtagonistPivotHeight);
-		Location = Pivot - Look.Vector() * ArmLength;
+		EffectiveArm = FMath::Lerp(ArmLength, FMath::Min(ArmLength, ProtagonistAimArm), Blend);
+		const FVector Right = FRotator(0.0, Yaw, 0.0).RotateVector(FVector::RightVector);
+		Location = Pivot - Look.Vector() * EffectiveArm + Right * (ProtagonistAimShoulder * Blend);
 		// Never under the ground on a hillside.
 		const FVector Local = (Location - Bridge->GetWorldOrigin()) / 100.0;
 		const colony::Map& Map = Bridge->GetSim()->map();
@@ -279,6 +342,33 @@ void AProtagonistPawn::UpdateCamera()
 			const double GroundZ = Bridge->SimToWorld(static_cast<float>(Local.X), static_cast<float>(Local.Y), 0).Z;
 			Location.Z = FMath::Max(Location.Z, GroundZ + ProtagonistMinCameraHeight);
 		}
+		// Aimed in the first person way: the camera goes to the eyes.
+		if (UShooterFeelSubsystem::IsAimFirstPerson())
+		{
+			Location = FMath::Lerp(Location, Eye, Blend);
+			EffectiveArm = FMath::Lerp(EffectiveArm, 0.0f, Blend);
+		}
 	}
 	SetActorLocationAndRotation(Location, Look);
+
+	// The field of view narrows while aiming, and the camera is nudged by the gun's kick, the shake and a roll (the aim
+	// above is not: the crosshair stays where the bullet goes).
+	Camera->SetFieldOfView(FMath::Lerp(ProtagonistNormalFov, UShooterFeelSubsystem::GetAimFov(), Blend));
+	if (UWorld* World = GetWorld())
+	{
+		if (UShooterFeelSubsystem* Feel = World->GetSubsystem<UShooterFeelSubsystem>())
+		{
+			const FCameraFeel& Nudge = Feel->GetCameraFeel();
+			Camera->SetRelativeRotation(Nudge.Rotation);
+			Camera->SetRelativeLocation(Nudge.Location);
+			FPostProcessSettings& PostProcess = Camera->PostProcessSettings;
+			PostProcess.bOverride_MotionBlurAmount = true;
+			PostProcess.MotionBlurAmount = Nudge.MotionBlur;
+			PostProcess.bOverride_VignetteIntensity = true;
+			PostProcess.VignetteIntensity = ProtagonistBaseVignette + Nudge.Vignette;
+			PostProcess.bOverride_SceneFringeIntensity = true;
+			PostProcess.SceneFringeIntensity = Nudge.Fringe;
+			Camera->PostProcessBlendWeight = 1.0f;
+		}
+	}
 }

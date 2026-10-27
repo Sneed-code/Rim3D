@@ -5,6 +5,7 @@
 #include "ColonySim/Grid.h"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -49,10 +50,13 @@ public:
     // Hours a plant of this def lives (grow days times its lifespan factor, in game hours).
     uint32_t lifespanHours(DefId def) const;
 
-    // Puts a plant in an empty cell with fertility above 0. Returns false otherwise (or for a def
+    // Puts a plant in an empty cell with fertility above 0 and no upper floor over it. Returns false otherwise (or for a def
     // that is not a plant). `growth` is clamped to 0..1.
     bool place(CellPos c, DefId def, float growth = 0.0f);
     void remove(CellPos c);
+    // True if an upper floor on any level covers the ground cell's column. Nothing grows there (no
+    // light): place() refuses, and growHour() kills what is left; laying a floor clears it at once.
+    bool underUpperFloor(CellPos c) const;
     // Sets the growth of the plant in the cell (e.g. a harvested berry bush goes back to
     // `plant.harvestAfterGrowth`). Does nothing if the cell has no plant.
     void setGrowth(CellPos c, float growth);
@@ -61,6 +65,18 @@ public:
     // older, plants past their lifespan die, and in the growing hours the rest grow by
     // 1 / (growDays x 24) of full growth times their fertility rate.
     void growHour(int hourOfDay);
+    // Whether plants grow in the hour that begins at `hourOfDay` (0..23), and the data's growth multiplier.
+    bool growsAtHour(int hourOfDay) const { return hourOfDay >= growStartHour_ && hourOfDay < growEndHour_; }
+    double growthTuning() const { return growthTuning_; }
+    // Scales a plant's growth in a cell (by the cell's index) by a factor of 0 to 1; farming uses it for
+    // the light and temperature of sown crops. Not saved: whoever installs it does so again on loading.
+    void setGrowthModifier(std::function<double(size_t)> modifier) { modifier_ = std::move(modifier); }
+    // Plants in a cell for which this says true grow in every hour, not only the growing hours (a crop under a
+    // sun lamp). Not saved.
+    void setGrowsAnytime(std::function<bool(size_t)> anytime) { anytime_ = std::move(anytime); }
+    // A cell whose fertility is not the ground's: a plant pot or hydroponics basin gives its own. The function
+    // takes the cell's index and returns the fertility, or a negative number for none. Not saved.
+    void setFertilityOverride(std::function<float(size_t)> override) { fertilityOverride_ = std::move(override); }
 
     size_t count() const { return count_; }
     size_t countOf(DefId def) const;
@@ -85,6 +101,7 @@ private:
     };
 
     size_t indexOf(CellPos c) const;
+    float fertilityAtIndex(size_t i) const;
     int kindOfDef(DefId def) const;
     uint64_t cellHash(size_t i) const;
     void set(size_t i, uint16_t kind, uint32_t growth, uint32_t age);
@@ -102,6 +119,9 @@ private:
     std::vector<uint32_t> age_;
     size_t count_ = 0;
     uint64_t hash_ = 0;
+    std::function<double(size_t)> modifier_;
+    std::function<bool(size_t)> anytime_;
+    std::function<float(size_t)> fertilityOverride_;
 };
 
 }  // namespace colony

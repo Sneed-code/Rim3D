@@ -189,16 +189,3 @@ TEST_CASE("MapGen: a 1 km map is made in under a second") {
     auto counts = mapGenCount(map);
     CHECK(counts[Terrain::ShallowWater] > 4000);
 }
-
-TEST_CASE("MapGen: the biome decides how wet the map is") {
-    SimSettings settings;
-    settings.seed = 3;
-    settings.mapSize = 256;
-    settings.biome = "BorealForest";
-    Sim boreal(settings, mapGenGameDefs());
-    settings.biome = "AridShrubland";
-    Sim arid(settings, mapGenGameDefs());
-    auto b = mapGenCount(boreal.map());
-    auto a = mapGenCount(arid.map());
-    CHECK(b[Terrain::Marsh] + b[Terrain::Mud] > 3 * (a[Terrain::Marsh] + a[Terrain::Mud]));
-}

@@ -17,7 +17,7 @@ class UPoseSearchDatabase;
 class UStaticMesh;
 class USimSubsystem;
 class USkeletalMesh;
-namespace colony { class DefDatabase; class Sim; struct PawnLooksView; }
+namespace colony { class DefDatabase; class Sim; struct PawnLooksView; struct Snapshot; struct ThingView; }
 
 /**
  * How a pawn looks, from the sim's PawnLooksView and its lineage's def, in Unreal's terms
@@ -43,6 +43,54 @@ struct FSimPawnLooks
 
 	/** The body shape morphs' weights (PawnLooks.h names) for this weight and gender. */
 	TArray<TPair<FName, float>> MorphWeights() const;
+};
+
+/** One mesh of a worn piece: a skinned mesh (follows the body) or, with a bone, a prop on that bone (a hat). */
+struct FSimWornMesh
+{
+	FString Path;
+	FName Bone;
+
+	bool operator==(const FSimWornMesh& Other) const { return Path == Other.Path && Bone == Other.Bone; }
+};
+
+/** A piece of apparel a pawn wears, from the snapshot's ApparelView and its def's `visual.worn` (docs/design/clothes-draw.md). */
+struct FSimWornPiece
+{
+	uint32 Item = 0;
+	uint32 Def = 0;
+	uint32 Stuff = 0xFFFFFFFFu;
+	TArray<FSimWornMesh> Meshes;
+	/** The colour of the stuff it is made of (linear); without one the mesh's own colour stays. */
+	bool bHasTint = false;
+	FLinearColor Tint = FLinearColor::White;
+	/** 0 whole to 1 in tatters, in sixteenths: how many holes the cloth has. */
+	float Wear = 0.0f;
+	bool bHidesHair = false;
+
+	/** Same item, def, stuff and meshes (what a rebuild of the components is for); wear and tint change in place. */
+	bool SameStructure(const FSimWornPiece& Other) const { return Item == Other.Item && Def == Other.Def && Stuff == Other.Stuff && Meshes == Other.Meshes; }
+};
+
+struct FSimPawnApparel
+{
+	TArray<FSimWornPiece> Pieces;
+
+	bool SameStructure(const FSimPawnApparel& Other) const
+	{
+		if (Pieces.Num() != Other.Pieces.Num())
+		{
+			return false;
+		}
+		for (int32 I = 0; I < Pieces.Num(); ++I)
+		{
+			if (!Pieces[I].SameStructure(Other.Pieces[I]))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
 };
 
 /** Pawns at each detail level this frame (USimPawnSubsystem). */
@@ -105,6 +153,11 @@ public:
 	UStaticMesh* GetHornMesh();
 	/** The looks a pawn's sim looks and lineage add up to. */
 	static FSimPawnLooks MakeLooks(const colony::PawnLooksView& View, const colony::DefDatabase* Defs);
+	/** What a pawn wears, from the snapshot (U16), and a number that changes whenever any of it does (cheap: no allocation). */
+	static FSimPawnApparel MakeApparel(const colony::Snapshot& Snapshot, const colony::ThingView& View, const colony::DefDatabase* Defs);
+	static uint64 ApparelKey(const colony::Snapshot& Snapshot, const colony::ThingView& View);
+	/** A clothes mesh made by the ClothesArt commandlet, by its object path (null, logged once, if it is missing). */
+	UObject* GetClothesAsset(const FString& Path);
 
 protected:
 	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
@@ -150,6 +203,10 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UStaticMesh> HornMesh;
+
+	/** Clothes meshes by path; null where a mesh is missing. */
+	UPROPERTY()
+	TMap<FString, TObjectPtr<UObject>> ClothesAssets;
 
 	bool bHornTried = false;
 	bool bLooksMissingLogged = false;
