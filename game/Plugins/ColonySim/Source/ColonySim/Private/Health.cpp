@@ -1158,7 +1158,7 @@ std::vector<BodyPartInfo> HealthSystem::bodyParts(DefId pawnDef) const {
     std::vector<BodyPartInfo> out;
     if (const HealthModel::Kind* kind = model_->kindOf(pawnDef)) {
         for (const HealthModel::Part& p : model_->bodies[static_cast<size_t>(kind->body)].parts) {
-            out.push_back(BodyPartInfo{p.label, p.parent, p.inside, p.ownOutside, p.groups});
+            out.push_back(BodyPartInfo{p.label, p.parent, p.inside, p.ownOutside, p.groups, p.def});
         }
     }
     return out;

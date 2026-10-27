@@ -112,6 +112,8 @@ injury at 0 is gone. Lost parts never come back on their own (prosthetics and bi
 heals completely may leave a scar or old wound, which never heals and is never picked to heal ([medicine.md](medicine.md)).
 Infections, diseases and immunity are in [diseases.md](diseases.md) (H2).
 
+What a snapshot shows of the injuries (kind, skin region, bandages, bleeding) is in [wounds.md](wounds.md).
+
 ## Using it
 
 ```cpp
