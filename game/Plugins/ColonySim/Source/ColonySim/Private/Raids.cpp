@@ -16,6 +16,7 @@
 #include "ColonySim/Random.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Rooms.h"
+#include "ColonySim/Trade.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -682,7 +683,7 @@ bool RaidSystem::soundAlarm(bool on, std::string& error) {
     // Enemies still about: don't sound it again by itself until they are gone.
     const entt::registry& reg = things_.registry();
     for (const auto [pawn, faction] : reg.view<const Faction>().each()) {
-        if (faction.id != kPlayerFaction && !reg.all_of<Animal>(pawn) && !reg.all_of<Prisoner>(pawn) && things_.spawned(pawn) &&
+        if (faction.id != kPlayerFaction && !reg.all_of<Animal>(pawn) && !reg.all_of<Prisoner>(pawn) && !reg.all_of<Visitor>(pawn) && things_.spawned(pawn) &&
             !health_.incapacitated(pawn)) {
             state_.suppressed = true;
             break;
@@ -1690,7 +1691,7 @@ void RaidSystem::thinkAlarm() {
         // Wild animals aren't enemies (Animals.h) until they hunt, fight back or go manhunter (N5).
         const Animal* wild = reg.try_get<Animal>(pawn);
         if (faction.id == kPlayerFaction || (wild != nullptr && wild->temper == AnimalTemper::Calm) || health_.incapacitated(pawn) ||
-            reg.all_of<Prisoner>(pawn)) {
+            reg.all_of<Prisoner>(pawn) || reg.all_of<Visitor>(pawn)) {
             continue;
         }
         const Fighter* f = reg.try_get<Fighter>(pawn);

@@ -99,7 +99,7 @@ after the capture.
 Event `PrisonerExecuted` (`thing` the prisoner, `target` the warden, `message` "guilty" or "innocent") comes before the
 death. Every living colonist except Psychopath, Bloodlust and Cannibal ones remembers it: `KnowPrisonerExecutedGuilty` (-2,
 6 days) or `KnowPrisonerExecuted` (-5, 6 days) (RimWorld wiki, Thoughts/Memory Death). The wiki has no faction goodwill loss
-for an execution, so there is none (goodwill itself waits for C23).
+for an execution; ours is a house rule: `execute` calls `TradeSystem::noteExecuted`, -10 with the prisoner's faction (`trade.md`).
 
 ## Organ harvesting
 
