@@ -36,7 +36,7 @@ struct COLONY_API SkillRules {
 COLONY_API double learnSkillXp(const SkillRules& rules, SkillRecord& skill, double xp);
 
 // Midnight for one skill: today's total starts again, and from level 10 up the skill loses
-// `decayXpPerDay[level]`. Experience may sink `xpBelowZeroBeforeLevelLoss` below zero before the
+// `decayXpPerDay[level]`, which also counts against that day's soft cap (the wiki's net XP). Experience may sink `xpBelowZeroBeforeLevelLoss` below zero before the
 // level is lost; the level below then takes over what is left.
 COLONY_API void skillDayPassed(const SkillRules& rules, SkillRecord& skill);
 

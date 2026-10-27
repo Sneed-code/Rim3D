@@ -58,10 +58,20 @@ map and carried by the player's pawns, plus the player's own pawns (colonists an
 "creatures count in full"), at their market value, plus buildings at half theirs. The wealth gives
 wealth points (0 up to 14,000, 2,400 at 400,000, 4,200 at 1,000,000), each colonist gives 15 to 200 by
 the same wealth, and the sum is scaled by the days passed (0.7 to day 10, 1 from day 40) and
-adaptation (0.8, its start value). Six fresh Crashlanded colonists are worth about 16,000 with their
-things: around 65 points, one pirate. **Adaptation is not tracked yet** (RimWorld raises it after a
-30-day grace and drops it when colonists go down or die; the difficulty's `adaptationGrowth` and
-`adaptationImpact` are for it).
+adaptation (below). Six fresh Crashlanded colonists are worth about 16,000 with their
+things: around 65 points, one pirate.
+
+**Adaptation** (`RaidSystem::thinkAdaptation`, `adaptationFactor`) follows the wiki. The colony has
+*AdaptDays*, starting at 0 (factor 0.8) and kept between -60 and 100. Every 12 hours they grow
+(3 a day below 0, 1 from 0, 0.5 from 60, 0.25 from 120, each times the difficulty's
+`adaptationGrowth`), but never above 0 in the first 30 days. Each colonist who goes down costs 8 days
+(6 with 2 or 3 colonists, 5 with 11, 3.5 with 20) and each who dies costs 30 (20 at 20 colonists); the
+colony's books are checked every 5 game seconds, so a colonist counts once per going down, and a
+newcomer already down costs nothing. The factor is the wiki's curve of AdaptDays (-30: 0.4, 0: 0.8,
+30: 1.0, 60: 1.2, 120: 1.6, 180: 2.0), blended with 1 by the difficulty's `adaptationImpact` (Losing
+is fun 0.4 gives 0.75 to 1.19). The narrator hands the difficulty's two numbers to the raid system
+when a narrator is picked or a save loads. The wiki's growth table is unclear on per check or per
+day; we took per day (unverified, in `RaidRules.json`). Saved in `raids` 2.
 
 ## Incidents and workers
 
@@ -100,7 +110,7 @@ the narrator off. It is all in `Sim::stateHash`.
 
 ## Not yet
 
-Adaptation; RimWorld's spacing rules between big threats beyond the cycle; Peaceful turning big
+RimWorld's spacing rules between big threats beyond the cycle; Peaceful turning big
 threats off (the data has only its 0.1 threat scale); the difficulty's `infestationRate` (for T3's
 infestation); goodwill-hostile factions (C23); letters kept in a list after loading (the events are
 the letters for now). The chances, days and cooldowns are D10's recalled numbers: tune them with

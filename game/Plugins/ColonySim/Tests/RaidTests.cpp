@@ -399,6 +399,51 @@ TEST_CASE("Raids: a squad that loses half its pawns routs and runs off the map")
     }
 }
 
+TEST_CASE("Raids: a squad whose members are all badly hurt runs, though none is down") {
+    SimSettings settings;
+    settings.seed = 43;
+    settings.mapSize = 96;
+    settings.flatMap = true;
+    Sim sim(settings, raidTestDefs());
+    sim.submit(StartRaidCommand{"Pirate", 400.0f, 2});
+    sim.step();
+    const std::vector<Entity> raiders = raidTestRaiders(sim);
+    RAID_REQUIRE(raiders.size() >= 4);
+    sim.stepMany(60);
+    RAID_REQUIRE(sim.raids().state().squads.size() == 1);
+    CHECK(sim.raids().state().squads[0].state == SquadState::Advance);
+    // Everyone is hurt but on their feet: pain and a limp, nobody downed.
+    bool routed = false;
+    for (int i = 0; i < 90 && !routed; ++i) {
+        for (const Entity r : raiders) {
+            Health& h = sim.things().registry().get<Health>(r);
+            h.pain = 0.5f;
+            h.movingFactor = 0.5f;
+        }
+        sim.step();
+        if (const Event* e = raidTestEvent(sim, EventType::SquadChanged)) {
+            routed = e->message == "Rout";
+        }
+    }
+    CHECK(routed);
+    for (const Entity r : raiders) {
+        CHECK_FALSE(sim.health().incapacitated(r));
+    }
+}
+
+TEST_CASE("Raids: a squad of unhurt pawns doesn't run") {
+    SimSettings settings;
+    settings.seed = 43;
+    settings.mapSize = 96;
+    settings.flatMap = true;
+    Sim sim(settings, raidTestDefs());
+    sim.submit(StartRaidCommand{"Pirate", 400.0f, 2});
+    sim.step();
+    sim.stepMany(150);
+    RAID_REQUIRE(sim.raids().state().squads.size() == 1);
+    CHECK(sim.raids().state().squads[0].state != SquadState::Rout);
+}
+
 TEST_CASE("Raids: a lone raider facing a stronger colony falls back") {
     auto sim = raidTestSim(51, 128);
     const std::vector<Entity> colonists = raidTestColonists(*sim);
@@ -491,4 +536,60 @@ TEST_CASE("Raids: wild animals near the colony don't sound the alarm and aren't 
                                     std::abs(static_cast<int>(p.y) - squad.target.y) <= 1);
     }
     CHECK(onColonist);
+}
+
+TEST_CASE("Raids: adaptation falls when a colonist dies or goes down and climbs back, and the difficulty sets its weight") {
+    auto sim = raidTestSim();
+    RAID_REQUIRE(sim->setupErrors().empty());
+    CHECK(sim->raids().state().adaptDays == doctest::Approx(0.0f));
+    CHECK(sim->raids().adaptationFactor() == doctest::Approx(0.8f));  // the wiki's start value
+    const std::vector<Entity> colonists = raidTestColonists(*sim);
+    RAID_REQUIRE(colonists.size() == 6);
+    sim->stepMany(10);  // the colony's books are open
+
+    // One goes down: 6 days lost at 6 colonists (wiki: 8 at 1, 6 at 2 and 3, 5 at 11).
+    sim->things().registry().get<Health>(colonists[1]).downed = true;
+    sim->stepMany(5);
+    const float afterDown = sim->raids().state().adaptDays;
+    CHECK(afterDown < -4.0f);
+    CHECK(afterDown > -8.0f);
+    sim->stepMany(20);
+    CHECK(sim->raids().state().adaptDays == doctest::Approx(afterDown));  // only once
+
+    // One dies: 30 days lost (the wiki's value from 0 to 11 colonists).
+    CHECK(sim->health().kill(colonists[0], DeathCause::BloodLoss));
+    sim->stepMany(5);
+    CHECK(sim->raids().state().adaptDays == doctest::Approx(afterDown - 30.0f));
+    // Less adapted than at the start: the curve gives under 0.8.
+    CHECK(sim->raids().adaptationFactor() < 0.5f);
+
+    // The difficulty's impact blends the factor with 1: 40% (Losing is fun) of the way to it.
+    sim->raids().setAdaptation(1.0f, 0.4f);
+    CHECK(sim->raids().adaptationFactor() > 0.7f);
+    CHECK(sim->raids().adaptationFactor() < 0.85f);
+    sim->raids().setAdaptation(1.0f, 0.0f);
+    CHECK(sim->raids().adaptationFactor() == doctest::Approx(1.0f));
+    sim->raids().setAdaptation(1.0f, 1.0f);
+
+    // Half a day on, the days climb by 3 a day while below 0 (halved to 1.5 a 12 hours).
+    const float before = sim->raids().state().adaptDays;
+    while (sim->time().seconds < 13 * 3600) {
+        sim->stepMany(600);
+    }
+    CHECK(sim->raids().state().adaptDays == doctest::Approx(before + 1.5f));
+
+    // It is saved.
+    SaveLoadResult loaded = loadSim(saveSim(*sim), raidTestDefs());
+    RAID_REQUIRE(loaded.sim != nullptr);
+    CHECK(loaded.sim->raids().state().adaptDays == doctest::Approx(sim->raids().state().adaptDays));
+    CHECK(loaded.sim->stateHash() == sim->stateHash());
+}
+
+TEST_CASE("Raids: adaptation does not climb above 0 in the first 30 days") {
+    auto sim = raidTestSim();
+    RAID_REQUIRE(sim->setupErrors().empty());
+    while (sim->time().seconds < 2 * 86400) {
+        sim->stepMany(600);
+    }
+    CHECK(sim->raids().state().adaptDays == doctest::Approx(0.0f));
 }
