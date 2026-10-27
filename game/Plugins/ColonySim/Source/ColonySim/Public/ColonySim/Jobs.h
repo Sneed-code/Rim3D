@@ -425,6 +425,7 @@ public:
     // set (some tests) nothing needs power.
     void setPower(const PowerGrid* power) { power_ = power; }
     bool buildingRuns(Entity building) const;
+    float unpoweredSpeed(Entity building) const;
     int64_t now() const;
 
     // The pawn holding a target, or kNoEntity.

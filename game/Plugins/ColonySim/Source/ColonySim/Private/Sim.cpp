@@ -1281,10 +1281,13 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         options.skillMax = billOptions->skillMax;
         options.radius = billOptions->radius;
         options.storeZone = billOptions->storeZone;
+        options.countZone = billOptions->countZone;
         options.unpauseAt = billOptions->unpauseAt;
         options.disallowed = billOptions->disallowed;
         if (billOptions->storeZone != 0 && zones_->find(billOptions->storeZone) == nullptr) {
             commandFailed(id, "there is no stockpile " + std::to_string(billOptions->storeZone));
+        } else if (billOptions->countZone != 0 && zones_->find(billOptions->countZone) == nullptr) {
+            commandFailed(id, "there is no stockpile " + std::to_string(billOptions->countZone));
         } else if (!jobs_->bills().setOptions(billOptions->building, billOptions->bill, options, error)) {
             commandFailed(id, error);
         }
@@ -1788,7 +1791,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.firstBill = static_cast<uint32_t>(out.bills.size());
             for (const Bill& bill : list->bills) {
                 out.bills.push_back(BillView{bill.id, bill.recipe, bill.mode, bill.count, bill.suspended, bill.skillMin, bill.skillMax,
-                                             bill.radius, bill.storeZone, bill.unpauseAt, bill.satisfied, bill.disallowed});
+                                             bill.radius, bill.storeZone, bill.countZone, bill.unpauseAt, bill.satisfied, bill.disallowed});
             }
             view.billCount = static_cast<uint32_t>(out.bills.size()) - view.firstBill;
         }
@@ -2410,6 +2413,7 @@ uint64_t Sim::stateHash() const {
                 h.add(bill.skillMax);
                 h.add(bill.radius);
                 h.add(bill.storeZone);
+                h.add(bill.countZone);
                 h.add(bill.unpauseAt);
                 h.add(bill.satisfied);
                 for (const DefId def : bill.disallowed) {

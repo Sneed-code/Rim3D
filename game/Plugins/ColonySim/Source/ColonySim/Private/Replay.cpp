@@ -213,6 +213,7 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["skillMax"] = c.skillMax;
                 j["radius"] = c.radius;
                 j["storeZone"] = c.storeZone;
+                j["countZone"] = c.countZone;
                 j["unpauseAt"] = c.unpauseAt;
                 j["disallowed"] = c.disallowed;
             } else if constexpr (std::is_same_v<Type, MoveBillCommand>) {
@@ -937,7 +938,7 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         if (!r.integer(j, "building", building, where) || !r.integer(j, "bill", c.bill, where) ||
             !r.integer(j, "skillMin", c.skillMin, where) || !r.integer(j, "skillMax", c.skillMax, where) ||
             !r.number(j, "radius", c.radius, where) || !r.integer(j, "storeZone", c.storeZone, where) ||
-            !r.integer(j, "unpauseAt", c.unpauseAt, where)) {
+            !r.integer(j, "unpauseAt", c.unpauseAt, where) || !r.integer(j, "countZone", c.countZone, where)) {
             return false;
         }
         const auto list = j.find("disallowed");

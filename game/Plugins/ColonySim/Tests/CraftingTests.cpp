@@ -488,7 +488,7 @@ TEST_CASE("Crafting: a bill can send its products to a stockpile") {
     sim.submit(c);
     sim.step();
     CRAFT_REQUIRE(!craftFailed(sim));
-    sim.submit(SetBillOptionsCommand{spot, bill, 0, 20, 0.0f, 9999, 0, {}});  // no such stockpile
+    sim.submit(SetBillOptionsCommand{spot, bill, 0, 20, 0.0f, 9999, 0, 0, {}});  // no such stockpile
     sim.step();
     CHECK(craftFailed(sim));
     CRAFT_REQUIRE(craftRunUntil(sim, 12000, [&] { return craftOnMap(sim, "Melee_Club") == 1; }) >= 0);
@@ -516,7 +516,7 @@ TEST_CASE("Crafting: the new commands round trip through replay files and the sa
         craftSpawn(*sim, "Steel", CellPos{19, 20, 0}, 75);
         craftAdd(*sim, spot, "MakeClub", BillMode::Count, 2);
         craftAdd(*sim, spot, "MakeKnife", BillMode::Count, 2);
-        sim->submit(SetBillOptionsCommand{spot, 2, 2, 18, 30.0f, 0, 3, {"Silver"}});
+        sim->submit(SetBillOptionsCommand{spot, 2, 2, 18, 30.0f, 0, 0, 3, {"Silver"}});
         sim->submit(MoveBillCommand{spot, 2, 0});
         sim->stepMany(8000);
         return sim;
@@ -540,7 +540,7 @@ TEST_CASE("Crafting: the new commands round trip through replay files and the sa
     Replay replay;
     LoggedCommand options;
     options.step = 10;
-    options.command = SetBillOptionsCommand{kNoEntity, 2, 2, 18, 30.5f, 7, 3, {"Silver", "Steel"}};
+    options.command = SetBillOptionsCommand{kNoEntity, 2, 2, 18, 30.5f, 7, 5, 3, {"Silver", "Steel"}};
     LoggedCommand move;
     move.step = 11;
     move.command = MoveBillCommand{kNoEntity, 2, 1};
@@ -574,7 +574,7 @@ TEST_CASE("Crafting: a save in the middle of a run, with bill settings and a mar
     CRAFT_REQUIRE(!original.zones().stockpiles().empty());
     const uint32_t bill = craftAdd(original, spot, "MakeClub", BillMode::Count, 3);
     CRAFT_REQUIRE(bill != 0);
-    original.submit(SetBillOptionsCommand{spot, bill, 1, 19, 45.0f, original.zones().stockpiles()[0].id, 2, {"Steel"}});
+    original.submit(SetBillOptionsCommand{spot, bill, 1, 19, 45.0f, original.zones().stockpiles()[0].id, original.zones().stockpiles()[0].id, 2, {"Steel"}});
     // Save the moment the first club lies on the floor marked for the stockpile.
     CRAFT_REQUIRE(craftRunUntil(original, 12000, [&] { return craftFind(original, "Melee_Club") != kNoEntity; }) >= 0);
     const std::vector<uint8_t> bytes = saveSim(original);
@@ -596,4 +596,56 @@ TEST_CASE("Crafting: a save in the middle of a run, with bill settings and a mar
     original.stepMany(6000);
     loaded.sim->stepMany(6000);
     CHECK(loaded.sim->stateHash() == original.stateHash());  // the quality stream carried on from the same place
+}
+
+TEST_CASE("Crafting: an 'until you have' bill can count only what lies in one stockpile") {
+    Sim sim = craftSim();
+    const Entity spot = craftSpawn(sim, "CraftingSpot", CellPos{20, 20, 0});
+    CRAFT_REQUIRE(spot != kNoEntity);
+    sim.submit(CreateStockpileCommand{CellRect{40, 40, 3, 3, 0}, StoragePriority::Normal});
+    sim.step();
+    CRAFT_REQUIRE(sim.zones().stockpiles().size() == 1);
+    const uint32_t zone = sim.zones().stockpiles()[0].id;
+    const uint32_t bill = craftAdd(sim, spot, "MakeClub", BillMode::UntilHave, 1);
+    CRAFT_REQUIRE(bill != 0);
+    craftSpawn(sim, "Melee_Club", CellPos{30, 30, 0});  // lies outside the stockpile
+    BillSystem& bills = sim.jobs().bills();
+    const Bill* b = bills.find(spot, bill);
+    CRAFT_REQUIRE(b != nullptr);
+    CHECK(!bills.shouldDo(*b));  // counted on the whole map: one club is enough
+
+    SetBillOptionsCommand c;
+    c.building = spot;
+    c.bill = bill;
+    c.countZone = zone;
+    sim.submit(c);
+    sim.step();
+    CRAFT_REQUIRE(!craftFailed(sim));
+    CHECK(b->countZone == zone);
+    CHECK(bills.shouldDo(*b));  // none lies in the stockpile
+    craftSpawn(sim, "Melee_Club", CellPos{41, 41, 0});
+    CHECK(!bills.shouldDo(*b));
+
+    c.countZone = 9999;  // no such stockpile
+    sim.submit(c);
+    sim.step();
+    CHECK(craftFailed(sim));
+    CHECK(b->countZone == zone);
+}
+
+TEST_CASE("Crafting: the electric tailor bench still works without power, at half speed, and tailoring teaches Crafting") {
+    Sim sim = craftSim();
+    const Entity table = craftSpawn(sim, "TailorBenchElectric", CellPos{20, 20, 0});
+    craftSpawn(sim, "TorchLamp", CellPos{17, 17, 0});
+    craftSpawn(sim, "Cloth", CellPos{19, 19, 0}, 40);
+    const Entity pawn = craftCrafter(sim, CellPos{18, 18, 0}, 8);
+    sim.submit(UnlockResearchCommand{"ComplexClothing"});
+    CRAFT_REQUIRE(table != kNoEntity && craftAdd(sim, table, "Make_Apparel_Tuque", BillMode::Count, 1) != 0);
+    const int took = craftRunUntil(sim, 30000, [&] { return craftOnMap(sim, "Apparel_Tuque") == 1; });
+    // A tuque is 1,728 s of work at speed 1.0: with no power the bench runs at half that, like the hand bench.
+    CHECK(took > 3300);
+    CHECK(took < 4200);
+    const SkillRecord* crafting = sim.things().registry().get<Colonist>(pawn).skill("Crafting");
+    CRAFT_REQUIRE(crafting != nullptr);
+    CHECK((crafting->level > 8 || crafting->xp > 0.0f));
 }
