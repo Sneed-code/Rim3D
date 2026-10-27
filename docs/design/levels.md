@@ -82,8 +82,7 @@ no levels):
   side by side, so a staircase against a wall leads onto the floor that wall holds up. The building
   itself blocks walking: it is only climbed. Neither end needs to be walkable when it is built; the
   link counts once both are. Nothing is planned on the top level (there is nothing to climb to).
-  An upper wall with open air on its outside cannot be reached once the walls on its two inner sides stand (see the
-  house scenario).
+  An upper wall with open air on its outside (a corner whose two sides stand) is built from the level below, standing on any of the eight cells round it (`Construction::workCell`), so corners need no special order. No plant grows under an upper floor: laying one clears the plant in the cell below, `Plants::place` refuses there and `growHour` kills any left (no light).
   Nothing stops a floor over the stairs: the house scenario lays one, so that the upper room is closed (open air
   beside a room makes it outdoors). U17 draws no floor over stairs and ladders, and walking into that cell from the
   head climbs down ([levels-draw](levels-draw.md)). A real stairwell rule needs rooms to join the room above and the
