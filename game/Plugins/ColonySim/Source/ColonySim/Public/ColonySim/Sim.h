@@ -33,6 +33,7 @@ class ApparelSystem;
 class Construction;
 class DefDatabase;
 class DefenseSystem;
+class DrugSystem;
 class Filth;
 class Floors;
 class RoomStats;
@@ -64,6 +65,7 @@ class Plants;
 class PowerGrid;
 class Regions;
 class PrisonerSystem;
+class TradeSystem;
 class QuestSystem;
 class ShipSystem;
 class Rooms;
@@ -197,6 +199,9 @@ public:
     // Recreation, comfort and the outdoors need (docs/design/recreation.md).
     RecreationSystem& recreation() { return *recreation_; }
     const RecreationSystem& recreation() const { return *recreation_; }
+    // Drugs, tolerance, addiction, withdrawal and drug policies (docs/design/drugs.md).
+    DrugSystem& drugs() { return *drugs_; }
+    const DrugSystem& drugs() const { return *drugs_; }
     // Research projects and what they unlock (docs/design/research.md).
     ResearchSystem& research() { return *research_; }
     const ResearchSystem& research() const { return *research_; }
@@ -346,6 +351,10 @@ public:
     QuestSystem& quests() { return *quests_; }
     const QuestSystem& quests() const { return *quests_; }
 
+    // Faction goodwill, visitors, trade caravans, orbital traders and trade (docs/design/trade.md).
+    TradeSystem& trade() { return *trade_; }
+    const TradeSystem& trade() const { return *trade_; }
+
     // Taming, training, animal zones and pens (docs/design/husbandry.md).
     Husbandry& husbandry() { return *husbandry_; }
     // Fire, burning pawns, burnt ground and the home area (docs/design/fire.md).
@@ -431,6 +440,7 @@ private:
     std::unique_ptr<NeedsSystem> needs_;
     std::unique_ptr<MoodSystem> mood_;
     std::unique_ptr<RecreationSystem> recreation_;
+    std::unique_ptr<DrugSystem> drugs_;  // after health_, needs_ and mood_
     std::unique_ptr<ResearchSystem> research_;
     std::unique_ptr<MedicineSystem> medicine_;
     std::unique_ptr<SurgerySystem> surgery_;
@@ -458,6 +468,7 @@ private:
     std::unique_ptr<RaidSystem> raids_;        // after the fighters
     std::unique_ptr<MonsterSystem> monsters_;  // after raids_ and animals_
     std::unique_ptr<PrisonerSystem> prisoners_;  // after the raids
+    std::unique_ptr<TradeSystem> trade_;         // after the raids
     std::unique_ptr<QuestSystem> quests_;        // after the raids
     std::unique_ptr<ShipSystem> ship_;           // after the raids
     std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system

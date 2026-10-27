@@ -1,0 +1,7 @@
+[
+  {"defName": "NoDrugs", "label": "no drugs", "source": "RimWorld wiki", "entries": [], "note": "Every drug only to satisfy an addiction."},
+  {"defName": "Social", "label": "social drugs", "source": "RimWorld wiki", "entries": [{"drug": "Beer", "forJoy": true}, {"drug": "SmokeleafJoint", "forJoy": true}], "note": "Beer and smokeleaf joints for recreation; the rest only for addiction. The default policy."},
+  {"defName": "OneDrinkPerDay", "label": "one drink per day", "source": "RimWorld wiki", "entries": [{"drug": "Beer", "forJoy": true, "scheduled": true, "daysFrequency": 1}, {"drug": "SmokeleafJoint", "forJoy": true}], "note": "Social drugs, plus a beer once a day."},
+  {"defName": "Unrestricted", "label": "unrestricted", "source": "RimWorld wiki", "entries": [{"drug": "Beer", "forJoy": true}, {"drug": "SmokeleafJoint", "forJoy": true}, {"drug": "PsychiteTea", "forJoy": true}, {"drug": "Flake", "forJoy": true}, {"drug": "Yayo", "forJoy": true}, {"drug": "GoJuice", "forJoy": true}, {"drug": "WakeUp", "forJoy": true}], "note": "Every drug for recreation; luciferium only for addiction."},
+  {"defName": "LuciferiumUser", "label": "luciferium user", "source": "ours", "entries": [{"drug": "Luciferium", "scheduled": true, "daysFrequency": 5.5}], "note": "Luciferium every 5.5 days (an adult's need lasts about 6)."}
+]
