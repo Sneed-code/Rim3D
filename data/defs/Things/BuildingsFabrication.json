@@ -1,0 +1,3 @@
+[
+  {"defName": "FabricationBench", "workGiver": "DoBillsSmithy", "researchPrerequisite": "Fabrication", "parent": "BuildingBase", "label": "fabrication bench", "size": [5, 2], "fillPercent": 0.5, "designationCategory": "Production", "stats": {"maxHitPoints": 300, "workToBuild": 7200.0, "flammability": 1.0}, "costs": {"Steel": 200, "ComponentIndustrial": 12, "ComponentSpacer": 2}, "comps": [{"type": "Power", "consumption": 250}], "unverified": ["size", "fillPercent"], "ours": ["visual: none yet"]}
+]

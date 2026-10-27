@@ -4,19 +4,19 @@
     "category": "Item", "stackLimit": 1
   },
   {
-    "defName": "Apparel_FlakVest", "visual": { "worn": [{ "mesh": "/Game/Rim3D/Generated/Clothes/SK_Apparel_FlakVest_0.SK_Apparel_FlakVest_0" }] }, "parent": "ApparelBase", "label": "flak vest",
+    "defName": "Apparel_FlakVest", "researchPrerequisite": "FlakArmor", "visual": { "worn": [{ "mesh": "/Game/Rim3D/Generated/Clothes/SK_Apparel_FlakVest_0.SK_Apparel_FlakVest_0" }] }, "parent": "ApparelBase", "label": "flak vest",
     "stats": { "maxHitPoints": 200, "mass": 4, "armorRatingSharp": 1.0, "armorRatingBlunt": 0.36, "armorRatingHeat": 0.27 },
     "equippedStatOffsets": { "moveSpeed": -0.004 },
     "apparel": { "bodyPartGroups": ["Torso", "Neck"], "layers": ["Middle"] }
   },
   {
-    "defName": "Apparel_FlakPants", "visual": { "worn": [{ "mesh": "/Game/Rim3D/Generated/Clothes/SK_Apparel_FlakPants_0.SK_Apparel_FlakPants_0" }] }, "parent": "ApparelBase", "label": "flak pants",
+    "defName": "Apparel_FlakPants", "researchPrerequisite": "FlakArmor", "visual": { "worn": [{ "mesh": "/Game/Rim3D/Generated/Clothes/SK_Apparel_FlakPants_0.SK_Apparel_FlakPants_0" }] }, "parent": "ApparelBase", "label": "flak pants",
     "stats": { "maxHitPoints": 140, "mass": 4, "armorRatingSharp": 0.55, "armorRatingBlunt": 0.08, "armorRatingHeat": 0.1 },
     "equippedStatOffsets": { "moveSpeed": -0.004 },
     "apparel": { "bodyPartGroups": ["Legs"], "layers": ["OnSkin", "Middle"] }
   },
   {
-    "defName": "Apparel_SimpleHelmet", "visual": { "worn": [{ "mesh": "/Game/Rim3D/Generated/Clothes/SM_Apparel_SimpleHelmet.SM_Apparel_SimpleHelmet", "bone": "head" }] }, "parent": "ApparelBase", "label": "simple helmet",
+    "defName": "Apparel_SimpleHelmet", "researchPrerequisite": "Smithing", "visual": { "worn": [{ "mesh": "/Game/Rim3D/Generated/Clothes/SM_Apparel_SimpleHelmet.SM_Apparel_SimpleHelmet", "bone": "head" }] }, "parent": "ApparelBase", "label": "simple helmet",
     "stats": { "maxHitPoints": 100, "mass": 2, "armorRatingSharp": 0.45, "armorRatingBlunt": 0.225, "armorRatingHeat": 0.3 },
     "apparel": { "bodyPartGroups": ["UpperHead"], "layers": ["Overhead"], "hidesHair": true }
   }
