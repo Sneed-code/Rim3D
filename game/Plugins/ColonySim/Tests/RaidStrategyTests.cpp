@@ -358,13 +358,6 @@ TEST_CASE("Raid strategies: kidnappers carry a downed colonist off the map, and 
         sim->step();
     }
     STRAT_REQUIRE(sim->health().incapacitated(victim));
-    // A few more bruises, so the pain keeps it down for the whole raid: just over the line it got up again
-    // before the kidnappers came (seen after the apparel wear stopped drawing from the random stream).
-    for (int i = 0; i < 3; ++i) {
-        sim->submit(DamagePawnCommand{victim, "Blunt", 4.0f, -1});
-        sim->step();
-    }
-    STRAT_REQUIRE(sim->health().incapacitated(victim));
     STRAT_REQUIRE(!reg.get<Health>(victim).dead);
     Position& vp = reg.get<Position>(victim);
     vp.x = 20.5f;
