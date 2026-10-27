@@ -1,7 +1,8 @@
 # Status
 
-Updated 2026-10-26.
+Updated 2026-10-27.
 
+Stage 2 G3 done: the game is packaged for the first time (`tools\package.ps1`) and measured with a new `perf` smoke test (1 km, 30 colonists, about 580 animals, a fire, rain and a 40-pirate raid at 3x, 1440p): 133 to 219 fps, game thread 4 to 6 ms, the sim about 1 ms a frame, so the sim stays on the game thread (`docs/decisions/0007-sim-stays-on-game-thread.md`, `docs/design/perf-check.md`). The hourly plant pass (a 14 ms step on 1 km) now runs a sixtieth of the map a step over a game minute. `simrun --perf` and the game share `ColonySim/PerfColony.h`. Fixed an editor-only call in `VisualMesh.cpp` that broke the game's non-editor build.
 Stage 2 S9 done: a sim step on the Stage 2 colony costs 0.66 ms, down from 0.96 (`simrun --perf`, `docs/design/sim-cost.md`, budget in `docs/decisions/0006-sim-cost-budget.md`, nightly).
 Stage 2 breeding follow-up done: young animals born to a tame mother follow her (they walk back when more than 4 m off), a pregnant mother in the cold (below -10) or heat (above 45) does not get on with her young until it is mild, and a new hatchery building (30 wood) keeps fertilized eggs within 2.5 m warm so they hatch in any weather (`docs/design/breeding.md`, tests `BreedingTests`). Save section `breeding` 3.
 Stage 2 vanilla weapons and armour check done: every base-game gun (machine pistol, chain shotgun, heavy SMG, LMG, minigun, sniper, charge rifle and lance), bow, pila, launcher, grenade, ultratech sword, armor set (flak jacket and helmet, plate, marine, recon, cataphract) and belt (shield, smokepop, firefoam) is now a def with the wiki's numbers and a recipe; new materials plasteel, uranium, gold, chemfuel and advanced components, a fabrication bench, four new research projects. Rockets and shells burst where they land. Shield belt, pop packs, EMP and smoke effects are data only (`docs/design/vanilla-gear.md`, `BACKLOG.md`).

@@ -11,8 +11,10 @@ Task S9. What a sim step costs at Stage 2 size, how to measure it, and what was 
 Runs the `PerfColony` scenario (`data/defs/Scenarios`): 30 colonists on a 1 km map who build two walled
 rooms (steel walls, doors, beds, stoves, wood floors), sow and harvest a 24 by 24 rice field, haul, mine
 and fell, plus 300 tame animals (chickens, cows, muffalo, alpacas) fed every game hour, and the wild
-animals the biome makes (about 290). Weather, light and room temperatures run as always. **Fire is not
-in the sim yet** (E2 isn't merged); add it to `Tools/simrun/PerfScenario.cpp` when it is.
+animals the biome makes (about 290). Weather, light and room temperatures run as always. The colony is set
+up by `colony::setUpPerfColony` (`ColonySim/PerfColony.h`), so the game's `perf` smoke test (G3,
+[perf-check.md](perf-check.md)) draws the same colony and adds rain, a fire and a raid; `simrun --perf` has
+none of those.
 
 It prints, on stderr, a table of ms per step for each system, dearest first, and on stdout one JSON line
 (`avgStepMs`, `p99StepMs`, `maxStepMs`, `msPerFrameAt3x`, `worstStep` and `worstSystem`, `stateHash`, and
@@ -63,9 +65,11 @@ Before (1 game day, this machine, one core): 0.96 ms a step, 1.45 ms of every 60
 
 ## Not fixed
 
-- **The hourly growth pass is a hitch.** Once a game hour `Plants::growHour` and `Farming::growHour` walk the
-  whole map: about 10 ms on 1 km (the `hourly` row is that spread over 3,600 steps). On the PC that is one
-  slow frame every two real minutes at 1x. If it shows in G3, spread the pass over a minute of steps.
+- ~~The hourly growth pass is a hitch.~~ Fixed in G3: once a game hour `Plants::growHour` walked the whole
+  map, 14 ms in one step on 1 km, and in the game that frame took 22 to 27 ms (a dropped frame every 40 real
+  seconds at 3x). The sim now grows a sixtieth of the map's cells in each of the next hour's first 60 steps
+  (`Plants::growHourSlice`); every plant still grows once an hour, up to a minute later than before.
+  `maxStepMs` of `simrun --perf` is now the first step (30 colonists' first jobs, a one-off at load).
 - **Filth** is 8% of the step: a map lookup per pawn per step to see whether it entered a new cell. Keeping
   each pawn's last cell in a flat array would make it nearly free but changes what a save holds.
 - Mood still builds the thought list per colonist per step; the mood only moves a little a second, so

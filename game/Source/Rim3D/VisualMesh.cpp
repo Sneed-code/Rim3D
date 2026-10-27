@@ -318,7 +318,7 @@ UStaticMesh* VisualMesh::MakeMesh(UObject* Outer, UMaterialInterface* Material, 
 	}
 
 	UStaticMesh* Mesh = NewObject<UStaticMesh>(Outer, NAME_None, RF_Transient);
-	Mesh->GetStaticMaterials().Add(FStaticMaterial(Material, TEXT("Visual"), TEXT("Visual")));
+	Mesh->GetStaticMaterials().Add(FStaticMaterial(Material, TEXT("Visual")));
 	UStaticMesh::FBuildMeshDescriptionsParams Params;
 	Params.bBuildSimpleCollision = false;
 	Params.bFastBuild = true;
