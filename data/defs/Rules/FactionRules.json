@@ -1,0 +1,11 @@
+[
+  {
+    "defName": "FactionRules", "source": "RimWorld wiki",
+    "goodwillRange": [-100, 100], "hostileAtOrBelow": -75, "alliedAtOrAbove": 75,
+    "driftTowardNaturalPerDay": 0.2,
+    "goodwillChanges": {"releasePrisoner": 12, "giftSilverPerPoint": 40, "visitorKilled": -25, "prisonerExecuted": -10},
+    "unverified": ["hostileAtOrBelow", "alliedAtOrAbove", "driftTowardNaturalPerDay", "goodwillChanges"],
+    "ours": ["driftTowardNaturalPerDay", "goodwillChanges.visitorKilled", "goodwillChanges.prisonerExecuted"],
+    "notes": "goodwillChanges: releasing a prisoner of a faction gives +12 with it (recalled); a gift gives 1 goodwill per 40 silver of market value (recalled); a visitor killed in the colony costs -25 and an executed prisoner -10 with its faction (both ours). Goodwill runs from -100 to 100; at -75 or less a faction is hostile and at 75 or more an ally (recalled). Goodwill drifts back toward the faction's starting middle slowly; the rate is a placeholder. A faction with permanentEnemy never leaves -100."
+  }
+]

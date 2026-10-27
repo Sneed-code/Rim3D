@@ -10,6 +10,8 @@
     "armorPenetrationPerDamage": 0.015,
     "chargeTraits": ["Brawler"],
     "bodyReach": 0.85,
+    "animalReachBase": 0.65,
+    "animalReachPerRoot": 0.4,
     "weaponReach": {
       "Melee_Knife": 1.0, "Melee_Club": 1.2, "Melee_Gladius": 1.2, "Melee_Mace": 1.2,
       "Melee_BreachAxe": 1.3, "Melee_Longsword": 1.5, "Melee_Spear": 1.9
@@ -32,7 +34,7 @@
     "dodgeHoldSteps": 3,
     "unverified": ["armorPenetrationPerDamage", "hitChanceCurve.3"],
     "ours": [
-      "bodyReach", "weaponReach", "reachSlack", "closeIn", "standGround", "defaultWeaponReach", "shoulderBelowEye", "strikeDepth", "windupShare",
+      "bodyReach", "animalReachBase", "animalReachPerRoot", "weaponReach", "reachSlack", "closeIn", "standGround", "defaultWeaponReach", "shoulderBelowEye", "strikeDepth", "windupShare",
       "minWindup", "commitSteps", "reactionStepsBySkill", "reactionJitter", "blockChanceBySkill", "blockSteps",
       "blockRecoverySteps", "playerBlockSteps", "dodgeHoldSteps", "chargeTraits"
     ]

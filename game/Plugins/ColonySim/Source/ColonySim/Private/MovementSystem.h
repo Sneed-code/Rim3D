@@ -17,7 +17,8 @@ class Map;
 class Weather;
 
 // Moves every pawn that has a Mover, once per step: along its path at the speed the ground and
-// slope allow, steering around the pawns near it. See docs/design/movement.md.
+// slope allow, steering around the pawns near it, and up and down stairs and ladders at their own
+// speed (docs/design/levels.md). See docs/design/movement.md.
 //
 // Every pawn decides from the positions and velocities at the start of the step and the new ones
 // are written together at the end, so the order pawns are visited in can't change the result.
@@ -54,6 +55,10 @@ private:
         float newVx = 0.0f;
         float newVy = 0.0f;
         int bucket = 0;
+        bool climbed = false;  // came to the end of stairs or a ladder this step: stands at `to`
+        float toX = 0.0f;
+        float toY = 0.0f;
+        int toLevel = 0;
     };
 
     std::vector<Agent> agents_;

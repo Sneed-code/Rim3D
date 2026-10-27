@@ -15,10 +15,23 @@ namespace {
 // Names are prefixed because Unreal's unity builds merge .cpp files together.
 
 constexpr int kBillsDefaultMinCount = 1;
+constexpr int kBillsMaxSkill = 20;
+constexpr float kBillsMaxRadius = 2000.0f;
 
+// An item is in a category by its `thingCategories` (FoodRaw, Textiles) or, for a stuff, by the categories
+// of its `stuffProps` (Metallic, Fabric, Leathery): recipes ask for either (`categories`, `stuffCategories`).
 bool billsHasCategory(const Def& item, const std::string& category) {
+    // Clothes and armour carry no thingCategories of their own: "Apparel" is any item with an `apparel` block.
+    if (category == "Apparel" && item.has("apparel")) {
+        return true;
+    }
     for (size_t i = 0; i < item.count("thingCategories"); ++i) {
         if (item.textAt("thingCategories", i) == category) {
+            return true;
+        }
+    }
+    for (size_t i = 0; i < item.count("stuffProps.categories"); ++i) {
+        if (item.textAt("stuffProps.categories", i) == category) {
             return true;
         }
     }
@@ -58,11 +71,13 @@ BillSystem::BillSystem(Things& things, const DefDatabase& defs) : things_(things
     }
 
     nutrition_.assign(defs_.size(), 0.0);
+    rawMeat_.assign(defs_.size(), 0);
     std::vector<DefId> items;
     for (uint32_t i = 0; i < defs_.size(); ++i) {
         const Def& def = defs_.get(DefId{i});
         if (def.kind() == "Things" && def.text("category") == "Item") {
             nutrition_[i] = def.number("stats.nutrition", 0.0);
+            rawMeat_[i] = billsHasCategory(def, "MeatRaw") ? 1 : 0;
             items.push_back(def.id());
         }
     }
@@ -90,12 +105,16 @@ BillSystem::BillSystem(Things& things, const DefDatabase& defs) : things_(things
             ingredient.amount = ingredient.byNutrition ? def.number((base + ".nutrition").c_str())
                                                        : def.number((base + ".count").c_str(), 1.0);
             const std::string categories = base + ".categories";
+            const std::string stuffCategories = base + ".stuffCategories";
             const std::string named = base + ".items";
             for (const DefId item : items) {
                 const Def& itemDef = defs_.get(item);
                 bool fits = false;
                 for (size_t c = 0; c < def.count(categories.c_str()) && !fits; ++c) {
                     fits = billsHasCategory(itemDef, def.textAt(categories.c_str(), c));
+                }
+                for (size_t c = 0; c < def.count(stuffCategories.c_str()) && !fits; ++c) {
+                    fits = billsHasCategory(itemDef, def.textAt(stuffCategories.c_str(), c));
                 }
                 for (size_t n = 0; n < def.count(named.c_str()) && !fits; ++n) {
                     fits = itemDef.defName() == def.textAt(named.c_str(), n);
@@ -107,6 +126,11 @@ BillSystem::BillSystem(Things& things, const DefDatabase& defs) : things_(things
             }
             recipe.ingredients.push_back(std::move(ingredient));
         }
+        recipe.butcher = def.has("butcher");
+        recipe.cremate = def.flag("cremate");
+        recipe.smeltFraction = def.number("smelt", 0.0);
+        recipe.fuelUsesSet = static_cast<int>(def.integer("fuelUses", 0));
+        recipe.stuffFromIngredient = def.flag("productsMadeOfIngredient") || def.flag("productStuffFromIngredient");
         for (const std::string& name : def.keys("products")) {
             const DefId item = defs_.idOf("Things", name);
             if (item.valid()) {
@@ -223,6 +247,7 @@ bool BillSystem::setBill(Entity building, uint32_t billId, BillMode mode, int co
             bill.mode = mode;
             bill.count = mode == BillMode::Forever ? 0 : count;
             bill.suspended = suspended;
+            bill.satisfied = false;
             return true;
         }
     }
@@ -230,11 +255,151 @@ bool BillSystem::setBill(Entity building, uint32_t billId, BillMode mode, int co
     return false;
 }
 
+bool BillSystem::setOptions(Entity building, uint32_t billId, const Options& options, std::string& error) {
+    BillList* list = things_.registry().valid(building) ? things_.registry().try_get<BillList>(building) : nullptr;
+    Bill* bill = nullptr;
+    if (list != nullptr) {
+        for (Bill& b : list->bills) {
+            bill = b.id == billId ? &b : bill;
+        }
+    }
+    if (bill == nullptr) {
+        error = "there is no such bill";
+        return false;
+    }
+    if (options.skillMin < 0 || options.skillMax > kBillsMaxSkill || options.skillMin > options.skillMax) {
+        error = "the skill range is 0 to " + std::to_string(kBillsMaxSkill) + ", lowest first";
+        return false;
+    }
+    if (!(options.radius >= 0.0f) || options.radius > kBillsMaxRadius) {
+        error = "the ingredient radius is 0 (anywhere) to " + std::to_string(static_cast<int>(kBillsMaxRadius)) + " metres";
+        return false;
+    }
+    if (options.unpauseAt < 0 || options.unpauseAt > numbers_.maxBillCount) {
+        error = "the restart stock is 0 to " + std::to_string(numbers_.maxBillCount);
+        return false;
+    }
+    std::vector<DefId> disallowed;
+    for (const std::string& name : options.disallowed) {
+        const Def* item = defs_.find("Things", name);
+        if (item == nullptr || item->text("category") != "Item") {
+            error = "no item '" + name + "'";
+            return false;
+        }
+        disallowed.push_back(item->id());
+    }
+    std::sort(disallowed.begin(), disallowed.end(), [](DefId a, DefId b) { return a.value < b.value; });
+    disallowed.erase(std::unique(disallowed.begin(), disallowed.end()), disallowed.end());
+    bill->skillMin = options.skillMin;
+    bill->skillMax = options.skillMax;
+    bill->radius = options.radius;
+    bill->storeZone = options.storeZone;
+    bill->unpauseAt = options.unpauseAt;
+    bill->satisfied = false;
+    bill->disallowed = std::move(disallowed);
+    return true;
+}
+
+bool BillSystem::moveBill(Entity building, uint32_t billId, int index, std::string& error) {
+    BillList* list = things_.registry().valid(building) ? things_.registry().try_get<BillList>(building) : nullptr;
+    if (list != nullptr) {
+        for (size_t from = 0; from < list->bills.size(); ++from) {
+            if (list->bills[from].id != billId) {
+                continue;
+            }
+            const size_t to = static_cast<size_t>(std::clamp(index, 0, static_cast<int>(list->bills.size()) - 1));
+            Bill moved = std::move(list->bills[from]);
+            list->bills.erase(list->bills.begin() + static_cast<std::ptrdiff_t>(from));
+            list->bills.insert(list->bills.begin() + static_cast<std::ptrdiff_t>(to), std::move(moved));
+            return true;
+        }
+    }
+    error = "there is no such bill";
+    return false;
+}
+
+bool BillSystem::allowsIngredient(const Bill& bill, DefId item) {
+    return !std::binary_search(bill.disallowed.begin(), bill.disallowed.end(), item,
+                               [](DefId a, DefId b) { return a.value < b.value; });
+}
+
+void BillSystem::step() {
+    for (const auto [building, list] : things_.registry().view<BillList>().each()) {
+        for (Bill& bill : list.bills) {
+            if (bill.mode != BillMode::UntilHave || bill.unpauseAt <= 0) {
+                bill.satisfied = false;
+                continue;
+            }
+            const Recipe* r = recipe(bill.recipe);
+            int stock = 0;
+            if (r == nullptr || !stockFor(*r, stock)) {
+                continue;
+            }
+            if (stock >= bill.count) {
+                bill.satisfied = true;
+            } else if (stock < bill.unpauseAt) {
+                bill.satisfied = false;
+            }
+        }
+    }
+}
+
 int BillSystem::stockOf(DefId item) const {
     int total = 0;
     things_.registry().view<const Thing, const StackCount, const Position>().each(
         [&](const Thing& thing, const StackCount& stack, const Position&) { total += thing.def == item ? stack.count : 0; });
     return total;
+}
+
+std::vector<RecipeProduct> BillSystem::smeltYield(DefId item, DefId stuff, double fraction, int count) const {
+    std::vector<RecipeProduct> out;
+    for (const Recipe& recipe : recipes_) {
+        const bool makes = std::any_of(recipe.products.begin(), recipe.products.end(),
+                                       [item](const RecipeProduct& product) { return product.item == item; });
+        if (!makes) {
+            continue;
+        }
+        for (const RecipeIngredient& ingredient : recipe.ingredients) {
+            if (ingredient.byNutrition) {
+                continue;
+            }
+            // A stuff ingredient (clothes, weapons) gives back the stuff the thing is made of; a named one, itself.
+            DefId metal;
+            if (stuff.valid() && std::find(ingredient.items.begin(), ingredient.items.end(), stuff) != ingredient.items.end()) {
+                metal = stuff;
+            } else if (ingredient.items.size() == 1) {
+                metal = ingredient.items.front();
+            }
+            if (!metal.valid() || !billsHasCategory(defs_.get(metal), "Metallic")) {
+                continue;
+            }
+            const int amount = static_cast<int>(std::floor(ingredient.amount * fraction + 1.0e-6)) * count;
+            if (amount > 0) {
+                out.push_back(RecipeProduct{metal, amount});
+            }
+        }
+        break;
+    }
+    return out;
+}
+
+bool BillSystem::stockFor(const Recipe& recipe, int& stock) const {
+    if (recipe.cremate) {
+        return false;
+    }
+    if (recipe.butcher) {
+        stock = 0;
+        things_.registry().view<const Thing, const StackCount, const Position>().each(
+            [&](const Thing& thing, const StackCount& count, const Position&) {
+                stock += thing.def.value < rawMeat_.size() && rawMeat_[thing.def.value] != 0 ? count.count : 0;
+            });
+        return true;
+    }
+    if (recipe.products.empty()) {
+        return false;
+    }
+    stock = stockOf(recipe.products.front().item);
+    return true;
 }
 
 bool BillSystem::shouldDo(const Bill& bill) const {
@@ -245,8 +410,12 @@ bool BillSystem::shouldDo(const Bill& bill) const {
         case BillMode::Count: return bill.count > 0;
         case BillMode::Forever: return true;
         case BillMode::UntilHave: {
+            if (bill.satisfied) {
+                return false;
+            }
             const Recipe* r = recipe(bill.recipe);
-            return r != nullptr && !r->products.empty() && stockOf(r->products.front().item) < bill.count;
+            int stock = 0;
+            return r != nullptr && stockFor(*r, stock) && stock < bill.count;
         }
     }
     return false;

@@ -24,6 +24,10 @@ class Things;
 // thin roof over every cell that has a roof holder (a wall, a door, rock) within the roof support
 // radius; a room with a cell left unroofed counts as outdoors. A room's role comes from what is
 // in it.
+//
+// Every level has its own rooms (docs/design/levels.md). On an upper level a room that reaches the
+// edge of its floor (a cell beside open air) is outdoors too, like one that reaches the map edge.
+// A cell under an upper floor has that floor for a roof, so Rooms never puts a thin roof there.
 
 using RoomId = uint32_t;
 inline constexpr RoomId kNoRoom = 0xFFFFFFFFu;
@@ -57,6 +61,8 @@ struct Room {
     CellPos anchor;      // the room's first cell in row order, one of the room's cells
     bool touchesEdge = false;
     bool huge = false;
+    bool openToAir = false;  // on an upper level: a cell beside one with no floor
+
     // Cells with no roof. An outdoor room that was not looked at has them all.
     int openRoofCount = 0;
     RoomRole role = RoomRole::None;
@@ -65,12 +71,12 @@ struct Room {
     int tables = 0;
     int chairs = 0;
     int stoves = 0;
-    uint32_t firstCell = 0;  // into Rooms::cellsOf; only rooms that are not edge or huge list their cells
+    uint32_t firstCell = 0;  // into Rooms::cellsOf; only enclosed rooms list their cells
     uint32_t listedCells = 0;
 
-    bool enclosed() const { return !touchesEdge && !huge; }
-    // Under the open sky: reaches the map edge, is huge, or has a cell with no roof.
-    bool outdoors() const { return touchesEdge || huge || openRoofCount > 0; }
+    bool enclosed() const { return !touchesEdge && !huge && !openToAir; }
+    // Under the open sky: reaches the map edge or open air, is huge, or has a cell with no roof.
+    bool outdoors() const { return !enclosed() || openRoofCount > 0; }
 };
 
 class COLONY_API Rooms {
@@ -103,9 +109,26 @@ public:
     // has a roof.
     bool indoors(CellPos c);
 
-    // The cells with a thin roof, in cell index order, and how many times that set has changed.
+    // True if a roof over the cell could be held up: rock (on the ground) or a building that holds
+    // roofs (a wall, a column) within the roof support radius, on the cell's own level. An upper
+    // floor needs this of the cell under it (docs/design/levels.md).
+    bool roofSupported(CellPos c) const;
+
+    // The cells with a thin roof, by level then cell index, and how many times that set has changed.
     const std::vector<CellPos>& thinRoofCells() const { return thinCells_; }
     uint64_t roofChanges() const { return roofChanges_; }
+
+    // Cells whose thin roof went when its last holder (a wall, a column) in reach was lost, since the
+    // last call (M3: RoofCollapse drops them and hurts what is under them). A roof that only came off
+    // because its room was opened, with a holder still in reach, does not count. In cell order.
+    std::vector<CellPos> takeUnsupportedRoofs();
+    // Puts back what takeUnsupportedRoofs would have said, for a loaded save.
+    void restoreUnsupportedRoofs(std::vector<CellPos> cells) { unsupported_ = std::move(cells); }
+    const std::vector<CellPos>& unsupportedRoofs() const { return unsupported_; }
+    // Puts back the thin roofs of a loaded save (cells in `thinRoofCells` order), before the first
+    // update: since M3 a roof stays while a holder is in reach, so it is no longer worked out from the
+    // walls alone. False, and nothing changed, if a cell is off the map.
+    bool restoreThinRoofs(const std::vector<CellPos>& cells);
 
     uint64_t rebuilds() const { return rebuilds_; }
 
@@ -113,8 +136,7 @@ private:
     void rebuild();
     void roof();
     void scanContents();
-    bool roofHolderAt(int x, int y) const;
-    bool supported(int x, int y) const;
+    bool roofHolderAt(CellPos c) const;
 
     Map& map_;
     Things& things_;
@@ -133,6 +155,7 @@ private:
     std::vector<uint32_t> firstRegion_;  // per room, into roomRegions_ (rooms_.size() + 1 entries)
     std::vector<CellPos> cells_;
     std::vector<CellPos> thinCells_;
+    std::vector<CellPos> unsupported_;  // thin roofs that lost their support, until RoofCollapse takes them
 };
 
 }  // namespace colony

@@ -3,6 +3,7 @@
 #include "ColonySim/Animals.h"
 #include "ColonySim/Breeding.h"
 #include "ColonySim/Apparel.h"
+#include "ColonySim/Drugs.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
@@ -11,22 +12,35 @@
 #include "ColonySim/Doors.h"
 #include "ColonySim/Explosives.h"
 #include "ColonySim/Defense.h"
+#include "ColonySim/Farming.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Filth.h"
+#include "ColonySim/Fire.h"
 #include "ColonySim/Floors.h"
+#include "ColonySim/Fuel.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Spoilage.h"
+#include "ColonySim/Crafting.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Lights.h"
+#include "ColonySim/Inspirations.h"
+#include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Recreation.h"
+#include "ColonySim/Social.h"
+#include "ColonySim/Medicine.h"
+#include "ColonySim/Surgery.h"
+#include "ColonySim/Prisoners.h"
+#include "ColonySim/Quests.h"
+#include "ColonySim/Ship.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Talents.h"
+#include "ColonySim/Trade.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Genes.h"
 #include "ColonySim/Looks.h"
@@ -39,9 +53,14 @@
 #include "ColonySim/RoomStats.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Snapshot.h"
+#include "ColonySim/Monsters.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/RoofCollapse.h"
+#include "ColonySim/UpperFloors.h"
 #include "ColonySim/Weather.h"
 #include "ColonySim/Zones.h"
+#include "ColonySim/Disasters.h"
+#include "ColonySim/Narrator.h"
 #include "MovementSystem.h"
 
 #include <algorithm>
@@ -52,6 +71,8 @@
 namespace colony {
 
 namespace {
+
+constexpr int64_t kBillUpkeepSeconds = 60;  // "until you have" bills with a restart stock look at their stock this often
 
 const DefDatabase& simEmptyDefs() {
     static const DefDatabase empty;
@@ -77,13 +98,53 @@ bool simJobUses(const JobSystem& jobs, const entt::registry& reg, Entity thing) 
 }
 
 // The map's size and seed, and how wet the biome makes it (`mapGen` in the Biomes def).
-MapSettings simMapSettings(const SimSettings& settings, const DefDatabase& defs) {
-    MapSettings map{settings.mapSize, settings.mapSize, splitMix64(settings.seed ^ 0x6D6170ULL), settings.flatMap};
-    if (const Def* biome = defs.find("Biomes", settings.biome)) {
+MapSettings simMapSettings(const SimSettings& settings, const DefDatabase& defs, uint64_t seed, const std::string& biomeName) {
+    MapSettings map{settings.mapSize, settings.mapSize, seed, settings.flatMap};
+    if (const Def* biome = defs.find("Biomes", biomeName)) {
         map.river = static_cast<float>(biome->number("mapGen.river", 1.0));
         map.marsh = static_cast<float>(biome->number("mapGen.marsh", 1.0));
     }
     return map;
+}
+// The world of the settings, or null when it is off (docs/design/world-map.md). A start tile of -1
+// is picked here (the scenario's biome, else any tile a colony can start on) and written back into
+// the settings, so saves and replays name it.
+std::unique_ptr<World> simMakeWorld(SimSettings& settings, const DefDatabase& defs) {
+    WorldSettings& w = settings.world;
+    if (!w.enabled) {
+        return nullptr;
+    }
+    if (w.seed == 0) {
+        w.seed = settings.seed;
+    }
+    auto world = std::make_unique<World>(World::generate(defs, w.seed, w.width, w.height));
+    w.width = world->width();
+    w.height = world->height();
+    if (world->empty()) {
+        return world;
+    }
+    if (w.startTile < 0) {
+        StartCriteria criteria;
+        const Def* scenario = settings.scenario.empty() ? nullptr : defs.find("Scenarios", settings.scenario);
+        criteria.biome = scenario != nullptr ? scenario->text("biome", "TemperateForest") : "TemperateForest";
+        criteria.seed = w.seed;
+        w.startTile = world->suggestStartTile(criteria);
+        if (w.startTile < 0) {
+            criteria.biome.clear();
+            w.startTile = world->suggestStartTile(criteria);
+        }
+    }
+    if (w.startTile >= 0) {
+        world->chooseStartTile(w.startTile);  // refused (the tile stays -1) if a colony can't start there
+    }
+    return world;
+}
+
+std::optional<WorldSite> simStartSite(const World* world) {
+    if (world == nullptr || world->startTile() < 0) {
+        return std::nullopt;
+    }
+    return world->siteFor(world->startTile());
 }
 
 void simHashCell(StateHasher& h, CellPos c) {
@@ -116,11 +177,15 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     : settings_(settings),
       // No defs: share a static empty database, owned by nobody.
       defs_(defs ? std::move(defs) : std::shared_ptr<const DefDatabase>(std::shared_ptr<const DefDatabase>(), &simEmptyDefs())),
-      map_(simMapSettings(settings, *defs_)),
+      world_(simMakeWorld(settings_, *defs_)),
+      site_(simStartSite(world_.get())),
+      biome_(site_ && !site_->biome.empty() ? site_->biome : settings.biome),
+      // On a world the start tile seeds the map, so the same world and tile always give the same map.
+      map_(simMapSettings(settings, *defs_, site_ ? site_->mapSeed : splitMix64(settings.seed ^ 0x6D6170ULL), biome_)),
       pathfinder_(map_),
       zones_(std::make_unique<Zones>(map_)),
       things_(std::make_unique<Things>(map_, defs_)),
-      plants_(std::make_unique<Plants>(map_, *defs_, splitMix64(settings.seed ^ 0x706C616E74ULL), settings.biome)),
+      plants_(std::make_unique<Plants>(map_, *defs_, splitMix64(settings.seed ^ 0x706C616E74ULL), biome_)),
       mineables_(std::make_unique<Mineables>(map_, *defs_, splitMix64(settings.seed ^ 0x6D696E65ULL))),
       designations_(std::make_unique<Designations>(map_)),
       movement_(std::make_unique<MovementSystem>()),
@@ -129,17 +194,33 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       time_(),
       rng_(splitMix64(settings.seed ^ 0x7061776EULL)),
       groundHash_(map_.contentHash()) {
+    if (world_) {
+        worldHash_ = world_->hash();
+        if (world_->empty()) {
+            setupErrors_.push_back("world: no WorldGen def 'Default'");
+        } else if (!site_) {
+            setupErrors_.push_back("world: tile " + std::to_string(settings_.world.startTile) + " can't start a colony");
+        }
+    }
     things_->setEventLog(&events_);
     health_->setEventLog(&events_);
-    weather_ = std::make_unique<Weather>(map_, *defs_, splitMix64(settings.seed ^ 0x636C696D617465ULL), settings.biome);
+    health_->setWorld(&time_.seconds, settings.seed);
+    // The start tile's own yearly mean temperature; the seasons and the daily swing are its biome's.
+    weather_ = std::make_unique<Weather>(map_, *defs_, splitMix64(settings.seed ^ 0x636C696D617465ULL), biome_,
+                                         site_ ? std::optional<double>(site_->temperature) : std::nullopt);
     weather_->setEventLog(&events_);
     movement_->setWeather(weather_.get());
     combat_->setWeather(weather_.get());
     construction_ = std::make_unique<Construction>(map_, *things_, *plants_, *defs_, rng_, events_);
     needs_ = std::make_unique<NeedsSystem>(*things_, *health_, *defs_);
     mood_ = std::make_unique<MoodSystem>(*things_, *needs_, *defs_);
+    drugs_ = std::make_unique<DrugSystem>(*things_, *health_, *defs_);
+    drugs_->setEventLog(&events_);
+    drugs_->registerThoughts(*mood_);
+    needs_->setRestFallFactor([this](Entity pawn) { return drugs_->restFallFactor(pawn); });
     apparel_ = std::make_unique<ApparelSystem>(*things_, *combat_, *health_, *defs_);
     apparel_->registerSituations(*mood_);
+    health_->registerSituations(*mood_);
     doorNumbers_ = DoorNumbers::read(*defs_);
     movement_->setDoors(doorNumbers_);
     pathfinder_.setDoorCost(doorNumbers_.pathCost);
@@ -156,11 +237,14 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     power_->setWind([this](const GameTime&) { return weather_->wind(); });
     power_->setSun([this](const GameTime&) { return static_cast<double>(lights_->skyGlow()); });
     power_->setOnChange([this] { lights_->markDirty(); });
-    lights_->setActive([this](Entity building) { return power_->running(building); });
+    // A lamp that burns fuel is dark without it (FuelSystem marks the lamps dirty when that changes).
+    lights_->setActive([this](Entity building) { return power_->running(building) && jobs_->fuel().lit(building); });
     movement_->setLights(lights_.get());
     recreation_ = std::make_unique<RecreationSystem>(*things_, *defs_);
     recreation_->setRooms(rooms_.get());
     research_ = std::make_unique<ResearchSystem>(*things_, *defs_);
+    medicine_ = std::make_unique<MedicineSystem>(*things_, *defs_);
+    surgery_ = std::make_unique<SurgerySystem>(*things_, *defs_, *health_, research_.get());
     talents_ = std::make_unique<TalentSystem>(*things_, *defs_);
     temperature_ = std::make_unique<TemperatureSystem>(map_, *things_, *rooms_, *health_, *defs_,
                                                        splitMix64(settings.seed ^ 0x74656D70ULL));
@@ -180,6 +264,23 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     spoilage_ = std::make_unique<SpoilageSystem>(map_, *things_, *temperature_, *roomStats_, *defs_,
                                                  splitMix64(settings.seed ^ 0x73706F696CULL));
     spoilage_->setEventLog(&events_);
+    // Eating a poisoned meal gives the FoodPoisoning disease (H2); a fresh wound's chance of infection follows how
+    // clean the room it was taken in is.
+    spoilage_->setPoisonHandler([this](Entity pawn) { health_->contract(pawn, health_->diseaseId("FoodPoisoning")); });
+    health_->setCleanliness([this](Entity pawn) {
+        const Position* pos = things_->registry().try_get<Position>(pawn);
+        return pos != nullptr ? roomStats_->cellCleanliness(cellOf(*pos)) : 0.0f;
+    });
+    farming_ = std::make_unique<Farming>(map_, *plants_, *zones_, *defs_, events_);
+    farming_->setClimate(temperature_.get(), lights_.get());
+    farming_->setForecast(
+        [this](int64_t seconds) { return outdoorOverride_ ? *outdoorOverride_ : outdoorTemperatureAt(seconds); },
+        [this]() { return time_.seconds; });
+    plants_->setGrowthModifier([this](size_t cell) { return farming_->growthFactor(cell); });
+    farming_->setPlantSpots(things_.get(), [this](Entity building) { return power_->running(building); });
+    plants_->setFertilityOverride([this](size_t cell) { return farming_->spotFertility(cell); });
+    plants_->setGrowsAnytime([this](size_t cell) { return farming_->sunLampLit(cell); });
+    zones_->setCellTaken([this](CellPos c) { return farming_->zoneAt(c) != kNoGrowingZone; });
     lights_->setWeather(weather_.get());
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
@@ -188,52 +289,148 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setPower(power_.get());
     jobs_->setRooms(rooms_.get());
     jobs_->setResearch(research_.get());
+    jobs_->setMedicine(medicine_.get());
+    jobs_->setDrugs(drugs_.get());
+    jobs_->setSurgery(surgery_.get());
+    jobs_->setRoomStats(roomStats_.get());
     jobs_->setTalents(talents_.get());
     jobs_->setFilth(filth_.get());
     jobs_->setApparel(apparel_.get());
     jobs_->setSpoilage(spoilage_.get());
+    crafting_ = std::make_unique<CraftingSystem>(*things_, *apparel_, *zones_, *defs_, settings.seed);
+    jobs_->setCrafting(crafting_.get());
+    jobs_->setFarming(farming_.get());
+    fire_ = std::make_unique<Fire>(map_, *things_, *plants_, *floors_, *filth_, *rooms_, *temperature_, *health_, *weather_, *defs_,
+                                   settings.seed);
+    fire_->setEventLog(&events_);
+    // Fire-resistant skin (a gene's flammability factor) keeps a pawn from catching fire.
+    fire_->setPawnFactor([this](Entity pawn) {
+        const PawnGenes* genes = genesOf(pawn);
+        return genes != nullptr ? geneStat(*genes, "flammability", 1.0f) : 1.0f;
+    });
+    fire_->setPawnHurt([this](Entity pawn, DefId type, float amount, Rng& rng) { return combat_->hurtPawn(pawn, type, amount, rng); });
+    jobs_->setFire(fire_.get());
+    jobs_->fuel().setLights(lights_.get());
+    // A wood-fired generator makes power only with fuel, and burns it only while it makes power.
+    power_->setFuel([this](Entity building) { return jobs_->fuel().lit(building); });
+    jobs_->fuel().setBurning([this](Entity building) { return !power_->hasPower(building) || power_->stateOf(building) != PowerState::Off; });
+    mood_->setActiveSkill([this](Entity pawn) { return jobs_->activeSkill(pawn); });
     fighters_ = std::make_unique<FighterSystem>(*things_, map_, *combat_, *health_, *jobs_, pathfinder_, *defs_, time_);
     explosives_ = std::make_unique<ExplosiveSystem>(*things_, map_, *combat_, *health_, *defs_);
     fighters_->setExplosives(explosives_.get());
+    mentalBreaks_ = std::make_unique<MentalBreakSystem>(*things_, map_, *health_, *fighters_, *jobs_, *mood_, *rooms_,
+                                                        pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
     combat_->setTalents(talents_.get());
     explosives_->setEventLog(&events_);
     fighters_->setEventLog(&events_);
-    // The biome is the one the plants use; both move to the settings together.
     animals_ = std::make_unique<AnimalSystem>(*things_, map_, *plants_, *health_, *defs_, time_,
-                                              splitMix64(settings.seed ^ 0x616E696D616C73ULL), settings.biome);
+                                              splitMix64(settings.seed ^ 0x616E696D616C73ULL), biome_);
     animals_->setEventLog(&events_);
     husbandry_ = std::make_unique<Husbandry>(*things_, map_, *animals_, *health_, *defs_, time_, settings.seed);
     husbandry_->setEventLog(&events_);
     breeding_ = std::make_unique<Breeding>(*things_, map_, *animals_, *husbandry_, *defs_, time_, settings.seed);
     breeding_->setEventLog(&events_);
+    breeding_->setClimate(temperature_.get());
     jobs_->setBreeding(breeding_.get());
     animals_->setHusbandry(husbandry_.get());
     animals_->setPathfinder(&pathfinder_);
+    combat_->setHurtHook([this](Entity victim, Entity attacker) { animals_->hurt(victim, attacker); });
     jobs_->setHusbandry(husbandry_.get());
+    jobs_->setCombat(combat_.get());
+    jobs_->setTemperature(temperature_.get());
     husbandry_->setHaulerHook([this](Entity animal, bool on) { jobs_->setAnimalHauler(animal, on); });
     jobs_->setAnimalWorkGate([this](Entity animal) { return animals_->mayWork(animal); });
     raids_ = std::make_unique<RaidSystem>(*things_, map_, *rooms_, *combat_, *health_, *jobs_, *fighters_, *defs_, time_, rng_);
     raids_->setEventLog(&events_);
     raids_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
+    monsters_ = std::make_unique<MonsterSystem>(*things_, map_, *combat_, *health_, *fighters_, *raids_, *animals_, *defs_, time_, rng_);
+    prisoners_ = std::make_unique<PrisonerSystem>(*things_, map_, *combat_, *health_, *jobs_, *fighters_, *raids_, *defs_, time_, rng_);
+    prisoners_->setEventLog(&events_);
+    trade_ = std::make_unique<TradeSystem>(*things_, map_, *combat_, *fighters_, *health_, *jobs_, *raids_, *defs_, time_, rng_, settings.seed);
+    trade_->setEventLog(&events_);
+    trade_->setTalents(talents_.get());
+    trade_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
+    jobs_->setPrisoners(prisoners_.get());
+    quests_ = std::make_unique<QuestSystem>(*things_, map_, *raids_, *fighters_, *health_, *defs_, time_, rng_);
+    quests_->setEventLog(&events_);
+    quests_->setJoinMaker([this](CellPos cell, uint64_t seed) { return makeJoiner(cell, seed); });
+    ship_ = std::make_unique<ShipSystem>(*things_, *raids_, *defs_, time_);
+    ship_->setEventLog(&events_);
+    mood_->addSituation("isPrisoner", [this](Entity pawn) { return prisoners_->isPrisoner(pawn) ? 0 : -1; });
+    // Night owls like being up at night and not by day (docs/design/mood.md); only pawns that are awake count.
+    const auto awakeAt = [this](Entity pawn, bool night) {
+        const Worker* worker = things_->registry().try_get<Worker>(pawn);
+        if (worker == nullptr || jobIsLyingDown(worker->job)) {
+            return -1;
+        }
+        return mood_->rules().isNightHour(time_.hourOfDay()) == night ? 0 : -1;
+    };
+    mood_->addSituation("awakeAtNight", [awakeAt](Entity pawn) { return awakeAt(pawn, true); });
+    mood_->addSituation("awakeInDay", [awakeAt](Entity pawn) { return awakeAt(pawn, false); });
+    mood_->addSituation("noBedroom", [this](Entity pawn) {
+        const Entity bed = jobs_->bedOf(pawn);
+        if (bed == kNoEntity || !things_->registry().all_of<Position>(bed)) {
+            return 0;
+        }
+        return rooms_->roleAt(cellOf(things_->registry().get<Position>(bed))) == RoomRole::Bedroom ? -1 : 0;
+    });
     combat_->setBeforeDestroy([this](Entity thing) {
         jobs_->forget(thing);
         raids_->forget(thing);
+        trade_->forget(thing);
         defense_->onDestroy(thing);
+        fire_->onDestroy(thing);
+        mentalBreaks_->forget(thing);
     });
     fighters_->setWeather(weather_.get());
     melee_ = std::make_unique<MeleeSystem>(*things_, map_, *combat_, *health_, *defs_, time_,
                                            splitMix64(settings.seed ^ 0x6D656C6565ULL));
     melee_->setEventLog(&events_);
     fighters_->setMelee(melee_.get());
+    upperFloors_ = std::make_unique<UpperFloors>(map_, *rooms_, *things_, plants_.get());
+    roofCollapse_ = std::make_unique<RoofCollapse>(map_, *rooms_, *things_, *health_, *defs_);
+    roofCollapse_->setEventLog(&events_);
+    roofCollapse_->setInterruptHandler([this](Entity pawn, const std::string& why) { jobs_->interrupt(pawn, why); });
+    construction_->setUpperFloors(upperFloors_.get());
+    animals_->setMelee(melee_.get());
     defense_ = std::make_unique<DefenseSystem>(*things_, map_, *combat_, *health_, *power_, *defs_, time_);
     defense_->setEventLog(&events_);
     defense_->setBeforeDestroy([this](Entity thing) {
         jobs_->forget(thing);
         raids_->forget(thing);
+        mentalBreaks_->forget(thing);
     });
+    fire_->setRunning([this](Entity building) { return power_->running(building); });
     defense_->setOnLearn([this](Entity pawn) { fighters_->replan(pawn); });
     fighters_->setDefense(defense_.get());
+    narrator_ = std::make_unique<NarratorSystem>(*raids_, *defs_, time_, settings.seed);
+    narrator_->setEventLog(&events_);
+    narrator_->setHostileCheck([this](const std::string& faction) { return trade_->hostile(faction); });
+    disasters_ = std::make_unique<DisasterSystem>(*narrator_, *power_, *weather_, *plants_, *farming_, *things_, *health_, *mood_,
+                                                  *animals_, *fire_, *combat_, map_, *defs_, time_, settings.seed);
+    disasters_->setEventLog(&events_);
+    narrator_->setWorker("QuestOffer", [this](IncidentFiring& f) {
+        uint32_t id = 0;
+        if (!quests_->offerRandom(id, f.error)) {
+            return false;
+        }
+        const Quest* quest = quests_->find(id);
+        const Def* questDef = quest != nullptr ? defs_->find("Quests", quest->kind) : nullptr;
+        f.text = "Quest: " + (questDef != nullptr ? questDef->text("text") : std::string("someone has an offer for the colony."));
+        return true;
+    });
+    social_ = std::make_unique<SocialSystem>(*things_, *rooms_, *health_, *melee_, *mood_, *jobs_, *defs_, time_,
+                                             splitMix64(settings.seed ^ 0x736F6369616CULL));
+    social_->setEventLog(&events_);
+    mentalBreaks_->setEventLog(&events_);
+    mentalBreaks_->setMelee(melee_.get());
+    mentalBreaks_->setFire(fire_.get());
+    inspirations_ = std::make_unique<InspirationSystem>(*things_, *health_, *defs_, time_);
+    inspirations_->setEventLog(&events_);
+    jobs_->setInspirations(inspirations_.get());
+    combat_->setInspirations(inspirations_.get());
+    prisoners_->setInspirations(inspirations_.get());
     map_.regions().update();  // build every region now, not in the first step
 }
 
@@ -335,6 +532,24 @@ void Sim::placeStockpileAndThings() {
     }
 }
 
+// A new colonist who walks in from outside (a quest's refugee or wanderer): a whole person working for the player.
+Entity Sim::makeJoiner(CellPos cell, uint64_t seed) {
+    Colonist colonist;
+    std::string error;
+    if (!generateColonist(*defs_, seed, false, colonist, error)) {
+        return kNoEntity;
+    }
+    const Entity pawn = things_->spawn("Human", cell);
+    if (pawn == kNoEntity || !things_->registry().all_of<Mover>(pawn)) {
+        things_->destroy(pawn);
+        return kNoEntity;
+    }
+    jobs_->addWorker(pawn, colonist.disabledWorkTags);
+    giveLooks(pawn, seed, colonist.female, "Baseline");
+    things_->registry().emplace<Colonist>(pawn, std::move(colonist));
+    return pawn;
+}
+
 void Sim::giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& lineage) {
     entt::registry& reg = things_->registry();
     const Thing* thing = reg.try_get<Thing>(pawn);
@@ -405,6 +620,25 @@ void Sim::commandFailed(uint64_t id, std::string message) {
 
 void Sim::applyCommand(const Command& command, uint64_t id) {
     std::string error;
+    // A colonist in a mental break takes no orders: it isn't the player's to command until it is over.
+    Entity ordered = kNoEntity;
+    if (const auto* draft = std::get_if<DraftCommand>(&command)) {
+        ordered = draft->drafted ? draft->pawn : kNoEntity;
+    } else if (const auto* moveOrder = std::get_if<MoveOrderCommand>(&command)) {
+        ordered = moveOrder->pawn;
+    } else if (const auto* attack = std::get_if<AttackOrderCommand>(&command)) {
+        ordered = attack->pawn;
+    } else if (const auto* haul = std::get_if<OrderHaulCommand>(&command)) {
+        ordered = haul->pawn;
+    } else if (const auto* control = std::get_if<ControlPawnCommand>(&command)) {
+        ordered = control->pawn;
+    } else if (const auto* hands = std::get_if<HandsOnCommand>(&command)) {
+        ordered = hands->mode == HandsOnMode::Work ? hands->pawn : kNoEntity;
+    }
+    if (ordered != kNoEntity && mentalBreaks_->active(ordered)) {
+        commandFailed(id, "that colonist is in a mental break");
+        return;
+    }
     if (const auto* spawn = std::get_if<SpawnThingCommand>(&command)) {
         const DefId def = defs_->idOf("Things", spawn->def);
         Entity thing = kNoEntity;
@@ -429,6 +663,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             jobs_->forget(destroy->thing);
             fighters_->forget(destroy->thing);
             raids_->forget(destroy->thing);
+            mentalBreaks_->forget(destroy->thing);
             things_->destroy(destroy->thing);
         }
     } else if (const auto* damage = std::get_if<DamagePawnCommand>(&command)) {
@@ -542,6 +777,61 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             fighters_->forget(circuit->thing);
             things_->destroy(circuit->thing);
         }
+    } else if (const auto* contract = std::get_if<ContractDiseaseCommand>(&command)) {
+        const DefId disease = health_->diseaseId(contract->disease);
+        if (!things_->exists(contract->pawn) || !health_->tracks(contract->pawn)) {
+            commandFailed(id, "that thing has no body to fall ill");
+        } else if (!disease.valid()) {
+            commandFailed(id, "there is no disease '" + contract->disease + "'");
+        } else if (!health_->contract(contract->pawn, disease, contract->severity, contract->part)) {
+            commandFailed(id, "that pawn can't catch " + contract->disease + " now");
+        }
+    } else if (const auto* medical = std::get_if<SetMedicalCareCommand>(&command)) {
+        MedicalCare care = MedicalCare::Best;
+        if (!things_->exists(medical->pawn) || !health_->tracks(medical->pawn)) {
+            commandFailed(id, "that thing has no body to care for");
+        } else if (!medicalCareFromName(medical->care, care)) {
+            commandFailed(id, "no medical care '" + medical->care + "' (NoCare, NoMedicine, Herbal, Normal or Best)");
+        } else {
+            things_->registry().emplace_or_replace<MedicalSettings>(medical->pawn, MedicalSettings{care});
+        }
+    } else if (const auto* prisonerMode = std::get_if<SetPrisonerModeCommand>(&command)) {
+        PrisonerMode mode = PrisonerMode::NoInteraction;
+        std::string why;
+        if (!prisonerModeFromName(prisonerMode->mode, mode)) {
+            commandFailed(id, "no prisoner mode '" + prisonerMode->mode + "' (NoInteraction, ReduceResistance, AttemptRecruit, Release or Execute)");
+        } else if (!prisoners_->setMode(prisonerMode->pawn, mode, why)) {
+            commandFailed(id, why);
+        }
+    } else if (const auto* visitCommand = std::get_if<StartVisitCommand>(&command)) {
+        VisitKind kind = VisitKind::Visitors;
+        std::string why;
+        uint32_t visitId = 0;
+        if (!visitKindFromName(visitCommand->kind, kind)) {
+            commandFailed(id, "no visit kind '" + visitCommand->kind + "' (Visitors, Caravan or Orbital)");
+        } else if (!trade_->startVisit(visitCommand->faction, kind, visitCommand->traderKind, visitCommand->edge, visitId, why)) {
+            commandFailed(id, why);
+        }
+    } else if (const auto* tradeCommand = std::get_if<TradeCommand>(&command)) {
+        std::string why;
+        if (!trade_->trade(tradeCommand->visit, tradeCommand->negotiator, tradeCommand->buy, tradeCommand->sell, why)) {
+            commandFailed(id, why);
+        }
+    } else if (const auto* giftCommand = std::get_if<GiftCommand>(&command)) {
+        std::string why;
+        if (!trade_->gift(giftCommand->visit, giftCommand->items, why)) {
+            commandFailed(id, why);
+        }
+    } else if (const auto* goodwillCommand = std::get_if<AdjustGoodwillCommand>(&command)) {
+        std::string why;
+        if (!trade_->adjustGoodwill(goodwillCommand->faction, goodwillCommand->delta, why)) {
+            commandFailed(id, why);
+        }
+    } else if (const auto* prisonBed = std::get_if<SetPrisonBedCommand>(&command)) {
+        std::string why;
+        if (!prisoners_->setPrisonBed(prisonBed->bed, prisonBed->on, why)) {
+            commandFailed(id, why);
+        }
     } else if (const auto* throwCommand = std::get_if<ThrowCommand>(&command)) {
         DefId item;
         if (!throwCommand->item.empty()) {
@@ -599,12 +889,22 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             ok = husbandry_->markTame(mark->animal, mark->on, error);
         } else if (mark->mark == "Slaughter") {
             ok = husbandry_->markSlaughter(mark->animal, mark->on, error);
+        } else if (mark->mark == "Hunt") {
+            ok = husbandry_->markHunt(mark->animal, mark->on, error);
         } else if (mark->mark == "Release") {
             ok = husbandry_->release(mark->animal, error);
         } else {
-            error = "a mark is Tame, Slaughter or Release";
+            error = "a mark is Tame, Slaughter, Hunt or Release";
         }
         if (!ok) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* markArea = std::get_if<MarkAnimalsInAreaCommand>(&command)) {
+        if (!husbandry_->markInArea(markArea->area, markArea->mark, markArea->on, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* animalName = std::get_if<SetAnimalNameCommand>(&command)) {
+        if (!husbandry_->setName(animalName->animal, animalName->name, error)) {
             commandFailed(id, error);
         }
     } else if (const auto* training = std::get_if<SetTrainingCommand>(&command)) {
@@ -626,9 +926,48 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!husbandry_->assignZone(assignAnimalZone->animal, assignAnimalZone->zone, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* setBreeding = std::get_if<SetBreedingCommand>(&command)) {
+        const bool ok = setBreeding->animal != kNoEntity ? breeding_->setBreeding(setBreeding->animal, setBreeding->allow, error)
+                                                         : husbandry_->setZoneBreeding(setBreeding->zone, setBreeding->allow, error);
+        if (!ok) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* createGrowing = std::get_if<CreateGrowingZoneCommand>(&command)) {
+        const DefId crop = defs_->idOf("Things", createGrowing->crop);
+        if (farming_->createZone(createGrowing->area, crop, error) == kNoGrowingZone) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* removeGrowing = std::get_if<RemoveGrowingZoneCellsCommand>(&command)) {
+        if (farming_->removeCells(removeGrowing->area) == 0) {
+            commandFailed(id, "no growing zone there");
+        }
+    } else if (const auto* setGrowingCrop = std::get_if<SetGrowingZoneCropCommand>(&command)) {
+        if (!farming_->setCrop(setGrowingCrop->zone, defs_->idOf("Things", setGrowingCrop->crop), error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* setNarrator = std::get_if<SetNarratorCommand>(&command)) {
+        if (!narrator_->setNarrator(setNarrator->narrator, setNarrator->difficulty, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* fireIncident = std::get_if<FireIncidentCommand>(&command)) {
+        if (!narrator_->fire(fireIncident->incident, fireIncident->points, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* spendTalent = std::get_if<SpendTalentPointCommand>(&command)) {
         if (!talents_->spend(spendTalent->pawn, spendTalent->talent, error)) {
             commandFailed(id, error);
+        }
+    } else if (const auto* ignite = std::get_if<IgniteCommand>(&command)) {
+        if (ignite->pawn != kNoEntity) {
+            if (!fire_->setPawnAlight(ignite->pawn, time_.seconds, ignite->force)) {
+                commandFailed(id, "that pawn can't catch fire");
+            }
+        } else if (!fire_->ignite(ignite->cell, ignite->size, ignite->force)) {
+            commandFailed(id, "nothing there can burn");
+        }
+    } else if (const auto* home = std::get_if<SetHomeAreaCommand>(&command)) {
+        if (fire_->setHome(home->area, home->add) == 0) {
+            commandFailed(id, "the home area is already so there");
         }
     } else if (const auto* rearm = std::get_if<RearmTrapCommand>(&command)) {
         if (!defense_->rearm(rearm->trap, &error)) {
@@ -838,6 +1177,31 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!done) {
             commandFailed(id, error);
         }
+    } else if (const auto* billOptions = std::get_if<SetBillOptionsCommand>(&command)) {
+        BillSystem::Options options;
+        options.skillMin = billOptions->skillMin;
+        options.skillMax = billOptions->skillMax;
+        options.radius = billOptions->radius;
+        options.storeZone = billOptions->storeZone;
+        options.unpauseAt = billOptions->unpauseAt;
+        options.disallowed = billOptions->disallowed;
+        if (billOptions->storeZone != 0 && zones_->find(billOptions->storeZone) == nullptr) {
+            commandFailed(id, "there is no stockpile " + std::to_string(billOptions->storeZone));
+        } else if (!jobs_->bills().setOptions(billOptions->building, billOptions->bill, options, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* addOperation = std::get_if<AddOperationCommand>(&command)) {
+        if (surgery_->add(addOperation->pawn, addOperation->recipe, addOperation->part, error) == 0) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* removeOperation = std::get_if<RemoveOperationCommand>(&command)) {
+        if (!surgery_->remove(removeOperation->pawn, removeOperation->operation, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* moveBill = std::get_if<MoveBillCommand>(&command)) {
+        if (!jobs_->bills().moveBill(moveBill->building, moveBill->bill, moveBill->index, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* setBill = std::get_if<SetBillCommand>(&command)) {
         if (!jobs_->bills().setBill(setBill->building, setBill->bill, setBill->mode, setBill->count, setBill->suspended,
                                     error)) {
@@ -868,6 +1232,13 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
     } else if (const auto* raid = std::get_if<StartRaidCommand>(&command)) {
         if (!raids_->startRaid(raid->faction, raid->points, raid->edge, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* threat = std::get_if<StartThreatCommand>(&command)) {
+        const bool ok = threat->kind == "Infestation"      ? monsters_->infest(threat->points, error)
+                        : threat->kind == "RemnantCluster" ? monsters_->remnantCluster(threat->points, threat->edge, error)
+                                                           : (error = "no such threat '" + threat->kind + "'", false);
+        if (!ok) {
             commandFailed(id, error);
         }
     } else if (const auto* alarm = std::get_if<SoundAlarmCommand>(&command)) {
@@ -905,6 +1276,100 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!apparel_->markStrip(strip->thing, strip->strip, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* interact = std::get_if<InteractCommand>(&command)) {
+        if (!social_->interact(interact->initiator, interact->recipient, interact->interaction, interact->outcome, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* upper = std::get_if<PlaceUpperFloorCommand>(&command)) {
+        int changed = 0;
+        std::string why;
+        for (int y = upper->area.minY; y < upper->area.minY + upper->area.sizeY; ++y) {
+            for (int x = upper->area.minX; x < upper->area.minX + upper->area.sizeX; ++x) {
+                const CellPos cell{x, y, upper->area.level};
+                const bool before = map_.upperFloor(cell);
+                const bool done = upper->remove ? upperFloors_->remove(cell, &why) : upperFloors_->lay(cell, &why);
+                if (done && map_.upperFloor(cell) != before) {
+                    ++changed;
+                }
+            }
+        }
+        if (changed == 0) {
+            commandFailed(id, why.empty() ? std::string("no upper floor changed there") : why);
+        }
+    } else if (const auto* refuel = std::get_if<SetRefuelCommand>(&command)) {
+        if (!jobs_->fuel().setRefuel(refuel->building, refuel->autoRefuel, refuel->fillNow, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* takeDrug = std::get_if<TakeDrugCommand>(&command)) {
+        if (!jobs_->orderTakeDrug(takeDrug->pawn, takeDrug->thing, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* drugPolicy = std::get_if<SetDrugPolicyCommand>(&command)) {
+        if (!drugs_->setPolicy(drugPolicy->pawn, drugPolicy->policy, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* drugEntry = std::get_if<SetDrugPolicyEntryCommand>(&command)) {
+        DrugPolicyEntry entry;
+        entry.drug = drugEntry->drug;
+        entry.forAddiction = drugEntry->forAddiction;
+        entry.forJoy = drugEntry->forJoy;
+        entry.scheduled = drugEntry->scheduled;
+        entry.daysFrequency = drugEntry->daysFrequency;
+        entry.moodBelow = drugEntry->moodBelow;
+        entry.joyBelow = drugEntry->joyBelow;
+        if (!drugs_->setEntry(drugEntry->pawn, entry, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* startBreak = std::get_if<StartMentalBreakCommand>(&command)) {
+        if (!mentalBreaks_->start(startBreak->pawn, startBreak->breakDef, rng_, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* ship = std::get_if<ShipCommand>(&command)) {
+        bool ok = false;
+        if (ship->action == "StartReactor") {
+            ok = ship_->startReactor(ship->thing, error);
+        } else if (ship->action == "Board") {
+            ok = ship_->board(ship->thing, ship->pawn, error);
+        } else if (ship->action == "Launch") {
+            ok = ship_->launch(error);
+        } else {
+            error = "no ship action '" + ship->action + "' (StartReactor, Board or Launch)";
+        }
+        if (!ok) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* endBreak = std::get_if<EndMentalBreakCommand>(&command)) {
+        if (!mentalBreaks_->end(endBreak->pawn, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* strategyRaid = std::get_if<StartStrategyRaidCommand>(&command)) {
+        RaidStrategy strategy = RaidStrategy::Assault;
+        if (strategyRaid->strategy != "Auto" && !raidStrategyFromName(strategyRaid->strategy, strategy)) {
+            commandFailed(id, "no raid strategy '" + strategyRaid->strategy + "'");
+        } else {
+            if (strategyRaid->strategy == "Auto") {
+                strategy = raids_->pickStrategy(strategyRaid->points);
+            }
+            if (!raids_->startRaid(strategyRaid->faction, strategyRaid->points, strategyRaid->edge, strategy, strategyRaid->hour,
+                                   error)) {
+                commandFailed(id, error);
+            }
+        }
+    } else if (const auto* quest = std::get_if<QuestCommand>(&command)) {
+        uint32_t made = 0;
+        bool ok = false;
+        if (quest->action == "offer") {
+            ok = quest->kind.empty() ? quests_->offerRandom(made, error) : quests_->offer(quest->kind, made, error);
+        } else if (quest->action == "accept") {
+            ok = quests_->accept(quest->quest, error);
+        } else if (quest->action == "decline") {
+            ok = quests_->decline(quest->quest, error);
+        } else {
+            error = "no quest action '" + quest->action + "' (offer, accept or decline)";
+        }
+        if (!ok) {
+            commandFailed(id, error);
+        }
     }
 }
 
@@ -939,6 +1404,7 @@ void Sim::step() {
         }
     }
     const size_t eventsBefore = events_.size();
+    jobs_->fuel().step();
     jobs_->step();
     raids_->step();
     {
@@ -947,32 +1413,66 @@ void Sim::step() {
         events_.insert(events_.end(), gained.begin(), gained.end());
     }
     fighters_->step();
+    prisoners_->step();
+    trade_->step(events_);
+    quests_->step();
+    ship_->step();
     recreation_->step();
+    drugs_->step(time_.seconds);
+    if (time_.seconds % kSecondsPerHour == 0) {
+        drugs_->prune();
+    }
     animals_->step();
     husbandry_->step();
     breeding_->step();
+    social_->step(time_.seconds);
+    mentalBreaks_->step(time_.seconds, rng_);  // before the mood system, which turns its events into memories
     mood_->step(time_.seconds, events_);
+    inspirations_->step(time_.seconds);
     movement_->step(things_->registry(), map_);
     melee_->step();
     combat_->step(rng_);
     explosives_->step(rng_);
+    animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
     defense_->step(rng_);
+    monsters_->step(events_, 0);  // mounds make jelly, brood and spread; insects hunt (docs/design/monsters.md)
+    {
+        // Blasts of Burn damage start fires; a pawn that catches fire stops what it was doing.
+        fire_->step(time_.seconds, 0);
+        for (size_t i = 0; i < events_.size(); ++i) {
+            if (events_[i].type == EventType::PawnCaughtFire) {
+                jobs_->interrupt(events_[i].thing, "it caught fire");
+            }
+        }
+    }
     apparel_->step(time_.seconds, rng_, events_);
     pathfinder_.update(settings_.pathBudget);  // paths asked for this step are ready next step at the earliest
     rooms_->update();
+    roofCollapse_->step(rng_);  // roofs and floors that lost their holders fall
     power_->step(time_);
     lights_->update();
     filth_->step();
     roomStats_->step(time_.seconds);
     temperature_->step(time_.seconds);
     spoilage_->step(time_.seconds);
+    if (time_.seconds % kBillUpkeepSeconds == 0) {
+        jobs_->bills().step();
+        crafting_->step();
+    }
     time_.seconds += 1;
     weather_->step(time_.seconds);
     spoilage_->setOutdoorFactor(weather_->deteriorationFactor());
+    if (time_.seconds % kSecondsPerDay == 0) {
+        jobs_->skillsNewDay();
+    }
     if (time_.seconds % kSecondsPerHour == 0) {
         plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
+        farming_->growHour(time_.seconds);
+        filth_->fadeHour(weather_->effects().rainRate);
         pruneDesignations();
     }
+    narrator_->step();  // after the clock: incidents come on the narrator's checks (T1)
+    disasters_->step();  // T3: conditions end, work and strike
     if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
         checkpoints_.push_back(Checkpoint{time_.seconds, stateHash()});
     }
@@ -1026,6 +1526,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.zones.clear();
     out.zoneCells.clear();
     out.animalZones.clear();
+    out.growingZones.clear();
+    out.growingZoneCells.clear();
     out.animalZoneCells.clear();
     out.looks.clear();
     out.research.clear();
@@ -1054,6 +1556,24 @@ void Sim::writeSnapshot(Snapshot& out) const {
         view.current = research_->current() == project.defName;
         out.research.push_back(view);
     }
+    {
+        const ShipParts parts = ship_->parts();
+        ShipView& s = out.ship;
+        s.phase = static_cast<uint8_t>(ship_->state().phase);
+        s.activationLeft = ship_->activationLeft();
+        s.waves = ship_->state().waves;
+        s.beams = parts.beams;
+        s.caskets = parts.caskets;
+        s.reactors = parts.reactors;
+        s.engines = parts.engines;
+        s.cores = parts.cores;
+        s.sensors = parts.sensors;
+        s.riders = parts.ridersAboard;
+        s.problem = ship_->launchProblem();
+        s.canLaunch = s.problem.empty();
+        s.won = ship_->won();
+        s.escaped = ship_->state().escaped;
+    }
     out.apparel.clear();
     out.outfits.clear();
     for (const OutfitPolicy& outfit : apparel_->outfits()) {
@@ -1073,6 +1593,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
                                                  static_cast<uint32_t>(zone.cells.size()), husbandry_->isPen(zone.id)});
         out.animalZoneCells.insert(out.animalZoneCells.end(), zone.cells.begin(), zone.cells.end());
     }
+    for (const GrowingZone& zone : farming_->zones()) {
+        out.growingZones.push_back(GrowingZoneView{zone.id, zone.crop, static_cast<uint32_t>(out.growingZoneCells.size()),
+                                                   static_cast<uint32_t>(zone.cells.size())});
+        out.growingZoneCells.insert(out.growingZoneCells.end(), zone.cells.begin(), zone.cells.end());
+    }
     const entt::registry& reg = things_->registry();
     for (const auto [entity, thing, pos] : reg.view<const Thing, const Position>().each()) {
         ThingView view;
@@ -1081,11 +1606,25 @@ void Sim::writeSnapshot(Snapshot& out) const {
         view.category = thing.category;
         view.x = pos.x;
         view.y = pos.y;
-        view.z = map_.heightAt(pos.x, pos.y);
+        view.z = map_.heightAt(pos.x, pos.y, pos.level);
         view.level = pos.level;
         if (const Mover* mover = reg.try_get<Mover>(entity)) {
             view.vx = mover->vx;
             view.vy = mover->vy;
+            // On stairs or a ladder the pawn is drawn the share `climb` of the way from where it
+            // stands to the cell at the other end (docs/design/levels.md).
+            if (mover->climbing(pos.level)) {
+                const CellPos to = mover->path[mover->next];
+                if (const LevelLink* link = map_.levelLinkBetween(cellOf(pos), to)) {
+                    const float t = std::clamp(mover->climbed / link->length, 0.0f, 1.0f);
+                    const float tx = static_cast<float>(to.x) + 0.5f;
+                    const float ty = static_cast<float>(to.y) + 0.5f;
+                    view.climb = t;
+                    view.x = pos.x + (tx - pos.x) * t;
+                    view.y = pos.y + (ty - pos.y) * t;
+                    view.z += (map_.heightAt(tx, ty, to.level) - view.z) * t;
+                }
+            }
             view.firstWaypoint = static_cast<uint32_t>(out.waypoints.size());
             for (size_t k = mover->next; k < mover->path.size(); ++k) {
                 out.waypoints.push_back(PathPointView{static_cast<float>(mover->path[k].x) + 0.5f,
@@ -1126,9 +1665,17 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const BillList* list = reg.try_get<BillList>(entity)) {
             view.firstBill = static_cast<uint32_t>(out.bills.size());
             for (const Bill& bill : list->bills) {
-                out.bills.push_back(BillView{bill.id, bill.recipe, bill.mode, bill.count, bill.suspended});
+                out.bills.push_back(BillView{bill.id, bill.recipe, bill.mode, bill.count, bill.suspended, bill.skillMin, bill.skillMax,
+                                             bill.radius, bill.storeZone, bill.unpauseAt, bill.satisfied, bill.disallowed});
             }
             view.billCount = static_cast<uint32_t>(out.bills.size()) - view.firstBill;
+        }
+        if (const Fuel* fuel = reg.try_get<Fuel>(entity)) {
+            const FuelSpec& spec = jobs_->fuel().specOf(entity);
+            view.fuel = fuel->amount;
+            view.fuelCapacity = spec.capacity;
+            view.autoRefuel = fuel->autoRefuel;
+            view.fillOrdered = fuel->fillOrdered;
         }
         if (const StackCount* stack = reg.try_get<StackCount>(entity)) {
             view.stackCount = stack->count;
@@ -1174,11 +1721,18 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.mood = mood->level;
             view.moodBand = static_cast<int>(mood->band);
         }
+        if (reg.all_of<Social>(entity)) {
+            view.partner = social_->partner(entity);
+            view.socialFight = social_->fighting(entity);
+        }
         if (const BeautyNeed* beauty = roomStats_->beautyNeed(entity)) {
             view.beautyNeed = beauty->level;
         }
         if (const Worker* worker = reg.try_get<Worker>(entity)) {
             view.asleep = jobIsLyingDown(worker->job);
+        }
+        if (const MentalBreaker* breaker = reg.try_get<MentalBreaker>(entity); breaker != nullptr && breaker->active) {
+            view.mentalBreak = defs_->idOf("MentalBreaks", breaker->def);
         }
         if (const Carrying* carrying = reg.try_get<Carrying>(entity); carrying && reg.valid(carrying->thing)) {
             view.carriedDef = reg.get<Thing>(carrying->thing).def;
@@ -1244,6 +1798,12 @@ void Sim::writeSnapshot(Snapshot& out) const {
             }
             view.quality = apparel_->stats().qualityOf(reg, entity);
             view.tainted = reg.all_of<Tainted>(entity);
+        } else if (view.category == ThingCategory::Item && crafting_->hasQuality(thing.def)) {
+            // Weapons and other crafted things with a quality: made of a stuff and of a quality like clothes.
+            if (const MadeOf* made = reg.try_get<MadeOf>(entity)) {
+                view.stuff = made->stuff;
+            }
+            view.quality = apparel_->stats().qualityOf(reg, entity);
         }
         if (view.category == ThingCategory::Pawn) {
             view.faction = fighters_->factionOf(entity);
@@ -1253,10 +1813,14 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.bodySize = animals_->bodySize(entity);
             view.food = animals_->foodShare(entity);
             view.asleep = animals_->asleep(entity);
+            view.animalTemper = static_cast<int>(reg.get<Animal>(entity).temper);
+            view.animalMode = static_cast<int>(reg.get<Animal>(entity).mode);
             if (const AnimalCare* care = husbandry_->care(entity)) {
                 view.markTame = care->markTame;
                 view.markSlaughter = care->markSlaughter;
+                view.markHunt = care->markHunt;
                 view.animalZone = care->zone;
+                view.animalName = care->name;
                 view.learnedTricks = husbandry_->learnedMask(entity);
                 view.wantedTricks = husbandry_->wantedMask(entity);
             }
@@ -1265,6 +1829,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.milkFullness = breeding_->fullness(entity, AnimalProduct::Milk);
             view.woolFullness = breeding_->fullness(entity, AnimalProduct::Wool);
         }
+        view.onFire = reg.all_of<Burning>(entity);
         if (const Fighter* fighter = reg.try_get<Fighter>(entity)) {
             view.drafted = fighter->drafted;
             view.fighting = true;
@@ -1280,6 +1845,17 @@ void Sim::writeSnapshot(Snapshot& out) const {
         }
         if (const Raider* raider = reg.try_get<Raider>(entity)) {
             view.squad = raider->squad;
+        }
+        if (const Prisoner* prisoner = reg.try_get<Prisoner>(entity)) {
+            view.prisoner = true;
+            view.prisonerMode = static_cast<uint8_t>(prisoner->mode);
+            view.resistance = prisoner->resistance;
+        }
+        view.prisonBed = reg.all_of<PrisonBed>(entity);
+        if (const Visitor* visitor = reg.try_get<Visitor>(entity)) {
+            view.visitor = true;
+            view.visitRole = static_cast<uint8_t>(visitor->role);
+            view.visit = visitor->visit;
         }
         if (const Melee* melee = reg.try_get<Melee>(entity)) {
             view.meleePhase = melee->phase;
@@ -1304,7 +1880,50 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.squads.clear();
     for (const Squad& squad : raids_->state().squads) {
         out.squads.push_back(SquadView{squad.id, squad.side, static_cast<uint8_t>(squad.state),
-                                       static_cast<int>(squad.members.size()), squad.started, squad.target});
+                                       static_cast<int>(squad.members.size()), squad.started, squad.target,
+                                       static_cast<uint8_t>(squad.strategy), squad.hasBreach, squad.breach});
+    }
+
+    out.visits.clear();
+    for (const Visit& visit : trade_->state().visits) {
+        VisitView view;
+        view.id = visit.id;
+        view.kind = static_cast<uint8_t>(visit.kind);
+        view.phase = static_cast<uint8_t>(visit.phase);
+        view.faction = visit.faction;
+        view.traderKind = visit.traderKind;
+        view.trader = visit.trader;
+        view.leaveAt = visit.leaveAt;
+        view.silver = visit.silver;
+        view.members = static_cast<int>(visit.members.size());
+        view.spot = visit.spot;
+        for (const TradeLine& line : visit.stock) {
+            view.stock.push_back(StockView{line.thing, line.count});
+        }
+        out.visits.push_back(std::move(view));
+    }
+    out.goodwill.clear();
+    for (const DefId factionId : defs_->idsOfKind("Factions")) {
+        const Def& faction = defs_->get(factionId);
+        out.goodwill.push_back(GoodwillView{faction.defName(), trade_->goodwill(faction.defName()),
+                                            static_cast<uint8_t>(trade_->relation(faction.defName()))});
+    }
+    out.quests.clear();
+    for (const Quest& quest : quests_->state().quests) {
+        QuestView view;
+        view.id = quest.id;
+        view.kind = quest.kind;
+        const Def* questDef = defs_->find("Quests", quest.kind);
+        view.label = questDef != nullptr ? questDef->label() : quest.kind;
+        view.state = static_cast<uint8_t>(quest.state);
+        view.expiresAt = quest.expiresAt;
+        view.deadline = quest.deadline;
+        view.people = quest.count;
+        view.points = quest.points;
+        for (const Quest::Reward& reward : quest.rewards) {
+            view.rewards.emplace_back(reward.thing, reward.count);
+        }
+        out.quests.push_back(std::move(view));
     }
 
     out.rooms.clear();
@@ -1352,8 +1971,31 @@ void Sim::writeSnapshot(Snapshot& out) const {
             }
         }
     }
+    if (out.fireChanges != fire_->changes()) {
+        out.fireChanges = fire_->changes();
+        out.fires.clear();
+        for (const auto& [index, fire] : fire_->all()) {
+            out.fires.push_back(FireView{map_.cellAt(index), fire.size});
+        }
+    }
+    if (out.burntChanges != fire_->burntChanges()) {
+        out.burntChanges = fire_->burntChanges();
+        out.burnt.clear();
+        for (const auto& [index, at] : fire_->burntCells()) {
+            (void)at;
+            out.burnt.push_back(map_.cellAt(index));
+        }
+    }
+    if (out.homeChanges != fire_->homeChanges()) {
+        out.homeChanges = fire_->homeChanges();
+        out.homeArea.clear();
+        for (const int index : fire_->homeCells()) {
+            out.homeArea.push_back(map_.cellAt(index));
+        }
+    }
     out.roofCells = rooms_->thinRoofCells();
     out.roofChanges = rooms_->roofChanges();
+    out.roofCollapses = roofCollapse_->collapses();
     {
         const WeatherEffects effects = weather_->effects();
         WeatherView& w = out.weather;
@@ -1381,6 +2023,15 @@ void Sim::writeSnapshot(Snapshot& out) const {
     }
     std::sort(out.projectiles.begin(), out.projectiles.end(),
               [](const ProjectileView& a, const ProjectileView& b) { return a.id < b.id; });
+    {
+        const NarratorState state = narrator_->state();
+        NarratorView& n = out.narrator;
+        n.narrator = narrator_->narratorDef();
+        n.difficulty = narrator_->difficultyDef();
+        n.wealth = state.wealth;
+        n.threatPoints = state.points;
+        n.incidents = state.incidents;
+    }
 }
 
 uint64_t Sim::stateHash() const {
@@ -1390,6 +2041,10 @@ uint64_t Sim::stateHash() const {
     // follows from the buildings' footprints, hashed below. Map layers that change in play
     // (mining, plants, roofs) must keep their own running hash: hashing a 1 km map takes ~10 ms.
     h.add(groundHash_);
+    if (world_) {  // the world doesn't change in play: its hash is taken once
+        h.add(worldHash_);
+        h.add(world_->startTile());
+    }
     h.add(rng_.state());
     h.add(rng_.increment());
     h.add(stockpileCell_.has_value());
@@ -1409,7 +2064,11 @@ uint64_t Sim::stateHash() const {
     designations_->hashState(h);
     research_->hashState(h);
     raids_->hashState(h);
+    trade_->hashState(h);
+    quests_->hashState(h);
+    ship_->hashState(h);
     talents_->hashState(h);
+    drugs_->hashState(h);
     pathfinder_.hashState(h);
     zones_->hashState(h);
     floors_->hashState(h);
@@ -1418,8 +2077,15 @@ uint64_t Sim::stateHash() const {
     animals_->hashState(h);
     husbandry_->hashState(h);
     breeding_->hashState(h);
+    fire_->hashState(h);
     temperature_->hashState(h);
+    h.add(map_.upperFloorHash());
+    roofCollapse_->hashState(h);
     spoilage_->hashState(h);
+    narrator_->hashState(h);
+    disasters_->hashState(h);
+    crafting_->hashState(h);
+    farming_->hashState(h);
 
     // The entity ids the registry has handed out: the free list in reuse order (it decides the
     // next ids), then every live thing in id order with its components. The registry's own
@@ -1502,6 +2168,9 @@ uint64_t Sim::stateHash() const {
             h.add(static_cast<uint64_t>(mover->ghostSteps));
             h.add(static_cast<uint64_t>(mover->heldSteps));
             h.add(mover->gaveUp);
+            if (mover->climbed != 0.0f) {
+                h.add(mover->climbed);  // M2; only when climbing, so older hashes stay
+            }
         }
         if (const Colonist* c = reg.try_get<Colonist>(e)) {
             for (const std::string* text : {&c->firstName, &c->nickName, &c->lastName, &c->childhood, &c->adulthood}) {
@@ -1519,6 +2188,7 @@ uint64_t Sim::stateHash() const {
                 h.add(s.level);
                 h.add(static_cast<int>(s.passion));
                 h.add(s.xp);
+                h.add(s.xpToday);
                 h.add(s.disabled);
             }
             for (const std::string& tag : c->disabledWorkTags) {
@@ -1566,7 +2236,24 @@ uint64_t Sim::stateHash() const {
                 h.add(static_cast<int>(bill.mode));
                 h.add(bill.count);
                 h.add(bill.suspended);
+                h.add(bill.skillMin);
+                h.add(bill.skillMax);
+                h.add(bill.radius);
+                h.add(bill.storeZone);
+                h.add(bill.unpauseAt);
+                h.add(bill.satisfied);
+                for (const DefId def : bill.disallowed) {
+                    h.add(def.value);
+                }
             }
+        }
+        if (const StoreIn* store = reg.try_get<StoreIn>(e)) {
+            h.add(store->zone);
+        }
+        if (const Fuel* fuel = reg.try_get<Fuel>(e)) {
+            h.add(fuel->amount);
+            h.add(fuel->autoRefuel);
+            h.add(fuel->fillOrdered);
         }
         if (const Worker* worker = reg.try_get<Worker>(e)) {
             const Job& job = worker->job;
@@ -1675,26 +2362,62 @@ uint64_t Sim::stateHash() const {
                 h.add(injury.hediff.value);
                 h.add(injury.severity);
                 h.add(injury.tendQuality);
+                h.add(injury.peak);
+                h.add(injury.infectAt);
+            }
+            h.add(static_cast<uint64_t>(health->diseases.size()));
+            for (const Disease& disease : health->diseases) {
+                h.add(disease.def.value);
+                h.add(disease.severity);
+                h.add(disease.tendQuality);
+                h.add(disease.tendedUntil);
+                h.add(disease.tendTotal);
+                h.add(static_cast<int>(disease.part));
+            }
+            h.add(static_cast<uint64_t>(health->immunities.size()));
+            for (const Immunity& immunity : health->immunities) {
+                h.add(immunity.def.value);
+                h.add(immunity.level);
             }
             h.add(static_cast<uint64_t>(health->missing.size()));
             for (const MissingPart& missing : health->missing) {
                 h.add(static_cast<int>(missing.part));
                 h.add(missing.tendQuality);
             }
+            h.add(static_cast<uint64_t>(health->added.size()));
+            for (const AddedPart& added : health->added) {
+                h.add(static_cast<int>(added.part));
+                h.add(added.hediff.value);
+            }
             h.add(health->bloodLoss);
             h.add(health->dead);
             h.add(static_cast<int>(health->cause));
+            if (!health->environment.empty()) {
+                h.add(static_cast<uint64_t>(health->environment.size()));
+                for (const EnvironmentHediff& env : health->environment) {
+                    h.add(env.def.value);
+                    h.add(env.severity);
+                }
+            }
         }
+        medicine_->hashPawn(e, h);
+        surgery_->hashPawn(e, h);
         combat_->hashThing(e, h);
         explosives_->hashThing(e, h);
         fighters_->hashThing(e, h);
         animals_->hashThing(e, h);
         raids_->hashThing(e, h);
+        prisoners_->hashThing(e, h);
+        trade_->hashThing(e, h);
         husbandry_->hashThing(e, h);
         breeding_->hashThing(e, h);
+        fire_->hashThing(e, h);
         melee_->hashThing(e, h);
+        social_->hashThing(e, h);
         defense_->hashThing(e, h);
         apparel_->hashThing(e, h);
+        mentalBreaks_->hashThing(e, h);
+        inspirations_->hashThing(e, h);
     }
     apparel_->hashState(h);
     return h.value();

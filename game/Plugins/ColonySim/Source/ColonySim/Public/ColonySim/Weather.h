@@ -7,6 +7,8 @@
 #include "ColonySim/Random.h"
 
 #include <cstdint>
+#include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -62,7 +64,10 @@ struct WeatherState {
 // bits. With no biome or no Weathers defs the weather stays clear and the temperature constant.
 class COLONY_API Weather {
 public:
-    Weather(const Map& map, const DefDatabase& defs, uint64_t seed, const std::string& biome);
+    // `yearMean`, when given, moves the biome's four season temperatures together so that they
+    // average to it: the world tile's own yearly mean (W2), keeping the biome's seasons and swing.
+    Weather(const Map& map, const DefDatabase& defs, uint64_t seed, const std::string& biome,
+            std::optional<double> yearMean = std::nullopt);
     ~Weather();
     Weather(const Weather&) = delete;
     Weather& operator=(const Weather&) = delete;
@@ -78,6 +83,14 @@ public:
     // Outdoor temperature in degrees Celsius at a game second, and now.
     double temperatureAt(int64_t seconds) const;
     double outdoorTemperature() const { return temperatureAt(now_); }
+    // Degrees added to the outdoor temperature at a game second (a volcanic winter's -7). Set by the disaster system
+    // from its own saved state, so it is not saved here; without one it is 0.
+    void setTemperatureOffset(std::function<double(int64_t)> offset) { offset_ = std::move(offset); }
+    // Scales the sun's light that gets through (a volcanic winter dims it by up to 30%). Not saved; set every step.
+    void setGlowScale(float scale) {
+        glowScale_ = scale;
+        cacheAt_ = -1;
+    }
     // The season's mean at a game second (no day cycle or drift), and the biome's daily swing.
     double seasonalMean(int64_t seconds) const;
     double dailySwing() const { return dailySwing_; }
@@ -178,6 +191,8 @@ private:
     // Climate.
     double seasonMean_[kSeasonsPerYear] = {15.0, 15.0, 15.0, 15.0};
     double dailySwing_ = 0.0;
+    std::function<double(int64_t)> offset_;
+    float glowScale_ = 1.0f;
     unsigned growingSeasons_ = 0xF;
     double dayCyclePhase_ = 0.32;
     double driftAmplitude_ = 0.0;

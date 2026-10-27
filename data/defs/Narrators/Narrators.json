@@ -1,0 +1,26 @@
+[
+  {
+    "defName": "Orrin", "source": "RimWorld wiki", "label": "Orrin", "description": "A steady build-up: trouble comes in waves, each a little bigger than the last, with calm between.",
+    "threatCycle": { "onDays": 4.6, "offDays": 6.0, "incidentsPerCycle": [1, 2], "firstThreatDay": 11, "minSpacingDays": 1.9 },
+    "mtbDays": { "Misc": 4.8, "FactionArrival": 7.0, "OrbitalVisitor": 11.0, "ThreatSmall": 12.0, "Disease": 8.0 },
+    "pointsFactor": 1.0,
+    "unverified": ["mtbDays", "pointsFactor"],
+    "notes": "RimWorld's Cassandra Classic. Threat cycle and Misc 4.8 days are from the wiki (4.6 days on, 6.0 off, 1 or 2 threats per on phase, first on day 11, at least 1.9 days apart). Other mean times and the points factor are still recalled."
+  },
+  {
+    "defName": "Maren", "source": "RimWorld wiki", "label": "Maren", "description": "Long quiet spells and gentler trouble; good things come more often.",
+    "threatCycle": { "onDays": 8.0, "offDays": 8.0, "incidentsPerCycle": [1, 1], "firstThreatDay": 13 },
+    "mtbDays": { "Misc": 4.8, "FactionArrival": 5.0, "OrbitalVisitor": 8.0, "ThreatSmall": 20.0, "Disease": 12.0 },
+    "pointsFactor": 0.85,
+    "unverified": ["mtbDays", "pointsFactor"],
+    "notes": "RimWorld's Phoebe Chillax. Threat cycle (8 days on, 8 off, one threat per on phase, first on day 13) and Misc 4.8 days are from the wiki. Other mean times and the points factor are still recalled."
+  },
+  {
+    "defName": "Jinx", "source": "RimWorld wiki", "label": "Jinx", "description": "Anything can happen at any time; no rhythm, no build-up.",
+    "threatCycle": null,
+    "mtbDays": { "ThreatBig": 7.14, "ThreatSmall": 20.7, "Misc": 3.56, "FactionArrival": 5.19, "OrbitalVisitor": 11.3, "Disease": 8.0 },
+    "pointsFactor": 1.0, "randomPointsFactor": [0.5, 1.5],
+    "unverified": ["Disease mtbDays"],
+    "notes": "RimWorld's Randy Random: every incident rolls on its own, and each threat's points are scaled by a random 0.5 to 1.5 (wiki). The wiki gives one incident per 1.35 days overall, split by weights Misc 3.5, ThreatBig 1.4, FactionArrival 2.4, OrbitalVisitor 1.1, ThreatSmall 0.6 (total 9.22), so each category's mean is 1.35 x 9.22 / weight. Big threats: the wiki says about 7.14 days on average, 13 at most (we use 7.14). Disease is not on the wiki page; 8.0 is kept."
+  }
+]

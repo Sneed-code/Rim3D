@@ -31,6 +31,21 @@ enum class JobType : uint8_t {
     SlaughterAnimal,   // walk to a marked tame animal and kill it
     FeedAnimal,        // fetch animal food and carry it to a hungry tame animal
     GatherAnimal,      // walk to a tame animal with full milk or wool and milk or shear it (docs/design/breeding.md)
+    SowCrop,           // walk next to a cell of a growing zone and sow the zone's crop (docs/design/farming.md)
+    ExtinguishFire,    // walk next to a fire and beat it out (docs/design/fire.md)
+    BedRest,           // go to a bed and lie in it until the injuries have healed (docs/design/medicine.md)
+    TendPatient,       // fetch medicine, walk to a patient and tend its injuries (docs/design/medicine.md)
+    Rescue,            // carry a downed colonist to a bed (docs/design/medicine.md)
+    CapturePrisoner,   // carry a downed enemy to a prison bed and make it a prisoner (docs/design/prisoners.md)
+    FeedPrisoner,      // fetch food, walk to a hungry prisoner and hand it over
+    WardenInteract,    // walk to a prisoner and talk to it: resistance, recruiting or release
+    Refuel,            // carry fuel to a building and put it in (fuel.md)
+    Hunt,              // walk up to a wild animal marked for the hunt and shoot it dead (docs/design/hunting.md)
+    HaulCorpse,        // carry a hunted or slaughtered animal's corpse to a stockpile (docs/design/hunting.md)
+    Butcher,           // carry a corpse to a butcher table and cut it up into meat and leather (docs/design/hunting.md)
+    SeekShelter,       // walk to a place with a safe temperature and stay a while (docs/design/temperature.md)
+    Operate,           // fetch the part to fit and a medicine, walk to a patient in bed and do a planned operation (docs/design/surgery.md)
+    Party,             // walk to a party spot and stay for the party, gaining joy (docs/design/social.md)
 };
 
 COLONY_API const char* jobTypeName(JobType type);

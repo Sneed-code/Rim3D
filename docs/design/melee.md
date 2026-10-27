@@ -29,7 +29,8 @@ an animal's teeth and claws). Each tool has (D8, [starting-data.md](starting-dat
 
 Stuff and quality don't change melee damage yet (items have no stuff).
 
-**Reach** (ours, `MeleeRules`): fists and other body tools 0.85 m from the pawn's centre; knife 1.0;
+**Reach** (ours, `MeleeRules`): fists and other body tools 0.85 m from the pawn's centre (an animal's teeth
+and claws 0.65 m + 0.4 x the root of its body size, N5: [animal-fights.md](animal-fights.md)); knife 1.0;
 club, gladius and mace 1.2; breach axe 1.3; longsword 1.5; spear 1.9 (`weaponReach`, by defName).
 
 ## A swing
@@ -139,7 +140,7 @@ Hooks in `FighterSystem` (`setMelee`):
 | Snapshot | `meleePhase` (Ready, Windup, Recovery), `meleeStepsLeft`, `meleeTarget` (while winding up) and `blocking` on each `ThingView` |
 | Save | section `melee` (version 1): the `Melee` component of each pawn that has swung or been swung at |
 
-U22 draws it: a swing animation stretched over the wind-up so the blow lands on the `MeleeHit`
+U22 draws it ([melee-draw.md](melee-draw.md)): a swing animation stretched over the wind-up so the blow lands on the `MeleeHit`
 step, a hit-stop and flinch on "hit", the raised weapon while `blocking`, the sidestep on `Dodge`.
 
 ## Not done yet

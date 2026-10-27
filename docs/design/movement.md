@@ -114,10 +114,19 @@ and queue round each other at the stockpile.
   `1 / speed factor`) and made the corridor search 15 times bigger on the test map, because the
   region route and its guide know nothing of slopes. It needs a per-region average cost in the
   region graph first; do that with the first task that wants it (a ridge or marsh in the way).
-- **Stairs and levels**: pawns stay on their level (the movement ignores neighbours on other levels).
+- **Stairs and levels** (M2): a pawn climbs stairs and ladders standing in the cell at their foot (or head) while
+  `Mover::climbed` counts up, then stands at the other end; it only steers round pawns on its own level. See
+  [levels.md](levels.md).
 - **Running, sneaking, crawling**: one speed per pawn, from the def. Injury, load and
   apparel slow-downs come with the health and inventory tasks, as a multiplier on `metresPerStep`.
 - **Animals and remnant machines** use the same system; bigger bodies need a radius per def (`kPawnRadius`
   is one number for now).
 - **Doors** are in the movement system since C5: a pawn waits at the edge of a closed door's cell until
   it has opened (23 steps), and an open door is walked through like open ground ([rooms.md](rooms.md)).
+
+## Carried bodies
+
+A pawn that carries a downed pawn or a corpse (rescue, corpse hauling, butcher job) has it moved to its own position every
+step, so the body lies exactly where the carrier stands. A body that cannot move (Moving capacity 0) at exactly that spot is
+left out of the carrier's neighbours; before this the carrier steered round its own load and froze for hours on a walk to the
+butcher table (found by the year run).

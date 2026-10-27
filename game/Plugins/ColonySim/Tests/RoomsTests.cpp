@@ -141,16 +141,16 @@ TEST_CASE("Rooms: walls round a space make a roofed room, and the roof follows t
     CHECK(outside->outdoors());
     CHECK(outside->id != room->id);
 
-    // Take a wall down: the room joins the outdoors and the roof goes.
-    const uint64_t changes = sim.rooms().roofChanges();
+    // Take a wall down: the room joins the outdoors. The roof stays, the other walls still hold it up
+    // (RimWorld's; M3 drops a roof only when nothing holds it).
     sim.things().destroy(sim.map().buildingAt(CellPos{10, 13, 0}));
     sim.rooms().update();
-    CHECK(sim.rooms().roofChanges() > changes);
-    CHECK(roomsCountRoof(sim, Roof::Thin) == 0);
+    CHECK(roomsCountRoof(sim, Roof::Thin) == 49);
+    CHECK(sim.rooms().unsupportedRoofs().empty());
     CHECK(sim.rooms().roomAt(CellPos{13, 13, 0}) == sim.rooms().roomAt(CellPos{5, 5, 0}));
     CHECK_FALSE(sim.rooms().indoors(CellPos{13, 13, 0}));
 
-    // Wall it up again and the roof returns.
+    // Wall it up again: the same roof.
     sim.things().spawn("Wall", CellPos{10, 13, 0});
     sim.rooms().update();
     CHECK(roomsCountRoof(sim, Roof::Thin) == 49);
