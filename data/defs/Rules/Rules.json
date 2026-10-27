@@ -34,7 +34,11 @@
     "growHours": [6, 19],
     "growthNeedsLight": 0.51,
     "killChancePerDegree": 0.1,
-    "unverified": ["killChancePerDegree"]
+    "sowGrowthMargin": 0.7,
+    "sowHarvestSlackHours": 36,
+    "unverified": ["killChancePerDegree"],
+    "ours": ["sowGrowthMargin", "sowHarvestSlackHours"],
+    "note": "Colonists sow only a crop that would ripen before the frost (Farming::ripensBeforeFrost): it is taken to grow at sowGrowthMargin of the forecast rate (cloud and dusk are not in the forecast) and to need sowHarvestSlackHours more frost-free hours after it is ripe, for somebody to pick it."
   },
   {
     "defName": "SkillRules", "source": "RimWorld wiki",
@@ -240,13 +244,13 @@
   {
     "defName": "QualityRules", "source": "RimWorld wiki",
     "levels": [
-      { "def": "Awful", "label": "awful", "armorFactor": 0.6, "insulationFactor": 0.8, "marketValueFactor": 0.5, "deteriorationFactor": 2, "beautyOffset": -0.1 },
-      { "def": "Poor", "label": "poor", "armorFactor": 0.8, "insulationFactor": 0.9, "marketValueFactor": 0.75, "deteriorationFactor": 1.5, "beautyOffset": 0.5 },
-      { "def": "Normal", "label": "normal", "armorFactor": 1.0, "insulationFactor": 1.0, "marketValueFactor": 1.0, "deteriorationFactor": 1, "beautyOffset": 1 },
-      { "def": "Good", "label": "good", "armorFactor": 1.15, "insulationFactor": 1.1, "marketValueFactor": 1.25, "deteriorationFactor": 0.8, "beautyOffset": 2 },
-      { "def": "Excellent", "label": "excellent", "armorFactor": 1.3, "insulationFactor": 1.2, "marketValueFactor": 1.5, "deteriorationFactor": 0.6, "beautyOffset": 3 },
-      { "def": "Masterwork", "label": "masterwork", "armorFactor": 1.45, "insulationFactor": 1.5, "marketValueFactor": 2.5, "deteriorationFactor": 0.3, "beautyOffset": 5 },
-      { "def": "Legendary", "label": "legendary", "armorFactor": 1.8, "insulationFactor": 1.8, "marketValueFactor": 5, "deteriorationFactor": 0.1, "beautyOffset": 8 }
+      { "def": "Awful", "label": "awful", "armorFactor": 0.6, "insulationFactor": 0.8, "marketValueFactor": 0.5, "deteriorationFactor": 2, "beautyOffset": -0.1, "meleeDamageFactor": 0.8, "rangedAccuracyFactor": 0.8, "rangedDamageFactor": 0.9 },
+      { "def": "Poor", "label": "poor", "armorFactor": 0.8, "insulationFactor": 0.9, "marketValueFactor": 0.75, "deteriorationFactor": 1.5, "beautyOffset": 0.5, "meleeDamageFactor": 0.9, "rangedAccuracyFactor": 0.9, "rangedDamageFactor": 1.0 },
+      { "def": "Normal", "label": "normal", "armorFactor": 1.0, "insulationFactor": 1.0, "marketValueFactor": 1.0, "deteriorationFactor": 1, "beautyOffset": 1, "meleeDamageFactor": 1, "rangedAccuracyFactor": 1, "rangedDamageFactor": 1 },
+      { "def": "Good", "label": "good", "armorFactor": 1.15, "insulationFactor": 1.1, "marketValueFactor": 1.25, "deteriorationFactor": 0.8, "beautyOffset": 2, "meleeDamageFactor": 1.1, "rangedAccuracyFactor": 1.1, "rangedDamageFactor": 1.0 },
+      { "def": "Excellent", "label": "excellent", "armorFactor": 1.3, "insulationFactor": 1.2, "marketValueFactor": 1.5, "deteriorationFactor": 0.6, "beautyOffset": 3, "meleeDamageFactor": 1.2, "rangedAccuracyFactor": 1.2, "rangedDamageFactor": 1.0 },
+      { "def": "Masterwork", "label": "masterwork", "armorFactor": 1.45, "insulationFactor": 1.5, "marketValueFactor": 2.5, "deteriorationFactor": 0.3, "beautyOffset": 5, "meleeDamageFactor": 1.45, "rangedAccuracyFactor": 1.35, "rangedDamageFactor": 1.25 },
+      { "def": "Legendary", "label": "legendary", "armorFactor": 1.8, "insulationFactor": 1.8, "marketValueFactor": 5, "deteriorationFactor": 0.1, "beautyOffset": 8, "meleeDamageFactor": 1.65, "rangedAccuracyFactor": 1.5, "rangedDamageFactor": 1.5 }
     ],
     "defaultLevel": "Normal",
     "unverified": ["levels.beautyOffset", "levels.deteriorationFactor"],
@@ -277,22 +281,32 @@
   },
   {
     "defName": "MedicineRules", "source": "RimWorld wiki",
-    "tendQualityBySkill": [[0, 0.2], [5, 0.5], [10, 0.8], [15, 1.0], [20, 1.2]],
-    "tendQualityRandomFactor": [0.7, 1.3],
+    "tendQualityBySkill": [[0, 0.2], [1, 0.3], [2, 0.4], [3, 0.5], [4, 0.6], [5, 0.7], [6, 0.8], [7, 0.9], [8, 1], [9, 1.05], [10, 1.1], [11, 1.15], [12, 1.2], [13, 1.25], [14, 1.3], [15, 1.35], [16, 1.4], [17, 1.45], [18, 1.5], [19, 1.525], [20, 1.55]],
+    "tendQualityRandomFactor": [0.75, 1.25],
     "tendQualityNoMedicineFactor": 0.7,
     "tendWorkSeconds": 864,
     "tendXp": 500,
     "selfTendQualityFactor": 0.7,
     "careHerbalMaxPotency": 0.6,
     "careNormalMaxPotency": 1.0,
-    "surgerySuccessBySkill": [[0, 0.5], [5, 0.75], [10, 1.0], [15, 1.2], [20, 1.4]],
+    "surgerySuccessBySkill": [[0, 0.1], [1, 0.2], [2, 0.3], [3, 0.4], [4, 0.5], [5, 0.6], [6, 0.7], [7, 0.75], [8, 0.8], [9, 0.85], [10, 0.9], [11, 0.92], [12, 0.94], [13, 0.96], [14, 0.98], [15, 1], [16, 1.02], [17, 1.04], [18, 1.06], [19, 1.08], [20, 1.1]],
     "surgeryFailDeathChanceFactor": 0.1,
+    "surgeryCleanlinessFactor": [[-5, 0.85], [0, 1.0], [2, 1.07]],
+    "surgeryNoMedicineFactor": 0.7,
+    "surgeryMedicinePotencyWeight": 0.3,
+    "surgeryMaxSuccessChance": 0.98,
+    "surgeryBotchHpFraction": 0.3,
+    "surgeryXp": 1200,
+    "surgeryMaxOperations": 12,
     "immunityGainPerDayMultiplierWhenTended": 1.0,
+    "infection": { "delayHoursMin": 6, "delayHoursMax": 18, "tendedChanceFactorAtQuality0": 0.85, "tendedChanceFactorAtQuality1": 0.05, "cleanlinessSlope": -0.25, "chanceFactorMin": 0.5, "chanceFactorMax": 2.0 },
+    "immunityGainSpeedByRest": { "Ground": 1.0, "Bed": 1.05, "HospitalBed": 1.07 },
+    "diseaseUpdateSeconds": 60,
     "diseaseOnsetMtbDays": { "Flu": 50, "Plague": 80, "Malaria": 80, "SleepingSickness": 80, "GutWorms": 80, "MuscleParasites": 80 },
     "foodPoisoningChancePerMeal": { "default": 0.0, "dirtyKitchen": 0.02, "rotten": 0.25 },
     "bodyTemperatureC": { "normal": 37.0, "hypothermiaBelow": 35.0, "heatstrokeAbove": 37.5 },
-    "unverified": ["tendQualityBySkill", "tendQualityRandomFactor", "tendQualityNoMedicineFactor", "tendWorkSeconds", "tendXp", "selfTendQualityFactor", "surgerySuccessBySkill", "surgeryFailDeathChanceFactor", "diseaseOnsetMtbDays", "foodPoisoningChancePerMeal", "bodyTemperatureC"],
-    "ours": ["immunityGainPerDayMultiplierWhenTended", "foodPoisoningChancePerMeal.dirtyKitchen", "careHerbalMaxPotency", "careNormalMaxPotency"]
+    "unverified": ["tendQualityNoMedicineFactor", "tendWorkSeconds", "tendXp", "selfTendQualityFactor", "surgeryFailDeathChanceFactor", "diseaseOnsetMtbDays", "foodPoisoningChancePerMeal", "bodyTemperatureC"],
+    "ours": ["immunityGainPerDayMultiplierWhenTended", "foodPoisoningChancePerMeal.dirtyKitchen", "careHerbalMaxPotency", "careNormalMaxPotency", "infection", "immunityGainSpeedByRest", "diseaseUpdateSeconds", "surgeryNoMedicineFactor", "surgeryMedicinePotencyWeight", "surgeryBotchHpFraction", "surgeryXp", "surgeryMaxOperations"]
   },
   {"defName": "MentalBreakRules", "source": "RimWorld", "meanDaysBetweenBreaks": {"Minor": 4.0, "Major": 1.5, "Extreme": 0.5}, "moodCurve": [[0, 0.1], [0.5, 0.5], [1, 1]], "moodCurveNote": "x is mood / threshold level, y multiplies the mean days between breaks (lower mood, shorter wait)", "catharsisThought": "Catharsis", "minHoursBetweenBreaks": 24, "recoveryMoodMargin": 0.1, "restOnlyWhenAwake": true, "unverified": ["meanDaysBetweenBreaks", "moodCurve", "minHoursBetweenBreaks", "recoveryMoodMargin"], "ours": ["restOnlyWhenAwake"]},
   {"defName": "JoyRules", "source": "RimWorld", "fallPerDay": 0.8, "joyHours": [19, 21], "toleranceMinGainFactor": 0.1, "toleranceMax": 1.0, "note": "Recreation falls fallPerDay when awake; it is done in the joy hours of the schedule (C18): the standard schedule has Joy from the first hour through the second, inclusive (19:00 to 21:59, three evening hours; D9 guessed 16 to 22, which took six working hours a day). Effective gain = joyPerHour x (1 - tolerance of the kind) x joyGainFactor, never under toleranceMinGainFactor.", "unverified": ["fallPerDay", "toleranceMinGainFactor"], "ours": ["joyHours", "toleranceMax"]},
@@ -304,7 +318,8 @@
    "cheatWeightFactor": 0.15, "cheatPartnerBelow": 60, "jealousFightChance": 0.25,
    "cheated": {"label": "cheated on me", "offset": -40, "days": 60}, "tookPartner": {"label": "took my partner", "offset": -20, "days": 60},
    "cheatedThought": "CheatedOnMe", "weddingGuestThought": "AttendedWedding", "weddingPartyThought": "WeddingParty",
+   "partyMinutes": 60, "partyJoyPerHour": 0.4, "partyMaxDistance": 80,
    "traitWeights": {"Kind": {"Slight": 0, "Insult": 0}, "Abrasive": {"Slight": 3, "Insult": 3}},
    "note": "C20 (docs/design/social.md). interactionMeanHours: a pawn with somebody in earshot starts a talk about this often; at a table or a game beside another pawn, tableChatMeanMinutes. traitWeights multiply an interaction's selectionWeight for the talker. A trait degree's `opinionOfMe` (Traits) is what everyone else thinks of its owner.",
-   "unverified": ["interactionMeanHours", "maxDistance"], "ours": ["opinionMin", "opinionMax", "socialSkillXpPerInteraction", "deadMansApparelDays", "minGapMinutes", "tableChatMeanMinutes", "compatibilityMax", "stackLimit", "kindWordsMoodBelow", "romanceOpinionScale", "adultAge", "fightChance", "fightPain", "fightBloodLoss", "fightMaxMinutes", "fightWalkEvery", "fight", "traitWeights", "skillOpinionPerLevel", "skillRomancePerLevel", "cheatWeightFactor", "cheatPartnerBelow", "jealousFightChance", "cheated", "tookPartner", "cheatedThought", "weddingGuestThought", "weddingPartyThought"]}
+   "unverified": ["interactionMeanHours", "maxDistance"], "ours": ["opinionMin", "opinionMax", "socialSkillXpPerInteraction", "deadMansApparelDays", "minGapMinutes", "tableChatMeanMinutes", "compatibilityMax", "stackLimit", "kindWordsMoodBelow", "romanceOpinionScale", "adultAge", "fightChance", "fightPain", "fightBloodLoss", "fightMaxMinutes", "fightWalkEvery", "fight", "traitWeights", "skillOpinionPerLevel", "skillRomancePerLevel", "cheatWeightFactor", "cheatPartnerBelow", "jealousFightChance", "cheated", "tookPartner", "cheatedThought", "weddingGuestThought", "weddingPartyThought", "partyMinutes", "partyJoyPerHour", "partyMaxDistance"]}
 ]

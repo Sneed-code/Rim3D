@@ -159,29 +159,31 @@ TEST_CASE("Medicine: tend quality follows the doctor's skill, the medicine and t
     CHECK(medicine.kinds().front().def == lumen->def);  // strongest first
     CHECK(medicine.kindOf(sim.defs().idOf("Things", "Steel")) == nullptr);
 
-    // The skill table, interpolated: 0.2 at 0, 0.5 at 5, 0.8 at 10, 1.2 at 20.
+    // The wiki's skill table: 0.2 + 0.1 a level up to 1.0 at 8, then 0.05 a level to 1.5 at 18, 1.55 at 20.
     CHECK(medicine.skillQuality(0) == doctest::Approx(0.2f));
-    CHECK(medicine.skillQuality(8) == doctest::Approx(0.68f));
-    CHECK(medicine.skillQuality(10) == doctest::Approx(0.8f));
-    CHECK(medicine.skillQuality(20) == doctest::Approx(1.2f));
-    CHECK(medicine.skillQuality(30) == doctest::Approx(1.2f));
+    CHECK(medicine.skillQuality(5) == doctest::Approx(0.7f));
+    CHECK(medicine.skillQuality(8) == doctest::Approx(1.0f));
+    CHECK(medicine.skillQuality(10) == doctest::Approx(1.1f));
+    CHECK(medicine.skillQuality(18) == doctest::Approx(1.5f));
+    CHECK(medicine.skillQuality(20) == doctest::Approx(1.55f));
+    CHECK(medicine.skillQuality(30) == doctest::Approx(1.55f));
 
-    // The roll 0.5 is the middle of 0.7 to 1.3, so it leaves the value alone.
-    CHECK(medicine.tendQuality(10, 1.0f, normal, 0.0f, false, 0.5f) == doctest::Approx(0.8f));
+    // The roll 0.5 is the middle of 0.75 to 1.25, so it leaves the value alone.
+    CHECK(medicine.tendQuality(5, 1.0f, normal, 0.0f, false, 0.5f) == doctest::Approx(0.7f));
     // Hurt hands tend worse; better medicine, better quality, up to what the medicine allows.
-    CHECK(medicine.tendQuality(10, 0.5f, normal, 0.0f, false, 0.5f) == doctest::Approx(0.4f));
-    CHECK(medicine.tendQuality(10, 1.0f, herbal, 0.0f, false, 0.5f) == doctest::Approx(0.48f));
-    CHECK(medicine.tendQuality(15, 1.0f, lumen, 0.0f, false, 0.5f) == doctest::Approx(1.3f));  // 1.6 capped at 1.3
-    CHECK(medicine.tendQuality(20, 1.0f, normal, 0.0f, false, 0.5f) == doctest::Approx(1.0f));  // capped at 1.0
+    CHECK(medicine.tendQuality(5, 0.5f, normal, 0.0f, false, 0.5f) == doctest::Approx(0.35f));
+    CHECK(medicine.tendQuality(5, 1.0f, herbal, 0.0f, false, 0.5f) == doctest::Approx(0.42f));
+    CHECK(medicine.tendQuality(15, 1.0f, lumen, 0.0f, false, 0.5f) == doctest::Approx(1.3f));  // 2.16 capped at 1.3
+    CHECK(medicine.tendQuality(10, 1.0f, normal, 0.0f, false, 0.5f) == doctest::Approx(1.0f));  // 1.1 capped at 1.0
     CHECK(medicine.tendQuality(10, 1.0f, herbal, 0.5f, false, 1.0f) == doctest::Approx(0.7f));   // capped at 0.7
     // Without medicine: 0.7 of the skill, and never above 0.7. A hospital bed adds its offset.
-    CHECK(medicine.tendQuality(10, 1.0f, nullptr, 0.0f, false, 0.5f) == doctest::Approx(0.56f));
-    CHECK(medicine.tendQuality(10, 1.0f, nullptr, 0.15f, false, 0.5f) == doctest::Approx(0.7f));
+    CHECK(medicine.tendQuality(5, 1.0f, nullptr, 0.0f, false, 0.5f) == doctest::Approx(0.49f));
+    CHECK(medicine.tendQuality(5, 1.0f, nullptr, 0.15f, false, 0.5f) == doctest::Approx(0.64f));
     CHECK(medicine.tendQuality(20, 1.0f, nullptr, 0.0f, false, 1.0f) == doctest::Approx(0.7f));
-    // The roll runs from 0.7 to 1.3 of the value, and tending yourself costs 30%.
-    CHECK(medicine.tendQuality(10, 1.0f, normal, 0.0f, false, 0.0f) == doctest::Approx(0.56f));
-    CHECK(medicine.tendQuality(10, 1.0f, normal, 0.0f, false, 1.0f) == doctest::Approx(1.0f));
-    CHECK(medicine.tendQuality(10, 1.0f, normal, 0.0f, true, 0.5f) == doctest::Approx(0.56f));
+    // The roll runs from 0.75 to 1.25 of the value, and tending yourself costs 30%.
+    CHECK(medicine.tendQuality(5, 1.0f, normal, 0.0f, false, 0.0f) == doctest::Approx(0.525f));
+    CHECK(medicine.tendQuality(5, 1.0f, normal, 0.0f, false, 1.0f) == doctest::Approx(0.875f));
+    CHECK(medicine.tendQuality(5, 1.0f, normal, 0.0f, true, 0.5f) == doctest::Approx(0.49f));
 }
 
 TEST_CASE("Medicine: the care setting says which medicine a patient may get, and a command sets it") {
@@ -457,6 +459,28 @@ TEST_CASE("Medicine: a patient who wants no care is left alone, and the herbal s
         MED_REQUIRE(best != kNoEntity);
         CHECK(sim.things().registry().get<Thing>(best).def == sim.defs().idOf("Things", "MedicineIndustrial"));
     }
+}
+
+TEST_CASE("Medicine: a patient walking about in a mental break is not chased, and is tended once it is over") {
+    Sim sim = medSim();
+    medColonist(sim, CellPos{10, 10, 0});
+    const Entity patient = medPatient(sim, CellPos{14, 10, 0});
+    sim.step();
+    medHit(sim, patient, "Cut", 6.0f, "left arm");
+    sim.submit(StartMentalBreakCommand{patient, "WanderSad"});
+    sim.step();
+    MED_REQUIRE(sim.mentalBreaks().active(patient));
+    MedLog log;
+    for (int i = 0; i < 1500; ++i) {
+        log.step(sim);
+        if (!sim.mentalBreaks().active(patient)) {
+            break;
+        }
+    }
+    CHECK(sim.stats().repaths == 0);
+    CHECK(log.type(EventType::PawnTended) == nullptr);
+    sim.submit(EndMentalBreakCommand{patient});
+    MED_REQUIRE(medRunUntil(sim, log, 4000, [&] { return log.type(EventType::PawnTended) != nullptr; }));
 }
 
 TEST_CASE("Medicine: with no hospital bed the downed go to an ordinary free bed, and a hospital bed is not slept in") {

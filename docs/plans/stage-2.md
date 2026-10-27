@@ -86,7 +86,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | S7 | **Saves and commands that merge in parallel.** Turn the save into named sections, each with its own version, listed in `saves.md`; today's formats 6 to 19 still load. Commands saved by name, not by their position in the `Command` variant. A short "how to add a system" checklist in `saves.md` and `bridge.md`. No behaviour change: every existing test and replay hash stays the same. | Cloud | Opus, high | 90 min | none |
 | | S8 | **Map generation 2 and 1 km games.** Rivers (shallow and deep water, crossing costs), marsh and mud, the D4 biomes, old ruins (broken walls), steam geysers; new games default to 1,024 m. `simrun --png` shows it; generation time stays under a second. Old saves whose map no longer matches fail with a clear message. | Cloud | Sonnet, high | 90 min | D4, E1 |
-| | S9 | **Sim cost at Stage 2 size.** `simrun` on 1 km with 30 colonists, 300 animals, crops, fire and room temperature at 3x: time per system, fix the worst, write the budget into the next `docs/decisions/` file. Runs nightly. | Cloud | Sonnet, high | 90 min | N1, E2, E4, C13 |
+| ✓ | S9 | **Sim cost at Stage 2 size.** `simrun` on 1 km with 30 colonists, 300 animals, crops, fire and room temperature at 3x: time per system, fix the worst, write the budget into the next `docs/decisions/` file. Runs nightly. | Cloud | Sonnet, high | 90 min | N1, E2, E4, C13 |
 
 ### Environment (E)
 
@@ -123,7 +123,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | ✓ | C20 | **Social life.** Opinions, interactions at RimWorld's rates, friends, rivals, lovers and spouses as bonds (no sex, no pregnancy), social fights with fists (F8), social thoughts, Social skill XP. | Cloud | Sonnet, high | 90 min | F8, D9 |
 | ✓ | C21 | **Research.** Research benches, a current project, the research job (Intellectual), unlocks that gate building plans and bills; commands to pick a project. | Cloud | Sonnet, medium | 60 min | S7, D12 |
 | ✓ | C22 | **Prisoners.** Capture downed enemies to a prison bed; warden feeding, chats and recruiting against resistance as in RimWorld; release; prisoner thoughts; prison-break hook for T3. | Cloud | Sonnet, high | 90 min | H1 |
-| | C23 | **Visitors and traders.** Faction goodwill; visitor groups walk in, stay a while and leave; trader caravans with stock; a trade command with RimWorld's prices (Social skill), silver as money. | Cloud | Sonnet, high | 90 min | T1, D10 |
+| ✓ | C23 | **Visitors and traders.** Faction goodwill; visitor groups walk in, stay a while and leave; trader caravans with stock; a trade command with RimWorld's prices (Social skill), silver as money. | Cloud | Sonnet, high | 90 min | T1, D10 |
 | ✓ | C24 | **Carry weight and hauling 2.** Item mass, carry capacity, carrying several stacks at once, slower walking when loaded, stacks merging in stockpiles. | Cloud | Sonnet, medium | 60 min | S7 |
 | | C25 | **Colony-year scenario.** `simrun --scenario year`: the Crashlanded colony on a 1 km map for 60 days with farming, clothes, fuel, temperature, animals and the narrator. Checks: nobody starves or freezes, nobody stuck for a game hour, food stays above zero. Nightly. | Cloud | Sonnet, high | 90 min | C13, C14, C15, E2, E4, H2, N3, T2 |
 
@@ -132,8 +132,8 @@ G2, A1 and A2 are Stage 1 tasks.
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | H1 | **Doctors, medicine and rescue.** Medicine items; the Doctor job tends patients in bed, quality from Medicine skill, medicine and bed; patient and bed-rest work; medical beds; rescuing downed colonists to a bed; scars from healed wounds. | Cloud | Sonnet, high | 90 min | S7, D7 |
-| | H2 | **Infections and diseases.** Infection chance from wound tending; RimWorld's immunity race (immunity against severity); flu, plague, malaria, sleeping sickness, gut worms, muscle parasites, food poisoning; a hook for T3's outbreaks. | Cloud | Sonnet, high | 90 min | H1 |
-| | H3 | **Surgery and prosthetics.** Operation bills on a pawn (amputate, install or remove a part); success chance by RimWorld's rule (skill, bed, medicine, cleanliness); body parts as items; prosthetics and bionics change capacities. | Cloud | Sonnet, high | 90 min | H1, C14 |
+| ✓ | H2 | **Infections and diseases.** Infection chance from wound tending; RimWorld's immunity race (immunity against severity); flu, plague, malaria, sleeping sickness, gut worms, muscle parasites, food poisoning; a hook for T3's outbreaks. | Cloud | Sonnet, high | 90 min | H1 |
+| ✓ | H3 | **Surgery and prosthetics.** Operation bills on a pawn (amputate, install or remove a part); success chance by RimWorld's rule (skill, bed, medicine, cleanliness); body parts as items; prosthetics and bionics change capacities. | Cloud | Sonnet, high | 90 min | H1, C14 |
 
 ### Animals (N)
 
@@ -153,7 +153,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | ✓ | F9 | **Explosives and grenades.** An explosion system (radius, falloff, damage to pawns and buildings, knock-down); frag grenades thrown as arcing projectiles; fighters throw them at groups in cover and dive away from them (F5's sidestep grown into a dive). Molotovs once E4 is in. | Cloud | Sonnet, high | 90 min | S7 |
 | | F10 | **Medics, firefighters and rescue under fire.** The alarm's Medic and Firefighter roles from `game-design.md`; fighters drag downed friends to safety when the route is reasonably safe; scenario checks in F7's nightly run. | Cloud | Opus, high | 90 min | F6, H1, E4 |
 | ✓ | F11 | **Turrets and traps.** Powered mini-turret (F2's guns, auto targeting, blows up when destroyed), spike trap and IED trap; the fighter AI avoids known traps. | Cloud | Sonnet, medium | 60 min | E5, F9 |
-| | F12 | **Raid strategies.** Sappers who dig or blast through walls, drop-pod raids landing inside the base, raiders who steal or kidnap and run, staged attacks at night; picked by T1's points. | Cloud | Opus, high | 120 min | T1, F9 |
+| ✓ | F12 | **Raid strategies.** Sappers who dig or blast through walls, drop-pod raids landing inside the base, raiders who steal or kidnap and run, staged attacks at night; picked by T1's points. | Cloud | Opus, high | 120 min | T1, F9 |
 
 ### Protagonist (P)
 
@@ -169,9 +169,9 @@ G2, A1 and A2 are Stage 1 tasks.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | T1 | **Narrator, incidents and threat points.** Colony wealth; threat points from wealth and colonists by RimWorld's curves; an incident system (weights, cooldowns, earliest day); Orrin, Maren and Jinx as RimWorld's three storytellers; letters as events; F6's raid becomes the first incident. | Cloud | Opus, high | 90 min | F6, D10 |
+| ✓ | T1 | **Narrator, incidents and threat points.** Colony wealth; threat points from wealth and colonists by RimWorld's curves; an incident system (weights, cooldowns, earliest day); Orrin, Maren and Jinx as RimWorld's three storytellers; letters as events; F6's raid becomes the first incident. | Cloud | Opus, high | 90 min | F6, D10 |
 | | T2 | **Events: nature and good news.** Wanderer joins, cargo pods, crashed pod with a downed survivor, herd migration, animal joins, cold snap, heat wave, eclipse, aurora, berry or healroot bloom. | Cloud | Sonnet, medium | 90 min | T1, E1, E3, N1 |
-| | T3 | **Events: trouble.** Manhunter pack, mad animal, disease outbreaks, blight, short circuit, solar flare, lightning fires, toxic fallout, resonance drone, prison break. | Cloud | Sonnet, medium | 90 min | T1, N5, H2, E4, E5, C13 |
+| | T3 | **Events: trouble.** (Done: solar flare, toxic fallout, volcanic winter, flashstorm, psychic drone and soothe, short circuit, blight, manhunter pack, mad animal; left: disease outbreaks, infestation, prison break.) Manhunter pack, mad animal, disease outbreaks, blight, short circuit, solar flare, lightning fires, toxic fallout, resonance drone, prison break. | Cloud | Sonnet, medium | 90 min | T1, N5, H2, E4, E5, C13 |
 
 ### Expansion pieces (X), when a thread is free
 

@@ -37,6 +37,8 @@ struct FilthKind {
     bool trackable = false;    // pawns carry it to other cells
     float cleanSeconds = 0.0f; // game seconds of work per layer at 100% speed
     int maxThickness = 3;
+    float fadeHours = 0.0f;    // mean game hours a layer lasts under the open sky before it is gone; 0: it stays
+    bool rainWashes = false;   // rain makes outdoor layers go quicker
 };
 
 struct FilthPile {
@@ -53,6 +55,7 @@ struct COLONY_API FilthNumbers {
     float dropChancePerCell = 0.05f;
     float bloodPerBleedDay = 4.0f;   // drops an hour for each point of blood loss a day
     float cleaningSpeed = 1.0f;
+    float rainWashFactor = 4.0f;     // how many times quicker outdoor filth that rain washes goes while it rains
 
     static FilthNumbers read(const DefDatabase& defs);
 };
@@ -122,6 +125,9 @@ public:
     // One game second: pawns pick dirt up on bare ground and drop it on floors, track filth from
     // cell to cell, and bleeding pawns drop blood.
     void step();
+    // One game hour has passed: layers under the open sky go by their kind's `fadeHours` (and quicker in rain,
+    // `rainRate` being the weather's), a pile of three layers three times as often as a pile of one.
+    void fadeHour(float rainRate);
 
     void hashState(StateHasher& h) const;
     FilthState state() const;

@@ -101,12 +101,12 @@ float CraftingSystem::benchSpeed(DefId buildingDef) const {
 }
 
 void CraftingSystem::finishProduct(Entity item, const Recipe& recipe, int skillLevel, const std::vector<BillUsed>& used,
-                                   uint32_t storeZone) {
+                                   uint32_t storeZone, int qualityShift) {
     entt::registry& reg = things_.registry();
     const DefId def = reg.get<Thing>(item).def;
     const DefId stuff = recipe.stuffFromIngredient ? dominantStuff(def, used) : DefId{};
     if (hasQuality(def)) {
-        const int quality = rollQuality(skillLevel);
+        const int quality = rollQuality(skillLevel, qualityShift);
         if (apparel_.stats().isApparel(def)) {
             apparel_.setMadeOf(item, stuff, quality, nullptr);
         } else {
