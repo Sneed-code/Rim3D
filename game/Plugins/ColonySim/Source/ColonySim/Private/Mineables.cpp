@@ -169,6 +169,21 @@ MineDrop Mineables::dropOf(CellPos c) const {
     return drop;
 }
 
+DefId Mineables::chunkOf(CellPos c) const {
+    std::vector<DefId> chunks;
+    for (const DefId rock : rockTypes_) {
+        const int k = kindOfDef(rock);
+        if (k >= 0 && kinds_[static_cast<size_t>(k)].dropDef.valid()) {
+            chunks.push_back(kinds_[static_cast<size_t>(k)].dropDef);
+        }
+    }
+    if (chunks.empty() || !map_inBounds(c)) {
+        return DefId{};
+    }
+    const uint64_t h = splitMix64(splitMix64(seed_ ^ 0x6472696C6CULL) ^ static_cast<uint64_t>(map_.index(c)));
+    return chunks[h % chunks.size()];
+}
+
 void Mineables::generate(const DefDatabase& defs) {
     std::vector<size_t> rockKinds;
     std::vector<size_t> oreKinds;
