@@ -123,6 +123,14 @@ enum class EventType : uint8_t {
     PrisonerExecuted,      // a warden executed a prisoner (docs/design/prisoners.md): `thing` the prisoner (dead), `target` the warden, `message` "guilty" or "innocent"
     OrganHarvested,        // an organ was taken from a living pawn: `thing` the victim, `target` the surgeon, `part` the body part, `message` "colonist" or "prisoner" (anyone who is not one of ours)
     OperationDone,      // a doctor finished an operation (H3, docs/design/surgery.md): `thing` the doctor, `target` the patient, `def` the Recipes def, `part` the body part, `amount` the success chance, `message` "success", "failed" or "the patient died"
+    // Caravans (docs/design/caravans.md): `count` is the caravan's id in all of them.
+    CaravanFormed,         // a caravan was formed: its members walk to `cell`, the exit at the map edge; `amount` how many
+    CaravanMemberLost,     // `thing` left the caravan: `message` why ("can't walk", "left behind", "died", "mental break"...)
+    CaravanCancelled,      // a forming caravan was given up (`message` why); its members stay on the map
+    CaravanDeparted,       // the last member stepped off the map and the caravan set out; `amount` the tile
+    CaravanArrived,        // it reached the end of its path: `amount` the tile, `message` the settlement's name there, if any
+    CaravanEntered,        // it came back onto the map at `cell`; `amount` how many pawns
+    CaravanLost,           // nobody in it can walk any more: it is gone with all it carried (`message` why)
 };
 
 // What stopped a projectile (ProjectileHit).

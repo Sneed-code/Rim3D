@@ -1,6 +1,8 @@
 # Status
 
-Updated 2026-10-26.
+Updated 2026-10-27.
+
+Stage 3 W4 done: caravans. `CaravanCommand` Form/Move/Stop/Enter: colonists and the stacks they take walk to the map edge facing their way, step off and travel the world tile by tile by RimWorld's numbers (4412 ticks a tile, biome movement difficulty, hills, winter, roads halve, x2 empty to x1 full load, 35 kg per body size, moving 6:00 to 22:00 and sleeping at night). They eat from their food, a death leaves a corpse in the caravan, they arrive at settlements (`CaravanArrived`) and walk back onto the map at home. `Snapshot::caravans`, save section `caravans` 1, `simrun --caravan` (`docs/design/caravans.md`, tests `CaravanTests`, CTest `simrun_caravan`). No trading or visiting yet (C23, W5); W3 draws them.
 
 Stage 2 executions done: `SetPrisonerModeCommand` has a fifth mode, `Execute`; a warden walks up, works 60 s and kills the prisoner (`DeathCause::Executed`). A raider caught in a raid counts as guilty for 24 hours, anyone else as innocent. Every colonist except Psychopath, Bloodlust and Cannibal ones remembers "a guilty prisoner was executed" (-2, 6 days) or "a prisoner was executed" (-5, 6 days). Organ harvesting has its moods (victim -30, colony -6, Bloodlust +4) and the hook `PrisonerSystem::noteOrganHarvested`, but the operation itself waits for surgery (H3, PR #119). No goodwill loss: the wiki has none and goodwill (C23) does not exist yet (`docs/design/prisoners.md`, tests `ExecutionTests`). Save section `prisoners` 2. Sim only.
 

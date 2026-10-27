@@ -1,0 +1,24 @@
+[
+ {
+  "defName": "CaravanRules",
+  "source": "RimWorld wiki (Caravan)",
+  "ticksPerTile": 4412,
+  "zeroMassSpeedFactor": 2.0,
+  "fullMassSpeedFactor": 1.0,
+  "carryPerBodySize": 35,
+  "roadFactor": 0.5,
+  "hillOffsets": [0, 0.5, 1.5, 3],
+  "winterFrom": -17.1,
+  "winterTo": -22.5,
+  "winterOffset": 2,
+  "restFromHour": 22,
+  "restToHour": 6,
+  "diagonalFactor": 1.41421356,
+  "formHours": 12,
+  "exitDepth": 2,
+  "verified": ["ticksPerTile", "carryPerBodySize", "roadFactor", "hillOffsets", "winterFrom", "winterTo", "winterOffset", "restFromHour", "restToHour"],
+  "unverified": ["zeroMassSpeedFactor", "fullMassSpeedFactor"],
+  "ours": ["diagonalFactor", "formHours", "exitDepth"],
+  "notes": "The wiki: a caravan covers 13.6 tiles in 24 hours of travel on difficulty 1 (60,000 / 13.6 = 4,412 ticks a tile), moves from 6:00 to 22:00, a road halves a tile's movement difficulty whatever the road, hills add 0.5, 1.5 and 3, cold adds up to 2 from -17.1 down to -22.5 C, and a pawn carries 35 kg per body size. Speed from load is recalled from RimWorld's code (twice as fast empty, normal when full; the wiki is unsure). Our world is a grid, so a diagonal step costs the square root of 2. formHours: how long members may take to reach the map edge before the caravan leaves without them."
+ }
+]

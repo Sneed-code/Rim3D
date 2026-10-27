@@ -1,4 +1,5 @@
 #include "ColonySim/Sim.h"
+#include "ColonySim/Caravans.h"
 
 #include "ColonySim/Animals.h"
 #include "ColonySim/Breeding.h"
@@ -334,6 +335,12 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     quests_->setJoinMaker([this](CellPos cell, uint64_t seed) { return makeJoiner(cell, seed); });
     ship_ = std::make_unique<ShipSystem>(*things_, *raids_, *defs_, time_);
     ship_->setEventLog(&events_);
+    caravans_ = std::make_unique<CaravanSystem>(*things_, map_, pathfinder_, *health_, *needs_, *defs_, time_, world_.get());
+    caravans_->setEventLog(&events_);
+    caravans_->setJobs(jobs_.get());
+    caravans_->setSpoilage(spoilage_.get());
+    // A caravan's pawns sleep on the ground while it rests for the night.
+    needs_->setRestingElsewhere([this](Entity pawn) { return caravans_->resting(pawn); });
     mood_->addSituation("isPrisoner", [this](Entity pawn) { return prisoners_->isPrisoner(pawn) ? 0 : -1; });
     // Night owls like being up at night and not by day (docs/design/mood.md); only pawns that are awake count.
     const auto awakeAt = [this](Entity pawn, bool night) {
@@ -358,6 +365,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         defense_->onDestroy(thing);
         fire_->onDestroy(thing);
         mentalBreaks_->forget(thing);
+        caravans_->forget(thing);
     });
     fighters_->setWeather(weather_.get());
     melee_ = std::make_unique<MeleeSystem>(*things_, map_, *combat_, *health_, *defs_, time_,
@@ -1255,6 +1263,23 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!mentalBreaks_->start(startBreak->pawn, startBreak->breakDef, rng_, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* caravan = std::get_if<CaravanCommand>(&command)) {
+        bool ok = false;
+        if (caravan->action == "Form") {
+            int formed = 0;
+            ok = caravans_->form(caravan->pawns, caravan->items, caravan->tile, formed, error);
+        } else if (caravan->action == "Move") {
+            ok = caravans_->move(caravan->caravan, caravan->tile, error);
+        } else if (caravan->action == "Stop") {
+            ok = caravans_->stop(caravan->caravan, error);
+        } else if (caravan->action == "Enter") {
+            ok = caravans_->enter(caravan->caravan, error);
+        } else {
+            error = "no caravan action '" + caravan->action + "' (Form, Move, Stop or Enter)";
+        }
+        if (!ok) {
+            commandFailed(id, error);
+        }
     } else if (const auto* ship = std::get_if<ShipCommand>(&command)) {
         bool ok = false;
         if (ship->action == "StartReactor") {
@@ -1337,6 +1362,7 @@ void Sim::step() {
     const size_t eventsBefore = events_.size();
     jobs_->fuel().step();
     jobs_->step();
+    caravans_->step();  // after the jobs, which leave caravan members alone; before movement walks them
     raids_->step();
     {
         std::vector<Event> gained;
@@ -1481,6 +1507,28 @@ void Sim::writeSnapshot(Snapshot& out) const {
         view.available = research_->available(project);
         view.current = research_->current() == project.defName;
         out.research.push_back(view);
+    }
+    out.caravans.clear();
+    for (const Caravan& c : caravans_->caravans()) {
+        CaravanView v;
+        v.id = c.id;
+        v.state = static_cast<uint8_t>(c.state);
+        v.tile = c.tile;
+        v.nextTile = c.path.empty() ? -1 : c.path.front();
+        v.destination = c.destination;
+        v.progress = c.cost > 0.0 ? static_cast<float>(std::min(1.0, c.progress / c.cost)) : 0.0f;
+        v.pawns = static_cast<int>(c.members.size());
+        v.items = static_cast<int>(c.items.size());
+        v.massKg = static_cast<float>(caravans_->massOf(c));
+        v.capacityKg = static_cast<float>(caravans_->capacityOf(c));
+        const double speed = caravans_->speedFactor(c);
+        if (c.cost > 0.0 && speed > 0.0) {
+            const CaravanRules& rules = caravans_->rules();
+            const int restHours = (rules.restToHour - rules.restFromHour + 24) % 24;  // 22 to 6: 8
+            const double movingSeconds = static_cast<double>(24 - restHours) * static_cast<double>(kSecondsPerHour);
+            v.tilesPerDay = static_cast<float>(movingSeconds * speed / c.cost);
+        }
+        out.caravans.push_back(v);
     }
     {
         const ShipParts parts = ship_->parts();
@@ -1963,6 +2011,7 @@ uint64_t Sim::stateHash() const {
     raids_->hashState(h);
     quests_->hashState(h);
     ship_->hashState(h);
+    caravans_->hashState(h);
     talents_->hashState(h);
     pathfinder_.hashState(h);
     zones_->hashState(h);

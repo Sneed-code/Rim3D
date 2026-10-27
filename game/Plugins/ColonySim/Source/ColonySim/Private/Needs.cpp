@@ -176,10 +176,12 @@ void NeedsSystem::step() {
 
         // Rest rises while lying down and falls otherwise, by band.
         const Worker* worker = reg.try_get<Worker>(pawn);
-        if (worker != nullptr && jobIsLyingDown(worker->job)) {
+        const bool elsewhere = restingElsewhere_ && restingElsewhere_(pawn);
+        if ((worker != nullptr && jobIsLyingDown(worker->job)) || elsewhere) {
             // Quick sleeper: `restRateMultiplier` +0.5 rests half as fast again.
             const float restRate = std::max(0.0f, needsTraitStat(defs_, reg, pawn, "restRateMultiplier", 1.0f));
-            needs.rest = std::min(1.0f, needs.rest + restGainPerDay(worker->job.thing) * restRate * kPerSecond);
+            const Entity bed = elsewhere ? kNoEntity : worker->job.thing;
+            needs.rest = std::min(1.0f, needs.rest + restGainPerDay(bed) * restRate * kPerSecond);
         } else {
             float fall = 0.0f;
             switch (restBandOf(rules_, needs.rest)) {

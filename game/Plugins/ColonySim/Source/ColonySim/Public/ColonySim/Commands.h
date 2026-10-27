@@ -580,6 +580,18 @@ struct ShipCommand {
     Entity pawn = kNoEntity;
 };
 
+// Caravans (W4, docs/design/caravans.md). `action` is "Form" (the colonists `pawns` take the item stacks `items`
+// off the map and set out for `tile`; -1 keeps them on the start tile), "Move" (caravan `caravan` sets off for
+// `tile`), "Stop" or "Enter" (a caravan on the start tile comes back onto the map). Needs a world (SimSettings::world).
+// Fails with the reason in plain words.
+struct CaravanCommand {
+    std::string action;
+    int caravan = 0;
+    int tile = -1;
+    std::vector<Entity> pawns;
+    std::vector<Entity> items;
+};
+
 // Dev command: the weather becomes this Weathers def now (by defName, e.g. "Rain") and lasts `hours`
 // game hours (0: its usual length), then the next is chosen as usual (docs/design/weather.md).
 // Fails if no Weathers def has the name.
@@ -793,7 +805,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand,
                              SetNarratorCommand, FireIncidentCommand, ContractDiseaseCommand, StartStrategyRaidCommand,
                              ShipCommand, QuestCommand,
-                             AddOperationCommand, RemoveOperationCommand>;
+                             AddOperationCommand, RemoveOperationCommand, CaravanCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

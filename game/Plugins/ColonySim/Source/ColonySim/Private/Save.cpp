@@ -46,6 +46,7 @@
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Quests.h"
 #include "ColonySim/Ship.h"
+#include "ColonySim/Caravans.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Social.h"
 #include "ColonySim/Research.h"
@@ -464,6 +465,8 @@ struct SaveData {
     SaveDesignations designations;     // format 12 on
     ResearchState research;            // section "research"
     ShipState ship;                    // section "ship"
+    std::vector<Caravan> caravans;     // section "caravans" (W4)
+    int caravanNextId = 1;
     // Section "talents" (P3): per protagonist, parallel lists in pawn order.
     std::vector<Entity> talentPawns;
     std::vector<int64_t> talentXp;
@@ -1040,6 +1043,12 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.text("action", c.action);
         ar.value("quest", c.quest);
         ar.text("kind", c.kind);
+    } else if constexpr (std::is_same_v<Type, CaravanCommand>) {
+        ar.text("action", c.action);
+        ar.value("caravan", c.caravan);
+        ar.value("tile", c.tile);
+        ar.list("pawns", c.pawns, [&](Entity& e) { ar.value(nullptr, e); });
+        ar.list("items", c.items, [&](Entity& e) { ar.value(nullptr, e); });
     } else {
         static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
     }
@@ -2324,6 +2333,32 @@ void saveShip(Ar& ar, ShipState& s) {
 }
 
 template <typename Ar>
+void saveCaravans(Ar& ar, SaveData& d) {
+    ar.value("nextId", d.caravanNextId);
+    ar.list("caravans", d.caravans, [&](Caravan& c) {
+        ar.value("id", c.id);
+        ar.value("state", c.state);
+        ar.require(static_cast<int>(c.state) <= static_cast<int>(CaravanState::Waiting), "the save file has a bad caravan state");
+        ar.list("members", c.members, [&](CaravanWalker& w) {
+            ar.value("pawn", w.pawn);
+            ar.value("walk", w.walk);
+            ar.value("repaths", w.repaths);
+            ar.value("pathSlot", w.path.slot);
+            ar.value("pathSerial", w.path.serial);
+        });
+        ar.list("items", c.items, [&](Entity& e) { ar.value(nullptr, e); });
+        ar.value("tile", c.tile);
+        ar.value("cameFrom", c.cameFrom);
+        ar.value("destination", c.destination);
+        ar.list("path", c.path, [&](int& t) { ar.value(nullptr, t); });
+        ar.value("progress", c.progress);
+        ar.value("cost", c.cost);
+        ar.group("exit", [&] { saveCell(ar, c.exit); });
+        ar.value("formedAt", c.formedAt);
+    });
+}
+
+template <typename Ar>
 void saveTalents(Ar& ar, SaveData& d) {
     ar.list("pawns", d.talentPawns, [&](Entity& pawn) { ar.value(nullptr, pawn); });
     ar.list("xp", d.talentXp, [&](int64_t& xp) { ar.value(nullptr, xp); });
@@ -2989,6 +3024,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("startTile", d.world.startTile);
         ar.value("hash", d.worldHash);
     });
+    ar.section("caravans", 1, [&] { saveCaravans(ar, d); });
     // New sections go here, at the end.
 }
 
@@ -3481,6 +3517,8 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     }
     d.research = sim.research_->state();
     d.ship = sim.ship_->state();
+    d.caravans = sim.caravans_->caravans();
+    d.caravanNextId = sim.caravans_->nextId();
     for (const auto& [pawn, s] : sim.talents_->states()) {
         d.talentPawns.push_back(pawn);
         d.talentXp.push_back(s.xp);
@@ -4270,6 +4308,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     }
     sim.quests_->state() = std::move(d.quests);
     if (!sim.ship_->restore(std::move(d.ship), error)) {
+        return false;
+    }
+    if (!sim.caravans_->restore(std::move(d.caravans), d.caravanNextId, error)) {
         return false;
     }
     sim.apparel_->restoreOutfits(std::move(d.outfits), d.nextOutfitId);

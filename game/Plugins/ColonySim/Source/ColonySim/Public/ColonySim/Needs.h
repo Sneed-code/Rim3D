@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 namespace colony {
@@ -110,9 +111,13 @@ public:
     // the bed def's `stats.bedRestEffectiveness`.
     float restGainPerDay(Entity bed) const;
 
+    // Pawns that sleep somewhere off the map (a caravan resting for the night): they rest as on the ground.
+    void setRestingElsewhere(std::function<bool(Entity)> resting) { restingElsewhere_ = std::move(resting); }
+
     void step();
 
 private:
+    std::function<bool(Entity)> restingElsewhere_;
     Things& things_;
     HealthSystem& health_;
     const DefDatabase& defs_;

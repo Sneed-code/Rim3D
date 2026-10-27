@@ -192,8 +192,12 @@ const char* commandName(const Command& command) {
             } else if constexpr (std::is_same_v<Type, ShipCommand>) {
                 return "Ship";
             } else {
-                static_assert(std::is_same_v<Type, QuestCommand>, "name every command type");
-                return "Quest";
+                if constexpr (std::is_same_v<Type, QuestCommand>) {
+                    return "Quest";
+                } else {
+                    static_assert(std::is_same_v<Type, CaravanCommand>, "name every command type");
+                    return "Caravan";
+                }
             }
         },
         command);
@@ -331,6 +335,13 @@ const char* eventTypeName(EventType type) {
         case EventType::ShipReactorLost: return "ShipReactorLost";
         case EventType::ShipLaunched: return "ShipLaunched";
         case EventType::OperationDone: return "OperationDone";
+        case EventType::CaravanFormed: return "CaravanFormed";
+        case EventType::CaravanMemberLost: return "CaravanMemberLost";
+        case EventType::CaravanCancelled: return "CaravanCancelled";
+        case EventType::CaravanDeparted: return "CaravanDeparted";
+        case EventType::CaravanArrived: return "CaravanArrived";
+        case EventType::CaravanEntered: return "CaravanEntered";
+        case EventType::CaravanLost: return "CaravanLost";
     }
     return "?";
 }

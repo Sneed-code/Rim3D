@@ -48,6 +48,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Farming (section `farming`) | growing zones: id, crop **by `defName`**, cells; the next zone id and the counters ([farming.md](farming.md)) |
 | Prisoners (section `prisoners`) | each prisoner's mode, resistance, capture time and next talk; each prison-marked bed ([prisoners.md](prisoners.md)) |
 | World (section `world`) | `SimSettings::world` (on, seed, width, height, start tile) and the world's hash; the world itself is made again from them and checked against the hash ([world-map.md](world-map.md)) |
+| Caravans (section `caravans`) | the next id; each caravan's state, members (walk state, tries, path ticket), items, tile, came-from, destination, path, progress, cost, exit cell, formed time ([caravans.md](caravans.md)) |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
@@ -298,6 +299,7 @@ Every section is version 1 at format 20. A task that changes a section adds a li
 - `roomstats` 1 (C17): floors, filth, carried filth, the filth rng, beauty needs ([room-stats.md](room-stats.md)). Commands `PlaceFloor` and `AddFilth` by name.
 - `health` 2 (E2): each pawn's environment hediffs (hypothermia, heatstroke...), a list of def name and severity before `dead`. Version 1 files load with none.
 - `world` 1 (W2): new section, see the table. Saves without it have no world.
+- `caravans` 1 (W4): new section, see the table. Command `Caravan` by name.
 - `prisoners` 1 (C22): new section, see the table. Commands `SetPrisonerMode` and `SetPrisonBed` by name; the job check now accepts `CapturePrisoner`, `FeedPrisoner` and `WardenInteract`.
 - `raids` 2 (adaptation): AdaptDays, the next growth time and the colonists watched, after the alarm values; version 1 loads as 0 and an empty list.
 - `raids` 1 (F6): new section, see the table. Commands `StartRaid`, `SoundAlarm`, `SetDefenseRole`, `MarkShelter` by name.

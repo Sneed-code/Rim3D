@@ -413,6 +413,22 @@ struct ShipView {
     int escaped = 0;
 };
 
+// A caravan (docs/design/caravans.md). `state` is a CaravanState number: 0 forming on the map, 1 travelling,
+// 2 resting for the night, 3 waiting on a tile. Tiles are World tile indices (-1 none).
+struct CaravanView {
+    int id = 0;
+    uint8_t state = 0;
+    int tile = -1;
+    int nextTile = -1;
+    int destination = -1;
+    float progress = 0.0f;     // 0 to 1 of the way to nextTile
+    int pawns = 0;             // members (downed ones too)
+    int items = 0;             // stacks it carries
+    float massKg = 0.0f;
+    float capacityKg = 0.0f;
+    float tilesPerDay = 0.0f;  // at the next tile's cost and its load, counting the night's rest; 0 when it can't move
+};
+
 // The date, the weather and the sky's mood (docs/design/weather.md). Snow per cell is not here:
 // read `Sim::weather().snowDepth(cell)` when `snowChanges` goes up.
 struct WeatherView {
@@ -510,6 +526,7 @@ struct Snapshot {
     WeatherView weather;
     ShipView ship;
     NarratorView narrator;
+    std::vector<CaravanView> caravans;  // by id
 
     // The thing with this id, or null if it is not on the map. Binary search.
     COLONY_API const ThingView* find(Entity id) const;
