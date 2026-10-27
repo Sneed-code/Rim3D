@@ -17,7 +17,11 @@
     "birthSpread": 1.5,
     "hatchMinTemp": 0,
     "hatchMaxTemp": 50,
+    "gestationMinTemp": -10,
+    "gestationMaxTemp": 45,
+    "followRadius": 4,
+    "hatcheryRadius": 2.5,
     "unverified": ["mateChance", "milkWorkSeconds", "woolWorkSeconds", "gatherXp"],
-    "ours": ["passSeconds", "mateMeanHours", "mateRadius", "mateSearchRadius", "courtSeconds", "mateHoldSeconds", "mateCooldownHours", "birthCooldownDays", "minFood", "birthSpread", "hatchMinTemp", "hatchMaxTemp"]
+    "ours": ["passSeconds", "mateMeanHours", "mateRadius", "mateSearchRadius", "courtSeconds", "mateHoldSeconds", "mateCooldownHours", "birthCooldownDays", "minFood", "birthSpread", "hatchMinTemp", "hatchMaxTemp", "gestationMinTemp", "gestationMaxTemp", "followRadius", "hatcheryRadius"]
   }
 ]

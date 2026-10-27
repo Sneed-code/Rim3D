@@ -6,6 +6,7 @@
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Events.h"
+#include "FuelTestHelper.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Jobs.h"
@@ -515,4 +516,34 @@ TEST_CASE("Butchering: a dead person can be cut up at the butcher table") {
     f.sim.stepMany(5);
     CHECK(f.onMap("Meat_Human") > 100);
     CHECK(f.onMap("Leather_Human") > 50);
+}
+
+TEST_CASE("Cremating: the crematorium burns a corpse to nothing, with no meat and no butcher's memory") {
+    HuntFixture f;
+    f.addColonist(CellPos{10, 14, 0}, 8, false);
+    f.sim.submit(UnlockResearchCommand{"Electricity"});
+    const Entity generator = f.building("WoodFiredGenerator", CellPos{10, 10, 0});
+    HUNT_REQUIRE(generator != kNoEntity);
+    testFueled(f.sim, generator);
+    for (int x = 12; x <= 17; ++x) {
+        f.sim.things().spawn("PowerConduit", CellPos{x, 10, 0});
+    }
+    const Entity oven = f.building("Crematorium", CellPos{19, 10, 0});
+    const Entity deer = f.animal("Deer", CellPos{18, 14, 0});
+    HUNT_REQUIRE(oven != kNoEntity && deer != kNoEntity);
+    f.kill(deer);
+    f.sim.submit(AddBillCommand{oven, "CremateCorpse", BillMode::Count, 1});
+    f.sim.step();
+    CHECK_FALSE(f.sawEvent(EventType::CommandFailed));
+    bool butchered = false;
+    const bool done = f.runUntil(6000, [&] {
+        for (const Event& e : f.sim.events()) {
+            butchered = butchered || e.type == EventType::AnimalButchered;
+        }
+        return !f.reg().valid(deer);
+    });
+    HUNT_REQUIRE(done);
+    CHECK_FALSE(butchered);
+    CHECK(f.onMap("Meat_Deer") == 0);
+    CHECK(f.onMap("Leather_Plain") == 0);
 }
