@@ -124,6 +124,9 @@ public:
         bool visible = true;      // false while a disease is too early to notice
         std::vector<std::pair<int, float>> offsets;  // capacity, amount
         std::vector<std::pair<int, float>> maxima;
+        float painFactor = 1.0f;  // multiplies the pawn's pain (drugs)
+        float workSpeed = 1.0f;   // multiplies its global work speed
+        float hunger = 1.0f;      // multiplies how fast its food falls
     };
     struct Hediff {
         float painPerSeverity = 0.0f;
@@ -304,6 +307,9 @@ std::vector<HealthModel::Stage> HealthModel::readStages(const Def& def, const st
                 s.maxima.emplace_back(found->second, static_cast<float>(def.number((at + ".capacityMax." + key).c_str())));
             }
         }
+        s.painFactor = static_cast<float>(def.number((at + ".painFactor").c_str(), 1.0));
+        s.workSpeed = static_cast<float>(def.number((at + ".workSpeed").c_str(), 1.0));
+        s.hunger = static_cast<float>(def.number((at + ".hunger").c_str(), 1.0));
         flagged.push_back(std::move(f));
     }
     std::stable_sort(flagged.begin(), flagged.end(),
@@ -922,7 +928,21 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, con
     const HealthModel::Body& body = model_->bodies[static_cast<size_t>(bodyIndex)];
     HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
     eval.workOutPainAndBleeding();
-    health.pain = mechanical ? 0.0f : eval.pain / healthScale * mods.painFactor;
+    // The stages of the pawn's environment hediffs (a drug high) scale pain, work speed and hunger.
+    float painFactor = 1.0f;
+    health.workSpeedFactor = 1.0f;
+    health.hungerFactor = 1.0f;
+    for (const EnvironmentHediff& env : health.environment) {
+        const HealthModel::EnvironmentDef* def = model_->environmentOf(env.def);
+        const int stage = def != nullptr ? HealthModel::stageIn(def->stages, env.severity) : -1;
+        if (stage >= 0) {
+            const HealthModel::Stage& st = def->stages[static_cast<size_t>(stage)];
+            painFactor *= st.painFactor;
+            health.workSpeedFactor *= st.workSpeed;
+            health.hungerFactor *= st.hunger;
+        }
+    }
+    health.pain = mechanical ? 0.0f : eval.pain / healthScale * painFactor * mods.painFactor;
     for (const Disease& disease : health.diseases) {
         const HealthModel::DiseaseDef* def = model_->diseaseOf(disease.def);
         const int stage = def != nullptr ? HealthModel::stageIn(def->stages, disease.severity) : -1;
@@ -1021,11 +1041,18 @@ void HealthSystem::refresh(Entity pawn) {
 
 void HealthSystem::refreshAll() {
     entt::registry& reg = things_.registry();
-    // `downed` is not saved, so every downed pawn looks newly downed here. It was downed before the
-    // save, and whatever path it holds now it held then.
+    // Saves before health section 6 do not hold `downed`, so every downed pawn looks newly downed here. It was
+    // downed before the save, and whatever path it holds now it held then. A wound still waiting to be worked
+    // out (`dirty`, saved) keeps its saved downed flag and stays pending, so the next step downs and announces it.
     restoring_ = true;
     for (const auto [entity, health] : reg.view<Health>().each()) {
+        const bool pending = health.dirty;
+        const bool downed = health.downed;
         recompute(entity, health, false);
+        if (pending) {
+            health.downed = downed;
+            health.dirty = true;
+        }
     }
     restoring_ = false;
 }
@@ -2127,6 +2154,18 @@ float HealthSystem::partHitPoints(Entity pawn, int part) const {
     const Health& health = reg.get<Health>(pawn);
     const HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
     return eval.hpFraction(part) * eval.maxHp(part);
+}
+
+float HealthSystem::workSpeedFactor(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Health* health = reg.valid(pawn) ? reg.try_get<Health>(pawn) : nullptr;
+    return health != nullptr ? health->workSpeedFactor : 1.0f;
+}
+
+float HealthSystem::hungerFactor(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Health* health = reg.valid(pawn) ? reg.try_get<Health>(pawn) : nullptr;
+    return health != nullptr ? health->hungerFactor : 1.0f;
 }
 
 float HealthSystem::capacityValue(Entity pawn, const std::string& capacity) const {

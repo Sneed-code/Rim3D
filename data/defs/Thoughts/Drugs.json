@@ -10,5 +10,7 @@
   {"defName": "SmokeleafWithdrawalMood", "label": "smokeleaf withdrawal", "source": "RimWorld wiki", "situation": {"condition": "drug:SmokeleafWithdrawal"}, "stages": [{"label": "smokeleaf withdrawal", "moodOffset": -20}]},
   {"defName": "PsychiteWithdrawalMood", "label": "psychite withdrawal", "source": "RimWorld wiki", "situation": {"condition": "drug:PsychiteWithdrawal"}, "stages": [{"label": "psychite withdrawal", "moodOffset": -35}]},
   {"defName": "GoJuiceWithdrawalMood", "label": "go-juice withdrawal", "source": "RimWorld wiki", "situation": {"condition": "drug:GoJuiceWithdrawal"}, "stages": [{"label": "go-juice withdrawal", "moodOffset": -22}]},
-  {"defName": "WakeUpWithdrawalMood", "label": "wake-up withdrawal", "source": "RimWorld wiki", "situation": {"condition": "drug:WakeUpWithdrawal"}, "stages": [{"label": "wake-up withdrawal", "moodOffset": -22}]}
+  {"defName": "WakeUpWithdrawalMood", "label": "wake-up withdrawal", "source": "RimWorld wiki", "situation": {"condition": "drug:WakeUpWithdrawal"}, "stages": [{"label": "wake-up withdrawal", "moodOffset": -22}]},
+  {"defName": "AmbrosiaMood", "label": "ambrosia high", "source": "RimWorld wiki", "situation": {"condition": "drug:AmbrosiaHigh"}, "stages": [{"label": "ambrosia", "moodOffset": 5}]},
+  {"defName": "AmbrosiaWithdrawalMood", "label": "ambrosia withdrawal", "source": "RimWorld wiki", "situation": {"condition": "drug:AmbrosiaWithdrawal"}, "stages": [{"label": "ambrosia withdrawal", "moodOffset": -10}]}
 ]

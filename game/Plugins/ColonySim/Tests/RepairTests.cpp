@@ -17,6 +17,7 @@
 #include <doctest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
@@ -149,11 +150,11 @@ TEST_CASE("Repair: a damaged flak vest is mended at a tailor bench for half the 
     const int max = sim.things().registry().get<HitPoints>(vest).max;
     repairDamage(sim, vest, max / 2);
 
-    // Full repair of a 4 kg vest is 12 cloth (3 per kg); half of it missing is 6.
+    // Full repair of a 4 kg vest is 4 cloth (apparel: 1 per kg); half of it missing is 2.
     const RepairCost cost = sim.repair().costOf(vest);
     CHECK(cost.material == repairDef(sim, "Cloth"));
-    CHECK(cost.count == 6);
-    CHECK(cost.work == doctest::Approx(600.0f));  // 4 kg x 300 work per kg x half
+    CHECK(cost.count == 2);
+    CHECK(cost.work == doctest::Approx(200.0f));  // 4 kg x 100 work per kg x half
 
     sim.submit(RepairGearCommand{vest, true});
     sim.step();
@@ -175,9 +176,98 @@ TEST_CASE("Repair: a damaged flak vest is mended at a tailor bench for half the 
     const entt::registry& reg = sim.things().registry();
     CHECK(reg.get<HitPoints>(vest).current == max);
     CHECK(!reg.all_of<RepairMark>(vest));
-    CHECK(repairStock(sim, "Cloth") == 24);
+    CHECK(repairStock(sim, "Cloth") == 28);
     sim.stepMany(60);
     CHECK(sim.things().spawned(vest));  // put down again beside the bench, not left in the hands
+}
+
+TEST_CASE("Repair: worn-out clothes cost about a tenth of their cloth, the bigger of hit points and durability, and come back to full") {
+    Sim sim = repairSim();
+    const Entity bench = repairSpawn(sim, "TailorBenchHand", CellPos{20, 20, 0});
+    REPAIR_REQUIRE(bench != kNoEntity);
+    repairSpawn(sim, "TorchLamp", CellPos{17, 17, 0});
+    repairCrafter(sim, CellPos{18, 18, 0});
+    repairSpawn(sim, "Cloth", CellPos{22, 22, 0}, 30);
+    const Entity shirt = repairSpawn(sim, "Apparel_TShirt", CellPos{19, 19, 0});
+    const Entity hat = repairSpawn(sim, "Apparel_CowboyHat", CellPos{19, 21, 0});
+    REPAIR_REQUIRE(shirt != kNoEntity && hat != kNoEntity);
+    entt::registry& reg = sim.things().registry();
+
+    // Full hit points and full durability: nothing to mend.
+    sim.submit(RepairGearCommand{shirt, true});
+    sim.step();
+    CHECK(repairFailed(sim));
+
+    // Hit points at 80%, durability at 50%: the bigger loss counts, half of a full repair. A full repair of a
+    // 40-cloth T-shirt is 4 cloth (a tenth), so 2; a 25-cloth hat worn out is 2 (2.5 rounded down).
+    reg.get<HitPoints>(shirt).current = 80;
+    reg.emplace_or_replace<Durability>(shirt, Durability{0.5f});
+    RepairCost cost = sim.repair().costOf(shirt);
+    CHECK(cost.count == 2);
+    CHECK(cost.work == doctest::Approx(std::ceil(2304.0f * 0.1f * 0.5f)));
+    reg.emplace_or_replace<Durability>(shirt, Durability{1.0f});
+    CHECK(sim.repair().costOf(shirt).count == 1);  // only the hit points: 20% of 4, at least 1
+    reg.emplace_or_replace<Durability>(shirt, Durability{0.0f});
+    reg.get<HitPoints>(shirt).current = 100;
+    cost = sim.repair().costOf(shirt);
+    CHECK(cost.material == repairDef(sim, "Cloth"));
+    CHECK(cost.count == 4);
+    reg.emplace_or_replace<Durability>(hat, Durability{0.0f});
+    CHECK(sim.repair().costOf(hat).count == 2);
+
+    // Worn out but whole: the mark takes it, a tailor mends it, both come back to full.
+    sim.submit(RepairGearCommand{shirt, true});
+    sim.step();
+    CHECK(!repairFailed(sim));
+    REPAIR_REQUIRE(repairRunUntil(sim, 4000, [&] { return !reg.all_of<RepairMark>(shirt); }) >= 0);
+    CHECK(reg.get<HitPoints>(shirt).current == reg.get<HitPoints>(shirt).max);
+    CHECK(ApparelStats::condition(reg, shirt) == doctest::Approx(1.0f));
+    CHECK(repairStock(sim, "Cloth") == 26);
+}
+
+TEST_CASE("Repair: a colonist mends its own tattered clothes at a tailor bench without taking them off") {
+    Sim sim = repairSim();
+    const Entity bench = repairSpawn(sim, "TailorBenchHand", CellPos{20, 20, 0});
+    REPAIR_REQUIRE(bench != kNoEntity);
+    repairSpawn(sim, "TorchLamp", CellPos{17, 17, 0});
+    const Entity pawn = repairCrafter(sim, CellPos{30, 30, 0});
+    entt::registry& reg = sim.things().registry();
+    std::string why;
+    const Entity shirt = sim.apparel().make(repairDef(sim, "Apparel_TShirt"), repairDef(sim, "Cloth"), -1, CellPos{30, 30, 0}, &why);
+    const Entity pants = sim.apparel().make(repairDef(sim, "Apparel_Pants"), repairDef(sim, "Cloth"), -1, CellPos{30, 30, 0}, &why);
+    REPAIR_REQUIRE(shirt != kNoEntity && pants != kNoEntity);
+    REPAIR_REQUIRE(sim.apparel().putOn(pawn, shirt, why));
+    REPAIR_REQUIRE(sim.apparel().putOn(pawn, pants, why));
+    reg.emplace_or_replace<Durability>(shirt, Durability{0.0f});  // tattered: mended without a mark
+    reg.emplace_or_replace<Durability>(pants, Durability{0.6f});  // worn, not tattered: left alone
+
+    // No cloth near the bench: nothing happens.
+    sim.stepMany(600);
+    CHECK(ApparelStats::condition(reg, shirt) <= 0.0f);
+    CHECK(!repairSaw(sim, EventType::GearRepaired));
+
+    repairSpawn(sim, "Cloth", CellPos{22, 22, 0}, 30);
+    bool repaired = false;
+    REPAIR_REQUIRE(repairRunUntil(sim, 6000, [&] {
+                       repaired = repaired || repairSaw(sim, EventType::GearRepaired);
+                       return repaired;
+                   }) >= 0);
+    CHECK(ApparelStats::condition(reg, shirt) == doctest::Approx(1.0f));
+    CHECK(ApparelStats::condition(reg, pants) < 0.61f);
+    const std::vector<Entity>& worn = sim.apparel().worn(pawn);
+    CHECK(std::find(worn.begin(), worn.end(), shirt) != worn.end());  // still on
+    CHECK(!sim.things().spawned(shirt));
+    CHECK(!reg.all_of<RepairMark>(shirt));
+    CHECK(repairStock(sim, "Cloth") == 26);  // a tenth of 40
+
+    // A worn piece the player marks is mended at any durability.
+    sim.submit(RepairGearCommand{pants, true});
+    sim.step();
+    CHECK(!repairFailed(sim));
+    REPAIR_REQUIRE(repairRunUntil(sim, 6000, [&] { return !reg.all_of<RepairMark>(pants); }) >= 0);
+    CHECK(ApparelStats::condition(reg, pants) == doctest::Approx(1.0f));
+    CHECK(std::find(worn.begin(), worn.end(), pants) != worn.end());
+    CHECK(repairStock(sim, "Cloth") == 25);  // 40% of 4, rounded down, at least 1
 }
 
 TEST_CASE("Repair: a rifle is mended at a smithy with steel, nothing is used when the steel is out of reach") {

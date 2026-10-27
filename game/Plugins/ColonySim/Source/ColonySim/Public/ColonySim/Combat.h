@@ -291,8 +291,9 @@ public:
     bool handsSlot(Entity pawn, WeaponSlot& out) const;
     // The slot a switch is going to (false if the pawn is not switching).
     bool switchTarget(Entity pawn, WeaponSlot& out) const;
-    // Takes `hitPoints` off a worn piece of apparel; at none it is destroyed (an ApparelDestroyed
-    // event). Used when armor takes a hit and by wear and tear (C15).
+    // Wears a worn piece of apparel by `hitPoints` worth of durability (Apparel.h `Durability`); its hit points
+    // stay. Only a fragile piece already at 0 durability loses the rest as hit points, and at none it is
+    // destroyed (an ApparelDestroyed event). Used when armor takes a hit (C15, docs/design/apparel-durability.md).
     void damageApparel(Entity pawn, Entity item, int hitPoints);
     // What the defs and the item's stuff and quality make of a piece of apparel (Apparel.h).
     const ApparelStats& apparelStats() const { return *apparelStats_; }

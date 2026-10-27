@@ -44,8 +44,8 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Pawn looks (format 16) | each humanlike pawn's lineage (by `defName`), gender, body type, weight, height, melanin and colours; `SetLineage` commands in the log ([looks.md](looks.md)). Older files load with pawns that have no looks |
 | Aiming (format 17) | rounds left in each gun that has been fired (`Magazine`), the trigger's reloading phase, a fighter's reaction and dodge times ([aiming.md](aiming.md)) |
 | Raids (section `raids`, `fighters` 2) | the raid squads (faction, points, state, target, members, when they give up), the alarm and its threat and home points, the shelter mark, the factions met so far; per pawn its `Raider` squad and kind and its `DefensePlan`; a fighter's mode, goal, squad, `defending` and `retreat` ([raids.md](raids.md)) |
-| Drugs (section `drugs`) | per pawn: policy, own policy entries, chemical states (tolerance, addicted, need, progress), last dose of each drug **by `defName`**, search wait ([drugs.md](drugs.md)) |
 | Raids (section `raids` 2, `fighters` 2) | the raid squads (faction, points, state, target, members, when they give up), the alarm and its threat and home points, the shelter mark, the factions met so far; per pawn its `Raider` squad and kind and its `DefensePlan`; a fighter's mode, goal, squad, `defending` and `retreat` ([raids.md](raids.md)) |
+| Drugs (section `drugs`) | per pawn: policy, own policy entries, chemical states (tolerance, addicted, need, progress), last dose of each drug **by `defName`**, search wait, binge end and chemical (`drugs` version 2) ([drugs.md](drugs.md)) |
 | Talents (section `talents`) | per protagonist: pawn, XP and ranks by talent **`defName`** ([talents.md](talents.md)) |
 | Resonance (section `resonance`) | per pawn its `attunement` (level, strain, focus, powers **by `defName`**), a `casting` under way (power by `defName`, target, cell, steps, player), `stunned` (steps) and resonance `effects` (numb and burden steps and values) ([resonance.md](resonance.md)) |
 | Farming (section `farming`) | growing zones: id, crop **by `defName`**, cells; the next zone id and the counters ([farming.md](farming.md)) |
@@ -106,7 +106,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `movement` | 2 | `mover` |
 | `jobs` | 1 | `worker` (the job, its bill picks and ingredients, avoid memory), `work` (Work tab), `carrying` |
 | `colonists` | 2 | `colonist` (2: each skill's `xpToday`, C12) |
-| `health` | 5 | `health` (version 2: environment hediffs such as hypothermia, E2; version 3: each injury's `peak`, for scars, H1; version 4: `infectAt`, `diseases` and `immunities`, H2; version 5: `added`, the artificial parts fitted, H3) |
+| `health` | 6 | `health` (version 2: environment hediffs such as hypothermia, E2; version 3: each injury's `peak`, for scars, H1; version 4: `infectAt`, `diseases` and `immunities`, H2; version 5: `added`, the artificial parts fitted, H3; version 6: `downed` and `dirty`, so a wound the last step added is still pending after a load) |
 | `control` | 1 | `playerControlled`: the ids of controlled pawns |
 | `needs` | 1 | `needs`, `schedule`, `bed` |
 | `bills` | 3 | `bills` on work buildings. Version 3 adds the bill's count stockpile. Version 2 (C14) adds each bill's skill range, ingredient radius, store stockpile, restart stock, satisfied flag and ingredient filter; version 1 loads with the defaults |
@@ -137,7 +137,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `raids` | 2 | the raid state (factions met, squads, the alarm, threat and home points, the shelter mark), then the `defense` and `raider` parts ([raids.md](raids.md), F6) |
 | `melee` | 1 | `melee`: each pawn's swing, its defense against one, its block (F8, [melee.md](melee.md)) |
 | `social` | 1 | `social` (a colonist's opinion memories, stored bonds, next talk, mourned) and `fight` (a fight with fists in progress) per pawn (C20, [social.md](social.md)) |
-| `apparel` | 1 | `apparel`: the stuff and quality of an item, taint, a strip mark, a pawn's outfit and next look; the outfit policies ([apparel.md](apparel.md)) |
+| `apparel` | 2 | `apparel`: the stuff and quality of an item, taint, a strip mark, a pawn's outfit and next look, and from version 2 its durability; the outfit policies ([apparel.md](apparel.md), [apparel-durability.md](apparel-durability.md)) |
 | `feel` | 1 | `kick` (the player's gun kick and its spray) and `roll` (a dodge roll's phase, steps, direction, wait) ([shooter-feel.md](shooter-feel.md)) |
 | `levels` | 1 | the upper floors, by level then row; put back before the buildings on them (M1) |
 | `medicine` | 2 | `medical`: the medical care setting of each pawn that has one (H1, [medicine.md](medicine.md)); version 2: `operations`, the operations planned on a patient (H3, [surgery.md](surgery.md)) |
@@ -148,6 +148,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `fire` | 1 | the counters, `fires` (cell, size, age, plant damage), `burnt` (cell, game second), `home` (the home area's cell indices), the automatic-growth flags, and `burning` (a pawn on fire: when it burns out) ([fire.md](fire.md), E4) |
 | `mentalBreaks` | 1 | `mentalBreaker` ([mental-breaks.md](mental-breaks.md)) |
 | `inspirations` | 1 | `inspired` ([inspirations.md](inspirations.md)) |
+| `travel` | 1 | the running skip, counters and the visited places ([skip-travel.md](skip-travel.md)) |
 
 **Commands are saved by name (S7).** The `commands` section starts with the names of the command
 types it uses (`commandNames`); each command then gives its type as a place in that list, and its
@@ -199,7 +200,9 @@ parallel tasks merge cleanly.
    nothing about it goes in the frozen table for formats 6 to 19.
 6. **Entity references** inside components (like a job's target) are saved as the id; ids come back
    exactly, so they stay valid. `restore` checks that what they name exists.
-7. **Test**: add the new state to the session in `Tests/SaveTests.cpp` (`saveTestSession`) so the
+7. **Test**: add the new state to the busy colony in `Tests/SaveAuditTests.cpp` (`auditSession`: the
+   commands, and the incident list if your task adds an incident; `auditRun`: anything that has to
+   exist before the first step) so the audit (below) exercises it. Also add it to the session in `Tests/SaveTests.cpp` (`saveTestSession`) so the
    "load and run on gives the same game" test exercises it, or a save round trip in your own test
    file. A cache needs no save, but it must be rebuilt by whatever asks for it, and nothing that
    changes game state may read it stale.
@@ -300,12 +303,37 @@ sneed's whole job for a bug is: press F8, then send the folder (zip it, or drop 
 - **20** (S7): named sections, each with its own version, and commands by name (above). The last
   format number: from here on, sections change instead.
 
+### The audit (`Tests/SaveAuditTests.cpp`)
+
+One generic test finds state a system forgot to save, without knowing the systems. It runs a busy
+colony (Crashlanded on real defs: the narrator, raids, caravans, diseases, fire, mental breaks,
+hunting, taming, a prisoner, bills, farming, research, talents, drugs, quests, inspirations, worn-out
+clothes and repair, an organ harvest, an execution), saves it at many moments, loads the
+file and runs the original and the loaded copy side by side with the same commands. Right after the
+load, and every 150 seconds for 900 seconds, the state hash and the whole saved file must be equal. State a
+system keeps but does not save makes the two drift apart, and a file the loader refuses is caught
+too. Run it as part of `unit`; a task that adds a system adds its commands and incidents to
+`auditSession` so the audit reaches it.
+
+- A second test (`...a night skip and of a fast travel`) puts everyone to bed in a quiet colony and saves in the
+  middle of a night skip and of a fast travel, which the busy script never reaches (nobody is all asleep).
+- **Soak**: `AUDIT_SOAK=60 ./build/colonysim_tests -tc="Save audit: soak"` plays seeds 1 to 60, saving each
+  about twenty times (a few minutes). Use it after adding state. `AUDIT_SEED=n` runs one seed,
+  `AUDIT_BLOCK=1` compares every second to find the first second a drift starts, and
+  `AUDIT_DUMP=/some/folder` writes both sims' JSON dumps (`a.json`, `b.json`) when they differ, for a diff.
+- **Typical causes**: a flag that is derived on loading but was "pending" when saved (health's
+  `downed`), a value one system sets for the *next* step (the weathering factor), a check in the
+  loader stricter than the sim's own rules (two jobs on one bed cell).
+- What the audit cannot see: state that never reaches the saved file or the hash (a cache that
+  changes behaviour). Caches must be rebuilt by whatever reads them.
+
 ### Section versions
 
 Every section is version 1 at format 20. A task that changes a section adds a line here, e.g.
 "`fighters` 2 (F9): ...". New sections are listed in the table above.
 
 - `roomstats` 1 (C17): floors, filth, carried filth, the filth rng, beauty needs ([room-stats.md](room-stats.md)). Commands `PlaceFloor` and `AddFilth` by name.
+- The loader accepts two jobs on one cell (the later one keeps the reservation) instead of refusing the file (audit).
 - `health` 2 (E2): each pawn's environment hediffs (hypothermia, heatstroke...), a list of def name and severity before `dead`. Version 1 files load with none.
 - `world` 1 (W2): new section, see the table. Saves without it have no world.
 - `caravans` 1 (W4): new section, see the table. Command `Caravan` by name.
@@ -319,6 +347,7 @@ Every section is version 1 at format 20. A task that changes a section adds a li
 - `breeding` 1 (N4): new section, see the table: the counters, per animal its `AnimalBreed` (pregnancy, litter, mating wait, milk, wool and egg timers, the female a male is walking to), per fertilized egg its `Hatching` time ([breeding.md](breeding.md)). The job check now accepts the animal jobs (it stopped at `StripPawn`, so a save made mid-taming would not load).
 - `husbandry` 2 (N2): per animal care record `markHunt` and `collect` after `markSlaughter`, and the `hunted` counter after `starved`. Version 1 files load with none. The job check now accepts `Hunt`, `HaulCorpse` and `Butcher`.
 - `apparel` 1 (C15): item stuff and quality, taint, strip marks, outfits ([apparel.md](apparel.md)). Commands `SetOutfit`, `EditOutfit`, `AddOutfit`, `RemoveOutfit` and `Strip` by name.
+- `apparel` 2 (durability): per item `hasDurability` and `durability` after `nextCheck` ([apparel-durability.md](apparel-durability.md)). Version 1 files load with every piece at full durability.
 - `movement` 2 (M2): each mover's `climbed` (metres up stairs or a ladder) after `gaveUp`. Version 1 files load with none; stairs and ladders need nothing saved (their links come from the buildings), stockpiles on upper levels were already saved with their level.
 - `looks` 2 (V1): after `hair`, the face sliders, `eyes`, `hairStyle`, `naturalBeard`, `beard`, `naturalBodyHair`, `bodyHair` and the lists `tattoos` and `scars` (region, style, u, v, size). Version 1 files load with an empty `hairStyle` and average faces.
 - `fire` 1 (E4): new section, see the table. Commands `Ignite` and `SetHomeArea` by name; the job check now accepts `ExtinguishFire`. Older saves load with no fires and a home area made at the first step.

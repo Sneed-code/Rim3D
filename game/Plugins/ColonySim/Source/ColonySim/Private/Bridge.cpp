@@ -205,6 +205,14 @@ const char* commandName(const Command& command) {
                 return "PlaceUpperFloor";
             } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
                 return "StartMentalBreak";
+            } else if constexpr (std::is_same_v<Type, CreateAreaCommand>) {
+                return "CreateArea";
+            } else if constexpr (std::is_same_v<Type, PaintAreaCommand>) {
+                return "PaintArea";
+            } else if constexpr (std::is_same_v<Type, DeleteAreaCommand>) {
+                return "DeleteArea";
+            } else if constexpr (std::is_same_v<Type, AssignAreaCommand>) {
+                return "AssignArea";
             } else if constexpr (std::is_same_v<Type, ContractDiseaseCommand>) {
                 return "ContractDisease";
             } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
@@ -221,6 +229,12 @@ const char* commandName(const Command& command) {
                 return "LearnPower";
             } else if constexpr (std::is_same_v<Type, CastPowerCommand>) {
                 return "CastPower";
+            } else if constexpr (std::is_same_v<Type, SkipNightCommand>) {
+                return "SkipNight";
+            } else if constexpr (std::is_same_v<Type, FastTravelCommand>) {
+                return "FastTravel";
+            } else if constexpr (std::is_same_v<Type, CancelSkipCommand>) {
+                return "CancelSkip";
             } else {
                 static_assert(std::is_same_v<Type, CaravanCommand>, "name every command type");
                 return "Caravan";
@@ -381,6 +395,10 @@ const char* eventTypeName(EventType type) {
         case EventType::CaravanArrived: return "CaravanArrived";
         case EventType::CaravanEntered: return "CaravanEntered";
         case EventType::CaravanLost: return "CaravanLost";
+        case EventType::DrugBinge: return "DrugBinge";
+        case EventType::ChemicalDamage: return "ChemicalDamage";
+        case EventType::SkipStarted: return "SkipStarted";
+        case EventType::SkipEnded: return "SkipEnded";
     }
     return "?";
 }

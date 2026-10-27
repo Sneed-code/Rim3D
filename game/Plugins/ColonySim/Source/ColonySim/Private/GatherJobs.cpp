@@ -105,15 +105,15 @@ bool JobSystem::canUseHands(Entity pawn) const {
     return gatherManipulation(things_.registry(), pawn, manipulationIndex_) > 0.0;
 }
 
-float JobSystem::lightWorkFactor(Entity pawn) const {
+float JobSystem::workFactor(Entity pawn) const {
     const Position* at = lights_ != nullptr ? things_.registry().try_get<Position>(pawn) : nullptr;
-    return at != nullptr ? lights_->workSpeedAt(cellOf(*at)) : 1.0f;
+    return (at != nullptr ? lights_->workSpeedAt(cellOf(*at)) : 1.0f) * health_.workSpeedFactor(pawn);
 }
 
 double JobSystem::miningSpeed(Entity pawn) const {
     const double speed = gather_.miningSpeedBase + gather_.miningSpeedPerLevel * skillLevel(pawn, "Mining");
     const PawnGenes* genes = things_.registry().valid(pawn) ? things_.registry().try_get<PawnGenes>(pawn) : nullptr;
-    return std::max(0.0, speed) * gatherManipulation(things_.registry(), pawn, manipulationIndex_) * lightWorkFactor(pawn) *
+    return std::max(0.0, speed) * gatherManipulation(things_.registry(), pawn, manipulationIndex_) * workFactor(pawn) *
            (genes != nullptr ? genes->effects.miningSpeed : 1.0);
 }
 
@@ -121,7 +121,7 @@ double JobSystem::plantWorkSpeed(Entity pawn) const {
     const double speed = gather_.plantSpeedBase + gather_.plantSpeedPerLevel * skillLevel(pawn, "Plants");
     const double manip = gatherManipulation(things_.registry(), pawn, manipulationIndex_);
     const PawnGenes* genes = things_.registry().valid(pawn) ? things_.registry().try_get<PawnGenes>(pawn) : nullptr;
-    return manip > 0.0 ? std::max(kGatherMinPlantSpeed, speed * manip) * lightWorkFactor(pawn) *
+    return manip > 0.0 ? std::max(kGatherMinPlantSpeed, speed * manip) * workFactor(pawn) *
                              (genes != nullptr ? genes->effects.plantWorkSpeed : 1.0)
                        : 0.0;
 }

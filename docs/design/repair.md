@@ -30,6 +30,8 @@ run (power) but burns no fuel. One colonist at a time per bench.
 | item with `stats.workToMake` and `costStuffCount` (clothes, melee weapons) | `workToMake` x 0.25 | `costStuffCount` x 0.25 of the stuff it is made of |
 | anything else (guns, flak vest, helmets) | 300 per kg of mass | 3 per kg of Steel (weapons) or Cloth (apparel) |
 
+**Apparel is cheaper since 2026-10-27** (sneed): a tenth instead of a quarter, rounded down, 1 cloth and 100 work per kg for apparel with no stuff, and the share lost is the bigger of lost hit points and lost durability; one repair brings both back ([apparel-durability.md](apparel-durability.md)). The table and the vest example below are the weapon numbers and the old apparel ones.
+
 A part-damaged item takes the share it lacks (`(max - current) / max`), the work rounded up, the material rounded up to
 at least 1. A flak vest (4 kg) at half hit points: 600 s of work and 6 cloth. A rifle (3.5 kg) at 40 of 100: 630 s and 7 steel.
 
@@ -89,7 +91,7 @@ gun stays upgraded when it is dropped, picked up or stowed.
 
 - Taking a part off (or swapping one), and parts for melee weapons or apparel.
 - A colonist fetching the material or the part (it is taken from near the bench), and a bill-like "repair everything under 50%"
-  setting; the player marks each piece. Worn and carried pieces are not reached: a drafted fighter's gear must be put down.
+  setting; the player marks each piece. Worn clothes are mended by their wearer while worn (`MendWorn`, [apparel-durability.md](apparel-durability.md)); carried weapons must be put down.
 - Armor and weapons wearing out in use: apparel already loses hit points when it absorbs damage (C15) but a weapon only
   deteriorates outdoors, so repairing weapons is rare until something wears them.
 - Unreal: a repair mark icon, a parts list on the weapon panel, and a work animation (no art in the sim).

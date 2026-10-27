@@ -161,6 +161,7 @@ void NeedsSystem::step() {
         }
         perDay *= health_.foodRateFactor(pawn);  // gut worms
         perDay *= needsTraitStat(defs_, reg, pawn, "hungerRateMultiplier", 1.0f);
+        perDay *= health_.hungerFactor(pawn);
         switch (foodBandOf(rules_, needs.food)) {
             case FoodBand::Fed: perDay *= rules_.foodFallFactorFed; break;
             case FoodBand::Hungry: perDay *= rules_.foodFallFactorHungry; break;

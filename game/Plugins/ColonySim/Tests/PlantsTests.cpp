@@ -324,3 +324,47 @@ TEST_CASE("Plants: nothing grows under an upper floor, and laying one clears the
     plants.growHour(8);
     CHECK_FALSE(plants.has(soil));
 }
+
+TEST_CASE("Plants: the hourly pass in slices grows every plant once, as the whole pass does (G3)") {
+    Sim whole(plantsTestSettings(9, 128), plantsTestRealDefs());
+    Sim sliced(plantsTestSettings(9, 128), plantsTestRealDefs());
+    whole.plants().growHour(10);
+    for (int slice = 0; slice < 60; ++slice) {
+        sliced.plants().growHourSlice(10, slice, 60);
+    }
+    size_t differ = 0;
+    for (int y = 0; y < whole.map().height(); ++y) {
+        for (int x = 0; x < whole.map().width(); ++x) {
+            const CellPos c{x, y, 0};
+            differ += whole.plants().growthPpm(c) != sliced.plants().growthPpm(c) || whole.plants().ageHours(c) != sliced.plants().ageHours(c) ? 1 : 0;
+        }
+    }
+    CHECK(differ == 0);
+}
+
+TEST_CASE("Plants: the sim spreads the hourly pass over the next hour's first minute (G3)") {
+    Sim sim(plantsTestSettings(9, 128), plantsTestRealDefs());
+    // A plant in the first row ages on the hour; one in the last row only a minute later.
+    CellPos first{-1, -1, 0};
+    CellPos last{-1, -1, 0};
+    for (int x = 0; x < sim.map().width() && (first.x < 0 || last.x < 0); ++x) {
+        if (first.x < 0 && sim.plants().has(CellPos{x, 0, 0})) {
+            first = CellPos{x, 0, 0};
+        }
+        if (last.x < 0 && sim.plants().has(CellPos{x, sim.map().height() - 1, 0})) {
+            last = CellPos{x, sim.map().height() - 1, 0};
+        }
+    }
+    if (first.x < 0 || last.x < 0) { CHECK(false); return; }
+    const uint32_t firstAge = sim.plants().ageHours(first);
+    const uint32_t lastAge = sim.plants().ageHours(last);
+    while (sim.time().seconds < kSecondsPerHour) {
+        sim.step();
+    }
+    CHECK(sim.plants().ageHours(first) == firstAge + 1);
+    CHECK(sim.plants().ageHours(last) == lastAge);
+    while (sim.time().seconds < kSecondsPerHour + 60) {
+        sim.step();
+    }
+    CHECK(sim.plants().ageHours(last) == lastAge + 1);
+}

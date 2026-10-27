@@ -43,6 +43,11 @@ struct DrugChemical {
     float withdrawalRisePerDay = 2.0f;
     float withdrawalRecoverPerDay = 2.0f;
     bool permanent = false;          // luciferium: never cured
+    std::string damagePart;          // Bodies part def that long heavy use harms ("Liver"); empty: none
+    float damageMinTolerance = 0.0f;  // from this tolerance on
+    std::string addictionDamagePart;  // part that may be hurt at once when the pawn becomes addicted
+    float addictionDamageChance = 0.0f;
+    float heartAttackMtbDays = 0.0f;  // while high on any drug of the chemical (wake-up); 0: never
 };
 
 // One drug item def.
@@ -59,6 +64,7 @@ struct DrugKind {
     float joy = 0.0f;                // recreation gained
     float restOffset = 0.0f;         // rest gained (negative: lost)
     bool overdose = false;
+    float nutrition = 0.0f;          // food gained with a dose (ambrosia)
 };
 
 // What a pawn's policy says about one drug (DrugPolicies defs and per-pawn changes). The "for addiction", "for
@@ -101,6 +107,8 @@ struct DrugState {
     std::vector<ChemicalState> chemicals;
     std::vector<DrugDose> last;          // sorted by drug
     int64_t searchAfter = 0;             // no drug was found; do not look again before this
+    int64_t bingeUntil = 0;              // on a binge until this game second (0: not)
+    std::string bingeChemical;           // the Chemicals defName it binges on
 };
 
 struct COLONY_API DrugRules {
@@ -121,6 +129,27 @@ struct COLONY_API DrugRules {
     int64_t searchSeconds = 60;
     float hangoverFromSeverity = 0.4f;
     float hangoverSeverity = 1.0f;
+    // Binges (ours; the wiki says only who binges and that withdrawal can force one). A pawn addicted to a social
+    // drug binges from the major mood band, to a hard drug from the extreme band; one in withdrawal may binge
+    // whatever its mood. Never the protagonist or a pawn the player walks.
+    int bingeCheckEvery = 216;
+    float bingeMeanDaysSocial = 1.5f;
+    float bingeMeanDaysHard = 0.5f;
+    float bingeMeanDaysWithdrawal = 2.0f;
+    float bingeHoursMin = 4.0f;
+    float bingeHoursMax = 8.0f;
+    float bingeRedoseBelow = 0.9f;
+    float bingeEndOverdose = 0.5f;
+    // Chemical damage (thresholds are the wiki's; the rest is ours).
+    int damageCheckEvery = 600;
+    float damageMtbDaysAtThreshold = 60.0f;
+    float damageMtbDaysAtFull = 20.0f;
+    float damageFraction = 0.2f;      // of the part's hit points a hit takes
+    float damageMaxFraction = 0.8f;   // a part is not damaged past this share
+    float brainDamageMtbDays = 2.5f;  // while the overdose is major (wiki: after 2.5 days)
+    float brainDamageFraction = 0.3f;
+    float heartAttackFraction = 0.5f;
+    float majorOverdose = 0.75f;
 
     static DrugRules read(const DefDatabase& defs);
     float addictionMultiplier(float tolerance) const;
@@ -140,6 +169,8 @@ public:
     // Registers the thoughts whose `situation.condition` is "drug:<Hediffs defName>" (the high, withdrawal and
     // hangover moods): a thought stage follows the stage of that hediff.
     void registerThoughts(MoodSystem& mood);
+    // Mood bands start binges (null: none start by themselves).
+    void setMood(MoodSystem* mood) { mood_ = mood; }
 
     const DrugRules& rules() const { return rules_; }
     const std::vector<DrugChemical>& chemicals() const { return chemicals_; }
@@ -186,6 +217,13 @@ public:
     // ---- Stepping -----------------------------------------------------------------------------------
     // One game second: highs fade, needs fall, tolerance wears off, withdrawals rise and fall, addictions heal.
     void step(int64_t now);
+    // Whether a pawn's drugs keep a disease away (Penoxycyline: malaria, plague, sleeping sickness). `disease` is
+    // a Hediffs defName. H2's illness rolls ask this before making a pawn sick.
+    bool preventsDisease(Entity pawn, const std::string& disease) const;
+    bool bingeing(Entity pawn) const;
+    // Starts a binge on a chemical now (dev and tests; the natural ones come from step). False if the pawn
+    // can't binge (not eligible, the protagonist, under the player's control, no such chemical).
+    bool startBinge(Entity pawn, const std::string& chemical, int64_t now);
     // What the pawn's sleep falls by (the product of its highs' and withdrawals' `restFallFactor`); 1 for none.
     float restFallFactor(Entity pawn) const;
 
@@ -200,10 +238,16 @@ private:
     void emit(EventType type, Entity pawn, DefId def, float amount, const char* message);
     float severity(Entity pawn, DefId hediff) const;
     void setSeverity(Entity pawn, DefId hediff, float value);
+    bool canBinge(Entity pawn) const;
+    void stepBinge(Entity pawn, DrugState& state, int64_t now);
+    void stepDamage(Entity pawn, DrugState& state, int64_t now);
+    bool hurtOrgan(Entity pawn, const std::string& partDef, float fraction, int64_t now, DefId chemical, uint64_t salt);
+    void endBinge(Entity pawn, DrugState& state);
 
     Things& things_;
     HealthSystem& health_;
     const DefDatabase& defs_;
+    MoodSystem* mood_ = nullptr;
     std::vector<Event>* events_ = nullptr;
     DrugRules rules_;
     std::vector<DrugChemical> chemicals_;
@@ -211,6 +255,7 @@ private:
     std::vector<int32_t> kindIndex_;  // by DefId value, -1 for none
     std::vector<DrugPolicy> policies_;
     DefId overdoseHediff_;
+    std::vector<std::vector<std::string>> prevents_;  // by hediff DefId value: the diseases it keeps away
     // Per hediff def (by DefId value): the fall per day and the sleep factor, for the hediffs the system moves.
     struct HediffInfo {
         bool known = false;

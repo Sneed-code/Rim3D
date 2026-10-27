@@ -58,12 +58,14 @@ struct ThingView {
     float rot = 0.0f;       // items that rot: 0 fresh to 1 rotted away (docs/design/spoilage.md)
     int hitPoints = 0;   // 0 and 0 when the thing has no hit points
     int maxHitPoints = 0;
+    float durability = 1.0f;  // apparel: 0 to 1, capped by the hit-point share (docs/design/apparel-durability.md)
     // Pawns with a body: can't act (pain shock, unconscious, can't move), and dead. A dead pawn
     // stays where it fell. A full health report is `Sim::healthReport`.
     bool downed = false;
     bool dead = false;
     // Pawns: the job they are on (docs/design/jobs.md) and what it is about, and what they carry.
     JobType job = JobType::None;
+    uint32_t area = 0;  // the allowed area a pawn is limited to (AreaView::id), 0 for none
     Entity jobTarget = kNoEntity;
     float jobProgress = 0.0f;  // 0 to 1: a swing of the pick, a plant being cut, a frame being built (hands-on work, U10)
     DefId carriedDef;
@@ -261,6 +263,7 @@ struct ApparelView {
     DefId stuff;      // invalid for none
     int quality = 2;
     float hitPointShare = 1.0f;  // 0 to 1
+    float durability = 1.0f;     // 0 to 1, capped by hitPointShare; 0 is tattered (docs/design/apparel-durability.md)
     bool tainted = false;
 };
 
@@ -402,6 +405,14 @@ struct AnimalZoneView {
     bool pen = false;
 };
 
+// One allowed area (docs/design/areas.md): `cellCount` cells from Snapshot::areaCells[firstCell].
+struct AreaView {
+    uint32_t id = 0;
+    std::string name;
+    uint32_t firstCell = 0;
+    uint32_t cellCount = 0;
+};
+
 // One growing zone (C13): `cellCount` cells from Snapshot::growingZoneCells[firstCell], growing `crop`.
 struct GrowingZoneView {
     uint32_t id = 0;
@@ -486,6 +497,8 @@ struct ShipView {
     std::string problem;         // why not, in plain words
     bool won = false;
     int escaped = 0;
+    Entity reactor = kNoEntity;  // the reactor warming up or active (none when idle)
+    std::vector<std::pair<Entity, Entity>> aboard;  // casket and its rider, in boarding order (riders not yet checked for a beam)
 };
 
 // A caravan (docs/design/caravans.md). `state` is a CaravanState number: 0 forming on the map, 1 travelling,
@@ -533,6 +546,18 @@ struct NarratorView {
     uint32_t incidents = 0;
 };
 
+// Night skip and fast travel (docs/design/skip-travel.md). `skipKind` is a SkipKind number (0 none, 1 night, 2 travel).
+struct TravelView {
+    uint8_t skipKind = 0;
+    int64_t skipEndsAt = 0;       // game second the running skip ends
+    bool canSkipNight = false;    // a night skip could start now
+    std::string skipWhy;          // when it could not: why, in plain words
+    uint32_t nights = 0;          // night skips that ran to the end
+    uint32_t travels = 0;         // fast travels that arrived
+    uint32_t visitedBlocks = 0;   // places visited
+    int visitedBlockSize = 8;     // metres per visited block
+};
+
 // A talent rank the protagonist has bought (docs/design/talents.md).
 struct TalentRankView {
     DefId talent;  // a Talents def
@@ -569,6 +594,8 @@ struct Snapshot {
     std::vector<CellPos> zoneCells;        // the zones' cells, see ZoneView
     std::vector<AnimalZoneView> animalZones;  // animal zones and pens (N3)
     std::vector<CellPos> animalZoneCells;     // their cells, see AnimalZoneView
+    std::vector<AreaView> areas;                // allowed areas, by id
+    std::vector<CellPos> areaCells;             // their cells, see AreaView
     std::vector<GrowingZoneView> growingZones;  // growing zones (C13)
     std::vector<CellPos> growingZoneCells;      // their cells, see GrowingZoneView
     std::vector<DesignationView> designations;  // every mark, in cell order
@@ -620,6 +647,7 @@ struct Snapshot {
     ShipView ship;
     NarratorView narrator;
     std::vector<CaravanView> caravans;  // by id
+    TravelView travel;
 
     // The thing with this id, or null if it is not on the map. Binary search.
     COLONY_API const ThingView* find(Entity id) const;

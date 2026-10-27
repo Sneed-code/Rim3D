@@ -622,7 +622,8 @@ struct ContractDiseaseCommand {
 };
 
 // The spaceship ending (docs/design/ship.md). `action` is "StartReactor" (`thing` a finished ship reactor), "Board" (`pawn` rides
-// in the ship cryptosleep casket `thing`; no pawn empties the casket) or "Launch". Fails with the reason in plain words.
+// in the ship cryptosleep casket `thing`; no pawn empties the casket), "Launch" or the dev action "FinishWarmUp" (the warming reactor is active at
+// the next step). Fails with the reason in plain words.
 struct ShipCommand {
     std::string action;
     Entity thing = kNoEntity;
@@ -870,6 +871,28 @@ struct EndMentalBreakCommand {
     Entity pawn = kNoEntity;
 };
 
+// Allowed areas (docs/design/areas.md). CreateArea makes an empty named area (ids count 1, 2, 3); PaintArea adds the
+// rectangle to it or takes it off (fails for an unknown area or if no cell changed); DeleteArea frees the pawns limited to it;
+// AssignArea limits a pawn to an area, or frees it with area 0.
+struct CreateAreaCommand {
+    std::string name;
+};
+
+struct PaintAreaCommand {
+    uint32_t area = 0;
+    CellRect rect;
+    bool add = true;
+};
+
+struct DeleteAreaCommand {
+    uint32_t area = 0;
+};
+
+struct AssignAreaCommand {
+    Entity pawn = kNoEntity;
+    uint32_t area = 0;
+};
+
 // Quests (task Q1, docs/design/quests.md). `action` is "offer" (a dev command and the narrator's hook: `kind` is a Quests defName, or
 // empty for one chosen by weight), "accept" or "decline" (`quest` is the quest's number). Fails if the action is not one of those, there
 // is no such open offer, or it can't be carried out (too many under way, nobody could reach the colony, no room for the goods).
@@ -906,6 +929,23 @@ struct RemoveOperationCommand {
     uint32_t operation = 0;
 };
 
+// P5 (docs/design/skip-travel.md). Skips the night: game time runs on in batches until the sleeping hours end, with the
+// narrator held. Fails in daytime, when a colonist who should be asleep isn't in bed yet, when nobody is asleep, and
+// while anything threatens the colony (a raid, an enemy, a fire, a mental break). The colonist under control is let go.
+struct SkipNightCommand {};
+
+// Moves the colonist under control to a place it has visited after the time the walk there would take (the sim keeps
+// running meanwhile, the narrator held). Fails near (under 20 m), at a place not visited, where it can't stand or reach,
+// and while anything threatens the colony.
+struct FastTravelCommand {
+    Entity pawn = kNoEntity;
+    float x = 0.0f;
+    float y = 0.0f;
+};
+
+// Ends a night skip or a fast travel now. A fast travel then leaves the colonist where it is.
+struct CancelSkipCommand {};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -931,12 +971,12 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
                              MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand,
                              SetNarratorCommand, FireIncidentCommand, ContractDiseaseCommand, StartStrategyRaidCommand,
-                             ShipCommand, QuestCommand,
-                             AddOperationCommand, RemoveOperationCommand,
-                             TakeDrugCommand, SetDrugPolicyCommand, SetDrugPolicyEntryCommand,
-                             StartVisitCommand, TradeCommand, AdjustGoodwillCommand, GiftCommand, ClimbCommand,
-                             AttuneCommand, LearnPowerCommand, CastPowerCommand,
-                             SetThermostatCommand, RepairGearCommand, FitUpgradeCommand, CaravanCommand>;
+                             ShipCommand, QuestCommand, AddOperationCommand, RemoveOperationCommand,
+                             TakeDrugCommand, SetDrugPolicyCommand, SetDrugPolicyEntryCommand, StartVisitCommand,
+                             TradeCommand, AdjustGoodwillCommand, GiftCommand, ClimbCommand, AttuneCommand,
+                             LearnPowerCommand, CastPowerCommand, SetThermostatCommand, RepairGearCommand,
+                             FitUpgradeCommand, CreateAreaCommand, PaintAreaCommand, DeleteAreaCommand,
+                             AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand, CaravanCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

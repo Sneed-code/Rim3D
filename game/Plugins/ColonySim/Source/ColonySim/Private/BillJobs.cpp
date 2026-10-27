@@ -161,7 +161,7 @@ JobSystem::StepResult JobSystem::billWork(Entity pawn, Job& job, std::string& wh
             stuffFactor = crafting_->stuffWorkFactor(crafting_->dominantStuff(recipe->products.front().item, job.used));
         }
     }
-    job.progress += bills_->workSpeed(pawn, *recipe) * health_.capacityValue(pawn, "Manipulation") * lightWorkFactor(pawn) *
+    job.progress += bills_->workSpeed(pawn, *recipe) * health_.capacityValue(pawn, "Manipulation") * workFactor(pawn) *
                     benchFactor / std::max(stuffFactor, 0.01f);
     // The recipe's experience is what a run gives at 100% speed, so it comes in a steady stream
     // while the pawn works, whatever its speed (a slow worker earns more from a run).

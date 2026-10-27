@@ -1,0 +1,130 @@
+[
+  {
+    "defName": "RaiderPackPirate",
+    "source": "RimWorld wiki",
+    "label": "pirate pack",
+    "items": [
+      { "thing": "MealSurvivalPack", "chance": 0.3, "count": [1, 2] },
+      { "thing": "MedicineIndustrial", "chance": 0.12, "count": [1, 1] },
+      { "thing": "Silver", "chance": 0.5, "count": [8, 30], "perHundredPoints": 6 }
+    ],
+    "unverified": ["items"],
+    "note": "What a pirate carries on its body and drops when it dies, besides the gun and clothes it wears (those stay on the corpse for a colonist to strip). Chances are ours: the wiki only says raiders may carry survival meals."
+  },
+  {
+    "defName": "RaiderPackMercenary",
+    "source": "RimWorld wiki",
+    "label": "mercenary pack",
+    "items": [
+      { "thing": "MealSurvivalPack", "chance": 0.5, "count": [1, 2] },
+      { "thing": "MedicineIndustrial", "chance": 0.3, "count": [1, 2] },
+      { "thing": "Silver", "chance": 0.7, "count": [20, 60], "perHundredPoints": 10 }
+    ],
+    "unverified": ["items"]
+  },
+  {
+    "defName": "RaiderPackTribal",
+    "source": "RimWorld wiki",
+    "label": "clan warrior pack",
+    "items": [
+      { "thing": "Pemmican", "chance": 0.5, "count": [4, 10] },
+      { "thing": "MedicineHerbal", "chance": 0.2, "count": [1, 2] },
+      { "thing": "Silver", "chance": 0.3, "count": [5, 20], "perHundredPoints": 3 }
+    ],
+    "unverified": ["items"]
+  },
+  {
+    "defName": "RaiderPackTrooper",
+    "source": "RimWorld wiki",
+    "label": "trooper pack",
+    "items": [
+      { "thing": "MealSurvivalPack", "chance": 0.6, "count": [1, 3] },
+      { "thing": "MedicineIndustrial", "chance": 0.4, "count": [1, 2] },
+      { "thing": "ComponentIndustrial", "chance": 0.15, "count": [1, 2], "perHundredPoints": 1 }
+    ],
+    "unverified": ["items"]
+  },
+  {
+    "defName": "CargoPod",
+    "source": "RimWorld wiki",
+    "label": "cargo pod",
+    "stacks": {
+      "rolls": [1, 1],
+      "value": [200, 900],
+      "from": [
+        { "thing": "Steel", "weight": 10 },
+        { "thing": "Silver", "weight": 10 },
+        { "thing": "WoodLog", "weight": 4 },
+        { "thing": "Cloth", "weight": 5 },
+        { "thing": "ComponentIndustrial", "weight": 6 },
+        { "thing": "MedicineIndustrial", "weight": 5 },
+        { "thing": "MedicineHerbal", "weight": 3 },
+        { "thing": "MealSurvivalPack", "weight": 5 },
+        { "thing": "Pemmican", "weight": 3 },
+        { "thing": "Synthread", "weight": 2 },
+        { "thing": "Hyperweave", "weight": 1 }
+      ]
+    },
+    "unverified": ["stacks"],
+    "note": "RimWorld's cargo pod drops one stack of a single raw or manufactured good. Which goods, their weights and the stack value are ours (the wiki gives no table)."
+  },
+  {
+    "defName": "SupplyCache",
+    "source": "RimWorld wiki",
+    "label": "supply cache",
+    "stacks": {
+      "rolls": [2, 3],
+      "value": [150, 400],
+      "from": [
+        { "thing": "Steel", "weight": 8 },
+        { "thing": "Silver", "weight": 8 },
+        { "thing": "ComponentIndustrial", "weight": 5 },
+        { "thing": "MedicineIndustrial", "weight": 6 },
+        { "thing": "MealSurvivalPack", "weight": 6 },
+        { "thing": "Cloth", "weight": 3 }
+      ]
+    },
+    "unverified": ["stacks"],
+    "note": "For quests that hand out a cache (Q1 supply cache): roll it with sim.loot() and drop it where the quest says."
+  },
+  {
+    "defName": "RuinStash",
+    "source": "RimWorld wiki",
+    "label": "ruin stash",
+    "stacks": {
+      "rolls": [1, 3],
+      "value": [100, 350],
+      "from": [
+        { "thing": "Steel", "weight": 8 },
+        { "thing": "Silver", "weight": 6 },
+        { "thing": "ComponentIndustrial", "weight": 6 },
+        { "thing": "Cloth", "weight": 3 },
+        { "thing": "MealSurvivalPack", "weight": 4 }
+      ]
+    },
+    "unverified": ["stacks"],
+    "note": "Something found in a ruin: a few stacks of old goods."
+  },
+  {
+    "defName": "AncientDanger",
+    "source": "RimWorld wiki",
+    "label": "ancient danger",
+    "items": [
+      { "thing": "MealSurvivalPack", "chance": 1.0, "count": [3, 8] }
+    ],
+    "stacks": {
+      "rolls": [3, 5],
+      "value": [250, 800],
+      "from": [
+        { "thing": "ComponentIndustrial", "weight": 10 },
+        { "thing": "MedicineIndustrial", "weight": 8 },
+        { "thing": "Silver", "weight": 8 },
+        { "thing": "Steel", "weight": 6 },
+        { "thing": "Hyperweave", "weight": 3 },
+        { "thing": "Synthread", "weight": 3 }
+      ]
+    },
+    "unverified": ["items", "stacks"],
+    "note": "What lies behind the sealed doors of an ancient danger room. The map-gen task that builds the room rolls this when it fills the crates."
+  }
+]

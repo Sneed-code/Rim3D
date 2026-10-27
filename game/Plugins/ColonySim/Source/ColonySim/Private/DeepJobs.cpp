@@ -101,7 +101,7 @@ JobSystem::StepResult JobSystem::deepWork(Entity pawn, Job& job, std::string& wh
     if (scan) {
         const int level = skillLevel(pawn, "Intellectual");
         const double skill = std::max(0.0, deep_->scanSpeedBase() + deep_->scanSpeedPerLevel() * level);
-        const double speed = skill * health_.capacityValue(pawn, "Consciousness") * lightWorkFactor(pawn);
+        const double speed = skill * health_.capacityValue(pawn, "Consciousness") * workFactor(pawn);
         learnSkill(pawn, "Intellectual", deep_->scanXpPerSecond());
         DeepFind find;
         if (!deep_->scanStep(origin, speed, find)) {

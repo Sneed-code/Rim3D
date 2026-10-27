@@ -65,6 +65,15 @@ struct RepairNumbers {
     float workPerKg = 300.0f;       // items without workToMake: work per kg of mass
     float materialShare = 0.25f;    // full repair takes this share of the item's `costStuffCount`
     float materialPerKg = 3.0f;     // items without one: units of material per kg of mass
+    // Apparel's own shares (docs/design/apparel-durability.md): mending clothes is cheap and quick. The material
+    // is rounded down (35 cloth to make: 3 for a full repair), at least 1.
+    float apparelWorkShare = 0.1f;
+    float apparelWorkPerKg = 100.0f;
+    float apparelMaterialShare = 0.1f;
+    float apparelMaterialPerKg = 1.0f;
+    // A worn piece at or under this durability (0: tattered) is mended by its wearer at a tailor bench while worn,
+    // without a mark; a marked worn piece is mended at any durability (docs/design/apparel-durability.md).
+    float mendWornAtOrBelow = 0.0f;
     std::string weaponMaterial = "Steel";   // for a weapon not made of a stuff
     std::string apparelMaterial = "Cloth";  // for apparel not made of a stuff
     float materialRadius = 12.0f;   // metres round the bench the material and the part are taken from
@@ -82,8 +91,9 @@ public:
     const UpgradeSpec* upgrade(DefId part) const;
 
     // ---- Commands ----------------------------------------------------------------------------
-    // Marks an item lying on the map for repair, or takes the mark off. Fails for a thing that is not apparel or a
-    // weapon, one that is worn or carried, and one that is not damaged (turning the mark off never fails).
+    // Marks an item lying on the map, or apparel someone wears (its wearer mends it at a bench while wearing it), for
+    // repair, or takes the mark off. Fails for a thing that is not apparel or a weapon, a carried or held weapon, and
+    // one that is not damaged (turning the mark off never fails).
     bool markRepair(Entity item, bool on, std::string& error);
     // Orders a part (a Things defName) fitted to a gun lying on the map, or with `on` false cancels the order.
     // Fails if it is not a gun, not on the map, the part is unknown, does not fit that sort of gun, or its slot
@@ -95,7 +105,8 @@ public:
     bool repairable(Entity item) const;
     // The kind of gear: "Weapons" or "Apparel" (empty for neither). A bench's `repairs` list names the kinds.
     std::string kindOf(DefId item) const;
-    // What it takes to mend the item's lost hit points now.
+    // What it takes to mend the item now: the bigger of its lost hit points and its lost durability (Apparel.h), as a
+    // share of a full repair. One repair brings both back to full.
     RepairCost costOf(Entity item) const;
     // The parts fitted to a gun, in the order fitted.
     const std::vector<DefId>& fitted(Entity weapon) const;
@@ -111,7 +122,7 @@ public:
     // Takes `count` of an item def from the stacks nearest the cell, within `materialRadius`. False, taking
     // nothing, if there are not enough.
     bool takeNear(DefId item, int count, CellPos around, int level);
-    // The item is mended to its full hit points and loses its mark. Returns the hit points restored.
+    // The item is mended to its full hit points and durability and loses its mark. Returns the hit points restored.
     int finishRepair(Entity item);
     // The part is fitted to the gun: the gun lists it and its numbers change. The caller has taken the part.
     void finishFit(Entity weapon, DefId part);

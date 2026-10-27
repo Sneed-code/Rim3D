@@ -379,7 +379,7 @@ JobSystem::StepResult JobSystem::butcherWork(Entity pawn, Job& job, std::string&
     there.x = at.x;
     there.y = at.y;
     there.level = at.level;
-    job.progress += static_cast<float>(health_.capacityValue(pawn, "Manipulation")) * lightWorkFactor(pawn);
+    job.progress += static_cast<float>(health_.capacityValue(pawn, "Manipulation")) * workFactor(pawn);
     return job.progress < recipe->work ? StepResult::Running : StepResult::Next;
 }
 

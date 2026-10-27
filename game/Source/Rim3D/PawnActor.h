@@ -17,6 +17,10 @@ class USimSubsystem;
 class USkeletalMeshComponent;
 class UMeshComponent;
 class UStaticMeshComponent;
+class UDecalComponent;
+class UMaterialInterface;
+class UMaterialInstanceDynamic;
+class UTexture;
 namespace colony { struct ThingView; }
 
 /**
@@ -57,6 +61,14 @@ public:
 	const TArray<TObjectPtr<USkeletalMeshComponent>>& GetShapedMeshes() const { return ShapedMeshes; }
 	const TArray<TObjectPtr<USkeletalMeshComponent>>& GetSkinMeshes() const { return SkinMeshes; }
 	const TArray<TObjectPtr<UStaticMeshComponent>>& GetHorns() const { return Horns; }
+	/** V2 (docs/design/looks.md): the MetaHuman's face with the face shape morphs, null without the PawnFaces assets. */
+	USkeletalMeshComponent* GetFaceMesh() const { return FaceMesh; }
+	/** The eye slots of the face (left, right). */
+	const TArray<int32>& GetEyeSlots() const { return EyeSlots; }
+	/** The groom a groom component (Hair, Eyebrows, Mustache, Beard, Eyelashes) draws now: the asset's name, empty for none. */
+	FString GetGroomName(FName Component) const;
+	/** V3: the tattoo, scar and body hair decals on the skin (made only near the camera, at full detail). */
+	const TArray<TObjectPtr<UDecalComponent>>& GetMarkDecals() const { return MarkDecals; }
 
 	/** Dresses the MetaHuman in what the sim says it wears (docs/design/clothes-draw.md): Kellan's own top and trousers are put
 	 *  away, a bare skin layer (the pawn's skin colour) shows what nothing covers, and each worn piece's meshes go on over it, in
@@ -71,6 +83,10 @@ public:
 	const TArray<uint32>& GetWornMeshItems() const { return WornMeshItems; }
 	/** The bare skin layer (torso and arms, legs); empty while the clothes assets are missing. */
 	const TArray<TObjectPtr<USkeletalMeshComponent>>& GetBareLayer() const { return BareLayer; }
+	const TArray<TObjectPtr<UMaterialInstanceDynamic>>& GetBareSkins() const { return BareSkins; }
+	const UStaticMeshComponent* GetHairCards() const { return HairCards; }
+	/** V2b: the material on the face's first skin slot (a MI_FaceSkin_* or Kellan's), null without the shaped face. */
+	UMaterialInterface* GetFaceSkin() const;
 	/** Kellan's own top and trousers (hidden while the clothes are drawn); null for a mannequin. */
 	USkeletalMeshComponent* GetDefaultTop() const { return DefaultTop; }
 	USkeletalMeshComponent* GetDefaultTrousers() const { return DefaultTrousers; }
@@ -187,6 +203,51 @@ private:
 	/** Colour, wear and morphs of a garment mesh. */
 	void StyleWornMesh(UMeshComponent* Mesh, const FSimWornPiece& Piece);
 	void UpdateHairVisibility();
+	/** Grooms show at full detail, minus hair under a covering hat and grooms with nothing to draw (bald, no beard). */
+	void RefreshGroomVisibility();
+	/** V2: face morphs, eyes and grooms from the looks. */
+	void ApplyFace(USimPawnSubsystem& Pawns);
+	/** V2b: the hair style's cards for far pawns, on the face's head bone, in the hair colour. */
+	void SetHairCards(USimPawnSubsystem& Pawns);
+	/** Puts a PawnFaces groom (by asset name; empty for none) on a groom component, bound to the shaped face. */
+	void SetGroom(USimPawnSubsystem& Pawns, FName Component, const FString& GroomName);
+	/** V3: remakes the mark decals (only at full detail; otherwise there are none). */
+	void ApplyMarks();
+
+	UPROPERTY()
+	TObjectPtr<USkeletalMeshComponent> FaceMesh;
+
+	TArray<int32> EyeSlots;
+
+	/** V2b: the face's skin slots and the skin instance PawnLooks gave each (Kellan's texture). */
+	UPROPERTY()
+	TMap<int32, TObjectPtr<UMaterialInterface>> FaceSkinSlots;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UDecalComponent>> MarkDecals;
+
+	/** The mark decal material and textures, kept from Setup (null without the PawnFaces assets). */
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> MarkMaterial;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UTexture>> TattooTextures;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UTexture>> ScarTextures;
+
+	UPROPERTY()
+	TObjectPtr<UTexture> BodyHairTexture;
+
+	/** V2b: hair cards (static mesh on the head bone), shown instead of the hair strands away from full detail. */
+	UPROPERTY()
+	TObjectPtr<UStaticMeshComponent> HairCards;
+
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> HairCardsMaterial;
+
+	/** Groom components (by name) with nothing to draw. */
+	TSet<FName> EmptyGrooms;
 
 	UPROPERTY()
 	TArray<TObjectPtr<UMeshComponent>> WornMeshes;
@@ -195,6 +256,10 @@ private:
 
 	UPROPERTY()
 	TArray<TObjectPtr<USkeletalMeshComponent>> BareLayer;
+
+	/** V2b: the bare layer's skin material instances (empty without the PawnFaces assets: then it keeps the garment colour). */
+	UPROPERTY()
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> BareSkins;
 
 	UPROPERTY()
 	TObjectPtr<USkeletalMeshComponent> DefaultTop;

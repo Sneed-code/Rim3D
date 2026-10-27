@@ -315,9 +315,10 @@
     "defName": "ApparelRules", "source": "RimWorld wiki",
     "absorbDamageDivisor": 4,
     "wearHpLossChancePerDay": 0.4,
+    "wearFactor": 1.0,
     "deathHpLoss": [0.15, 0.4],
-    "rattyBelow": 0.5,
-    "tatteredBelow": 0.25,
+    "tatteredBenefitFactor": 0.8,
+    "durabilityNote": "Worn apparel wears its durability, not its hit points (sneed, 2026-10-27; docs/design/apparel-durability.md). wearHpLossChancePerDay is RimWorld's daily hit point loss, here a steady rate of durability (that many hit points' worth a day, times wearFactor); absorbed damage wears 1 hit point's worth per absorbDamageDivisor; deathHpLoss is the share of durability lost when the wearer dies. At 0 durability a piece is tattered: tatteredBenefitFactor of its armor and insulation.",
     "taintedStageCap": 4,
     "defaultOutfit": "Anything",
     "wearSteps": 60,
@@ -332,7 +333,7 @@
     "taintedScorePenalty": 0.2,
     "minGain": 0.05,
     "unverified": ["wearSteps", "stripStepsPerPiece"],
-    "ours": ["defaultOutfit", "wearSteps", "stripStepsPerPiece", "checkEverySteps", "scoreBase", "scoreSharp", "scoreBlunt", "scoreHeat", "scoreInsulationPerDegree", "scoreHpFloor", "taintedScorePenalty", "minGain"]
+    "ours": ["wearFactor", "tatteredBenefitFactor", "durabilityNote", "defaultOutfit", "wearSteps", "stripStepsPerPiece", "checkEverySteps", "scoreBase", "scoreSharp", "scoreBlunt", "scoreHeat", "scoreInsulationPerDegree", "scoreHpFloor", "taintedScorePenalty", "minGain"]
   },
   {
     "defName": "MedicineRules", "source": "RimWorld wiki",
@@ -372,9 +373,10 @@
    "skillOpinionPerLevel": 0.05, "skillRomancePerLevel": 0.02,
    "cheatWeightFactor": 0.15, "cheatPartnerBelow": 60, "jealousFightChance": 0.25,
    "cheated": {"label": "cheated on me", "offset": -40, "days": 60}, "tookPartner": {"label": "took my partner", "offset": -20, "days": 60},
-   "cheatedThought": "CheatedOnMe", "weddingGuestThought": "AttendedWedding", "weddingPartyThought": "WeddingParty",
+   "cheatedThought": "CheatedOnMe", "witnessThought": "SawDeath", "witnessRadius": 12,
+   "orientation": {"straight": 0.7, "gay": 0.1, "bisexual": 0.15, "asexual": 0.05}, "weddingGuestThought": "AttendedWedding", "weddingPartyThought": "WeddingParty",
    "partyMinutes": 60, "partyJoyPerHour": 0.4, "partyMaxDistance": 80,
    "traitWeights": {"Kind": {"Slight": 0, "Insult": 0}, "Abrasive": {"Slight": 3, "Insult": 3}},
    "note": "C20 (docs/design/social.md). interactionMeanHours: a pawn with somebody in earshot starts a talk about this often; at a table or a game beside another pawn, tableChatMeanMinutes. traitWeights multiply an interaction's selectionWeight for the talker. A trait degree's `opinionOfMe` (Traits) is what everyone else thinks of its owner.",
-   "unverified": ["interactionMeanHours", "maxDistance"], "ours": ["opinionMin", "opinionMax", "socialSkillXpPerInteraction", "deadMansApparelDays", "minGapMinutes", "tableChatMeanMinutes", "compatibilityMax", "stackLimit", "kindWordsMoodBelow", "romanceOpinionScale", "adultAge", "fightChance", "fightPain", "fightBloodLoss", "fightMaxMinutes", "fightWalkEvery", "fight", "traitWeights", "skillOpinionPerLevel", "skillRomancePerLevel", "cheatWeightFactor", "cheatPartnerBelow", "jealousFightChance", "cheated", "tookPartner", "cheatedThought", "weddingGuestThought", "weddingPartyThought", "partyMinutes", "partyJoyPerHour", "partyMaxDistance"]}
+   "unverified": ["interactionMeanHours", "maxDistance"], "ours": ["opinionMin", "opinionMax", "socialSkillXpPerInteraction", "deadMansApparelDays", "minGapMinutes", "tableChatMeanMinutes", "compatibilityMax", "stackLimit", "kindWordsMoodBelow", "romanceOpinionScale", "adultAge", "fightChance", "fightPain", "fightBloodLoss", "fightMaxMinutes", "fightWalkEvery", "fight", "traitWeights", "skillOpinionPerLevel", "skillRomancePerLevel", "cheatWeightFactor", "cheatPartnerBelow", "jealousFightChance", "cheated", "tookPartner", "cheatedThought", "witnessThought", "witnessRadius", "orientation", "weddingGuestThought", "weddingPartyThought", "partyMinutes", "partyJoyPerHour", "partyMaxDistance"]}
 ]

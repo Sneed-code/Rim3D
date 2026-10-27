@@ -645,7 +645,8 @@ void UFightSubsystem::UpdateTracers(float DeltaTime, float GameDelta)
 	for (int32 Index = Tracers.Num() - 1; Index >= 0; --Index)
 	{
 		FFightTracer& Tracer = Tracers[Index];
-		Tracer.Age += DeltaTime;
+		// Game time, so a tracer frozen by the pause stays up however long the pause lasts.
+		Tracer.Age += GameDelta;
 
 		// The bullet's own direction and speed, from the snapshot once it shows there.
 		if (!Tracer.bDirKnown)
@@ -674,7 +675,7 @@ void UFightSubsystem::UpdateTracers(float DeltaTime, float GameDelta)
 				// Fired and stopped inside one step: it never showed in a snapshot.
 				Tracer.bDirKnown = true;
 			}
-			else if (++Tracer.Frames > 6)
+			else if (GameDelta > 0.0f && ++Tracer.Frames > 6)
 			{
 				++TracersDropped;
 				Tracers.RemoveAtSwap(Index);
