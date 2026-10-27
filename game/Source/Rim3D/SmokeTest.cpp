@@ -169,6 +169,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildHandsOnPhases();
 	}
+	else if (TestName == TEXT("sound"))
+	{
+		BuildSoundPhases();
+	}
 	else if (TestName == TEXT("animals"))
 	{
 		BuildAnimalsPhases();
