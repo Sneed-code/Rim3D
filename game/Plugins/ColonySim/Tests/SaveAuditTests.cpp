@@ -36,6 +36,8 @@ std::shared_ptr<const DefDatabase> auditDefs() {
     return db;
 }
 
+int64_t gAuditStart = 0;  // game second the script began at
+
 std::vector<Entity> auditColonists(const Sim& sim) {
     std::vector<Entity> out;
     for (const auto [pawn, colonist] : sim.things().registry().view<const Colonist>().each()) {
@@ -68,7 +70,7 @@ void auditSession(Sim& sim, int64_t from, int64_t to) {
     const std::vector<Entity> people = auditColonists(sim);
     const std::vector<Entity> animals = auditAnimals(sim);
     for (int64_t i = from; i < to; ++i) {
-        const int64_t t = i;
+        const int64_t t = i - gAuditStart;  // the script runs from the sim's first second, whatever hour the start is at
         if (t == 2) {
             sim.submit(SetNarratorCommand{"Orrin", ""});
             sim.submit(UnlockResearchCommand{"Electricity"});
@@ -242,6 +244,7 @@ void auditRun(uint64_t seed, const std::vector<int64_t>& gaps) {
             }
         }
     }
+    gAuditStart = original.time().seconds;  // the setup above took a few steps
     // Moments chosen to land in the middle of things: building, farming, hunting, a raid, a fire, a break.
     for (const int64_t gap : gaps) {
         auditSession(original, original.time().seconds, original.time().seconds + gap);
@@ -275,4 +278,17 @@ TEST_CASE("Save audit: soak") {
         }
         auditRun(static_cast<uint64_t>(seed), std::vector<int64_t>(20, 1777 + 211 * (seed % 5)));
     }
+}
+
+TEST_CASE("Save audit: a game that never picked a narrator keeps the full adaptation after a load") {
+    const auto defs = auditDefs();
+    Sim original(auditSettings(3), defs);
+    original.stepMany(10);
+    SaveLoadResult loaded = loadSim(saveSim(original), defs);
+    if (loaded.sim == nullptr) {
+        CHECK_MESSAGE(false, loaded.error);
+        return;
+    }
+    CHECK(loaded.sim->raids().adaptationFactor() == original.raids().adaptationFactor());
+    CHECK(loaded.sim->raids().threatPoints() == original.raids().threatPoints());
 }
