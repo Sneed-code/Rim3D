@@ -22,11 +22,13 @@
 #include "ColonySim/Fuel.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Loot.h"
 #include "ColonySim/Spoilage.h"
 #include "ColonySim/Crafting.h"
 #include "ColonySim/Repair.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Hash.h"
+#include "ColonySim/Areas.h"
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Lights.h"
@@ -307,6 +309,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setLights(lights_.get());
     jobs_->setPower(power_.get());
     jobs_->setRooms(rooms_.get());
+    jobs_->setTemperature(temperature_.get());
     jobs_->setResearch(research_.get());
     jobs_->setDeepResources(deepResources_.get());
     jobs_->setMedicine(medicine_.get());
@@ -360,10 +363,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     combat_->setHurtHook([this](Entity victim, Entity attacker) { animals_->hurt(victim, attacker); });
     jobs_->setHusbandry(husbandry_.get());
     jobs_->setCombat(combat_.get());
-    jobs_->setTemperature(temperature_.get());
     husbandry_->setHaulerHook([this](Entity animal, bool on) { jobs_->setAnimalHauler(animal, on); });
     jobs_->setAnimalWorkGate([this](Entity animal) { return animals_->mayWork(animal); });
     raids_ = std::make_unique<RaidSystem>(*things_, map_, *rooms_, *combat_, *health_, *jobs_, *fighters_, *defs_, time_, rng_);
+    mood_->setWealth([this] { return raids_->colonyWealth(1.0f); });
     raids_->setEventLog(&events_);
     raids_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
     monsters_ = std::make_unique<MonsterSystem>(*things_, map_, *combat_, *health_, *fighters_, *raids_, *animals_, *defs_, time_, rng_);
@@ -412,6 +415,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     melee_->setEventLog(&events_);
     fighters_->setMelee(melee_.get());
     upperFloors_ = std::make_unique<UpperFloors>(map_, *rooms_, *things_, plants_.get());
+    areas_ = std::make_unique<Areas>();
+    jobs_->setAreas(areas_.get());
     roofCollapse_ = std::make_unique<RoofCollapse>(map_, *rooms_, *things_, *health_, *defs_);
     roofCollapse_->setEventLog(&events_);
     roofCollapse_->setInterruptHandler([this](Entity pawn, const std::string& why) { jobs_->interrupt(pawn, why); });
@@ -432,6 +437,33 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setFieldCare(fieldCare_.get());
     narrator_ = std::make_unique<NarratorSystem>(*raids_, *defs_, time_, settings.seed);
     narrator_->setEventLog(&events_);
+    loot_ = std::make_unique<LootSystem>(*things_, map_, *defs_, settings.seed);
+    narrator_->setWorker("ResourcePodCrash", [this](IncidentFiring& f) {
+        // Lands near the colony: the middle of the player's colonists, else of the map.
+        float sx = 0.0f;
+        float sy = 0.0f;
+        int n = 0;
+        for (const auto [pawn, colonist, pos] : things_->registry().view<const Colonist, const Position>().each()) {
+            if (fighters_->factionOf(pawn) == kPlayerFaction && pos.level == 0) {
+                sx += pos.x;
+                sy += pos.y;
+                ++n;
+            }
+        }
+        const CellPos centre = n > 0 ? CellPos{static_cast<int>(sx / static_cast<float>(n)), static_cast<int>(sy / static_cast<float>(n)), 0}
+                                     : CellPos{map_.width() / 2, map_.width() / 2, 0};
+        Rng rng = loot_->rngFor(0x706F64ULL, time_.seconds);
+        std::vector<LootItem> items;
+        CellPos where;
+        if (!loot_->cargoPod("CargoPod", centre, rng, where, items)) {
+            f.error = "no open ground for a cargo pod";
+            return false;
+        }
+        f.hasCell = true;
+        f.cell = where;
+        f.text = "A cargo pod has crashed nearby, with " + loot_->describe(items) + ".";
+        return true;
+    });
     narrator_->setHostileCheck([this](const std::string& faction) { return trade_->hostile(faction); });
     disasters_ = std::make_unique<DisasterSystem>(*narrator_, *power_, *weather_, *plants_, *farming_, *things_, *health_, *mood_,
                                                   *animals_, *fire_, *combat_, map_, *defs_, time_, settings.seed);
@@ -862,6 +894,24 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             jobs_->forget(circuit->thing);
             fighters_->forget(circuit->thing);
             things_->destroy(circuit->thing);
+        }
+    } else if (const auto* createArea = std::get_if<CreateAreaCommand>(&command)) {
+        areas_->create(createArea->name);
+    } else if (const auto* paintArea = std::get_if<PaintAreaCommand>(&command)) {
+        if (areas_->find(paintArea->area) == nullptr) {
+            commandFailed(id, "no such area");
+        } else if (areas_->paint(paintArea->area, paintArea->rect, paintArea->add) == 0) {
+            commandFailed(id, paintArea->add ? "those cells are in the area already" : "none of those cells are in the area");
+        }
+    } else if (const auto* deleteArea = std::get_if<DeleteAreaCommand>(&command)) {
+        if (!areas_->remove(deleteArea->area)) {
+            commandFailed(id, "no such area");
+        }
+    } else if (const auto* assignArea = std::get_if<AssignAreaCommand>(&command)) {
+        if (!things_->exists(assignArea->pawn)) {
+            commandFailed(id, "no such pawn");
+        } else if (!areas_->assign(assignArea->pawn, assignArea->area, error)) {
+            commandFailed(id, error);
         }
     } else if (const auto* contract = std::get_if<ContractDiseaseCommand>(&command)) {
         const DefId disease = health_->diseaseId(contract->disease);
@@ -1579,6 +1629,7 @@ void Sim::step() {
         }
     }
     { SimLap lap(profile_, "apparel"); apparel_->step(time_.seconds, rng_, events_); }
+    { SimLap lap(profile_, "loot"); loot_->step(events_, 0, raids_->state(), time_.seconds); }  // raiders killed this step drop their packs
     { SimLap lap(profile_, "pathfinder"); pathfinder_.update(settings_.pathBudget); }  // paths asked for this step are ready next step at the earliest
     { SimLap lap(profile_, "rooms"); rooms_->update(); }
     { SimLap lap(profile_, "roofCollapse"); roofCollapse_->step(rng_); }  // roofs and floors that lost their holders fall
@@ -1736,6 +1787,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
                                      static_cast<uint32_t>(zone.cells.size())});
         out.zoneCells.insert(out.zoneCells.end(), zone.cells.begin(), zone.cells.end());
     }
+    for (const Area& area : areas_->areas()) {
+        const std::vector<CellPos> cells = areas_->cellsIn(area.id);
+        out.areas.push_back(AreaView{area.id, area.name, static_cast<uint32_t>(out.areaCells.size()), static_cast<uint32_t>(cells.size())});
+        out.areaCells.insert(out.areaCells.end(), cells.begin(), cells.end());
+    }
     for (const AnimalZone& zone : husbandry_->zones()) {
         out.animalZones.push_back(AnimalZoneView{zone.id, static_cast<uint32_t>(out.animalZoneCells.size()),
                                                  static_cast<uint32_t>(zone.cells.size()), husbandry_->isPen(zone.id)});
@@ -1870,6 +1926,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
         }
         if (const Worker* worker = reg.try_get<Worker>(entity)) {
             view.job = worker->job.type;
+            view.area = areas_->areaOf(entity);
             view.jobTarget = worker->job.thing;
             view.jobProgress = worker->job.type != JobType::None ? jobs_->jobProgress(entity) : 0.0f;
         }
@@ -2284,6 +2341,7 @@ uint64_t Sim::stateHash() const {
     temperature_->hashState(h);
     h.add(map_.upperFloorHash());
     roofCollapse_->hashState(h);
+    areas_->hashState(h);
     spoilage_->hashState(h);
     narrator_->hashState(h);
     disasters_->hashState(h);

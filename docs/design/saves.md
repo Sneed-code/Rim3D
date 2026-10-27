@@ -105,7 +105,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `movement` | 2 | `mover` |
 | `jobs` | 1 | `worker` (the job, its bill picks and ingredients, avoid memory), `work` (Work tab), `carrying` |
 | `colonists` | 2 | `colonist` (2: each skill's `xpToday`, C12) |
-| `health` | 6 | `health` (version 2: environment hediffs such as hypothermia, E2; version 3: each injury's `peak`, for scars, H1; version 4: `infectAt`, `diseases` and `immunities`, H2; version 5: `added`, the artificial parts fitted, H3; version 6: `downed` and `dirty`) |
+| `health` | 6 | `health` (version 2: environment hediffs such as hypothermia, E2; version 3: each injury's `peak`, for scars, H1; version 4: `infectAt`, `diseases` and `immunities`, H2; version 5: `added`, the artificial parts fitted, H3; version 6: `downed` and `dirty`, so a wound the last step added is still pending after a load) |
 | `control` | 1 | `playerControlled`: the ids of controlled pawns |
 | `needs` | 1 | `needs`, `schedule`, `bed` |
 | `bills` | 3 | `bills` on work buildings. Version 3 adds the bill's count stockpile. Version 2 (C14) adds each bill's skill range, ingredient radius, store stockpile, restart stock, satisfied flag and ingredient filter; version 1 loads with the defaults |
@@ -328,7 +328,7 @@ Every section is version 1 at format 20. A task that changes a section adds a li
 "`fighters` 2 (F9): ...". New sections are listed in the table above.
 
 - `roomstats` 1 (C17): floors, filth, carried filth, the filth rng, beauty needs ([room-stats.md](room-stats.md)). Commands `PlaceFloor` and `AddFilth` by name.
-- `health` 6 (audit): each pawn's `downed` and `dirty` flags, after `cause`. Loading no longer works them out again (a hit taken after the health step was lost as a "downed" announcement and a death was done at once); version 3 files still do. The loader also accepts two jobs on one cell (the later one keeps the reservation) instead of refusing the file.
+- The loader accepts two jobs on one cell (the later one keeps the reservation) instead of refusing the file (audit).
 - `health` 2 (E2): each pawn's environment hediffs (hypothermia, heatstroke...), a list of def name and severity before `dead`. Version 1 files load with none.
 - `world` 1 (W2): new section, see the table. Saves without it have no world.
 - `prisoners` 1 (C22): new section, see the table. Commands `SetPrisonerMode` and `SetPrisonBed` by name; the job check now accepts `CapturePrisoner`, `FeedPrisoner` and `WardenInteract`.

@@ -977,9 +977,8 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, con
     }
 }
 
-void HealthSystem::recompute(Entity pawn, Health& health, bool announce, bool exact) {
-    // `exact` (after loading a save that holds them): dirty, downed and dead stay as saved; only the derived values are worked out.
-    health.dirty = exact ? health.dirty : false;
+void HealthSystem::recompute(Entity pawn, Health& health, bool announce) {
+    health.dirty = false;
     const HealthModel::Kind* kind = healthKindOf(*model_, things_.registry(), pawn);
     if (kind == nullptr) {
         return;
@@ -992,13 +991,13 @@ void HealthSystem::recompute(Entity pawn, Health& health, bool announce, bool ex
     }
     derive(kind->body, kind->healthScale, kind->mechanical, mods, health, cause, shouldBeDown);
 
-    if (!exact && !health.dead && cause != DeathCause::None) {
+    if (!health.dead && cause != DeathCause::None) {
         die(pawn, health, cause, announce);
     }
-    if (!exact && !health.dead) {
+    if (!health.dead) {
         const bool wasDowned = health.downed;
         health.downed = shouldBeDown;
-        if (shouldBeDown && !wasDowned) {
+        if (shouldBeDown && !wasDowned && !restoring_) {
             stopWalking(pawn);
         }
         if (announce && shouldBeDown != wasDowned) {
@@ -1020,12 +1019,22 @@ void HealthSystem::refresh(Entity pawn) {
     }
 }
 
-void HealthSystem::refreshAll(bool exact) {
+void HealthSystem::refreshAll() {
     entt::registry& reg = things_.registry();
-    // From health section 6 the file holds `downed` and `dirty` (exact); older files work them out here.
+    // Saves before health section 6 do not hold `downed`, so every downed pawn looks newly downed here. It was
+    // downed before the save, and whatever path it holds now it held then. A wound still waiting to be worked
+    // out (`dirty`, saved) keeps its saved downed flag and stays pending, so the next step downs and announces it.
+    restoring_ = true;
     for (const auto [entity, health] : reg.view<Health>().each()) {
-        recompute(entity, health, false, exact);
+        const bool pending = health.dirty;
+        const bool downed = health.downed;
+        recompute(entity, health, false);
+        if (pending) {
+            health.downed = downed;
+            health.dirty = true;
+        }
     }
+    restoring_ = false;
 }
 
 // ---- Damage ---------------------------------------------------------------------------------------

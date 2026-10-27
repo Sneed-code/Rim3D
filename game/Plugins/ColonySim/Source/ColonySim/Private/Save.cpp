@@ -1,6 +1,7 @@
 #include "ColonySim/Save.h"
 
 #include "ColonySim/Animals.h"
+#include "ColonySim/Areas.h"
 #include "ColonySim/Breeding.h"
 #include "ColonySim/Apparel.h"
 #include "ColonySim/Husbandry.h"
@@ -225,8 +226,8 @@ struct SaveHealth {
     std::vector<SaveImmunity> immunities;            // health section 4 on
     bool dead = false;
     DeathCause cause = DeathCause::None;
-    bool downed = false;  // health section 6 on: saved, not worked out again, so a hit not yet taken in comes back as it was
-    bool dirty = true;
+    bool downed = false;  // health section 5 on: with `dirty`, so a wound not yet worked out is still pending after a load
+    bool dirty = false;
 };
 
 // An item's rot and wear and what a meal was cooked from, by defName (section "spoilage").
@@ -548,6 +549,8 @@ struct SaveData {
     SaveDesignations designations;     // format 12 on
     ResearchState research;            // section "research"
     ShipState ship;                    // section "ship"
+    float moodWealth = 0.0f;           // section "expectations": the wealth the mood system measured, and when
+    int64_t moodWealthAt = -1;
     // Section "talents" (P3): per protagonist, parallel lists in pawn order.
     std::vector<Entity> talentPawns;
     std::vector<int64_t> talentXp;
@@ -569,6 +572,7 @@ struct SaveData {
     std::vector<Thermostat> thermostats;            // section "thermostats"
     std::vector<CellPos> upperFloors;  // section "levels" (M1), by level then row
     RoofCollapseSaved roofs;           // section "roofs" (M3)
+    AreasSaved areas;                  // section "areas": allowed areas and who is limited to one
     SaveDeep deep;                     // section "deep"
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
     uint32_t nextOutfitId = 1;
@@ -577,7 +581,6 @@ struct SaveData {
     FarmingSaved farming;                           // section "farming" (C13)
     bool hasWeather = false;           // the file has the weather section; older saves start it fresh
     SaveWeather weather;
-    bool healthExact = false;          // health section 6 on: downed and dirty are in the file
     TradeState trade;                  // section "trade" (C23)
     bool hasNarrator = false;          // section "narrator" (T1); older saves keep the narrator off
     NarratorState narrator;
@@ -967,10 +970,31 @@ struct SaveCommandNames {
 template <typename>
 inline constexpr bool kSaveNoSuchCommand = false;
 
+// The area commands, one branch of the tail below.
+template <typename Ar, typename Type>
+void saveAreaCommand(Ar& ar, Type& c) {
+    if constexpr (std::is_same_v<Type, CreateAreaCommand>) {
+        ar.text("name", c.name);
+    } else if constexpr (std::is_same_v<Type, PaintAreaCommand>) {
+        ar.value("area", c.area);
+        ar.group("rect", [&] { saveRect(ar, c.rect); });
+        ar.value("add", c.add);
+    } else if constexpr (std::is_same_v<Type, DeleteAreaCommand>) {
+        ar.value("area", c.area);
+    } else {
+        static_assert(std::is_same_v<Type, AssignAreaCommand>, "save every area command here");
+        ar.value("pawn", c.pawn);
+        ar.value("area", c.area);
+    }
+}
+
 // Second half of the command chain, split out because MSVC stops at 127 nested else-if blocks (C1061).
 template <typename Ar, typename Type>
 void saveCommandTail(Ar& ar, Type& c) {
-    if constexpr (std::is_same_v<Type, StartRaidCommand>) {
+    if constexpr (std::is_same_v<Type, CreateAreaCommand> || std::is_same_v<Type, PaintAreaCommand> ||
+                  std::is_same_v<Type, DeleteAreaCommand> || std::is_same_v<Type, AssignAreaCommand>) {
+        saveAreaCommand(ar, c);
+    } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
         ar.text("faction", c.faction);
         ar.value("points", c.points);
         ar.value("edge", c.edge);
@@ -1673,7 +1697,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::RepairGear, "the save file has a bad job");
+    ar.require(job.type <= JobType::FeedPatient, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -2953,7 +2977,6 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
     ar.section("health", 6, [&] {
-        d.healthExact = ar.sectionVersion() >= 6;
         saveParts(ar, "health", e, &SaveEntity::health, [&](SaveHealth& h) { saveHealthPart(ar, h); });
     });
     ar.section("control", 1, [&] {
@@ -3285,6 +3308,18 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("fuel", 1, [&] {
         saveParts(ar, "fuel", e, &SaveEntity::fuel, [&](Fuel& f) { saveFuelPart(ar, f); });
     });
+    ar.section("areas", 1, [&] {
+        ar.value("nextId", d.areas.nextId);
+        ar.list("areas", d.areas.areas, [&](Area& a) {
+            ar.value("id", a.id);
+            ar.text("name", a.name);
+            ar.list("cells", a.cells, [&](CellPos& c) { saveCell(ar, c); });
+        });
+        ar.list("assigned", d.areas.assigned, [&](std::pair<Entity, AreaId>& p) {
+            ar.value("pawn", p.first);
+            ar.value("area", p.second);
+        });
+    });
     ar.section("deep", 1, [&] {
         ar.list("defs", d.deep.defs, [&](std::string& s) { ar.text(nullptr, s); });
         ar.list("cells", d.deep.cells, [&](uint32_t& v) { ar.value(nullptr, v); });
@@ -3344,6 +3379,10 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("height", d.world.height);
         ar.value("startTile", d.world.startTile);
         ar.value("hash", d.worldHash);
+    });
+    ar.section("expectations", 1, [&] {
+        ar.value("wealth", d.moodWealth);
+        ar.value("at", d.moodWealthAt);
     });
     // New sections go here, at the end.
 }
@@ -3891,6 +3930,8 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     }
     d.research = sim.research_->state();
     d.ship = sim.ship_->state();
+    d.moodWealth = sim.mood_->wealth();
+    d.moodWealthAt = sim.mood_->wealthAt();
     for (const auto& [pawn, s] : sim.talents_->states()) {
         d.talentPawns.push_back(pawn);
         d.talentXp.push_back(s.xp);
@@ -3911,6 +3952,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.thermostats = sim.temperature_->thermostats();
     d.upperFloors = sim.map_.upperFloorCells();
     d.roofs = sim.roofCollapse_->state();
+    d.areas = sim.areas_->saved();
     {
         const DeepResourcesSaved deep = sim.deepResources_->saved();
         std::unordered_map<uint32_t, uint32_t> indexOf;
@@ -4315,7 +4357,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                       [](const EnvironmentHediff& a, const EnvironmentHediff& b) { return a.def.value < b.def.value; });
             health.dead = e.health->dead;
             health.cause = e.health->cause;
-            health.downed = e.health->downed;
+            health.downed = e.health->downed;  // with `dirty`: a wound not yet worked out stays pending (refreshAll)
             health.dirty = e.health->dirty;
             const int parts = e.thing ? sim.health_->partCount(reg.get<Thing>(entity).def) : 0;
             for (const Injury& injury : health.injuries) {
@@ -4574,7 +4616,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.farming_->restore(d.farming, error)) {
         return false;
     }
-    sim.health_->refreshAll(d.healthExact);
+    sim.health_->refreshAll();
     // Upper floors before the buildings that stand on them.
     for (const CellPos& c : d.upperFloors) {
         if (!sim.map_.setUpperFloor(c, true)) {
@@ -4787,6 +4829,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.ship_->restore(std::move(d.ship), error)) {
         return false;
     }
+    sim.mood_->restoreWealth(d.moodWealth, d.moodWealthAt);  // an older save measures it again at once
     sim.apparel_->restoreOutfits(std::move(d.outfits), d.nextOutfitId);
     if (d.hasWeather) {
         WeatherState state;
@@ -4894,6 +4937,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (!sim.filth_->restore(d.filth, error) || !sim.roomStats_->restore(d.roomStats, error)) {
             return false;
         }
+    }
+    if (!sim.areas_->restore(d.areas, error)) {
+        return false;
     }
     if (!sim.rooms_->restoreThinRoofs(d.roofs.thin)) {
         error = "the save has a roof outside the map";

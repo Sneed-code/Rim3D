@@ -265,8 +265,7 @@ public:
     // Works the derived values out for one pawn or all of them, without events. Called after
     // loading a save.
     void refresh(Entity pawn);
-    // `exact`: the save held each pawn's downed and dirty flags, so they stay as saved.
-    void refreshAll(bool exact = false);
+    void refreshAll();
 
     bool incapacitated(Entity pawn) const;
     // Kills a pawn for a cause that is not an injury (starvation). False if it has no tracked
@@ -371,6 +370,7 @@ private:
     uint64_t seed_ = 0;
     std::function<float(Entity)> cleanliness_;
     std::vector<Entity> active_;  // scratch for step
+    bool restoring_ = false;      // inside refreshAll: working out what a loaded save already was, so nobody stops walking for it
     std::vector<size_t> healable_;  // scratch for step: the injuries that can heal
     std::function<void(Entity, HealthMods&)> mods_;
 
@@ -378,7 +378,7 @@ private:
     // pawn should be downed) into `health`'s derived fields. Changes nothing else.
     void derive(int body, float healthScale, bool mechanical, const HealthMods& mods, Health& health, DeathCause& cause,
                 bool& shouldBeDown) const;
-    void recompute(Entity pawn, Health& health, bool announce, bool exact = false);
+    void recompute(Entity pawn, Health& health, bool announce);
     void emit(EventType type, Entity pawn, DefId def = DefId{}, int part = -1, float amount = 0.0f,
               const char* message = nullptr);
     void stopWalking(Entity pawn);
