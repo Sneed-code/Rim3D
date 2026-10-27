@@ -14,6 +14,7 @@
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
+#include "ColonySim/Raids.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Weather.h"
@@ -30,6 +31,8 @@ namespace {
 // Names are prefixed because Unreal's unity builds merge .cpp files together.
 
 constexpr int kFightMaxRepaths = 3;
+constexpr uint16_t kFightHeldKeep = 5;  // steps held up on the way after which a walking fighter keeps its spot
+constexpr size_t kFightEffortPool = 3;  // times `refine` spots get their walk worked out by terrain and health
 // Weights of the nearest threats a spot is scored against: the nearest counts most.
 constexpr float kFightThreatWeights[] = {1.0f, 0.7f, 0.5f, 0.35f, 0.25f, 0.2f, 0.15f, 0.1f};
 constexpr int kFightMaxThreats = static_cast<int>(sizeof kFightThreatWeights / sizeof kFightThreatWeights[0]);
@@ -110,6 +113,9 @@ void fightReadRules(const DefDatabase& defs, FighterRules& r) {
     num("switchMeleeRange", r.switchMeleeRange);
     num("switchSidearmRange", r.switchSidearmRange);
     num("switchMargin", r.switchMargin);
+    num("minWalkShare", r.minWalkShare);
+    num("rangeMargin", r.rangeMargin);
+    num("walkStayBonus", r.walkStayBonus);
     r.throwEvery = std::max(1, r.throwEvery);
     r.planEvery = std::max(1, r.planEvery);
     r.threats = std::clamp(r.threats, 1, kFightMaxThreats);
@@ -499,9 +505,15 @@ Entity FighterSystem::chooseTarget(Entity pawn, const Fighter& f, const PawnInfo
     Entity best = kNoEntity;
     int bestRank = 0;
     float bestDist = 0.0f;
+    const entt::registry& reg = things_.registry();
+    const Raider* raider = reg.try_get<Raider>(pawn);
     for (const KnownEnemy& k : f.known) {
         const PawnInfo* p = info(k.pawn);
         if (p == nullptr) {
+            continue;
+        }
+        // Kidnappers (F12) carry the downed off instead of shooting them, and nobody shoots a colonist being carried off.
+        if (!p->able && raider != nullptr && (raider->sparesDowned || raider->goalThing == k.pawn || reg.all_of<Kidnapped>(k.pawn))) {
             continue;
         }
         // Able before downed, seen just now before remembered, then the nearest.
@@ -549,7 +561,8 @@ bool FighterSystem::fireOption(CellPos cell, const PawnInfo& target, float range
         }
     }
     for (int i = 0; i < count; ++i) {
-        if (fightDist(fightCentre(options[i].x), fightCentre(options[i].y), tx, ty) > range) {
+        // A little inside the range: the pawn stands anywhere in its cell, and a spot at the very edge is not one it can shoot from.
+        if (fightDist(fightCentre(options[i].x), fightCentre(options[i].y), tx, ty) > range - rules_.rangeMargin) {
             continue;
         }
         for (const Stance stance : {Stance::Crouching, Stance::Standing}) {
@@ -668,22 +681,38 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
         // A raider heads for its squad's target (F6); everyone else stays put or keeps to its order.
         const bool heads = f.moveOrdered || f.hasGoal;
         if (!f.hasSpot || heads) {
-            const CellPos goal = f.moveOrdered ? f.anchor : f.hasGoal ? f.goal : at;
-            if (f.hasSpot && f.spot == goal && (f.walk != 0 || at == goal)) {
-                return;  // on its way there already, or there
-            }
-            f.hasSpot = true;
-            f.spot = goal;
-            f.fireCell = goal;
-            f.canFire = false;
-            if (f.walk != 0) {
-                stop(pawn, f);
-            }
-            if (goal != at) {
-                walkToSpot(pawn, f);
-            }
+            setCourse(pawn, f, at, f.moveOrdered ? f.anchor : f.hasGoal ? f.goal : at);
         }
         return;
+    }
+
+    // A shooter with an enemy at arm's length that is as fast as it is stands where it is and shoots: running to a better
+    // spot with a wolf on its heels only gets it bitten in the back (found by the year run, docs/design/colony-scenario.md).
+    // A slower enemy (a boar) is still kited from spot to spot.
+    const auto runSpeed = [&](Entity e) {
+        const Thing* thing = reg.try_get<Thing>(e);
+        return thing != nullptr ? things_.defs().get(thing->def).number("stats.moveSpeed", 0.0) : 0.0;
+    };
+    if (melee_ != nullptr && targetInfo != nullptr && range > 0.0f && threatCount > 0 &&
+        threats[0].d <= melee_->reach(pawn) + melee_->rules().standGround && runSpeed(threats[0].pawn) >= runSpeed(pawn)) {
+        Candidate here;
+        here.cell = at;
+        here.fireCell = at;
+        if (fireOption(at, *targetInfo, range, tx, ty, here)) {
+            const bool moved = !f.hasSpot || f.spot != at;
+            f.hasSpot = true;
+            f.spot = at;
+            f.fireCell = here.fireCell;
+            f.fireStance = here.fireStance;
+            f.canFire = here.canFire;
+            if (moved && f.walk != 0) {
+                stop(pawn, f);
+            }
+            if (cellOf(reg.get<Position>(pawn)) != f.spot && !(fightAdjacent(cellOf(reg.get<Position>(pawn)), f.spot) && cellOf(reg.get<Position>(pawn)) == f.fireCell)) {
+                walkToSpot(pawn, f);
+            }
+            return;
+        }
     }
 
     // Where to look: around the pawn, or around the anchor when it is held there and far from it.
@@ -777,7 +806,7 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
                 s += rules_.fallBackWeight * nearest;
             }
             if (f.hasSpot && c == f.spot) {
-                s += rules_.stayBonus;
+                s += rules_.stayBonus + (f.walk != 0 ? rules_.walkStayBonus : 0.0f);  // more once on its way there
             }
             cand.score = s;
             cand.fireCell = c;
@@ -788,9 +817,25 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
         return;  // nowhere better to be: keep the old plan
     }
 
-    // The best few by that quick score get the line of sight checks: can the threats see it
+    // The walk is the straight line in the quick score. For the best of them it is worked out properly: up a
+    // steep slope or on soft ground it takes longer, and a hurt pawn is slow everywhere, so it
+    // prefers a spot close by on level ground.
+    const size_t pool = std::min(candidates_.size(), static_cast<size_t>(rules_.refine) * kFightEffortPool);
+    std::partial_sort(candidates_.begin(), candidates_.begin() + static_cast<std::ptrdiff_t>(pool), candidates_.end(),
+                      [](const Candidate& a, const Candidate& b) { return fightBetter(a, b); });
+    const Health* hurt = reg.try_get<Health>(pawn);
+    const float walkShare = std::max(hurt != nullptr ? hurt->movingFactor : 1.0f, rules_.minWalkShare);
+    for (size_t i = 0; i < pool; ++i) {
+        Candidate& cand = candidates_[i];
+        const float cx = fightCentre(cand.cell.x);
+        const float cy = fightCentre(cand.cell.y);
+        const float effort = walkEffort(map_, self.x, self.y, cx, cy) / walkShare;
+        cand.score += rules_.travelWeight * (fightDist(cx, cy, self.x, self.y) - effort);
+    }
+
+    // The best few by that score get the line of sight checks: can the threats see it
     // crouched, and can it shoot the target from there.
-    const size_t refine = std::min(candidates_.size(), static_cast<size_t>(rules_.refine));
+    const size_t refine = std::min(pool, static_cast<size_t>(rules_.refine));
     std::partial_sort(candidates_.begin(), candidates_.begin() + static_cast<std::ptrdiff_t>(refine), candidates_.end(),
                       [](const Candidate& a, const Candidate& b) { return fightBetter(a, b); });
     for (size_t i = 0; i < refine; ++i) {
@@ -817,6 +862,21 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
     }
     const Candidate& best = *std::min_element(candidates_.begin(), candidates_.begin() + static_cast<std::ptrdiff_t>(refine),
                                               [](const Candidate& a, const Candidate& b) { return fightBetter(a, b); });
+    // An advancing fighter with no spot in reach from which it can shoot, and its target out of range from the best of
+    // them: scoring cells within 10 m can't see round a cliff or a wall, so it follows its squad's way to the colony
+    // instead of settling where it is.
+    if (f.advances && f.hasGoal && !f.fallingBack && targetInfo != nullptr && range > 0.0f && !best.canFire &&
+        fightDist(fightCentre(best.cell.x), fightCentre(best.cell.y), tx, ty) > range) {
+        setCourse(pawn, f, at, f.goal);
+        return;
+    }
+    // Held up on the way (others in a narrow place): a new spot would start the walk again, and the movement's count of
+    // steps held up with it, so the pawn would never get to walk through the others or give up. Keep the old one.
+    const Mover* walking = reg.try_get<Mover>(pawn);
+    if (f.walk != 0 && f.hasSpot && best.cell != f.spot && walking != nullptr && walking->heldSteps >= kFightHeldKeep &&
+        std::find(friendSpots_.begin(), friendSpots_.end(), f.spot) == friendSpots_.end()) {
+        return;
+    }
     const bool moved = !f.hasSpot || best.cell != f.spot;
     f.hasSpot = true;
     f.spot = best.cell;
@@ -831,6 +891,23 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
         if (here != f.spot && !(fightAdjacent(here, f.spot) && here == f.fireCell)) {
             walkToSpot(pawn, f);
         }
+    }
+}
+
+// Heads for `goal` with no spot to shoot from, unless it is there or on its way already.
+void FighterSystem::setCourse(Entity pawn, Fighter& f, CellPos at, CellPos goal) {
+    if (f.hasSpot && f.spot == goal && (f.walk != 0 || at == goal)) {
+        return;
+    }
+    f.hasSpot = true;
+    f.spot = goal;
+    f.fireCell = goal;
+    f.canFire = false;
+    if (f.walk != 0) {
+        stop(pawn, f);
+    }
+    if (goal != at) {
+        walkToSpot(pawn, f);
     }
 }
 
