@@ -794,9 +794,18 @@ struct SetRefuelCommand {
     bool fillNow = false;
 };
 
+// Thermostat (docs/design/temperature.md): sets the target temperature of a heater or cooler, which then holds its
+// room at that instead of the def's limit; `clear` goes back to the def's limit. Fails for a thing with no
+// thermostat or a target outside the rules' range.
+struct SetThermostatCommand {
+    Entity building = kNoEntity;
+    float celsius = 21.0f;
+    bool clear = false;
+};
+
 // Changes the details of a bill (task C14, docs/design/crafting.md): the least and most skill a worker may
 // have in the recipe's skill, how far from the building ingredients are taken (metres, 0 anywhere), a stockpile
-// the products are taken to (0: none), the stock an "until you have" bill waits to fall under before it starts
+// the products are taken to (0: none), a stockpile an "until you have" bill counts its stock in (0: the whole map), the stock an "until you have" bill waits to fall under before it starts
 // again (0: as soon as it is under its count) and the item defNames the bill may not use. Replaces all of them.
 // Fails if there is no such bill, a number is out of range, the stockpile does not exist or a name is not an item.
 struct SetBillOptionsCommand {
@@ -806,6 +815,7 @@ struct SetBillOptionsCommand {
     int skillMax = 20;
     float radius = 0.0f;
     uint32_t storeZone = 0;
+    uint32_t countZone = 0;
     int unpauseAt = 0;
     std::vector<std::string> disallowed;
 };
@@ -896,7 +906,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              AddOperationCommand, RemoveOperationCommand,
                              TakeDrugCommand, SetDrugPolicyCommand, SetDrugPolicyEntryCommand,
                              StartVisitCommand, TradeCommand, AdjustGoodwillCommand, GiftCommand, ClimbCommand,
-                             AttuneCommand, LearnPowerCommand, CastPowerCommand>;
+                             AttuneCommand, LearnPowerCommand, CastPowerCommand,
+                             SetThermostatCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.
