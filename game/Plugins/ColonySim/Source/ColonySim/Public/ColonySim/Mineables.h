@@ -68,6 +68,10 @@ public:
     // doesn't depend on who mines it when.
     MineDrop dropOf(CellPos c) const;
 
+    // A rock chunk of one of this map's rock types, chosen by a hash of the cell (what a deep drill with nothing
+    // under it brings up); an invalid DefId when the map has no rock type with a chunk.
+    DefId chunkOf(CellPos c) const;
+
     // Fingerprint of the layer; kept up to date as it changes, so asking costs nothing.
     uint64_t hash() const { return hash_ ^ static_cast<uint64_t>(count_); }
 
