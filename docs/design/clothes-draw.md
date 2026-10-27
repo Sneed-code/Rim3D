@@ -17,8 +17,10 @@ Kellan's MetaHuman body only has hands and feet; his hoodie and trousers are wha
 1. **Kellan's own top and trousers are hidden** (the shoes stay: the sim has no footwear yet).
 2. **A skin layer** is always drawn: `SK_Body_Bare_0` (torso and arms) and `SK_Body_Bare_1` (legs), copies of the
    hoodie and cargo trousers (hood and hands cut away, 1.2 cm slimmer) on the garment material, coloured with the
-   pawn's skin (`FSimPawnLooks::Skin`). Where nothing is worn this is what shows. It is flat coloured (the skin
-   texture's UVs do not fit these meshes) and the shape is the loose hoodie's, so a bare pawn looks a little padded.
+   pawn's skin (`FSimPawnLooks::Skin`). Where nothing is worn this is what shows. With the PawnFaces assets it is drawn
+   with `M_PawnBareSkin` instead (V2b, [looks.md](looks.md)): lit like the face and hands, in the pawn's skin colour, with
+   a fine tiled skin normal (the skin texture's UVs do not fit these meshes). The shape is the loose hoodie's, so a bare
+   pawn looks a little padded.
 3. **Each worn piece** puts its `visual.worn` meshes on over the skin, in the order the sim lists them (the order
    put on; the garments' thickness grows by layer, A5): a skinned mesh follows the same leader pose as the
    hoodie did and gets the same body-shape morphs (`Thin`, `Heavy`, `Female`...), so it fits every body type; a
