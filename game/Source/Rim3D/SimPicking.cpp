@@ -2,6 +2,7 @@
 
 #include "BuildingSubsystem.h"
 #include "Engine/World.h"
+#include "LevelsSubsystem.h"
 #include "SimSubsystem.h"
 #include "TerrainDraw.h"
 
@@ -51,8 +52,9 @@ namespace
 		return true;
 	}
 
-	// How far above the sim's ground a world point is (negative: below it), or false off the map.
-	bool SimPickHeightAbove(const USimSubsystem& Bridge, const FVector& Point, double& OutAbove)
+	// How far above the surface a world point is (negative: below it), or false off the map. The surface is level `Level`'s
+	// height, or (Level -1) the highest upper floor at most TopLevel over the point, else the ground; OutLevel says which.
+	bool SimPickHeightAbove(const USimSubsystem& Bridge, const FVector& Point, double& OutAbove, int32 Level, int32 TopLevel, int32& OutLevel)
 	{
 		const colony::Map& Map = Bridge.GetSim()->map();
 		const FVector Local = (Point - Bridge.GetWorldOrigin()) / 100.0;
@@ -60,8 +62,21 @@ namespace
 		{
 			return false;
 		}
-		// The surface is the ground, plus the rock block where the cell is rock (TerrainDraw.h).
-		OutAbove = Point.Z - Bridge.SimToWorld(static_cast<float>(Local.X), static_cast<float>(Local.Y), 0).Z - TerrainDraw::SurfaceBonusCm(Map, Local.X, Local.Y);
+		OutLevel = FMath::Max(Level, 0);
+		if (Level < 0)
+		{
+			for (int32 Upper = FMath::Min(TopLevel, colony::Map::kLevels - 1); Upper > 0; --Upper)
+			{
+				if (Map.upperFloor(colony::CellPos{FMath::FloorToInt32(Local.X), FMath::FloorToInt32(Local.Y), Upper}))
+				{
+					OutLevel = Upper;
+					break;
+				}
+			}
+		}
+		// The ground has the rock block where the cell is rock (TerrainDraw.h); a level above it is 3 m a level over the ground.
+		const double Bonus = OutLevel == 0 ? TerrainDraw::SurfaceBonusCm(Map, Local.X, Local.Y) : 0.0;
+		OutAbove = Point.Z - Bridge.SimToWorld(static_cast<float>(Local.X), static_cast<float>(Local.Y), OutLevel).Z - Bonus;
 		return true;
 	}
 }
@@ -105,7 +120,7 @@ namespace SimPicking
 		return true;
 	}
 
-	bool RayHitGround(const USimSubsystem& Bridge, const FVector& Origin, const FVector& Direction, double& OutDistance)
+	bool RayHitGround(const USimSubsystem& Bridge, const FVector& Origin, const FVector& Direction, double& OutDistance, int32 Level, int32 TopLevel, int32* OutLevel)
 	{
 		if (!Bridge.GetSim())
 		{
@@ -114,10 +129,11 @@ namespace SimPicking
 		double PreviousT = 0.0;
 		double PreviousAbove = 0.0;
 		bool bHavePrevious = false;
+		int32 HitLevel = 0;
 		for (double T = 0.0; T <= SimPickMaxDistance;)
 		{
 			double Above = 0.0;
-			if (SimPickHeightAbove(Bridge, Origin + Direction * T, Above))
+			if (SimPickHeightAbove(Bridge, Origin + Direction * T, Above, Level, TopLevel, HitLevel))
 			{
 				if (bHavePrevious && PreviousAbove > 0.0 && Above <= 0.0)
 				{
@@ -128,7 +144,8 @@ namespace SimPicking
 					{
 						const double Mid = 0.5 * (Low + High);
 						double MidAbove = 0.0;
-						if (SimPickHeightAbove(Bridge, Origin + Direction * Mid, MidAbove) && MidAbove <= 0.0)
+						int32 MidLevel = 0;
+						if (SimPickHeightAbove(Bridge, Origin + Direction * Mid, MidAbove, Level, TopLevel, MidLevel) && MidAbove <= 0.0)
 						{
 							High = Mid;
 						}
@@ -138,6 +155,11 @@ namespace SimPicking
 						}
 					}
 					OutDistance = High;
+					if (OutLevel)
+					{
+						double Unused = 0.0;
+						SimPickHeightAbove(Bridge, Origin + Direction * High, Unused, Level, TopLevel, *OutLevel);
+					}
 					return true;
 				}
 				PreviousT = T;
@@ -154,18 +176,19 @@ namespace SimPicking
 		return false;
 	}
 
-	FSimPick PickGroundFromRay(const USimSubsystem& Bridge, const FVector& Origin, const FVector& InDirection)
+	FSimPick PickGroundFromRay(const USimSubsystem& Bridge, const FVector& Origin, const FVector& InDirection, int32 Level)
 	{
 		FSimPick Result;
 		FVector Direction = InDirection;
 		double GroundT = 0.0;
-		if (!Bridge.GetSim() || !Direction.Normalize() || !RayHitGround(Bridge, Origin, Direction, GroundT))
+		Level = FMath::Clamp(Level, 0, colony::Map::kLevels - 1);
+		if (!Bridge.GetSim() || !Direction.Normalize() || !RayHitGround(Bridge, Origin, Direction, GroundT, Level, Level))
 		{
 			return Result;
 		}
 		Result.Location = Origin + Direction * GroundT;
 		const FVector Local = (Result.Location - Bridge.GetWorldOrigin()) / 100.0;
-		Result.Cell = colony::CellPos{FMath::FloorToInt32(Local.X), FMath::FloorToInt32(Local.Y), 0};
+		Result.Cell = colony::CellPos{FMath::FloorToInt32(Local.X), FMath::FloorToInt32(Local.Y), Level};
 		Result.Kind = Bridge.GetSim()->map().inBounds(Result.Cell) ? ESimPickKind::Cell : ESimPickKind::None;
 		return Result;
 	}
@@ -179,12 +202,13 @@ namespace SimPicking
 			return Result;
 		}
 
+		const int32 TopLevel = ULevelsSubsystem::TopShownLevel(Bridge.GetWorld());
 		double BestThingT = SimPickMaxDistance;
 		for (const colony::ThingView& View : Bridge.GetCurrentSnapshot().things)
 		{
 			FBox Box;
 			double T = 0.0;
-			if (SimPicking::ThingBox(Bridge, View, Box) && SimPickRayBox(Origin, Direction, Box, T) && T < BestThingT)
+			if (View.level <= TopLevel && SimPicking::ThingBox(Bridge, View, Box) && SimPickRayBox(Origin, Direction, Box, T) && T < BestThingT)
 			{
 				BestThingT = T;
 				Result.Kind = ESimPickKind::Thing;
@@ -193,7 +217,8 @@ namespace SimPicking
 		}
 
 		double GroundT = 0.0;
-		const bool bGround = RayHitGround(Bridge, Origin, Direction, GroundT);
+		int32 GroundLevel = 0;
+		const bool bGround = RayHitGround(Bridge, Origin, Direction, GroundT, -1, TopLevel, &GroundLevel);
 		if (Result.Kind == ESimPickKind::Thing && (!bGround || BestThingT <= GroundT))
 		{
 			Result.Location = Origin + Direction * BestThingT;
@@ -205,7 +230,7 @@ namespace SimPicking
 		{
 			Result.Location = Origin + Direction * GroundT;
 			const FVector Local = (Result.Location - Bridge.GetWorldOrigin()) / 100.0;
-			Result.Cell = colony::CellPos{FMath::FloorToInt32(Local.X), FMath::FloorToInt32(Local.Y), 0};
+			Result.Cell = colony::CellPos{FMath::FloorToInt32(Local.X), FMath::FloorToInt32(Local.Y), GroundLevel};
 			if (Bridge.GetSim()->map().inBounds(Result.Cell))
 			{
 				Result.Kind = ESimPickKind::Cell;
