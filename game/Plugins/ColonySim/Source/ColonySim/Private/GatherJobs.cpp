@@ -4,6 +4,7 @@
 
 #include "ColonySim/Bills.h"
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Construction.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Farming.h"
@@ -162,6 +163,7 @@ std::string JobSystem::activeSkill(Entity pawn) const {
         case JobType::HarvestPlant:
             return "Plants";
         case JobType::BuildFrame:
+            return reg.valid(job.thing) && construction_.isArt(reg.get<Thing>(job.thing).def) ? "Artistic" : "Construction";
         case JobType::Deconstruct:
             return "Construction";
         case JobType::DoBill: {

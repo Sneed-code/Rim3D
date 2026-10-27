@@ -1,6 +1,7 @@
 #include "ColonySim/RoomStats.h"
 
 #include "ColonySim/Clock.h"
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Cover.h"
 #include "ColonySim/Filth.h"
@@ -160,6 +161,8 @@ RoomStats::RoomStats(Map& map, Things& things, Rooms& rooms, const Floors& floor
     cleanliness_.assign(n, 0.0f);
     baseValue_.assign(n, 0.0f);
     stuffBeauty_.assign(n, 1.0f);
+    stuffBeautyOffset_.assign(n, 0.0f);
+    art_.assign(n, 0);
     stuffCount_.assign(n, 0.0f);
     standable_.assign(n, 0);
     impassable_.assign(n, 0);
@@ -171,6 +174,8 @@ RoomStats::RoomStats(Map& map, Things& things, Rooms& rooms, const Floors& floor
             beautyOutdoors_[i] = roomStatsFloat(def, "stats.beautyOutdoors", beautyIndoors_[i]);
             cleanliness_[i] = roomStatsFloat(def, "stats.cleanliness", 0.0f);
             stuffBeauty_[i] = roomStatsFloat(def, "stuffProps.statFactors.beauty", 1.0f);
+            stuffBeautyOffset_[i] = roomStatsFloat(def, "stuffProps.statOffsets.beauty", 0.0f);
+            art_[i] = def.flag("building.art") ? 1 : 0;
             stuffCount_[i] = roomStatsFloat(def, "costStuffCount", 0.0f);
             const std::string passability = def.text("passability");
             standable_[i] = passability == "Standable" ? 1 : 0;
@@ -195,6 +200,23 @@ RoomStats::RoomStats(Map& map, Things& things, Rooms& rooms, const Floors& floor
             baseValue_[i] = value;
         }
     }
+    if (const Def* rules = defs.find("Rules", "QualityRules")) {
+        const std::string defaultLevel = rules->text("defaultLevel", "Normal");
+        for (size_t i = 0; i < rules->count("levels"); ++i) {
+            const std::string path = "levels." + std::to_string(i);
+            qualityBeauty_.push_back(roomStatsFloat(*rules, (path + ".beautyOffset").c_str(), 1.0f));
+            qualityValue_.push_back(roomStatsFloat(*rules, (path + ".marketValueFactor").c_str(), 1.0f));
+            if (rules->text((path + ".def").c_str()) == defaultLevel) {
+                defaultQuality_ = static_cast<int>(i);
+            }
+        }
+    }
+    if (qualityBeauty_.empty()) {
+        qualityBeauty_.push_back(1.0f);
+        qualityValue_.push_back(1.0f);
+        defaultQuality_ = 0;
+    }
+    defaultQuality_ = std::clamp(defaultQuality_, 0, static_cast<int>(qualityBeauty_.size()) - 1);
     groundDef_[static_cast<size_t>(Terrain::Water)] = defs.idOf("Terrain", "WaterShallow");
     groundDef_[static_cast<size_t>(Terrain::Sand)] = defs.idOf("Terrain", "Sand");
     groundDef_[static_cast<size_t>(Terrain::Soil)] = defs.idOf("Terrain", "Soil");
@@ -228,7 +250,32 @@ float RoomStats::marketValueOf(Entity building) const {
     if (const BuiltOf* made = reg.try_get<BuiltOf>(building); made != nullptr && made->stuff.valid()) {
         value += stuffCount_[def.value] * roomStatsFloat(defs_.get(made->stuff), "stats.marketValue", 0.0f);
     }
+    if (art_[def.value] != 0) {
+        const Quality* quality = reg.try_get<Quality>(building);
+        const size_t level = quality != nullptr ? std::min(static_cast<size_t>(quality->level), qualityValue_.size() - 1)
+                                                : static_cast<size_t>(defaultQuality_);
+        value *= qualityValue_[level];
+    }
     return value;
+}
+
+float RoomStats::buildingBeauty(Entity building, bool outdoors) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(building) || !reg.all_of<Thing>(building)) {
+        return 0.0f;
+    }
+    const DefId def = reg.get<Thing>(building).def;
+    float beauty = statBeauty(def, outdoors);
+    if (const BuiltOf* made = reg.try_get<BuiltOf>(building); made != nullptr && made->stuff.valid()) {
+        beauty = beauty * stuffBeauty_[made->stuff.value] + stuffBeautyOffset_[made->stuff.value];
+    }
+    if (art_[def.value] != 0) {
+        const Quality* quality = reg.try_get<Quality>(building);
+        const size_t level = quality != nullptr ? std::min(static_cast<size_t>(quality->level), qualityBeauty_.size() - 1)
+                                                : static_cast<size_t>(defaultQuality_);
+        beauty *= qualityBeauty_[level];
+    }
+    return beauty;
 }
 
 float RoomStats::marketValueOfFloor(DefId floor) const {
@@ -248,11 +295,7 @@ float RoomStats::cellBeauty(CellPos c, bool withGround, std::vector<Entity>* cou
         const DefId def = reg.get<Thing>(building).def;
         walled = impassable_[def.value] != 0;
         if (counted == nullptr || std::find(counted->begin(), counted->end(), building) == counted->end()) {
-            float beauty = statBeauty(def, outdoors);
-            if (const BuiltOf* made = reg.try_get<BuiltOf>(building); made != nullptr && made->stuff.valid()) {
-                beauty *= stuffBeauty_[made->stuff.value];
-            }
-            total += beauty;
+            total += buildingBeauty(building, outdoors);
             if (counted != nullptr) {
                 counted->push_back(building);
             }

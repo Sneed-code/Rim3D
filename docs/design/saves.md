@@ -47,6 +47,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Drugs (section `drugs`) | per pawn: policy, own policy entries, chemical states (tolerance, addicted, need, progress), last dose of each drug **by `defName`**, search wait ([drugs.md](drugs.md)) |
 | Raids (section `raids` 2, `fighters` 2) | the raid squads (faction, points, state, target, members, when they give up), the alarm and its threat and home points, the shelter mark, the factions met so far; per pawn its `Raider` squad and kind and its `DefensePlan`; a fighter's mode, goal, squad, `defending` and `retreat` ([raids.md](raids.md)) |
 | Talents (section `talents`) | per protagonist: pawn, XP and ranks by talent **`defName`** ([talents.md](talents.md)) |
+| Resonance (section `resonance`) | per pawn its `attunement` (level, strain, focus, powers **by `defName`**), a `casting` under way (power by `defName`, target, cell, steps, player), `stunned` (steps) and resonance `effects` (numb and burden steps and values) ([resonance.md](resonance.md)) |
 | Farming (section `farming`) | growing zones: id, crop **by `defName`**, cells; the next zone id and the counters ([farming.md](farming.md)) |
 | Prisoners (section `prisoners`) | each prisoner's mode, resistance, capture time and next talk; each prison-marked bed ([prisoners.md](prisoners.md)) |
 | Trade (section `trade`) | the visits (kind, phase, faction, trader kind, times, spot, trader silver, stock by **`defName`**, members and trader pawn), the factions whose goodwill changed, the visit counter and the last drift day; per pawn its `Visitor` visit and role ([trade.md](trade.md)) |
@@ -114,8 +115,10 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `mood` | 1 | `mood` |
 | `combat` | 1 | `posture`, `gear`, `equippedBy`, `shooter`, `projectile`, `magazine` |
 | `doors` | 1 | `door` |
-| `fighters` | 2 | `faction`, `fighter` (version 2: its mode, `defending`, squad, goal and `retreat`, F6) |
+| `fighters` | 3 | `faction`, `fighter` (version 2: its mode, `defending`, squad, goal and `retreat`, F6; version 3: `rescuing`, `lifted`, `rescueTo`, F10) |
 | `looks` | 1 | `looks` |
+| `fighters` | 2 | `faction`, `fighter` (version 2: its mode, `defending`, squad, goal and `retreat`, F6) |
+| `looks` | 2 | `looks`. Version 2 (V1) adds the face sliders, eyes, hair style, beard, body hair, tattoos and scars; version 1 loads with the defaults |
 | `paths` | 1 | the path queue |
 | `zones` | 1 | next zone id, stockpile zones |
 | `plants` | 1 | the plant layer |
@@ -307,10 +310,12 @@ Every section is version 1 at format 20. A task that changes a section adds a li
 - `raids` 1 (F6): new section, see the table. Commands `StartRaid`, `SoundAlarm`, `SetDefenseRole`, `MarkShelter` by name.
 - `raids` 2 (F12): per squad `strategy`, `hasBreach`, `breach`, `breachFrom`; the raids waiting for their hour (`pending`); per raider `goalThing`, `loot`, `sparesDowned`; a `kidnapped` part on a colonist a raider carries ([raid-strategies.md](raid-strategies.md)). Version 1 files load with Assault squads and nothing waiting. Command `StartStrategyRaid` by name.
 - `fighters` 2 (F6): a fighter's `mode`, `defending`, `squad`, `hasGoal`, `goal`, `retreat` after `dodgeUntil`. Version 1 files load them as a plain fighter.
+- `fighters` 3 (F10): a fighter's `rescuing`, `lifted`, `rescueTo` after `retreat` ([field-care.md](field-care.md)). Older files load with nobody carried.
 - `breeding` 1 (N4): new section, see the table: the counters, per animal its `AnimalBreed` (pregnancy, litter, mating wait, milk, wool and egg timers, the female a male is walking to), per fertilized egg its `Hatching` time ([breeding.md](breeding.md)). The job check now accepts the animal jobs (it stopped at `StripPawn`, so a save made mid-taming would not load).
 - `husbandry` 2 (N2): per animal care record `markHunt` and `collect` after `markSlaughter`, and the `hunted` counter after `starved`. Version 1 files load with none. The job check now accepts `Hunt`, `HaulCorpse` and `Butcher`.
 - `apparel` 1 (C15): item stuff and quality, taint, strip marks, outfits ([apparel.md](apparel.md)). Commands `SetOutfit`, `EditOutfit`, `AddOutfit`, `RemoveOutfit` and `Strip` by name.
 - `movement` 2 (M2): each mover's `climbed` (metres up stairs or a ladder) after `gaveUp`. Version 1 files load with none; stairs and ladders need nothing saved (their links come from the buildings), stockpiles on upper levels were already saved with their level.
+- `looks` 2 (V1): after `hair`, the face sliders, `eyes`, `hairStyle`, `naturalBeard`, `beard`, `naturalBodyHair`, `bodyHair` and the lists `tattoos` and `scars` (region, style, u, v, size). Version 1 files load with an empty `hairStyle` and average faces.
 - `fire` 1 (E4): new section, see the table. Commands `Ignite` and `SetHomeArea` by name; the job check now accepts `ExtinguishFire`. Older saves load with no fires and a home area made at the first step.
 
 ## Why the state hash changed in S6

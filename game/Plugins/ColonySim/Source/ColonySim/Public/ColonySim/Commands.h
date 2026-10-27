@@ -56,6 +56,18 @@ struct DirectMoveCommand {
     float y = 0.0f;
 };
 
+// The player's colonist takes the stairs or ladder it stands at (U17, docs/design/levels.md): from
+// the cell at either end of a level link, the link whose other end lies most nearly along (dx, dy)
+// (any length; zero or not a number takes the first). The sim climbs it the way it climbs any pawn,
+// at the link's share of its walking speed, and DirectMove is ignored until it stands at the other
+// end. Fails if the pawn isn't the colonist under direct control, is downed, rolling or climbing
+// already, or no link starts at its cell within 60 degrees of that direction.
+struct ClimbCommand {
+    Entity pawn = kNoEntity;
+    float dx = 0.0f;
+    float dy = 0.0f;
+};
+
 // The farthest a controlled pawn moves in one step: 0.5 m, which is 15 m/s at 1x, over three times
 // the fastest pawn. Longer requests are cut to this.
 inline constexpr float kDirectMaxStep = 0.5f;
@@ -392,9 +404,10 @@ struct SoundAlarmCommand {
     bool on = true;
 };
 
-// What a colonist does when the alarm sounds: 0 Defender, 1 Shelter, 2 Keep working (DefenseRole
-// in Raids.h). A Defender can have a defense spot it holds. Fails for a pawn that isn't the
-// colony's, a spot for another role, or a spot nobody can stand on.
+// What a colonist does when the alarm sounds: 0 Defender, 1 Shelter, 2 Keep working, 3 Medic, 4 Firefighter
+// (DefenseRole in Raids.h; the last two docs/design/field-care.md). A Defender can have a defense spot it holds.
+// Fails for a pawn that isn't the colony's, a spot for another role, a spot nobody can stand on, or a Medic or
+// Firefighter who can't do that work.
 struct SetDefenseRoleCommand {
     Entity pawn = kNoEntity;
     uint8_t role = 0;
@@ -711,6 +724,29 @@ struct SetHomeAreaCommand {
     bool add = true;
 };
 
+// Resonance (task X2, docs/design/resonance.md). Attune sets a pawn's attunement level, 0 to 6 (0 takes it away);
+// each new level teaches one power of that level at random. Stands in for RimWorld's neuroformer and titles.
+struct AttuneCommand {
+    Entity pawn = kNoEntity;
+    int level = 1;
+};
+
+// Teaches an attuned pawn a power (a Powers defName) of its level or lower, as RimWorld's psytrainer does.
+struct LearnPowerCommand {
+    Entity pawn = kNoEntity;
+    std::string power;
+};
+
+// Uses a power: `target` the pawn it is used on (kNoEntity or the pawn itself for itself), `cell` where a jump
+// takes the target. Fails if the pawn doesn't know it or can't act, focus or strain don't allow it, or the
+// target (or cell) is out of range or sight.
+struct CastPowerCommand {
+    Entity pawn = kNoEntity;
+    std::string power;
+    Entity target = kNoEntity;
+    CellPos cell;
+    bool player = false;
+};
 // Multi-storey (task M1, docs/design/levels.md): lays an upper floor on every cell of `area` (on
 // level 1 or above) that can hold one, or takes them up with `remove`. A floor needs a wall or column
 // within the roof support radius on the level below; one is taken up only when nothing stands on it.
@@ -859,7 +895,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ShipCommand, QuestCommand,
                              AddOperationCommand, RemoveOperationCommand,
                              TakeDrugCommand, SetDrugPolicyCommand, SetDrugPolicyEntryCommand,
-                             StartVisitCommand, TradeCommand, AdjustGoodwillCommand, GiftCommand>;
+                             StartVisitCommand, TradeCommand, AdjustGoodwillCommand, GiftCommand, ClimbCommand,
+                             AttuneCommand, LearnPowerCommand, CastPowerCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.
