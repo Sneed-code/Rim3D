@@ -306,13 +306,16 @@ sneed's whole job for a bug is: press F8, then send the folder (zip it, or drop 
 
 One generic test finds state a system forgot to save, without knowing the systems. It runs a busy
 colony (Crashlanded on real defs: the narrator, raids, caravans, diseases, fire, mental breaks,
-hunting, taming, a prisoner, bills, farming, research, talents), saves it at many moments, loads the
+hunting, taming, a prisoner, bills, farming, research, talents, drugs, quests, inspirations, worn-out
+clothes and repair, an organ harvest, an execution), saves it at many moments, loads the
 file and runs the original and the loaded copy side by side with the same commands. Right after the
 load, and every 150 seconds for 900 seconds, the state hash and the whole saved file must be equal. State a
 system keeps but does not save makes the two drift apart, and a file the loader refuses is caught
 too. Run it as part of `unit`; a task that adds a system adds its commands and incidents to
 `auditSession` so the audit reaches it.
 
+- A second test (`...a night skip and of a fast travel`) puts everyone to bed in a quiet colony and saves in the
+  middle of a night skip and of a fast travel, which the busy script never reaches (nobody is all asleep).
 - **Soak**: `AUDIT_SOAK=60 ./build/colonysim_tests -tc="Save audit: soak"` plays seeds 1 to 60, saving each
   about twenty times (a few minutes). Use it after adding state. `AUDIT_SEED=n` runs one seed,
   `AUDIT_BLOCK=1` compares every second to find the first second a drift starts, and
