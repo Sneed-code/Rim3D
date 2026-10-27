@@ -100,6 +100,10 @@ enum class EventType : uint8_t {
     PawnMentalBreakEnded,  // it ended: `message` says how ("recovered", "downed", "died", "stopped")
     PawnInsulted,          // a pawn in an insulting spree insulted another
     PawnLeftColony,        // a pawn gave up and walked off the map for good
+    VisitArrived,          // visitors, a trade caravan or an orbital trader came (C23, docs/design/trade.md): `squad` the visit id, `thing` the trader pawn (none for visitors and a ship), `amount` the VisitKind (0 visitors, 1 caravan, 2 orbital), `message` the Factions defName
+    VisitLeft,             // a visit is over and gone: `squad` the visit id, `amount` its VisitKind, `message` the faction
+    TradeDone,             // the colony traded: `squad` the visit id, `thing` the trader, `amount` the silver the colony got (minus: paid), `message` the faction (and what was given free)
+    GoodwillChanged,       // a faction's goodwill moved: `amount` by how much, `message` the Factions defName
     PawnTookDrug,          // a pawn took a dose of a drug (docs/design/drugs.md): `thing` the pawn, `def` the drug's Things def, `amount` the high's severity now, `cell` where
     PawnAddicted,          // it became addicted: `thing` the pawn, `def` the Chemicals def, `message` its defName, `amount` the need
     AddictionCured,        // an addiction healed away: the same fields

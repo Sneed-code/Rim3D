@@ -7,6 +7,7 @@
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Trade.h"
 #include "ColonySim/WeaponSlot.h"
 #include "ColonySim/Zones.h"
 
@@ -562,6 +563,41 @@ struct SetPrisonBedCommand {
     bool on = true;
 };
 
+// Trade (task C23, docs/design/trade.md). StartVisitCommand: visitors, a trade caravan or an orbital trader of `faction` (a Factions
+// defName) come; `kind` is Visitors, Caravan or Orbital (visitKindName), `traderKind` a TraderKinds defName (empty: one of the
+// faction's), `edge` 0 north, 1 east, 2 south, 3 west, -1 any. T1's incidents do the same through TradeSystem::startVisit. Fails for
+// a faction that can't do that, is hostile, or has no way in.
+struct StartVisitCommand {
+    std::string faction;
+    std::string kind = "Visitors";
+    std::string traderKind;
+    int edge = -1;
+};
+
+// The colony trades with a visit's trader: it buys the `buy` lines from the trader's stock and sells the `sell` lines from what lies
+// on the map, the difference paid in silver items; `negotiator` (a colonist) sets the prices by Social skill and talents. All or
+// nothing; fails with the reason in plain words.
+struct TradeCommand {
+    uint32_t visit = 0;
+    Entity negotiator = kNoEntity;
+    std::vector<TradeLine> buy;
+    std::vector<TradeLine> sell;
+};
+
+// The colony gives a visit's faction a gift: the `items` are taken from what lies on the map and the faction's goodwill rises by
+// their market value over `giftSilverPerPoint` (FactionRules). A caravan's trader or a ship adds the goods to its stock. Works on any
+// visit that is still here, hostile faction or not. Fails with the reason in plain words.
+struct GiftCommand {
+    uint32_t visit = 0;
+    std::vector<TradeLine> items;
+};
+
+// Dev command: changes a faction's goodwill by `delta` (within -100 to 100).
+struct AdjustGoodwillCommand {
+    std::string faction;
+    float delta = 0.0f;
+};
+
 // Dev command (task H2, docs/design/diseases.md): the pawn catches a disease (a Hediffs def of class Disease, by
 // defName) at `severity` (below 0: the def's initial severity); an infection needs the wound's body part in `part`.
 // Fails for a pawn without a body, a name that is not a disease, or when the pawn already has it or is immune.
@@ -822,7 +858,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SetNarratorCommand, FireIncidentCommand, ContractDiseaseCommand, StartStrategyRaidCommand,
                              ShipCommand, QuestCommand,
                              AddOperationCommand, RemoveOperationCommand,
-                             TakeDrugCommand, SetDrugPolicyCommand, SetDrugPolicyEntryCommand>;
+                             TakeDrugCommand, SetDrugPolicyCommand, SetDrugPolicyEntryCommand,
+                             StartVisitCommand, TradeCommand, AdjustGoodwillCommand, GiftCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

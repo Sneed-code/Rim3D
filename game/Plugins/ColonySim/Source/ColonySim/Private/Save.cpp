@@ -51,6 +51,7 @@
 #include "ColonySim/Social.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Talents.h"
+#include "ColonySim/Trade.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
 #include "ColonySim/Zones.h"
@@ -406,6 +407,7 @@ struct SaveEntity {
     std::optional<Fuel> fuel;               // "fuel" section (C11)
     std::optional<StoreIn> storeIn;         // "crafting" section (C14)
     std::optional<MentalBreaker> mentalBreaker;  // section "mentalBreaks" (C19)
+    std::optional<Visitor> visitor;         // section "trade" (C23)
     std::optional<Inspired> inspired;            // section "inspirations" (C25)
 };
 
@@ -525,6 +527,7 @@ struct SaveData {
     FarmingSaved farming;                           // section "farming" (C13)
     bool hasWeather = false;           // the file has the weather section; older saves start it fresh
     SaveWeather weather;
+    TradeState trade;                  // section "trade" (C23)
     bool hasNarrator = false;          // section "narrator" (T1); older saves keep the narrator off
     NarratorState narrator;
     bool hasDisasters = false;         // section "disasters" (T3); older saves have none on
@@ -1095,6 +1098,43 @@ void saveCommandTail(Ar& ar, Type& c) {
 }
 
 template <typename Ar>
+void saveTradeLine(Ar& ar, TradeLine& l) {
+    ar.text("thing", l.thing);
+    ar.value("count", l.count);
+}
+
+template <typename Type>
+inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitCommand> || std::is_same_v<Type, TradeCommand> ||
+                                            std::is_same_v<Type, AdjustGoodwillCommand> || std::is_same_v<Type, GiftCommand>;
+
+// The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
+template <typename Ar, typename Type>
+void saveTradeCommand(Ar& ar, Type& c) {
+    if constexpr (std::is_same_v<Type, StartVisitCommand>) {
+        auto* visit = &c;
+        ar.text("faction", visit->faction);
+        ar.text("kind", visit->kind);
+        ar.text("traderKind", visit->traderKind);
+        ar.value("edge", visit->edge);
+    } else if constexpr (std::is_same_v<Type, TradeCommand>) {
+        auto* deal = &c;
+        ar.value("visit", deal->visit);
+        ar.value("negotiator", deal->negotiator);
+        ar.list("buy", deal->buy, [&](TradeLine& l) { saveTradeLine(ar, l); });
+        ar.list("sell", deal->sell, [&](TradeLine& l) { saveTradeLine(ar, l); });
+    } else if constexpr (std::is_same_v<Type, AdjustGoodwillCommand>) {
+        auto* goodwill = &c;
+        ar.text("faction", goodwill->faction);
+        ar.value("delta", goodwill->delta);
+    } else {
+        static_assert(std::is_same_v<Type, GiftCommand>, "save every trade command here");
+        auto* gift = &c;
+        ar.value("visit", gift->visit);
+        ar.list("items", gift->items, [&](TradeLine& l) { saveTradeLine(ar, l); });
+    }
+}
+
+template <typename Ar>
 void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
     if (names != nullptr) {
         uint16_t type = 0;
@@ -1371,6 +1411,8 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("damage", c.damage);
                 ar.text("damageType", c.damageType);
                 ar.value("penetration", c.penetration);
+            } else if constexpr (kSaveIsTradeCommand<Type>) {
+                saveTradeCommand(ar, c);
             } else {
                 saveCommandTail(ar, c);
             }
@@ -2590,6 +2632,37 @@ void saveRaids(Ar& ar, RaidState& r) {
     }
 }
 
+template <typename Ar>
+void saveTrade(Ar& ar, TradeState& t) {
+    ar.value("nextVisit", t.nextVisit);
+    ar.value("lastDrift", t.lastDrift);
+    ar.list("standings", t.standings, [&](Standing& s) {
+        ar.text("faction", s.faction);
+        ar.value("goodwill", s.goodwill);
+        ar.require(std::isfinite(s.goodwill), "the save file has an impossible goodwill");
+    });
+    ar.list("visits", t.visits, [&](Visit& v) {
+        ar.value("id", v.id);
+        ar.value("kind", v.kind);
+        ar.require(static_cast<int>(v.kind) <= static_cast<int>(VisitKind::Orbital), "the save file has a bad visit kind");
+        ar.value("phase", v.phase);
+        ar.require(static_cast<int>(v.phase) <= static_cast<int>(VisitPhase::Leaving), "the save file has a bad visit phase");
+        ar.text("faction", v.faction);
+        ar.text("traderKind", v.traderKind);
+        ar.value("side", v.side);
+        ar.value("arrivedAt", v.arrivedAt);
+        ar.value("leaveAt", v.leaveAt);
+        ar.value("nextWander", v.nextWander);
+        ar.group("entry", [&] { saveCell(ar, v.entry); });
+        ar.group("spot", [&] { saveCell(ar, v.spot); });
+        ar.value("silver", v.silver);
+        ar.value("started", v.started);
+        ar.value("trader", v.trader);
+        ar.list("stock", v.stock, [&](TradeLine& l) { saveTradeLine(ar, l); });
+        ar.list("members", v.members, [&](Entity& m) { ar.value(nullptr, m); });
+    });
+}
+
 // ---- Sections (format 20 on) -----------------------------------------------------------------
 
 // A thing's part as saved in a section: the thing's id, then the part.
@@ -3057,6 +3130,14 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("mentalBreaks", 1, [&] {
         saveParts(ar, "mentalBreaker", e, &SaveEntity::mentalBreaker, [&](MentalBreaker& b) { saveMentalBreakerPart(ar, b); });
     });
+    ar.section("trade", 1, [&] {
+        saveTrade(ar, d.trade);
+        saveParts(ar, "visitor", e, &SaveEntity::visitor, [&](Visitor& v) {
+            ar.value("visit", v.visit);
+            ar.value("role", v.role);
+            ar.require(static_cast<int>(v.role) <= static_cast<int>(VisitorRole::Guard), "the save file has a bad visitor role");
+        });
+    });
     ar.section("quests", 1, [&] { saveQuests(ar, d.quests); });
     ar.section("inspirations", 1, [&] {
         saveParts(ar, "inspired", e, &SaveEntity::inspired, [&](Inspired& i) {
@@ -3318,6 +3399,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const MentalBreaker* breaker = reg.try_get<MentalBreaker>(e)) {
             out.mentalBreaker = *breaker;
+        }
+        if (const Visitor* visitor = reg.try_get<Visitor>(e)) {
+            out.visitor = *visitor;
         }
         if (const Inspired* inspired = reg.try_get<Inspired>(e)) {
             out.inspired = *inspired;
@@ -3604,6 +3688,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.quests = sim.quests_->state();
     d.spoilageState = sim.spoilage_->state();
     d.craftingState = sim.crafting_->state();
+    d.trade = sim.trade_->state();
     {
         const WeatherState state = sim.weather_->state();
         const auto nameOf = [&](DefId def) { return def.valid() ? sim.defs_->get(def).defName() : std::string(); };
@@ -3839,6 +3924,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.mentalBreaker) {
             reg.emplace<MentalBreaker>(entity, std::move(*e.mentalBreaker));
+        }
+        if (e.visitor) {
+            reg.emplace<Visitor>(entity, *e.visitor);
         }
         if (e.inspired) {
             reg.emplace<Inspired>(entity, std::move(*e.inspired));
@@ -4362,6 +4450,21 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
     }
     if (!sim.raids_->restore(std::move(d.raids), error)) {
+        return false;
+    }
+    for (const Visit& visit : d.trade.visits) {
+        for (const Entity m : visit.members) {
+            if (!reg.valid(m) || !reg.all_of<Visitor>(m)) {
+                error = "the save has a visit with a pawn that isn't there";
+                return false;
+            }
+        }
+        if (visit.trader != kNoEntity && !reg.valid(visit.trader)) {
+            error = "the save has a trader that isn't there";
+            return false;
+        }
+    }
+    if (!sim.trade_->restore(std::move(d.trade), error)) {
         return false;
     }
     for (Quest& quest : d.quests.quests) {
