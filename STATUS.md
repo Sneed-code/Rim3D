@@ -6,6 +6,8 @@ Art stage V20 done and V21's PC part done: the game now plays sound (`USoundSubs
 
 Stage 2 ship ending on screen done (the Unreal side of the spaceship ending): a **Ship** button in the panels' menu row once a ship part stands (the warm-up days left, green when it can launch), a ship window (parts against what a launch needs, Start reactor, the warm-up bar and waves, a colonist list for each cryptosleep casket, Launch greyed with the reason) and an ending screen naming who left, with Keep playing; log lines for the reactor, waves and launch. The snapshot's `ship` adds `reactor` and `aboard`, and `ShipCommand` has a dev action `FinishWarmUp` (`docs/design/panels.md` "Ship", smoke test `ship`).
 
+Art stage look pass planned (2026-10-27, after sneed called the screenshots awful): `docs/plans/art-stage.md` "Look pass" has ten PC tasks L1 to L10, biggest change on screen first: light and camera with a fixed screenshot bench (L1), real grass and ground cover instead of the cones (L2), ground and water (L3), walls, doors and roofs (L4), a quick UI style (L5), trees and rocks (L6), full materials on furniture (L7), weapons and resources (L8), realistic animals (L9), a look check (L10). Free art from Epic's Electric Dreams sample (sneed adds it on Fab once), Poly Haven and ambientCG. It replaces V16, V18 and V19. **Next on the PC: L1.**
+
 Stage 2 quest panel done (not a plan task; the Unreal side of Q1): a **Quests** button in the panels' menu row counts the offers waiting (amber until seen), and the quest window lists the offers (the quest's text, who comes, the raid's size, the rewards, how long the offer stands) with **Accept** and **Decline** (`QuestCommand`), the quests under way (when the raiders come, how long is left to beat them) and the finished ones with how they ended. The message log says when a quest is offered, answered, done, failed or lapsed (`docs/design/panels.md` "Quests", smoke test `quests`). Unreal only, no sim or save change.
 
 Stage 2 U19 part done (trade and thermostat): a trade strip under the clock, a trade window (buy from the trader, sell what lies on the map, prices at the chosen negotiator's Social skill, `TradeCommand`), a gift window (`GiftCommand`, shows the goodwill it earns), a factions window with every faction's goodwill, and a heater/cooler thermostat slider (`SetThermostatCommand`) (`docs/design/panels.md`, smoke test `trade`). **U19's animals tab, outfits, power, temperature and beauty overlays are still to do.**
@@ -596,7 +598,9 @@ binds R to reload; reload and sidestep animations are not drawn yet). ~~**C10** 
 
 ## Waiting on sneed
 
-- Nothing now. (Megascans for A2 are no longer needed: the free textures are in; Megascans can replace them
+- Look pass: add Epic's free **Electric Dreams Environment** on Fab and create it in `C:\Dev\Samples` (steps in
+  `docs/plans/art-stage.md`, "What sneed does for the look pass"), needed before L2.
+- Nothing else now. (Megascans for A2 are no longer needed: the free textures are in; Megascans can replace them
   later through `assets/terrain_textures.json`.)
 
 **Biome and animal numbers checked on the wiki** (after PR #160): all 12 biomes now have the wiki's plant and animal density, disease days, weather commonalities, and animal and plant commonalities (plants we have no def for are folded into a similar tree or left out, listed in each biome's `ours`). 12 of the 14 new animals have the wiki's speed, value, size, health, life span, meat, leather, wildness, food, gestation and litter. Still `unverified`: biome `climate` and `terrain` (the wiki only gives a minimum or maximum temperature), animal `tools`, and the lion and monkey (their wiki pages could not be fetched).
