@@ -57,9 +57,11 @@ class SurgerySystem;
 class RecreationSystem;
 class SocialSystem;
 class ResearchSystem;
+class ResonanceSystem;
 class TalentSystem;
 class NeedsSystem;
 class RaidSystem;
+class FieldCare;
 class MonsterSystem;
 class Plants;
 class PowerGrid;
@@ -135,6 +137,24 @@ struct Checkpoint {
     uint64_t hash = 0;
 };
 
+// Wall time spent in each system of a step, summed over the steps run while it is set on a Sim
+// (`simrun --perf`, docs/design/sim-cost.md). Names are string literals.
+struct StepProfile {
+    std::vector<const char*> names;
+    std::vector<double> ms;
+    int64_t steps = 0;
+    void add(const char* name, double elapsedMs) {
+        for (size_t i = 0; i < names.size(); ++i) {
+            if (names[i] == name) {
+                ms[i] += elapsedMs;
+                return;
+            }
+        }
+        names.push_back(name);
+        ms.push_back(elapsedMs);
+    }
+};
+
 // The whole game state and its rules. Unreal sends commands, reads events and snapshots, and
 // never changes sim state directly (docs/design/bridge.md).
 class COLONY_API Sim {
@@ -152,6 +172,9 @@ public:
     // then runs every system.
     void step();
     void stepMany(int64_t steps);
+    // Times each system of the following steps into `profile` (null: off, the default). Not saved,
+    // not hashed.
+    void setProfile(StepProfile* profile) { profile_ = profile; }
 
     // Queues a command for the start of the next step. Returns its id: 1, 2, 3... in submit
     // order, which a CommandFailed event names.
@@ -330,6 +353,9 @@ public:
     // Raids, raid squads and the colony alarm with its defense roles (docs/design/raids.md).
     RaidSystem& raids() { return *raids_; }
     const RaidSystem& raids() const { return *raids_; }
+    // Medics, firefighters and rescue under fire (F10, docs/design/field-care.md).
+    FieldCare& fieldCare() { return *fieldCare_; }
+    const FieldCare& fieldCare() const { return *fieldCare_; }
 
     // Brood mounds and Remnant clusters (docs/design/monsters.md).
     MonsterSystem& monsters() { return *monsters_; }
@@ -376,6 +402,10 @@ public:
     Construction& construction() { return *construction_; }
     const Construction& construction() const { return *construction_; }
 
+    // Attunement, strain, focus and the powers of resonance (docs/design/resonance.md).
+    ResonanceSystem& resonance() { return *resonance_; }
+    const ResonanceSystem& resonance() const { return *resonance_; }
+
     // Power nets, generators, batteries and who has power (docs/design/power.md). Stepped at the end
     // of every step, after rooms (the sun needs roofs).
     PowerGrid& power() { return *power_; }
@@ -401,6 +431,8 @@ private:
 
     void applyCommand(const Command& command, uint64_t id);
     void commandFailed(uint64_t id, std::string message);
+    // ClimbCommand (U17): sets the controlled pawn off up or down the stairs or ladder at its cell.
+    bool startClimb(Entity pawn, float dx, float dy, std::string& error);
     void placeStockpileAndThings();
     void pruneDesignations();
     void startScenario();
@@ -433,6 +465,7 @@ private:
     std::unique_ptr<Farming> farming_;                // after temperature_, lights_ and zones_
     std::unique_ptr<SpoilageSystem> spoilage_;        // after temperature_ and roomStats_
     std::optional<float> outdoorOverride_;
+    StepProfile* profile_ = nullptr;
     DoorNumbers doorNumbers_;  // for the snapshot's door animation
     std::unique_ptr<HealthSystem> health_;
     std::unique_ptr<NeedsSystem> needs_;
@@ -482,9 +515,11 @@ private:
     std::vector<Checkpoint> checkpoints_;
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
+    std::unique_ptr<FieldCare> fieldCare_;    // after the raids, the fighters and the jobs, which hold a pointer to it
     std::unique_ptr<NarratorSystem> narrator_;  // after raids_
     std::unique_ptr<DisasterSystem> disasters_;  // T3, after the narrator and everything it touches
     std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
+    std::unique_ptr<ResonanceSystem> resonance_;  // after the fighters and the job system it holds
 };
 
 }  // namespace colony

@@ -52,6 +52,11 @@ struct CombatModel {
         float damage = 0.0f;
         float penetration = 0.0f;
         float speed = 0.0f;  // metres per step, tuning applied
+        // A rocket or shell: the projectile def's `explosion` block, set off where it lands (R2).
+        float blastRadius = 0.0f;
+        float blastDamage = 0.0f;
+        float blastPenetration = 0.0f;
+        DefId blastType;
     };
     struct Shape {
         int part = -1;
@@ -353,6 +358,12 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
         b.penetration = combatNum(def, "projectile.armorPenetrationBase", 0.0);
         b.speed = combatNum(def, "projectile.speed", 0.0);
         b.valid = b.damageType.valid() && b.speed > 0.0f;
+        if (def.has("explosion")) {
+            b.blastRadius = combatNum(def, "explosion.radius", 0.0);
+            b.blastDamage = combatNum(def, "explosion.damage", 0.0);
+            b.blastPenetration = combatNum(def, "explosion.armorPenetration", 0.0);
+            b.blastType = defs.idOf("DamageTypes", def.text("explosion.damageDef"));
+        }
     }
 
     for (const DefId id : defs.idsOfKind(kCombatThingsKind)) {
@@ -1026,6 +1037,9 @@ bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, 
     if (reg.all_of<KnockedDown>(pawn)) {
         return fail("that pawn is knocked down");
     }
+    if (reg.all_of<Stunned>(pawn)) {
+        return fail("that pawn is stunned");
+    }
     if (target != kNoEntity && (target == pawn || !things_.spawned(target) || !reg.all_of<Posture>(target))) {
         return fail("the target is not a pawn on the map");
     }
@@ -1062,7 +1076,7 @@ bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, 
 
 bool CombatSystem::setStance(Entity pawn, Stance stance) {
     Posture* posture = things_.registry().try_get<Posture>(pawn);
-    if (posture == nullptr || things_.registry().all_of<KnockedDown>(pawn)) {
+    if (posture == nullptr || things_.registry().any_of<KnockedDown, Stunned>(pawn)) {
         return false;
     }
     posture->stance = stance;
@@ -1077,7 +1091,7 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
         gear != nullptr && gear->weapon != kNoEntity ? model_->gun(reg.get<Thing>(gear->weapon).def) : nullptr;
     if (s.phase == ShotPhase::Aiming || s.phase == ShotPhase::Firing || s.phase == ShotPhase::Reloading) {
         if (gun == nullptr || (s.phase != ShotPhase::Reloading &&
-                                  (health_.incapacitated(pawn) || !things_.spawned(pawn) || reg.all_of<KnockedDown>(pawn)))) {
+                                  (health_.incapacitated(pawn) || !things_.spawned(pawn) || reg.any_of<KnockedDown, Stunned>(pawn)))) {
             s.phase = ShotPhase::Ready;  // the shot (or reload) is off
             s.shotsLeft = 0;
             s.stepsLeft = 0;
@@ -1396,6 +1410,24 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
     entt::registry& reg = things_.registry();
     const CombatModel::Bullet& bullet = *model_->bullet(p.def);
     TraceHit h = hit;
+    if (bullet.blastRadius > 0.0f) {
+        // A rocket does nothing on its own: wherever it ends (pawn, wall, ground, out of range) it bursts.
+        emitHit(projectile, p, h, 0.0f);
+        Explosion ex;
+        ex.x = hit.x;
+        ex.y = hit.y;
+        ex.z = hit.z;
+        ex.level = p.level;
+        ex.radius = bullet.blastRadius;
+        ex.damage = bullet.blastDamage;
+        ex.damageType = bullet.blastType;
+        ex.penetration = bullet.blastPenetration;
+        ex.source = projectile;
+        ex.instigator = p.launcher;
+        ex.seed = p.seed;
+        explode(ex);
+        return;
+    }
     switch (hit.kind) {
         case ProjectileHitKind::Building: {
             HitPoints* hp = reg.valid(hit.thing) ? reg.try_get<HitPoints>(hit.thing) : nullptr;
@@ -1413,6 +1445,10 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
             break;
         }
         case ProjectileHitKind::Pawn: {
+            if (bullet.damage <= 0.0f) {
+                emitHit(projectile, p, h, 0.0f);
+                break;
+            }
             const PawnHitResult result = hitPawn(hit.thing, hit.part, bullet.damageType, bullet.damage * p.damageFactor, bullet.penetration * p.damageFactor, p.seed);
             h.part = result.part;
             if (result.deflected) {
@@ -2314,6 +2350,9 @@ bool CombatSystem::switchWeapon(Entity pawn, WeaponSlot slot, std::string* why) 
     }
     if (reg.all_of<KnockedDown>(pawn)) {
         return fail("that pawn is knocked down");
+    }
+    if (reg.all_of<Stunned>(pawn)) {
+        return fail("that pawn is stunned");
     }
     if (rollLocked(pawn)) {
         return fail("rolling");
