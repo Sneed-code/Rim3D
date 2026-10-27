@@ -101,7 +101,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | Section | Version | Holds |
 | --- | --- | --- |
 | `sim` | 1 | sim version, data files' hash, settings, clock, random stream, the map's hash, the hauling test |
-| `commands` | 1 | the names of the command types used, then queued commands, the command log and the checkpoints |
+| `commands` | 2 | the names of the command types used, then queued commands, the command log and the checkpoints |
 | `things` | 1 | free ids, then every thing: id, def, position, footprint, stack, hit points |
 | `movement` | 2 | `mover` |
 | `jobs` | 1 | `worker` (the job, its bill picks and ingredients, avoid memory), `work` (Work tab), `carrying` |
@@ -109,13 +109,15 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `health` | 5 | `health` (version 2: environment hediffs such as hypothermia, E2; version 3: each injury's `peak`, for scars, H1; version 4: `infectAt`, `diseases` and `immunities`, H2; version 5: `added`, the artificial parts fitted, H3) |
 | `control` | 1 | `playerControlled`: the ids of controlled pawns |
 | `needs` | 1 | `needs`, `schedule`, `bed` |
-| `bills` | 2 | `bills` on work buildings. Version 2 (C14) adds each bill's skill range, ingredient radius, store stockpile, restart stock, satisfied flag and ingredient filter; version 1 loads with the defaults |
+| `bills` | 3 | `bills` on work buildings. Version 3 adds the bill's count stockpile. Version 2 (C14) adds each bill's skill range, ingredient radius, store stockpile, restart stock, satisfied flag and ingredient filter; version 1 loads with the defaults |
 | `crafting` | 1 | the quality random stream and `storeIn` marks on products bound for a stockpile ([crafting.md](crafting.md)) |
 | `fuel` | 1 | `fuel` on buildings that burn it ([fuel.md](fuel.md)); a building with a fuel part and none saved loads full |
 | `construction` | 1 | `site`, `builtOf`, `marked` |
 | `mood` | 1 | `mood` |
 | `combat` | 1 | `posture`, `gear`, `equippedBy`, `shooter`, `projectile`, `magazine` |
 | `doors` | 1 | `door` |
+| `fighters` | 3 | `faction`, `fighter` (version 2: its mode, `defending`, squad, goal and `retreat`, F6; version 3: `rescuing`, `lifted`, `rescueTo`, F10) |
+| `looks` | 1 | `looks` |
 | `fighters` | 2 | `faction`, `fighter` (version 2: its mode, `defending`, squad, goal and `retreat`, F6) |
 | `looks` | 2 | `looks`. Version 2 (V1) adds the face sliders, eyes, hair style, beard, body hair, tattoos and scars; version 1 loads with the defaults |
 | `paths` | 1 | the path queue |
@@ -129,6 +131,8 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `husbandry` | 2 | animal zones (id and cells), counters, and the `care` part of every animal that has one: marks, zone, home, timers, training steps and wants, the path it waits on ([husbandry.md](husbandry.md)); version 2 (N2) adds the hunt mark, the collect flag and the hunted counter ([hunting.md](hunting.md)) |
 | `explosives` | 1 | `belt`, `thrower`, `grenade` (a thrown grenade in flight or waiting out its fuse; an entity with no `Thing`), `knockedDown` ([explosives.md](explosives.md)) |
 | `temperature` | 1 | each enclosed room's temperature, by its anchor cell (E2) |
+| `thermostats` | 1 | each heater or cooler target temperature set by the player, by building |
+| `raids` | 1 | the raid state (factions met, squads, the alarm, threat and home points, the shelter mark), then the `defense` and `raider` parts ([raids.md](raids.md), F6) |
 | `raids` | 2 | the raid state (factions met, squads, the alarm, threat and home points, the shelter mark), then the `defense` and `raider` parts ([raids.md](raids.md), F6) |
 | `melee` | 1 | `melee`: each pawn's swing, its defense against one, its block (F8, [melee.md](melee.md)) |
 | `social` | 1 | `social` (a colonist's opinion memories, stored bonds, next talk, mourned) and `fight` (a fight with fists in progress) per pawn (C20, [social.md](social.md)) |
@@ -310,6 +314,7 @@ Every section is version 1 at format 20. A task that changes a section adds a li
 - `raids` 1 (F6): new section, see the table. Commands `StartRaid`, `SoundAlarm`, `SetDefenseRole`, `MarkShelter` by name.
 - `raids` 2 (F12): per squad `strategy`, `hasBreach`, `breach`, `breachFrom`; the raids waiting for their hour (`pending`); per raider `goalThing`, `loot`, `sparesDowned`; a `kidnapped` part on a colonist a raider carries ([raid-strategies.md](raid-strategies.md)). Version 1 files load with Assault squads and nothing waiting. Command `StartStrategyRaid` by name.
 - `fighters` 2 (F6): a fighter's `mode`, `defending`, `squad`, `hasGoal`, `goal`, `retreat` after `dodgeUntil`. Version 1 files load them as a plain fighter.
+- `fighters` 3 (F10): a fighter's `rescuing`, `lifted`, `rescueTo` after `retreat` ([field-care.md](field-care.md)). Older files load with nobody carried.
 - `breeding` 1 (N4): new section, see the table: the counters, per animal its `AnimalBreed` (pregnancy, litter, mating wait, milk, wool and egg timers, the female a male is walking to), per fertilized egg its `Hatching` time ([breeding.md](breeding.md)). The job check now accepts the animal jobs (it stopped at `StripPawn`, so a save made mid-taming would not load).
 - `husbandry` 2 (N2): per animal care record `markHunt` and `collect` after `markSlaughter`, and the `hunted` counter after `starved`. Version 1 files load with none. The job check now accepts `Hunt`, `HaulCorpse` and `Butcher`.
 - `apparel` 1 (C15): item stuff and quality, taint, strip marks, outfits ([apparel.md](apparel.md)). Commands `SetOutfit`, `EditOutfit`, `AddOutfit`, `RemoveOutfit` and `Strip` by name.
