@@ -735,6 +735,29 @@ struct SetHomeAreaCommand {
     bool add = true;
 };
 
+// Resonance (task X2, docs/design/resonance.md). Attune sets a pawn's attunement level, 0 to 6 (0 takes it away);
+// each new level teaches one power of that level at random. Stands in for RimWorld's neuroformer and titles.
+struct AttuneCommand {
+    Entity pawn = kNoEntity;
+    int level = 1;
+};
+
+// Teaches an attuned pawn a power (a Powers defName) of its level or lower, as RimWorld's psytrainer does.
+struct LearnPowerCommand {
+    Entity pawn = kNoEntity;
+    std::string power;
+};
+
+// Uses a power: `target` the pawn it is used on (kNoEntity or the pawn itself for itself), `cell` where a jump
+// takes the target. Fails if the pawn doesn't know it or can't act, focus or strain don't allow it, or the
+// target (or cell) is out of range or sight.
+struct CastPowerCommand {
+    Entity pawn = kNoEntity;
+    std::string power;
+    Entity target = kNoEntity;
+    CellPos cell;
+    bool player = false;
+};
 // Multi-storey (task M1, docs/design/levels.md): lays an upper floor on every cell of `area` (on
 // level 1 or above) that can hold one, or takes them up with `remove`. A floor needs a wall or column
 // within the roof support radius on the level below; one is taken up only when nothing stands on it.
@@ -883,7 +906,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ShipCommand, QuestCommand,
                              AddOperationCommand, RemoveOperationCommand,
                              TakeDrugCommand, SetDrugPolicyCommand, SetDrugPolicyEntryCommand,
-                             StartVisitCommand, TradeCommand, AdjustGoodwillCommand, GiftCommand, ClimbCommand, CaravanCommand>;
+                             StartVisitCommand, TradeCommand, AdjustGoodwillCommand, GiftCommand, ClimbCommand,
+                             AttuneCommand, LearnPowerCommand, CastPowerCommand, CaravanCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

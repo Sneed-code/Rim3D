@@ -226,6 +226,13 @@ struct ThingView {
     uint32_t apparelCount = 0;
     int quality = -1;
     bool tainted = false;
+    // Resonance (docs/design/resonance.md). Pawns: steps left of a stun (0: not stunned), whether a numb or burden
+    // is on them, and for a pawn winding up a power, the Powers def and the steps until it goes off.
+    int stunnedFor = 0;
+    bool numbed = false;
+    bool burdened = false;
+    DefId castPower;
+    int castStepsLeft = 0;
     // Pawns in a mental break (docs/design/mental-breaks.md): its MentalBreaks def, invalid when not in one.
     DefId mentalBreak;
 };
@@ -331,6 +338,17 @@ struct PawnLooksView {
     float height = 1.0f;  // times 1.80 m
     LooksColor skin;
     LooksColor hair;
+    // V1 (docs/design/looks.md): the face, hair style, beard, body hair and skin marks.
+    float faceShape = 0.5f;
+    float brow = 0.5f;
+    float nose = 0.5f;
+    float jaw = 0.5f;
+    LooksColor eyes;
+    std::string hairStyle;  // empty for a pawn from an older save
+    std::string beard;
+    float bodyHair = 0.0f;
+    std::vector<LooksMark> tattoos;
+    std::vector<LooksMark> scars;
 };
 
 // One bill on a work building, in the building's order (first is tried first).
@@ -505,6 +523,16 @@ struct TalentView {
     std::vector<TalentRankView> ranks;  // in Talents def order
 };
 
+// An attuned pawn (docs/design/resonance.md). One entry per attuned pawn, in id order.
+struct AttunedView {
+    Entity pawn = kNoEntity;
+    int level = 0;
+    float strain = 0.0f;       // RimWorld's neural heat
+    float strainLimit = 0.0f;
+    float focus = 0.0f;        // RimWorld's psyfocus, 0 to 1
+    std::vector<DefId> powers;  // the Powers defs it knows
+};
+
 struct Snapshot {
     int64_t gameSeconds = 0;  // Sim::time().seconds when it was written
     int mapWidth = 0;
@@ -558,6 +586,7 @@ struct Snapshot {
     std::vector<ApparelView> apparel;      // worn apparel, see ThingView
     std::vector<OutfitView> outfits;       // the outfit policies, by id
     WeatherView weather;
+    std::vector<AttunedView> attuned;      // see AttunedView
     ShipView ship;
     NarratorView narrator;
     std::vector<CaravanView> caravans;  // by id

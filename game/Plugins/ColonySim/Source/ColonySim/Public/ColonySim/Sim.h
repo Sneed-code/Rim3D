@@ -57,6 +57,7 @@ class SurgerySystem;
 class RecreationSystem;
 class SocialSystem;
 class ResearchSystem;
+class ResonanceSystem;
 class TalentSystem;
 class NeedsSystem;
 class RaidSystem;
@@ -401,6 +402,10 @@ public:
     Construction& construction() { return *construction_; }
     const Construction& construction() const { return *construction_; }
 
+    // Attunement, strain, focus and the powers of resonance (docs/design/resonance.md).
+    ResonanceSystem& resonance() { return *resonance_; }
+    const ResonanceSystem& resonance() const { return *resonance_; }
+
     // Power nets, generators, batteries and who has power (docs/design/power.md). Stepped at the end
     // of every step, after rooms (the sun needs roofs).
     PowerGrid& power() { return *power_; }
@@ -514,6 +519,7 @@ private:
     std::unique_ptr<NarratorSystem> narrator_;  // after raids_
     std::unique_ptr<DisasterSystem> disasters_;  // T3, after the narrator and everything it touches
     std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
+    std::unique_ptr<ResonanceSystem> resonance_;  // after the fighters and the job system it holds
 };
 
 }  // namespace colony
