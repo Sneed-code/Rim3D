@@ -496,6 +496,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setInspirations(inspirations_.get());
     combat_->setInspirations(inspirations_.get());
     prisoners_->setInspirations(inspirations_.get());
+    mentalBreaks_->setSocial(social_.get());
     travel_ = std::make_unique<TravelSystem>(*things_, map_, *jobs_, *raids_, *fire_, *animals_, *fighters_, *mentalBreaks_,
                                              *health_, *needs_, *defs_, time_);
     travel_->setEventLog(&events_);

@@ -15,6 +15,7 @@
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
+#include "ColonySim/Social.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -355,6 +356,13 @@ TEST_CASE("Mental breaks: an insulting spree insults three colonists in turn and
     }
     CHECK(insulted.size() == 3);
     CHECK(insulted.count(entt::to_integral(pawn)) == 0);
+    // The social system saw them: each one insulted thinks worse of the insulter (-20 on top of the first impression).
+    CHECK(sim.social().stats().insults >= 3);
+    for (const Entity other : others) {
+        if (insulted.count(entt::to_integral(other)) == 1) {
+            CHECK(sim.social().opinion(other, pawn) < -10.0f);
+        }
+    }
     for (const Entity other : others) {
         CHECK(breakHasMemory(sim, other, "Insulted") == (insulted.count(entt::to_integral(other)) == 1));
     }

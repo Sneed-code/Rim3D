@@ -23,6 +23,7 @@ class MeleeSystem;
 class MoodSystem;
 class Rng;
 class Rooms;
+class SocialSystem;
 class StateHasher;
 class Things;
 struct GameTime;
@@ -119,6 +120,8 @@ public:
     // Berserk fights with F8's melee (the pawn's weapon or fists, real swings, dodges and blocks); without
     // it, or against a thing that isn't a pawn, it punches as before.
     void setMelee(MeleeSystem* melee) { melee_ = melee; }
+    // Lets an insulting spree insult for real: the one insulted thinks less of the insulter and may be upset.
+    void setSocial(SocialSystem* social) { social_ = social; }
     // Fire-starting (E4): gives FireSpree the fire to light, and provides the "fire" feature.
     void setFire(Fire* fire);
 
@@ -210,6 +213,7 @@ private:
     Rooms& rooms_;
     Pathfinder& pathfinder_;
     MeleeSystem* melee_ = nullptr;
+    SocialSystem* social_ = nullptr;
     Fire* fire_ = nullptr;
     const DefDatabase& defs_;
     const GameTime& time_;
