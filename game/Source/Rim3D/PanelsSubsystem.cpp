@@ -18,6 +18,7 @@
 #include "ColonySim/Mood.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Temperature.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -225,6 +226,7 @@ void UPanelsSubsystem::ResetForNewSim()
 	Stats.CommandsSent = 0;
 	NewBillBuilding = colony::kNoEntity;
 	NewRecipe = 0;
+	ThermoBuilding = colony::kNoEntity;
 }
 
 void UPanelsSubsystem::Submit(colony::Command Command)
@@ -436,6 +438,19 @@ bool UPanelsSubsystem::AssignBed(colony::Entity Bed, colony::Entity Pawn)
 	return true;
 }
 
+bool UPanelsSubsystem::SetThermostat(colony::Entity Building, float Celsius, bool bClear)
+{
+	const USimSubsystem* Bridge = GetBridge();
+	const colony::ThingView* View = Bridge ? Bridge->GetCurrentSnapshot().find(Building) : nullptr;
+	if (!View || !Bridge->GetSim() || !Bridge->GetSim()->defs().get(View->def).flag("heatPusher.adjustable"))
+	{
+		return false;
+	}
+	const colony::TemperatureNumbers& Numbers = Bridge->GetSim()->temperature().numbers();
+	Submit(colony::SetThermostatCommand{Building, FMath::Clamp(Celsius, Numbers.thermostatMinC, Numbers.thermostatMaxC), bClear});
+	return true;
+}
+
 // ---- The tick and the panels -------------------------------------------------------------------
 
 void UPanelsSubsystem::Tick(float DeltaTime)
@@ -505,7 +520,14 @@ void UPanelsSubsystem::DrawPanels(USimSubsystem& Bridge)
 			}
 			else if (View->category == colony::ThingCategory::Building && View->stage == colony::ConstructionStage::Built)
 			{
-				DrawBillsPanel(Bridge, *View, Left, Top, Scale);
+				if (Bridge.GetSim()->defs().get(View->def).flag("heatPusher.adjustable"))
+				{
+					DrawThermostatPanel(Bridge, *View, Left, Top, Scale);
+				}
+				else
+				{
+					DrawBillsPanel(Bridge, *View, Left, Top, Scale);
+				}
 			}
 		}
 	}
@@ -1110,6 +1132,76 @@ void UPanelsSubsystem::DrawBillsPanel(USimSubsystem& Bridge, const colony::Thing
 		{
 			AddBill(View.id, UTF8_TO_TCHAR(Picked.defName.c_str()), static_cast<colony::BillMode>(NewMode), NewCount);
 		}
+	}
+	ImGui::End();
+}
+
+void UPanelsSubsystem::DrawThermostatPanel(USimSubsystem& Bridge, const colony::ThingView& View, float Left, float Top, float Scale)
+{
+	const colony::Sim& Sim = *Bridge.GetSim();
+	const colony::Def& Def = Sim.defs().get(View.def);
+	const colony::TemperatureSystem& Temperature = Sim.temperature();
+	const colony::TemperatureNumbers& Numbers = Temperature.numbers();
+	const bool bHeater = Def.number("heatPusher.heatPerSecond", 0.0) > 0.0;
+	const bool bOwnTarget = Temperature.hasThermostat(View.id);
+	const float Target = Temperature.thermostat(View.id);
+	const double OwnLimit = Def.number(bHeater ? "heatPusher.maxTemp" : "heatPusher.minTemp", 21.0);
+	// A new building: start the drag value from its target.
+	if (ThermoBuilding != View.id)
+	{
+		ThermoBuilding = View.id;
+		ThermoDragValue = Target;
+		bThermoDragging = false;
+	}
+
+	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
+	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Left, Viewport->Pos.y + Top), ImGuiCond_Always, ImVec2(0.0f, 0.0f));
+	ImGui::SetNextWindowSizeConstraints(ImVec2(380.0f * Scale, 0.0f), ImVec2(520.0f * Scale, FLT_MAX));
+	if (ImGui::Begin("##PanelsThermostat", nullptr, PanelFlags()))
+	{
+		++Stats.ThermostatPanelFrames;
+		PText(FString::Printf(TEXT("%s: thermostat"), *PCapital(Def.label())));
+		PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), bHeater ? TEXT("Heats the room up to this and then rests.") : TEXT("Cools the room down to this and then rests."));
+		// The room it works on, now (read only; the sim keeps it up to date every step).
+		const colony::CellPos Cell{static_cast<int>(std::floor(View.x)), static_cast<int>(std::floor(View.y)), View.level};
+		const float RoomNow = const_cast<colony::TemperatureSystem&>(Temperature).temperatureAt(Cell);
+		PText(FString::Printf(TEXT("Room now: %.1f C"), RoomNow));
+		ImGui::Separator();
+
+		float Shown = bThermoDragging ? ThermoDragValue : Target;
+		ImGui::SetNextItemWidth(300.0f * Scale);
+		ImGui::SliderFloat("##Target", &Shown, Numbers.thermostatMinC, Numbers.thermostatMaxC, "%.0f C");
+		if (ImGui::IsItemActive())
+		{
+			bThermoDragging = true;
+			ThermoDragValue = Shown;
+		}
+		if (ImGui::IsItemDeactivatedAfterEdit())
+		{
+			SetThermostat(View.id, std::round(ThermoDragValue), false);
+		}
+		if (ImGui::IsItemDeactivated())
+		{
+			bThermoDragging = false;
+		}
+		const auto Nudge = [&](const char* Label, float Delta)
+		{
+			if (ImGui::SmallButton(Label))
+			{
+				SetThermostat(View.id, std::round(Target + Delta), false);
+			}
+			ImGui::SameLine();
+		};
+		Nudge("-5", -5.0f);
+		Nudge("-1", -1.0f);
+		Nudge("+1", 1.0f);
+		Nudge("+5", 5.0f);
+		if (ImGui::SmallButton("Reset"))
+		{
+			SetThermostat(View.id, Target, true);
+		}
+		PTextColored(ImVec4(0.7f, 0.8f, 0.9f, 1.0f), bOwnTarget ? FString::Printf(TEXT("Set to %.0f C (the building's own limit is %.0f C)."), Target, OwnLimit)
+														 : FString::Printf(TEXT("At the building's own limit, %.0f C."), OwnLimit));
 	}
 	ImGui::End();
 }
