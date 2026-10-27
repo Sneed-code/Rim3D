@@ -132,6 +132,13 @@ struct KnockedDown {
     Stance before = Stance::Standing;
 };
 
+// On a stunned pawn (resonance's Stun, X2, docs/design/resonance.md): it can't walk, shoot, throw,
+// swing, block, cast or work until the steps run out; its stance stays as it was. ResonanceSystem
+// counts it down.
+struct Stunned {
+    int stepsLeft = 0;
+};
+
 // An explosion (CombatSystem::explode): a blast of `damage` that falls off to `edgeFactor` of it at
 // `radius`, is stopped by walls and cover, and reaches pawns as 2 to 4 fragments each.
 struct Explosion {
@@ -392,6 +399,10 @@ public:
     // the caller does (HealthSystem::applyHit), so bullets and melee strikes land the same way (F8).
     PawnHitResult hitPawn(Entity pawn, int hitboxPart, DefId damageType, float amount, float penetration,
                           uint64_t seed) const;
+    // One blow that comes from no gun or hand (a spike trap's stab): lands on an outside part picked
+    // by size, goes through the pawn's armor like a bullet (so armor wears) and hurts what is left.
+    // A pawn with no hitboxes takes it on a part health picks.
+    void strikePawn(Entity pawn, DefId damageType, float amount, float penetration, Rng& rng);
     // Damage of a kind with no aim behind it (flames): a random outside part, through the armor that
     // covers it (heat armor for Burn), worn pieces losing hit points. False if the pawn can't be hurt.
     bool hurtPawn(Entity pawn, DefId damageType, float amount, Rng& rng);

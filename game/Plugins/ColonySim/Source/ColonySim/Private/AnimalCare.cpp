@@ -22,6 +22,8 @@ namespace {
 
 // Names are prefixed because Unreal's unity builds merge .cpp files together.
 
+constexpr float kAnimalCareFollowRange = 40.0f;  // metres: a drafted colonist this near is followed (ours)
+constexpr float kAnimalCareFollowClose = 4.0f;   // and the animal stays this close to it
 constexpr int kAnimalCareWalkCheck = 5;   // seconds between looks at an animal that is walking
 constexpr int kAnimalCareTries = 6;       // spots tried for one walk
 constexpr float kAnimalCarePenWander = 1.5f;  // the shortest walk in a zone, metres
@@ -101,7 +103,8 @@ bool AnimalSystem::goTo(Entity animal, CellPos goal) {
 bool AnimalSystem::mayWork(Entity animal) const {
     const entt::registry& reg = things_.registry();
     const Kind* kind = kindOf(animal);
-    if (kind == nullptr || husbandry_ == nullptr || !husbandry_->learned(animal, Trainable::Haul)) {
+    if (kind == nullptr || husbandry_ == nullptr || 
+        (!husbandry_->learned(animal, Trainable::Haul) && !husbandry_->learned(animal, Trainable::Rescue))) {
         return false;
     }
     const Animal& a = reg.get<Animal>(animal);
@@ -323,6 +326,38 @@ void AnimalSystem::finishEatingItem(Entity e, Animal& a, const Kind& kind) {
 
 // ---- Deciding -------------------------------------------------------------------------------
 
+bool AnimalSystem::followDrafted(Entity e, Animal& a, const Kind& kind, AnimalCare& care) {
+    const entt::registry& reg = things_.registry();
+    const Position pos = reg.get<Position>(e);
+    float best = kAnimalCareFollowRange * kAnimalCareFollowRange;
+    CellPos goal;
+    bool found = false;
+    for (const auto [pawn, fighter, at] : reg.view<const Fighter, const Position>().each()) {
+        if (!fighter.drafted || at.level != pos.level) {
+            continue;
+        }
+        const float d2 = animalCareDist2(at.x, at.y, pos.x, pos.y);
+        if (d2 < best) {
+            best = d2;
+            goal = cellOf(at);
+            found = true;
+        }
+    }
+    if (!found) {
+        return false;
+    }
+    if (best <= kAnimalCareFollowClose * kAnimalCareFollowClose) {
+        a.mode = AnimalMode::Idle;
+        a.nextThink = time_.seconds + kAnimalCareWalkCheck;
+        return true;
+    }
+    if (walkOrPath(e, a, kind, care, goal, AnimalMode::Wander)) {
+        a.nextThink = std::min(a.nextThink, time_.seconds + kAnimalCareWalkCheck);
+        return true;
+    }
+    return false;
+}
+
 void AnimalSystem::decideTamed(Entity e, Animal& a, const Kind& kind, Rng& rng) {
     entt::registry& reg = things_.registry();
     const int64_t now = time_.seconds;
@@ -356,6 +391,11 @@ void AnimalSystem::decideTamed(Entity e, Animal& a, const Kind& kind, Rng& rng) 
                 return;
             }
         }
+    }
+
+    // Obedience: while a colonist is drafted the animal keeps close to the nearest one.
+    if (husbandry_->learned(e, Trainable::Obedience) && followDrafted(e, a, kind, *care)) {
+        return;
     }
 
     // Outside the zone, or too far from home: walk back to the nearest spot it may stand on.

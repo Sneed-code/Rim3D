@@ -376,7 +376,7 @@ bool Husbandry::release(Entity animal, std::string& error) {
         error = "it is wild already";
         return false;
     }
-    const bool hauler = learned(animal, Trainable::Haul);
+    const bool hauler = learned(animal, Trainable::Haul) || learned(animal, Trainable::Rescue);
     reg.emplace_or_replace<AnimalCare>(animal);
     a.wild = true;
     a.herd = 0;
@@ -726,7 +726,7 @@ bool Husbandry::finishTrain(Entity handler, Entity animal, Trainable what, int s
     }
     ++saved_.stats.trainingSteps;
     emit(EventType::AnimalTrained, animal, handler, trainableName(what), static_cast<float>(state.steps), needed);
-    if (state.steps == needed && what == Trainable::Haul) {
+    if (state.steps == needed && (what == Trainable::Haul || what == Trainable::Rescue)) {
         setHauler(animal, true);
     }
     return true;
