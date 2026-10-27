@@ -331,6 +331,17 @@ struct PawnLooksView {
     float height = 1.0f;  // times 1.80 m
     LooksColor skin;
     LooksColor hair;
+    // V1 (docs/design/looks.md): the face, hair style, beard, body hair and skin marks.
+    float faceShape = 0.5f;
+    float brow = 0.5f;
+    float nose = 0.5f;
+    float jaw = 0.5f;
+    LooksColor eyes;
+    std::string hairStyle;  // empty for a pawn from an older save
+    std::string beard;
+    float bodyHair = 0.0f;
+    std::vector<LooksMark> tattoos;
+    std::vector<LooksMark> scars;
 };
 
 // One bill on a work building, in the building's order (first is tried first).
