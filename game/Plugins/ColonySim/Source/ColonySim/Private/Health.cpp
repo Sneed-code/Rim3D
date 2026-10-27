@@ -1022,8 +1022,7 @@ void HealthSystem::refresh(Entity pawn) {
 
 void HealthSystem::refreshAll(bool exact) {
     entt::registry& reg = things_.registry();
-    // `downed` is not saved, so every downed pawn looks newly downed here. It was downed before the
-    // save, and whatever path it holds now it held then.
+    // From health section 6 the file holds `downed` and `dirty` (exact); older files work them out here.
     for (const auto [entity, health] : reg.view<Health>().each()) {
         recompute(entity, health, false, exact);
     }
