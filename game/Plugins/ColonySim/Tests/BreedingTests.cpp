@@ -854,6 +854,7 @@ TEST_CASE("Breeding: a calf keeps near its mother, and the link survives a save"
     const Young* y = loaded.sim->things().registry().try_get<Young>(calf);
     BREED_REQUIRE(y != nullptr);
     CHECK(y->mother == cow);
+}
 
 TEST_CASE("Breeding: goats give 12 milk every 3 days, camels 18 every 2, caribou 10 every 2, and a muffalo none") {
     BreedFixture f;
