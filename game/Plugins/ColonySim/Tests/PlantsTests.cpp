@@ -1,7 +1,10 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Save.h"
+#include "ColonySim/Rooms.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Things.h"
+#include "ColonySim/UpperFloors.h"
 
 #include <doctest.h>
 
@@ -281,4 +284,43 @@ TEST_CASE("Plants: a damaged plant list in a save is refused") {
     SaveLoadResult loaded = loadSim(bytes, other);
     CHECK(loaded.sim == nullptr);
     CHECK_FALSE(loaded.error.empty());
+}
+
+TEST_CASE("Plants: nothing grows under an upper floor, and laying one clears the cell") {
+    Sim sim(plantsTestSettings(1, 32), plantsTestRealDefs());
+    Plants& plants = sim.plants();
+    const DefId grass = sim.defs().idOf("Things", "Plant_Grass");
+    const DefId oak = sim.defs().idOf("Things", "Plant_TreeOak");
+    // A column of ground with walls round it to hold a floor up.
+    CellPos soil{-1, -1, 0};
+    for (int i = 0; i < 32 * 32 && soil.x < 0; ++i) {
+        const CellPos c = sim.map().cellAt(i);
+        if (c.x >= 5 && c.x < 25 && c.y >= 5 && c.y < 25 && plants.fertility(c) > 0.5f && sim.map().terrain(c) == Terrain::Soil) {
+            soil = c;
+        }
+    }
+    if (soil.x < 0) { CHECK(false); return; }
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            const CellPos c{soil.x + dx, soil.y + dy, 0};
+            plants.remove(c);
+            if (dx != 0 || dy != 0) {
+                sim.things().spawn("Wall", c);
+            }
+        }
+    }
+    sim.rooms().update();
+    CHECK(plants.place(soil, oak, 1.0f));
+    const CellPos up{soil.x, soil.y, 1};
+    if (!sim.upperFloors().lay(up)) { CHECK(false); return; }
+    CHECK(plants.underUpperFloor(soil));
+    CHECK_FALSE(plants.has(soil));
+    CHECK_FALSE(plants.place(soil, grass, 0.0f));
+    // A plant that gets there another way (e.g. a save from before) dies in the next hour.
+    CHECK(sim.upperFloors().remove(up));
+    CHECK(plants.place(soil, grass, 0.5f));
+    CHECK(const_cast<Map&>(sim.map()).setUpperFloor(up, true));
+    CHECK(plants.has(soil));
+    plants.growHour(8);
+    CHECK_FALSE(plants.has(soil));
 }
