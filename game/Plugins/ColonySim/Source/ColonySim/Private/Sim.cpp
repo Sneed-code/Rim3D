@@ -1523,8 +1523,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             ok = ship_->board(ship->thing, ship->pawn, error);
         } else if (ship->action == "Launch") {
             ok = ship_->launch(error);
+        } else if (ship->action == "FinishWarmUp") {
+            ok = ship_->finishWarmUp(error);
         } else {
-            error = "no ship action '" + ship->action + "' (StartReactor, Board or Launch)";
+            error = "no ship action '" + ship->action + "' (StartReactor, Board, Launch or FinishWarmUp)";
         }
         if (!ok) {
             commandFailed(id, error);
@@ -1821,6 +1823,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
         s.canLaunch = s.problem.empty();
         s.won = ship_->won();
         s.escaped = ship_->state().escaped;
+        s.reactor = ship_->state().phase == ShipPhase::Idle ? kNoEntity : ship_->state().reactor;
+        s.aboard.clear();
+        for (size_t i = 0; i < ship_->state().caskets.size(); ++i) {
+            s.aboard.emplace_back(ship_->state().caskets[i], ship_->state().riders[i]);
+        }
     }
     out.apparel.clear();
     out.fittedParts.clear();

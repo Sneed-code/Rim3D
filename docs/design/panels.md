@@ -71,3 +71,18 @@ Code: `game/Source/Rim3D/QuestPanelSubsystem.*`. Smoke test: `quests`. Sim side:
 A refused accept (too many under way, no room for the goods, nobody could reach the colony) shows as "Refused" in the log and the offer stays open. Not here yet: a letter that opens the window, jumping the camera to a quest's raid or its people, and the narrator's quests on the world map (Stage 3).
 
 Smoke test `quests` (about 10 s), on the Crashlanded start (paused): a wanderer and a supply cache are offered (the button counts 2 unseen offers, opening the window marks them seen, the log says so); accepting both puts the cache's steel on the map and one more colonist in the colony, and a second answer to either is not sent; a second wanderer is declined (nobody joins) and a new cache is left waiting for the picture. Not covered: a quest under way (Refugees and Defend need day 5 and day 8).
+
+## Ship (the Unreal side of the spaceship ending)
+
+Code: `game/Source/Rim3D/ShipPanelSubsystem.*`. Smoke test: `ship`. Sim side: [ship.md](ship.md). ImGui, overseer view only; `Ship.UI 0` hides the window and the ending, `Ship.Open` opens or closes the window.
+
+| Where | What |
+| --- | --- |
+| Top left, in the menu row | **Ship** button after Quests, once a finished ship part stands or the reactor runs: `Ship (12.5 days)` while the reactor warms up, green once the ship can launch |
+| Middle | **Ship window**. *Parts*: reactor, engines (3, `ShipRules.enginesNeeded`), computer core, sensor cluster, beams and caskets, each green with enough. *Reactor*: **Start reactor** (`ShipCommand` StartReactor on the first finished reactor) with a warning about the raids, then a bar of the warm-up (`activationLeft` of `ShipRules.activationDays`) and the waves so far, then "active". *Cryptosleep caskets*: one row per finished casket with a list of the colonists to put in it, or empty (`ShipCommand` Board; the snapshot's `ship.aboard`). **Launch**, greyed with the sim's `problem` until `canLaunch` |
+| Whole screen | **Ending screen** when the ship has launched (`ShipLaunched`): the world darkened, who left (their names as the last frame before the launch had them), and **Keep playing**: the sim runs on with those left behind |
+| Right, the message log | A line when the reactor starts, each wave, the reactor is active or lost, and the launch |
+
+The parts are built from the build menu's Ship category (their defs' `designationCategory`) once researched. Not here yet: prisoners and tame animals in the casket list (the sim takes them), which casket touches no beam, jumping the camera to the reactor, a letter for the ending, and a launch animation.
+
+Smoke test `ship` (about 8 s), on a flat map with the Crashlanded colonists (paused): a whole ship is spawned (the Ship button shows only then, the window lists one casket, Launch is greyed and sends nothing); Start reactor warms it up (a second press sends nothing) and Board puts a colonist in the casket; the dev action `FinishWarmUp` makes the reactor active and Launch wakes up; Launch wins: the ending screen is drawn and names the one rider, and Keep playing closes it.
