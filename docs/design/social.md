@@ -71,8 +71,7 @@ times `1 + the target's opinion of the asker / 100`, at most 95%. A romance that
 (the listener also gets the +10). A proposal that works turns the lover bond into **Spouse** and both get
 *got married*; one refused leaves the bond and the asker gets *rejected my proposal*. A breakup makes both
 **ExLover** (both get *broke up*, the listener thinks -30 of the talker for 60 days) and a spouse never breaks
-up. A pawn in a bond is not asked (but may stray, see below). There are no
-orientations yet: anyone may love anyone else (BACKLOG). Adults only (`Colonist.age` of at least 18; pawns
+up. A pawn in a bond is not asked (but may stray, see below). Romance needs **orientation** both ways (below). Adults only (`Colonist.age` of at least 18; pawns
 without a Colonist record count as adults).
 
 **Death.** The first second a pawn is dead, those who cared get one thought: the strongest of *my spouse
@@ -115,14 +114,27 @@ Extras after C20 (numbers are ours, in `SocialRules`).
   hour (`partyJoyPerHour`), chatting with whoever is in earshot, and hunger or tiredness wait until it is over
   (`stats.partyGuests`). Ours; rules in `SocialRules`.
 
+## Orientation and seeing a death
+
+**Orientation** (ours; `SocialRules.orientation`, shares 0.7 straight, 0.1 gay, 0.15 bisexual, 0.05 asexual) comes from a hash of
+the pawn and the world seed (`orientationOf`), so it never changes and is not saved. `attractedTo(pawn, other)`: straight likes the
+other gender, gay the same, bisexual either, asexual nobody; a pawn without a Colonist record likes anybody. A romance attempt
+needs it both ways; a stored bond, a breakup and a proposal between lovers do not look at it again. Attractiveness is the
+beautiful/pretty/ugly traits in the opinion, as before.
+
+**Seeing a death** (ours): when a pawn dies, whoever gets a spouse, lover or friend thought for it and stood within
+`witnessRadius` (12 m) in the same room (or both in the open) also gets *saw someone I care about die* (-4 for 5 days). A rival's
+death is not worse for being seen.
+
+**Mental-break insults:** an insulting spree (`MentalBreakSystem::tickInsult`) now goes through `SocialSystem::interact`, so each
+insult also lowers the target's opinion of the insulter and may start a fistfight, on top of the break's own *insulted* memory.
+
 ## Not yet
 
-- Orientations and attractiveness, ideology-style rivalry, the "mutual friend" thoughts, and mood effects of
-  seeing a friend die in front of you. Social skill for trade and recruiting (C22, C23). The experience rate
+- Ideology-style rivalry, the "mutual friend" thoughts. Social skill for trade and recruiting (C22, C23). The experience rate
   follows the D9 numbers (10 to 30 an interaction), slow against `SkillRules.xpToNextLevel`; revisit with C12.
 - The colonist panel's relations tab and the bond lines (U task; the data is `opinionLines` and
   `partner`, and the snapshot's `partner` and `socialFight`).
-- Prisoners and recruiting (C22), mental-break insults (C19: an insulting spree can call `interact`).
 
 ## What Unreal sees
 
