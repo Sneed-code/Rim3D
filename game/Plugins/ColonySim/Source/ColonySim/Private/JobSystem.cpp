@@ -4,7 +4,9 @@
 #include "ColonySim/Bills.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Construction.h"
+#include "ColonySim/Crafting.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Fire.h"
@@ -83,7 +85,8 @@ enum class JobStepKind : uint8_t {
     OperatePickUp,
     OperateDeposit,
     OperateWork,
-    OperateFinish
+    OperateFinish,
+    PartyWork       // stand at the party spot until it ends, gaining joy (PartyJobs.cpp)
 };
 
 constexpr JobStepKind kJobsWaitSteps[] = {JobStepKind::Wait};
@@ -131,6 +134,7 @@ constexpr JobStepKind kJobsChatSteps[] = {JobStepKind::ApproachPrisoner, JobStep
 constexpr JobStepKind kJobsRefuelSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::CarryToCell,
                                             JobStepKind::RefuelWork};
 static_assert(kRefuelPickUpStep == 1, "the Refuel steps moved");
+constexpr JobStepKind kJobsPartySteps[] = {JobStepKind::WalkToSpot, JobStepKind::PartyWork};
 constexpr JobStepKind kJobsHuntSteps[] = {JobStepKind::HuntWork};
 constexpr JobStepKind kJobsHaulCorpseSteps[] = {JobStepKind::TendGotoPatient, JobStepKind::LiftPawn, JobStepKind::CarryPawn,
                                                 JobStepKind::DropCorpse};
@@ -196,6 +200,7 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::Hunt: return {kJobsHuntSteps, static_cast<int>(std::size(kJobsHuntSteps))};
         case JobType::HaulCorpse: return {kJobsHaulCorpseSteps, static_cast<int>(std::size(kJobsHaulCorpseSteps))};
         case JobType::Butcher: return {kJobsButcherSteps, static_cast<int>(std::size(kJobsButcherSteps))};
+        case JobType::Party: return {kJobsPartySteps, static_cast<int>(std::size(kJobsPartySteps))};
         case JobType::SeekShelter: return {kJobsShelterSteps, static_cast<int>(std::size(kJobsShelterSteps))};
         case JobType::Operate: return {kJobsOperateSteps, static_cast<int>(std::size(kJobsOperateSteps))};
     }
@@ -223,6 +228,7 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::ChatWork:
         case JobStepKind::RefuelWork:
         case JobStepKind::ButcherWork:
+        case JobStepKind::PartyWork:
         case JobStepKind::OperateWork:
         case JobStepKind::Eat:
         case JobStepKind::Lie:
@@ -296,6 +302,7 @@ const char* jobTypeName(JobType type) {
         case JobType::Hunt: return "Hunt";
         case JobType::HaulCorpse: return "HaulCorpse";
         case JobType::Butcher: return "Butcher";
+        case JobType::Party: return "Party";
         case JobType::SeekShelter: return "SeekShelter";
         case JobType::Operate: return "Operate";
     }
@@ -619,6 +626,7 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
             return 2;
         case JobType::None:
         case JobType::Wait:
+        case JobType::Party:  // a party spot is open ground, not reserved
         case JobType::SeekShelter:
         case JobType::ExtinguishFire:  // colonists fight a fire together: nothing is reserved
             return 0;
@@ -1116,6 +1124,9 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::Butcher) {
         return failCheckButcher(pawn, job, why);
     }
+    if (job.type == JobType::Party) {
+        return failCheckParty(pawn, job, why);
+    }
     entt::registry& reg = things_.registry();
     if (job.type == JobType::DeliverResources) {
         const ConstructionSite* site = reg.valid(job.site) ? reg.try_get<ConstructionSite>(job.site) : nullptr;
@@ -1292,6 +1303,8 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return butcherWork(pawn, job, why);
         case JobStepKind::ButcherFinish:
             return butcherFinish(pawn, job, why);
+        case JobStepKind::PartyWork:
+            return partyWork(pawn, job, why);
     }
     return StepResult::Failed;
 }
@@ -1422,9 +1435,9 @@ JobSystem::StepResult JobSystem::place(Entity pawn, Job& job, std::string& why) 
 // Construction (docs/design/construction.md). Work steps use `job.walk` as "started": 0 until the
 // pawn's first second of work, which sends the PawnAction.
 
-float JobSystem::constructionSpeed(Entity pawn) const {
+float JobSystem::constructionSpeed(Entity pawn, const char* skillName) const {
     const float talent = talents_ != nullptr ? static_cast<float>(talents_->statFactor(pawn, "buildSpeed")) : 1.0f;
-    return construction_.skillSpeed(pawn) * health_.capacityValue(pawn, "Manipulation") * lightWorkFactor(pawn) * talent;
+    return construction_.skillSpeed(pawn, skillName) * health_.capacityValue(pawn, "Manipulation") * lightWorkFactor(pawn) * talent;
 }
 
 JobSystem::StepResult JobSystem::deliver(Entity pawn, Job& job, std::string& why) {
@@ -1462,8 +1475,10 @@ JobSystem::StepResult JobSystem::buildWork(Entity pawn, Job& job, std::string& w
         pawnDid(pawn, PawnAction::Build, job.thing);
     }
     ConstructionSite& site = reg.get<ConstructionSite>(job.thing);
-    site.workDone += constructionSpeed(pawn) * static_cast<float>(construction_.numbers().buildWorkPerSecond);
-    learnSkill(pawn, "Construction", gather_.constructionXpPerSecond);
+    const bool art = construction_.isArt(reg.get<Thing>(job.thing).def);
+    const char* skillName = art ? "Artistic" : "Construction";
+    site.workDone += constructionSpeed(pawn, skillName) * static_cast<float>(construction_.numbers().buildWorkPerSecond);
+    learnSkill(pawn, skillName, gather_.constructionXpPerSecond);
     if (site.workDone < site.workTotal) {
         return StepResult::Running;
     }
@@ -1482,6 +1497,11 @@ JobSystem::StepResult JobSystem::buildWork(Entity pawn, Job& job, std::string& w
     if (building == kNoEntity) {
         why = "the building can't stand there any more";
         return StepResult::Failed;
+    }
+    if (art && crafting_ != nullptr) {
+        // A sculpture has the quality its sculptor's Artistic skill rolls (RimWorld's table, as for crafting).
+        const int quality = crafting_->rollQuality(skillLevel(pawn, "Artistic"));
+        reg.emplace_or_replace<Quality>(building, Quality{static_cast<uint8_t>(quality)});
     }
     release(pawn, job);
     job.thing = building;
