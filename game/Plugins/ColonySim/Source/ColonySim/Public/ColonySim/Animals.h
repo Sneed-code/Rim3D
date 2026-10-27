@@ -218,6 +218,23 @@ public:
     // Whether the fighter AI takes the animal for an enemy.
     bool hostile(Entity animal) const;
 
+    // ---- Incidents (T3, docs/design/disasters.md)
+    // The kinds this biome has wild animals of, in def order (a manhunter pack picks among them).
+    struct WildKind {
+        DefId def;
+        float bodySize = 1.0f;
+        bool predator = false;
+        double commonality = 0.0;
+    };
+    std::vector<WildKind> wildKinds() const;
+    // Brings `count` adults of `def` in at a random map edge, all manhunters for `hours` game hours, the first one's
+    // chase set on `target` (a colonist; the rest follow their own sight). Returns how many came, and the first one's
+    // cell in `where`.
+    int spawnManhunters(DefId def, int count, double hours, Entity target, CellPos& where);
+    // Turns one living adult animal, wild or tame, within `range` metres of any of the `anchors` (colonists' cells)
+    // manhunter for `hours` game hours, picked by `rng`. Returns it, or kNoEntity if none is near.
+    Entity goMad(const std::vector<CellPos>& anchors, float range, double hours, Rng& rng);
+
     // ---- Tame animals (AnimalCare.cpp, docs/design/husbandry.md)
     // Husbandry says where a tame animal may be and what it eats; the pathfinder lets it walk round walls
     // to its zone and food (without one it only walks straight). Both are set by the sim after construction.

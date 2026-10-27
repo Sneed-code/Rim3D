@@ -64,14 +64,22 @@ Breeding::Breeding(Things& things, const Map& map, AnimalSystem& animals, Husban
         rules_.birthSpread = r->number("birthSpread", rules_.birthSpread);
         rules_.hatchMinTemp = r->number("hatchMinTemp", rules_.hatchMinTemp);
         rules_.hatchMaxTemp = r->number("hatchMaxTemp", rules_.hatchMaxTemp);
+        rules_.gestationMinTemp = r->number("gestationMinTemp", rules_.gestationMinTemp);
+        rules_.gestationMaxTemp = r->number("gestationMaxTemp", rules_.gestationMaxTemp);
+        rules_.followRadius = r->number("followRadius", rules_.followRadius);
+        rules_.hatcheryRadius = r->number("hatcheryRadius", rules_.hatcheryRadius);
     }
     kinds_.assign(defs.size(), Kind{});
     isAnimal_.assign(defs.size(), 0);
     hatches_.assign(defs.size(), Hatch{});
+    hatchery_.assign(defs.size(), 0);
     stackLimits_.assign(defs.size(), 1);
     for (const DefId id : defs.idsOfKind("Things")) {
         const Def& def = defs.get(id);
         stackLimits_[id.value] = std::max(1, static_cast<int>(def.integer("stackLimit", 1)));
+        if (def.has("hatchery.warm")) {
+            hatchery_[id.value] = 1;
+        }
         if (def.has("hatches.into")) {
             hatches_[id.value].into = defs.idOf("Things", def.text("hatches.into"));
             hatches_[id.value].seconds = def.number("hatches.days", 3.0) * static_cast<double>(kSecondsPerDay);
@@ -90,7 +98,9 @@ Breeding::Breeding(Things& things, const Map& map, AnimalSystem& animals, Husban
         if (def.has("race.eggs")) {
             k.eggUnfertilized = defs.idOf("Things", def.text("race.eggs.unfertilizedThing"));
             k.eggFertilized = defs.idOf("Things", def.text("race.eggs.fertilizedThing"));
-            k.eggs = k.eggUnfertilized.valid();
+            k.eggs = k.eggUnfertilized.valid() || k.eggFertilized.valid();
+            // Ostriches, emus and the like have no unfertilized egg: their laying timer waits at half until a male mates.
+            k.eggFertilizedOnly = !k.eggUnfertilized.valid();
             k.eggIntervalSeconds = def.number("race.eggs.intervalDays", 1.0) * static_cast<double>(kSecondsPerDay);
             k.eggCount = std::max(1, static_cast<int>(def.number("race.eggs.count", 1.0)));
         }
@@ -309,6 +319,9 @@ Entity Breeding::spawnYoung(DefId def, Entity mother, CellPos around, int64_t no
     a.bornAt = now;
     a.herd = 0;
     reg.emplace_or_replace<Faction>(baby, Faction{kPlayerFaction});
+    if (mother != kNoEntity) {
+        reg.emplace_or_replace<Young>(baby, Young{mother});
+    }
     AnimalCare* care = husbandry_.careFor(baby);
     care->tamedAt = now;
     care->hasHome = true;
@@ -507,6 +520,14 @@ void Breeding::pass(int64_t now, bool everyMaleSeeks) {
         const bool isFemale = female(e);
         AnimalBreed& b = reg.get_or_emplace<AnimalBreed>(e);
 
+        // A mother left out in the cold or the heat does not get on with her young: the birth moves on with the clock.
+        if (isFemale && b.pregnantUntil >= 0 && temperature_ != nullptr) {
+            const float degrees = temperature_->temperatureAt(cellOf(reg.get<Position>(e)));
+            if (degrees < rules_.gestationMinTemp || degrees > rules_.gestationMaxTemp) {
+                b.pregnantUntil += rules_.passSeconds;
+                b.nextMateAt = std::max(b.nextMateAt, b.pregnantUntil);
+            }
+        }
         if (isFemale && b.pregnantUntil >= 0 && now >= b.pregnantUntil) {
             giveBirth(e, b, *kind, now);
         }
@@ -520,6 +541,11 @@ void Breeding::pass(int64_t now, bool everyMaleSeeks) {
         if (kind->eggs && isFemale) {
             if (b.eggSince == kBreedNotStarted) {
                 b.eggSince = now;
+            } else if (kind->eggFertilizedOnly && b.fertilized == 0) {
+                const int64_t half = static_cast<int64_t>(kind->eggIntervalSeconds * 0.5);
+                if (now - b.eggSince > half) {
+                    b.eggSince = now - half;
+                }
             } else if (static_cast<double>(now - b.eggSince) >= kind->eggIntervalSeconds) {
                 const bool fertilized = b.fertilized > 0;
                 if (layEgg(e, fertilized) != kNoEntity && fertilized) {
@@ -592,6 +618,31 @@ void Breeding::pass(int64_t now, bool everyMaleSeeks) {
         }
     }
 
+    // Young animals walk back to their mother when they have strayed.
+    const float follow2 = static_cast<float>(rules_.followRadius * rules_.followRadius);
+    for (const auto [young, y] : reg.view<Young>().each()) {
+        if (!reg.all_of<Position, Animal>(young) || animals_.isAdult(young) || !reg.valid(y.mother) || !things_.spawned(y.mother)) {
+            continue;
+        }
+        const Position& at = reg.get<Position>(young);
+        const Position& to = reg.get<Position>(y.mother);
+        if (at.level != to.level || breedDist2(at.x, at.y, to.x, to.y) <= follow2) {
+            continue;
+        }
+        animals_.goTo(young, cellOf(to));
+    }
+
+    hatcheries_.clear();
+    for (size_t i = 0; i < hatchery_.size(); ++i) {
+        if (hatchery_[i] != 0) {
+            for (const auto [b, t, pos] : reg.view<const Thing, const Position>().each()) {
+                if (t.def.value == i) {
+                    hatcheries_.push_back(pos);
+                }
+            }
+        }
+    }
+
     // Fertilized eggs hatch where they lie.
     eggs_.clear();
     for (auto [e, h] : reg.view<Hatching>().each()) {
@@ -599,7 +650,7 @@ void Breeding::pass(int64_t now, bool everyMaleSeeks) {
             continue;
         }
         // An egg that is too cold or too hot makes no progress: its hatch time moves on with the clock.
-        if (temperature_ != nullptr) {
+        if (temperature_ != nullptr && !warmByHatchery(reg.get<Position>(e))) {
             const float degrees = temperature_->temperatureAt(cellOf(reg.get<Position>(e)));
             if (degrees < rules_.hatchMinTemp || degrees > rules_.hatchMaxTemp) {
                 h.hatchAt += rules_.passSeconds;
@@ -617,6 +668,16 @@ void Breeding::pass(int64_t now, bool everyMaleSeeks) {
 }
 
 // ---- Hash -----------------------------------------------------------------------------------
+
+bool Breeding::warmByHatchery(const Position& at) const {
+    const float r2 = static_cast<float>(rules_.hatcheryRadius * rules_.hatcheryRadius);
+    for (const Position& h : hatcheries_) {
+        if (h.level == at.level && breedDist2(h.x, h.y, at.x, at.y) <= r2) {
+            return true;
+        }
+    }
+    return false;
+}
 
 void Breeding::hashState(StateHasher& h) const {
     if (stats_.total() == 0) {
@@ -649,6 +710,10 @@ void Breeding::hashThing(Entity e, StateHasher& h) const {
     }
     if (const Hatching* hatching = reg.try_get<Hatching>(e)) {
         h.add(hatching->hatchAt);
+    }
+    if (const Young* young = reg.try_get<Young>(e)) {
+        h.add(uint64_t{3});
+        h.add(static_cast<uint64_t>(entt::to_integral(young->mother)));
     }
 }
 

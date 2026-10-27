@@ -415,3 +415,17 @@ TEST_CASE("Fuel: a stove saved before fuel existed loads full") {
     }
     CHECK(stoves >= 1);
 }
+
+TEST_CASE("Fuel: a cook turns meat and berries into 50 kibble on one wood, not fifty") {
+    Sim sim = fuelSim();
+    const Entity stove = fuelSpawn(sim, "FueledStove", kFuelStoveCell);
+    const Entity cook = fuelWorker(sim, CellPos{10, 10, 0});
+    fuelSpawn(sim, "Meat_Deer", CellPos{12, 12, 0}, 20);
+    fuelSpawn(sim, "RawBerries", CellPos{13, 12, 0}, 20);
+    FUEL_REQUIRE(stove != kNoEntity && cook != kNoEntity);
+    sim.submit(SetRefuelCommand{stove, false, false});
+    sim.things().registry().get<Fuel>(stove).amount = 1.0f;
+    sim.submit(AddBillCommand{stove, "MakeKibble", BillMode::Count, 1});
+    CHECK(fuelRunUntil(sim, 4000, [&] { return fuelItems(sim, "Kibble") == 50; }) >= 0);
+    CHECK(fuelOf(sim, stove) == 0.0f);
+}

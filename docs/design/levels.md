@@ -81,7 +81,7 @@ no levels):
   side by side, so a staircase against a wall leads onto the floor that wall holds up. The building
   itself blocks walking: it is only climbed. Neither end needs to be walkable when it is built; the
   link counts once both are. Nothing is planned on the top level (there is nothing to climb to).
-  Nothing stops a floor over the stairs for now; U17 may want a stairwell rule. An upper wall with open air on its outside cannot be reached once the walls on its two inner sides stand (see the house scenario).
+  Nothing stops a floor over the stairs for now; U17 may want a stairwell rule. An upper wall with open air on its outside (a corner whose two sides stand) is built from the level below, standing on any of the eight cells round it (`Construction::workCell`), so corners need no special order. No plant grows under an upper floor: laying one clears the plant in the cell below, `Plants::place` refuses there and `growHour` kills any left (no light).
 - **The map** keeps the links (`Map::levelLinks`, `LevelLink{low, high, building, length, speedFactor}`,
   sorted by cell) in step with the buildings (`Things` adds them on spawn and load, removes them on
   despawn), and marks the regions at both ends dirty.
