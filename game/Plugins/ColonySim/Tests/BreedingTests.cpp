@@ -787,6 +787,75 @@ TEST_CASE("Breeding: a fertilized egg that is too cold or too hot does not hatch
     CHECK(f.br().stats().hatched == 1);
 }
 
+TEST_CASE("Breeding: a fertilized egg beside a hatchery hatches in the cold, one far from it does not") {
+    BreedFixture f;
+    const Entity hen = f.tame("Chicken", CellPos{20, 20, 0}, 1);
+    BREED_REQUIRE(hen != kNoEntity);
+    f.sim.setOutdoorOverride(-15.0f);
+    BREED_REQUIRE(f.sim.things().spawn("Hatchery", CellPos{30, 30, 0}) != kNoEntity);
+    const Entity cold = f.br().layEgg(hen, true);
+    BREED_REQUIRE(cold != kNoEntity);
+    // A second egg is laid next to the hatchery.
+    const Entity warm = f.sim.things().spawn("EggChickenFertilized", CellPos{31, 30, 0});
+    BREED_REQUIRE(warm != kNoEntity);
+    f.reg().emplace_or_replace<Hatching>(warm, Hatching{f.sim.time().seconds + 4 * kSecondsPerHour});
+    const int hitPoints = f.reg().get<HitPoints>(cold).current;
+    for (int64_t t = 0; t < 5 * kSecondsPerHour; t += 600) {
+        f.runFed(600);
+        if (f.sim.things().exists(cold)) {
+            f.reg().get<HitPoints>(cold).current = hitPoints;
+        }
+    }
+    CHECK(f.br().stats().hatched == 1);
+    CHECK_FALSE(f.sim.things().exists(warm));
+    CHECK(f.sim.things().exists(cold));
+}
+
+TEST_CASE("Breeding: a mother in the cold carries her young for longer") {
+    BreedFixture f;
+    const Entity cow = f.tame("Cow", CellPos{20, 20, 0}, 1);
+    BREED_REQUIRE(cow != kNoEntity);
+    f.sim.setOutdoorOverride(-20.0f);
+    BREED_REQUIRE(f.br().makePregnant(cow, 1, f.sim.time().seconds + 2 * kSecondsPerHour));
+    f.runFed(4 * kSecondsPerHour);
+    CHECK(f.br().pregnant(cow));
+    CHECK(f.br().stats().born == 0);
+    f.sim.setOutdoorOverride(10.0f);
+    f.runFed(4 * kSecondsPerHour);
+    CHECK(f.br().stats().born == 1);
+}
+
+TEST_CASE("Breeding: a calf keeps near its mother, and the link survives a save") {
+    BreedFixture f;
+    f.sim.setOutdoorOverride(10.0f);
+    const Entity cow = f.tame("Cow", CellPos{20, 20, 0}, 1);
+    BREED_REQUIRE(cow != kNoEntity);
+    BREED_REQUIRE(f.br().makePregnant(cow, 1, f.sim.time().seconds + 60));
+    f.runFed(180);
+    BREED_REQUIRE(f.br().stats().born == 1);
+    Entity calf = kNoEntity;
+    for (const auto [e, y] : f.reg().view<Young>().each()) {
+        calf = e;
+        CHECK(y.mother == cow);
+    }
+    BREED_REQUIRE(calf != kNoEntity);
+    // The mother is carried far off; the calf walks after her and ends up within a few metres.
+    f.reg().get<Position>(cow).x = 45.5f;
+    f.reg().get<Position>(cow).y = 20.5f;
+    f.runFed(3 * kSecondsPerHour);
+    const Position& a = f.reg().get<Position>(calf);
+    const Position& b = f.reg().get<Position>(cow);
+    CHECK(std::hypot(a.x - b.x, a.y - b.y) < 12.0);
+
+    const std::vector<uint8_t> bytes = saveSim(f.sim);
+    SaveLoadResult loaded = loadSim(bytes, breedDefs());
+    BREED_REQUIRE(loaded.sim != nullptr);
+    CHECK(loaded.sim->stateHash() == f.sim.stateHash());
+    const Young* y = loaded.sim->things().registry().try_get<Young>(calf);
+    BREED_REQUIRE(y != nullptr);
+    CHECK(y->mother == cow);
+}
+
 TEST_CASE("Breeding: goats give 12 milk every 3 days, camels 18 every 2, caribou 10 every 2, and a muffalo none") {
     BreedFixture f;
     const Entity goat = f.tame("Goat", CellPos{20, 20, 0}, 1);

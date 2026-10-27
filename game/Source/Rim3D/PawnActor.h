@@ -82,6 +82,9 @@ public:
 	/** Hides or shows the whole pawn, MetaHuman included (first person view hides the player's own body). */
 	void SetBodyHidden(bool bHide);
 	bool IsBodyHidden() const { return IsHidden(); }
+	/** Hides the pawn while its level is cut away in the overseer view (docs/design/levels-draw.md), on top of SetBodyHidden. */
+	void SetCutAway(bool bCut);
+	bool IsCutAway() const { return bCutAway; }
 
 	/** A hit (docs/design/fights.md): the pawn flinches, leaning away from the shot for about half a
 	 *  second. `ShotDirection` is the way the bullet was travelling; `Strength` is 0 to 1. Cosmetic. */
@@ -247,6 +250,8 @@ private:
 	float CruiseSpeed = 400.0f;
 	float Yaw = 0.0f;
 	bool bPlaced = false;
+	bool bBodyHidden = false;
+	bool bCutAway = false;
 	double ActionEndSeconds = 0.0;
 	int32 ActionsPlayed = 0;
 };

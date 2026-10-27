@@ -52,7 +52,8 @@ struct FBuildingStats
  * Like the terrain, the map is cut into 32 m chunks; each chunk has one instanced mesh component for each kind of thing
  * in it. When a new snapshot arrives the subsystem sums a signature for each chunk and rebuilds the chunks whose
  * signature changed, so a chunk is rebuilt only when something in it appears, goes, or steps to another stage or size.
- * Only the doors move every frame.
+ * Only the doors move every frame. Each level (docs/design/levels.md) has chunks of its own, so the levels above the one
+ * the overseer looks at can be hidden whole (docs/design/levels-draw.md).
  *
  * Console: Buildings.Enable (0 draws nothing).
  */
@@ -73,8 +74,10 @@ public:
 	bool IsBuilt() const { return bBuilt; }
 	const FBuildingStats& GetStats() const { return Stats; }
 
-	/** Instances drawn in a chunk, all kinds; 0 if there is no such chunk. */
+	/** Instances drawn in a chunk, all kinds and levels; 0 if there is no such chunk. */
 	int32 GetChunkInstances(int32 ChunkX, int32 ChunkY) const;
+	/** Instances drawn on a level, all chunks; only the ones visible right now if `bVisibleOnly` (the cut-away levels are hidden). */
+	int32 GetLevelInstances(int32 Level, bool bVisibleOnly) const;
 	/** How open the door `Door` is drawn right now, 0 to 1; -1 if it is not a drawn door. */
 	float GetDoorShown(colony::Entity Door) const;
 	/** The slide of the door's moving leaf from its closed place along its length, cm; 0 for no such door. */
@@ -148,10 +151,13 @@ private:
 	const FDefLook* LookOfDef(colony::DefId Def) const;
 	/** The index in Looks of this def made of this stuff (invalid for none), made if it is new; -1 if the def has no picture. */
 	int32 GetLook(colony::DefId Def, colony::DefId Stuff);
-	void RebuildChunk(int32 ChunkX, int32 ChunkY, const TArray<int32>& ThingIndexes, const colony::Snapshot& Snapshot);
+	void RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, const TArray<int32>& ThingIndexes, const colony::Snapshot& Snapshot);
+	/** Hides the chunks of the levels above the highest one shown (ULevelsSubsystem), and shows the rest. */
+	void ApplyCut(bool bForce);
 	UInstancedStaticMeshComponent* GetComponent(FChunk& Chunk, int32 Key, UStaticMesh* Mesh, bool bGhost, bool bItem, bool bCastShadow);
 	void AnimateDoors();
-	int32 ChunkIndex(int32 ChunkX, int32 ChunkY) const { return ChunkY * ChunksX + ChunkX; }
+	int32 ChunkIndex(int32 Level, int32 ChunkX, int32 ChunkY) const { return (Level * ChunksY + ChunkY) * ChunksX + ChunkX; }
+	int32 LevelOfChunk(int32 Index) const { return Index / FMath::Max(1, ChunksX * ChunksY); }
 
 	UPROPERTY()
 	TObjectPtr<AActor> DrawActor;
@@ -175,6 +181,7 @@ private:
 	TArray<uint64> ScanSignatures;
 	int32 ChunksX = 0;
 	int32 ChunksY = 0;
+	int32 ShownTop = -1;
 	int32 BuiltGeneration = -1;
 	int64 LastSeconds = -1;
 	const colony::Sim* BuiltSim = nullptr;
