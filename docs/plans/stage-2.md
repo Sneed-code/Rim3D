@@ -207,7 +207,7 @@ G2, A1 and A2 are Stage 1 tasks.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | G3 | **Performance check in a packaged build.** 1 km map, 30 colonists, 300 animals, rain and a fire, then a 40-raider fight; record fps, game thread, GPU and sim cost in the next `docs/decisions/` file; decide whether the sim moves to its own thread. | PC Unreal | Sonnet, high | 90 min | S9, U14, U15 |
+| ✓ | G3 | **Performance check in a packaged build.** 1 km map, 30 colonists, 300 animals, rain and a fire, then a 40-raider fight; record fps, game thread, GPU and sim cost in the next `docs/decisions/` file; decide whether the sim moves to its own thread. | PC Unreal | Sonnet, high | 90 min | S9, U14, U15 |
 | | G4 | **Playtest build 2.** Package Stage 2, update `docs/setup/playtest.md`, sneed plays a season or more; notes go to `BACKLOG.md` and the Stage 3 plan. | PC Unreal | Sonnet, medium | 60 min | everything above it except X |
 
 ## Order

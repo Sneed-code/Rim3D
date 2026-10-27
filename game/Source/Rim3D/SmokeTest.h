@@ -33,8 +33,9 @@ namespace colony { class Map; }
  * thunderstorm flashes and the date readout).
  * melee (carried and holstered weapons, the weapon switch key, melee swings timed to the sim, blocks, dodges and hit-stop),
  * clothes (worn apparel drawn on MetaHumans over a skin layer: stuff tint, torn look, hats and hair, taking off and stripping),
- * levels (upper floors, stairs and ladders drawn, the overseer's Page Up / Page Down cutaway and picking, climbing stairs in direct mode).
- * fire (the sim's lamps and fires as lights, flames, embers and smoke; burning pawns; burnt ground and ash).
+ * fire (the sim's lamps and fires as lights, flames, embers and smoke; burning pawns; burnt ground and ash),
+ * levels (upper floors, stairs and ladders drawn, the overseer's Page Up / Page Down cutaway and picking, climbing stairs in direct mode),
+ * perf (G3: the 1 km performance colony at 3x with rain, a fire and a 40-pirate raid; frame, GPU and sim cost).
  * Optional: -SmokeTimeout=<seconds> (default 300) fails a run that hangs.
  * To add a test: write a Build<Name>Phases() and add a branch in OnWorldBeginPlay.
  * Run it with tools/smoke.ps1.
@@ -64,6 +65,9 @@ private:
 		TFunction<void()> Verify;
 		/** Runs every frame of the phase. */
 		TFunction<void()> OnFrame;
+		/** Take the screenshot half a second before the measuring starts, so its slow frame is not measured
+		 *  (the perf test; at 1440p a screenshot frame takes about 400 ms). */
+		bool bScreenshotInWarmup = false;
 	};
 
 	struct FFrameSample
@@ -87,6 +91,8 @@ private:
 	void BuildBuildingsPhases();    // SmokeTestBuildings.cpp
 	void BuildOrdersPhases();       // SmokeTestOrders.cpp
 	void BuildPanelsPhases();       // SmokeTestPanels.cpp
+	void BuildTradePhases();        // SmokeTestTrade.cpp
+	void BuildQuestsPhases();       // SmokeTestQuests.cpp
 	void BuildWorldMapPhases();     // SmokeTestWorldMap.cpp
 	void BuildFightsPhases();       // SmokeTestFights.cpp
 	void BuildHandsOnPhases();      // SmokeTestHandsOn.cpp
@@ -97,6 +103,8 @@ private:
 	void BuildLevelsPhases();       // SmokeTestLevels.cpp
 	void BuildFeelPhases();         // SmokeTestFeel.cpp
 	void BuildFirePhases();         // SmokeTestFire.cpp
+	void BuildPerfPhases();         // SmokeTestPerf.cpp
+	void BuildFacesPhases();        // SmokeTestFaces.cpp
 	void StartPhase(int32 Index);
 	void FinishPhase();
 	void WriteResultsAndQuit();
@@ -116,6 +124,8 @@ private:
 	bool bScreenshotTaken = false;
 	TArray<FFrameSample> Samples;
 	TArray<TSharedPtr<FJsonValue>> Results;
+	/** Extra numbers a phase's Verify reports; written into that phase's result, then cleared. */
+	TMap<FString, double> PhaseNumbers;
 	TArray<FString> Notes;
 	TArray<FString> Errors;
 	double StartSeconds = 0.0;

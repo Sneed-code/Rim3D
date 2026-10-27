@@ -1493,16 +1493,24 @@ void RaidSystem::stepStrategies() {
             const Position& gp = reg.get<Position>(goal);
             const float away = gp.level != p.level ? 1e9f : raidDist(gp.x, gp.y, p.x, p.y);
             if (squad.strategy == RaidStrategy::Kidnappers) {
-                // Close to the downed colonist it stops fighting and goes to lift it; further off it fights again.
+                // Close to the downed colonist, or with no enemy near it, it stops fighting and goes to lift it; an
+                // enemy within seizeRange of a kidnapper still far from its captive makes it fight again.
                 Fighter* kf = reg.try_get<Fighter>(m);
-                if (kf != nullptr && away <= rules_.seizeRange && kf->mode == FightMode::Fight) {
-                    kf->mode = FightMode::Seize;
-                    kf->hasGoal = true;
-                    kf->goal = cellOf(gp);
-                    fighters_.replan(m);
-                } else if (kf != nullptr && away > rules_.seizeRange + 3.0f && kf->mode == FightMode::Seize) {
-                    kf->mode = FightMode::Fight;
-                    fighters_.replan(m);
+                if (kf != nullptr) {
+                    bool threatened = false;
+                    if (kf->target != kNoEntity && things_.spawned(kf->target)) {
+                        const Position& tp = reg.get<Position>(kf->target);
+                        threatened = tp.level == p.level && raidDist(tp.x, tp.y, p.x, p.y) <= rules_.seizeRange;
+                    }
+                    if (kf->mode == FightMode::Fight && (away <= rules_.seizeRange || !threatened)) {
+                        kf->mode = FightMode::Seize;
+                        kf->hasGoal = true;
+                        kf->goal = cellOf(gp);
+                        fighters_.replan(m);
+                    } else if (kf->mode == FightMode::Seize && away > rules_.seizeRange + 3.0f && threatened) {
+                        kf->mode = FightMode::Fight;
+                        fighters_.replan(m);
+                    }
                 }
             }
             if (away > rules_.grabReach) {

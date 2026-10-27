@@ -81,6 +81,7 @@ namespace colony {
 namespace {
 
 constexpr int64_t kBillUpkeepSeconds = 60;  // "until you have" bills with a restart stock look at their stock this often
+constexpr int64_t kSimPlantSlices = 60;      // the hourly plant pass runs over this many steps (G3, docs/design/sim-cost.md)
 
 const DefDatabase& simEmptyDefs() {
     static const DefDatabase empty;
@@ -1668,7 +1669,6 @@ void Sim::stepOnce(bool keepEvents) {
     { SimLap lap(profile_, "roomStats"); roomStats_->step(time_.seconds); }
     { SimLap lap(profile_, "temperature"); temperature_->step(time_.seconds); }
     // From the weather as it is now, not left over from the last step: a loaded game has not had a last step.
-    spoilage_->setOutdoorFactor(weather_->deteriorationFactor());
     spoilage_->setOutdoorFactor(weather_->deteriorationFactor());  // not saved: the weather says it, also on the first step after a load
     { SimLap lap(profile_, "spoilage"); spoilage_->step(time_.seconds); }
     if (time_.seconds % kBillUpkeepSeconds == 0) {
@@ -1681,9 +1681,15 @@ void Sim::stepOnce(bool keepEvents) {
     if (time_.seconds % kSecondsPerDay == 0) {
         jobs_->skillsNewDay();
     }
+    // The plants of the hour that just ended grow a slice at a time over the next hour's first minute (G3).
+    const int64_t intoHour = time_.seconds % kSecondsPerHour;
+    if (time_.seconds >= kSecondsPerHour && intoHour < kSimPlantSlices) {
+        SimLap lap(profile_, "hourly");
+        plants_->growHourSlice(static_cast<int>(((time_.seconds - intoHour - 1) % kSecondsPerDay) / kSecondsPerHour), static_cast<int>(intoHour),
+                               static_cast<int>(kSimPlantSlices));
+    }
     if (time_.seconds % kSecondsPerHour == 0) {
         SimLap lap(profile_, "hourly");
-        plants_->growHour(static_cast<int>(((time_.seconds - 1) % kSecondsPerDay) / kSecondsPerHour));
         farming_->growHour(time_.seconds);
         filth_->fadeHour(weather_->effects().rainRate);
         pruneDesignations();

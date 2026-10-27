@@ -19,6 +19,22 @@ class USimSubsystem;
 class USkeletalMesh;
 namespace colony { class DefDatabase; class Sim; struct PawnLooksView; struct Snapshot; struct ThingView; }
 
+/** A tattoo or scar on the skin (the sim's LooksMark): a body region (colony::BodyRegion), a style index, where on the
+ *  region (0 to 1 around and along it) and a size factor. */
+struct FSimPawnMark
+{
+	uint8 Region = 0;
+	uint8 Style = 0;
+	float U = 0.5f;
+	float V = 0.5f;
+	float Size = 1.0f;
+
+	bool operator==(const FSimPawnMark& Other) const
+	{
+		return Region == Other.Region && Style == Other.Style && U == Other.U && V == Other.V && Size == Other.Size;
+	}
+};
+
 /**
  * How a pawn looks, from the sim's PawnLooksView and its lineage's def, in Unreal's terms
  * (docs/design/looks.md). Colours are linear.
@@ -34,15 +50,35 @@ struct FSimPawnLooks
 	float HornRadius = 0.0f;  // cm, at the base
 	float HornSpread = 0.0f;  // cm from the middle of the forehead
 	FLinearColor HornColor = FLinearColor::Black;
+	// V2: the face sliders (0.5 average), eye colour (sRGB, as the sim has it), hair style and beard. An empty hair
+	// style is a pawn from an older save: it keeps Kellan's face, hair and eyes.
+	float FaceShape = 0.5f;
+	float Brow = 0.5f;
+	float Nose = 0.5f;
+	float Jaw = 0.5f;
+	FColor Eyes = FColor::Black;
+	FString HairStyle;
+	FString Beard;
+	// V3: body hair (0 none to 1 thick) and the marks on the skin.
+	float BodyHair = 0.0f;
+	TArray<FSimPawnMark> Tattoos;
+	TArray<FSimPawnMark> Scars;
 
 	bool operator==(const FSimPawnLooks& Other) const
 	{
 		return Height == Other.Height && Weight == Other.Weight && bFemale == Other.bFemale && Skin == Other.Skin && Hair == Other.Hair
-			&& HornLength == Other.HornLength && HornRadius == Other.HornRadius && HornSpread == Other.HornSpread && HornColor == Other.HornColor;
+			&& HornLength == Other.HornLength && HornRadius == Other.HornRadius && HornSpread == Other.HornSpread && HornColor == Other.HornColor
+			&& FaceShape == Other.FaceShape && Brow == Other.Brow && Nose == Other.Nose && Jaw == Other.Jaw && Eyes == Other.Eyes
+			&& HairStyle == Other.HairStyle && Beard == Other.Beard && BodyHair == Other.BodyHair && Tattoos == Other.Tattoos && Scars == Other.Scars;
 	}
+
+	/** Whether the pawn has V1 face numbers (not an older save's pawn). */
+	bool HasFace() const { return !HairStyle.IsEmpty(); }
 
 	/** The body shape morphs' weights (PawnLooks.h names) for this weight and gender. */
 	TArray<TPair<FName, float>> MorphWeights() const;
+	/** The face shape morphs' weights (PawnFaces.h names). */
+	TArray<TPair<FName, float>> FaceMorphWeights() const;
 };
 
 /** One mesh of a worn piece: a skinned mesh (follows the body) or, with a bone, a prop on that bone (a hat). */
@@ -151,6 +187,8 @@ public:
 	/** Clothes materials that may be used with the body shape morphs. */
 	UMaterialInterface* GetClothMaterial(const UMaterialInterface* Original);
 	UStaticMesh* GetHornMesh();
+	/** Faces, grooms and marks from the PawnFaces commandlet (PawnFaces.h names); null if it hasn't been run or there is none. */
+	UObject* GetFacesAsset(const FString& Name);
 	/** The looks a pawn's sim looks and lineage add up to. */
 	static FSimPawnLooks MakeLooks(const colony::PawnLooksView& View, const colony::DefDatabase* Defs);
 	/** What a pawn wears, from the snapshot (U16), and a number that changes whenever any of it does (cheap: no allocation). */
@@ -207,6 +245,11 @@ private:
 	/** Clothes meshes by path; null where a mesh is missing. */
 	UPROPERTY()
 	TMap<FString, TObjectPtr<UObject>> ClothesAssets;
+
+	/** PawnFaces assets by name; null where one is missing. */
+	UPROPERTY()
+	TMap<FString, TObjectPtr<UObject>> FacesAssets;
+	bool bFacesMissingLogged = false;
 
 	bool bHornTried = false;
 	bool bLooksMissingLogged = false;
