@@ -6,6 +6,8 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
+#include <utility>
 #include <vector>
 
 namespace colony {
@@ -110,6 +112,9 @@ public:
     // the bed def's `stats.bedRestEffectiveness`.
     float restGainPerDay(Entity bed) const;
 
+    // What a pawn's rest falls by is multiplied by this (drugs: a stimulant slows it, a withdrawal speeds it).
+    void setRestFallFactor(std::function<float(Entity)> factor) { restFallFactor_ = std::move(factor); }
+
     void step();
 
 private:
@@ -117,6 +122,7 @@ private:
     HealthSystem& health_;
     const DefDatabase& defs_;
     NeedRules rules_;
+    std::function<float(Entity)> restFallFactor_;
 };
 
 }  // namespace colony

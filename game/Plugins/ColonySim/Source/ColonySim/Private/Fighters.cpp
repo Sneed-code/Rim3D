@@ -12,10 +12,12 @@
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Prisoners.h"
+#include "ColonySim/Trade.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Regions.h"
+#include "ColonySim/Resonance.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Weather.h"
 
@@ -370,7 +372,8 @@ void FighterSystem::step() {
         p.fighter = reg.all_of<Fighter>(e);
         const Animal* wildLife = reg.try_get<Animal>(e);
         // A hunting, manhunting or avenging animal is an enemy (N5); a prisoner is nobody's target (C22).
-        p.animal = (wildLife != nullptr && wildLife->temper == AnimalTemper::Calm) || reg.all_of<Prisoner>(e);
+        // Visitors and traders (C23) are nobody's target either.
+        p.animal = (wildLife != nullptr && wildLife->temper == AnimalTemper::Calm) || reg.all_of<Prisoner>(e) || reg.all_of<Visitor>(e);
         p.stance = p.able ? posture.stance : Stance::Prone;
         pawns_.push_back(p);
     }
@@ -401,8 +404,8 @@ void FighterSystem::step() {
             }
             continue;
         }
-        // Thrown to the ground by a blast: nothing until it is up.
-        if (reg.all_of<KnockedDown>(pawn)) {
+        // Thrown to the ground by a blast, stunned, or winding up a power (X2): nothing until it is over.
+        if (reg.any_of<KnockedDown, Stunned, Casting>(pawn)) {
             if (f.walk != 0) {
                 stop(pawn, f);
             }

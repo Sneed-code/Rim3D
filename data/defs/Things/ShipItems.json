@@ -34,6 +34,28 @@
    "stats",
    "stackLimit"
   ],
+  "stuffProps": {
+   "categories": [
+    "Metallic"
+   ],
+   "statFactors": {
+    "maxHitPoints": 2.8,
+    "beauty": 1.0,
+    "flammability": 0.0,
+    "workToBuild": 2.2,
+    "workToMake": 2.2,
+    "armorRatingSharp": 1.14,
+    "armorRatingBlunt": 0.55,
+    "armorRatingHeat": 0.65,
+    "sharpDamageMultiplier": 1.1,
+    "bluntDamageMultiplier": 0.9,
+    "meleeCooldownMultiplier": 0.8
+   },
+   "statOffsets": {
+    "insulationCold": 3,
+    "insulationHeat": 0
+   }
+  },
   "deep": {
    "lumpSize": [
     2,
@@ -78,6 +100,28 @@
    "stats",
    "stackLimit"
   ],
+  "stuffProps": {
+   "categories": [
+    "Metallic"
+   ],
+   "statFactors": {
+    "maxHitPoints": 2.5,
+    "beauty": 0.5,
+    "flammability": 0.0,
+    "workToBuild": 1.9,
+    "workToMake": 1.9,
+    "armorRatingSharp": 1.08,
+    "armorRatingBlunt": 0.54,
+    "armorRatingHeat": 0.65,
+    "sharpDamageMultiplier": 1.1,
+    "bluntDamageMultiplier": 1.5,
+    "meleeCooldownMultiplier": 1.1
+   },
+   "statOffsets": {
+    "insulationCold": 3,
+    "insulationHeat": 0
+   }
+  },
   "deep": {
    "lumpSize": [
     4,
