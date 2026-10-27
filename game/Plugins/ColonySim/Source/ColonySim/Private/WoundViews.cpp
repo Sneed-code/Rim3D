@@ -40,14 +40,14 @@ const char* woundKindName(WoundKind kind) {
     return "Cut";
 }
 
-const char* bodyRegionName(BodyRegion region) {
+const char* woundRegionName(WoundRegion region) {
     switch (region) {
-        case BodyRegion::Torso: return "Torso";
-        case BodyRegion::Head: return "Head";
-        case BodyRegion::LeftArm: return "LeftArm";
-        case BodyRegion::RightArm: return "RightArm";
-        case BodyRegion::LeftLeg: return "LeftLeg";
-        case BodyRegion::RightLeg: return "RightLeg";
+        case WoundRegion::Torso: return "Torso";
+        case WoundRegion::Head: return "Head";
+        case WoundRegion::LeftArm: return "LeftArm";
+        case WoundRegion::RightArm: return "RightArm";
+        case WoundRegion::LeftLeg: return "LeftLeg";
+        case WoundRegion::RightLeg: return "RightLeg";
     }
     return "Torso";
 }
@@ -101,13 +101,13 @@ const std::vector<WoundViews::PartData>& WoundViews::body(DefId pawnDef) {
             side[i] = side[parent];
         }
         if (regionName[i] == "Head") {
-            part.region = BodyRegion::Head;
+            part.region = WoundRegion::Head;
         } else if (regionName[i] == "Arm") {
-            part.region = side[i] > 0 ? BodyRegion::RightArm : BodyRegion::LeftArm;
+            part.region = side[i] > 0 ? WoundRegion::RightArm : WoundRegion::LeftArm;
         } else if (regionName[i] == "Leg") {
-            part.region = side[i] > 0 ? BodyRegion::RightLeg : BodyRegion::LeftLeg;
+            part.region = side[i] > 0 ? WoundRegion::RightLeg : WoundRegion::LeftLeg;
         } else {
-            part.region = BodyRegion::Torso;
+            part.region = WoundRegion::Torso;
         }
     }
     return bodies_.emplace(pawnDef.value, std::move(parts)).first->second;

@@ -25,7 +25,7 @@ private:
     struct PartData {
         bool inside = false;
         DefId def;
-        BodyRegion region = BodyRegion::Torso;
+        WoundRegion region = WoundRegion::Torso;
         float bleedRate = 1.0f;
     };
     struct HediffData {

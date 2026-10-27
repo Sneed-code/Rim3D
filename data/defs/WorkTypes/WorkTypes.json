@@ -41,7 +41,7 @@
   {
     "defName": "Construction", "parent": "WorkTypeBase", "label": "construct", "naturalPriority": 800,
     "relevantSkills": ["Construction"], "workTags": ["ManualSkilled", "Constructing"], "inPrototype": true,
-    "tasks": ["Repair", "BuildRoofs", "RemoveRoofs", "ConstructFinishFrames", "ConstructDeliverResources", "Deconstruct"]
+    "tasks": ["Repair", "BuildRoofs", "RemoveRoofs", "ConstructFinishFrames", "ConstructDeliverResources", "Deconstruct", "RearmTraps"]
   },
   {
     "defName": "Growing", "parent": "WorkTypeBase", "label": "grow", "naturalPriority": 700,
@@ -66,7 +66,7 @@
   },
   {
     "defName": "Art", "parent": "WorkTypeBase", "label": "art", "naturalPriority": 450,
-    "relevantSkills": ["Artistic"], "workTags": ["Artistic"], "tasks": ["DoBillsSculpt"]
+    "relevantSkills": ["Artistic"], "workTags": ["Artistic"], "tasks": ["BuildArt", "DoBillsSculpt"]
   },
   {
     "defName": "Crafting", "parent": "WorkTypeBase", "label": "craft", "naturalPriority": 400,

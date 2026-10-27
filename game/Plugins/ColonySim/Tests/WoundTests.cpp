@@ -111,7 +111,7 @@ TEST_CASE("Wounds: a gunshot shows on its part with its kind, region and share o
     const WoundView& w = wounds[0];
     CHECK(w.part == woundTestPart(*sim, pawn, "left arm"));
     CHECK(w.kind == WoundKind::Gunshot);
-    CHECK(w.region == BodyRegion::LeftArm);
+    CHECK(w.region == WoundRegion::LeftArm);
     CHECK(sim->defs().get(w.partDef).defName() == "Arm");
     CHECK(w.severity == doctest::Approx(6.0f / 30.0f).epsilon(0.05));  // the arm has 30 hit points; a second of healing is allowed
     CHECK(w.bleeding);
@@ -140,7 +140,7 @@ TEST_CASE("Wounds: tending wraps the wound in a bandage and stops it bleeding") 
     CHECK(wounds[0].tendQuality == doctest::Approx(0.7f));
     CHECK_FALSE(wounds[0].bleeding);
     CHECK(bleedPerDay == doctest::Approx(0.0f));
-    CHECK(wounds[0].region == BodyRegion::RightLeg);
+    CHECK(wounds[0].region == WoundRegion::RightLeg);
 }
 
 TEST_CASE("Wounds: each injury def draws as its kind, scars as scars") {
@@ -161,7 +161,7 @@ TEST_CASE("Wounds: each injury def draws as its kind, scars as scars") {
     WOUND_REQUIRE(wounds.size() == sizeof(cases) / sizeof(cases[0]));
     for (size_t i = 0; i < wounds.size(); ++i) {
         CHECK_MESSAGE(wounds[i].kind == cases[i].kind, cases[i].hediff);
-        CHECK(wounds[i].region == BodyRegion::Torso);
+        CHECK(wounds[i].region == WoundRegion::Torso);
     }
 }
 
@@ -170,14 +170,14 @@ TEST_CASE("Wounds: the regions follow the part and its side, down to fingers and
     const Entity pawn = woundTestPawn(*sim);
     struct Case {
         const char* part;
-        BodyRegion region;
+        WoundRegion region;
     };
-    const Case cases[] = {{"torso", BodyRegion::Torso},        {"neck", BodyRegion::Head},         {"head", BodyRegion::Head},
-                          {"left eye", BodyRegion::Head},      {"nose", BodyRegion::Head},         {"jaw", BodyRegion::Head},
-                          {"left shoulder", BodyRegion::LeftArm},  {"right arm", BodyRegion::RightArm},
-                          {"left hand", BodyRegion::LeftArm},  {"right pinky", BodyRegion::RightArm},
-                          {"left leg", BodyRegion::LeftLeg},   {"right foot", BodyRegion::RightLeg},
-                          {"left big toe", BodyRegion::LeftLeg}};
+    const Case cases[] = {{"torso", WoundRegion::Torso},        {"neck", WoundRegion::Head},         {"head", WoundRegion::Head},
+                          {"left eye", WoundRegion::Head},      {"nose", WoundRegion::Head},         {"jaw", WoundRegion::Head},
+                          {"left shoulder", WoundRegion::LeftArm},  {"right arm", WoundRegion::RightArm},
+                          {"left hand", WoundRegion::LeftArm},  {"right pinky", WoundRegion::RightArm},
+                          {"left leg", WoundRegion::LeftLeg},   {"right foot", WoundRegion::RightLeg},
+                          {"left big toe", WoundRegion::LeftLeg}};
     for (const Case& c : cases) {
         CHECK_MESSAGE(woundTestPart(*sim, pawn, c.part) >= 0, c.part);
         WOUND_REQUIRE(woundTestInjure(*sim, pawn, "Cut", 1.0f, c.part));
@@ -203,7 +203,7 @@ TEST_CASE("Wounds: injuries to organs and bones inside the body are not drawn, t
     const std::vector<WoundView> wounds = woundTestWounds(*sim, pawn);
     WOUND_REQUIRE(!wounds.empty());
     for (const WoundView& w : wounds) {
-        CHECK(w.region == BodyRegion::Torso);
+        CHECK(w.region == WoundRegion::Torso);
         CHECK(sim->defs().get(w.partDef).defName() == "Torso");
     }
 }
@@ -218,7 +218,7 @@ TEST_CASE("Wounds: a lost part shows as a stump, without its children, and a ban
         if (w.kind == WoundKind::Missing) {
             ++missing;
             CHECK(w.part == woundTestPart(*sim, pawn, "left hand"));
-            CHECK(w.region == BodyRegion::LeftArm);
+            CHECK(w.region == WoundRegion::LeftArm);
             CHECK(sim->defs().get(w.partDef).defName() == "Hand");
             CHECK(w.severity == doctest::Approx(1.0f));
             CHECK(w.bleeding);
@@ -256,7 +256,7 @@ TEST_CASE("Wounds: every injury and scar def names a kind, and every outside par
     }
     CHECK(checked >= 12);
     CHECK(std::string(woundKindName(WoundKind::Infection)) == "Infection");
-    CHECK(std::string(bodyRegionName(BodyRegion::RightLeg)) == "RightLeg");
+    CHECK(std::string(woundRegionName(WoundRegion::RightLeg)) == "RightLeg");
     for (const char* part : {"Torso", "Neck", "Head", "Eye", "Ear", "Nose", "Jaw", "Shoulder", "Arm", "Hand", "Finger", "Leg", "Foot", "Toe"}) {
         const Def* def = defs.find("BodyParts", part);
         WOUND_REQUIRE(def != nullptr);

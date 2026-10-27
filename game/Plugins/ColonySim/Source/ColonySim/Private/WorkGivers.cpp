@@ -1,4 +1,5 @@
 // The work scanners, one per task name in the WorkTypes defs (docs/design/jobs.md).
+#include "ColonySim/Animals.h"
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Jobs.h"
 
@@ -6,6 +7,7 @@
 #include "ColonySim/Bills.h"
 #include "ColonySim/Crafting.h"
 #include "ColonySim/Construction.h"
+#include "ColonySim/Defense.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Farming.h"
@@ -214,15 +216,18 @@ private:
 };
 
 // Frames with all their materials (RimWorld's WorkGiver_ConstructFinishFrames).
-class ConstructFinishGiver final : public WorkGiver {
+class ConstructFinishGiver : public WorkGiver {
 public:
     const char* task() const override { return "ConstructFinishFrames"; }
+    // Sculptures are art: the Art work type's giver builds those, this one every other frame.
+    virtual bool wantsArt() const { return false; }
 
     void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
         const entt::registry& reg = jobs.things().registry();
         const Position& at = reg.get<Position>(pawn);
         reg.view<const ConstructionSite, const Position>().each([&](Entity site, const ConstructionSite& s, const Position& pos) {
-            if (s.stage != ConstructionStage::Frame || !s.hasAllMaterials()) {
+            if (s.stage != ConstructionStage::Frame || !s.hasAllMaterials() ||
+                jobs.construction().isArt(reg.get<Thing>(site).def) != wantsArt()) {
                 return;
             }
             CellPos stand;
@@ -240,6 +245,13 @@ public:
         out.cell = candidate.reach;
         return true;
     }
+};
+
+// Sculptures (docs/design/art.md): the same frames, built by artists.
+class ConstructArtGiver final : public ConstructFinishGiver {
+public:
+    const char* task() const override { return "BuildArt"; }
+    bool wantsArt() const override { return true; }
 };
 
 // Buildings marked to be taken down (RimWorld's WorkGiver_Deconstruct).
@@ -681,8 +693,8 @@ public:
     const char* task() const override { return "TendPatients"; }
 
     void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
-        if (jobs.medicine() == nullptr || !jobs.canUseHands(pawn)) {
-            return;
+        if (jobs.medicine() == nullptr || !jobs.canUseHands(pawn) || jobs.things().registry().all_of<Animal>(pawn)) {
+            return;  // a rescuing animal carries the downed to bed but cannot tend
         }
         const entt::registry& reg = jobs.things().registry();
         const Position& at = reg.get<Position>(pawn);
@@ -1011,6 +1023,40 @@ public:
     }
 };
 
+// Rearming (RimWorld's WorkGiver_RearmTraps, in Construction): every sprung trap that can be used again, nearest first.
+// One colonist per trap.
+class RearmTrapsGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "RearmTraps"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        DefenseSystem* defense = jobs.defense();
+        if (defense == nullptr || !jobs.canUseHands(pawn)) {
+            return;
+        }
+        const entt::registry& reg = jobs.things().registry();
+        const Position& at = reg.get<Position>(pawn);
+        reg.view<const Trap, const Position>().each([&](Entity trap, const Trap& state, const Position& pos) {
+            if (!state.sprung || pos.level != at.level || !defense->needsRearm(trap) || jobs.reservedByOther(JobTarget{trap, CellPos{}}, pawn)) {
+                return;
+            }
+            out.push_back(WorkCandidate{JobTarget{trap, CellPos{}}, workGiverDistSq(at, pos), 0, 0, false, CellPos{}});
+        });
+    }
+
+    bool makeJob(JobSystem& jobs, Entity, const WorkCandidate& candidate, Job& out) override {
+        const Entity trap = candidate.target.thing;
+        if (jobs.defense() == nullptr || !jobs.defense()->needsRearm(trap)) {
+            return false;
+        }
+        out = Job{};
+        out.type = JobType::RearmTrap;
+        out.thing = trap;
+        out.cell = cellOf(jobs.things().registry().get<Position>(trap));
+        return true;
+    }
+};
+
 }  // namespace
 
 bool makeHaulJob(JobSystem& jobs, Entity pawn, Entity item, Job& out) {
@@ -1038,6 +1084,7 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<HaulToStockpileGiver>());
     givers.push_back(std::make_unique<ConstructDeliverGiver>());
     givers.push_back(std::make_unique<ConstructFinishGiver>());
+    givers.push_back(std::make_unique<ConstructArtGiver>());
     givers.push_back(std::make_unique<DeconstructGiver>());
     givers.push_back(std::make_unique<MineGiver>());
     givers.push_back(std::make_unique<CutOrHarvestPlantsGiver>());
@@ -1056,6 +1103,7 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<GoToMedicalBedGiver>());
     givers.push_back(std::make_unique<RestToHealGiver>());
     givers.push_back(std::make_unique<ExtinguishFiresGiver>());
+    givers.push_back(std::make_unique<RearmTrapsGiver>());
     givers.push_back(std::make_unique<StripGiver>());
     addHusbandryWorkGivers(givers);
     addHuntWorkGivers(givers);

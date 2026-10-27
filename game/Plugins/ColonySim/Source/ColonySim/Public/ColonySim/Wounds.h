@@ -24,14 +24,14 @@ enum class WoundKind : uint8_t {
 
 // The coarse piece of skin a body part is on; the part's BodyParts def says which (`skinRegion`) and its label or
 // its parents' say the side. Only outside parts have wounds that show.
-enum class BodyRegion : uint8_t { Torso, Head, LeftArm, RightArm, LeftLeg, RightLeg };
+enum class WoundRegion : uint8_t { Torso, Head, LeftArm, RightArm, LeftLeg, RightLeg };
 
 // One wound or lost part on a humanlike (or any) pawn, Snapshot::wounds[ThingView::firstWound + n]. Wounds on organs
 // and bones inside the body are left out: the outside part over them has its own.
 struct WoundView {
     uint16_t part = 0;          // position in the pawn's Bodies def, depth-first, torso 0
     DefId partDef;              // the BodyParts def of that part: Arm, Hand, Eye...
-    BodyRegion region = BodyRegion::Torso;
+    WoundRegion region = WoundRegion::Torso;
     WoundKind kind = WoundKind::Cut;
     float severity = 0.0f;      // share of the part's hit points the wound took, 0 to 1 (1 for a lost part)
     bool tended = false;        // wrapped in a bandage
@@ -40,6 +40,6 @@ struct WoundView {
 };
 
 COLONY_API const char* woundKindName(WoundKind kind);
-COLONY_API const char* bodyRegionName(BodyRegion region);
+COLONY_API const char* woundRegionName(WoundRegion region);
 
 }  // namespace colony
