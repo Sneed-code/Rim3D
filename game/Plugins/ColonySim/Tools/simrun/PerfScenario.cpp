@@ -1,13 +1,8 @@
 #include "PerfScenario.h"
 
-#include "ColonySim/Animals.h"
 #include "ColonySim/Clock.h"
-#include "ColonySim/Colonist.h"
-#include "ColonySim/Commands.h"
-#include "ColonySim/Designations.h"
-#include "ColonySim/Fighters.h"
-#include "ColonySim/Husbandry.h"
-#include "ColonySim/Map.h"
+#include "ColonySim/Events.h"
+#include "ColonySim/PerfColony.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
 
@@ -20,50 +15,7 @@
 
 namespace perfscenario {
 
-namespace {
-
 using namespace colony;
-
-constexpr int kTameAnimals = 300;
-constexpr int kRoomWidth = 12;
-constexpr int kRoomHeight = 8;
-constexpr int kBeds = 8;
-constexpr int kSearchRadius = 60;
-constexpr int kMarkRadius = 35;
-
-// The origin of a width by height patch of bare, buildable ground (with a one cell margin) in the ring
-// round `landing` that no earlier site took, nearest first, or false.
-bool perfFindSite(const Sim& sim, CellPos landing, int width, int height, const std::vector<CellRect>& taken, CellPos& out) {
-    bool found = false;
-    int best = 0;
-    for (int dy = -kSearchRadius; dy <= kSearchRadius; ++dy) {
-        for (int dx = -kSearchRadius; dx <= kSearchRadius; ++dx) {
-            const int dist = dx * dx + dy * dy;
-            if (dist < 100 || (found && dist >= best)) {
-                continue;  // not on the landing itself, and no better than what we have
-            }
-            const CellPos origin{landing.x + dx, landing.y + dy, 0};
-            bool ok = true;
-            for (int y = origin.y - 1; y <= origin.y + height && ok; ++y) {
-                for (int x = origin.x - 1; x <= origin.x + width && ok; ++x) {
-                    const CellPos c{x, y, 0};
-                    ok = sim.map().inBounds(c) && sim.map().groundWalkable(c) && sim.map().buildingAt(c) == kNoEntity &&
-                         std::none_of(taken.begin(), taken.end(), [&](const CellRect& r) {
-                             return x >= r.minX - 2 && x < r.minX + r.sizeX + 2 && y >= r.minY - 2 && y < r.minY + r.sizeY + 2;
-                         });
-                }
-            }
-            if (ok) {
-                found = true;
-                best = dist;
-                out = origin;
-            }
-        }
-    }
-    return found;
-}
-
-}  // namespace
 
 int run(uint64_t seed, int mapSize, double days, double budgetMs, std::shared_ptr<const DefDatabase> defs) {
     using Clock = std::chrono::steady_clock;
@@ -75,98 +27,17 @@ int run(uint64_t seed, int mapSize, double days, double budgetMs, std::shared_pt
     const auto start = Clock::now();
     Sim sim(settings, defs);
     const auto generated = Clock::now();
-    if (!sim.setupErrors().empty() || !sim.stockpileCell()) {
+    PerfColonyCounts counts;
+    if (const std::string error = setUpPerfColony(sim, counts); !error.empty()) {
         for (const std::string& e : sim.setupErrors()) {
             std::fprintf(stderr, "%s\n", e.c_str());
         }
-        std::fprintf(stderr, "perf: the sim could not be set up (does the data folder have the PerfColony scenario?)\n");
+        std::fprintf(stderr, "perf: %s\n", error.c_str());
         return 2;
     }
-    const CellPos landing = *sim.stockpileCell();
-
-    // Two walled rooms, each with a door in the south wall, beds and a stove: room temperature and
-    // the construction work for the colonists.
-    std::vector<CellRect> taken;
-    for (int room = 0; room < 2; ++room) {
-        CellPos origin;
-        if (!perfFindSite(sim, landing, kRoomWidth, kRoomHeight, taken, origin)) {
-            std::fprintf(stderr, "perf: no room for building %d near the landing site\n", room + 1);
-            return 2;
-        }
-        taken.push_back(CellRect{origin.x, origin.y, kRoomWidth, kRoomHeight, 0});
-        for (int x = 0; x < kRoomWidth; ++x) {
-            for (const int y : {0, kRoomHeight - 1}) {
-                const bool door = y == 0 && x == 2;
-                sim.submit(PlaceBlueprintCommand{door ? "Door" : "Wall", door ? "WoodLog" : "Steel", CellPos{origin.x + x, origin.y + y, 0}});
-            }
-        }
-        for (int y = 1; y < kRoomHeight - 1; ++y) {
-            sim.submit(PlaceBlueprintCommand{"Wall", "Steel", CellPos{origin.x, origin.y + y, 0}});
-            sim.submit(PlaceBlueprintCommand{"Wall", "Steel", CellPos{origin.x + kRoomWidth - 1, origin.y + y, 0}});
-        }
-        for (int bed = 0; bed < kBeds; ++bed) {
-            sim.submit(PlaceBlueprintCommand{"Bed", "Steel", CellPos{origin.x + 1 + bed, origin.y + kRoomHeight - 3, 0}});
-        }
-        sim.submit(PlaceBlueprintCommand{"FueledStove", "", CellPos{origin.x + 5, origin.y + 1, 0}});
-        sim.submit(PlaceFloorCommand{CellRect{origin.x + 1, origin.y + 1, kRoomWidth - 2, kRoomHeight - 2, 0}, "WoodFloor"});
-    }
-
-    // A growing zone of rice, and everything round the landing to mine, fell and pick.
-    CellPos farm;
-    if (perfFindSite(sim, landing, 24, 24, taken, farm)) {
-        sim.submit(CreateGrowingZoneCommand{CellRect{farm.x, farm.y, 24, 24, 0}, "Plant_Rice"});
-        taken.push_back(CellRect{farm.x, farm.y, 24, 24, 0});
-    }
-    const CellRect marks{landing.x - kMarkRadius, landing.y - kMarkRadius, 2 * kMarkRadius, 2 * kMarkRadius, 0};
-    bool rock = false;  // a Mine mark over no rock fails
-    for (int y = marks.minY; y < marks.minY + marks.sizeY && !rock; ++y) {
-        for (int x = marks.minX; x < marks.minX + marks.sizeX && !rock; ++x) {
-            rock = sim.map().inBounds(CellPos{x, y, 0}) && sim.map().terrain(CellPos{x, y, 0}) == Terrain::Rock;
-        }
-    }
-    if (rock) {
-        sim.submit(DesignateCommand{marks, DesignationKind::Mine});
-    }
-    sim.submit(DesignateCommand{marks, DesignationKind::CutPlant});
-    sim.submit(DesignateCommand{marks, DesignationKind::HarvestPlant});
-
-    // 300 tame, grown animals on a grid in a patch of open ground, fed every game hour.
-    CellPos pen;
-    const int side = 20;  // 20 by 20 cells, one animal to every cell and a bit
-    if (!perfFindSite(sim, landing, side, side, taken, pen)) {
-        std::fprintf(stderr, "perf: no room for the animals near the landing site\n");
-        return 2;
-    }
-    static const char* const kKinds[] = {"Chicken", "Chicken", "Cow", "Muffalo", "Alpaca"};
-    int penned = 0;
-    for (int i = 0; i < kTameAnimals; ++i) {
-        const CellPos cell{pen.x + i % side, pen.y + i / side, 0};
-        const Entity e = sim.things().spawn(kKinds[i % 5], cell);
-        if (e == kNoEntity) {
-            continue;
-        }
-        Animal& a = sim.things().registry().get<Animal>(e);
-        a.wild = false;
-        a.bornAt = -400 * kSecondsPerDay;
-        sim.things().registry().emplace_or_replace<Faction>(e, Faction{kPlayerFaction});
-        AnimalCare* care = sim.husbandry().careFor(e);
-        care->hasHome = true;
-        care->home = cell;
-        care->tamedAt = 0;
-        ++penned;
-    }
-
-    int colonists = 0;
-    int wild = 0;
-    for (const auto [pawn, colonist] : sim.things().registry().view<const Colonist>().each()) {
-        (void)pawn;
-        (void)colonist;
-        ++colonists;
-    }
-    for (const auto [pawn, animal] : sim.things().registry().view<const Animal>().each()) {
-        (void)pawn;
-        wild += animal.wild ? 1 : 0;
-    }
+    const int colonists = counts.colonists;
+    const int penned = counts.tameAnimals;
+    const int wild = counts.wildAnimals;
 
     StepProfile profile;
     sim.setProfile(&profile);
@@ -179,12 +50,7 @@ int run(uint64_t seed, int mapSize, double days, double budgetMs, std::shared_pt
     const auto run0 = Clock::now();
     for (int64_t i = 0; i < steps; ++i) {
         if (sim.time().seconds % kSecondsPerHour == 0) {
-            std::vector<Entity> animals(sim.things().registry().view<const Animal>().begin(), sim.things().registry().view<const Animal>().end());
-            for (const Entity e : animals) {
-                if (!sim.things().registry().get<Animal>(e).wild) {
-                    sim.animals().addFood(e, 50.0f);
-                }
-            }
+            feedPerfColonyAnimals(sim);
         }
         const std::vector<double> lapsBefore = profile.ms;
         const auto before = Clock::now();

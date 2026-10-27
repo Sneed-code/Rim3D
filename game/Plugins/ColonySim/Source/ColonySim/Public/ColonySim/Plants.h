@@ -64,7 +64,11 @@ public:
     // One game hour has passed, and it began at `hourOfDay` (0..23): every plant gets an hour
     // older, plants past their lifespan die, and in the growing hours the rest grow by
     // 1 / (growDays x 24) of full growth times their fertility rate.
-    void growHour(int hourOfDay);
+    void growHour(int hourOfDay) { growHourSlice(hourOfDay, 0, 1); }
+    // growHour for one of `slices` equal runs of the cells, in order (`slice` 0 to slices - 1). The sim does a
+    // sixtieth of the map in each second of the next hour's first minute, so no one step walks the whole map
+    // (task G3: on 1 km that was a 14 ms step, docs/design/sim-cost.md).
+    void growHourSlice(int hourOfDay, int slice, int slices);
     // Whether plants grow in the hour that begins at `hourOfDay` (0..23), and the data's growth multiplier.
     bool growsAtHour(int hourOfDay) const { return hourOfDay >= growStartHour_ && hourOfDay < growEndHour_; }
     double growthTuning() const { return growthTuning_; }
