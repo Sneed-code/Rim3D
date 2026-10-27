@@ -367,6 +367,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     trade_->setEventLog(&events_);
     trade_->setTalents(talents_.get());
     trade_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
+    prisoners_->setTrade(trade_.get());
     jobs_->setPrisoners(prisoners_.get());
     quests_ = std::make_unique<QuestSystem>(*things_, map_, *raids_, *fighters_, *health_, *defs_, time_, rng_);
     quests_->setEventLog(&events_);
@@ -420,6 +421,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     fire_->setRunning([this](Entity building) { return power_->running(building); });
     defense_->setOnLearn([this](Entity pawn) { fighters_->replan(pawn); });
     fighters_->setDefense(defense_.get());
+    jobs_->setDefense(defense_.get());
     fieldCare_ = std::make_unique<FieldCare>(*things_, map_, *health_, *jobs_, *fighters_, *raids_, *defs_, time_);
     jobs_->setFieldCare(fieldCare_.get());
     narrator_ = std::make_unique<NarratorSystem>(*raids_, *defs_, time_, settings.seed);
@@ -1284,10 +1286,13 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         options.skillMax = billOptions->skillMax;
         options.radius = billOptions->radius;
         options.storeZone = billOptions->storeZone;
+        options.countZone = billOptions->countZone;
         options.unpauseAt = billOptions->unpauseAt;
         options.disallowed = billOptions->disallowed;
         if (billOptions->storeZone != 0 && zones_->find(billOptions->storeZone) == nullptr) {
             commandFailed(id, "there is no stockpile " + std::to_string(billOptions->storeZone));
+        } else if (billOptions->countZone != 0 && zones_->find(billOptions->countZone) == nullptr) {
+            commandFailed(id, "there is no stockpile " + std::to_string(billOptions->countZone));
         } else if (!jobs_->bills().setOptions(billOptions->building, billOptions->bill, options, error)) {
             commandFailed(id, error);
         }
@@ -1404,6 +1409,12 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
         if (changed == 0) {
             commandFailed(id, why.empty() ? std::string("no upper floor changed there") : why);
+        }
+    } else if (const auto* thermostat = std::get_if<SetThermostatCommand>(&command)) {
+        if (thermostat->clear) {
+            temperature_->clearThermostat(thermostat->building);
+        } else if (!temperature_->setThermostat(thermostat->building, thermostat->celsius, &error)) {
+            commandFailed(id, error);
         }
     } else if (const auto* refuel = std::get_if<SetRefuelCommand>(&command)) {
         if (!jobs_->fuel().setRefuel(refuel->building, refuel->autoRefuel, refuel->fillNow, error)) {
@@ -1795,7 +1806,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.firstBill = static_cast<uint32_t>(out.bills.size());
             for (const Bill& bill : list->bills) {
                 out.bills.push_back(BillView{bill.id, bill.recipe, bill.mode, bill.count, bill.suspended, bill.skillMin, bill.skillMax,
-                                             bill.radius, bill.storeZone, bill.unpauseAt, bill.satisfied, bill.disallowed});
+                                             bill.radius, bill.storeZone, bill.countZone, bill.unpauseAt, bill.satisfied, bill.disallowed});
             }
             view.billCount = static_cast<uint32_t>(out.bills.size()) - view.firstBill;
         }
@@ -2428,6 +2439,7 @@ uint64_t Sim::stateHash() const {
                 h.add(bill.skillMax);
                 h.add(bill.radius);
                 h.add(bill.storeZone);
+                h.add(bill.countZone);
                 h.add(bill.unpauseAt);
                 h.add(bill.satisfied);
                 for (const DefId def : bill.disallowed) {

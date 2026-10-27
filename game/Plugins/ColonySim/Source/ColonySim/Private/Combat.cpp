@@ -2151,6 +2151,19 @@ bool CombatSystem::unequip(Entity pawn, Entity item) {
     return true;
 }
 
+void CombatSystem::strikePawn(Entity pawn, DefId damageType, float amount, float penetration, Rng& rng) {
+    const int part = pickOutsidePart(pawn, rng);
+    if (part < 0) {
+        health_.applyDamage(pawn, damageType, amount, -1, rng);
+        return;
+    }
+    const PawnHitResult hit = armorPass(pawn, part, damageType, amount, penetration, rng);
+    if (!hit.deflected && hit.amount > 0.0f) {
+        health_.applyHit(pawn, hit.damageType, hit.amount, part);
+    }
+    wearApparel(pawn, hit);
+}
+
 void CombatSystem::wearApparel(Entity pawn, const PawnHitResult& result) {
     for (const auto& [item, points] : result.wear) {
         damageApparel(pawn, item, points);

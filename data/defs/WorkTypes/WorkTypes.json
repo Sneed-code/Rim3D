@@ -41,7 +41,7 @@
   {
     "defName": "Construction", "parent": "WorkTypeBase", "label": "construct", "naturalPriority": 800,
     "relevantSkills": ["Construction"], "workTags": ["ManualSkilled", "Constructing"], "inPrototype": true,
-    "tasks": ["Repair", "BuildRoofs", "RemoveRoofs", "ConstructFinishFrames", "ConstructDeliverResources", "Deconstruct"]
+    "tasks": ["Repair", "BuildRoofs", "RemoveRoofs", "ConstructFinishFrames", "ConstructDeliverResources", "Deconstruct", "RearmTraps"]
   },
   {
     "defName": "Growing", "parent": "WorkTypeBase", "label": "grow", "naturalPriority": 700,

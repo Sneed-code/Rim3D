@@ -413,6 +413,10 @@ public:
     // the caller does (HealthSystem::applyHit), so bullets and melee strikes land the same way (F8).
     PawnHitResult hitPawn(Entity pawn, int hitboxPart, DefId damageType, float amount, float penetration,
                           uint64_t seed) const;
+    // One blow that comes from no gun or hand (a spike trap's stab): lands on an outside part picked
+    // by size, goes through the pawn's armor like a bullet (so armor wears) and hurts what is left.
+    // A pawn with no hitboxes takes it on a part health picks.
+    void strikePawn(Entity pawn, DefId damageType, float amount, float penetration, Rng& rng);
     // Damage of a kind with no aim behind it (flames): a random outside part, through the armor that
     // covers it (heat armor for Burn), worn pieces losing hit points. False if the pawn can't be hurt.
     bool hurtPawn(Entity pawn, DefId damageType, float amount, Rng& rng);

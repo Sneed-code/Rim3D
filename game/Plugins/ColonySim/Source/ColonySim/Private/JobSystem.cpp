@@ -82,6 +82,7 @@ enum class JobStepKind : uint8_t {
     HuntWork,       // walk up to the job's animal and shoot it dead (HuntJobs.cpp)
     DropCorpse,     // put the carried corpse down in the job's cell
     ButcherWork,    // cut the corpse up at the butcher table
+    RearmWork,      // set the job's sprung trap again (DefenseJobs.cpp)
     ButcherFinish,  // the meat and leather appear and the corpse is gone
     OperateGoto,     // operations (SurgeryJobs.cpp)
     OperatePickUp,
@@ -130,6 +131,7 @@ constexpr JobStepKind kJobsHandleFoodSteps[] = {JobStepKind::GotoThing, JobStepK
                                                 JobStepKind::HandleWork};
 constexpr JobStepKind kJobsHandleSteps[] = {JobStepKind::ApproachAnimal, JobStepKind::HandleWork};
 constexpr JobStepKind kJobsExtinguishSteps[] = {JobStepKind::GotoTouch, JobStepKind::ExtinguishWork};
+constexpr JobStepKind kJobsRearmSteps[] = {JobStepKind::GotoTouch, JobStepKind::RearmWork};
 constexpr JobStepKind kJobsFeedPrisonerSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::ApproachPrisoner,
                                                   JobStepKind::FeedWork};
 constexpr JobStepKind kJobsChatSteps[] = {JobStepKind::ApproachPrisoner, JobStepKind::ChatWork};
@@ -208,6 +210,7 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::Hunt: return {kJobsHuntSteps, static_cast<int>(std::size(kJobsHuntSteps))};
         case JobType::HaulCorpse: return {kJobsHaulCorpseSteps, static_cast<int>(std::size(kJobsHaulCorpseSteps))};
         case JobType::Butcher: return {kJobsButcherSteps, static_cast<int>(std::size(kJobsButcherSteps))};
+        case JobType::RearmTrap: return {kJobsRearmSteps, static_cast<int>(std::size(kJobsRearmSteps))};
         case JobType::Party: return {kJobsPartySteps, static_cast<int>(std::size(kJobsPartySteps))};
         case JobType::SeekShelter: return {kJobsShelterSteps, static_cast<int>(std::size(kJobsShelterSteps))};
         case JobType::Operate: return {kJobsOperateSteps, static_cast<int>(std::size(kJobsOperateSteps))};
@@ -237,6 +240,7 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::RefuelWork:
         case JobStepKind::GearWork:
         case JobStepKind::ButcherWork:
+        case JobStepKind::RearmWork:
         case JobStepKind::PartyWork:
         case JobStepKind::OperateWork:
         case JobStepKind::Eat:
@@ -313,6 +317,7 @@ const char* jobTypeName(JobType type) {
         case JobType::Hunt: return "Hunt";
         case JobType::HaulCorpse: return "HaulCorpse";
         case JobType::Butcher: return "Butcher";
+        case JobType::RearmTrap: return "RearmTrap";
         case JobType::Party: return "Party";
         case JobType::SeekShelter: return "SeekShelter";
         case JobType::Operate: return "Operate";
@@ -346,6 +351,7 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
       bills_(std::make_unique<BillSystem>(things, defs)),
       fuel_(std::make_unique<FuelSystem>(things, defs, events)),
       givers_(makeWorkGivers()) {
+    bills_->setZones(&zones_);
     for (const DefId id : defs_.idsOfKind("WorkTypes")) {
         const Def& def = defs_.get(id);
         WorkType type;
@@ -636,6 +642,9 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
             out[0] = keyOf(JobTarget{job.site, CellPos{}});
             out[1] = keyOf(JobTarget{job.thing, CellPos{}});
             return 2;
+        case JobType::RearmTrap:
+            out[0] = keyOf(JobTarget{job.thing, CellPos{}});
+            return 1;
         case JobType::None:
         case JobType::Wait:
         case JobType::Party:  // a party spot is open ground, not reserved
@@ -1164,6 +1173,9 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::Butcher) {
         return failCheckButcher(pawn, job, why);
     }
+    if (job.type == JobType::RearmTrap) {
+        return failCheckRearm(pawn, job, why);
+    }
     if (job.type == JobType::Party) {
         return failCheckParty(pawn, job, why);
     }
@@ -1331,6 +1343,8 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return handleWork(pawn, job, why);
         case JobStepKind::ExtinguishWork:
             return extinguishWork(pawn, job, why);
+        case JobStepKind::RearmWork:
+            return rearmWork(pawn, job, why);
         case JobStepKind::ApproachPrisoner:
             return approachPrisoner(pawn, job, why);
         case JobStepKind::FeedWork:
