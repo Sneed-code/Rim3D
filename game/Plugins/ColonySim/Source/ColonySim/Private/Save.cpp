@@ -2026,7 +2026,9 @@ void saveProjectilePart(Ar& ar, SaveProjectile& sp) {
     ar.value("age", sp.p.age);
     ar.group("startCell", [&] { saveCell(ar, sp.p.startCell); });
     ar.value("seed", sp.p.seed);
-
+    if (ar.sectionVersion() >= 2) {
+        ar.value("damageFactor", sp.p.damageFactor);
+    }
 }
 
 template <typename Ar>
@@ -2838,7 +2840,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("mood", 1, [&] {
         saveParts(ar, "mood", e, &SaveEntity::mood, [&](Mood& m) { saveMoodPart(ar, m); });
     });
-    ar.section("combat", 1, [&] {
+    ar.section("combat", 2, [&] {
         saveParts(ar, "posture", e, &SaveEntity::posture, [&](Posture& p) { savePosturePart(ar, p); });
         saveParts(ar, "gear", e, &SaveEntity::gear, [&](Gear& g) { saveGearPart(ar, g); });
         saveParts(ar, "equippedBy", e, &SaveEntity::equippedBy, [&](EquippedBy& b) { saveEquippedByPart(ar, b); });

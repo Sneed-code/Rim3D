@@ -288,6 +288,12 @@ public:
     // Ends the pawn's job, if it has one, as interrupted for `why`: reservations let go, what it
     // carried put down. Used when the player takes the pawn over (ControlPawnCommand).
     void interrupt(Entity pawn, const std::string& why);
+    // A party (PartyJobs.cpp, docs/design/social.md): the pawn drops what it is doing, walks to `cell` and stays
+    // there until game second `until`, gaining `joyPerHour` of its recreation need. Refused for a pawn that is
+    // not a free colonist (player-controlled, lying down, no way to the cell).
+    // Whether `cell` is a place the pawn could stand at a party.
+    bool partyCellOk(Entity pawn, CellPos cell) const;
+    bool startParty(Entity pawn, CellPos cell, int64_t until, float joyPerHour, std::string& error);
 
     // Skill learning (docs/design/skills.md). Every job that uses a skill calls `learnSkill` each
     // second it works; `skillsNewDay` is Sim's midnight (daily XP total starts over, high skills decay).
@@ -560,6 +566,8 @@ private:
     int recreationUsers(Entity building, Entity except) const;
     bool failCheckRecreate(Entity pawn, Job& job, std::string& why);
     StepResult play(Entity pawn, Job& job, std::string& why);
+    bool failCheckParty(Entity pawn, Job& job, std::string& why);
+    StepResult partyWork(Entity pawn, Job& job, std::string& why);
 
     // Research (ResearchJobs.cpp, docs/design/research.md). `site` is the bench, `cell` where the pawn sits.
     bool failCheckResearch(Entity pawn, Job& job, std::string& why);
