@@ -129,6 +129,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildLooksPhases();
 	}
+	else if (TestName == TEXT("faces"))
+	{
+		BuildFacesPhases();
+	}
 	else if (TestName == TEXT("world"))
 	{
 		BuildWorldPhases();
@@ -144,6 +148,14 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	else if (TestName == TEXT("panels"))
 	{
 		BuildPanelsPhases();
+	}
+	else if (TestName == TEXT("trade"))
+	{
+		BuildTradePhases();
+	}
+	else if (TestName == TEXT("quests"))
+	{
+		BuildQuestsPhases();
 	}
 	else if (TestName == TEXT("worldmap"))
 	{
@@ -184,6 +196,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	else if (TestName == TEXT("fire"))
 	{
 		BuildFirePhases();
+	}
+	else if (TestName == TEXT("perf"))
+	{
+		BuildPerfPhases();
 	}
 	else
 	{
@@ -1200,6 +1216,11 @@ void USmokeTestSubsystem::Tick(float DeltaTime)
 	}
 	if (PhaseTime < Phase.WarmupSeconds)
 	{
+		if (Phase.bScreenshotInWarmup && !bScreenshotTaken && PhaseTime >= Phase.WarmupSeconds - 0.5f)
+		{
+			bScreenshotTaken = true;
+			FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke") / TestName / (Phase.Name + TEXT(".png")), false, false);
+		}
 		return;
 	}
 	Samples.Add({DeltaTime * 1000.0f, static_cast<float>(FPlatformTime::ToMilliseconds(GGameThreadTime)),
@@ -1210,7 +1231,7 @@ void USmokeTestSubsystem::Tick(float DeltaTime)
 		bScreenshotTaken = true;
 		const FString Path = FPaths::ProjectSavedDir() / TEXT("Smoke") / TestName / (Phase.Name + TEXT(".png"));
 		// The sim tests show the on-screen sim timings and the overseer its ImGui panels, which count as UI.
-		FScreenshotRequest::RequestScreenshot(Path, TestName == TEXT("sim") || TestName == TEXT("overseer") || TestName == TEXT("saves") || TestName == TEXT("protagonist") || TestName == TEXT("orders") || TestName == TEXT("panels") || TestName == TEXT("worldmap") || TestName == TEXT("fights") || TestName == TEXT("handson") || TestName == TEXT("sky") || TestName == TEXT("melee") || TestName == TEXT("levels"), false);
+		FScreenshotRequest::RequestScreenshot(Path, TestName == TEXT("sim") || TestName == TEXT("overseer") || TestName == TEXT("saves") || TestName == TEXT("protagonist") || TestName == TEXT("orders") || TestName == TEXT("panels") || TestName == TEXT("trade") || TestName == TEXT("quests") || TestName == TEXT("worldmap") || TestName == TEXT("fights") || TestName == TEXT("handson") || TestName == TEXT("sky") || TestName == TEXT("melee") || TestName == TEXT("levels"), false);
 	}
 	if (PhaseTime >= Phase.WarmupSeconds + Phase.MeasureSeconds)
 	{
@@ -1244,6 +1265,11 @@ void USmokeTestSubsystem::FinishPhase()
 	Result->SetNumberField(TEXT("medianGpuMs"), SmokePercentile(Gpu, 0.5));
 	Result->SetNumberField(TEXT("actors"), Spawned.Num());
 	Result->SetStringField(TEXT("screenshot"), TestName / (Phases[PhaseIndex].Name + TEXT(".png")));
+	for (const TPair<FString, double>& Number : PhaseNumbers)
+	{
+		Result->SetNumberField(Number.Key, Number.Value);
+	}
+	PhaseNumbers.Reset();
 	if (Frame.IsEmpty())
 	{
 		Fail(FString::Printf(TEXT("Phase %s produced no frames"), *Phases[PhaseIndex].Name));
