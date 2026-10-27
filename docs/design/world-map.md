@@ -40,6 +40,10 @@ Elevation (m, negative under water), yearly mean temperature (°C), rainfall (mm
 
 `simrun --seed 42 --world world.png --check` (CTest `simrun_world`, `simrun_world_seed7` at 180 by 90) prints the numbers and draws it: biome colours (darker for hills), rivers blue, roads brown to black, settlements red, the suggested start yellow. `--world-size WxH` sets the size.
 
+## The world screen (W3)
+
+`UWorldScreenSubsystem` (Unreal, ImGui, `WorldScreenSubsystem.cpp`) draws the world as a map: biome colours (darker for hills), open water by depth, rivers blue, roads brown to black, settlements red, the colony's tile a yellow ring. M, the \\World map (M)\\ button (bottom right, overseer view) or \\World.Screen 0|1\\ opens it; M, Esc or Close shuts it. A click picks a tile and the side panel lists its biome, hills, height, temperature, rainfall, river, road and settlement. \\Start colony here\\ restarts the sim with \\FSimStartOptions\\ world options (\\World\\, \\WorldSeed\\, size, \\WorldStartTile\\; command line \\-SimWorld -SimWorldSeed=N -SimWorldTile=N\\) on the shown world with the picked tile, with the running game's scenario (Crashlanded when it has none). Water, impassable mountains and settlements say why and have no button. With no world in the running sim, the screen shows a preview made from a seed (\\Make world\\ changes it). Smoke test \\worldmap\\ checks the drawing, the facts, the refusals and a colony started on the picked tile.
+
 ## Next
 
-Show the world on screen and pick the start tile there (Unreal, W3); the S8 map generator reading `Sim::site()` for hills, rivers, roads and terrain; tile-by-tile faction goodwill and events; caravans travelling the roads; other maps made when visited. Faction relations to tiles (who owns what) are static for now.
+The S8 map generator reading `Sim::site()` for hills, rivers, roads and terrain; tile-by-tile faction goodwill and events; caravans travelling the roads; other maps made when visited. Faction relations to tiles (who owns what) are static for now.

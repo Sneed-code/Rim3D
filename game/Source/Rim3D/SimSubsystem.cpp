@@ -93,6 +93,13 @@ namespace
 		FParse::Value(Line, TEXT("SimScenario="), Options.Scenario);
 		Options.WildAnimals = Options.bFlatMap ? 0 : 100;
 		FParse::Value(Line, TEXT("SimWildAnimals="), Options.WildAnimals);
+		Options.bWorld = FParse::Param(Line, TEXT("SimWorld"));
+		int64 WorldSeed = 0;
+		if (FParse::Value(Line, TEXT("SimWorldSeed="), WorldSeed))
+		{
+			Options.WorldSeed = static_cast<uint64>(WorldSeed);
+		}
+		FParse::Value(Line, TEXT("SimWorldTile="), Options.WorldStartTile);
 		return Options;
 	}
 
@@ -287,6 +294,11 @@ bool USimSubsystem::StartSim(const FSimStartOptions& Options)
 	Settings.flatMap = Options.bFlatMap;
 	Settings.scenario = SimBridgeUtf8(Options.Scenario);
 	Settings.wildAnimals = Options.WildAnimals;
+	Settings.world.enabled = Options.bWorld;
+	Settings.world.seed = Options.WorldSeed;
+	Settings.world.width = Options.WorldWidth;
+	Settings.world.height = Options.WorldHeight;
+	Settings.world.startTile = Options.WorldStartTile;
 	Sim = Defs ? std::make_unique<colony::Sim>(Settings, Defs) : std::make_unique<colony::Sim>(Settings);
 	for (const std::string& Problem : Sim->setupErrors())
 	{
@@ -631,6 +643,11 @@ bool USimSubsystem::LoadGame(const FString& Slot)
 	StartOptions.Pawns = Settings.pawns;
 	StartOptions.Items = Settings.items;
 	StartOptions.bFlatMap = Settings.flatMap;
+	StartOptions.bWorld = Settings.world.enabled;
+	StartOptions.WorldSeed = Settings.world.seed;
+	StartOptions.WorldWidth = Settings.world.width;
+	StartOptions.WorldHeight = Settings.world.height;
+	StartOptions.WorldStartTile = Settings.world.startTile;
 	ResetAfterSimChange();
 	UE_LOG(LogColonySim, Display, TEXT("Loaded %s: day %lld, %d things"), *Path, static_cast<long long>(Sim->time().day() + 1), static_cast<int32>(Current.things.size()));
 	SimBridgeScreenMessage(11, 3.0f, FColor::Green, FString::Printf(TEXT("Loaded: %s"), *Clean));
