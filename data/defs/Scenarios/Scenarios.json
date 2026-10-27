@@ -27,5 +27,25 @@
     ],
     "gearLater": ["MeleeWeapon_Knife (plasteel) when melee comes", "the helmet is plasteel in RimWorld; steel until materials exist"],
     "ours": ["colonists", "protagonist", "colonistApparel"]
+  },
+  {
+    "defName": "PerfColony", "source": "ours", "label": "performance test colony",
+    "colonists": 29, "protagonist": true, "colonistKind": "Human", "lineage": "Baseline", "biome": "TemperateForest",
+    "colonistApparel": [
+      { "thing": "Apparel_TShirt", "stuff": "Cloth" },
+      { "thing": "Apparel_Pants", "stuff": "Cloth" }
+    ],
+    "startingThings": [
+      { "thing": "MealSurvivalPack", "count": 200 },
+      { "thing": "MedicineIndustrial", "count": 30 }
+    ],
+    "nearbyThings": [
+      { "thing": "Steel", "count": 900 },
+      { "thing": "WoodLog", "count": 600 }
+    ],
+    "scatteredThings": [
+      { "thing": "Steel", "count": 720 }
+    ],
+    "ours": ["colonists", "protagonist", "colonistApparel"]
   }
 ]

@@ -183,6 +183,21 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
                 j["kind"] = c.kind;
                 j["layers"] = c.layers;
+            } else if constexpr (std::is_same_v<Type, TakeDrugCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["thing"] = entt::to_integral(c.thing);
+            } else if constexpr (std::is_same_v<Type, SetDrugPolicyCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["policy"] = c.policy;
+            } else if constexpr (std::is_same_v<Type, SetDrugPolicyEntryCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["drug"] = c.drug;
+                j["forAddiction"] = c.forAddiction;
+                j["forJoy"] = c.forJoy;
+                j["scheduled"] = c.scheduled;
+                j["daysFrequency"] = c.daysFrequency;
+                j["moodBelow"] = c.moodBelow;
+                j["joyBelow"] = c.joyBelow;
             } else if constexpr (std::is_same_v<Type, SetRefuelCommand>) {
                 j["building"] = entt::to_integral(c.building);
                 j["autoRefuel"] = c.autoRefuel;
@@ -200,6 +215,17 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["building"] = entt::to_integral(c.building);
                 j["bill"] = c.bill;
                 j["index"] = c.index;
+            } else if constexpr (std::is_same_v<Type, ClimbCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["dx"] = static_cast<double>(c.dx);
+                j["dy"] = static_cast<double>(c.dy);
+            } else if constexpr (std::is_same_v<Type, AddOperationCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["recipe"] = c.recipe;
+                j["part"] = c.part;
+            } else if constexpr (std::is_same_v<Type, RemoveOperationCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["operation"] = c.operation;
             } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
                 j["thing"] = entt::to_integral(c.thing);
             } else if constexpr (std::is_same_v<Type, SetResearchCommand>) {
@@ -220,6 +246,10 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["penetration"] = static_cast<double>(c.penetration);
             } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
                 j["faction"] = c.faction;
+                j["points"] = static_cast<double>(c.points);
+                j["edge"] = c.edge;
+            } else if constexpr (std::is_same_v<Type, StartThreatCommand>) {
+                j["kind"] = c.kind;
                 j["points"] = static_cast<double>(c.points);
                 j["edge"] = c.edge;
             } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
@@ -353,11 +383,48 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["edge"] = c.edge;
                 j["strategy"] = c.strategy;
                 j["hour"] = static_cast<double>(c.hour);
-            } else {
-                static_assert(std::is_same_v<Type, ShipCommand>, "write every command type");
+            } else if constexpr (std::is_same_v<Type, StartVisitCommand>) {
+                j["faction"] = c.faction;
+                j["kind"] = c.kind;
+                j["traderKind"] = c.traderKind;
+                j["edge"] = c.edge;
+            } else if constexpr (std::is_same_v<Type, TradeCommand>) {
+                j["visit"] = c.visit;
+                j["negotiator"] = entt::to_integral(c.negotiator);
+                const auto lines = [](const std::vector<TradeLine>& list) {
+                    ReplayJson array = ReplayJson::array();
+                    for (const TradeLine& l : list) {
+                        ReplayJson line;
+                        line["thing"] = l.thing;
+                        line["count"] = l.count;
+                        array.push_back(std::move(line));
+                    }
+                    return array;
+                };
+                j["buy"] = lines(c.buy);
+                j["sell"] = lines(c.sell);
+            } else if constexpr (std::is_same_v<Type, AdjustGoodwillCommand>) {
+                j["faction"] = c.faction;
+                j["delta"] = c.delta;
+            } else if constexpr (std::is_same_v<Type, GiftCommand>) {
+                j["visit"] = c.visit;
+                ReplayJson array = ReplayJson::array();
+                for (const TradeLine& l : c.items) {
+                    ReplayJson line;
+                    line["thing"] = l.thing;
+                    line["count"] = l.count;
+                    array.push_back(std::move(line));
+                }
+                j["items"] = std::move(array);
+            } else if constexpr (std::is_same_v<Type, ShipCommand>) {
                 j["action"] = c.action;
                 j["thing"] = entt::to_integral(c.thing);
                 j["pawn"] = entt::to_integral(c.pawn);
+            } else {
+                static_assert(std::is_same_v<Type, QuestCommand>, "write every command type");
+                j["action"] = c.action;
+                j["quest"] = c.quest;
+                j["kind"] = c.kind;
             }
         },
         logged.command);
@@ -880,6 +947,51 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.building = static_cast<Entity>(building);
         out.command = c;
+    } else if (type == "TakeDrug") {
+        TakeDrugCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        uint32_t thing = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "thing", thing, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        c.thing = static_cast<Entity>(thing);
+        out.command = c;
+    } else if (type == "SetDrugPolicy") {
+        SetDrugPolicyCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "policy", c.policy, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = c;
+    } else if (type == "SetDrugPolicyEntry") {
+        SetDrugPolicyEntryCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "drug", c.drug, where) || !r.flag(j, "forAddiction", c.forAddiction, where) ||
+            !r.flag(j, "forJoy", c.forJoy, where) || !r.flag(j, "scheduled", c.scheduled, where) ||
+            !r.number(j, "daysFrequency", c.daysFrequency, where) || !r.number(j, "moodBelow", c.moodBelow, where) ||
+            !r.number(j, "joyBelow", c.joyBelow, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = c;
+    } else if (type == "AddOperation") {
+        AddOperationCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "recipe", c.recipe, where) || !r.integer(j, "part", c.part, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "RemoveOperation") {
+        RemoveOperationCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "operation", c.operation, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
     } else if (type == "SetRefuel") {
         SetRefuelCommand c;
         uint32_t building = entt::to_integral(kNoEntity);
@@ -1021,6 +1133,21 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.x = (*point)[0].get<float>();
         c.y = (*point)[1].get<float>();
+        out.command = c;
+    } else if (type == "Climb") {
+        ClimbCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        for (const auto& [key, field] : {std::pair<const char*, float*>{"dx", &c.dx}, std::pair<const char*, float*>{"dy", &c.dy}}) {
+            const auto it = j.find(key);
+            if (it == j.end() || !it->is_number()) {
+                return r.fail(where + "." + key + " must be a number");
+            }
+            *field = static_cast<float>(it->get<double>());
+        }
         out.command = c;
     } else if (type == "DodgeRoll") {
         DodgeRollCommand c;
@@ -1267,6 +1394,13 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = c;
+    } else if (type == "StartThreat") {
+        StartThreatCommand c;
+        if (!r.text(j, "kind", c.kind, where) || !r.number(j, "points", c.points, where) ||
+            !r.integer(j, "edge", c.edge, where)) {
+            return false;
+        }
+        out.command = c;
     } else if (type == "SoundAlarm") {
         SoundAlarmCommand c;
         if (!r.flag(j, "on", c.on, where)) {
@@ -1320,6 +1454,58 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.pawn = static_cast<Entity>(pawn);
         out.command = std::move(c);
+    } else if (type == "StartVisit") {
+        StartVisitCommand c;
+        if (!r.text(j, "faction", c.faction, where) || !r.text(j, "kind", c.kind, where) || !r.text(j, "traderKind", c.traderKind, where) ||
+            !r.integer(j, "edge", c.edge, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "Trade") {
+        TradeCommand c;
+        uint32_t negotiator = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "visit", c.visit, where) || !r.integer(j, "negotiator", negotiator, where)) {
+            return false;
+        }
+        c.negotiator = static_cast<Entity>(negotiator);
+        for (const char* key : {"buy", "sell"}) {
+            const auto list = j.find(key);
+            if (list == j.end() || !list->is_array()) {
+                return r.fail(where + "." + key + " must be a list of {thing, count}");
+            }
+            std::vector<TradeLine>& into = std::string(key) == "buy" ? c.buy : c.sell;
+            for (const ReplayJson& item : *list) {
+                TradeLine line;
+                if (!item.is_object() || !r.text(item, "thing", line.thing, where) || !r.integer(item, "count", line.count, where)) {
+                    return false;
+                }
+                into.push_back(std::move(line));
+            }
+        }
+        out.command = std::move(c);
+    } else if (type == "AdjustGoodwill") {
+        AdjustGoodwillCommand c;
+        if (!r.text(j, "faction", c.faction, where) || !r.number(j, "delta", c.delta, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "Gift") {
+        GiftCommand c;
+        if (!r.integer(j, "visit", c.visit, where)) {
+            return false;
+        }
+        const auto list = j.find("items");
+        if (list == j.end() || !list->is_array()) {
+            return r.fail(where + ".items must be a list of {thing, count}");
+        }
+        for (const ReplayJson& item : *list) {
+            TradeLine line;
+            if (!item.is_object() || !r.text(item, "thing", line.thing, where) || !r.integer(item, "count", line.count, where)) {
+                return false;
+            }
+            c.items.push_back(std::move(line));
+        }
+        out.command = std::move(c);
     } else if (type == "EndMentalBreak") {
         uint32_t pawn = entt::to_integral(kNoEntity);
         if (!r.integer(j, "pawn", pawn, where)) {
@@ -1343,6 +1529,12 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.thing = static_cast<Entity>(thing);
         c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "Quest") {
+        QuestCommand c;
+        if (!r.text(j, "action", c.action, where) || !r.integer(j, "quest", c.quest, where) || !r.text(j, "kind", c.kind, where)) {
+            return false;
+        }
         out.command = std::move(c);
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");
@@ -1382,6 +1574,14 @@ std::string writeReplay(const Replay& replay) {
     }
     if (s.wildAnimals != 0) {
         settings["wildAnimals"] = s.wildAnimals;
+    }
+    if (s.world.enabled) {
+        ReplayOrderedJson world = ReplayOrderedJson::object();
+        world["seed"] = s.world.seed;
+        world["width"] = s.world.width;
+        world["height"] = s.world.height;
+        world["startTile"] = s.world.startTile;
+        settings["world"] = world;
     }
 
     // One command and one checkpoint per line, so files diff and read well.
@@ -1456,6 +1656,21 @@ bool readReplay(const std::string& text, Replay& out, std::string& error) {
         s.pathBudget <= 0 || s.wildAnimals < 0) {
         return r.fail(
             "settings: mapSize must be 1 to 4096; pawns, items, checkpointEvery and wildAnimals not negative; pathBudget above 0");
+    }
+    // "world": {"seed", "width", "height", "startTile"} plays the game on a world (W2); absent, no world.
+    if (const auto world = settings->find("world"); world != settings->end()) {
+        if (!world->is_object()) {
+            return r.fail("settings.world must be an object");
+        }
+        const std::string at = "settings.world";
+        s.world.enabled = true;
+        if (!r.integer(*world, "seed", s.world.seed, at) || !r.integer(*world, "width", s.world.width, at) ||
+            !r.integer(*world, "height", s.world.height, at) || !r.integer(*world, "startTile", s.world.startTile, at)) {
+            return false;
+        }
+        if (!worldSettingsValid(s.world)) {
+            return r.fail("settings.world: width 0 to 1000, height 0 to 500, startTile -1 or a tile of the world");
+        }
     }
 
     if (const auto commands = root.find("commands"); commands != root.end()) {

@@ -1,0 +1,4 @@
+[
+  {"defName": "Proj_GrenadeMolotov", "parent": "GrenadeBase", "label": "molotov cocktail", "thrown": {"speed": 0.4, "fuse": 50}, "explosion": {"damageDef": "Burn", "damage": 10, "armorPenetration": 0.0, "radius": 1.1}, "visual": {"parts": [{"shape": "sphere", "radius": 0.035, "height": 0.07, "color": [0.4, 0.3, 0.2]}]}, "unverified": ["thrown.fuse"], "ours": ["thrown"]},
+  {"defName": "Proj_GrenadeEMP", "parent": "GrenadeBase", "label": "EMP grenade", "thrown": {"speed": 0.4, "fuse": 50}, "explosion": {"damageDef": "Bomb", "damage": 0, "armorPenetration": 0.0, "radius": 3.5}, "visual": {"parts": [{"shape": "sphere", "radius": 0.035, "height": 0.07, "color": [0.4, 0.3, 0.2]}]}, "unverified": ["thrown.fuse"], "ours": ["thrown"]}
+]

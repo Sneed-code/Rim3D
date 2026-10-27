@@ -15,6 +15,7 @@
 #include <imgui.h>
 
 #include "BuildingSubsystem.h"
+#include "LevelsSubsystem.h"
 #include "OverseerPawn.h"
 #include "OverseerSubsystem.h"
 #include "ProtagonistSubsystem.h"
@@ -26,6 +27,7 @@
 #include "ColonySim/Map.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/UpperFloors.h"
 
 #include <string>
 #include <vector>
@@ -75,29 +77,29 @@ namespace
 	{
 		const int32 MinX = FMath::Min(A.x, B.x);
 		const int32 MinY = FMath::Min(A.y, B.y);
-		return colony::CellRect{MinX, MinY, FMath::Abs(A.x - B.x) + 1, FMath::Abs(A.y - B.y) + 1, 0};
+		return colony::CellRect{MinX, MinY, FMath::Abs(A.x - B.x) + 1, FMath::Abs(A.y - B.y) + 1, A.level};
 	}
 
 	/** The cells a building, plan or frame covers, from its snapshot entry. */
 	colony::CellRect OrdThingRect(const colony::ThingView& View)
 	{
 		return colony::CellRect{FMath::RoundToInt32(View.x - static_cast<float>(View.sizeX) * 0.5f), FMath::RoundToInt32(View.y - static_cast<float>(View.sizeY) * 0.5f),
-			FMath::Max(1, View.sizeX), FMath::Max(1, View.sizeY), 0};
+			FMath::Max(1, View.sizeX), FMath::Max(1, View.sizeY), View.level};
 	}
 
 	bool OrdOverlap(const colony::CellRect& A, const colony::CellRect& B)
 	{
-		return A.minX < B.minX + B.sizeX && B.minX < A.minX + A.sizeX && A.minY < B.minY + B.sizeY && B.minY < A.minY + A.sizeY;
+		return A.level == B.level && A.minX < B.minX + B.sizeX && B.minX < A.minX + A.sizeX && A.minY < B.minY + B.sizeY && B.minY < A.minY + A.sizeY;
 	}
 
-	/** A corner of a cell on the surface that is drawn (the rock block included), lifted a little so lines don't sink into the ground. */
-	FVector OrdCorner(const USimSubsystem& Bridge, int32 X, int32 Y)
+	/** A corner of a cell on the surface that is drawn (the rock block included; an upper level's floor height), lifted a little so lines don't sink into the ground. */
+	FVector OrdCorner(const USimSubsystem& Bridge, int32 X, int32 Y, int32 Level)
 	{
 		const colony::Map& Map = Bridge.GetSim()->map();
 		FVector Point = Bridge.SimToWorld(FMath::Clamp(static_cast<float>(X), 0.0f, static_cast<float>(Map.width()) - 0.01f),
-			FMath::Clamp(static_cast<float>(Y), 0.0f, static_cast<float>(Map.height()) - 0.01f), 0);
+			FMath::Clamp(static_cast<float>(Y), 0.0f, static_cast<float>(Map.height()) - 0.01f), Level);
 		double Bonus = 0.0;
-		for (int32 DY = -1; DY <= 0; ++DY)
+		for (int32 DY = -1; DY <= 0 && Level == 0; ++DY)
 		{
 			for (int32 DX = -1; DX <= 0; ++DX)
 			{
@@ -127,7 +129,7 @@ namespace
 	{
 		const auto Segment = [&](int32 X0, int32 Y0, int32 X1, int32 Y1)
 		{
-			DrawDebugLine(World, OrdCorner(Bridge, X0, Y0), OrdCorner(Bridge, X1, Y1), Color, false, -1.0f, SDPG_Foreground, Thickness);
+			DrawDebugLine(World, OrdCorner(Bridge, X0, Y0, Rect.level), OrdCorner(Bridge, X1, Y1, Rect.level), Color, false, -1.0f, SDPG_Foreground, Thickness);
 		};
 		for (int32 X = Rect.minX; X < Rect.minX + Rect.sizeX; ++X)
 		{
@@ -541,7 +543,8 @@ FSimPick UOrdersSubsystem::PickGroundAt(const FVector2D& Screen) const
 	{
 		return FSimPick();
 	}
-	return SimPicking::PickGroundFromRay(*Bridge, Origin, Direction);
+	// On the level the overseer looks at (docs/design/levels-draw.md).
+	return SimPicking::PickGroundFromRay(*Bridge, Origin, Direction, ULevelsSubsystem::TopShownLevel(World));
 }
 
 bool UOrdersSubsystem::HandleLeftPressed(const FVector2D& Screen)
@@ -598,7 +601,8 @@ bool UOrdersSubsystem::HandleRightClick(const FVector2D& Screen)
 		return false;
 	}
 	const FVector Local = (Pick.Location - Bridge->GetWorldOrigin()) / 100.0;
-	const colony::CellPos Cell{FMath::FloorToInt32(Local.X), FMath::FloorToInt32(Local.Y), 0};
+	const int32 Level = Pick.Kind == ESimPickKind::Cell ? Pick.Cell.level : 0;
+	const colony::CellPos Cell{FMath::FloorToInt32(Local.X), FMath::FloorToInt32(Local.Y), Level};
 	return OrderMoveSelected(Cell);
 }
 
@@ -657,13 +661,13 @@ void UOrdersSubsystem::GetBuildOrigins(TArray<colony::CellPos>& Out) const
 		const int32 Step = (bAlongX ? DX : DY) < 0 ? -1 : 1;
 		for (int32 Index = 0; Index < Length; ++Index)
 		{
-			Out.Add(bAlongX ? colony::CellPos{From.x + Index * Step, From.y, 0} : colony::CellPos{From.x, From.y + Index * Step, 0});
+			Out.Add(bAlongX ? colony::CellPos{From.x + Index * Step, From.y, From.level} : colony::CellPos{From.x, From.y + Index * Step, From.level});
 		}
 	}
 	else
 	{
 		// The footprint is centred on the cursor's cell.
-		Out.Add(colony::CellPos{Hover.x - (Foot.sizeX - 1) / 2, Hover.y - (Foot.sizeY - 1) / 2, 0});
+		Out.Add(colony::CellPos{Hover.x - (Foot.sizeX - 1) / 2, Hover.y - (Foot.sizeY - 1) / 2, Hover.level});
 	}
 }
 
@@ -678,13 +682,23 @@ bool UOrdersSubsystem::CanPlace(colony::DefId Def, colony::CellPos Origin, colon
 	const colony::Def& Data = Sim.defs().get(Def);
 	const colony::CellRect Rect = colony::footprintRect(Origin, FMath::Max(1, FMath::RoundToInt32(static_cast<float>(Data.numberAt("size", 0, 1.0)))),
 		FMath::Max(1, FMath::RoundToInt32(static_cast<float>(Data.numberAt("size", 1, 1.0)))), Rot);
+	// An upper floor goes over open air where it would be held up; stairs and ladders need a level above them (docs/design/levels.md).
+	const bool bUpperFloor = Data.flag("building.upperFloor", false);
+	if (Data.has("building.climb") && Origin.level + 1 >= colony::Map::kLevels)
+	{
+		return false;
+	}
 	for (int32 Y = Rect.minY; Y < Rect.minY + Rect.sizeY; ++Y)
 	{
 		for (int32 X = Rect.minX; X < Rect.minX + Rect.sizeX; ++X)
 		{
-			const colony::CellPos Cell{X, Y, 0};
-			if (!Sim.map().inBounds(Cell) || !Sim.map().walkable(Cell) || Sim.map().buildingAt(Cell) != colony::kNoEntity ||
-				Sim.construction().siteAt(Cell) != colony::kNoEntity)
+			const colony::CellPos Cell{X, Y, Origin.level};
+			if (!Sim.map().inBounds(Cell) || Sim.construction().siteAt(Cell) != colony::kNoEntity)
+			{
+				return false;
+			}
+			if (bUpperFloor ? !Sim.upperFloors().whyNotLay(Cell).empty()
+							: (!Sim.map().walkable(Cell) || Sim.map().buildingAt(Cell) != colony::kNoEntity))
 			{
 				return false;
 			}
@@ -1222,7 +1236,7 @@ void UOrdersSubsystem::UpdatePreview(USimSubsystem& Bridge)
 			}
 			const bool bValid = CanPlace(BuildDef, Origin, BuildRot);
 			(bValid ? Good : Bad).Add(Placed);
-			Signature = OrdMix(Signature, OrdCellKey(Origin.x, Origin.y) + (bValid ? 1 : 0));
+			Signature = OrdMix(Signature, OrdCellKey(Origin.x, Origin.y) + (bValid ? 1 : 0) + (static_cast<uint64>(Origin.level) << 8));
 		}
 	}
 	if (Signature == PreviewSignature)
