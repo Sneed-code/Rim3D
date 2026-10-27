@@ -3,6 +3,7 @@
 #include "ColonySim/Animals.h"
 #include "ColonySim/Breeding.h"
 #include "ColonySim/Apparel.h"
+#include "ColonySim/Drugs.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
@@ -39,6 +40,7 @@
 #include "ColonySim/Ship.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Talents.h"
+#include "ColonySim/Trade.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Genes.h"
 #include "ColonySim/Looks.h"
@@ -200,6 +202,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     construction_ = std::make_unique<Construction>(map_, *things_, *plants_, *defs_, rng_, events_);
     needs_ = std::make_unique<NeedsSystem>(*things_, *health_, *defs_);
     mood_ = std::make_unique<MoodSystem>(*things_, *needs_, *defs_);
+    drugs_ = std::make_unique<DrugSystem>(*things_, *health_, *defs_);
+    drugs_->setEventLog(&events_);
+    drugs_->registerThoughts(*mood_);
+    needs_->setRestFallFactor([this](Entity pawn) { return drugs_->restFallFactor(pawn); });
     apparel_ = std::make_unique<ApparelSystem>(*things_, *combat_, *health_, *defs_);
     apparel_->registerSituations(*mood_);
     health_->registerSituations(*mood_);
@@ -272,6 +278,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setRooms(rooms_.get());
     jobs_->setResearch(research_.get());
     jobs_->setMedicine(medicine_.get());
+    jobs_->setDrugs(drugs_.get());
     jobs_->setSurgery(surgery_.get());
     jobs_->setRoomStats(roomStats_.get());
     jobs_->setTalents(talents_.get());
@@ -328,6 +335,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     monsters_ = std::make_unique<MonsterSystem>(*things_, map_, *combat_, *health_, *fighters_, *raids_, *animals_, *defs_, time_, rng_);
     prisoners_ = std::make_unique<PrisonerSystem>(*things_, map_, *combat_, *health_, *jobs_, *fighters_, *raids_, *defs_, time_, rng_);
     prisoners_->setEventLog(&events_);
+    trade_ = std::make_unique<TradeSystem>(*things_, map_, *combat_, *fighters_, *health_, *jobs_, *raids_, *defs_, time_, rng_, settings.seed);
+    trade_->setEventLog(&events_);
+    trade_->setTalents(talents_.get());
+    trade_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
     jobs_->setPrisoners(prisoners_.get());
     quests_ = std::make_unique<QuestSystem>(*things_, map_, *raids_, *fighters_, *health_, *defs_, time_, rng_);
     quests_->setEventLog(&events_);
@@ -355,6 +366,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     combat_->setBeforeDestroy([this](Entity thing) {
         jobs_->forget(thing);
         raids_->forget(thing);
+        trade_->forget(thing);
         defense_->onDestroy(thing);
         fire_->onDestroy(thing);
         mentalBreaks_->forget(thing);
@@ -382,6 +394,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     fighters_->setDefense(defense_.get());
     narrator_ = std::make_unique<NarratorSystem>(*raids_, *defs_, time_, settings.seed);
     narrator_->setEventLog(&events_);
+    narrator_->setHostileCheck([this](const std::string& faction) { return trade_->hostile(faction); });
     disasters_ = std::make_unique<DisasterSystem>(*narrator_, *power_, *weather_, *plants_, *farming_, *things_, *health_, *mood_,
                                                   *animals_, *fire_, *combat_, map_, *defs_, time_, settings.seed);
     disasters_->setEventLog(&events_);
@@ -776,6 +789,30 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!prisonerModeFromName(prisonerMode->mode, mode)) {
             commandFailed(id, "no prisoner mode '" + prisonerMode->mode + "' (NoInteraction, ReduceResistance, AttemptRecruit, Release or Execute)");
         } else if (!prisoners_->setMode(prisonerMode->pawn, mode, why)) {
+            commandFailed(id, why);
+        }
+    } else if (const auto* visitCommand = std::get_if<StartVisitCommand>(&command)) {
+        VisitKind kind = VisitKind::Visitors;
+        std::string why;
+        uint32_t visitId = 0;
+        if (!visitKindFromName(visitCommand->kind, kind)) {
+            commandFailed(id, "no visit kind '" + visitCommand->kind + "' (Visitors, Caravan or Orbital)");
+        } else if (!trade_->startVisit(visitCommand->faction, kind, visitCommand->traderKind, visitCommand->edge, visitId, why)) {
+            commandFailed(id, why);
+        }
+    } else if (const auto* tradeCommand = std::get_if<TradeCommand>(&command)) {
+        std::string why;
+        if (!trade_->trade(tradeCommand->visit, tradeCommand->negotiator, tradeCommand->buy, tradeCommand->sell, why)) {
+            commandFailed(id, why);
+        }
+    } else if (const auto* giftCommand = std::get_if<GiftCommand>(&command)) {
+        std::string why;
+        if (!trade_->gift(giftCommand->visit, giftCommand->items, why)) {
+            commandFailed(id, why);
+        }
+    } else if (const auto* goodwillCommand = std::get_if<AdjustGoodwillCommand>(&command)) {
+        std::string why;
+        if (!trade_->adjustGoodwill(goodwillCommand->faction, goodwillCommand->delta, why)) {
             commandFailed(id, why);
         }
     } else if (const auto* prisonBed = std::get_if<SetPrisonBedCommand>(&command)) {
@@ -1251,6 +1288,26 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!jobs_->fuel().setRefuel(refuel->building, refuel->autoRefuel, refuel->fillNow, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* takeDrug = std::get_if<TakeDrugCommand>(&command)) {
+        if (!jobs_->orderTakeDrug(takeDrug->pawn, takeDrug->thing, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* drugPolicy = std::get_if<SetDrugPolicyCommand>(&command)) {
+        if (!drugs_->setPolicy(drugPolicy->pawn, drugPolicy->policy, error)) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* drugEntry = std::get_if<SetDrugPolicyEntryCommand>(&command)) {
+        DrugPolicyEntry entry;
+        entry.drug = drugEntry->drug;
+        entry.forAddiction = drugEntry->forAddiction;
+        entry.forJoy = drugEntry->forJoy;
+        entry.scheduled = drugEntry->scheduled;
+        entry.daysFrequency = drugEntry->daysFrequency;
+        entry.moodBelow = drugEntry->moodBelow;
+        entry.joyBelow = drugEntry->joyBelow;
+        if (!drugs_->setEntry(drugEntry->pawn, entry, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* startBreak = std::get_if<StartMentalBreakCommand>(&command)) {
         if (!mentalBreaks_->start(startBreak->pawn, startBreak->breakDef, rng_, error)) {
             commandFailed(id, error);
@@ -1345,9 +1402,14 @@ void Sim::step() {
     }
     fighters_->step();
     prisoners_->step();
+    trade_->step(events_);
     quests_->step();
     ship_->step();
     recreation_->step();
+    drugs_->step(time_.seconds);
+    if (time_.seconds % kSecondsPerHour == 0) {
+        drugs_->prune();
+    }
     animals_->step();
     husbandry_->step();
     breeding_->step();
@@ -1778,6 +1840,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.resistance = prisoner->resistance;
         }
         view.prisonBed = reg.all_of<PrisonBed>(entity);
+        if (const Visitor* visitor = reg.try_get<Visitor>(entity)) {
+            view.visitor = true;
+            view.visitRole = static_cast<uint8_t>(visitor->role);
+            view.visit = visitor->visit;
+        }
         if (const Melee* melee = reg.try_get<Melee>(entity)) {
             view.meleePhase = melee->phase;
             view.meleeStepsLeft = melee->stepsLeft;
@@ -1805,6 +1872,30 @@ void Sim::writeSnapshot(Snapshot& out) const {
                                        static_cast<uint8_t>(squad.strategy), squad.hasBreach, squad.breach});
     }
 
+    out.visits.clear();
+    for (const Visit& visit : trade_->state().visits) {
+        VisitView view;
+        view.id = visit.id;
+        view.kind = static_cast<uint8_t>(visit.kind);
+        view.phase = static_cast<uint8_t>(visit.phase);
+        view.faction = visit.faction;
+        view.traderKind = visit.traderKind;
+        view.trader = visit.trader;
+        view.leaveAt = visit.leaveAt;
+        view.silver = visit.silver;
+        view.members = static_cast<int>(visit.members.size());
+        view.spot = visit.spot;
+        for (const TradeLine& line : visit.stock) {
+            view.stock.push_back(StockView{line.thing, line.count});
+        }
+        out.visits.push_back(std::move(view));
+    }
+    out.goodwill.clear();
+    for (const DefId factionId : defs_->idsOfKind("Factions")) {
+        const Def& faction = defs_->get(factionId);
+        out.goodwill.push_back(GoodwillView{faction.defName(), trade_->goodwill(faction.defName()),
+                                            static_cast<uint8_t>(trade_->relation(faction.defName()))});
+    }
     out.quests.clear();
     for (const Quest& quest : quests_->state().quests) {
         QuestView view;
@@ -1961,9 +2052,11 @@ uint64_t Sim::stateHash() const {
     designations_->hashState(h);
     research_->hashState(h);
     raids_->hashState(h);
+    trade_->hashState(h);
     quests_->hashState(h);
     ship_->hashState(h);
     talents_->hashState(h);
+    drugs_->hashState(h);
     pathfinder_.hashState(h);
     zones_->hashState(h);
     floors_->hashState(h);
@@ -2287,6 +2380,13 @@ uint64_t Sim::stateHash() const {
             h.add(health->bloodLoss);
             h.add(health->dead);
             h.add(static_cast<int>(health->cause));
+            if (!health->environment.empty()) {
+                h.add(static_cast<uint64_t>(health->environment.size()));
+                for (const EnvironmentHediff& env : health->environment) {
+                    h.add(env.def.value);
+                    h.add(env.severity);
+                }
+            }
         }
         medicine_->hashPawn(e, h);
         surgery_->hashPawn(e, h);
@@ -2296,6 +2396,7 @@ uint64_t Sim::stateHash() const {
         animals_->hashThing(e, h);
         raids_->hashThing(e, h);
         prisoners_->hashThing(e, h);
+        trade_->hashThing(e, h);
         husbandry_->hashThing(e, h);
         breeding_->hashThing(e, h);
         fire_->hashThing(e, h);
