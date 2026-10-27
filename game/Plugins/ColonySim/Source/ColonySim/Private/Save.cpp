@@ -1635,6 +1635,8 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
+    ar.require(job.type <= JobType::RearmTrap, "the save file has a bad job");
+    ar.require(job.type <= JobType::Party, "the save file has a bad job");
     ar.require(job.type <= JobType::StandBy, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
@@ -3073,27 +3075,6 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.value("building", t.building);
             ar.value("celsius", t.celsius);
         });
-    });
-    ar.section("raids", 1, [&] {
-        saveRaids(ar, d.raids);
-        saveParts(ar, "defense", e, &SaveEntity::defense, [&](DefensePlan& p) {
-            ar.value("role", p.role);
-            ar.require(static_cast<int>(p.role) <= static_cast<int>(DefenseRole::Firefighter), "the save file has a bad defense role");
-            ar.value("hasSpot", p.hasSpot);
-            ar.group("spot", [&] { saveCell(ar, p.spot); });
-        });
-        saveParts(ar, "raider", e, &SaveEntity::raider, [&](Raider& r) {
-            ar.value("squad", r.squad);
-            ar.text("kind", r.kind);
-            if (ar.sectionVersion() >= 2) {  // F12
-                ar.value("goalThing", r.goalThing);
-                ar.value("loot", r.loot);
-                ar.value("sparesDowned", r.sparesDowned);
-            }
-        });
-        if (ar.sectionVersion() >= 2) {
-            saveParts(ar, "kidnapped", e, &SaveEntity::kidnapped, [&](Kidnapped& k) { ar.value("by", k.by); });
-        }
     });
     ar.section("raids", 2, [&] {
         saveRaids(ar, d.raids);

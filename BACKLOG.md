@@ -17,7 +17,7 @@ Ideas parked for later. Newest first. Move an item into a stage plan when it's p
 - Social life (found in C20; cheating, jealousy, wedding thoughts and Social skill effects done): orientations and attractiveness for romance (now anyone may love anyone), the colonist panel's relations tab, and mood effects of seeing a friend die in front of you.
 - Breeding (found in N4; switch, young health, egg warmth, young following their mother, warm gestation and the hatchery building are done): a hauling job that carries fertilized eggs into a hatchery; tailoring from wool (C14 bills); milk pasteurizing is not in RimWorld either.
 - Show animal names in the animals tab (U19): the sim has `SetAnimalName` and `ThingView::animalName`.
-- Effects of the trained tricks: Obedience (come when called, follow when drafted), Release (go wild on a command), Rescue (carry a downed colonist to a bed). N3 only counts the steps.
+- Trained tricks (Obedience following drafted colonists and Rescue done): "come when called" with a command, a master per animal, and a use for the Release trick (the release command works without it).
 - Lead a tamed animal home by rope. (The "tame all nearby" button: the sim has `MarkAnimalsInArea`; the button is U19.)
 - Floor-building job and architect tool (floors are placed by `PlaceFloor` command only; found in C17, no plan task covers it). Needs a Construction-style job: pick floor, mark area, colonists lay it.
 - Cleaning outdoors needs the home area (C17 cleans indoors only); vomit, ash and animal filth have no sources yet (E4 fire, animals).
@@ -31,6 +31,8 @@ Ideas parked for later. Newest first. Move an item into a stage plan when it's p
 - Elevators for multi-storey buildings (after stairs and ladders).
 - Carry on as another colonist after the protagonist dies (currently game over).
 - Children and sexual content: out of scope for now; sneed may revisit.
+- A "rearm all" button and a rearm animation for the trap (U19 panels, Unreal side; the sim job `RearmTrap` is done).
+- Raiders shooting back at turrets (the fighter AI targets pawns only; needs turrets as fighter targets in `Fighters.cpp`, left while the raid-soak fixes touch it); the other turrets (sentry, autocannon) and trap kinds (found in F11).
 - Rearm job for sprung spike traps (a Construction-style colonist job; F11 has only `RearmTrapCommand`) and a "rearm all" button (U19 panels).
 - Raiders shooting back at turrets (the fighter AI targets pawns only); armor for spike-trap stabs; the other turrets (sentry, autocannon) and trap kinds (found in F11).
 - Left from the F7 soak fix (`docs/design/raid-soak.md`): a few raids (about 3 in 80) where both sides are healthy and trade shots from cover for six hours without a kill (two thirds of the bullets hit the ground; a shooting-numbers tuning matter, with F2's spread and cover), and a rare pair of pawns jamming in a narrow place.
