@@ -8,6 +8,7 @@
 namespace colony {
 
 class Map;
+class Plants;
 class Rooms;
 class Things;
 
@@ -20,7 +21,7 @@ class Things;
 // comes with stairs (M2), and floors that fall when their walls go with M3.
 class COLONY_API UpperFloors {
 public:
-    UpperFloors(Map& map, Rooms& rooms, Things& things);
+    UpperFloors(Map& map, Rooms& rooms, Things& things, Plants* plants = nullptr);
 
     // Why an upper floor can't be laid on the cell, or empty if it can (or is there already).
     std::string whyNotLay(CellPos c) const;
@@ -34,6 +35,7 @@ private:
     Map& map_;
     Rooms& rooms_;
     Things& things_;
+    Plants* plants_;  // cleared from under a new floor; may be null
 };
 
 }  // namespace colony
