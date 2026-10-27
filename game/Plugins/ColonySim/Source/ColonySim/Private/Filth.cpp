@@ -210,7 +210,9 @@ void Filth::step() {
     entt::registry& reg = things_.registry();
     // Pawns in id order: the registry's own order depends on its history.
     std::vector<Entity> pawns;
-    for (const auto [entity, thing, pos] : reg.view<const Thing, const Position>().each()) {
+    // (Every pawn has a Mover, and there are far fewer of them than things.)
+    for (const auto [entity, mover, thing, pos] : reg.view<const Mover, const Thing, const Position>().each()) {
+        (void)mover;
         (void)pos;
         if (thing.category == ThingCategory::Pawn && filthRate_[thing.def.value] > 0.0f) {
             pawns.push_back(entity);

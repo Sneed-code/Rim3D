@@ -393,6 +393,7 @@ struct SaveEntity {
     std::optional<AnimalCare> care;         // section "husbandry"
     std::optional<AnimalBreed> breed;       // section "breeding" (N4)
     std::optional<Hatching> hatching;       // section "breeding" (N4)
+    std::optional<Young> young;             // section "breeding" version 3
     std::optional<Burning> burning;         // section "fire" (E4)
     std::optional<SaveSpoilage> spoilage;   // section "spoilage"
     std::optional<SaveGrenade> grenade;     // section "explosives"
@@ -1400,6 +1401,10 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("building", c.building);
                 ar.value("bill", c.bill);
                 ar.value("index", c.index);
+            } else if constexpr (std::is_same_v<Type, ClimbCommand>) {
+                ar.value("pawn", c.pawn);
+                ar.value("dx", c.dx);
+                ar.value("dy", c.dy);
             } else if constexpr (std::is_same_v<Type, AddOperationCommand>) {
                 ar.value("pawn", c.pawn);
                 ar.text("recipe", c.recipe);
@@ -1583,7 +1588,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::Operate, "the save file has a bad job");
+    ar.require(job.type <= JobType::Party, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -1958,6 +1963,11 @@ void saveBreedPart(Ar& ar, AnimalBreed& b) {
 }
 
 template <typename Ar>
+void saveYoungPart(Ar& ar, Young& y) {
+    ar.value("mother", y.mother);
+}
+
+template <typename Ar>
 void saveHatchingPart(Ar& ar, Hatching& h) {
     ar.value("hatchAt", h.hatchAt);
 }
@@ -2041,7 +2051,9 @@ void saveProjectilePart(Ar& ar, SaveProjectile& sp) {
     ar.value("age", sp.p.age);
     ar.group("startCell", [&] { saveCell(ar, sp.p.startCell); });
     ar.value("seed", sp.p.seed);
-
+    if (ar.sectionVersion() >= 2) {
+        ar.value("damageFactor", sp.p.damageFactor);
+    }
 }
 
 template <typename Ar>
@@ -2853,7 +2865,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("mood", 1, [&] {
         saveParts(ar, "mood", e, &SaveEntity::mood, [&](Mood& m) { saveMoodPart(ar, m); });
     });
-    ar.section("combat", 1, [&] {
+    ar.section("combat", 2, [&] {
         saveParts(ar, "posture", e, &SaveEntity::posture, [&](Posture& p) { savePosturePart(ar, p); });
         saveParts(ar, "gear", e, &SaveEntity::gear, [&](Gear& g) { saveGearPart(ar, g); });
         saveParts(ar, "equippedBy", e, &SaveEntity::equippedBy, [&](EquippedBy& b) { saveEquippedByPart(ar, b); });
@@ -3035,7 +3047,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "grenade", e, &SaveEntity::grenade, [&](SaveGrenade& g) { saveGrenadePart(ar, g); });
         saveParts(ar, "knockedDown", e, &SaveEntity::knocked, [&](KnockedDown& k) { saveKnockedPart(ar, k); });
     });
-    ar.section("breeding", 2, [&] {
+    ar.section("breeding", 3, [&] {
         ar.value("matings", d.breeding.matings);
         ar.value("pregnancies", d.breeding.pregnancies);
         ar.value("born", d.breeding.born);
@@ -3045,6 +3057,9 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("sheared", d.breeding.sheared);
         saveParts(ar, "breed", e, &SaveEntity::breed, [&](AnimalBreed& b) { saveBreedPart(ar, b); });
         saveParts(ar, "hatching", e, &SaveEntity::hatching, [&](Hatching& h) { saveHatchingPart(ar, h); });
+        if (ar.sectionVersion() >= 3) {
+            saveParts(ar, "young", e, &SaveEntity::young, [&](Young& y) { saveYoungPart(ar, y); });
+        }
     });
     ar.section("defense", 1, [&] {
         saveParts(ar, "turret", e, &SaveEntity::turret, [&](Turret& t) { saveTurretPart(ar, t); });
@@ -3607,6 +3622,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         if (const Hatching* hatching = reg.try_get<Hatching>(e)) {
             out.hatching = *hatching;
+        }
+        if (const Young* young = reg.try_get<Young>(e)) {
+            out.young = *young;
         }
         if (const Burning* burning = reg.try_get<Burning>(e)) {
             out.burning = *burning;
@@ -4270,6 +4288,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         if (e.hatching) {
             reg.emplace<Hatching>(entity, *e.hatching);
+        }
+        if (e.young) {
+            reg.emplace<Young>(entity, *e.young);
         }
         if (e.burning) {
             reg.emplace<Burning>(entity, *e.burning);

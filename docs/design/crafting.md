@@ -67,8 +67,8 @@ When a bill makes something (`finishProduct`):
    that stockpile before any other (the best other stockpile if it has no room). The mark goes when the
    product lies in the zone, or the zone is gone (checked every game minute).
 
-Melee weapons carry their stuff and quality, and the snapshot shows both (`ThingView::stuff`, `quality`), but
-**their damage does not use them yet** (P4 did repair and upgrades, [repair.md](repair.md), and left this). Clothes already do (C15).
+Melee weapons carry their stuff and quality, and the snapshot shows both (`ThingView::stuff`, `quality`).
+Clothes use them for armor and insulation (C15), weapons for damage and accuracy ([weapon-quality.md](weapon-quality.md)).
 
 ## Bill details
 
@@ -101,7 +101,7 @@ stream and the `StoreIn` marks.
 - Inspirations (quality shift), art, sculpting, smelting, the machining table's other recipes.
 - Damage and hit points of melee weapons from their stuff and quality.
 - Art, sculpting, smelting, the machining table's other recipes.
-- Damage and hit points of melee weapons from their stuff and quality (P4).
+- Hit points of melee weapons from their stuff and quality (P4).
 - "Count only what lies in this stockpile", "take from this stockpile only" and a per-bill ingredient quality
   filter (the bill's `disallowed` list is by item def).
 - The electric tailor bench's `unpoweredWorkSpeedFactor` (an unpowered bench does nothing).

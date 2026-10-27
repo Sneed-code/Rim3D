@@ -1,0 +1,41 @@
+[
+  {
+    "defName": "SculptureBase", "parent": "StuffBuildingBase", "abstract": true,
+    "stuffCategories": ["Metallic", "Woody", "Stony"],
+    "passability": "PassThroughOnly", "fillPercent": 0.35, "designationCategory": "Furniture",
+    "building": { "art": true },
+    "source": "RimWorld wiki (Sculpture)",
+    "note": "Art. Built by an artist (Art work type, Artistic skill) and given a quality from that skill. Beauty = (stats.beauty x the stuff's beauty factor + its beauty offset) x the quality's beauty factor (QualityRules.levels.beautyOffset). Work = workToBuild x the stuff's workToMake factor. Market value = stuff cost + work, times the quality's marketValueFactor.",
+    "unverified": ["fillPercent", "stats.maxHitPoints", "stats.flammability"]
+  },
+  {
+    "defName": "SculptureSmall", "parent": "SculptureBase", "label": "small sculpture", "size": [1, 1],
+    "costStuffCount": 50,
+    "stats": { "maxHitPoints": 150, "workToBuild": 25920, "flammability": 1.0, "beauty": 50 },
+    "visual": { "parts": [
+      { "shape": "box", "size": [-0.2, -0.2, 0.25], "at": [0, 0, 0], "stuff": true },
+      { "shape": "cylinder", "radius": 0.16, "height": 0.55, "at": [0, 0, 0.25], "stuff": true },
+      { "shape": "cylinder", "radius": 0.1, "height": 0.2, "at": [0, 0, 0.8], "stuff": true } ] },
+    "ours": ["visual"]
+  },
+  {
+    "defName": "SculptureLarge", "parent": "SculptureBase", "label": "large sculpture", "size": [1, 2],
+    "costStuffCount": 100,
+    "stats": { "maxHitPoints": 250, "workToBuild": 43200, "flammability": 1.0, "beauty": 100 },
+    "visual": { "parts": [
+      { "shape": "box", "size": [-0.2, -0.3, 0.3], "at": [0, 0, 0], "stuff": true },
+      { "shape": "cylinder", "radius": 0.24, "height": 1.0, "at": [0, 0, 0.3], "stuff": true },
+      { "shape": "cylinder", "radius": 0.14, "height": 0.3, "at": [0, 0, 1.3], "stuff": true } ] },
+    "ours": ["visual"]
+  },
+  {
+    "defName": "SculptureGrand", "parent": "SculptureBase", "label": "grand sculpture", "size": [2, 2],
+    "costStuffCount": 400,
+    "stats": { "maxHitPoints": 500, "workToBuild": 151200, "flammability": 1.0, "beauty": 400 },
+    "visual": { "parts": [
+      { "shape": "box", "size": [-0.2, -0.2, 0.4], "at": [0, 0, 0], "stuff": true },
+      { "shape": "cylinder", "radius": 0.5, "height": 1.4, "at": [0, 0, 0.4], "stuff": true },
+      { "shape": "cylinder", "radius": 0.3, "height": 0.6, "at": [0, 0, 1.8], "stuff": true } ] },
+    "ours": ["visual"]
+  }
+]

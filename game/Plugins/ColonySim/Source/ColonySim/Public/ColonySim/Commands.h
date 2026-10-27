@@ -56,6 +56,18 @@ struct DirectMoveCommand {
     float y = 0.0f;
 };
 
+// The player's colonist takes the stairs or ladder it stands at (U17, docs/design/levels.md): from
+// the cell at either end of a level link, the link whose other end lies most nearly along (dx, dy)
+// (any length; zero or not a number takes the first). The sim climbs it the way it climbs any pawn,
+// at the link's share of its walking speed, and DirectMove is ignored until it stands at the other
+// end. Fails if the pawn isn't the colonist under direct control, is downed, rolling or climbing
+// already, or no link starts at its cell within 60 degrees of that direction.
+struct ClimbCommand {
+    Entity pawn = kNoEntity;
+    float dx = 0.0f;
+    float dy = 0.0f;
+};
+
 // The farthest a controlled pawn moves in one step: 0.5 m, which is 15 m/s at 1x, over three times
 // the fastest pawn. Longer requests are cut to this.
 inline constexpr float kDirectMaxStep = 0.5f;
@@ -876,7 +888,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ShipCommand, QuestCommand,
                              AddOperationCommand, RemoveOperationCommand,
                              TakeDrugCommand, SetDrugPolicyCommand, SetDrugPolicyEntryCommand,
-                             StartVisitCommand, TradeCommand, AdjustGoodwillCommand, GiftCommand,
+                             StartVisitCommand, TradeCommand, AdjustGoodwillCommand, GiftCommand, ClimbCommand,
                              RepairGearCommand, FitUpgradeCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was

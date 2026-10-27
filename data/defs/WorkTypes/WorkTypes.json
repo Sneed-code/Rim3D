@@ -66,7 +66,7 @@
   },
   {
     "defName": "Art", "parent": "WorkTypeBase", "label": "art", "naturalPriority": 450,
-    "relevantSkills": ["Artistic"], "workTags": ["Artistic"], "tasks": ["DoBillsSculpt"]
+    "relevantSkills": ["Artistic"], "workTags": ["Artistic"], "tasks": ["BuildArt", "DoBillsSculpt"]
   },
   {
     "defName": "Crafting", "parent": "WorkTypeBase", "label": "craft", "naturalPriority": 400,
