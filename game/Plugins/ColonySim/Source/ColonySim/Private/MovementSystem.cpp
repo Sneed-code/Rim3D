@@ -12,6 +12,7 @@
 #include "ColonySim/Weather.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace colony {
@@ -43,6 +44,7 @@ constexpr float kMoveSeparationSpeed = 0.5f;      // of the pawn's speed, pushin
 constexpr float kMoveHeldBackShare = 0.3f;        // under this share of the wanted speed counts as held back
 constexpr int kMoveGhostAfter = 45;               // steps held back before walking through the others
 constexpr int kMoveGhostSteps = 30;               // and for how many steps
+constexpr int kMoveCandidates = 17 + 9 + 2 + 1;   // turns at full speed, turns at half, two axis parts, standing still
 constexpr float kMoveDoorLookAhead = 8.0f;        // steps ahead the pawn the player walks asks a door to open
 
 // Unit vectors every 22.5 degrees (cos, sin), counter-clockwise on a map with y up. Written out
@@ -52,6 +54,37 @@ constexpr float kMoveDirs[16][2] = {
     {0.0f, 1.0f},         {-0.3826834f, 0.9238795f},  {-0.7071068f, 0.7071068f},  {-0.9238795f, 0.3826834f},
     {-1.0f, 0.0f},        {-0.9238795f, -0.3826834f}, {-0.7071068f, -0.7071068f}, {-0.3826834f, -0.9238795f},
     {0.0f, -1.0f},        {0.3826834f, -0.9238795f},  {0.7071068f, -0.7071068f},  {0.9238795f, -0.3826834f}};
+
+// How far candidate `c` of the steering turns the wanted velocity, in 22.5 degree steps: candidates 0 to 16 are
+// full speed from a half circle right to a half circle left, 17 to 25 half speed from a quarter circle right
+// to a quarter circle left, 26 and 27 the two axis parts and 28 standing still.
+int moveCandidateTurn(int c) {
+    if (c < 17) {
+        return c - 8;
+    }
+    return c < 26 ? c - 17 - 4 : 0;
+}
+
+// The candidates in the order they are tried, with the least their cost can be (their turn penalty).
+struct MoveCandidateSlot {
+    int number = 0;
+    float leastCost = 0.0f;
+};
+
+const std::array<MoveCandidateSlot, kMoveCandidates>& moveCandidateOrder() {
+    static const std::array<MoveCandidateSlot, kMoveCandidates> order = [] {
+        std::array<MoveCandidateSlot, kMoveCandidates> slots;
+        for (int c = 0; c < kMoveCandidates; ++c) {
+            const int turn = moveCandidateTurn(c);
+            const int steps = turn < 0 ? -turn : turn;
+            slots[static_cast<size_t>(c)] = MoveCandidateSlot{c, kMoveTurnPenalty * static_cast<float>(steps) + (turn > 0 ? kMoveLeftExtra : 0.0f)};
+        }
+        std::stable_sort(slots.begin(), slots.end(),
+                         [](const MoveCandidateSlot& x, const MoveCandidateSlot& y) { return x.leastCost < y.leastCost; });
+        return slots;
+    }();
+    return order;
+}
 
 struct MoveNeighbour {
     float dist2 = 0.0f;
@@ -180,16 +213,21 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
             a.newVy = a.vy;
             continue;
         }
-        // Injuries slow a pawn down (its Moving capacity); a downed or dead one doesn't walk.
-        const Health* health = reg.try_get<Health>(a.entity);
-        const float lightFactor = lights_ != nullptr ? lights_->moveSpeedAt(here) : 1.0f;
-        const float weatherFactor = weather_ != nullptr ? weather_->moveFactorAt(here) : 1.0f;
-        const PawnGenes* genes = reg.try_get<PawnGenes>(a.entity);
-        const float geneSpeed = genes != nullptr ? genes->effects.moveSpeed / static_cast<float>(kStepsPerRealSecondAt1x) : 0.0f;
-        const float base = std::max(0.0f, mover.metresPerStep + geneSpeed) * (health != nullptr ? health->movingFactor : 1.0f) *
-                           lightFactor * weatherFactor * (speedFactor_ ? speedFactor_(a.entity) : 1.0f);
-        if (base <= 0.0f || mover.hold || reg.all_of<KnockedDown>(a.entity)) {
-            // Downed or dead, knocked down by a blast, or working standing still: it stays where it is. Others still steer around it.
+        // Working standing still, or knocked down by a blast: it stays where it is. Others still steer around it.
+        bool stays = mover.hold || reg.all_of<KnockedDown>(a.entity);
+        float base = 0.0f;
+        if (!stays) {
+            // Injuries slow a pawn down (its Moving capacity); a downed or dead one doesn't walk.
+            const Health* health = reg.try_get<Health>(a.entity);
+            const float lightFactor = lights_ != nullptr ? lights_->moveSpeedAt(here) : 1.0f;
+            const float weatherFactor = weather_ != nullptr ? weather_->moveFactorAt(here) : 1.0f;
+            const PawnGenes* genes = reg.try_get<PawnGenes>(a.entity);
+            const float geneSpeed = genes != nullptr ? genes->effects.moveSpeed / static_cast<float>(kStepsPerRealSecondAt1x) : 0.0f;
+            base = std::max(0.0f, mover.metresPerStep + geneSpeed) * (health != nullptr ? health->movingFactor : 1.0f) *
+                   lightFactor * weatherFactor * (speedFactor_ ? speedFactor_(a.entity) : 1.0f);
+            stays = base <= 0.0f;
+        }
+        if (stays) {
             a.newVx = 0.0f;
             a.newVy = 0.0f;
             mover.blockedSteps = 0;
@@ -252,6 +290,39 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
             continue;
         }
         mover.climbed = 0.0f;
+        // Standing still with nowhere to go, and no pawn in its space to push it: it stays put. This is
+        // what the full steering below comes to for it, without the neighbour list and the candidates.
+        if (mover.arrived() && a.vx == 0.0f && a.vy == 0.0f) {
+            bool crowded = false;
+            if (mover.ghostSteps == 0) {
+                const int cbx = a.bucket % bucketsX;
+                const int cby = a.bucket / bucketsX;
+                for (int cy = std::max(cby - 1, 0); cy <= std::min(cby + 1, bucketsY - 1) && !crowded; ++cy) {
+                    for (int cx = std::max(cbx - 1, 0); cx <= std::min(cbx + 1, bucketsX - 1) && !crowded; ++cx) {
+                        for (int j = bucketHead_[static_cast<size_t>(cy * bucketsX + cx)]; j >= 0; j = nextInBucket_[static_cast<size_t>(j)]) {
+                            const Agent& o = agents_[static_cast<size_t>(j)];
+                            const float ox = o.x - a.x;
+                            const float oy = o.y - a.y;
+                            if (static_cast<size_t>(j) != index && o.level == a.level && ox * ox + oy * oy < reach * reach) {
+                                crowded = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            if (!crowded) {
+                a.newVx = 0.0f;
+                a.newVy = 0.0f;
+                if (mover.ghostSteps > 0) {
+                    --mover.ghostSteps;
+                } else {
+                    mover.blockedSteps = 0;
+                    mover.heldSteps = 0;
+                }
+                continue;
+            }
+        }
 
         // The velocity it wants and the fastest it may go.
         float wantX = 0.0f;
@@ -408,19 +479,24 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
             }
         }
 
+        // The cost of a candidate is its distance from the wanted velocity plus penalties that are never
+        // negative, so they are tried in the order of their turn penalty (the least their cost can be)
+        // and the rest left alone once that is over the best total found. The winner is the lowest
+        // total, the lowest candidate number among equals.
         float bestCost = 1.0e30f;
+        int bestNumber = kMoveCandidates;
         float bestVx = 0.0f;
         float bestVy = 0.0f;
-        const int candidates = wantLen > 1.0e-6f ? 17 + 9 + 2 + 1 : 1;
-        for (int c = 0; c < candidates; ++c) {
+        const int candidates = wantLen > 1.0e-6f ? kMoveCandidates : 1;
+        const MoveCandidateSlot* order = moveCandidateOrder().data();
+        for (int t = 0; t < candidates; ++t) {
+            const int c = candidates == 1 ? 0 : order[t].number;
+            if (candidates > 1 && order[t].leastCost > bestCost) {
+                break;
+            }
             float ux = 0.0f;
             float uy = 0.0f;
-            int turn = 0;
-            if (c < 17) {
-                turn = c - 8;
-            } else if (c < 26) {
-                turn = c - 17 - 4;
-            }
+            const int turn = moveCandidateTurn(c);
             if (c == 26 || c == 27) {
                 // Slide along a wall: only the part of the wanted velocity along one axis.
                 ux = c == 26 ? wantX : 0.0f;
@@ -457,9 +533,9 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
             if (!ghost) {
                 for (int k = 0; k < count; ++k) {
                     const MoveNeighbour& n = closest[k];
-                    const float t = moveTimeToMeet(n.px, n.py, nvx - n.vx, nvy - n.vy, reach);
-                    if (t < kMoveHorizon) {
-                        cost += kMoveCollisionWeight * (kMoveHorizon - t) / kMoveHorizon;
+                    const float meet = moveTimeToMeet(n.px, n.py, nvx - n.vx, nvy - n.vy, reach);
+                    if (meet < kMoveHorizon) {
+                        cost += kMoveCollisionWeight * (kMoveHorizon - meet) / kMoveHorizon;
                     }
                     // And room to spare: the closer to it after this step, the dearer.
                     const float rx = n.px + n.vx - nvx;
@@ -470,8 +546,9 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
                     }
                 }
             }
-            if (cost < bestCost) {
+            if (cost < bestCost || (cost == bestCost && c < bestNumber)) {
                 bestCost = cost;
+                bestNumber = c;
                 bestVx = nvx;
                 bestVy = nvy;
             }
