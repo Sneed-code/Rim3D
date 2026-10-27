@@ -1,0 +1,245 @@
+[
+ {
+  "defName": "Plasteel",
+  "parent": "ItemBase",
+  "label": "plasteel",
+  "stackLimit": 75,
+  "visual": {
+   "pieces": 5,
+   "layer": 0.05,
+   "parts": [
+    {
+     "shape": "box",
+     "size": [
+      0.2,
+      0.14,
+      0.05
+     ],
+     "color": [
+      0.55,
+      0.7,
+      0.78
+     ]
+    }
+   ]
+  },
+  "stats": {
+   "maxHitPoints": 100,
+   "marketValue": 9,
+   "mass": 0.35,
+   "flammability": 0
+  },
+  "source": "RimWorld wiki",
+  "unverified": [
+   "stats",
+   "stackLimit"
+  ],
+  "stuffProps": {
+   "categories": [
+    "Metallic"
+   ],
+   "statFactors": {
+    "maxHitPoints": 2.8,
+    "beauty": 1.0,
+    "flammability": 0.0,
+    "workToBuild": 2.2,
+    "workToMake": 2.2,
+    "armorRatingSharp": 1.14,
+    "armorRatingBlunt": 0.55,
+    "armorRatingHeat": 0.65,
+    "sharpDamageMultiplier": 1.1,
+    "bluntDamageMultiplier": 0.9,
+    "meleeCooldownMultiplier": 0.8
+   },
+   "statOffsets": {
+    "insulationCold": 3,
+    "insulationHeat": 0
+   }
+  }
+ },
+ {
+  "defName": "Uranium",
+  "parent": "ItemBase",
+  "label": "uranium",
+  "stackLimit": 75,
+  "visual": {
+   "pieces": 5,
+   "layer": 0.05,
+   "parts": [
+    {
+     "shape": "box",
+     "size": [
+      0.2,
+      0.14,
+      0.05
+     ],
+     "color": [
+      0.45,
+      0.5,
+      0.4
+     ]
+    }
+   ]
+  },
+  "stats": {
+   "maxHitPoints": 100,
+   "marketValue": 6,
+   "mass": 1.0,
+   "flammability": 0
+  },
+  "source": "RimWorld wiki",
+  "unverified": [
+   "stats",
+   "stackLimit"
+  ],
+  "stuffProps": {
+   "categories": [
+    "Metallic"
+   ],
+   "statFactors": {
+    "maxHitPoints": 2.5,
+    "beauty": 0.5,
+    "flammability": 0.0,
+    "workToBuild": 1.9,
+    "workToMake": 1.9,
+    "armorRatingSharp": 1.08,
+    "armorRatingBlunt": 0.54,
+    "armorRatingHeat": 0.65,
+    "sharpDamageMultiplier": 1.1,
+    "bluntDamageMultiplier": 1.5,
+    "meleeCooldownMultiplier": 1.1
+   },
+   "statOffsets": {
+    "insulationCold": 3,
+    "insulationHeat": 0
+   }
+  }
+ },
+ {
+  "defName": "Gold",
+  "parent": "ItemBase",
+  "label": "gold",
+  "stackLimit": 75,
+  "visual": {
+   "pieces": 5,
+   "layer": 0.05,
+   "parts": [
+    {
+     "shape": "box",
+     "size": [
+      0.2,
+      0.14,
+      0.05
+     ],
+     "color": [
+      0.9,
+      0.75,
+      0.2
+     ]
+    }
+   ]
+  },
+  "stats": {
+   "maxHitPoints": 100,
+   "marketValue": 10,
+   "mass": 0.008,
+   "flammability": 0
+  },
+  "source": "RimWorld wiki",
+  "unverified": [
+   "stats",
+   "stackLimit"
+  ]
+ },
+ {
+  "defName": "ComponentSpacer",
+  "parent": "ItemBase",
+  "label": "advanced component",
+  "stackLimit": 50,
+  "visual": {
+   "pieces": 4,
+   "layer": 0.05,
+   "parts": [
+    {
+     "shape": "box",
+     "size": [
+      0.14,
+      0.14,
+      0.04
+     ],
+     "color": [
+      0.2,
+      0.35,
+      0.6
+     ]
+    },
+    {
+     "shape": "box",
+     "size": [
+      0.06,
+      0.06,
+      0.03
+     ],
+     "at": [
+      0,
+      0,
+      0.04
+     ],
+     "color": [
+      0.9,
+      0.8,
+      0.3
+     ]
+    }
+   ]
+  },
+  "stats": {
+   "maxHitPoints": 70,
+   "marketValue": 200,
+   "mass": 0.6,
+   "flammability": 0.4,
+   "deteriorationRate": 2
+  },
+  "source": "RimWorld wiki",
+  "unverified": [
+   "stats",
+   "stackLimit"
+  ]
+ },
+ {
+  "defName": "SleeperShard",
+  "parent": "ItemBase",
+  "label": "Sleeper shard",
+  "stackLimit": 1,
+  "visual": {
+   "pieces": 1,
+   "layer": 0.06,
+   "parts": [
+    {
+     "shape": "box",
+     "size": [
+      0.12,
+      0.12,
+      0.12
+     ],
+     "color": [
+      0.7,
+      0.3,
+      0.9
+     ]
+    }
+   ]
+  },
+  "stats": {
+   "maxHitPoints": 50,
+   "marketValue": 1500,
+   "mass": 0.5,
+   "flammability": 0
+  },
+  "source": "RimWorld wiki",
+  "unverified": [
+   "stats"
+  ],
+  "note": "Our name for the AI persona core. Only found or traded, never made."
+ }
+]

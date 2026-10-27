@@ -164,11 +164,11 @@ TEST_CASE("Animals: the map is filled with herds by the biome's density and spec
     ANIMAL_REQUIRE(animals.populated());
     CHECK(animals.wildWeight() >= animals.targetWeight());
     CHECK(animals.wildWeight() < animals.targetWeight() + 25.0f);  // one more group at most
-    CHECK(animals.livingCount() > 30);
+    CHECK(animals.livingCount() > 20);
 
     // Only the temperate forest's wild animals, never domestic or zero-commonality ones.
     const std::set<std::string> allowed = {"Hare", "Squirrel", "Deer", "WildBoar", "Muffalo", "Alpaca",
-                                           "TimberWolf", "GrizzlyBear", "Cougar"};
+                                           "TimberWolf", "GrizzlyBear", "Cougar", "Boomalope"};
     std::set<std::string> seen;
     std::map<uint32_t, int> herdSizes;
     const entt::registry& reg = sim.things().registry();

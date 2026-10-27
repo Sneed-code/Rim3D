@@ -602,6 +602,16 @@ bool Construction::workCell(const CellRect& rect, CellPos from, CellPos& out) co
             }
         }
     }
+    // An upper wall whose neighbours on its own level cannot be stood on (a corner whose two
+    // sides already stand, with open air beyond the ring) is built from the level below, from
+    // any of the eight cells round it, like the edge of an upper floor.
+    if (!found && rect.level > 0) {
+        for (int y = rect.minY - 1; y <= rect.minY + rect.sizeY; ++y) {
+            for (int x = rect.minX - 1; x <= rect.minX + rect.sizeX; ++x) {
+                considerOn(x, y, rect.level - 1);
+            }
+        }
+    }
     return found;
 }
 
