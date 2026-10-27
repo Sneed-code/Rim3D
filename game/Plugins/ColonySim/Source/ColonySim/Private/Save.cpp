@@ -1567,7 +1567,6 @@ void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
     ar.require(job.type <= JobType::StandBy, "the save file has a bad job");
-    ar.require(job.type <= JobType::Party, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -2134,7 +2133,6 @@ void saveFighterPart(Ar& ar, Fighter& f) {
     if (ar.sectionVersion() >= 2) {  // F6: what the alarm or a raid has it do
         ar.value("mode", f.mode);
         ar.require(static_cast<int>(f.mode) <= static_cast<int>(FightMode::Rescue), "the save file has a bad fighter mode");
-        ar.require(static_cast<int>(f.mode) <= static_cast<int>(FightMode::Seize), "the save file has a bad fighter mode");
         ar.value("defending", f.defending);
         ar.value("squad", f.squad);
         ar.value("hasGoal", f.hasGoal);

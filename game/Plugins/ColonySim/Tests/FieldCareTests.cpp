@@ -259,6 +259,8 @@ TEST_CASE("Field care: a fighter drags a downed friend out of the enemy's sight,
     const Entity friendDown = f.colonist(CareFixture::kOpen);
     f.sim.things().spawn("MedicineIndustrial", CellPos{30, 30, 0}, 5);
     f.sim.submit(SetDefenseRoleCommand{medic, static_cast<uint8_t>(DefenseRole::Medic), false, CellPos{}});
+    // Unarmed and with no plan of its own it would run for shelter (Raids: RimWorld's default response).
+    f.sim.submit(SetDefenseRoleCommand{fighter, static_cast<uint8_t>(DefenseRole::Defender), false, CellPos{}});
     f.run(1);
     f.downBleeding(friendDown);
     f.run(1);
@@ -294,6 +296,8 @@ TEST_CASE("Field care: a drag and a duty in the middle save and load, and the lo
     const Entity friendDown = f.colonist(CareFixture::kOpen);
     f.sim.things().spawn("MedicineIndustrial", CellPos{30, 30, 0}, 5);
     f.sim.submit(SetDefenseRoleCommand{medic, static_cast<uint8_t>(DefenseRole::Medic), false, CellPos{}});
+    // Unarmed and with no plan of its own it would run for shelter (Raids: RimWorld's default response).
+    f.sim.submit(SetDefenseRoleCommand{fighter, static_cast<uint8_t>(DefenseRole::Defender), false, CellPos{}});
     f.run(1);
     f.downBleeding(friendDown);
     f.run(1);
@@ -308,6 +312,7 @@ TEST_CASE("Field care: a drag and a duty in the middle save and load, and the lo
     f.reg().remove<PlayerControl>(f.enemy);
     const std::vector<uint8_t> bytes = saveSim(f.sim);
     SaveLoadResult loaded = loadSim(bytes, careDefs());
+    INFO(loaded.error);
     CARE_REQUIRE(loaded.sim != nullptr);
     CHECK(loaded.sim->stateHash() == f.sim.stateHash());
     loaded.sim->setOutdoorOverride(20.0f);  // a test aid, not saved

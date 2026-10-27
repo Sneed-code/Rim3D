@@ -39,7 +39,6 @@ enum class JobType : uint8_t {
     CapturePrisoner,   // carry a downed enemy to a prison bed and make it a prisoner (docs/design/prisoners.md)
     FeedPrisoner,      // fetch food, walk to a hungry prisoner and hand it over
     WardenInteract,    // walk to a prisoner and talk to it: resistance, recruiting or release
-    StandBy,           // a Medic or Firefighter on duty walks to its place behind the line and waits (docs/design/field-care.md)
     Refuel,            // carry fuel to a building and put it in (fuel.md)
     Hunt,              // walk up to a wild animal marked for the hunt and shoot it dead (docs/design/hunting.md)
     HaulCorpse,        // carry a hunted or slaughtered animal's corpse to a stockpile (docs/design/hunting.md)
@@ -47,6 +46,7 @@ enum class JobType : uint8_t {
     SeekShelter,       // walk to a place with a safe temperature and stay a while (docs/design/temperature.md)
     Operate,           // fetch the part to fit and a medicine, walk to a patient in bed and do a planned operation (docs/design/surgery.md)
     Party,             // walk to a party spot and stay for the party, gaining joy (docs/design/social.md)
+    StandBy,           // a Medic or Firefighter on duty walks to its place behind the line and waits (docs/design/field-care.md)
 };
 
 COLONY_API const char* jobTypeName(JobType type);

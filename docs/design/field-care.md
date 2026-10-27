@@ -83,7 +83,7 @@ out of sight.
 ## Snapshot, saves, hash, replays
 
 - Snapshot: `defenseRole` 3 and 4; `ThingView::rescuing` (the friend a fighter is carrying or fetching); a duty's jobs
-  are ordinary jobs (`StandBy` is job type 30).
+  are ordinary jobs (`StandBy` is job type 37).
 - Saves: no section of its own. The fighters section is version 3 (`rescuing`, `lifted`, `rescueTo`); defense
   plans with roles 3 and 4 and `StandBy` jobs load. Everything else follows from the alarm, roles, fighters and jobs,
   so a game saved mid-drag loads and goes on the same (test).
