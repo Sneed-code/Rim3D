@@ -161,6 +161,7 @@ private:
         int eggCount = 1;
         DefId eggUnfertilized;
         DefId eggFertilized;
+        bool eggFertilizedOnly = false;  // no `unfertilizedThing`: the timer stops at half until she has mated
         double milkIntervalSeconds = 0.0;
         int milkAmount = 0;
         DefId milkThing;

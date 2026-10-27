@@ -11,7 +11,7 @@
   },
   {
     "defName": "Doctor", "parent": "WorkTypeBase", "label": "doctor", "naturalPriority": 1200,
-    "relevantSkills": ["Medicine"], "workTags": ["Caring"], "tasks": ["TendPatients", "Rescue", "FeedPatients"]
+    "relevantSkills": ["Medicine"], "workTags": ["Caring"], "tasks": ["TendPatients", "Rescue", "Operate", "FeedPatients"]
   },
   {
     "defName": "PatientBedRest", "parent": "WorkTypeBase", "label": "bed rest", "naturalPriority": 1150,
@@ -74,7 +74,7 @@
   },
   {
     "defName": "Hauling", "parent": "WorkTypeBase", "label": "haul", "naturalPriority": 300,
-    "workTags": ["ManualDumb", "Hauling"], "inPrototype": true, "tasks": ["Refuel", "Strip", "HaulToStockpile", "HaulCorpses"]
+    "workTags": ["ManualDumb", "Hauling"], "inPrototype": true, "tasks": ["Refuel", "Strip", "HaulToStockpile", "HaulCorpses", "DoBillsCremate"]
   },
   {
     "defName": "Cleaning", "parent": "WorkTypeBase", "label": "clean", "naturalPriority": 200,

@@ -46,7 +46,7 @@ uses a skill calls `learnSkill` each working second and lists itself in `JobSyst
 
 ## Midnight (`skillDayPassed`, from `Sim::step` when the day ends)
 
-- `xpToday` goes back to 0.
+- `xpToday` goes back to 0, then the decay below is taken off it: the wiki's cap counts *net* XP, so a level-20 master starts the day at -3,600 and has to earn 7,600 before learning slows.
 - From level 10 up the skill loses `decayXpPerDay[level]` XP (30 at level 10, 120 at 12, 300 at 14,
   1,200 at 17, 3,600 at 20). XP may sink `xpBelowZeroBeforeLevelLoss` (1,000) below 0 before the
   level drops; the level below then gets its `xpToNextLevel` added, so nothing jumps. Level 0
