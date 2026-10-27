@@ -3538,11 +3538,6 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         z.cells = zone.cells;
         d.zones.push_back(std::move(z));
     }
-    std::vector<uint32_t> defIndexOf(sim.defs_->size(), UINT32_MAX);
-    for (const PlantRecord& r : sim.plants_->records()) {
-        if (defIndexOf[r.def.value] == UINT32_MAX) {
-            defIndexOf[r.def.value] = static_cast<uint32_t>(d.plants.defs.size());
-            d.plants.defs.push_back(sim.defs_->get(r.def).defName());
     for (const auto& [pawn, s] : sim.drugs_->states()) {
         SaveDrugPawn saved;
         saved.pawn = pawn;
@@ -3559,6 +3554,11 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
         d.drugPawns.push_back(std::move(saved));
     }
+    std::vector<uint32_t> defIndexOf(sim.defs_->size(), UINT32_MAX);
+    for (const PlantRecord& r : sim.plants_->records()) {
+        if (defIndexOf[r.def.value] == UINT32_MAX) {
+            defIndexOf[r.def.value] = static_cast<uint32_t>(d.plants.defs.size());
+            d.plants.defs.push_back(sim.defs_->get(r.def).defName());
         }
         d.plants.cells.push_back(static_cast<uint32_t>(r.cell));
         d.plants.defIndex.push_back(defIndexOf[r.def.value]);
