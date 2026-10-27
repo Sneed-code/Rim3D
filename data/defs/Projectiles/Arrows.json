@@ -1,0 +1,7 @@
+[
+  {"defName": "ArrowBase", "abstract": true, "source": "RimWorld wiki", "projectile": {"damageDef": "Arrow"}},
+  {"defName": "Arrow_Short", "parent": "ArrowBase", "label": "short bow arrow", "projectile": {"damageAmountBase": 11, "armorPenetrationBase": 0.16, "stoppingPower": 0.5, "speed": 1.333333}, "unverified": ["projectile.speed"]},
+  {"defName": "Arrow_Recurve", "parent": "ArrowBase", "label": "recurve bow arrow", "projectile": {"damageAmountBase": 14, "armorPenetrationBase": 0.21, "stoppingPower": 1, "speed": 1.4}, "unverified": ["projectile.speed"]},
+  {"defName": "Arrow_Great", "parent": "ArrowBase", "label": "greatbow arrow", "projectile": {"damageAmountBase": 17, "armorPenetrationBase": 0.15, "stoppingPower": 1.5, "speed": 1.5}, "unverified": ["projectile.speed"]},
+  {"defName": "Spear_Pila", "parent": "ArrowBase", "label": "pila", "projectile": {"damageAmountBase": 25, "armorPenetrationBase": 0.1, "stoppingPower": 2.5, "speed": 1.333333}, "unverified": ["projectile.speed"]}
+]
