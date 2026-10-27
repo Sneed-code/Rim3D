@@ -88,6 +88,9 @@ public:
     // is laid (UpperFloors::lay) instead of a building spawned. Without this, none can be planned.
     void setUpperFloors(UpperFloors* floors) { upperFloors_ = floors; }
     bool isUpperFloor(DefId def) const;
+    // Art (`building.art`, docs/design/art.md): sculptures. An artist builds them (Artistic skill, the Art
+    // work type), the work follows the stuff's `workToMake` factor, and the finished piece has a quality.
+    bool isArt(DefId def) const;
 
     // ---- What a building costs --------------------------------------------------------------
     // True if the def is a Things def of category Building that can be built (it has
@@ -139,7 +142,7 @@ public:
     bool workCell(const CellRect& rect, CellPos from, CellPos& out) const;
     // Construction speed from the pawn's Construction skill (`skillSpeedBase` + `skillSpeedPerLevel`
     // x level); `defaultSkillLevel` if it has no skills.
-    float skillSpeed(Entity pawn) const;
+    float skillSpeed(Entity pawn, const char* skillName = "Construction") const;
 
     // After loading a save: rebuilds the cell index from the sites. False, with `error`, if two
     // sites overlap or one stands where a building is.
