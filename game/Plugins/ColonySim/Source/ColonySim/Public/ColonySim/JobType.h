@@ -46,6 +46,7 @@ enum class JobType : uint8_t {
     SeekShelter,       // walk to a place with a safe temperature and stay a while (docs/design/temperature.md)
     Operate,           // fetch the part to fit and a medicine, walk to a patient in bed and do a planned operation (docs/design/surgery.md)
     Party,             // walk to a party spot and stay for the party, gaining joy (docs/design/social.md)
+    StandBy,           // a Medic or Firefighter on duty walks to its place behind the line and waits (docs/design/field-care.md)
     DeepWork,          // work a ground-penetrating scanner until it finds a deposit, or a deep drill for one portion (docs/design/deep-mining.md)
 };
 

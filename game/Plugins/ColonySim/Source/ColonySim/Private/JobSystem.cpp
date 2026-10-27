@@ -8,6 +8,7 @@
 #include "ColonySim/Construction.h"
 #include "ColonySim/Crafting.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/FieldCare.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Fire.h"
 #include "ColonySim/Social.h"
@@ -133,6 +134,7 @@ constexpr JobStepKind kJobsExtinguishSteps[] = {JobStepKind::GotoTouch, JobStepK
 constexpr JobStepKind kJobsFeedPrisonerSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::ApproachPrisoner,
                                                   JobStepKind::FeedWork};
 constexpr JobStepKind kJobsChatSteps[] = {JobStepKind::ApproachPrisoner, JobStepKind::ChatWork};
+constexpr JobStepKind kJobsStandBySteps[] = {JobStepKind::WalkToSpot, JobStepKind::Wait};
 constexpr JobStepKind kJobsRefuelSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::CarryToCell,
                                             JobStepKind::RefuelWork};
 static_assert(kRefuelPickUpStep == 1, "the Refuel steps moved");
@@ -198,6 +200,7 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::CapturePrisoner: return {kJobsRescueSteps, static_cast<int>(std::size(kJobsRescueSteps))};
         case JobType::FeedPrisoner: return {kJobsFeedPrisonerSteps, static_cast<int>(std::size(kJobsFeedPrisonerSteps))};
         case JobType::WardenInteract: return {kJobsChatSteps, static_cast<int>(std::size(kJobsChatSteps))};
+        case JobType::StandBy: return {kJobsStandBySteps, static_cast<int>(std::size(kJobsStandBySteps))};
         case JobType::Refuel: return {kJobsRefuelSteps, static_cast<int>(std::size(kJobsRefuelSteps))};
         case JobType::Hunt: return {kJobsHuntSteps, static_cast<int>(std::size(kJobsHuntSteps))};
         case JobType::HaulCorpse: return {kJobsHaulCorpseSteps, static_cast<int>(std::size(kJobsHaulCorpseSteps))};
@@ -302,6 +305,7 @@ const char* jobTypeName(JobType type) {
         case JobType::CapturePrisoner: return "CapturePrisoner";
         case JobType::FeedPrisoner: return "FeedPrisoner";
         case JobType::WardenInteract: return "WardenInteract";
+        case JobType::StandBy: return "StandBy";
         case JobType::Refuel: return "Refuel";
         case JobType::Hunt: return "Hunt";
         case JobType::HaulCorpse: return "HaulCorpse";
@@ -340,6 +344,7 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
       bills_(std::make_unique<BillSystem>(things, defs)),
       fuel_(std::make_unique<FuelSystem>(things, defs, events)),
       givers_(makeWorkGivers()) {
+    bills_->setZones(&zones_);
     for (const DefId id : defs_.idsOfKind("WorkTypes")) {
         const Def& def = defs_.get(id);
         WorkType type;
@@ -635,6 +640,7 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
         case JobType::Party:  // a party spot is open ground, not reserved
         case JobType::SeekShelter:
         case JobType::ExtinguishFire:  // colonists fight a fire together: nothing is reserved
+        case JobType::StandBy:
             return 0;
     }
     return 0;
@@ -937,6 +943,16 @@ void JobSystem::step() {
         worker.avoid.erase(std::remove_if(worker.avoid.begin(), worker.avoid.end(),
                                           [t](const AvoidTarget& a) { return a.until <= t; }),
                            worker.avoid.end());
+        // A Medic or Firefighter while the alarm is on (F10): its duty instead of the think list.
+        if (fieldCare_ != nullptr) {
+            if (const int duty = fieldCare_->dutyWorkType(pawn); duty >= 0) {
+                dutyStep(pawn, duty);
+                continue;
+            }
+            if (worker.job.type == JobType::StandBy) {
+                endJob(pawn, JobEnd::Interrupted, "off duty");  // the alarm is over
+            }
+        }
         if (worker.job.type != JobType::None) {
             interruptForNeeds(pawn);
             interruptForEmergency(pawn);
@@ -961,7 +977,7 @@ bool JobSystem::thinkWork(Entity pawn, Job& out) {
     return thinkWorkPass(pawn, out, false);
 }
 
-bool JobSystem::thinkWorkPass(Entity pawn, Job& out, bool urgentOnly) {
+bool JobSystem::thinkWorkPass(Entity pawn, Job& out, bool urgentOnly, int dutyWork) {
     entt::registry& reg = things_.registry();
     const WorkSettings* settings = reg.try_get<WorkSettings>(pawn);
     if (settings == nullptr) {
@@ -976,8 +992,10 @@ bool JobSystem::thinkWorkPass(Entity pawn, Job& out, bool urgentOnly) {
             candidates_.clear();
             for (size_t w = 0; w < settings->entries.size() && w < workTypes_.size(); ++w) {
                 const WorkPriority& entry = settings->entries[w];
-                if (entry.disabled || entry.priority != priority ||
-                    (workTypes_[w].naturalPriority >= kJobsUrgentWorkFrom) != (pass == 0)) {
+                const bool wanted = dutyWork >= 0
+                                        ? static_cast<int>(w) == dutyWork && priority == 1 && pass == 0
+                                        : entry.priority == priority && (workTypes_[w].naturalPriority >= kJobsUrgentWorkFrom) == (pass == 0);
+                if (entry.disabled || !wanted) {
                     continue;
                 }
                 for (size_t g = 0; g < workTypes_[w].givers.size(); ++g) {
@@ -996,6 +1014,10 @@ bool JobSystem::thinkWorkPass(Entity pawn, Job& out, bool urgentOnly) {
                 candidates_.pop_back();
                 if (reservedByOther(c.target, pawn) || avoiding(pawn, c.target)) {
                     continue;
+                }
+                if (dutyWork >= 0 &&
+                    !fieldCare_->dutyAllows(pawn, c.target, c.target.thing != kNoEntity ? cellOf(reg.get<Position>(c.target.thing)) : c.target.cell)) {
+                    continue;  // under fire: not now
                 }
                 const CellPos targetCell = c.hasReach ? c.reach
                                            : c.target.thing != kNoEntity ? cellOf(reg.get<Position>(c.target.thing))
@@ -1119,6 +1141,9 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     }
     if (job.type == JobType::ExtinguishFire) {
         return failCheckExtinguish(pawn, job, why);
+    }
+    if (job.type == JobType::StandBy) {
+        return failCheckStandBy(pawn, job, why);
     }
     if (job.type == JobType::WearApparel || job.type == JobType::StripPawn) {
         return failCheckApparel(pawn, job, why);

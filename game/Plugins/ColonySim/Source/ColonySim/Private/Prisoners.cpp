@@ -457,6 +457,9 @@ bool PrisonerSystem::execute(Entity prisoner, Entity warden) {
         return false;
     }
     const bool wasGuilty = guilty(prisoner);
+    if (trade_ != nullptr) {
+        trade_->noteExecuted(prisoner);  // while its faction is still known
+    }
     // The event comes first: the colony's moods read it, and the pawn's own death follows.
     emit(EventType::PrisonerExecuted, prisoner, warden, 0.0f, wasGuilty ? "guilty" : "innocent");
     if (!health_.kill(prisoner, DeathCause::Executed)) {
