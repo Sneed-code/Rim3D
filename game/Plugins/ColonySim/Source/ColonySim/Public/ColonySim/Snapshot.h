@@ -12,6 +12,7 @@
 #include "ColonySim/Melee.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Rooms.h"
+#include "ColonySim/Wounds.h"
 #include "ColonySim/Zones.h"
 
 #include <cstdint>
@@ -173,6 +174,12 @@ struct ThingView {
     Entity rescuing = kNoEntity;
     // Humanlike pawns: their looks, Snapshot::looks[looks]; -1 for other things.
     int32_t looks = -1;
+    // Pawns with a body (docs/design/wounds.md): their wounds and lost parts that show on the skin, `woundCount` from
+    // Snapshot::wounds[firstWound]; blood lost (0 to 1, 1 is death) and how fast it is going (blood loss a day).
+    uint32_t firstWound = 0;
+    uint32_t woundCount = 0;
+    float bloodLoss = 0.0f;
+    float bleedPerDay = 0.0f;
     // Buildings with a power part (docs/design/power.md): whether they have power, the net they are
     // in (Snapshot::powerNets[powerNet - 1]; 0 for none), watts now (+ generating, - drawing) and,
     // for batteries, how full (0 to 1; -1 for other buildings).
@@ -229,6 +236,13 @@ struct ThingView {
     uint32_t apparelCount = 0;
     int quality = -1;
     bool tainted = false;
+    // Repair and upgrades (docs/design/repair.md). Apparel and weapons on the map: whether a colonist is to repair them.
+    // Guns: the part ordered fitted (invalid for none) and the parts already fitted, `fittedCount` of them from
+    // Snapshot::fittedParts[firstFitted], in the order fitted.
+    bool repairMarked = false;
+    DefId fitOrder;
+    uint32_t firstFitted = 0;
+    uint32_t fittedCount = 0;
     // Resonance (docs/design/resonance.md). Pawns: steps left of a stun (0: not stunned), whether a numb or burden
     // is on them, and for a pawn winding up a power, the Powers def and the steps until it goes off.
     int stunnedFor = 0;
@@ -566,6 +580,7 @@ struct Snapshot {
     uint64_t roofCollapses = 0;
     std::vector<ProjectileView> projectiles;  // sorted by id
     std::vector<PawnLooksView> looks;      // see ThingView::looks
+    std::vector<WoundView> wounds;         // see ThingView::firstWound
     std::vector<PowerNetView> powerNets;   // by id - 1, see ThingView::powerNet
     std::vector<ResearchView> research;    // every project, in def order
     std::vector<TalentView> talents;       // see TalentView
@@ -594,6 +609,7 @@ struct Snapshot {
     std::vector<GoodwillView> goodwill;    // every faction's goodwill with the colony
     std::vector<QuestView> quests;         // offered, active and recently finished quests, by id
     std::vector<ApparelView> apparel;      // worn apparel, see ThingView
+    std::vector<DefId> fittedParts;        // upgrade parts fitted to guns, see ThingView
     std::vector<OutfitView> outfits;       // the outfit policies, by id
     WeatherView weather;
     std::vector<AttunedView> attuned;      // see AttunedView

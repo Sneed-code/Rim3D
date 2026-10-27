@@ -202,6 +202,7 @@ struct BodyPartInfo {
     bool inside = false;     // an organ or bone under another part
     float ownOutside = 0.0f;  // its share of hits from outside (its area minus its outside children's)
     std::vector<std::string> groups;  // BodyPartGroups defs, which apparel covers
+    std::string def;         // its BodyParts def name: "Arm", "Hand"...
 };
 
 // The rules. Owned by the sim, which calls `step` once per game second; damage comes in through
