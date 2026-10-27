@@ -3,6 +3,7 @@
 #include "ColonySim/Animals.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Protagonist.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
@@ -707,6 +708,9 @@ void SocialSystem::gatherParty(Entity a, Entity b, const std::vector<Entity>& pa
 
 void SocialSystem::startFight(Entity a, Entity b) {
     entt::registry& reg = things_.registry();
+    if (mindIsPlayersOwn(reg, a) || mindIsPlayersOwn(reg, b)) {
+        return;  // the protagonist never gets into a fight they didn't pick
+    }
     if (reg.all_of<SocialFight>(a) || reg.all_of<SocialFight>(b)) {
         return;
     }
