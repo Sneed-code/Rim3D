@@ -1669,7 +1669,6 @@ void Sim::stepOnce(bool keepEvents) {
     { SimLap lap(profile_, "roomStats"); roomStats_->step(time_.seconds); }
     { SimLap lap(profile_, "temperature"); temperature_->step(time_.seconds); }
     // From the weather as it is now, not left over from the last step: a loaded game has not had a last step.
-    spoilage_->setOutdoorFactor(weather_->deteriorationFactor());
     spoilage_->setOutdoorFactor(weather_->deteriorationFactor());  // not saved: the weather says it, also on the first step after a load
     { SimLap lap(profile_, "spoilage"); spoilage_->step(time_.seconds); }
     if (time_.seconds % kBillUpkeepSeconds == 0) {
@@ -1931,6 +1930,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const HitPoints* hp = reg.try_get<HitPoints>(entity)) {
             view.hitPoints = hp->current;
             view.maxHitPoints = hp->max;
+            view.durability = ApparelStats::condition(reg, entity);
         }
         if (const Health* health = reg.try_get<Health>(entity)) {
             view.downed = health->downed;
@@ -2058,6 +2058,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 }
                 worn.quality = apparel_->stats().qualityOf(reg, piece);
                 worn.hitPointShare = ApparelStats::hitPointShare(reg, piece);
+                worn.durability = ApparelStats::condition(reg, piece);
                 worn.tainted = reg.all_of<Tainted>(piece);
                 out.apparel.push_back(worn);
             }
