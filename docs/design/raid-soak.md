@@ -37,6 +37,14 @@ is 6 to 9%, stuck fighters 1 to 2, and raids still on 0 to 4. Zero is the aim; t
 two sides of healthy pawns trading shots from cover with poor accuracy (a tuning matter for the
 shooting numbers) and the odd pair of pawns jamming in a narrow place.
 
+Deaths and fight length are only reported: downed colonists often bleed out, so they are numbers to watch, not
+rules.
+
+**With medics** (F10, [field-care.md](field-care.md)): each seed's raid is played a second time with the first
+colonist as the alarm's Medic and the second as its Firefighter. The table's last columns and the JSON line
+`{"raidSoakMedics":{...}}` give raids ended and still on, colonists dead, tends during the fight, downed colonists
+dragged to cover and stuck fighters (not counted in the stuck rule). Only a raid that never came fails the run: with two colonists out of the firing line more raids
+hold on past the quarter day.
 Deaths and fight length are only reported: they are numbers to watch, not rules.
 
 ## What the first run found, and the fixes (F7 fix task)

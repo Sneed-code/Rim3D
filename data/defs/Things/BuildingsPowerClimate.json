@@ -244,6 +244,7 @@
   "heatPusher": {
    "heatPerSecond": 21,
    "maxTemp": 21,
+   "adjustable": true,
    "switchesOffAbove": true
   },
   "unverified": [
@@ -275,7 +276,8 @@
   },
   "heatPusher": {
    "heatPerSecond": -21,
-   "minTemp": 10
+   "minTemp": 10,
+   "adjustable": true
   },
   "unverified": [
    "costs",
@@ -458,12 +460,12 @@
    1
   ],
   "costs": {
-   "Steel": 100,
-   "ComponentIndustrial": 2
+   "Steel": 40
   },
   "stats": {
-   "maxHitPoints": 80,
-   "workToBuild": 1440.0
+   "maxHitPoints": 50,
+   "workToBuild": 475.2,
+   "flammability": 1.0
   },
   "glower": {
    "radius": 10.0,
@@ -474,17 +476,12 @@
     0.6
    ],
    "growsPlants": true,
-   "plantLightRadius": 5.0
+   "plantLightRadius": 5.5
   },
   "power": {
    "consumption": 2900
   },
-  "unverified": [
-   "costs",
-   "stats.workToBuild",
-   "power",
-   "glower"
-  ]
+  "unverified": ["glower.radius", "glower.lift"]
  },
  {
   "defName": "TorchLamp", "visual": {"sound": {"loop": "Fire_Torch"}, "mesh": "/Game/Rim3D/Generated/Art/SM_TorchLamp.SM_TorchLamp", "flame": { "lift": 0.34, "size": 0.14 } },
