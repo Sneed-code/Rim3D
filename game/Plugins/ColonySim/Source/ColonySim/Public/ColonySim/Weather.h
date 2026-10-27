@@ -7,6 +7,7 @@
 #include "ColonySim/Random.h"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -62,7 +63,10 @@ struct WeatherState {
 // bits. With no biome or no Weathers defs the weather stays clear and the temperature constant.
 class COLONY_API Weather {
 public:
-    Weather(const Map& map, const DefDatabase& defs, uint64_t seed, const std::string& biome);
+    // `yearMean`, when given, moves the biome's four season temperatures together so that they
+    // average to it: the world tile's own yearly mean (W2), keeping the biome's seasons and swing.
+    Weather(const Map& map, const DefDatabase& defs, uint64_t seed, const std::string& biome,
+            std::optional<double> yearMean = std::nullopt);
     ~Weather();
     Weather(const Weather&) = delete;
     Weather& operator=(const Weather&) = delete;
