@@ -8,6 +8,8 @@
 
 #include <cstdint>
 #include <functional>
+#include <map>
+#include <string>
 #include <vector>
 
 namespace colony {
@@ -44,6 +46,8 @@ struct COLONY_API TemperatureNumbers {
     float rock = 0.004f;       // a rock cell round the room, towards the ground temperature
     float safeMarginC = 10.0f; // the safe range is the comfortable range this much wider
     float frostbiteSeverity = 3.0f;
+    float thermostatMinC = -50.0f;  // the range a heater's or cooler's target may be set in
+    float thermostatMaxC = 50.0f;
 
     static TemperatureNumbers read(const DefDatabase& defs);
 };
@@ -51,6 +55,12 @@ struct COLONY_API TemperatureNumbers {
 // An enclosed room's temperature as saved: the room is named by its anchor cell.
 struct RoomTemperature {
     CellPos anchor;
+    float celsius = 0.0f;
+};
+
+// A heater's or cooler's own target temperature as saved (task thermostats, docs/design/temperature.md).
+struct Thermostat {
+    Entity building = kNoEntity;
     float celsius = 0.0f;
 };
 
@@ -98,12 +108,24 @@ public:
     // Heat pushed into the open air is lost. Fires use it (docs/design/fire.md).
     void addHeat(CellPos cell, double heatPerSecond, double seconds, float maxTemp);
 
+    // Thermostats: a heater (or cooler) whose def says `heatPusher.adjustable` holds its room at its own target
+    // instead of the def's limit. False (with the reason in `error`) for a thing that is not such a building or a
+    // target outside the rules' range. `clearThermostat` goes back to the def's limit.
+    bool setThermostat(Entity building, float celsius, std::string* error = nullptr);
+    void clearThermostat(Entity building);
+    // The target a pusher holds now: its own, else the def's limit (0 for a thing that has none).
+    float thermostat(Entity building) const;
+    bool hasThermostat(Entity building) const;
+
     // One game second, after the rooms are brought up to date. `now` is the game second.
     void step(int64_t now);
 
     // ---- Saving
     // The temperature of every enclosed room under a roof, by anchor cell, in anchor order.
     std::vector<RoomTemperature> roomTemperatures();
+    // Every thermostat that was set, by entity.
+    std::vector<Thermostat> thermostats() const;
+    void restoreThermostats(const std::vector<Thermostat>& thermostats);
     // Puts the temperatures back after loading (rooms not listed start at the outdoor temperature).
     void restore(const std::vector<RoomTemperature>& temperatures);
     void hashState(StateHasher& hasher);
@@ -116,6 +138,7 @@ private:
         float maxTemp = 0.0f;
         bool hasMin = false;
         float minTemp = 0.0f;
+        bool adjustable = false;
         bool isWall = false;
         bool isVent = false;
     };
@@ -162,6 +185,7 @@ private:
     std::vector<CellPos> storedCells_;  // the cells cellTemp_ holds a number for
     uint64_t seenRebuilds_ = ~uint64_t{0};
     uint64_t sourceChanges_ = ~uint64_t{0};
+    std::map<Entity, float> thermostats_;  // targets set by the player, by building
     std::vector<Entity> sources_;     // heaters, coolers, campfires, by entity id
     std::vector<float> frozen_;       // scratch: room temperatures at the start of an exchange
     std::vector<float> flow_;         // scratch: the change in each room from heat through its boundary

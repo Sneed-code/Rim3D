@@ -31,7 +31,7 @@ target_include_directories(colonysim SYSTEM PUBLIC ThirdParty)
 add_library(colonysim_thirdparty INTERFACE)
 target_include_directories(colonysim_thirdparty SYSTEM INTERFACE ThirdParty)
 
-add_executable(simrun Tools/simrun/main.cpp Tools/simrun/ColonyScenario.cpp Tools/simrun/HouseScenario.cpp Tools/simrun/PowerScenario.cpp Tools/simrun/RaidSoak.cpp Tools/simrun/WorldMap.cpp)
+add_executable(simrun Tools/simrun/main.cpp Tools/simrun/ColonyScenario.cpp Tools/simrun/HouseScenario.cpp Tools/simrun/PowerScenario.cpp Tools/simrun/RaidSoak.cpp Tools/simrun/WorldMap.cpp Tools/simrun/PerfScenario.cpp)
 target_link_libraries(simrun PRIVATE colonysim colonysim_thirdparty)
 target_compile_definitions(simrun PRIVATE COLONY_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../data")
 
@@ -56,6 +56,8 @@ add_test(NAME simrun_needs COMMAND simrun --seed 42 --size 128 --days 3 --start 
 # Raids (F6): pirates walk in, the alarm sounds, the armed colonists fight, and the raid ends
 # (beaten, routed or gone) within a quarter of a day.
 add_test(NAME simrun_raid COMMAND simrun --seed 1 --size 256 --days 0.25 --start Crashlanded --raid 300 --armed --check)
+# Medics, firefighters and rescue under fire (F10): the same raid with a Medic and a Firefighter; it still ends.
+add_test(NAME simrun_medics COMMAND simrun --seed 1 --size 256 --days 0.25 --start Crashlanded --raid 300 --armed --medics --check)
 # Orrin's first big threat, a raid, comes between day 11 and 15.6 of a new colony (T1, docs/design/narrator.md).
 add_test(NAME simrun_narrator COMMAND simrun --seed 42 --size 128 --days 15.7 --start Crashlanded --narrator Orrin --armed --check)
 # Raid soak (F7, docs/design/raid-soak.md): firefights and raids over a few seeds. The nightly workflow runs many more.
@@ -150,3 +152,8 @@ add_test(NAME simrun_fire COMMAND simrun --seed 42 --size 256 --days 1 --start C
 # Pathfinding load test (S3): 100 pawns hauling on a 1 km map for a day, no failed job or search.
 add_test(NAME simrun_paths COMMAND simrun --seed 42 --size 1024 --days 1 --pawns 100 --items 2000 --check
          --data ${CMAKE_CURRENT_SOURCE_DIR}/Tests/data)
+
+# The sim cost check (S9, docs/design/sim-cost.md): 30 colonists and 300 tame animals on a 1 km map. Two game
+# minutes' worth here keeps CI quick and only catches a step that has become several times dearer; the nightly
+# workflow runs a whole day against the real budget.
+add_test(NAME simrun_perf COMMAND simrun --perf --days 0.02 --budget 10)
