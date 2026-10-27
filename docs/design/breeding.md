@@ -79,6 +79,15 @@ Hit points grow with the stages too: every part has the stage's `healthScaleFact
   lies in, or with its home at the egg). One that is being carried waits until it is put down. `EggHatched`.
 - A fertilized egg lying where the temperature is outside `hatchMinTemp`..`hatchMaxTemp` (0 to 50, ours) makes no progress: every pass pushes its hatch time on by the pass length. Nothing new is saved.
 
+## Young animals follow their mother
+
+A young animal born to a tame mother carries `Young { mother }` (saved, section `breeding` 3; hatched chicks have none). At each pass, while it is not grown up and its mother is on the map and on its level, it walks back to her (`AnimalSystem::goTo`) when it is further than `followRadius` (4 m) away. Once grown up it is left alone. Only one pass a minute, so it trails her loosely.
+
+## Warm gestation and the hatchery
+
+- A pregnant female whose cell is outside `gestationMinTemp`..`gestationMaxTemp` (-10 to 45 degrees, ours) makes no progress: each pass moves the birth on by the pass length.
+- The **hatchery** (a building, 30 wood, def field `hatchery.warm`) keeps every fertilized egg within `hatcheryRadius` (2.5 m) on its level warm, so it hatches however cold or hot the room is. It needs no power. There is no job that carries eggs to it yet: eggs hatch where they lie, so a stockpile or the hens' pen has to be beside it.
+
 ## Milk and wool
 
 - Milk (cows, muffalo): adult females only. Wool (muffalo, alpaca): adult of both sexes. `intervalDays` after the pass first sees the
@@ -110,8 +119,7 @@ mother), `EggLaid`, `EggHatched`, `AnimalGathered` (`message` "milk" or "wool").
 - Mating needs the two in the same zone (or both outside any); a pen or zone per kind is how to keep males and females apart.
 - No separate "allow breeding" switch, no limit on the number of animals, no overcrowding. A pen only stays
   small because the player slaughters.
-- Young animals have the adult's health; they do not follow their mother.
-- Hatching ignores temperature. An unfertilized or fertilized egg rots like any food (about five days outdoors), so a fertilized egg left unhauled still hatches at 3.8 days, but one hauled into a freezer-less stockpile is fine too.
+- An unfertilized or fertilized egg rots like any food (about five days outdoors), so a fertilized egg left unhauled still hatches at 3.8 days, but one hauled into a freezer-less stockpile is fine too.
 - Animal products are not marked "do not sell" or ranked by quality (RimWorld has none).
 
 ## Products checked against the wiki (2026-10-26)

@@ -8,6 +8,7 @@
 #include <fstream>
 #include <map>
 #include <sstream>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 
@@ -53,7 +54,7 @@ const Json* defsFindPath(const Json& root, const char* path) {
             continue;
         }
         if (!cur->is_object()) return nullptr;
-        const auto it = cur->find(std::string(p, end));
+        const auto it = cur->find(std::string_view(p, static_cast<size_t>(end - p)));
         if (it == cur->end()) return nullptr;
         cur = &*it;
         p = (*end == '.') ? end + 1 : end;
