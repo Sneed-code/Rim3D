@@ -22,6 +22,7 @@
 #include "ColonySim/Fuel.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Loot.h"
 #include "ColonySim/Spoilage.h"
 #include "ColonySim/Crafting.h"
 #include "ColonySim/Repair.h"
@@ -436,6 +437,33 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setFieldCare(fieldCare_.get());
     narrator_ = std::make_unique<NarratorSystem>(*raids_, *defs_, time_, settings.seed);
     narrator_->setEventLog(&events_);
+    loot_ = std::make_unique<LootSystem>(*things_, map_, *defs_, settings.seed);
+    narrator_->setWorker("ResourcePodCrash", [this](IncidentFiring& f) {
+        // Lands near the colony: the middle of the player's colonists, else of the map.
+        float sx = 0.0f;
+        float sy = 0.0f;
+        int n = 0;
+        for (const auto [pawn, colonist, pos] : things_->registry().view<const Colonist, const Position>().each()) {
+            if (fighters_->factionOf(pawn) == kPlayerFaction && pos.level == 0) {
+                sx += pos.x;
+                sy += pos.y;
+                ++n;
+            }
+        }
+        const CellPos centre = n > 0 ? CellPos{static_cast<int>(sx / static_cast<float>(n)), static_cast<int>(sy / static_cast<float>(n)), 0}
+                                     : CellPos{map_.width() / 2, map_.width() / 2, 0};
+        Rng rng = loot_->rngFor(0x706F64ULL, time_.seconds);
+        std::vector<LootItem> items;
+        CellPos where;
+        if (!loot_->cargoPod("CargoPod", centre, rng, where, items)) {
+            f.error = "no open ground for a cargo pod";
+            return false;
+        }
+        f.hasCell = true;
+        f.cell = where;
+        f.text = "A cargo pod has crashed nearby, with " + loot_->describe(items) + ".";
+        return true;
+    });
     narrator_->setHostileCheck([this](const std::string& faction) { return trade_->hostile(faction); });
     disasters_ = std::make_unique<DisasterSystem>(*narrator_, *power_, *weather_, *plants_, *farming_, *things_, *health_, *mood_,
                                                   *animals_, *fire_, *combat_, map_, *defs_, time_, settings.seed);
@@ -1601,6 +1629,7 @@ void Sim::step() {
         }
     }
     { SimLap lap(profile_, "apparel"); apparel_->step(time_.seconds, rng_, events_); }
+    { SimLap lap(profile_, "loot"); loot_->step(events_, 0, raids_->state(), time_.seconds); }  // raiders killed this step drop their packs
     { SimLap lap(profile_, "pathfinder"); pathfinder_.update(settings_.pathBudget); }  // paths asked for this step are ready next step at the earliest
     { SimLap lap(profile_, "rooms"); rooms_->update(); }
     { SimLap lap(profile_, "roofCollapse"); roofCollapse_->step(rng_); }  // roofs and floors that lost their holders fall

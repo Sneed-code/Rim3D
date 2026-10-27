@@ -76,6 +76,7 @@ class ShipSystem;
 class Rooms;
 class TemperatureSystem;
 class SpoilageSystem;
+class LootSystem;
 class CraftingSystem;
 class RepairSystem;
 class Things;
@@ -378,6 +379,9 @@ public:
     // The narrator, incidents and threat points (docs/design/narrator.md).
     NarratorSystem& narrator() { return *narrator_; }
     const NarratorSystem& narrator() const { return *narrator_; }
+    // Loot tables: what raiders drop, cargo pods, ancient stashes (docs/design/loot.md).
+    LootSystem& loot() { return *loot_; }
+    const LootSystem& loot() const { return *loot_; }
     // Disasters and bad events: solar flare, toxic fallout, volcanic winter, flashstorm, psychic waves, blight,
     // manhunters, short circuits (docs/design/disasters.md).
     DisasterSystem& disasters() { return *disasters_; }
@@ -536,6 +540,7 @@ private:
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<FieldCare> fieldCare_;    // after the raids, the fighters and the jobs, which hold a pointer to it
     std::unique_ptr<NarratorSystem> narrator_;  // after raids_
+    std::unique_ptr<LootSystem> loot_;          // after the narrator, whose cargo pod it carries out
     std::unique_ptr<DisasterSystem> disasters_;  // T3, after the narrator and everything it touches
     std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
     std::unique_ptr<ResonanceSystem> resonance_;  // after the fighters and the job system it holds
