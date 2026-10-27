@@ -25,7 +25,7 @@ private:
     struct PartData {
         bool inside = false;
         DefId def;
-        BodyRegion region = BodyRegion::Torso;
+        WoundRegion region = WoundRegion::Torso;
         float bleedRate = 1.0f;
     };
     struct HediffData {
@@ -41,6 +41,8 @@ private:
 
     const std::vector<PartData>& body(DefId pawnDef);
     const HediffData& hediff(DefId def);
+    // The disease is past its first, unnoticed stage.
+    bool diseaseShows(const Disease& disease) const;
 };
 
 }  // namespace colony

@@ -1808,7 +1808,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.bloodLoss = health->bloodLoss;
             view.bleedPerDay = health->bleedPerDay;
             view.firstWound = static_cast<uint32_t>(out.wounds.size());
-            if (!health->injuries.empty() || !health->missing.empty()) {
+            if (!health->injuries.empty() || !health->missing.empty() || !health->diseases.empty()) {
                 woundViews_->append(entity, thing.def, *health, out.wounds);
             }
             view.woundCount = static_cast<uint32_t>(out.wounds.size()) - view.firstWound;

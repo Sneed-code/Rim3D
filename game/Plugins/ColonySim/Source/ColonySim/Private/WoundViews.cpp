@@ -40,14 +40,14 @@ const char* woundKindName(WoundKind kind) {
     return "Cut";
 }
 
-const char* bodyRegionName(BodyRegion region) {
+const char* woundRegionName(WoundRegion region) {
     switch (region) {
-        case BodyRegion::Torso: return "Torso";
-        case BodyRegion::Head: return "Head";
-        case BodyRegion::LeftArm: return "LeftArm";
-        case BodyRegion::RightArm: return "RightArm";
-        case BodyRegion::LeftLeg: return "LeftLeg";
-        case BodyRegion::RightLeg: return "RightLeg";
+        case WoundRegion::Torso: return "Torso";
+        case WoundRegion::Head: return "Head";
+        case WoundRegion::LeftArm: return "LeftArm";
+        case WoundRegion::RightArm: return "RightArm";
+        case WoundRegion::LeftLeg: return "LeftLeg";
+        case WoundRegion::RightLeg: return "RightLeg";
     }
     return "Torso";
 }
@@ -101,23 +101,39 @@ const std::vector<WoundViews::PartData>& WoundViews::body(DefId pawnDef) {
             side[i] = side[parent];
         }
         if (regionName[i] == "Head") {
-            part.region = BodyRegion::Head;
+            part.region = WoundRegion::Head;
         } else if (regionName[i] == "Arm") {
-            part.region = side[i] > 0 ? BodyRegion::RightArm : BodyRegion::LeftArm;
+            part.region = side[i] > 0 ? WoundRegion::RightArm : WoundRegion::LeftArm;
         } else if (regionName[i] == "Leg") {
-            part.region = side[i] > 0 ? BodyRegion::RightLeg : BodyRegion::LeftLeg;
+            part.region = side[i] > 0 ? WoundRegion::RightLeg : WoundRegion::LeftLeg;
         } else {
-            part.region = BodyRegion::Torso;
+            part.region = WoundRegion::Torso;
         }
     }
     return bodies_.emplace(pawnDef.value, std::move(parts)).first->second;
 }
 
+bool WoundViews::diseaseShows(const Disease& disease) const {
+    if (!disease.def.valid() || disease.def.value >= defs_.size()) {
+        return false;
+    }
+    // The stage it is in (the last whose minSeverity it has reached) decides, as for the health panel.
+    const Def& def = defs_.get(disease.def);
+    int stage = -1;
+    for (size_t i = 0; i < def.count("stages"); ++i) {
+        if (disease.severity >= def.number(("stages." + std::to_string(i) + ".minSeverity").c_str())) {
+            stage = static_cast<int>(i);
+        }
+    }
+    return stage < 0 || def.flag(("stages." + std::to_string(stage) + ".visible").c_str(), true);
+}
+
 void WoundViews::append(Entity pawn, DefId pawnDef, const Health& health, std::vector<WoundView>& out) {
-    if (health.injuries.empty() && health.missing.empty()) {
+    if (health.injuries.empty() && health.missing.empty() && health.diseases.empty()) {
         return;
     }
     const std::vector<PartData>& parts = body(pawnDef);
+    const size_t firstOfPawn = out.size();
     for (const Injury& injury : health.injuries) {
         if (injury.part >= parts.size() || parts[injury.part].inside || injury.severity <= 0.0f) {
             continue;
@@ -135,6 +151,36 @@ void WoundViews::append(Entity pawn, DefId pawnDef, const Health& health, std::v
         wound.tendQuality = injury.tendQuality;
         wound.bleeding = !injury.tended() && data.bleedRate * part.bleedRate > 0.0f;
         out.push_back(wound);
+    }
+    // A wound that has turned septic (H2: a Disease with the wound's part) is drawn as an infection once its stage is
+    // visible: the worst-looking wound on that part, or a new one if the wound itself is gone.
+    for (const Disease& disease : health.diseases) {
+        if (disease.part < 0 || static_cast<size_t>(disease.part) >= parts.size() || parts[static_cast<size_t>(disease.part)].inside ||
+            !diseaseShows(disease)) {
+            continue;
+        }
+        const uint16_t part = static_cast<uint16_t>(disease.part);
+        WoundView* host = nullptr;
+        for (size_t i = firstOfPawn; i < out.size(); ++i) {
+            WoundView& wound = out[i];
+            if (wound.part == part && wound.kind != WoundKind::Scar && wound.kind != WoundKind::Missing &&
+                (host == nullptr || wound.severity > host->severity)) {
+                host = &wound;
+            }
+        }
+        if (host == nullptr) {
+            const PartData& data = parts[part];
+            WoundView wound;
+            wound.part = part;
+            wound.partDef = data.def;
+            wound.region = data.region;
+            wound.severity = std::clamp(disease.severity, 0.0f, 1.0f);
+            wound.tended = disease.tendQuality >= 0.0f;
+            wound.tendQuality = disease.tendQuality;
+            out.push_back(wound);
+            host = &out.back();
+        }
+        host->kind = WoundKind::Infection;
     }
     for (const MissingPart& missing : health.missing) {
         if (missing.part >= parts.size() || parts[missing.part].inside) {

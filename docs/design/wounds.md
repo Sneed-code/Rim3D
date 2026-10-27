@@ -13,7 +13,7 @@ Every pawn with a body has `ThingView::firstWound` and `woundCount`: its wounds 
 | Field | Meaning |
 | --- | --- |
 | `part`, `partDef` | the part's position in the pawn's Bodies def, and its BodyParts def (`Arm`, `Hand`, `Eye`...) |
-| `region` | the coarse skin piece: `Torso`, `Head`, `LeftArm`, `RightArm`, `LeftLeg`, `RightLeg` |
+| `region` | the coarse skin piece (`WoundRegion`, separate from the looks' `BodyRegion`): `Torso`, `Head`, `LeftArm`, `RightArm`, `LeftLeg`, `RightLeg` |
 | `kind` | `Cut`, `Bruise`, `Burn`, `Bite`, `Gunshot`, `Infection`, `Scar`, `Missing` |
 | `severity` | the share of the part's hit points the wound took, 0 to 1 (a lost part is 1) |
 | `tended`, `tendQuality` | bandaged, and how well (below 0 while untended) |
@@ -38,9 +38,9 @@ goes in also hurts the outside part over it (HealthRules `innerHurtsOuter`), and
 
 ## What is not here yet
 
-- **Infection.** `WoundKind::Infection` is in the list and any injury def with `"woundKind": "Infection"` shows as one,
-  but nothing in the sim makes one until H2 (diseases) is merged. H2 stores an infection as a `Disease` with a wound's
-  `part`; when it lands, `WoundViews::append` (`Private/WoundViews.cpp`) should show the wound it sits on as `Infection`.
+- **Infection** (H2 is merged): a `Disease` with a wound's `part` makes the worst-looking wound on that part an `Infection`
+  (as long as the disease's current stage is not marked `visible: false`). If the wound itself has healed away, a new
+  `Infection` entry stands in for it. Whole-body sicknesses (flu...) show nothing on the skin.
 - **Drawing.** Skin-material layers per region, bandages, the blood-soaked look and blackened burns are the PC half of V7.
   Dismemberment (V8) reads the `Missing` wounds and the `PawnPartLost` event.
 
