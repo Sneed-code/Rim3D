@@ -1406,6 +1406,14 @@ std::string writeReplay(const Replay& replay) {
     if (s.wildAnimals != 0) {
         settings["wildAnimals"] = s.wildAnimals;
     }
+    if (s.world.enabled) {
+        ReplayOrderedJson world = ReplayOrderedJson::object();
+        world["seed"] = s.world.seed;
+        world["width"] = s.world.width;
+        world["height"] = s.world.height;
+        world["startTile"] = s.world.startTile;
+        settings["world"] = world;
+    }
 
     // One command and one checkpoint per line, so files diff and read well.
     std::string out = "{\n";
@@ -1479,6 +1487,21 @@ bool readReplay(const std::string& text, Replay& out, std::string& error) {
         s.pathBudget <= 0 || s.wildAnimals < 0) {
         return r.fail(
             "settings: mapSize must be 1 to 4096; pawns, items, checkpointEvery and wildAnimals not negative; pathBudget above 0");
+    }
+    // "world": {"seed", "width", "height", "startTile"} plays the game on a world (W2); absent, no world.
+    if (const auto world = settings->find("world"); world != settings->end()) {
+        if (!world->is_object()) {
+            return r.fail("settings.world must be an object");
+        }
+        const std::string at = "settings.world";
+        s.world.enabled = true;
+        if (!r.integer(*world, "seed", s.world.seed, at) || !r.integer(*world, "width", s.world.width, at) ||
+            !r.integer(*world, "height", s.world.height, at) || !r.integer(*world, "startTile", s.world.startTile, at)) {
+            return false;
+        }
+        if (!worldSettingsValid(s.world)) {
+            return r.fail("settings.world: width 0 to 1000, height 0 to 500, startTile -1 or a tile of the world");
+        }
     }
 
     if (const auto commands = root.find("commands"); commands != root.end()) {

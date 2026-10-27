@@ -153,19 +153,19 @@ TEST_CASE("Surgery: the recipes are read, and the success chance follows RimWorl
     CHECK(bionic->minSkill == 8);
     CHECK_FALSE(bionic->requiresMissing);
 
-    // Skill: 0.5 at level 0, 1.0 at 10, 1.4 at 20, read in between.
-    CHECK(surgery.skillFactor(0) == doctest::Approx(0.5f));
-    CHECK(surgery.skillFactor(10) == doctest::Approx(1.0f));
-    CHECK(surgery.skillFactor(20) == doctest::Approx(1.4f));
-    CHECK(surgery.skillFactor(7) == doctest::Approx(0.85f));
+    // Skill (wiki, checked in the skills pass): 0.1 at level 0, 0.9 at 10, 1.1 at 20, read in between.
+    CHECK(surgery.skillFactor(0) == doctest::Approx(0.1f));
+    CHECK(surgery.skillFactor(10) == doctest::Approx(0.9f));
+    CHECK(surgery.skillFactor(20) == doctest::Approx(1.1f));
+    CHECK(surgery.skillFactor(7) == doctest::Approx(0.75f));
     SurgeryConditions c;
     c.skill = 10;
     // No medicine costs 30%; the cap is 98%.
-    CHECK(surgery.successChance(*amputate, c) == doctest::Approx(0.7f));
+    CHECK(surgery.successChance(*amputate, c) == doctest::Approx(0.7f * 0.9f));
     c.bedFactor = 1.07f;
-    CHECK(surgery.successChance(*amputate, c) == doctest::Approx(0.7f * 1.07f));
+    CHECK(surgery.successChance(*amputate, c) == doctest::Approx(0.7f * 0.9f * 1.07f));
     c.cleanliness = -5.0f;
-    CHECK(surgery.successChance(*amputate, c) == doctest::Approx(0.7f * 1.07f * 0.85f));
+    CHECK(surgery.successChance(*amputate, c) == doctest::Approx(0.7f * 0.9f * 1.07f * 0.85f));
     c.cleanliness = 0.0f;
     const MedicineKind* medicine = sim.medicine().kindOf(sim.defs().idOf("Things", "MedicineIndustrial"));
     SURG_REQUIRE(medicine != nullptr);
@@ -175,7 +175,7 @@ TEST_CASE("Surgery: the recipes are read, and the success chance follows RimWorl
     // A clumsy doctor does worse.
     c.skill = 10;
     c.manipulation = 0.5f;
-    CHECK(surgery.successChance(*amputate, c) == doctest::Approx(0.5f * 1.07f * 1.0f));
+    CHECK(surgery.successChance(*amputate, c) == doctest::Approx(0.5f * 1.07f * 0.9f));
 }
 
 TEST_CASE("Surgery: a lost leg, fitted with a peg leg, a prosthetic or a bionic, moves at the part's efficiency") {
