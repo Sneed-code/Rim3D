@@ -1045,7 +1045,7 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<SowCropsGiver>());
     for (const char* task :
          {"DoBillsCookStove", "DoBillsButcher", "DoBillsSmithy", "DoBillsTailor", "DoBillsCraftingSpot", "DoBillsStonecut", "DoBillsSmelt",
-          "DoBillsCremate"}) {
+          "DoBillsCremate", "DoBillsDrugLab", "DoBillsBrew"}) {
         givers.push_back(std::make_unique<DoBillsGiver>(task));
     }
     givers.push_back(std::make_unique<ResearchGiver>());
