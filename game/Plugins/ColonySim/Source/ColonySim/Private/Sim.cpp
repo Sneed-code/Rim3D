@@ -1291,6 +1291,15 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     } else if (const auto* equip = std::get_if<EquipCommand>(&command)) {
         const bool grenade = things_->registry().valid(equip->item) && things_->registry().all_of<Thing>(equip->item) &&
                              explosives_->isThrown(things_->registry().get<Thing>(equip->item).def);
+        // The order beats a colonist only walking over to pick the thing up for itself (a loose gun, clothes): that
+        // colonist's job ends and it thinks again. Any other job using the thing still refuses the order.
+        if (const Entity other = jobs_->reservedBy(JobTarget{equip->item, CellPos{}});
+            other != kNoEntity && things_->registry().all_of<Worker>(other)) {
+            const JobType type = things_->registry().get<Worker>(other).job.type;
+            if (type == JobType::EquipWeapon || type == JobType::WearApparel) {
+                jobs_->interrupt(other, "the player took that");
+            }
+        }
         if (simJobUses(*jobs_, things_->registry(), equip->item)) {
             commandFailed(id, "a job is using that thing");
         } else if (grenade ? !explosives_->take(equip->pawn, equip->item, &error)
