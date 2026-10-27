@@ -12,6 +12,7 @@
 #include "ColonySim/Raids.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Trade.h"
 #include "ColonySim/Things.h"
 
 #include <doctest.h>
@@ -197,6 +198,15 @@ TEST_CASE("Execution: an innocent prisoner costs -5") {
     EXEC_REQUIRE(f.event(EventType::PrisonerExecuted) != nullptr);
     CHECK(f.offset(plain, "KnowPrisonerExecuted") == doctest::Approx(-5.0f));
     CHECK_FALSE(f.remembers(plain, "KnowPrisonerExecutedGuilty"));
+}
+
+TEST_CASE("Execution: the prisoner's faction loses 10 goodwill") {
+    ExecFixture f;
+    std::string error;
+    EXEC_REQUIRE(f.sim.fighters().setFaction(f.prisoner, f.sim.raids().factionId("FrayCompact"), error));
+    EXEC_REQUIRE(f.sim.trade().adjustGoodwill("FrayCompact", -f.sim.trade().goodwill("FrayCompact"), error));
+    EXEC_REQUIRE(f.sim.prisoners().execute(f.prisoner, f.warden));
+    CHECK(f.sim.trade().goodwill("FrayCompact") == doctest::Approx(-10.0f));
 }
 
 TEST_CASE("Execution: switching the mode away before the cut saves the prisoner") {

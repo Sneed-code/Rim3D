@@ -185,9 +185,12 @@ struct RaidResult {
     int colonistsDied = 0;
     int raidersDowned = 0;
     int raidersDied = 0;
+    int tendedInFight = 0;  // with medics (F10): tends while the alarm was on
+    int dragged = 0;        // downed colonists a fighter carried to cover
 };
 
-RaidResult raid(uint64_t seed, const std::shared_ptr<const colony::DefDatabase>& defs, StuckWatch& watch) {
+// `medics` (F10, docs/design/field-care.md): the first colonist is the alarm's Medic, the second its Firefighter.
+RaidResult raid(uint64_t seed, const std::shared_ptr<const colony::DefDatabase>& defs, StuckWatch& watch, bool medics) {
     colony::SimSettings settings{seed, 256, 0, 0};
     settings.scenario = "Crashlanded";
     colony::Sim sim(settings, defs);
@@ -200,6 +203,15 @@ RaidResult raid(uint64_t seed, const std::shared_ptr<const colony::DefDatabase>&
         sim.combat().equip(pawn, sim.things().make(sim.defs().idOf("Things", "Gun_AssaultRifle")));
     }
     sim.submit(colony::StartRaidCommand{"Pirate", 300.0f, -1});
+    if (medics) {
+        std::vector<colony::Entity> crew(sim.things().registry().view<const colony::Colonist>().begin(),
+                                         sim.things().registry().view<const colony::Colonist>().end());
+        std::sort(crew.begin(), crew.end());
+        for (size_t c = 0; c < crew.size() && c < 2; ++c) {
+            const colony::DefenseRole role = c == 0 ? colony::DefenseRole::Medic : colony::DefenseRole::Firefighter;
+            sim.submit(colony::SetDefenseRoleCommand{crew[c], static_cast<uint8_t>(role), false, colony::CellPos{}});
+        }
+    }
     int64_t arrivedAt = -1;
     for (int64_t i = 0; i < kRaidSteps && !r.ended; ++i) {
         sim.step();
@@ -212,6 +224,10 @@ RaidResult raid(uint64_t seed, const std::shared_ptr<const colony::DefDatabase>&
                 case colony::EventType::PawnDowned: ++(ours ? r.colonistsDowned : r.raidersDowned); break;
                 case colony::EventType::PawnDied: ++(ours ? r.colonistsDied : r.raidersDied); break;
                 case colony::EventType::CommandFailed: r.skipped = !r.arrived; break;  // no way in from any edge: an island start
+                case colony::EventType::PawnTended: r.tendedInFight += sim.raids().state().alarm ? 1 : 0; break;
+                case colony::EventType::PawnAction:
+                    r.dragged += e.action == colony::PawnAction::LayPawn && e.message == "safe" ? 1 : 0;
+                    break;
                 default: break;
             }
         }
@@ -258,12 +274,28 @@ int run(uint64_t firstSeed, int seeds, std::shared_ptr<const colony::DefDatabase
     int raidersDowned = 0;
     int raidersDied = 0;
     StuckWatch raidWatch;
-    std::printf("seed  fight: steps downed died waiting open%%   raid: ended length(min) colonists down/dead  raiders down/dead\n");
+    // The same raid with a Medic and a Firefighter (F10).
+    int careEnded = 0;
+    int careOpen = 0;
+    int careMissed = 0;
+    int careDied = 0;
+    int careTended = 0;
+    int careDragged = 0;
+    StuckWatch careWatch;  // reported, not counted in the stuck rule
+    std::printf("seed  fight: steps downed died waiting open%%   raid: ended length(min) colonists down/dead  raiders down/dead"
+                "   with medics: ended died tended dragged\n");
     for (int k = 0; k < seeds; ++k) {
         const uint64_t seed = firstSeed + static_cast<uint64_t>(k);
         Tally t;
         firefight(seed, defs, t, fightWatch);
-        const RaidResult r = raid(seed, defs, raidWatch);
+        const RaidResult r = raid(seed, defs, raidWatch, false);
+        const RaidResult c = raid(seed, defs, careWatch, true);
+        careEnded += c.ended ? 1 : 0;
+        careOpen += c.arrived && !c.ended && !c.wiped ? 1 : 0;
+        careMissed += c.arrived || c.skipped ? 0 : 1;
+        careDied += c.colonistsDied;
+        careTended += c.tendedInFight;
+        careDragged += c.dragged;
         fights.waiting += t.waiting;
         fights.inOpen += t.inOpen;
         fights.downed += t.downed;
@@ -280,11 +312,13 @@ int run(uint64_t firstSeed, int seeds, std::shared_ptr<const colony::DefDatabase
         colonistsDied += r.colonistsDied;
         raidersDowned += r.raidersDowned;
         raidersDied += r.raidersDied;
-        std::printf("%4llu  %11lld %6d %4d %7lld %5.1f   %17s %11lld %9d/%d %14d/%d\n", static_cast<unsigned long long>(seed),
+        std::printf("%4llu  %11lld %6d %4d %7lld %5.1f   %17s %11lld %9d/%d %14d/%d   %17s %4d %6d %7d\n", static_cast<unsigned long long>(seed),
                     static_cast<long long>(t.fightSteps), t.downed, t.died, static_cast<long long>(t.waiting),
                     t.waiting > 0 ? 100.0 * static_cast<double>(t.inOpen) / static_cast<double>(t.waiting) : 0.0,
                     r.skipped ? "no start room" : r.arrived ? (r.ended ? "yes" : r.wiped ? "colony down" : "NO (still on)") : "NO (never came)",
-                    static_cast<long long>(r.length / 60), r.colonistsDowned, r.colonistsDied, r.raidersDowned, r.raidersDied);
+                    static_cast<long long>(r.length / 60), r.colonistsDowned, r.colonistsDied, r.raidersDowned, r.raidersDied,
+                    c.skipped ? "no start room" : c.arrived ? (c.ended ? "yes" : c.wiped ? "colony down" : "NO (still on)") : "NO (never came)",
+                    c.colonistsDied, c.tendedInFight, c.dragged);
         if (verbose) {
             std::fflush(stdout);
         }
@@ -299,6 +333,9 @@ int run(uint64_t firstSeed, int seeds, std::shared_ptr<const colony::DefDatabase
                 static_cast<double>(fights.fightSteps) / seeds, fights.downed, fights.died, raidsEnded, raidsWiped, raidsOpen,
                 raidsSkipped, raidsMissed, raidsEnded > 0 ? static_cast<double>(raidLength) / raidsEnded / 60.0 : 0.0,
                 static_cast<long long>(longest / 60), colonistsDowned, colonistsDied, raidersDowned, raidersDied, stuck, fightWatch.stuck(), raidWatch.stuck());
+    std::printf("{\"raidSoakMedics\":{\"raidsEnded\":%d,\"raidsStillOn\":%d,\"raidsNeverCame\":%d,\"colonistsDied\":%d,"
+                "\"tendedInFight\":%d,\"dragged\":%d,\"stuckFighters\":%d}}\n",
+                careEnded, careOpen, careMissed, careDied, careTended, careDragged, careWatch.stuck());
     bool ok = true;
     if (fights.waiting == 0 || openPercent >= kOpenLimit) {
         std::fprintf(stderr, "check failed: fighters waited in the open %.1f%% of the time (rule: under %.0f%%, %lld pawn-steps)\n",
@@ -312,6 +349,14 @@ int run(uint64_t firstSeed, int seeds, std::shared_ptr<const colony::DefDatabase
         ok = false;
     } else if (stuck > 0) {
         std::fprintf(stderr, "note: %d fighters stuck (walking but getting nowhere for %d steps)\n", stuck, kStuckSteps);
+    }
+    // With two colonists out of the firing line the colony is weaker and more raids hold on (field-care.md): only a raid
+    // that never came fails; the rest are numbers to watch.
+    if (careMissed > 0) {
+        std::fprintf(stderr, "check failed: with medics, %d raids never came\n", careMissed);
+        ok = false;
+    } else if (careOpen > 0) {
+        std::fprintf(stderr, "note: with medics, %d raids were still going after a quarter day\n", careOpen);
     }
     if (raidsMissed > 0 || raidsOpen * kOneIn > seeds) {
         std::fprintf(stderr, "check failed: %d raids never came, %d never ended inside the quarter day (at most one seed in %d)\n", raidsMissed,
