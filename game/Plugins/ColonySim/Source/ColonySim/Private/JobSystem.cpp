@@ -864,7 +864,7 @@ void JobSystem::step() {
         // The player walks this one (U9): no think, until control is let go. Its only job is a
         // hands-on one the player started (U10), done in place.
         if (reg.all_of<PlayerControl>(pawn)) {
-            if (reg.get<Worker>(pawn).job.type != JobType::None) {
+            if (reg.get<Worker>(pawn).job.type != JobType::None && !(pauseGate_ && pauseGate_(pawn))) {
                 tickJob(pawn);
             }
             continue;
@@ -904,6 +904,11 @@ void JobSystem::step() {
                 !(lying.type == JobType::BedRest && lying.step >= 1)) {
                 health->rest = RestKind::Ground;
             }
+        }
+        // Stunned or winding up a power (X2): the job waits where it is.
+        if (pauseGate_ && pauseGate_(pawn)) {
+            reg.get<Mover>(pawn).hold = true;
+            continue;
         }
         // A prisoner sleeps and rests in its cell and does nothing else (PrisonerJobs.cpp).
         if (reg.all_of<Prisoner>(pawn)) {

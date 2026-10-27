@@ -2,6 +2,7 @@
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Genes.h"
+#include "ColonySim/Looks.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Things.h"
 
@@ -923,7 +924,7 @@ void HealthSystem::die(Entity pawn, Health& health, DeathCause cause, bool annou
     }
 }
 
-void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, Health& health, DeathCause& cause, bool& shouldBeDown) const {
+void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, const HealthMods& mods, Health& health, DeathCause& cause, bool& shouldBeDown) const {
     const HealthModel::Body& body = model_->bodies[static_cast<size_t>(bodyIndex)];
     HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
     eval.workOutPainAndBleeding();
@@ -941,7 +942,7 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, Hea
             health.hungerFactor *= st.hunger;
         }
     }
-    health.pain = mechanical ? 0.0f : eval.pain / healthScale * painFactor;
+    health.pain = mechanical ? 0.0f : eval.pain / healthScale * painFactor * mods.painFactor;
     for (const Disease& disease : health.diseases) {
         const HealthModel::DiseaseDef* def = model_->diseaseOf(disease.def);
         const int stage = def != nullptr ? HealthModel::stageIn(def->stages, disease.severity) : -1;
@@ -956,6 +957,10 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, Hea
     health.capacities.resize(model_->capacities.size());
     for (size_t i = 0; i < model_->capacities.size(); ++i) {
         health.capacities[i] = eval.capacity(static_cast<int>(i));
+    }
+    if (model_->movingCapacity >= 0 && mods.movingMax < 1.0f) {
+        float& moving = health.capacities[static_cast<size_t>(model_->movingCapacity)];
+        moving = std::min(moving, mods.movingMax);  // a cap, not a factor: a pawn already slower is unaffected
     }
 
     cause = DeathCause::None;
@@ -1000,7 +1005,11 @@ void HealthSystem::recompute(Entity pawn, Health& health, bool announce) {
     }
     DeathCause cause = DeathCause::None;
     bool shouldBeDown = false;
-    derive(kind->body, kind->healthScale, kind->mechanical, health, cause, shouldBeDown);
+    HealthMods mods;
+    if (mods_) {
+        mods_(pawn, mods);
+    }
+    derive(kind->body, kind->healthScale, kind->mechanical, mods, health, cause, shouldBeDown);
 
     if (!health.dead && cause != DeathCause::None) {
         die(pawn, health, cause, announce);
@@ -1495,6 +1504,28 @@ void HealthSystem::leaveScar(Entity pawn, Health& health, const Injury& healed, 
     scar.peak = model_->scarSeverity;
     health.injuries.push_back(scar);
     emit(EventType::PawnScarred, pawn, def, healed.part, scar.severity);
+
+    // V1: a scar on the skin shows. The part's own def and the side come from its chain of parents.
+    if (PawnLooks* looks = things_.registry().try_get<PawnLooks>(pawn)) {
+        const HealthModel::Kind* kind = healthKindOf(*model_, things_.registry(), pawn);
+        if (kind != nullptr) {
+            const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+            BodyRegion region = BodyRegion::Torso;
+            bool left = false;
+            bool found = false;
+            for (int p = healed.part; p >= 0 && !found; p = body.parts[static_cast<size_t>(p)].parent) {
+                const HealthModel::Part& part = body.parts[static_cast<size_t>(p)];
+                left = left || part.label.rfind("left ", 0) == 0;
+                found = bodyRegionOfPart(part.def, left, region) && !part.inside;
+                if (!found && part.inside) {
+                    break;  // an organ or bone: nothing shows on the skin
+                }
+            }
+            if (found) {
+                addScarMark(things_.defs(), *looks, region, things_.defs().get(healed.hediff).defName(), rng);
+            }
+        }
+    }
 }
 
 // ---- Infections and diseases (H2) --------------------------------------------------------------------
@@ -2152,7 +2183,11 @@ bool HealthSystem::report(Entity pawn, HealthReport& out) const {
     if (health.dirty) {
         DeathCause cause = DeathCause::None;
         bool shouldBeDown = false;
-        derive(kind->body, kind->healthScale, kind->mechanical, health, cause, shouldBeDown);
+        HealthMods mods;
+        if (mods_) {
+            mods_(pawn, mods);
+        }
+        derive(kind->body, kind->healthScale, kind->mechanical, mods, health, cause, shouldBeDown);
         if (!health.dead && cause != DeathCause::None) {
             health.dead = true;
             health.cause = cause;
