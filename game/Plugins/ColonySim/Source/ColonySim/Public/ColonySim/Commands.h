@@ -622,7 +622,8 @@ struct ContractDiseaseCommand {
 };
 
 // The spaceship ending (docs/design/ship.md). `action` is "StartReactor" (`thing` a finished ship reactor), "Board" (`pawn` rides
-// in the ship cryptosleep casket `thing`; no pawn empties the casket) or "Launch". Fails with the reason in plain words.
+// in the ship cryptosleep casket `thing`; no pawn empties the casket), "Launch" or the dev action "FinishWarmUp" (the warming reactor is active at
+// the next step). Fails with the reason in plain words.
 struct ShipCommand {
     std::string action;
     Entity thing = kNoEntity;

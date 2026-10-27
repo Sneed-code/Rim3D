@@ -497,6 +497,8 @@ struct ShipView {
     std::string problem;         // why not, in plain words
     bool won = false;
     int escaped = 0;
+    Entity reactor = kNoEntity;  // the reactor warming up or active (none when idle)
+    std::vector<std::pair<Entity, Entity>> aboard;  // casket and its rider, in boarding order (riders not yet checked for a beam)
 };
 
 // The date, the weather and the sky's mood (docs/design/weather.md). Snow per cell is not here:
