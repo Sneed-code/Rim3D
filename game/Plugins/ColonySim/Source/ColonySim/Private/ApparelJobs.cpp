@@ -53,6 +53,9 @@ bool JobSystem::thinkApparel(Entity pawn, Job& out) {
         out.cell = cellOf(reg.get<Position>(best));
         return true;
     }
+    if (thinkMendWorn(pawn, out)) {
+        return true;
+    }
     if (findLooseWeapon(pawn, out)) {
         return true;
     }

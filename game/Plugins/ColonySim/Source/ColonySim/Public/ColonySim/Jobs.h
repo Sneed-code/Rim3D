@@ -718,6 +718,9 @@ private:
     // RepairGear (GearJobs.cpp, docs/design/repair.md): carry the gear to a bench, mend it or fit a part.
     StepResult gearWork(Entity pawn, Job& job, std::string& why);
     bool failCheckGear(Entity pawn, Job& job, std::string& why);
+    // MendWorn (GearJobs.cpp, docs/design/apparel-durability.md): a worn piece that is marked for repair, or tattered, is
+    // mended at the nearest tailor bench with the material near it, while the pawn keeps it on. Called by thinkApparel.
+    bool thinkMendWorn(Entity pawn, Job& out);
     // Puts the ingredients delivered so far back on the ground near the pawn.
     void returnIngredients(Entity pawn, const Job& job);
     // Makes `count` of an item def and puts it down on the nearest free cell near the pawn.

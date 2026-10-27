@@ -38,6 +38,7 @@ RepairSystem::RepairSystem(Things& things, ApparelSystem& apparel, CombatSystem&
         numbers_.apparelWorkPerKg = static_cast<float>(rules->number("apparelWorkPerKg", numbers_.apparelWorkPerKg));
         numbers_.apparelMaterialShare = static_cast<float>(rules->number("apparelMaterialShare", numbers_.apparelMaterialShare));
         numbers_.apparelMaterialPerKg = static_cast<float>(rules->number("apparelMaterialPerKg", numbers_.apparelMaterialPerKg));
+        numbers_.mendWornAtOrBelow = static_cast<float>(rules->number("mendWornAtOrBelow", numbers_.mendWornAtOrBelow));
         numbers_.weaponMaterial = rules->text("weaponMaterial", numbers_.weaponMaterial);
         numbers_.apparelMaterial = rules->text("apparelMaterial", numbers_.apparelMaterial);
         numbers_.materialRadius = static_cast<float>(rules->number("materialRadius", numbers_.materialRadius));
@@ -111,8 +112,9 @@ bool RepairSystem::markRepair(Entity item, bool on, std::string& error) {
         error = "only clothes, armor and weapons can be repaired";
         return false;
     }
-    if (!things_.spawned(item)) {
-        error = "take it off or put it down first: only gear lying on the ground can be repaired";
+    const bool wornApparel = kindOf(reg.get<Thing>(item).def) == "Apparel" && reg.all_of<EquippedBy>(item);
+    if (!things_.spawned(item) && !wornApparel) {
+        error = "put it down first: only gear lying on the ground, or clothes being worn, can be repaired";
         return false;
     }
     if (!reg.all_of<HitPoints>(item) || ApparelStats::condition(reg, item) >= 1.0f) {

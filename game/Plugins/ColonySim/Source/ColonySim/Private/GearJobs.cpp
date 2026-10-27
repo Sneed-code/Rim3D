@@ -1,5 +1,6 @@
 // The RepairGear job: fetch a marked piece of gear, carry it to a bench and mend it, or fit an upgrade part to a
-// gun (task P4, docs/design/repair.md). Part of the job system.
+// gun (task P4, docs/design/repair.md); and MendWorn, mending one's own clothes at a bench while wearing them
+// (docs/design/apparel-durability.md). Part of the job system.
 #include "ColonySim/Jobs.h"
 
 #include "ColonySim/Apparel.h"
@@ -9,6 +10,7 @@
 #include "ColonySim/Crafting.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Repair.h"
+#include "ColonySim/Designations.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -52,6 +54,13 @@ bool JobSystem::failCheckGear(Entity pawn, Job& job, std::string& why) {
     } else if (!reg.all_of<RepairMark>(job.thing) || !repair_->benchRepairs(bench, repair_->kindOf(gear))) {
         why = "the repair was called off";
         return false;
+    }
+    if (job.type == JobType::MendWorn) {
+        if (apparel_ == nullptr || std::find(apparel_->worn(pawn).begin(), apparel_->worn(pawn).end(), job.thing) == apparel_->worn(pawn).end()) {
+            why = "it no longer wears that";
+            return false;
+        }
+        return true;
     }
     if (job.step <= kGearPickUpStep) {
         if (!things_.spawned(job.thing)) {
@@ -144,6 +153,76 @@ JobSystem::StepResult JobSystem::gearWork(Entity pawn, Job& job, std::string& wh
     }
     events_.push_back(std::move(event));
     return StepResult::Next;
+}
+
+bool JobSystem::thinkMendWorn(Entity pawn, Job& out) {
+    if (repair_ == nullptr || apparel_ == nullptr || !canUseHands(pawn)) {
+        return false;
+    }
+    const entt::registry& reg = things_.registry();
+    const RepairNumbers& numbers = repair_->numbers();
+    if (bills_->skillLevel(pawn, numbers.skill) < repair_->repairMinSkill()) {
+        return false;
+    }
+    // The piece: one the player marked, else the most worn one at or under the line.
+    Entity piece = kNoEntity;
+    float worst = 2.0f;
+    for (const Entity item : apparel_->worn(pawn)) {
+        const float condition = ApparelStats::condition(reg, item);
+        const bool marked = reg.all_of<RepairMark>(item);
+        if (condition >= 1.0f || (!marked && condition > numbers.mendWornAtOrBelow) || reservedByOther(JobTarget{item, CellPos{}}, pawn)) {
+            continue;
+        }
+        const float rank = marked ? condition - 1.0f : condition;  // marked pieces first
+        if (rank < worst) {
+            worst = rank;
+            piece = item;
+        }
+    }
+    if (piece == kNoEntity) {
+        return false;
+    }
+    const RepairCost cost = repair_->costOf(piece);
+    if (cost.count <= 0 || !cost.material.valid()) {
+        return false;
+    }
+    // The nearest tailor bench that runs, is free, has a place to stand and the material within reach.
+    const Position& at = reg.get<Position>(pawn);
+    const CellPos from = cellOf(at);
+    Entity bench = kNoEntity;
+    CellPos stand;
+    float bestDist = 0.0f;
+    reg.view<const Thing, const Footprint, const Position>().each([&](Entity b, const Thing& thing, const Footprint& footprint, const Position& pos) {
+        if (pos.level != at.level || !repair_->benchRepairs(thing.def, "Apparel") || reg.all_of<ConstructionSite>(b) ||
+            reg.all_of<MarkedForDeconstruct>(b) || !buildingRuns(b) || deliveryReservedByOther(b, pawn)) {
+            return;
+        }
+        const float dx = pos.x - at.x;
+        const float dy = pos.y - at.y;
+        const float dist = dx * dx + dy * dy;
+        if (bench != kNoEntity && (dist > bestDist || (dist == bestDist && b > bench))) {
+            return;
+        }
+        CellPos cell;
+        if (!construction().workCell(footprint.rect(), from, cell) || !canReach(from, cell) ||
+            repair_->stockNear(cost.material, cellOf(pos), pos.level) < cost.count) {
+            return;
+        }
+        bench = b;
+        stand = cell;
+        bestDist = dist;
+    });
+    if (bench == kNoEntity) {
+        return false;
+    }
+    things_.registry().emplace_or_replace<RepairMark>(piece);  // so the job checks it like any repair
+    out = Job{};
+    out.type = JobType::MendWorn;
+    out.thing = piece;
+    out.site = bench;
+    out.cell = stand;
+    out.count = 1;
+    return true;
 }
 
 }  // namespace colony

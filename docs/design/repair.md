@@ -91,7 +91,7 @@ gun stays upgraded when it is dropped, picked up or stowed.
 
 - Taking a part off (or swapping one), and parts for melee weapons or apparel.
 - A colonist fetching the material or the part (it is taken from near the bench), and a bill-like "repair everything under 50%"
-  setting; the player marks each piece. Worn and carried pieces are not reached: a drafted fighter's gear must be put down.
+  setting; the player marks each piece. Worn clothes are mended by their wearer while worn (`MendWorn`, [apparel-durability.md](apparel-durability.md)); carried weapons must be put down.
 - Armor and weapons wearing out in use: apparel already loses hit points when it absorbs damage (C15) but a weapon only
   deteriorates outdoors, so repairing weapons is rare until something wears them.
 - Unreal: a repair mark icon, a parts list on the weapon panel, and a work animation (no art in the sim).

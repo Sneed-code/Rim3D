@@ -225,6 +225,51 @@ TEST_CASE("Repair: worn-out clothes cost about a tenth of their cloth, the bigge
     CHECK(repairStock(sim, "Cloth") == 26);
 }
 
+TEST_CASE("Repair: a colonist mends its own tattered clothes at a tailor bench without taking them off") {
+    Sim sim = repairSim();
+    const Entity bench = repairSpawn(sim, "TailorBenchHand", CellPos{20, 20, 0});
+    REPAIR_REQUIRE(bench != kNoEntity);
+    repairSpawn(sim, "TorchLamp", CellPos{17, 17, 0});
+    const Entity pawn = repairCrafter(sim, CellPos{30, 30, 0});
+    entt::registry& reg = sim.things().registry();
+    std::string why;
+    const Entity shirt = sim.apparel().make(repairDef(sim, "Apparel_TShirt"), repairDef(sim, "Cloth"), -1, CellPos{30, 30, 0}, &why);
+    const Entity pants = sim.apparel().make(repairDef(sim, "Apparel_Pants"), repairDef(sim, "Cloth"), -1, CellPos{30, 30, 0}, &why);
+    REPAIR_REQUIRE(shirt != kNoEntity && pants != kNoEntity);
+    REPAIR_REQUIRE(sim.apparel().putOn(pawn, shirt, why));
+    REPAIR_REQUIRE(sim.apparel().putOn(pawn, pants, why));
+    reg.emplace_or_replace<Durability>(shirt, Durability{0.0f});  // tattered: mended without a mark
+    reg.emplace_or_replace<Durability>(pants, Durability{0.6f});  // worn, not tattered: left alone
+
+    // No cloth near the bench: nothing happens.
+    sim.stepMany(600);
+    CHECK(ApparelStats::condition(reg, shirt) <= 0.0f);
+    CHECK(!repairSaw(sim, EventType::GearRepaired));
+
+    repairSpawn(sim, "Cloth", CellPos{22, 22, 0}, 30);
+    bool repaired = false;
+    REPAIR_REQUIRE(repairRunUntil(sim, 6000, [&] {
+                       repaired = repaired || repairSaw(sim, EventType::GearRepaired);
+                       return repaired;
+                   }) >= 0);
+    CHECK(ApparelStats::condition(reg, shirt) == doctest::Approx(1.0f));
+    CHECK(ApparelStats::condition(reg, pants) < 0.61f);
+    const std::vector<Entity>& worn = sim.apparel().worn(pawn);
+    CHECK(std::find(worn.begin(), worn.end(), shirt) != worn.end());  // still on
+    CHECK(!sim.things().spawned(shirt));
+    CHECK(!reg.all_of<RepairMark>(shirt));
+    CHECK(repairStock(sim, "Cloth") == 26);  // a tenth of 40
+
+    // A worn piece the player marks is mended at any durability.
+    sim.submit(RepairGearCommand{pants, true});
+    sim.step();
+    CHECK(!repairFailed(sim));
+    REPAIR_REQUIRE(repairRunUntil(sim, 6000, [&] { return !reg.all_of<RepairMark>(pants); }) >= 0);
+    CHECK(ApparelStats::condition(reg, pants) == doctest::Approx(1.0f));
+    CHECK(std::find(worn.begin(), worn.end(), pants) != worn.end());
+    CHECK(repairStock(sim, "Cloth") == 25);  // 40% of 4, rounded down, at least 1
+}
+
 TEST_CASE("Repair: a rifle is mended at a smithy with steel, nothing is used when the steel is out of reach") {
     Sim sim = repairSim();
     const Entity smithy = repairSpawn(sim, "FueledSmithy", CellPos{20, 20, 0});
