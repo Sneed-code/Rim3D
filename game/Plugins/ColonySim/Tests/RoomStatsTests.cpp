@@ -460,3 +460,18 @@ TEST_CASE("Room stats: the same seed and commands give the same game") {
     };
     CHECK(run() == run());
 }
+
+TEST_CASE("Room stats: sterile tiles make a room very clean and a little ugly") {
+    Sim sim = rsSim();
+    rsRing(sim, 10, 10, 16, 16);
+    sim.submit(PlaceFloorCommand{CellRect{11, 11, 5, 5, 0}, "SterileTile"});
+    sim.step();
+    const RoomStatValues* stats = rsStats(sim, 13, 13);
+    RS_REQUIRE(stats != nullptr);
+    CHECK(stats->cleanliness == doctest::Approx(0.6f));
+    CHECK(stats->beauty < 0.0f);
+    const Def& tile = rsDefs()->get(rsDefs()->idOf("Terrain", "SterileTile"));
+    CHECK(tile.text("researchPrerequisite") == "SterileMaterials");
+    CHECK(tile.integer("costs.Steel") == 3);
+    CHECK(tile.integer("costs.Silver") == 12);
+}

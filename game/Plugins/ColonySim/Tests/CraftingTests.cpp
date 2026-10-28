@@ -7,6 +7,7 @@
 #include "ColonySim/Events.h"
 #include "ColonySim/Fuel.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Power.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
@@ -648,4 +649,64 @@ TEST_CASE("Crafting: the electric tailor bench still works without power, at hal
     const SkillRecord* crafting = sim.things().registry().get<Colonist>(pawn).skill("Crafting");
     CRAFT_REQUIRE(crafting != nullptr);
     CHECK((crafting->level > 8 || crafting->xp > 0.0f));
+}
+
+namespace {
+
+// A biofuel refinery (3 x 2 at 20..22 x 20..21) on a solar generator's net, a lamp and a crafter.
+Entity craftRefinery(Sim& sim) {
+    sim.power().setSun([](const GameTime&) { return 1.0; });
+    sim.submit(UnlockResearchCommand{"BiofuelRefining"});
+    craftSpawn(sim, "SolarGenerator", CellPos{4, 4, 0});
+    for (int y = 4; y <= 19; ++y) {
+        craftSpawn(sim, "PowerConduit", CellPos{8, y, 0});
+    }
+    for (int x = 9; x <= 21; ++x) {
+        craftSpawn(sim, "PowerConduit", CellPos{x, 19, 0});
+    }
+    const Entity refinery = craftSpawn(sim, "BiofuelRefinery", CellPos{20, 20, 0});
+    craftSpawn(sim, "TorchLamp", CellPos{17, 17, 0});
+    craftCrafter(sim, CellPos{18, 18, 0}, 8);
+    return refinery;
+}
+
+}  // namespace
+
+TEST_CASE("Biofuel refinery: 70 wood logs make 35 chemfuel, 3.5 nutrition of raw food make 35") {
+    {
+        Sim sim = craftSim();
+        const Entity refinery = craftRefinery(sim);
+        CRAFT_REQUIRE(refinery != kNoEntity);
+        sim.stepMany(3);
+        CHECK(sim.power().running(refinery));
+        craftSpawn(sim, "WoodLog", CellPos{19, 22, 0}, 70);
+        CRAFT_REQUIRE(craftAdd(sim, refinery, "RefineChemfuelWood", BillMode::Count, 1) != 0);
+        CRAFT_REQUIRE(craftRunUntil(sim, 15000, [&] { return craftOnMap(sim, "Chemfuel") == 35; }) >= 0);
+        CHECK(craftOnMap(sim, "WoodLog") == 0);
+    }
+    {
+        Sim sim = craftSim();
+        const Entity refinery = craftRefinery(sim);
+        CRAFT_REQUIRE(refinery != kNoEntity);
+        sim.stepMany(3);
+        craftSpawn(sim, "RawRice", CellPos{19, 22, 0}, 70);  // 0.05 nutrition each
+        craftSpawn(sim, "Hay", CellPos{19, 24, 0}, 90);      // hay is not accepted
+        CRAFT_REQUIRE(craftAdd(sim, refinery, "RefineChemfuelFood", BillMode::Count, 1) != 0);
+        CRAFT_REQUIRE(craftRunUntil(sim, 15000, [&] { return craftOnMap(sim, "Chemfuel") == 35; }) >= 0);
+        CHECK(craftOnMap(sim, "RawRice") == 0);
+        CHECK(craftOnMap(sim, "Hay") == 90);
+    }
+}
+
+TEST_CASE("Biofuel refinery: no research, no bill; the refinery needs power") {
+    Sim sim = craftSim();
+    const Entity refinery = craftSpawn(sim, "BiofuelRefinery", CellPos{20, 20, 0});
+    CRAFT_REQUIRE(refinery != kNoEntity);
+    CHECK(!sim.power().running(refinery));
+    const DefDatabase& defs = *craftDefs();
+    const Def& project = defs.get(defs.idOf("Research", "BiofuelRefining"));
+    CHECK(project.count("unlocks.Things") == 1);
+    CHECK(project.count("unlocks.Recipes") == 2);
+    CHECK(defs.get(defs.idOf("Things", "BiofuelRefinery")).integer("costs.Steel") == 150);
+    CHECK(defs.get(defs.idOf("Things", "BiofuelRefinery")).number("power.consumption") == doctest::Approx(170.0));
 }

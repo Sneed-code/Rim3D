@@ -111,5 +111,11 @@
   "unverified": [
    "cleanliness"
   ]
- }
+ },
+  {
+    "defName": "SterileTile", "researchPrerequisite": "SterileMaterials", "parent": "FloorBase", "label": "sterile tile",
+    "costs": { "Steel": 3, "Silver": 12 }, "stuff": false, "workToBuild": 2304.0,
+    "stats": { "beauty": -1, "cleanliness": 0.6, "flammability": 0 },
+    "note": "Wiki-checked 2026-10-28: 3 steel + 12 silver, 1600 ticks, beauty -1, cleanliness +0.6, not flammable. The wiki's 60% cleaning time is not modelled."
+  }
 ]
