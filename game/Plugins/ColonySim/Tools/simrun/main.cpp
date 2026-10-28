@@ -113,6 +113,7 @@ struct Options {
     int items = 0;
     int pathBudget = colony::Pathfinder::kDefaultBudget;
     std::string start;  // a Scenarios def; prints the colonists it makes
+    std::string reroll;  // with --start: slots to reroll before the game starts, e.g. "0,2"
     std::string scenario;  // "colony": the scripted colony test (C10)
     bool year = false;     // --year: the colony scenario with animals and a farm, for long runs
     bool verbose = false;  // --scenario, --power: an hourly line on stderr
@@ -180,6 +181,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.pathBudget = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--start") == 0 && hasValue) {
             out.start = argv[++i];
+        } else if (std::strcmp(arg, "--reroll") == 0 && hasValue) {
+            out.reroll = argv[++i];
         } else if (std::strcmp(arg, "--scenario") == 0 && hasValue) {
             out.scenario = argv[++i];
         } else if (std::strcmp(arg, "--perf") == 0) {
@@ -802,6 +805,17 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "%s\n", e.c_str());
         }
         return 1;
+    }
+    if (!options.reroll.empty() && options.load.empty() && options.replay.empty()) {
+        // RerollColonist for each slot named, applied in the first step, before the colonists are listed.
+        for (size_t at = 0; at < options.reroll.size();) {
+            char* end = nullptr;
+            const long slot = std::strtol(options.reroll.c_str() + at, &end, 10);
+            sim.submit(colony::RerollColonistCommand{static_cast<int>(slot)});
+            at = static_cast<size_t>(end - options.reroll.c_str());
+            at += at < options.reroll.size() ? 1 : 0;
+        }
+        sim.step();
     }
     if (const colony::WorldSite* site = sim.site()) {
         const colony::World& world = *sim.world();

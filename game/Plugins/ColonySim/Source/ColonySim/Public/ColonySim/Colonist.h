@@ -53,8 +53,10 @@ struct Colonist {
 
 // Makes one adult colonist from `seed` alone: the same seed and defs give the same colonist, and
 // nothing else in the sim is touched. Needs the defs of kinds Backstories, Traits, Skills, Names
-// and Rules; returns false and fills `error` if one is missing.
+// and Rules; returns false and fills `error` if one is missing. `category` picks the backstories
+// that fit the kind of person ("Colony" for settlers, "Raider" for pirates): a backstory with a
+// `categories` list is only used for the categories it names, one without fits all.
 COLONY_API bool generateColonist(const DefDatabase& defs, uint64_t seed, bool protagonist, Colonist& out,
-                                 std::string& error);
+                                 std::string& error, const std::string& category = "Colony");
 
 }  // namespace colony

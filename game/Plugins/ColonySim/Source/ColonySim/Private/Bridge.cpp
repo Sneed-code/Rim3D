@@ -235,9 +235,11 @@ const char* commandName(const Command& command) {
                 return "FastTravel";
             } else if constexpr (std::is_same_v<Type, CancelSkipCommand>) {
                 return "CancelSkip";
-            } else {
-                static_assert(std::is_same_v<Type, CaravanCommand>, "name every command type");
+            } else if constexpr (std::is_same_v<Type, CaravanCommand>) {
                 return "Caravan";
+            } else {
+                static_assert(std::is_same_v<Type, RerollColonistCommand>, "name every command type");
+                return "RerollColonist";
             }
         },
         command);

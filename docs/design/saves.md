@@ -324,7 +324,8 @@ too. Run it as part of `unit`; a task that adds a system adds its commands and i
   `AUDIT_DUMP=/some/folder` writes both sims' JSON dumps (`a.json`, `b.json`) when they differ, for a diff.
 - **Typical causes**: a flag that is derived on loading but was "pending" when saved (health's
   `downed`), a value one system sets for the *next* step (the weathering factor), a check in the
-  loader stricter than the sim's own rules (two jobs on one bed cell).
+  loader stricter than the sim's own rules (two jobs on one bed cell), a loader that tidies away what the running game
+  keeps (a quest's ids of people who are gone, 2026-10-28).
 - What the audit cannot see: state that never reaches the saved file or the hash (a cache that
   changes behaviour). Caches must be rebuilt by whatever reads them.
 

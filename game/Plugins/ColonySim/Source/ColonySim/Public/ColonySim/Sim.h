@@ -501,6 +501,10 @@ private:
     std::string placeName(int tile) const;
     void pruneDesignations();
     void startScenario();
+    // One colonist of the scenario at a cell (Scenario.cpp); kNoEntity and a setup error if it fails.
+    Entity makeScenarioColonist(const Def& scenario, CellPos cell, uint64_t colonistSeed, bool protagonist);
+    // RerollColonist: another starting colonist in the same place, before the first step.
+    bool rerollColonist(int slot, std::string& error);
     // Gives a new pawn its looks if it is humanlike (its def names no other intelligence).
     Entity makeJoiner(CellPos cell, uint64_t seed);
     void giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& lineage);

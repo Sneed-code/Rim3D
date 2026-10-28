@@ -86,11 +86,13 @@ std::string colonistName(const Def& bank, Rng& rng) {
     return n == 0 ? std::string() : bank.textAt("names", rng.below(static_cast<uint32_t>(n)));
 }
 
-const Def* colonistPickBackstory(const DefDatabase& defs, const char* slot, Rng& rng) {
+// A backstory with no `categories` fits every kind of person; otherwise it must list `category`.
+const Def* colonistPickBackstory(const DefDatabase& defs, const char* slot, const std::string& category, Rng& rng) {
     std::vector<const Def*> pool;
     for (const DefId id : defs.idsOfKind("Backstories")) {
-        if (defs.get(id).text("slot") == slot) {
-            pool.push_back(&defs.get(id));
+        const Def& def = defs.get(id);
+        if (def.text("slot") == slot && (def.count("categories") == 0 || colonistListHas(colonistTextList(def, "categories"), category))) {
+            pool.push_back(&def);
         }
     }
     return pool.empty() ? nullptr : pool[rng.below(static_cast<uint32_t>(pool.size()))];
@@ -98,7 +100,8 @@ const Def* colonistPickBackstory(const DefDatabase& defs, const char* slot, Rng&
 
 }  // namespace
 
-bool generateColonist(const DefDatabase& defs, uint64_t seed, bool protagonist, Colonist& out, std::string& error) {
+bool generateColonist(const DefDatabase& defs, uint64_t seed, bool protagonist, Colonist& out, std::string& error,
+                      const std::string& category) {
     out = Colonist{};
     out.protagonist = protagonist;
     Rng rng(splitMix64(seed ^ 0x636F6C6F6E697374ULL), 3);
@@ -124,10 +127,10 @@ bool generateColonist(const DefDatabase& defs, uint64_t seed, bool protagonist, 
     out.age = std::max(adultAge, static_cast<int>(colonistDraw(ageCurve, adultAge, std::max<double>(maxAge, adultAge + 1), 64, rng)));
 
     // Backstories.
-    const Def* childhood = colonistPickBackstory(defs, "Childhood", rng);
-    const Def* adulthood = colonistPickBackstory(defs, "Adulthood", rng);
+    const Def* childhood = colonistPickBackstory(defs, "Childhood", category, rng);
+    const Def* adulthood = colonistPickBackstory(defs, "Adulthood", category, rng);
     if (childhood == nullptr || adulthood == nullptr) {
-        error = "colonists need Backstories defs for the Childhood and Adulthood slots";
+        error = "colonists need Backstories defs for the Childhood and Adulthood slots (category " + category + ")";
         return false;
     }
     out.childhood = childhood->defName();
@@ -141,13 +144,65 @@ bool generateColonist(const DefDatabase& defs, uint64_t seed, bool protagonist, 
         }
     }
 
-    // Traits: weighted by commonality, one degree each, never two that conflict, and never one
-    // that needs work the backstories disabled.
+    // Traits: a backstory may force one (by chance) or forbid some; the rest are weighted by
+    // commonality, one degree each, never two that conflict, never a repeat, and never one that
+    // needs work the backstories disabled.
     const int traitMin = static_cast<int>(genRules->numberAt("traitCount", 0, 1));
     const int traitMax = static_cast<int>(genRules->numberAt("traitCount", 1, 3));
     const int wanted = traitMin + static_cast<int>(rng.below(static_cast<uint32_t>(std::max(1, traitMax - traitMin + 1))));
     const std::vector<DefId> traitIds = defs.idsOfKind("Traits");
+    std::vector<std::string> forbiddenTraits;
+    for (const Def* b : {childhood, adulthood}) {
+        for (const std::string& name : colonistTextList(*b, "disallowedTraits")) {
+            forbiddenTraits.push_back(name);
+        }
+    }
     std::vector<const Def*> chosen;
+    const auto allowed = [&](const Def& trait) {
+        if (colonistListHas(forbiddenTraits, trait.defName())) {
+            return false;
+        }
+        for (const Def* other : chosen) {
+            if (other == &trait || colonistListHas(colonistTextList(trait, "conflictingTraits"), other->defName()) ||
+                colonistListHas(colonistTextList(*other, "conflictingTraits"), trait.defName())) {
+                return false;
+            }
+        }
+        for (const std::string& tag : colonistTextList(trait, "requiredWorkTags")) {
+            if (colonistListHas(disabled, tag)) {
+                return false;
+            }
+        }
+        return true;
+    };
+    const auto addTrait = [&](const Def& trait, size_t degreeIndex) {
+        const std::string degreePath = "degreeDatas." + std::to_string(degreeIndex);
+        out.traits.push_back(TraitRecord{trait.defName(), static_cast<int>(trait.integer((degreePath + ".degree").c_str(), 0))});
+        chosen.push_back(&trait);
+        for (const std::string& tag : colonistTextList(trait, "disabledWorkTags")) {
+            if (!colonistListHas(disabled, tag)) {
+                disabled.push_back(tag);
+            }
+        }
+    };
+    for (const Def* b : {childhood, adulthood}) {
+        for (size_t i = 0; i < b->count("forcedTraits"); ++i) {
+            const std::string base = "forcedTraits." + std::to_string(i);
+            const bool happens = rng.unit() < static_cast<float>(b->number((base + ".chance").c_str(), 1.0));
+            const Def* trait = defs.find("Traits", b->text((base + ".trait").c_str()));
+            if (!happens || trait == nullptr || !allowed(*trait)) {
+                continue;
+            }
+            size_t degreeIndex = 0;
+            for (size_t d = 0; d < trait->count("degreeDatas"); ++d) {
+                if (static_cast<int>(trait->integer(("degreeDatas." + std::to_string(d) + ".degree").c_str(), 0)) ==
+                    static_cast<int>(b->integer((base + ".degree").c_str(), 0))) {
+                    degreeIndex = d;
+                }
+            }
+            addTrait(*trait, degreeIndex);
+        }
+    }
     for (int attempt = 0; attempt < 64 && static_cast<int>(chosen.size()) < wanted && !traitIds.empty(); ++attempt) {
         uint32_t total = 0;
         for (const DefId id : traitIds) {
@@ -163,27 +218,11 @@ bool generateColonist(const DefDatabase& defs, uint64_t seed, bool protagonist, 
             }
             pick -= w;
         }
-        bool ok = true;
-        for (const Def* other : chosen) {
-            ok = ok && other != trait && !colonistListHas(colonistTextList(*trait, "conflictingTraits"), other->defName()) &&
-                 !colonistListHas(colonistTextList(*other, "conflictingTraits"), trait->defName());
-        }
-        for (const std::string& tag : colonistTextList(*trait, "requiredWorkTags")) {
-            ok = ok && !colonistListHas(disabled, tag);
-        }
-        if (!ok) {
+        if (!allowed(*trait)) {
             continue;
         }
         const size_t degrees = trait->count("degreeDatas");
-        const size_t degreeIndex = degrees == 0 ? 0 : rng.below(static_cast<uint32_t>(degrees));
-        const std::string degreePath = "degreeDatas." + std::to_string(degreeIndex);
-        out.traits.push_back(TraitRecord{trait->defName(), static_cast<int>(trait->integer((degreePath + ".degree").c_str(), 0))});
-        chosen.push_back(trait);
-        for (const std::string& tag : colonistTextList(*trait, "disabledWorkTags")) {
-            if (!colonistListHas(disabled, tag)) {
-                disabled.push_back(tag);
-            }
-        }
+        addTrait(*trait, degrees == 0 ? 0 : rng.below(static_cast<uint32_t>(degrees)));
     }
     std::sort(disabled.begin(), disabled.end());
     out.disabledWorkTags = disabled;
@@ -192,6 +231,13 @@ bool generateColonist(const DefDatabase& defs, uint64_t seed, bool protagonist, 
     const int maxLevel = static_cast<int>(skillRules->integer("maxLevel", 20));
     const ColonistCurve levelCurve = colonistCurveField(*genRules, "skillLevelRandomCurve");
     const double levelMax = levelCurve.points.empty() ? 1.0 : levelCurve.points.back().first;
+    const ColonistCurve ageFactorCurve = colonistCurveField(*genRules, "ageSkillMaxFactorCurve");
+    const double ageFactor = ageFactorCurve.points.empty() ? 1.0
+                                                                   : ageFactorCurve.at(std::clamp<double>(out.age, ageFactorCurve.points.front().first,
+                                                                                                          ageFactorCurve.points.back().first));
+    const std::vector<std::string> backstoryDefined = colonistTextList(*genRules, "backstoryDefinedSkills");
+    const int definedMin = static_cast<int>(genRules->numberAt("backstoryDefinedLevel", 0, 0));
+    const int definedMax = std::max(definedMin, static_cast<int>(genRules->numberAt("backstoryDefinedLevel", 1, 4)));
     std::vector<std::pair<int, const Def*>> skillDefs;  // listOrder, def
     for (const DefId id : defs.idsOfKind("Skills")) {
         skillDefs.emplace_back(static_cast<int>(defs.get(id).integer("listOrder", 0)), &defs.get(id));
@@ -200,9 +246,12 @@ bool generateColonist(const DefDatabase& defs, uint64_t seed, bool protagonist, 
     for (const auto& [order, skillDef] : skillDefs) {
         (void)order;
         const std::string& name = skillDef->defName();
-        int level = static_cast<int>(std::lround(colonistDraw(levelCurve, 0.0, levelMax, 120, rng)));
-        level += static_cast<int>(childhood->integer(("skillGains." + name).c_str(), 0));
-        level += static_cast<int>(adulthood->integer(("skillGains." + name).c_str(), 0));
+        // Skills a person's backstory mostly defines start at 0 to 4, the rest from the random curve.
+        double level = colonistListHas(backstoryDefined, name)
+                           ? static_cast<double>(definedMin + static_cast<int>(rng.below(static_cast<uint32_t>(definedMax - definedMin + 1))))
+                           : std::round(colonistDraw(levelCurve, 0.0, levelMax, 120, rng));
+        level += childhood->integer(("skillGains." + name).c_str(), 0);
+        level += adulthood->integer(("skillGains." + name).c_str(), 0);
         for (const Def* trait : chosen) {
             for (const TraitRecord& record : out.traits) {
                 if (record.def != trait->defName()) {
@@ -219,7 +268,12 @@ bool generateColonist(const DefDatabase& defs, uint64_t seed, bool protagonist, 
         }
         SkillRecord skill;
         skill.def = name;
-        skill.level = std::clamp(level, 0, maxLevel);
+        // Age: older people know more. The level is stretched by a random factor between 1 and the
+        // age's maximum (below 1 for the young, so a 20-year-old's levels are a little lower).
+        if (!ageFactorCurve.points.empty()) {
+            level *= 1.0 + (ageFactor - 1.0) * rng.unit();
+        }
+        skill.level = std::clamp(static_cast<int>(std::lround(level)), 0, maxLevel);
         for (const std::string& tag : colonistTextList(*skillDef, "disablingWorkTags")) {
             skill.disabled = skill.disabled || colonistListHas(disabled, tag);
         }

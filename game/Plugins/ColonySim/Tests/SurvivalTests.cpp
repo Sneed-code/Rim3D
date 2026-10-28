@@ -172,6 +172,8 @@ TEST_CASE("Jobs: a dead colonist butchered by another colonist's job in the same
     sim.step();
     sim.health().kill(victim, DeathCause::BloodLoss);
     sim.submit(AddBillCommand{table, "ButcherCorpse", BillMode::Count, 1});
+    // The bill leaves people out by default: let them in.
+    sim.submit(SetBillOptionsCommand{table, 1, 0, 20, 0.0f, 0, 0, 0, {}});
     for (int i = 0; i < 6000 && reg.valid(victim); ++i) {
         sim.step();
     }

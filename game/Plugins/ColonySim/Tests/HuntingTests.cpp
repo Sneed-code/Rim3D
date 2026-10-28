@@ -541,7 +541,7 @@ TEST_CASE("Hunting: hunters keep away from animals that turn on them, and take t
     CHECK_FALSE(f.dead(bear));
 }
 
-TEST_CASE("Butchering: a dead person can be cut up at the butcher table") {
+TEST_CASE("Butchering: a butcher bill leaves dead people alone unless its filter lets them in") {
     HuntFixture f;
     f.addColonist(CellPos{10, 10, 0}, 8, false);
     const Entity table = f.building("ButcherTable", CellPos{12, 10, 0});
@@ -549,13 +549,39 @@ TEST_CASE("Butchering: a dead person can be cut up at the butcher table") {
     HUNT_REQUIRE(table != kNoEntity && raider != kNoEntity);
     f.kill(raider);
     CHECK(f.hu().isCorpse(raider));
-    f.sim.submit(AddBillCommand{table, "ButcherCorpse", BillMode::Count, 1});
+    f.sim.submit(AddBillCommand{table, "ButcherCorpse", BillMode::Forever, 1});
     f.sim.step();
+    // RimWorld's default: the bill's filter has humanlike corpses switched off, so the colonists don't cut up their dead.
+    const Bill* bill = f.sim.jobs().bills().find(table, 1);
+    HUNT_REQUIRE(bill != nullptr);
+    CHECK_FALSE(BillSystem::allowsIngredient(*bill, f.def("Human")));
+    CHECK(BillSystem::allowsIngredient(*bill, f.def("Deer")));
+    f.sim.stepMany(3000);
+    CHECK(f.reg().valid(raider));
+    CHECK(f.onMap("Meat_Human") == 0);
+    // A deer lying next to it is still taken.
+    const Entity deer = f.animal("Deer", CellPos{18, 8, 0});
+    f.kill(deer);
+    HUNT_REQUIRE(f.runUntil(5000, [&] { return !f.reg().valid(deer); }));
+    CHECK(f.reg().valid(raider));
+
+    // The player lets people in (a filter naming nothing): the dead raider is cut up, a full body's yield.
+    f.sim.submit(SetBillOptionsCommand{table, 1, 0, 20, 0.0f, 0, 0, 0, {}});
+    f.sim.step();
+    CHECK_FALSE(f.sawEvent(EventType::CommandFailed));
     const bool done = f.runUntil(5000, [&] { return !f.reg().valid(raider); });
     HUNT_REQUIRE(done);
     f.sim.stepMany(5);
     CHECK(f.onMap("Meat_Human") > 100);
     CHECK(f.onMap("Leather_Human") > 50);
+
+    // A filter can name a race again, but only on a bill that takes corpses.
+    f.sim.submit(SetBillOptionsCommand{table, 1, 0, 20, 0.0f, 0, 0, 0, {"Human"}});
+    f.sim.step();
+    CHECK_FALSE(f.sawEvent(EventType::CommandFailed));
+    const Bill* again = f.sim.jobs().bills().find(table, 1);
+    HUNT_REQUIRE(again != nullptr);
+    CHECK_FALSE(BillSystem::allowsIngredient(*again, f.def("Human")));
 }
 
 TEST_CASE("Cremating: the crematorium burns a corpse to nothing, with no meat and no butcher's memory") {
@@ -586,4 +612,67 @@ TEST_CASE("Cremating: the crematorium burns a corpse to nothing, with no meat an
     CHECK_FALSE(butchered);
     CHECK(f.onMap("Meat_Deer") == 0);
     CHECK(f.onMap("Leather_Plain") == 0);
+}
+
+TEST_CASE("Hunting: a hunter with a revolver brings a hare down") {
+    // Small game is a small target: a hunter closes in by the animal's size against a man's, so a revolver hunt of a hare
+    // ends in a kill, not in hunt after hunt given up (found in the year run: 107 given up, 7 animals hunted).
+    int killed = 0;
+    int gaveUp = 0;
+    int64_t slowest = 0;
+    for (uint64_t seed = 1; seed <= 8; ++seed) {
+        HuntFixture f(seed);
+        f.sim.submit(CreateStockpileCommand{CellRect{8, 14, 3, 3}});
+        f.sim.step();
+        const Entity hunter = f.addColonist(CellPos{10, 10, 0}, 8, false);
+        f.sim.combat().equip(hunter, f.sim.things().make(f.def("Gun_Revolver")));
+        const Entity hare = f.animal("Hare", CellPos{36, 30, 0});
+        HUNT_REQUIRE(hare != kNoEntity);
+        std::string error;
+        HUNT_REQUIRE(f.hu().markHunt(hare, true, error));
+        const int64_t start = f.sim.time().seconds;
+        f.runUntil(3 * kSecondsPerHour, [&] {
+            for (const Event& e : f.sim.events()) {
+                gaveUp += e.type == EventType::JobEnded && e.job == JobType::Hunt && e.message.rfind("failed", 0) == 0 ? 1 : 0;
+            }
+            return f.dead(hare);
+        });
+        if (f.dead(hare)) {
+            ++killed;
+            slowest = std::max(slowest, f.sim.time().seconds - start);
+        }
+    }
+    MESSAGE("hares killed " << killed << " of 8, hunts given up " << gaveUp << ", slowest kill " << slowest << " s");
+    // Before: 2 of 8 in three hours, 52 hunts given up. Now one in eight runs off for good (a hare that keeps running is
+    // hard to hit at any distance).
+    CHECK(killed >= 7);
+    CHECK(gaveUp <= 12);
+}
+
+TEST_CASE("Hunting: a hunt that keeps hitting a deer goes on past the time limit") {
+    // The 15 minutes count from the last hit: a revolver brings a deer down in up to an hour, and giving up after 15 minutes
+    // to start again was most of the hunts given up in the year run (before: 10 given up for 8 deer).
+    int killed = 0;
+    int gaveUp = 0;
+    for (uint64_t seed = 1; seed <= 8; ++seed) {
+        HuntFixture f(seed);
+        f.sim.submit(CreateStockpileCommand{CellRect{8, 14, 3, 3}});
+        f.sim.step();
+        const Entity hunter = f.addColonist(CellPos{10, 10, 0}, 8, false);
+        f.sim.combat().equip(hunter, f.sim.things().make(f.def("Gun_Revolver")));
+        const Entity deer = f.animal("Deer", CellPos{36, 30, 0});
+        HUNT_REQUIRE(deer != kNoEntity);
+        std::string error;
+        HUNT_REQUIRE(f.hu().markHunt(deer, true, error));
+        f.runUntil(3 * kSecondsPerHour, [&] {
+            for (const Event& e : f.sim.events()) {
+                gaveUp += e.type == EventType::JobEnded && e.job == JobType::Hunt && e.message.rfind("failed", 0) == 0 ? 1 : 0;
+            }
+            return f.dead(deer);
+        });
+        killed += f.dead(deer) ? 1 : 0;
+    }
+    MESSAGE("deer killed " << killed << " of 8, hunts given up " << gaveUp);
+    CHECK(killed == 8);
+    CHECK(gaveUp <= 3);
 }
