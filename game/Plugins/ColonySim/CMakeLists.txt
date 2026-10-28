@@ -78,6 +78,9 @@ add_test(NAME simrun_on_world COMMAND simrun --seed 42 --size 128 --days 1 --on-
 # Caravans (W4, docs/design/caravans.md): two colonists take survival meals to the nearest settlement
 # 4 or more tiles away and come home, nobody lost.
 add_test(NAME simrun_caravan COMMAND simrun --seed 42 --size 128 --days 2 --on-world --start Crashlanded --caravan --check)
+# Other maps (W5, docs/design/other-maps.md): the same caravan walks onto the settlement's map, stays half a day and
+# comes home from there; the map is kept.
+add_test(NAME simrun_visit COMMAND simrun --seed 42 --size 128 --days 3 --on-world --start Crashlanded --caravan --visit --check)
 
 # Temperature (E2, docs/design/temperature.md): the Crashlanded colonists live two days in 4 degrees weather
 # (just above the safe range their T-shirts and pants give them) and nobody falls ill or dies.

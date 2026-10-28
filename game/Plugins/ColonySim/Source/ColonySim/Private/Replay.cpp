@@ -480,6 +480,7 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                     items.push_back(entt::to_integral(e));
                 }
                 j["items"] = items;
+                j["map"] = c.map;
             }
         },
         logged.command);
@@ -1691,7 +1692,7 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         CaravanCommand c;
         if (!r.text(j, "action", c.action, where) || !r.integer(j, "caravan", c.caravan, where) ||
             !r.integer(j, "tile", c.tile, where) || !r.entities(j, "pawns", c.pawns, where) ||
-            !r.entities(j, "items", c.items, where)) {
+            !r.entities(j, "items", c.items, where) || (j.contains("map") && !r.integer(j, "map", c.map, where))) {
             return false;
         }
         out.command = std::move(c);

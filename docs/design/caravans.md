@@ -13,6 +13,9 @@ come home. Sim only: Unreal reads `Snapshot::caravans` and sends `CaravanCommand
 | `Move` | `caravan`, `tile` | a caravan on the world sets off for `tile` by the cheapest path |
 | `Stop` | `caravan` | it waits where it is |
 | `Enter` | `caravan` | a caravan on the start tile walks back onto the map (it does so by itself when it arrives home) |
+| `Visit` | `caravan` | W5: a caravan on another tile walks onto that tile's map ([other-maps.md](other-maps.md)) |
+
+`Form` with `map` set to a tile forms the caravan from colonists on that other map (W5).
 
 Who can join: a colonist on the map, alive, up, not drafted (no `Fighter`), not a prisoner, not in a
 mental break, not the pawn the player walks. The load must not be more than the members can carry,
@@ -72,4 +75,4 @@ is rebuilt from it.
 ## Not yet (in BACKLOG.md)
 
 Hauling goods to the exit (packing is instant), animals and pack animals, food rotting and temperature
-off the map, trading and visiting at settlements (C23, W5), the gear members wear counting as load.
+off the map, trading at settlements (C23), the gear members wear counting as load. Visiting is W5 ([other-maps.md](other-maps.md)).
