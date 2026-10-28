@@ -1,0 +1,59 @@
+[
+  {
+    "defName": "Gun_Mortar", "label": "mortar", "source": "RimWorld wiki",
+    "category": "Item", "stackLimit": 1, "turretGun": true,
+    "visual": { "sound": { "shot": "Shot_Turret" }, "parts": [{ "shape": "cylinder", "radius": 0.12, "height": 1.1, "rot": [0, 50, 0], "at": [0, 0, 0.3], "color": [0.22, 0.24, 0.22] }] },
+    "stats": { "maxHitPoints": 100, "rangedWeaponCooldown": 840, "accuracyTouch": 1, "accuracyShort": 1, "accuracyMedium": 1, "accuracyLong": 1 },
+    "verbs": [ { "range": 500, "minRange": 29.9, "warmupTime": 120, "burstShotCount": 1, "secondsBetweenBurstShots": 0, "defaultProjectile": "Bullet_Shell_HighExplosive" } ],
+    "ours": ["turretGun", "visual", "stats.maxHitPoints", "stats.accuracy*: the shell lands within the mortar's miss radius instead"],
+    "note": "Wiki-checked 2026-10-28: range 29.9 to 500, warm-up 240 ticks, cooldown 1680 ticks (counted only while a colonist mans it), one shell a shot. Times are ticks / 2 (steps)."
+  },
+  {
+    "defName": "Gun_RocketswarmLauncher", "label": "rocketswarm launcher", "source": "RimWorld wiki",
+    "category": "Item", "stackLimit": 1, "turretGun": true,
+    "visual": { "sound": { "shot": "Shot_Turret" }, "parts": [{ "shape": "box", "size": [0.9, 0.9, 0.5], "at": [0, 0, 0.3], "color": [0.26, 0.24, 0.2] }] },
+    "stats": { "maxHitPoints": 100, "rangedWeaponCooldown": 3600, "accuracyTouch": 1, "accuracyShort": 1, "accuracyMedium": 1, "accuracyLong": 1 },
+    "verbs": [ { "range": 29.9, "warmupTime": 30, "burstShotCount": 12, "secondsBetweenBurstShots": 5, "defaultProjectile": "Bullet_Rocketswarm" } ],
+    "unverified": ["stats.rangedWeaponCooldown"],
+    "ours": ["turretGun", "visual", "stats.maxHitPoints", "stats.accuracy*: each rocket aims at a point within the miss radius instead"],
+    "note": "Wiki-checked 2026-10-28: range 29.9, 12 rockets 10 ticks apart, 60 ticks from targeting to the first. The wiki's infobox says a 210 tick cooldown and its text 7200 ticks; the text's is taken (a full chemfuel load is needed for each volley anyway)."
+  },
+  {
+    "defName": "Turret_Mortar", "parent": "BuildingBase", "label": "mortar", "source": "RimWorld wiki",
+    "researchPrerequisite": "Mortars",
+    "size": [2, 2], "passability": "PassThroughOnly", "fillPercent": 0.4, "designationCategory": "Security",
+    "costs": { "Steel": 225, "ComponentIndustrial": 6 },
+    "visual": { "parts": [{ "shape": "box", "size": [1.6, 1.6, 0.25], "color": [0.3, 0.32, 0.3] }, { "shape": "cylinder", "radius": 0.14, "height": 1.2, "rot": [0, 50, 0], "at": [0, 0, 0.35], "color": [0.2, 0.22, 0.2] }] },
+    "stats": { "maxHitPoints": 180, "workToBuild": 2880, "flammability": 0.28, "beauty": -20 },
+    "fuel": { "item": "Shell_HighExplosive", "capacity": 1, "perUse": 1, "autoRefuelPercent": 0 },
+    "artillery": { "gun": "Gun_Mortar", "overhead": true, "autoTarget": true, "missRadius": 13, "crewScaled": true, "muzzleHeight": 1.0 },
+    "explosion": { "damageDef": "Bomb", "damage": 50, "armorPenetration": 0.1, "radius": 4.9 },
+    "explodeWhenDestroyed": true,
+    "unverified": ["fuel.autoRefuelPercent"],
+    "ours": ["artillery", "explodeWhenDestroyed", "visual", "passability", "costs: the Classic mortars recipe, 75 steel as its stuff plus 150 steel"],
+    "note": "Wiki-checked 2026-10-28, with RimWorld's Classic mortars rules (no reinforced barrels, which are not made in the game): 75 metal + 150 steel + 6 components, 2000 ticks of work, 180 HP and 28% flammable in steel, beauty -20, cover 40%, 2x2, miss radius 13 tiles. It holds one shell at a time and can't fire under a roof. Its blast (50 Bomb, 4.9 m) comes 4 s after it drops below a third of its HP in RimWorld; ours goes off when it is destroyed."
+  },
+  {
+    "defName": "Turret_RocketswarmLauncher", "parent": "BuildingBase", "label": "rocketswarm launcher", "source": "RimWorld wiki",
+    "researchPrerequisite": "RocketswarmLauncher",
+    "size": [2, 2], "passability": "PassThroughOnly", "fillPercent": 0.4, "designationCategory": "Security",
+    "costs": { "Steel": 200, "Plasteel": 20, "ComponentIndustrial": 2, "Chemfuel": 180 },
+    "visual": { "parts": [{ "shape": "box", "size": [1.7, 1.7, 0.35], "color": [0.32, 0.3, 0.26] }, { "shape": "box", "size": [1.1, 1.1, 0.6], "at": [0, 0, 0.35], "color": [0.24, 0.22, 0.19] }] },
+    "stats": { "maxHitPoints": 200, "workToBuild": 14400, "flammability": 0.7, "beauty": -20 },
+    "power": { "consumption": 150 },
+    "fuel": { "item": "Chemfuel", "capacity": 180, "perUse": 180 },
+    "artillery": { "gun": "Gun_RocketswarmLauncher", "overhead": false, "autoTarget": false, "missRadius": 5.75, "crewScaled": false, "spreadCells": true, "ammoPerVolley": true, "singleVolley": true, "muzzleHeight": 1.0 },
+    "explosion": { "damageDef": "Bomb", "damage": 50, "armorPenetration": 0.1, "radius": 6.9 },
+    "explodeWhenDestroyed": true,
+    "ours": ["artillery", "explodeWhenDestroyed", "visual", "passability"],
+    "note": "Wiki-checked 2026-10-28: 200 steel + 20 plasteel + 2 components + 180 chemfuel, 10000 ticks of work, 200 HP, 70% flammable, beauty -20, cover 40%, 2x2, 150 W. Holds 180 chemfuel and needs all of it for one volley of 12 rockets, which scatter round the picked point (miss radius 5.75), each on a cell of its own where it can. It fires only at a point the player picks. Its blast (50 Bomb, 6.9 m) comes 4 s after it is badly damaged in RimWorld; ours goes off when it is destroyed."
+  },
+  {
+    "defName": "Shell_HighExplosive", "researchPrerequisite": "Mortars", "parent": "ItemBase", "label": "high-explosive shell", "source": "RimWorld wiki",
+    "visual": { "pieces": 3, "layer": 0.1, "parts": [{ "shape": "cylinder", "radius": 0.06, "height": 0.3, "color": [0.35, 0.38, 0.3] }, { "shape": "sphere", "radius": 0.06, "height": 0.08, "at": [0, 0, 0.3], "color": [0.6, 0.55, 0.3] }] },
+    "stackLimit": 25,
+    "stats": { "maxHitPoints": 60, "marketValue": 55, "mass": 1.25, "flammability": 1.0 },
+    "ours": ["visual"],
+    "note": "Wiki-checked 2026-10-28: stack of 25, 1.25 kg, 55 silver, 60 HP, 100% flammable. RimWorld's shells cook off when damaged; ours do not yet."
+  }
+]

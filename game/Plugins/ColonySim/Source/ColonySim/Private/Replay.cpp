@@ -486,6 +486,13 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 }
                 j["items"] = items;
                 j["map"] = c.map;
+            } else if constexpr (std::is_same_v<Type, ArtilleryCommand>) {
+                j["action"] = c.action;
+                j["building"] = entt::to_integral(c.building);
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["target"] = entt::to_integral(c.target);
+                j["x"] = static_cast<double>(c.x);
+                j["y"] = static_cast<double>(c.y);
             } else {
                 // Nested, not one more else-if: MSVC stops at 128 nested blocks (C1061).
                 if constexpr (std::is_same_v<Type, PodCommand>) {
@@ -1742,6 +1749,19 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         out.command = std::move(c);
     } else if (type == "CancelSkip") {
         out.command = CancelSkipCommand{};
+    } else if (type == "Artillery") {
+        ArtilleryCommand c;
+        uint32_t building = entt::to_integral(kNoEntity);
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        uint32_t target = entt::to_integral(kNoEntity);
+        if (!r.text(j, "action", c.action, where) || !r.integer(j, "building", building, where) || !r.integer(j, "pawn", pawn, where) ||
+            !r.integer(j, "target", target, where) || !r.number(j, "x", c.x, where) || !r.number(j, "y", c.y, where)) {
+            return false;
+        }
+        c.building = static_cast<Entity>(building);
+        c.pawn = static_cast<Entity>(pawn);
+        c.target = static_cast<Entity>(target);
+        out.command = std::move(c);
     } else {
         // Nested, not one more else-if: MSVC stops at 128 nested blocks (C1061).
         if (type != "Pod") {

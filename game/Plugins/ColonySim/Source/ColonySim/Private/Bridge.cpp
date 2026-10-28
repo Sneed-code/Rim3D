@@ -237,6 +237,8 @@ const char* commandName(const Command& command) {
                 return "CancelSkip";
             } else if constexpr (std::is_same_v<Type, CaravanCommand>) {
                 return "Caravan";
+            } else if constexpr (std::is_same_v<Type, ArtilleryCommand>) {
+                return "Artillery";
             } else {
                 // Nested, not one more else-if: MSVC stops at 128 nested blocks (C1061).
                 if constexpr (std::is_same_v<Type, PodCommand>) {
@@ -460,6 +462,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Operate: return "Operate";
         case PawnAction::Scan: return "Scan";
         case PawnAction::Drill: return "Drill";
+        case PawnAction::Man: return "Man";
     }
     return "?";
 }

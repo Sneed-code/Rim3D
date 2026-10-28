@@ -11,6 +11,7 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Looks.h"
+#include "ColonySim/Artillery.h"
 #include "ColonySim/Defense.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Commands.h"
@@ -313,6 +314,13 @@ struct SaveSite {
 
 struct SaveMark {};  // a building marked for deconstruction
 
+// A mortar shell in flight (section "artillery"): its defs by name.
+struct SaveShell {
+    std::string def;  // Projectiles def
+    std::string gun;  // Things def
+    ArtilleryShell s;
+};
+
 // A projectile as saved: its defs by name.
 struct SaveProjectile {
     std::string def;     // Projectiles def
@@ -439,6 +447,8 @@ struct SaveEntity {
     std::optional<std::vector<Entity>> stowed;  // section "weapons" (P1): Gear::stowed
     std::optional<WeaponSwitch> weaponSwitch;   // section "weapons"
     std::optional<Turret> turret;           // section "defense" (F11)
+    std::optional<Artillery> artillery;     // section "artillery" (mortars, rocketswarm launchers)
+    std::optional<SaveShell> shell;
     std::optional<Trap> trap;               // section "defense" (F11)
     std::optional<SaveAttunement> attunement;   // section "resonance" (X2)
     std::optional<SaveCasting> casting;         // section "resonance"
@@ -1236,6 +1246,13 @@ void saveCommandTail(Ar& ar, Type& c) {
         if (ar.sectionVersion() >= 3) {  // W5
             ar.value("map", c.map);
         }
+    } else if constexpr (std::is_same_v<Type, ArtilleryCommand>) {
+        ar.text("action", c.action);
+        ar.value("building", c.building);
+        ar.value("pawn", c.pawn);
+        ar.value("target", c.target);
+        ar.value("x", c.x);
+        ar.value("y", c.y);
     } else {
         // Nested, not one more else-if: MSVC stops at 128 nested blocks (C1061).
         if constexpr (std::is_same_v<Type, PodCommand>) {
@@ -2456,6 +2473,41 @@ void saveTurretPart(Ar& ar, Turret& t) {
 }
 
 template <typename Ar>
+void saveArtilleryPart(Ar& ar, Artillery& a) {
+    ar.value("phase", a.phase);
+    ar.require(static_cast<int>(a.phase) <= static_cast<int>(TurretPhase::Cooling), "the save file has a bad artillery phase");
+    ar.value("stepsLeft", a.stepsLeft);
+    ar.value("shotsLeft", a.shotsLeft);
+    ar.value("crew", a.crew);
+    ar.value("holdFire", a.holdFire);
+    ar.value("hasAim", a.hasAim);
+    ar.value("aimX", a.aimX);
+    ar.value("aimY", a.aimY);
+    ar.value("aimPawn", a.aimPawn);
+    ar.value("target", a.target);
+    ar.value("volleyX", a.volleyX);
+    ar.value("volleyY", a.volleyY);
+    ar.list("hitCells", a.hitCells, [&](CellPos& c) { saveCell(ar, c); });
+}
+
+template <typename Ar>
+void saveShellPart(Ar& ar, SaveShell& ss) {
+    ar.text("def", ss.def);
+    ar.text("gun", ss.gun);
+    ar.value("launcher", ss.s.launcher);
+    ar.value("fromX", ss.s.fromX);
+    ar.value("fromY", ss.s.fromY);
+    ar.value("fromZ", ss.s.fromZ);
+    ar.value("toX", ss.s.toX);
+    ar.value("toY", ss.s.toY);
+    ar.value("level", ss.s.level);
+    ar.value("steps", ss.s.steps);
+    ar.value("age", ss.s.age);
+    ar.value("seed", ss.s.seed);
+    ar.require(ss.s.steps >= 1 && ss.s.age >= 0, "the save file has a bad shell flight");
+}
+
+template <typename Ar>
 void saveTrapPart(Ar& ar, Trap& t) {
     ar.value("sprung", t.sprung);
     ar.list("known", t.known, [&](FactionId& f) {
@@ -3384,6 +3436,10 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "turret", e, &SaveEntity::turret, [&](Turret& t) { saveTurretPart(ar, t); });
         saveParts(ar, "trap", e, &SaveEntity::trap, [&](Trap& t) { saveTrapPart(ar, t); });
     });
+    ar.section("artillery", 1, [&] {
+        saveParts(ar, "artillery", e, &SaveEntity::artillery, [&](Artillery& a) { saveArtilleryPart(ar, a); });
+        saveParts(ar, "shell", e, &SaveEntity::shell, [&](SaveShell& s) { saveShellPart(ar, s); });
+    });
     ar.section("narrator", 1, [&] {
         d.hasNarrator = true;
         NarratorState& n = d.narrator;
@@ -3982,6 +4038,12 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
     if (const Turret* turret = reg.try_get<Turret>(e)) {
         out.turret = *turret;
     }
+    if (const Artillery* artillery = reg.try_get<Artillery>(e)) {
+        out.artillery = *artillery;
+    }
+    if (const ArtilleryShell* shell = reg.try_get<ArtilleryShell>(e)) {
+        out.shell = SaveShell{sim.defs_->get(shell->def).defName(), sim.defs_->get(shell->gun).defName(), *shell};
+    }
     if (const Trap* trap = reg.try_get<Trap>(e)) {
         out.trap = *trap;
     }
@@ -4549,6 +4611,21 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
         reg.emplace<Turret>(entity, *e.turret);
     } else if (e.footprint && e.thing && sim.defs_->get(reg.get<Thing>(entity).def).has("turret")) {
         reg.emplace<Turret>(entity);  // saved before turrets existed
+    }
+    if (e.artillery) {
+        reg.emplace<Artillery>(entity, *e.artillery);
+    } else if (e.footprint && e.thing && sim.defs_->get(reg.get<Thing>(entity).def).has("artillery")) {
+        reg.emplace<Artillery>(entity);  // saved before artillery existed
+    }
+    if (e.shell) {
+        ArtilleryShell s = e.shell->s;
+        s.def = sim.defs_->idOf("Projectiles", e.shell->def);
+        s.gun = sim.defs_->idOf(kSaveThingsKind, e.shell->gun);
+        if (!s.def.valid() || !s.gun.valid()) {
+            error = "the save has a shell of '" + e.shell->def + "', which the data files no longer have";
+            return false;
+        }
+        reg.emplace<ArtilleryShell>(entity, s);
     }
     if (e.trap) {
         reg.emplace<Trap>(entity, *e.trap);

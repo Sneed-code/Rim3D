@@ -1,0 +1,16 @@
+[
+  {
+    "defName": "Bullet_Shell_HighExplosive", "parent": "BulletBase", "label": "high-explosive shell",
+    "projectile": { "damageAmountBase": 0, "armorPenetrationBase": 0, "stoppingPower": 0, "speed": 1.366667 },
+    "explosion": { "damageDef": "Bomb", "damage": 50, "armorPenetration": 0.1, "radius": 2.9 },
+    "ours": ["projectile.damageAmountBase: 0, the damage is the explosion's (R2)"],
+    "note": "Wiki-checked 2026-10-28: 50 Bomb, 10% armor penetration, blast radius 2.9, 41 m/s (/30 like every projectile). It flies over walls and lands where the mortar's scatter puts it; only an overhead mountain stops it."
+  },
+  {
+    "defName": "Bullet_Rocketswarm", "parent": "BulletBase", "label": "rocketswarm rocket",
+    "projectile": { "damageAmountBase": 0, "armorPenetrationBase": 0, "stoppingPower": 0.5, "speed": 1.266667 },
+    "explosion": { "damageDef": "Bomb", "damage": 24, "armorPenetration": 0.36, "radius": 2.9 },
+    "ours": ["projectile.damageAmountBase: 0, the damage is the explosion's (R2)"],
+    "note": "Wiki-checked 2026-10-28: 24 Bomb, 36% armor penetration, blast radius 2.9, 38 m/s, stopping power 0.5. A straight flight: walls and pawns in the way set it off."
+  }
+]

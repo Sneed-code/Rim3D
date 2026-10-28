@@ -32,6 +32,7 @@ class Fire;
 class ApparelSystem;
 class Construction;
 class DefDatabase;
+class ArtillerySystem;
 class DefenseSystem;
 class DrugSystem;
 class Filth;
@@ -276,6 +277,8 @@ public:
     // Turrets and traps (docs/design/defense.md).
     DefenseSystem& defense() { return *defense_; }
     const DefenseSystem& defense() const { return *defense_; }
+    ArtillerySystem& artillery() { return *artillery_; }
+    const ArtillerySystem& artillery() const { return *artillery_; }
     // Clothes and armor, outfits, stripping (docs/design/apparel.md).
     ApparelSystem& apparel() { return *apparel_; }
     const ApparelSystem& apparel() const { return *apparel_; }
@@ -606,6 +609,7 @@ private:
     std::vector<Checkpoint> checkpoints_;
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it
+    std::unique_ptr<ArtillerySystem> artillery_;
     std::unique_ptr<FieldCare> fieldCare_;    // after the raids, the fighters and the jobs, which hold a pointer to it
     std::unique_ptr<NarratorSystem> narrator_;  // after raids_
     std::unique_ptr<LootSystem> loot_;          // after the narrator, whose cargo pod it carries out
