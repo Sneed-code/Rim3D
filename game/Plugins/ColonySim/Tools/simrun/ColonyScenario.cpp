@@ -115,6 +115,15 @@ uint64_t floatBits(float f) {
 
 bool isTree(const Sim& sim, DefId def) { return def.valid() && sim.defs().get(def).flag("plant.isTree"); }
 
+// Dry ground to build or sow on: walkable, and not shallow water, marsh or mud (map generation 2).
+bool dryGround(const Sim& sim, CellPos c) {
+    if (!sim.map().inBounds(c) || !sim.map().groundWalkable(c)) {
+        return false;
+    }
+    const Terrain t = sim.map().terrain(c);
+    return t != Terrain::ShallowWater && t != Terrain::Marsh && t != Terrain::Mud;
+}
+
 // A bush that gives something when picked (not a tree).
 bool isBerryBush(const Sim& sim, DefId def) {
     return def.valid() && !isTree(sim, def) && sim.defs().get(def).integer("plant.harvestYield", 0) > 0;
@@ -152,7 +161,7 @@ bool findRoomSite(Sim& sim, CellPos landing, CellPos& out) {
             for (int y = origin.y - 1; y <= origin.y + kRoomHeight && ok; ++y) {
                 for (int x = origin.x - 1; x <= origin.x + kRoomWidth && ok; ++x) {
                     const CellPos c{x, y, 0};
-                    ok = sim.map().groundWalkable(c) && sim.map().buildingAt(c) == kNoEntity;
+                    ok = dryGround(sim, c) && sim.map().buildingAt(c) == kNoEntity;
                     trees += ok && isTree(sim, sim.plants().defAt(c)) ? 1 : 0;
                 }
             }
@@ -180,7 +189,7 @@ CellPos findFieldSite(const Sim& sim, CellPos landing, const CellRect& room, con
             for (int y = 0; y < 10 && ok; ++y) {
                 for (int x = 0; x < 14 && ok; ++x) {
                     const CellPos c{origin.x + x, origin.y + y, 0};
-                    ok = sim.map().groundWalkable(c) && sim.map().buildingAt(c) == kNoEntity && !room.contains(c) &&
+                    ok = dryGround(sim, c) && sim.map().buildingAt(c) == kNoEntity && !room.contains(c) &&
                          sim.map().terrain(c) == Terrain::Soil &&
                          std::none_of(taken.begin(), taken.end(), [&](const CellRect& t) { return t.contains(c); });
                     score += ok ? sim.plants().fertility(c) : 0.0f;
@@ -201,7 +210,7 @@ CellPos freeCellNear(const Sim& sim, CellPos centre) {
         for (int dy = -ring; dy <= ring; ++dy) {
             for (int dx = -ring; dx <= ring; ++dx) {
                 const CellPos c{centre.x + dx, centre.y + dy, 0};
-                if (std::max(std::abs(dx), std::abs(dy)) == ring && sim.map().inBounds(c) && sim.map().groundWalkable(c) &&
+                if (std::max(std::abs(dx), std::abs(dy)) == ring && dryGround(sim, c) &&
                     sim.map().buildingAt(c) == kNoEntity && sim.map().terrain(c) != Terrain::Rock) {
                     return c;
                 }
@@ -224,7 +233,7 @@ bool findGreenhouseSite(Sim& sim, CellPos landing, const CellRect& room, CellPos
             for (int y = origin.y - 1; y <= origin.y + height && ok; ++y) {
                 for (int x = origin.x - 1; x <= origin.x + width && ok; ++x) {
                     const CellPos c{x, y, 0};
-                    ok = sim.map().inBounds(c) && sim.map().groundWalkable(c) && sim.map().buildingAt(c) == kNoEntity &&
+                    ok = dryGround(sim, c) && sim.map().buildingAt(c) == kNoEntity &&
                          sim.farming().zoneAt(c) == kNoGrowingZone && sim.zones().stockpileAt(c) == nullptr &&
                          std::none_of(taken.begin(), taken.end(), [&](const CellRect& t) { return t.contains(c); }) &&
                          !(x >= room.minX - 2 && x < room.minX + room.sizeX + 2 && y >= room.minY - 2 && y < room.minY + room.sizeY + 2);

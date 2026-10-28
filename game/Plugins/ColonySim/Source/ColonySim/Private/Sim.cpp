@@ -690,16 +690,38 @@ ThreatMap& Sim::threatMap(FactionId faction) {
 }
 
 void Sim::placeStockpileAndThings() {
-    // The stockpile's middle: the walkable cell nearest the middle, searched in growing squares.
+    // The stockpile's middle (the landing): the cell nearest the middle, searched in growing squares, with dry ground
+    // all round it (no water, marsh, mud or rock within kDryRadius), so the start's things can be put down and built
+    // beside; if no such cell is within kDrySearch of the middle, the walkable cell nearest the middle.
+    constexpr int kDryRadius = 4;
+    constexpr int kDrySearch = 64;
     const int size = map_.width();
     const int mid = size / 2;
-    for (int r = 0; r < size && !stockpileCell_; ++r) {
-        for (int y = mid - r; y <= mid + r && !stockpileCell_; ++y) {
-            for (int x = mid - r; x <= mid + r; ++x) {
-                const bool onRing = std::abs(x - mid) == r || std::abs(y - mid) == r;
-                if (onRing && map_.walkable(CellPos{x, y, 0})) {
-                    stockpileCell_ = CellPos{x, y, 0};
-                    break;
+    const auto dryAround = [&](CellPos c) {
+        for (int y = c.y - kDryRadius; y <= c.y + kDryRadius; ++y) {
+            for (int x = c.x - kDryRadius; x <= c.x + kDryRadius; ++x) {
+                const CellPos n{x, y, 0};
+                if (!map_.walkable(n)) {
+                    return false;
+                }
+                const Terrain t = map_.terrain(n);
+                if (t == Terrain::ShallowWater || t == Terrain::Marsh || t == Terrain::Mud) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
+    for (const bool dry : {true, false}) {
+        const int reach = dry ? std::min(kDrySearch, size) : size;
+        for (int r = 0; r < reach && !stockpileCell_; ++r) {
+            for (int y = mid - r; y <= mid + r && !stockpileCell_; ++y) {
+                for (int x = mid - r; x <= mid + r; ++x) {
+                    const bool onRing = std::abs(x - mid) == r || std::abs(y - mid) == r;
+                    if (onRing && map_.walkable(CellPos{x, y, 0}) && (!dry || dryAround(CellPos{x, y, 0}))) {
+                        stockpileCell_ = CellPos{x, y, 0};
+                        break;
+                    }
                 }
             }
         }
