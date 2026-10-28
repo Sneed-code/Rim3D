@@ -292,6 +292,26 @@ TEST_CASE("quests: saving and loading keeps open and finished quests, and the ga
     CHECK(loaded.sim->quests().find(id)->launched == sim->quests().find(id)->launched);
 }
 
+// Seed 14 of the save audit: a wanderer's body was burned, the quest kept its id, and the loader dropped it.
+TEST_CASE("quests: a quest whose person is gone saves and loads to the same game") {
+    auto sim = questSim();
+    uint32_t id = 0;
+    std::string error;
+    QUEST_REQUIRE(sim->quests().offer("WandererAsks", id, error));
+    QUEST_REQUIRE(sim->quests().accept(id, error));
+    QUEST_REQUIRE(sim->quests().find(id)->people.size() == 1);
+    sim->things().destroy(sim->quests().find(id)->people.front());
+    sim->stepMany(10);
+    const std::vector<uint8_t> bytes = saveSim(*sim);
+    SaveLoadResult loaded = loadSim(bytes, questDefs());
+    QUEST_REQUIRE(loaded.sim != nullptr);
+    CHECK(loaded.sim->stateHash() == sim->stateHash());
+    CHECK(saveSim(*loaded.sim) == bytes);
+    sim->stepMany(600);
+    loaded.sim->stepMany(600);
+    CHECK(loaded.sim->stateHash() == sim->stateHash());
+}
+
 TEST_CASE("quests: old finished quests are dropped beyond the history limit") {
     auto sim = questSim();
     const int keep = sim->quests().rules().historyKept;

@@ -1176,6 +1176,8 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.text("action", c.action);
         ar.value("quest", c.quest);
         ar.text("kind", c.kind);
+    } else if constexpr (std::is_same_v<Type, RerollColonistCommand>) {
+        ar.value("slot", c.slot);
     } else if constexpr (std::is_same_v<Type, RepairGearCommand>) {
         ar.value("thing", c.thing);
         ar.value("repair", c.repair);
@@ -4916,10 +4918,8 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.trade_->restore(std::move(d.trade), error)) {
         return false;
     }
-    for (Quest& quest : d.quests.quests) {
-        quest.people.erase(std::remove_if(quest.people.begin(), quest.people.end(), [&](Entity p) { return !reg.valid(p); }),
-                           quest.people.end());
-    }
+    // A quest keeps the ids of people who are gone (a butchered or burned body) as the running game does; dropping them here made a
+    // loaded game hash differently from the one it was saved from. The quest checks each one is alive before using it.
     sim.quests_->state() = std::move(d.quests);
     if (!sim.ship_->restore(std::move(d.ship), error)) {
         return false;

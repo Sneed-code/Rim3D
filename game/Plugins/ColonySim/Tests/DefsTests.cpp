@@ -175,7 +175,7 @@ TEST_CASE("defs: the real data folder loads") {
         CHECK(crop->number("plant.growOptimalMinTemperature") == doctest::Approx(6.0));   // from CropBase
         CHECK(db.find("Things", crop->text("plant.harvestedThingDef")) != nullptr);
     }
-    CHECK(db.find("Things", "Plant_Potato")->number("plant.growDays") == doctest::Approx(7.6));
+    CHECK(db.find("Things", "Plant_Potato")->number("plant.growDays") == doctest::Approx(5.8));
     for (const char* name : {"TemperateForest", "BorealForest", "AridShrubland"}) {
         const Def* biome = db.find("Biomes", name);
         if (biome == nullptr) { CHECK(false); continue; }

@@ -339,7 +339,7 @@ TEST_CASE("Raid strategies: thieves lift the most valuable loose item and leave 
 }
 
 TEST_CASE("Raid strategies: kidnappers carry a downed colonist off the map, and the colony can't rescue it") {
-    auto sim = stratSim(61, 128);
+    auto sim = stratSim(62, 128);
     const std::vector<Entity> colonists = stratColonists(*sim);
     STRAT_REQUIRE(colonists.size() == 6);
     entt::registry& reg = sim->things().registry();

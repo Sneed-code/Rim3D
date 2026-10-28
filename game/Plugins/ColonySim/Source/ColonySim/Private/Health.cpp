@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <unordered_map>
 #include <utility>
 
@@ -741,44 +742,39 @@ struct HealthEval {
         if (c.hasPain) {
             v *= std::min(c.painMax, c.painIntercept + c.painSlope * pain);
         }
+        // RimWorld's order (PawnCapacityUtility): the offsets of every stage that touches the capacity (blood loss, cold,
+        // illness) are added up first, and the lowest of their caps comes last. Capping stage by stage let one stage's
+        // offset push a capped value under the cap: an extreme infection (at most 0.1) and food poisoning (-0.1) made
+        // consciousness 0 and killed the pawn (year run, seed 1).
+        float offsets = 0.0f;
+        float cap = std::numeric_limits<float>::max();
+        const auto add = [&](const HealthModel::Stage& s) {
+            for (const auto& [which, offset] : s.offsets) {
+                offsets += which == index ? offset : 0.0f;
+            }
+            for (const auto& [which, maximum] : s.maxima) {
+                cap = which == index ? std::min(cap, maximum) : cap;
+            }
+        };
         const int stage = model.stageOf(health.bloodLoss);
         if (stage >= 0) {
-            const HealthModel::Stage& s = model.bloodStages[static_cast<size_t>(stage)];
-            for (const auto& [cap, offset] : s.offsets) {
-                v += cap == index ? offset : 0.0f;
-            }
-            for (const auto& [cap, maximum] : s.maxima) {
-                v = cap == index ? std::min(v, maximum) : v;
-            }
+            add(model.bloodStages[static_cast<size_t>(stage)]);
         }
         for (const EnvironmentHediff& env : health.environment) {
             const HealthModel::EnvironmentDef* def = model.environmentOf(env.def);
             const int envStage = def != nullptr ? HealthModel::stageIn(def->stages, env.severity) : -1;
-            if (envStage < 0) {
-                continue;
-            }
-            const HealthModel::Stage& s = def->stages[static_cast<size_t>(envStage)];
-            for (const auto& [cap, offset] : s.offsets) {
-                v += cap == index ? offset : 0.0f;
-            }
-            for (const auto& [cap, maximum] : s.maxima) {
-                v = cap == index ? std::min(v, maximum) : v;
+            if (envStage >= 0) {
+                add(def->stages[static_cast<size_t>(envStage)]);
             }
         }
         for (const Disease& disease : health.diseases) {
             const HealthModel::DiseaseDef* def = model.diseaseOf(disease.def);
             const int diseaseStage = def != nullptr ? HealthModel::stageIn(def->stages, disease.severity) : -1;
-            if (diseaseStage < 0) {
-                continue;
-            }
-            const HealthModel::Stage& s = def->stages[static_cast<size_t>(diseaseStage)];
-            for (const auto& [cap, offset] : s.offsets) {
-                v += cap == index ? offset : 0.0f;
-            }
-            for (const auto& [cap, maximum] : s.maxima) {
-                v = cap == index ? std::min(v, maximum) : v;
+            if (diseaseStage >= 0) {
+                add(def->stages[static_cast<size_t>(diseaseStage)]);
             }
         }
+        v = std::min(v + offsets, cap);
         value[i] = std::max(0.0f, v);
         state[i] = 2;
         return value[i];

@@ -34,6 +34,22 @@ float huntGunRange(JobSystem& jobs, Entity pawn) {
     return combat->gunStats(reg.get<Thing>(gear->weapon).def, stats) ? stats.range : 0.0f;
 }
 
+// How big the animal looks to a shooter against a standing man: the height of the point shooters aim at on it (its chest) over
+// a man's. 1 when it can't be told.
+constexpr float kHuntManAimHeight = 1.15f;  // HumanHitboxes, standing
+
+float huntTargetScale(JobSystem& jobs, Entity animal) {
+    CombatSystem* combat = jobs.combat();
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    if (combat == nullptr || !combat->aimPoint(animal, x, y, z)) {
+        return 1.0f;
+    }
+    const Position& pos = jobs.things().registry().get<Position>(animal);
+    return std::clamp((z - jobs.map().heightAt(pos.x, pos.y)) / kHuntManAimHeight, 0.05f, 1.0f);
+}
+
 bool huntDead(const entt::registry& reg, Entity e) {
     const Health* h = reg.try_get<Health>(e);
     return h != nullptr && h->dead;
@@ -80,6 +96,7 @@ public:
         out.type = JobType::Hunt;
         out.site = animal;
         out.cell = cellOf(reg.get<Position>(animal));
+        out.count = static_cast<int>(reg.get<Health>(animal).injuries.size());  // a new wound restarts the hunt's clock
         return true;
     }
 };
@@ -174,8 +191,8 @@ bool makeButcherJob(JobSystem& jobs, Entity pawn, Entity building, const Bill& b
     Entity best = kNoEntity;
     float bestDist = 0.0f;
     reg.view<const Health, const Position>().each([&](Entity corpse, const Health&, const Position& pos) {
-        if (pos.level != at.level || !hu->isCorpse(corpse)) {
-            return;
+        if (pos.level != at.level || !hu->isCorpse(corpse) || !BillSystem::allowsIngredient(bill, reg.get<Thing>(corpse).def)) {
+            return;  // the bill's filter leaves this race out (people, by default)
         }
         const float dist = huntDistSq(table, pos);
         if ((bill.radius > 0.0f && dist > radiusSq) || (best != kNoEntity && (dist > bestDist || (dist == bestDist && corpse > best)))) {
@@ -225,7 +242,7 @@ bool JobSystem::failCheckHunt(Entity pawn, Job& job, std::string& why) {
         why = "it has no gun in its hands";
         return false;
     }
-    if (now() - job.startedAt > static_cast<int64_t>(husbandry_->rules().huntMaxSeconds)) {
+    if (static_cast<double>(now() - job.startedAt) - static_cast<double>(job.progress) > husbandry_->rules().huntMaxSeconds) {
         why = "it could not bring the animal down";
         return false;
     }
@@ -257,6 +274,13 @@ JobSystem::StepResult JobSystem::huntWork(Entity pawn, Job& job, std::string& wh
         mover.path.clear();
         mover.next = 0;
     };
+    // The time limit counts from the last hit: a hunt that is wearing the animal down goes on (a deer often takes more
+    // than 15 minutes, and giving up on it to start again was most of the hunts given up in the year run).
+    const int wounds = static_cast<int>(reg.get<Health>(animal).injuries.size());
+    if (wounds != job.count) {
+        job.count = wounds;
+        job.progress = static_cast<float>(now() - job.startedAt);  // seconds into the hunt of the last hit
+    }
     const Shooter* shooter = reg.try_get<Shooter>(pawn);
     if (shooter != nullptr && (shooter->phase == ShotPhase::Aiming || shooter->phase == ShotPhase::Firing)) {
         stand();
@@ -265,7 +289,9 @@ JobSystem::StepResult JobSystem::huntWork(Entity pawn, Job& job, std::string& wh
     const Position& pp = reg.get<Position>(pawn);
     const Position& ap = reg.get<Position>(animal);
     const double range = static_cast<double>(huntGunRange(*this, pawn));
-    const double shootRange = std::min(range, std::max(rules.huntMinRange, range * rules.huntRangeShare));
+    // Closer for small game: at the usual distance a hare is a tenth of a man's target and nearly every shot misses.
+    const double size = std::pow(static_cast<double>(huntTargetScale(*this, animal)), std::max(0.0, rules.huntSizeExponent));
+    const double shootRange = std::min(range, std::max(rules.huntMinRange, range * rules.huntRangeShare * size));
     const double dx = static_cast<double>(pp.x - ap.x);
     const double dy = static_cast<double>(pp.y - ap.y);
     if (pp.level == ap.level && dx * dx + dy * dy <= shootRange * shootRange &&

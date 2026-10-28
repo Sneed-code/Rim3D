@@ -2,10 +2,7 @@
   {
     "defName": "Crashlanded", "source": "RimWorld wiki", "label": "crashlanded",
     "colonists": 5, "protagonist": true, "colonistKind": "Human", "lineage": "Baseline", "biome": "TemperateForest",
-    "colonistApparel": [
-      { "thing": "Apparel_TShirt", "stuff": "Cloth" },
-      { "thing": "Apparel_Pants", "stuff": "Cloth" }
-    ],
+    "colonistPawnKind": "CrashlandedSettler",
     "startingThings": [
       { "thing": "Silver", "count": 800 },
       { "thing": "MealSurvivalPack", "count": 50 },
@@ -26,7 +23,7 @@
       { "thing": "MealSurvivalPack", "count": 7 }
     ],
     "gearLater": ["MeleeWeapon_Knife (plasteel) when melee comes", "the helmet is plasteel in RimWorld; steel until materials exist"],
-    "ours": ["colonists", "protagonist", "colonistApparel"]
+    "ours": ["colonists", "protagonist", "colonistPawnKind"]
   },
   {
     "defName": "PerfColony", "source": "ours", "label": "performance test colony",

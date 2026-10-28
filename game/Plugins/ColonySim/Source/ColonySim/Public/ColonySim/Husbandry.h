@@ -113,6 +113,9 @@ struct HusbandryRules {
     // N2 (docs/design/hunting.md).
     double huntRangeShare = 0.8;       // a hunter shoots from within this share of its gun's range
     double huntMinRange = 3.0;         // metres: a hunter never closes in nearer than this (the range of a short-barrelled gun)
+    // Small game is a small target: the shooting distance shrinks with the animal's size against a standing man's (the height
+    // of the point shooters aim at), to this power. 0 keeps the same distance for every animal (ours).
+    double huntSizeExponent = 1.0;
     double huntMaxSeconds = 900.0;     // a hunt that has not killed its target in this long is given up
     double huntAvoidManhunterChance = 0.1;  // hunters skip animals that turn manhunter when hurt at this chance or more (ours)
     double huntRepathSeconds = 3.0;    // a hunter walking at a moving animal looks for a new path this often
