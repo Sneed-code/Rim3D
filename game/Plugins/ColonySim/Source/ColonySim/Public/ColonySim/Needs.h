@@ -112,12 +112,15 @@ public:
     // the bed def's `stats.bedRestEffectiveness`.
     float restGainPerDay(Entity bed) const;
 
+    // Pawns that sleep somewhere off the map (a caravan resting for the night): they rest as on the ground.
+    void setRestingElsewhere(std::function<bool(Entity)> resting) { restingElsewhere_ = std::move(resting); }
     // What a pawn's rest falls by is multiplied by this (drugs: a stimulant slows it, a withdrawal speeds it).
     void setRestFallFactor(std::function<float(Entity)> factor) { restFallFactor_ = std::move(factor); }
 
     void step();
 
 private:
+    std::function<bool(Entity)> restingElsewhere_;
     Things& things_;
     HealthSystem& health_;
     const DefDatabase& defs_;

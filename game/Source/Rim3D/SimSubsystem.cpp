@@ -37,7 +37,9 @@ namespace
 	constexpr uint64 SimBridgeMessageKey = 0x51317100;
 
 	TAutoConsoleVariable<int32> GSimBridgeShowTimings(
-		TEXT("Sim.ShowTimings"), 1, TEXT("1 shows the sim's speed and cost on screen, 0 hides it."), ECVF_Default);
+		TEXT("Sim.ShowTimings"), 0, TEXT("1 shows the sim's speed and cost on screen, 0 hides it (the default since L1)."), ECVF_Default);
+	TAutoConsoleVariable<int32> GSimBridgeKeyHelp(
+		TEXT("UI.KeyHelp"), 0, TEXT("1 shows the list of keys in the bottom right corner, 0 folds it to an \"F1  keys\" box (F1 switches)."), ECVF_Default);
 	TAutoConsoleVariable<int32> GSimBridgeDebugDraw(
 		TEXT("Sim.DebugDraw"), 0, TEXT("1 draws every thing in the snapshot as a coloured shape, at its blended position."), ECVF_Default);
 
@@ -715,6 +717,11 @@ FString USimSubsystem::WriteBugReport()
 	return Folder;
 }
 
+bool USimSubsystem::IsKeyHelpShown()
+{
+	return GSimBridgeKeyHelp.GetValueOnGameThread() != 0;
+}
+
 bool USimSubsystem::HandleKey(const FKey& Key)
 {
 	if (Key == EKeys::SpaceBar)
@@ -743,6 +750,10 @@ bool USimSubsystem::HandleKey(const FKey& Key)
 	else if (Key == EKeys::F7)
 	{
 		SaveReplay();
+	}
+	else if (Key == EKeys::F1)
+	{
+		GSimBridgeKeyHelp->Set(IsKeyHelpShown() ? 0 : 1, ECVF_SetByCode);
 	}
 	else if (Key == EKeys::F5)
 	{

@@ -140,6 +140,14 @@ enum class EventType : uint8_t {
     ChemicalDamage,        // heavy use hurt an organ for good: `thing` the pawn, `def` the Chemicals def (invalid: a major overdose), `message` the part ("liver", "heart"...), `amount` hit points lost
     DeepDepositFound,      // a scanner found deep resources (docs/design/deep-mining.md): `def` the item, `cell` the middle of the lump, `count` its cells, `thing` the scanner (none for the long-range hook)
     DeepPortionDrilled,    // a deep drill finished a portion: `thing` the drill, `def` what came up (a rock chunk if nothing is under it), `amount` how many, `cell` where it was taken from
+    // Caravans (docs/design/caravans.md): `count` is the caravan's id in all of them.
+    CaravanFormed,         // a caravan was formed: its members walk to `cell`, the exit at the map edge; `amount` how many
+    CaravanMemberLost,     // `thing` left the caravan: `message` why ("can't walk", "left behind", "died", "mental break"...)
+    CaravanCancelled,      // a forming caravan was given up (`message` why); its members stay on the map
+    CaravanDeparted,       // the last member stepped off the map and the caravan set out; `amount` the tile
+    CaravanArrived,        // it reached the end of its path: `amount` the tile, `message` the settlement's name there, if any
+    CaravanEntered,        // it came back onto the map at `cell`; `amount` how many pawns
+    CaravanLost,           // nobody in it can walk any more: it is gone with all it carried (`message` why)
     SkipStarted,           // a night skip or fast travel began (P5, docs/design/skip-travel.md): `message` "night" or "travel", `thing` the colonist, `amount` the game seconds it will run
     SkipEnded,             // it ended: `message` "night: why" or "travel: why" (morning, arrived, cancelled, or the threat), `thing` the colonist (take control again), `amount` the game seconds skipped, (x, y) where the colonist is
 };
