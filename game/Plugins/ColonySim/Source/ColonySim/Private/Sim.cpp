@@ -311,7 +311,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     lights_->setWeather(weather_.get());
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
-    movement_->setSpeedFactor([this](Entity pawn) { return jobs_->loadSpeedFactor(pawn); });
+    movement_->setSpeedFactor([this](Entity pawn) {
+        return jobs_->loadSpeedFactor(pawn) * static_cast<float>(talents_->statFactor(pawn, "moveSpeed"));
+    });
     jobs_->setLights(lights_.get());
     jobs_->setPower(power_.get());
     jobs_->setRooms(rooms_.get());

@@ -12,8 +12,8 @@ every stat factor for them is exactly 1.
 The protagonist earns XP when a job ends "done" (`TalentRules.jobXp`, by job type: building 6,
 bills 5, research 12, mining 3, hauling 1, ...). The n-th point costs `xpFirstPoint + xpGrowthPerPoint x
 (n - 1)` (100, 125, 150, ...), up to `maxPoints` (40). Each point gives a `TalentPoint` event.
-Combat XP is not in yet (the event does not say who shot): a later combat task can call
-`TalentSystem::addXp`.
+Combat XP (`TalentRules.combatXp`): 1 per shot fired (`ShotFired`), 2 per melee blow that lands on a pawn or its armor
+(`MeleeHit`). Kills give nothing (the death event does not say who killed).
 
 ## Talents
 
@@ -26,10 +26,12 @@ rank) and optional `requires` (`{talent: rank}`). Factor = 1 + sum of `perRank x
 | `buildSpeed` | `JobSystem::constructionSpeed` (building and deconstructing) |
 | `aimSpread` | `CombatSystem` when a shot is fired (multiplies the gun's spread, not recoil) |
 | `carryCapacity` | `JobSystem::carryCapacity` (so the load limit and the slowdown follow it) |
-| `tradePrice` | nothing yet: the trade task reads `sim.talents().statFactor(pawn, "tradePrice")` |
+| `tradePrice` | `TradeSystem` (negotiator's price improvement) |
+| `reloadTime` | `CombatSystem::startReload` (multiplies the reload steps) |
+| `moveSpeed` | the movement system's speed factor (walking and running) |
 
-Starting talents: FastBuilder, MasterBuilder, SteadyAim, DeadEye, PackMule, Haggler, SilverTongue (the
-second of each pair needs rank 3 of the first).
+Talents: FastBuilder, MasterBuilder, SteadyAim, DeadEye, PackMule, Haggler, SilverTongue, QuickHands, Gunslinger,
+FleetFoot, Sprinter (the second of each pair needs rank 3 of the first).
 
 ## Commands, events, snapshot, saves
 

@@ -5,5 +5,9 @@
   {"defName": "DeadEye", "label": "dead eye", "stat": "aimSpread", "perRank": -0.10, "maxRank": 2, "cost": 2, "requires": {"SteadyAim": 3}, "ours": ["stat", "perRank", "maxRank", "cost", "requires"]},
   {"defName": "PackMule", "label": "pack mule", "stat": "carryCapacity", "perRank": 0.20, "maxRank": 5, "cost": 1, "ours": ["stat", "perRank", "maxRank", "cost"]},
   {"defName": "Haggler", "label": "haggler", "stat": "tradePrice", "perRank": -0.04, "maxRank": 5, "cost": 1, "ours": ["stat", "perRank", "maxRank", "cost"]},
-  {"defName": "SilverTongue", "label": "silver tongue", "stat": "tradePrice", "perRank": -0.06, "maxRank": 2, "cost": 2, "requires": {"Haggler": 3}, "ours": ["stat", "perRank", "maxRank", "cost", "requires"]}
+  {"defName": "SilverTongue", "label": "silver tongue", "stat": "tradePrice", "perRank": -0.06, "maxRank": 2, "cost": 2, "requires": {"Haggler": 3}, "ours": ["stat", "perRank", "maxRank", "cost", "requires"]},
+  {"defName": "QuickHands", "label": "quick hands", "stat": "reloadTime", "perRank": -0.08, "maxRank": 5, "cost": 1, "ours": ["stat", "perRank", "maxRank", "cost"]},
+  {"defName": "Gunslinger", "label": "gunslinger", "stat": "reloadTime", "perRank": -0.15, "maxRank": 2, "cost": 2, "requires": {"QuickHands": 3}, "ours": ["stat", "perRank", "maxRank", "cost", "requires"]},
+  {"defName": "FleetFoot", "label": "fleet foot", "stat": "moveSpeed", "perRank": 0.03, "maxRank": 5, "cost": 1, "ours": ["stat", "perRank", "maxRank", "cost"]},
+  {"defName": "Sprinter", "label": "sprinter", "stat": "moveSpeed", "perRank": 0.05, "maxRank": 2, "cost": 2, "requires": {"FleetFoot": 3}, "ours": ["stat", "perRank", "maxRank", "cost", "requires"]}
 ]
