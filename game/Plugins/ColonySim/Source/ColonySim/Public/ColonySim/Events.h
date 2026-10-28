@@ -163,6 +163,9 @@ enum class EventType : uint8_t {
     PodsCancelled,         // the loading was given up (`message` why); what was in came out beside the pods
     PodsLaunched,          // the pods flew off: `amount` the tile, `message` the arrival (Land, Caravan, Gift)
     PodsArrived,           // they came down: `amount` the tile, `message` what happened ("landed", "caravan", "gift", "lost"), `cell` where they landed, `part` the new caravan's id
+    // The comms console (docs/design/comms-console.md).
+    CaravanRequested,      // `thing` asked the faction `message` for a trade caravan over the comms console; it comes in `amount` days
+    CaravanRequestFailed,  // an asked-for caravan could not come: `message` "faction: why"
 };
 
 // What stopped a projectile (ProjectileHit).

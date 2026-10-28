@@ -1,0 +1,36 @@
+[
+  {
+    "defName": "CommsConsole", "parent": "BuildingBase", "label": "comms console",
+    "description": "A radio and screen for talking to passing trade ships and other factions. Needs power.",
+    "size": [3, 2], "fillPercent": 0.5, "designationCategory": "Misc",
+    "costs": { "Steel": 120, "ComponentIndustrial": 4 },
+    "researchPrerequisite": "Microelectronics",
+    "stats": { "maxHitPoints": 250, "workToBuild": 3168, "flammability": 0.6 },
+    "power": { "consumption": 200 },
+    "building": { "commsConsole": true },
+    "visual": { "parts": [
+      { "shape": "box", "size": [0, -0.4, 0.8], "color": [0.45, 0.47, 0.5] },
+      { "shape": "box", "size": [-0.6, 0.04, 0.45], "at": [0, 0.1, 0.8], "color": [0.12, 0.35, 0.5] }
+    ] },
+    "unverified": ["fillPercent", "designationCategory"],
+    "ours": ["visual", "building.commsConsole", "description"],
+    "note": "Wiki-checked 2026-10-28: 120 steel + 4 components, 2200 ticks, 250 HP, 3 x 2, 200 W, 60% flammable, Microelectronics. A powered console lets the colony trade with orbital traders and ask an allied faction for a trade caravan (19 goodwill, 4-day cooldown). docs/design/comms-console.md."
+  },
+  {
+    "defName": "OrbitalTradeBeacon", "parent": "BuildingBase", "label": "orbital trade beacon",
+    "description": "Marks the goods that passing trade ships may buy, and where what they sell lands. Needs power.",
+    "size": [1, 1], "passability": "PassThroughOnly", "fillPercent": 0.15, "designationCategory": "Misc",
+    "costs": { "Steel": 40, "ComponentIndustrial": 1 },
+    "researchPrerequisite": "Microelectronics",
+    "stats": { "maxHitPoints": 75, "workToBuild": 1152, "flammability": 0.5 },
+    "power": { "consumption": 40 },
+    "building": { "tradeBeacon": true, "tradeRadius": 7.9 },
+    "visual": { "parts": [
+      { "shape": "cylinder", "radius": 0.08, "height": 0.9, "color": [0.4, 0.42, 0.45] },
+      { "shape": "box", "size": [0.3, 0.3, 0.12], "at": [0, 0, 0.9], "color": [0.85, 0.6, 0.2] }
+    ] },
+    "unverified": ["passability", "fillPercent", "designationCategory", "building.tradeRadius"],
+    "ours": ["visual", "building.tradeBeacon", "description"],
+    "note": "Wiki-checked 2026-10-28: 40 steel + 1 component, 800 ticks, 75 HP, 1 x 1, 40 W, 50% flammable, Microelectronics; 15 tiles across. The radius 7.9 is recalled from RimWorld's code (Building_OrbitalTradeBeacon.TradeRadius). Walls break its area."
+  }
+]

@@ -152,6 +152,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `mentalBreaks` | 1 | `mentalBreaker` ([mental-breaks.md](mental-breaks.md)) |
 | `inspirations` | 1 | `inspired` ([inspirations.md](inspirations.md)) |
 | `travel` | 1 | the running skip, counters and the visited places ([skip-travel.md](skip-travel.md)) |
+| `comms` | 1 | caravans asked for over the comms console and when each faction was last asked ([comms-console.md](comms-console.md)) |
 
 **Commands are saved by name (S7).** The `commands` section starts with the names of the command
 types it uses (`commandNames`); each command then gives its type as a place in that list, and its

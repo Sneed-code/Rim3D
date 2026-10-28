@@ -1287,7 +1287,8 @@ void saveTradeLine(Ar& ar, TradeLine& l) {
 
 template <typename Type>
 inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitCommand> || std::is_same_v<Type, TradeCommand> ||
-                                            std::is_same_v<Type, AdjustGoodwillCommand> || std::is_same_v<Type, GiftCommand>;
+                                            std::is_same_v<Type, AdjustGoodwillCommand> || std::is_same_v<Type, GiftCommand> ||
+                                            std::is_same_v<Type, CommsCommand>;
 
 // The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
 template <typename Ar, typename Type>
@@ -1307,6 +1308,11 @@ void saveTradeCommand(Ar& ar, Type& c) {
         if (ar.sectionVersion() >= 4) {  // W6: trading on another map
             ar.value("map", deal->map);
         }
+    } else if constexpr (std::is_same_v<Type, CommsCommand>) {
+        ar.text("action", c.action);
+        ar.text("faction", c.faction);
+        ar.text("traderKind", c.traderKind);
+        ar.value("negotiator", c.negotiator);
     } else if constexpr (std::is_same_v<Type, AdjustGoodwillCommand>) {
         auto* goodwill = &c;
         ar.text("faction", goodwill->faction);
@@ -3671,6 +3677,17 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.value("tile", a.tile);
             ar.value("there", a.there);
             ar.group("social", [&] { saveSocialPart(ar, a.social); });
+        });
+    });
+    ar.section("comms", 1, [&] {  // the comms console's caravan requests (docs/design/comms-console.md)
+        ar.list("requests", d.trade.requests, [&](CaravanRequest& r) {
+            ar.text("faction", r.faction);
+            ar.text("traderKind", r.traderKind);
+            ar.value("arriveAt", r.arriveAt);
+        });
+        ar.list("calls", d.trade.calls, [&](CommsCall& c) {
+            ar.text("faction", c.faction);
+            ar.value("at", c.at);
         });
     });
     // New sections go here, at the end.
