@@ -67,7 +67,7 @@ TEST_CASE("Talents: the defs load and XP turns into points") {
     Sim sim = talSim();
     const TalentSystem& talents = sim.talents();
     TAL_REQUIRE(talents.rules().present);
-    CHECK(talents.talents().size() == 7);
+    CHECK(talents.talents().size() == 11);
     CHECK(talents.xpForPoints(0) == 0);
     CHECK(talents.xpForPoints(1) == 100);
     CHECK(talents.xpForPoints(2) == 225);  // 100 + 125
@@ -185,6 +185,43 @@ TEST_CASE("Talents: finished jobs give the protagonist XP, other pawns none") {
     TAL_REQUIRE(sim.talents().state(hero) != nullptr);
     CHECK(sim.talents().state(hero)->xp == 6);
     CHECK(sim.talents().state(other) == nullptr);
+}
+
+TEST_CASE("Talents: shots and melee hits give the protagonist XP, reload and move talents work") {
+    Sim sim = talSim();
+    const Entity hero = talPawn(sim, CellPos{10, 10, 0}, true);
+    const Entity other = talPawn(sim, CellPos{12, 10, 0}, false);
+    std::vector<Event> events;
+    for (const Entity pawn : {hero, other}) {
+        Event shot;
+        shot.type = EventType::ShotFired;
+        shot.thing = pawn;
+        events.push_back(shot);
+        Event swing;
+        swing.type = EventType::MeleeHit;
+        swing.thing = pawn;
+        swing.hit = ProjectileHitKind::Pawn;
+        events.push_back(swing);
+        Event miss = swing;
+        miss.hit = ProjectileHitKind::None;
+        events.push_back(miss);
+    }
+    std::vector<Event> out;
+    sim.talents().awardJobXp(events, 0, out);
+    TAL_REQUIRE(sim.talents().state(hero) != nullptr);
+    CHECK(sim.talents().state(hero)->xp == 3);  // 1 for the shot, 2 for the hit, none for the miss
+    CHECK(sim.talents().state(other) == nullptr);
+
+    sim.submit(AddTalentXpCommand{hero, 100000});
+    sim.step();
+    for (const char* name : {"QuickHands", "FleetFoot", "FleetFoot"}) {
+        sim.submit(SpendTalentPointCommand{hero, name});
+    }
+    sim.step();
+    CHECK(talLastFailure(sim).empty());
+    CHECK(sim.talents().statFactor(hero, "reloadTime") == doctest::Approx(0.92));
+    CHECK(sim.talents().statFactor(hero, "moveSpeed") == doctest::Approx(1.06));
+    CHECK(sim.talents().statFactor(other, "moveSpeed") == doctest::Approx(1.0));
 }
 
 TEST_CASE("Talents: the state saves, loads and replays the same") {
