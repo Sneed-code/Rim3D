@@ -706,3 +706,98 @@ TEST_CASE("Power: machines that draw power in the data really draw it, and a ben
     sim.step();
     CHECK_FALSE(sim.power().running(stove));  // no generator on its net
 }
+
+namespace {
+
+void powerLake(Sim& sim, int x0, int y0, int x1, int y1, bool flowing) {
+    for (int y = y0; y <= y1; ++y) {
+        for (int x = x0; x <= x1; ++x) {
+            sim.editMap().setTerrain(CellPos{x, y, 0}, Terrain::Water);
+            sim.editMap().setFlowing(CellPos{x, y, 0}, flowing);
+        }
+    }
+}
+
+}  // namespace
+
+TEST_CASE("Power: a watermill goes on moving water only, and makes 1000 W there") {
+    Sim sim = powerSim();
+    powerLake(sim, 30, 30, 34, 34, false);  // a still pond
+    powerLake(sim, 40, 30, 42, 34, true);   // a river
+    CHECK(sim.things().spawn("WatermillGenerator", CellPos{20, 20, 0}, 1) == kNoEntity);  // dry land
+    CHECK(sim.things().spawn("WatermillGenerator", CellPos{30, 30, 0}, 1) == kNoEntity);  // still water
+    CHECK(sim.things().spawn("WatermillGenerator", CellPos{39, 30, 0}, 1) == kNoEntity);  // half on the bank
+    CHECK(sim.things().spawn("PowerConduit", CellPos{41, 31, 0}, 1) == kNoEntity);        // nothing else floats
+    const Entity mill = powerPut(sim, "WatermillGenerator", 40, 30);
+    POWER_REQUIRE(mill != kNoEntity);
+    powerWire(sim, 43, 46, 31);
+    const Entity lamp = powerPut(sim, "StandingLamp", 47, 31);
+    POWER_REQUIRE(lamp != kNoEntity);
+    powerRun(sim, 2);
+    CHECK(sim.power().wattsOf(mill) == doctest::Approx(1000.0));
+    CHECK(sim.power().powered(lamp));
+}
+
+TEST_CASE("Power: a moisture pump dries still water near it, slowly, and leaves moving water alone") {
+    Sim sim = powerSim();
+    const Entity pump = powerPut(sim, "MoisturePump", 10, 10);  // (10,10)-(11,11), centre (10.5, 10.5) -> cell (10,10)
+    POWER_REQUIRE(pump != kNoEntity);
+    const Entity gen = powerPut(sim, "WoodFiredGenerator", 10, 14);
+    POWER_REQUIRE(gen != kNoEntity);
+    powerWire(sim, 12, 12, 11);
+    powerPut(sim, "PowerConduit", 12, 12);
+    powerPut(sim, "PowerConduit", 12, 13);
+    powerPut(sim, "PowerConduit", 11, 13);
+    powerLake(sim, 14, 8, 15, 12, false);   // within 5 of the pump
+    powerLake(sim, 14, 5, 14, 6, true);     // a river inside the reach
+    powerLake(sim, 30, 10, 30, 10, false);  // far away
+    powerRun(sim, 2);
+    POWER_REQUIRE(sim.power().powered(pump));
+    const Map& map = sim.map();
+    const auto wet = [&] {
+        int n = 0;
+        for (int y = 8; y <= 12; ++y) {
+            for (int x = 14; x <= 15; ++x) {
+                n += map.terrain(CellPos{x, y, 0}) == Terrain::Water ? 1 : 0;
+            }
+        }
+        return n;
+    };
+    CHECK(wet() == 9);    // the pump's first tick came at second 0
+    powerRun(sim, 1300);  // two more (600 and 1200)
+    CHECK(wet() == 7);
+    CHECK(map.dried().size() == 3);
+    powerRun(sim, 600 * 20);
+    CHECK(wet() == 1);
+    CHECK(map.terrain(CellPos{15, 8, 0}) == Terrain::Water);  // 5.2 cells from the pump's middle: out of reach
+    CHECK(map.terrain(CellPos{14, 5, 0}) == Terrain::Water);  // the river stays
+    CHECK(map.terrain(CellPos{30, 10, 0}) == Terrain::Water);  // out of reach
+    CHECK(map.dried().size() == 9);
+
+}
+
+TEST_CASE("Power: a save keeps the water a pump dried") {
+    Sim sim(SimSettings{42, 512, 0, 0, false}, powerDefs());
+    // The seed's own lakes come back on loading; edits to the terrain do not, so dry one of those.
+    std::vector<CellPos> lake;
+    for (int y = 0; y < sim.map().height() && lake.size() < 3; ++y) {
+        for (int x = 0; x < sim.map().width() && lake.size() < 3; ++x) {
+            if (sim.map().terrain(CellPos{x, y, 0}) == Terrain::Water) {
+                lake.push_back(CellPos{x, y, 0});
+            }
+        }
+    }
+    POWER_REQUIRE(lake.size() == 3);
+    for (const CellPos c : lake) {
+        sim.editMap().dryWater(c);
+    }
+    CHECK(sim.map().dried().size() == 3);
+    const std::vector<uint8_t> bytes = saveSim(sim);
+    SaveLoadResult loaded = loadSim(bytes, powerDefs());
+    POWER_REQUIRE(loaded.error.empty());
+    POWER_REQUIRE(loaded.sim != nullptr);
+    CHECK(loaded.sim->map().dried() == sim.map().dried());
+    for (const CellPos c : lake) {
+        CHECK(loaded.sim->map().terrain(c) == Terrain::Soil);
+    }
+}

@@ -27,6 +27,8 @@ def's numbers are read once per def (`PowerGrid::info`):
 | `power.output` | watts a generator makes |
 | `power.scalesWithSun` | output follows the sun and the share of the footprint with no roof |
 | `power.needsGeyser` | output only while a steam geyser (`Map::geyser`) lies under the footprint: the geothermal generator, 3600 W |
+| `building.onFlowingWater` | the building stands on moving water (`Map::flowing`) and nowhere else, all of its footprint: the watermill generator, 1000 W (size, cost and watts unverified) |
+| `dries` (`radius`, `everySeconds`) | with `power.consumption`: while powered, every `everySeconds` the pump turns the nearest still water cell within `radius` cells into soil (`Map::dryWater`). The moisture pump: 200 W, radius 5, 600 s. Moving water is never dried. Mud and marsh join when S8 makes them |
 | `power.scalesWithWind`, `windBlockRadius` | output follows the wind and how clear the air is at both ends |
 | `fuel` (on a generator) | needs fuel; see the hooks below |
 | `power.consumption` | watts a consumer draws while on |
@@ -117,7 +119,7 @@ without it. Geysers are set with `Map::setGeyser`; S8 map generation places them
 
 ## Not here
 
-Watermill (needs flowing rivers, S8), chemfuel making (refinery, drums), the electric tailor bench's draw (crafting.md),
+Placing moving water in a map (S8; `Map::setFlowing`, not saved, like geysers; dried cells are saved in section "terrain"), chemfuel making (refinery, drums), the electric tailor bench's draw (crafting.md),
 
 Fuel use (C11), the wind source (E1), heaters and coolers pushing room temperature (E2),
 the short-circuit event itself (T3), the overlay and power panel

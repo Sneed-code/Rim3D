@@ -215,6 +215,11 @@ void Things::placeFootprint(Entity thing, const CellRect& rect, const Footprint&
     }
 }
 
+bool Things::standsOnFlowingWater(Entity thing) const {
+    const Thing* t = registry_.try_get<Thing>(thing);
+    return t != nullptr && t->def.valid() && defs_->get(t->def).flag("building.onFlowingWater");
+}
+
 bool Things::spawnAt(Entity thing, CellPos cell, Rot4 rot) {
     if (!registry_.valid(thing) || registry_.all_of<Position>(thing)) {
         return false;
@@ -233,10 +238,11 @@ bool Things::spawnAt(Entity thing, CellPos cell, Rot4 rot) {
     }
 
     const CellRect rect = footprintRect(cell, footprint->sizeX, footprint->sizeY, rot);
+    const bool onWater = standsOnFlowingWater(thing);
     for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
         for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
             const CellPos c{x, y, rect.level};
-            if (!map_.inBounds(c) || !map_.groundWalkable(c) || map_.buildingAt(c) != kNoEntity) {
+            if (!map_.inBounds(c) || !map_.groundBuildable(c, onWater) || map_.buildingAt(c) != kNoEntity) {
                 return false;
             }
         }
@@ -264,10 +270,11 @@ bool Things::relink(Entity thing) {
         return true;
     }
     const CellRect rect = footprint->rect();
+    const bool onWater = standsOnFlowingWater(thing);
     for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
         for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
             const CellPos c{x, y, rect.level};
-            if (!map_.inBounds(c) || !map_.groundWalkable(c) || map_.buildingAt(c) != kNoEntity) {
+            if (!map_.inBounds(c) || !map_.groundBuildable(c, onWater) || map_.buildingAt(c) != kNoEntity) {
                 return false;
             }
         }

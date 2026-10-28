@@ -125,6 +125,32 @@
   "ours": ["power.needsGeyser"]
  },
  {
+  "defName": "WatermillGenerator", "visual": {"sound": {"loop": "Hum_Generator"}}, "researchPrerequisite": "WatermillGenerator",
+  "parent": "PowerBase",
+  "label": "watermill generator",
+  "size": [3, 3],
+  "costs": {"WoodLog": 100, "Steel": 50},
+  "fillPercent": 0.5,
+  "building": {"onFlowingWater": true},
+  "stats": {"maxHitPoints": 180, "workToBuild": 7000.0},
+  "power": {"output": 1000},
+  "unverified": ["size", "costs", "stats", "power"],
+  "ours": ["building.onFlowingWater"]
+ },
+ {
+  "defName": "MoisturePump", "visual": {"sound": {"loop": "Hum_Generator"}}, "researchPrerequisite": "MoisturePump",
+  "parent": "PowerBase",
+  "label": "moisture pump",
+  "size": [2, 2],
+  "costs": {"Steel": 80, "ComponentIndustrial": 3},
+  "fillPercent": 0.5,
+  "stats": {"maxHitPoints": 100, "workToBuild": 7200.0},
+  "power": {"consumption": 200},
+  "dries": {"radius": 5, "everySeconds": 600},
+  "unverified": ["size", "costs", "stats", "power", "dries"],
+  "ours": ["dries"]
+ },
+ {
   "defName": "SolarGenerator", "researchPrerequisite": "SolarPanel",
   "parent": "PowerBase",
   "label": "solar generator",

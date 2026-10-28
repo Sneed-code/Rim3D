@@ -85,6 +85,8 @@ struct PowerInfo {
     bool wind = false;         // output follows the wind and what stands in its way
     int windBlockRadius = 0;
     bool geyser = false;       // output needs a steam geyser under the footprint (`power.needsGeyser`)
+    int dryRadius = 0;         // cells; a powered pump dries one water cell this near every `dryEvery` seconds (`dries`)
+    int dryEvery = 0;
     bool fuelled = false;      // a generator that needs fuel (`fuel` object): see PowerGrid::setFuel
     double consumption = 0.0;  // W of a consumer
     double battery = 0.0;      // Wd capacity
@@ -170,6 +172,7 @@ private:
 
     void rebuild();
     void balance(const GameTime& time);
+    void dry(const GameTime& time);
     double sunNow(const GameTime& time) const;
     double sunFactor(const Member& m) const;
     double windFactor(const Member& m, double wind);
