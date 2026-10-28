@@ -6,6 +6,8 @@ Stage 2 research unlocks, nutrient paste: the `NutrientPaste` project now unlock
 
 Stage 2 research unlocks, second batch: the autodoor (opens at 4 times a door's speed while powered, a plain door without power), the flood light (50 W, 17.45 m) and the vitals monitor (powered, in the 8 cells around a bed: +7% tend quality, +5% surgery success, +0.02 immunity gain speed) now exist and unlock from their projects (`docs/design/autodoor-lights-monitor.md`, tests `MoreBuildingsTests`). 13 empty projects remain, listed in `BACKLOG.md`. Sim and data, no save change.
 
+Stage 2 research unlocks, third batch: the autocannon turret and the uranium slug turret (2 x 2, 150 W, wiki numbers) unlock from their projects. Turrets got two new rules: ammunition on the fuel system (2 steel or uranium a shot, colonists load it, no ammunition no fire) and a gun's minimum range (8.9 and 11.9 m). Mortars and the rocketswarm launcher still unlock nothing: they are manned weapons that need their own design (`BACKLOG.md`). 11 empty projects remain. Sim and data, no save change (`docs/design/defense.md` "Heavy turrets", tests `HeavyTurretTests`).
+
 Stage 2 research unlocks, first batch: the tube television, the flatscreen television, brewing beer and the packaged survival meal now need their own projects (before: Electricity, Microelectronics, nothing, nothing); the other empty projects in `BACKLOG.md` still wait for content. Data and one test only.
 
 Stage 2 talent tree grown (protagonist): 4 more talents (quick hands and gunslinger shorten reloads, fleet foot and sprinter raise walking speed) and combat XP (1 per shot, 2 per melee blow that lands); sim only, no save change (`docs/design/talents.md`).

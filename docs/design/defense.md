@@ -36,6 +36,25 @@ switched off (`FlickCommand`), it forgets its target and its burst and does noth
   Deconstruction and `DestroyThingCommand` never explode. The turret's blast (25 damage, radius 2.9 m)
   is ours; RimWorld's is not recalled.
 
+## Heavy turrets (autocannon, uranium slug)
+
+`Turret_Autocannon` (`AutocannonTurret`) and `Turret_UraniumSlug` (`UraniumSlugTurret`) are mini-turrets with RimWorld's
+wiki numbers (checked 2026-10-28; `Things/DefenseTurrets.json`, `Projectiles/TurretBullets2.json`), 2 x 2, 150 W,
+380 HP, 70% flammable, with two additions to the turret code:
+
+- **Ammunition** rides on the fuel system ([fuel.md](fuel.md)): the def's `fuel` block (steel, capacity 180, or uranium,
+  capacity 60) with `perUse` 2 (ours, from the wiki's 90 and 30 rounds) is what a shot takes. A turret with no
+  ammunition holds its fire; one that runs out mid-burst cools down. Colonists refuel it like any building (the
+  Refuel giver, fetching the item from a stockpile). `DefenseSystem::setFuel`.
+- **Minimum range** (`verbs[0].minRange`, 8.9 and 11.9 m): a target closer than that is not picked, and a target that comes
+  closer is dropped. `GunStats::minRange`.
+
+Autocannon: range 32.9 m, burst of 3 with 8.5 steps between, cooldown 105 steps, 27 damage at 40% penetration, accuracy
+28/72/66/50%, warm-up 45 steps (ours: the wiki gives none). Slug: range 45.9 m, one shot per 120 steps, no warm-up,
+55 damage at 82% penetration, accuracy 22/33/44/95% (the last is the wiki's unlabelled 95%, taken as long range).
+Their blast (50 Bomb, 5.9 m) goes off when they are destroyed; RimWorld's comes 4 s after they drop below 20% HP.
+Tests: `HeavyTurretTests` (shots, ammunition, minimum range, a 2 x 2 turret shooting out of all 8 directions).
+
 ## Traps
 
 A building whose def has a `trap` block gets a `Trap` component (`sprung`, `known`). It is not a wall
@@ -91,6 +110,6 @@ works for the player.
 - Raiders do not shoot back at turrets: the fighter AI chooses only pawns as targets, so a turret is
   hit only by stray fire, blasts and what T1/F12 add (sappers, mortars).
 - IEDs wait for chemfuel versions (E4); no EMP, no incendiary traps; no sentry
-  machine-gun or autocannon turrets, no ammunition (RimWorld's mini-turret has none either).
+  machine-gun turrets. Mortars and the rocketswarm launcher (manned, ammunition, indirect fire) are not in.
 - Unreal: the turret mesh and its barrel turning to `turretTarget`, muzzle flash and the trap's spring
   animation.
