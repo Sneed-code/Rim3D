@@ -23,6 +23,7 @@
 #include "ColonySim/Farming.h"
 #include "ColonySim/Disasters.h"
 #include "ColonySim/Narrator.h"
+#include "ColonySim/NatureEvents.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Filth.h"
@@ -455,6 +456,7 @@ struct SaveEntity {
     std::optional<ResonanceEffects> resonanceFx;  // section "resonance"
     std::optional<Prisoner> prisoner;       // section "prisoners" (C22)
     std::optional<PrisonBed> prisonBed;     // section "prisoners" (C22)
+    std::optional<ArrestOrder> arrest;      // section "prisoners" version 3
     std::optional<Fuel> fuel;               // "fuel" section (C11)
     std::optional<StoreIn> storeIn;         // "crafting" section (C14)
     std::optional<SaveRepair> repair;       // "repair" section (P4)
@@ -618,6 +620,8 @@ struct SaveData {
     DisasterState disasters;
     WorldSettings world;               // section "world" (W2): SimSettings::world; older saves have no world
     uint64_t worldHash = 0;            // the world's hash when saved, checked against the one made again
+    bool hasNature = false;            // section "nature" (T2)
+    NatureState nature;
     std::vector<SaveOtherMap> maps;    // section "maps" (W5)
 };
 
@@ -1162,6 +1166,9 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.text("mode", c.mode);
     } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
         ar.value("bed", c.bed);
+        ar.value("on", c.on);
+    } else if constexpr (std::is_same_v<Type, ArrestCommand>) {
+        ar.value("pawn", c.pawn);
         ar.value("on", c.on);
     } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
         ar.group("area", [&] { saveRect(ar, c.area); });
@@ -3456,6 +3463,17 @@ void saveSections(Ar& ar, SaveData& d) {
             });
         }
     });
+    ar.section("nature", 1, [&] {
+        d.hasNature = true;
+        NatureState& n = d.nature;
+        ar.value("rngState", n.rngState);
+        ar.value("rngIncrement", n.rngIncrement);
+        ar.list("conditions", n.conditions, [&](NatureCondition& c) {
+            ar.text("incident", c.incident);
+            ar.value("startsAt", c.startsAt);
+            ar.value("endsAt", c.endsAt);
+        });
+    });
     ar.section("fire", 1, [&] {
         ar.value("started", d.fire.started);
         ar.value("burntUp", d.fire.burntUp);
@@ -3482,7 +3500,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "stunned", e, &SaveEntity::stunned, [&](Stunned& s) { ar.value("stepsLeft", s.stepsLeft); });
         saveParts(ar, "effects", e, &SaveEntity::resonanceFx, [&](ResonanceEffects& fx) { saveResonanceFxPart(ar, fx); });
     });
-    ar.section("prisoners", 2, [&] {
+    ar.section("prisoners", 3, [&] {
         saveParts(ar, "prisoner", e, &SaveEntity::prisoner, [&](Prisoner& p) {
             ar.value("mode", p.mode);
             ar.value("resistance", p.resistance);
@@ -3494,6 +3512,9 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(static_cast<int>(p.mode) <= static_cast<int>(PrisonerMode::Execute), "the save file has a bad prisoner mode");
         });
         saveParts(ar, "prisonBed", e, &SaveEntity::prisonBed, [&](PrisonBed& b) { ar.value("marked", b.marked); });
+        if (ar.sectionVersion() >= 3) {  // arrests
+            saveParts(ar, "arrest", e, &SaveEntity::arrest, [&](ArrestOrder& a) { ar.value("by", a.by); });
+        }
     });
     ar.section("levels", 1, [&] {
         ar.list("upperFloors", d.upperFloors, [&](CellPos& c) {
@@ -3708,7 +3729,7 @@ std::unique_ptr<Sim> SimSaveAccess::makeEmpty(const SaveData& data, std::shared_
         return nullptr;
     }
     if (sim->groundHash_ != data.groundHash) {
-        error = "the map generator gives a different map for this seed than when the save was made";
+        error = "the map generator gives a different map for this seed than when the save was made (the world generator changed in Stage 2, task S8), so this save can no longer be loaded";
         return nullptr;
     }
     return sim;
@@ -3975,6 +3996,9 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
     }
     if (const PrisonBed* prisonBed = reg.try_get<PrisonBed>(e)) {
         out.prisonBed = *prisonBed;
+    }
+    if (const ArrestOrder* arrest = reg.try_get<ArrestOrder>(e)) {
+        out.arrest = *arrest;
     }
     if (const Operations* operations = reg.try_get<Operations>(e)) {
         SaveOperations saved;
@@ -4524,6 +4548,9 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
     if (e.prisonBed) {
         reg.emplace<PrisonBed>(entity, *e.prisonBed);
     }
+    if (e.arrest) {
+        reg.emplace<ArrestOrder>(entity, *e.arrest);
+    }
     if (e.defense) {
         reg.emplace<DefensePlan>(entity, *e.defense);
     }
@@ -4814,6 +4841,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.breeding = sim.breeding_->saved();
     d.narrator = sim.narrator_->state();
     d.disasters = sim.disasters_->state();
+    d.nature = sim.nature_->state();
     d.fire = sim.fire_->saved();
     d.seconds = sim.time_.seconds;
     d.rngState = sim.rng_.state();
@@ -5059,6 +5087,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     }
     if (d.hasDisasters) {
         sim.disasters_->restore(d.disasters);
+    }
+    if (d.hasNature) {
+        sim.nature_->restore(d.nature);
     }
     if (!sim.farming_->restore(d.farming, error)) {
         return false;

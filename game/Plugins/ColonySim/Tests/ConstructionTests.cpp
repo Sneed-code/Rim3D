@@ -156,8 +156,8 @@ TEST_CASE("Construction: every building in the data can be planned with a stuff 
     const DefId steel = defs.idOf("Things", "Steel");
     int buildings = 0;
     for (const DefId id : defs.idsOfKind("Things")) {
-        if (defs.get(id).text("category") != "Building") {
-            continue;
+        if (defs.get(id).text("category") != "Building" || !defs.get(id).has("designationCategory")) {
+            continue;  // buildings the map is made with (ruin walls, geysers) are never planned
         }
         ++buildings;
         DefId stuff = defs.get(id).count("stuffCategories") > 0 ? steel : DefId{};

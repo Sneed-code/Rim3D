@@ -376,6 +376,9 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
                 j["bed"] = entt::to_integral(c.bed);
                 j["on"] = c.on;
+            } else if constexpr (std::is_same_v<Type, ArrestCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["on"] = c.on;
             } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
                 j["area"] = replayRectJson(c.area);
                 j["remove"] = c.remove;
@@ -1515,6 +1518,14 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         c.bed = static_cast<Entity>(bed);
+        out.command = std::move(c);
+    } else if (type == "Arrest") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        ArrestCommand c;
+        if (!r.integer(j, "pawn", pawn, where) || !r.flag(j, "on", c.on, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
         out.command = std::move(c);
     } else if (type == "PlaceUpperFloor") {
         PlaceUpperFloorCommand c;

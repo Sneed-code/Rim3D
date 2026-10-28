@@ -17,6 +17,21 @@
     "ours": ["building.holdsRoof"]
   },
   {
+    "defName": "AncientWall", "visual": {"parts": [{"shape": "box", "size": [0, 0, 2.2], "color": [0.42, 0.4, 0.37]}]}, "parent": "BuildingBase", "label": "ancient wall",
+    "passability": "Impassable", "fillPercent": 1.0,
+    "stats": { "maxHitPoints": 200, "flammability": 0 },
+    "building": { "holdsRoof": true },
+    "ours": ["building.holdsRoof", "stats.maxHitPoints"],
+    "note": "Part of a ruin the map is made with (docs/design/mapgen.md). Not built by anyone."
+  },
+  {
+    "defName": "SteamGeyser", "visual": {"parts": [{"shape": "cylinder", "radius": 0.85, "height": 0.35, "color": [0.4, 0.38, 0.35]}, {"shape": "cylinder", "radius": 0.35, "height": 0.5, "color": [0.55, 0.55, 0.55]}]}, "parent": "BuildingBase", "label": "steam geyser",
+    "size": [2, 2], "passability": "Impassable", "fillPercent": 0.3,
+    "stats": { "maxHitPoints": 100000, "flammability": 0 },
+    "ours": ["stats.maxHitPoints"],
+    "note": "Found on the map, never built. Steam power and eruptions come with the events (docs/design/mapgen.md)."
+  },
+  {
     "defName": "Door", "visual": {"sound": {"open": "Door_Open", "close": "Door_Close"}, "mesh": "/Game/Rim3D/Generated/Art/SM_Door.SM_Door", "parts": [{"shape": "box", "size": [0, 0, 0.8], "at": [0, 0, 2.2], "color": [0.9, 0.9, 0.9], "stuff": true}, {"shape": "box", "size": [0.12, 0, 2.2], "at": [-0.44, 0, 0], "color": [0.9, 0.9, 0.9], "stuff": true}, {"shape": "box", "size": [0.12, 0, 2.2], "at": [0.44, 0, 0], "color": [0.9, 0.9, 0.9], "stuff": true}, {"shape": "box", "size": [-0.26, 0.1, 2.15], "at": [0, 0, 0], "color": [0.8, 0.8, 0.8], "stuff": true, "slide": 0.85}]}, "parent": "StuffBuildingBase", "label": "door",
     "thingClass": "Building_Door", "fillPercent": 1.0, "designationCategory": "Structure",
     "costStuffCount": 25,

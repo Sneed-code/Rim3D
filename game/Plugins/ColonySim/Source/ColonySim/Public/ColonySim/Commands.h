@@ -576,6 +576,13 @@ struct SetPrisonBedCommand {
     bool on = true;
 };
 
+// Orders a colonist arrested (`on`) or cancels the order: a warden carries it to a free prison bed in a closed room and it becomes a
+// prisoner. Fails for the protagonist, a pawn the player is walking, a prisoner, an animal and anyone not of the colony.
+struct ArrestCommand {
+    Entity pawn = kNoEntity;
+    bool on = true;
+};
+
 // Trade (task C23, docs/design/trade.md). StartVisitCommand: visitors, a trade caravan or an orbital trader of `faction` (a Factions
 // defName) come; `kind` is Visitors, Caravan or Orbital (visitKindName), `traderKind` a TraderKinds defName (empty: one of the
 // faction's), `edge` 0 north, 1 east, 2 south, 3 west, -1 any. T1's incidents do the same through TradeSystem::startVisit. Fails for
@@ -1009,7 +1016,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              LearnPowerCommand, CastPowerCommand, SetThermostatCommand, RepairGearCommand,
                              FitUpgradeCommand, CreateAreaCommand, PaintAreaCommand, DeleteAreaCommand,
                              AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand, CaravanCommand, RerollColonistCommand,
-                             ArtilleryCommand>;
+                             ArtilleryCommand, ArrestCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

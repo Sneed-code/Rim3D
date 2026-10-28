@@ -123,6 +123,9 @@ public:
     // `events` are the step's events; `now` the game second the step ran in.
     void step(int64_t now, std::vector<Event>& events);
 
+    // True if the colonist has the trait (any degree).
+    bool hasTrait(Entity pawn, const std::string& trait) const;
+
 private:
     struct Thought {
         DefId def;
@@ -179,7 +182,6 @@ private:
         float breakOffset = 0.0f;
     };
     const TraitDegree* traitDegree(const TraitRecord& record) const;
-    bool hasTrait(Entity pawn, const std::string& trait) const;
     // Cannibals and psychopaths are not troubled by people as meat or leather.
     bool eatsPeople(Entity pawn) const { return hasTrait(pawn, "Cannibal") || hasTrait(pawn, "Psychopath"); }
     float traitMoodOffset(Entity pawn) const;

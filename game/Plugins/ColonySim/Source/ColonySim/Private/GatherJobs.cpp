@@ -16,6 +16,7 @@
 #include "ColonySim/Regions.h"
 #include "ColonySim/Lights.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Traits.h"
 
 #include <algorithm>
 #include <cmath>
@@ -107,7 +108,9 @@ bool JobSystem::canUseHands(Entity pawn) const {
 
 float JobSystem::workFactor(Entity pawn) const {
     const Position* at = lights_ != nullptr ? things_.registry().try_get<Position>(pawn) : nullptr;
-    return (at != nullptr ? lights_->workSpeedAt(cellOf(*at)) : 1.0f) * health_.workSpeedFactor(pawn);
+    // The light on the pawn, its drugs and its own nature: industrious works faster, lazy slower (TraitStats).
+    return (at != nullptr ? lights_->workSpeedAt(cellOf(*at)) : 1.0f) * health_.workSpeedFactor(pawn) *
+           (traits_ != nullptr ? traits_->of(pawn).workSpeed : 1.0f);
 }
 
 double JobSystem::miningSpeed(Entity pawn) const {
@@ -134,7 +137,7 @@ void JobSystem::learnSkill(Entity pawn, const char* skill, double xp) {
     }
     for (SkillRecord& record : colonist->skills) {
         if (record.def == skill) {
-            learnSkillXp(skillRules_, record, xp);
+            learnSkillXp(skillRules_, record, traits_ != nullptr ? xp * traits_->of(pawn).learningFactor : xp);
             return;
         }
     }
@@ -144,7 +147,7 @@ void JobSystem::learnSkill(Entity pawn, const char* skill, double xp) {
 void JobSystem::skillsNewDay() {
     for (const Entity pawn : things_.registry().view<Colonist>()) {
         for (SkillRecord& record : things_.registry().get<Colonist>(pawn).skills) {
-            skillDayPassed(skillRules_, record);
+            skillDayPassed(skillRules_, record, traits_ != nullptr ? traits_->of(pawn).skillLossFactor : 1.0f);
         }
     }
 }

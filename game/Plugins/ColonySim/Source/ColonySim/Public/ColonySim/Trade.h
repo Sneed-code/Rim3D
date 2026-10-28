@@ -181,6 +181,9 @@ public:
     bool gift(uint32_t visit, const std::vector<TradeLine>& items, std::string& error);
     // A prisoner was put to death: its faction's goodwill drops (`executedGoodwill`). The executions task calls it.
     void noteExecuted(Entity prisoner);
+    // A warden has seized one of a visit's pawns for an arrest: it leaves its visit, and its faction turns hostile at once
+    // (goodwill drops to `hostileAtOrBelow`, as RimWorld's Faction.Notify_MemberCaptured), which sends its visits away.
+    void noteArrested(Entity pawn);
 
     // ---- Visits ----
     // A visit of `faction` walks in at `edge` (0 north, 1 east, 2 south, 3 west, -1 any) or, for a ship, arrives.

@@ -13,6 +13,7 @@ namespace colony {
 
 class StateHasher;
 class Things;
+class TraitBook;
 struct Event;
 
 // Research (task C21). See docs/design/research.md.
@@ -97,6 +98,8 @@ public:
     const ResearchBenchInfo* benchInfo(DefId thingDef) const;
     // Whether a bench can work on the current project (a project is chosen, available, and the bench's tier is enough).
     bool benchCanWork(const ResearchBenchInfo& bench) const;
+    // Industrious researchers work faster (docs/design/traits.md); null: no trait does.
+    void setTraits(const TraitBook* traits) { traits_ = traits; }
     // Points per game second for this pawn at this bench.
     double speedAt(Entity pawn, const ResearchBenchInfo& bench) const;
     // Adds points to the current project. Returns true when that finished it (the event is appended to `events`).
@@ -108,6 +111,7 @@ public:
 private:
     Things& things_;
     const DefDatabase& defs_;
+    const TraitBook* traits_ = nullptr;
     ResearchRules rules_;
     std::vector<ResearchProject> projects_;
     std::map<uint32_t, ResearchBenchInfo> benches_;  // by Things def (DefId::value)

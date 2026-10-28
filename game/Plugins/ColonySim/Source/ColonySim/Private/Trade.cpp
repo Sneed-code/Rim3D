@@ -375,6 +375,15 @@ void TradeSystem::noteExecuted(Entity prisoner) {
     }
 }
 
+void TradeSystem::noteArrested(Entity pawn) {
+    forget(pawn);
+    const std::string faction = factionOf(pawn);
+    std::string ignored;
+    if (!faction.empty()) {
+        adjustGoodwill(faction, std::min(0.0f, rules_.hostileAtOrBelow - goodwill(faction)), ignored);
+    }
+}
+
 // ---- Starting a visit -------------------------------------------------------------------------
 
 bool TradeSystem::readKind(const std::string& kindName, KindInfo& out, std::string& error) const {

@@ -294,7 +294,12 @@ void MentalBreakSystem::natural(Entity pawn, int64_t now, Rng& rng) {
     // Pick one of the band's breaks that can happen now, by commonality.
     std::vector<const Kind*> options;
     double total = 0.0;
+    // A pyromaniac's only extreme break is the fire-starting spree (docs/design/traits.md).
+    const bool pyromaniac = band == 2 && mood_.hasTrait(pawn, "Pyromaniac");
     for (const Kind& kind : kinds_) {
+        if (pyromaniac && kind.state != BreakState::FireSpree) {
+            continue;
+        }
         if (kind.band == band && provided(kind) && kind.commonality > 0.0 && feasible(pawn, kind, rng)) {
             options.push_back(&kind);
             total += kind.commonality;

@@ -50,13 +50,13 @@ double learnSkillXp(const SkillRules& rules, SkillRecord& skill, double xp) {
     return added;
 }
 
-void skillDayPassed(const SkillRules& rules, SkillRecord& skill) {
+void skillDayPassed(const SkillRules& rules, SkillRecord& skill, float lossFactor) {
     skill.xpToday = 0.0f;
     const int top = rules.maxLevel();
     if (skill.disabled || top < 1 || skill.level < 0 || static_cast<size_t>(skill.level) >= rules.decayXpPerDay.size()) {
         return;
     }
-    const float decay = static_cast<float>(rules.decayXpPerDay[static_cast<size_t>(skill.level)]);
+    const float decay = static_cast<float>(rules.decayXpPerDay[static_cast<size_t>(skill.level)]) * lossFactor;
     skill.xp -= decay;
     skill.xpToday -= decay;  // the cap counts net experience: the day starts with the loss already in
     while (skill.level > 0 && skill.xp < -static_cast<float>(rules.xpBelowZeroBeforeLevelLoss)) {
