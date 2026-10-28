@@ -1064,12 +1064,18 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
     } else if (const auto* tradeCommand = std::get_if<TradeCommand>(&command)) {
         std::string why;
-        if (!trade_->trade(tradeCommand->visit, tradeCommand->negotiator, tradeCommand->buy, tradeCommand->sell, why)) {
+        Sim* there = tradeCommand->map < 0 ? this : otherMap(tradeCommand->map);
+        if (there == nullptr) {
+            commandFailed(id, "no caravan has been to that tile");
+        } else if (!there->trade_->trade(tradeCommand->visit, tradeCommand->negotiator, tradeCommand->buy, tradeCommand->sell, why)) {
             commandFailed(id, why);
         }
     } else if (const auto* giftCommand = std::get_if<GiftCommand>(&command)) {
         std::string why;
-        if (!trade_->gift(giftCommand->visit, giftCommand->items, why)) {
+        Sim* there = giftCommand->map < 0 ? this : otherMap(giftCommand->map);
+        if (there == nullptr) {
+            commandFailed(id, "no caravan has been to that tile");
+        } else if (!there->trade_->gift(giftCommand->visit, giftCommand->items, why)) {
             commandFailed(id, why);
         }
     } else if (const auto* goodwillCommand = std::get_if<AdjustGoodwillCommand>(&command)) {

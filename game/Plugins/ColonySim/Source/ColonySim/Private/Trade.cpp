@@ -77,12 +77,13 @@ const char* visitKindName(VisitKind kind) {
         case VisitKind::Visitors: return "Visitors";
         case VisitKind::Caravan: return "Caravan";
         case VisitKind::Orbital: return "Orbital";
+        case VisitKind::Settlement: return "Settlement";
     }
     return "?";
 }
 
 bool visitKindFromName(const std::string& name, VisitKind& out) {
-    for (const VisitKind kind : {VisitKind::Visitors, VisitKind::Caravan, VisitKind::Orbital}) {
+    for (const VisitKind kind : {VisitKind::Visitors, VisitKind::Caravan, VisitKind::Orbital, VisitKind::Settlement}) {
         if (name == visitKindName(kind)) {
             out = kind;
             return true;
@@ -95,6 +96,7 @@ const char* visitPhaseName(VisitPhase phase) {
     switch (phase) {
         case VisitPhase::Staying: return "Staying";
         case VisitPhase::Leaving: return "Leaving";
+        case VisitPhase::Defending: return "Defending";
     }
     return "?";
 }
@@ -158,6 +160,9 @@ TradeRules TradeRules::read(const DefDatabase& defs) {
     r.edgeDepth = static_cast<int>(rules->integer("edgeDepth", r.edgeDepth));
     r.leaveTimeoutSeconds = static_cast<int>(rules->integer("leaveTimeoutSeconds", r.leaveTimeoutSeconds));
     r.dropRadius = static_cast<int>(rules->integer("dropRadius", r.dropRadius));
+    num("settlementDiscount", r.settlementDiscount);
+    num("settlementRestockDays", r.settlementRestockDays);
+    r.settlementRestockDays = std::max(0.1f, r.settlementRestockDays);
     r.visitorCountMax = std::max(r.visitorCountMax, r.visitorCountMin);
     r.guardCountMax = std::max(r.guardCountMax, r.guardCountMin);
     r.caravanStayHoursMax = std::max(r.caravanStayHoursMax, r.caravanStayHoursMin);
@@ -225,6 +230,9 @@ float TradeSystem::startGoodwill(const std::string& faction) const {
 }
 
 float TradeSystem::goodwill(const std::string& faction) const {
+    if (owner_ != nullptr) {
+        return owner_->goodwill(faction);
+    }
     for (const Standing& s : state_.standings) {
         if (s.faction == faction) {
             return s.goodwill;
@@ -234,6 +242,9 @@ float TradeSystem::goodwill(const std::string& faction) const {
 }
 
 bool TradeSystem::adjustGoodwill(const std::string& faction, float delta, std::string& error) {
+    if (owner_ != nullptr) {
+        return owner_->adjustGoodwill(faction, delta, error);  // this map's step turns its settlement hostile if need be
+    }
     const Def* def = defs_.find("Factions", faction);
     if (def == nullptr) {
         error = "no Factions def '" + faction + "'";
@@ -277,7 +288,9 @@ void TradeSystem::sendAwayIfHostile(const std::string& faction) {
         return;
     }
     for (Visit& visit : state_.visits) {
-        if (visit.faction == faction && visit.kind != VisitKind::Orbital && visit.phase == VisitPhase::Staying) {
+        if (visit.faction == faction && visit.kind == VisitKind::Settlement && visit.phase == VisitPhase::Staying) {
+            defend(visit);
+        } else if (visit.faction == faction && visit.kind != VisitKind::Orbital && visit.phase == VisitPhase::Staying) {
             leave(visit);
         }
     }
@@ -308,7 +321,7 @@ bool TradeSystem::gift(uint32_t visitId, const std::vector<TradeLine>& items, st
         return false;
     }
     if (visit->phase != VisitPhase::Staying) {
-        error = "they are leaving";
+        error = visit->phase == VisitPhase::Defending ? "they are fighting the colony" : "they are leaving";
         return false;
     }
     if (items.empty()) {
@@ -433,7 +446,7 @@ bool TradeSystem::pickEntry(const CellPos& target, int edge, CellPos& entry) con
     return false;
 }
 
-bool TradeSystem::spawnPawn(Visit& visit, const KindInfo& kind, VisitorRole role, CellPos cell, uint64_t base) {
+bool TradeSystem::spawnPawn(Visit& visit, const KindInfo& kind, VisitorRole role, CellPos cell, uint64_t base, bool defending) {
     entt::registry& reg = things_.registry();
     const Entity pawn = things_.spawn(kind.race, cell);
     if (pawn == kNoEntity || !reg.all_of<Mover, Posture>(pawn)) {
@@ -451,7 +464,9 @@ bool TradeSystem::spawnPawn(Visit& visit, const KindInfo& kind, VisitorRole role
     }
     reg.emplace<Colonist>(pawn, std::move(person));
     reg.emplace<Faction>(pawn, Faction{visit.side});
-    reg.emplace<Visitor>(pawn, Visitor{visit.id, role});
+    if (!defending) {
+        reg.emplace<Visitor>(pawn, Visitor{visit.id, role});
+    }
     if (!kind.weapons.empty()) {
         const std::string& gun = kind.weapons[rng_.below(static_cast<uint32_t>(kind.weapons.size()))];
         const Entity item = things_.spawn(gun, cell);
@@ -467,12 +482,20 @@ bool TradeSystem::spawnPawn(Visit& visit, const KindInfo& kind, VisitorRole role
             }
         }
     }
-    // Walking as a fighter in the Flee mode: it never looks for enemies or shoots, it only goes to its goal.
-    Fighter& f = fighters_.enlist(pawn, "visiting");
-    f.mode = FightMode::Flee;
-    f.advances = false;
+    // Walking as a fighter in the Flee mode: it never looks for enemies or shoots, it only goes to its goal. A settlement's
+    // defender fights, from a post in its base.
+    Fighter& f = fighters_.enlist(pawn, defending ? "defending" : "visiting");
+    f.mode = defending ? FightMode::Fight : FightMode::Flee;
+    f.advances = defending;
     f.hasGoal = true;
     f.goal = visit.spot;
+    if (defending) {
+        f.anchor = visit.spot;
+        CellPos post;
+        if (settlementCell(visit, post)) {
+            f.goal = post;
+        }
+    }
     fighters_.replan(pawn);
     visit.members.push_back(pawn);
     if (role == VisitorRole::Trader) {
@@ -490,6 +513,10 @@ bool TradeSystem::startVisit(const std::string& faction, VisitKind kind, const s
     }
     if (edge < -1 || edge > 3) {
         error = "the edge must be -1 (any) or 0 to 3";
+        return false;
+    }
+    if (kind == VisitKind::Settlement) {
+        error = "a settlement's people come with its map";
         return false;
     }
     if (kind == VisitKind::Visitors ? !factionDef->flag("canVisit") : !factionDef->flag("canTrade")) {
@@ -560,24 +587,7 @@ bool TradeSystem::startVisit(const std::string& faction, VisitKind kind, const s
 
     // The trader's silver and stock.
     if (kind != VisitKind::Visitors) {
-        const Def* traderDef = defs_.find("TraderKinds", chosenTrader);
-        const double silverMin = traderDef->number("silver.0", 0.0);
-        const double silverMax = std::max(silverMin, traderDef->number("silver.1", silverMin));
-        visit.silver = static_cast<int>(std::round(silverMin + rng_.unit() * (silverMax - silverMin)));
-        for (size_t i = 0; i < traderDef->count("stock"); ++i) {
-            const std::string at = "stock." + std::to_string(i);
-            const std::string thing = traderDef->text((at + ".thing").c_str());
-            const int lo = static_cast<int>(traderDef->number((at + ".count.0").c_str(), 0.0));
-            const int hi = std::max(lo, static_cast<int>(traderDef->number((at + ".count.1").c_str(), lo)));
-            const Def* thingDef = defs_.find("Things", thing);
-            if (thingDef == nullptr || thingDef->number("stats.marketValue", 0.0) <= 0.0) {
-                continue;  // a thing the game doesn't have yet is skipped (the kind's list is written ahead of the items)
-            }
-            const int count = lo + static_cast<int>(rng_.below(static_cast<uint32_t>(hi - lo + 1)));
-            if (count > 0) {
-                tradeAddStock(visit.stock, thing, count);
-            }
-        }
+        rollStock(visit);
     }
 
     id = 0;
@@ -596,94 +606,37 @@ bool TradeSystem::startVisit(const std::string& faction, VisitKind kind, const s
     }
 
     // The pawns to bring: the trader and its guards, or a group of villagers.
-    struct Member {
-        std::string kind;
-        VisitorRole role;
-    };
-    std::vector<Member> bring;
-    const auto pickFrom = [&](const char* list, VisitorRole role, int count, std::string& fail) {
-        std::vector<std::string> names;
-        std::vector<float> weights;
-        for (size_t i = 0; i < factionDef->count(list); ++i) {
-            const std::string at = std::string(list) + "." + std::to_string(i);
-            if (factionDef->has((at + ".kind").c_str())) {
-                names.push_back(factionDef->text((at + ".kind").c_str()));
-                weights.push_back(static_cast<float>(factionDef->number((at + ".weight").c_str(), 1.0)));
-            } else {
-                names.push_back(factionDef->textAt(list, i));
-                weights.push_back(1.0f);
-            }
-        }
-        if (names.empty()) {
-            fail = std::string("the ") + factionDef->label() + " have no " + list;
-            return false;
-        }
-        float total = 0.0f;
-        for (const float w : weights) {
-            total += std::max(0.0f, w);
-        }
-        for (int k = 0; k < count; ++k) {
-            float pick = rng_.unit() * total;
-            size_t which = names.size() - 1;
-            for (size_t i = 0; i < names.size(); ++i) {
-                if (pick < weights[i]) {
-                    which = i;
-                    break;
-                }
-                pick -= weights[i];
-            }
-            bring.push_back(Member{names[which], role});
-        }
-        return true;
-    };
+    std::vector<std::pair<std::string, VisitorRole>> bring;
     if (kind == VisitKind::Caravan) {
         const int guards = rules_.guardCountMin + static_cast<int>(rng_.below(static_cast<uint32_t>(rules_.guardCountMax - rules_.guardCountMin + 1)));
-        if (!pickFrom("traderKinds", VisitorRole::Trader, 1, error) || !pickFrom("traderGuardKinds", VisitorRole::Guard, guards, error)) {
+        if (!pickKinds(*factionDef, "traderKinds", VisitorRole::Trader, 1, bring, error) ||
+            !pickKinds(*factionDef, "traderGuardKinds", VisitorRole::Guard, guards, bring, error)) {
             return false;
         }
     } else {
         const int count = rules_.visitorCountMin + static_cast<int>(rng_.below(static_cast<uint32_t>(rules_.visitorCountMax - rules_.visitorCountMin + 1)));
-        if (!pickFrom("visitorKinds", VisitorRole::Visitor, count, error)) {
+        if (!pickKinds(*factionDef, "visitorKinds", VisitorRole::Visitor, count, bring, error)) {
             return false;
         }
     }
     std::vector<KindInfo> infos;
-    for (const Member& m : bring) {
+    for (const auto& m : bring) {
         KindInfo info;
-        if (!readKind(m.kind, info, error)) {
+        if (!readKind(m.first, info, error)) {
             return false;
         }
         infos.push_back(std::move(info));
     }
 
     // Cells for them around the entry, a metre apart (every other cell).
-    std::vector<CellPos> cells;
-    {
-        std::vector<CellPos> open{visit.entry};
-        std::set<int> seen{map_.index(visit.entry)};
-        for (size_t head = 0; head < open.size() && cells.size() < bring.size() && open.size() < 20000; ++head) {
-            const CellPos c = open[head];
-            if ((c.x + c.y) % 2 == 0 && map_.obstacleDm(c) == 0 && !map_.isDoor(c)) {
-                cells.push_back(c);
-            }
-            const CellPos around[4] = {{c.x + 1, c.y, 0}, {c.x - 1, c.y, 0}, {c.x, c.y + 1, 0}, {c.x, c.y - 1, 0}};
-            for (const CellPos& next : around) {
-                if (map_.walkable(next) && seen.insert(map_.index(next)).second) {
-                    open.push_back(next);
-                }
-            }
-        }
-    }
+    const std::vector<CellPos> cells = cellsAround(visit.entry, bring.size());
     if (cells.size() < bring.size()) {
         error = "no room at the edge for the visitors";
         return false;
     }
 
     visit.id = state_.nextVisit;
-    for (size_t i = 0; i < bring.size(); ++i) {
-        const uint64_t base = splitMix64((static_cast<uint64_t>(rng_.next()) << 32) ^ rng_.next());
-        spawnPawn(visit, infos[i], bring[i].role, cells[i], base);
-    }
+    spawnGroup(visit, bring, infos, cells, false);
     if (visit.members.empty() || (kind == VisitKind::Caravan && visit.trader == kNoEntity)) {
         for (const Entity m : visit.members) {
             raids_.leaveMap(m);
@@ -699,6 +652,217 @@ bool TradeSystem::startVisit(const std::string& faction, VisitKind kind, const s
     const Visit& added = state_.visits.back();
     emit(EventType::VisitArrived, added.id, added.trader, static_cast<float>(kind), added.faction);
     return true;
+}
+
+bool TradeSystem::pickKinds(const Def& faction, const char* list, VisitorRole role, int count,
+                            std::vector<std::pair<std::string, VisitorRole>>& out, std::string& error) const {
+    std::vector<std::string> names;
+    std::vector<float> weights;
+    for (size_t i = 0; i < faction.count(list); ++i) {
+        const std::string at = std::string(list) + "." + std::to_string(i);
+        if (faction.has((at + ".kind").c_str())) {
+            names.push_back(faction.text((at + ".kind").c_str()));
+            weights.push_back(static_cast<float>(faction.number((at + ".weight").c_str(), 1.0)));
+        } else {
+            names.push_back(faction.textAt(list, i));
+            weights.push_back(1.0f);
+        }
+    }
+    if (names.empty()) {
+        error = std::string("the ") + faction.label() + " have no " + list;
+        return false;
+    }
+    float total = 0.0f;
+    for (const float w : weights) {
+        total += std::max(0.0f, w);
+    }
+    for (int k = 0; k < count; ++k) {
+        float pick = rng_.unit() * total;
+        size_t which = names.size() - 1;
+        for (size_t i = 0; i < names.size(); ++i) {
+            if (pick < weights[i]) {
+                which = i;
+                break;
+            }
+            pick -= weights[i];
+        }
+        out.emplace_back(names[which], role);
+    }
+    return true;
+}
+
+std::vector<CellPos> TradeSystem::cellsAround(CellPos from, size_t count) const {
+    std::vector<CellPos> cells;
+    std::vector<CellPos> open{from};
+    std::set<int> seen{map_.index(from)};
+    for (size_t head = 0; head < open.size() && cells.size() < count && open.size() < 20000; ++head) {
+        const CellPos c = open[head];
+        if ((c.x + c.y) % 2 == 0 && map_.obstacleDm(c) == 0 && !map_.isDoor(c)) {
+            cells.push_back(c);
+        }
+        const CellPos around[4] = {{c.x + 1, c.y, 0}, {c.x - 1, c.y, 0}, {c.x, c.y + 1, 0}, {c.x, c.y - 1, 0}};
+        for (const CellPos& next : around) {
+            if (map_.walkable(next) && seen.insert(map_.index(next)).second) {
+                open.push_back(next);
+            }
+        }
+    }
+    return cells;
+}
+
+void TradeSystem::spawnGroup(Visit& visit, const std::vector<std::pair<std::string, VisitorRole>>& bring, const std::vector<KindInfo>& infos,
+                             const std::vector<CellPos>& cells, bool defending) {
+    for (size_t i = 0; i < bring.size() && i < cells.size(); ++i) {
+        const uint64_t base = splitMix64((static_cast<uint64_t>(rng_.next()) << 32) ^ rng_.next());
+        spawnPawn(visit, infos[i], bring[i].second, cells[i], base, defending);
+    }
+}
+
+void TradeSystem::rollStock(Visit& visit) {
+    visit.stock.clear();
+    const Def* traderDef = defs_.find("TraderKinds", visit.traderKind);
+    if (traderDef == nullptr) {
+        visit.silver = 0;
+        return;
+    }
+    const double silverMin = traderDef->number("silver.0", 0.0);
+    const double silverMax = std::max(silverMin, traderDef->number("silver.1", silverMin));
+    visit.silver = static_cast<int>(std::round(silverMin + rng_.unit() * (silverMax - silverMin)));
+    for (size_t i = 0; i < traderDef->count("stock"); ++i) {
+        const std::string at = "stock." + std::to_string(i);
+        const std::string thing = traderDef->text((at + ".thing").c_str());
+        const int lo = static_cast<int>(traderDef->number((at + ".count.0").c_str(), 0.0));
+        const int hi = std::max(lo, static_cast<int>(traderDef->number((at + ".count.1").c_str(), lo)));
+        const Def* thingDef = defs_.find("Things", thing);
+        if (thingDef == nullptr || thingDef->number("stats.marketValue", 0.0) <= 0.0) {
+            continue;  // a thing the game doesn't have yet is skipped (the kind's list is written ahead of the items)
+        }
+        const int count = lo + static_cast<int>(rng_.below(static_cast<uint32_t>(hi - lo + 1)));
+        if (count > 0) {
+            tradeAddStock(visit.stock, thing, count);
+        }
+    }
+}
+
+bool TradeSystem::startSettlement(const std::string& faction, CellPos spot, int range, int residents, uint32_t& id, std::string& error) {
+    const Def* factionDef = defs_.find("Factions", faction);
+    if (factionDef == nullptr) {
+        error = "no Factions def '" + faction + "'";
+        return false;
+    }
+    if (!map_.inBounds(spot) || !map_.walkable(spot)) {
+        error = "the settlement's middle is not open ground";
+        return false;
+    }
+    const bool defending = hostile(faction);
+    Visit visit;
+    visit.kind = VisitKind::Settlement;
+    visit.phase = defending ? VisitPhase::Defending : VisitPhase::Staying;
+    visit.faction = faction;
+    visit.side = raids_.factionId(faction);
+    visit.arrivedAt = now();
+    visit.leaveAt = now();
+    visit.nextWander = now() + rules_.wanderEverySeconds;
+    visit.entry = spot;
+    visit.spot = spot;
+    visit.range = std::max(1, range);
+    visit.restockAt = now() + static_cast<int64_t>(rules_.settlementRestockDays * static_cast<float>(kSecondsPerDay));
+
+    // Who lives there: fighters of a hostile faction; else a trader (if it trades), half guards, half villagers.
+    std::vector<std::pair<std::string, VisitorRole>> bring;
+    residents = std::max(1, residents);
+    if (defending) {
+        if (!pickKinds(*factionDef, factionDef->count("pawnKinds") > 0 ? "pawnKinds" : "guardKinds", VisitorRole::Guard, residents, bring, error)) {
+            return false;
+        }
+    } else {
+        std::vector<std::string> base;
+        for (size_t i = 0; i < factionDef->count("traders.base"); ++i) {
+            if (defs_.find("TraderKinds", factionDef->textAt("traders.base", i)) != nullptr) {
+                base.push_back(factionDef->textAt("traders.base", i));
+            }
+        }
+        if (factionDef->flag("canTrade") && !base.empty() && factionDef->count("traderKinds") > 0) {
+            visit.traderKind = base[rng_.below(static_cast<uint32_t>(base.size()))];
+            rollStock(visit);
+            if (!pickKinds(*factionDef, "traderKinds", VisitorRole::Trader, 1, bring, error)) {
+                return false;
+            }
+        }
+        const int left = residents - static_cast<int>(bring.size());
+        const int guards = (left + 1) / 2;
+        const char* guardList = factionDef->count("guardKinds") > 0 ? "guardKinds" : "pawnKinds";
+        const char* villagerList = factionDef->count("visitorKinds") > 0 ? "visitorKinds" : guardList;
+        if (!pickKinds(*factionDef, guardList, VisitorRole::Guard, guards, bring, error) ||
+            !pickKinds(*factionDef, villagerList, VisitorRole::Visitor, left - guards, bring, error)) {
+            return false;
+        }
+    }
+    std::vector<KindInfo> infos;
+    for (const auto& m : bring) {
+        KindInfo info;
+        if (!readKind(m.first, info, error)) {
+            return false;
+        }
+        infos.push_back(std::move(info));
+    }
+    const std::vector<CellPos> cells = cellsAround(spot, bring.size());
+    if (cells.size() < bring.size()) {
+        error = "no room in the settlement for its people";
+        return false;
+    }
+    visit.id = state_.nextVisit;
+    spawnGroup(visit, bring, infos, cells, defending);
+    if (visit.members.empty() || (!visit.traderKind.empty() && visit.trader == kNoEntity)) {
+        for (const Entity m : visit.members) {
+            raids_.leaveMap(m);
+        }
+        error = "the settlement's people couldn't be made";
+        return false;
+    }
+    ++state_.nextVisit;
+    std::sort(visit.members.begin(), visit.members.end());
+    visit.started = static_cast<int>(visit.members.size());
+    id = visit.id;
+    state_.visits.push_back(std::move(visit));
+    Visit& added = state_.visits.back();
+    if (!defending) {
+        wander(added);  // they go about the base at once
+    }
+    emit(EventType::VisitArrived, added.id, added.trader, static_cast<float>(VisitKind::Settlement), added.faction);
+    return true;
+}
+
+bool TradeSystem::settlementCell(const Visit& visit, CellPos& out) const {
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        const float x = tradeCentre(visit.spot.x) + (rng_.unit() * 2.0f - 1.0f) * static_cast<float>(visit.range);
+        const float y = tradeCentre(visit.spot.y) + (rng_.unit() * 2.0f - 1.0f) * static_cast<float>(visit.range);
+        if (nearestFree(x, y, visit.spot, 3, out)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void TradeSystem::defend(Visit& visit) {
+    entt::registry& reg = things_.registry();
+    visit.phase = VisitPhase::Defending;
+    for (const Entity m : visit.members) {
+        reg.remove<Visitor>(m);
+        Fighter* f = reg.try_get<Fighter>(m);
+        if (f == nullptr || !things_.spawned(m)) {
+            continue;
+        }
+        f->mode = FightMode::Fight;
+        f->advances = true;
+        f->anchor = visit.spot;
+        f->hasGoal = true;
+        CellPos post;
+        if (settlementCell(visit, post)) {
+            f->goal = post;
+        }
+        fighters_.replan(m);
+    }
 }
 
 const Visit* TradeSystem::find(uint32_t id) const {
@@ -905,7 +1069,7 @@ bool TradeSystem::trade(uint32_t visitId, Entity negotiator, const std::vector<T
         return false;
     }
     if (visit->phase != VisitPhase::Staying) {
-        error = "the trader is leaving";
+        error = visit->phase == VisitPhase::Defending ? "the " + visit->faction + " are fighting the colony" : "the trader is leaving";
         return false;
     }
     if (visit->kind != VisitKind::Orbital &&
@@ -922,7 +1086,10 @@ bool TradeSystem::trade(uint32_t visitId, Entity negotiator, const std::vector<T
         error = "nothing to trade";
         return false;
     }
-    const float improvement = priceImprovement(negotiator);
+    // A settlement gives a little better prices (RimWorld's settlement price improvement offset).
+    const float improvement = visit->kind == VisitKind::Settlement
+                                  ? std::min(rules_.improvementCap, priceImprovement(negotiator) + rules_.settlementDiscount)
+                                  : priceImprovement(negotiator);
 
     // Merge the lines by thing and check each.
     std::vector<TradeLine> buys;
@@ -1065,14 +1232,22 @@ void TradeSystem::wander(Visit& visit) {
     for (const Entity m : visit.members) {
         const Visitor* v = reg.try_get<Visitor>(m);
         Fighter* f = reg.try_get<Fighter>(m);
-        if (v == nullptr || f == nullptr || v->role != VisitorRole::Visitor || !things_.spawned(m) || health_.incapacitated(m)) {
+        // A settlement's guards walk about too; a trader always stands at the spot.
+        const bool walks = v != nullptr && (v->role == VisitorRole::Visitor || (visit.kind == VisitKind::Settlement && v->role == VisitorRole::Guard));
+        if (!walks || f == nullptr || !things_.spawned(m) || health_.incapacitated(m)) {
             continue;
         }
-        const float angle = rng_.unit() * 6.2831853f;
-        const float dist = rng_.unit() * rules_.wanderRadius;
         CellPos goal;
-        if (nearestFree(tradeCentre(visit.spot.x) + std::cos(angle) * dist, tradeCentre(visit.spot.y) + std::sin(angle) * dist,
-                        visit.spot, 3, goal)) {
+        bool found = false;
+        if (visit.kind == VisitKind::Settlement) {
+            found = settlementCell(visit, goal);
+        } else {
+            const float angle = rng_.unit() * 6.2831853f;
+            const float dist = rng_.unit() * rules_.wanderRadius;
+            found = nearestFree(tradeCentre(visit.spot.x) + std::cos(angle) * dist, tradeCentre(visit.spot.y) + std::sin(angle) * dist,
+                                visit.spot, 3, goal);
+        }
+        if (found) {
             f->hasGoal = true;
             f->goal = goal;
             fighters_.replan(m);
@@ -1134,6 +1309,25 @@ void TradeSystem::step(const std::vector<Event>& events) {
         bool over = false;
         if (visit.kind == VisitKind::Orbital) {
             over = t >= visit.leaveAt;
+        } else if (visit.kind == VisitKind::Settlement) {
+            // Its people live there: they go about the base, the trader's goods come again, and they fight once the colony
+            // is their enemy. The visit ends only when they are all gone.
+            over = visit.members.empty();
+            if (!over && visit.phase == VisitPhase::Staying) {
+                if (hostile(visit.faction)) {
+                    defend(visit);
+                } else {
+                    if (t >= visit.nextWander) {
+                        wander(visit);
+                    }
+                    if (t >= visit.restockAt) {
+                        visit.restockAt = t + static_cast<int64_t>(rules_.settlementRestockDays * static_cast<float>(kSecondsPerDay));
+                        if (!visit.traderKind.empty()) {
+                            rollStock(visit);
+                        }
+                    }
+                }
+            }
         } else if (visit.phase == VisitPhase::Staying) {
             if (visit.members.empty()) {
                 over = true;
@@ -1240,6 +1434,10 @@ void TradeSystem::hashState(StateHasher& h) const {
         h.add(static_cast<uint64_t>(v.members.size()));
         for (const Entity m : v.members) {
             h.add(entt::to_integral(m));
+        }
+        if (v.kind == VisitKind::Settlement) {
+            h.add(v.restockAt);
+            h.add(v.range);
         }
     }
 }

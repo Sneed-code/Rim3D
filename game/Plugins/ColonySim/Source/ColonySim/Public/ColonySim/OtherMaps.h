@@ -3,6 +3,10 @@
 #include "ColonySim/Entity.h"
 #include "ColonySim/Social.h"
 
+#include <map>
+#include <string>
+#include <vector>
+
 namespace colony {
 
 class DefDatabase;
@@ -27,6 +31,28 @@ struct OtherMapRules {
     int mapSize = 256;
     int settlementMapSize = 384;
     static OtherMapRules read(const DefDatabase& defs);
+};
+
+// A settlement on its map (W6, docs/design/settlements.md): SettlementRules in data/defs/Rules.
+struct SettlementRules {
+    struct Room {
+        std::string kind;
+        float weight = 1.0f;
+        bool beds = false;                // beds along two walls
+        std::vector<std::string> things;  // Things defNames, put inside in this order
+    };
+    int baseSizeMin = 34;  // cells a side of the base (recalled from RimWorld's settlement generator)
+    int baseSizeMax = 38;
+    int residentsMin = 8;  // ours
+    int residentsMax = 12;
+    int blocks = 3;        // the base is cut into blocks x blocks; the middle one is the yard
+    float roomChance = 0.85f;
+    std::map<std::string, std::vector<std::string>> wallStuff;       // tech level -> Things defNames
+    std::map<std::string, std::vector<std::string>> furnitureStuff;
+    std::vector<std::string> perimeterTechLevels;  // factions of these tech levels wall their base in
+    std::vector<Room> rooms;
+    std::vector<std::string> yard;  // put in the yard, beside the trader's spot
+    static SettlementRules read(const DefDatabase& defs);
 };
 
 }  // namespace colony
