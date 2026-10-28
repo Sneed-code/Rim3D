@@ -13,6 +13,7 @@
 #include "ColonySim/Designations.h"
 #include "ColonySim/Doors.h"
 #include "ColonySim/Explosives.h"
+#include "ColonySim/Artillery.h"
 #include "ColonySim/Defense.h"
 #include "ColonySim/Farming.h"
 #include "ColonySim/FieldCare.h"
@@ -454,6 +455,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     defense_->setOnLearn([this](Entity pawn) { fighters_->replan(pawn); });
     fighters_->setDefense(defense_.get());
     jobs_->setDefense(defense_.get());
+    artillery_ = std::make_unique<ArtillerySystem>(*things_, map_, *combat_, *health_, *power_, *jobs_, *defs_, time_);
+    artillery_->setEventLog(&events_);
+    artillery_->setFuel(&jobs_->fuel());
     fieldCare_ = std::make_unique<FieldCare>(*things_, map_, *health_, *jobs_, *fighters_, *raids_, *defs_, time_);
     jobs_->setFieldCare(fieldCare_.get());
     narrator_ = std::make_unique<NarratorSystem>(*raids_, *defs_, time_, settings.seed);
@@ -1238,6 +1242,34 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (fire_->setHome(home->area, home->add) == 0) {
             commandFailed(id, "the home area is already so there");
         }
+    } else if (const auto* gun = std::get_if<ArtilleryCommand>(&command)) {
+        bool ok = false;
+        if (gun->action == "Man") {
+            // A drafted colonist, or one the alarm called up, is let go first: the job system walks it to the gun.
+            if (const Fighter* f = things_->registry().valid(gun->pawn) ? things_->registry().try_get<Fighter>(gun->pawn) : nullptr;
+                f != nullptr && fighters_->factionOf(gun->pawn) == kPlayerFaction && !things_->registry().all_of<PlayerControl>(gun->pawn)) {
+                if (f->drafted) {
+                    std::string ignored;
+                    fighters_->draft(gun->pawn, false, ignored);
+                } else if (f->defending) {
+                    fighters_->standDown(gun->pawn);
+                }
+            }
+            ok = artillery_->man(gun->building, gun->pawn, error);
+        } else if (gun->action == "StopManning") {
+            ok = artillery_->stopManning(gun->building, error);
+        } else if (gun->action == "Aim") {
+            ok = artillery_->aim(gun->building, gun->target, gun->x, gun->y, error);
+        } else if (gun->action == "ClearAim") {
+            ok = artillery_->clearAim(gun->building, error);
+        } else if (gun->action == "HoldFire" || gun->action == "FireAtWill") {
+            ok = artillery_->setHoldFire(gun->building, gun->action == "HoldFire", error);
+        } else {
+            error = "no artillery action '" + gun->action + "' (Man, StopManning, Aim, ClearAim, HoldFire or FireAtWill)";
+        }
+        if (!ok) {
+            commandFailed(id, error);
+        }
     } else if (const auto* rearm = std::get_if<RearmTrapCommand>(&command)) {
         if (!defense_->rearm(rearm->trap, &error)) {
             commandFailed(id, error);
@@ -1815,6 +1847,7 @@ void Sim::stepOnce(bool keepEvents) {
     { SimLap lap(profile_, "explosives"); explosives_->step(rng_); }
     animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
     { SimLap lap(profile_, "defense"); defense_->step(rng_); }
+    { SimLap lap(profile_, "artillery"); artillery_->step(rng_); }
     { SimLap lap(profile_, "monsters"); monsters_->step(events_, 0); }  // mounds make jelly, brood and spread; insects hunt (docs/design/monsters.md)
     {
         // Blasts of Burn damage start fires; a pawn that catches fire stops what it was doing.
@@ -2360,6 +2393,17 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Trap* trap = reg.try_get<Trap>(entity)) {
             view.trapState = trap->sprung ? 2 : 1;
         }
+        if (const Artillery* gun = reg.try_get<Artillery>(entity)) {
+            view.turretPhase = static_cast<uint8_t>(gun->phase);
+            view.turretTarget = gun->target;
+            view.artilleryCrew = gun->crew;
+            view.artilleryManned = artillery_->manned(entity);
+            view.artilleryAim = gun->hasAim;
+            view.artilleryAimX = gun->aimX;
+            view.artilleryAimY = gun->aimY;
+            view.artilleryAimPawn = gun->aimPawn;
+            view.holdFire = gun->holdFire;
+        }
         out.things.push_back(view);
     }
     std::sort(out.things.begin(), out.things.end(),
@@ -2517,6 +2561,16 @@ void Sim::writeSnapshot(Snapshot& out) const {
     }
     for (const auto [grenade, g] : reg.view<const Grenade>().each()) {
         out.projectiles.push_back(ProjectileView{grenade, g.def, g.x, g.y, g.z, g.vx, g.vy, g.vz, g.level, g.fuse});
+    }
+    for (const auto [shell, s] : reg.view<const ArtilleryShell>().each()) {  // a mortar's: on its arc (docs/design/artillery.md)
+        float x = 0.0f;
+        float y = 0.0f;
+        float z = 0.0f;
+        float vx = 0.0f;
+        float vy = 0.0f;
+        float vz = 0.0f;
+        artilleryShellAt(s, map_, artillery_->numbers().apexShare, x, y, z, vx, vy, vz);
+        out.projectiles.push_back(ProjectileView{shell, s.def, x, y, z, vx, vy, vz, s.level});
     }
     std::sort(out.projectiles.begin(), out.projectiles.end(),
               [](const ProjectileView& a, const ProjectileView& b) { return a.id < b.id; });
@@ -2964,6 +3018,7 @@ uint64_t Sim::stateHash() const {
         melee_->hashThing(e, h);
         social_->hashThing(e, h);
         defense_->hashThing(e, h);
+        artillery_->hashThing(e, h);
         resonance_->hashThing(e, h);
         apparel_->hashThing(e, h);
         mentalBreaks_->hashThing(e, h);
