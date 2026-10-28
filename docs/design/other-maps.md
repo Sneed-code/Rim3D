@@ -27,6 +27,9 @@ it, and each map has its own biome, weather, plants, animals and things.
 - **A settlement's tile** gets the faction's base and its people when the map is made, and the map's goodwill is the
   colony's (W6, [settlements.md](settlements.md)); `TradeCommand` and `GiftCommand` with `map` = the tile trade there.
 
+Transport pods can land on a map that exists already (not a settlement's), and pods sent to a tile with
+`Caravan` arrival make a caravan there that can visit it ([transport-pods.md](transport-pods.md)).
+
 ## Moving pawns between sims
 
 Things of one sim can't be named in another (entity ids are per sim). `moveOffMapThings` moves

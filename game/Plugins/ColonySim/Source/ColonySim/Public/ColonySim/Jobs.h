@@ -147,6 +147,9 @@ inline constexpr uint8_t kRefuelPickUpStep = 1;
 // RepairGear has four as well: go to the gear, pick it up, carry it beside the bench, work. `thing` is the gear, `site` the
 // bench, `cell` where the pawn stands, `bill` 0 for a repair or the upgrade part's def id + 1 for a fitting.
 inline constexpr uint8_t kGearPickUpStep = 1;
+// LoadPod has four: go to the stack, pick it up, carry it beside the pod (`site`), put it in. `thing` is the stack
+// (then what the pawn carries), `cell` where it stands (docs/design/transport-pods.md).
+inline constexpr uint8_t kLoadPodPickUpStep = 1;
 
 // ManArtillery has two: go to the cell beside the gun (`site`), then man it there for as long as the order lasts.
 inline constexpr uint8_t kManArtilleryPostStep = 1;
@@ -183,6 +186,7 @@ class CombatSystem;
 class TemperatureSystem;
 class Construction;
 class FuelSystem;
+class TransportPodSystem;
 class DefDatabase;
 class DrugSystem;
 class Farming;
@@ -456,6 +460,9 @@ public:
     const BillSystem& bills() const { return *bills_; }
     // Fuel in buildings: burning, counting, refilling (Fuel.h, docs/design/fuel.md).
     FuelSystem& fuel() { return *fuel_; }
+    // Transport pods (docs/design/transport-pods.md): the LoadPod job puts stacks in them.
+    void setPods(TransportPodSystem* pods) { pods_ = pods; }
+    TransportPodSystem* pods() const { return pods_; }
     const FuelSystem& fuel() const { return *fuel_; }
     const DefDatabase& defs() const { return defs_; }
     // Buildings that draw power only work while they have it (docs/design/power.md). Until a grid is
@@ -738,6 +745,8 @@ private:
     // Refuel (FuelJobs.cpp, docs/design/fuel.md): fetch fuel, carry it to the building, put it in.
     StepResult refuelWork(Entity pawn, Job& job, std::string& why);
     bool failCheckRefuel(Entity pawn, Job& job, std::string& why);
+    StepResult loadPodWork(Entity pawn, Job& job, std::string& why);
+    bool failCheckLoadPod(Entity pawn, Job& job, std::string& why);
     // RepairGear (GearJobs.cpp, docs/design/repair.md): carry the gear to a bench, mend it or fit a part.
     StepResult gearWork(Entity pawn, Job& job, std::string& why);
     bool failCheckGear(Entity pawn, Job& job, std::string& why);
@@ -850,6 +859,7 @@ private:
     Filth* filth_ = nullptr;
     Fire* fire_ = nullptr;
     DefenseSystem* defense_ = nullptr;
+    TransportPodSystem* pods_ = nullptr;
     FieldCare* fieldCare_ = nullptr;
     SpoilageSystem* spoilage_ = nullptr;
     DrugSystem* drugs_ = nullptr;
@@ -882,6 +892,8 @@ void addHusbandryWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers);
 void addPrisonerWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers);
 // The scanners for hunting a marked wild animal and carrying its corpse to a stockpile (HuntJobs.cpp).
 void addHuntWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers);
+// The scanner that carries stacks into transport pods being loaded (PodJobs.cpp).
+void addPodWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers);
 // A butcher bill's job: the nearest corpse the bill may use (within its radius), carried to the table's `stand` cell. False if there is none.
 bool makeButcherJob(JobSystem& jobs, Entity pawn, Entity building, const Bill& bill, CellPos stand, Job& out);
 // Haul jobs, shared by the hauling scanner and the haul order: the job to store `item`, or false.

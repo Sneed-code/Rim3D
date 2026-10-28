@@ -529,6 +529,32 @@ struct CaravanView {
     float tilesPerDay = 0.0f;  // at the next tile's cost and its load, counting the night's rest; 0 when it can't move
 };
 
+// Transport pods loading (docs/design/transport-pods.md).
+struct PodGroupView {
+    int id = 0;
+    uint8_t state = 0;                // PodGroupState: 0 loading, 1 boarding, 2 ready
+    std::vector<Entity> pods;
+    std::vector<Entity> passengers;   // still to get in
+    std::vector<Entity> aboard;       // in a pod (off the map)
+    std::vector<Entity> toLoad;       // stacks on the map still to carry in
+    std::vector<Entity> loaded;       // stacks inside (off the map)
+    float massKg = 0.0f;              // all of it, loaded or not
+    float capacityKg = 0.0f;
+    int rangeTiles = -1;              // how far the launchers' fuel reaches; -1 when a pod has no launcher or too little
+};
+
+// Transport pods in the air.
+struct PodFlightView {
+    int id = 0;
+    int from = -1;
+    int to = -1;
+    uint8_t arrival = 0;   // PodArrival: 0 land, 1 caravan, 2 gift
+    int pods = 0;
+    int pawns = 0;
+    int items = 0;
+    float progress = 0.0f; // 0 to 1
+};
+
 // Another map (W5, docs/design/other-maps.md): a tile caravans have visited, kept as a sim of its own
 // (Sim::otherMap(tile) for its things and its own snapshot).
 struct OtherMapView {
@@ -685,6 +711,8 @@ struct Snapshot {
     NarratorView narrator;
     std::vector<CaravanView> caravans;  // by id
     std::vector<OtherMapView> otherMaps;  // in the order they were made
+    std::vector<PodGroupView> podGroups;    // by id
+    std::vector<PodFlightView> podFlights;  // by id
     TravelView travel;
 
     // The thing with this id, or null if it is not on the map. Binary search.

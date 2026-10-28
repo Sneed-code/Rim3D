@@ -502,8 +502,27 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["traderKind"] = c.traderKind;
                 j["negotiator"] = entt::to_integral(c.negotiator);
             } else {
-                static_assert(std::is_same_v<Type, RerollColonistCommand>, "write every command type");
-                j["slot"] = c.slot;
+                // Nested, not one more else-if: MSVC stops at 128 nested blocks (C1061).
+                if constexpr (std::is_same_v<Type, PodCommand>) {
+                    j["action"] = c.action;
+                    j["group"] = c.group;
+                    for (const auto& [key, list] : {std::pair<const char*, const std::vector<Entity>*>{"pods", &c.pods},
+                                                    std::pair<const char*, const std::vector<Entity>*>{"pawns", &c.pawns},
+                                                    std::pair<const char*, const std::vector<Entity>*>{"items", &c.items}}) {
+                        ReplayOrderedJson array = ReplayOrderedJson::array();
+                        for (const Entity e : *list) {
+                            array.push_back(entt::to_integral(e));
+                        }
+                        j[key] = array;
+                    }
+                    j["tile"] = c.tile;
+                    j["arrival"] = c.arrival;
+                    j["x"] = c.x;
+                    j["y"] = c.y;
+                } else {
+                    static_assert(std::is_same_v<Type, RerollColonistCommand>, "write every command type");
+                    j["slot"] = c.slot;
+                }
             }
         },
         logged.command);
@@ -1769,7 +1788,18 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         c.negotiator = static_cast<Entity>(negotiator);
         out.command = std::move(c);
     } else {
-        return r.fail(where + ".type: unknown command '" + type + "'");
+        // Nested, not one more else-if: MSVC stops at 128 nested blocks (C1061).
+        if (type != "Pod") {
+            return r.fail(where + ".type: unknown command '" + type + "'");
+        }
+        PodCommand c;
+        if (!r.text(j, "action", c.action, where) || !r.integer(j, "group", c.group, where) || !r.entities(j, "pods", c.pods, where) ||
+            !r.entities(j, "pawns", c.pawns, where) || !r.entities(j, "items", c.items, where) ||
+            !r.integer(j, "tile", c.tile, where) || !r.text(j, "arrival", c.arrival, where) || !r.integer(j, "x", c.x, where) ||
+            !r.integer(j, "y", c.y, where)) {
+            return false;
+        }
+        out.command = std::move(c);
     }
     return true;
 }

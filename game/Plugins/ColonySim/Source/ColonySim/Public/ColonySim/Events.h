@@ -155,6 +155,14 @@ enum class EventType : uint8_t {
     OtherMapEntered,       // the caravan `count` walked onto that map (`thing` none: its pawns are that map's things now)
     OtherMapLeft,          // a caravan set out from that map; it is this sim's caravan `count` now
     SiegeChanged,          // a siege moved on (docs/design/sieges.md): `squad`, `cell` its camp, `count` its members, `message` "camp" (it got there and its shells dropped in), "shelling" (its mortars are up) or "assault: why" (losses, time, no mortars, out of shells)
+    // Transport pods (docs/design/transport-pods.md): `count` is the pod group's id, or the flight's for the last two.
+    PodsLoading,           // loading began: `amount` how many pods, `cell` the first pod's
+    PodLoaded,             // `thing` (a stack or a passenger) went into a pod at `cell`
+    PodPassengerDropped,   // `thing` won't ride: `message` why ("can't walk", "can't reach the pods", "went to fight"...)
+    PodsReady,             // everything that could get in is in: `amount` how many passengers
+    PodsCancelled,         // the loading was given up (`message` why); what was in came out beside the pods
+    PodsLaunched,          // the pods flew off: `amount` the tile, `message` the arrival (Land, Caravan, Gift)
+    PodsArrived,           // they came down: `amount` the tile, `message` what happened ("landed", "caravan", "gift", "lost"), `cell` where they landed, `part` the new caravan's id
     // The comms console (docs/design/comms-console.md).
     CaravanRequested,      // `thing` asked the faction `message` for a trade caravan over the comms console; it comes in `amount` days
     CaravanRequestFailed,  // an asked-for caravan could not come: `message` "faction: why"

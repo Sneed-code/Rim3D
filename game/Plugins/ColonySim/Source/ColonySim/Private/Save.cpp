@@ -54,6 +54,7 @@
 #include "ColonySim/Quests.h"
 #include "ColonySim/Ship.h"
 #include "ColonySim/Caravans.h"
+#include "ColonySim/TransportPods.h"
 #include "ColonySim/OtherMaps.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Social.h"
@@ -579,6 +580,10 @@ struct SaveData {
     ShipState ship;                    // section "ship"
     std::vector<Caravan> caravans;     // section "caravans" (W4)
     int caravanNextId = 1;
+    std::vector<PodGroup> podGroups;   // section "pods"
+    std::vector<PodFlight> podFlights;
+    int podNextGroup = 1;
+    int podNextFlight = 1;
     float moodWealth = 0.0f;           // section "expectations": the wealth the mood system measured, and when
     int64_t moodWealthAt = -1;
     TravelState travel;                // section "travel" (P5)
@@ -1257,7 +1262,20 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.value("x", c.x);
         ar.value("y", c.y);
     } else {
-        static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
+        // Nested, not one more else-if: MSVC stops at 128 nested blocks (C1061).
+        if constexpr (std::is_same_v<Type, PodCommand>) {
+            ar.text("action", c.action);
+            ar.value("group", c.group);
+            ar.list("pods", c.pods, [&](Entity& e) { ar.value(nullptr, e); });
+            ar.list("pawns", c.pawns, [&](Entity& e) { ar.value(nullptr, e); });
+            ar.list("items", c.items, [&](Entity& e) { ar.value(nullptr, e); });
+            ar.value("tile", c.tile);
+            ar.text("arrival", c.arrival);
+            ar.value("x", c.x);
+            ar.value("y", c.y);
+        } else {
+            static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
+        }
     }
 }
 
@@ -1779,7 +1797,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::ManArtillery, "the save file has a bad job");
+    ar.require(job.type <= JobType::LoadPod, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -2743,6 +2761,42 @@ void saveCaravans(Ar& ar, SaveData& d) {
 }
 
 template <typename Ar>
+void savePods(Ar& ar, SaveData& d) {
+    ar.value("nextGroup", d.podNextGroup);
+    ar.value("nextFlight", d.podNextFlight);
+    ar.list("groups", d.podGroups, [&](PodGroup& g) {
+        ar.value("id", g.id);
+        ar.value("state", g.state);
+        ar.require(static_cast<int>(g.state) <= static_cast<int>(PodGroupState::Ready), "the save file has a bad pod group state");
+        ar.list("pods", g.pods, [&](Entity& e) { ar.value(nullptr, e); });
+        ar.list("wanted", g.wanted, [&](Entity& e) { ar.value(nullptr, e); });
+        ar.list("passengers", g.passengers, [&](PodWalker& w) {
+            ar.value("pawn", w.pawn);
+            ar.value("walk", w.walk);
+            ar.value("repaths", w.repaths);
+            ar.value("pathSlot", w.path.slot);
+            ar.value("pathSerial", w.path.serial);
+            ar.group("to", [&] { saveCell(ar, w.to); });
+        });
+        ar.list("loaded", g.loaded, [&](Entity& e) { ar.value(nullptr, e); });
+        ar.group("spot", [&] { saveCell(ar, g.spot); });
+    });
+    ar.list("flights", d.podFlights, [&](PodFlight& f) {
+        ar.value("id", f.id);
+        ar.list("pawns", f.pawns, [&](Entity& e) { ar.value(nullptr, e); });
+        ar.list("items", f.items, [&](Entity& e) { ar.value(nullptr, e); });
+        ar.value("pods", f.pods);
+        ar.value("from", f.from);
+        ar.value("to", f.to);
+        ar.value("arrival", f.arrival);
+        ar.require(static_cast<int>(f.arrival) <= static_cast<int>(PodArrival::Gift), "the save file has a bad pod arrival");
+        ar.group("cell", [&] { saveCell(ar, f.cell); });
+        ar.value("progress", f.progress);
+        ar.value("seconds", f.seconds);
+    });
+}
+
+template <typename Ar>
 void saveTravel(Ar& ar, TravelState& s) {
     ar.value("kind", s.kind);
     ar.require(static_cast<int>(s.kind) <= static_cast<int>(SkipKind::Travel), "the save file has a bad skip kind");
@@ -3607,6 +3661,7 @@ void saveSections(Ar& ar, SaveData& d) {
         }
     });
     ar.section("caravans", 1, [&] { saveCaravans(ar, d); });
+    ar.section("pods", 1, [&] { savePods(ar, d); });
     ar.section("expectations", 1, [&] {
         ar.value("wealth", d.moodWealth);
         ar.value("at", d.moodWealthAt);
@@ -4818,6 +4873,7 @@ bool SimSaveAccess::moveThings(Sim& from, const std::vector<Entity>& roots, Sim&
         from.mentalBreaks_->forget(e);
         from.trade_->forget(e);
         from.caravans_->forget(e);
+        from.pods_->forget(e);
         from.drugs_->states().erase(e);
     }
     for (const Entity e : moving) {
@@ -4954,6 +5010,10 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.ship = sim.ship_->state();
     d.caravans = sim.caravans_->caravans();
     d.caravanNextId = sim.caravans_->nextId();
+    d.podGroups = sim.pods_->groups();
+    d.podFlights = sim.pods_->flights();
+    d.podNextGroup = sim.pods_->nextGroupId();
+    d.podNextFlight = sim.pods_->nextFlightId();
     d.moodWealth = sim.mood_->wealth();
     d.moodWealthAt = sim.mood_->wealthAt();
     d.travel = sim.travel_->state();
@@ -5327,6 +5387,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         return false;
     }
     if (!sim.caravans_->restore(std::move(d.caravans), d.caravanNextId, error)) {
+        return false;
+    }
+    if (!sim.pods_->restore(std::move(d.podGroups), std::move(d.podFlights), d.podNextGroup, d.podNextFlight, error)) {
         return false;
     }
     for (SaveOtherMap& m : d.maps) {

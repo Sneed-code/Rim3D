@@ -1,5 +1,6 @@
 #include "ColonySim/Sim.h"
 #include "ColonySim/Caravans.h"
+#include "ColonySim/TransportPods.h"
 
 #include "ColonySim/Animals.h"
 #include "ColonySim/Breeding.h"
@@ -424,6 +425,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     caravans_->setEventLog(&events_);
     caravans_->setJobs(jobs_.get());
     caravans_->setSpoilage(spoilage_.get());
+    pods_ = std::make_unique<TransportPodSystem>(*things_, map_, pathfinder_, *health_, jobs_->fuel(), *defs_, time_, world_.get());
+    pods_->setEventLog(&events_);
+    pods_->setJobs(jobs_.get());
+    jobs_->setPods(pods_.get());
     // A caravan's pawns sleep on the ground while it rests for the night.
     needs_->setRestingElsewhere([this](Entity pawn) { return caravans_->resting(pawn); });
     mood_->addSituation("isPrisoner", [this](Entity pawn) { return prisoners_->isPrisoner(pawn) ? 0 : -1; });
@@ -479,6 +484,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         fire_->onDestroy(thing);
         mentalBreaks_->forget(thing);
         caravans_->forget(thing);
+        pods_->forget(thing);
     });
     fighters_->setWeather(weather_.get());
     melee_ = std::make_unique<MeleeSystem>(*things_, map_, *combat_, *health_, *defs_, time_,
@@ -943,6 +949,11 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     }
     if (ordered != kNoEntity && mentalBreaks_->active(ordered)) {
         commandFailed(id, "that colonist is in a mental break");
+        return;
+    }
+    // Apart from the chain below: MSVC stops at 128 nested else-ifs (C1061).
+    if (const auto* pod = std::get_if<PodCommand>(&command)) {
+        applyPodCommand(*pod, id);
         return;
     }
     // The comms console, before the long chain below (MSVC's limit on nested else-ifs).
@@ -1891,6 +1902,11 @@ void Sim::stepOnce(bool keepEvents) {
     { SimLap lap(profile_, "jobs"); jobs_->step(); }
     // after the jobs, which leave caravan members alone; before movement walks them
     { SimLap lap(profile_, "caravans"); caravans_->step(); }
+    {
+        SimLap lap(profile_, "pods");
+        pods_->step();
+        landPods();
+    }
     { SimLap lap(profile_, "raids"); raids_->step(); }
     { SimLap lap(profile_, "fieldCare"); fieldCare_->step(); }
     {
@@ -2096,6 +2112,35 @@ void Sim::writeSnapshot(Snapshot& out) const {
         out.caravans.push_back(v);
     }
     writeOtherMaps(out.otherMaps);
+    out.podGroups.clear();
+    for (const PodGroup& g : pods_->groups()) {
+        PodGroupView v;
+        v.id = g.id;
+        v.state = static_cast<uint8_t>(g.state);
+        v.pods = g.pods;
+        for (const PodWalker& w : g.passengers) {
+            (w.walk == 3 ? v.aboard : v.passengers).push_back(w.pawn);
+        }
+        v.toLoad = g.wanted;
+        v.loaded = g.loaded;
+        v.massKg = static_cast<float>(pods_->massOf(g));
+        v.capacityKg = static_cast<float>(pods_->capacityOf(g));
+        v.rangeTiles = pods_->rangeOf(g);
+        out.podGroups.push_back(std::move(v));
+    }
+    out.podFlights.clear();
+    for (const PodFlight& f : pods_->flights()) {
+        PodFlightView v;
+        v.id = f.id;
+        v.from = f.from;
+        v.to = f.to;
+        v.arrival = static_cast<uint8_t>(f.arrival);
+        v.pods = f.pods;
+        v.pawns = static_cast<int>(f.pawns.size());
+        v.items = static_cast<int>(f.items.size());
+        v.progress = f.seconds > 0.0 ? static_cast<float>(std::min(1.0, f.progress / f.seconds)) : 1.0f;
+        out.podFlights.push_back(v);
+    }
     {
         const ShipParts parts = ship_->parts();
         ShipView& s = out.ship;
@@ -2718,6 +2763,7 @@ uint64_t Sim::stateHash() const {
     quests_->hashState(h);
     ship_->hashState(h);
     caravans_->hashState(h);
+    pods_->hashState(h);
     hashOtherMaps(h);
     talents_->hashState(h);
     drugs_->hashState(h);
