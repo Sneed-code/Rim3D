@@ -5,6 +5,7 @@
 #include "IAssetTools.h"
 #include "MaterialEditingLibrary.h"
 #include "Materials/Material.h"
+#include "Materials/MaterialExpressionEyeAdaptationInverse.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
 #include "Misc/PackageName.h"
@@ -45,7 +46,14 @@ int32 UBuildingMaterialsCommandlet::Main(const FString& Params)
 	auto* Color = Cast<UMaterialExpressionVectorParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionVectorParameter::StaticClass(), -500, 0));
 	Color->ParameterName = TEXT("Color");
 	Color->DefaultValue = FLinearColor(0.18f, 0.42f, 0.95f, 1.0f);
-	UMaterialEditingLibrary::ConnectMaterialProperty(Color, TEXT("RGB"), MP_EmissiveColor);
+	// The colour goes through the inverse of the camera's exposure, so a ghost looks the same at noon (EV 15) as at night (L1).
+	auto* Unexposed = Cast<UMaterialExpressionEyeAdaptationInverse>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionEyeAdaptationInverse::StaticClass(), -250, 0));
+	if (!UMaterialEditingLibrary::ConnectMaterialExpressions(Color, TEXT("RGB"), Unexposed, TEXT("LightValue")) &&
+		!UMaterialEditingLibrary::ConnectMaterialExpressions(Color, TEXT("RGB"), Unexposed, TEXT("LightValueInput")))
+	{
+		Unexposed->LightValueInput.Connect(0, Color);
+	}
+	UMaterialEditingLibrary::ConnectMaterialProperty(Unexposed, TEXT(""), MP_EmissiveColor);
 	auto* Opacity = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -500, 200));
 	Opacity->ParameterName = TEXT("Opacity");
 	Opacity->DefaultValue = 0.38f;

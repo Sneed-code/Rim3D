@@ -38,7 +38,7 @@
     },
     {
       "name": "Building ghost material (generated)",
-      "source": "Made by the BuildingMaterials commandlet: our own unlit translucent material with a Color and an Opacity, marked for instanced static meshes",
+      "source": "Made by the BuildingMaterials commandlet: our own unlit translucent material with a Color (through the inverse of the camera exposure since L1) and an Opacity, marked for instanced static meshes",
       "licence": "Our own",
       "version": "UE 5.8",
       "installedTo": "game/Content/Rim3D/Generated/Buildings/M_BuildingGhost.uasset (not in Git)",
