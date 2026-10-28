@@ -67,7 +67,8 @@ bool Farming::isCrop(DefId def) const {
         return false;
     }
     const Def& d = defs_.get(def);
-    return d.text("category") == "Plant" && d.has("plant.sowWork") && d.has("plant.growDays") && !d.flag("plant.isTree");
+    return d.text("category") == "Plant" && d.has("plant.sowWork") && d.has("plant.growDays") &&
+           (!d.flag("plant.isTree") || d.flag("plant.sowable"));
 }
 
 std::vector<DefId> Farming::crops() const {
@@ -237,6 +238,20 @@ std::string Farming::sowBlocker(CellPos c) const {
             return "a tree is in the way";
         }
     }
+    if (def.flag("plant.isTree")) {
+        // A tree needs open sky and a free ring of cells: no other tree, wild or sown, next to it.
+        if (map_.roof(c) != Roof::None) {
+            return "a tree needs open sky";
+        }
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                const CellPos n{c.x + dx, c.y + dy, c.level};
+                if ((dx != 0 || dy != 0) && map_.inBounds(n) && plants_.has(n) && defs_.get(plants_.defAt(n)).flag("plant.isTree")) {
+                    return "another tree is next to it";
+                }
+            }
+        }
+    }
     if (plants_.fertility(c) < static_cast<float>(def.number("plant.fertilityMin", 0.0)) || plants_.fertility(c) <= 0.0f) {
         return "the soil is too poor";
     }
@@ -257,11 +272,15 @@ std::string Farming::sowBlocker(CellPos c) const {
 // until it is grown (then true) or the temperature falls under `coldDamageBelow` (then false). Only the hours the sun is bright
 // enough count (clear sky; clouds are left to the margin).
 bool Farming::ripensBeforeFrost(CellPos c, DefId cropId) const {
-    constexpr int64_t kHorizonHours = 24 * 40;
     if (!forecast_ || !clock_ || map_.roof(c) != Roof::None) {
         return true;
     }
     const Def& crop = defs_.get(cropId);
+    if (crop.flag("plant.isTree") && !crop.has("plant.coldDamageBelow")) {
+        return true;  // an ordinary tree goes dormant in the cold, it does not die
+    }
+    // 40 days, or longer for a slow plant: a tree grows in a share of each day.
+    const int64_t kHorizonHours = 24 * std::max<int64_t>(40, static_cast<int64_t>(std::ceil(crop.number("plant.growDays", 1.0) * 4.0)));
     const int64_t now = clock_();
     const int64_t hourNow = now / kSecondsPerHour;
     if (hourNow != ripenHour_) {
@@ -331,6 +350,9 @@ double Farming::growthFactor(size_t cellIndex) const {
 void Farming::growHour(int64_t now) {
     for (const GrowingZone& zone : zones_) {
         const Def& def = defs_.get(zone.crop);
+        if (def.flag("plant.isTree") && !def.has("plant.coldDamageBelow")) {
+            continue;  // an ordinary tree goes dormant in frost and heat
+        }
         const double cold = def.number("plant.coldDamageBelow", 0.0);
         const double heat = def.number("plant.heatDamageAbove", 58.0);
         for (const CellPos& c : zone.cells) {

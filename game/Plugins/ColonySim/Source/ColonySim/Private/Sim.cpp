@@ -1198,7 +1198,9 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
     } else if (const auto* createGrowing = std::get_if<CreateGrowingZoneCommand>(&command)) {
         const DefId crop = defs_->idOf("Things", createGrowing->crop);
-        if (farming_->createZone(createGrowing->area, crop, error) == kNoGrowingZone) {
+        if (crop.valid() && !research_->unlocked(defs_->get(crop), error)) {
+            commandFailed(id, error);
+        } else if (farming_->createZone(createGrowing->area, crop, error) == kNoGrowingZone) {
             commandFailed(id, error);
         }
     } else if (const auto* removeGrowing = std::get_if<RemoveGrowingZoneCellsCommand>(&command)) {
@@ -1206,7 +1208,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "no growing zone there");
         }
     } else if (const auto* setGrowingCrop = std::get_if<SetGrowingZoneCropCommand>(&command)) {
-        if (!farming_->setCrop(setGrowingCrop->zone, defs_->idOf("Things", setGrowingCrop->crop), error)) {
+        const DefId crop = defs_->idOf("Things", setGrowingCrop->crop);
+        if (crop.valid() && !research_->unlocked(defs_->get(crop), error)) {
+            commandFailed(id, error);
+        } else if (!farming_->setCrop(setGrowingCrop->zone, crop, error)) {
             commandFailed(id, error);
         }
     } else if (const auto* setNarrator = std::get_if<SetNarratorCommand>(&command)) {

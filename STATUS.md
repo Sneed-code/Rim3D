@@ -2,6 +2,8 @@
 
 Updated 2026-10-28.
 
+Stage 2 research unlocks, fifth batch: **Tree sowing** and **Cocoa** now unlock real content. Growing zones take trees (oak, poplar, pine, teak, cecropia, palm, bamboo after Tree sowing, the new cocoa tree after Cocoa; Plants 6 or 8, open sky, no tree next to another, a grown tree is felled for its wood or 20 chocolate and the cell is sown again) and the new Chocolate item exists; a def's research prerequisite now also gates the zone's crop. Sim and data, no save change (`docs/design/farming.md` "Trees in zones", tests `TreeSowingTests`). 7 empty projects remain (`BACKLOG.md`).
+
 Stage 2 research unlocks, nutrient paste: the `NutrientPaste` project now unlocks the nutrient paste dispenser (125 steel + 3 components, 200 W, 3 x 4) and the hopper (15 steel); a hungry colonist takes a meal from a powered dispenser whose hoppers hold 0.3 nutrition of raw food (the meal is 0.9 nutrition, awful tier, -4 mood for a day, not for an Ascetic). Sim and data, no save change (`docs/design/nutrient-paste.md`, tests `NutrientPasteTests`). 16 empty projects remain in `BACKLOG.md`.
 
 Stage 2 research unlocks, second batch: the autodoor (opens at 4 times a door's speed while powered, a plain door without power), the flood light (50 W, 17.45 m) and the vitals monitor (powered, in the 8 cells around a bed: +7% tend quality, +5% surgery success, +0.02 immunity gain speed) now exist and unlock from their projects (`docs/design/autodoor-lights-monitor.md`, tests `MoreBuildingsTests`). 13 empty projects remain, listed in `BACKLOG.md`. Sim and data, no save change.
