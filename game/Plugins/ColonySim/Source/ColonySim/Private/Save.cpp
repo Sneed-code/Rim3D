@@ -3309,7 +3309,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("wealth", n.wealth);
         ar.value("points", n.points);
     });
-    ar.section("disasters", 1, [&] {
+    ar.section("disasters", 2, [&] {
         d.hasDisasters = true;
         DisasterState& s = d.disasters;
         ar.value("rngState", s.rngState);
@@ -3332,6 +3332,13 @@ void saveSections(Ar& ar, SaveData& d) {
             c.radius = static_cast<float>(radius);
             ar.value("nextStrike", c.nextStrike);
         });
+        if (ar.sectionVersion() >= 2) {  // blight that spreads
+            ar.list("blighted", s.blighted, [&](BlightedPlant& b) {
+                ar.value("x", b.cell.x);
+                ar.value("y", b.cell.y);
+                ar.value("dies", b.dies);
+            });
+        }
     });
     ar.section("fire", 1, [&] {
         ar.value("started", d.fire.started);

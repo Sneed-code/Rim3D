@@ -170,3 +170,23 @@ otherwise empty it. Verbose mode prints the greenhouse's temperature, wood on th
 (6,337 crop-hours, 158 ripe-hours). The room only went cold again after the colonists were dead and nobody refuelled the
 generator. The colonists still die for the reasons above (predators, starvation, hypothermia outdoors), so the greenhouse
 alone does not yet keep the colony alive; only six basins feed few people.
+
+## The year scenario (`--scenario year`, C25)
+
+`simrun --scenario year [--seed N] [--size 512] [--days 60] [--narrator NAME]` is the year run (`--scenario colony --year`,
+above) with the narrator switched on (Orrin unless `--narrator` says otherwise) from the first step, so raids, disasters,
+diseases and the rest arrive on their own. The summary line `year` also prints the narrator's name and its `letters`.
+Its checks are the colony scenario's: six colonists alive, nobody starved (food never 0), nobody stuck for a game hour.
+It runs nightly on seeds 1, 7 and 42 (`.github/workflows/nightly.yml`, job `colony-year`, allowed to fail until the
+colony lasts the year), about 15 minutes a seed. Not in CTest.
+
+Waiting on: T2's good-news events (PR #215) and the winter food plan (`BACKLOG.md`). Without them the colony does not
+last the year, so the scenario is red; it is wired up so the day it goes green the nightly job can be made strict by
+removing `continue-on-error`.
+
+**First runs (2026-10-28, Orrin, 512 m, 60 days):** the narrator makes it far worse than the plain year run, and every seed
+fails. Seed 1: everyone dead by about day 8 to 10 (6 colonists plus 1 other dead, walls 0/54 built, 45 jobs failed, 26 letters). Seed 7:
+everyone dead by day 40 (22 letters). Seed 42: the room was finished but 5 died, one starved (food 0) and 163 jobs failed.
+The narrator's early letters (disease outbreaks, animals, raids) arrive before the colony has walls or guns, and the
+colony has no defence in the script. Next for the scenario: let the script build defences and give the narrator a
+threat-free first stretch (or a gentler difficulty) before the nightly run can say anything about food and cold.

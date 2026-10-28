@@ -17,6 +17,7 @@
 //                                     exit 1 if a check fails, docs/design/colony-scenario.md)
 //   simrun --perf [--seed 42] [--size 1024] [--days 1] [--budget MS]   (the sim cost check, S9: 30 colonists, 300 tame animals, crops
 //                                     and rooms; a table of what each system costs per step, exit 1 over --budget; docs/design/sim-cost.md)
+//   simrun --scenario year [--seed 42] [--days 60] [--narrator NAME]   (C25: the colony year with the narrator; docs/design/colony-scenario.md)
 //   simrun --scenario house [--seed 42] [--days 3] [--png house.png] [--verbose]   (the two-storey house, M4: builds, sleeps and hauls
 //                                     across two levels, writes house-level0.png and house-level1.png; docs/design/house-scenario.md)
 //   simrun --world world.png [--seed 42] [--world-size 120x60] [--check]   (the world map: biomes, rivers, roads, settlements; docs/design/world-map.md)
@@ -259,7 +260,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
                          "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--scenario colony [--verbose]] [--power] [--raid POINTS [--raid-strategy NAME]] [--armed] [--narrator NAME [--difficulty NAME]] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house [--verbose]] [--power] [--perf [--budget MS]] [--world FILE [--world-size WxH]] [--on-world [--world-tile N] [--caravan]] [--raid POINTS [--raid-strategy NAME]] [--armed] [--medics] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house|year [--verbose]] [--power] [--perf [--budget MS]] [--world FILE [--world-size WxH]] [--on-world [--world-tile N] [--caravan]] [--raid POINTS [--raid-strategy NAME]] [--armed] [--medics] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS] [--roundtrip SECONDS]\n");
             return false;
         }
@@ -706,8 +707,8 @@ int main(int argc, char** argv) {
 
     // The colony scenario (C10) runs its own script on the Crashlanded start; 5 days unless --days says.
     if (!options.scenario.empty()) {
-        if ((options.scenario != "colony" && options.scenario != "house") || !defs) {
-            std::fprintf(stderr, "--scenario takes 'colony' or 'house' and needs the game's defs\n");
+        if ((options.scenario != "colony" && options.scenario != "house" && options.scenario != "year") || !defs) {
+            std::fprintf(stderr, "--scenario takes 'colony', 'house' or 'year' and needs the game's defs\n");
             return 2;
         }
         if (options.scenario == "house") {
@@ -716,6 +717,11 @@ int main(int argc, char** argv) {
                 pngBase.resize(pngBase.size() - 4);
             }
             return housescenario::run(options.seed, options.size, options.daysGiven ? options.days : 3.0, defs, options.verbose, pngBase);
+        }
+        if (options.scenario == "year") {
+            // C25: the year run with the narrator, 60 game days unless --days says otherwise.
+            return colonyscenario::run(options.seed, options.size, options.daysGiven ? options.days : 60.0, defs, options.verbose, true,
+                                       options.narrator.empty() ? "Orrin" : options.narrator);
         }
         return colonyscenario::run(options.seed, options.size, options.daysGiven ? options.days : 5.0, defs, options.verbose, options.year);
     }
