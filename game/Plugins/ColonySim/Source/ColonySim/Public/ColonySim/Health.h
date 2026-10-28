@@ -305,6 +305,8 @@ public:
     // The cleanliness of the cell a pawn stands in (RoomStats), which scales a fresh wound's chance of infection:
     // dirt raises it, clean floors lower it (MedicineRules.infection.cleanlinessSlope). Without it the factor is 1.
     void setCleanliness(std::function<float(Entity pawn)> cleanliness) { cleanliness_ = std::move(cleanliness); }
+    // Added to a pawn's immunity gain speed while it rests in a hospital bed (a vitals monitor beside it: +0.02).
+    void setImmunityBonus(std::function<float(Entity pawn)> bonus) { immunityBonus_ = std::move(bonus); }
     // Gives the pawn the disease (a Hediffs def of class Disease) at `severity` (below 0: the def's
     // `initialSeverity`). An infection needs the wound's `part`. False, and nothing changes, if the pawn has no
     // tracked health or is dead, the def is not a disease, the pawn already has it (an infection: on that part) or
@@ -375,6 +377,7 @@ private:
     const int64_t* clock_ = nullptr;
     uint64_t seed_ = 0;
     std::function<float(Entity)> cleanliness_;
+    std::function<float(Entity)> immunityBonus_;
     std::vector<Entity> active_;  // scratch for step
     bool restoring_ = false;      // inside refreshAll: working out what a loaded save already was, so nobody stops walking for it
     std::vector<size_t> healable_;  // scratch for step: the injuries that can heal

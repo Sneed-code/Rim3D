@@ -35,6 +35,8 @@ public:
     void setSpeedFactor(std::function<float(Entity)> factor) { speedFactor_ = std::move(factor); }
     // Rain, snow and the rest slow a pawn under the open sky (docs/design/weather.md).
     void setWeather(const Weather* weather) { weather_ = weather; }
+    // How many times faster a door opens than a plain one (an autodoor with power: 4); 1 if none set.
+    void setDoorSpeed(std::function<int(Entity)> speed) { doorSpeed_ = std::move(speed); }
     void step(entt::registry& registry, Map& map);
 
     // Pawns whose walk was held up by other pawns this step, for the stats simrun prints.
@@ -69,6 +71,7 @@ private:
     const Lights* lights_ = nullptr;
     std::function<float(Entity)> speedFactor_;
     const Weather* weather_ = nullptr;
+    std::function<int(Entity)> doorSpeed_;
     std::vector<Entity> doorRequests_;  // doors a pawn is in, waiting at or about to walk into this step
 };
 

@@ -424,6 +424,9 @@ public:
     // The bed building under a pawn standing in its cell, or kNoEntity.
     Entity bedUnder(Entity pawn) const;
     bool isMedicalBed(Entity bed) const;
+    // Whether a powered vitals monitor (`building.vitalsMonitor`) stands in one of the 8 cells around the bed's footprint
+    // (docs/design/vitals-monitor.md). One counts, more do not.
+    bool bedMonitored(Entity bed) const;
     // A downed colonist on its own side, or a downed prisoner, that no bed holds and no fighter is fetching to cover (F10).
     bool needsRescue(Entity pawn) const;
     // The food a warden should carry to a hungry prisoner: the best the prisoner may eat, the nearest of that kind, with how
