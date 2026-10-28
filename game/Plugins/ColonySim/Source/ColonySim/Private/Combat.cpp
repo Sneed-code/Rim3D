@@ -1249,7 +1249,8 @@ void CombatSystem::startReload(Entity pawn, Shooter& s, Entity weapon, int extra
     entt::registry& reg = things_.registry();
     CombatModel::Gun moddedGun;
     const CombatModel::Gun& gun = *combatGunOf(*model_, reg, weapon, moddedGun);
-    const float factor = combatBySkill(model_->reloadFactor, shootingSkill(pawn));
+    const float factor = combatBySkill(model_->reloadFactor, shootingSkill(pawn)) *
+                         (talents_ != nullptr ? static_cast<float>(talents_->statFactor(pawn, "reloadTime")) : 1.0f);
     s.phase = ShotPhase::Reloading;
     s.shotsLeft = 0;
     s.stepsLeft = std::max(1, extraSteps + static_cast<int>(std::lround(static_cast<float>(gun.reloadTime) * factor)));
