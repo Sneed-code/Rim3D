@@ -232,6 +232,7 @@ struct PawnHitResult {
 // metres, steps of warm-up, of cooldown after a burst and between the shots of a burst, shots in a burst.
 struct GunStats {
     float range = 0.0f;
+    float minRange = 0.0f;  // the verb's `minRange`: a target closer than this can't be shot (turrets)
     int warmup = 0;
     int cooldown = 0;
     int burst = 1;

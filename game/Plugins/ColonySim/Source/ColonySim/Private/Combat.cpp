@@ -28,6 +28,7 @@ struct CombatModel {
         bool valid = false;
         DefId projectile;
         float range = 0.0f;
+        float minRange = 0.0f;
         int warmup = 0;    // steps
         int cooldown = 0;  // steps
         int burst = 1;
@@ -372,6 +373,7 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
             Gun& g = guns[id.value];
             g.projectile = defs.idOf("Projectiles", def.text("verbs.0.defaultProjectile"));
             g.range = combatNum(def, "verbs.0.range", 0.0);
+            g.minRange = combatNum(def, "verbs.0.minRange", 0.0);
             g.warmup = static_cast<int>(std::lround(def.number("verbs.0.warmupTime")));
             g.cooldown = static_cast<int>(std::lround(def.number("stats.rangedWeaponCooldown")));
             g.burst = std::max(1, static_cast<int>(def.integer("verbs.0.burstShotCount", 1)));
@@ -1402,6 +1404,7 @@ bool CombatSystem::gunStats(DefId weapon, GunStats& out) const {
         return false;
     }
     out.range = gun->range;
+    out.minRange = gun->minRange;
     out.warmup = gun->warmup;
     out.cooldown = gun->cooldown;
     out.burst = gun->burst;

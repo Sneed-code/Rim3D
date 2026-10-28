@@ -20,6 +20,7 @@
 namespace colony {
 
 class CombatSystem;
+class FuelSystem;
 class HealthSystem;
 class Map;
 class PowerGrid;
@@ -88,6 +89,9 @@ public:
     DefenseSystem& operator=(const DefenseSystem&) = delete;
 
     void setEventLog(std::vector<Event>* events) { events_ = events; }
+    // Ammunition: a turret whose def has a `fuel` block with `perUse` uses that much of it for every shot, and fires only
+    // while it has it (colonists refuel it like any building, docs/design/fuel.md). Null: turrets never run dry.
+    void setFuel(FuelSystem* fuel) { fuel_ = fuel; }
     // Called before the system destroys a thing itself (a trap that went off), so jobs can let go of it.
     void setBeforeDestroy(std::function<void(Entity)> hook) { beforeDestroy_ = std::move(hook); }
     // Called for every fighter of a side that has just noticed a trap, so it plans its spot and walk again round it
@@ -154,6 +158,7 @@ private:
     CombatSystem& combat_;
     HealthSystem& health_;
     PowerGrid& power_;
+    FuelSystem* fuel_ = nullptr;
     const GameTime& time_;
     DefenseNumbers numbers_;
     std::unique_ptr<DefenseModel> model_;
@@ -172,7 +177,7 @@ private:
     void collectPawns();
     const std::vector<ArmedTrap>& armedTraps() const;
     void stepTurret(Entity building, Turret& turret, Rng& rng);
-    Entity pickTarget(const Position& pos, float range, float height) const;
+    Entity pickTarget(const Position& pos, float range, float minRange, float height) const;
     bool canSee(const Position& pos, float height, Entity target, float range) const;
     void stepTraps(Rng& rng);
     void spring(Entity trap, Entity victim, Rng& rng);

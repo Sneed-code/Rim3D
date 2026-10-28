@@ -2,6 +2,7 @@
 
 #include "ColonySim/Animals.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Fuel.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
@@ -33,6 +34,7 @@ struct DefenseModel {
         GunStats stats;
         int skill = 8;
         float muzzleHeight = 0.8f;
+        float ammoPerShot = 0.0f;  // `fuel.perUse` of the building: what a shot takes out of its ammunition
     };
     struct TrapInfo {
         bool valid = false;
@@ -74,6 +76,7 @@ struct DefenseModel {
                 t.gun = defs.idOf("Things", def.text("turret.gun"));
                 t.skill = std::clamp(static_cast<int>(def.integer("turret.shootingSkill", 8)), 0, 20);
                 t.muzzleHeight = static_cast<float>(def.number("turret.muzzleHeight", 0.8));
+                t.ammoPerShot = def.has("fuel") ? static_cast<float>(def.number("fuel.perUse")) : 0.0f;
                 t.valid = t.gun.valid() && combat.gunStats(t.gun, t.stats) && t.stats.range > 0.0f;
             }
             if (def.has("trap")) {
@@ -200,7 +203,7 @@ bool DefenseSystem::canSee(const Position& pos, float height, Entity target, flo
     return hit.kind == ProjectileHitKind::None;
 }
 
-Entity DefenseSystem::pickTarget(const Position& pos, float range, float height) const {
+Entity DefenseSystem::pickTarget(const Position& pos, float range, float minRange, float height) const {
     Entity best = kNoEntity;
     float bestDistance = range + 1.0f;
     for (const PawnInfo& p : pawns_) {
@@ -208,7 +211,7 @@ Entity DefenseSystem::pickTarget(const Position& pos, float range, float height)
             continue;
         }
         const float d = defenseDistance(pos.x, pos.y, p.x, p.y);
-        if (d > range || d >= bestDistance) {
+        if (d > range || d < minRange || d >= bestDistance) {
             continue;
         }
         if (canSee(pos, height, p.pawn, range)) {
@@ -239,14 +242,22 @@ void DefenseSystem::stepTurret(Entity building, Turret& turret, Rng& rng) {
         if (h != nullptr && (h->dead || h->downed)) {
             return false;
         }
-        return canSee(pos, info->muzzleHeight, turret.target, gun.range);
+        const Position& tp = reg.get<Position>(turret.target);
+        return defenseDistance(pos.x, pos.y, tp.x, tp.y) >= gun.minRange && canSee(pos, info->muzzleHeight, turret.target, gun.range);
+    };
+    // Out of ammunition: it holds its fire (and its target) until colonists load it.
+    const auto hasAmmo = [&]() {
+        return info->ammoPerShot <= 0.0f || fuel_ == nullptr || fuel_->canUse(building, info->ammoPerShot);
     };
     switch (turret.phase) {
         case TurretPhase::Idle: {
             if ((time_.seconds + static_cast<int64_t>(entt::to_integral(building))) % numbers_.scanEvery != 0) {
                 return;
             }
-            const Entity target = pickTarget(pos, gun.range, info->muzzleHeight);
+            if (!hasAmmo()) {
+                return;
+            }
+            const Entity target = pickTarget(pos, gun.range, gun.minRange, info->muzzleHeight);
             if (target == kNoEntity) {
                 return;
             }
@@ -272,7 +283,7 @@ void DefenseSystem::stepTurret(Entity building, Turret& turret, Rng& rng) {
                 --turret.stepsLeft;
                 return;
             }
-            if (!stillGood()) {
+            if (!stillGood() || !hasAmmo()) {
                 turret.phase = TurretPhase::Cooling;
                 turret.stepsLeft = gun.cooldown;
                 turret.target = kNoEntity;
@@ -290,6 +301,9 @@ void DefenseSystem::stepTurret(Entity building, Turret& turret, Rng& rng) {
             combat_.fireFrom(building, info->gun, pos.x, pos.y, map_.heightAt(pos.x, pos.y) + info->muzzleHeight,
                              pos.level, cellOf(pos), ax, ay, az, spread, rng);
             ++shots_;
+            if (info->ammoPerShot > 0.0f && fuel_ != nullptr) {
+                fuel_->use(building, info->ammoPerShot);
+            }
             if (--turret.shotsLeft > 0) {
                 turret.stepsLeft = std::max(1, gun.burstGap);
             } else {
