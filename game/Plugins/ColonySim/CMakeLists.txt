@@ -93,7 +93,7 @@ add_test(NAME colony_scenario_seed7 COMMAND simrun --scenario colony --seed 7 --
 
 # The two-storey house (M4, docs/design/house-scenario.md): six colonists build a house with stairs and an upper floor,
 # sleep upstairs and haul up and down for three days.
-add_test(NAME house_scenario COMMAND simrun --scenario house --seed 3 --size 512)
+add_test(NAME house_scenario COMMAND simrun --scenario house --seed 42 --size 512)
 add_test(NAME house_scenario_seed7 COMMAND simrun --scenario house --seed 7 --size 512)
 
 # The power check (E5, docs/design/power.md): solar, batteries, lamps and a switch for three days.
