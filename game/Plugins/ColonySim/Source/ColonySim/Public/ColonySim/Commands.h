@@ -595,6 +595,9 @@ struct TradeCommand {
     Entity negotiator = kNoEntity;
     std::vector<TradeLine> buy;
     std::vector<TradeLine> sell;
+    // -1 for a visit on the colony's map; else the tile of the other map it is on (a settlement's trader, W6), and then
+    // `visit`, `negotiator` and the goods are that map's (Sim::otherMap(tile)).
+    int map = -1;
 };
 
 // The colony gives a visit's faction a gift: the `items` are taken from what lies on the map and the faction's goodwill rises by
@@ -603,6 +606,7 @@ struct TradeCommand {
 struct GiftCommand {
     uint32_t visit = 0;
     std::vector<TradeLine> items;
+    int map = -1;  // as TradeCommand's: the tile of the other map the visit is on, or -1
 };
 
 // Dev command: changes a faction's goodwill by `delta` (within -100 to 100).

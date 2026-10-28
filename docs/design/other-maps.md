@@ -24,6 +24,8 @@ it, and each map has its own biome, weather, plants, animals and things.
   stepped once at the end of every colony step, night skips included, so its clock, season and
   weather time match. Its events stay its own (Unreal reads them when it draws that map).
 - **Kept.** Nothing abandons a map yet: each visited tile's sim lives until the game ends.
+- **A settlement's tile** gets the faction's base and its people when the map is made, and the map's goodwill is the
+  colony's (W6, [settlements.md](settlements.md)); `TradeCommand` and `GiftCommand` with `map` = the tile trade there.
 
 ## Moving pawns between sims
 
@@ -61,7 +63,8 @@ caravan that walked on), `OtherMapLeft` (`count` the colony's new caravan); `amo
 
 ## Snapshot (`OtherMapView`)
 
-Per map: tile, place name, cells a side, the colony's colonists there, caravans forming there.
+Per map: tile, place name, cells a side, the colony's colonists there, caravans forming there; for a settlement its
+faction, its people's visit id, how many are left and whether they are hostile (W6).
 
 ## Saves
 
@@ -78,7 +81,7 @@ stay half a day, form a caravan there and come home; the map is kept. `--visit-p
 
 ## Not yet (in BACKLOG.md)
 
-The settlement on its map (buildings, people, traders), quest sites, ambushes and caravan stops as
+Quest sites, ambushes and caravan stops as
 map kinds, abandoning a map, the narrator and raids on other maps, a death away telling the colony
 (mood), orders on another map other than forming a caravan (needs a command that names the map),
 Unreal drawing another map and switching to it, a night skip that counts colonists away.

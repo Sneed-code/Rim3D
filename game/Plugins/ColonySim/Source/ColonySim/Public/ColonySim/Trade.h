@@ -40,11 +40,13 @@ enum class VisitKind : uint8_t {
     Visitors,  // a group of the faction's villagers
     Caravan,   // a trader and guards on foot
     Orbital,   // a trade ship: no pawns, a stock for a few hours
+    Settlement,  // the people of a faction's settlement, on its own map (docs/design/settlements.md): they live there
 };
 
 enum class VisitPhase : uint8_t {
     Staying,  // here: the colony may trade with a trader
     Leaving,  // walking off the map
+    Defending,  // a settlement whose faction is hostile: its people fight for it and nobody trades
 };
 
 COLONY_API const char* visitKindName(VisitKind kind);
@@ -86,6 +88,10 @@ struct Visit {
     Entity trader = kNoEntity;     // the pawn to trade with; none for a ship, or once it is dead
     std::vector<Entity> members;   // in id order; the dead and those that left are dropped
     int started = 0;
+    // A settlement's (saved from trade section 2): when its trader's stock and silver are rolled again, and how far from the
+    // spot its people walk (half the base).
+    int64_t restockAt = 0;
+    int range = 0;
 };
 
 // What one faction thinks of the colony: goodwill from -100 to 100. Only factions whose goodwill has changed are listed;
@@ -130,6 +136,8 @@ struct COLONY_API TradeRules {
     int edgeDepth = 2;                   // cells in from the map edge a visit walks in at
     int leaveTimeoutSeconds = 21600;     // pawns still on the map this long after leaving are gone
     int dropRadius = 6;                  // goods are put down within this many cells of the spot
+    float settlementDiscount = 0.02f;    // trading at a settlement adds this to the price improvement (RimWorld wiki)
+    float settlementRestockDays = 30.0f; // a settlement's trader rolls its stock again this often (recalled from RimWorld)
     // FactionRules.
     float hostileAtOrBelow = -75.0f;
     float alliedAtOrAbove = 75.0f;
@@ -183,6 +191,14 @@ public:
                     std::string& error);
     const Visit* find(uint32_t id) const;
     const TradeState& state() const { return state_; }
+    // The people of a faction's settlement (docs/design/settlements.md), made with its map: `residents` pawns around `spot`, who
+    // walk within `range` cells of it for good. A faction at peace with the colony has a trader of one of its `traders.base`
+    // kinds standing at the spot (when it trades), guards and villagers; a hostile one has fighters of its `pawnKinds`
+    // who defend the base. `id` is the new visit's.
+    bool startSettlement(const std::string& faction, CellPos spot, int range, int residents, uint32_t& id, std::string& error);
+    // Another map's trade system asks the colony's for goodwill: the colony's standings are the only ones, so gifts, a
+    // killed visitor and hostility on that map are the colony's. Not saved: the colony sets it when the map is made or loaded.
+    void setGoodwillOwner(TradeSystem* owner) { owner_ = owner; }
 
     // ---- Trade ----
     // How many silver the colony has: the silver lying on the map.
@@ -231,9 +247,23 @@ private:
     float startGoodwill(const std::string& faction) const;
     bool readKind(const std::string& kindName, KindInfo& out, std::string& error) const;
     bool pickEntry(const CellPos& target, int edge, CellPos& entry) const;
-    bool spawnPawn(Visit& visit, const KindInfo& kind, VisitorRole role, CellPos cell, uint64_t base);
+    // Adds `count` pawn kinds from the faction's `list` (names, or {kind, weight}) to `out`, by weight.
+    bool pickKinds(const Def& faction, const char* list, VisitorRole role, int count, std::vector<std::pair<std::string, VisitorRole>>& out,
+                   std::string& error) const;
+    // Open cells a metre apart (every other cell) reachable from `from`, nearest first.
+    std::vector<CellPos> cellsAround(CellPos from, size_t count) const;
+    // Makes the pawns of `bring` in `cells` and joins them to the visit; `defending` makes hostile fighters, not visitors.
+    void spawnGroup(Visit& visit, const std::vector<std::pair<std::string, VisitorRole>>& bring, const std::vector<KindInfo>& infos,
+                    const std::vector<CellPos>& cells, bool defending);
+    bool spawnPawn(Visit& visit, const KindInfo& kind, VisitorRole role, CellPos cell, uint64_t base, bool defending = false);
+    // A trader's silver and stock, rolled from its kind (a settlement's again every `settlementRestockDays`).
+    void rollStock(Visit& visit);
     void leave(Visit& visit);
     void wander(Visit& visit);
+    // A settlement's people fight for it from now on: they are no longer visitors, and nobody trades there.
+    void defend(Visit& visit);
+    // A cell for a settlement's pawn within its range of the spot, by chance.
+    bool settlementCell(const Visit& visit, CellPos& out) const;
     CellPos edgeGoal(Entity pawn) const;
     bool nearestFree(float x, float y, CellPos from, int radius, CellPos& out) const;
     void dropGoods(const Visit& visit, const std::string& thing, int count);
@@ -259,6 +289,7 @@ private:
     float disadvantage_ = 0.0f;
     std::vector<Event>* events_ = nullptr;
     std::function<void(Entity, uint64_t, bool)> looks_;
+    TradeSystem* owner_ = nullptr;
 };
 
 }  // namespace colony

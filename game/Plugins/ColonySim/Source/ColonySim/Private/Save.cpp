@@ -1261,6 +1261,9 @@ void saveTradeCommand(Ar& ar, Type& c) {
         ar.value("negotiator", deal->negotiator);
         ar.list("buy", deal->buy, [&](TradeLine& l) { saveTradeLine(ar, l); });
         ar.list("sell", deal->sell, [&](TradeLine& l) { saveTradeLine(ar, l); });
+        if (ar.sectionVersion() >= 4) {  // W6: trading on another map
+            ar.value("map", deal->map);
+        }
     } else if constexpr (std::is_same_v<Type, AdjustGoodwillCommand>) {
         auto* goodwill = &c;
         ar.text("faction", goodwill->faction);
@@ -1270,6 +1273,9 @@ void saveTradeCommand(Ar& ar, Type& c) {
         auto* gift = &c;
         ar.value("visit", gift->visit);
         ar.list("items", gift->items, [&](TradeLine& l) { saveTradeLine(ar, l); });
+        if (ar.sectionVersion() >= 4) {
+            ar.value("map", gift->map);
+        }
     }
 }
 
@@ -2918,10 +2924,13 @@ void saveTrade(Ar& ar, TradeState& t) {
     });
     ar.list("visits", t.visits, [&](Visit& v) {
         ar.value("id", v.id);
+        const bool settlements = ar.sectionVersion() >= 2;  // W6: a settlement's people on its map
         ar.value("kind", v.kind);
-        ar.require(static_cast<int>(v.kind) <= static_cast<int>(VisitKind::Orbital), "the save file has a bad visit kind");
+        ar.require(static_cast<int>(v.kind) <= static_cast<int>(settlements ? VisitKind::Settlement : VisitKind::Orbital),
+                   "the save file has a bad visit kind");
         ar.value("phase", v.phase);
-        ar.require(static_cast<int>(v.phase) <= static_cast<int>(VisitPhase::Leaving), "the save file has a bad visit phase");
+        ar.require(static_cast<int>(v.phase) <= static_cast<int>(settlements ? VisitPhase::Defending : VisitPhase::Leaving),
+                   "the save file has a bad visit phase");
         ar.text("faction", v.faction);
         ar.text("traderKind", v.traderKind);
         ar.value("side", v.side);
@@ -2935,6 +2944,10 @@ void saveTrade(Ar& ar, TradeState& t) {
         ar.value("trader", v.trader);
         ar.list("stock", v.stock, [&](TradeLine& l) { saveTradeLine(ar, l); });
         ar.list("members", v.members, [&](Entity& m) { ar.value(nullptr, m); });
+        if (settlements) {
+            ar.value("restockAt", v.restockAt);
+            ar.value("range", v.range);
+        }
     });
 }
 
@@ -3060,7 +3073,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("repaths", d.repaths);
         ar.list("setupErrors", d.setupErrors, [&](std::string& s) { ar.text(nullptr, s); });
     });
-    ar.section("commands", 3, [&] { saveCommandsSection(ar, d); });
+    ar.section("commands", 4, [&] { saveCommandsSection(ar, d); });
     ar.section("things", 1, [&] { saveThingsSection(ar, d); });
     std::vector<SaveEntity>& e = d.entities;
     ar.section("movement", 2, [&] {
@@ -3461,7 +3474,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("mentalBreaks", 1, [&] {
         saveParts(ar, "mentalBreaker", e, &SaveEntity::mentalBreaker, [&](MentalBreaker& b) { saveMentalBreakerPart(ar, b); });
     });
-    ar.section("trade", 1, [&] {
+    ar.section("trade", 2, [&] {
         saveTrade(ar, d.trade);
         saveParts(ar, "visitor", e, &SaveEntity::visitor, [&](Visitor& v) {
             ar.value("visit", v.visit);
@@ -5174,6 +5187,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             error = "the save's map of world tile " + std::to_string(m.tile) + " doesn't load: " + loaded.error;
             return false;
         }
+        loaded.sim->trade_->setGoodwillOwner(sim.trade_.get());
         sim.otherMaps_.push_back(OtherMap{m.tile, m.madeAt, std::move(loaded.sim)});
     }
     sim.apparel_->restoreOutfits(std::move(d.outfits), d.nextOutfitId);

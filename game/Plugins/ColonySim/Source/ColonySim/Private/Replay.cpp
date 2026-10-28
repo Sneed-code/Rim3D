@@ -426,6 +426,9 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 };
                 j["buy"] = lines(c.buy);
                 j["sell"] = lines(c.sell);
+                if (c.map >= 0) {
+                    j["map"] = c.map;
+                }
             } else if constexpr (std::is_same_v<Type, AdjustGoodwillCommand>) {
                 j["faction"] = c.faction;
                 j["delta"] = c.delta;
@@ -439,6 +442,9 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                     array.push_back(std::move(line));
                 }
                 j["items"] = std::move(array);
+                if (c.map >= 0) {
+                    j["map"] = c.map;
+                }
             } else if constexpr (std::is_same_v<Type, ShipCommand>) {
                 j["action"] = c.action;
                 j["thing"] = entt::to_integral(c.thing);
@@ -1624,7 +1630,8 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
     } else if (type == "Trade") {
         TradeCommand c;
         uint32_t negotiator = entt::to_integral(kNoEntity);
-        if (!r.integer(j, "visit", c.visit, where) || !r.integer(j, "negotiator", negotiator, where)) {
+        if (!r.integer(j, "visit", c.visit, where) || !r.integer(j, "negotiator", negotiator, where) ||
+            (j.contains("map") && !r.integer(j, "map", c.map, where))) {
             return false;
         }
         c.negotiator = static_cast<Entity>(negotiator);
@@ -1651,7 +1658,7 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         out.command = std::move(c);
     } else if (type == "Gift") {
         GiftCommand c;
-        if (!r.integer(j, "visit", c.visit, where)) {
+        if (!r.integer(j, "visit", c.visit, where) || (j.contains("map") && !r.integer(j, "map", c.map, where))) {
             return false;
         }
         const auto list = j.find("items");

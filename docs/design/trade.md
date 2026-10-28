@@ -10,6 +10,7 @@ Other factions' people come to the colony in **visits**. A visit is one of three
 | `Visitors` | 2 to 5 villagers of the faction (`visitorKinds`) | 6 to 14 hours (ours) | none |
 | `Caravan` | one trader (`traderKinds`) and 2 to 4 guards (`traderGuardKinds`) on foot | 12 to 20 hours (ours) | with the trader pawn |
 | `Orbital` | a trade ship: no pawns, only a stock | 16 hours (`orbitalStayHours`, RimWorld) | while it is here |
+| `Settlement` | a settlement's people on its own map (W6, [settlements.md](settlements.md)) | for good | with its trader, 2% better |
 
 `TradeSystem::startVisit(faction, kind, traderKind, edge, id, error)` starts one. **T1's incidents call it** (the incident defs
 `TraderCaravanArrival`, `VisitorGroup` and `OrbitalTraderArrival` already name the way); the narrator's workers for them (in `Sim.cpp`) pick a faction at random that can and is not hostile and call it, so the storyteller now sends caravans, visitors and orbital traders by itself.
