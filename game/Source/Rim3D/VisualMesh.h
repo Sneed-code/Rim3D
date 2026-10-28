@@ -73,6 +73,9 @@ namespace VisualMesh
 	 * A mesh of the parts, flat shaded, standing on z = 0 with the footprint's middle at x = y = 0; null if
 	 * the set is empty. `StuffColor` colours the parts made of stuff (a grey if it is null). `bBakeLight` darkens
 	 * downward faces and the lower parts a little, for the plants, which the shared material would otherwise draw flat.
+	 * With a `StuffMaterial` (the stuff's surface, L4) the parts made of stuff go in a second material slot that uses it, their
+	 * vertex colour only the part's own shade.
 	 */
-	UStaticMesh* MakeMesh(UObject* Outer, UMaterialInterface* Material, const TArray<FPart>& Parts, EPartSet Set, const FLinearColor* StuffColor, bool bBakeLight);
+	UStaticMesh* MakeMesh(UObject* Outer, UMaterialInterface* Material, const TArray<FPart>& Parts, EPartSet Set, const FLinearColor* StuffColor, bool bBakeLight,
+		UMaterialInterface* StuffMaterial = nullptr);
 }

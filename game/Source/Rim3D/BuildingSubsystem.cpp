@@ -110,6 +110,57 @@ namespace
 		return View.rotation == colony::Rot4::East || View.rotation == colony::Rot4::West;
 	}
 
+	// A linked wall's base course and cap (L4): this much wider than the wall on each side, this high, and this shade of it.
+	constexpr float BldBaseLedgeCm = 4.0f;
+	constexpr float BldBaseHeightCm = 35.0f;
+	constexpr float BldCapLedgeCm = 2.5f;
+	constexpr float BldCapHeightCm = 8.0f;
+	const FLinearColor BldBaseShade(0.72f, 0.72f, 0.72f);
+	const FLinearColor BldCapShade(0.85f, 0.85f, 0.85f);
+	const TCHAR* const BldSurfaceFolder = TEXT("/Game/Rim3D/Generated/Surfaces");
+
+	uint64 BldCellKey(int32 X, int32 Y, int32 Level)
+	{
+		return (static_cast<uint64>(static_cast<uint32>(Level)) << 48) | (static_cast<uint64>(static_cast<uint16>(Y)) << 24) | static_cast<uint64>(static_cast<uint16>(X));
+	}
+
+	/**
+	 * A linked building (a wall) as boxes in a 1 x 1 cell facing north: a post in the middle and an arm out to each side in
+	 * `Link` (1 north, 2 east, 4 south, 8 west), with a wider base course and a cap, all made of the stuff.
+	 */
+	void BldLinkParts(int32 Link, float Thickness, float Height, TArray<VisualMesh::FPart>& Out)
+	{
+		const float Body = FMath::Max(Height - BldCapHeightCm, BldBaseHeightCm + 1.0f);
+		const auto Add = [&Out](float SizeX, float SizeY, float SizeZ, float AtX, float AtY, float AtZ, const FLinearColor& Shade)
+		{
+			VisualMesh::FPart Part;
+			Part.Shape = VisualMesh::EShape::Box;
+			Part.Size = FVector3f(SizeX, SizeY, SizeZ);
+			Part.At = FVector3f(AtX, AtY, AtZ);
+			Part.Color = Shade;
+			Part.bStuff = true;
+			Out.Add(Part);
+		};
+		// Each layer (base course, wall, cap) is the post and its arms at one width.
+		const auto Layer = [&](float Width, float SizeZ, float AtZ, const FLinearColor& Shade)
+		{
+			Add(Width, Width, SizeZ, 0.0f, 0.0f, AtZ, Shade);
+			const float Length = 50.0f - Width * 0.5f;
+			if (Length <= 0.0f)
+			{
+				return;
+			}
+			const float Middle = Width * 0.5f + Length * 0.5f;
+			if (Link & 1) { Add(Width, Length, SizeZ, 0.0f, Middle, AtZ, Shade); }
+			if (Link & 2) { Add(Length, Width, SizeZ, Middle, 0.0f, AtZ, Shade); }
+			if (Link & 4) { Add(Width, Length, SizeZ, 0.0f, -Middle, AtZ, Shade); }
+			if (Link & 8) { Add(Length, Width, SizeZ, -Middle, 0.0f, AtZ, Shade); }
+		};
+		Layer(Thickness + 2.0f * BldBaseLedgeCm, BldBaseHeightCm, 0.0f, BldBaseShade);
+		Layer(Thickness, Body, 0.0f, FLinearColor::White);
+		Layer(Thickness + 2.0f * BldCapLedgeCm, Height - Body, Body, BldCapShade);
+	}
+
 	struct FBldBatch
 	{
 		UStaticMesh* Mesh = nullptr;
@@ -291,6 +342,11 @@ void UBuildingSubsystem::ReadDefs(const colony::Sim& Sim)
 		Look.bRead = true;
 		Look.bItem = Category == "Item";
 		Look.bDoor = Def.text("thingClass") == "Building_Door";
+		if (Def.has("visual.link"))
+		{
+			Look.bLink = true;
+			Look.LinkThicknessCm = FMath::Clamp(static_cast<float>(Def.number("visual.link.thickness", 0.5)) * 100.0f, 10.0f, 100.0f);
+		}
 		if (!Look.bItem)
 		{
 			Look.FootprintCm = FVector2f(static_cast<float>(Def.numberAt("size", 0, 1.0)) * 100.0f, static_cast<float>(Def.numberAt("size", 1, 1.0)) * 100.0f);
@@ -339,14 +395,42 @@ void UBuildingSubsystem::ReadDefs(const colony::Sim& Sim)
 	}
 }
 
-int32 UBuildingSubsystem::GetLook(colony::DefId Def, colony::DefId Stuff)
+UMaterialInterface* UBuildingSubsystem::SurfaceOf(colony::DefId Stuff)
+{
+	if (!Stuff.valid() || !BuiltSim)
+	{
+		return nullptr;
+	}
+	if (const TObjectPtr<UMaterialInterface>* Found = Surfaces.Find(static_cast<int32>(Stuff.value)))
+	{
+		return *Found;
+	}
+	UMaterialInterface* Material = nullptr;
+	const std::string Surface = BuiltSim->defs().get(Stuff).text("visual.surface");
+	if (!Surface.empty())
+	{
+		const FString Name = FString::Printf(TEXT("MI_Surface_%s"), UTF8_TO_TCHAR(Surface.c_str()));
+		Material = LoadObject<UMaterialInterface>(nullptr, *FString::Printf(TEXT("%s/%s.%s"), BldSurfaceFolder, *Name, *Name));
+		if (!Material)
+		{
+			// Made by the SurfaceMaterials commandlet (assets/manifest.json); without it the stuff's plain colour is drawn.
+			UE_LOG(LogSimBuildings, Warning, TEXT("%s/%s not found: %s is drawn in its plain colour. Run tools/stuff_textures.py and the SurfaceMaterials commandlet."),
+				BldSurfaceFolder, *Name, UTF8_TO_TCHAR(BuiltSim->defs().get(Stuff).defName().c_str()));
+		}
+	}
+	Surfaces.Add(static_cast<int32>(Stuff.value), Material);
+	return Material;
+}
+
+int32 UBuildingSubsystem::GetLook(colony::DefId Def, colony::DefId Stuff, int32 Link)
 {
 	const FDefLook* DefLook = LookOfDef(Def);
 	if (!DefLook || !BuiltSim)
 	{
 		return -1;
 	}
-	const uint64 Key = (static_cast<uint64>(Def.value) << 32) | (Stuff.valid() ? static_cast<uint64>(Stuff.value) + 1 : 0);
+	Link = DefLook->bLink ? Link : -1;
+	const uint64 Key = (static_cast<uint64>(Def.value) << 32) | (static_cast<uint64>(Link + 1) << 24) | (Stuff.valid() ? static_cast<uint64>(Stuff.value) + 1 : 0);
 	if (const int32* Found = LookIndex.Find(Key))
 	{
 		return *Found;
@@ -356,11 +440,18 @@ int32 UBuildingSubsystem::GetLook(colony::DefId Def, colony::DefId Stuff)
 	{
 		StuffColor = VisualMesh::ReadColor(BuiltSim->defs().get(Stuff), "visual.color", StuffColor);
 	}
+	UMaterialInterface* Surface = SurfaceOf(Stuff);
+	TArray<VisualMesh::FPart> LinkParts;
+	if (Link >= 0)
+	{
+		BldLinkParts(Link, DefLook->LinkThicknessCm, DefLook->HeightCm, LinkParts);
+	}
+	const TArray<VisualMesh::FPart>& Parts = Link >= 0 ? LinkParts : DefLook->Parts;
 	FLook Look;
 	Look.DefValue = static_cast<int32>(Def.value);
 	const auto Make = [&](VisualMesh::EPartSet Set) -> UStaticMesh*
 	{
-		UStaticMesh* Mesh = VisualMesh::MakeMesh(this, SolidMaterial, DefLook->Parts, Set, &StuffColor, false);
+		UStaticMesh* Mesh = VisualMesh::MakeMesh(this, SolidMaterial, Parts, Set, &StuffColor, false, Surface);
 		if (Mesh)
 		{
 			KeepMeshes.Add(Mesh);
@@ -404,7 +495,10 @@ UInstancedStaticMeshComponent* UBuildingSubsystem::GetComponent(FChunk& Chunk, i
 	Component->bAffectDistanceFieldLighting = false;
 	if (bGhost && GhostMaterial)
 	{
-		Component->SetMaterial(0, GhostMaterial);
+		for (int32 Slot = 0; Slot < FMath::Max(1, Mesh ? Mesh->GetStaticMaterials().Num() : 1); ++Slot)
+		{
+			Component->SetMaterial(Slot, GhostMaterial);
+		}
 	}
 	if (bItem)
 	{
@@ -481,6 +575,36 @@ void UBuildingSubsystem::Refresh()
 		List.Reset();
 	}
 	ScanSignatures.Init(0, Chunks.Num());
+
+	// Linked buildings (walls) join the walls, doors and rock beside them: first where those stand, then each one's neighbours.
+	const int32 ThingCount = static_cast<int32>(Snapshot.things.size());
+	ScanLinks.Init(-1, ThingCount);
+	TSet<uint64> LinkCells;
+	for (const colony::ThingView& View : Snapshot.things)
+	{
+		const FDefLook* Look = View.category == colony::ThingCategory::Building ? LookOfDef(View.def) : nullptr;
+		if (Look && (Look->bLink || Look->bDoor))
+		{
+			LinkCells.Add(BldCellKey(FMath::FloorToInt32(View.x), FMath::FloorToInt32(View.y), View.level));
+		}
+	}
+	const auto Joins = [&Map, &LinkCells](int32 X, int32 Y, int32 Level)
+	{
+		const colony::CellPos Cell{X, Y, Level};
+		return Map.inBounds(Cell) && (LinkCells.Contains(BldCellKey(X, Y, Level)) || Map.terrain(Cell) == colony::Terrain::Rock);
+	};
+	for (int32 I = 0; I < ThingCount; ++I)
+	{
+		const colony::ThingView& View = Snapshot.things[static_cast<size_t>(I)];
+		const FDefLook* Look = View.category == colony::ThingCategory::Building ? LookOfDef(View.def) : nullptr;
+		if (Look && Look->bLink)
+		{
+			const int32 X = FMath::FloorToInt32(View.x);
+			const int32 Y = FMath::FloorToInt32(View.y);
+			ScanLinks[I] = static_cast<int8>((Joins(X, Y + 1, View.level) ? 1 : 0) | (Joins(X + 1, Y, View.level) ? 2 : 0) |
+				(Joins(X, Y - 1, View.level) ? 4 : 0) | (Joins(X - 1, Y, View.level) ? 8 : 0));
+		}
+	}
 	int32 Built = 0, Frames = 0, Blueprints = 0, Items = 0, Doors = 0;
 	for (int32 I = 0; I < static_cast<int32>(Snapshot.things.size()); ++I)
 	{
@@ -524,6 +648,10 @@ void UBuildingSubsystem::Refresh()
 			{
 				++Doors;
 				H = BldCombine(H, BldDoorAlongY(Map, View) ? 1ULL : 2ULL);
+			}
+			if (ScanLinks[I] >= 0)
+			{
+				H = BldCombine(H, 0x11C0ULL + static_cast<uint64>(ScanLinks[I]));
 			}
 		}
 		const int32 Chunk = ChunkIndex(View.level, CX, CY);
@@ -654,9 +782,11 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 			}
 		}
 		const bool bDoorBuilt = DefLook->bDoor && View.stage == colony::ConstructionStage::Built;
-		const float Yaw = bDoorBuilt ? (BldDoorAlongY(Map, View) ? 90.0f : 0.0f) : BldYawOf(View.rotation);
+		const int32 Link = ScanLinks.IsValidIndex(ThingIndex) ? ScanLinks[ThingIndex] : -1;
+		// A linked building's arms point at its neighbours on the map, so it is never turned.
+		const float Yaw = bDoorBuilt ? (BldDoorAlongY(Map, View) ? 90.0f : 0.0f) : (Link >= 0 ? 0.0f : BldYawOf(View.rotation));
 		const FVector Location(View.x * 100.0f, View.y * 100.0f, Base * 100.0f);
-		const int32 LookId = GetLook(View.def, View.stuff);
+		const int32 LookId = GetLook(View.def, View.stuff, Link);
 		if (LookId < 0)
 		{
 			continue;

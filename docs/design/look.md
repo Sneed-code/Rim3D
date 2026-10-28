@@ -76,7 +76,7 @@ is folded to a small "F1  keys" box; F1 opens and closes it (`UI.KeyHelp`).
 ## The look bench (smoke test `look`)
 
 Every look task ends with it. Seed 42, a 256 m Crashlanded map; a 7 x 6 room with a bed, a table, an armchair and two lit torches
-is built on open ground near the colony's stockpile, and the clock run to 10:00. The game stays paused for every shot so the
+is built of wood on open ground near the colony's stockpile, with a sample wall of each other building stuff west of it, and the clock run to 10:00. The game stays paused for every shot so the
 pawns stand in the same places each run; MetaHumans on. The shots (Full HD, no UI except `hud`):
 
 1. `overseer_high`: the overseer zoomed out over the colony, clear midsummer noon.
@@ -86,7 +86,8 @@ pawns stand in the same places each run; MetaHumans on. The shots (Full HD, no U
 5. `dusk`: the low sun in the west over the field, 17:48.
 6. `rainy_night`: an hour of rain, the overseer over the room at 23:00.
 7. `hud`: the overseer view at noon with the HUD as a new player sees it.
-8. `snowy_day`: a new game on the same seed snows hard through the night; the overseer at 11:00 on a midwinter morning.
+8. `walls` (L4): the sample wall of every block, steel and plasteel west of the room, from the west at noon.
+9. `snowy_day`: a new game on the same seed snows hard through the night; the overseer at 11:00 on a midwinter morning.
 
 `tools/smoke.ps1 -Test look -LookLabel <word>` runs it, then `tools/look_sheet.ps1` copies the shots into
 `game/Saved/Look/<date>_<time>_<word>/` and makes `sheet.png` there: each shot with the last run's on the left. Compare any two

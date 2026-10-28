@@ -46,7 +46,7 @@ if ($Against) {
 $againstName = if ($againstDir) { Split-Path -Leaf $againstDir } else { "(no earlier run)" }
 
 # The shots in the bench's own order, then any others by name.
-$order = @("overseer_high", "overseer_low", "colonist_closeup", "room_lit", "dusk", "rainy_night", "hud", "snowy_day")
+$order = @("overseer_high", "overseer_low", "colonist_closeup", "room_lit", "dusk", "rainy_night", "hud", "walls", "snowy_day")
 $names = @(Get-ChildItem $runDir -Filter *.png | Where-Object { $_.Name -ne "sheet.png" } | ForEach-Object { $_.BaseName })
 $rows = @($order | Where-Object { $names -contains $_ }) + @($names | Where-Object { $order -notcontains $_ } | Sort-Object)
 if ($rows.Count -eq 0) { Write-Host "No shots in $runDir"; exit 1 }

@@ -1,0 +1,16 @@
+{
+  "source": "ambientCG (https://ambientcg.com), CC0, 2k JPG colour, DirectX normal and roughness maps",
+  "swap": "To use other textures set a surface's \"source\" to \"local\" and put <surface>_color, <surface>_normal (DirectX) and <surface>_rough (.jpg or .png) in game/Content/ThirdParty/StuffTextures/, then run the SurfaceMaterials commandlet again. A stuff def names its surface in visual.surface (docs/design/building-draw.md).",
+  "fields": "source: ambientcg or local. id: the texture's name on that site. tileMetres: metres one repeat covers. tint: multiplies the colour (sRGB, as picked in a paint program). saturation: 1 as it is, 0 grey. roughness: multiplies the roughness map. metallic: 0 stone or wood, 1 bare metal.",
+  "surfaces": {
+    "wood":      {"source": "ambientcg", "id": "WoodSiding008", "tileMetres": 2.0, "tint": [1.0, 1.0, 1.0],    "saturation": 1.0,  "roughness": 1.0, "metallic": 0.0},
+    "granite":   {"source": "ambientcg", "id": "Bricks089",     "tileMetres": 2.0, "tint": [0.95, 0.92, 0.92], "saturation": 0.25, "roughness": 1.0, "metallic": 0.0},
+    "limestone": {"source": "ambientcg", "id": "Bricks083",     "tileMetres": 2.0, "tint": [1.05, 1.03, 0.98], "saturation": 0.55, "roughness": 1.0, "metallic": 0.0},
+    "sandstone": {"source": "ambientcg", "id": "Bricks100",     "tileMetres": 2.5, "tint": [1.0, 0.92, 0.82],  "saturation": 0.7,  "roughness": 1.0, "metallic": 0.0},
+    "slate":     {"source": "ambientcg", "id": "Bricks066",     "tileMetres": 2.5, "tint": [0.42, 0.45, 0.5],  "saturation": 1.0,  "roughness": 0.9, "metallic": 0.0},
+    "marble":    {"source": "ambientcg", "id": "Marble012",     "tileMetres": 2.0, "tint": [1.0, 1.0, 1.0],    "saturation": 1.0,  "roughness": 1.0, "metallic": 0.0},
+    "steel":     {"source": "ambientcg", "id": "MetalPlates013", "tileMetres": 2.0, "tint": [0.85, 0.88, 0.92], "saturation": 0.6, "roughness": 1.2, "metallic": 0.55},
+    "plasteel":  {"source": "ambientcg", "id": "MetalPlates004", "tileMetres": 2.0, "tint": [1.0, 1.0, 1.0], "saturation": 1.0, "roughness": 1.3, "metallic": 0.25},
+    "uranium":   {"source": "ambientcg", "id": "MetalPlates004", "tileMetres": 2.0, "tint": [0.45, 0.55, 0.42], "saturation": 1.0, "roughness": 1.5, "metallic": 0.5}
+  }
+}
