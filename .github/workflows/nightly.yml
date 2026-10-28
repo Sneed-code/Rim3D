@@ -65,3 +65,40 @@ jobs:
           path: |
             perf.json
             perf-table.txt
+
+  colony-year:
+    # The colony-year scenario (task C25, docs/design/colony-scenario.md): the Crashlanded colony for 60 game days
+    # with farming, clothes, fuel, temperature, animals and the narrator, on three seeds. Reports who is alive,
+    # who starved and who got stuck. It fails while the colony does not last the year (winter food, BACKLOG.md),
+    # so it is allowed to fail: read the summary.
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          cmake -S game/Plugins/ColonySim -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel 4 --target simrun
+      - name: Play the seeds
+        run: |
+          for seed in 1 7 42; do
+            ./build/simrun --scenario year --seed "$seed" --size 512 > "year-$seed.json" 2> "year-$seed.err" &
+          done
+          status=0
+          for job in $(jobs -p); do wait "$job" || status=1; done
+          exit $status
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '## Colony year'
+            for f in year-*.json; do echo "### $f"; echo '```'; tail -c 3000 "$f"; tail -n 20 "${f%.json}.err"; echo '```'; done
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: colony-year
+          path: |
+            year-*.json
+            year-*.err
