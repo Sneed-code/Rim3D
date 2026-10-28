@@ -249,7 +249,7 @@ TEST_CASE("Nature events: the spells and the rest are saved, loaded and replay t
 }
 
 TEST_CASE("Nature events: Jinx sends the good news by himself over a year") {
-    auto sim = natureTestSim(5, 100);
+    auto sim = natureTestSim(21, 100);
     sim->submit(SetNarratorCommand{"Jinx", "Peaceful"});
     const std::vector<std::string> good = {"WandererJoin", "ResourcePodCrash", "RefugeePodCrash", "HerdMigration", "AnimalSelfTame",
                                            "ColdSnap", "HeatWave", "Eclipse", "Aurora", "BerryBloom", "HealrootBloom"};
