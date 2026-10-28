@@ -52,6 +52,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Prisoners (section `prisoners`) | each prisoner's mode, resistance, capture time and next talk; each prison-marked bed ([prisoners.md](prisoners.md)) |
 | Trade (section `trade`) | the visits (kind, phase, faction, trader kind, times, spot, trader silver, stock by **`defName`**, members and trader pawn), the factions whose goodwill changed, the visit counter and the last drift day; per pawn its `Visitor` visit and role ([trade.md](trade.md)) |
 | World (section `world`) | `SimSettings::world` (on, seed, width, height, start tile) and the world's hash; the world itself is made again from them and checked against the hash ([world-map.md](world-map.md)) |
+| Caravans (section `caravans`) | the next id; each caravan's state, members (walk state, tries, path ticket), items, tile, came-from, destination, path, progress, cost, exit cell, formed time ([caravans.md](caravans.md)) |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
@@ -335,6 +336,7 @@ Every section is version 1 at format 20. A task that changes a section adds a li
 - The loader accepts two jobs on one cell (the later one keeps the reservation) instead of refusing the file (audit).
 - `health` 2 (E2): each pawn's environment hediffs (hypothermia, heatstroke...), a list of def name and severity before `dead`. Version 1 files load with none.
 - `world` 1 (W2): new section, see the table. Saves without it have no world.
+- `caravans` 1 (W4): new section, see the table. Command `Caravan` by name.
 - `prisoners` 1 (C22): new section, see the table. Commands `SetPrisonerMode` and `SetPrisonBed` by name; the job check now accepts `CapturePrisoner`, `FeedPrisoner` and `WardenInteract`.
 - `trade` 1 (C23): new section, see the table. Commands `StartVisit`, `Trade`, `Gift` and `AdjustGoodwill` by name.
 - `raids` 2 (adaptation): AdaptDays, the next growth time and the colonists watched, after the alarm values; version 1 loads as 0 and an empty list.
