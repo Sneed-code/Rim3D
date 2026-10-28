@@ -657,6 +657,25 @@ struct CaravanCommand {
     int map = -1;
 };
 
+// Transport pods (docs/design/transport-pods.md), saved by name as "Pod". Actions:
+// - "Load": `pods` (finished transport pods beside launchers) take `items` (stacks on the map) and `pawns` (colonists);
+//   haulers carry the stacks in, then the colonists get in. The new group's id is the next one (PodGroupView::id).
+// - "Cancel": `group`'s loading is given up; what is in comes out beside the pods.
+// - "Launch": `group` flies to `tile` (-1: this map) and does `arrival` there: "Land" at cell (x, y) (x -1: the
+//   middle) on the colony's map or another map a caravan has been to, "Caravan" (the passengers form a caravan on
+//   the tile), or "Gift" (no passengers: the goods go to the tile's settlement for goodwill).
+struct PodCommand {
+    std::string action;
+    int group = 0;
+    std::vector<Entity> pods;
+    std::vector<Entity> pawns;
+    std::vector<Entity> items;
+    int tile = -1;
+    std::string arrival = "Land";
+    int x = -1;
+    int y = -1;
+};
+
 // Dev command: the weather becomes this Weathers def now (by defName, e.g. "Rain") and lasts `hours`
 // game hours (0: its usual length), then the next is chosen as usual (docs/design/weather.md).
 // Fails if no Weathers def has the name.
@@ -1016,7 +1035,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              LearnPowerCommand, CastPowerCommand, SetThermostatCommand, RepairGearCommand,
                              FitUpgradeCommand, CreateAreaCommand, PaintAreaCommand, DeleteAreaCommand,
                              AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand, CaravanCommand, RerollColonistCommand,
-                             ArtilleryCommand, ArrestCommand>;
+                             ArtilleryCommand, ArrestCommand, PodCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

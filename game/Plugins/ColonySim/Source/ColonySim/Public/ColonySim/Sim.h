@@ -78,6 +78,9 @@ class TradeSystem;
 class QuestSystem;
 class ShipSystem;
 class CaravanSystem;
+class TransportPodSystem;
+struct PodCommand;
+struct PodFlight;
 class Rooms;
 class TemperatureSystem;
 class SpoilageSystem;
@@ -420,6 +423,9 @@ public:
     // Caravans on the world map (docs/design/caravans.md); they need a world.
     CaravanSystem& caravans() { return *caravans_; }
     const CaravanSystem& caravans() const { return *caravans_; }
+    // Transport pods: loading, launching and flights (docs/design/transport-pods.md).
+    TransportPodSystem& pods() { return *pods_; }
+    const TransportPodSystem& pods() const { return *pods_; }
     PrisonerSystem& prisoners() { return *prisoners_; }
     const PrisonerSystem& prisoners() const { return *prisoners_; }
     // Quests: offers, answers, rewards (docs/design/quests.md). The narrator offers them with `quests().offerRandom`.
@@ -510,6 +516,11 @@ private:
     void takeCaravanFrom(OtherMap& map, int caravan);
     void hashOtherMaps(StateHasher& h) const;
     void writeOtherMaps(std::vector<OtherMapView>& out) const;
+    // Transport pods (PodArrivals.cpp): PodCommand, and landing the flights that came down this step.
+    void applyPodCommand(const PodCommand& command, uint64_t id);
+    bool launchPods(const PodCommand& command, std::string& error);
+    void landPods();
+    void landFlight(PodFlight& flight);
     std::string placeName(int tile) const;
     void pruneDesignations();
     void startScenario();
@@ -591,6 +602,7 @@ private:
     std::unique_ptr<QuestSystem> quests_;        // after the raids
     std::unique_ptr<ShipSystem> ship_;           // after the raids
     std::unique_ptr<CaravanSystem> caravans_;    // after the job system
+    std::unique_ptr<TransportPodSystem> pods_;   // after the job system
     std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system
     std::unique_ptr<Breeding> breeding_;    // after husbandry_
     std::unique_ptr<Fire> fire_;            // after the weather, temperature, rooms, floors, filth, plants and health

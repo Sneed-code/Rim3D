@@ -25,6 +25,7 @@
 #include "ColonySim/Sim.h"
 #include "ColonySim/Talents.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/TransportPods.h"
 
 #include <algorithm>
 #include <cmath>
@@ -94,7 +95,8 @@ enum class JobStepKind : uint8_t {
     OperateFinish,
     PartyWork,      // stand at the party spot until it ends, gaining joy (PartyJobs.cpp)
     WarmWait,       // stay put in a warm room until the cold has let go (NeedJobs.cpp)
-    ManWork         // stand beside the gun while it is manned (ArtilleryJobs.cpp)
+    ManWork,        // stand beside the gun while it is manned (ArtilleryJobs.cpp)
+    LoadPodWork     // put the carried stack into the pod (PodJobs.cpp)
 };
 
 constexpr JobStepKind kJobsWaitSteps[] = {JobStepKind::Wait};
@@ -149,6 +151,9 @@ static_assert(kManArtilleryPostStep == 1, "the ManArtillery steps moved");
 constexpr JobStepKind kJobsRefuelSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::CarryToCell,
                                             JobStepKind::RefuelWork};
 static_assert(kRefuelPickUpStep == 1, "the Refuel steps moved");
+constexpr JobStepKind kJobsLoadPodSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::CarryToCell,
+                                             JobStepKind::LoadPodWork};
+static_assert(kLoadPodPickUpStep == 1, "the LoadPod steps moved");
 constexpr JobStepKind kJobsGearSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::CarryToCell,
                                           JobStepKind::GearWork};
 static_assert(kGearPickUpStep == 1, "the RepairGear steps moved");
@@ -220,6 +225,7 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::WardenInteract: return {kJobsChatSteps, static_cast<int>(std::size(kJobsChatSteps))};
         case JobType::StandBy: return {kJobsStandBySteps, static_cast<int>(std::size(kJobsStandBySteps))};
         case JobType::Refuel: return {kJobsRefuelSteps, static_cast<int>(std::size(kJobsRefuelSteps))};
+        case JobType::LoadPod: return {kJobsLoadPodSteps, static_cast<int>(std::size(kJobsLoadPodSteps))};
         case JobType::RepairGear: return {kJobsGearSteps, static_cast<int>(std::size(kJobsGearSteps))};
         case JobType::MendWorn: return {kJobsMendWornSteps, static_cast<int>(std::size(kJobsMendWornSteps))};
         case JobType::Hunt: return {kJobsHuntSteps, static_cast<int>(std::size(kJobsHuntSteps))};
@@ -338,6 +344,7 @@ const char* jobTypeName(JobType type) {
         case JobType::Refuel: return "Refuel";
         case JobType::RepairGear: return "RepairGear";
         case JobType::MendWorn: return "MendWorn";
+        case JobType::LoadPod: return "LoadPod";
         case JobType::Hunt: return "Hunt";
         case JobType::HaulCorpse: return "HaulCorpse";
         case JobType::Butcher: return "Butcher";
@@ -549,6 +556,9 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
             out[0] = keyOf(JobTarget{job.thing, CellPos{}});
             out[1] = keyOf(JobTarget{kNoEntity, job.cell});
             return 2;
+        case JobType::LoadPod:
+            out[0] = keyOf(JobTarget{job.thing, CellPos{}});
+            return 1;
         case JobType::Ingest:
             out[0] = keyOf(JobTarget{job.thing, CellPos{}});
             if (job.chair != kNoEntity) {
@@ -954,8 +964,8 @@ void JobSystem::step() {
         if (const MentalBreaker* breaker = reg.try_get<MentalBreaker>(pawn); breaker != nullptr && breaker->active) {
             continue;
         }
-        // It walks off the map with its caravan (W4): the caravan system walks it.
-        if (reg.all_of<CaravanMember>(pawn)) {
+        // It walks off the map with its caravan (W4), or to its transport pod: that system walks it.
+        if (reg.all_of<CaravanMember>(pawn) || reg.all_of<PodPassenger>(pawn)) {
             continue;
         }
         // It fights (drafted, or another faction's: F4): no think, no job, until it is undrafted.
@@ -1232,6 +1242,9 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::Refuel) {
         return failCheckRefuel(pawn, job, why);
     }
+    if (job.type == JobType::LoadPod) {
+        return failCheckLoadPod(pawn, job, why);
+    }
     if (job.type == JobType::RepairGear || job.type == JobType::MendWorn) {
         return failCheckGear(pawn, job, why);
     }
@@ -1369,6 +1382,8 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return billWork(pawn, job, why);
         case JobStepKind::RefuelWork:
             return refuelWork(pawn, job, why);
+        case JobStepKind::LoadPodWork:
+            return loadPodWork(pawn, job, why);
         case JobStepKind::GearWork:
             return gearWork(pawn, job, why);
         case JobStepKind::OperateGoto:
@@ -1967,12 +1982,13 @@ bool JobSystem::afterLoad(std::string& error) {
             }
         }
         if (job.type == JobType::HaulToCell || job.type == JobType::DeliverResources || job.type == JobType::Refuel ||
-            job.type == JobType::RepairGear) {
+            job.type == JobType::RepairGear || job.type == JobType::LoadPod) {
             const Carrying* carrying = reg.try_get<Carrying>(pawn);
             const bool carries = carrying != nullptr && carrying->thing == job.thing;
             const uint8_t pickUpStep = job.type == JobType::HaulToCell        ? kJobsHaulPickUpStep
                                        : job.type == JobType::DeliverResources ? kJobsDeliverPickUpStep
                                                                                : job.type == JobType::Refuel ? kRefuelPickUpStep
+                                                                               : job.type == JobType::LoadPod ? kLoadPodPickUpStep
                                                                                                               : kGearPickUpStep;
             if (job.thing == kNoEntity || (job.step > pickUpStep) != carries) {
                 error = "the save has a carrying job that doesn't match what the pawn carries";
