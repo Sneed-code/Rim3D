@@ -1,0 +1,18 @@
+[
+  {
+    "defName": "RefineChemfuelWood", "parent": "RecipeBase", "label": "make chemfuel from wood",
+    "researchPrerequisite": "BiofuelRefining", "recipeUsers": ["BiofuelRefinery"], "workSkill": "Crafting",
+    "workAmount": 2880.0, "workSkillXp": 0,
+    "ingredients": [{ "items": ["WoodLog"], "count": 70 }], "products": { "Chemfuel": 35 },
+    "unverified": ["workSkillXp"],
+    "note": "Wiki-checked 2026-10-28: 70 wood logs make 35 chemfuel in 2000 ticks."
+  },
+  {
+    "defName": "RefineChemfuelFood", "parent": "RecipeBase", "label": "make chemfuel from raw food",
+    "researchPrerequisite": "BiofuelRefining", "recipeUsers": ["BiofuelRefinery"], "workSkill": "Crafting",
+    "workAmount": 3600.0, "workSkillXp": 0,
+    "ingredients": [{ "categories": ["FoodRaw"], "nutrition": 3.5 }], "products": { "Chemfuel": 35 },
+    "unverified": ["workSkillXp"],
+    "note": "Wiki-checked 2026-10-28: 3.5 nutrition of raw food (hay and meals excluded) makes 35 chemfuel in 2500 ticks."
+  }
+]

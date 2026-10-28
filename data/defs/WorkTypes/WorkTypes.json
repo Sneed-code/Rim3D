@@ -70,7 +70,7 @@
   },
   {
     "defName": "Crafting", "parent": "WorkTypeBase", "label": "craft", "naturalPriority": 400,
-    "relevantSkills": ["Crafting"], "workTags": ["ManualSkilled", "Crafting"], "tasks": ["DoBillsCraftingSpot", "DoBillsStonecut", "DoBillsSmelt", "DoBillsDrugLab"]
+    "relevantSkills": ["Crafting"], "workTags": ["ManualSkilled", "Crafting"], "tasks": ["DoBillsCraftingSpot", "DoBillsStonecut", "DoBillsSmelt", "DoBillsDrugLab", "DoBillsRefine"]
   },
   {
     "defName": "Hauling", "parent": "WorkTypeBase", "label": "haul", "naturalPriority": 300,

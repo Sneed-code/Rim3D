@@ -1,0 +1,18 @@
+[
+  {
+    "defName": "BiofuelRefinery", "workGiver": "DoBillsRefine", "parent": "BuildingBase", "label": "biofuel refinery",
+    "researchPrerequisite": "BiofuelRefining",
+    "size": [3, 2], "passability": "PassThroughOnly", "fillPercent": 0.5, "designationCategory": "Production",
+    "costs": { "Steel": 150, "ComponentIndustrial": 3 },
+    "stats": { "maxHitPoints": 200, "workToBuild": 2880.0, "flammability": 1.0 },
+    "power": { "consumption": 170 },
+    "visual": { "parts": [
+      { "shape": "box", "size": [2.9, 1.9, 0.7], "color": [0.5, 0.52, 0.55] },
+      { "shape": "cylinder", "radius": 0.45, "height": 1.1, "at": [-0.8, 0, 0.7], "color": [0.85, 0.6, 0.2] },
+      { "shape": "cylinder", "radius": 0.45, "height": 1.1, "at": [0.8, 0, 0.7], "color": [0.7, 0.72, 0.75] }
+    ] },
+    "unverified": ["fillPercent", "passability"],
+    "ours": ["visual"],
+    "note": "Wiki-checked 2026-10-28: 150 steel + 3 components, 2000 ticks, 200 HP, 100% flammable, 3x2, 170 W."
+  }
+]
