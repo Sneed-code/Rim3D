@@ -35,6 +35,17 @@ buildings, have fertility above 0 and lie in no growing zone and no stockpile; `
 
 Both give Plants experience.
 
+## Trees in zones (Tree sowing and Cocoa)
+
+A tree def with `plant.sowable` can be a zone's crop (oak, poplar, pine, teak, cecropia, palm, bamboo with the project
+`TreeSowing`; the cocoa tree with `Cocoa`; willows and wild-only trees cannot). A def's `researchPrerequisite` now gates
+`CreateGrowingZone` and `SetGrowingZoneCrop` for any crop (devilstrand too). Rules, after the wiki (2026-10-28): Plants 6
+to sow a tree (cocoa 8), sow work 4000 ticks, no sowing under a roof, and a tree takes no cell next to another tree, wild
+or sown. A fully grown tree in a zone is picked like a crop (felled: wood, or 20 chocolate from the cocoa tree) and the cell
+is sown again. An ordinary tree goes dormant in frost (growth 0 under 0 degrees) and is never killed by it or kept from
+sowing by the frost check; the cocoa tree has `coldDamageBelow` and dies like a crop. Not modelled: the biome a tree is
+native to (any sowable tree grows anywhere its soil and temperature allow), chocolate's joy. Tests `TreeSowingTests`.
+
 ## Growth
 
 `Plants` has a growth modifier hook; `Farming::growthFactor` is installed in it. For a crop in its own zone the
