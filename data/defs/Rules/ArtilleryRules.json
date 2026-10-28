@@ -1,0 +1,14 @@
+[
+  {
+    "defName": "ArtilleryRules", "source": "Rim3D",
+    "scanEvery": 10,
+    "reach": 1.5,
+    "apexShare": 0.25,
+    "spreadTries": 8,
+    "missBase": 0.2,
+    "missPerShooting": 0.025,
+    "missManipulation": 0.5,
+    "ours": ["scanEvery", "reach", "apexShare", "spreadTries"],
+    "note": "missBase, missPerShooting and missManipulation are RimWorld's Mortar Miss Radius Multiplier (wiki-checked 2026-10-28): 100% + 20% - 2.5% per Shooting level - (100% - Sight) - 0.5 x (Manipulation - 100%)."
+  }
+]

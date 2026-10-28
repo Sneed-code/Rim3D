@@ -227,6 +227,15 @@ struct ThingView {
     uint8_t turretPhase = 0;
     Entity turretTarget = kNoEntity;
     uint8_t trapState = 0;
+    // Manned artillery (docs/design/artillery.md), which also sets turretPhase and turretTarget: the colonist ordered to
+    // man it, whether it is at its post now, the player's aim (a point, or a pawn it follows) and hold fire.
+    Entity artilleryCrew = kNoEntity;
+    bool artilleryManned = false;
+    bool artilleryAim = false;
+    float artilleryAimX = 0.0f;
+    float artilleryAimY = 0.0f;
+    Entity artilleryAimPawn = kNoEntity;
+    bool holdFire = false;
     // Clothes (docs/design/apparel.md). Pawns: the outfit they follow (0 for other things), whether a strip
     // order is on them, and what they wear: `apparelCount` pieces from Snapshot::apparel[firstApparel], in the
     // order put on. Apparel items on the map: their `stuff` (as for buildings), `quality` (a place in
@@ -334,7 +343,8 @@ struct QuestView {
 // appears with a ShotFired event and disappears with a ProjectileHit event. A thrown grenade is here
 // too (docs/design/explosives.md): its def is the grenade's Projectiles def, it appears with a
 // GrenadeThrown event and goes with an Explosion; `fuse` is -1 while it flies and the steps left
-// once it lies on the ground (its velocity is 0 then).
+// once it lies on the ground (its velocity is 0 then). A mortar shell is here too (docs/design/artillery.md): on its
+// arc, from a ShotFired to a ProjectileHit.
 struct ProjectileView {
     Entity id = kNoEntity;
     DefId def;  // Projectiles def

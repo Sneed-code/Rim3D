@@ -110,6 +110,6 @@ works for the player.
 - Raiders do not shoot back at turrets: the fighter AI chooses only pawns as targets, so a turret is
   hit only by stray fire, blasts and what T1/F12 add (sappers, mortars).
 - IEDs wait for chemfuel versions (E4); no EMP, no incendiary traps; no sentry
-  machine-gun turrets. Mortars and the rocketswarm launcher (manned, ammunition, indirect fire) are not in.
+  machine-gun turrets. Mortars and the rocketswarm launcher are manned artillery: [artillery.md](artillery.md).
 - Unreal: the turret mesh and its barrel turning to `turretTarget`, muzzle flash and the trap's spring
   animation.
