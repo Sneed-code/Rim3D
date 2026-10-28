@@ -13,6 +13,7 @@
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Trade.h"
 #include "ColonySim/World.h"
 
 #include <algorithm>
@@ -127,6 +128,10 @@ bool Sim::visitMap(int caravanId, std::string& error) {
             error = "the map of that tile can't be made" + (sim->setupErrors().empty() ? std::string() : ": " + sim->setupErrors().front());
             return false;
         }
+        // Its factions think of the colony as the colony's do; a settlement's tile gets the base and its people (W6).
+        sim->trade_->setGoodwillOwner(trade_.get());
+        std::string unbuilt;
+        sim->buildSettlement(unbuilt);
         otherMaps_.push_back(OtherMap{tile, time_.seconds, std::move(sim)});
         map = &otherMaps_.back();
         Event made;
@@ -291,6 +296,14 @@ void Sim::writeOtherMaps(std::vector<OtherMapView>& out) const {
             v.colonists += away.tile == m.tile ? 1 : 0;
         }
         v.caravans = static_cast<int>(m.sim->caravans().caravans().size());
+        for (const Visit& visit : m.sim->trade().state().visits) {
+            if (visit.kind == VisitKind::Settlement) {
+                v.faction = visit.faction;
+                v.visit = visit.id;
+                v.residents = static_cast<int>(visit.members.size());
+                v.hostile = visit.phase == VisitPhase::Defending;
+            }
+        }
         out.push_back(std::move(v));
     }
 }

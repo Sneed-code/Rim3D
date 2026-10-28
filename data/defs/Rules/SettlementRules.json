@@ -1,0 +1,32 @@
+[
+ {
+  "defName": "SettlementRules",
+  "source": "RimWorld (settlement map generator, recalled) and ours",
+  "baseSize": [34, 38],
+  "residents": [8, 12],
+  "blocks": 3,
+  "roomChance": 0.85,
+  "wallStuff": {
+   "Neolithic": ["WoodLog"],
+   "Industrial": ["Steel", "WoodLog", "BlocksGranite", "BlocksLimestone", "BlocksSandstone"],
+   "Spacer": ["Steel", "Plasteel"]
+  },
+  "furnitureStuff": {
+   "Neolithic": ["WoodLog"],
+   "Industrial": ["WoodLog", "Steel"],
+   "Spacer": ["Steel"]
+  },
+  "perimeterTechLevels": ["Industrial", "Spacer"],
+  "rooms": [
+   {"kind": "Barracks", "weight": 3, "beds": true, "things": ["TorchLamp"]},
+   {"kind": "Dining", "weight": 2, "things": ["Table2x2", "Stool", "Stool", "Stool", "Stool", "TorchLamp"]},
+   {"kind": "Kitchen", "weight": 1, "things": ["FueledStove", "Table1x2", "TorchLamp"]},
+   {"kind": "Workshop", "weight": 1, "things": ["CraftingSpot", "TailorBenchHand", "Stool", "TorchLamp"]},
+   {"kind": "Storage", "weight": 1, "things": ["Dresser", "Dresser", "EndTable"]}
+  ],
+  "yard": ["Campfire"],
+  "unverified": ["baseSize"],
+  "ours": ["residents", "blocks", "roomChance", "wallStuff", "furnitureStuff", "perimeterTechLevels", "rooms", "yard"],
+  "notes": "RimWorld makes a settlement's base 34 to 38 cells a side (GenStep_Settlement, recalled) out of rooms its base generator cuts at random (barracks, dining rooms, kitchens, storerooms), walls of a stuff its tech level allows and an edge defense for industrial and spacer factions, and fills it with defenders worth 1150 to 1600 raid points. Ours is simpler: the base is cut into blocks x blocks, the middle block is the yard where the trader stands, each other block is a walled room by roomChance with its door toward the yard, the room kind by weight, beds along two walls of a barracks, the other things put inside in order; industrial and spacer bases get a wall round them with a gap in the middle of each side. Residents are a count, not points (about 8 to 12 pawns: RimWorld's 1150-1600 points over a gunner's ~130)."
+ }
+]

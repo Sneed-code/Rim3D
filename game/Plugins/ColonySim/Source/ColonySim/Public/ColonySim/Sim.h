@@ -462,6 +462,11 @@ public:
     const std::vector<OtherMap>& otherMaps() const { return otherMaps_; }
     const Sim* otherMap(int tile) const;
     Sim* otherMap(int tile);
+    // W6 (Settlements.cpp, docs/design/settlements.md): on another map of a settlement's tile (`world.visit`), builds the
+    // faction's base and makes its people. The colony calls it once, when a caravan first walks onto the tile (after
+    // linking the map's goodwill to its own); nothing to do on a tile without a settlement. False only for a sim that is
+    // not another map, or a faction the defs lack.
+    bool buildSettlement(std::string& error);
 
     // Hauling test: the middle of its stockpile zone (empty if no cell is walkable) and its pawns.
     const std::optional<CellPos>& stockpileCell() const { return stockpileCell_; }

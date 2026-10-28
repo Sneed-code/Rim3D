@@ -525,6 +525,12 @@ struct OtherMapView {
     int size = 0;       // cells per side
     int colonists = 0;  // of the colony, there now
     int caravans = 0;   // forming there to leave
+    // A settlement's people there (W6, docs/design/settlements.md): their faction, their visit on that map (for
+    // TradeCommand and GiftCommand with `map` = the tile), how many are left, and whether they fight the colony.
+    std::string faction;
+    uint32_t visit = 0;
+    int residents = 0;
+    bool hostile = false;
 };
 
 // The date, the weather and the sky's mood (docs/design/weather.md). Snow per cell is not here:

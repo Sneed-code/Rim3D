@@ -128,6 +128,8 @@ REFERENCES = [
     ("Lineages", "genes[]", "Genes"),
     ("Genes", "aptitudes{}", "Skills"),
     ("Scenarios", "lineageWeights{}", "Lineages"),
+    ("Rules", "rooms[].things[]", "Things"),
+    ("Rules", "yard[]", "Things"),
 ]
 
 # Kinds whose defs may carry "researchPrerequisite" (a project name or a list of them). Every project
