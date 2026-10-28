@@ -411,6 +411,7 @@ const char* eventTypeName(EventType type) {
         case EventType::OtherMapMade: return "OtherMapMade";
         case EventType::OtherMapEntered: return "OtherMapEntered";
         case EventType::OtherMapLeft: return "OtherMapLeft";
+        case EventType::SiegeChanged: return "SiegeChanged";
         case EventType::PodsLoading: return "PodsLoading";
         case EventType::PodLoaded: return "PodLoaded";
         case EventType::PodPassengerDropped: return "PodPassengerDropped";

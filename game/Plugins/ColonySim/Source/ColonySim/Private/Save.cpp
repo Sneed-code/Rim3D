@@ -2978,6 +2978,26 @@ void saveRaids(Ar& ar, RaidState& r) {
             ar.group("breach", [&] { saveCell(ar, s.breach); });
             ar.group("breachFrom", [&] { saveCell(ar, s.breachFrom); });
         }
+        if (ar.sectionVersion() >= 3) {  // sieges (docs/design/sieges.md)
+            ar.group("siege", [&] {
+                Siege& g = s.siege;
+                ar.value("stage", g.stage);
+                ar.require(static_cast<int>(g.stage) <= static_cast<int>(SiegeStage::Assault), "the save file has a bad siege stage");
+                ar.group("camp", [&] { saveCell(ar, g.camp); });
+                ar.value("endsAt", g.endsAt);
+                ar.value("resupplies", g.resupplies);
+                ar.list("builds", g.builds, [&](SiegeBuild& b) {
+                    ar.text("def", b.def);
+                    ar.text("stuff", b.stuff);
+                    ar.group("origin", [&] { saveCell(ar, b.origin); });
+                    ar.value("rotation", b.rotation);
+                    ar.require(static_cast<int>(b.rotation) <= static_cast<int>(Rot4::West), "the save file has a bad rotation");
+                    ar.value("workLeft", b.workLeft);
+                    ar.value("done", b.done);
+                    ar.value("built", b.built);
+                });
+            });
+        }
         ar.value("gaveUp", s.gaveUp);
         ar.group("entry", [&] { saveCell(ar, s.entry); });
         ar.value("hasTarget", s.hasTarget);
@@ -3356,7 +3376,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.value("celsius", t.celsius);
         });
     });
-    ar.section("raids", 2, [&] {
+    ar.section("raids", 3, [&] {
         saveRaids(ar, d.raids);
         saveParts(ar, "defense", e, &SaveEntity::defense, [&](DefensePlan& p) {
             ar.value("role", p.role);

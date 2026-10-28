@@ -501,8 +501,14 @@ bool NarratorSystem::raidWorker(IncidentFiring& f) {
         const Def& faction = *factions[pick];
         std::string error;
         // F12: the way it comes is drawn by weight (sappers when walls shut the colony in, pods, thieves, kidnappers).
-        const RaidStrategy strategy = raids_.pickStrategy(f.points);
-        if (raids_.startRaid(faction.defName(), f.points, -1, strategy, -1.0f, error)) {
+        RaidStrategy strategy = raids_.pickStrategy(f.points, faction.defName());
+        bool started = raids_.startRaid(faction.defName(), f.points, -1, strategy, -1.0f, error);
+        if (!started && strategy == RaidStrategy::Siege) {
+            // No room for a camp: they come straight in instead.
+            strategy = RaidStrategy::Assault;
+            started = raids_.startRaid(faction.defName(), f.points, -1, strategy, -1.0f, error);
+        }
+        if (started) {
             const Squad& squad = raids_.state().squads.back();
             f.squad = squad.id;
             f.hasCell = true;
@@ -514,6 +520,7 @@ bool NarratorSystem::raidWorker(IncidentFiring& f) {
                 case RaidStrategy::DropPods: how = " They are dropping in by pod."; break;
                 case RaidStrategy::Thieves: how = " They have come to steal."; break;
                 case RaidStrategy::Kidnappers: how = " They are after your wounded."; break;
+                case RaidStrategy::Siege: how = " They are digging in to shell the colony with mortars."; break;
                 case RaidStrategy::Assault: break;
             }
             f.text = "Raid: " + std::to_string(squad.started) + (one ? " raider from the " : " raiders from the ") + faction.label() +

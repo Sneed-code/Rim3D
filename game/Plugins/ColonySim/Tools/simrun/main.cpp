@@ -137,7 +137,7 @@ struct Options {
     int farm = 0;        // --farm N: N tame chickens, fed every hour (N4)
     bool fire = false;   // --fire: light a grass fire near the first colonist ten minutes in (E4)
     double raid = -1.0;  // start a pirate raid of this many points at the first step (0: the colony's threat points)
-    std::string raidStrategy = "Assault";  // --raid-strategy NAME: Assault, Sappers, DropPods, Thieves, Kidnappers or Auto (F12)
+    std::string raidStrategy = "Assault";  // --raid-strategy NAME: Assault, Sappers, DropPods, Thieves, Kidnappers, Siege or Auto (F12, sieges.md)
     int raidSoak = 0;    // --raid-soak N: the F7 soak over N seeds from --seed
     bool armed = false;  // give every colonist an assault rifle first (not a command: not in replays)
     bool medics = false; // --medics: the first colonist is the alarm's Medic, the second its Firefighter (F10)

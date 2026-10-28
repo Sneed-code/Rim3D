@@ -464,6 +464,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     artillery_ = std::make_unique<ArtillerySystem>(*things_, map_, *combat_, *health_, *power_, *jobs_, *defs_, time_);
     artillery_->setEventLog(&events_);
     artillery_->setFuel(&jobs_->fuel());
+    raids_->setSiegeParts(construction_.get(), artillery_.get(), &jobs_->fuel());
     fieldCare_ = std::make_unique<FieldCare>(*things_, map_, *health_, *jobs_, *fighters_, *raids_, *defs_, time_);
     jobs_->setFieldCare(fieldCare_.get());
     narrator_ = std::make_unique<NarratorSystem>(*raids_, *defs_, time_, settings.seed);
@@ -1749,7 +1750,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "no raid strategy '" + strategyRaid->strategy + "'");
         } else {
             if (strategyRaid->strategy == "Auto") {
-                strategy = raids_->pickStrategy(strategyRaid->points);
+                strategy = raids_->pickStrategy(strategyRaid->points, strategyRaid->faction);
             }
             if (!raids_->startRaid(strategyRaid->faction, strategyRaid->points, strategyRaid->edge, strategy, strategyRaid->hour,
                                    error)) {
@@ -2460,7 +2461,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
     for (const Squad& squad : raids_->state().squads) {
         out.squads.push_back(SquadView{squad.id, squad.side, static_cast<uint8_t>(squad.state),
                                        static_cast<int>(squad.members.size()), squad.started, squad.target,
-                                       static_cast<uint8_t>(squad.strategy), squad.hasBreach, squad.breach});
+                                       static_cast<uint8_t>(squad.strategy), squad.hasBreach, squad.breach,
+                                       static_cast<uint8_t>(squad.siege.stage), squad.siege.camp});
     }
 
     out.visits.clear();

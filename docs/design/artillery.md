@@ -92,7 +92,7 @@ used because RimWorld 1.6's mortar needs a reinforced barrel, which can't be mad
 
 ## Not done yet
 
-- Raiders' sieges with their own mortars (raid-strategies.md), and the AI shooting at guns.
+- The AI shooting at guns. (Raiders' sieges man these mortars: [sieges.md](sieges.md).)
 - Other shells (incendiary, EMP, smoke, firefoam, antigrain), choosing which shells a mortar takes, and shells cooking
   off when burnt or shot. Reinforced barrels (once sieges and traders bring them) and RimWorld 1.6's numbers.
 - A thin roof does not cave in where a shell lands (rooms here roof themselves); the shell bursts below it.

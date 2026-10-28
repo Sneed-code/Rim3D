@@ -167,7 +167,7 @@ Entity evScenarioColonist(Sim& sim, size_t n = 0) {
 }  // namespace
 
 TEST_CASE("Event scenarios: every raid strategy starts, ends, and saves and loads to the same game") {
-    for (const char* strategy : {"Assault", "Sappers", "DropPods", "Thieves", "Kidnappers", "Auto"}) {
+    for (const char* strategy : {"Assault", "Sappers", "DropPods", "Thieves", "Kidnappers", "Siege", "Auto"}) {
         CAPTURE(strategy);
         auto sim = evScenarioSim(3);
         sim->things().spawn("Steel", CellPos{40, 40, 0}, 100);
