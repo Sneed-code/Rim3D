@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 
 namespace colonyscenario {
 
@@ -15,7 +16,8 @@ namespace colonyscenario {
 // worked off, everything planned was built, and the stove made meals that were eaten.
 // Returns 0 if all checks hold, 1 if one failed (each is said on stderr), 2 if the scenario could
 // not be set up (no room site or rock near the landing).
-int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const colony::DefDatabase> defs, bool verbose, bool year = false);
+int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const colony::DefDatabase> defs, bool verbose, bool year = false, const std::string& narrator = "");
+// `narrator`: a SetNarratorCommand at the first step (the year scenario, C25).
 // `year`: also wild animals, a rice field and a stockpile, a bigger meal bill, and the slowest step is reported.
 
 }  // namespace colonyscenario

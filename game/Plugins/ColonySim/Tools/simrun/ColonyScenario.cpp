@@ -240,7 +240,7 @@ size_t ripeCrops(const Sim& sim) {
 
 }  // namespace
 
-int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDatabase> defs, bool verbose, bool year) {
+int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDatabase> defs, bool verbose, bool year, const std::string& narrator) {
     SimSettings settings{seed, mapSize, 0, 0};
     settings.scenario = "Crashlanded";
     settings.wildAnimals = year ? 100 : 0;
@@ -301,6 +301,9 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         sim.submit(PlaceBlueprintCommand{p.defName, p.stuff, p.cell, p.rot});
     }
     const CellRect roomRect{origin.x, origin.y, kRoomWidth, kRoomHeight, 0};
+    if (!narrator.empty()) {
+        sim.submit(SetNarratorCommand{narrator, ""});  // the year scenario (C25): the narrator sends its incidents
+    }
     if (year) {
         // The player has the colony's research done at the start: hydroponics (and the electricity it needs) is
         // what the greenhouse is made of.
@@ -467,6 +470,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     uint64_t cleaned = 0;
     uint64_t woodIn = 0;     // wood colonists put into buildings (Refueled events)
     uint64_t outOfFuel = 0;  // times a building ran out
+    uint64_t letters = 0;  // narrator letters (C25)
     uint64_t weatherChanges = 0;  // WeatherChanged events (E1): the colony works through rain, fog and cold
     uint64_t commandsFailed = 0;
     uint64_t recreations = 0;  // recreation jobs started
@@ -579,6 +583,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     }
                     break;
                 case EventType::WeatherChanged: ++weatherChanges; break;
+                case EventType::Letter: ++letters; break;
                 case EventType::PawnMentalBreak:
                     ++mentalBreaks;
                     std::fprintf(stderr, "day %lld: a colonist had a mental break: %s\n", static_cast<long long>(sim.time().day()), e.message.c_str());
@@ -1041,7 +1046,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
 
     if (year) {
         std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"warmthSeeks\":%llu,\"weaponsTaken\":%llu}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), static_cast<unsigned long long>(warmthSeeks), static_cast<unsigned long long>(weaponsTaken));
-        std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay));
+        std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"narrator\":\"%s\",\"letters\":%llu}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), narrator.c_str(), static_cast<unsigned long long>(letters));
         if (greenhousePlanned) {
             std::printf("{\"greenhouse\":{\"at\":\"%d,%d\",\"basins\":%d,\"generators\":%d,\"heaters\":%d,\"lamps\":%d,\"zoneMade\":%s,"
                         "\"minTemp\":%.1f,\"maxTemp\":%.1f,\"mostCrops\":%d,\"cropHours\":%llu,\"ripeHours\":%llu,\"unbuilt\":%d}}\n",
