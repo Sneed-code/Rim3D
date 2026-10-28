@@ -408,3 +408,30 @@ TEST_CASE("Disasters: the same seed and commands give the same game") {
     };
     CHECK(play() == play());
 }
+
+TEST_CASE("Disasters: a disease outbreak makes some colonists ill") {
+    auto sim = disasterSim();
+    sim->step();
+    const Event* letter = disasterFire(*sim, "Disease_Plague");
+    DISASTER_REQUIRE(letter != nullptr);
+    CHECK(disasterCommandFailures(*sim) == 0);
+    int sick = 0;
+    for (const Entity pawn : disasterColonists(*sim)) {
+        sick += sim->health().sick(pawn) ? 1 : 0;
+    }
+    CHECK(sick >= 1);
+    CHECK(sick <= static_cast<int>(disasterColonists(*sim).size()));
+}
+
+TEST_CASE("Disasters: a prison break needs prisoners, an infestation needs a roof") {
+    auto sim = disasterSim();
+    sim->step();
+    sim->submit(FireIncidentCommand{"PrisonBreak", 0.0f});
+    sim->step();
+    CHECK(disasterCommandFailures(*sim) == 1);
+    // A flat open map has no roofed place for brood mounds; the worker answers in words and nothing is half done.
+    sim->submit(FireIncidentCommand{"Infestation", 100.0f});
+    sim->step();
+    CHECK(sim->narrator().hasWorker("Infestation"));
+    CHECK(sim->narrator().hasWorker("RemnantCluster"));
+}
