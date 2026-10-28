@@ -67,7 +67,9 @@ struct DisasterSystem::Numbers {
     DisasterRange droneDays{0.75, 1.75};
     DisasterRange soothDays{1.5, 3.0};
     double blightKill = 0.7;
-    DisasterRange blightRadius{10.0, 20.0};
+    DisasterRange blightRadius{2.0, 4.0};
+    DisasterRange blightHours{24.0, 72.0};
+    double blightSpreadPerHour = 0.03;
     DisasterRange packHours{24.0, 54.0};
     double animalPowerPerBodySize = 100.0;
     double animalPowerMin = 20.0;
@@ -110,6 +112,8 @@ struct DisasterSystem::Numbers {
         soothDays = disasterRangeOf(r, "psychicSoothe.durationDays", soothDays.lo, soothDays.hi);
         blightKill = r->number("blight.killChance", blightKill);
         blightRadius = disasterRangeOf(r, "blight.radius", blightRadius.lo, blightRadius.hi);
+        blightHours = disasterRangeOf(r, "blight.witherHours", blightHours.lo, blightHours.hi);
+        blightSpreadPerHour = r->number("blight.spreadPerHour", blightSpreadPerHour);
         packHours = disasterRangeOf(r, "manhunterPack.durationHours", packHours.lo, packHours.hi);
         animalPowerPerBodySize = r->number("manhunterPack.powerPerBodySize", animalPowerPerBodySize);
         animalPowerMin = r->number("manhunterPack.powerMin", animalPowerMin);
@@ -337,8 +341,64 @@ void DisasterSystem::strike(DisasterCondition& storm) {
     }
 }
 
+bool DisasterSystem::isBlighted(CellPos cell) const {
+    return std::any_of(state_.blighted.begin(), state_.blighted.end(), [&](const BlightedPlant& b) { return b.cell == cell; });
+}
+
+bool DisasterSystem::blightPlant(CellPos cell, DefId crop) {
+    if (!plants_.has(cell) || plants_.defAt(cell) != crop || isBlighted(cell)) {
+        return false;
+    }
+    const double hours = rng_.range(static_cast<float>(numbers_->blightHours.lo), static_cast<float>(numbers_->blightHours.hi));
+    state_.blighted.push_back(BlightedPlant{cell, time_.seconds + static_cast<int64_t>(hours * static_cast<double>(kSecondsPerHour))});
+    return true;
+}
+
+// Crop blight, once an hour: each blighted plant may pass it to the sown plants of its kind next to it, and
+// withers when its time is up. A plant that was harvested or replaced is dropped from the list.
+void DisasterSystem::blightHour() {
+    if (state_.blighted.empty()) {
+        return;
+    }
+    static const int kDx[4] = {1, -1, 0, 0};
+    static const int kDy[4] = {0, 0, 1, -1};
+    const std::vector<BlightedPlant> now = state_.blighted;
+    std::vector<BlightedPlant> keep;
+    for (const BlightedPlant& b : now) {
+        const DefId crop = plants_.has(b.cell) ? plants_.defAt(b.cell) : DefId{};
+        if (!crop.valid()) {
+            continue;
+        }
+        if (time_.seconds >= b.dies) {
+            plants_.remove(b.cell);
+            if (events_ != nullptr) {
+                Event e;
+                e.type = EventType::PlantRemoved;
+                e.cell = b.cell;
+                e.def = crop;
+                e.message = "blighted";
+                events_->push_back(std::move(e));
+            }
+            continue;
+        }
+        keep.push_back(b);
+    }
+    state_.blighted = keep;
+    for (const BlightedPlant& b : keep) {
+        const DefId crop = plants_.defAt(b.cell);
+        for (int i = 0; i < 4; ++i) {
+            const CellPos c{b.cell.x + kDx[i], b.cell.y + kDy[i], 0};
+            if (map_.inBounds(c) && plants_.has(c) && plants_.defAt(c) == crop && farming_.zoneAt(c) != kNoGrowingZone &&
+                static_cast<double>(rng_.unit()) < numbers_->blightSpreadPerHour) {
+                blightPlant(c, crop);
+            }
+        }
+    }
+}
+
 void DisasterSystem::hourly() {
     toxicHour();
+    blightHour();
 }
 
 // Toxic fallout, once an hour: plants under the open sky die, and pawns there take buildup (animals at a share of
@@ -553,7 +613,7 @@ void DisasterSystem::registerWorkers() {
         const DefId crop = plants_.defAt(centre);
         const float radius = rng_.range(static_cast<float>(n.blightRadius.lo), static_cast<float>(n.blightRadius.hi));
         const int reach = static_cast<int>(radius);
-        int killed = 0;
+        int caught = 0;
         for (int dy = -reach; dy <= reach; ++dy) {
             for (int dx = -reach; dx <= reach; ++dx) {
                 const CellPos c{centre.x + dx, centre.y + dy, 0};
@@ -561,21 +621,13 @@ void DisasterSystem::registerWorkers() {
                     plants_.defAt(c) != crop || farming_.zoneAt(c) == kNoGrowingZone) {
                     continue;
                 }
-                if (c == centre || static_cast<double>(rng_.unit()) < n.blightKill) {
-                    plants_.remove(c);
-                    ++killed;
-                    if (events_ != nullptr) {
-                        Event e;
-                        e.type = EventType::PlantRemoved;
-                        e.cell = c;
-                        e.def = crop;
-                        e.message = "blighted";
-                        events_->push_back(std::move(e));
-                    }
+                if ((c == centre || static_cast<double>(rng_.unit()) < n.blightKill) && blightPlant(c, crop)) {
+                    ++caught;
                 }
             }
         }
-        f.text = "Crop blight: " + std::to_string(killed) + " " + defs_.get(crop).label() + " plants withered.";
+        f.text = "Crop blight: " + std::to_string(caught) + " " + defs_.get(crop).label() +
+                 " plants caught the blight. It spreads to the next plants and withers them over days.";
         f.hasCell = true;
         f.cell = centre;
         return true;
@@ -660,6 +712,12 @@ void DisasterSystem::hashState(StateHasher& h) const {
     h.add(rng_.state());
     h.add(rng_.increment());
     h.add(state_.started);
+    h.add(static_cast<uint64_t>(state_.blighted.size()));
+    for (const BlightedPlant& b : state_.blighted) {
+        h.add(b.cell.x);
+        h.add(b.cell.y);
+        h.add(b.dies);
+    }
     h.add(static_cast<uint64_t>(state_.active.size()));
     for (const DisasterCondition& c : state_.active) {
         h.add(static_cast<int>(c.kind));

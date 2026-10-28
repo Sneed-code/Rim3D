@@ -319,12 +319,30 @@ TEST_CASE("Disasters: crop blight kills one crop's plants round a centre, only i
     const Event* letter = disasterFire(*sim, "Blight");
     DISASTER_REQUIRE(letter != nullptr);
     CHECK(letter->message.find("Crop blight") == 0);
-    int left = 0;
-    for (const CellPos& c : sim->farming().find(zone)->cells) {
-        left += sim->plants().has(c) && sim->plants().defAt(c) == rice ? 1 : 0;
+    // The blight starts in a small cluster and kills nothing yet.
+    const size_t first = sim->disasters().blighted().size();
+    CHECK(first >= 1);
+    for (const BlightedPlant& b : sim->disasters().blighted()) {
+        CHECK(sim->plants().has(b.cell));
+        CHECK(sim->plants().defAt(b.cell) == rice);
     }
-    CHECK(left < sown);
-    CHECK(left > 0);  // a 10 to 20 m circle on a 12 m field leaves some, and kills 70% of what it reaches
+    CHECK(sim->plants().has(wild));
+    // Over days it spreads to the neighbours and every blighted plant withers (within 72 hours of catching it).
+    size_t most = first;
+    int withered = 0;
+    disasterRun(*sim, 4 * 3600);
+    for (int h = 0; h < 6 * 24; ++h) {
+        for (int i = 0; i < 3600; ++i) {
+            sim->step();
+            for (const Event& e : sim->events()) {
+                withered += e.type == EventType::PlantRemoved && e.message == "blighted" ? 1 : 0;
+            }
+        }
+        most = std::max(most, sim->disasters().blighted().size());
+    }
+    CHECK(withered > 0);
+    CHECK(most > first);
+    CHECK(sim->disasters().blighted().empty());
     CHECK(sim->plants().has(wild));
     (void)grass;
 
