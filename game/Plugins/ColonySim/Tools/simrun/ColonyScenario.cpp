@@ -49,6 +49,12 @@ namespace {
 
 constexpr int64_t kFieldDay = 2;   // year run: the rice fields are laid out on this game day (sowing waits for frost-free weather)
 constexpr int64_t kHuntDay = 13;   // year run: hunting starts on this game day
+// ... with this many game animals marked at a time within kHuntRadius metres of the landing, a mark taken off one that runs
+// kHuntLeash away. The fields feed the colony now: hunters that chased six marks up to 80 m out met wolf packs and manhunters
+// far from help (two dead on seed 7), so they stay nearer home.
+constexpr int kHuntMarks = 3;
+constexpr float kHuntRadius = 50.0f;
+constexpr float kHuntLeash = 60.0f;
 constexpr int64_t kWinterDay = 33; // year run: the campfire, the warm clothes and the extra wood come on this game day
 constexpr int kFields = 4;         // year run: rice fields
 constexpr int kWinterTrees = 40;   // ... trees marked then, for the fire
@@ -971,20 +977,20 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                         const AnimalCare* care = sim.husbandry().care(animal);
                         const float away = std::hypot(pos.x - static_cast<float>(landing.x), pos.y - static_cast<float>(landing.y));
                         if (care != nullptr && care->markHunt) {
-                            if (away > 80.0f) {
+                            if (away > kHuntLeash) {
                                 sim.submit(MarkAnimalCommand{animal, "Hunt", false});  // it ran off: the hunter would follow it for good
                             } else {
                                 ++marked;
                             }
                         } else if (name == "Deer" || name == "Hare" || name == "Muffalo" || name == "Alpaca") {
                             const float d = std::hypot(pos.x - static_cast<float>(landing.x), pos.y - static_cast<float>(landing.y));
-                            if (d < 70.0f) {
+                            if (d < kHuntRadius) {
                                 prey.emplace_back(d, animal);
                             }
                         }
                     }
                     std::sort(prey.begin(), prey.end());
-                    for (size_t k = 0; marked < 6 && k < prey.size(); ++k, ++marked) {
+                    for (size_t k = 0; marked < kHuntMarks && k < prey.size(); ++k, ++marked) {
                         sim.submit(MarkAnimalCommand{prey[k].second, "Hunt", true});
                     }
                 }
