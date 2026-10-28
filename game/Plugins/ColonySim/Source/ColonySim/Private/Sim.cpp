@@ -1637,6 +1637,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!ok) {
             commandFailed(id, error);
         }
+    } else if (const auto* reroll = std::get_if<RerollColonistCommand>(&command)) {
+        if (!rerollColonist(reroll->slot, error)) {
+            commandFailed(id, error);
+        }
     } else if (const auto* ship = std::get_if<ShipCommand>(&command)) {
         bool ok = false;
         if (ship->action == "StartReactor") {

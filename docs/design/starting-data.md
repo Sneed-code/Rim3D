@@ -50,7 +50,7 @@ names in lowerCamel (`workSpeedGlobal`), keys that are def names keep their case
 | `Skills` | the 12 skills | C1, C8 | `disablingWorkTags` |
 | `WorkTypes` | the 20 Core work types, in Work tab order | C1 | `relevantSkills`, `workTags`, `alwaysStartActive`, `inPrototype`, `tasks` (our job names, in order) |
 | `Traits` | 27 traits, spectra as `degreeDatas` | C8 | `statOffsets`, `statFactors`, `skillGains`, `conflictingTraits`; mood numbers used by C9 ([mood.md](mood.md)) |
-| `Backstories` | 14 childhood, 18 adulthood (ours) | C8 | `slot`, `skillGains`, `workDisables` (work tags) |
+| `Backstories` | 28 childhood, 44 adulthood (ours) | C8 | `slot`, `categories`, `skillGains`, `workDisables` (work tags), `forcedTraits`, `disallowedTraits`, `description` |
 | `Names` | first names (two lists), last names, nicknames (ours) | C8 | `names` |
 | `Scenarios` | Crashlanded | C8, F2 | RimWorld's starting items, with the rifle, revolver and flak gear since F2 (the knife waits for melee) |
 | `Bodies` | Human | F1 | Part tree: `def`, `label`, `coverage`, `depth`, `groups`, `parts` |

@@ -1176,6 +1176,8 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.text("action", c.action);
         ar.value("quest", c.quest);
         ar.text("kind", c.kind);
+    } else if constexpr (std::is_same_v<Type, RerollColonistCommand>) {
+        ar.value("slot", c.slot);
     } else if constexpr (std::is_same_v<Type, RepairGearCommand>) {
         ar.value("thing", c.thing);
         ar.value("repair", c.repair);

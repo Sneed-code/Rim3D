@@ -1,5 +1,9 @@
 #include "ColonySim/Apparel.h"
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Combat.h"
+#include "ColonySim/Fighters.h"
+#include "ColonySim/MentalBreaks.h"
+#include "ColonySim/Raids.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
@@ -64,6 +68,127 @@ std::string scenarioRollLineage(const Def& scenario, uint64_t colonistSeed, cons
 
 }  // namespace
 
+// Makes one colonist of `scenario` standing at `cell`, from `colonistSeed`: character, worker,
+// looks, and the gear of the scenario's pawn kind (else its `colonistApparel`). Returns kNoEntity
+// and a setup error if it can't.
+Entity Sim::makeScenarioColonist(const Def& scenario, CellPos cell, uint64_t colonistSeed, bool protagonist) {
+    const std::string who = "scenario '" + settings_.scenario + "': ";
+    const std::string kindName = scenario.text("colonistKind", "Human");
+    const DefId kind = defs_->idOf("Things", kindName);
+    const std::string lineage = scenario.text("lineage", "Baseline");
+    const Def* gearKind = scenario.text("colonistPawnKind").empty() ? nullptr : defs_->find("PawnKinds", scenario.text("colonistPawnKind"));
+    if (!scenario.text("colonistPawnKind").empty() && gearKind == nullptr) {
+        setupErrors_.push_back(who + "no PawnKinds def '" + scenario.text("colonistPawnKind") + "'");
+        return kNoEntity;
+    }
+    Colonist colonist;
+    std::string error;
+    if (!generateColonist(*defs_, colonistSeed, protagonist, colonist, error, gearKind ? gearKind->text("backstoryCategory", "Colony") : "Colony")) {
+        setupErrors_.push_back(who + error);
+        return kNoEntity;
+    }
+    const Entity pawn = things_->spawn(kind, cell);
+    if (pawn == kNoEntity || !things_->registry().all_of<Mover>(pawn)) {
+        things_->destroy(pawn);
+        setupErrors_.push_back(who + "'" + kindName + "' is not a pawn");
+        return kNoEntity;
+    }
+    if (Health* health = things_->registry().try_get<Health>(pawn)) {
+        health->protagonist = colonist.protagonist;  // 2x part hit points (docs/design/health.md)
+    }
+    jobs_->addWorker(pawn, colonist.disabledWorkTags);
+    giveLooks(pawn, colonistSeed, colonist.female, protagonist ? lineage : scenarioRollLineage(scenario, colonistSeed, lineage));
+    things_->registry().emplace<Colonist>(pawn, std::move(colonist));
+
+    // They land dressed, as RimWorld's colonists are (nudists excepted), in what their kind wears;
+    // a kind may also carry a weapon, each entry by its own chance from the colonist's seed.
+    const Colonist& made = things_->registry().get<Colonist>(pawn);
+    const bool nudist = std::any_of(made.traits.begin(), made.traits.end(),
+                                    [](const TraitRecord& trait) { return trait.def == "Nudist"; });
+    const Def& gearDef = gearKind ? *gearKind : scenario;
+    const char* wearList = gearKind ? "apparel" : "colonistApparel";
+    Rng gearRng(splitMix64(colonistSeed ^ 0x6765617273ULL), 13);
+    for (size_t i = 0; !nudist && i < gearDef.count(wearList); ++i) {
+        const std::string base = std::string(wearList) + "." + std::to_string(i);
+        if (gearKind != nullptr && gearRng.unit() >= static_cast<float>(gearDef.number((base + ".chance").c_str(), 1.0))) {
+            continue;
+        }
+        const DefId piece = defs_->idOf("Things", gearDef.text((base + ".thing").c_str()));
+        const DefId stuff = defs_->idOf("Things", gearDef.text((base + ".stuff").c_str()));
+        std::string why;
+        const Entity item = piece.valid() ? apparel_->make(piece, stuff, -1, cell, &why) : kNoEntity;
+        if (item == kNoEntity || !apparel_->putOn(pawn, item, why)) {
+            setupErrors_.push_back(who + "can't dress a colonist in '" + gearDef.text((base + ".thing").c_str()) + "'" +
+                                   (why.empty() ? "" : ": " + why));
+            return kNoEntity;
+        }
+    }
+    if (gearKind != nullptr && gearKind->count("weapons") > 0 && gearRng.unit() < static_cast<float>(gearKind->number("weaponChance", 1.0))) {
+        const std::string gun = gearKind->textAt("weapons", gearRng.below(static_cast<uint32_t>(gearKind->count("weapons"))));
+        const Entity item = things_->spawn(defs_->idOf("Things", gun), cell);
+        if (item == kNoEntity || !combat_->equip(pawn, item)) {
+            things_->destroy(item);
+            setupErrors_.push_back(who + "can't arm a colonist with '" + gun + "'");
+            return kNoEntity;
+        }
+    }
+    return pawn;
+}
+
+// Throws away the colonist in slot `slot` (the player's colonists in the order they were made) and
+// makes another from a fresh draw of the main stream, on the same spot. Only before the first step.
+bool Sim::rerollColonist(int slot, std::string& error) {
+    if (time_.seconds != 0) {
+        error = "the starting colonists can only be rerolled before the game starts";
+        return false;
+    }
+    const Def* scenario = defs_->find("Scenarios", settings_.scenario);
+    if (scenario == nullptr) {
+        error = "there is no starting scenario to reroll";
+        return false;
+    }
+    std::vector<Entity> slots;
+    for (const auto [pawn, colonist] : things_->registry().view<Colonist>().each()) {
+        (void)colonist;
+        if (things_->spawned(pawn) && fighters_->factionOf(pawn) == kPlayerFaction) {
+            slots.push_back(pawn);
+        }
+    }
+    // By index, not version: a new colonist takes the freed index, so the slots keep their order.
+    std::sort(slots.begin(), slots.end(), [](Entity a, Entity b) { return entt::to_entity(a) < entt::to_entity(b); });
+    if (slot < 0 || static_cast<size_t>(slot) >= slots.size()) {
+        error = "there is no starting colonist " + std::to_string(slot);
+        return false;
+    }
+    const Entity old = slots[static_cast<size_t>(slot)];
+    const CellPos cell = cellOf(things_->registry().get<Position>(old));
+    const bool protagonist = things_->registry().get<Colonist>(old).protagonist;
+    std::vector<Entity> gear;
+    if (const Gear* worn = things_->registry().try_get<Gear>(old)) {
+        gear = worn->apparel;
+        gear.insert(gear.end(), worn->stowed.begin(), worn->stowed.end());
+        if (worn->weapon != kNoEntity) {
+            gear.push_back(worn->weapon);
+        }
+    }
+    const uint64_t colonistSeed = splitMix64((static_cast<uint64_t>(rng_.next()) << 32) ^ rng_.next());
+    combat_->dropGear(old);
+    for (const Entity item : gear) {
+        things_->destroy(item);
+    }
+    jobs_->forget(old);
+    fighters_->forget(old);
+    raids_->forget(old);
+    mentalBreaks_->forget(old);
+    things_->destroy(old);
+    const size_t errorsBefore = setupErrors_.size();
+    if (makeScenarioColonist(*scenario, cell, colonistSeed, protagonist) == kNoEntity) {
+        error = setupErrors_.size() > errorsBefore ? setupErrors_.back() : "the colonist could not be made";
+        return false;
+    }
+    return true;
+}
+
 // Starts the scenario named in the settings (docs/design/colonists.md): the protagonist and the
 // colonists made from the seed, standing near the middle of the map, with the scenario's items
 // lying around them. Uses its own random streams, so the rest of the sim is not disturbed.
@@ -119,42 +244,10 @@ void Sim::startScenario() {
         if (cell.x % 2 != 0 || cell.y % 2 != 0) {
             continue;
         }
-        Colonist colonist;
-        std::string error;
         const bool protagonist = placed == 0 && scenario->flag("protagonist");
         const uint64_t colonistSeed = splitMix64(settings_.seed ^ 0x636F6C6FULL) + static_cast<uint64_t>(placed);
-        if (!generateColonist(*defs_, colonistSeed, protagonist, colonist, error)) {
-            setupErrors_.push_back("scenario '" + settings_.scenario + "': " + error);
+        if (makeScenarioColonist(*scenario, cell, colonistSeed, protagonist) == kNoEntity) {
             return;
-        }
-        const Entity pawn = things_->spawn(kind, cell);
-        if (pawn == kNoEntity || !things_->registry().all_of<Mover>(pawn)) {
-            things_->destroy(pawn);
-            setupErrors_.push_back("scenario '" + settings_.scenario + "': '" + scenario->text("colonistKind", "Human") + "' is not a pawn");
-            return;
-        }
-        if (Health* health = things_->registry().try_get<Health>(pawn)) {
-            health->protagonist = colonist.protagonist;  // 2x part hit points (docs/design/health.md)
-        }
-        jobs_->addWorker(pawn, colonist.disabledWorkTags);
-        giveLooks(pawn, colonistSeed, colonist.female,
-                  protagonist ? lineage : scenarioRollLineage(*scenario, colonistSeed, lineage));
-        things_->registry().emplace<Colonist>(pawn, std::move(colonist));
-        // They land dressed, as RimWorld's colonists are (nudists excepted).
-        const Colonist& made = things_->registry().get<Colonist>(pawn);
-        const bool nudist = std::any_of(made.traits.begin(), made.traits.end(),
-                                        [](const TraitRecord& trait) { return trait.def == "Nudist"; });
-        for (size_t i = 0; !nudist && i < scenario->count("colonistApparel"); ++i) {
-            const std::string base = "colonistApparel." + std::to_string(i);
-            const DefId piece = defs_->idOf("Things", scenario->text((base + ".thing").c_str()));
-            const DefId stuff = defs_->idOf("Things", scenario->text((base + ".stuff").c_str()));
-            std::string why;
-            const Entity item = piece.valid() ? apparel_->make(piece, stuff, -1, cell, &why) : kNoEntity;
-            if (item == kNoEntity || !apparel_->putOn(pawn, item, why)) {
-                setupErrors_.push_back("scenario '" + settings_.scenario + "': can't dress a colonist in '" +
-                                       scenario->text((base + ".thing").c_str()) + "'" + (why.empty() ? "" : ": " + why));
-                return;
-            }
         }
         used.insert(map_.index(cell));
         ++placed;
