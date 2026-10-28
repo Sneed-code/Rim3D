@@ -212,6 +212,16 @@ uint32_t BillSystem::addBill(Entity building, const std::string& recipeName, Bil
     bill.recipe = r->def;
     bill.mode = mode;
     bill.count = mode == BillMode::Forever ? 0 : count;
+    if (r->butcher && !r->cremate) {
+        // RimWorld's butcher bills leave people out by default: the corpse of every humanlike race starts disallowed.
+        for (const DefId race : defs_.idsOfKind("Things")) {
+            const Def& d = defs_.get(race);
+            if (d.text("category") == "Pawn" && d.text("race.intelligence") == "Humanlike") {
+                bill.disallowed.push_back(race);
+            }
+        }
+        std::sort(bill.disallowed.begin(), bill.disallowed.end(), [](DefId a, DefId b) { return a.value < b.value; });
+    }
     list.bills.push_back(bill);
     return bill.id;
 }
@@ -283,7 +293,10 @@ bool BillSystem::setOptions(Entity building, uint32_t billId, const Options& opt
     std::vector<DefId> disallowed;
     for (const std::string& name : options.disallowed) {
         const Def* item = defs_.find("Things", name);
-        if (item == nullptr || item->text("category") != "Item") {
+        // A butcher or crematorium bill takes corpses: its filter names races (pawn defs) as well as items.
+        const Recipe* takes = recipe(bill->recipe);
+        const bool corpse = item != nullptr && item->text("category") == "Pawn" && takes != nullptr && (takes->butcher || takes->cremate);
+        if (item == nullptr || (item->text("category") != "Item" && !corpse)) {
             error = "no item '" + name + "'";
             return false;
         }

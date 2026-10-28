@@ -47,17 +47,24 @@ namespace colonyscenario {
 
 namespace {
 
-constexpr int64_t kFieldDay = 13;  // year run: the rice field is laid out on this game day
+constexpr int64_t kFieldDay = 2;   // year run: the rice fields are laid out on this game day (sowing waits for frost-free weather)
+constexpr int64_t kHuntDay = 13;   // year run: hunting starts on this game day
 constexpr int64_t kWinterDay = 33; // year run: the campfire, the warm clothes and the extra wood come on this game day
-constexpr int kFields = 3;         // year run: rice fields
+constexpr int kFields = 4;         // year run: rice fields
 constexpr int kWinterTrees = 40;   // ... trees marked then, for the fire
 constexpr int64_t kGreenhouseDay = 15;  // year run: the heated greenhouse is planned on this game day
 // The greenhouse: wood walls round a 10 by 6 footprint with a door in the south wall. Inside (x 1..8, y 1..4):
-// a row of conduits at y = 3 joining six hydroponics basins above it (y = 2), a heater and two standing lamps
+// a row of conduits at y = 3 joining four hydroponics basins above it (y = 2), a heater and two standing lamps
 // below it (y = 4) and a wood-fired generator (2 by 2, x 7..8, y 3..4) at the row's east end.
 constexpr int kGreenWidth = 10;
 constexpr int kGreenHeight = 6;
-constexpr int kGreenBasins = 6;
+constexpr int kGreenBasins = 4;  // six took more steel than the crash site has, and then none got built
+// The storeroom (year run, day 1): wood walls round a 10 by 8 footprint with a door in the south wall, and a stockpile for food
+// only over its inside (8 by 6). Under a roof rice and meals don't weather away (rain wears a meal out in the open in about a
+// day), and in winter the unheated room freezes and keeps them: the colony's winter larder.
+constexpr int64_t kShedDay = 1;
+constexpr int kShedWidth = 10;
+constexpr int kShedHeight = 8;
 
 using namespace colony;
 
@@ -198,8 +205,9 @@ CellPos freeCellNear(const Sim& sim, CellPos centre) {
     return centre;
 }
 
-// The nearest spot to the landing for the greenhouse (with a ring of free ground round it), outside the room.
-bool findGreenhouseSite(Sim& sim, CellPos landing, const CellRect& room, CellPos& out) {
+// The nearest spot to the landing for the greenhouse or the storeroom (with a ring of free ground round it), outside the room.
+bool findGreenhouseSite(Sim& sim, CellPos landing, const CellRect& room, CellPos& out, int width = kGreenWidth, int height = kGreenHeight,
+                        const std::vector<CellRect>& taken = {}) {
     bool found = false;
     float best = 0.0f;
     for (int dy = -30; dy <= 30; ++dy) {
@@ -207,11 +215,12 @@ bool findGreenhouseSite(Sim& sim, CellPos landing, const CellRect& room, CellPos
             const CellPos origin{landing.x + dx, landing.y + dy, 0};
             bool ok = true;
             int trees = 0;
-            for (int y = origin.y - 1; y <= origin.y + kGreenHeight && ok; ++y) {
-                for (int x = origin.x - 1; x <= origin.x + kGreenWidth && ok; ++x) {
+            for (int y = origin.y - 1; y <= origin.y + height && ok; ++y) {
+                for (int x = origin.x - 1; x <= origin.x + width && ok; ++x) {
                     const CellPos c{x, y, 0};
                     ok = sim.map().inBounds(c) && sim.map().groundWalkable(c) && sim.map().buildingAt(c) == kNoEntity &&
-                         sim.farming().zoneAt(c) == kNoGrowingZone &&
+                         sim.farming().zoneAt(c) == kNoGrowingZone && sim.zones().stockpileAt(c) == nullptr &&
+                         std::none_of(taken.begin(), taken.end(), [&](const CellRect& t) { return t.contains(c); }) &&
                          !(x >= room.minX - 2 && x < room.minX + room.sizeX + 2 && y >= room.minY - 2 && y < room.minY + room.sizeY + 2);
                     trees += ok && isTree(sim, sim.plants().defAt(c)) ? 1 : 0;  // cleared when the walls go up, at a cost
                 }
@@ -236,6 +245,29 @@ size_t ripeCrops(const Sim& sim) {
         }
     }
     return ripe;
+}
+
+// A colonist's illnesses and what ails it, on one line (year run, verbose): to see what an illness death came from.
+void printIllness(const Sim& sim, Entity pawn, const char* prefix) {
+    HealthReport report;
+    if (!sim.healthReport(pawn, report) || (report.diseases.empty() && report.environment.empty() && !report.dead)) {
+        return;
+    }
+    std::string line;
+    char part[160];
+    for (const HealthReport::DiseaseLine& d : report.diseases) {
+        std::snprintf(part, sizeof(part), " %s%s%s (%s) severity %.2f immunity %.2f%s;", d.name.c_str(), d.part.empty() ? "" : " in the ",
+                      d.part.c_str(), d.stage.c_str(), static_cast<double>(d.severity), static_cast<double>(d.immunity), d.tended ? " tended" : " untended");
+        line += part;
+    }
+    for (const HealthReport::EnvironmentLine& env : report.environment) {
+        std::snprintf(part, sizeof(part), " %s (%s) %.2f;", env.name.c_str(), env.stage.c_str(), static_cast<double>(env.severity));
+        line += part;
+    }
+    std::snprintf(part, sizeof(part), " blood loss %.2f, %zu injuries, %s", static_cast<double>(report.bloodLoss), report.injuries.size(),
+                  report.downed ? "down" : "up");
+    line += part;
+    std::fprintf(stderr, "%s colonist %u:%s\n", prefix, static_cast<unsigned>(entt::to_integral(pawn)), line.c_str());
 }
 
 }  // namespace
@@ -490,6 +522,10 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     bool greenZoneMade = false;
     CellPos greenOrigin{0, 0, 0};
     std::vector<Plan> greenPlans;
+    bool shedPlanned = false;
+    bool shedFiltered = false;
+    CellRect shedRect{0, 0, 0, 0, 0};
+    std::vector<Plan> shedPlans;
     float greenMinTemp = 100.0f;
     float greenMaxTemp = -100.0f;
     int greenMostCrops = 0;  // most basins with a crop in them at once
@@ -508,6 +544,9 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     Snapshot snapshot;
 
     std::map<std::string, int> animalDeaths;  // deaths of anything that is not a colonist, by cause
+    std::map<Entity, int> shotsBy;            // year run, verbose: shots each pawn fired
+    std::map<std::string, int> spoiled;
+    std::map<std::string, int> huntFailures;  // year run: hunts given up, by the animal's def       // year run: stacks lost to rot or the weather, by def and how
     double worstStepMs = 0.0;
     int64_t worstStepAt = 0;
     for (int64_t i = 0; i < steps; ++i) {
@@ -524,6 +563,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     if (sim.things().registry().valid(e.thing) && sim.things().registry().all_of<Colonist>(e.thing)) {
                         ++died;
                         std::fprintf(stderr, "day %lld: a colonist died: %s\n", static_cast<long long>(sim.time().day()), e.message.c_str());
+                        printIllness(sim, e.thing, "    at death:");
                     } else {
                         ++animalDeaths[e.message];
                     }
@@ -545,8 +585,14 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     break;
                 case EventType::JobEnded:
                     if (e.message.rfind("failed", 0) == 0) {
-                        std::fprintf(stderr, "step %lld: %s job failed for a colonist at %d,%d: %s\n", static_cast<long long>(i),
-                                     jobTypeName(e.job), e.cell.x, e.cell.y, e.message.c_str());
+                        const entt::registry& reg = sim.things().registry();
+                        const bool known = e.target != kNoEntity && reg.valid(e.target) && reg.all_of<Thing>(e.target);
+                        std::fprintf(stderr, "step %lld: %s job failed for a colonist at %d,%d%s%s: %s\n", static_cast<long long>(i),
+                                     jobTypeName(e.job), e.cell.x, e.cell.y, known ? ", target " : "",
+                                     known ? defs->get(reg.get<Thing>(e.target).def).defName().c_str() : "", e.message.c_str());
+                        if (e.job == JobType::Hunt && known) {
+                            ++huntFailures[defs->get(reg.get<Thing>(e.target).def).defName()];
+                        }
                     }
                     break;
                 case EventType::PawnInjured:
@@ -558,7 +604,8 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                         const entt::registry& reg = sim.things().registry();
                         const Fighter* fighter = reg.try_get<Fighter>(e.thing);
                         const Gear* gear = reg.try_get<Gear>(e.thing);
-                        std::fprintf(stderr, "    alarm %d, fighter %s%s, weapon %s", sim.raids().state().alarm ? 1 : 0, fighter != nullptr ? "yes" : "no",
+                        std::fprintf(stderr, "    shots fired %d, alarm %d, fighter %s%s, weapon %s", shotsBy[e.thing], sim.raids().state().alarm ? 1 : 0,
+                                     fighter != nullptr ? "yes" : "no",
                                      fighter != nullptr && fighter->defending ? " (defending)" : "",
                                      gear != nullptr && gear->weapon != kNoEntity ? "yes" : "no");
                         if (fighter != nullptr && gear != nullptr && gear->weapon != kNoEntity) {
@@ -578,6 +625,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                         std::fprintf(stderr, "\n");
                     }
                     break;
+                case EventType::ShotFired: ++shotsBy[e.thing]; break;
                 case EventType::WeatherChanged: ++weatherChanges; break;
                 case EventType::PawnMentalBreak:
                     ++mentalBreaks;
@@ -592,6 +640,11 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     }
                     break;
                 case EventType::PlantHarvested: ++picked; break;
+                case EventType::ItemSpoiled:
+                    if (year) {
+                        ++spoiled[defs->get(e.def).defName() + " " + e.message];
+                    }
+                    break;
                 case EventType::PawnAction: cleaned += e.action == PawnAction::Clean ? 1 : 0; break;
                 case EventType::RecipeDone:
                     if (defs->get(e.def).defName() == "MakeClub") {
@@ -681,8 +734,11 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 // Sown at the start, the crops die in the early spring frosts: the field goes in with the warm weather.
                 // Three fields: one feeds the colony for about five days, the stock of survival meals is gone by day 40.
                 std::vector<CellRect> fields;
+                const CellRect shedRing{shedRect.minX - 1, shedRect.minY - 1, shedRect.sizeX + 2, shedRect.sizeY + 2, 0};
                 for (int f = 0; f < kFields; ++f) {
-                    const CellPos site = findFieldSite(sim, landing, roomRect, fields);
+                    std::vector<CellRect> taken = fields;
+                    taken.push_back(shedRing);
+                    const CellPos site = findFieldSite(sim, landing, roomRect, taken);
                     if (verbose) {
                         std::fprintf(stderr, "rice field at %d,%d\n", site.x, site.y);
                     }
@@ -711,9 +767,53 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                                        freeCellNear(sim, CellPos{origin.x + 2 + static_cast<int>(k), origin.y - 2, 0}), &why);
                 }
             }
+            if (year && !shedPlanned && sim.time().day() >= kShedDay) {
+                // The winter larder: a roofed room of wood near the landing with a food stockpile inside.
+                shedPlanned = true;
+                CellPos shedOrigin;
+                if (!findGreenhouseSite(sim, landing, roomRect, shedOrigin, kShedWidth, kShedHeight)) {
+                    std::fprintf(stderr, "colony scenario: no room for the storeroom\n");
+                    return 2;
+                }
+                if (verbose) {
+                    std::fprintf(stderr, "storeroom at %d,%d\n", shedOrigin.x, shedOrigin.y);
+                }
+                shedRect = CellRect{shedOrigin.x, shedOrigin.y, kShedWidth, kShedHeight, 0};
+                const auto shed = [&](const char* def, int x, int y) {
+                    shedPlans.push_back(Plan{defs->idOf("Things", def), def, "WoodLog", CellPos{shedOrigin.x + x, shedOrigin.y + y, 0}, Rot4::North});
+                };
+                for (int x = 0; x < kShedWidth; ++x) {
+                    shed(x == 1 ? "Door" : "Wall", x, 0);
+                    shed("Wall", x, kShedHeight - 1);
+                }
+                for (int y = 1; y < kShedHeight - 1; ++y) {
+                    shed("Wall", 0, y);
+                    shed("Wall", kShedWidth - 1, y);
+                }
+                for (const Plan& p : shedPlans) {
+                    sim.submit(PlaceBlueprintCommand{p.defName, p.stuff, p.cell, p.rot});
+                }
+                sim.submit(CreateStockpileCommand{CellRect{shedOrigin.x + 1, shedOrigin.y + 1, kShedWidth - 2, kShedHeight - 2, 0},
+                                                  StoragePriority::Important});
+            } else if (shedPlanned && !shedFiltered) {
+                // Food, medicine and components only (in the open the crash site's medicine and components weather away in a
+                // few weeks, and a doctor with no medicine tends too badly to stop an infection): every other item and every
+                // corpse stays out (the hauled game goes to the butcher).
+                const StockpileZone* zone = sim.zones().stockpileAt(CellPos{shedRect.minX + 1, shedRect.minY + 1, 0});
+                if (zone != nullptr) {
+                    for (const DefId d : defs->idsOfKind("Things")) {
+                        const Def& def = defs->get(d);
+                        const bool keep = def.has("ingestible") || def.defName().rfind("Medicine", 0) == 0 || def.defName().rfind("Component", 0) == 0;
+                        if ((def.text("category") == "Item" && !keep) || def.text("category") == "Pawn") {
+                            sim.submit(SetStockpileAllowedCommand{zone->id, def.defName(), false});
+                        }
+                    }
+                    shedFiltered = true;
+                }
+            }
             if (year && !greenhousePlanned && sim.time().day() >= kGreenhouseDay) {
                 greenhousePlanned = true;
-                if (!findGreenhouseSite(sim, landing, roomRect, greenOrigin)) {
+                if (!findGreenhouseSite(sim, landing, roomRect, greenOrigin, kGreenWidth, kGreenHeight, {shedRect})) {
                     std::fprintf(stderr, "colony scenario: no room for the greenhouse\n");
                     return 2;
                 }
@@ -736,8 +836,10 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     green("Wall", "WoodLog", 0, y);
                     green("Wall", "WoodLog", kGreenWidth - 1, y);
                 }
+                for (int x = 1; x <= 6; ++x) {
+                    green("PowerConduit", "", x, 3);  // up to the generator
+                }
                 for (int x = 1; x <= kGreenBasins; ++x) {
-                    green("PowerConduit", "", x, 3);
                     green("HydroponicsBasin", "", x, 2);
                 }
                 green("WoodFiredGenerator", "", 7, 3);
@@ -804,11 +906,13 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     const Entity heater = sim.map().buildingAt(CellPos{greenOrigin.x + 1, greenOrigin.y + 4, 0});
                     const Entity gen = sim.map().buildingAt(CellPos{greenOrigin.x + 7, greenOrigin.y + 3, 0});
                     int wood = 0;
+                    int steel = 0;
                     for (const auto [item, thing, stack] : sim.things().registry().view<const Thing, const StackCount>().each()) {
                         wood += defs->get(thing.def).defName() == "WoodLog" ? stack.count : 0;
+                        steel += defs->get(thing.def).defName() == "Steel" ? stack.count : 0;
                     }
                     const Fuel* genFuel = gen != kNoEntity ? sim.things().registry().try_get<Fuel>(gen) : nullptr;
-                    std::fprintf(stderr, "      wood on the map %d, generator holds %.1f\n", wood, genFuel != nullptr ? static_cast<double>(genFuel->amount) : -1.0);
+                    std::fprintf(stderr, "      wood on the map %d, steel %d, generator holds %.1f\n", wood, steel, genFuel != nullptr ? static_cast<double>(genFuel->amount) : -1.0);
                     std::fprintf(stderr, "      room enclosed %d, open roof cells %d; heater powered %d running %d; generator lit %d powered %d\n",
                                  room != nullptr && room->enclosed(), room != nullptr ? room->openRoofCount : -1,
                                  heater != kNoEntity && sim.power().powered(heater), heater != kNoEntity && sim.power().running(heater),
@@ -847,13 +951,14 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     if (!butcherBillAdded && t.category == ThingCategory::Building && t.stage == ConstructionStage::Built &&
                         defs->get(t.def).defName() == "ButcherTable") {
                         sim.submit(AddBillCommand{t.id, "ButcherCorpse", BillMode::Forever, 1});
-                        // Only corpses within 40 m: with no limit the butcher walks across the map to a wolf's kill.
-                        sim.submit(SetBillOptionsCommand{t.id, 1, 0, 20, 40.0f, 0, 0, 0, {}});
+                        // Only corpses within 40 m: with no limit the butcher walks across the map to a wolf's kill. People stay
+                        // out of the filter, as by default.
+                        sim.submit(SetBillOptionsCommand{t.id, 1, 0, 20, 40.0f, 0, 0, 0, {"Human"}});
                         butcherBillAdded = true;
                     }
                 }
                 // Hunting: keep a few game animals marked, nearest to the landing first (not the predators or the boars).
-                if (now >= kFieldDay * kSecondsPerDay) {
+                if (now >= kHuntDay * kSecondsPerDay) {
                     int marked = 0;
                     std::vector<std::pair<float, Entity>> prey;
                     const entt::registry& reg = sim.things().registry();
@@ -913,14 +1018,18 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 int rice = 0;
                 int meat = 0;
                 int meals = 0;
+                int steel = 0;
+                int components = 0;
                 for (const auto [item, thing, stack] : sim.things().registry().view<const Thing, const StackCount>().each()) {
                     const std::string& name = defs->get(thing.def).defName();
+                    steel += name == "Steel" ? stack.count : 0;
+                    components += name == "ComponentIndustrial" ? stack.count : 0;
                     rice += name == "RawRice" ? stack.count : 0;
                     meat += name.rfind("Meat", 0) == 0 ? stack.count : 0;
                     meals += name.rfind("Meal", 0) == 0 ? stack.count : 0;
                 }
-                std::fprintf(stderr, "    food: rice %d, meat %d, meals %d; crops ripe %zu; hunted %llu\n", rice, meat, meals, ripeCrops(sim),
-                             static_cast<unsigned long long>(sim.husbandry().stats().hunted));
+                std::fprintf(stderr, "    food: rice %d, meat %d, meals %d; crops ripe %zu; hunted %llu; steel %d, components %d\n", rice, meat, meals,
+                             ripeCrops(sim), static_cast<unsigned long long>(sim.husbandry().stats().hunted), steel, components);
             }
             if (verbose && year && now % (6 * kSecondsPerHour) == 3 * kSecondsPerHour) {
                 // Each colonist's mood, what makes it and what it is doing, four times a day.
@@ -939,6 +1048,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                         std::snprintf(part, sizeof(part), " %s %+.0f", t.def.c_str(), static_cast<double>(t.offset));
                         why += part;
                     }
+                    printIllness(sim, pawn, "    illness");
                     const Worker& worker = sim.things().registry().get<Worker>(pawn);
                     const Position& at = sim.things().registry().get<Position>(pawn);
                     std::fprintf(stderr, "    mood %u: %.0f (food %.2f, %s at %.0f,%.0f, %s)%s\n", static_cast<unsigned>(entt::to_integral(pawn)),
@@ -984,6 +1094,10 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     int expectedWalls = 0;
     int expectedDoors = 0;
     for (const Plan& p : plans) {
+        expectedWalls += p.defName == "Wall" ? 1 : 0;
+        expectedDoors += p.defName == "Door" ? 1 : 0;
+    }
+    for (const Plan& p : shedPlans) {
         expectedWalls += p.defName == "Wall" ? 1 : 0;
         expectedDoors += p.defName == "Door" ? 1 : 0;
     }
@@ -1068,6 +1182,12 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     static_cast<unsigned long long>(f.sown), static_cast<unsigned long long>(f.harvested), static_cast<unsigned long long>(f.frostKilled), static_cast<unsigned long long>(f.heatKilled));
         std::printf("{\"hunting\":{\"hunted\":%llu,\"butchered\":%llu}}\n", static_cast<unsigned long long>(sim.husbandry().stats().hunted),
                     static_cast<unsigned long long>(butchered));
+        for (const auto& [what, n] : huntFailures) {
+            std::printf("{\"huntFailed\":{\"animal\":\"%s\",\"count\":%d}}\n", what.c_str(), n);
+        }
+        for (const auto& [what, n] : spoiled) {
+            std::printf("{\"spoiled\":{\"stacks\":\"%s\",\"count\":%d}}\n", what.c_str(), n);
+        }
         for (const auto& [cause, n] : animalDeaths) {
             std::printf("{\"otherDeaths\":{\"cause\":\"%s\",\"count\":%d}}\n", cause.c_str(), n);
         }

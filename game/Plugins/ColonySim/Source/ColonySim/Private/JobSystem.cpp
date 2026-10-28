@@ -1741,7 +1741,9 @@ void JobSystem::endJob(Entity pawn, JobEnd end, const std::string& why) {
                 }
             }
         }
-        if (jobIsGather(job.type)) {
+        // A job at a cell (gathering, cleaning): the cell is kept away from as a thing would be. Without it a cleaner whose path
+        // to a filthy cell kept failing took the same job again two steps later, for game days (year run, seed 7).
+        if (jobIsGather(job.type) || job.type == JobType::CleanFilth) {
             worker.avoid.push_back(AvoidTarget{JobTarget{kNoEntity, job.cell}, now() + avoidSeconds_});
             if (worker.avoid.size() > kMaxAvoid) {
                 worker.avoid.erase(worker.avoid.begin());

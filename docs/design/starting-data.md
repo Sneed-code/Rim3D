@@ -141,7 +141,10 @@ in `unverified` if it is recalled. If a new field names other defs, add it to `R
 `Things/Plants.json`, all from `CropBase` (`plant.isCrop`; growing temperatures: nothing grows below 0
 or above 58 degrees, full speed between 6 and 42, `coldDamageBelow`, `heatDamageAbove`). Each has
 `growDays`, `harvestYield`, `sowWork` and `harvestWork` (game seconds), `sowMinSkill`,
-`fertilityMin` and `fertilitySensitivity` (C2's formula). What they yield is in
+`fertilityMin` and `fertilitySensitivity` (C2's formula). Rice, potatoes, corn, strawberries, haygrass and cotton were checked
+against the wiki on 2026-10-27 (rice had potatoes' 5.8 grow days and grew in twice its time, which starved the year run): rice 3,
+potatoes 5.8, corn 11.3, strawberries 4.6 (yield 8), haygrass 7 (sensitivity 0.6), cotton 8 (yield 10); every crop's harvest work
+is 200 ticks (288 s); raw rice and corn weigh 0.03 kg and start to rot after 40 and 60 days. What they yield is in
 `Things/CropProducts.json` (rice, potatoes, corn, strawberries, hay, cloth, herbal medicine,
 devilstrand). D6 and D7 add the stuff and tend numbers for cloth, devilstrand and herbal medicine;
 whoever merges second drops a duplicate def. Each biome has `climate` (`seasonMeanTemperature` per

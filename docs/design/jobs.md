@@ -202,7 +202,8 @@ falls back to the same values when the def is missing.
 
 `Mine`, `CutPlant` and `HarvestPlant` target a cell (a rock or a plant) instead of a thing. They
 reserve the cell like a thing, a scanner skips cells nobody can reach, and a failed gather job makes
-the pawn skip that cell for the avoid time. `Job::cell` is the rock or plant, not where the pawn
+the pawn skip that cell for the avoid time. A failed `CleanFilth` job does the same (a cleaner whose path to a filthy cell kept
+failing took the job again two steps later, a million times in one year run). `Job::cell` is the rock or plant, not where the pawn
 stands; `touchCell` finds the walkable neighbour it works from (`WorkCandidate::hasReach` is for
 the construction jobs, whose standing cell the scanner works out). `Job::progress` is the work
 towards the next pick hit or on the plant. Details and numbers: [mining.md](mining.md).

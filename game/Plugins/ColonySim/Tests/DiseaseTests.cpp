@@ -601,3 +601,21 @@ TEST_CASE("Diseases: a recorded session with a disease replays to the same state
     CHECK(check.matched());
     CHECK(again.stateHash() == recorded.stateHash());
 }
+
+TEST_CASE("Diseases: an illness's cap on a capacity comes after every offset, as in RimWorld") {
+    // An extreme infection caps consciousness at 0.1 and food poisoning takes 0.1 off it. Capped stage by stage, the
+    // poisoning pushed consciousness to 0 and the pawn died of it (year run, seed 1); the cap comes last, so it stays at 0.1.
+    Sim sim = disSim();
+    const Entity pawn = disPawn(sim);
+    sim.step();
+    DIS_REQUIRE(sim.health().contract(pawn, disId(sim, "Infection"), 0.9f, disPart(sim, pawn, "left arm")));
+    DIS_REQUIRE(sim.health().contract(pawn, disId(sim, "FoodPoisoning")));
+    sim.step();
+    const HealthReport report = disReport(sim, pawn);
+    CHECK_FALSE(report.dead);
+    float consciousness = -1.0f;
+    for (const auto& line : report.capacities) {
+        consciousness = line.name == "Consciousness" ? line.value : consciousness;
+    }
+    CHECK(consciousness == doctest::Approx(0.1f));
+}

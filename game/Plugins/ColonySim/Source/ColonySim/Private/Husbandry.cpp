@@ -103,6 +103,7 @@ Husbandry::Husbandry(Things& things, const Map& map, AnimalSystem& animals, Heal
         rules_.repathSeconds = r->number("repathSeconds", rules_.repathSeconds);
         rules_.huntRangeShare = r->number("huntRangeShare", rules_.huntRangeShare);
         rules_.huntMinRange = r->number("huntMinRange", rules_.huntMinRange);
+        rules_.huntSizeExponent = r->number("huntSizeExponent", rules_.huntSizeExponent);
         rules_.huntMaxSeconds = r->number("huntMaxSeconds", rules_.huntMaxSeconds);
         rules_.huntAvoidManhunterChance = r->number("huntAvoidManhunterChance", rules_.huntAvoidManhunterChance);
         rules_.huntRepathSeconds = r->number("huntRepathSeconds", rules_.huntRepathSeconds);
