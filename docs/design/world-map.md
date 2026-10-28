@@ -46,4 +46,4 @@ Elevation (m, negative under water), yearly mean temperature (°C), rainfall (mm
 
 ## Next
 
-The S8 map generator reading `Sim::site()` for hills, rivers, roads and terrain; tile-by-tile faction goodwill and events; caravans travelling the roads; other maps made when visited. Faction relations to tiles (who owns what) are static for now.
+The S8 map generator reading `Sim::site()` for hills, rivers, roads and terrain; tile-by-tile faction goodwill and events; caravans travelling the roads (W4, [caravans.md](caravans.md)); other maps made when visited (W5, [other-maps.md](other-maps.md): a visited tile's map is a sim made with `world.visit`, whose start tile may hold a settlement). Faction relations to tiles (who owns what) are static for now.

@@ -150,6 +150,10 @@ enum class EventType : uint8_t {
     CaravanLost,           // nobody in it can walk any more: it is gone with all it carried (`message` why)
     SkipStarted,           // a night skip or fast travel began (P5, docs/design/skip-travel.md): `message` "night" or "travel", `thing` the colonist, `amount` the game seconds it will run
     SkipEnded,             // it ended: `message` "night: why" or "travel: why" (morning, arrived, cancelled, or the threat), `thing` the colonist (take control again), `amount` the game seconds skipped, (x, y) where the colonist is
+    // Other maps (W5, docs/design/other-maps.md): `amount` is the tile, `message` its place name (the settlement's, else the biome's).
+    OtherMapMade,          // a visited tile's map was made (`count` its cells per side)
+    OtherMapEntered,       // the caravan `count` walked onto that map (`thing` none: its pawns are that map's things now)
+    OtherMapLeft,          // a caravan set out from that map; it is this sim's caravan `count` now
 };
 
 // What stopped a projectile (ProjectileHit).

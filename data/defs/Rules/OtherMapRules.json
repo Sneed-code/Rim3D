@@ -1,0 +1,10 @@
+[
+ {
+  "defName": "OtherMapRules",
+  "source": "ours (docs/game-design.md: other maps are 256 to 512 m)",
+  "mapSize": 256,
+  "settlementMapSize": 384,
+  "ours": ["mapSize", "settlementMapSize"],
+  "notes": "RimWorld makes every map, a visited one too, the size the player picked for the colony. Our colony map is 1 km, and other maps are smaller so a visit is quick to make and cheap to keep running: cells per side of a visited tile's map, and of one with a settlement on it."
+ }
+]

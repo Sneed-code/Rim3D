@@ -52,6 +52,7 @@
 #include "ColonySim/Quests.h"
 #include "ColonySim/Ship.h"
 #include "ColonySim/Caravans.h"
+#include "ColonySim/OtherMaps.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Social.h"
 #include "ColonySim/Research.h"
@@ -62,6 +63,7 @@
 #include "ColonySim/Version.h"
 #include "ColonySim/Zones.h"
 
+#include <functional>
 #include <algorithm>
 #include <unordered_map>
 #include <cmath>
@@ -449,6 +451,14 @@ struct SaveEntity {
     std::optional<MentalBreaker> mentalBreaker;  // section "mentalBreaks" (C19)
     std::optional<Visitor> visitor;         // section "trade" (C23)
     std::optional<Inspired> inspired;            // section "inspirations" (C25)
+    std::optional<AwayPawn> away;                // section "maps" (W5)
+};
+
+// Another map (W5): its tile, when it was made and its whole sim as a save of its own.
+struct SaveOtherMap {
+    int tile = -1;
+    int64_t madeAt = 0;
+    std::vector<uint8_t> save;
 };
 
 // A stockpile zone, with its filter by defName.
@@ -597,6 +607,7 @@ struct SaveData {
     DisasterState disasters;
     WorldSettings world;               // section "world" (W2): SimSettings::world; older saves have no world
     uint64_t worldHash = 0;            // the world's hash when saved, checked against the one made again
+    std::vector<SaveOtherMap> maps;    // section "maps" (W5)
 };
 
 // ---- Archives ------------------------------------------------------------------------------
@@ -777,7 +788,14 @@ public:
     template <typename T>
     void value(const char*, T& v) {
         get(v);
+        if constexpr (std::is_same_v<T, Entity>) {
+            if (remap_ != nullptr) {
+                v = (*remap_)(v);
+            }
+        }
     }
+    // Every thing id read goes through `remap` (W5: things moved to another sim get its ids).
+    void setRemap(const std::function<Entity(Entity)>* remap) { remap_ = remap; }
     void text(const char*, std::string& s) {
         uint32_t length = 0;
         get(length);
@@ -881,6 +899,7 @@ private:
     uint32_t sectionVersion_ = 0;
     std::vector<SaveSectionSpan> sections_;
     std::string error_;
+    const std::function<Entity(Entity)>* remap_ = nullptr;
 };
 
 class SaveJsonWriter {
@@ -1209,6 +1228,9 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.value("tile", c.tile);
         ar.list("pawns", c.pawns, [&](Entity& e) { ar.value(nullptr, e); });
         ar.list("items", c.items, [&](Entity& e) { ar.value(nullptr, e); });
+        if (ar.sectionVersion() >= 3) {  // W5
+            ar.value("map", c.map);
+        }
     } else {
         static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
     }
@@ -3038,7 +3060,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("repaths", d.repaths);
         ar.list("setupErrors", d.setupErrors, [&](std::string& s) { ar.text(nullptr, s); });
     });
-    ar.section("commands", 2, [&] { saveCommandsSection(ar, d); });
+    ar.section("commands", 3, [&] { saveCommandsSection(ar, d); });
     ar.section("things", 1, [&] { saveThingsSection(ar, d); });
     std::vector<SaveEntity>& e = d.entities;
     ar.section("movement", 2, [&] {
@@ -3455,13 +3477,16 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.value("endsAt", i.endsAt);
         });
     });
-    ar.section("world", 1, [&] {
+    ar.section("world", 2, [&] {
         ar.value("enabled", d.world.enabled);
         ar.value("seed", d.world.seed);
         ar.value("width", d.world.width);
         ar.value("height", d.world.height);
         ar.value("startTile", d.world.startTile);
         ar.value("hash", d.worldHash);
+        if (ar.sectionVersion() >= 2) {  // W5: another map's sim
+            ar.value("visit", d.world.visit);
+        }
     });
     ar.section("caravans", 1, [&] { saveCaravans(ar, d); });
     ar.section("expectations", 1, [&] {
@@ -3469,6 +3494,18 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("at", d.moodWealthAt);
     });
     ar.section("travel", 1, [&] { saveTravel(ar, d.travel); });
+    ar.section("maps", 1, [&] {
+        ar.list("maps", d.maps, [&](SaveOtherMap& m) {
+            ar.value("tile", m.tile);
+            ar.value("madeAt", m.madeAt);
+            ar.list("save", m.save, [&](uint8_t& b) { ar.value(nullptr, b); });
+        });
+        saveParts(ar, "away", e, &SaveEntity::away, [&](AwayPawn& a) {
+            ar.value("tile", a.tile);
+            ar.value("there", a.there);
+            ar.group("social", [&] { saveSocialPart(ar, a.social); });
+        });
+    });
     // New sections go here, at the end.
 }
 
@@ -3485,7 +3522,8 @@ std::vector<uint8_t> saveEncode(SaveData& data) {
     return std::move(bytes);
 }
 
-bool saveDecode(const std::vector<uint8_t>& bytes, SaveData& out, std::string& error) {
+bool saveDecode(const std::vector<uint8_t>& bytes, SaveData& out, std::string& error,
+                const std::function<Entity(Entity)>* remap = nullptr) {
     const size_t headerSize = kSaveMagicSize + sizeof(uint32_t);
     if (bytes.size() < headerSize + sizeof(uint64_t) || std::memcmp(bytes.data(), kSaveMagic, kSaveMagicSize) != 0) {
         error = "this is not a Rim3D save file";
@@ -3515,6 +3553,7 @@ bool saveDecode(const std::vector<uint8_t>& bytes, SaveData& out, std::string& e
         return false;
     }
     SaveBinaryReader reader(bytes.data() + headerSize, bodyEnd - headerSize, version);
+    reader.setRemap(remap);
     out = SaveData();
     if (version >= kSaveSectionsFormat) {
         reader.readSections();
@@ -3554,6 +3593,10 @@ class SimSaveAccess {
 public:
     static SaveData collect(const Sim& sim);
     static bool restore(Sim& sim, SaveData& data, std::string& error);
+    static void collectEntity(const Sim& sim, Entity e, SaveEntity& out);
+    static bool restoreEntity(Sim& sim, SaveEntity& e, std::string& error);
+    static bool moveThings(Sim& from, const std::vector<Entity>& roots, Sim& to, const std::vector<Entity>& into, bool keepPawns,
+                           std::vector<Entity>& made, std::string& error);
     // A sim with the saved settings and a regenerated map, ready for restore.
     static std::unique_ptr<Sim> makeEmpty(const SaveData& data, std::shared_ptr<const DefDatabase> defs,
                                           std::string& error);
@@ -3578,6 +3621,1071 @@ std::unique_ptr<Sim> SimSaveAccess::makeEmpty(const SaveData& data, std::shared_
         return nullptr;
     }
     return sim;
+}
+
+// One thing as a save keeps it (also what moves a thing to another map, W5).
+void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
+    const entt::registry& reg = sim.things_->registry();
+    out.id = entt::to_integral(e);
+    if (const Thing* thing = reg.try_get<Thing>(e)) {
+        out.thing = SaveThing{sim.defs_->get(thing->def).defName(), thing->category};
+    }
+    if (const Position* position = reg.try_get<Position>(e)) {
+        out.position = *position;
+    }
+    if (const Footprint* footprint = reg.try_get<Footprint>(e)) {
+        out.footprint = *footprint;
+    }
+    if (const StackCount* stack = reg.try_get<StackCount>(e)) {
+        out.stack = *stack;
+    }
+    if (const HitPoints* hitPoints = reg.try_get<HitPoints>(e)) {
+        out.hitPoints = *hitPoints;
+    }
+    if (const Mover* mover = reg.try_get<Mover>(e)) {
+        out.mover = *mover;
+    }
+    if (const Worker* worker = reg.try_get<Worker>(e)) {
+        SaveWorker w;
+        w.job = worker->job;
+        w.workType = worker->job.workType.valid() ? sim.defs_->get(worker->job.workType).defName() : std::string();
+        for (const BillUsed& used : worker->job.used) {
+            w.used.push_back(SaveBillUsed{sim.defs_->get(used.def).defName(), used.count});
+        }
+        w.job.used.clear();
+        w.avoid = worker->avoid;
+        out.worker = std::move(w);
+    }
+    if (const Spoilage* spoilage = reg.try_get<Spoilage>(e)) {
+        SaveSpoilage saved;
+        saved.rot = spoilage->rot;
+        saved.decay = spoilage->decay;
+        saved.poisoned = spoilage->poisoned;
+        for (const DefId ingredient : spoilage->ingredients) {
+            saved.ingredients.push_back(sim.defs_->get(ingredient).defName());
+        }
+        out.spoilage = std::move(saved);
+    }
+    if (const Joy* joy = reg.try_get<Joy>(e)) {
+        SaveJoy saved;
+        saved.joy = *joy;
+        const Worker* worker = reg.try_get<Worker>(e);
+        if (worker != nullptr && worker->job.activity.valid()) {
+            saved.activity = sim.defs_->get(worker->job.activity).defName();
+        }
+        out.joy = std::move(saved);
+    }
+    if (const WorkSettings* work = reg.try_get<WorkSettings>(e)) {
+        SaveWorkSettings w;
+        for (const WorkPriority& entry : work->entries) {
+            w.entries.push_back(SaveWorkPriority{sim.defs_->get(entry.workType).defName(), entry.priority, entry.disabled});
+        }
+        out.work = std::move(w);
+    }
+    if (const Carrying* carrying = reg.try_get<Carrying>(e)) {
+        out.carrying = *carrying;
+    }
+    if (const Needs* needs = reg.try_get<Needs>(e)) {
+        out.needs = *needs;
+    }
+    if (const Door* door = reg.try_get<Door>(e)) {
+        out.door = *door;
+    }
+    if (const PowerPart* part = reg.try_get<PowerPart>(e)) {
+        out.power = *part;
+        out.power->net = 0;  // worked out again on loading
+        out.power->watts = 0.0;
+    }
+    if (const Mood* mood = reg.try_get<Mood>(e)) {
+        out.mood = *mood;
+    }
+    if (const Schedule* schedule = reg.try_get<Schedule>(e)) {
+        out.schedule = *schedule;
+    }
+    if (const Bed* bed = reg.try_get<Bed>(e)) {
+        out.bed = *bed;
+    }
+    if (const Colonist* colonist = reg.try_get<Colonist>(e)) {
+        out.colonist = *colonist;
+    }
+    if (const PawnLooks* looks = reg.try_get<PawnLooks>(e)) {
+        out.looks = *looks;
+    }
+    if (const MentalBreaker* breaker = reg.try_get<MentalBreaker>(e)) {
+        out.mentalBreaker = *breaker;
+    }
+    if (const Visitor* visitor = reg.try_get<Visitor>(e)) {
+        out.visitor = *visitor;
+    }
+    if (const Inspired* inspired = reg.try_get<Inspired>(e)) {
+        out.inspired = *inspired;
+    }
+    out.playerControlled = reg.all_of<PlayerControl>(e);
+    if (const ConstructionSite* site = reg.try_get<ConstructionSite>(e)) {
+        SaveSite s;
+        s.stage = site->stage;
+        s.stuff = site->stuff.valid() ? sim.defs_->get(site->stuff).defName() : std::string();
+        s.origin = site->origin;
+        s.rotation = site->rotation;
+        s.sizeX = site->sizeX;
+        s.sizeY = site->sizeY;
+        for (const MaterialCount& m : site->materials) {
+            s.materials.push_back(SaveMaterial{sim.defs_->get(m.item).defName(), m.needed, m.have});
+        }
+        s.workTotal = site->workTotal;
+        s.workDone = site->workDone;
+        out.site = std::move(s);
+    }
+    if (const BuiltOf* made = reg.try_get<BuiltOf>(e)) {
+        out.builtOf = sim.defs_->get(made->stuff).defName();
+    }
+    if (reg.all_of<MarkedForDeconstruct>(e)) {
+        out.marked = SaveMark{};
+    }
+    {
+        const MadeOf* made = reg.try_get<MadeOf>(e);
+        const Quality* quality = reg.try_get<Quality>(e);
+        const PawnOutfit* outfit = reg.try_get<PawnOutfit>(e);
+        const Durability* durability = reg.try_get<Durability>(e);
+        if (made != nullptr || quality != nullptr || outfit != nullptr || durability != nullptr || reg.all_of<Tainted>(e) ||
+            reg.all_of<StripMark>(e)) {
+            SaveApparel a;
+            a.stuff = made != nullptr && made->stuff.valid() ? sim.defs_->get(made->stuff).defName() : std::string();
+            a.quality = quality != nullptr ? static_cast<int>(quality->level) : -1;
+            a.tainted = reg.all_of<Tainted>(e);
+            a.stripMark = reg.all_of<StripMark>(e);
+            a.hasOutfit = outfit != nullptr;
+            a.outfit = outfit != nullptr ? outfit->outfit : 0;
+            a.nextCheck = outfit != nullptr ? outfit->nextCheck : 0;
+            a.hasDurability = durability != nullptr;
+            a.durability = durability != nullptr ? durability->share : 1.0f;
+            out.apparel = std::move(a);
+        }
+    }
+    if (const BillList* list = reg.try_get<BillList>(e)) {
+        SaveBillList saved;
+        saved.nextId = list->nextId;
+        for (const Bill& bill : list->bills) {
+            SaveBill b;
+            b.id = bill.id;
+            b.recipe = sim.defs_->get(bill.recipe).defName();
+            b.mode = bill.mode;
+            b.count = bill.count;
+            b.suspended = bill.suspended;
+            b.skillMin = bill.skillMin;
+            b.skillMax = bill.skillMax;
+            b.radius = bill.radius;
+            b.storeZone = bill.storeZone;
+            b.countZone = bill.countZone;
+            b.unpauseAt = bill.unpauseAt;
+            b.satisfied = bill.satisfied;
+            for (const DefId def : bill.disallowed) {
+                b.disallowed.push_back(sim.defs_->get(def).defName());
+            }
+            saved.bills.push_back(std::move(b));
+        }
+        out.bills = std::move(saved);
+    }
+    if (const Fuel* fuel = reg.try_get<Fuel>(e)) {
+        out.fuel = *fuel;
+    }
+    if (const StoreIn* store = reg.try_get<StoreIn>(e)) {
+        out.storeIn = *store;
+    }
+    if (reg.all_of<RepairMark>(e) || reg.all_of<FitOrder>(e) || reg.all_of<FittedParts>(e)) {
+        SaveRepair saved;
+        saved.marked = reg.all_of<RepairMark>(e);
+        if (const FitOrder* order = reg.try_get<FitOrder>(e)) {
+            saved.order = sim.defs_->get(order->part).defName();
+        }
+        if (const FittedParts* parts = reg.try_get<FittedParts>(e)) {
+            for (const DefId part : parts->parts) {
+                saved.parts.push_back(sim.defs_->get(part).defName());
+            }
+        }
+        out.repair = std::move(saved);
+    }
+    if (const Health* health = reg.try_get<Health>(e)) {
+        SaveHealth saved;
+        saved.protagonist = health->protagonist;
+        saved.rest = health->rest;
+        for (const Injury& injury : health->injuries) {
+            saved.injuries.push_back(SaveInjury{injury.part, sim.defs_->get(injury.hediff).defName(), injury.severity,
+                                                injury.tendQuality, injury.peak, injury.infectAt});
+        }
+        for (const Disease& disease : health->diseases) {
+            saved.diseases.push_back(SaveDisease{sim.defs_->get(disease.def).defName(), disease.severity, disease.tendQuality,
+                                                 disease.tendedUntil, disease.tendTotal, disease.part});
+        }
+        for (const Immunity& immunity : health->immunities) {
+            saved.immunities.push_back(SaveImmunity{sim.defs_->get(immunity.def).defName(), immunity.level});
+        }
+        saved.missing = health->missing;
+        for (const AddedPart& added : health->added) {
+            saved.added.push_back(SaveAddedPart{added.part, sim.defs_->get(added.hediff).defName()});
+        }
+        saved.bloodLoss = health->bloodLoss;
+        for (const EnvironmentHediff& env : health->environment) {
+            saved.environment.push_back(SaveEnvironmentHediff{sim.defs_->get(env.def).defName(), env.severity});
+        }
+        saved.dead = health->dead;
+        saved.cause = health->cause;
+        saved.downed = health->downed;
+        saved.dirty = health->dirty;
+        out.health = std::move(saved);
+    }
+    if (const Posture* posture = reg.try_get<Posture>(e)) {
+        out.posture = *posture;
+    }
+    if (const Gear* gear = reg.try_get<Gear>(e)) {
+        out.gear = *gear;
+    }
+    if (const EquippedBy* by = reg.try_get<EquippedBy>(e)) {
+        out.equippedBy = *by;
+    }
+    if (const Shooter* shooter = reg.try_get<Shooter>(e)) {
+        out.shooter = *shooter;
+    }
+    if (const Faction* faction = reg.try_get<Faction>(e)) {
+        out.faction = *faction;
+    }
+    if (const Fighter* fighter = reg.try_get<Fighter>(e)) {
+        out.fighter = *fighter;
+    }
+    if (const Magazine* magazine = reg.try_get<Magazine>(e)) {
+        out.magazine = *magazine;
+    }
+    if (const DefensePlan* plan = reg.try_get<DefensePlan>(e)) {
+        out.defense = *plan;
+    }
+    if (const Raider* raider = reg.try_get<Raider>(e)) {
+        out.raider = *raider;
+    }
+    if (const Kidnapped* kidnapped = reg.try_get<Kidnapped>(e)) {
+        out.kidnapped = *kidnapped;
+    }
+    if (const RecoilKick* kick = reg.try_get<RecoilKick>(e)) {
+        out.kick = *kick;
+    }
+    if (const DodgeRoll* roll = reg.try_get<DodgeRoll>(e)) {
+        out.roll = *roll;
+    }
+    if (const Gear* gear = reg.try_get<Gear>(e); gear != nullptr && !gear->stowed.empty()) {
+        out.stowed = gear->stowed;
+    }
+    if (const WeaponSwitch* change = reg.try_get<WeaponSwitch>(e)) {
+        out.weaponSwitch = *change;
+    }
+    if (const Animal* animal = reg.try_get<Animal>(e)) {
+        out.animal = *animal;
+    }
+    if (const Prisoner* prisoner = reg.try_get<Prisoner>(e)) {
+        out.prisoner = *prisoner;
+    }
+    if (const PrisonBed* prisonBed = reg.try_get<PrisonBed>(e)) {
+        out.prisonBed = *prisonBed;
+    }
+    if (const Operations* operations = reg.try_get<Operations>(e)) {
+        SaveOperations saved;
+        saved.nextId = operations->nextId;
+        for (const Operation& op : operations->list) {
+            saved.list.push_back(SaveOperation{op.id, sim.defs_->get(op.recipe).defName(), op.part});
+        }
+        out.operations = std::move(saved);
+    }
+    if (const MedicalSettings* medical = reg.try_get<MedicalSettings>(e)) {
+        out.medical = *medical;
+    }
+    if (const AnimalCare* care = reg.try_get<AnimalCare>(e)) {
+        out.care = *care;
+    }
+    if (const AnimalBreed* breed = reg.try_get<AnimalBreed>(e)) {
+        out.breed = *breed;
+    }
+    if (const Hatching* hatching = reg.try_get<Hatching>(e)) {
+        out.hatching = *hatching;
+    }
+    if (const Young* young = reg.try_get<Young>(e)) {
+        out.young = *young;
+    }
+    if (const Burning* burning = reg.try_get<Burning>(e)) {
+        out.burning = *burning;
+    }
+    if (const Turret* turret = reg.try_get<Turret>(e)) {
+        out.turret = *turret;
+    }
+    if (const Trap* trap = reg.try_get<Trap>(e)) {
+        out.trap = *trap;
+    }
+    if (const Attunement* a = reg.try_get<Attunement>(e)) {
+        SaveAttunement saved{a->level, a->strain, a->focus, {}};
+        for (const DefId p : a->powers) {
+            saved.powers.push_back(sim.defs_->get(p).defName());
+        }
+        out.attunement = std::move(saved);
+    }
+    if (const Casting* c = reg.try_get<Casting>(e)) {
+        out.casting = SaveCasting{sim.defs_->get(c->power).defName(), *c};
+    }
+    if (const Stunned* s = reg.try_get<Stunned>(e)) {
+        out.stunned = *s;
+    }
+    if (const ResonanceEffects* fx = reg.try_get<ResonanceEffects>(e)) {
+        out.resonanceFx = *fx;
+    }
+    if (const Melee* melee = reg.try_get<Melee>(e)) {
+        out.melee = *melee;
+    }
+    if (const Social* social = reg.try_get<Social>(e)) {
+        out.social = *social;
+    }
+    if (const SocialFight* fight = reg.try_get<SocialFight>(e)) {
+        out.socialFight = *fight;
+    }
+    if (const Projectile* p = reg.try_get<Projectile>(e)) {
+        out.projectile = SaveProjectile{sim.defs_->get(p->def).defName(), sim.defs_->get(p->weapon).defName(), *p};
+    }
+    if (const Grenade* g = reg.try_get<Grenade>(e)) {
+        out.grenade = SaveGrenade{sim.defs_->get(g->def).defName(), g->item.valid() ? sim.defs_->get(g->item).defName() : std::string(), *g};
+    }
+    if (const Belt* belt = reg.try_get<Belt>(e)) {
+        SaveBelt saved;
+        for (const BeltStack& s : belt->stacks) {
+            saved.stacks.push_back(SaveBeltStack{sim.defs_->get(s.item).defName(), s.count});
+        }
+        out.belt = std::move(saved);
+    }
+    if (const Thrower* t = reg.try_get<Thrower>(e)) {
+        out.thrower = SaveThrower{t->item.valid() ? sim.defs_->get(t->item).defName() : std::string(), *t};
+    }
+    if (const KnockedDown* k = reg.try_get<KnockedDown>(e)) {
+        out.knocked = *k;
+    }
+    if (const AwayPawn* away = reg.try_get<AwayPawn>(e)) {
+        out.away = *away;
+    }
+}
+
+// Puts one saved thing's parts back on the entity with its id, which has none yet.
+bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
+    Things& things = *sim.things_;
+    entt::registry& reg = things.registry();
+    (void)things;
+    const Entity entity = static_cast<Entity>(e.id);
+    if (e.thing) {
+        const Def* def = sim.defs_->find(kSaveThingsKind, e.thing->def);
+        if (def == nullptr) {
+            error = "the save has a thing made from '" + e.thing->def + "', which the data files no longer have";
+            return false;
+        }
+        reg.emplace<Thing>(entity, Thing{def->id(), e.thing->category});
+    }
+    if (e.position) {
+        if (!sim.map_.inBounds(cellOf(*e.position))) {
+            error = "the save has a thing outside the map";
+            return false;
+        }
+        reg.emplace<Position>(entity, *e.position);
+    }
+    if (e.footprint) {
+        reg.emplace<Footprint>(entity, *e.footprint);
+    }
+    if (e.stack) {
+        reg.emplace<StackCount>(entity, *e.stack);
+    }
+    if (e.hitPoints) {
+        reg.emplace<HitPoints>(entity, *e.hitPoints);
+    }
+    if (e.mover) {
+        reg.emplace<Mover>(entity, std::move(*e.mover));
+    }
+    if (e.worker) {
+        Worker worker;
+        worker.job = e.worker->job;
+        worker.job.workType = DefId{};
+        worker.job.activity = DefId{};  // from the recreation section below
+        if (!e.worker->workType.empty()) {
+            // A work type the data files dropped leaves the job without one; it runs on.
+            worker.job.workType = sim.defs_->idOf(kSaveWorkTypesKind, e.worker->workType);
+        }
+        for (const SaveBillUsed& used : e.worker->used) {
+            const DefId def = sim.defs_->idOf(kSaveThingsKind, used.def);
+            if (!def.valid()) {
+                error = "the save has a bill job with '" + used.def + "', which the data files no longer have";
+                return false;
+            }
+            worker.job.used.push_back(BillUsed{def, used.count});
+        }
+        worker.avoid = std::move(e.worker->avoid);
+        reg.emplace<Worker>(entity, std::move(worker));
+    }
+    if (e.work) {
+        // Matched to today's work types by name: one the save doesn't know gets the default
+        // priority, one the data files dropped is forgotten.
+        WorkSettings work = sim.jobs_->defaultWorkSettings();
+        for (WorkPriority& entry : work.entries) {
+            for (const SaveWorkPriority& saved : e.work->entries) {
+                if (saved.workType == sim.defs_->get(entry.workType).defName()) {
+                    entry.priority = saved.priority;
+                    entry.disabled = saved.disabled;
+                }
+            }
+        }
+        reg.emplace<WorkSettings>(entity, std::move(work));
+    }
+    if (e.carrying) {
+        reg.emplace<Carrying>(entity, *e.carrying);
+    }
+    if (e.needs) {
+        reg.emplace<Needs>(entity, *e.needs);
+    }
+    if (e.mood) {
+        reg.emplace<Mood>(entity, *e.mood);
+    }
+    if (e.footprint && e.footprint->isDoor) {
+        reg.emplace<Door>(entity, e.door.value_or(Door{}));  // saves before format 12: closed
+    }
+    if (e.power) {
+        reg.emplace<PowerPart>(entity, *e.power);
+    } else if (e.footprint && e.thing && sim.defs_->get(reg.get<Thing>(entity).def).has("power")) {
+        reg.emplace<PowerPart>(entity);  // saves from before the section: switched on, unpowered until the first step
+    }
+    if (e.schedule) {
+        reg.emplace<Schedule>(entity, *e.schedule);
+    }
+    if (e.bed) {
+        reg.emplace<Bed>(entity, *e.bed);
+    }
+    if (e.colonist) {
+        reg.emplace<Colonist>(entity, std::move(*e.colonist));
+    }
+    if (e.site) {
+        ConstructionSite site;
+        site.stage = e.site->stage;
+        if (!e.site->stuff.empty()) {
+            site.stuff = sim.defs_->idOf(kSaveThingsKind, e.site->stuff);
+            if (!site.stuff.valid()) {
+                error = "the save has a building plan made of '" + e.site->stuff + "', which the data files no longer have";
+                return false;
+            }
+        }
+        site.origin = e.site->origin;
+        site.rotation = e.site->rotation;
+        site.sizeX = e.site->sizeX;
+        site.sizeY = e.site->sizeY;
+        for (const SaveMaterial& m : e.site->materials) {
+            const DefId item = sim.defs_->idOf(kSaveThingsKind, m.item);
+            if (!item.valid()) {
+                error = "the save has a building plan that needs '" + m.item + "', which the data files no longer have";
+                return false;
+            }
+            site.materials.push_back(MaterialCount{item, m.needed, m.have});
+        }
+        site.workTotal = e.site->workTotal;
+        site.workDone = e.site->workDone;
+        if (!e.thing || !e.position || e.thing->category != ThingCategory::Building) {
+            error = "the save has a building plan that isn't a building on the map";
+            return false;
+        }
+        reg.emplace<ConstructionSite>(entity, std::move(site));
+    }
+    if (e.builtOf) {
+        const DefId stuff = sim.defs_->idOf(kSaveThingsKind, *e.builtOf);
+        if (!stuff.valid()) {
+            error = "the save has a building made of '" + *e.builtOf + "', which the data files no longer have";
+            return false;
+        }
+        reg.emplace<BuiltOf>(entity, BuiltOf{stuff});
+    }
+    if (e.marked) {
+        reg.emplace<MarkedForDeconstruct>(entity);
+    }
+    if (e.apparel) {
+        const SaveApparel& a = *e.apparel;
+        if (!a.stuff.empty()) {
+            const DefId stuff = sim.defs_->idOf(kSaveThingsKind, a.stuff);
+            if (!stuff.valid()) {
+                error = "the save has apparel made of '" + a.stuff + "', which the data files no longer have";
+                return false;
+            }
+            reg.emplace<MadeOf>(entity, MadeOf{stuff});
+        }
+        if (a.quality >= 0) {
+            reg.emplace<Quality>(entity, Quality{static_cast<uint8_t>(a.quality)});
+        }
+        if (a.tainted) {
+            reg.emplace<Tainted>(entity);
+        }
+        if (a.stripMark) {
+            reg.emplace<StripMark>(entity);
+        }
+        if (a.hasOutfit) {
+            reg.emplace<PawnOutfit>(entity, PawnOutfit{a.outfit, a.nextCheck});
+        }
+        if (a.hasDurability) {
+            reg.emplace<Durability>(entity, Durability{a.durability});
+        }
+    }
+    if (e.looks) {
+        reg.emplace<PawnLooks>(entity, std::move(*e.looks));
+        sim.giveGenes(entity);  // genes follow the lineage and are not saved (docs/design/genes.md)
+    }
+    if (e.mentalBreaker) {
+        reg.emplace<MentalBreaker>(entity, std::move(*e.mentalBreaker));
+    }
+    if (e.visitor) {
+        reg.emplace<Visitor>(entity, *e.visitor);
+    }
+    if (e.inspired) {
+        reg.emplace<Inspired>(entity, std::move(*e.inspired));
+    }
+    if (e.bills) {
+        BillList list;
+        list.nextId = e.bills->nextId;
+        for (const SaveBill& saved : e.bills->bills) {
+            const Def* recipe = sim.defs_->find("Recipes", saved.recipe);
+            if (recipe == nullptr) {
+                error = "the save has a bill for '" + saved.recipe + "', which the data files no longer have";
+                return false;
+            }
+            Bill bill;
+            bill.id = saved.id;
+            bill.recipe = recipe->id();
+            bill.mode = saved.mode;
+            bill.count = saved.count;
+            bill.suspended = saved.suspended;
+            bill.skillMin = saved.skillMin;
+            bill.skillMax = saved.skillMax;
+            bill.radius = saved.radius;
+            bill.storeZone = saved.storeZone;
+            bill.countZone = saved.countZone;
+            bill.unpauseAt = saved.unpauseAt;
+            bill.satisfied = saved.satisfied;
+            for (const std::string& name : saved.disallowed) {
+                const Def* item = sim.defs_->find("Things", name);
+                if (item == nullptr) {
+                    error = "the save has a bill that refuses '" + name + "', which the data files no longer have";
+                    return false;
+                }
+                bill.disallowed.push_back(item->id());
+            }
+            std::sort(bill.disallowed.begin(), bill.disallowed.end(), [](DefId a, DefId b) { return a.value < b.value; });
+            list.bills.push_back(std::move(bill));
+        }
+        reg.emplace<BillList>(entity, std::move(list));
+    }
+    if (e.storeIn) {
+        reg.emplace<StoreIn>(entity, *e.storeIn);
+    }
+    if (e.repair) {
+        if (e.repair->marked) {
+            reg.emplace<RepairMark>(entity);
+        }
+        if (!e.repair->order.empty()) {
+            const DefId part = sim.defs_->idOf("Things", e.repair->order);
+            if (!part.valid()) {
+                error = "the save has an upgrade order for a part that no longer exists: " + e.repair->order;
+                return false;
+            }
+            reg.emplace<FitOrder>(entity, FitOrder{part});
+        }
+        if (!e.repair->parts.empty()) {
+            FittedParts fitted;
+            for (const std::string& name : e.repair->parts) {
+                const DefId part = sim.defs_->idOf("Things", name);
+                if (!part.valid()) {
+                    error = "the save has a gun with a part that no longer exists: " + name;
+                    return false;
+                }
+                fitted.parts.push_back(part);
+            }
+            reg.emplace<FittedParts>(entity, std::move(fitted));
+        }
+    }
+    if (e.fuel) {
+        reg.emplace<Fuel>(entity, *e.fuel);
+    } else if (e.thing && e.thing->category == ThingCategory::Building && !e.site) {
+        // A building saved before fuel existed: it burns fuel now, and starts full (a stove that
+        // cooked for free keeps cooking until it first runs low).
+        const FuelSpec fuelSpec = readFuelSpec(*sim.defs_, *sim.defs_->find(kSaveThingsKind, e.thing->def));
+        if (fuelSpec.present) {
+            reg.emplace<Fuel>(entity, Fuel{fuelSpec.capacity});
+        }
+    }
+    if (e.health) {
+        Health health;
+        health.protagonist = e.health->protagonist;
+        health.rest = e.health->rest;
+        for (const SaveInjury& injury : e.health->injuries) {
+            const Def* hediff = sim.defs_->find("Hediffs", injury.hediff);
+            if (hediff == nullptr) {
+                error = "the save has an injury of '" + injury.hediff + "', which the data files no longer have";
+                return false;
+            }
+            health.injuries.push_back(Injury{injury.part, hediff->id(), injury.severity, injury.tendQuality, injury.peak, injury.infectAt});
+        }
+        for (const SaveDisease& disease : e.health->diseases) {
+            const Def* hediff = sim.defs_->find("Hediffs", disease.hediff);
+            if (hediff == nullptr || !sim.health_->isDisease(hediff->id())) {
+                error = "the save has the disease '" + disease.hediff + "', which the data files no longer have";
+                return false;
+            }
+            health.diseases.push_back(Disease{hediff->id(), disease.severity, disease.tendQuality, disease.tendedUntil, disease.tendTotal, disease.part});
+        }
+        for (const SaveImmunity& immunity : e.health->immunities) {
+            const Def* hediff = sim.defs_->find("Hediffs", immunity.hediff);
+            if (hediff == nullptr || !sim.health_->isDisease(hediff->id())) {
+                error = "the save has an immunity to '" + immunity.hediff + "', which the data files no longer have";
+                return false;
+            }
+            health.immunities.push_back(Immunity{hediff->id(), immunity.level});
+        }
+        std::sort(health.diseases.begin(), health.diseases.end(), [](const Disease& a, const Disease& b) {
+            return a.def.value != b.def.value ? a.def.value < b.def.value : a.part < b.part;
+        });
+        std::sort(health.immunities.begin(), health.immunities.end(),
+                  [](const Immunity& a, const Immunity& b) { return a.def.value < b.def.value; });
+        health.missing = e.health->missing;
+        for (const SaveAddedPart& added : e.health->added) {
+            const Def* hediff = sim.defs_->find("Hediffs", added.hediff);
+            std::string partDef;
+            DefId item;
+            float efficiency = 1.0f;
+            if (hediff == nullptr || !sim.health_->addedInfo(hediff->id(), partDef, item, efficiency)) {
+                error = "the save has the artificial part '" + added.hediff + "', which the data files no longer have";
+                return false;
+            }
+            health.added.push_back(AddedPart{added.part, hediff->id()});
+        }
+        health.bloodLoss = e.health->bloodLoss;
+        for (const SaveEnvironmentHediff& env : e.health->environment) {
+            const Def* hediff = sim.defs_->find("Hediffs", env.hediff);
+            if (hediff == nullptr) {
+                error = "the save has the illness '" + env.hediff + "', which the data files no longer have";
+                return false;
+            }
+            health.environment.push_back(EnvironmentHediff{hediff->id(), env.severity});
+        }
+        std::sort(health.environment.begin(), health.environment.end(),
+                  [](const EnvironmentHediff& a, const EnvironmentHediff& b) { return a.def.value < b.def.value; });
+        health.dead = e.health->dead;
+        health.cause = e.health->cause;
+        health.downed = e.health->downed;  // with `dirty`: a wound not yet worked out stays pending (refreshAll)
+        health.dirty = e.health->dirty;
+        const int parts = e.thing ? sim.health_->partCount(reg.get<Thing>(entity).def) : 0;
+        for (const Injury& injury : health.injuries) {
+            if (injury.part >= parts) {
+                error = "the save has an injury on a body part its pawn doesn't have";
+                return false;
+            }
+        }
+        for (const MissingPart& missing : health.missing) {
+            if (missing.part >= parts) {
+                error = "the save has a lost body part its pawn doesn't have";
+                return false;
+            }
+        }
+        for (const AddedPart& added : health.added) {
+            if (added.part >= parts) {
+                error = "the save has an artificial part on a body part its pawn doesn't have";
+                return false;
+            }
+        }
+        for (const Disease& disease : health.diseases) {
+            if (disease.part >= parts) {
+                error = "the save has a disease on a body part its pawn doesn't have";
+                return false;
+            }
+        }
+        reg.emplace<Health>(entity, std::move(health));
+    } else if (e.thing && e.thing->category == ThingCategory::Pawn &&
+               sim.defs_->get(reg.get<Thing>(entity).def).has("race.body")) {
+        reg.emplace<Health>(entity);  // saved before pawns had health
+    }
+    if (e.playerControlled) {
+        reg.emplace<PlayerControl>(entity);
+    }
+    if (e.posture) {
+        reg.emplace<Posture>(entity, *e.posture);
+    } else if (e.thing && e.thing->category == ThingCategory::Pawn) {
+        reg.emplace<Posture>(entity);  // saved before pawns had a posture
+    }
+    if (e.gear) {
+        reg.emplace<Gear>(entity, std::move(*e.gear));
+    }
+    if (e.equippedBy) {
+        reg.emplace<EquippedBy>(entity, *e.equippedBy);
+    }
+    if (e.shooter) {
+        reg.emplace<Shooter>(entity, *e.shooter);
+    }
+    if (e.projectile) {
+        Projectile p = e.projectile->p;
+        p.def = sim.defs_->idOf("Projectiles", e.projectile->def);
+        p.weapon = sim.defs_->idOf(kSaveThingsKind, e.projectile->weapon);
+        if (!p.def.valid() || !p.weapon.valid()) {
+            error = "the save has a projectile of '" + e.projectile->def + "', which the data files no longer have";
+            return false;
+        }
+        reg.emplace<Projectile>(entity, p);
+    }
+    if (e.grenade) {
+        Grenade g = e.grenade->g;
+        g.def = sim.defs_->idOf("Projectiles", e.grenade->def);
+        g.item = e.grenade->item.empty() ? DefId{} : sim.defs_->idOf(kSaveThingsKind, e.grenade->item);
+        if (!g.def.valid() || (!e.grenade->item.empty() && !g.item.valid())) {
+            error = "the save has a grenade of '" + e.grenade->def + "', which the data files no longer have";
+            return false;
+        }
+        reg.emplace<Grenade>(entity, g);
+    }
+    if (e.belt) {
+        Belt belt;
+        for (const SaveBeltStack& s : e.belt->stacks) {
+            const DefId item = sim.defs_->idOf(kSaveThingsKind, s.item);
+            if (!item.valid()) {
+                error = "the save has a grenade '" + s.item + "' on a belt, which the data files no longer have";
+                return false;
+            }
+            belt.stacks.push_back(BeltStack{item, s.count});
+        }
+        reg.emplace<Belt>(entity, std::move(belt));
+    }
+    if (e.thrower) {
+        Thrower t = e.thrower->t;
+        t.item = e.thrower->item.empty() ? DefId{} : sim.defs_->idOf(kSaveThingsKind, e.thrower->item);
+        if (!e.thrower->item.empty() && !t.item.valid()) {
+            error = "the save has a throw of '" + e.thrower->item + "', which the data files no longer have";
+            return false;
+        }
+        reg.emplace<Thrower>(entity, t);
+    }
+    if (e.knocked) {
+        reg.emplace<KnockedDown>(entity, *e.knocked);
+    }
+    if (e.faction) {
+        reg.emplace<Faction>(entity, *e.faction);
+    }
+    if (e.fighter) {
+        reg.emplace<Fighter>(entity, *e.fighter);
+    }
+    if (e.magazine) {
+        reg.emplace<Magazine>(entity, *e.magazine);
+    }
+    if (e.kick) {
+        reg.emplace<RecoilKick>(entity, *e.kick);
+    }
+    if (e.roll) {
+        reg.emplace<DodgeRoll>(entity, *e.roll);
+    }
+    if (e.stowed) {
+        if (!reg.all_of<Gear>(entity)) {
+            error = "the save has carried weapons on a pawn without gear";
+            return false;
+        }
+        reg.get<Gear>(entity).stowed = *e.stowed;
+    }
+    if (e.weaponSwitch) {
+        reg.emplace<WeaponSwitch>(entity, *e.weaponSwitch);
+    }
+    if (e.joy) {
+        reg.emplace<Joy>(entity, e.joy->joy);
+        if (!e.joy->activity.empty()) {
+            // An activity the data files dropped leaves the job without one; it ends at once.
+            if (Worker* worker = reg.try_get<Worker>(entity)) {
+                worker->job.activity = sim.defs_->idOf("RecreationActivities", e.joy->activity);
+            }
+        }
+    }
+    if (e.animal) {
+        reg.emplace<Animal>(entity, *e.animal);
+    }
+    if (e.operations) {
+        Operations operations;
+        operations.nextId = e.operations->nextId;
+        const int parts = e.thing ? sim.health_->partCount(reg.get<Thing>(entity).def) : 0;
+        for (const SaveOperation& saved : e.operations->list) {
+            const SurgeryRecipe* recipe = sim.surgery_->recipe(saved.recipe);
+            if (recipe == nullptr) {
+                error = "the save has an operation '" + saved.recipe + "', which the data files no longer have";
+                return false;
+            }
+            if (saved.part >= parts) {
+                error = "the save has an operation on a body part its patient doesn't have";
+                return false;
+            }
+            operations.list.push_back(Operation{saved.id, recipe->def, saved.part});
+        }
+        reg.emplace<Operations>(entity, std::move(operations));
+    }
+    if (e.medical) {
+        reg.emplace<MedicalSettings>(entity, *e.medical);
+    }
+    if (e.prisoner) {
+        reg.emplace<Prisoner>(entity, *e.prisoner);
+    }
+    if (e.prisonBed) {
+        reg.emplace<PrisonBed>(entity, *e.prisonBed);
+    }
+    if (e.defense) {
+        reg.emplace<DefensePlan>(entity, *e.defense);
+    }
+    if (e.kidnapped) {
+        reg.emplace<Kidnapped>(entity, *e.kidnapped);
+    }
+    if (e.raider) {
+        reg.emplace<Raider>(entity, *e.raider);
+    }
+    if (e.care) {
+        reg.emplace<AnimalCare>(entity, *e.care);
+    }
+    if (e.breed) {
+        reg.emplace<AnimalBreed>(entity, *e.breed);
+    }
+    if (e.hatching) {
+        reg.emplace<Hatching>(entity, *e.hatching);
+    }
+    if (e.young) {
+        reg.emplace<Young>(entity, *e.young);
+    }
+    if (e.burning) {
+        reg.emplace<Burning>(entity, *e.burning);
+    }
+    if (e.spoilage) {
+        Spoilage spoilage;
+        spoilage.rot = e.spoilage->rot;
+        spoilage.decay = e.spoilage->decay;
+        spoilage.poisoned = e.spoilage->poisoned;
+        for (const std::string& name : e.spoilage->ingredients) {
+            const DefId ingredient = sim.defs_->idOf(kSaveThingsKind, name);
+            if (ingredient.valid()) {  // an ingredient the data files dropped is forgotten
+                spoilage.ingredients.push_back(ingredient);
+            }
+        }
+        std::sort(spoilage.ingredients.begin(), spoilage.ingredients.end(),
+                  [](DefId a, DefId b) { return a.value < b.value; });
+        reg.emplace_or_replace<Spoilage>(entity, std::move(spoilage));
+    } else if (e.thing && e.thing->category == ThingCategory::Item && thingHasSpoilage(sim.defs_->get(reg.get<Thing>(entity).def))) {
+        reg.emplace<Spoilage>(entity);  // saved before items could spoil
+    }
+    if (e.melee) {
+        reg.emplace<Melee>(entity, *e.melee);
+    }
+    if (e.social) {
+        reg.emplace<Social>(entity, *e.social);
+    }
+    if (e.socialFight) {
+        reg.emplace<SocialFight>(entity, *e.socialFight);
+    }
+    if (e.turret) {
+        reg.emplace<Turret>(entity, *e.turret);
+    } else if (e.footprint && e.thing && sim.defs_->get(reg.get<Thing>(entity).def).has("turret")) {
+        reg.emplace<Turret>(entity);  // saved before turrets existed
+    }
+    if (e.trap) {
+        reg.emplace<Trap>(entity, *e.trap);
+    } else if (e.footprint && e.thing && sim.defs_->get(reg.get<Thing>(entity).def).has("trap")) {
+        reg.emplace<Trap>(entity);
+    }
+    if (e.attunement) {
+        Attunement a;
+        a.level = e.attunement->level;
+        a.strain = e.attunement->strain;
+        a.focus = e.attunement->focus;
+        for (const std::string& name : e.attunement->powers) {
+            const DefId power = sim.defs_->idOf("Powers", name);
+            if (power.valid()) {  // a power the data files dropped is forgotten
+                a.powers.push_back(power);
+            }
+        }
+        std::sort(a.powers.begin(), a.powers.end(), [](DefId x, DefId y) { return x.value < y.value; });
+        reg.emplace<Attunement>(entity, std::move(a));
+    }
+    if (e.casting) {
+        Casting c = e.casting->c;
+        c.power = sim.defs_->idOf("Powers", e.casting->power);
+        if (c.power.valid()) {
+            reg.emplace<Casting>(entity, c);
+        }
+    }
+    if (e.stunned) {
+        reg.emplace<Stunned>(entity, *e.stunned);
+    }
+    if (e.resonanceFx) {
+        reg.emplace<ResonanceEffects>(entity, *e.resonanceFx);
+    }
+    if (e.away) {
+        reg.emplace<AwayPawn>(entity, std::move(*e.away));
+    }
+    return true;
+}
+
+bool SimSaveAccess::moveThings(Sim& from, const std::vector<Entity>& roots, Sim& to, const std::vector<Entity>& into,
+                               bool keepPawns, std::vector<Entity>& made, std::string& error) {
+    entt::registry& src = from.things_->registry();
+    entt::registry& dst = to.things_->registry();
+    made.clear();
+    if (into.size() != roots.size() || from.defs_ != to.defs_) {
+        error = "the things can't move between these games";
+        return false;
+    }
+    const auto offMapThing = [&](Entity e) { return src.valid(e) && src.all_of<Thing>(e) && !src.all_of<Position>(e); };
+    for (size_t i = 0; i < roots.size(); ++i) {
+        if (!offMapThing(roots[i]) || src.all_of<AwayPawn>(roots[i])) {
+            error = "only things off the map can move to another map";
+            return false;
+        }
+        if (into[i] != kNoEntity && (!dst.valid(into[i]) || dst.all_of<Thing>(into[i]))) {
+            error = "the pawn's place on the other map is taken";
+            return false;
+        }
+    }
+    // What goes: the roots and every item off the map they name (worn, held, stowed, carried), found by
+    // reading their saved parts until nothing new turns up.
+    std::vector<Entity> moving(roots.begin(), roots.end());
+    std::sort(moving.begin(), moving.end());
+    if (std::adjacent_find(moving.begin(), moving.end()) != moving.end()) {
+        error = "a thing is named twice";
+        return false;
+    }
+    SaveData packet;
+    for (bool grew = true; grew;) {
+        grew = false;
+        packet.entities.clear();
+        for (const Entity e : moving) {
+            SaveEntity out;
+            collectEntity(from, e, out);
+            packet.entities.push_back(std::move(out));
+        }
+        std::vector<Entity> named;
+        const std::function<Entity(Entity)> note = [&](Entity e) {
+            named.push_back(e);
+            return e;
+        };
+        SaveData seen;
+        if (!saveDecode(saveEncode(packet), seen, error, &note)) {
+            return false;
+        }
+        for (const Entity e : named) {
+            if (e != kNoEntity && !std::binary_search(moving.begin(), moving.end(), e) && offMapThing(e) &&
+                src.get<Thing>(e).category == ThingCategory::Item) {
+                moving.insert(std::lower_bound(moving.begin(), moving.end(), e), e);
+                grew = true;
+            }
+        }
+    }
+    // Their ids over there: the given empty entities, else new ones.
+    std::vector<std::pair<Entity, Entity>> idOf;  // (here, there), in `moving` order
+    for (const Entity e : moving) {
+        const auto root = std::find(roots.begin(), roots.end(), e);
+        const Entity given = root != roots.end() ? into[static_cast<size_t>(root - roots.begin())] : kNoEntity;
+        idOf.emplace_back(e, given);
+    }
+    std::vector<uint8_t> fresh(idOf.size(), 0);
+    for (size_t i = 0; i < idOf.size(); ++i) {
+        if (idOf[i].second == kNoEntity) {
+            idOf[i].second = dst.create();
+            fresh[i] = 1;
+        }
+    }
+    const std::function<Entity(Entity)> remap = [&](Entity e) {
+        const auto at = std::lower_bound(idOf.begin(), idOf.end(), e, [](const std::pair<Entity, Entity>& p, Entity k) { return p.first < k; });
+        return at != idOf.end() && at->first == e ? at->second : kNoEntity;
+    };
+    SaveData moved;
+    if (!saveDecode(saveEncode(packet), moved, error, &remap)) {
+        for (size_t i = 0; i < idOf.size(); ++i) {
+            if (fresh[i] != 0) {
+                dst.destroy(idOf[i].second);
+            }
+        }
+        return false;
+    }
+    std::vector<AwayPawn> placeholders(idOf.size());
+    for (size_t i = 0; i < idOf.size(); ++i) {
+        if (AwayPawn* away = dst.try_get<AwayPawn>(idOf[i].second)) {
+            placeholders[i] = std::move(*away);
+            dst.remove<AwayPawn>(idOf[i].second);
+        }
+    }
+    for (size_t i = 0; i < moved.entities.size(); ++i) {
+        SaveEntity& e = moved.entities[i];
+        e.id = entt::to_integral(idOf[i].second);
+        // Nothing of its old map comes along: no job, path, controller or caravan place.
+        e.worker = e.worker ? std::optional<SaveWorker>(SaveWorker{}) : std::nullopt;
+        if (e.mover) {
+            Mover still;
+            still.metresPerStep = e.mover->metresPerStep;
+            e.mover = still;
+        }
+        e.playerControlled = false;
+        e.socialFight.reset();
+        if (!restoreEntity(to, e, error)) {
+            return false;
+        }
+        const Entity there = idOf[i].second;
+        // Ties to pawns who stayed on this map come back from when the pawn left it.
+        if (Social* social = dst.try_get<Social>(there)) {
+            const auto travelled = [&](Entity other) {
+                return std::any_of(idOf.begin(), idOf.end(), [&](const std::pair<Entity, Entity>& p) { return p.second == other; });
+            };
+            for (const OpinionMemory& m : placeholders[i].social.memories) {
+                if (dst.valid(m.other) && !travelled(m.other)) {
+                    social->memories.push_back(m);
+                }
+            }
+            for (const Bond& b : placeholders[i].social.bonds) {
+                if (dst.valid(b.other) && !travelled(b.other)) {
+                    social->bonds.push_back(b);
+                }
+            }
+        }
+        const auto drugs = from.drugs_->states().find(idOf[i].first);
+        if (drugs != from.drugs_->states().end()) {
+            to.drugs_->states()[there] = drugs->second;
+        }
+    }
+    for (const auto& [here, there] : idOf) {
+        (void)here;
+        if (dst.all_of<Thing>(there) && dst.get<Thing>(there).category == ThingCategory::Pawn) {
+            to.health_->refresh(there);
+        }
+    }
+    for (const Entity root : roots) {
+        made.push_back(remap(root));
+    }
+    // Gone from here: pawns kept as empty entities (with their ties) or destroyed; their gear and goods destroyed.
+    for (const Entity e : moving) {
+        from.jobs_->forget(e);
+        from.fighters_->forget(e);
+        from.raids_->forget(e);
+        from.mentalBreaks_->forget(e);
+        from.trade_->forget(e);
+        from.caravans_->forget(e);
+        from.drugs_->states().erase(e);
+    }
+    for (const Entity e : moving) {
+        const bool pawn = src.get<Thing>(e).category == ThingCategory::Pawn;
+        if (keepPawns && pawn && std::find(roots.begin(), roots.end(), e) != roots.end()) {
+            AwayPawn away;
+            if (const Social* social = src.try_get<Social>(e)) {
+                away.social = *social;
+            }
+            for (auto [id, pool] : src.storage()) {
+                (void)id;
+                if (pool.info() != entt::type_id<Entity>() && pool.contains(e)) {
+                    pool.remove(e);
+                }
+            }
+            src.emplace<AwayPawn>(e, std::move(away));
+        }
+    }
+    for (const Entity e : moving) {
+        if (src.all_of<Thing>(e)) {
+            from.things_->destroy(e);
+        }
+    }
+    return true;
 }
 
 SaveData SimSaveAccess::collect(const Sim& sim) {
@@ -3627,341 +4735,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.entities.reserve(ids.size());
     for (const Entity e : ids) {
         SaveEntity out;
-        out.id = entt::to_integral(e);
-        if (const Thing* thing = reg.try_get<Thing>(e)) {
-            out.thing = SaveThing{sim.defs_->get(thing->def).defName(), thing->category};
-        }
-        if (const Position* position = reg.try_get<Position>(e)) {
-            out.position = *position;
-        }
-        if (const Footprint* footprint = reg.try_get<Footprint>(e)) {
-            out.footprint = *footprint;
-        }
-        if (const StackCount* stack = reg.try_get<StackCount>(e)) {
-            out.stack = *stack;
-        }
-        if (const HitPoints* hitPoints = reg.try_get<HitPoints>(e)) {
-            out.hitPoints = *hitPoints;
-        }
-        if (const Mover* mover = reg.try_get<Mover>(e)) {
-            out.mover = *mover;
-        }
-        if (const Worker* worker = reg.try_get<Worker>(e)) {
-            SaveWorker w;
-            w.job = worker->job;
-            w.workType = worker->job.workType.valid() ? sim.defs_->get(worker->job.workType).defName() : std::string();
-            for (const BillUsed& used : worker->job.used) {
-                w.used.push_back(SaveBillUsed{sim.defs_->get(used.def).defName(), used.count});
-            }
-            w.job.used.clear();
-            w.avoid = worker->avoid;
-            out.worker = std::move(w);
-        }
-        if (const Spoilage* spoilage = reg.try_get<Spoilage>(e)) {
-            SaveSpoilage saved;
-            saved.rot = spoilage->rot;
-            saved.decay = spoilage->decay;
-            saved.poisoned = spoilage->poisoned;
-            for (const DefId ingredient : spoilage->ingredients) {
-                saved.ingredients.push_back(sim.defs_->get(ingredient).defName());
-            }
-            out.spoilage = std::move(saved);
-        }
-        if (const Joy* joy = reg.try_get<Joy>(e)) {
-            SaveJoy saved;
-            saved.joy = *joy;
-            const Worker* worker = reg.try_get<Worker>(e);
-            if (worker != nullptr && worker->job.activity.valid()) {
-                saved.activity = sim.defs_->get(worker->job.activity).defName();
-            }
-            out.joy = std::move(saved);
-        }
-        if (const WorkSettings* work = reg.try_get<WorkSettings>(e)) {
-            SaveWorkSettings w;
-            for (const WorkPriority& entry : work->entries) {
-                w.entries.push_back(SaveWorkPriority{sim.defs_->get(entry.workType).defName(), entry.priority, entry.disabled});
-            }
-            out.work = std::move(w);
-        }
-        if (const Carrying* carrying = reg.try_get<Carrying>(e)) {
-            out.carrying = *carrying;
-        }
-        if (const Needs* needs = reg.try_get<Needs>(e)) {
-            out.needs = *needs;
-        }
-        if (const Door* door = reg.try_get<Door>(e)) {
-            out.door = *door;
-        }
-        if (const PowerPart* part = reg.try_get<PowerPart>(e)) {
-            out.power = *part;
-            out.power->net = 0;  // worked out again on loading
-            out.power->watts = 0.0;
-        }
-        if (const Mood* mood = reg.try_get<Mood>(e)) {
-            out.mood = *mood;
-        }
-        if (const Schedule* schedule = reg.try_get<Schedule>(e)) {
-            out.schedule = *schedule;
-        }
-        if (const Bed* bed = reg.try_get<Bed>(e)) {
-            out.bed = *bed;
-        }
-        if (const Colonist* colonist = reg.try_get<Colonist>(e)) {
-            out.colonist = *colonist;
-        }
-        if (const PawnLooks* looks = reg.try_get<PawnLooks>(e)) {
-            out.looks = *looks;
-        }
-        if (const MentalBreaker* breaker = reg.try_get<MentalBreaker>(e)) {
-            out.mentalBreaker = *breaker;
-        }
-        if (const Visitor* visitor = reg.try_get<Visitor>(e)) {
-            out.visitor = *visitor;
-        }
-        if (const Inspired* inspired = reg.try_get<Inspired>(e)) {
-            out.inspired = *inspired;
-        }
-        out.playerControlled = reg.all_of<PlayerControl>(e);
-        if (const ConstructionSite* site = reg.try_get<ConstructionSite>(e)) {
-            SaveSite s;
-            s.stage = site->stage;
-            s.stuff = site->stuff.valid() ? sim.defs_->get(site->stuff).defName() : std::string();
-            s.origin = site->origin;
-            s.rotation = site->rotation;
-            s.sizeX = site->sizeX;
-            s.sizeY = site->sizeY;
-            for (const MaterialCount& m : site->materials) {
-                s.materials.push_back(SaveMaterial{sim.defs_->get(m.item).defName(), m.needed, m.have});
-            }
-            s.workTotal = site->workTotal;
-            s.workDone = site->workDone;
-            out.site = std::move(s);
-        }
-        if (const BuiltOf* made = reg.try_get<BuiltOf>(e)) {
-            out.builtOf = sim.defs_->get(made->stuff).defName();
-        }
-        if (reg.all_of<MarkedForDeconstruct>(e)) {
-            out.marked = SaveMark{};
-        }
-        {
-            const MadeOf* made = reg.try_get<MadeOf>(e);
-            const Quality* quality = reg.try_get<Quality>(e);
-            const PawnOutfit* outfit = reg.try_get<PawnOutfit>(e);
-            const Durability* durability = reg.try_get<Durability>(e);
-            if (made != nullptr || quality != nullptr || outfit != nullptr || durability != nullptr || reg.all_of<Tainted>(e) ||
-                reg.all_of<StripMark>(e)) {
-                SaveApparel a;
-                a.stuff = made != nullptr && made->stuff.valid() ? sim.defs_->get(made->stuff).defName() : std::string();
-                a.quality = quality != nullptr ? static_cast<int>(quality->level) : -1;
-                a.tainted = reg.all_of<Tainted>(e);
-                a.stripMark = reg.all_of<StripMark>(e);
-                a.hasOutfit = outfit != nullptr;
-                a.outfit = outfit != nullptr ? outfit->outfit : 0;
-                a.nextCheck = outfit != nullptr ? outfit->nextCheck : 0;
-                a.hasDurability = durability != nullptr;
-                a.durability = durability != nullptr ? durability->share : 1.0f;
-                out.apparel = std::move(a);
-            }
-        }
-        if (const BillList* list = reg.try_get<BillList>(e)) {
-            SaveBillList saved;
-            saved.nextId = list->nextId;
-            for (const Bill& bill : list->bills) {
-                SaveBill b;
-                b.id = bill.id;
-                b.recipe = sim.defs_->get(bill.recipe).defName();
-                b.mode = bill.mode;
-                b.count = bill.count;
-                b.suspended = bill.suspended;
-                b.skillMin = bill.skillMin;
-                b.skillMax = bill.skillMax;
-                b.radius = bill.radius;
-                b.storeZone = bill.storeZone;
-                b.countZone = bill.countZone;
-                b.unpauseAt = bill.unpauseAt;
-                b.satisfied = bill.satisfied;
-                for (const DefId def : bill.disallowed) {
-                    b.disallowed.push_back(sim.defs_->get(def).defName());
-                }
-                saved.bills.push_back(std::move(b));
-            }
-            out.bills = std::move(saved);
-        }
-        if (const Fuel* fuel = reg.try_get<Fuel>(e)) {
-            out.fuel = *fuel;
-        }
-        if (const StoreIn* store = reg.try_get<StoreIn>(e)) {
-            out.storeIn = *store;
-        }
-        if (reg.all_of<RepairMark>(e) || reg.all_of<FitOrder>(e) || reg.all_of<FittedParts>(e)) {
-            SaveRepair saved;
-            saved.marked = reg.all_of<RepairMark>(e);
-            if (const FitOrder* order = reg.try_get<FitOrder>(e)) {
-                saved.order = sim.defs_->get(order->part).defName();
-            }
-            if (const FittedParts* parts = reg.try_get<FittedParts>(e)) {
-                for (const DefId part : parts->parts) {
-                    saved.parts.push_back(sim.defs_->get(part).defName());
-                }
-            }
-            out.repair = std::move(saved);
-        }
-        if (const Health* health = reg.try_get<Health>(e)) {
-            SaveHealth saved;
-            saved.protagonist = health->protagonist;
-            saved.rest = health->rest;
-            for (const Injury& injury : health->injuries) {
-                saved.injuries.push_back(SaveInjury{injury.part, sim.defs_->get(injury.hediff).defName(), injury.severity,
-                                                    injury.tendQuality, injury.peak, injury.infectAt});
-            }
-            for (const Disease& disease : health->diseases) {
-                saved.diseases.push_back(SaveDisease{sim.defs_->get(disease.def).defName(), disease.severity, disease.tendQuality,
-                                                     disease.tendedUntil, disease.tendTotal, disease.part});
-            }
-            for (const Immunity& immunity : health->immunities) {
-                saved.immunities.push_back(SaveImmunity{sim.defs_->get(immunity.def).defName(), immunity.level});
-            }
-            saved.missing = health->missing;
-            for (const AddedPart& added : health->added) {
-                saved.added.push_back(SaveAddedPart{added.part, sim.defs_->get(added.hediff).defName()});
-            }
-            saved.bloodLoss = health->bloodLoss;
-            for (const EnvironmentHediff& env : health->environment) {
-                saved.environment.push_back(SaveEnvironmentHediff{sim.defs_->get(env.def).defName(), env.severity});
-            }
-            saved.dead = health->dead;
-            saved.cause = health->cause;
-            saved.downed = health->downed;
-            saved.dirty = health->dirty;
-            out.health = std::move(saved);
-        }
-        if (const Posture* posture = reg.try_get<Posture>(e)) {
-            out.posture = *posture;
-        }
-        if (const Gear* gear = reg.try_get<Gear>(e)) {
-            out.gear = *gear;
-        }
-        if (const EquippedBy* by = reg.try_get<EquippedBy>(e)) {
-            out.equippedBy = *by;
-        }
-        if (const Shooter* shooter = reg.try_get<Shooter>(e)) {
-            out.shooter = *shooter;
-        }
-        if (const Faction* faction = reg.try_get<Faction>(e)) {
-            out.faction = *faction;
-        }
-        if (const Fighter* fighter = reg.try_get<Fighter>(e)) {
-            out.fighter = *fighter;
-        }
-        if (const Magazine* magazine = reg.try_get<Magazine>(e)) {
-            out.magazine = *magazine;
-        }
-        if (const DefensePlan* plan = reg.try_get<DefensePlan>(e)) {
-            out.defense = *plan;
-        }
-        if (const Raider* raider = reg.try_get<Raider>(e)) {
-            out.raider = *raider;
-        }
-        if (const Kidnapped* kidnapped = reg.try_get<Kidnapped>(e)) {
-            out.kidnapped = *kidnapped;
-        }
-        if (const RecoilKick* kick = reg.try_get<RecoilKick>(e)) {
-            out.kick = *kick;
-        }
-        if (const DodgeRoll* roll = reg.try_get<DodgeRoll>(e)) {
-            out.roll = *roll;
-        }
-        if (const Gear* gear = reg.try_get<Gear>(e); gear != nullptr && !gear->stowed.empty()) {
-            out.stowed = gear->stowed;
-        }
-        if (const WeaponSwitch* change = reg.try_get<WeaponSwitch>(e)) {
-            out.weaponSwitch = *change;
-        }
-        if (const Animal* animal = reg.try_get<Animal>(e)) {
-            out.animal = *animal;
-        }
-        if (const Prisoner* prisoner = reg.try_get<Prisoner>(e)) {
-            out.prisoner = *prisoner;
-        }
-        if (const PrisonBed* prisonBed = reg.try_get<PrisonBed>(e)) {
-            out.prisonBed = *prisonBed;
-        }
-        if (const Operations* operations = reg.try_get<Operations>(e)) {
-            SaveOperations saved;
-            saved.nextId = operations->nextId;
-            for (const Operation& op : operations->list) {
-                saved.list.push_back(SaveOperation{op.id, sim.defs_->get(op.recipe).defName(), op.part});
-            }
-            out.operations = std::move(saved);
-        }
-        if (const MedicalSettings* medical = reg.try_get<MedicalSettings>(e)) {
-            out.medical = *medical;
-        }
-        if (const AnimalCare* care = reg.try_get<AnimalCare>(e)) {
-            out.care = *care;
-        }
-        if (const AnimalBreed* breed = reg.try_get<AnimalBreed>(e)) {
-            out.breed = *breed;
-        }
-        if (const Hatching* hatching = reg.try_get<Hatching>(e)) {
-            out.hatching = *hatching;
-        }
-        if (const Young* young = reg.try_get<Young>(e)) {
-            out.young = *young;
-        }
-        if (const Burning* burning = reg.try_get<Burning>(e)) {
-            out.burning = *burning;
-        }
-        if (const Turret* turret = reg.try_get<Turret>(e)) {
-            out.turret = *turret;
-        }
-        if (const Trap* trap = reg.try_get<Trap>(e)) {
-            out.trap = *trap;
-        }
-        if (const Attunement* a = reg.try_get<Attunement>(e)) {
-            SaveAttunement saved{a->level, a->strain, a->focus, {}};
-            for (const DefId p : a->powers) {
-                saved.powers.push_back(sim.defs_->get(p).defName());
-            }
-            out.attunement = std::move(saved);
-        }
-        if (const Casting* c = reg.try_get<Casting>(e)) {
-            out.casting = SaveCasting{sim.defs_->get(c->power).defName(), *c};
-        }
-        if (const Stunned* s = reg.try_get<Stunned>(e)) {
-            out.stunned = *s;
-        }
-        if (const ResonanceEffects* fx = reg.try_get<ResonanceEffects>(e)) {
-            out.resonanceFx = *fx;
-        }
-        if (const Melee* melee = reg.try_get<Melee>(e)) {
-            out.melee = *melee;
-        }
-        if (const Social* social = reg.try_get<Social>(e)) {
-            out.social = *social;
-        }
-        if (const SocialFight* fight = reg.try_get<SocialFight>(e)) {
-            out.socialFight = *fight;
-        }
-        if (const Projectile* p = reg.try_get<Projectile>(e)) {
-            out.projectile = SaveProjectile{sim.defs_->get(p->def).defName(), sim.defs_->get(p->weapon).defName(), *p};
-        }
-        if (const Grenade* g = reg.try_get<Grenade>(e)) {
-            out.grenade = SaveGrenade{sim.defs_->get(g->def).defName(), g->item.valid() ? sim.defs_->get(g->item).defName() : std::string(), *g};
-        }
-        if (const Belt* belt = reg.try_get<Belt>(e)) {
-            SaveBelt saved;
-            for (const BeltStack& s : belt->stacks) {
-                saved.stacks.push_back(SaveBeltStack{sim.defs_->get(s.item).defName(), s.count});
-            }
-            out.belt = std::move(saved);
-        }
-        if (const Thrower* t = reg.try_get<Thrower>(e)) {
-            out.thrower = SaveThrower{t->item.valid() ? sim.defs_->get(t->item).defName() : std::string(), *t};
-        }
-        if (const KnockedDown* k = reg.try_get<KnockedDown>(e)) {
-            out.knocked = *k;
-        }
+        collectEntity(sim, e, out);
         d.entities.push_back(std::move(out));
     }
     d.paths = sim.pathfinder_.saveState();
@@ -4078,6 +4852,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.spoilageState = sim.spoilage_->state();
     d.craftingState = sim.crafting_->state();
     d.trade = sim.trade_->state();
+    for (const OtherMap& m : sim.otherMaps_) {
+        d.maps.push_back(SaveOtherMap{m.tile, m.madeAt, saveSim(*m.sim)});
+    }
     {
         const WeatherState state = sim.weather_->state();
         const auto nameOf = [&](DefId def) { return def.valid() ? sim.defs_->get(def).defName() : std::string(); };
@@ -4155,548 +4932,8 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
 
     // Components. A thing's def is looked up by name; the rest is copied back.
     for (SaveEntity& e : d.entities) {
-        const Entity entity = static_cast<Entity>(e.id);
-        if (e.thing) {
-            const Def* def = sim.defs_->find(kSaveThingsKind, e.thing->def);
-            if (def == nullptr) {
-                error = "the save has a thing made from '" + e.thing->def + "', which the data files no longer have";
-                return false;
-            }
-            reg.emplace<Thing>(entity, Thing{def->id(), e.thing->category});
-        }
-        if (e.position) {
-            if (!sim.map_.inBounds(cellOf(*e.position))) {
-                error = "the save has a thing outside the map";
-                return false;
-            }
-            reg.emplace<Position>(entity, *e.position);
-        }
-        if (e.footprint) {
-            reg.emplace<Footprint>(entity, *e.footprint);
-        }
-        if (e.stack) {
-            reg.emplace<StackCount>(entity, *e.stack);
-        }
-        if (e.hitPoints) {
-            reg.emplace<HitPoints>(entity, *e.hitPoints);
-        }
-        if (e.mover) {
-            reg.emplace<Mover>(entity, std::move(*e.mover));
-        }
-        if (e.worker) {
-            Worker worker;
-            worker.job = e.worker->job;
-            worker.job.workType = DefId{};
-            worker.job.activity = DefId{};  // from the recreation section below
-            if (!e.worker->workType.empty()) {
-                // A work type the data files dropped leaves the job without one; it runs on.
-                worker.job.workType = sim.defs_->idOf(kSaveWorkTypesKind, e.worker->workType);
-            }
-            for (const SaveBillUsed& used : e.worker->used) {
-                const DefId def = sim.defs_->idOf(kSaveThingsKind, used.def);
-                if (!def.valid()) {
-                    error = "the save has a bill job with '" + used.def + "', which the data files no longer have";
-                    return false;
-                }
-                worker.job.used.push_back(BillUsed{def, used.count});
-            }
-            worker.avoid = std::move(e.worker->avoid);
-            reg.emplace<Worker>(entity, std::move(worker));
-        }
-        if (e.work) {
-            // Matched to today's work types by name: one the save doesn't know gets the default
-            // priority, one the data files dropped is forgotten.
-            WorkSettings work = sim.jobs_->defaultWorkSettings();
-            for (WorkPriority& entry : work.entries) {
-                for (const SaveWorkPriority& saved : e.work->entries) {
-                    if (saved.workType == sim.defs_->get(entry.workType).defName()) {
-                        entry.priority = saved.priority;
-                        entry.disabled = saved.disabled;
-                    }
-                }
-            }
-            reg.emplace<WorkSettings>(entity, std::move(work));
-        }
-        if (e.carrying) {
-            reg.emplace<Carrying>(entity, *e.carrying);
-        }
-        if (e.needs) {
-            reg.emplace<Needs>(entity, *e.needs);
-        }
-        if (e.mood) {
-            reg.emplace<Mood>(entity, *e.mood);
-        }
-        if (e.footprint && e.footprint->isDoor) {
-            reg.emplace<Door>(entity, e.door.value_or(Door{}));  // saves before format 12: closed
-        }
-        if (e.power) {
-            reg.emplace<PowerPart>(entity, *e.power);
-        } else if (e.footprint && e.thing && sim.defs_->get(reg.get<Thing>(entity).def).has("power")) {
-            reg.emplace<PowerPart>(entity);  // saves from before the section: switched on, unpowered until the first step
-        }
-        if (e.schedule) {
-            reg.emplace<Schedule>(entity, *e.schedule);
-        }
-        if (e.bed) {
-            reg.emplace<Bed>(entity, *e.bed);
-        }
-        if (e.colonist) {
-            reg.emplace<Colonist>(entity, std::move(*e.colonist));
-        }
-        if (e.site) {
-            ConstructionSite site;
-            site.stage = e.site->stage;
-            if (!e.site->stuff.empty()) {
-                site.stuff = sim.defs_->idOf(kSaveThingsKind, e.site->stuff);
-                if (!site.stuff.valid()) {
-                    error = "the save has a building plan made of '" + e.site->stuff + "', which the data files no longer have";
-                    return false;
-                }
-            }
-            site.origin = e.site->origin;
-            site.rotation = e.site->rotation;
-            site.sizeX = e.site->sizeX;
-            site.sizeY = e.site->sizeY;
-            for (const SaveMaterial& m : e.site->materials) {
-                const DefId item = sim.defs_->idOf(kSaveThingsKind, m.item);
-                if (!item.valid()) {
-                    error = "the save has a building plan that needs '" + m.item + "', which the data files no longer have";
-                    return false;
-                }
-                site.materials.push_back(MaterialCount{item, m.needed, m.have});
-            }
-            site.workTotal = e.site->workTotal;
-            site.workDone = e.site->workDone;
-            if (!e.thing || !e.position || e.thing->category != ThingCategory::Building) {
-                error = "the save has a building plan that isn't a building on the map";
-                return false;
-            }
-            reg.emplace<ConstructionSite>(entity, std::move(site));
-        }
-        if (e.builtOf) {
-            const DefId stuff = sim.defs_->idOf(kSaveThingsKind, *e.builtOf);
-            if (!stuff.valid()) {
-                error = "the save has a building made of '" + *e.builtOf + "', which the data files no longer have";
-                return false;
-            }
-            reg.emplace<BuiltOf>(entity, BuiltOf{stuff});
-        }
-        if (e.marked) {
-            reg.emplace<MarkedForDeconstruct>(entity);
-        }
-        if (e.apparel) {
-            const SaveApparel& a = *e.apparel;
-            if (!a.stuff.empty()) {
-                const DefId stuff = sim.defs_->idOf(kSaveThingsKind, a.stuff);
-                if (!stuff.valid()) {
-                    error = "the save has apparel made of '" + a.stuff + "', which the data files no longer have";
-                    return false;
-                }
-                reg.emplace<MadeOf>(entity, MadeOf{stuff});
-            }
-            if (a.quality >= 0) {
-                reg.emplace<Quality>(entity, Quality{static_cast<uint8_t>(a.quality)});
-            }
-            if (a.tainted) {
-                reg.emplace<Tainted>(entity);
-            }
-            if (a.stripMark) {
-                reg.emplace<StripMark>(entity);
-            }
-            if (a.hasOutfit) {
-                reg.emplace<PawnOutfit>(entity, PawnOutfit{a.outfit, a.nextCheck});
-            }
-            if (a.hasDurability) {
-                reg.emplace<Durability>(entity, Durability{a.durability});
-            }
-        }
-        if (e.looks) {
-            reg.emplace<PawnLooks>(entity, std::move(*e.looks));
-            sim.giveGenes(entity);  // genes follow the lineage and are not saved (docs/design/genes.md)
-        }
-        if (e.mentalBreaker) {
-            reg.emplace<MentalBreaker>(entity, std::move(*e.mentalBreaker));
-        }
-        if (e.visitor) {
-            reg.emplace<Visitor>(entity, *e.visitor);
-        }
-        if (e.inspired) {
-            reg.emplace<Inspired>(entity, std::move(*e.inspired));
-        }
-        if (e.bills) {
-            BillList list;
-            list.nextId = e.bills->nextId;
-            for (const SaveBill& saved : e.bills->bills) {
-                const Def* recipe = sim.defs_->find("Recipes", saved.recipe);
-                if (recipe == nullptr) {
-                    error = "the save has a bill for '" + saved.recipe + "', which the data files no longer have";
-                    return false;
-                }
-                Bill bill;
-                bill.id = saved.id;
-                bill.recipe = recipe->id();
-                bill.mode = saved.mode;
-                bill.count = saved.count;
-                bill.suspended = saved.suspended;
-                bill.skillMin = saved.skillMin;
-                bill.skillMax = saved.skillMax;
-                bill.radius = saved.radius;
-                bill.storeZone = saved.storeZone;
-                bill.countZone = saved.countZone;
-                bill.unpauseAt = saved.unpauseAt;
-                bill.satisfied = saved.satisfied;
-                for (const std::string& name : saved.disallowed) {
-                    const Def* item = sim.defs_->find("Things", name);
-                    if (item == nullptr) {
-                        error = "the save has a bill that refuses '" + name + "', which the data files no longer have";
-                        return false;
-                    }
-                    bill.disallowed.push_back(item->id());
-                }
-                std::sort(bill.disallowed.begin(), bill.disallowed.end(), [](DefId a, DefId b) { return a.value < b.value; });
-                list.bills.push_back(std::move(bill));
-            }
-            reg.emplace<BillList>(entity, std::move(list));
-        }
-        if (e.storeIn) {
-            reg.emplace<StoreIn>(entity, *e.storeIn);
-        }
-        if (e.repair) {
-            if (e.repair->marked) {
-                reg.emplace<RepairMark>(entity);
-            }
-            if (!e.repair->order.empty()) {
-                const DefId part = sim.defs_->idOf("Things", e.repair->order);
-                if (!part.valid()) {
-                    error = "the save has an upgrade order for a part that no longer exists: " + e.repair->order;
-                    return false;
-                }
-                reg.emplace<FitOrder>(entity, FitOrder{part});
-            }
-            if (!e.repair->parts.empty()) {
-                FittedParts fitted;
-                for (const std::string& name : e.repair->parts) {
-                    const DefId part = sim.defs_->idOf("Things", name);
-                    if (!part.valid()) {
-                        error = "the save has a gun with a part that no longer exists: " + name;
-                        return false;
-                    }
-                    fitted.parts.push_back(part);
-                }
-                reg.emplace<FittedParts>(entity, std::move(fitted));
-            }
-        }
-        if (e.fuel) {
-            reg.emplace<Fuel>(entity, *e.fuel);
-        } else if (e.thing && e.thing->category == ThingCategory::Building && !e.site) {
-            // A building saved before fuel existed: it burns fuel now, and starts full (a stove that
-            // cooked for free keeps cooking until it first runs low).
-            const FuelSpec fuelSpec = readFuelSpec(*sim.defs_, *sim.defs_->find(kSaveThingsKind, e.thing->def));
-            if (fuelSpec.present) {
-                reg.emplace<Fuel>(entity, Fuel{fuelSpec.capacity});
-            }
-        }
-        if (e.health) {
-            Health health;
-            health.protagonist = e.health->protagonist;
-            health.rest = e.health->rest;
-            for (const SaveInjury& injury : e.health->injuries) {
-                const Def* hediff = sim.defs_->find("Hediffs", injury.hediff);
-                if (hediff == nullptr) {
-                    error = "the save has an injury of '" + injury.hediff + "', which the data files no longer have";
-                    return false;
-                }
-                health.injuries.push_back(Injury{injury.part, hediff->id(), injury.severity, injury.tendQuality, injury.peak, injury.infectAt});
-            }
-            for (const SaveDisease& disease : e.health->diseases) {
-                const Def* hediff = sim.defs_->find("Hediffs", disease.hediff);
-                if (hediff == nullptr || !sim.health_->isDisease(hediff->id())) {
-                    error = "the save has the disease '" + disease.hediff + "', which the data files no longer have";
-                    return false;
-                }
-                health.diseases.push_back(Disease{hediff->id(), disease.severity, disease.tendQuality, disease.tendedUntil, disease.tendTotal, disease.part});
-            }
-            for (const SaveImmunity& immunity : e.health->immunities) {
-                const Def* hediff = sim.defs_->find("Hediffs", immunity.hediff);
-                if (hediff == nullptr || !sim.health_->isDisease(hediff->id())) {
-                    error = "the save has an immunity to '" + immunity.hediff + "', which the data files no longer have";
-                    return false;
-                }
-                health.immunities.push_back(Immunity{hediff->id(), immunity.level});
-            }
-            std::sort(health.diseases.begin(), health.diseases.end(), [](const Disease& a, const Disease& b) {
-                return a.def.value != b.def.value ? a.def.value < b.def.value : a.part < b.part;
-            });
-            std::sort(health.immunities.begin(), health.immunities.end(),
-                      [](const Immunity& a, const Immunity& b) { return a.def.value < b.def.value; });
-            health.missing = e.health->missing;
-            for (const SaveAddedPart& added : e.health->added) {
-                const Def* hediff = sim.defs_->find("Hediffs", added.hediff);
-                std::string partDef;
-                DefId item;
-                float efficiency = 1.0f;
-                if (hediff == nullptr || !sim.health_->addedInfo(hediff->id(), partDef, item, efficiency)) {
-                    error = "the save has the artificial part '" + added.hediff + "', which the data files no longer have";
-                    return false;
-                }
-                health.added.push_back(AddedPart{added.part, hediff->id()});
-            }
-            health.bloodLoss = e.health->bloodLoss;
-            for (const SaveEnvironmentHediff& env : e.health->environment) {
-                const Def* hediff = sim.defs_->find("Hediffs", env.hediff);
-                if (hediff == nullptr) {
-                    error = "the save has the illness '" + env.hediff + "', which the data files no longer have";
-                    return false;
-                }
-                health.environment.push_back(EnvironmentHediff{hediff->id(), env.severity});
-            }
-            std::sort(health.environment.begin(), health.environment.end(),
-                      [](const EnvironmentHediff& a, const EnvironmentHediff& b) { return a.def.value < b.def.value; });
-            health.dead = e.health->dead;
-            health.cause = e.health->cause;
-            health.downed = e.health->downed;  // with `dirty`: a wound not yet worked out stays pending (refreshAll)
-            health.dirty = e.health->dirty;
-            const int parts = e.thing ? sim.health_->partCount(reg.get<Thing>(entity).def) : 0;
-            for (const Injury& injury : health.injuries) {
-                if (injury.part >= parts) {
-                    error = "the save has an injury on a body part its pawn doesn't have";
-                    return false;
-                }
-            }
-            for (const MissingPart& missing : health.missing) {
-                if (missing.part >= parts) {
-                    error = "the save has a lost body part its pawn doesn't have";
-                    return false;
-                }
-            }
-            for (const AddedPart& added : health.added) {
-                if (added.part >= parts) {
-                    error = "the save has an artificial part on a body part its pawn doesn't have";
-                    return false;
-                }
-            }
-            for (const Disease& disease : health.diseases) {
-                if (disease.part >= parts) {
-                    error = "the save has a disease on a body part its pawn doesn't have";
-                    return false;
-                }
-            }
-            reg.emplace<Health>(entity, std::move(health));
-        } else if (e.thing && e.thing->category == ThingCategory::Pawn &&
-                   sim.defs_->get(reg.get<Thing>(entity).def).has("race.body")) {
-            reg.emplace<Health>(entity);  // saved before pawns had health
-        }
-        if (e.playerControlled) {
-            reg.emplace<PlayerControl>(entity);
-        }
-        if (e.posture) {
-            reg.emplace<Posture>(entity, *e.posture);
-        } else if (e.thing && e.thing->category == ThingCategory::Pawn) {
-            reg.emplace<Posture>(entity);  // saved before pawns had a posture
-        }
-        if (e.gear) {
-            reg.emplace<Gear>(entity, std::move(*e.gear));
-        }
-        if (e.equippedBy) {
-            reg.emplace<EquippedBy>(entity, *e.equippedBy);
-        }
-        if (e.shooter) {
-            reg.emplace<Shooter>(entity, *e.shooter);
-        }
-        if (e.projectile) {
-            Projectile p = e.projectile->p;
-            p.def = sim.defs_->idOf("Projectiles", e.projectile->def);
-            p.weapon = sim.defs_->idOf(kSaveThingsKind, e.projectile->weapon);
-            if (!p.def.valid() || !p.weapon.valid()) {
-                error = "the save has a projectile of '" + e.projectile->def + "', which the data files no longer have";
-                return false;
-            }
-            reg.emplace<Projectile>(entity, p);
-        }
-        if (e.grenade) {
-            Grenade g = e.grenade->g;
-            g.def = sim.defs_->idOf("Projectiles", e.grenade->def);
-            g.item = e.grenade->item.empty() ? DefId{} : sim.defs_->idOf(kSaveThingsKind, e.grenade->item);
-            if (!g.def.valid() || (!e.grenade->item.empty() && !g.item.valid())) {
-                error = "the save has a grenade of '" + e.grenade->def + "', which the data files no longer have";
-                return false;
-            }
-            reg.emplace<Grenade>(entity, g);
-        }
-        if (e.belt) {
-            Belt belt;
-            for (const SaveBeltStack& s : e.belt->stacks) {
-                const DefId item = sim.defs_->idOf(kSaveThingsKind, s.item);
-                if (!item.valid()) {
-                    error = "the save has a grenade '" + s.item + "' on a belt, which the data files no longer have";
-                    return false;
-                }
-                belt.stacks.push_back(BeltStack{item, s.count});
-            }
-            reg.emplace<Belt>(entity, std::move(belt));
-        }
-        if (e.thrower) {
-            Thrower t = e.thrower->t;
-            t.item = e.thrower->item.empty() ? DefId{} : sim.defs_->idOf(kSaveThingsKind, e.thrower->item);
-            if (!e.thrower->item.empty() && !t.item.valid()) {
-                error = "the save has a throw of '" + e.thrower->item + "', which the data files no longer have";
-                return false;
-            }
-            reg.emplace<Thrower>(entity, t);
-        }
-        if (e.knocked) {
-            reg.emplace<KnockedDown>(entity, *e.knocked);
-        }
-        if (e.faction) {
-            reg.emplace<Faction>(entity, *e.faction);
-        }
-        if (e.fighter) {
-            reg.emplace<Fighter>(entity, *e.fighter);
-        }
-        if (e.magazine) {
-            reg.emplace<Magazine>(entity, *e.magazine);
-        }
-        if (e.kick) {
-            reg.emplace<RecoilKick>(entity, *e.kick);
-        }
-        if (e.roll) {
-            reg.emplace<DodgeRoll>(entity, *e.roll);
-        }
-        if (e.stowed) {
-            if (!reg.all_of<Gear>(entity)) {
-                error = "the save has carried weapons on a pawn without gear";
-                return false;
-            }
-            reg.get<Gear>(entity).stowed = *e.stowed;
-        }
-        if (e.weaponSwitch) {
-            reg.emplace<WeaponSwitch>(entity, *e.weaponSwitch);
-        }
-        if (e.joy) {
-            reg.emplace<Joy>(entity, e.joy->joy);
-            if (!e.joy->activity.empty()) {
-                // An activity the data files dropped leaves the job without one; it ends at once.
-                if (Worker* worker = reg.try_get<Worker>(entity)) {
-                    worker->job.activity = sim.defs_->idOf("RecreationActivities", e.joy->activity);
-                }
-            }
-        }
-        if (e.animal) {
-            reg.emplace<Animal>(entity, *e.animal);
-        }
-        if (e.operations) {
-            Operations operations;
-            operations.nextId = e.operations->nextId;
-            const int parts = e.thing ? sim.health_->partCount(reg.get<Thing>(entity).def) : 0;
-            for (const SaveOperation& saved : e.operations->list) {
-                const SurgeryRecipe* recipe = sim.surgery_->recipe(saved.recipe);
-                if (recipe == nullptr) {
-                    error = "the save has an operation '" + saved.recipe + "', which the data files no longer have";
-                    return false;
-                }
-                if (saved.part >= parts) {
-                    error = "the save has an operation on a body part its patient doesn't have";
-                    return false;
-                }
-                operations.list.push_back(Operation{saved.id, recipe->def, saved.part});
-            }
-            reg.emplace<Operations>(entity, std::move(operations));
-        }
-        if (e.medical) {
-            reg.emplace<MedicalSettings>(entity, *e.medical);
-        }
-        if (e.prisoner) {
-            reg.emplace<Prisoner>(entity, *e.prisoner);
-        }
-        if (e.prisonBed) {
-            reg.emplace<PrisonBed>(entity, *e.prisonBed);
-        }
-        if (e.defense) {
-            reg.emplace<DefensePlan>(entity, *e.defense);
-        }
-        if (e.kidnapped) {
-            reg.emplace<Kidnapped>(entity, *e.kidnapped);
-        }
-        if (e.raider) {
-            reg.emplace<Raider>(entity, *e.raider);
-        }
-        if (e.care) {
-            reg.emplace<AnimalCare>(entity, *e.care);
-        }
-        if (e.breed) {
-            reg.emplace<AnimalBreed>(entity, *e.breed);
-        }
-        if (e.hatching) {
-            reg.emplace<Hatching>(entity, *e.hatching);
-        }
-        if (e.young) {
-            reg.emplace<Young>(entity, *e.young);
-        }
-        if (e.burning) {
-            reg.emplace<Burning>(entity, *e.burning);
-        }
-        if (e.spoilage) {
-            Spoilage spoilage;
-            spoilage.rot = e.spoilage->rot;
-            spoilage.decay = e.spoilage->decay;
-            spoilage.poisoned = e.spoilage->poisoned;
-            for (const std::string& name : e.spoilage->ingredients) {
-                const DefId ingredient = sim.defs_->idOf(kSaveThingsKind, name);
-                if (ingredient.valid()) {  // an ingredient the data files dropped is forgotten
-                    spoilage.ingredients.push_back(ingredient);
-                }
-            }
-            std::sort(spoilage.ingredients.begin(), spoilage.ingredients.end(),
-                      [](DefId a, DefId b) { return a.value < b.value; });
-            reg.emplace_or_replace<Spoilage>(entity, std::move(spoilage));
-        } else if (e.thing && e.thing->category == ThingCategory::Item && thingHasSpoilage(sim.defs_->get(reg.get<Thing>(entity).def))) {
-            reg.emplace<Spoilage>(entity);  // saved before items could spoil
-        }
-        if (e.melee) {
-            reg.emplace<Melee>(entity, *e.melee);
-        }
-        if (e.social) {
-            reg.emplace<Social>(entity, *e.social);
-        }
-        if (e.socialFight) {
-            reg.emplace<SocialFight>(entity, *e.socialFight);
-        }
-        if (e.turret) {
-            reg.emplace<Turret>(entity, *e.turret);
-        } else if (e.footprint && e.thing && sim.defs_->get(reg.get<Thing>(entity).def).has("turret")) {
-            reg.emplace<Turret>(entity);  // saved before turrets existed
-        }
-        if (e.trap) {
-            reg.emplace<Trap>(entity, *e.trap);
-        } else if (e.footprint && e.thing && sim.defs_->get(reg.get<Thing>(entity).def).has("trap")) {
-            reg.emplace<Trap>(entity);
-        }
-        if (e.attunement) {
-            Attunement a;
-            a.level = e.attunement->level;
-            a.strain = e.attunement->strain;
-            a.focus = e.attunement->focus;
-            for (const std::string& name : e.attunement->powers) {
-                const DefId power = sim.defs_->idOf("Powers", name);
-                if (power.valid()) {  // a power the data files dropped is forgotten
-                    a.powers.push_back(power);
-                }
-            }
-            std::sort(a.powers.begin(), a.powers.end(), [](DefId x, DefId y) { return x.value < y.value; });
-            reg.emplace<Attunement>(entity, std::move(a));
-        }
-        if (e.casting) {
-            Casting c = e.casting->c;
-            c.power = sim.defs_->idOf("Powers", e.casting->power);
-            if (c.power.valid()) {
-                reg.emplace<Casting>(entity, c);
-            }
-        }
-        if (e.stunned) {
-            reg.emplace<Stunned>(entity, *e.stunned);
-        }
-        if (e.resonanceFx) {
-            reg.emplace<ResonanceEffects>(entity, *e.resonanceFx);
+        if (!restoreEntity(sim, e, error)) {
+            return false;
         }
     }
     sim.animals_->restore(d.animals);
@@ -4931,6 +5168,14 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.caravans_->restore(std::move(d.caravans), d.caravanNextId, error)) {
         return false;
     }
+    for (SaveOtherMap& m : d.maps) {
+        SaveLoadResult loaded = loadSim(m.save, sim.defs_);
+        if (!loaded.sim) {
+            error = "the save's map of world tile " + std::to_string(m.tile) + " doesn't load: " + loaded.error;
+            return false;
+        }
+        sim.otherMaps_.push_back(OtherMap{m.tile, m.madeAt, std::move(loaded.sim)});
+    }
     sim.apparel_->restoreOutfits(std::move(d.outfits), d.nextOutfitId);
     if (d.hasWeather) {
         WeatherState state;
@@ -5095,6 +5340,11 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     sim.lights_->update();  // derived from the buildings and roofs, so not saved: the first step must already see it
     sim.events_.clear();
     return true;
+}
+
+bool moveOffMapThings(Sim& from, const std::vector<Entity>& roots, Sim& to, const std::vector<Entity>& into, bool keepPawns,
+                      std::vector<Entity>& made, std::string& error) {
+    return SimSaveAccess::moveThings(from, roots, to, into, keepPawns, made, error);
 }
 
 std::vector<uint8_t> saveSim(const Sim& sim) {

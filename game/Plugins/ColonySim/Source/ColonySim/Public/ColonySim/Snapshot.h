@@ -517,6 +517,16 @@ struct CaravanView {
     float tilesPerDay = 0.0f;  // at the next tile's cost and its load, counting the night's rest; 0 when it can't move
 };
 
+// Another map (W5, docs/design/other-maps.md): a tile caravans have visited, kept as a sim of its own
+// (Sim::otherMap(tile) for its things and its own snapshot).
+struct OtherMapView {
+    int tile = -1;
+    std::string name;   // the settlement's name, else the biome's label
+    int size = 0;       // cells per side
+    int colonists = 0;  // of the colony, there now
+    int caravans = 0;   // forming there to leave
+};
+
 // The date, the weather and the sky's mood (docs/design/weather.md). Snow per cell is not here:
 // read `Sim::weather().snowDepth(cell)` when `snowChanges` goes up.
 struct WeatherView {
@@ -647,6 +657,7 @@ struct Snapshot {
     ShipView ship;
     NarratorView narrator;
     std::vector<CaravanView> caravans;  // by id
+    std::vector<OtherMapView> otherMaps;  // in the order they were made
     TravelView travel;
 
     // The thing with this id, or null if it is not on the map. Binary search.

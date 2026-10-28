@@ -401,6 +401,9 @@ const char* eventTypeName(EventType type) {
         case EventType::ChemicalDamage: return "ChemicalDamage";
         case EventType::SkipStarted: return "SkipStarted";
         case EventType::SkipEnded: return "SkipEnded";
+        case EventType::OtherMapMade: return "OtherMapMade";
+        case EventType::OtherMapEntered: return "OtherMapEntered";
+        case EventType::OtherMapLeft: return "OtherMapLeft";
     }
     return "?";
 }

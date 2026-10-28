@@ -90,7 +90,9 @@ class Farming;
 class NarratorSystem;
 class DisasterSystem;
 struct Snapshot;
+struct OtherMapView;
 class SimSaveAccess;
+class StateHasher;
 
 // The planet the game is on (docs/design/world-map.md). Off (the default), there is no world: the map is
 // made from SimSettings::seed in the temperate forest, as before W2. On, the sim makes the world from
@@ -103,6 +105,9 @@ struct WorldSettings {
     // The colony's tile. -1: picked when the sim is made, by the scenario's biome, and then stored
     // here, so a save or replay always names the tile.
     int startTile = -1;
+    // This sim is another map (W5, docs/design/other-maps.md): `startTile` is the visited tile, which may
+    // hold a settlement, and the colony's own tile is not here.
+    bool visit = false;
 };
 
 // Sizes a world can have (0 takes the def's) and a start tile that is a tile or -1. Saves and replays
@@ -130,6 +135,9 @@ struct SimSettings {
     // animal density in percent (100 = as the biome says). Needs the Biomes and animal defs.
     int wildAnimals = 0;
     WorldSettings world{};  // saved in its own section, "world"
+    // The game second the sim starts at (another map made in play starts at the colony's time). Not
+    // saved: a save has the time it reached.
+    int64_t startSecond = 0;
 };
 
 struct SimStats {
@@ -160,6 +168,16 @@ struct StepProfile {
         names.push_back(name);
         ms.push_back(elapsedMs);
     }
+};
+
+class Sim;
+
+// Another world tile's map (W5, docs/design/other-maps.md): a sim of its own, made the first time a
+// caravan visits the tile and kept from then on, stepped with the colony's.
+struct OtherMap {
+    int tile = -1;
+    int64_t madeAt = 0;  // the colony's game second when it was made
+    std::unique_ptr<Sim> sim;
 };
 
 // The whole game state and its rules. Unreal sends commands, reads events and snapshots, and
@@ -438,6 +456,13 @@ public:
     PowerGrid& power() { return *power_; }
     const PowerGrid& power() const { return *power_; }
 
+    // Other maps (W5, docs/design/other-maps.md): the tiles caravans have visited, each its own sim with
+    // its own things (their ids are that sim's). Pawns there from the colony stay here as entities with
+    // only an `AwayPawn` part. Null / empty without a world, and on another map itself.
+    const std::vector<OtherMap>& otherMaps() const { return otherMaps_; }
+    const Sim* otherMap(int tile) const;
+    Sim* otherMap(int tile);
+
     // Hauling test: the middle of its stockpile zone (empty if no cell is walkable) and its pawns.
     const std::optional<CellPos>& stockpileCell() const { return stockpileCell_; }
     const std::vector<Entity>& haulers() const { return haulers_; }
@@ -463,6 +488,17 @@ private:
     // ClimbCommand (U17): sets the controlled pawn off up or down the stairs or ladder at its cell.
     bool startClimb(Entity pawn, float dx, float dy, std::string& error);
     void placeStockpileAndThings();
+    // W5 (OtherMaps.cpp): a caravan on another tile walks onto its map, made the first time.
+    bool visitMap(int caravan, std::string& error);
+    // A caravan formed by colonists on another map; it comes back here once it sets out.
+    bool formOnMap(int tile, const std::vector<Entity>& pawns, const std::vector<Entity>& items, int destination,
+                   int& formed, std::string& error);
+    // Steps every other map once, then takes over the caravans that left them.
+    void stepOtherMaps();
+    void takeCaravanFrom(OtherMap& map, int caravan);
+    void hashOtherMaps(StateHasher& h) const;
+    void writeOtherMaps(std::vector<OtherMapView>& out) const;
+    std::string placeName(int tile) const;
     void pruneDesignations();
     void startScenario();
     // One colonist of the scenario at a cell (Scenario.cpp); kNoEntity and a setup error if it fails.
@@ -560,6 +596,7 @@ private:
     std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
     std::unique_ptr<ResonanceSystem> resonance_;  // after the fighters and the job system it holds
     std::unique_ptr<TravelSystem> travel_;    // after nearly everything: it asks the others about threats
+    std::vector<OtherMap> otherMaps_;         // W5, by the order they were made
 };
 
 }  // namespace colony

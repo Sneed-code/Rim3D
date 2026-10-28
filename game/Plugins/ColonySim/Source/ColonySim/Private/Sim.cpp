@@ -124,7 +124,7 @@ std::unique_ptr<World> simMakeWorld(SimSettings& settings, const DefDatabase& de
     if (world->empty()) {
         return world;
     }
-    if (w.startTile < 0) {
+    if (w.startTile < 0 && !w.visit) {
         StartCriteria criteria;
         const Def* scenario = settings.scenario.empty() ? nullptr : defs.find("Scenarios", settings.scenario);
         criteria.biome = scenario != nullptr ? scenario->text("biome", "TemperateForest") : "TemperateForest";
@@ -135,7 +135,9 @@ std::unique_ptr<World> simMakeWorld(SimSettings& settings, const DefDatabase& de
             w.startTile = world->suggestStartTile(criteria);
         }
     }
-    if (w.startTile >= 0) {
+    if (w.visit) {
+        world->chooseVisitTile(w.startTile);  // another map (W5): any land a caravan can stand on
+    } else if (w.startTile >= 0) {
         world->chooseStartTile(w.startTile);  // refused (the tile stays -1) if a colony can't start there
     }
     return world;
@@ -216,6 +218,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       time_(),
       rng_(splitMix64(settings.seed ^ 0x7061776EULL)),
       groundHash_(map_.contentHash()) {
+    time_.seconds = settings_.startSecond;
     if (world_) {
         worldHash_ = world_->hash();
         if (world_->empty()) {
@@ -1622,9 +1625,14 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
     } else if (const auto* caravan = std::get_if<CaravanCommand>(&command)) {
         bool ok = false;
-        if (caravan->action == "Form") {
+        if (caravan->action == "Form" && caravan->map >= 0) {
+            int formed = 0;
+            ok = formOnMap(caravan->map, caravan->pawns, caravan->items, caravan->tile, formed, error);
+        } else if (caravan->action == "Form") {
             int formed = 0;
             ok = caravans_->form(caravan->pawns, caravan->items, caravan->tile, formed, error);
+        } else if (caravan->action == "Visit") {
+            ok = visitMap(caravan->caravan, error);
         } else if (caravan->action == "Move") {
             ok = caravans_->move(caravan->caravan, caravan->tile, error);
         } else if (caravan->action == "Stop") {
@@ -1632,7 +1640,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         } else if (caravan->action == "Enter") {
             ok = caravans_->enter(caravan->caravan, error);
         } else {
-            error = "no caravan action '" + caravan->action + "' (Form, Move, Stop or Enter)";
+            error = "no caravan action '" + caravan->action + "' (Form, Move, Stop, Enter or Visit)";
         }
         if (!ok) {
             commandFailed(id, error);
@@ -1840,6 +1848,7 @@ void Sim::stepOnce(bool keepEvents) {
     }
     travel_->afterStep();
     narrator_->postpone(travel_->takeHold());  // a skip that ended (here or by a command) held the narrator back
+    { SimLap lap(profile_, "otherMaps"); stepOtherMaps(); }  // W5: in step with the colony's clock
     if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
         checkpoints_.push_back(Checkpoint{time_.seconds, stateHash()});
     }
@@ -1956,6 +1965,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
         }
         out.caravans.push_back(v);
     }
+    writeOtherMaps(out.otherMaps);
     {
         const ShipParts parts = ship_->parts();
         ShipView& s = out.ship;
@@ -2552,6 +2562,7 @@ uint64_t Sim::stateHash() const {
     quests_->hashState(h);
     ship_->hashState(h);
     caravans_->hashState(h);
+    hashOtherMaps(h);
     talents_->hashState(h);
     drugs_->hashState(h);
     pathfinder_.hashState(h);

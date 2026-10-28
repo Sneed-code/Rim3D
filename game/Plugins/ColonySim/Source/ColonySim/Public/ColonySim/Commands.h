@@ -632,14 +632,18 @@ struct ShipCommand {
 
 // Caravans (W4, docs/design/caravans.md). `action` is "Form" (the colonists `pawns` take the item stacks `items`
 // off the map and set out for `tile`; -1 keeps them on the start tile), "Move" (caravan `caravan` sets off for
-// `tile`), "Stop" or "Enter" (a caravan on the start tile comes back onto the map). Needs a world (SimSettings::world).
-// Fails with the reason in plain words.
+// `tile`), "Stop", "Enter" (a caravan on the start tile comes back onto the map) or "Visit" (W5: a caravan on
+// another tile walks onto that tile's map, made the first time, docs/design/other-maps.md). Needs a world
+// (SimSettings::world). Fails with the reason in plain words.
 struct CaravanCommand {
     std::string action;
     int caravan = 0;
     int tile = -1;
     std::vector<Entity> pawns;
     std::vector<Entity> items;
+    // "Form" only: -1 for colonists on the colony's map, else the tile of the other map they are on (and then
+    // `pawns` and `items` are that map's things, Sim::otherMap(tile)).
+    int map = -1;
 };
 
 // Dev command: the weather becomes this Weathers def now (by defName, e.g. "Rain") and lasts `hours`

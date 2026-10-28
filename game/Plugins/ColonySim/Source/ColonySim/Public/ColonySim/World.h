@@ -106,6 +106,10 @@ public:
     int startTile() const { return startTile_; }
     bool canStartAt(int index) const;
     bool chooseStartTile(int index);
+    // Another map's tile (W5, docs/design/other-maps.md): any land a caravan can stand on, settlements too.
+    bool canVisit(int index) const;
+    // Makes `index` the tile this world's sim is the map of, for a visit; false (and nothing changes) if it can't be visited.
+    bool chooseVisitTile(int index);
     int suggestStartTile(const StartCriteria& criteria) const;  // -1 if nothing matches
 
     WorldSite siteFor(int index) const;
