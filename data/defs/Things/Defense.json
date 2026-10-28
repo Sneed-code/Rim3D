@@ -57,5 +57,14 @@
     "unverified": ["costs", "stats", "explosion", "researchPrerequisite"],
     "ours": ["trap", "explodeWhenDestroyed", "visual"]
   },
-  {"defName": "FirefoamPopper", "parent": "BuildingBase", "label": "firefoam popper", "source": "RimWorld wiki", "researchPrerequisite": "Firefoam", "size": [1, 1], "designationCategory": "Security", "costs": {"Steel": 30}, "visual": {"parts": [{"shape": "cylinder", "radius": 0.3, "height": 0.55, "color": [0.75, 0.15, 0.12]}, {"shape": "cylinder", "radius": 0.1, "height": 0.12, "at": [0, 0, 0.55], "color": [0.85, 0.85, 0.88]}]}, "stats": {"maxHitPoints": 80, "workToBuild": 600, "flammability": 0.0}, "firefoam": {"radius": 9.0, "triggerRadius": 3.0}, "unverified": ["costs", "stats", "firefoam.radius", "researchPrerequisite"], "ours": ["firefoam.triggerRadius", "visual"]}
+  {"defName": "FirefoamPopper", "parent": "BuildingBase", "label": "firefoam popper", "source": "RimWorld wiki", "researchPrerequisite": "Firefoam", "size": [1, 1], "designationCategory": "Security", "costs": {"Steel": 30}, "visual": {"parts": [{"shape": "cylinder", "radius": 0.3, "height": 0.55, "color": [0.75, 0.15, 0.12]}, {"shape": "cylinder", "radius": 0.1, "height": 0.12, "at": [0, 0, 0.55], "color": [0.85, 0.85, 0.88]}]}, "stats": {"maxHitPoints": 80, "workToBuild": 600, "flammability": 0.0}, "firefoam": {"radius": 9.0, "triggerRadius": 3.0}, "unverified": ["costs", "stats", "firefoam.radius", "researchPrerequisite"], "ours": ["firefoam.triggerRadius", "visual"]},
+  {
+    "defName": "Sandbags", "parent": "BuildingBase", "label": "sandbags", "source": "RimWorld wiki",
+    "size": [1, 1], "passability": "PassThroughOnly", "pathCost": 42, "fillPercent": 0.55, "designationCategory": "Security",
+    "stuffCategories": ["Fabric", "Leathery"], "costStuffCount": 5,
+    "visual": { "parts": [{ "shape": "box", "size": [0.95, 0.95, 0.55], "stuff": true }] },
+    "stats": { "maxHitPoints": 300, "workToBuild": 259.2, "flammability": 0.0, "beauty": -10 },
+    "ours": ["visual"],
+    "note": "Wiki-checked 2026-10-28: 5 fabric or leather, 300 HP, 180 ticks of work (x 1.44 = 259.2 game seconds), cover 55% (fill), path cost 42, beauty -10, 0% flammable, 1x1, no research. Siege camps build them (docs/design/sieges.md)."
+  }
 ]
