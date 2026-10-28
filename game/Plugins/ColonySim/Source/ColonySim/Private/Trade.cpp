@@ -3,6 +3,7 @@
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
+#include "ColonySim/Construction.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Hash.h"
@@ -24,6 +25,10 @@ namespace colony {
 namespace {
 
 // Names are prefixed because Unreal's unity builds merge .cpp files together.
+
+bool tradeCellLess(const CellPos& a, const CellPos& b) {
+    return a.level != b.level ? a.level < b.level : a.y != b.y ? a.y < b.y : a.x < b.x;
+}
 
 float tradeCurve(const std::vector<std::pair<float, float>>& points, float x) {
     if (points.empty()) {
@@ -163,6 +168,10 @@ TradeRules TradeRules::read(const DefDatabase& defs) {
     num("settlementDiscount", r.settlementDiscount);
     num("settlementRestockDays", r.settlementRestockDays);
     r.settlementRestockDays = std::max(0.1f, r.settlementRestockDays);
+    num("comms.requestGoodwillCost", r.requestGoodwillCost);
+    num("comms.requestCooldownDays", r.requestCooldownDays);
+    num("comms.requestArrivalDays", r.requestArrivalDays);
+    num("comms.beaconRadius", r.beaconRadius);
     r.visitorCountMax = std::max(r.visitorCountMax, r.visitorCountMin);
     r.guardCountMax = std::max(r.guardCountMax, r.guardCountMin);
     r.caravanStayHoursMax = std::max(r.caravanStayHoursMax, r.caravanStayHoursMin);
@@ -328,6 +337,17 @@ bool TradeSystem::gift(uint32_t visitId, const std::vector<TradeLine>& items, st
         error = "nothing to give";
         return false;
     }
+    // A ship takes gifts as it trades: over the comms console, from the beacons' cells.
+    std::vector<CellPos> beacon;
+    const std::vector<CellPos>* from = nullptr;
+    if (visit->kind == VisitKind::Orbital) {
+        error = orbitalBlocker(kNoEntity);
+        if (!error.empty()) {
+            return false;
+        }
+        beacon = beaconCells();
+        from = &beacon;
+    }
     std::vector<TradeLine> gifts;
     for (const TradeLine& l : items) {
         if (l.count <= 0 || l.count > 1000000) {
@@ -348,14 +368,14 @@ bool TradeSystem::gift(uint32_t visitId, const std::vector<TradeLine>& items, st
             error = def->label() + " is worth nothing as a gift";
             return false;
         }
-        if (colonyHas(l.thing) < l.count) {
-            error = "the colony hasn't " + std::to_string(l.count) + " of " + def->label();
+        if (countOnMap(l.thing, from) < l.count) {
+            error = "the colony hasn't " + std::to_string(l.count) + " of " + def->label() + (from != nullptr ? " by a trade beacon" : "");
             return false;
         }
         value += each * l.count;
     }
     for (const TradeLine& l : gifts) {
-        takeFromMap(l.thing, l.count);
+        takeFromMap(l.thing, l.count, from);
         if (l.thing == "Silver") {
             visit->silver += l.count;
         } else if (!visit->traderKind.empty()) {
@@ -877,6 +897,10 @@ const Visit* TradeSystem::find(uint32_t id) const {
 // ---- Trade ------------------------------------------------------------------------------------
 
 int TradeSystem::colonyHas(const std::string& thing) const {
+    return countOnMap(thing, nullptr);
+}
+
+int TradeSystem::countOnMap(const std::string& thing, const std::vector<CellPos>* cells) const {
     const DefId def = defs_.idOf("Things", thing);
     if (!def.valid()) {
         return 0;
@@ -884,11 +908,226 @@ int TradeSystem::colonyHas(const std::string& thing) const {
     const entt::registry& reg = things_.registry();
     int64_t total = 0;
     for (const auto [e, t, stack, pos] : reg.view<const Thing, const StackCount, const Position>().each()) {
-        if (t.category == ThingCategory::Item && t.def == def) {
+        if (t.category == ThingCategory::Item && t.def == def &&
+            (cells == nullptr || std::binary_search(cells->begin(), cells->end(), cellOf(pos), tradeCellLess))) {
             total += stack.count;
         }
     }
     return static_cast<int>(std::min<int64_t>(total, 2000000000));
+}
+
+// ---- Comms console and trade beacons ------------------------------------------------------------
+
+bool TradeSystem::builtAndRunning(Entity building) const {
+    const entt::registry& reg = things_.registry();
+    return things_.spawned(building) && !reg.all_of<ConstructionSite>(building) && (!running_ || running_(building));
+}
+
+Entity TradeSystem::commsConsole(Entity user) const {
+    const entt::registry& reg = things_.registry();
+    std::vector<Entity> consoles;
+    for (const auto [e, t, fp] : reg.view<const Thing, const Footprint>().each()) {
+        if (t.category == ThingCategory::Building && defs_.get(t.def).flag("building.commsConsole") && builtAndRunning(e)) {
+            consoles.push_back(e);
+        }
+    }
+    std::sort(consoles.begin(), consoles.end());
+    if (user == kNoEntity) {
+        return consoles.empty() ? kNoEntity : consoles.front();
+    }
+    if (!things_.spawned(user)) {
+        return kNoEntity;
+    }
+    const CellPos from = cellOf(reg.get<Position>(user));
+    Regions& regions = map_.regions();
+    for (const Entity console : consoles) {
+        // Any cell beside the console that the user can walk to.
+        const CellRect rect = reg.get<Footprint>(console).rect();
+        for (int y = rect.minY - 1; y <= rect.minY + rect.sizeY; ++y) {
+            for (int x = rect.minX - 1; x <= rect.minX + rect.sizeX; ++x) {
+                const CellPos c{x, y, rect.level};
+                const bool inside = x >= rect.minX && x < rect.minX + rect.sizeX && y >= rect.minY && y < rect.minY + rect.sizeY;
+                if (!inside && map_.walkable(c) && (c == from || regions.canReach(from, c))) {
+                    return console;
+                }
+            }
+        }
+    }
+    return kNoEntity;
+}
+
+std::vector<Entity> TradeSystem::tradeBeacons() const {
+    const entt::registry& reg = things_.registry();
+    std::vector<Entity> beacons;
+    for (const auto [e, t, fp] : reg.view<const Thing, const Footprint>().each()) {
+        if (t.category == ThingCategory::Building && defs_.get(t.def).flag("building.tradeBeacon") && builtAndRunning(e)) {
+            beacons.push_back(e);
+        }
+    }
+    std::sort(beacons.begin(), beacons.end());
+    return beacons;
+}
+
+std::vector<CellPos> TradeSystem::beaconCells() const {
+    const entt::registry& reg = things_.registry();
+    std::vector<CellPos> cells;
+    for (const Entity beacon : tradeBeacons()) {
+        const CellPos at = reg.get<Footprint>(beacon).origin;
+        const float radius = static_cast<float>(defs_.get(reg.get<Thing>(beacon).def).number("building.tradeRadius", rules_.beaconRadius));
+        const int reach = static_cast<int>(std::ceil(radius));
+        const int side = 2 * reach + 1;
+        // Spread from the beacon over cells in the radius; a wall, a door or rock stops it (RimWorld: the beacon's district).
+        std::vector<uint8_t> seen(static_cast<size_t>(side) * static_cast<size_t>(side), 0);
+        std::vector<CellPos> open{at};
+        seen[static_cast<size_t>(reach * side + reach)] = 1;
+        while (!open.empty()) {
+            const CellPos c = open.back();
+            open.pop_back();
+            cells.push_back(c);
+            const int steps[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+            for (const auto& d : steps) {
+                const CellPos n{c.x + d[0], c.y + d[1], c.level};
+                const int dx = n.x - at.x;
+                const int dy = n.y - at.y;
+                if (std::abs(dx) > reach || std::abs(dy) > reach ||
+                    static_cast<float>(dx * dx + dy * dy) > radius * radius || !map_.inBounds(n)) {
+                    continue;
+                }
+                uint8_t& mark = seen[static_cast<size_t>((dy + reach) * side + dx + reach)];
+                if (mark != 0) {
+                    continue;
+                }
+                mark = 1;
+                const Passage passage = map_.passage(n);
+                if (passage == Passage::Blocked || passage == Passage::Door || map_.terrain(n) == Terrain::Rock) {
+                    continue;
+                }
+                open.push_back(n);
+            }
+        }
+    }
+    std::sort(cells.begin(), cells.end(), tradeCellLess);
+    cells.erase(std::unique(cells.begin(), cells.end()), cells.end());
+    return cells;
+}
+
+int TradeSystem::beaconHas(const std::string& thing) const {
+    const std::vector<CellPos> cells = beaconCells();
+    return countOnMap(thing, &cells);
+}
+
+std::string TradeSystem::orbitalBlocker(Entity negotiator) const {
+    if (commsConsole(kNoEntity) == kNoEntity) {
+        return "the colony needs a powered comms console to talk to the ship";
+    }
+    if (negotiator != kNoEntity && commsConsole(negotiator) == kNoEntity) {
+        return "the negotiator can't get to a powered comms console";
+    }
+    if (tradeBeacons().empty()) {
+        return "the colony needs a powered orbital trade beacon to trade with a ship";
+    }
+    return std::string();
+}
+
+CellPos TradeSystem::dropSpot(const Visit& visit) const {
+    if (visit.kind == VisitKind::Orbital) {
+        const std::vector<Entity> beacons = tradeBeacons();
+        if (!beacons.empty()) {
+            return things_.registry().get<Footprint>(beacons.front()).origin;
+        }
+    }
+    return visit.spot;
+}
+
+bool TradeSystem::requestCaravan(const std::string& faction, const std::string& traderKind, Entity negotiator, std::string& error) {
+    if (owner_ != nullptr) {
+        error = "only the colony's own map has a comms console to call from";
+        return false;
+    }
+    const Def* factionDef = defs_.find("Factions", faction);
+    if (factionDef == nullptr) {
+        error = "no faction '" + faction + "'";
+        return false;
+    }
+    if (!factionDef->flag("canTrade")) {
+        error = "the " + factionDef->label() + " don't send traders";
+        return false;
+    }
+    if (relation(faction) != Relation::Ally) {
+        error = "only an allied faction sends a caravan when asked";
+        return false;
+    }
+    if (!traderKind.empty()) {
+        bool listed = false;
+        for (size_t i = 0; i < factionDef->count("traders.caravan"); ++i) {
+            listed = listed || factionDef->textAt("traders.caravan", i) == traderKind;
+        }
+        if (!listed) {
+            error = "the " + factionDef->label() + " have no '" + traderKind + "' caravans";
+            return false;
+        }
+    }
+    const entt::registry& reg = things_.registry();
+    if (!things_.spawned(negotiator) || !reg.all_of<Mover>(negotiator) || fighters_.factionOf(negotiator) != kPlayerFaction ||
+        health_.incapacitated(negotiator)) {
+        error = "the caller must be one of the colony's pawns who can act";
+        return false;
+    }
+    if (commsConsole(kNoEntity) == kNoEntity) {
+        error = "the colony needs a powered comms console";
+        return false;
+    }
+    if (commsConsole(negotiator) == kNoEntity) {
+        error = "the caller can't get to a powered comms console";
+        return false;
+    }
+    const int64_t t = now();
+    const int64_t cooldown = static_cast<int64_t>(rules_.requestCooldownDays * static_cast<float>(kSecondsPerDay));
+    for (const CommsCall& call : state_.calls) {
+        if (call.faction == faction && t < call.at + cooldown) {
+            const int64_t hours = (call.at + cooldown - t + kSecondsPerHour - 1) / kSecondsPerHour;
+            error = "the " + factionDef->label() + " were asked lately; ask again in " + std::to_string(hours) + " hours";
+            return false;
+        }
+    }
+    if (!adjustGoodwill(faction, -rules_.requestGoodwillCost, error)) {
+        return false;
+    }
+    auto call = std::lower_bound(state_.calls.begin(), state_.calls.end(), faction,
+                                 [](const CommsCall& c, const std::string& f) { return c.faction < f; });
+    if (call != state_.calls.end() && call->faction == faction) {
+        call->at = t;
+    } else {
+        state_.calls.insert(call, CommsCall{faction, t});
+    }
+    CaravanRequest request;
+    request.faction = faction;
+    request.traderKind = traderKind;
+    request.arriveAt = t + static_cast<int64_t>(rules_.requestArrivalDays * static_cast<float>(kSecondsPerDay));
+    const auto at = std::upper_bound(state_.requests.begin(), state_.requests.end(), request, [](const CaravanRequest& a, const CaravanRequest& b) {
+        return a.arriveAt != b.arriveAt ? a.arriveAt < b.arriveAt : a.faction < b.faction;
+    });
+    state_.requests.insert(at, request);
+    emit(EventType::CaravanRequested, 0, negotiator, rules_.requestArrivalDays, faction);
+    return true;
+}
+
+// Asked-for caravans whose day has come walk in. One that can't (the faction turned hostile, no way in) is dropped.
+void TradeSystem::arriveRequested() {
+    const int64_t t = now();
+    while (!state_.requests.empty() && state_.requests.front().arriveAt <= t) {
+        const CaravanRequest request = state_.requests.front();
+        state_.requests.erase(state_.requests.begin());
+        uint32_t id = 0;
+        std::string error;
+        if (!startVisit(request.faction, VisitKind::Caravan, request.traderKind, -1, id, error)) {
+            emit(EventType::CaravanRequestFailed, 0, kNoEntity, 0.0f, request.faction + ": " + error);
+        }
+    }
+    // Calls whose cooldown is over are forgotten, so a quiet game keeps no state.
+    const int64_t cooldown = static_cast<int64_t>(rules_.requestCooldownDays * static_cast<float>(kSecondsPerDay));
+    state_.calls.erase(std::remove_if(state_.calls.begin(), state_.calls.end(), [&](const CommsCall& c) { return t >= c.at + cooldown; }),
+                       state_.calls.end());
 }
 
 int TradeSystem::silverOnMap() const {
@@ -988,13 +1227,13 @@ float TradeSystem::unitPrice(const Def& def, bool colonyBuys, float improvement)
     return value * rules_.colonySellsAt * sellFactor(def) * (1.0f + improvement);
 }
 
-// Takes up to `count` of a thing from the stacks lying on the map, lowest id first. Returns how many it took.
-int TradeSystem::takeFromMap(const std::string& thing, int count) {
+int TradeSystem::takeFromMap(const std::string& thing, int count, const std::vector<CellPos>* cells) {
     const DefId def = defs_.idOf("Things", thing);
     entt::registry& reg = things_.registry();
     std::vector<Entity> stacks;
     for (const auto [e, t, stack, pos] : reg.view<const Thing, const StackCount, const Position>().each()) {
-        if (t.category == ThingCategory::Item && t.def == def) {
+        if (t.category == ThingCategory::Item && t.def == def &&
+            (cells == nullptr || std::binary_search(cells->begin(), cells->end(), cellOf(pos), tradeCellLess))) {
             stacks.push_back(e);
         }
     }
@@ -1016,8 +1255,8 @@ int TradeSystem::takeFromMap(const std::string& thing, int count) {
     return taken;
 }
 
-// Puts `count` of a thing down near the visit's spot, in stacks.
-void TradeSystem::dropGoods(const Visit& visit, const std::string& thing, int count) {
+// Puts `count` of a thing down near `at`, in stacks.
+void TradeSystem::dropGoods(CellPos at, const std::string& thing, int count) {
     const Def* def = defs_.find("Things", thing);
     if (def == nullptr) {
         return;
@@ -1026,7 +1265,7 @@ void TradeSystem::dropGoods(const Visit& visit, const std::string& thing, int co
     Regions& regions = map_.regions();
     while (count > 0) {
         const int n = std::min(count, limit);
-        CellPos cell = visit.spot;
+        CellPos cell = at;
         bool found = false;
         for (int r = 0; r <= rules_.dropRadius && !found; ++r) {
             for (int dy = -r; dy <= r && !found; ++dy) {
@@ -1034,9 +1273,9 @@ void TradeSystem::dropGoods(const Visit& visit, const std::string& thing, int co
                     if (std::max(std::abs(dx), std::abs(dy)) != r) {
                         continue;
                     }
-                    const CellPos c{visit.spot.x + dx, visit.spot.y + dy, visit.spot.level};
+                    const CellPos c{at.x + dx, at.y + dy, at.level};
                     if (map_.inBounds(c) && map_.walkable(c) && map_.obstacleDm(c) == 0 && !map_.isDoor(c) &&
-                        things_.itemsAt(c).empty() && regions.canReach(visit.spot, c)) {
+                        things_.itemsAt(c).empty() && regions.canReach(at, c)) {
                         cell = c;
                         found = true;
                         break;
@@ -1086,6 +1325,17 @@ bool TradeSystem::trade(uint32_t visitId, Entity negotiator, const std::vector<T
         error = "nothing to trade";
         return false;
     }
+    // A ship is reached over a powered comms console, and what the colony sells or pays lies by a powered trade beacon.
+    std::vector<CellPos> beacon;
+    const std::vector<CellPos>* from = nullptr;
+    if (visit->kind == VisitKind::Orbital) {
+        error = orbitalBlocker(negotiator);
+        if (!error.empty()) {
+            return false;
+        }
+        beacon = beaconCells();
+        from = &beacon;
+    }
     // A settlement gives a little better prices (RimWorld's settlement price improvement offset).
     const float improvement = visit->kind == VisitKind::Settlement
                                   ? std::min(rules_.improvementCap, priceImprovement(negotiator) + rules_.settlementDiscount)
@@ -1130,8 +1380,9 @@ bool TradeSystem::trade(uint32_t visitId, Entity negotiator, const std::vector<T
             error = "the trader won't take '" + l.thing + "'";
             return false;
         }
-        if (colonyHas(l.thing) < l.count) {
-            error = "the colony hasn't " + std::to_string(l.count) + " of " + def->label() + " to sell";
+        if (countOnMap(l.thing, from) < l.count) {
+            error = "the colony hasn't " + std::to_string(l.count) + " of " + def->label() + " to sell" +
+                    (from != nullptr ? " by a trade beacon" : "");
             return false;
         }
         sellTotal += static_cast<double>(unitPrice(*def, false, improvement)) * l.count;
@@ -1143,8 +1394,10 @@ bool TradeSystem::trade(uint32_t visitId, Entity negotiator, const std::vector<T
     int paid = 0;
     int surplus = 0;
     if (net < 0) {
-        if (silverOnMap() < -net) {
-            error = "the deal costs " + std::to_string(-net) + " silver and the colony has " + std::to_string(silverOnMap());
+        const int silver = countOnMap("Silver", from);
+        if (silver < -net) {
+            error = "the deal costs " + std::to_string(-net) + " silver and the colony has " + std::to_string(silver) +
+                    (from != nullptr ? " by a trade beacon" : "");
             return false;
         }
     } else {
@@ -1153,8 +1406,9 @@ bool TradeSystem::trade(uint32_t visitId, Entity negotiator, const std::vector<T
     }
 
     // Do it.
+    const CellPos dropAt = dropSpot(*visit);
     for (const TradeLine& l : sells) {
-        takeFromMap(l.thing, l.count);
+        takeFromMap(l.thing, l.count, from);
         tradeAddStock(visit->stock, l.thing, l.count);
     }
     for (const TradeLine& l : buys) {
@@ -1163,16 +1417,16 @@ bool TradeSystem::trade(uint32_t visitId, Entity negotiator, const std::vector<T
                 s.count -= l.count;
             }
         }
-        dropGoods(*visit, l.thing, l.count);
+        dropGoods(dropAt, l.thing, l.count);
     }
     visit->stock.erase(std::remove_if(visit->stock.begin(), visit->stock.end(), [](const TradeLine& s) { return s.count <= 0; }),
                        visit->stock.end());
     if (net < 0) {
-        takeFromMap("Silver", -net);
+        takeFromMap("Silver", -net, from);
         visit->silver += -net;
     } else if (paid > 0) {
         visit->silver -= paid;
-        dropGoods(*visit, "Silver", paid);
+        dropGoods(dropAt, "Silver", paid);
     }
     emit(EventType::TradeDone, visit->id, visit->trader, static_cast<float>(net),
          surplus > 0 ? visit->faction + ": " + std::to_string(surplus) + " silver of goods given free" : visit->faction);
@@ -1289,6 +1543,9 @@ void TradeSystem::step(const std::vector<Event>& events) {
             }
         }
     }
+    if (!state_.requests.empty() || !state_.calls.empty()) {
+        arriveRequested();
+    }
     if (state_.visits.empty() || t % 15 != 0) {
         return;
     }
@@ -1386,6 +1643,12 @@ bool TradeSystem::restore(TradeState state, std::string& error) {
             }
         }
     }
+    for (const CaravanRequest& r : state.requests) {
+        if (defs_.find("Factions", r.faction) == nullptr || (!r.traderKind.empty() && defs_.find("TraderKinds", r.traderKind) == nullptr)) {
+            error = "the save has a caravan request that doesn't fit the data files";
+            return false;
+        }
+    }
     std::vector<Standing> kept;
     for (const Standing& s : state.standings) {
         if (defs_.find("Factions", s.faction) != nullptr) {
@@ -1398,7 +1661,8 @@ bool TradeSystem::restore(TradeState state, std::string& error) {
 }
 
 void TradeSystem::hashState(StateHasher& h) const {
-    if (state_.visits.empty() && state_.standings.empty() && state_.nextVisit == 1 && state_.lastDrift == 0) {
+    if (state_.visits.empty() && state_.standings.empty() && state_.nextVisit == 1 && state_.lastDrift == 0 && state_.requests.empty() &&
+        state_.calls.empty()) {
         return;  // a game that never met the system hashes as it did before it existed
     }
     h.add(state_.nextVisit);
@@ -1438,6 +1702,19 @@ void TradeSystem::hashState(StateHasher& h) const {
         if (v.kind == VisitKind::Settlement) {
             h.add(v.restockAt);
             h.add(v.range);
+        }
+    }
+    if (!state_.requests.empty() || !state_.calls.empty()) {  // comms: only once a caravan was asked for
+        h.add(static_cast<uint64_t>(state_.requests.size()));
+        for (const CaravanRequest& r : state_.requests) {
+            h.add(r.faction.data(), r.faction.size());
+            h.add(r.traderKind.data(), r.traderKind.size());
+            h.add(r.arriveAt);
+        }
+        h.add(static_cast<uint64_t>(state_.calls.size()));
+        for (const CommsCall& c : state_.calls) {
+            h.add(c.faction.data(), c.faction.size());
+            h.add(c.at);
         }
     }
 }

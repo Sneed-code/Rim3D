@@ -75,10 +75,14 @@ void trdPutDown(Sim& sim, const char* def, int count, CellPos cell) {
     }
 }
 
-// Start an orbital trader of the Fray Compact and return the visit.
+// Start an orbital trader of the Fray Compact and return the visit. A comms console and a trade beacon at (53,53) are put
+// down and counted as powered, so goods the tests lay at (50..57, 50..60) are by the beacon.
 const Visit* trdShip(Sim& sim, const char* kind = "BulkGoods") {
     uint32_t id = 0;
     std::string error;
+    sim.trade().setRunning([](Entity) { return true; });
+    sim.things().spawn("CommsConsole", CellPos{100, 100, 0});
+    sim.things().spawn("OrbitalTradeBeacon", CellPos{53, 53, 0});
     if (!sim.trade().startVisit("FrayCompact", VisitKind::Orbital, kind, -1, id, error)) {
         MESSAGE(error);
         return nullptr;
@@ -603,6 +607,8 @@ TEST_CASE("Trade: the narrator sends trade caravans, visitors and orbital trader
         CAPTURE(incident);
         Sim sim = trdSim();
         trdColonist(sim, CellPos{64, 64, 0});
+        sim.trade().setRunning([](Entity) { return true; });
+        sim.things().spawn("CommsConsole", CellPos{100, 100, 0});  // a ship needs a console to hear it
         sim.submit(FireIncidentCommand{incident, 0.0f});
         sim.step();
         bool failed = false;
@@ -618,4 +624,89 @@ TEST_CASE("Trade: the narrator sends trade caravans, visitors and orbital trader
         CHECK((visit.kind == VisitKind::Orbital) == (name == "OrbitalTraderArrival"));
         CHECK(sim.narrator().state().incidents == 1);
     }
+}
+
+TEST_CASE("Comms: a ship trades only over a powered console, from the beacon's cells, and drops goods by the beacon") {
+    Sim sim = trdSim();
+    const Entity colonist = trdColonist(sim, CellPos{60, 60, 0});
+    uint32_t id = 0;
+    std::string error;
+    TRD_REQUIRE(sim.trade().startVisit("FrayCompact", VisitKind::Orbital, "BulkGoods", -1, id, error));
+    trdPutDown(sim, "Silver", 400, CellPos{20, 20, 0});
+    // No console, no beacon.
+    CHECK_FALSE(sim.trade().trade(id, colonist, {TradeLine{"Steel", 1}}, {}, error));
+    CHECK(error.find("comms console") != std::string::npos);
+    // A console that is not powered doesn't count.
+    const Entity console = sim.things().spawn("CommsConsole", CellPos{100, 100, 0});
+    TRD_REQUIRE(console != kNoEntity);
+    sim.step();
+    CHECK(sim.trade().commsConsole() == kNoEntity);
+    sim.trade().setRunning([](Entity) { return true; });
+    CHECK(sim.trade().commsConsole() == console);
+    CHECK(sim.trade().commsConsole(colonist) == console);
+    CHECK_FALSE(sim.trade().trade(id, colonist, {TradeLine{"Steel", 1}}, {}, error));
+    CHECK(error.find("beacon") != std::string::npos);
+    // A beacon far from the silver: the colony has none to pay with.
+    sim.things().spawn("OrbitalTradeBeacon", CellPos{90, 40, 0});
+    CHECK(sim.trade().beaconHas("Silver") == 0);
+    CHECK_FALSE(sim.trade().trade(id, colonist, {TradeLine{"Steel", 1}}, {}, error));
+    CHECK(error.find("by a trade beacon") != std::string::npos);
+    // Walls cut a beacon's area: a beacon walled off from the silver beside it.
+    for (int y = 8; y <= 34; ++y) {
+        sim.things().spawn("Wall", CellPos{23, y, 0});
+    }
+    sim.things().spawn("OrbitalTradeBeacon", CellPos{25, 20, 0});
+    CHECK(sim.trade().beaconHas("Silver") == 0);
+    sim.things().spawn("OrbitalTradeBeacon", CellPos{21, 22, 0});
+    CHECK(sim.trade().beaconHas("Silver") == 400);
+    CHECK(sim.trade().trade(id, colonist, {TradeLine{"Steel", 10}}, {}, error));
+    // The steel lands beside the first beacon.
+    bool near = false;
+    for (const auto [e, t, pos] : sim.things().registry().view<const Thing, const Position>().each()) {
+        if (t.def == trdDefs()->idOf("Things", "Steel")) {
+            near = near || (std::abs(pos.x - 90.5f) < 8.0f && std::abs(pos.y - 40.5f) < 8.0f);
+        }
+    }
+    CHECK(near);
+}
+
+TEST_CASE("Comms: the narrator sends no trade ship without a powered console") {
+    Sim sim = trdSim();
+    trdColonist(sim, CellPos{64, 64, 0});
+    std::string error;
+    CHECK_FALSE(sim.narrator().fire("OrbitalTraderArrival", 0.0f, error));
+    CHECK(error.find("comms console") != std::string::npos);
+    CHECK(sim.trade().state().visits.empty());
+}
+
+TEST_CASE("Comms: an ally sends a caravan when asked, for goodwill, with a cooldown, and it saves") {
+    Sim sim = trdSim();
+    const Entity colonist = trdColonist(sim, CellPos{60, 60, 0});
+    std::string error;
+    CHECK_FALSE(sim.trade().requestCaravan("FrayCompact", "", colonist, error));  // not an ally yet
+    TRD_REQUIRE(sim.trade().adjustGoodwill("FrayCompact", 200.0f, error));
+    CHECK_FALSE(sim.trade().requestCaravan("FrayCompact", "", colonist, error));  // no console
+    CHECK(error.find("comms console") != std::string::npos);
+    sim.trade().setRunning([](Entity) { return true; });
+    sim.things().spawn("CommsConsole", CellPos{70, 70, 0});
+    sim.submit(CommsCommand{"RequestCaravan", "FrayCompact", "", colonist});
+    sim.step();
+    CHECK(sim.trade().goodwill("FrayCompact") == doctest::Approx(81.0f));
+    TRD_REQUIRE(sim.trade().state().requests.size() == 1);
+    CHECK_FALSE(sim.trade().requestCaravan("FrayCompact", "", colonist, error));  // cooldown
+    CHECK(error.find("asked lately") != std::string::npos);
+    // It saves and loads.
+    const std::vector<uint8_t> bytes = saveSim(sim);
+    SaveLoadResult loaded = loadSim(bytes, trdDefs());
+    TRD_REQUIRE(loaded.sim != nullptr);
+    CHECK(loaded.sim->trade().state().requests.size() == 1);
+    CHECK(loaded.sim->stateHash() == sim.stateHash());
+    // Two days on, the caravan walks in.
+    sim.stepMany(2 * 86400 + 10);
+    CHECK(sim.trade().state().requests.empty());
+    bool caravan = false;
+    for (const Visit& v : sim.trade().state().visits) {
+        caravan = caravan || (v.kind == VisitKind::Caravan && v.faction == "FrayCompact");
+    }
+    CHECK(caravan);
 }

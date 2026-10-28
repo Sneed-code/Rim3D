@@ -978,6 +978,16 @@ struct ArtilleryCommand {
     float y = 0.0f;
 };
 
+// The comms console (docs/design/comms-console.md). "RequestCaravan": `negotiator` asks the allied `faction` for a trade
+// caravan (`traderKind`, or empty for any of its own) over a powered comms console it can walk to; it costs 19 goodwill, waits
+// 4 days per faction and walks in 2 days later. Fails with the reason in plain words.
+struct CommsCommand {
+    std::string action;
+    std::string faction;
+    std::string traderKind;
+    Entity negotiator = kNoEntity;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -1009,7 +1019,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              LearnPowerCommand, CastPowerCommand, SetThermostatCommand, RepairGearCommand,
                              FitUpgradeCommand, CreateAreaCommand, PaintAreaCommand, DeleteAreaCommand,
                              AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand, CaravanCommand, RerollColonistCommand,
-                             ArtilleryCommand>;
+                             ArtilleryCommand, CommsCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

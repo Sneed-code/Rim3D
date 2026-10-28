@@ -101,11 +101,26 @@ struct Standing {
     float goodwill = 0.0f;
 };
 
+// A trade caravan the colony asked a faction for over the comms console (docs/design/comms-console.md). Saved in section "comms".
+struct CaravanRequest {
+    std::string faction;     // Factions defName
+    std::string traderKind;  // TraderKinds defName; empty for one of the faction's by chance
+    int64_t arriveAt = 0;    // game second it walks in
+};
+
+// When the colony last asked a faction for a caravan (the request's cooldown). Saved in section "comms".
+struct CommsCall {
+    std::string faction;
+    int64_t at = 0;
+};
+
 struct TradeState {
     std::vector<Visit> visits;       // in id order
     uint32_t nextVisit = 1;
     std::vector<Standing> standings; // in faction name order
     int64_t lastDrift = 0;           // the game day goodwill last drifted back toward its start
+    std::vector<CaravanRequest> requests;  // in arrival order (then faction name)
+    std::vector<CommsCall> calls;          // in faction name order
 };
 
 // What a faction is to the colony, by goodwill (FactionRules).
@@ -138,6 +153,11 @@ struct COLONY_API TradeRules {
     int dropRadius = 6;                  // goods are put down within this many cells of the spot
     float settlementDiscount = 0.02f;    // trading at a settlement adds this to the price improvement (RimWorld wiki)
     float settlementRestockDays = 30.0f; // a settlement's trader rolls its stock again this often (recalled from RimWorld)
+    // The comms console's caravan request (TradeRules.comms; wiki: an ally only, 19 goodwill, 4 days between).
+    float requestGoodwillCost = 19.0f;
+    float requestCooldownDays = 4.0f;
+    float requestArrivalDays = 2.0f;     // recalled from RimWorld's code (120,000 ticks), unverified
+    float beaconRadius = 7.9f;           // a beacon whose def has no building.tradeRadius
     // FactionRules.
     float hostileAtOrBelow = -75.0f;
     float alliedAtOrAbove = 75.0f;
@@ -165,6 +185,9 @@ public:
     void setTalents(const TalentSystem* talents) { talents_ = talents; }
     // The difficulty's trade price disadvantage (0 to 0.2): taken off every negotiator's price improvement.
     void setPriceDisadvantage(float disadvantage) { disadvantage_ = disadvantage; }
+    // Whether a building does its job (PowerGrid::running): a comms console and a trade beacon need power. Without it
+    // every built one counts.
+    void setRunning(std::function<bool(Entity)> running) { running_ = std::move(running); }
 
     // ---- Goodwill ----
     // A faction's goodwill with the colony now.
@@ -199,6 +222,21 @@ public:
     // Another map's trade system asks the colony's for goodwill: the colony's standings are the only ones, so gifts, a
     // killed visitor and hostility on that map are the colony's. Not saved: the colony sets it when the map is made or loaded.
     void setGoodwillOwner(TradeSystem* owner) { owner_ = owner; }
+
+    // ---- Comms console and trade beacons (docs/design/comms-console.md) ----
+    // A built, powered comms console. With `user`, one that pawn can walk up to; without (kNoEntity), any. kNoEntity if none.
+    Entity commsConsole(Entity user = kNoEntity) const;
+    // The built, powered orbital trade beacons, in id order.
+    std::vector<Entity> tradeBeacons() const;
+    // The cells an orbital trader buys from: within each powered beacon's radius and not cut off from it by a wall or a
+    // door. Sorted.
+    std::vector<CellPos> beaconCells() const;
+    // How many of a thing lie on the beacons' cells (what a ship can be sold or given).
+    int beaconHas(const std::string& thing) const;
+    // `negotiator` uses a comms console to ask `faction` for a trade caravan (`traderKind`, or empty for any of its own). The
+    // faction must be an ally and not asked in the last `requestCooldownDays`; it costs `requestGoodwillCost` goodwill and
+    // the caravan walks in `requestArrivalDays` later. False, with a reason in plain words, when it can't be done.
+    bool requestCaravan(const std::string& faction, const std::string& traderKind, Entity negotiator, std::string& error);
 
     // ---- Trade ----
     // How many silver the colony has: the silver lying on the map.
@@ -266,8 +304,16 @@ private:
     bool settlementCell(const Visit& visit, CellPos& out) const;
     CellPos edgeGoal(Entity pawn) const;
     bool nearestFree(float x, float y, CellPos from, int radius, CellPos& out) const;
-    void dropGoods(const Visit& visit, const std::string& thing, int count);
-    int takeFromMap(const std::string& thing, int count);
+    void dropGoods(CellPos at, const std::string& thing, int count);
+    // Where a visit's bought goods go down: its spot, or for a ship the first beacon.
+    CellPos dropSpot(const Visit& visit) const;
+    // Up to `count` of a thing from the stacks lying on `cells` (all the map when null), lowest id first. Returns how many.
+    int takeFromMap(const std::string& thing, int count, const std::vector<CellPos>* cells = nullptr);
+    int countOnMap(const std::string& thing, const std::vector<CellPos>* cells) const;
+    // A ship needs a powered console (one `negotiator` can reach, if given) and a powered beacon. Empty when it may trade.
+    std::string orbitalBlocker(Entity negotiator) const;
+    bool builtAndRunning(Entity building) const;
+    void arriveRequested();
     std::vector<std::string> wordsOf(const Def& def) const;
     float sellFactor(const Def& def) const;
     void emit(EventType type, uint32_t visit, Entity thing, float amount, const std::string& message) const;
@@ -289,6 +335,7 @@ private:
     float disadvantage_ = 0.0f;
     std::vector<Event>* events_ = nullptr;
     std::function<void(Entity, uint64_t, bool)> looks_;
+    std::function<bool(Entity)> running_;
     TradeSystem* owner_ = nullptr;
 };
 

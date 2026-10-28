@@ -389,6 +389,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     trade_ = std::make_unique<TradeSystem>(*things_, map_, *combat_, *fighters_, *health_, *jobs_, *raids_, *defs_, time_, rng_, settings.seed);
     trade_->setEventLog(&events_);
     trade_->setTalents(talents_.get());
+    trade_->setRunning([this](Entity building) { return power_->running(building); });
     trade_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
     prisoners_->setTrade(trade_.get());
     jobs_->setPrisoners(prisoners_.get());
@@ -558,6 +559,11 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
             const Def* incident = defs_->find("Incidents", name);
             const std::string way = incident != nullptr ? incident->text("trader") : std::string();
             const VisitKind kind = way == "orbital" ? VisitKind::Orbital : way == "caravan" ? VisitKind::Caravan : VisitKind::Visitors;
+            // RimWorld sends a trade ship only to a colony with a powered comms console to hear it (comms-console.md).
+            if (kind == VisitKind::Orbital && trade_->commsConsole() == kNoEntity) {
+                f.error = "no powered comms console to hear a trade ship";
+                return false;
+            }
             std::vector<std::string> factions;
             for (const DefId id : defs_->idsOfKind("Factions")) {
                 const Def& faction = defs_->get(id);
@@ -882,6 +888,17 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     }
     if (ordered != kNoEntity && mentalBreaks_->active(ordered)) {
         commandFailed(id, "that colonist is in a mental break");
+        return;
+    }
+    // The comms console, before the long chain below (MSVC's limit on nested else-ifs).
+    if (const auto* comms = std::get_if<CommsCommand>(&command)) {
+        if (comms->action != "RequestCaravan") {
+            commandFailed(id, "no comms action '" + comms->action + "' (RequestCaravan)");
+        } else if (comms->negotiator != kNoEntity && mentalBreaks_->active(comms->negotiator)) {
+            commandFailed(id, "that colonist is in a mental break");
+        } else if (!trade_->requestCaravan(comms->faction, comms->traderKind, comms->negotiator, error)) {
+            commandFailed(id, error);
+        }
         return;
     }
     if (const auto* spawn = std::get_if<SpawnThingCommand>(&command)) {

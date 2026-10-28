@@ -239,6 +239,8 @@ const char* commandName(const Command& command) {
                 return "Caravan";
             } else if constexpr (std::is_same_v<Type, ArtilleryCommand>) {
                 return "Artillery";
+            } else if constexpr (std::is_same_v<Type, CommsCommand>) {
+                return "Comms";
             } else {
                 static_assert(std::is_same_v<Type, RerollColonistCommand>, "name every command type");
                 return "RerollColonist";
@@ -407,6 +409,8 @@ const char* eventTypeName(EventType type) {
         case EventType::OtherMapEntered: return "OtherMapEntered";
         case EventType::OtherMapLeft: return "OtherMapLeft";
         case EventType::SiegeChanged: return "SiegeChanged";
+        case EventType::CaravanRequested: return "CaravanRequested";
+        case EventType::CaravanRequestFailed: return "CaravanRequestFailed";
     }
     return "?";
 }
