@@ -107,6 +107,33 @@ void Map::setGeyser(CellPos c, bool present) {
     geyser_[static_cast<size_t>(index(c))] = present ? 1 : 0;
 }
 
+void Map::setFlowing(CellPos c, bool present) {
+    if (!onGround(c)) {
+        return;
+    }
+    if (flowing_.empty()) {
+        flowing_.assign(static_cast<size_t>(width_) * static_cast<size_t>(height_), 0);
+    }
+    flowing_[static_cast<size_t>(index(c))] = present ? 1 : 0;
+}
+
+void Map::dryWater(CellPos c) {
+    if (!onGround(c) || terrain(c) != Terrain::Water || flowing(c)) {
+        return;
+    }
+    setTerrain(c, Terrain::Soil);
+    dried_.push_back(static_cast<uint32_t>(index(c)));
+}
+
+void Map::restoreDried(const std::vector<uint32_t>& cells) {
+    dried_.clear();
+    for (const uint32_t i : cells) {
+        if (i < static_cast<uint32_t>(width_) * static_cast<uint32_t>(height_)) {
+            dryWater(cellAt(static_cast<int>(i)));
+        }
+    }
+}
+
 void Map::setBuilding(CellPos c, Entity building, Passage passage, uint8_t obstacleDm) {
     ++buildingChanges_;
     if (c.level != 0) {

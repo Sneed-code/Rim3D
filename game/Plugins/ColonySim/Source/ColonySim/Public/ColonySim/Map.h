@@ -206,6 +206,23 @@ public:
     // Map generation (S8) places them from the seed; they are not saved, so whoever places them must do
     // it again the same way after a load.
     void setGeyser(CellPos c, bool present);
+    // Moving water (ground level): water cells of a river. A watermill is built on these and nowhere
+    // else, and a moisture pump leaves them alone. Like geysers, map generation (S8) places them and
+    // they are not saved.
+    void setFlowing(CellPos c, bool present);
+    bool flowing(CellPos c) const {
+        return c.level == 0 && inBounds(c) && !flowing_.empty() && flowing_[static_cast<size_t>(index(c))] != 0 &&
+               terrain(c) == Terrain::Water;
+    }
+    // Where a building can stand: walkable ground, or for a building made for moving water, moving water.
+    bool groundBuildable(CellPos c, bool onFlowingWater) const {
+        return onFlowingWater ? flowing(c) : groundWalkable(c);
+    }
+    // A moisture pump turns a water cell into soil. The cells it dried are kept (in order), because the
+    // terrain is made again from the seed on loading and `restoreDried` puts them back.
+    void dryWater(CellPos c);
+    const std::vector<uint32_t>& dried() const { return dried_; }
+    void restoreDried(const std::vector<uint32_t>& cells);
     bool geyser(CellPos c) const { return c.level == 0 && inBounds(c) && !geyser_.empty() && geyser_[static_cast<size_t>(index(c))] != 0; }
 
     // The roof over a cell. Thick over the rock the map was generated with (and over it for good,
@@ -292,6 +309,8 @@ private:
     uint64_t buildingChanges_ = 0;
     uint64_t rockChanges_ = 0;
     std::vector<uint8_t> geyser_;  // 1 where a steam geyser vents
+    std::vector<uint8_t> flowing_;  // 1 where the water moves (a river)
+    std::vector<uint32_t> dried_;   // cells a moisture pump dried, in the order it did
     std::vector<int> hollow_;  // mined-out ground cells that still have the thick roof
     std::vector<LevelLink> levelLinks_;
     std::unique_ptr<Regions> regions_;

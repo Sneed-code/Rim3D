@@ -587,6 +587,7 @@ struct SaveData {
     std::vector<std::vector<int32_t>> talentRanks;
     // Section "roomstats" (C17): floors, filth, what pawns carry on their shoes, beauty needs.
     bool hasRoomStats = false;
+    std::vector<uint32_t> driedCells;  // section "terrain": water cells a moisture pump dried, in order
     std::vector<SaveFloor> floors;
     FilthState filth;
     RoomStatsState roomStats;
@@ -3253,6 +3254,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("talents", 1, [&] { saveTalents(ar, d); });
     ar.section("drugs", 2, [&] { saveDrugs(ar, d); });
     ar.section("roomstats", 1, [&] { saveRoomStatsSection(ar, d); });
+    ar.section("terrain", 1, [&] { ar.list("dried", d.driedCells, [&](uint32_t& cell) { ar.value(nullptr, cell); }); });
     ar.section("animals", 2, [&] {
         ar.value("wildAnimals", d.wildAnimals);
         ar.value("populated", d.animals.populated);
@@ -4920,6 +4922,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
             d.talentRanks.back().push_back(rank);
         }
     }
+    d.driedCells = sim.map_.dried();
     d.hasRoomStats = true;
     for (const auto& [cell, def] : sim.floors_->all()) {
         d.floors.push_back(SaveFloor{static_cast<uint32_t>(cell), sim.defs_->get(def).defName()});
@@ -5386,6 +5389,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             setDoorSight(sim.map_, footprint, true);
         }
     }
+    sim.map_.restoreDried(d.driedCells);
     if (d.hasRoomStats) {
         std::vector<std::pair<int, DefId>> floors;
         for (const SaveFloor& f : d.floors) {
