@@ -59,6 +59,12 @@ add_test(NAME simrun_raid COMMAND simrun --seed 1 --size 256 --days 0.25 --start
 # Medics, firefighters and rescue under fire (F10): the same raid with a Medic and a Firefighter; it still ends.
 add_test(NAME simrun_medics COMMAND simrun --seed 1 --size 256 --days 0.25 --start Crashlanded --raid 300 --armed --medics --check)
 # Orrin's first big threat, a raid, comes between day 11 and 15.6 of a new colony (T1, docs/design/narrator.md).
+# Save round trips in a busy game (docs/design/saves.md): every 3 game hours simrun saves, loads a copy, checks the
+# hash and the file, and runs both 600 steps on; the copy must never go its own way.
+add_test(NAME simrun_roundtrip COMMAND simrun --seed 4 --size 256 --days 2.2 --start Crashlanded --animals --armed
+         --narrator Maren --difficulty Rough --roundtrip 10800)
+add_test(NAME simrun_roundtrip_rain COMMAND simrun --seed 1 --size 256 --days 1.8 --start Crashlanded --animals --armed
+         --narrator Orrin --difficulty Rough --roundtrip 10800)
 add_test(NAME simrun_narrator COMMAND simrun --seed 42 --size 128 --days 15.7 --start Crashlanded --narrator Orrin --armed --check)
 # Raid soak (F7, docs/design/raid-soak.md): firefights and raids over a few seeds. The nightly workflow runs many more.
 add_test(NAME simrun_raid_soak COMMAND simrun --seed 1 --raid-soak 3)
@@ -68,6 +74,10 @@ add_test(NAME simrun_world COMMAND simrun --seed 42 --world ${CMAKE_BINARY_DIR}/
 add_test(NAME simrun_world_seed7 COMMAND simrun --seed 7 --world ${CMAKE_BINARY_DIR}/world7.png --world-size 180x90 --check)
 # The game on a world (W2): the Crashlanded colonists land on the seed's suggested temperate forest tile and live a day.
 add_test(NAME simrun_on_world COMMAND simrun --seed 42 --size 128 --days 1 --on-world --start Crashlanded --check)
+
+# Caravans (W4, docs/design/caravans.md): two colonists take survival meals to the nearest settlement
+# 4 or more tiles away and come home, nobody lost.
+add_test(NAME simrun_caravan COMMAND simrun --seed 42 --size 128 --days 2 --on-world --start Crashlanded --caravan --check)
 
 # Temperature (E2, docs/design/temperature.md): the Crashlanded colonists live two days in 4 degrees weather
 # (just above the safe range their T-shirts and pants give them) and nobody falls ill or dies. Seed 43: on seed 42

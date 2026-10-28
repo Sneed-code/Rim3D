@@ -65,20 +65,37 @@ terrain under the foot: `soundStepCue`), **doors** (`doorOpen` going from shut t
 **idle calls** (random, by the animal's `idle` slot, from Unreal's own random: cosmetic), and the
 **weather and ambience beds**.
 
-## The Unreal half (PC, later)
+## The Unreal half (`USoundSubsystem`, PC V20)
 
-- `USoundSubsystem` reads the snapshot's events each step, runs them through `soundForEvent`, and plays.
-- Distance attenuation from `range`; a voice budget of 32 where the lowest `priority`, then the
-  farthest, is dropped first.
-- Occlusion: a sound whose line to the listener crosses roofed cells or walls is muffled (low-pass
-  and quieter), by the sim's own cell data.
-- Ambience: one bed fades in by biome and time of day (`day`, `night`), `indoor` under a roof,
-  `cave` under a mountain roof, and the weather `loop` on top of it, louder with the weather's strength.
-- Mixer: sliders for master, effects, ambience, voices and (V21) music, saved in the settings.
-- Placeholder tones until V21, then the real files by cue name.
+`game/Source/Rim3D/SoundSubsystem.cpp`, smoke test `sound`.
 
-Not here: music (V21), a sound for every def (the cues above are the first set; new defs add a slot
-and a cue and `check_defs.py` keeps the two in step).
+- **Plays:** every sim event goes through `soundForEvent` right after its step; the plays are handled on the next frame.
+  A cue is a `FCue` read from the `SoundCues` defs; each play picks one of the cue's cut files at random (one-shots get
+  a pitch change of up to 5%), or the def's `tone`, made in memory, when the cue has no file.
+- **Voices:** a voice is an audio component playing a procedural wave (`UCueVoiceWave`) that copies the clip's samples
+  on the audio thread. `Sound.Voices` (32) at most. Each frame every sound is ranked by `priority`, then by how loud it
+  is from the ears; the first 32 have a voice. A one-shot pushed out or never given one is dropped; a loop waits without
+  one and picks up where it would be by now when it comes back.
+- **Ears:** the overseer camera's focus (300 cm up) while the overseer view is on, else the camera (direct mode, the
+  smoke tests' camera). Distance falloff is the square of `1 - distance / range`; panning is Unreal's.
+- **Occlusion:** walls (cells whose passage is blocked) on the line from the sound to the ears, plus one when only one
+  end is under a roof, at most 3: each makes it 0.55 times as loud and lowers the low-pass (20 kHz / (1 + 3n)).
+  Rain and wind are muffled twice when the ears are under a roof.
+- **From the snapshot:** footsteps every 0.7 m a pawn walks (animals by body size) within 26 m, by the floor or
+  ground under it (`soundStepCue`; upper floors sound like wood); doors on `doorOpen` crossing 5%; building loops
+  (`loop` slot) while powered or fuelled, checked every 0.1 s; animals' `idle` calls every 20 to 60 s (Unreal's random).
+- **Beds:** the biome's `day` (06:00 to 20:00) or `night`, `indoor` under a thin roof and `cave` under a thick one; the
+  weather's `loop` fades in with the transition and the old one out. Thunder follows the sky's lightning flashes by
+  0.4 to 2.5 s.
+- **Music:** tense with raiders (a pawn of another faction in a squad) or the alarm, combat when a colonist or a raider
+  is shooting at someone; it rises at once and falls after 20 quiet seconds. Calm tracks play once with 45 to 150 s of
+  quiet between; tense and combat tracks loop until the mood changes (3 s fade). Combat uses the tense tracks while it
+  has none. Each Letter event plays a stinger.
+- **Mixer:** master, effects (everything else), ambience (`Amb_`, `Weather_`), voices (`Pawn_`, `Animal_`, `Work_Chat`)
+  and music, in the overseer's folded "Sound" panel, saved in `GameUserSettings.ini` (`[/Script/Rim3D.Sound]`).
+- Console: `Sound.Enable`, `Sound.Master`, `Sound.Effects`, `Sound.Ambience`, `Sound.VoicesVolume`, `Sound.Music`,
+  `Sound.Voices`, `Sound.Tones` (0 no tones, 1 short sounds only (default), 2 loops too: a hissing noise bed is worse
+  than silence), `Sound.Debug`.
 
 ## Real sounds (V21, cloud half)
 
@@ -98,3 +115,23 @@ container cannot reach these sites) and writes `CREDITS.txt` for the CC-BY ones.
   danger music is still open.
 - Nothing was downloaded or listened to in the cloud. The PC half (V21) imports the files, cuts them
   to the cue names and checks how they sound.
+
+## Real sounds (V21, PC half)
+
+`python tools/sound_assets.py` downloaded the ten scriptable packs (2026-10-27; the firearm library is a .7z, unpacked
+with 7-Zip) and then cuts what `assets/sound_picks.json` names, with ffmpeg, into
+`game/Content/ThirdParty/Sounds/cues/<Cue>/<n>.wav` (mono with a place, stereo heard everywhere, peak at -1 dB, gun
+shots trimmed to their first second or two) and `Sounds/music/<calm|tense|stinger>/`. `--cut` cuts again after an edit
+to the picks. The game reads the WAV files at the start (about 50 MB, 288 files) and a music track when it starts;
+the packaged build stages both folders as plain files (`DefaultGame.ini`).
+
+- **68 of 140 cues have real sounds:** all shots (the firearm library's near-distance takes), reload and switch,
+  impacts, flesh hits, swings, clangs, steps on every surface, work, items, doors, power switches, research chime,
+  rain and heavy rain (two parts of the one rain recording), the cave bed, pawn hurt and falls (soft thuds, no voices).
+- **Still tones (gaps):** explosions, fire, hums, alarm, raid horn, wind and blizzard, thunder, the day and night beds,
+  indoor, all 39 animal calls, `Flesh_Burn`, `Short_Circuit`, `Work_Eat` and `Work_Chat`. These need Sonniss GDC or
+  Freesound CC0 files by hand (no scriptable link). Loops without a file stay silent by default (`Sound.Tones`).
+- **Music:** calm is seven Indie Meditations tracks, tense the three loudest of them (the volcanic sea shore, the royal
+  palace, the desert) by measured loudness, not by ear; no combat tracks yet. Stingers: Kenney's steel jingles.
+- The picks were made from file names and the packs' notes, not by listening: sneed should judge them in play.
+- `CREDITS.txt` in the Sounds folder lists the two CC-BY credits (the footsteps and the music); a credits screen is V24.

@@ -434,6 +434,21 @@ void NarratorSystem::step() {
     }
 }
 
+void NarratorSystem::postpone(int64_t seconds) {
+    if (seconds <= 0) {
+        return;
+    }
+    if (state_.cycleStart >= 0) {
+        state_.cycleStart += seconds;
+    }
+    for (int64_t& at : state_.threats) {
+        at += seconds;
+    }
+    for (IncidentFired& fired : state_.fired) {
+        fired.at += seconds;
+    }
+}
+
 bool NarratorSystem::setNarrator(const std::string& name, const std::string& difficulty, std::string& error) {
     if (!name.empty() && defs_.find("Narrators", name) == nullptr) {
         error = "there is no narrator called " + name;
@@ -485,14 +500,24 @@ bool NarratorSystem::raidWorker(IncidentFiring& f) {
         const size_t pick = rng_.below(static_cast<uint32_t>(factions.size()));
         const Def& faction = *factions[pick];
         std::string error;
-        if (raids_.startRaid(faction.defName(), f.points, -1, error)) {
+        // F12: the way it comes is drawn by weight (sappers when walls shut the colony in, pods, thieves, kidnappers).
+        const RaidStrategy strategy = raids_.pickStrategy(f.points);
+        if (raids_.startRaid(faction.defName(), f.points, -1, strategy, -1.0f, error)) {
             const Squad& squad = raids_.state().squads.back();
             f.squad = squad.id;
             f.hasCell = true;
             f.cell = squad.entry;
             const bool one = squad.started == 1;
+            const char* how = "";
+            switch (strategy) {
+                case RaidStrategy::Sappers: how = " They are digging through the walls."; break;
+                case RaidStrategy::DropPods: how = " They are dropping in by pod."; break;
+                case RaidStrategy::Thieves: how = " They have come to steal."; break;
+                case RaidStrategy::Kidnappers: how = " They are after your wounded."; break;
+                case RaidStrategy::Assault: break;
+            }
             f.text = "Raid: " + std::to_string(squad.started) + (one ? " raider from the " : " raiders from the ") + faction.label() +
-                     (one ? " has" : " have") + " come to attack the colony.";
+                     (one ? " has" : " have") + " come to attack the colony." + how;
             return true;
         }
         f.error = error;
@@ -530,7 +555,9 @@ bool NarratorSystem::restore(NarratorState s, std::string& error) {
     std::sort(s.threats.begin(), s.threats.end());
     rng_.restore(s.rngState, s.rngIncrement);
     state_ = std::move(s);
-    applyAdaptation();
+    if (!state_.narrator.empty()) {
+        applyAdaptation();  // only setNarrator does this, so a game that never picked one keeps the full impact
+    }
     return true;
 }
 

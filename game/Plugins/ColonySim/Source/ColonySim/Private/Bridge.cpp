@@ -155,6 +155,10 @@ const char* commandName(const Command& command) {
                 return "RemoveOutfit";
             } else if constexpr (std::is_same_v<Type, StripCommand>) {
                 return "Strip";
+            } else if constexpr (std::is_same_v<Type, RepairGearCommand>) {
+                return "RepairGear";
+            } else if constexpr (std::is_same_v<Type, FitUpgradeCommand>) {
+                return "FitUpgrade";
             } else if constexpr (std::is_same_v<Type, InteractCommand>) {
                 return "Interact";
             } else if constexpr (std::is_same_v<Type, SetWeatherCommand>) {
@@ -201,6 +205,14 @@ const char* commandName(const Command& command) {
                 return "PlaceUpperFloor";
             } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
                 return "StartMentalBreak";
+            } else if constexpr (std::is_same_v<Type, CreateAreaCommand>) {
+                return "CreateArea";
+            } else if constexpr (std::is_same_v<Type, PaintAreaCommand>) {
+                return "PaintArea";
+            } else if constexpr (std::is_same_v<Type, DeleteAreaCommand>) {
+                return "DeleteArea";
+            } else if constexpr (std::is_same_v<Type, AssignAreaCommand>) {
+                return "AssignArea";
             } else if constexpr (std::is_same_v<Type, ContractDiseaseCommand>) {
                 return "ContractDisease";
             } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
@@ -217,6 +229,14 @@ const char* commandName(const Command& command) {
                 return "LearnPower";
             } else if constexpr (std::is_same_v<Type, CastPowerCommand>) {
                 return "CastPower";
+            } else if constexpr (std::is_same_v<Type, SkipNightCommand>) {
+                return "SkipNight";
+            } else if constexpr (std::is_same_v<Type, FastTravelCommand>) {
+                return "FastTravel";
+            } else if constexpr (std::is_same_v<Type, CancelSkipCommand>) {
+                return "CancelSkip";
+            } else if constexpr (std::is_same_v<Type, CaravanCommand>) {
+                return "Caravan";
             } else {
                 static_assert(std::is_same_v<Type, RerollColonistCommand>, "name every command type");
                 return "RerollColonist";
@@ -335,6 +355,8 @@ const char* eventTypeName(EventType type) {
         case EventType::OutOfFuel: return "OutOfFuel";
         case EventType::Refueled: return "Refueled";
         case EventType::FirefoamPopped: return "FirefoamPopped";
+        case EventType::GearRepaired: return "GearRepaired";
+        case EventType::WeaponUpgraded: return "WeaponUpgraded";
         case EventType::AnimalHunted: return "AnimalHunted";
         case EventType::AnimalButchered: return "AnimalButchered";
         case EventType::DeepDepositFound: return "DeepDepositFound";
@@ -368,6 +390,17 @@ const char* eventTypeName(EventType type) {
         case EventType::ShipReactorLost: return "ShipReactorLost";
         case EventType::ShipLaunched: return "ShipLaunched";
         case EventType::OperationDone: return "OperationDone";
+        case EventType::CaravanFormed: return "CaravanFormed";
+        case EventType::CaravanMemberLost: return "CaravanMemberLost";
+        case EventType::CaravanCancelled: return "CaravanCancelled";
+        case EventType::CaravanDeparted: return "CaravanDeparted";
+        case EventType::CaravanArrived: return "CaravanArrived";
+        case EventType::CaravanEntered: return "CaravanEntered";
+        case EventType::CaravanLost: return "CaravanLost";
+        case EventType::DrugBinge: return "DrugBinge";
+        case EventType::ChemicalDamage: return "ChemicalDamage";
+        case EventType::SkipStarted: return "SkipStarted";
+        case EventType::SkipEnded: return "SkipEnded";
     }
     return "?";
 }
@@ -404,6 +437,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Chat: return "Chat";
         case PawnAction::FeedPawn: return "FeedPawn";
         case PawnAction::Refuel: return "Refuel";
+        case PawnAction::Repair: return "Repair";
         case PawnAction::Butcher: return "Butcher";
         case PawnAction::DropCorpse: return "DropCorpse";
         case PawnAction::Rearm: return "Rearm";

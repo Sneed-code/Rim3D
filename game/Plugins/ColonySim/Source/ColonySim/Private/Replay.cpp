@@ -316,6 +316,13 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, StripCommand>) {
                 j["thing"] = entt::to_integral(c.thing);
                 j["strip"] = c.strip;
+            } else if constexpr (std::is_same_v<Type, RepairGearCommand>) {
+                j["thing"] = entt::to_integral(c.thing);
+                j["repair"] = c.repair;
+            } else if constexpr (std::is_same_v<Type, FitUpgradeCommand>) {
+                j["thing"] = entt::to_integral(c.thing);
+                j["part"] = c.part;
+                j["fit"] = c.fit;
             } else if constexpr (std::is_same_v<Type, InteractCommand>) {
                 j["initiator"] = entt::to_integral(c.initiator);
                 j["recipient"] = entt::to_integral(c.recipient);
@@ -375,6 +382,17 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["breakDef"] = c.breakDef;
+            } else if constexpr (std::is_same_v<Type, CreateAreaCommand>) {
+                j["name"] = c.name;
+            } else if constexpr (std::is_same_v<Type, PaintAreaCommand>) {
+                j["id"] = c.area;
+                j["area"] = replayRectJson(c.rect);
+                j["add"] = c.add;
+            } else if constexpr (std::is_same_v<Type, DeleteAreaCommand>) {
+                j["id"] = c.area;
+            } else if constexpr (std::is_same_v<Type, AssignAreaCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["id"] = c.area;
             } else if constexpr (std::is_same_v<Type, ContractDiseaseCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["disease"] = c.disease;
@@ -441,6 +459,26 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["target"] = entt::to_integral(c.target);
                 j["cell"] = {c.cell.x, c.cell.y, c.cell.level};
                 j["player"] = c.player;
+            } else if constexpr (std::is_same_v<Type, FastTravelCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
+                j["x"] = static_cast<double>(c.x);
+                j["y"] = static_cast<double>(c.y);
+            } else if constexpr (std::is_same_v<Type, SkipNightCommand> || std::is_same_v<Type, CancelSkipCommand>) {
+                // no fields
+            } else if constexpr (std::is_same_v<Type, CaravanCommand>) {
+                j["action"] = c.action;
+                j["caravan"] = c.caravan;
+                j["tile"] = c.tile;
+                ReplayOrderedJson pawns = ReplayOrderedJson::array();
+                for (const Entity e : c.pawns) {
+                    pawns.push_back(entt::to_integral(e));
+                }
+                j["pawns"] = pawns;
+                ReplayOrderedJson items = ReplayOrderedJson::array();
+                for (const Entity e : c.items) {
+                    items.push_back(entt::to_integral(e));
+                }
+                j["items"] = items;
             } else {
                 static_assert(std::is_same_v<Type, RerollColonistCommand>, "write every command type");
                 j["slot"] = c.slot;
@@ -510,6 +548,24 @@ public:
             return fail(where + "." + key + " must be text");
         }
         out = it->get<std::string>();
+        return true;
+    }
+
+    // A list of thing ids (absent: empty).
+    bool entities(const ReplayJson& obj, const char* key, std::vector<Entity>& out, const std::string& where) {
+        const auto it = obj.find(key);
+        if (it == obj.end()) {
+            return true;
+        }
+        if (!it->is_array()) {
+            return fail(where + "." + key + " must be a list of thing ids");
+        }
+        for (const ReplayJson& id : *it) {
+            if (!id.is_number_unsigned()) {
+                return fail(where + "." + key + " must be a list of thing ids");
+            }
+            out.push_back(static_cast<Entity>(id.get<uint32_t>()));
+        }
         return true;
     }
 
@@ -1111,6 +1167,22 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.thing = static_cast<Entity>(thing);
         out.command = c;
+    } else if (type == "RepairGear") {
+        RepairGearCommand c;
+        uint32_t thing = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "thing", thing, where) || !r.flag(j, "repair", c.repair, where)) {
+            return false;
+        }
+        c.thing = static_cast<Entity>(thing);
+        out.command = c;
+    } else if (type == "FitUpgrade") {
+        FitUpgradeCommand c;
+        uint32_t thing = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "thing", thing, where) || !r.text(j, "part", c.part, where) || !r.flag(j, "fit", c.fit, where)) {
+            return false;
+        }
+        c.thing = static_cast<Entity>(thing);
+        out.command = c;
     } else if (type == "Interact") {
         InteractCommand c;
         uint32_t initiator = entt::to_integral(kNoEntity);
@@ -1379,6 +1451,32 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         c.pawn = static_cast<Entity>(pawn);
         out.command = std::move(c);
+    } else if (type == "CreateArea") {
+        CreateAreaCommand c;
+        if (!r.text(j, "name", c.name, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "PaintArea") {
+        PaintAreaCommand c;
+        if (!r.integer(j, "id", c.area, where) || !replayReadRect(r, j, where, c.rect) || !r.flag(j, "add", c.add, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "DeleteArea") {
+        DeleteAreaCommand c;
+        if (!r.integer(j, "id", c.area, where)) {
+            return false;
+        }
+        out.command = c;
+    } else if (type == "AssignArea") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        AssignAreaCommand c;
+        if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "id", c.area, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = c;
     } else if (type == "ContractDisease") {
         uint32_t pawn = entt::to_integral(kNoEntity);
         ContractDiseaseCommand c;
@@ -1597,6 +1695,26 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         out.command = std::move(c);
+    } else if (type == "Caravan") {
+        CaravanCommand c;
+        if (!r.text(j, "action", c.action, where) || !r.integer(j, "caravan", c.caravan, where) ||
+            !r.integer(j, "tile", c.tile, where) || !r.entities(j, "pawns", c.pawns, where) ||
+            !r.entities(j, "items", c.items, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "SkipNight") {
+        out.command = SkipNightCommand{};
+    } else if (type == "FastTravel") {
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        FastTravelCommand c;
+        if (!r.integer(j, "pawn", pawn, where) || !r.number(j, "x", c.x, where) || !r.number(j, "y", c.y, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
+        out.command = std::move(c);
+    } else if (type == "CancelSkip") {
+        out.command = CancelSkipCommand{};
     } else {
         return r.fail(where + ".type: unknown command '" + type + "'");
     }

@@ -162,8 +162,8 @@ G2, A1 and A2 are Stage 1 tasks.
 | ✓ | P1 | **Several weapons.** Carry a rifle, a sidearm and a melee weapon; a switch command with a switch time; the fighter AI picks by range; weight counts (C24 if merged). | Cloud | Sonnet, high | 90 min | F8 |
 | ✓ | P2 | **Recoil kicks and dodge roll.** Per-weapon recoil kick lists in weapon defs for the player's shots; a dodge-roll command with start-up, a short no-hit window and recovery, moved by the sim (`shooter-feel.md`). | Cloud | Sonnet, high | 60 min | S7 |
 | ✓ | P3 | **Talent tree.** Talent XP and points for the protagonist, perks from data (`Talents/`, numbers `ours`: faster building, steadier aim, more carry weight, better trading), applied as stat changes; a spend-point command. | Cloud | Sonnet, medium | 60 min | S7 |
-| | P4 | **Repair and weapon upgrades.** Repair clothes, armor and weapons at a bench; upgrade parts (scope, longer magazine, better barrel; `ours`) fitted by recipe and changing the weapon's stats. | Cloud | Sonnet, high | 90 min | C14, C15 |
-| | P5 | **Night skip and fast travel.** Skip to morning when everyone off night shift is asleep and no threat is active, moving needs, growth and healing forward in one go and holding the narrator; fast travel to visited places when no threat. Same seed and commands still give the same game. | Cloud | Opus, high | 90 min | T1, E1 |
+| ✓ | P4 | **Repair and weapon upgrades.** Repair clothes, armor and weapons at a bench; upgrade parts (scope, longer magazine, better barrel; `ours`) fitted by recipe and changing the weapon's stats. | Cloud | Sonnet, high | 90 min | C14, C15 |
+| ✓ | P5 | **Night skip and fast travel.** Skip to morning when everyone off night shift is asleep and no threat is active, moving needs, growth and healing forward in one go and holding the narrator; fast travel to visited places when no threat. Same seed and commands still give the same game. | Cloud | Opus, high | 90 min | T1, E1 |
 
 ### Narrator and events (T)
 
@@ -171,7 +171,7 @@ G2, A1 and A2 are Stage 1 tasks.
 | --- | --- | --- | --- | --- | --- | --- |
 | ✓ | T1 | **Narrator, incidents and threat points.** Colony wealth; threat points from wealth and colonists by RimWorld's curves; an incident system (weights, cooldowns, earliest day); Orrin, Maren and Jinx as RimWorld's three storytellers; letters as events; F6's raid becomes the first incident. | Cloud | Opus, high | 90 min | F6, D10 |
 | | T2 | **Events: nature and good news.** Wanderer joins, cargo pods, crashed pod with a downed survivor, herd migration, animal joins, cold snap, heat wave, eclipse, aurora, berry or healroot bloom. | Cloud | Sonnet, medium | 90 min | T1, E1, E3, N1 |
-| | T3 | **Events: trouble.** (Done: solar flare, toxic fallout, volcanic winter, flashstorm, psychic drone and soothe, short circuit, blight, manhunter pack, mad animal; left: disease outbreaks, infestation, prison break.) Manhunter pack, mad animal, disease outbreaks, blight, short circuit, solar flare, lightning fires, toxic fallout, resonance drone, prison break. | Cloud | Sonnet, medium | 90 min | T1, N5, H2, E4, E5, C13 |
+| ✓ | T3 | **Events: trouble.** (Done: solar flare, toxic fallout, volcanic winter, flashstorm, psychic drone and soothe, short circuit, blight, manhunter pack, mad animal, disease outbreaks, infestation, remnant cluster, prison break.) Manhunter pack, mad animal, disease outbreaks, blight, short circuit, solar flare, lightning fires, toxic fallout, resonance drone, prison break. | Cloud | Sonnet, medium | 90 min | T1, N5, H2, E4, E5, C13 |
 
 ### Expansion pieces (X), when a thread is free
 
@@ -207,7 +207,7 @@ G2, A1 and A2 are Stage 1 tasks.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | G3 | **Performance check in a packaged build.** 1 km map, 30 colonists, 300 animals, rain and a fire, then a 40-raider fight; record fps, game thread, GPU and sim cost in the next `docs/decisions/` file; decide whether the sim moves to its own thread. | PC Unreal | Sonnet, high | 90 min | S9, U14, U15 |
+| ✓ | G3 | **Performance check in a packaged build.** 1 km map, 30 colonists, 300 animals, rain and a fire, then a 40-raider fight; record fps, game thread, GPU and sim cost in the next `docs/decisions/` file; decide whether the sim moves to its own thread. | PC Unreal | Sonnet, high | 90 min | S9, U14, U15 |
 | | G4 | **Playtest build 2.** Package Stage 2, update `docs/setup/playtest.md`, sneed plays a season or more; notes go to `BACKLOG.md` and the Stage 3 plan. | PC Unreal | Sonnet, medium | 60 min | everything above it except X |
 
 ## Order

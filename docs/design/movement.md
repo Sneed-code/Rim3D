@@ -83,6 +83,11 @@ For one pawn:
    past shoved a builder out of its working cell and the job failed ("left its place"). `hold` is not
    saved: the job system sets it again before the movement system reads it.
 
+**Never into a wall.** The wall costs only steer, so a pawn squeezed by others (or walking through them after being
+held up) could still be pushed into a wall's cell, where no path starts, and stay shut in until it starved (the year
+run lost a colonist that way on day 4). The chosen velocity is now checked: if the pawn's centre would end in a cell it
+cannot stand in, it keeps the part along one axis that stays out, else stands still for the step.
+
 A wall that is finished under a walking pawn moves the pawn out and clears its route; that now also
 sets `gaveUp`, so its job asks for a new path instead of taking the empty route for arriving.
 

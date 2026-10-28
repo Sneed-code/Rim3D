@@ -1,8 +1,8 @@
 # The spaceship ending
 
 Code: `ColonySim/Ship.h`, `Private/Ship.cpp`. Tests: `Tests/ShipTests.cpp`. Data: `data/defs/Things/ShipParts.json`,
-`ShipItems.json`, `Research/ShipResearch.json`, `Rules/ShipRules.json`. Sim only; the build menu, the
-reactor and launch buttons and the ending screen are Unreal work for later.
+`ShipItems.json`, `Research/ShipResearch.json`, `Rules/ShipRules.json`. On screen: the ship window and the
+ending screen (`ShipPanelSubsystem`, [panels.md](panels.md) "Ship"); the parts are in the build menu's Ship category.
 
 ## The chain
 
@@ -44,11 +44,12 @@ The ship is whatever finished parts stand on the map; they need not touch each o
 
 Events: `ShipReactorStarted`, `ShipWave`, `ShipReactorReady`, `ShipReactorLost`, `ShipLaunched`.
 `Snapshot::ship` has the phase, time left, waves, part counts, riders, `canLaunch` with the plain-words
-`problem`, `won` and `escaped`. Save section `ship` 1.
+`problem`, `won`, `escaped`, the `reactor` running (none when idle) and `aboard` (each casket and its rider). The dev
+action `FinishWarmUp` makes a warming reactor active at the next step. Save section `ship` 1.
 
 ## Not done
 
 Fuel or power for the parts, "can't be built under a roof" for the reactor and beam, Construction skill
 minimums, mechanoid-only waves (the Remnant has no pawn kinds yet, so every wave is pirates), the incident
 system's own rules for raids (T1 will own the narrator side; `ShipSystem::sendWave` is the hook), colonists
-walking into caskets, and the ending screen.
+walking into caskets.

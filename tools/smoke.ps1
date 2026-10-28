@@ -17,10 +17,13 @@ param(
     [switch]$BuildOnly,                   # compile, but do not start the game
     [switch]$Visible,                     # show the game window (default: draw offscreen, no pop-up)
     [switch]$Force,                       # skip the "is the PC busy" check
+    [switch]$Packaged,                    # run the packaged game from tools\package.ps1 instead of the editor (no build)
+    [string]$PackageDir = "",            # where tools\package.ps1 put it (default: Rim3D-packaged next to the repo)
     [string]$Resolution = "1920x1080",
     [int]$Threads = 6,                    # cap for compiler jobs
     [int]$TimeoutSeconds = 300,           # the test fails itself after this long
     [string]$EngineDir = "C:\Program Files\Epic Games\UE_5.8",
+    [string]$LookLabel = "",              # look test only: a word added to the Saved\Look folder's name (before, after)
     [string[]]$ExtraArgs = @()           # more game arguments, e.g. "-ini:Engine:[SystemSettings]:Terrain.Textured=0" (a console variable from the first frame)
 )
 
@@ -31,6 +34,15 @@ $Project = Join-Path $Repo "game\Rim3D.uproject"
 $SmokeDir = Join-Path $Repo "game\Saved\Smoke"
 $Editor = Join-Path $EngineDir "Engine\Binaries\Win64\UnrealEditor.exe"
 $BuildBat = Join-Path $EngineDir "Engine\Build\BatchFiles\Build.bat"
+
+if (-not $PackageDir) { $PackageDir = Join-Path (Split-Path -Parent $Repo) "Rim3D-packaged" }
+$GameExe = Join-Path $PackageDir "Windows\Rim3D.exe"
+if ($Packaged) {
+    # The packaged game keeps its Saved folder next to itself and reads the defs from the repo.
+    if (-not (Test-Path $GameExe)) { Write-Host "Missing: $GameExe (run tools\package.ps1 first)"; exit 2 }
+    $SmokeDir = Join-Path $PackageDir "Windows\Rim3D\Saved\Smoke"
+    $NoBuild = $true
+}
 
 foreach ($path in @($Project, $Editor, $BuildBat)) {
     if (-not (Test-Path $path)) { Write-Host "Missing: $path"; exit 2 }
@@ -77,10 +89,16 @@ $gameArgs = @(
     "`"$Project`"", "/Game/Levels/DefaultLevel", "-game", "-windowed", "-ResX=$($res[0])", "-ResY=$($res[1])",
     "-nosplash", "-nosound", "-unattended", "-SmokeTest=$Test", "-SmokeTimeout=$TimeoutSeconds"
 )
+$exe = $Editor
+if ($Packaged) {
+    $exe = $GameExe
+    $gameArgs = @("/Game/Levels/DefaultLevel", "-windowed", "-ResX=$($res[0])", "-ResY=$($res[1])", "-nosplash", "-nosound", "-unattended",
+        "-SmokeTest=$Test", "-SmokeTimeout=$TimeoutSeconds", "-SimData=`"$(Join-Path $Repo 'data')`"")
+}
 if (-not $Visible) { $gameArgs += "-RenderOffScreen" }
 $gameArgs += $ExtraArgs
-Write-Host "Running smoke test '$Test' at $Resolution..."
-$game = Start-Process -FilePath $Editor -ArgumentList $gameArgs -PassThru
+Write-Host "Running smoke test '$Test' at $Resolution$(if ($Packaged) { ' (packaged build)' })..."
+$game = Start-Process -FilePath $exe -ArgumentList $gameArgs -PassThru
 try { $game.PriorityClass = "BelowNormal" } catch { }
 if (-not $game.WaitForExit(($TimeoutSeconds + 120) * 1000)) {
     Write-Host "The game did not quit in time; stopping it."
@@ -93,7 +111,7 @@ if (-not $game.WaitForExit(($TimeoutSeconds + 120) * 1000)) {
 $jsonPath = Join-Path $SmokeDir "$Test.json"
 if (-not (Test-Path $jsonPath)) {
     Write-Host "CRASH or no result: $jsonPath was not written (exit code $($game.ExitCode))."
-    $log = Join-Path $Repo "game\Saved\Logs\Rim3D.log"
+    $log = if ($Packaged) { Join-Path $PackageDir "Windows\Rim3D\Saved\Logs\Rim3D.log" } else { Join-Path $Repo "game\Saved\Logs\Rim3D.log" }
     if (Test-Path $log) { Write-Host "Last log lines:"; Get-Content $log -Tail 20 }
     exit 3
 }
@@ -110,6 +128,11 @@ foreach ($p in $r.phases) {
 foreach ($n in $r.notes) { Write-Host "note: $n" }
 foreach ($e in $r.errors) { Write-Host "ERROR: $e" }
 Write-Host "Screenshots: $(Join-Path $SmokeDir $Test)"
+
+# The look bench (L1): keep this run's shots under Saved\Look\<date> and lay them beside the last run's.
+if ($Test -eq "look") {
+    & (Join-Path $PSScriptRoot "look_sheet.ps1") -Shots (Join-Path $SmokeDir $Test) -LookDir (Join-Path (Split-Path -Parent $SmokeDir) "Look") -Label $LookLabel
+}
 
 if ($r.status -ne "pass" -or $missingShot) { exit 1 }
 exit 0

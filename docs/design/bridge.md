@@ -60,6 +60,8 @@ rest (place blueprint, designate, draft, actions) come with the tasks that build
 | `AddOutfitCommand{name}` | a new outfit allowing everything | empty or taken name |
 | `RemoveOutfitCommand{outfit}` | removes it; pawns on it go back to the first | no such outfit; the first one |
 | `StripCommand{thing, strip}` | marks a downed or dead pawn to be stripped of clothes and weapon by a colonist with Hauling work, or takes the mark off | not a pawn on the map; not downed or dead; nothing on it |
+| `RepairGearCommand{thing, repair}` | marks apparel or a weapon lying on the map for repair at a bench, or takes the mark off ([repair.md](repair.md)) | not apparel or a weapon; worn or carried; not damaged |
+| `FitUpgradeCommand{thing, part, fit}` | orders an upgrade part (a Things defName) fitted to a gun lying on the map at a machining table, or (`fit` false) cancels the gun's order ([repair.md](repair.md)) | not a gun on the map; unknown part; the part does not fit that gun; its slot is taken |
 | `SetScheduleCommand{pawn, hour, kind}` | the pawn's schedule for one hour (0 to 23): Anything, Work, Joy or Sleep ([needs.md](needs.md)) | the pawn has no schedule; bad hour |
 | `DesignateCommand{area, kind}` | marks rock (`Mine`), plants (`CutPlant`) or ripe plants (`HarvestPlant`) in the rectangle for work ([mining.md](mining.md)) | `kind` is None; nothing in `area` suits |
 | `CancelDesignationsCommand{area, kind}` | takes marks off, `None` for every kind, and ends the jobs on them | nothing marked in `area` |
@@ -131,6 +133,8 @@ starts, so read it after every step. Before the first step it holds what setting
 | `FrameStarted` | `thing` (the plan), `def` (the building), `cell` | a blueprint got its first materials and is a frame now; the plan itself came with a `ThingSpawned` |
 | `OutOfFuel` | `thing` (the building), `def`, `cell` | a building's fuel reached 0 ([fuel.md](fuel.md)) |
 | `Refueled` | `thing`, `def`, `cell`, `amount` (items in) | a colonist put fuel in a building |
+| `GearRepaired` | `thing` (pawn), `target` (the gear), `def`, `cell`, `amount` (hit points restored) | a colonist mended gear at a bench ([repair.md](repair.md)) |
+| `WeaponUpgraded` | `thing` (pawn), `target` (the gun), `def` (the part), `cell` | a colonist fitted an upgrade part to a gun |
 | `RecipeDone` | `thing` (the cook), `def` (the Recipes def), `target` (the stove), `cell`, `amount` (products made), `message` | one run of a bill is done; `message` is "bill finished" when a "do X times" bill reached 0 and went ([bills.md](bills.md)) |
 | `PawnInjured` | `thing`, `def` (the injury), `part`, `amount`, `cell` | a pawn got an injury (F1) |
 | `PawnPartLost` | `thing`, `def` (MissingBodyPart), `part`, `amount`, `cell` | a pawn lost a body part |
@@ -199,6 +203,7 @@ Since F2 pawns also have
 Since E5 a building with a power part has `power`, `powerNet`, `powerWatts` and `batteryFill`, and the snapshot has `powerNets` ([power.md](power.md)). Since C5 a door's `ThingView` has `doorOpen` (0 to 1) and the snapshot has `rooms` (the enclosed rooms with role and
 size), `roofCells` (the thin roof) and `roofChanges` ([rooms.md](rooms.md)). Since C3 the snapshot lists the `designations`
 (cell and kind of every mine, cut and harvest mark; [mining.md](mining.md)).
+Since V7 pawns with a body also have `bloodLoss`, `bleedPerDay` and their visible wounds, `woundCount` from `Snapshot::wounds[firstWound]` (kind, skin region, size, bandaged, bleeding; [wounds.md](wounds.md)).
 Later tasks add what they draw and show: pawn info, the work tab.
 
 Unreal reads only snapshots and events, never the registry or `Things.h`. That lets the sim move to
@@ -339,7 +344,7 @@ Code: `game/Source/Rim3D/SimSubsystem.h/.cpp` (`USimSubsystem`). Smoke test: `-T
   resumes at the earlier speed, 1 / 2 / 3 set the speed, `.` steps once while paused, F7 saves a
   replay to `game/Saved/Replays/replay-<time>-day<N>.json`. Keys are ignored while the console is
   open. Console: `Sim.Speed <0-3>`, `Sim.Spawn <Def> <x> <y> [count]`, `Sim.SaveReplay`,
-  `Sim.ShowTimings 0|1` (on by default), `Sim.DebugDraw 0|1` (coloured shapes at blended positions,
+  `Sim.ShowTimings 0|1` (off by default since L1), `Sim.DebugDraw 0|1` (coloured shapes at blended positions,
   until U4 and U5 draw the real things).
 - **On-screen timings** (top left): game time and speed, things on the map, events so far, the
   sim's cost per frame (average and worst over about a second, red above the 5 ms budget), steps per

@@ -210,9 +210,11 @@ size_t Plants::countOf(DefId def) const {
     return k < 0 ? 0 : static_cast<size_t>(std::count(kind_.begin(), kind_.end(), static_cast<uint16_t>(k + 1)));
 }
 
-void Plants::growHour(int hourOfDay) {
+void Plants::growHourSlice(int hourOfDay, int slice, int slices) {
     const bool growing = hourOfDay >= growStartHour_ && hourOfDay < growEndHour_;
-    for (size_t i = 0; i < kind_.size(); ++i) {
+    const size_t begin = kind_.size() * static_cast<size_t>(slice) / static_cast<size_t>(slices);
+    const size_t end = kind_.size() * static_cast<size_t>(slice + 1) / static_cast<size_t>(slices);
+    for (size_t i = begin; i < end; ++i) {
         if (kind_[i] == 0) {
             continue;
         }

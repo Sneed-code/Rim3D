@@ -315,3 +315,21 @@ TEST_CASE("Spoilage: rot, wear, ingredients and poison survive a save, and the g
     loaded.sim->stepMany(86400 / 2);
     CHECK(loaded.sim->stateHash() == original.stateHash());
 }
+
+TEST_CASE("Spoilage: wear under the open sky goes on the same after a save and load, with the real weather") {
+    auto db = std::make_shared<DefDatabase>();
+    std::vector<std::string> errors;
+    DefDatabase::loadDirectory(COLONY_DATA_DIR, *db, errors);
+    SimSettings settings{3, 128, 0, 0};
+    settings.scenario = "Crashlanded";
+    Sim original(settings, db);
+    // The weather's wear factor is not saved; the first minute after a load must still use it.
+    original.stepMany(86400 / 2);
+    const std::vector<uint8_t> bytes = saveSim(original);
+    SaveLoadResult loaded = loadSim(bytes, db);
+    SPOIL_REQUIRE(loaded.error.empty());
+    SPOIL_REQUIRE(loaded.sim != nullptr);
+    original.stepMany(600);
+    loaded.sim->stepMany(600);
+    CHECK(loaded.sim->stateHash() == original.stateHash());
+}

@@ -43,6 +43,7 @@ struct FPanelsStats
 	int32 ColonistPanelFrames = 0;
 	int32 BillPanelFrames = 0;
 	int32 LogPanelFrames = 0;
+	int32 ThermostatPanelFrames = 0;
 	/** Commands the panels sent since the sim started. */
 	int32 CommandsSent = 0;
 };
@@ -62,6 +63,9 @@ struct FPanelsStats
  *   passions, health (pain, bleeding, injuries, abilities) and their bed (which sends AssignBedCommand).
  * - Bills panel, with a work building (the stove) selected: its bills in order with mode, count,
  *   pause and remove, and a form to add one. Sends AddBill, SetBill and RemoveBillCommand.
+ * - Thermostat panel, with a heater or cooler selected (task U19): a slider for its target temperature (sent when
+ *   let go), -1 and +1 buttons, the room's temperature now and a reset to the building's own limit. Sends
+ *   SetThermostatCommand.
  * - Message log, right side under the alarm: what happened (deaths, wounds, mood trouble, finished
  *   bills, refused orders), newest last, click to centre on the colonist; the Log button opens more lines.
  *
@@ -94,6 +98,8 @@ public:
 	bool RemoveBill(colony::Entity Building, uint32 BillId);
 	bool ChangeBill(colony::Entity Building, uint32 BillId, colony::BillMode Mode, int32 Count, bool bSuspended);
 	bool AssignBed(colony::Entity Bed, colony::Entity Pawn);
+	/** Sets a heater's or cooler's target temperature (SetThermostatCommand), or with `bClear` goes back to the def's own limit. False if the building has no thermostat (nothing is sent). */
+	bool SetThermostat(colony::Entity Building, float Celsius, bool bClear);
 
 	// ---- State for tests --------------------------------------------------------------------
 	const FPanelsStats& GetStats() const { return Stats; }
@@ -119,6 +125,7 @@ private:
 	void DrawScheduleTab(USimSubsystem& Bridge, float Scale);
 	void DrawColonistPanel(USimSubsystem& Bridge, const colony::ThingView& View, float Left, float Top, float Scale);
 	void DrawBillsPanel(USimSubsystem& Bridge, const colony::ThingView& View, float Left, float Top, float Scale);
+	void DrawThermostatPanel(USimSubsystem& Bridge, const colony::ThingView& View, float Left, float Top, float Scale);
 	void DrawLog(USimSubsystem& Bridge, float Scale, float Margin);
 
 	EColonyTab Tab = EColonyTab::None;
@@ -134,6 +141,11 @@ private:
 	int32 NewMode = 0;
 	int32 NewCount = 1;
 	colony::Entity NewBillBuilding = colony::kNoEntity;
+
+	// The thermostat slider: the value being dragged is held here and sent when the mouse is let go.
+	colony::Entity ThermoBuilding = colony::kNoEntity;
+	float ThermoDragValue = 0.0f;
+	bool bThermoDragging = false;
 
 	FPanelsStats Stats;
 };

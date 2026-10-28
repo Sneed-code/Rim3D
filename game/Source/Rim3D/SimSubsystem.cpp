@@ -37,7 +37,9 @@ namespace
 	constexpr uint64 SimBridgeMessageKey = 0x51317100;
 
 	TAutoConsoleVariable<int32> GSimBridgeShowTimings(
-		TEXT("Sim.ShowTimings"), 1, TEXT("1 shows the sim's speed and cost on screen, 0 hides it."), ECVF_Default);
+		TEXT("Sim.ShowTimings"), 0, TEXT("1 shows the sim's speed and cost on screen, 0 hides it (the default since L1)."), ECVF_Default);
+	TAutoConsoleVariable<int32> GSimBridgeKeyHelp(
+		TEXT("UI.KeyHelp"), 0, TEXT("1 shows the list of keys in the bottom right corner, 0 folds it to an \"F1  keys\" box (F1 switches)."), ECVF_Default);
 	TAutoConsoleVariable<int32> GSimBridgeDebugDraw(
 		TEXT("Sim.DebugDraw"), 0, TEXT("1 draws every thing in the snapshot as a coloured shape, at its blended position."), ECVF_Default);
 
@@ -93,6 +95,13 @@ namespace
 		FParse::Value(Line, TEXT("SimScenario="), Options.Scenario);
 		Options.WildAnimals = Options.bFlatMap ? 0 : 100;
 		FParse::Value(Line, TEXT("SimWildAnimals="), Options.WildAnimals);
+		Options.bWorld = FParse::Param(Line, TEXT("SimWorld"));
+		int64 WorldSeed = 0;
+		if (FParse::Value(Line, TEXT("SimWorldSeed="), WorldSeed))
+		{
+			Options.WorldSeed = static_cast<uint64>(WorldSeed);
+		}
+		FParse::Value(Line, TEXT("SimWorldTile="), Options.WorldStartTile);
 		return Options;
 	}
 
@@ -287,6 +296,11 @@ bool USimSubsystem::StartSim(const FSimStartOptions& Options)
 	Settings.flatMap = Options.bFlatMap;
 	Settings.scenario = SimBridgeUtf8(Options.Scenario);
 	Settings.wildAnimals = Options.WildAnimals;
+	Settings.world.enabled = Options.bWorld;
+	Settings.world.seed = Options.WorldSeed;
+	Settings.world.width = Options.WorldWidth;
+	Settings.world.height = Options.WorldHeight;
+	Settings.world.startTile = Options.WorldStartTile;
 	Sim = Defs ? std::make_unique<colony::Sim>(Settings, Defs) : std::make_unique<colony::Sim>(Settings);
 	for (const std::string& Problem : Sim->setupErrors())
 	{
@@ -631,6 +645,11 @@ bool USimSubsystem::LoadGame(const FString& Slot)
 	StartOptions.Pawns = Settings.pawns;
 	StartOptions.Items = Settings.items;
 	StartOptions.bFlatMap = Settings.flatMap;
+	StartOptions.bWorld = Settings.world.enabled;
+	StartOptions.WorldSeed = Settings.world.seed;
+	StartOptions.WorldWidth = Settings.world.width;
+	StartOptions.WorldHeight = Settings.world.height;
+	StartOptions.WorldStartTile = Settings.world.startTile;
 	ResetAfterSimChange();
 	UE_LOG(LogColonySim, Display, TEXT("Loaded %s: day %lld, %d things"), *Path, static_cast<long long>(Sim->time().day() + 1), static_cast<int32>(Current.things.size()));
 	SimBridgeScreenMessage(11, 3.0f, FColor::Green, FString::Printf(TEXT("Loaded: %s"), *Clean));
@@ -698,6 +717,11 @@ FString USimSubsystem::WriteBugReport()
 	return Folder;
 }
 
+bool USimSubsystem::IsKeyHelpShown()
+{
+	return GSimBridgeKeyHelp.GetValueOnGameThread() != 0;
+}
+
 bool USimSubsystem::HandleKey(const FKey& Key)
 {
 	if (Key == EKeys::SpaceBar)
@@ -726,6 +750,10 @@ bool USimSubsystem::HandleKey(const FKey& Key)
 	else if (Key == EKeys::F7)
 	{
 		SaveReplay();
+	}
+	else if (Key == EKeys::F1)
+	{
+		GSimBridgeKeyHelp->Set(IsKeyHelpShown() ? 0 : 1, ECVF_SetByCode);
 	}
 	else if (Key == EKeys::F5)
 	{

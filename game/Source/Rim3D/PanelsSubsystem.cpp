@@ -6,6 +6,8 @@
 #include <imgui.h>
 
 #include "OverseerSubsystem.h"
+#include "QuestPanelSubsystem.h"
+#include "ShipPanelSubsystem.h"
 #include "SimSubsystem.h"
 
 #include "ColonySim/Bills.h"
@@ -18,6 +20,7 @@
 #include "ColonySim/Mood.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Temperature.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -225,6 +228,7 @@ void UPanelsSubsystem::ResetForNewSim()
 	Stats.CommandsSent = 0;
 	NewBillBuilding = colony::kNoEntity;
 	NewRecipe = 0;
+	ThermoBuilding = colony::kNoEntity;
 }
 
 void UPanelsSubsystem::Submit(colony::Command Command)
@@ -347,6 +351,43 @@ void UPanelsSubsystem::OnSimEvent(const colony::Event& Event)
 			AddLog(FString::Printf(TEXT("%s finished: %s%s."), *NameOf(Event.thing), *What, Event.message.empty() ? TEXT("") : TEXT(" (bill done)")), 3, Event.thing);
 			break;
 		}
+		case colony::EventType::QuestOffered:
+		case colony::EventType::QuestAccepted:
+		case colony::EventType::QuestDeclined:
+		case colony::EventType::QuestExpired:
+		case colony::EventType::QuestCompleted:
+		case colony::EventType::QuestFailed:
+		{
+			// Quests (docs/design/quests.md); the quest window is UQuestPanelSubsystem.
+			const FString What = PCapital(Event.def.valid() ? Sim.defs().get(Event.def).label() : Event.message);
+			const FString Why = UTF8_TO_TCHAR(Event.message.c_str());
+			switch (Event.type)
+			{
+				case colony::EventType::QuestOffered: AddLog(FString::Printf(TEXT("Quest offered: %s. Open Quests to answer."), *What), 0); break;
+				case colony::EventType::QuestAccepted: AddLog(FString::Printf(TEXT("Quest accepted: %s."), *What), 0); break;
+				case colony::EventType::QuestDeclined: AddLog(FString::Printf(TEXT("Quest declined: %s."), *What), 0); break;
+				case colony::EventType::QuestExpired: AddLog(FString::Printf(TEXT("Quest lapsed: %s."), *What), 1); break;
+				case colony::EventType::QuestCompleted: AddLog(FString::Printf(TEXT("Quest done: %s (%s)."), *What, *Why), 3); break;
+				default: AddLog(FString::Printf(TEXT("Quest failed: %s (%s)."), *What, *Why), 2); break;
+			}
+			break;
+		}
+		// The spaceship ending (docs/design/ship.md); the ship window is UShipPanelSubsystem.
+		case colony::EventType::ShipReactorStarted:
+			AddLog(FString::Printf(TEXT("The ship reactor is starting. It needs %.0f days, and raiders will come for it."), Event.amount), 1, Event.thing);
+			break;
+		case colony::EventType::ShipWave:
+			AddLog(FString::Printf(TEXT("Raiders are coming for the ship reactor (wave %.0f)."), Event.amount), 2, Event.thing);
+			break;
+		case colony::EventType::ShipReactorReady:
+			AddLog(TEXT("The ship reactor is active. Open Ship to launch."), 3, Event.thing);
+			break;
+		case colony::EventType::ShipReactorLost:
+			AddLog(TEXT("The ship reactor is lost. It must be started again."), 2);
+			break;
+		case colony::EventType::ShipLaunched:
+			AddLog(FString::Printf(TEXT("The ship has launched with %.0f aboard."), Event.amount), 3);
+			break;
 		default:
 			break;
 	}
@@ -436,6 +477,19 @@ bool UPanelsSubsystem::AssignBed(colony::Entity Bed, colony::Entity Pawn)
 	return true;
 }
 
+bool UPanelsSubsystem::SetThermostat(colony::Entity Building, float Celsius, bool bClear)
+{
+	const USimSubsystem* Bridge = GetBridge();
+	const colony::ThingView* View = Bridge ? Bridge->GetCurrentSnapshot().find(Building) : nullptr;
+	if (!View || !Bridge->GetSim() || !Bridge->GetSim()->defs().get(View->def).flag("heatPusher.adjustable"))
+	{
+		return false;
+	}
+	const colony::TemperatureNumbers& Numbers = Bridge->GetSim()->temperature().numbers();
+	Submit(colony::SetThermostatCommand{Building, FMath::Clamp(Celsius, Numbers.thermostatMinC, Numbers.thermostatMaxC), bClear});
+	return true;
+}
+
 // ---- The tick and the panels -------------------------------------------------------------------
 
 void UPanelsSubsystem::Tick(float DeltaTime)
@@ -505,7 +559,14 @@ void UPanelsSubsystem::DrawPanels(USimSubsystem& Bridge)
 			}
 			else if (View->category == colony::ThingCategory::Building && View->stage == colony::ConstructionStage::Built)
 			{
-				DrawBillsPanel(Bridge, *View, Left, Top, Scale);
+				if (Bridge.GetSim()->defs().get(View->def).flag("heatPusher.adjustable"))
+				{
+					DrawThermostatPanel(Bridge, *View, Left, Top, Scale);
+				}
+				else
+				{
+					DrawBillsPanel(Bridge, *View, Left, Top, Scale);
+				}
 			}
 		}
 	}
@@ -544,6 +605,48 @@ void UPanelsSubsystem::DrawMenuAndColonistBar(USimSubsystem& Bridge, float Scale
 		if (PButton(TEXT("Log"), bLogOpen))
 		{
 			bLogOpen = !bLogOpen;
+		}
+		if (UQuestPanelSubsystem* Quests = GetWorld()->GetSubsystem<UQuestPanelSubsystem>())
+		{
+			// "Quests (2)" while offers wait for an answer; amber until the window has been opened since the newest one.
+			ImGui::SameLine();
+			const int32 Waiting = Quests->CountOffered();
+			const bool bUnseen = Quests->HasUnseenOffer();
+			if (bUnseen)
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.75f, 0.55f, 0.15f, 1.0f));
+			}
+			if (PButton(Waiting > 0 ? FString::Printf(TEXT("Quests (%d)"), Waiting) : FString(TEXT("Quests")), Quests->IsOpen()))
+			{
+				Quests->SetOpen(!Quests->IsOpen());
+			}
+			if (bUnseen)
+			{
+				ImGui::PopStyleColor();
+			}
+		}
+		UShipPanelSubsystem* Ship = GetWorld()->GetSubsystem<UShipPanelSubsystem>();
+		if (Ship && Ship->HasShip())
+		{
+			// "Ship (12.5 days)" while the reactor warms up; green once it can launch.
+			ImGui::SameLine();
+			const colony::ShipView& ShipView = Bridge.GetCurrentSnapshot().ship;
+			const bool bReady = ShipView.canLaunch;
+			if (bReady)
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.25f, 0.6f, 0.3f, 1.0f));
+			}
+			const FString Label = ShipView.phase == 1
+				? FString::Printf(TEXT("Ship (%.1f days)"), static_cast<double>(ShipView.activationLeft) / colony::kSecondsPerDay)
+				: FString(TEXT("Ship"));
+			if (PButton(Label, Ship->IsOpen()))
+			{
+				Ship->SetOpen(!Ship->IsOpen());
+			}
+			if (bReady)
+			{
+				ImGui::PopStyleColor();
+			}
 		}
 
 		// The colonists, coloured by mood; downed ones are grey.
@@ -1110,6 +1213,76 @@ void UPanelsSubsystem::DrawBillsPanel(USimSubsystem& Bridge, const colony::Thing
 		{
 			AddBill(View.id, UTF8_TO_TCHAR(Picked.defName.c_str()), static_cast<colony::BillMode>(NewMode), NewCount);
 		}
+	}
+	ImGui::End();
+}
+
+void UPanelsSubsystem::DrawThermostatPanel(USimSubsystem& Bridge, const colony::ThingView& View, float Left, float Top, float Scale)
+{
+	const colony::Sim& Sim = *Bridge.GetSim();
+	const colony::Def& Def = Sim.defs().get(View.def);
+	const colony::TemperatureSystem& Temperature = Sim.temperature();
+	const colony::TemperatureNumbers& Numbers = Temperature.numbers();
+	const bool bHeater = Def.number("heatPusher.heatPerSecond", 0.0) > 0.0;
+	const bool bOwnTarget = Temperature.hasThermostat(View.id);
+	const float Target = Temperature.thermostat(View.id);
+	const double OwnLimit = Def.number(bHeater ? "heatPusher.maxTemp" : "heatPusher.minTemp", 21.0);
+	// A new building: start the drag value from its target.
+	if (ThermoBuilding != View.id)
+	{
+		ThermoBuilding = View.id;
+		ThermoDragValue = Target;
+		bThermoDragging = false;
+	}
+
+	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
+	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Left, Viewport->Pos.y + Top), ImGuiCond_Always, ImVec2(0.0f, 0.0f));
+	ImGui::SetNextWindowSizeConstraints(ImVec2(380.0f * Scale, 0.0f), ImVec2(520.0f * Scale, FLT_MAX));
+	if (ImGui::Begin("##PanelsThermostat", nullptr, PanelFlags()))
+	{
+		++Stats.ThermostatPanelFrames;
+		PText(FString::Printf(TEXT("%s: thermostat"), *PCapital(Def.label())));
+		PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), bHeater ? TEXT("Heats the room up to this and then rests.") : TEXT("Cools the room down to this and then rests."));
+		// The room it works on, now (read only; the sim keeps it up to date every step).
+		const colony::CellPos Cell{static_cast<int>(std::floor(View.x)), static_cast<int>(std::floor(View.y)), View.level};
+		const float RoomNow = const_cast<colony::TemperatureSystem&>(Temperature).temperatureAt(Cell);
+		PText(FString::Printf(TEXT("Room now: %.1f C"), RoomNow));
+		ImGui::Separator();
+
+		float Shown = bThermoDragging ? ThermoDragValue : Target;
+		ImGui::SetNextItemWidth(300.0f * Scale);
+		ImGui::SliderFloat("##Target", &Shown, Numbers.thermostatMinC, Numbers.thermostatMaxC, "%.0f C");
+		if (ImGui::IsItemActive())
+		{
+			bThermoDragging = true;
+			ThermoDragValue = Shown;
+		}
+		if (ImGui::IsItemDeactivatedAfterEdit())
+		{
+			SetThermostat(View.id, std::round(ThermoDragValue), false);
+		}
+		if (ImGui::IsItemDeactivated())
+		{
+			bThermoDragging = false;
+		}
+		const auto Nudge = [&](const char* Label, float Delta)
+		{
+			if (ImGui::SmallButton(Label))
+			{
+				SetThermostat(View.id, std::round(Target + Delta), false);
+			}
+			ImGui::SameLine();
+		};
+		Nudge("-5", -5.0f);
+		Nudge("-1", -1.0f);
+		Nudge("+1", 1.0f);
+		Nudge("+5", 5.0f);
+		if (ImGui::SmallButton("Reset"))
+		{
+			SetThermostat(View.id, Target, true);
+		}
+		PTextColored(ImVec4(0.7f, 0.8f, 0.9f, 1.0f), bOwnTarget ? FString::Printf(TEXT("Set to %.0f C (the building's own limit is %.0f C)."), Target, OwnLimit)
+														 : FString::Printf(TEXT("At the building's own limit, %.0f C."), OwnLimit));
 	}
 	ImGui::End();
 }

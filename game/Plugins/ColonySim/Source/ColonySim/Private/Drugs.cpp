@@ -72,6 +72,25 @@ DrugRules DrugRules::read(const DefDatabase& defs) {
     r.searchSeconds = def->integer("searchSeconds", r.searchSeconds);
     r.hangoverFromSeverity = drugsFloat(*def, "hangoverFromSeverity", r.hangoverFromSeverity);
     r.hangoverSeverity = drugsFloat(*def, "hangoverSeverity", r.hangoverSeverity);
+    r.bingeCheckEvery = static_cast<int>(def->integer("bingeCheckEvery", r.bingeCheckEvery));
+    r.bingeMeanDaysSocial = drugsFloat(*def, "bingeMeanDaysSocial", r.bingeMeanDaysSocial);
+    r.bingeMeanDaysHard = drugsFloat(*def, "bingeMeanDaysHard", r.bingeMeanDaysHard);
+    r.bingeMeanDaysWithdrawal = drugsFloat(*def, "bingeMeanDaysWithdrawal", r.bingeMeanDaysWithdrawal);
+    r.bingeHoursMin = drugsFloat(*def, "bingeHoursMin", r.bingeHoursMin);
+    r.bingeHoursMax = drugsFloat(*def, "bingeHoursMax", r.bingeHoursMax);
+    r.bingeRedoseBelow = drugsFloat(*def, "bingeRedoseBelow", r.bingeRedoseBelow);
+    r.bingeEndOverdose = drugsFloat(*def, "bingeEndOverdose", r.bingeEndOverdose);
+    r.damageCheckEvery = static_cast<int>(def->integer("damageCheckEvery", r.damageCheckEvery));
+    r.damageMtbDaysAtThreshold = drugsFloat(*def, "damageMtbDaysAtThreshold", r.damageMtbDaysAtThreshold);
+    r.damageMtbDaysAtFull = drugsFloat(*def, "damageMtbDaysAtFull", r.damageMtbDaysAtFull);
+    r.damageFraction = drugsFloat(*def, "damageFraction", r.damageFraction);
+    r.damageMaxFraction = drugsFloat(*def, "damageMaxFraction", r.damageMaxFraction);
+    r.brainDamageMtbDays = drugsFloat(*def, "brainDamageMtbDays", r.brainDamageMtbDays);
+    r.brainDamageFraction = drugsFloat(*def, "brainDamageFraction", r.brainDamageFraction);
+    r.heartAttackFraction = drugsFloat(*def, "heartAttackFraction", r.heartAttackFraction);
+    r.majorOverdose = drugsFloat(*def, "majorOverdoseSeverity", r.majorOverdose);
+    r.bingeCheckEvery = std::max(1, r.bingeCheckEvery);
+    r.damageCheckEvery = std::max(1, r.damageCheckEvery);
     return r;
 }
 
@@ -96,6 +115,7 @@ float DrugRules::addictionMultiplier(float tolerance) const {
 DrugSystem::DrugSystem(Things& things, HealthSystem& health, const DefDatabase& defs)
     : things_(things), health_(health), defs_(defs), rules_(DrugRules::read(defs)) {
     hediffs_.assign(defs.size(), HediffInfo{});
+    prevents_.assign(defs.size(), {});
     kindIndex_.assign(defs.size(), -1);
 
     for (const DefId id : defs.idsOfKind(kDrugsHediffsKind)) {
@@ -113,6 +133,9 @@ DrugSystem::DrugSystem(Things& things, HealthSystem& health, const DefDatabase& 
         }
         if (info.restFallFactor != 1.0f) {
             restHediffs_.push_back(id);
+        }
+        for (size_t i = 0, n = def.count("preventsDiseases"); i < n; ++i) {
+            prevents_[id.value].push_back(def.textAt("preventsDiseases", i));
         }
         if (def.defName() == "Overdose") {
             overdoseHediff_ = id;
@@ -135,6 +158,11 @@ DrugSystem::DrugSystem(Things& things, HealthSystem& health, const DefDatabase& 
         c.withdrawalRisePerDay = drugsFloat(def, "withdrawalRisePerDay", c.withdrawalRisePerDay);
         c.withdrawalRecoverPerDay = drugsFloat(def, "withdrawalRecoverPerDay", c.withdrawalRecoverPerDay);
         c.permanent = def.flag("permanent");
+        c.damagePart = def.text("chemicalDamage.part");
+        c.damageMinTolerance = drugsFloat(def, "chemicalDamage.minTolerance", 0.0f);
+        c.addictionDamagePart = def.text("addictionDamage.part");
+        c.addictionDamageChance = drugsFloat(def, "addictionDamage.chance", 0.0f);
+        c.heartAttackMtbDays = drugsFloat(def, "heartAttackMtbDays", 0.0f);
         chemicals_.push_back(std::move(c));
     }
     std::sort(chemicals_.begin(), chemicals_.end(), [](const DrugChemical& a, const DrugChemical& b) { return a.defName < b.defName; });
@@ -161,6 +189,7 @@ DrugSystem::DrugSystem(Things& things, HealthSystem& health, const DefDatabase& 
         k.joy = drugsFloat(def, "drug.joy", 0.0f);
         k.restOffset = drugsFloat(def, "drug.restOffset", 0.0f);
         k.overdose = def.flag("drug.overdose");
+        k.nutrition = drugsFloat(def, "drug.nutrition", 0.0f);
         kindIndex_[id.value] = static_cast<int32_t>(kinds_.size());
         kinds_.push_back(std::move(k));
     }
@@ -188,6 +217,7 @@ DrugSystem::DrugSystem(Things& things, HealthSystem& health, const DefDatabase& 
 }
 
 void DrugSystem::registerThoughts(MoodSystem& mood) {
+    mood_ = &mood;
     std::vector<std::string> done;
     for (const DefId id : defs_.idsOfKind("Thoughts")) {
         const std::string condition = defs_.get(id).text("situation.condition");
@@ -421,15 +451,20 @@ std::vector<DrugWant> DrugSystem::wants(Entity pawn, int64_t now, ScheduleKind s
     const Joy* joy = reg.try_get<Joy>(pawn);
     const Mood* mood = reg.try_get<Mood>(pawn);
     const float overdose = severity(pawn, overdoseHediff_);
+    const bool binge = s != nullptr && s->bingeUntil > now;
     for (const DrugKind& k : kinds_) {
         const DrugPolicyEntry entry = entryFor(pawn, k.defName);
         const DrugChemical& chem = chemicals_[static_cast<size_t>(k.chemical)];
         const ChemicalState* cs = s != nullptr ? chemicalState(*s, chem.defName) : nullptr;
-        if (severity(pawn, k.high) >= rules_.redoseBelow) {
+        // On a binge the policy and the limits do not count: any drug of the chemical, until it is nearly full.
+        const bool bingeKind = binge && k.category != DrugCategory::Medical && chem.defName == s->bingeChemical;
+        if (severity(pawn, k.high) >= (bingeKind ? rules_.bingeRedoseBelow : rules_.redoseBelow)) {
             continue;  // still high on it
         }
         int priority = 0;
-        if (cs != nullptr && cs->addicted && cs->need < rules_.seekNeedBelow && entry.forAddiction) {
+        if (bingeKind && overdose < rules_.overdoseHoldOff) {
+            priority = 4;
+        } else if (cs != nullptr && cs->addicted && cs->need < rules_.seekNeedBelow && entry.forAddiction) {
             priority = 3;
         } else if (overdose < rules_.overdoseHoldOff && !sleeping) {
             if (entry.scheduled) {
@@ -463,7 +498,11 @@ std::vector<DrugWant> DrugSystem::wants(Entity pawn, int64_t now, ScheduleKind s
 
 void DrugSystem::searchFailed(Entity pawn, int64_t now) {
     if (things_.exists(pawn)) {
-        ensure(pawn).searchAfter = now + rules_.searchSeconds;
+        DrugState& s = ensure(pawn);
+        s.searchAfter = now + rules_.searchSeconds;
+        if (s.bingeUntil > now) {
+            endBinge(pawn, s);  // nothing left to binge on
+        }
     }
 }
 
@@ -494,6 +533,9 @@ bool DrugSystem::takeDose(Entity pawn, DefId drug, int64_t now) {
             cs.need = std::min(1.0f, chem.needPerDose);
             cs.progress = chem.permanent ? 0.0f : rules_.newAddictionProgress;
             emit(EventType::PawnAddicted, pawn, chem.def, cs.need, chem.defName.c_str());
+            if (!chem.addictionDamagePart.empty() && unit(pawn, now, 0xDA11A6EULL) < static_cast<double>(chem.addictionDamageChance)) {
+                hurtOrgan(pawn, chem.addictionDamagePart, rules_.damageFraction, now, chem.def, 0xDA11A6EULL);
+            }
         }
     }
     cs.tolerance = std::min(1.0f, cs.tolerance + kind->toleranceGain);
@@ -504,6 +546,11 @@ bool DrugSystem::takeDose(Entity pawn, DefId drug, int64_t now) {
     }
     if (Joy* joy = reg.try_get<Joy>(pawn)) {
         joy->level = std::min(1.0f, joy->level + kind->joy);
+    }
+    if (kind->nutrition > 0.0f) {
+        if (Needs* needs = reg.try_get<Needs>(pawn)) {
+            needs->food = std::min(1.0f, needs->food + kind->nutrition);
+        }
     }
 
     // Overdose: only hard drugs.
@@ -616,8 +663,190 @@ void DrugSystem::step(int64_t now) {
                 setSeverity(pawn, chem.withdrawalHediff, withdrawal);
             }
         }
+        stepBinge(pawn, state, now);
+        stepDamage(pawn, state, now);
     }
-    (void)now;
+}
+
+bool DrugSystem::canBinge(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    return eligible(pawn) && !health_.incapacitated(pawn) && !reg.get<Health>(pawn).protagonist && !reg.all_of<PlayerControl>(pawn);
+}
+
+bool DrugSystem::bingeing(Entity pawn) const {
+    const DrugState* s = state(pawn);
+    return s != nullptr && s->bingeUntil > 0;
+}
+
+bool DrugSystem::startBinge(Entity pawn, const std::string& chemical, int64_t now) {
+    if (!canBinge(pawn) || chemicalIndex(chemical) < 0) {
+        return false;
+    }
+    DrugState& s = ensure(pawn);
+    if (s.bingeUntil > 0) {
+        return false;
+    }
+    const double hours = rules_.bingeHoursMin + unit(pawn, now, 0xB146EULL) * (rules_.bingeHoursMax - rules_.bingeHoursMin);
+    s.bingeUntil = now + static_cast<int64_t>(hours * 3600.0);
+    s.bingeChemical = chemical;
+    s.searchAfter = 0;
+    emit(EventType::DrugBinge, pawn, chemicals_[static_cast<size_t>(chemicalIndex(chemical))].def, static_cast<float>(hours), "start");
+    return true;
+}
+
+void DrugSystem::endBinge(Entity pawn, DrugState& state) {
+    const int index = chemicalIndex(state.bingeChemical);
+    state.bingeUntil = 0;
+    state.bingeChemical.clear();
+    emit(EventType::DrugBinge, pawn, index >= 0 ? chemicals_[static_cast<size_t>(index)].def : DefId{}, 0.0f, "end");
+}
+
+// A binge runs out, or ends at a minor overdose; natural ones start here: a pawn addicted to a social drug in a major
+// mood band, or to a hard one in an extreme band, or one in withdrawal at any mood, rolls every few minutes.
+void DrugSystem::stepBinge(Entity pawn, DrugState& state, int64_t now) {
+    if (state.bingeUntil > 0) {
+        if (now >= state.bingeUntil || severity(pawn, overdoseHediff_) >= rules_.bingeEndOverdose || !canBinge(pawn)) {
+            endBinge(pawn, state);
+        }
+        return;
+    }
+    if (mood_ == nullptr || (now + static_cast<int64_t>(entt::to_integral(pawn))) % rules_.bingeCheckEvery != 0) {
+        return;
+    }
+    bool any = false;
+    for (const ChemicalState& cs : state.chemicals) {
+        any = any || cs.addicted;
+    }
+    if (!any || !canBinge(pawn)) {
+        return;
+    }
+    const Mood* mood = things_.registry().try_get<Mood>(pawn);
+    const MoodBand band = mood != nullptr ? mood->band : MoodBand::Stable;
+    // The chemical to binge on and the mean wait: the worst of what the pawn's state allows.
+    const std::string* chemical = nullptr;
+    double meanDays = 0.0;
+    for (const ChemicalState& cs : state.chemicals) {
+        const int index = chemicalIndex(cs.chemical);
+        if (!cs.addicted || index < 0) {
+            continue;
+        }
+        bool hard = false;
+        bool usable = false;
+        for (const DrugKind& k : kinds_) {
+            if (k.chemical == index && k.category != DrugCategory::Medical) {
+                usable = true;
+                hard = hard || k.category == DrugCategory::Hard;
+            }
+        }
+        if (!usable) {
+            continue;
+        }
+        double days = 0.0;
+        if (hard && band == MoodBand::Extreme) {
+            days = rules_.bingeMeanDaysHard;
+        } else if (!hard && (band == MoodBand::Major || band == MoodBand::Extreme)) {
+            days = rules_.bingeMeanDaysSocial;
+        }
+        const DrugChemical& chem = chemicals_[static_cast<size_t>(index)];
+        if (chem.withdrawalHediff.valid() && severity(pawn, chem.withdrawalHediff) > 0.0f &&
+            (days <= 0.0 || rules_.bingeMeanDaysWithdrawal < days)) {
+            days = rules_.bingeMeanDaysWithdrawal;
+        }
+        if (days > 0.0 && (chemical == nullptr || days < meanDays)) {
+            chemical = &cs.chemical;
+            meanDays = days;
+        }
+    }
+    if (chemical == nullptr) {
+        return;
+    }
+    const double chance = static_cast<double>(rules_.bingeCheckEvery) / (meanDays * 86400.0);
+    if (unit(pawn, now, 0xB146E5ULL) < chance) {
+        startBinge(pawn, *chemical, now);
+    }
+}
+
+bool DrugSystem::hurtOrgan(Entity pawn, const std::string& partDef, float fraction, int64_t now, DefId chemical, uint64_t salt) {
+    const entt::registry& reg = things_.registry();
+    const DefId damage = defs_.idOf(kDrugsHediffsKind, "ChemicalDamage");
+    if (!damage.valid() || !reg.all_of<Thing>(pawn)) {
+        return false;
+    }
+    // Of a paired organ the healthier one is hurt (ties by the dice).
+    const std::vector<int> parts = health_.partsOfDef(reg.get<Thing>(pawn).def, partDef);
+    int best = -1;
+    float bestHp = 0.0f;
+    const size_t start = parts.empty() ? 0 : static_cast<size_t>(unit(pawn, now, salt) * static_cast<double>(parts.size())) % parts.size();
+    for (size_t i = 0; i < parts.size(); ++i) {
+        const int part = parts[(start + i) % parts.size()];
+        const float hp = health_.partHitPoints(pawn, part);
+        if (hp > bestHp) {
+            best = part;
+            bestHp = hp;
+        }
+    }
+    if (best < 0) {
+        return false;
+    }
+    const float max = health_.partMaxHitPoints(pawn, best);
+    const float amount = std::min(max * fraction, bestHp - max * (1.0f - rules_.damageMaxFraction));
+    if (amount <= 0.0f || !health_.addInjury(pawn, best, damage, amount)) {
+        return false;
+    }
+    const std::vector<std::string> labels = health_.partLabels(reg.get<Thing>(pawn).def);
+    emit(EventType::ChemicalDamage, pawn, chemical, amount,
+         static_cast<size_t>(best) < labels.size() ? labels[static_cast<size_t>(best)].c_str() : partDef.c_str());
+    return true;
+}
+
+// Heavy use hurts an organ for good (wiki: liver for alcohol from 45% tolerance, lung for smokeleaf from 36%, kidney
+// for psychite from 45%; brain after a major overdose; wake-up risks a heart attack). The thresholds are the wiki's,
+// the rates are ours.
+void DrugSystem::stepDamage(Entity pawn, DrugState& state, int64_t now) {
+    if ((now + static_cast<int64_t>(entt::to_integral(pawn))) % rules_.damageCheckEvery != 0) {
+        return;
+    }
+    const double every = static_cast<double>(rules_.damageCheckEvery);
+    for (const ChemicalState& cs : state.chemicals) {
+        const int index = chemicalIndex(cs.chemical);
+        if (index < 0) {
+            continue;
+        }
+        const DrugChemical& chem = chemicals_[static_cast<size_t>(index)];
+        if (!chem.damagePart.empty() && cs.tolerance >= chem.damageMinTolerance) {
+            const float span = std::max(0.001f, 1.0f - chem.damageMinTolerance);
+            const float t = std::clamp((cs.tolerance - chem.damageMinTolerance) / span, 0.0f, 1.0f);
+            const double mtb = static_cast<double>(rules_.damageMtbDaysAtThreshold + (rules_.damageMtbDaysAtFull - rules_.damageMtbDaysAtThreshold) * t);
+            if (unit(pawn, now, 0xC4E3ULL + static_cast<uint64_t>(index)) < every / (mtb * 86400.0)) {
+                hurtOrgan(pawn, chem.damagePart, rules_.damageFraction, now, chem.def, 0xC4E4ULL + static_cast<uint64_t>(index));
+            }
+        }
+        if (chem.heartAttackMtbDays > 0.0f) {
+            bool high = false;
+            for (const DrugKind& k : kinds_) {
+                high = high || (k.chemical == index && severity(pawn, k.high) > 0.0f);
+            }
+            if (high && unit(pawn, now, 0x4EA27ULL + static_cast<uint64_t>(index)) < every / (static_cast<double>(chem.heartAttackMtbDays) * 86400.0)) {
+                hurtOrgan(pawn, "Heart", rules_.heartAttackFraction, now, chem.def, 0x4EA28ULL);
+            }
+        }
+    }
+    if (severity(pawn, overdoseHediff_) >= rules_.majorOverdose && unit(pawn, now, 0xB8A1AULL) < every / (static_cast<double>(rules_.brainDamageMtbDays) * 86400.0)) {
+        hurtOrgan(pawn, "Brain", rules_.brainDamageFraction, now, DefId{}, 0xB8A1BULL);
+    }
+}
+
+bool DrugSystem::preventsDisease(Entity pawn, const std::string& disease) const {
+    if (states_.find(pawn) == states_.end()) {
+        return false;
+    }
+    for (size_t id = 0; id < prevents_.size(); ++id) {
+        if (!prevents_[id].empty() && severity(pawn, DefId{static_cast<uint32_t>(id)}) > 0.0f &&
+            std::find(prevents_[id].begin(), prevents_[id].end(), disease) != prevents_[id].end()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 float DrugSystem::restFallFactor(Entity pawn) const {
@@ -648,6 +877,10 @@ void DrugSystem::hashState(StateHasher& h) const {
         h.add(static_cast<uint64_t>(pawn));
         h.add(s.policy.data(), s.policy.size());
         h.add(s.searchAfter);
+        if (s.bingeUntil != 0) {  // only while on a binge, so older hashes do not change
+            h.add(s.bingeUntil);
+            h.add(s.bingeChemical.data(), s.bingeChemical.size());
+        }
         h.add(static_cast<uint64_t>(s.edits.size()));
         for (const DrugPolicyEntry& e : s.edits) {
             h.add(e.drug.data(), e.drug.size());

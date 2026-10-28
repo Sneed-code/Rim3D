@@ -38,10 +38,10 @@ ApparelRules ApparelRules::read(const DefDatabase& defs) {
     }
     r.absorbDamageDivisor = std::max(0.01f, apparelNum(*def, "absorbDamageDivisor", r.absorbDamageDivisor));
     r.wearHpLossChancePerDay = apparelNum(*def, "wearHpLossChancePerDay", r.wearHpLossChancePerDay);
+    r.wearFactor = std::max(0.0f, apparelNum(*def, "wearFactor", r.wearFactor));
     r.deathHpLossMin = static_cast<float>(def->numberAt("deathHpLoss", 0, r.deathHpLossMin));
     r.deathHpLossMax = static_cast<float>(def->numberAt("deathHpLoss", 1, r.deathHpLossMax));
-    r.rattyBelow = apparelNum(*def, "rattyBelow", r.rattyBelow);
-    r.tatteredBelow = apparelNum(*def, "tatteredBelow", r.tatteredBelow);
+    r.tatteredBenefitFactor = std::clamp(apparelNum(*def, "tatteredBenefitFactor", r.tatteredBenefitFactor), 0.0f, 1.0f);
     r.taintedStageCap = std::max(1, static_cast<int>(def->integer("taintedStageCap", r.taintedStageCap)));
     r.defaultOutfit = def->text("defaultOutfit", r.defaultOutfit);
     r.wearSteps = std::max(1, static_cast<int>(def->integer("wearSteps", r.wearSteps)));
@@ -83,6 +83,7 @@ ApparelStats::ApparelStats(const DefDatabase& defs) {
         defaultQuality_ = 0;
     }
     defaultQuality_ = std::clamp(defaultQuality_, 0, static_cast<int>(qualityArmor_.size()) - 1);
+    tatteredFactor_ = ApparelRules::read(defs).tatteredBenefitFactor;
 
     for (const DefId id : defs.idsOfKind("Things")) {
         const Def& def = defs.get(id);
@@ -90,6 +91,7 @@ ApparelStats::ApparelStats(const DefDatabase& defs) {
             Apparel& a = apparel_[id.value];
             a.valid = true;
             a.stuffRequired = def.flag("stuffRequired");
+            a.fragile = def.flag("apparel.fragile");
             for (int t = 0; t < 3; ++t) {
                 a.fixedArmor[t] = apparelNum(def, (std::string("stats.") + kApparelArmorKeys[t]).c_str(), 0.0f);
             }
@@ -158,7 +160,7 @@ float ApparelStats::armor(const entt::registry& reg, Entity item, ArmorType type
         }
         value = stuff_[made->stuff.value].armor[t] * a.armorMultiplier;
     }
-    return value * qualityArmor_[static_cast<size_t>(qualityOf(reg, item))];
+    return value * qualityArmor_[static_cast<size_t>(qualityOf(reg, item))] * (tattered(reg, item) ? tatteredFactor_ : 1.0f);
 }
 
 float ApparelStats::insulationCold(const entt::registry& reg, Entity item) const {
@@ -175,7 +177,7 @@ float ApparelStats::insulationCold(const entt::registry& reg, Entity item) const
         }
         value = stuff_[made->stuff.value].cold * a.coldMultiplier;
     }
-    return value * qualityInsulation_[static_cast<size_t>(qualityOf(reg, item))];
+    return value * qualityInsulation_[static_cast<size_t>(qualityOf(reg, item))] * (tattered(reg, item) ? tatteredFactor_ : 1.0f);
 }
 
 float ApparelStats::insulationHeat(const entt::registry& reg, Entity item) const {
@@ -192,7 +194,7 @@ float ApparelStats::insulationHeat(const entt::registry& reg, Entity item) const
         }
         value = stuff_[made->stuff.value].heat * a.heatMultiplier;
     }
-    return value * qualityInsulation_[static_cast<size_t>(qualityOf(reg, item))];
+    return value * qualityInsulation_[static_cast<size_t>(qualityOf(reg, item))] * (tattered(reg, item) ? tatteredFactor_ : 1.0f);
 }
 
 int ApparelStats::maxHitPoints(DefId def, DefId stuff) const {
@@ -209,6 +211,16 @@ int ApparelStats::maxHitPoints(DefId def, DefId stuff) const {
 float ApparelStats::hitPointShare(const entt::registry& reg, Entity item) {
     const HitPoints* hp = reg.try_get<HitPoints>(item);
     return hp == nullptr || hp->max <= 0 ? 1.0f : static_cast<float>(hp->current) / static_cast<float>(hp->max);
+}
+
+float ApparelStats::condition(const entt::registry& reg, Entity item) {
+    const Durability* durability = reg.try_get<Durability>(item);
+    const float own = durability != nullptr ? durability->share : 1.0f;
+    return std::clamp(std::min(own, hitPointShare(reg, item)), 0.0f, 1.0f);
+}
+
+bool ApparelStats::tattered(const entt::registry& reg, Entity item) {
+    return condition(reg, item) <= 0.0f;
 }
 
 // ---- ApparelSystem --------------------------------------------------------------------------
@@ -441,7 +453,7 @@ bool ApparelSystem::allowed(const OutfitPolicy& policy, Entity item) const {
     if (std::binary_search(policy.disallowed.begin(), policy.disallowed.end(), defs_.get(def).defName())) {
         return false;
     }
-    const float share = ApparelStats::hitPointShare(reg, item);
+    const float share = ApparelStats::condition(reg, item);
     if (share < policy.hitPointsMin - 1e-4f || share > policy.hitPointsMax + 1e-4f) {
         return false;
     }
@@ -481,9 +493,18 @@ float ApparelSystem::worstCondition(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     float worst = 1.0f;
     for (const Entity piece : worn(pawn)) {
-        worst = std::min(worst, ApparelStats::hitPointShare(reg, piece));
+        worst = std::min(worst, ApparelStats::condition(reg, piece));
     }
     return worst;
+}
+
+void ApparelSystem::wearDown(Entity item, float share) {
+    entt::registry& reg = things_.registry();
+    if (!reg.valid(item) || share <= 0.0f) {
+        return;
+    }
+    const float now = ApparelStats::condition(reg, item);
+    reg.emplace_or_replace<Durability>(item, Durability{std::max(0.0f, now - share)});
 }
 
 float ApparelSystem::score(Entity item) const {
@@ -492,7 +513,7 @@ float ApparelSystem::score(Entity item) const {
                   rules_.scoreBlunt * stats().armor(reg, item, ArmorType::Blunt) +
                   rules_.scoreHeat * stats().armor(reg, item, ArmorType::Heat) +
                   rules_.scoreInsulationPerDegree * (stats().insulationCold(reg, item) + stats().insulationHeat(reg, item));
-    value *= rules_.scoreHpFloor + (1.0f - rules_.scoreHpFloor) * ApparelStats::hitPointShare(reg, item);
+    value *= rules_.scoreHpFloor + (1.0f - rules_.scoreHpFloor) * ApparelStats::condition(reg, item);
     if (reg.all_of<Tainted>(item)) {
         value -= rules_.taintedScorePenalty;
     }
@@ -691,8 +712,7 @@ void ApparelSystem::registerSituations(MoodSystem& mood) const {
         if (worn(pawn).empty()) {
             return -1;
         }
-        const float condition = worstCondition(pawn);
-        return condition < rules_.tatteredBelow ? 1 : (condition <= rules_.rattyBelow ? 0 : -1);
+        return worstCondition(pawn) <= 0.0f ? 0 : -1;
     });
     mood.addSituation("apparelTainted", [this](Entity pawn) {
         const int count = taintedWorn(pawn);
@@ -706,7 +726,7 @@ void ApparelSystem::registerSituations(MoodSystem& mood) const {
 void ApparelSystem::step(int64_t now, Rng& rng, const std::vector<Event>& events) {
     entt::registry& reg = things_.registry();
 
-    // The dead: what they wore loses hit points, and what a human wore is tainted for good. Collected
+    // The dead: what they wore is worn down (not its hit points), and what a human wore is tainted for good. Collected
     // first, because damaging apparel adds events to the very list being read.
     std::vector<Entity> dead;
     for (const Event& event : events) {
@@ -718,35 +738,31 @@ void ApparelSystem::step(int64_t now, Rng& rng, const std::vector<Event>& events
         const bool human = reg.all_of<PawnLooks>(pawn) || reg.all_of<Colonist>(pawn);
         const std::vector<Entity> pieces = worn(pawn);
         for (const Entity piece : pieces) {
-            const HitPoints* hp = reg.try_get<HitPoints>(piece);
-            if (hp != nullptr) {
-                const int lost = static_cast<int>(std::lround(static_cast<float>(hp->current) *
-                                                              rng.range(rules_.deathHpLossMin, rules_.deathHpLossMax)));
-                combat_.damageApparel(pawn, piece, lost);
-            }
+            wearDown(piece, ApparelStats::condition(reg, piece) * rng.range(rules_.deathHpLossMin, rules_.deathHpLossMax));
             if (human && reg.valid(piece) && reg.all_of<EquippedBy>(piece)) {
                 reg.emplace_or_replace<Tainted>(piece);
             }
         }
     }
 
-    // Wear and tear: once an hour each worn piece has a share of the day's chance to lose a hit
-    // point. Pawns in id order, because they share the random stream.
+    // Wear and tear: once an hour each worn piece wears a 24th of the day's hit points' worth of durability
+    // (RimWorld's 0.4 hit points a day as a steady rate: a 100 hit point shirt wears 24% in a 60-day year). Never
+    // hit points, so normal use can't destroy clothes. Pawns in id order.
     if (now % kSecondsPerHour == 0) {
         scratch_.clear();
         for (const Entity pawn : reg.view<Gear, Position>()) {
             scratch_.push_back(pawn);
         }
         std::sort(scratch_.begin(), scratch_.end());
-        const float chance = rules_.wearHpLossChancePerDay / 24.0f;
+        const float perHour = rules_.wearHpLossChancePerDay * rules_.wearFactor / 24.0f;
         for (const Entity pawn : scratch_) {
             if (health_.tracks(pawn) && reg.get<Health>(pawn).dead) {
                 continue;
             }
-            const std::vector<Entity> pieces = worn(pawn);
-            for (const Entity piece : pieces) {
-                if (rng.unit() < chance) {
-                    combat_.damageApparel(pawn, piece, 1);
+            for (const Entity piece : worn(pawn)) {
+                const HitPoints* hp = reg.try_get<HitPoints>(piece);
+                if (hp != nullptr && hp->max > 0) {
+                    wearDown(piece, perHour / static_cast<float>(hp->max));
                 }
             }
         }
@@ -771,8 +787,10 @@ void ApparelSystem::hashThing(Entity e, StateHasher& h) const {
     const MadeOf* made = reg.try_get<MadeOf>(e);
     const Quality* quality = reg.try_get<Quality>(e);
     const PawnOutfit* outfitOfPawn = reg.try_get<PawnOutfit>(e);
+    const Durability* durability = reg.try_get<Durability>(e);
     const uint64_t mask = (made != nullptr ? 1u : 0u) | (quality != nullptr ? 2u : 0u) | (reg.all_of<Tainted>(e) ? 4u : 0u) |
-                          (reg.all_of<StripMark>(e) ? 8u : 0u) | (outfitOfPawn != nullptr ? 16u : 0u);
+                          (reg.all_of<StripMark>(e) ? 8u : 0u) | (outfitOfPawn != nullptr ? 16u : 0u) |
+                          (durability != nullptr ? 32u : 0u);
     if (mask == 0) {
         return;  // most things have none of these: their hash stays what it was
     }
@@ -786,6 +804,9 @@ void ApparelSystem::hashThing(Entity e, StateHasher& h) const {
     if (outfitOfPawn != nullptr) {
         h.add(outfitOfPawn->outfit);
         h.add(outfitOfPawn->nextCheck);
+    }
+    if (durability != nullptr) {
+        h.add(durability->share);
     }
 }
 

@@ -15,6 +15,7 @@
 #include "OverseerPawn.h"
 #include "ProtagonistSubsystem.h"
 #include "ShooterFeelSubsystem.h"
+#include "SoundSubsystem.h"
 #include "SimSubsystem.h"
 #include "SkySubsystem.h"
 
@@ -422,12 +423,19 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 		ImGui::End();
 	}
 
-	// Key hints, bottom right.
+	// Key hints, bottom right, folded behind F1.
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x - Margin, Viewport->Pos.y + Viewport->Size.y - Margin), ImGuiCond_Always, ImVec2(1.0f, 1.0f));
 	ImGui::SetNextWindowBgAlpha(0.6f);
-	if (ImGui::Begin("##OverseerHints", nullptr, PanelFlags | ImGuiWindowFlags_NoInputs))
+	if (!USimSubsystem::IsKeyHelpShown())
 	{
-		ImGui::TextUnformatted("WASD pan   Q/E turn   wheel zoom");
+		if (ImGui::Begin("##OverseerHints", nullptr, PanelFlags | ImGuiWindowFlags_NoInputs))
+		{
+			ImGui::TextUnformatted("F1  keys");
+		}
+	}
+	else if (ImGui::Begin("##OverseerHints", nullptr, PanelFlags | ImGuiWindowFlags_NoInputs))
+	{
+		ImGui::TextUnformatted("F1 hide   WASD pan   Q/E turn   wheel zoom");
 		ImGui::TextUnformatted("middle-drag orbit   click select");
 		ImGui::TextUnformatted("F centre   Home reset   Esc deselect");
 		ImGui::TextUnformatted("Page Up / Page Down level above / below");
@@ -440,6 +448,11 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 	if (UShooterFeelSubsystem* Feel = GetWorld()->GetSubsystem<UShooterFeelSubsystem>())
 	{
 		Feel->DrawSettingsPanel(Viewport->Pos.x + Viewport->Size.x, Scale);
+	}
+	// The sound mixer (V20), folded under it.
+	if (USoundSubsystem* Sound = GetWorld()->GetSubsystem<USoundSubsystem>())
+	{
+		Sound->DrawMixerPanel(Viewport->Pos.x + Viewport->Size.x, Scale);
 	}
 
 	++PanelFramesDrawn;
