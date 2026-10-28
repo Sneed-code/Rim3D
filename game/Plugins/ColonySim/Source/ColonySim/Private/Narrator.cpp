@@ -434,6 +434,21 @@ void NarratorSystem::step() {
     }
 }
 
+void NarratorSystem::postpone(int64_t seconds) {
+    if (seconds <= 0) {
+        return;
+    }
+    if (state_.cycleStart >= 0) {
+        state_.cycleStart += seconds;
+    }
+    for (int64_t& at : state_.threats) {
+        at += seconds;
+    }
+    for (IncidentFired& fired : state_.fired) {
+        fired.at += seconds;
+    }
+}
+
 bool NarratorSystem::setNarrator(const std::string& name, const std::string& difficulty, std::string& error) {
     if (!name.empty() && defs_.find("Narrators", name) == nullptr) {
         error = "there is no narrator called " + name;
@@ -530,7 +545,9 @@ bool NarratorSystem::restore(NarratorState s, std::string& error) {
     std::sort(s.threats.begin(), s.threats.end());
     rng_.restore(s.rngState, s.rngIncrement);
     state_ = std::move(s);
-    applyAdaptation();
+    if (!state_.narrator.empty()) {
+        applyAdaptation();  // only setNarrator does this, so a game that never picked one keeps the full impact
+    }
     return true;
 }
 

@@ -404,9 +404,10 @@ struct SoundAlarmCommand {
     bool on = true;
 };
 
-// What a colonist does when the alarm sounds: 0 Defender, 1 Shelter, 2 Keep working (DefenseRole
-// in Raids.h). A Defender can have a defense spot it holds. Fails for a pawn that isn't the
-// colony's, a spot for another role, or a spot nobody can stand on.
+// What a colonist does when the alarm sounds: 0 Defender, 1 Shelter, 2 Keep working, 3 Medic, 4 Firefighter
+// (DefenseRole in Raids.h; the last two docs/design/field-care.md). A Defender can have a defense spot it holds.
+// Fails for a pawn that isn't the colony's, a spot for another role, a spot nobody can stand on, or a Medic or
+// Firefighter who can't do that work.
 struct SetDefenseRoleCommand {
     Entity pawn = kNoEntity;
     uint8_t role = 0;
@@ -621,11 +622,24 @@ struct ContractDiseaseCommand {
 };
 
 // The spaceship ending (docs/design/ship.md). `action` is "StartReactor" (`thing` a finished ship reactor), "Board" (`pawn` rides
-// in the ship cryptosleep casket `thing`; no pawn empties the casket) or "Launch". Fails with the reason in plain words.
+// in the ship cryptosleep casket `thing`; no pawn empties the casket), "Launch" or the dev action "FinishWarmUp" (the warming reactor is active at
+// the next step). Fails with the reason in plain words.
 struct ShipCommand {
     std::string action;
     Entity thing = kNoEntity;
     Entity pawn = kNoEntity;
+};
+
+// Caravans (W4, docs/design/caravans.md). `action` is "Form" (the colonists `pawns` take the item stacks `items`
+// off the map and set out for `tile`; -1 keeps them on the start tile), "Move" (caravan `caravan` sets off for
+// `tile`), "Stop" or "Enter" (a caravan on the start tile comes back onto the map). Needs a world (SimSettings::world).
+// Fails with the reason in plain words.
+struct CaravanCommand {
+    std::string action;
+    int caravan = 0;
+    int tile = -1;
+    std::vector<Entity> pawns;
+    std::vector<Entity> items;
 };
 
 // Dev command: the weather becomes this Weathers def now (by defName, e.g. "Rain") and lasts `hours`
@@ -723,6 +737,29 @@ struct SetHomeAreaCommand {
     bool add = true;
 };
 
+// Resonance (task X2, docs/design/resonance.md). Attune sets a pawn's attunement level, 0 to 6 (0 takes it away);
+// each new level teaches one power of that level at random. Stands in for RimWorld's neuroformer and titles.
+struct AttuneCommand {
+    Entity pawn = kNoEntity;
+    int level = 1;
+};
+
+// Teaches an attuned pawn a power (a Powers defName) of its level or lower, as RimWorld's psytrainer does.
+struct LearnPowerCommand {
+    Entity pawn = kNoEntity;
+    std::string power;
+};
+
+// Uses a power: `target` the pawn it is used on (kNoEntity or the pawn itself for itself), `cell` where a jump
+// takes the target. Fails if the pawn doesn't know it or can't act, focus or strain don't allow it, or the
+// target (or cell) is out of range or sight.
+struct CastPowerCommand {
+    Entity pawn = kNoEntity;
+    std::string power;
+    Entity target = kNoEntity;
+    CellPos cell;
+    bool player = false;
+};
 // Multi-storey (task M1, docs/design/levels.md): lays an upper floor on every cell of `area` (on
 // level 1 or above) that can hold one, or takes them up with `remove`. A floor needs a wall or column
 // within the roof support radius on the level below; one is taken up only when nothing stands on it.
@@ -770,9 +807,18 @@ struct SetRefuelCommand {
     bool fillNow = false;
 };
 
+// Thermostat (docs/design/temperature.md): sets the target temperature of a heater or cooler, which then holds its
+// room at that instead of the def's limit; `clear` goes back to the def's limit. Fails for a thing with no
+// thermostat or a target outside the rules' range.
+struct SetThermostatCommand {
+    Entity building = kNoEntity;
+    float celsius = 21.0f;
+    bool clear = false;
+};
+
 // Changes the details of a bill (task C14, docs/design/crafting.md): the least and most skill a worker may
 // have in the recipe's skill, how far from the building ingredients are taken (metres, 0 anywhere), a stockpile
-// the products are taken to (0: none), the stock an "until you have" bill waits to fall under before it starts
+// the products are taken to (0: none), a stockpile an "until you have" bill counts its stock in (0: the whole map), the stock an "until you have" bill waits to fall under before it starts
 // again (0: as soon as it is under its count) and the item defNames the bill may not use. Replaces all of them.
 // Fails if there is no such bill, a number is out of range, the stockpile does not exist or a name is not an item.
 struct SetBillOptionsCommand {
@@ -782,6 +828,7 @@ struct SetBillOptionsCommand {
     int skillMax = 20;
     float radius = 0.0f;
     uint32_t storeZone = 0;
+    uint32_t countZone = 0;
     int unpauseAt = 0;
     std::vector<std::string> disallowed;
 };
@@ -791,6 +838,23 @@ struct MoveBillCommand {
     Entity building = kNoEntity;
     uint32_t bill = 0;
     int index = 0;
+};
+
+// Repair (task P4, docs/design/repair.md): marks a piece of apparel or a weapon lying on the map for repair at a
+// bench by a colonist (`repair` true), or takes the mark off. Fails if it is neither apparel nor a weapon, is
+// worn or carried, or is not damaged.
+struct RepairGearCommand {
+    Entity thing = kNoEntity;
+    bool repair = true;
+};
+
+// Orders the Things upgrade part `part` fitted to a gun lying on the map by a colonist at a machining table
+// (`fit` true), or cancels the gun's order (`part` is then ignored). Fails if the thing is not a gun on the map,
+// the part is unknown or does not fit that gun, or the gun already has a part in its slot.
+struct FitUpgradeCommand {
+    Entity thing = kNoEntity;
+    std::string part;
+    bool fit = true;
 };
 
 // Dev command: the colonist has a mental break now (a MentalBreaks defName, docs/design/mental-breaks.md),
@@ -805,6 +869,28 @@ struct StartMentalBreakCommand {
 // Dev command: ends the colonist's mental break at once, with no catharsis. Fails if it isn't in one.
 struct EndMentalBreakCommand {
     Entity pawn = kNoEntity;
+};
+
+// Allowed areas (docs/design/areas.md). CreateArea makes an empty named area (ids count 1, 2, 3); PaintArea adds the
+// rectangle to it or takes it off (fails for an unknown area or if no cell changed); DeleteArea frees the pawns limited to it;
+// AssignArea limits a pawn to an area, or frees it with area 0.
+struct CreateAreaCommand {
+    std::string name;
+};
+
+struct PaintAreaCommand {
+    uint32_t area = 0;
+    CellRect rect;
+    bool add = true;
+};
+
+struct DeleteAreaCommand {
+    uint32_t area = 0;
+};
+
+struct AssignAreaCommand {
+    Entity pawn = kNoEntity;
+    uint32_t area = 0;
 };
 
 // Quests (task Q1, docs/design/quests.md). `action` is "offer" (a dev command and the narrator's hook: `kind` is a Quests defName, or
@@ -843,6 +929,23 @@ struct RemoveOperationCommand {
     uint32_t operation = 0;
 };
 
+// P5 (docs/design/skip-travel.md). Skips the night: game time runs on in batches until the sleeping hours end, with the
+// narrator held. Fails in daytime, when a colonist who should be asleep isn't in bed yet, when nobody is asleep, and
+// while anything threatens the colony (a raid, an enemy, a fire, a mental break). The colonist under control is let go.
+struct SkipNightCommand {};
+
+// Moves the colonist under control to a place it has visited after the time the walk there would take (the sim keeps
+// running meanwhile, the narrator held). Fails near (under 20 m), at a place not visited, where it can't stand or reach,
+// and while anything threatens the colony.
+struct FastTravelCommand {
+    Entity pawn = kNoEntity;
+    float x = 0.0f;
+    float y = 0.0f;
+};
+
+// Ends a night skip or a fast travel now. A fast travel then leaves the colonist where it is.
+struct CancelSkipCommand {};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -868,10 +971,12 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SetPrisonBedCommand, PlaceUpperFloorCommand, SetRefuelCommand, SetBillOptionsCommand,
                              MoveBillCommand, StartMentalBreakCommand, EndMentalBreakCommand,
                              SetNarratorCommand, FireIncidentCommand, ContractDiseaseCommand, StartStrategyRaidCommand,
-                             ShipCommand, QuestCommand,
-                             AddOperationCommand, RemoveOperationCommand,
-                             TakeDrugCommand, SetDrugPolicyCommand, SetDrugPolicyEntryCommand,
-                             StartVisitCommand, TradeCommand, AdjustGoodwillCommand, GiftCommand, ClimbCommand>;
+                             ShipCommand, QuestCommand, AddOperationCommand, RemoveOperationCommand,
+                             TakeDrugCommand, SetDrugPolicyCommand, SetDrugPolicyEntryCommand, StartVisitCommand,
+                             TradeCommand, AdjustGoodwillCommand, GiftCommand, ClimbCommand, AttuneCommand,
+                             LearnPowerCommand, CastPowerCommand, SetThermostatCommand, RepairGearCommand,
+                             FitUpgradeCommand, CreateAreaCommand, PaintAreaCommand, DeleteAreaCommand,
+                             AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand, CaravanCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

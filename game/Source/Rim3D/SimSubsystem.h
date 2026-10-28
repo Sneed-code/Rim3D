@@ -36,6 +36,13 @@ struct FSimStartOptions
 	/** Wild animals when the map is made, in percent of the biome's animal density (0: none). The game's own
 	 *  start has 100 (-SimWildAnimals=<percent> to change it); tests start without unless they ask. */
 	int32 WildAnimals = 0;
+	/** Play on a world map (docs/design/world-map.md): the colony's map is the start tile's. Command line:
+	 *  -SimWorld, -SimWorldSeed=<n> (0: the sim's seed), -SimWorldTile=<n> (-1: picked by the scenario's biome). */
+	bool bWorld = false;
+	uint64 WorldSeed = 0;
+	int32 WorldWidth = 0;
+	int32 WorldHeight = 0;
+	int32 WorldStartTile = -1;
 };
 
 /** Sim cost, averaged over about a second of real time. */
@@ -134,6 +141,8 @@ public:
 
 	/** Folder the saves go in. */
 	static FString GetSaveDirectory();
+	/** Whether the HUDs show their list of keys (UI.KeyHelp, F1); folded by default. */
+	static bool IsKeyHelpShown();
 
 	/** Game seconds between autosaves; a day unless a test shortens it. 0 turns autosave off. */
 	void SetAutosaveInterval(int64 GameSeconds);

@@ -63,9 +63,11 @@ gives no work; the tasks with scanners so far:
 | Task | Work type | Scanner |
 | --- | --- | --- |
 | `Refuel` | Hauling (first) | finished buildings low on fuel, or ordered filled: a job to bring the nearest fuel stack ([fuel.md](fuel.md)) |
+| `RepairWeapons`, `RepairApparel` | Smithing, Tailoring (after the bench bills) | gear marked for repair, or a gun with a part ordered, at a bench that repairs that kind ([repair.md](repair.md)) |
 | `HaulToStockpile` | Hauling | items outside storage, or in a stockpile worse than one that would take them |
 | `ConstructDeliverResources` | Construction | blueprints and frames that need materials ([construction.md](construction.md)) |
 | `ConstructFinishFrames` | Construction | frames with all their materials |
+| `RearmTraps` | Construction | sprung traps that can be used again ([defense.md](defense.md)) |
 | `Deconstruct` | Construction | buildings marked for deconstruction |
 | `DoBillsCookStove`, `DoBillsSmithy`, `DoBillsTailor`, `DoBillsCraftingSpot`, `DoBillsStonecut`, `DoBillsButcher` | Cooking, Smithing, Tailoring, Crafting | work buildings with a bill to do, the giver named by the building def's `workGiver` ([bills.md](bills.md), [crafting.md](crafting.md)) |
 | `TendPatients`, `Rescue` | Doctor | a colonist with untended wounds (the bleeding first); a downed colonist no bed holds ([medicine.md](medicine.md)); jobs `TendPatient`, `Rescue` |

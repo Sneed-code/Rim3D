@@ -8,8 +8,11 @@
     },
     "safeMarginC": 10.0,
     "frostbiteSeverity": 3.0,
+    "thermostatRangeC": { "min": -50.0, "max": 50.0 },
+    "seekWarmthSeverity": 0.12,
+    "warmEnoughSeverity": 0.03,
     "note": "A pawn's comfortable range is widened by what it wears (apparel insulation, C15). How fast heat moves between a room and what is round it. Per game hour, as a share of the temperature difference for each boundary cell, divided by the room's cell count (docs/design/temperature.md). A closed 5 x 5 room with a thin roof loses about 1/18 of the difference an hour.",
     "unverified": ["safeMarginC"],
-    "ours": ["intervalSeconds", "conductancePerHour", "frostbiteSeverity"]
+    "ours": ["thermostatRangeC", "intervalSeconds", "conductancePerHour", "frostbiteSeverity", "seekWarmthSeverity", "warmEnoughSeverity"]
   }
 ]

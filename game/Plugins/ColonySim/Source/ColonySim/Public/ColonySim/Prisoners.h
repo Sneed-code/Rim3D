@@ -21,6 +21,7 @@ class JobSystem;
 class Map;
 class RaidSystem;
 class Rng;
+class TradeSystem;
 class StateHasher;
 class Things;
 struct GameTime;
@@ -95,6 +96,8 @@ public:
 
     const PrisonerRules& rules() const { return rules_; }
     void setEventLog(std::vector<Event>* events) { events_ = events; }
+    // Executions cost goodwill with the prisoner's faction (TradeSystem::noteExecuted); without it they cost none.
+    void setTrade(TradeSystem* trade) { trade_ = trade; }
 
     bool isPrisoner(Entity pawn) const;
     bool isPrisonBed(Entity bed) const;
@@ -169,6 +172,7 @@ private:
     Rng& rng_;
     PrisonerRules rules_;
     std::vector<Event>* events_ = nullptr;
+    TradeSystem* trade_ = nullptr;
 };
 
 }  // namespace colony

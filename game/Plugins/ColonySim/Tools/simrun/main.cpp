@@ -22,6 +22,8 @@
 //   simrun --world world.png [--seed 42] [--world-size 120x60] [--check]   (the world map: biomes, rivers, roads, settlements; docs/design/world-map.md)
 //   simrun --seed 42 --on-world [--world-tile N] [--world-size WxH] --start Crashlanded --days 1   (the game on a world, W2:
 //                                     the start tile's biome, climate and map seed; prints the tile; docs/design/world-map.md)
+//   simrun --seed 42 --on-world --start Crashlanded --caravan --days 8 --check   (a caravan, W4: two colonists take the
+//                                     survival meals to the nearest settlement and come home; docs/design/caravans.md)
 //   simrun --power [--days 3] [--verbose]   (the power check, E5: solar, batteries, lamps and a switch; docs/design/power.md)
 //   simrun --seed 42 --size 1024 --days 3 --animals [--animal-percent 300] --check   (wild animals, N1:
 //                                     herds by biome, a report of them, checks they stay on walkable ground)
@@ -43,6 +45,7 @@
 #include "RaidSoak.h"
 #include "ColonySim/Animals.h"
 #include "ColonySim/Breeding.h"
+#include "ColonySim/Caravans.h"
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Health.h"
@@ -55,6 +58,7 @@
 #include "ColonySim/Designations.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Pathfinder.h"
+#include "ColonySim/FieldCare.h"
 #include "ColonySim/Narrator.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Combat.h"
@@ -116,6 +120,7 @@ struct Options {
     int worldHeight = 0;
     bool onWorld = false;  // --on-world: play on a world (SimSettings::world); --world-tile N picks its start tile
     int worldTile = -1;
+    bool caravan = false;  // --caravan: two colonists go to the nearest settlement and back (W4)
     bool check = false;  // exit 1 if a job or a path search failed
     bool weather = false;  // print a line a day of the weather (E1)
     int gather = 0;      // mark rock to mine and plants to harvest this many cells round the middle
@@ -126,6 +131,7 @@ struct Options {
     std::string raidStrategy = "Assault";  // --raid-strategy NAME: Assault, Sappers, DropPods, Thieves, Kidnappers or Auto (F12)
     int raidSoak = 0;    // --raid-soak N: the F7 soak over N seeds from --seed
     bool armed = false;  // give every colonist an assault rifle first (not a command: not in replays)
+    bool medics = false; // --medics: the first colonist is the alarm's Medic, the second its Firefighter (F10)
     std::string narrator;    // --narrator NAME: a SetNarratorCommand at the first step (T1)
     std::string difficulty;  // --difficulty NAME: with it
     std::string png;
@@ -140,6 +146,7 @@ struct Options {
     std::string saveJson;
     bool hasOutdoor = false;  // --outdoor C: hold the outdoor temperature fixed (docs/design/temperature.md)
     double outdoor = 0.0;
+    int64_t roundtrip = 0;  // --roundtrip N: every N game seconds save, load, compare, and run both 600 steps on
 #ifdef COLONY_DATA_DIR
     std::string data = COLONY_DATA_DIR;
 #else
@@ -182,6 +189,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else if (std::strcmp(arg, "--world-tile") == 0 && hasValue) {
             out.onWorld = true;
             out.worldTile = std::atoi(argv[++i]);
+        } else if (std::strcmp(arg, "--caravan") == 0) {
+            out.caravan = true;
         } else if (std::strcmp(arg, "--power") == 0) {
             out.power = true;
         } else if (std::strcmp(arg, "--verbose") == 0) {
@@ -206,6 +215,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.raid = std::atof(argv[++i]);
         } else if (std::strcmp(arg, "--armed") == 0) {
             out.armed = true;
+        } else if (std::strcmp(arg, "--medics") == 0) {
+            out.medics = true;
         } else if (std::strcmp(arg, "--narrator") == 0 && hasValue) {
             out.narrator = argv[++i];
         } else if (std::strcmp(arg, "--difficulty") == 0 && hasValue) {
@@ -236,6 +247,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.save = argv[++i];
         } else if (std::strcmp(arg, "--save-json") == 0 && hasValue) {
             out.saveJson = argv[++i];
+        } else if (std::strcmp(arg, "--roundtrip") == 0 && hasValue) {
+            out.roundtrip = std::atoll(argv[++i]);
         } else if (std::strcmp(arg, "--outdoor") == 0 && hasValue) {
             out.hasOutdoor = true;
             out.outdoor = std::atof(argv[++i]);
@@ -243,8 +256,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
                          "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--scenario colony [--verbose]] [--power] [--raid POINTS [--raid-strategy NAME]] [--armed] [--narrator NAME [--difficulty NAME]] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house [--verbose]] [--power] [--perf [--budget MS]] [--world FILE [--world-size WxH]] [--on-world [--world-tile N]] [--raid POINTS [--raid-strategy NAME]] [--armed] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
-                         "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS]\n");
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house [--verbose]] [--power] [--perf [--budget MS]] [--world FILE [--world-size WxH]] [--on-world [--world-tile N] [--caravan]] [--raid POINTS [--raid-strategy NAME]] [--armed] [--medics] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS] [--roundtrip SECONDS]\n");
             return false;
         }
     }
@@ -819,6 +832,19 @@ int main(int argc, char** argv) {
     if (options.raid >= 0.0) {
         sim.submit(colony::StartStrategyRaidCommand{"Pirate", static_cast<float>(options.raid), -1, options.raidStrategy, -1.0f});
     }
+    // --medics (F10, docs/design/field-care.md): the first colonist tends and rescues the downed during the fight,
+    // the second puts out fires; the rest defend.
+    if (options.medics) {
+        std::vector<colony::Entity> crew;
+        for (const auto [pawn, colonist] : sim.things().registry().view<const colony::Colonist>().each()) {
+            crew.push_back(pawn);
+        }
+        std::sort(crew.begin(), crew.end());
+        for (size_t c = 0; c < crew.size() && c < 2; ++c) {
+            const colony::DefenseRole role = c == 0 ? colony::DefenseRole::Medic : colony::DefenseRole::Firefighter;
+            sim.submit(colony::SetDefenseRoleCommand{crew[c], static_cast<uint8_t>(role), false, colony::CellPos{}});
+        }
+    }
     // --narrator: the narrator sends incidents from the first step (T1, docs/design/narrator.md); each
     // letter is printed as it comes.
     if (!options.narrator.empty()) {
@@ -843,6 +869,9 @@ int main(int argc, char** argv) {
         uint64_t raiderShots = 0;
         uint64_t colonyShots = 0;
         std::string states;
+        int tendedInFight = 0;  // --medics: tends while the alarm was on
+        int dragged = 0;        // downed colonists a fighter carried to cover
+        int letGo = 0;          // carries that ended early
     } raid;
 
     // --farm: tame, grown chickens on a grid in the middle of the map (N4, docs/design/breeding.md).
@@ -895,8 +924,55 @@ int main(int argc, char** argv) {
     uint64_t fireBurntOut = 0;
     uint64_t pawnsCaught = 0;
     uint64_t fireLit = 0;
+    // --caravan: the trip's moments, game seconds (-1 not yet).
+    struct CaravanTrip {
+        int settlementTile = -1;
+        int64_t formed = -1, departed = -1, arrived = -1, home = -1;
+        int lost = 0;
+        int ate = 0;
+        double minFood = 1.0;
+        double minRest = 1.0;
+        std::string settlement;
+    } trip;
+    int roundtripChecks = 0;
+    int roundtripFails = 0;
     for (int64_t i = 0; i < steps; ++i) {
         feeder.submitDue(sim);
+        if (options.caravan && sim.time().seconds == 60 && sim.world() != nullptr) {
+            // Two colonists (not the protagonist) and the survival meals set out for the nearest settlement 4 or more tiles away.
+            const colony::World& world = *sim.world();
+            const int home = world.startTile();
+            int best = -1;
+            int bestDist = 1 << 30;
+            for (const colony::WorldSettlement& s : world.settlements()) {
+                int dx = std::abs(world.tileX(s.tile) - world.tileX(home));
+                dx = std::min(dx, world.width() - dx);
+                const int dist = std::max(dx, std::abs(world.tileY(s.tile) - world.tileY(home)));
+                if (dist >= 4 && dist < bestDist && !sim.caravans().findPath(home, s.tile, sim.time().season()).empty()) {
+                    bestDist = dist;
+                    best = s.tile;
+                }
+            }
+            trip.settlementTile = best;
+            colony::CaravanCommand form;
+            form.action = "Form";
+            form.tile = best;
+            for (const auto [e, c, pos] : sim.things().registry().view<const colony::Colonist, const colony::Position>().each()) {
+                (void)pos;
+                if (!c.protagonist && form.pawns.size() < 2) {
+                    form.pawns.push_back(e);
+                }
+            }
+            std::sort(form.pawns.begin(), form.pawns.end());
+            for (const auto [e, thing, pos] : sim.things().registry().view<const colony::Thing, const colony::Position>().each()) {
+                (void)pos;
+                if (sim.defs().get(thing.def).defName() == "MealSurvivalPack" && sim.things().registry().get<colony::StackCount>(e).count >= 20) {
+                    form.items.push_back(e);
+                }
+            }
+            std::sort(form.items.begin(), form.items.end());
+            sim.submit(form);
+        }
         if (options.fire && sim.time().seconds == 600) {
             // A fire in the grass 6 to 14 cells from the first colonist.
             colony::CellPos from{sim.map().width() / 2, sim.map().height() / 2, 0};
@@ -934,6 +1010,55 @@ int main(int argc, char** argv) {
                 needs.malnutrition = 0.0f;
             }
         }
+        // --caravan: nobody farms at home in this run, so the colonists left on the map are fed every hour (the
+        // caravan's own eat from what it carries).
+        if (options.caravan && sim.time().seconds % 3600 == 0) {
+            for (const auto [pawn, needs, pos] : sim.things().registry().view<colony::Needs, const colony::Position>().each()) {
+                (void)pos;
+                needs.food = 1.0f;
+                needs.malnutrition = 0.0f;
+            }
+        }
+        // --roundtrip: a copy made by saving and loading must be the same game: same hash and file now, and the
+        // same hash after both run on (600 steps, no scripted commands), or something is not saved.
+        if (options.roundtrip > 0 && sim.time().seconds > 0 && sim.time().seconds % options.roundtrip == 0) {
+            colony::SaveLoadResult copy = colony::loadSim(colony::saveSim(sim), defs);
+            if (!copy.sim) {
+                std::printf("ROUNDTRIP FAIL at %lld: load refused: %s\n", static_cast<long long>(sim.time().seconds), copy.error.c_str());
+                roundtripFails += 1;
+            } else {
+                const int64_t at = sim.time().seconds;
+                if (copy.sim->stateHash() != sim.stateHash()) {
+                    std::printf("ROUNDTRIP FAIL at %lld: hash differs right after loading\n", static_cast<long long>(at));
+                    if (std::getenv("RT_DUMP") && roundtripFails == 0) {
+                        std::ofstream(std::string(std::getenv("RT_DUMP")) + ".a.json") << colony::saveToJson(sim);
+                        std::ofstream(std::string(std::getenv("RT_DUMP")) + ".b.json") << colony::saveToJson(*copy.sim);
+                        std::string js, er;
+                        colony::saveFileToJson(colony::saveSim(sim), js, er);
+                        std::ofstream(std::string(std::getenv("RT_DUMP")) + ".c.json") << js;
+                    }
+                    roundtripFails += 1;
+                } else if (colony::saveSim(*copy.sim) != colony::saveSim(sim)) {
+                    std::printf("ROUNDTRIP FAIL at %lld: saving the loaded copy gives another file\n", static_cast<long long>(at));
+                    roundtripFails += 1;
+                } else {
+                    for (int k = 0; k < 600; ++k) {
+                        sim.step();
+                        copy.sim->step();
+                        if (sim.stateHash() != copy.sim->stateHash()) {
+                            std::printf("ROUNDTRIP FAIL at %lld: the copy went its own way %d steps later\n", static_cast<long long>(at), k + 1);
+                            roundtripFails += 1;
+                            if (std::getenv("RT_DUMP") && roundtripFails == 1) {
+                                std::ofstream(std::string(std::getenv("RT_DUMP")) + ".a.json") << colony::saveToJson(sim);
+                                std::ofstream(std::string(std::getenv("RT_DUMP")) + ".b.json") << colony::saveToJson(*copy.sim);
+                            }
+                            break;
+                        }
+                    }
+                }
+                roundtripChecks += 1;
+            }
+        }
         const bool passStep = options.farm > 0 && sim.time().seconds > 0 && sim.time().seconds % sim.breeding().rules().passSeconds == 0;
         const auto before = Clock::now();
         sim.step();
@@ -963,6 +1088,33 @@ int main(int argc, char** argv) {
             pawnsCaught += e.type == colony::EventType::PawnCaughtFire ? 1 : 0;
             fireLit += e.type == colony::EventType::FireStarted ? 1 : 0;
             picked += e.type == colony::EventType::PlantHarvested ? 1 : 0;
+            if (options.caravan) {
+                const int64_t t = sim.time().seconds;
+                switch (e.type) {
+                    case colony::EventType::CaravanFormed: trip.formed = t; break;
+                    case colony::EventType::CaravanDeparted: trip.departed = t; break;
+                    case colony::EventType::CaravanMemberLost:
+                        ++trip.lost;
+                        std::fprintf(stderr, "caravan member lost: %s\n", e.message.c_str());
+                        break;
+                    case colony::EventType::CaravanEntered: trip.home = t; break;
+                    case colony::EventType::CaravanArrived:
+                        if (static_cast<int>(e.amount) == trip.settlementTile && trip.arrived < 0) {
+                            trip.arrived = t;
+                            trip.settlement = e.message;
+                            colony::CaravanCommand back;
+                            back.action = "Move";
+                            back.caravan = e.count;
+                            back.tile = sim.world()->startTile();
+                            sim.submit(back);
+                        }
+                        break;
+                    case colony::EventType::PawnAte:
+                        trip.ate += e.count != 0 ? 1 : 0;
+                        break;
+                    default: break;
+                }
+            }
             if (e.type == colony::EventType::Letter) {
                 const double day = static_cast<double>(sim.time().seconds) / static_cast<double>(colony::kSecondsPerDay);
                 ++letters;
@@ -994,6 +1146,13 @@ int main(int argc, char** argv) {
                     case colony::EventType::PawnDowned: ++(ours ? raid.colonistsDowned : raid.raidersDowned); break;
                     case colony::EventType::PawnDied: ++(ours ? raid.colonistsDied : raid.raidersDied); break;
                     case colony::EventType::ShotFired: ++(ours ? raid.colonyShots : raid.raiderShots); break;
+                    case colony::EventType::PawnTended: raid.tendedInFight += sim.raids().state().alarm ? 1 : 0; break;
+                    case colony::EventType::PawnAction:
+                        if (e.action == colony::PawnAction::LayPawn && sim.things().exists(e.thing) &&
+                            sim.things().registry().all_of<colony::Fighter>(e.thing)) {
+                            ++(e.message == "safe" ? raid.dragged : raid.letGo);
+                        }
+                        break;
                     default: break;
                 }
             }
@@ -1026,6 +1185,12 @@ int main(int argc, char** argv) {
         }
     }
     const auto finished = Clock::now();
+    if (options.roundtrip > 0) {
+        std::printf("{\"roundtrip\":{\"checks\":%d,\"failed\":%d}}\n", roundtripChecks, roundtripFails);
+        if (roundtripFails > 0 || roundtripChecks == 0) {
+            return 1;
+        }
+    }
 
     double totalMs = 0.0;
     for (const float v : stepMs) {
@@ -1230,6 +1395,12 @@ int main(int argc, char** argv) {
                     static_cast<long long>(raid.alarmOn), static_cast<long long>(raid.alarmOff), static_cast<long long>(raid.ended),
                     raid.states.c_str(), raid.left, raid.raidersDowned, raid.raidersDied, raid.colonistsDowned, raid.colonistsDied,
                     static_cast<unsigned long long>(raid.raiderShots), static_cast<unsigned long long>(raid.colonyShots));
+        if (options.medics) {
+            // Medics, firefighters and rescue under fire (docs/design/field-care.md).
+            std::printf("{\"fieldCare\":{\"tendedInFight\":%d,\"dragsStarted\":%llu,\"dragged\":%d,\"letGo\":%d,\"givenUp\":%llu}}\n",
+                        raid.tendedInFight, static_cast<unsigned long long>(sim.fieldCare().drags()), raid.dragged, raid.letGo,
+                        static_cast<unsigned long long>(sim.fieldCare().givenUp()));
+        }
         if (options.check && options.raid >= 0.0 && (raid.arrived < 0 || raid.ended < 0 || raid.raiderShots + raid.colonyShots == 0)) {
             std::fprintf(stderr, "check failed: the raid didn't arrive, didn't end, or nobody fired a shot\n");
             return 1;
@@ -1329,6 +1500,32 @@ int main(int argc, char** argv) {
             }
             if (extraPerStep > 0.5) {
                 std::fprintf(stderr, "check failed: breeding costs %.3f ms a step\n", extraPerStep);
+                return 1;
+            }
+        }
+    }
+
+    // The caravan (W4, docs/design/caravans.md): to the nearest settlement and home again.
+    if (options.caravan) {
+        const auto days = [](int64_t a, int64_t b) {
+            return a < 0 || b < 0 ? -1.0 : static_cast<double>(b - a) / static_cast<double>(colony::kSecondsPerDay);
+        };
+        std::printf("{\"caravan\":{\"settlement\":\"%s\",\"tile\":%d,\"leaveHours\":%.2f,\"outDays\":%.2f,\"backDays\":%.2f,"
+                    "\"ateOnRoad\":%d,\"membersLost\":%d,\"home\":%s}}\n",
+                    trip.settlement.c_str(), trip.settlementTile, days(trip.formed, trip.departed) * 24.0,
+                    days(trip.departed, trip.arrived), days(trip.arrived, trip.home), trip.ate, trip.lost,
+                    trip.home >= 0 ? "true" : "false");
+        if (options.check) {
+            const char* failed = sim.world() == nullptr ? "no world (use --on-world)"
+                                 : trip.settlementTile < 0 ? "no settlement can be reached"
+                                 : trip.formed < 0          ? "the caravan was not formed"
+                                 : trip.departed < 0        ? "the caravan never left the map"
+                                 : trip.arrived < 0         ? "the caravan never reached the settlement"
+                                 : trip.home < 0            ? "the caravan never came home"
+                                 : trip.lost > 0            ? "a member left the caravan"
+                                                            : nullptr;
+            if (failed != nullptr) {
+                std::fprintf(stderr, "check failed: %s\n", failed);
                 return 1;
             }
         }

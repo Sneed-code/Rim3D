@@ -95,6 +95,8 @@ public:
     bool board(Entity casket, Entity pawn, std::string& error);
     // Launches: the riders leave the map and the game is won.
     bool launch(std::string& error);
+    // Dev: the reactor that is warming up is active at the next step (RimWorld's dev-mode skip).
+    bool finishWarmUp(std::string& error);
 
     // Waves of raiders while the reactor warms up, the reactor's end, losing a reactor.
     void step();

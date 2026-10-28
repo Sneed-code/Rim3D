@@ -1,7 +1,7 @@
 # Light and darkness
 
 Code: `ColonySim/Lights.h`, `Private/Lights.cpp`; the effects are in `Private/MovementSystem.cpp`
-(walking) and `JobSystem::lightWorkFactor` (work). Defs: `LightRules` in `data/defs/Rules/Rules.json`,
+(walking) and `JobSystem::workFactor` (work). Defs: `LightRules` in `data/defs/Rules/Rules.json`,
 `glower` on buildings (D11's `TorchLamp`, `StandingLamp`, `SunLamp`, `Campfire` in `BuildingsPowerClimate.json`). Tests:
 `Tests/LightTests.cpp`. Picture: `simrun --size 128 --days 0 --light light.png --hour 22`. Task E3.
 Builds on [rooms](rooms.md) (the roof).

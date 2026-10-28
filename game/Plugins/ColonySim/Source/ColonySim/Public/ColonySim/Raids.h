@@ -42,6 +42,9 @@ enum class DefenseRole : uint8_t {
     Defender,     // takes cover on the side the threat comes from, or holds its defense spot
     Shelter,      // goes to the shelter room and stays there
     KeepWorking,  // works on, unless an enemy comes within keepWorkingRadius; then it defends itself
+    // F10 (docs/design/field-care.md): FieldCare gives these their duty.
+    Medic,        // waits behind the line; tends and rescues the downed it can reach without coming under fire
+    Firefighter,  // waits behind the line; puts out fires in the home area once it is safe to go to them
 };
 
 // A colonist's defense plan, on the pawn. A colonist without one is a Defender with no spot.
@@ -228,7 +231,10 @@ public:
     // RimWorld's storyteller wealth (wiki "Raid points"): items on the map and carried by the
     // player's pawns, and the player's own pawns (colonists, tame animals), at their market value,
     // plus buildings at half theirs. Defs without a marketValue count 0.
-    float colonyWealth() const;
+    float colonyWealth() const { return colonyWealth(rules_.buildingWealthFactor); }
+    // The same with buildings at the given share of their value: 1 is RimWorld's map wealth, which sets the colonists'
+    // expectations (docs/design/mood.md).
+    float colonyWealth(float buildingFactor) const;
     // The adaptation factor now (1 with the impact at 0), and what the difficulty says about it
     // (its adaptationGrowth and adaptationImpact; the narrator sets them with the difficulty).
     float adaptationFactor() const;

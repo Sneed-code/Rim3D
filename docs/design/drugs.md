@@ -70,19 +70,47 @@ whose policy allows the drug for addiction (3), a scheduled dose that is due (2)
 an Anything or Joy hour, never for medical drugs (1). It does not drink while still high (over 0.25) or while the
 overdose is over 0.4, and it does not take joy drugs during Work hours. No reachable item: the pawn waits a minute.
 
+## Side effects
+
+A hediff stage may carry `painFactor`, `workSpeed` and `hunger` (all multiply, default 1); `HealthSystem` works them out
+with the capacities (`Health::workSpeedFactor`, `hungerFactor`; pain is scaled before it reaches the capacities and
+the shock limit). Pain: smokeleaf x0.8, psychite tea x0.9, flake and yayo x0.5, go-juice x0.1, luciferium x0.8; beer
+only "less the drunker" on the wiki, so x0.9, x0.8, x0.7 by stage is ours. Work speed: wake-up x1.5, go-juice x1.2 (they
+multiply); `JobSystem::workFactor` (formerly `lightWorkFactor`) and research use it. Hunger: smokeleaf x1.3.
+
+**Binges** (`DrugSystem::stepBinge`). A colonist addicted to a social drug in a major (or worse) mood band, or to a hard
+drug in an extreme one, or one in withdrawal at any mood, rolls every 216 seconds against a mean wait of 1.5, 0.5 or 2 days
+(`DrugRules`, ours). Never the protagonist (`Health::protagonist`) or a pawn under `PlayerControl`. A binge lasts 4 to 8
+hours; `wants` then returns every non-medical drug of the chemical at priority 4, ignoring the policy and the
+joy limits, until the high is over 0.9. It ends at the time, at a minor overdose, when the pawn is downed, or when
+no drug can be found (`searchFailed`). Events `DrugBinge` ("start" with the hours, "end"). `startBinge` is for tests and dev.
+
+**Chemical damage** (`stepDamage`, every 600 seconds): a `ChemicalDamage` injury (permanent, no pain, a share of the
+organ's hit points, never past 80%). Thresholds are the wiki's: alcohol above 45% tolerance hurts the liver, smokeleaf
+above 36% the lung, psychite above 45% a kidney (and 15% of new psychite addictions at once). The mean wait is 60 days
+at the threshold falling to 20 at full tolerance, 20% of the organ a hit (ours). A major overdose (0.75) hurts the brain
+every 2.5 days on average (wiki). Wake-up: a heart attack, mean 120 days while high (wiki), 50% of the heart (ours).
+Event `ChemicalDamage` (`message` the part). Cirrhosis, carcinoma and asthma as illnesses are not built; the organ damage
+stands in.
+
+**Ambrosia** (social, found not made): 0.5 severity high over 16 hours, +5 mood, +50% recreation, feeds 0.2, tolerance
++3.2% a dose, addiction from 15% tolerance at 1%, the mildest withdrawal (-10 mood). **Penoxycyline** (medical, 2
+neutroamine at a drug lab, research `PenoxycyclineProduction`): a 5.5 day protection high whose hediff names
+`preventsDiseases` (malaria, plague, sleeping sickness); never addictive. `preventsDisease(pawn, disease)` is what H2's
+illness rolls ask. Policy `Prophylaxis` (ours) schedules it every 5.5 days.
+
 ## Save, hash, events
 
-Save section `drugs` 1: per pawn the policy, its own entries, the chemical states, the last dose of each drug and the
-search wait. The high, withdrawal, hangover and overdose live in the pawn's environment hediffs (health section 2).
+Save section `drugs` 2: per pawn the policy, its own entries, the chemical states, the last dose of each drug, the
+search wait and the binge (end second, chemical). The high, withdrawal, hangover and overdose live in the pawn's environment hediffs (health section 2).
 `stateHash` now includes environment hediffs (only when a pawn has some, so older hashes do not change) and the drug
-records (only when there are some). Events: `PawnTookDrug`, `PawnAddicted`, `AddictionCured`, `DrugOverdose`.
+records (only when there are some). Events: `PawnTookDrug`, `PawnAddicted`, `AddictionCured`, `DrugOverdose`, `DrugBinge`, `ChemicalDamage`.
 
 ## Not built
 
-Pain changes (beer, smokeleaf, tea, go-juice), hunger and +30% food use (smokeleaf), the +50% work speed of wake-up and
-+20% of go-juice, wake-up's heart attacks, vomiting and social fight changes from alcohol, the tolerance's chemical
-damage (cirrhosis, kidneys, lung cancer), drug binges and psychotic wandering in withdrawal, luciferium's scar healing
-and berserk, penoxycyline and ambrosia, chemical interest and fascination traits, the drug dependency genes, drug
-inventory counts, the colonists carrying drugs, the item's "nutrition" of beer, and the barrel's six days of fermenting
-(the bill's work stands in for it). Unreal draws nothing yet: the hediffs show in the health report and the thoughts in
-the mood list; a U task can add the drinking animation and the drug icons.
+Wake-up's meditation rate, vomiting and social fight changes from alcohol, luciferium's scar healing and berserk,
+cirrhosis, carcinoma and asthma as illnesses (the organ damage stands in), the ambrosia sprout event, chemical interest and
+fascination traits, the drug dependency genes, drug inventory counts, the colonists carrying drugs, the item's
+"nutrition" of beer, and the barrel's six days of fermenting (the bill's work stands in for it). Unreal draws nothing yet:
+the hediffs show in the health report and the thoughts in the mood list; a U task can add the drinking animation and the
+drug icons.

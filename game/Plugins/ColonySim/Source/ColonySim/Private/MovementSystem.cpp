@@ -213,8 +213,8 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
             a.newVy = a.vy;
             continue;
         }
-        // Working standing still, or knocked down by a blast: it stays where it is. Others still steer around it.
-        bool stays = mover.hold || reg.all_of<KnockedDown>(a.entity);
+        // Working standing still, knocked down by a blast or stunned: it stays where it is. Others still steer around it.
+        bool stays = mover.hold || reg.any_of<KnockedDown, Stunned>(a.entity);
         float base = 0.0f;
         if (!stays) {
             // Injuries slow a pawn down (its Moving capacity); a downed or dead one doesn't walk.
@@ -566,6 +566,25 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
             if (state != nullptr && !state->open) {
                 bestVx = 0.0f;
                 bestVy = 0.0f;
+            }
+        }
+        // The wall costs only steer, so a pawn squeezed by others (or walking through them) could still be pushed into a
+        // wall's cell and be shut in there for good, starving (found by the year run). Never into a cell it cannot stand in:
+        // keep the part along one axis that stays out, else stand still.
+        if (map.walkable(here)) {
+            const auto standsIn = [&](float vx, float vy) {
+                const CellPos c{static_cast<int>(std::floor(a.x + vx)), static_cast<int>(std::floor(a.y + vy)), a.level};
+                return c == here || (map.inBounds(c) && map.walkable(c));
+            };
+            if (!standsIn(bestVx, bestVy)) {
+                if (standsIn(bestVx, 0.0f)) {
+                    bestVy = 0.0f;
+                } else if (standsIn(0.0f, bestVy)) {
+                    bestVx = 0.0f;
+                } else {
+                    bestVx = 0.0f;
+                    bestVy = 0.0f;
+                }
             }
         }
         a.newVx = bestVx;

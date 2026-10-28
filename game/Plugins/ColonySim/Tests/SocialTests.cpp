@@ -53,6 +53,19 @@ std::shared_ptr<const DefDatabase> socDefs() {
 
 Sim socSim() { return Sim(SimSettings{5, 48, 0, 0, true}, socDefs()); }
 
+void socOrientations(Sim& sim, float straight, float gay, float bisexual, float asexual);
+
+// Everybody is bisexual unless a test says otherwise, so who may love whom does not depend on the dice.
+void socAllBi(Sim& sim) { socOrientations(sim, 0.0f, 0.0f, 1.0f, 0.0f); }
+
+void socOrientations(Sim& sim, float straight, float gay, float bisexual, float asexual) {
+    float* weights = sim.social().rules().orientationWeights;
+    weights[0] = straight;
+    weights[1] = gay;
+    weights[2] = bisexual;
+    weights[3] = asexual;
+}
+
 // A colonist with a Colonist record (an adult with the Social skill at 0 and the given traits) that works
 // all day, so it is awake and talks.
 Entity socPawn(Sim& sim, CellPos cell, std::vector<std::string> traits = {}) {
@@ -125,6 +138,7 @@ bool socTalk(Sim& sim, Entity from, Entity to, const char* interaction, int outc
 
 TEST_CASE("Social: colonists get a social life, and two strangers think about as well of each other") {
     Sim sim = socSim();
+    socAllBi(sim);
     const Entity a = socPawn(sim, CellPos{20, 20, 0});
     const Entity b = socPawn(sim, CellPos{22, 20, 0});
     socStart(sim);
@@ -153,6 +167,7 @@ TEST_CASE("Social: colonists get a social life, and two strangers think about as
 
 TEST_CASE("Social: chitchat changes the listener's opinion, starts a thought and teaches the talker") {
     Sim sim = socSim();
+    socAllBi(sim);
     const Entity a = socPawn(sim, CellPos{20, 20, 0});
     const Entity b = socPawn(sim, CellPos{22, 20, 0});
     socStartQuiet(sim);
@@ -175,6 +190,7 @@ TEST_CASE("Social: chitchat changes the listener's opinion, starts a thought and
 
 TEST_CASE("Social: a kind of memory stacks to the limit and fades after its days") {
     Sim sim = socSim();
+    socAllBi(sim);
     const Entity a = socPawn(sim, CellPos{20, 20, 0});
     const Entity b = socPawn(sim, CellPos{22, 20, 0});
     socStartQuiet(sim);
@@ -193,6 +209,7 @@ TEST_CASE("Social: a kind of memory stacks to the limit and fades after its days
 
 TEST_CASE("Social: slights and insults lower the opinion, kind words need a low mood, deep talk raises it") {
     Sim sim = socSim();
+    socAllBi(sim);
     const Entity a = socPawn(sim, CellPos{20, 20, 0});
     const Entity b = socPawn(sim, CellPos{22, 20, 0});
     socStartQuiet(sim);
@@ -214,6 +231,7 @@ TEST_CASE("Social: slights and insults lower the opinion, kind words need a low 
 
 TEST_CASE("Social: pawns out of earshot, in another room, asleep or downed cannot talk") {
     Sim sim = socSim();
+    socAllBi(sim);
     const Entity a = socPawn(sim, CellPos{20, 20, 0});
     const Entity far = socPawn(sim, CellPos{40, 20, 0});
     // A walled room around a third pawn.
@@ -240,6 +258,7 @@ TEST_CASE("Social: pawns out of earshot, in another room, asleep or downed canno
 
 TEST_CASE("Social: pawns beside each other talk at about the rules' rate") {
     Sim sim = socSim();
+    socAllBi(sim);
     socPawn(sim, CellPos{20, 20, 0});
     socPawn(sim, CellPos{22, 20, 0});
     socPawn(sim, CellPos{20, 22, 0});
@@ -255,6 +274,7 @@ TEST_CASE("Social: pawns beside each other talk at about the rules' rate") {
 
 TEST_CASE("Social: romance is a bond only, one at a time, and marriage needs a lover") {
     Sim sim = socSim();
+    socAllBi(sim);
     const Entity a = socPawn(sim, CellPos{20, 20, 0});
     const Entity b = socPawn(sim, CellPos{22, 20, 0});
     const Entity c = socPawn(sim, CellPos{20, 22, 0});
@@ -302,6 +322,7 @@ TEST_CASE("Social: romance is a bond only, one at a time, and marriage needs a l
 
 TEST_CASE("Social: a breakup makes ex-lovers, who think worse of each other and can begin again") {
     Sim sim = socSim();
+    socAllBi(sim);
     const Entity a = socPawn(sim, CellPos{20, 20, 0});
     const Entity b = socPawn(sim, CellPos{22, 20, 0});
     socStartQuiet(sim);
@@ -328,6 +349,7 @@ TEST_CASE("Social: a breakup makes ex-lovers, who think worse of each other and 
 
 TEST_CASE("Social: friends need both to think well of each other, a rival is one who is thought badly of") {
     Sim sim = socSim();
+    socAllBi(sim);
     const Entity a = socPawn(sim, CellPos{20, 20, 0});
     const Entity b = socPawn(sim, CellPos{22, 20, 0});
     socStartQuiet(sim);
@@ -348,6 +370,7 @@ TEST_CASE("Social: friends need both to think well of each other, a rival is one
 
 TEST_CASE("Social: traits change what others think and what a pawn says") {
     Sim sim = socSim();
+    socAllBi(sim);
     const Entity plain = socPawn(sim, CellPos{20, 20, 0});
     const Entity rude = socPawn(sim, CellPos{22, 20, 0}, {"Abrasive"});
     const Entity kind = socPawn(sim, CellPos{20, 22, 0}, {"Kind"});
@@ -383,6 +406,7 @@ TEST_CASE("Social: traits change what others think and what a pawn says") {
 
 TEST_CASE("Social: when someone dies, those who cared think about it, and a widow is free again") {
     Sim sim = socSim();
+    socAllBi(sim);
     const Entity a = socPawn(sim, CellPos{20, 20, 0});
     const Entity b = socPawn(sim, CellPos{22, 20, 0});
     const Entity c = socPawn(sim, CellPos{20, 22, 0});
@@ -424,6 +448,7 @@ TEST_CASE("Social: when someone dies, those who cared think about it, and a wido
 
 TEST_CASE("Social: an insult can start a fight with fists that ends with the fighters back to work") {
     Sim sim = socSim();
+    socAllBi(sim);
     const Entity a = socPawn(sim, CellPos{20, 20, 0});
     const Entity b = socPawn(sim, CellPos{21, 20, 0});
     socStartQuiet(sim);
@@ -468,6 +493,7 @@ TEST_CASE("Social: an insult can start a fight with fists that ends with the fig
 
 TEST_CASE("Social: a fight stops when the pawns are called away to fight for the colony") {
     Sim sim = socSim();
+    socAllBi(sim);
     const Entity a = socPawn(sim, CellPos{20, 20, 0});
     const Entity b = socPawn(sim, CellPos{26, 20, 0});
     socStartQuiet(sim);
@@ -483,6 +509,7 @@ TEST_CASE("Social: a fight stops when the pawns are called away to fight for the
 
 TEST_CASE("Social: opinions, bonds and fights are saved and a loaded game goes on the same") {
     Sim original = socSim();
+    socAllBi(original);
     const Entity a = socPawn(original, CellPos{20, 20, 0});
     const Entity b = socPawn(original, CellPos{21, 20, 0});
     const Entity c = socPawn(original, CellPos{20, 22, 0});
@@ -497,6 +524,7 @@ TEST_CASE("Social: opinions, bonds and fights are saved and a loaded game goes o
     const SaveLoadResult loaded = loadSim(bytes, socDefs());
     SOC_REQUIRE(loaded.sim != nullptr);
     Sim& copy = *loaded.sim;
+    socAllBi(copy);
     CHECK(copy.stateHash() == original.stateHash());
     CHECK(copy.social().fighting(c));
     CHECK(copy.social().partner(a) == b);
@@ -514,6 +542,7 @@ TEST_CASE("Social: opinions, bonds and fights are saved and a loaded game goes o
 
 TEST_CASE("Social: the talk command is replayed, saved by name and known by name") {
     Sim original = socSim();
+    socAllBi(original);
     const Entity a = socPawn(original, CellPos{20, 20, 0});
     const Entity b = socPawn(original, CellPos{22, 20, 0});
     socStartQuiet(original);
@@ -535,6 +564,7 @@ TEST_CASE("Social: the talk command is replayed, saved by name and known by name
 
 TEST_CASE("Social: a skilled talker's good chat counts for more and romance is likelier") {
     Sim sim = socSim();
+    socAllBi(sim);
     const Entity a = socPawn(sim, CellPos{20, 20, 0});
     const Entity b = socPawn(sim, CellPos{22, 20, 0});
     const Entity c = socPawn(sim, CellPos{20, 22, 0});
@@ -556,6 +586,7 @@ TEST_CASE("Social: a skilled talker's good chat counts for more and romance is l
 
 TEST_CASE("Social: a lover who strays is cheating; the betrayed one is upset and may fight the new lover") {
     Sim sim = socSim();
+    socAllBi(sim);
     const Entity a = socPawn(sim, CellPos{20, 20, 0});
     const Entity b = socPawn(sim, CellPos{22, 20, 0}, {"Kind"});  // too kind to fight
     const Entity c = socPawn(sim, CellPos{20, 22, 0});
@@ -580,6 +611,7 @@ TEST_CASE("Social: a lover who strays is cheating; the betrayed one is upset and
 
 TEST_CASE("Social: a wedding is a party: the guests and the couple get their thoughts") {
     Sim sim = socSim();
+    socAllBi(sim);
     const Entity a = socPawn(sim, CellPos{20, 20, 0});
     const Entity b = socPawn(sim, CellPos{22, 20, 0});
     const Entity guest = socPawn(sim, CellPos{20, 22, 0});
@@ -596,8 +628,21 @@ TEST_CASE("Social: a wedding is a party: the guests and the couple get their tho
     CHECK(sim.social().stats().weddingGuests == 1);
 }
 
+TEST_CASE("Social: an insult never starts a fight with the protagonist") {
+    Sim sim = socSim();
+    const Entity a = socPawn(sim, CellPos{20, 20, 0});
+    const Entity b = socPawn(sim, CellPos{21, 20, 0});
+    sim.things().registry().get<Colonist>(b).protagonist = true;
+    socStartQuiet(sim);
+    SOC_REQUIRE(socTalk(sim, a, b, "Insult", 1));
+    CHECK(socCountEvents(sim, EventType::SocialFight, "started") == 0);
+    CHECK_FALSE(sim.social().fighting(a));
+    CHECK_FALSE(sim.social().fighting(b));
+}
+
 TEST_CASE("Social: wedding guests walk to the couple and stay for the party") {
     Sim sim = socSim();
+    socAllBi(sim);
     const Entity a = socPawn(sim, CellPos{20, 20, 0});
     const Entity b = socPawn(sim, CellPos{22, 20, 0});
     const Entity guest = socPawn(sim, CellPos{30, 30, 0});
@@ -619,4 +664,73 @@ TEST_CASE("Social: wedding guests walk to the couple and stay for the party") {
         sim.step();
     }
     CHECK(sim.things().registry().get<Worker>(guest).job.type != JobType::Party);
+}
+
+TEST_CASE("Social: who may fall in love follows each pawn's orientation") {
+    Sim sim = socSim();
+    socAllBi(sim);
+    const Entity man = socPawn(sim, CellPos{20, 20, 0});
+    const Entity woman = socPawn(sim, CellPos{22, 20, 0});
+    const Entity man2 = socPawn(sim, CellPos{20, 22, 0});
+    sim.things().registry().get<Colonist>(woman).female = true;
+    socStartQuiet(sim);
+
+    // Straight: the other gender only.
+    socOrientations(sim, 1.0f, 0.0f, 0.0f, 0.0f);
+    CHECK(sim.social().orientationOf(man) == Orientation::Straight);
+    CHECK(sim.social().attractedTo(man, woman));
+    CHECK_FALSE(sim.social().attractedTo(man, man2));
+    CHECK_FALSE(socTalk(sim, man, man2, "RomanceAttempt", 1));
+    CHECK(socTalk(sim, man, woman, "RomanceAttempt", 1));
+    CHECK(sim.social().partner(man) == woman);
+
+    // Gay: the same gender only.
+    socOrientations(sim, 0.0f, 1.0f, 0.0f, 0.0f);
+    CHECK(sim.social().attractedTo(man2, man));
+    CHECK_FALSE(sim.social().attractedTo(man2, woman));
+
+    // Asexual: nobody; a romance with one is refused from either side.
+    socOrientations(sim, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK_FALSE(sim.social().attractedTo(man2, man));
+    CHECK_FALSE(sim.social().attractedTo(woman, man2));
+
+    // The share follows the weights, and a pawn's orientation never changes.
+    socOrientations(sim, 0.7f, 0.1f, 0.15f, 0.05f);
+    int counts[4] = {0, 0, 0, 0};
+    for (int i = 0; i < 400; ++i) {
+        const Entity p = sim.things().spawn("Human", CellPos{4 + i % 20, 4 + i / 20, 0});
+        const Orientation o = sim.social().orientationOf(p);
+        CHECK(sim.social().orientationOf(p) == o);
+        ++counts[static_cast<int>(o)];
+    }
+    CHECK(counts[0] > 230);
+    CHECK(counts[0] < 330);  // 70% of 400 is 280
+    CHECK(counts[1] > 10);
+    CHECK(counts[2] > 30);
+    CHECK(counts[3] > 3);
+}
+
+TEST_CASE("Social: seeing a loved one or friend die is worse than hearing of it") {
+    Sim sim = socSim();
+    socAllBi(sim);
+    const Entity dead = socPawn(sim, CellPos{20, 20, 0});
+    const Entity near = socPawn(sim, CellPos{22, 20, 0});
+    const Entity far = socPawn(sim, CellPos{45, 45, 0});
+    const Entity rival = socPawn(sim, CellPos{20, 22, 0});
+    socStartQuiet(sim);
+    socThinks(sim, near, dead, 60.0f);
+    socThinks(sim, dead, near, 60.0f);
+    socThinks(sim, far, dead, 60.0f);
+    socThinks(sim, dead, far, 60.0f);
+    socThinks(sim, rival, dead, -80.0f);
+    sim.step();
+    sim.things().registry().get<Health>(dead).dead = true;
+    sim.step();
+    sim.step();
+    CHECK(socThoughtHas(sim, near, "FriendDied"));
+    CHECK(socThoughtHas(sim, near, "SawDeath"));
+    CHECK(socThoughtHas(sim, far, "FriendDied"));
+    CHECK_FALSE(socThoughtHas(sim, far, "SawDeath"));
+    CHECK(socThoughtHas(sim, rival, "RivalDied"));
+    CHECK_FALSE(socThoughtHas(sim, rival, "SawDeath"));
 }

@@ -454,6 +454,31 @@ TEST_CASE("Surgery: a patient goes to bed, a doctor amputates, and the medicine 
     CHECK_FALSE(surgFailed(log));
 }
 
+TEST_CASE("Surgery: harvesting a kidney gives the organ and tells the colony") {
+    Sim sim = surgSim();
+    sim.things().spawn("HospitalBed", CellPos{20, 20, 0});
+    sim.things().spawn("MedicineIndustrial", CellPos{12, 12, 0}, 3);
+    surgColonist(sim, CellPos{10, 10, 0});
+    const Entity patient = surgPatient(sim, CellPos{30, 30, 0});
+    sim.step();
+    const SurgeryRecipe* harvest = sim.surgery().recipe("HarvestOrgan");
+    SURG_REQUIRE(harvest != nullptr);
+    std::string why;
+    CHECK_FALSE(sim.surgery().eligible(patient, *harvest, surgPart(sim, patient, "left arm"), why));  // no organ item for an arm
+    CHECK_FALSE(sim.surgery().eligible(patient, *harvest, surgPart(sim, patient, "heart"), why));     // could not live without it
+    const int kidney = surgPart(sim, patient, "left kidney");
+    sim.submit(AddOperationCommand{patient, "HarvestOrgan", kidney});
+    SurgLog log;
+    SURG_REQUIRE(surgRunUntil(sim, log, 4000, [&] { return log.type(EventType::OperationDone) != nullptr; }));
+    CHECK(log.type(EventType::OperationDone)->message == "success");
+    CHECK(surgItems(sim, "OrganKidney") == 1);
+    CHECK(sim.health().partCondition(patient, kidney) == PartCondition::Missing);
+    const Event* note = log.type(EventType::OrganHarvested);
+    SURG_REQUIRE(note != nullptr);
+    CHECK(note->thing == patient);
+    CHECK(note->part == kidney);
+}
+
 TEST_CASE("Surgery: fitting a peg leg takes the item to the patient and the patient walks again") {
     Sim sim = surgSim();
     sim.things().spawn("HospitalBed", CellPos{20, 20, 0});

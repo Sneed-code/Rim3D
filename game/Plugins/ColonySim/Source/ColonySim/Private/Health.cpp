@@ -2,6 +2,7 @@
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Genes.h"
+#include "ColonySim/Looks.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Things.h"
 
@@ -123,6 +124,9 @@ public:
         bool visible = true;      // false while a disease is too early to notice
         std::vector<std::pair<int, float>> offsets;  // capacity, amount
         std::vector<std::pair<int, float>> maxima;
+        float painFactor = 1.0f;  // multiplies the pawn's pain (drugs)
+        float workSpeed = 1.0f;   // multiplies its global work speed
+        float hunger = 1.0f;      // multiplies how fast its food falls
     };
     struct Hediff {
         float painPerSeverity = 0.0f;
@@ -303,6 +307,9 @@ std::vector<HealthModel::Stage> HealthModel::readStages(const Def& def, const st
                 s.maxima.emplace_back(found->second, static_cast<float>(def.number((at + ".capacityMax." + key).c_str())));
             }
         }
+        s.painFactor = static_cast<float>(def.number((at + ".painFactor").c_str(), 1.0));
+        s.workSpeed = static_cast<float>(def.number((at + ".workSpeed").c_str(), 1.0));
+        s.hunger = static_cast<float>(def.number((at + ".hunger").c_str(), 1.0));
         flagged.push_back(std::move(f));
     }
     std::stable_sort(flagged.begin(), flagged.end(),
@@ -917,11 +924,25 @@ void HealthSystem::die(Entity pawn, Health& health, DeathCause cause, bool annou
     }
 }
 
-void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, Health& health, DeathCause& cause, bool& shouldBeDown) const {
+void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, const HealthMods& mods, Health& health, DeathCause& cause, bool& shouldBeDown) const {
     const HealthModel::Body& body = model_->bodies[static_cast<size_t>(bodyIndex)];
     HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
     eval.workOutPainAndBleeding();
-    health.pain = mechanical ? 0.0f : eval.pain / healthScale;
+    // The stages of the pawn's environment hediffs (a drug high) scale pain, work speed and hunger.
+    float painFactor = 1.0f;
+    health.workSpeedFactor = 1.0f;
+    health.hungerFactor = 1.0f;
+    for (const EnvironmentHediff& env : health.environment) {
+        const HealthModel::EnvironmentDef* def = model_->environmentOf(env.def);
+        const int stage = def != nullptr ? HealthModel::stageIn(def->stages, env.severity) : -1;
+        if (stage >= 0) {
+            const HealthModel::Stage& st = def->stages[static_cast<size_t>(stage)];
+            painFactor *= st.painFactor;
+            health.workSpeedFactor *= st.workSpeed;
+            health.hungerFactor *= st.hunger;
+        }
+    }
+    health.pain = mechanical ? 0.0f : eval.pain / healthScale * painFactor * mods.painFactor;
     for (const Disease& disease : health.diseases) {
         const HealthModel::DiseaseDef* def = model_->diseaseOf(disease.def);
         const int stage = def != nullptr ? HealthModel::stageIn(def->stages, disease.severity) : -1;
@@ -936,6 +957,10 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, Hea
     health.capacities.resize(model_->capacities.size());
     for (size_t i = 0; i < model_->capacities.size(); ++i) {
         health.capacities[i] = eval.capacity(static_cast<int>(i));
+    }
+    if (model_->movingCapacity >= 0 && mods.movingMax < 1.0f) {
+        float& moving = health.capacities[static_cast<size_t>(model_->movingCapacity)];
+        moving = std::min(moving, mods.movingMax);  // a cap, not a factor: a pawn already slower is unaffected
     }
 
     cause = DeathCause::None;
@@ -980,7 +1005,11 @@ void HealthSystem::recompute(Entity pawn, Health& health, bool announce) {
     }
     DeathCause cause = DeathCause::None;
     bool shouldBeDown = false;
-    derive(kind->body, kind->healthScale, kind->mechanical, health, cause, shouldBeDown);
+    HealthMods mods;
+    if (mods_) {
+        mods_(pawn, mods);
+    }
+    derive(kind->body, kind->healthScale, kind->mechanical, mods, health, cause, shouldBeDown);
 
     if (!health.dead && cause != DeathCause::None) {
         die(pawn, health, cause, announce);
@@ -988,7 +1017,7 @@ void HealthSystem::recompute(Entity pawn, Health& health, bool announce) {
     if (!health.dead) {
         const bool wasDowned = health.downed;
         health.downed = shouldBeDown;
-        if (shouldBeDown && !wasDowned) {
+        if (shouldBeDown && !wasDowned && !restoring_) {
             stopWalking(pawn);
         }
         if (announce && shouldBeDown != wasDowned) {
@@ -1012,9 +1041,20 @@ void HealthSystem::refresh(Entity pawn) {
 
 void HealthSystem::refreshAll() {
     entt::registry& reg = things_.registry();
+    // Saves before health section 6 do not hold `downed`, so every downed pawn looks newly downed here. It was
+    // downed before the save, and whatever path it holds now it held then. A wound still waiting to be worked
+    // out (`dirty`, saved) keeps its saved downed flag and stays pending, so the next step downs and announces it.
+    restoring_ = true;
     for (const auto [entity, health] : reg.view<Health>().each()) {
+        const bool pending = health.dirty;
+        const bool downed = health.downed;
         recompute(entity, health, false);
+        if (pending) {
+            health.downed = downed;
+            health.dirty = true;
+        }
     }
+    restoring_ = false;
 }
 
 // ---- Damage ---------------------------------------------------------------------------------------
@@ -1145,7 +1185,7 @@ std::vector<BodyPartInfo> HealthSystem::bodyParts(DefId pawnDef) const {
     std::vector<BodyPartInfo> out;
     if (const HealthModel::Kind* kind = model_->kindOf(pawnDef)) {
         for (const HealthModel::Part& p : model_->bodies[static_cast<size_t>(kind->body)].parts) {
-            out.push_back(BodyPartInfo{p.label, p.parent, p.inside, p.ownOutside, p.groups});
+            out.push_back(BodyPartInfo{p.label, p.parent, p.inside, p.ownOutside, p.groups, p.def});
         }
     }
     return out;
@@ -1475,6 +1515,28 @@ void HealthSystem::leaveScar(Entity pawn, Health& health, const Injury& healed, 
     scar.peak = model_->scarSeverity;
     health.injuries.push_back(scar);
     emit(EventType::PawnScarred, pawn, def, healed.part, scar.severity);
+
+    // V1: a scar on the skin shows. The part's own def and the side come from its chain of parents.
+    if (PawnLooks* looks = things_.registry().try_get<PawnLooks>(pawn)) {
+        const HealthModel::Kind* kind = healthKindOf(*model_, things_.registry(), pawn);
+        if (kind != nullptr) {
+            const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+            BodyRegion region = BodyRegion::Torso;
+            bool left = false;
+            bool found = false;
+            for (int p = healed.part; p >= 0 && !found; p = body.parts[static_cast<size_t>(p)].parent) {
+                const HealthModel::Part& part = body.parts[static_cast<size_t>(p)];
+                left = left || part.label.rfind("left ", 0) == 0;
+                found = bodyRegionOfPart(part.def, left, region) && !part.inside;
+                if (!found && part.inside) {
+                    break;  // an organ or bone: nothing shows on the skin
+                }
+            }
+            if (found) {
+                addScarMark(things_.defs(), *looks, region, things_.defs().get(healed.hediff).defName(), rng);
+            }
+        }
+    }
 }
 
 // ---- Infections and diseases (H2) --------------------------------------------------------------------
@@ -2094,6 +2156,18 @@ float HealthSystem::partHitPoints(Entity pawn, int part) const {
     return eval.hpFraction(part) * eval.maxHp(part);
 }
 
+float HealthSystem::workSpeedFactor(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Health* health = reg.valid(pawn) ? reg.try_get<Health>(pawn) : nullptr;
+    return health != nullptr ? health->workSpeedFactor : 1.0f;
+}
+
+float HealthSystem::hungerFactor(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Health* health = reg.valid(pawn) ? reg.try_get<Health>(pawn) : nullptr;
+    return health != nullptr ? health->hungerFactor : 1.0f;
+}
+
 float HealthSystem::capacityValue(Entity pawn, const std::string& capacity) const {
     const entt::registry& reg = things_.registry();
     const Health* health = reg.valid(pawn) ? reg.try_get<Health>(pawn) : nullptr;
@@ -2120,7 +2194,11 @@ bool HealthSystem::report(Entity pawn, HealthReport& out) const {
     if (health.dirty) {
         DeathCause cause = DeathCause::None;
         bool shouldBeDown = false;
-        derive(kind->body, kind->healthScale, kind->mechanical, health, cause, shouldBeDown);
+        HealthMods mods;
+        if (mods_) {
+            mods_(pawn, mods);
+        }
+        derive(kind->body, kind->healthScale, kind->mechanical, mods, health, cause, shouldBeDown);
         if (!health.dead && cause != DeathCause::None) {
             health.dead = true;
             health.cause = cause;

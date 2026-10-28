@@ -39,6 +39,35 @@ and in saves (format 16). Pawns from older saves have none and keep Kellan's loo
 What Unreal draws is under `visual` on the lineage's **genes** (X1, [genes.md](genes.md)), not the lineage: the last gene with `skinColor`, `hairColor` or `horns` counts. Emberkin: red skin, dark hair, horns
 (`length`, base `radius`, `spread` from the middle of the forehead, all metres; `color`).
 
+### Faces, hair, beards, marks (V1)
+
+The same component also holds the face and skin marks, from their own random stream (so the A3
+fields of a seed did not move). All numbers are our own, in `LooksRules`. Nothing in the sim reads
+them; V2 (faces and hair on screen) and V3 (body hair, scars, tattoos on screen) draw them.
+
+| Field | What | From |
+| --- | --- | --- |
+| `faceShape`, `brow`, `nose`, `jaw` | 0 to 1 sliders, 0.5 the average face (Unreal turns them into face morph weights) | the average of two draws; men's brow and jaw shifted up, women's down (`faceGenderShift`) |
+| `eyes` | colour | `eyeColors` by weight |
+| `hairStyle` | name from `hairStyles` (14: Short, Buzz, Crew, SlickBack, Mohawk, Bald, Medium, Bob, Long, Ponytail, Bun, Braids, Curly, Afro) | separate male and female weights |
+| `naturalBeard`, `beard` | name from `beardStyles` (None, Stubble, Moustache, Goatee, Short, Full, Long); women always None | `beardStyles` weights; the lineage's last gene with `visual.beard: false` (Beardless) draws None |
+| `naturalBodyHair`, `bodyHair` | 0 none to 1 thick | `bodyHair` range by gender; a gene with `visual.bodyHair` (Furskin: 1) draws that |
+| `tattoos` | list of marks | 18% of pawns have 1 to 3 (`tattoos`), on regions by weight, style an index into `tattoos.styles` |
+| `scars` | list of marks | one for each Scar or OldWound a healed injury leaves (H1's `PawnScarred`), at most `scars.max` (24) |
+
+A mark is `{region, style, u, v, size}`: the region is Face, Neck, Torso, LeftArm, RightArm,
+LeftLeg or RightLeg (hands count as arms, feet and toes as legs, eyes, ears, nose and jaw as the
+face); `u` and `v` (0 to 1) place it on that region's skin, `size` is a factor. A scar's style is
+picked among the `scars.styles` that list the healed injury (Cut gives Slash or Puncture, Burn gives
+Burn...), else among those that list none (Stitched). Scars on organs and bones leave the
+injury (it is still a scar to the health system) but no mark, because nothing shows on the skin.
+Marks stay if the injury is later removed or the part lost; that is rare and V7/V8 can tidy it.
+
+`setLineage` draws `beard` and `bodyHair` again from the natural values, so a lineage graft is
+undone cleanly. Looks are in the snapshot (`PawnLooksView` has all of the above), in `stateHash`
+and in saves (section `looks` version 2). A pawn from an older save has an empty `hairStyle` and
+average faces; Unreal keeps Kellan's face for those.
+
 ## The looks assets (generated, not in Git)
 
 `UnrealEditor-Cmd.exe game\Rim3D.uproject -run=PawnLooks -unattended -nosplash -nullrhi` (about
@@ -68,6 +97,99 @@ Animation Sample's Kellan and the engine's MetaHuman Creator plugin, and deletes
   head skin (the head's three LOD materials). Subsurface profile is Kellan's head one.
 - **Parts.** `SM_PawnHorn` (a curved cone, 1 cm long, 0.1 cm base radius, scaled per lineage) and
   `M_PawnPart` (one colour from custom primitive data).
+
+## Faces, hair and marks on screen (V2, V3)
+
+Code: Unreal `game/Source/Rim3D/PawnFaces.h` (shared names), `PawnActor.cpp` (`ApplyFace`, `SetGroom`, `ApplyMarks`),
+`PawnSubsystem.cpp` (`MakeLooks`, `GetFacesAsset`); the generator `game/Source/Rim3DEditor/PawnFacesCommandlet.cpp` and its
+list `assets/pawn_faces.json`. Smoke test `faces`. Everything comes from the engine's own MetaHuman Creator plugin
+(`MetaHumanCharacter`, enabled for the editor only in `Rim3D.uproject`): nothing is downloaded and nothing needs a sign-in.
+The game reads only what the commandlet copies into `/Game`, so a packaged build does not need the plugin.
+
+`UnrealEditor-Cmd.exe game\Rim3D.uproject -run=PawnFaces -unattended -nosplash -nullrhi` (about 2 minutes, after PawnLooks)
+makes `/Game/Rim3D/Generated/PawnFaces` (about 370 MB, not in Git) and deletes what was there. `-Probe` only logs.
+
+- **Face shapes.** The Creator's face model (its `Face/IdentityTemplate`, evaluated offline) gives the 29 preset faces
+  (`presets` in the json, by gender) as moves from its average face, each lined up on its neck. Five morphs go on a copy of
+  Kellan's face (`SK_Face_Kellan_FaceMesh`, every LOD): `FaceFemale` (the female presets' average minus the male ones'), and
+  `FaceShape`, `FaceBrow`, `FaceNose`, `FaceJaw`, each the presets' main way of varying (first principal component, within
+  each gender) inside that region of the face, 1.6 standard deviations at weight 1, positive bigger (wider face and jaw,
+  nose and brow forward). The regions fade out under the chin, behind the cheeks and up the forehead, so the neck still
+  meets the body and the scalp (which the hair is bound to) does not move. The model's vertices reach Kellan's lighter
+  mesh by the four nearest of the same part (head, teeth, eyes, lashes...), after a scale and offset that fits the eyes and
+  teeth (1.095; within 3 mm). Largest move of any morph: 1.4 cm. The sim's sliders drive them directly: weight = 2 x slider - 1.
+  The log lists each preset's share of the female face so a mislabelled preset shows (the face model has no gender field).
+- **Eyes.** Kellan's eye material copied as `M_PawnEye` (marked for morph targets, which it was not) and one instance per
+  `LooksRules` eye colour, `MI_PawnEye_<sRGB hex>`, with the MetaHuman iris colour chart cell nearest that colour; `MI_PawnEye_Default`
+  is Kellan's. A pawn's eye colour finds its instance by hex, so changing the colours needs the commandlet run again.
+- **Hair, beards, brows.** For each of the sim's 14 hair styles and 7 beards the json names one of the Creator's grooms
+  (Bald and None draw none; a beard is a beard groom and a moustache groom). The commandlet copies each as `GA_<Kind>_<Style>`
+  (Hair, Beard, Moustache; brows as `GA_Brows_F0..` and `GA_Brows_M0..`), strands only (no cards or helmet meshes, which live in
+  the plugin), on Kellan's hair material, no simulation, every LOD strands. The Creator made its grooms on two heads:
+  `SKM_Groom_Head_Legacy02` is exactly where Kellan's head is; strands made on `Legacy01` (lower and smaller) are moved onto it
+  by the scale and offset that fit Legacy01 onto Legacy02 vertex by vertex (1.10). Each copy and each of Kellan's own grooms
+  (`GB_Kellan_*`, for his eyelashes and for pawns from older saves) gets a binding to the shaped face (`GB_*`).
+- **Marks (V3).** Our own masks drawn in code (256 px, greyscale): `T_Tattoo_0..9` in `tattoos.styles` order (tribal spikes,
+  stripes, anchor, rose, sun, skull, chain, wings, dragon, knot), `T_Scar_0..5` in `scars.styles` order (slash, three claw
+  cuts, a mottled burn, a puncture, a ragged tear, a stitched line) and `T_BodyHair` (short strokes). `M_PawnMark` is a
+  translucent decal of one colour times a mask and an opacity, gated to where custom depth equals the scene depth within
+  2 mm: the pawn's skin (MetaHuman body, face and the bare skin layer) draws into custom depth while it has marks, so a mark
+  shows on skin and never on the clothes over it (nor anywhere if custom depth is missing).
+
+In the game (`ApplyLooks`, MetaHumans only):
+
+- The face mesh is swapped for the shaped copy, its morphs set from the sliders and gender, the eyes given their colour's
+  instance, and Kellan's grooms rebound to it. A pawn from an older save (no hair style) keeps Kellan's face shape, eyes and grooms.
+- Hair, beard, moustache and brows: `SetGroom` puts the style's groom and binding on Kellan's groom components (`Hair`,
+  `Beard`, `Mustache`, `Eyebrows`); none for Bald, None, or a style with no groom. The brow slider picks among the gender's
+  brows. Women never get a beard (the sim gives them None). Hair colour goes on as before (melanin, redness). A groom with
+  nothing to draw is hidden; grooms show only at full detail, and hair under a covering hat stays hidden.
+- Marks: only at full detail (the nearest 20 pawns; remade when the detail or looks change). One decal per tattoo and scar,
+  attached to a bone of the body: a region is a chain of bones (torso spine_01 to spine_05, arms upper arm to hand, legs thigh
+  to foot, neck, and the front half of the face) with a radius along it; `v` runs along the chain, `u` once around it (0 the
+  front, the face from ear to ear), and the decal projects inward from that point on the body's surface. Tattoos are dark
+  ink (4 cm x size), scars paler and pinker than the skin (3 cm x size), body hair four decals in the hair colour on forearms
+  and shins (men also chest and belly) as dense as the amount. Decals fade out below 0.4% of the screen.
+
+Measured (`faces`, editor build, offscreen 888x500): twelve pawns in a row all look different (7 hair styles, 6 eye
+colours, no two faces closer than 0.18 on the four sliders); 100 MetaHumans with faces and hair, 19.7 ms game thread, 8.0 ms
+GPU at 888x500 (the `looks` crowd on the same build: 18.2 ms and 2.4 ms, a smaller scene). Close-ups and portraits at 1080p.
+
+Not done: hair does not follow the face morphs where they meet (the morphs stay off the scalp), far pawns have no
+beards or brows (hair cards, V2b below, cover the hair only), and eyebrows and beards do not move with expressions.
+
+## Face skins and the bare skin (V2b)
+
+Two gaps V2 left. Code: the same files (`FacesMakeSkins`, `FacesMakeBareSkin` in the commandlet; `ApplyFace`,
+`EnsureBareLayer` in `PawnActor.cpp`); smoke test `faces`.
+
+- **Face skins.** Kellan's face texture is a man's (stubble, a man's brow), and every pawn had it. The Creator plugin
+  ships its texture synthesis model (`Optional/TextureSynthesis`, 153 people's skin, 1024 px, offline, no sign-in). For
+  each preset named under `skins` in `assets/pawn_faces.json` (13 women, 15 men) the commandlet synthesizes the face
+  colour map and picks the normal map from the preset's own skin settings (its skin tone and texture index), saves them
+  as `T_FaceSkin_<F|M><n>_BaseColor` and `_Normal`, and makes `MI_FaceSkin_<F|M><n>` on our skin material
+  (`M_PawnSkin`) with Kellan's face instance's values and the new texture's own average as `SourceAverage`, so the
+  pawn's skin colour still drives it. Aoi is left out: the model marks her texture as heavy stubble (the log lists each
+  texture's wrinkles, stubble and marks). `ApplyFace` puts one on the face's skin slots: a woman picks among the female
+  skins, a man among the male ones and Kellan's, by a hash of the four face sliders, so a pawn always has the same one.
+  About 85 MB more in the generated folder.
+- **Bare skin.** U16's skin layer was meant to be the pawn's skin colour through the garment material's custom
+  primitive data, but the generated `M_Garment` on the PC was still A5's (no custom primitive data), so every bare body
+  showed the instance's own beige, and stuff tints and torn holes did not show either: run `ClothesArt` again after
+  pulling U16 (it was rerun here; `clothes` now shows tints and holes). The layer now also gets its own material,
+  `M_PawnBareSkin`: subsurface skin with M_PawnSkin's profile, roughness and specular, a fine tiled skin normal (the
+  hoodie's UVs fit no skin texture), and `SkinColor` set on a dynamic instance per layer (`BareSkins`), so the torso,
+  arms and legs match the face and hands. Without the PawnFaces assets it keeps the garment colour.
+- **Hair cards for far pawns.** Strands draw only at full detail (the nearest 20), so the rest were bald. Each hair style
+  now also gets `SM_HairCards_<Style>`: its Creator groom's own card meshes at card LOD `hairCardsLod` (3; the nearest at
+  or under it, every group in one mesh, 2,500 to 17,000 triangles, the afro the most), moved onto Kellan's head like the
+  strands and into the face's head bone space, and `MI_HairCards_<Style>` on `M_PawnHairCards` (masked, two-sided, one
+  colour `HairColor`, cut by the cards' coverage texture `T_HairCards_<Style>_Coverage`, copied from the plugin). The
+  pawn attaches it to the face's `head` bone, sets its hair colour on a dynamic instance, and shows it whenever it is not
+  at full detail (not under a covering hat). `Pawns.HairCards 0` turns them off. The Creator's buzz cut has no cards, so
+  far pawns with Buzz hair draw none. The generated folder is about 660 MB now (the coverage textures are most of the
+  growth). Measured (`faces`, 1080p, 100 pawns, about 80 of them with cards): 22.2 ms game thread and 9.9 ms GPU, against
+  21.7 ms and 9.5 ms with `Pawns.HairCards 0`.
 
 ## In Unreal
 
@@ -103,15 +225,14 @@ next to nothing. At the default overseer distance horns are about 2 px long and 
 
 ## Not done here
 
-- **Faces.** Every pawn has Kellan's face (women too); only its colour changes. More faces need
-  MetaHuman Creator characters assembled, which needs the cloud rig and texture download (an Epic
-  sign-in), or face morphs made from its presets.
+- **Faces.** V2 draws them: face morphs from the Creator's presets, above. Whole new MetaHuman faces (assembled
+  characters) would need the cloud rig and texture download (an Epic sign-in).
 - **Proportions.** Shorter limbs, narrower shoulders and wider hips are skeleton, which the leader
   pose takes from the mannequin; body types change shape and the scale changes height.
 - **Clothes.** U16 draws the sim's worn apparel over a skin layer and hides Kellan's own top and trousers
   ([clothes-draw.md](clothes-draw.md); meshes: A5, below). Without the clothes assets Kellan's outfit stays.
 - **Mannequins** (the default look) get height and horns only.
-- **Hair styles and beards** stay Kellan's; their colour follows `hair`.
+- **Hair styles and beards**: V2, above (Kellan's stay for pawns from older saves); their colour follows `hair`.
 
 ## Apparel meshes (A5)
 
