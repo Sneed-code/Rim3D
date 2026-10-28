@@ -597,3 +597,25 @@ TEST_CASE("Trade: a friendly faction never raids") {
         CHECK(squad.faction != "Concord");
     }
 }
+
+TEST_CASE("Trade: the narrator sends trade caravans, visitors and orbital traders") {
+    for (const char* incident : {"TraderCaravanArrival", "VisitorGroup", "OrbitalTraderArrival"}) {
+        CAPTURE(incident);
+        Sim sim = trdSim();
+        trdColonist(sim, CellPos{64, 64, 0});
+        sim.submit(FireIncidentCommand{incident, 0.0f});
+        sim.step();
+        bool failed = false;
+        for (const Event& e : sim.events()) {
+            failed = failed || e.type == EventType::CommandFailed;
+        }
+        CHECK_FALSE(failed);
+        TRD_REQUIRE(sim.trade().state().visits.size() == 1);
+        const Visit& visit = sim.trade().state().visits.front();
+        const std::string name = incident;
+        CHECK((visit.kind == VisitKind::Visitors) == (name == "VisitorGroup"));
+        CHECK((visit.kind == VisitKind::Caravan) == (name == "TraderCaravanArrival"));
+        CHECK((visit.kind == VisitKind::Orbital) == (name == "OrbitalTraderArrival"));
+        CHECK(sim.narrator().state().incidents == 1);
+    }
+}

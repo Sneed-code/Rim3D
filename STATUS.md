@@ -11,6 +11,8 @@ Stage 2 C25 (colony-year scenario) wired up, not green: `simrun --scenario year`
 
 
 
+Stage 2 T1 traders and visitors: the narrator now fires `TraderCaravanArrival`, `VisitorGroup` and `OrbitalTraderArrival` (workers pick a non-hostile faction by chance and start a visit through C23's `startVisit`; letter with a jump-to cell). Tests in `TradeTests`. Sim only, no save change.
+
 Stage 2 T3 trouble events finished: the narrator can now fire the six disease outbreaks (colonists fall ill, 30% of them, plague 50%), chitinid infestations, remnant clusters and prison breaks (docs/design/disasters.md). Sim only, no save change.
 Crop blight now starts small, spreads plant to plant over days and withers the plants after 1 to 3 days (`docs/design/disasters.md`; rest of old PR #185 was already on main).
 
