@@ -232,6 +232,10 @@ JobSystem::StepResult JobSystem::operateFinish(Entity pawn, Job& job, std::strin
         const Def& bedDef = defs_.get(reg.get<Thing>(bed).def);
         conditions.bedFactor = static_cast<float>(bedDef.number("stats.surgerySuccessChanceFactor", 1.0));
         bedOffset = static_cast<float>(bedDef.number("stats.medicalTendQualityOffset", 0.0));
+        if (bedMonitored(bed)) {
+            conditions.bedFactor += 0.05f;
+            bedOffset += 0.07f;
+        }
     }
     if (roomStats_ != nullptr) {
         const CellPos cell = cellOf(reg.get<Position>(patient));

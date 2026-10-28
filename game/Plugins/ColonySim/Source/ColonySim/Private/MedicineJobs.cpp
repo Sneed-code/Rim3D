@@ -3,6 +3,7 @@
 #include "ColonySim/Jobs.h"
 
 #include "ColonySim/Clock.h"
+#include "ColonySim/Construction.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Health.h"
@@ -10,6 +11,7 @@
 #include "ColonySim/Map.h"
 #include "ColonySim/Medicine.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Power.h"
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Random.h"
@@ -22,6 +24,10 @@
 namespace colony {
 
 namespace {
+
+// A vitals monitor beside a bed, added to the bed's own numbers (RimWorld wiki: +7% tend quality, +5% surgery success,
+// +2% immunity gain speed).
+constexpr float kVitalsTendOffset = 0.07f;
 
 // Names are prefixed because Unreal's unity builds merge .cpp files together.
 
@@ -66,6 +72,25 @@ Entity JobSystem::bedUnder(Entity pawn) const {
     }
     const Entity building = map_.buildingAt(cell);
     return building != kNoEntity && reg.valid(building) && reg.all_of<Bed>(building) ? building : kNoEntity;
+}
+
+bool JobSystem::bedMonitored(Entity bed) const {
+    const entt::registry& reg = things_.registry();
+    if (bed == kNoEntity || !reg.valid(bed) || !reg.all_of<Footprint>(bed)) {
+        return false;
+    }
+    const CellRect rect = reg.get<Footprint>(bed).rect();
+    for (int y = rect.minY - 1; y <= rect.minY + rect.sizeY; ++y) {
+        for (int x = rect.minX - 1; x <= rect.minX + rect.sizeX; ++x) {
+            const CellPos c{x, y, rect.level};
+            const Entity monitor = map_.inBounds(c) ? map_.buildingAt(c) : kNoEntity;
+            if (monitor != kNoEntity && defs_.get(reg.get<Thing>(monitor).def).flag("building.vitalsMonitor") &&
+                !reg.all_of<ConstructionSite>(monitor) && (power_ == nullptr || power_->running(monitor))) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 bool JobSystem::bedOccupied(CellPos cell, Entity except) const {
@@ -342,7 +367,8 @@ JobSystem::StepResult JobSystem::tendWork(Entity pawn, Job& job, std::string& wh
     const Entity medicineItem = job.site != kNoEntity && carrying != nullptr && carrying->thing == job.site ? job.site : kNoEntity;
     const MedicineKind* kind = medicineItem != kNoEntity ? medicine_->kindOf(reg.get<Thing>(medicineItem).def) : nullptr;
     const Entity bed = bedUnder(patient);
-    const float bedOffset = bed != kNoEntity ? static_cast<float>(defs_.get(reg.get<Thing>(bed).def).number("stats.medicalTendQualityOffset", 0.0)) : 0.0f;
+    const float bedOffset = (bed != kNoEntity ? static_cast<float>(defs_.get(reg.get<Thing>(bed).def).number("stats.medicalTendQualityOffset", 0.0)) : 0.0f) +
+                            (bedMonitored(bed) ? kVitalsTendOffset : 0.0f);
     // The roll comes from the second, the doctor and the patient, so it doesn't depend on who is asked first.
     Rng rng(splitMix64(static_cast<uint64_t>(now()) ^ (static_cast<uint64_t>(entt::to_integral(pawn)) << 32) ^
                        static_cast<uint64_t>(entt::to_integral(patient)) ^ 0x7E4D1C8AULL));

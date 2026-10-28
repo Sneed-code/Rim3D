@@ -1,0 +1,53 @@
+[
+  {
+    "defName": "Autodoor", "parent": "Door", "label": "autodoor",
+    "visual": {
+      "sound": { "open": "Door_Open", "close": "Door_Close" },
+      "parts": [
+        { "shape": "box", "size": [0, 0, 0.8], "at": [0, 0, 2.2], "color": [0.62, 0.68, 0.74], "stuff": true },
+        { "shape": "box", "size": [0.12, 0, 2.2], "at": [-0.44, 0, 0], "color": [0.62, 0.68, 0.74], "stuff": true },
+        { "shape": "box", "size": [0.12, 0, 2.2], "at": [0.44, 0, 0], "color": [0.62, 0.68, 0.74], "stuff": true },
+        { "shape": "box", "size": [-0.26, 0.1, 2.15], "at": [0, 0, 0], "color": [0.55, 0.62, 0.7], "stuff": true, "slide": 0.85 },
+        { "shape": "box", "size": [0.1, 0.12, 0.1], "at": [0.44, 0.1, 1.5], "color": [0.2, 0.8, 0.4] }
+      ]
+    },
+    "researchPrerequisite": "Autodoor",
+    "costStuffCount": 25, "costs": { "Steel": 40, "ComponentIndustrial": 2 },
+    "stats": { "maxHitPoints": 160, "workToBuild": 1584, "flammability": 1.0 },
+    "power": { "consumption": 50 },
+    "door": { "openSpeedFactor": 4 },
+    "ours": ["visual", "door.openSpeedFactor"],
+    "note": "Wiki-checked 2026-10-28: 25 stuff + 40 steel + 2 components, 1100 ticks, 160 HP, 50 W. Powered it opens at 4 times a door's speed (the wiki has wood 480% and stone 180%; ours is 4 for every stuff); with no power it is a plain door."
+  },
+  {
+    "defName": "FloodLight", "parent": "LampBase", "label": "flood light",
+    "size": [1, 1], "costs": { "Steel": 50 },
+    "researchPrerequisite": "AdvancedLights",
+    "stats": { "maxHitPoints": 120, "workToBuild": 864, "flammability": 0 },
+    "glower": { "radius": 17.45, "lift": 2.4, "color": [0.95, 0.95, 0.9] },
+    "power": { "consumption": 50 },
+    "visual": { "parts": [
+      { "shape": "cylinder", "radius": 0.04, "height": 2.2, "color": [0.3, 0.3, 0.32] },
+      { "shape": "box", "size": [0.45, 0.3, 0.25], "at": [0, 0, 2.2], "color": [0.85, 0.85, 0.8] }
+    ] },
+    "unverified": ["glower.lift", "glower.color"],
+    "ours": ["visual"],
+    "note": "Wiki-checked 2026-10-28: 50 steel, 600 ticks, 120 HP, not flammable, radius 17.45; 100 W, or 50 W once Advanced lights is researched, which it always is here."
+  },
+  {
+    "defName": "VitalsMonitor", "parent": "BuildingBase", "label": "vitals monitor",
+    "size": [1, 1], "passability": "PassThroughOnly", "fillPercent": 0.2, "designationCategory": "Furniture",
+    "costs": { "Steel": 50, "ComponentIndustrial": 3 },
+    "researchPrerequisite": "VitalsMonitor",
+    "stats": { "maxHitPoints": 100, "workToBuild": 8640, "flammability": 0.7, "beauty": 0 },
+    "power": { "consumption": 80 },
+    "building": { "vitalsMonitor": true },
+    "visual": { "parts": [
+      { "shape": "box", "size": [0.5, 0.4, 0.8], "color": [0.8, 0.82, 0.85] },
+      { "shape": "box", "size": [0.4, 0.02, 0.3], "at": [0, -0.2, 0.45], "color": [0.15, 0.7, 0.45] }
+    ] },
+    "unverified": ["designationCategory"],
+    "ours": ["visual", "building.vitalsMonitor"],
+    "note": "Wiki-checked 2026-10-28: 50 steel + 3 components, 6000 ticks, 100 HP, 70% flammable, 80 W. A powered monitor in one of the 8 cells around a bed adds +7% tend quality, +5% surgery success and +2% immunity gain speed (docs/design/vitals-monitor.md)."
+  }
+]

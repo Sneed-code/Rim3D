@@ -1599,6 +1599,9 @@ void HealthSystem::updateDiseases(Entity pawn, Health& health, int64_t now) {
 
     const float dt = static_cast<float>(model_->diseaseUpdate) / static_cast<float>(kSecondsPerDay);
     float gainSpeed = model_->immunityGainByRest[static_cast<size_t>(health.rest)];
+    if (health.rest == RestKind::HospitalBed && immunityBonus_) {
+        gainSpeed += immunityBonus_(pawn);
+    }
     if (model_->bloodFiltrationCapacity >= 0 && static_cast<size_t>(model_->bloodFiltrationCapacity) < health.capacities.size()) {
         gainSpeed *= health.capacities[static_cast<size_t>(model_->bloodFiltrationCapacity)];
     }
