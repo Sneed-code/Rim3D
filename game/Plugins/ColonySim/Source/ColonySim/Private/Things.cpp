@@ -4,6 +4,7 @@
 #include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Cover.h"
+#include "ColonySim/Artillery.h"
 #include "ColonySim/Defense.h"
 #include "ColonySim/Doors.h"
 #include "ColonySim/Fuel.h"
@@ -173,6 +174,9 @@ Entity Things::make(DefId defId, int stackCount) {
             }
             if (def.has("turret")) {
                 registry_.emplace<Turret>(thing);  // Defense.h
+            }
+            if (def.has("artillery")) {
+                registry_.emplace<Artillery>(thing);  // Artillery.h
             }
             if (def.has("trap")) {
                 registry_.emplace<Trap>(thing);

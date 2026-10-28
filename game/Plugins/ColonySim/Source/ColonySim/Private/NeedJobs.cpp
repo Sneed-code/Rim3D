@@ -7,6 +7,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Power.h"
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Spoilage.h"
@@ -323,7 +324,7 @@ JobSystem::StepResult JobSystem::warmWait(Entity pawn, Job& job, std::string& wh
 
 // RimWorld's "best food": the tastiest kind the pawn can reach, the nearest of that kind. Food only
 // good for desperate times is eaten only when the pawn is ravenous.
-bool JobSystem::findFood(Entity pawn, Job& out) {
+bool JobSystem::findFood(Entity pawn, Job& out, bool commit) {
     const entt::registry& reg = things_.registry();
     const Needs& needs = reg.get<Needs>(pawn);
     const Position& at = reg.get<Position>(pawn);
@@ -350,8 +351,41 @@ bool JobSystem::findFood(Entity pawn, Job& out) {
         bestTier = tier;
         bestDist = dist;
     }
+    // A powered dispenser with raw food in its hoppers counts as a meal of its kind at the cell the pawn would stand on.
+    Entity dispenser = kNoEntity;
+    CellPos dispenserSpot;
+    for (const auto [building, thing, footprint] : reg.view<const Thing, const Footprint>().each()) {
+        (void)footprint;
+        const float cost = thing.def.value < pasteCost_.size() ? pasteCost_[thing.def.value] : 0.0f;
+        const DefId meal = cost > 0.0f ? pasteMeal_[thing.def.value] : DefId{};
+        if (!meal.valid() || foodTier_[meal.value] < bestTier || (power_ != nullptr && !power_->running(building)) ||
+            pasteStock(building) < cost) {
+            continue;
+        }
+        CellPos spot;
+        if (!pasteSpot(building, pawn, spot)) {
+            continue;
+        }
+        const int tier = foodTier_[meal.value];
+        const float dist = needJobsDistSq(at, spot);
+        if (best == kNoEntity || tier > bestTier || (tier == bestTier && dist < bestDist)) {
+            dispenser = building;
+            dispenserSpot = spot;
+            best = building;
+            bestTier = tier;
+            bestDist = dist;
+        }
+    }
     if (best == kNoEntity) {
         return false;
+    }
+    if (dispenser != kNoEntity) {
+        if (!commit) {
+            out = Job{};
+            out.type = JobType::Ingest;
+            return true;
+        }
+        best = dispensePaste(dispenser, dispenserSpot);
     }
     const DefId def = reg.get<Thing>(best).def;
     const float nutrition = nutrition_[def.value];
@@ -612,7 +646,7 @@ JobSystem::StepResult JobSystem::lie(Entity pawn, Job& job, std::string&) {
     // A pawn that is starving wakes to eat, if there is something to eat.
     if (needs.food < rules_.foodRavenousBelow && now() >= needs.foodSearchAfter) {
         Job food;
-        if (findFood(pawn, food)) {
+        if (findFood(pawn, food, false)) {
             return StepResult::Next;
         }
         needs.foodSearchAfter = now() + idleSeconds_;

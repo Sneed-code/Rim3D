@@ -53,6 +53,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | Trade (section `trade`) | the visits (kind, phase, faction, trader kind, times, spot, trader silver, stock by **`defName`**, members and trader pawn), the factions whose goodwill changed, the visit counter and the last drift day; per pawn its `Visitor` visit and role ([trade.md](trade.md)) |
 | World (section `world`) | `SimSettings::world` (on, seed, width, height, start tile) and the world's hash; the world itself is made again from them and checked against the hash ([world-map.md](world-map.md)) |
 | Caravans (section `caravans`) | the next id; each caravan's state, members (walk state, tries, path ticket), items, tile, came-from, destination, path, progress, cost, exit cell, formed time ([caravans.md](caravans.md)) |
+| Other maps (section `maps`) | each visited tile's map: tile, when it was made, its whole sim as a save of its own; per colonist away its `away` part (tile, entity there, bonds and memories as it left) ([other-maps.md](other-maps.md)) |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
@@ -101,7 +102,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | Section | Version | Holds |
 | --- | --- | --- |
 | `sim` | 1 | sim version, data files' hash, settings, clock, random stream, the map's hash, the hauling test |
-| `commands` | 2 | the names of the command types used, then queued commands, the command log and the checkpoints |
+| `commands` | 3 | the names of the command types used, then queued commands, the command log and the checkpoints |
 | `things` | 1 | free ids, then every thing: id, def, position, footprint, stack, hit points |
 | `movement` | 2 | `mover` |
 | `jobs` | 1 | `worker` (the job, its bill picks and ingredients, avoid memory), `work` (Work tab), `carrying` |
@@ -131,10 +132,12 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `animals` | 1 | `SimSettings::wildAnimals`, the animal system's state (populated, percent, random stream, next herd id, over-density flag, counters) and the `animal` part of every animal ([animal-life.md](animal-life.md)) |
 | `husbandry` | 2 | animal zones (id and cells), counters, and the `care` part of every animal that has one: marks, zone, home, timers, training steps and wants, the path it waits on ([husbandry.md](husbandry.md)); version 2 (N2) adds the hunt mark, the collect flag and the hunted counter ([hunting.md](hunting.md)) |
 | `explosives` | 1 | `belt`, `thrower`, `grenade` (a thrown grenade in flight or waiting out its fuse; an entity with no `Thing`), `knockedDown` ([explosives.md](explosives.md)) |
+| `artillery` | 1 | `artillery` on mortars and rocketswarm launchers (crew, aim, hold fire, phase), `shell` (a mortar shell in flight; an entity with no `Thing`) ([artillery.md](artillery.md)) |
 | `temperature` | 1 | each enclosed room's temperature, by its anchor cell (E2) |
 | `thermostats` | 1 | each heater or cooler target temperature set by the player, by building |
 | `raids` | 1 | the raid state (factions met, squads, the alarm, threat and home points, the shelter mark), then the `defense` and `raider` parts ([raids.md](raids.md), F6) |
 | `raids` | 2 | the raid state (factions met, squads, the alarm, threat and home points, the shelter mark), then the `defense` and `raider` parts ([raids.md](raids.md), F6) |
+| `raids` | 3 | as 2, and per squad its `siege`: stage, camp, end time, resupplies and the camp's builds ([sieges.md](sieges.md)) |
 | `melee` | 1 | `melee`: each pawn's swing, its defense against one, its block (F8, [melee.md](melee.md)) |
 | `social` | 1 | `social` (a colonist's opinion memories, stored bonds, next talk, mourned) and `fight` (a fight with fists in progress) per pawn (C20, [social.md](social.md)) |
 | `apparel` | 2 | `apparel`: the stuff and quality of an item, taint, a strip mark, a pawn's outfit and next look, and from version 2 its durability; the outfit policies ([apparel.md](apparel.md), [apparel-durability.md](apparel-durability.md)) |
@@ -338,11 +341,13 @@ Every section is version 1 at format 20. A task that changes a section adds a li
 - `health` 2 (E2): each pawn's environment hediffs (hypothermia, heatstroke...), a list of def name and severity before `dead`. Version 1 files load with none.
 - `world` 1 (W2): new section, see the table. Saves without it have no world.
 - `caravans` 1 (W4): new section, see the table. Command `Caravan` by name.
+- `maps` 1 (W5): new section, see the table. `world` 2 adds `visit` (a sim that is another map); `commands` 3 adds `map` to the `Caravan` command. Older files load with no other maps.
 - `prisoners` 1 (C22): new section, see the table. Commands `SetPrisonerMode` and `SetPrisonBed` by name; the job check now accepts `CapturePrisoner`, `FeedPrisoner` and `WardenInteract`.
 - `trade` 1 (C23): new section, see the table. Commands `StartVisit`, `Trade`, `Gift` and `AdjustGoodwill` by name.
 - `raids` 2 (adaptation): AdaptDays, the next growth time and the colonists watched, after the alarm values; version 1 loads as 0 and an empty list.
 - `raids` 1 (F6): new section, see the table. Commands `StartRaid`, `SoundAlarm`, `SetDefenseRole`, `MarkShelter` by name.
 - `raids` 2 (F12): per squad `strategy`, `hasBreach`, `breach`, `breachFrom`; the raids waiting for their hour (`pending`); per raider `goalThing`, `loot`, `sparesDowned`; a `kidnapped` part on a colonist a raider carries ([raid-strategies.md](raid-strategies.md)). Version 1 files load with Assault squads and nothing waiting. Command `StartStrategyRaid` by name.
+- `raids` 3 (sieges): per squad a `siege` group after `breachFrom`: `stage`, `camp`, `endsAt`, `resupplies` and `builds` (def, stuff, origin, rotation, work left, done, the built building) ([sieges.md](sieges.md)). Older files load every squad with an empty siege. Strategy `Siege` (5) by name in `StartStrategyRaid`.
 - `fighters` 2 (F6): a fighter's `mode`, `defending`, `squad`, `hasGoal`, `goal`, `retreat` after `dodgeUntil`. Version 1 files load them as a plain fighter.
 - `fighters` 3 (F10): a fighter's `rescuing`, `lifted`, `rescueTo` after `retreat` ([field-care.md](field-care.md)). Older files load with nobody carried.
 - `breeding` 1 (N4): new section, see the table: the counters, per animal its `AnimalBreed` (pregnancy, litter, mating wait, milk, wool and egg timers, the female a male is walking to), per fertilized egg its `Hatching` time ([breeding.md](breeding.md)). The job check now accepts the animal jobs (it stopped at `StripPawn`, so a save made mid-taming would not load).

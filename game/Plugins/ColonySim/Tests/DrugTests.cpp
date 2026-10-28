@@ -490,6 +490,14 @@ TEST_CASE("Drugs: a barrel brews beer from hops and a drug lab rolls joints from
     DRUG_REQUIRE(barrel != kNoEntity && lab != kNoEntity);
     f.sim.things().spawn("Hops", CellPos{11, 12, 0}, 25);
     f.sim.things().spawn("SmokeleafLeaves", CellPos{11, 16, 0}, 4);
+    f.sim.submit(AddBillCommand{barrel, "BrewBeer", BillMode::Count, 5});  // refused: beer brewing is not researched
+    f.sim.step();
+    bool refused = false;
+    for (const Event& e : f.sim.events()) {
+        refused = refused || (e.type == EventType::CommandFailed && e.message.find("needs the research") != std::string::npos);
+    }
+    CHECK(refused);
+    f.sim.submit(UnlockResearchCommand{"BeerBrewing"});
     f.sim.submit(AddBillCommand{barrel, "BrewBeer", BillMode::Count, 5});
     f.sim.submit(AddBillCommand{lab, "MakeSmokeleafJoint", BillMode::Count, 1});
     int beers = 0;

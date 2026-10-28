@@ -24,6 +24,7 @@ A building def names the work giver that offers its bills with `workGiver`. The 
 | `DoBillsCraftingSpot` | Crafting | crafting spot | prosthetics (wood), knife, club, spear |
 | `DoBillsStonecut` | Crafting | stonecutter's table | stone blocks from chunks |
 | `DoBillsSmelt` | Crafting | electric smelter (Electricity, 170 steel, 2 components, 700 W) | smelt or destroy weapons and clothes |
+| `DoBillsRefine` | Crafting | biofuel refinery (BiofuelRefining; 150 steel, 3 components, 170 W, 3 x 2) | chemfuel: 70 wood logs make 35 (2000 ticks), 3.5 nutrition of raw food makes 35 (2500 ticks); hay and meals are not taken (wiki, 2026-10-28; the work type is our guess) |
 | `DoBillsCremate` | Hauling | electric crematorium (Electricity, 150 stone, 20 steel, 2 components, 200 W) | cremate corpses, burn weapons and clothes |
 
 A recipe lists the buildings that can make it (`recipeUsers`); the cooking recipes now include the electric stove.

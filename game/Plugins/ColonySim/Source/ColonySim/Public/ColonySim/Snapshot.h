@@ -227,6 +227,15 @@ struct ThingView {
     uint8_t turretPhase = 0;
     Entity turretTarget = kNoEntity;
     uint8_t trapState = 0;
+    // Manned artillery (docs/design/artillery.md), which also sets turretPhase and turretTarget: the colonist ordered to
+    // man it, whether it is at its post now, the player's aim (a point, or a pawn it follows) and hold fire.
+    Entity artilleryCrew = kNoEntity;
+    bool artilleryManned = false;
+    bool artilleryAim = false;
+    float artilleryAimX = 0.0f;
+    float artilleryAimY = 0.0f;
+    Entity artilleryAimPawn = kNoEntity;
+    bool holdFire = false;
     // Clothes (docs/design/apparel.md). Pawns: the outfit they follow (0 for other things), whether a strip
     // order is on them, and what they wear: `apparelCount` pieces from Snapshot::apparel[firstApparel], in the
     // order put on. Apparel items on the map: their `stuff` (as for buildings), `quality` (a place in
@@ -282,9 +291,11 @@ struct SquadView {
     int members = 0;       // still with it: on the map, downed ones included
     int started = 0;
     CellPos target;        // the cell it goes for
-    uint8_t strategy = 0;  // RaidStrategy (F12): 0 Assault, 1 Sappers, 2 DropPods, 3 Thieves, 4 Kidnappers
+    uint8_t strategy = 0;  // RaidStrategy (F12): 0 Assault, 1 Sappers, 2 DropPods, 3 Thieves, 4 Kidnappers, 5 Siege
     bool breaching = false;  // sappers are digging through a wall...
     CellPos breach;          // ...this one
+    uint8_t siegeStage = 0;  // a siege's SiegeStage (docs/design/sieges.md): 0 March, 1 Build, 2 Shell, 3 Assault
+    CellPos camp;            // and its camp's middle
 };
 
 // A thing in a trader's stock.
@@ -334,7 +345,8 @@ struct QuestView {
 // appears with a ShotFired event and disappears with a ProjectileHit event. A thrown grenade is here
 // too (docs/design/explosives.md): its def is the grenade's Projectiles def, it appears with a
 // GrenadeThrown event and goes with an Explosion; `fuse` is -1 while it flies and the steps left
-// once it lies on the ground (its velocity is 0 then).
+// once it lies on the ground (its velocity is 0 then). A mortar shell is here too (docs/design/artillery.md): on its
+// arc, from a ShotFired to a ProjectileHit.
 struct ProjectileView {
     Entity id = kNoEntity;
     DefId def;  // Projectiles def
@@ -517,6 +529,22 @@ struct CaravanView {
     float tilesPerDay = 0.0f;  // at the next tile's cost and its load, counting the night's rest; 0 when it can't move
 };
 
+// Another map (W5, docs/design/other-maps.md): a tile caravans have visited, kept as a sim of its own
+// (Sim::otherMap(tile) for its things and its own snapshot).
+struct OtherMapView {
+    int tile = -1;
+    std::string name;   // the settlement's name, else the biome's label
+    int size = 0;       // cells per side
+    int colonists = 0;  // of the colony, there now
+    int caravans = 0;   // forming there to leave
+    // A settlement's people there (W6, docs/design/settlements.md): their faction, their visit on that map (for
+    // TradeCommand and GiftCommand with `map` = the tile), how many are left, and whether they fight the colony.
+    std::string faction;
+    uint32_t visit = 0;
+    int residents = 0;
+    bool hostile = false;
+};
+
 // The date, the weather and the sky's mood (docs/design/weather.md). Snow per cell is not here:
 // read `Sim::weather().snowDepth(cell)` when `snowChanges` goes up.
 struct WeatherView {
@@ -656,6 +684,7 @@ struct Snapshot {
     ShipView ship;
     NarratorView narrator;
     std::vector<CaravanView> caravans;  // by id
+    std::vector<OtherMapView> otherMaps;  // in the order they were made
     TravelView travel;
 
     // The thing with this id, or null if it is not on the map. Binary search.

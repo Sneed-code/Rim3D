@@ -1,0 +1,54 @@
+[
+  {
+    "defName": "Gun_AutocannonTurret", "label": "autocannon turret gun", "source": "RimWorld wiki",
+    "category": "Item", "stackLimit": 1, "turretGun": true,
+    "visual": { "sound": { "shot": "Shot_Turret" }, "parts": [{ "shape": "box", "size": [0.9, 0.1, 0.1], "at": [0.2, 0, 0.04], "color": [0.2, 0.2, 0.22] }] },
+    "stats": { "maxHitPoints": 100, "rangedWeaponCooldown": 105, "accuracyTouch": 0.28, "accuracyShort": 0.72, "accuracyMedium": 0.66, "accuracyLong": 0.5 },
+    "verbs": [ { "range": 32.9, "minRange": 8.9, "warmupTime": 45, "burstShotCount": 3, "secondsBetweenBurstShots": 8.5, "defaultProjectile": "Bullet_Autocannon" } ],
+    "unverified": ["verbs.0.warmupTime"],
+    "ours": ["turretGun", "visual"],
+    "note": "Wiki-checked 2026-10-28: range 32.9, minimum 8.9, burst of 3, 17 ticks apart, cooldown 210 ticks, accuracy 28/72/66/50%. Times are ticks / 2 (steps). The wiki gives no warm-up: 1.5 s is a guess."
+  },
+  {
+    "defName": "Gun_UraniumSlugTurret", "label": "uranium slug turret gun", "source": "RimWorld wiki",
+    "category": "Item", "stackLimit": 1, "turretGun": true,
+    "visual": { "sound": { "shot": "Shot_Turret" }, "parts": [{ "shape": "box", "size": [1.2, 0.12, 0.12], "at": [0.3, 0, 0.04], "color": [0.18, 0.2, 0.18] }] },
+    "stats": { "maxHitPoints": 100, "rangedWeaponCooldown": 120, "accuracyTouch": 0.22, "accuracyShort": 0.33, "accuracyMedium": 0.44, "accuracyLong": 0.95 },
+    "verbs": [ { "range": 45.9, "minRange": 11.9, "warmupTime": 0, "burstShotCount": 1, "secondsBetweenBurstShots": 0, "defaultProjectile": "Bullet_UraniumSlug" } ],
+    "unverified": ["stats.accuracyLong"],
+    "ours": ["turretGun", "visual"],
+    "note": "Wiki-checked 2026-10-28: range 45.9, minimum 11.9, one shot every 240 ticks, no warm-up, accuracy 22/33/44% and a 95% the wiki does not label (taken as long range)."
+  },
+  {
+    "defName": "Turret_Autocannon", "parent": "BuildingBase", "label": "autocannon turret", "source": "RimWorld wiki",
+    "researchPrerequisite": "AutocannonTurret",
+    "size": [2, 2], "passability": "Impassable", "fillPercent": 0.5, "designationCategory": "Security",
+    "costs": { "Steel": 350, "Plasteel": 40, "ComponentIndustrial": 6 },
+    "visual": { "parts": [{ "shape": "box", "size": [1.7, 1.7, 0.45], "color": [0.32, 0.34, 0.36] }, { "shape": "cylinder", "radius": 0.5, "height": 0.35, "at": [0, 0, 0.45], "color": [0.22, 0.24, 0.26] }, { "shape": "box", "size": [0.2, 1.2, 0.2], "at": [0, 0.5, 0.6], "color": [0.14, 0.14, 0.16] }] },
+    "stats": { "maxHitPoints": 380, "workToBuild": 21600, "flammability": 0.7 },
+    "power": { "consumption": 150 },
+    "fuel": { "item": "Steel", "capacity": 180, "perUse": 2, "autoRefuelPercent": 0.5 },
+    "turret": { "gun": "Gun_AutocannonTurret", "shootingSkill": 8, "muzzleHeight": 1.0 },
+    "explosion": { "damageDef": "Bomb", "damage": 50, "armorPenetration": 0.1, "radius": 5.9 },
+    "explodeWhenDestroyed": true,
+    "unverified": ["fillPercent", "fuel.autoRefuelPercent"],
+    "ours": ["turret", "explosion", "explodeWhenDestroyed", "fuel.perUse", "visual"],
+    "note": "Wiki-checked 2026-10-28: 350 steel + 40 plasteel + 6 components, 15000 ticks, 380 HP, 70% flammable, 2x2, 150 W, steel ammunition (holds 180, 90 rounds). The wiki's blast (50 Bomb, 5.9 m) comes 4 s after the turret is damaged below 20%; ours goes off when it is destroyed. Ammunition rides on the fuel system: each shot uses perUse (2) steel."
+  },
+  {
+    "defName": "Turret_UraniumSlug", "parent": "BuildingBase", "label": "uranium slug turret", "source": "RimWorld wiki",
+    "researchPrerequisite": "UraniumSlugTurret",
+    "size": [2, 2], "passability": "Impassable", "fillPercent": 0.5, "designationCategory": "Security",
+    "costs": { "Steel": 300, "Plasteel": 30, "Uranium": 60, "ComponentIndustrial": 6 },
+    "visual": { "parts": [{ "shape": "box", "size": [1.7, 1.7, 0.45], "color": [0.3, 0.34, 0.3] }, { "shape": "cylinder", "radius": 0.5, "height": 0.35, "at": [0, 0, 0.45], "color": [0.2, 0.24, 0.2] }, { "shape": "box", "size": [0.16, 1.5, 0.16], "at": [0, 0.6, 0.6], "color": [0.12, 0.14, 0.12] }] },
+    "stats": { "maxHitPoints": 380, "workToBuild": 21600, "flammability": 0.7 },
+    "power": { "consumption": 150 },
+    "fuel": { "item": "Uranium", "capacity": 60, "perUse": 2, "autoRefuelPercent": 0.5 },
+    "turret": { "gun": "Gun_UraniumSlugTurret", "shootingSkill": 8, "muzzleHeight": 1.0 },
+    "explosion": { "damageDef": "Bomb", "damage": 50, "armorPenetration": 0.1, "radius": 5.9 },
+    "explodeWhenDestroyed": true,
+    "unverified": ["fillPercent", "fuel.autoRefuelPercent"],
+    "ours": ["turret", "explosion", "explodeWhenDestroyed", "fuel.perUse", "visual"],
+    "note": "Wiki-checked 2026-10-28: 300 steel + 30 plasteel + 60 uranium + 6 components, 15000 ticks, 380 HP, 70% flammable, 2x2, 150 W, uranium ammunition (holds 60, 30 slugs). Blast as the autocannon turret's."
+  }
+]

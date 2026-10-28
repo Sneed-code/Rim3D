@@ -25,6 +25,9 @@
 //                                     the start tile's biome, climate and map seed; prints the tile; docs/design/world-map.md)
 //   simrun --seed 42 --on-world --start Crashlanded --caravan --days 8 --check   (a caravan, W4: two colonists take the
 //                                     survival meals to the nearest settlement and come home; docs/design/caravans.md)
+//   simrun --seed 42 --on-world --start Crashlanded --caravan --visit --days 8 --check   (W5: at the settlement they walk
+//                                     onto its map, stay half a day and leave from there; --visit-png FILE draws that map;
+//                                     docs/design/other-maps.md)
 //   simrun --power [--days 3] [--verbose]   (the power check, E5: solar, batteries, lamps and a switch; docs/design/power.md)
 //   simrun --seed 42 --size 1024 --days 3 --animals [--animal-percent 300] --check   (wild animals, N1:
 //                                     herds by biome, a report of them, checks they stay on walkable ground)
@@ -63,6 +66,7 @@
 #include "ColonySim/Narrator.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Combat.h"
+#include "ColonySim/Construction.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Fire.h"
 #include "ColonySim/Health.h"
@@ -75,6 +79,7 @@
 #include "ColonySim/Sim.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/ThreatMap.h"
+#include "ColonySim/Trade.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
 #include "ColonySim/Weather.h"
@@ -123,6 +128,8 @@ struct Options {
     bool onWorld = false;  // --on-world: play on a world (SimSettings::world); --world-tile N picks its start tile
     int worldTile = -1;
     bool caravan = false;  // --caravan: two colonists go to the nearest settlement and back (W4)
+    bool visit = false;    // --visit: with --caravan, they walk onto the settlement's map and leave from it (W5)
+    std::string visitPng;  // --visit-png: the visited map, drawn at the end
     bool check = false;  // exit 1 if a job or a path search failed
     bool weather = false;  // print a line a day of the weather (E1)
     int gather = 0;      // mark rock to mine and plants to harvest this many cells round the middle
@@ -130,7 +137,7 @@ struct Options {
     int farm = 0;        // --farm N: N tame chickens, fed every hour (N4)
     bool fire = false;   // --fire: light a grass fire near the first colonist ten minutes in (E4)
     double raid = -1.0;  // start a pirate raid of this many points at the first step (0: the colony's threat points)
-    std::string raidStrategy = "Assault";  // --raid-strategy NAME: Assault, Sappers, DropPods, Thieves, Kidnappers or Auto (F12)
+    std::string raidStrategy = "Assault";  // --raid-strategy NAME: Assault, Sappers, DropPods, Thieves, Kidnappers, Siege or Auto (F12, sieges.md)
     int raidSoak = 0;    // --raid-soak N: the F7 soak over N seeds from --seed
     bool armed = false;  // give every colonist an assault rifle first (not a command: not in replays)
     bool medics = false; // --medics: the first colonist is the alarm's Medic, the second its Firefighter (F10)
@@ -195,6 +202,10 @@ bool parseOptions(int argc, char** argv, Options& out) {
             out.worldTile = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--caravan") == 0) {
             out.caravan = true;
+        } else if (std::strcmp(arg, "--visit") == 0) {
+            out.visit = true;
+        } else if (std::strcmp(arg, "--visit-png") == 0 && i + 1 < argc) {
+            out.visitPng = argv[++i];
         } else if (std::strcmp(arg, "--power") == 0) {
             out.power = true;
         } else if (std::strcmp(arg, "--verbose") == 0) {
@@ -260,7 +271,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
                          "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--scenario colony [--verbose]] [--power] [--raid POINTS [--raid-strategy NAME]] [--armed] [--narrator NAME [--difficulty NAME]] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house|year [--verbose]] [--power] [--perf [--budget MS]] [--world FILE [--world-size WxH]] [--on-world [--world-tile N] [--caravan]] [--raid POINTS [--raid-strategy NAME]] [--armed] [--medics] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house|year [--verbose]] [--power] [--perf [--budget MS]] [--world FILE [--world-size WxH]] [--on-world [--world-tile N] [--caravan [--visit [--visit-png FILE]]]] [--raid POINTS [--raid-strategy NAME]] [--armed] [--medics] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS] [--roundtrip SECONDS]\n");
             return false;
         }
@@ -951,6 +962,14 @@ int main(int argc, char** argv) {
     struct CaravanTrip {
         int settlementTile = -1;
         int64_t formed = -1, departed = -1, arrived = -1, home = -1;
+        int64_t entered = -1, left = -1;  // --visit: onto the settlement's map and off it
+        int visitors = 0;                 // colonists seen on that map
+        // W6: the settlement on that map, seen when they walk on, and the trade made there.
+        std::string faction;
+        int buildings = 0, beds = 0, doors = 0, residents = 0;
+        bool hostile = false, trader = false;
+        int soldMeals = 0, silverGot = -1;
+        int64_t tradedAt = -1;
         int lost = 0;
         int ate = 0;
         double minFood = 1.0;
@@ -989,12 +1008,84 @@ int main(int argc, char** argv) {
             std::sort(form.pawns.begin(), form.pawns.end());
             for (const auto [e, thing, pos] : sim.things().registry().view<const colony::Thing, const colony::Position>().each()) {
                 (void)pos;
-                if (sim.defs().get(thing.def).defName() == "MealSurvivalPack" && sim.things().registry().get<colony::StackCount>(e).count >= 20) {
+                // Full stacks (a stack of survival meals holds 10).
+                if (sim.defs().get(thing.def).defName() == "MealSurvivalPack" && sim.things().registry().get<colony::StackCount>(e).count >= 10) {
                     form.items.push_back(e);
                 }
             }
             std::sort(form.items.begin(), form.items.end());
+            form.items.resize(std::min<size_t>(form.items.size(), 2));
             sim.submit(form);
+        }
+        // --visit (W6): an hour on the settlement's map, they look at it and sell its trader three meals.
+        if (options.visit && trip.entered >= 0 && trip.tradedAt < 0 && sim.time().seconds == trip.entered + colony::kSecondsPerHour) {
+            const colony::Sim* there = sim.otherMap(trip.settlementTile);
+            if (there != nullptr) {
+                trip.tradedAt = sim.time().seconds;
+                const entt::registry& reg = there->things().registry();
+                for (const auto [e, thing, pos] : reg.view<const colony::Thing, const colony::Position>().each()) {
+                    (void)pos;
+                    if (thing.category == colony::ThingCategory::Building && !reg.all_of<colony::ConstructionSite>(e)) {
+                        const std::string& name = there->defs().get(thing.def).defName();
+                        ++trip.buildings;
+                        trip.beds += name == "Bed" ? 1 : 0;
+                        trip.doors += name == "Door" ? 1 : 0;
+                    }
+                }
+                colony::Entity negotiator = colony::kNoEntity;
+                for (const auto [e, c, pos] : reg.view<const colony::Colonist, const colony::Position>().each()) {
+                    (void)c;
+                    (void)pos;
+                    if (there->fighters().factionOf(e) == colony::kPlayerFaction && (negotiator == colony::kNoEntity || e < negotiator)) {
+                        negotiator = e;
+                    }
+                }
+                for (const colony::Visit& v : there->trade().state().visits) {
+                    if (v.kind == colony::VisitKind::Settlement) {
+                        trip.faction = v.faction;
+                        trip.residents = static_cast<int>(v.members.size());
+                        trip.hostile = v.phase == colony::VisitPhase::Defending;
+                        trip.trader = v.trader != colony::kNoEntity;
+                        if (trip.trader && !trip.hostile && there->trade().colonyHas("MealSurvivalPack") >= 3) {
+                            colony::TradeCommand deal;
+                            deal.map = trip.settlementTile;
+                            deal.visit = v.id;
+                            deal.negotiator = negotiator;
+                            deal.sell.push_back(colony::TradeLine{"MealSurvivalPack", 3});
+                            trip.silverGot = there->trade().silverOnMap();
+                            sim.submit(deal);
+                            trip.soldMeals = 3;
+                        }
+                    }
+                }
+            }
+        }
+        if (options.visit && trip.silverGot >= 0 && trip.tradedAt >= 0 && sim.time().seconds == trip.tradedAt + 1) {
+            const colony::Sim* there = sim.otherMap(trip.settlementTile);
+            trip.silverGot = there != nullptr ? there->trade().silverOnMap() - trip.silverGot : -1;
+        }
+        // --visit: half a day on the settlement's map, then they form a caravan there and set out for home.
+        if (options.visit && trip.entered >= 0 && trip.left < 0 && sim.time().seconds == trip.entered + 12 * colony::kSecondsPerHour) {
+            const colony::Sim* there = sim.otherMap(trip.settlementTile);
+            if (there != nullptr) {
+                colony::CaravanCommand leave;
+                leave.action = "Form";
+                leave.map = trip.settlementTile;
+                leave.tile = sim.world()->startTile();
+                for (const auto [e, c, pos] : there->things().registry().view<const colony::Colonist, const colony::Position>().each()) {
+                    (void)c;
+                    (void)pos;
+                    if (there->fighters().factionOf(e) == colony::kPlayerFaction) {
+                        leave.pawns.push_back(e);  // the colony's, not the settlement's people
+                    }
+                }
+                std::sort(leave.pawns.begin(), leave.pawns.end());
+                trip.visitors = static_cast<int>(leave.pawns.size());
+                sim.submit(leave);
+                if (!options.visitPng.empty() && !writeMapPng(*there, options.visitPng)) {
+                    std::fprintf(stderr, "could not write %s\n", options.visitPng.c_str());
+                }
+            }
         }
         if (options.fire && sim.time().seconds == 600) {
             // A fire in the grass 6 to 14 cells from the first colonist.
@@ -1126,12 +1217,14 @@ int main(int argc, char** argv) {
                             trip.arrived = t;
                             trip.settlement = e.message;
                             colony::CaravanCommand back;
-                            back.action = "Move";
+                            back.action = options.visit ? "Visit" : "Move";
                             back.caravan = e.count;
                             back.tile = sim.world()->startTile();
                             sim.submit(back);
                         }
                         break;
+                    case colony::EventType::OtherMapEntered: trip.entered = t; break;
+                    case colony::EventType::OtherMapLeft: trip.left = t; break;
                     case colony::EventType::PawnAte:
                         trip.ate += e.count != 0 ? 1 : 0;
                         break;
@@ -1538,6 +1631,16 @@ int main(int argc, char** argv) {
                     trip.settlement.c_str(), trip.settlementTile, days(trip.formed, trip.departed) * 24.0,
                     days(trip.departed, trip.arrived), days(trip.arrived, trip.home), trip.ate, trip.lost,
                     trip.home >= 0 ? "true" : "false");
+        if (options.visit) {
+            const colony::Sim* there = sim.otherMap(trip.settlementTile);
+            std::printf("{\"visit\":{\"map\":%d,\"biome\":\"%s\",\"visitors\":%d,\"stayHours\":%.2f,\"kept\":%s}}\n",
+                        there != nullptr ? there->map().width() : 0, there != nullptr ? there->biome().c_str() : "",
+                        trip.visitors, days(trip.entered, trip.left) * 24.0, there != nullptr ? "true" : "false");
+            std::printf("{\"settlement\":{\"faction\":\"%s\",\"buildings\":%d,\"beds\":%d,\"doors\":%d,\"residents\":%d,"
+                        "\"hostile\":%s,\"trader\":%s,\"soldMeals\":%d,\"silverGot\":%d}}\n",
+                        trip.faction.c_str(), trip.buildings, trip.beds, trip.doors, trip.residents, trip.hostile ? "true" : "false",
+                        trip.trader ? "true" : "false", trip.soldMeals, trip.silverGot);
+        }
         if (options.check) {
             const char* failed = sim.world() == nullptr ? "no world (use --on-world)"
                                  : trip.settlementTile < 0 ? "no settlement can be reached"
@@ -1546,6 +1649,14 @@ int main(int argc, char** argv) {
                                  : trip.arrived < 0         ? "the caravan never reached the settlement"
                                  : trip.home < 0            ? "the caravan never came home"
                                  : trip.lost > 0            ? "a member left the caravan"
+                                 : !options.visit           ? nullptr
+                                 : trip.entered < 0         ? "the caravan never walked onto the settlement's map"
+                                 : trip.visitors != 2       ? "the colonists were not on the settlement's map"
+                                 : trip.buildings < 20 || trip.beds < 1 || trip.doors < 1 ? "the settlement's map has no base"
+                                 : trip.residents < 1       ? "nobody lives in the settlement"
+                                 : !trip.hostile && trip.trader && trip.silverGot <= 0 ? "the settlement's trader paid nothing for the meals"
+                                 : trip.left < 0            ? "the caravan never left the settlement's map"
+                                 : sim.otherMap(trip.settlementTile) == nullptr ? "the settlement's map was not kept"
                                                             : nullptr;
             if (failed != nullptr) {
                 std::fprintf(stderr, "check failed: %s\n", failed);

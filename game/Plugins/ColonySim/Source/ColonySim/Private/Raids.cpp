@@ -122,6 +122,36 @@ void raidReadRules(const DefDatabase& defs, RaidRules& r) {
     num("stealMass", r.stealMass);
     num("kidnapRange", r.kidnapRange);
     num("seizeRange", r.seizeRange);
+    num("weightSiege", r.weightSiege);
+    num("siegeMinPoints", r.siegeMinPoints);
+    num("campDistanceMax", r.campDistanceMax);
+    num("campDistanceMin", r.campDistanceMin);
+    num("campArrive", r.campArrive);
+    num("campLeash", r.campLeash);
+    num("campDefend", r.campDefend);
+    num("campSupplies", r.campSupplies);
+    num("builderShare", r.builderShare);
+    num("buildReach", r.buildReach);
+    num("pointsPerMortar", r.pointsPerMortar);
+    whole("mortarsMax", r.mortarsMax);
+    whole("coverLinesMin", r.coverLinesMin);
+    whole("coverLinesMax", r.coverLinesMax);
+    whole("coverLengthMin", r.coverLengthMin);
+    whole("coverLengthMax", r.coverLengthMax);
+    whole("shellsPerMortar", r.shellsPerMortar);
+    whole("resupplyAt", r.resupplyAt);
+    whole("resupplyShells", r.resupplyShells);
+    whole("resupplyMax", r.resupplyMax);
+    num("siegeAssaultLost", r.siegeAssaultLost);
+    num("siegeDays", r.siegeDays);
+    r.siegeMortar = def->text("siegeMortar", r.siegeMortar);
+    r.siegeCover = def->text("siegeCover", r.siegeCover);
+    r.siegeCoverStuff = def->text("siegeCoverStuff", r.siegeCoverStuff);
+    r.siegeShell = def->text("siegeShell", r.siegeShell);
+    r.mortarsMax = std::max(1, r.mortarsMax);
+    r.coverLinesMax = std::max(r.coverLinesMin, r.coverLinesMax);
+    r.coverLengthMax = std::max(r.coverLengthMin, r.coverLengthMax);
+    r.pointsPerMortar = std::max(1.0f, r.pointsPerMortar);
     r.squadThinkEvery = std::max(1, r.squadThinkEvery);
     r.alarmThinkEvery = std::max(1, r.alarmThinkEvery);
     r.edgeDepth = std::max(0, r.edgeDepth);
@@ -164,6 +194,17 @@ const char* raidStrategyName(RaidStrategy strategy) {
         case RaidStrategy::DropPods: return "DropPods";
         case RaidStrategy::Thieves: return "Thieves";
         case RaidStrategy::Kidnappers: return "Kidnappers";
+        case RaidStrategy::Siege: return "Siege";
+    }
+    return "?";
+}
+
+const char* siegeStageName(SiegeStage stage) {
+    switch (stage) {
+        case SiegeStage::March: return "March";
+        case SiegeStage::Build: return "Build";
+        case SiegeStage::Shell: return "Shell";
+        case SiegeStage::Assault: return "Assault";
     }
     return "?";
 }
@@ -484,7 +525,7 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, R
         found = true;
     } else {
         found = pickEntry(edge, target, true, entry);
-        if (!found && strategy == RaidStrategy::Sappers) {
+        if (!found && (strategy == RaidStrategy::Sappers || strategy == RaidStrategy::Siege)) {
             found = pickEntry(edge, target, false, entry);
         }
     }
@@ -510,6 +551,11 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, R
     // points left still pay for, until none does. At least one.
     if (points <= 0.0f) {
         points = threatPoints();
+    }
+    // A siege picks its camp and lays it out before anyone comes (docs/design/sieges.md).
+    Siege siege;
+    if (strategy == RaidStrategy::Siege && !planSiege(siege, points, entry, target, error)) {
+        return false;
     }
     std::vector<size_t> chosen;
     float left = points;
@@ -604,6 +650,12 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, R
     squad.hasTarget = true;
     squad.target = target;
     squad.nextThink = now() + rules_.squadThinkEvery;
+    if (strategy == RaidStrategy::Siege) {
+        // It doesn't give up while it sits in its camp: the give-up clock starts when it assaults.
+        siege.endsAt = now() + static_cast<int64_t>(rules_.siegeDays * static_cast<float>(kSecondsPerDay));
+        squad.giveUpAt = siege.endsAt + static_cast<int64_t>(rules_.giveUpHoursMax * hourSeconds);
+        squad.siege = std::move(siege);
+    }
     for (size_t i = 0; i < chosen.size(); ++i) {
         const PawnKind& kind = kinds[chosen[i]];
         const CellPos cell = cells[i];
@@ -646,10 +698,11 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, R
             }
         }
         Fighter& f = fighters_.enlist(pawn, "raiding");
-        f.advances = true;
+        f.advances = strategy != RaidStrategy::Siege;
+        f.mode = strategy == RaidStrategy::Siege ? FightMode::Seize : f.mode;  // it walks to its camp first
         f.squad = squad.id;
         f.hasGoal = true;
-        f.goal = target;
+        f.goal = strategy == RaidStrategy::Siege ? squad.siege.camp : target;
         squad.members.push_back(pawn);
         if (strategy == RaidStrategy::DropPods && events_ != nullptr) {
             Event landed;
@@ -944,6 +997,7 @@ void RaidSystem::thinkSquad(Squad& squad) {
             case RaidStrategy::Sappers: thinkBreach(squad); break;
             case RaidStrategy::Thieves: thinkLoot(squad); break;
             case RaidStrategy::Kidnappers: thinkKidnap(squad); break;
+            case RaidStrategy::Siege: thinkSiege(squad, lost); break;
             case RaidStrategy::Assault:
             case RaidStrategy::DropPods: break;
         }
@@ -968,6 +1022,9 @@ void RaidSystem::thinkSquad(Squad& squad) {
                 flee(m, squad);
             }
             continue;
+        }
+        if (squad.strategy == RaidStrategy::Siege && squad.siege.stage != SiegeStage::Assault) {
+            continue;  // thinkSiege gave it its orders
         }
         f->advances = next == SquadState::Advance;
         if (f->retreat != (next == SquadState::FallBack)) {
@@ -1142,13 +1199,22 @@ bool RaidSystem::colonyWalledOff() {
     return true;
 }
 
-RaidStrategy RaidSystem::pickStrategy(float points) {
+RaidStrategy RaidSystem::pickStrategy(float points, const std::string& faction) {
     if (!(points > 0.0f)) {
         points = threatPoints();
     }
     const entt::registry& reg = things_.registry();
     float weight[kRaidStrategyCount] = {rules_.weightAssault, rules_.weightSappers, rules_.weightDropPods, rules_.weightThieves,
-                                        rules_.weightKidnappers};
+                                        rules_.weightKidnappers, rules_.weightSiege};
+    // Sieges: big enough raids of a faction that can build mortars (RimWorld: tribes can't siege), when the camp can be
+    // built and manned here.
+    const Def* factionDef = faction.empty() ? nullptr : defs_.find("Factions", faction);
+    const std::string tech = factionDef != nullptr ? factionDef->text("techLevel", "Industrial") : std::string("Industrial");
+    if (points < rules_.siegeMinPoints || tech == "Neolithic" || tech == "Medieval" || tech == "Animal" ||
+        (factionDef != nullptr && factionDef->has("humanlike") && !factionDef->flag("humanlike")) || construction_ == nullptr ||
+        artillery_ == nullptr) {
+        weight[static_cast<int>(RaidStrategy::Siege)] = 0.0f;
+    }
     if (colonyWalledOff()) {
         weight[static_cast<int>(RaidStrategy::Assault)] = 0.0f;
         weight[static_cast<int>(RaidStrategy::Thieves)] = 0.0f;
@@ -1461,6 +1527,9 @@ void RaidSystem::stepStrategies() {
     const int w = map_.width();
     const int h = map_.height();
     for (Squad& squad : state_.squads) {
+        if (squad.strategy == RaidStrategy::Siege && squad.siege.stage != SiegeStage::Assault && squad.state != SquadState::Rout) {
+            stepSiege(squad);
+        }
         if (squad.hasBreach) {
             const Entity wall = map_.buildingAt(squad.breach);
             if (wall == kNoEntity) {
@@ -1660,6 +1729,9 @@ void RaidSystem::forget(Entity thing) {
     }
     for (Squad& squad : state_.squads) {
         squad.members.erase(std::remove(squad.members.begin(), squad.members.end(), thing), squad.members.end());
+        for (SiegeBuild& b : squad.siege.builds) {
+            b.built = b.built == thing ? kNoEntity : b.built;
+        }
         for (const Entity m : squad.members) {
             Raider* r = reg.valid(m) ? reg.try_get<Raider>(m) : nullptr;
             if (r != nullptr) {
@@ -1818,6 +1890,9 @@ void RaidSystem::callUp(Entity pawn, const std::vector<Entity>& spotted) {
     Fighter* f = reg.try_get<Fighter>(pawn);
     if (f != nullptr && !f->defending) {
         return;  // drafted: the player commands it
+    }
+    if (const Worker* w = reg.try_get<Worker>(pawn); f == nullptr && w != nullptr && w->job.type == JobType::ManArtillery) {
+        return;  // a gun's crew stays at its post (docs/design/artillery.md)
     }
     const DefensePlan* plan = reg.try_get<DefensePlan>(pawn);
     DefenseRole role = plan != nullptr ? plan->role : DefenseRole::Defender;
@@ -2015,6 +2090,12 @@ bool RaidSystem::restore(RaidState state, std::string& error) {
             error = "the save has a raid squad that doesn't fit";
             return false;
         }
+        for (const SiegeBuild& b : squad.siege.builds) {
+            if (!defs_.idOf("Things", b.def).valid() || (!b.stuff.empty() && !defs_.idOf("Things", b.stuff).valid())) {
+                error = "the save has a siege camp that builds something the defs don't have";
+                return false;
+            }
+        }
     }
     for (const PendingRaid& p : state.pending) {
         if (defs_.find("Factions", p.faction) == nullptr || static_cast<int>(p.strategy) >= kRaidStrategyCount) {
@@ -2050,6 +2131,24 @@ void RaidSystem::hashState(StateHasher& h) const {
         h.add(s.breach.y);
         h.add(s.breachFrom.x);
         h.add(s.breachFrom.y);
+        h.add(static_cast<int>(s.siege.stage));
+        h.add(s.siege.camp.x);
+        h.add(s.siege.camp.y);
+        h.add(s.siege.camp.level);
+        h.add(s.siege.endsAt);
+        h.add(s.siege.resupplies);
+        h.add(static_cast<uint64_t>(s.siege.builds.size()));
+        for (const SiegeBuild& b : s.siege.builds) {
+            h.add(b.def.data(), b.def.size());
+            h.add(b.stuff.data(), b.stuff.size());
+            h.add(b.origin.x);
+            h.add(b.origin.y);
+            h.add(b.origin.level);
+            h.add(static_cast<int>(b.rotation));
+            h.add(b.workLeft);
+            h.add(b.done);
+            h.add(entt::to_integral(b.built));
+        }
         h.add(s.side);
         h.add(s.points);
         h.add(s.started);

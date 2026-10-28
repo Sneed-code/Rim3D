@@ -47,6 +47,16 @@ COLONY_API std::string saveToJson(const Sim& sim);
 // the bytes aren't a readable save.
 COLONY_API bool saveFileToJson(const std::vector<uint8_t>& bytes, std::string& json, std::string& error);
 
+// Moves things that are off their map (a caravan's pawns and goods) from one sim to another with all
+// their parts, as a save keeps them, and the items they wear, hold and carry (W5, docs/design/other-maps.md).
+// `into` gives, per root, an empty entity of `to` to fill (an `AwayPawn` placeholder, whose ties to
+// pawns of `to` come back) or kNoEntity for a new one. A name of anything that doesn't move becomes
+// kNoEntity (memories of it are dropped). `made` gets the roots' entities in `to`. With `keepPawns`, a
+// pawn root stays in `from` as an entity with only an `AwayPawn` part (its ties as it left) instead of
+// being destroyed. False, with nothing moved, for a thing on its map or not there.
+COLONY_API bool moveOffMapThings(Sim& from, const std::vector<Entity>& roots, Sim& to, const std::vector<Entity>& into,
+                                 bool keepPawns, std::vector<Entity>& made, std::string& error);
+
 COLONY_API bool readSaveFile(const std::string& path, std::vector<uint8_t>& out, std::string& error);
 COLONY_API bool writeSaveFile(const std::string& path, const std::vector<uint8_t>& bytes, std::string& error);
 

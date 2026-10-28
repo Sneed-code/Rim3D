@@ -909,6 +909,39 @@ void CaravanSystem::enterMap(Caravan& c) {
                     caravans_.end());
 }
 
+bool CaravanSystem::release(int id, Caravan& out) {
+    const auto it = std::find_if(caravans_.begin(), caravans_.end(), [&](const Caravan& c) { return c.id == id; });
+    if (it == caravans_.end() || it->state == CaravanState::Forming) {
+        return false;
+    }
+    entt::registry& reg = things_.registry();
+    for (const CaravanWalker& w : it->members) {
+        if (reg.valid(w.pawn)) {
+            reg.remove<CaravanMember>(w.pawn);
+        }
+    }
+    out = std::move(*it);
+    caravans_.erase(it);
+    return true;
+}
+
+int CaravanSystem::adopt(Caravan caravan, bool keepId) {
+    if (!keepId) {
+        caravan.id = nextId_++;
+    }
+    entt::registry& reg = things_.registry();
+    for (CaravanWalker& w : caravan.members) {
+        w.walk = 3;
+        w.repaths = 0;
+        w.path = PathTicket{};
+        reg.emplace_or_replace<CaravanMember>(w.pawn, CaravanMember{caravan.id});
+    }
+    const int id = caravan.id;
+    const auto at = std::lower_bound(caravans_.begin(), caravans_.end(), id, [](const Caravan& c, int k) { return c.id < k; });
+    caravans_.insert(at, std::move(caravan));
+    return id;
+}
+
 void CaravanSystem::forget(Entity thing) {
     entt::registry& reg = things_.registry();
     for (Caravan& c : caravans_) {

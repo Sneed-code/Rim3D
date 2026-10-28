@@ -148,6 +148,9 @@ inline constexpr uint8_t kRefuelPickUpStep = 1;
 // bench, `cell` where the pawn stands, `bill` 0 for a repair or the upgrade part's def id + 1 for a fitting.
 inline constexpr uint8_t kGearPickUpStep = 1;
 
+// ManArtillery has two: go to the cell beside the gun (`site`), then man it there for as long as the order lasts.
+inline constexpr uint8_t kManArtilleryPostStep = 1;
+
 // Operate: the DoBill steps with the patient for the work building. `thing` is the part or medicine being fetched (none when
 // there is nothing to fetch), `site` the patient, `bill` the operation's id, `cell` where the doctor stands.
 inline constexpr uint8_t kOperatePickUpStep = 1;
@@ -277,6 +280,9 @@ public:
     // A player order: haul this item to the best stockpile now, ending the pawn's current job.
     // Refused for the pawn the player controls directly (PlayerControl).
     bool orderHaul(Entity pawn, Entity thing, std::string& error);
+    // A player order: walk beside this mortar or rocket launcher and man it (ArtilleryJobs.cpp, docs/design/artillery.md)
+    // until ordered off. Refused for a pawn the player controls, one that is drafted or fighting, or no way to the gun.
+    bool orderMan(Entity pawn, Entity building, std::string& error);
     // A player order: go and take this drug (an Ingest job; docs/design/drugs.md). Refused for a pawn the player controls.
     bool orderTakeDrug(Entity pawn, Entity thing, std::string& error);
     void setDrugs(DrugSystem* drugs) { drugs_ = drugs; }
@@ -427,6 +433,9 @@ public:
     // The bed building under a pawn standing in its cell, or kNoEntity.
     Entity bedUnder(Entity pawn) const;
     bool isMedicalBed(Entity bed) const;
+    // Whether a powered vitals monitor (`building.vitalsMonitor`) stands in one of the 8 cells around the bed's footprint
+    // (docs/design/vitals-monitor.md). One counts, more do not.
+    bool bedMonitored(Entity bed) const;
     // A downed colonist on its own side, or a downed prisoner, that no bed holds and no fighter is fetching to cover (F10).
     bool needsRescue(Entity pawn) const;
     // The food a warden should carry to a hungry prisoner: the best the prisoner may eat, the nearest of that kind, with how
@@ -583,7 +592,15 @@ private:
     void interruptForNeeds(Entity pawn);
     ScheduleKind scheduleNow(Entity pawn) const;
     float sleepBelow(ScheduleKind slot) const;
-    bool findFood(Entity pawn, Job& out);
+    // `commit` false only asks whether there is food: a nutrient paste dispenser then makes no meal.
+    bool findFood(Entity pawn, Job& out, bool commit = true);
+    // Nutrient paste (NutrientPaste.cpp, docs/design/nutrient-paste.md): the raw food in the hoppers beside a dispenser
+    // (nutrition), and whether the dispenser could make a meal now (powered, with enough in its hoppers).
+    float pasteStock(Entity dispenser) const;
+    // The free cell beside the dispenser where `pawn` would stand: the nearest it can reach. False if there is none.
+    bool pasteSpot(Entity dispenser, Entity pawn, CellPos& cell) const;
+    // Takes one meal's raw food out of the hoppers and puts the meal on `cell`.
+    Entity dispensePaste(Entity dispenser, CellPos cell);
     // The chair, next to a table, that `pawn` would eat at when the food lies at `from`: the nearest
     // within NeedRules.eatSpotRadius that it can reach and nobody holds. kNoEntity if there is none.
     Entity findChair(Entity pawn, CellPos from, CellPos& cell) const;
@@ -689,6 +706,9 @@ private:
     // Standing by on duty (FieldCareJobs.cpp): ends when the pawn is off duty.
     bool failCheckStandBy(Entity pawn, Job& job, std::string& why);
     StepResult extinguishWork(Entity pawn, Job& job, std::string& why);
+    // Manning artillery (ArtilleryJobs.cpp).
+    bool failCheckMan(Entity pawn, Job& job, std::string& why);
+    StepResult manWork(Entity pawn, Job& job, std::string& why);
     // Rearming sprung traps (DefenseJobs.cpp).
     bool failCheckRearm(Entity pawn, Job& job, std::string& why);
     StepResult rearmWork(Entity pawn, Job& job, std::string& why);
@@ -801,6 +821,10 @@ private:
     std::vector<uint8_t> isMedical_;  // per def id: a bed with `building.medical`
     std::vector<uint8_t> isTable_;
     std::vector<uint8_t> isChair_;
+    std::vector<uint8_t> isHopper_;   // per def id: `building.hopper`
+    std::vector<uint8_t> pasteRaw_;   // per def id: raw food a dispenser takes (not hay, not human flesh)
+    std::vector<float> pasteCost_;    // per def id: a dispenser's `building.nutritionPerMeal`, else 0
+    std::vector<DefId> pasteMeal_;    // per def id: the meal a dispenser makes (`building.mealDef`)
     // WorkRules and SkillRules (GatherJobs.cpp), with RimWorld's numbers when the defs are missing.
     struct GatherRules {
         double miningSpeedBase = 0.04;

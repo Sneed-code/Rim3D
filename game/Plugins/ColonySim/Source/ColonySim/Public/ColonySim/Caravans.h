@@ -119,6 +119,14 @@ public:
     // Brings a caravan on the start tile back onto the map (it does so by itself when it arrives there).
     bool enter(int id, std::string& error);
 
+    // ---- Other maps (W5, docs/design/other-maps.md). ----
+    // Takes a caravan out of this sim, things untouched (its pawns lose `CaravanMember`): it goes to
+    // another sim. False if there is no such caravan or it is still forming.
+    bool release(int id, Caravan& out);
+    // Takes over a caravan from another sim whose members and items are this sim's things now, off
+    // the map. It gets a new id here, which is returned (or keeps its own with `keepId`: one released here, put back).
+    int adopt(Caravan caravan, bool keepId = false);
+
     void step();
     // Call before a thing is destroyed: it leaves the caravan it was in.
     void forget(Entity thing);

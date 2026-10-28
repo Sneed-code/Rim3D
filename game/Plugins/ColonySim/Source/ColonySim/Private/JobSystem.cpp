@@ -93,7 +93,8 @@ enum class JobStepKind : uint8_t {
     OperateWork,
     OperateFinish,
     PartyWork,      // stand at the party spot until it ends, gaining joy (PartyJobs.cpp)
-    WarmWait        // stay put in a warm room until the cold has let go (NeedJobs.cpp)
+    WarmWait,       // stay put in a warm room until the cold has let go (NeedJobs.cpp)
+    ManWork         // stand beside the gun while it is manned (ArtilleryJobs.cpp)
 };
 
 constexpr JobStepKind kJobsWaitSteps[] = {JobStepKind::Wait};
@@ -143,6 +144,8 @@ constexpr JobStepKind kJobsFeedPrisonerSteps[] = {JobStepKind::GotoThing, JobSte
                                                   JobStepKind::FeedWork};
 constexpr JobStepKind kJobsChatSteps[] = {JobStepKind::ApproachPrisoner, JobStepKind::ChatWork};
 constexpr JobStepKind kJobsStandBySteps[] = {JobStepKind::WalkToSpot, JobStepKind::Wait};
+constexpr JobStepKind kJobsManSteps[] = {JobStepKind::GotoCell, JobStepKind::ManWork};
+static_assert(kManArtilleryPostStep == 1, "the ManArtillery steps moved");
 constexpr JobStepKind kJobsRefuelSteps[] = {JobStepKind::GotoThing, JobStepKind::PickUp, JobStepKind::CarryToCell,
                                             JobStepKind::RefuelWork};
 static_assert(kRefuelPickUpStep == 1, "the Refuel steps moved");
@@ -227,6 +230,7 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::SeekShelter: return {kJobsShelterSteps, static_cast<int>(std::size(kJobsShelterSteps))};
         case JobType::Operate: return {kJobsOperateSteps, static_cast<int>(std::size(kJobsOperateSteps))};
         case JobType::DeepWork: return {kJobsDeepSteps, static_cast<int>(std::size(kJobsDeepSteps))};
+        case JobType::ManArtillery: return {kJobsManSteps, static_cast<int>(std::size(kJobsManSteps))};
     }
     return {nullptr, 0};
 }
@@ -245,6 +249,7 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::BillWork:
         case JobStepKind::ResearchWork:
         case JobStepKind::DeepWork:
+        case JobStepKind::ManWork:
         case JobStepKind::CleanWork:
         case JobStepKind::ApparelWork:
         case JobStepKind::StripWork:
@@ -341,6 +346,7 @@ const char* jobTypeName(JobType type) {
         case JobType::SeekShelter: return "SeekShelter";
         case JobType::Operate: return "Operate";
         case JobType::DeepWork: return "DeepWork";
+        case JobType::ManArtillery: return "ManArtillery";
     }
     return "?";
 }
@@ -406,6 +412,10 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
     isMedical_.assign(defs_.size(), 0);
     isTable_.assign(defs_.size(), 0);
     isChair_.assign(defs_.size(), 0);
+    isHopper_.assign(defs_.size(), 0);
+    pasteRaw_.assign(defs_.size(), 0);
+    pasteCost_.assign(defs_.size(), 0.0f);
+    pasteMeal_.assign(defs_.size(), DefId{});
     for (uint32_t i = 0; i < defs_.size(); ++i) {
         const Def& def = defs_.get(DefId{i});
         if (def.kind() != "Things") {
@@ -418,6 +428,16 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
         isMedical_[i] = def.flag("building.bed") && def.flag("building.medical") ? 1 : 0;
         isTable_[i] = def.flag("building.isTable") ? 1 : 0;
         isChair_[i] = def.flag("building.isSittable") ? 1 : 0;
+        isHopper_[i] = def.flag("building.hopper") ? 1 : 0;
+        if (def.has("building.nutritionPerMeal")) {
+            pasteCost_[i] = static_cast<float>(def.number("building.nutritionPerMeal"));
+            pasteMeal_[i] = defs_.idOf("Things", def.text("building.mealDef"));
+        }
+        const std::string foodType = def.text("ingestible.foodType");
+        pasteRaw_[i] = (foodType == "VegetableOrFruit" || foodType == "Meat" || foodType == "AnimalProduct") &&
+                               def.number("stats.nutrition") > 0.0 && !def.flag("humanlike")
+                           ? 1
+                           : 0;
         if (def.has("ingestible") && def.number("stats.nutrition") > 0.0) {
             // Food tiers, tastiest last (docs/design/needs.md). NeverForNutrition is not food.
             const std::string taste = def.text("ingestible.preferability");
@@ -671,6 +691,9 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
             return 2;
         case JobType::RearmTrap:
             out[0] = keyOf(JobTarget{job.thing, CellPos{}});
+            return 1;
+        case JobType::ManArtillery:  // the gun's crew post: a refueller may still bring it ammunition
+            out[0] = keyOf(JobTarget{job.site, CellPos{}}, 2);
             return 1;
         case JobType::None:
         case JobType::Wait:
@@ -1224,6 +1247,9 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::RearmTrap) {
         return failCheckRearm(pawn, job, why);
     }
+    if (job.type == JobType::ManArtillery) {
+        return failCheckMan(pawn, job, why);
+    }
     if (job.type == JobType::Party) {
         return failCheckParty(pawn, job, why);
     }
@@ -1365,6 +1391,8 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return researchWork(pawn, job, why);
         case JobStepKind::DeepWork:
             return deepWork(pawn, job, why);
+        case JobStepKind::ManWork:
+            return manWork(pawn, job, why);
         case JobStepKind::CleanWork:
             return cleanWork(pawn, job, why);
         case JobStepKind::TendMedicine:

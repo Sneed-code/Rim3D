@@ -648,6 +648,22 @@ bool World::chooseStartTile(int index) {
     return true;
 }
 
+bool World::canVisit(int index) const {
+    if (index < 0 || index >= tileCount()) {
+        return false;
+    }
+    const WorldTile& t = tiles_[static_cast<size_t>(index)];
+    return !t.water && t.biome != kNoBiome && t.hilliness != Hilliness::Impassable;
+}
+
+bool World::chooseVisitTile(int index) {
+    if (!canVisit(index)) {
+        return false;
+    }
+    startTile_ = index;
+    return true;
+}
+
 int World::suggestStartTile(const StartCriteria& c) const {
     std::vector<int> matches;
     for (int i = 0; i < tileCount(); ++i) {

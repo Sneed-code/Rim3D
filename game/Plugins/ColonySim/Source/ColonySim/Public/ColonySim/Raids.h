@@ -13,8 +13,11 @@
 
 namespace colony {
 
+class ArtillerySystem;
 class CombatSystem;
+class Construction;
 class DefDatabase;
+class FuelSystem;
 class FighterSystem;
 class HealthSystem;
 class JobSystem;
@@ -61,8 +64,37 @@ enum class RaidStrategy : uint8_t {
     DropPods,   // lands in pods round the colony, inside its walls if need be
     Thieves,    // walks in, grabs the most valuable loose items and runs for the edge with them
     Kidnappers, // walks in, fights, and carries off colonists who go down
+    Siege,      // walks in, digs in out of reach, builds mortars and sandbags, shells the colony, then assaults
 };
-inline constexpr int kRaidStrategyCount = 5;
+inline constexpr int kRaidStrategyCount = 6;
+
+// How far a siege has got (docs/design/sieges.md).
+enum class SiegeStage : uint8_t {
+    March,    // walking to the camp spot
+    Build,    // its first shells have dropped in; builders put up the mortars and the sandbags
+    Shell,    // the mortars are up and manned: shelling the colony while the builders finish the sandbags
+    Assault,  // out of shells, too many lost, no mortar left or on too long: an ordinary assault from now on
+};
+
+// One thing a siege camp builds: a mortar or a sandbag. Built through Construction when its work is done.
+struct SiegeBuild {
+    std::string def;           // Things defName
+    std::string stuff;         // its stuff's defName, empty for none
+    CellPos origin;
+    Rot4 rotation = Rot4::North;
+    float workLeft = 0.0f;     // game seconds of work at speed 1
+    bool done = false;         // built, or given up because it can't stand there any more
+    Entity built = kNoEntity;  // the finished building while it stands
+};
+
+// A siege squad's camp (raids section 3). Meaningful only for RaidStrategy::Siege.
+struct Siege {
+    SiegeStage stage = SiegeStage::March;
+    CellPos camp;                    // the camp's middle
+    int64_t endsAt = 0;              // it assaults at this game second whatever else happens
+    int resupplies = 0;              // shell drops after the first
+    std::vector<SiegeBuild> builds;  // the mortars first, then the sandbags
+};
 
 // On every pawn a raid brought: its squad and pawn kind (PawnKinds defName).
 struct Raider {
@@ -102,6 +134,7 @@ struct Squad {
     bool hasBreach = false;  // Sappers: the wall they are digging through, and the cell they dig from
     CellPos breach;
     CellPos breachFrom;
+    Siege siege;             // a siege's camp (RaidStrategy::Siege, raids section 3)
     bool gaveUp = false;    // routed because time ran out rather than losses
     CellPos entry;          // where it walked in
     bool hasTarget = false;  // the cell it goes for: the colonist nearest to it
@@ -213,6 +246,33 @@ struct RaidRules {
     float stealMass = 40.0f;           // kilograms of items a thief carries off
     float kidnapRange = 90.0f;         // a kidnapper goes for downed colonists this close
     float seizeRange = 12.0f;          // and stops fighting to lift one this close
+    // Sieges (docs/design/sieges.md). The unverified ones are recalled RimWorld numbers, the rest ours.
+    float weightSiege = 8.0f;
+    float siegeMinPoints = 300.0f;     // smaller raids don't dig in
+    float campDistanceMax = 70.0f;     // the camp is this far from the colony at most...
+    float campDistanceMin = 35.0f;     // ...and at least (outside the mortar's 29.9 m minimum range)
+    float campArrive = 8.0f;           // metres from the camp's middle at which the squad has got there
+    float campLeash = 10.0f;           // the guards stay this close to it
+    float campDefend = 30.0f;          // an enemy this close to the camp calls the builders to fight
+    float campSupplies = 12.0f;        // shells lying this close to the camp's middle are its supplies
+    float builderShare = 0.4f;         // of the able members build (unverified: RimWorld 0.25 to 0.4)
+    float buildReach = 2.0f;           // metres from what it builds a builder works from
+    float pointsPerMortar = 60.0f;     // mortars: points / this, rounded, 1 to mortarsMax (unverified)
+    int mortarsMax = 2;
+    int coverLinesMin = 2;             // lines of sandbags (unverified)
+    int coverLinesMax = 4;
+    int coverLengthMin = 2;            // sandbags in a line (unverified)
+    int coverLengthMax = 7;
+    int shellsPerMortar = 5;           // shells in the first drop, per mortar (unverified)
+    int resupplyAt = 4;                // another drop when the camp has fewer shells than this (unverified)
+    int resupplyShells = 10;           // shells in it (unverified)
+    int resupplyMax = 3;               // drops after the first: then the supplies run out
+    float siegeAssaultLost = 0.4f;     // share of its pawns lost that sends it in (unverified)
+    float siegeDays = 2.0f;            // it assaults after this long whatever else happens ("a few days")
+    std::string siegeMortar = "Turret_Mortar";
+    std::string siegeCover = "Sandbags";
+    std::string siegeCoverStuff = "Cloth";
+    std::string siegeShell = "Shell_HighExplosive";
 };
 
 class COLONY_API RaidSystem {
@@ -225,6 +285,12 @@ public:
 
     const RaidRules& rules() const { return rules_; }
     void setEventLog(std::vector<Event>* events) { events_ = events; }
+    // What a siege needs to build its camp, man its mortars and load them (null: sieges can't start).
+    void setSiegeParts(Construction* construction, ArtillerySystem* artillery, FuelSystem* fuel) {
+        construction_ = construction;
+        artillery_ = artillery;
+        fuel_ = fuel;
+    }
     // Gives a new raider its looks (Sim::giveLooks): pawn, seed, female.
     void setLooksMaker(std::function<void(Entity, uint64_t, bool)> maker) { looks_ = std::move(maker); }
 
@@ -256,8 +322,9 @@ public:
     bool startRaid(const std::string& faction, float points, int edge, RaidStrategy strategy, float hour, std::string& error);
     // The strategy a raid of these points would pick now, by the rules' weights: sappers favoured when no edge
     // reaches the colony, drop pods only from dropPodsMinPoints, thieves only when loose items exist, kidnappers
-    // only when colonists do. Draws from the sim's Rng, so call it from the sim.
-    RaidStrategy pickStrategy(float points);
+    // only when colonists do, sieges only from siegeMinPoints and for a faction that can build (not a neolithic one;
+    // an empty `faction` is any). Draws from the sim's Rng, so call it from the sim.
+    RaidStrategy pickStrategy(float points, const std::string& faction = std::string());
     // Where outsiders walk in: `target` is the player's colonist nearest the middle (else the middle) and `entry` a cell
     // near a map edge (`edge` 0 to 3, or -1 for any) that can reach it. False, with a reason, if there is no way in.
     bool findEntry(int edge, CellPos& target, CellPos& entry, std::string& error);
@@ -304,6 +371,18 @@ private:
     void thinkBreach(Squad& squad);
     void thinkLoot(Squad& squad);
     void thinkKidnap(Squad& squad);
+    // Sieges (docs/design/sieges.md).
+    bool planSiege(Siege& siege, float points, CellPos entry, CellPos target, std::string& error);
+    void thinkSiege(Squad& squad, float lost);
+    void siegeOrders(Squad& squad);
+    void stepSiege(Squad& squad);
+    void finishBuild(Squad& squad, SiegeBuild& build);
+    void dropShells(Squad& squad, int count);
+    int siegeShells(const Squad& squad, std::vector<Entity>* stacks) const;
+    void siegeAim(const Squad& squad, Entity mortar);
+    void startAssault(Squad& squad, const char* why);
+    void siegeEvent(const Squad& squad, std::string message);
+    CellRect buildRect(const SiegeBuild& build) const;
     void dropLoot(Entity pawn);
     void flee(Entity pawn, Squad& squad);
     bool findBreach(const Squad& squad, CellPos from, CellPos& wall, CellPos& approach) const;
@@ -342,12 +421,16 @@ private:
     std::vector<float> armor_;        // per def id: armorRatingSharp of apparel
     std::vector<Event>* events_ = nullptr;
     std::function<void(Entity, uint64_t, bool)> looks_;
+    Construction* construction_ = nullptr;
+    ArtillerySystem* artillery_ = nullptr;
+    FuelSystem* fuel_ = nullptr;
 };
 
 COLONY_API const char* defenseRoleName(DefenseRole role);
 COLONY_API const char* squadStateName(SquadState state);
 COLONY_API const char* raidStrategyName(RaidStrategy strategy);
-// The strategy with this name ("Assault", "Sappers", "DropPods", "Thieves", "Kidnappers"); false if there is none.
+COLONY_API const char* siegeStageName(SiegeStage stage);
+// The strategy with this name ("Assault", "Sappers", "DropPods", "Thieves", "Kidnappers", "Siege"); false if there is none.
 COLONY_API bool raidStrategyFromName(const std::string& name, RaidStrategy& out);
 
 }  // namespace colony

@@ -1,0 +1,13 @@
+[
+  {
+    "defName": "Bullet_Autocannon", "parent": "BulletBase", "label": "autocannon shell",
+    "projectile": { "damageAmountBase": 27, "armorPenetrationBase": 0.4, "stoppingPower": 1, "speed": 2.933333 },
+    "unverified": ["projectile.stoppingPower"],
+    "note": "Wiki-checked 2026-10-28: 27 damage, 40% armor penetration, 88 m/s (/30 like every bullet)."
+  },
+  {
+    "defName": "Bullet_UraniumSlug", "parent": "BulletBase", "label": "uranium slug",
+    "projectile": { "damageAmountBase": 55, "armorPenetrationBase": 0.82, "stoppingPower": 0.5, "speed": 4.0 },
+    "note": "Wiki-checked 2026-10-28: 55 damage, 82% armor penetration, 120 m/s."
+  }
+]

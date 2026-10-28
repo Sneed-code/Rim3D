@@ -49,6 +49,7 @@
       { "categories": ["PlantFoodRaw"], "nutrition": 0.25 }
     ],
     "products": { "MealSurvivalPack": 1 },
+    "researchPrerequisite": "PackagedSurvivalMeal",
     "ours": ["fuelUses"],
     "unverified": ["workAmount", "workSkillXp", "minSkill", "ingredients"]
   },

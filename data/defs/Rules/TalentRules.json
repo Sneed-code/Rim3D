@@ -17,7 +17,12 @@
       "DoBill": 5,
       "Research": 12
     },
+    "combatXp": {
+      "shot": 1,
+      "meleeHit": 2
+    },
     "ours": [
+      "combatXp",
       "xpFirstPoint",
       "xpGrowthPerPoint",
       "maxPoints",

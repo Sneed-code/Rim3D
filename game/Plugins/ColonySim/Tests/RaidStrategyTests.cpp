@@ -173,10 +173,10 @@ TEST_CASE("Raid strategies: names round-trip and bad commands fail") {
         CHECK(static_cast<int>(back) == i);
     }
     RaidStrategy ignored = RaidStrategy::Assault;
-    CHECK_FALSE(raidStrategyFromName("Siege", ignored));
+    CHECK_FALSE(raidStrategyFromName("Blitz", ignored));
 
     auto sim = stratSim();
-    sim->submit(StartStrategyRaidCommand{"Pirate", 100.0f, -1, "Siege", -1.0f});     // no such strategy
+    sim->submit(StartStrategyRaidCommand{"Pirate", 100.0f, -1, "Blitz", -1.0f});     // no such strategy
     sim->submit(StartStrategyRaidCommand{"Pirate", 100.0f, -1, "Assault", 30.0f});   // no such hour
     sim->submit(StartStrategyRaidCommand{"Nobody", 100.0f, -1, "Assault", -1.0f});   // no such faction
     sim->step();
@@ -200,11 +200,11 @@ TEST_CASE("Raid strategies: Auto picks sappers for a walled colony and never dro
     auto walled = stratSim(13, 128);
     stratWallRing(*walled);
     walled->step();
-    // Walls shut out everything but sappers and pods, and sappers are much likelier.
+    // Walls shut out everything but sappers, pods and sieges, and sappers are much likelier.
     int dug = 0;
     for (int i = 0; i < 40; ++i) {
         const RaidStrategy s = walled->raids().pickStrategy(300.0f);
-        CHECK((s == RaidStrategy::Sappers || s == RaidStrategy::DropPods));
+        CHECK((s == RaidStrategy::Sappers || s == RaidStrategy::DropPods || s == RaidStrategy::Siege));
         dug += s == RaidStrategy::Sappers ? 1 : 0;
     }
     CHECK(dug > 20);

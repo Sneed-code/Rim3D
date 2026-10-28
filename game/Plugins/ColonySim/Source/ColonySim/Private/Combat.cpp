@@ -29,6 +29,7 @@ struct CombatModel {
         bool valid = false;
         DefId projectile;
         float range = 0.0f;
+        float minRange = 0.0f;
         int warmup = 0;    // steps
         int cooldown = 0;  // steps
         int burst = 1;
@@ -373,6 +374,7 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
             Gun& g = guns[id.value];
             g.projectile = defs.idOf("Projectiles", def.text("verbs.0.defaultProjectile"));
             g.range = combatNum(def, "verbs.0.range", 0.0);
+            g.minRange = combatNum(def, "verbs.0.minRange", 0.0);
             g.warmup = static_cast<int>(std::lround(def.number("verbs.0.warmupTime")));
             g.cooldown = static_cast<int>(std::lround(def.number("stats.rangedWeaponCooldown")));
             g.burst = std::max(1, static_cast<int>(def.integer("verbs.0.burstShotCount", 1)));
@@ -1254,7 +1256,8 @@ void CombatSystem::startReload(Entity pawn, Shooter& s, Entity weapon, int extra
     entt::registry& reg = things_.registry();
     CombatModel::Gun moddedGun;
     const CombatModel::Gun& gun = *combatGunOf(*model_, reg, weapon, moddedGun);
-    const float factor = combatBySkill(model_->reloadFactor, shootingSkill(pawn));
+    const float factor = combatBySkill(model_->reloadFactor, shootingSkill(pawn)) *
+                         (talents_ != nullptr ? static_cast<float>(talents_->statFactor(pawn, "reloadTime")) : 1.0f);
     s.phase = ShotPhase::Reloading;
     s.shotsLeft = 0;
     s.stepsLeft = std::max(1, extraSteps + static_cast<int>(std::lround(static_cast<float>(gun.reloadTime) * factor)));
@@ -1406,6 +1409,7 @@ bool CombatSystem::gunStats(DefId weapon, GunStats& out) const {
         return false;
     }
     out.range = gun->range;
+    out.minRange = gun->minRange;
     out.warmup = gun->warmup;
     out.cooldown = gun->cooldown;
     out.burst = gun->burst;

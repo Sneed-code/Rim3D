@@ -39,6 +39,11 @@
     "unverified": ["moodOffset", "durationDays"]
   },
   {
+    "defName": "AteNutrientPasteMeal", "label": "ate nutrient paste meal", "source": "RimWorld wiki",
+    "moodOffset": -4, "durationDays": 1, "trigger": "AteNutrientPasteMeal",
+    "note": "Not for an Ascetic (Mood.cpp). Wiki-checked 2026-10-28."
+  },
+  {
     "defName": "AteFineMeal", "label": "ate a fine meal", "source": "RimWorld",
     "moodOffset": 5, "durationDays": 0.6, "trigger": "AteFineMeal", "notTrait": "Ascetic",
     "unverified": ["moodOffset", "durationDays"]

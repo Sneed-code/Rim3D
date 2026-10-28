@@ -135,7 +135,8 @@ void MovementSystem::updateDoors(entt::registry& reg, Map& map) {
         if (std::binary_search(doorRequests_.begin(), doorRequests_.end(), entity)) {
             if (door.open) {
                 door.hold = static_cast<uint16_t>(doors_.closeDelaySteps);
-            } else if (++door.progress >= doors_.openSteps) {
+            } else if ((door.progress = static_cast<uint16_t>(door.progress + std::max(1, doorSpeed_ ? doorSpeed_(entity) : 1))) >=
+                       doors_.openSteps) {
                 door.open = true;
                 door.hold = static_cast<uint16_t>(doors_.closeDelaySteps);
             }

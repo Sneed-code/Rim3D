@@ -165,10 +165,17 @@ void TalentSystem::awardJobXp(const std::vector<Event>& events, size_t from, std
     const Def* rules = defs_.find("Rules", "TalentRules");
     for (size_t i = from; i < events.size(); ++i) {
         const Event& e = events[i];
-        if (e.type != EventType::JobEnded || e.message != "done" || !eligible(e.thing)) {
+        if (!eligible(e.thing)) {
             continue;
         }
-        const int64_t xp = rules->integer((std::string("jobXp.") + jobTypeName(e.job)).c_str(), 0);
+        int64_t xp = 0;
+        if (e.type == EventType::JobEnded && e.message == "done") {
+            xp = rules->integer((std::string("jobXp.") + jobTypeName(e.job)).c_str(), 0);
+        } else if (e.type == EventType::ShotFired) {
+            xp = rules->integer("combatXp.shot", 0);
+        } else if (e.type == EventType::MeleeHit && (e.hit == ProjectileHitKind::Pawn || e.hit == ProjectileHitKind::Armor)) {
+            xp = rules->integer("combatXp.meleeHit", 0);
+        }
         std::string error;
         if (xp > 0) {
             addXp(e.thing, xp, out, error);

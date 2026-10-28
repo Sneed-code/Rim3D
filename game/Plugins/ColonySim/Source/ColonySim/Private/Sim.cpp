@@ -13,6 +13,7 @@
 #include "ColonySim/Designations.h"
 #include "ColonySim/Doors.h"
 #include "ColonySim/Explosives.h"
+#include "ColonySim/Artillery.h"
 #include "ColonySim/Defense.h"
 #include "ColonySim/Farming.h"
 #include "ColonySim/FieldCare.h"
@@ -127,7 +128,7 @@ std::unique_ptr<World> simMakeWorld(SimSettings& settings, const DefDatabase& de
     if (world->empty()) {
         return world;
     }
-    if (w.startTile < 0) {
+    if (w.startTile < 0 && !w.visit) {
         StartCriteria criteria;
         const Def* scenario = settings.scenario.empty() ? nullptr : defs.find("Scenarios", settings.scenario);
         criteria.biome = scenario != nullptr ? scenario->text("biome", "TemperateForest") : "TemperateForest";
@@ -138,7 +139,9 @@ std::unique_ptr<World> simMakeWorld(SimSettings& settings, const DefDatabase& de
             w.startTile = world->suggestStartTile(criteria);
         }
     }
-    if (w.startTile >= 0) {
+    if (w.visit) {
+        world->chooseVisitTile(w.startTile);  // another map (W5): any land a caravan can stand on
+    } else if (w.startTile >= 0) {
         world->chooseStartTile(w.startTile);  // refused (the tile stays -1) if a colony can't start there
     }
     return world;
@@ -231,6 +234,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       time_(),
       rng_(splitMix64(settings.seed ^ 0x7061776EULL)),
       groundHash_(map_.contentHash()) {
+    time_.seconds = settings_.startSecond;
     if (world_) {
         worldHash_ = world_->hash();
         if (world_->empty()) {
@@ -327,7 +331,14 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     lights_->setWeather(weather_.get());
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
-    movement_->setSpeedFactor([this](Entity pawn) { return jobs_->loadSpeedFactor(pawn); });
+    movement_->setSpeedFactor([this](Entity pawn) {
+        return jobs_->loadSpeedFactor(pawn) * static_cast<float>(talents_->statFactor(pawn, "moveSpeed"));
+    });
+    movement_->setDoorSpeed([this](Entity door) {
+        const int factor = static_cast<int>(defs_->get(things_->registry().get<Thing>(door).def).integer("door.openSpeedFactor", 1));
+        return factor > 1 && !power_->running(door) ? 1 : factor;
+    });
+    health_->setImmunityBonus([this](Entity pawn) { return jobs_->bedMonitored(jobs_->bedUnder(pawn)) ? 0.02f : 0.0f; });
     jobs_->setLights(lights_.get());
     jobs_->setPower(power_.get());
     jobs_->setRooms(rooms_.get());
@@ -483,6 +494,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     animals_->setMelee(melee_.get());
     defense_ = std::make_unique<DefenseSystem>(*things_, map_, *combat_, *health_, *power_, *defs_, time_);
     defense_->setEventLog(&events_);
+    defense_->setFuel(&jobs_->fuel());
     defense_->setBeforeDestroy([this](Entity thing) {
         jobs_->forget(thing);
         raids_->forget(thing);
@@ -492,6 +504,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     defense_->setOnLearn([this](Entity pawn) { fighters_->replan(pawn); });
     fighters_->setDefense(defense_.get());
     jobs_->setDefense(defense_.get());
+    artillery_ = std::make_unique<ArtillerySystem>(*things_, map_, *combat_, *health_, *power_, *jobs_, *defs_, time_);
+    artillery_->setEventLog(&events_);
+    artillery_->setFuel(&jobs_->fuel());
+    raids_->setSiegeParts(construction_.get(), artillery_.get(), &jobs_->fuel());
     fieldCare_ = std::make_unique<FieldCare>(*things_, map_, *health_, *jobs_, *fighters_, *raids_, *defs_, time_);
     jobs_->setFieldCare(fieldCare_.get());
     narrator_ = std::make_unique<NarratorSystem>(*raids_, *defs_, time_, settings.seed);
@@ -1116,12 +1132,18 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
     } else if (const auto* tradeCommand = std::get_if<TradeCommand>(&command)) {
         std::string why;
-        if (!trade_->trade(tradeCommand->visit, tradeCommand->negotiator, tradeCommand->buy, tradeCommand->sell, why)) {
+        Sim* there = tradeCommand->map < 0 ? this : otherMap(tradeCommand->map);
+        if (there == nullptr) {
+            commandFailed(id, "no caravan has been to that tile");
+        } else if (!there->trade_->trade(tradeCommand->visit, tradeCommand->negotiator, tradeCommand->buy, tradeCommand->sell, why)) {
             commandFailed(id, why);
         }
     } else if (const auto* giftCommand = std::get_if<GiftCommand>(&command)) {
         std::string why;
-        if (!trade_->gift(giftCommand->visit, giftCommand->items, why)) {
+        Sim* there = giftCommand->map < 0 ? this : otherMap(giftCommand->map);
+        if (there == nullptr) {
+            commandFailed(id, "no caravan has been to that tile");
+        } else if (!there->trade_->gift(giftCommand->visit, giftCommand->items, why)) {
             commandFailed(id, why);
         }
     } else if (const auto* goodwillCommand = std::get_if<AdjustGoodwillCommand>(&command)) {
@@ -1241,7 +1263,9 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
     } else if (const auto* createGrowing = std::get_if<CreateGrowingZoneCommand>(&command)) {
         const DefId crop = defs_->idOf("Things", createGrowing->crop);
-        if (farming_->createZone(createGrowing->area, crop, error) == kNoGrowingZone) {
+        if (crop.valid() && !research_->unlocked(defs_->get(crop), error)) {
+            commandFailed(id, error);
+        } else if (farming_->createZone(createGrowing->area, crop, error) == kNoGrowingZone) {
             commandFailed(id, error);
         }
     } else if (const auto* removeGrowing = std::get_if<RemoveGrowingZoneCellsCommand>(&command)) {
@@ -1249,7 +1273,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "no growing zone there");
         }
     } else if (const auto* setGrowingCrop = std::get_if<SetGrowingZoneCropCommand>(&command)) {
-        if (!farming_->setCrop(setGrowingCrop->zone, defs_->idOf("Things", setGrowingCrop->crop), error)) {
+        const DefId crop = defs_->idOf("Things", setGrowingCrop->crop);
+        if (crop.valid() && !research_->unlocked(defs_->get(crop), error)) {
+            commandFailed(id, error);
+        } else if (!farming_->setCrop(setGrowingCrop->zone, crop, error)) {
             commandFailed(id, error);
         }
     } else if (const auto* setNarrator = std::get_if<SetNarratorCommand>(&command)) {
@@ -1275,6 +1302,34 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     } else if (const auto* home = std::get_if<SetHomeAreaCommand>(&command)) {
         if (fire_->setHome(home->area, home->add) == 0) {
             commandFailed(id, "the home area is already so there");
+        }
+    } else if (const auto* gun = std::get_if<ArtilleryCommand>(&command)) {
+        bool ok = false;
+        if (gun->action == "Man") {
+            // A drafted colonist, or one the alarm called up, is let go first: the job system walks it to the gun.
+            if (const Fighter* f = things_->registry().valid(gun->pawn) ? things_->registry().try_get<Fighter>(gun->pawn) : nullptr;
+                f != nullptr && fighters_->factionOf(gun->pawn) == kPlayerFaction && !things_->registry().all_of<PlayerControl>(gun->pawn)) {
+                if (f->drafted) {
+                    std::string ignored;
+                    fighters_->draft(gun->pawn, false, ignored);
+                } else if (f->defending) {
+                    fighters_->standDown(gun->pawn);
+                }
+            }
+            ok = artillery_->man(gun->building, gun->pawn, error);
+        } else if (gun->action == "StopManning") {
+            ok = artillery_->stopManning(gun->building, error);
+        } else if (gun->action == "Aim") {
+            ok = artillery_->aim(gun->building, gun->target, gun->x, gun->y, error);
+        } else if (gun->action == "ClearAim") {
+            ok = artillery_->clearAim(gun->building, error);
+        } else if (gun->action == "HoldFire" || gun->action == "FireAtWill") {
+            ok = artillery_->setHoldFire(gun->building, gun->action == "HoldFire", error);
+        } else {
+            error = "no artillery action '" + gun->action + "' (Man, StopManning, Aim, ClearAim, HoldFire or FireAtWill)";
+        }
+        if (!ok) {
+            commandFailed(id, error);
         }
     } else if (const auto* rearm = std::get_if<RearmTrapCommand>(&command)) {
         if (!defense_->rearm(rearm->trap, &error)) {
@@ -1682,9 +1737,14 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
     } else if (const auto* caravan = std::get_if<CaravanCommand>(&command)) {
         bool ok = false;
-        if (caravan->action == "Form") {
+        if (caravan->action == "Form" && caravan->map >= 0) {
+            int formed = 0;
+            ok = formOnMap(caravan->map, caravan->pawns, caravan->items, caravan->tile, formed, error);
+        } else if (caravan->action == "Form") {
             int formed = 0;
             ok = caravans_->form(caravan->pawns, caravan->items, caravan->tile, formed, error);
+        } else if (caravan->action == "Visit") {
+            ok = visitMap(caravan->caravan, error);
         } else if (caravan->action == "Move") {
             ok = caravans_->move(caravan->caravan, caravan->tile, error);
         } else if (caravan->action == "Stop") {
@@ -1692,7 +1752,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         } else if (caravan->action == "Enter") {
             ok = caravans_->enter(caravan->caravan, error);
         } else {
-            error = "no caravan action '" + caravan->action + "' (Form, Move, Stop or Enter)";
+            error = "no caravan action '" + caravan->action + "' (Form, Move, Stop, Enter or Visit)";
         }
         if (!ok) {
             commandFailed(id, error);
@@ -1739,7 +1799,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "no raid strategy '" + strategyRaid->strategy + "'");
         } else {
             if (strategyRaid->strategy == "Auto") {
-                strategy = raids_->pickStrategy(strategyRaid->points);
+                strategy = raids_->pickStrategy(strategyRaid->points, strategyRaid->faction);
             }
             if (!raids_->startRaid(strategyRaid->faction, strategyRaid->points, strategyRaid->edge, strategy, strategyRaid->hour,
                                    error)) {
@@ -1848,6 +1908,7 @@ void Sim::stepOnce(bool keepEvents) {
     { SimLap lap(profile_, "explosives"); explosives_->step(rng_); }
     animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
     { SimLap lap(profile_, "defense"); defense_->step(rng_); }
+    { SimLap lap(profile_, "artillery"); artillery_->step(rng_); }
     { SimLap lap(profile_, "monsters"); monsters_->step(events_, 0); }  // mounds make jelly, brood and spread; insects hunt (docs/design/monsters.md)
     {
         // Blasts of Burn damage start fires; a pawn that catches fire stops what it was doing.
@@ -1900,6 +1961,7 @@ void Sim::stepOnce(bool keepEvents) {
     }
     travel_->afterStep();
     narrator_->postpone(travel_->takeHold());  // a skip that ended (here or by a command) held the narrator back
+    { SimLap lap(profile_, "otherMaps"); stepOtherMaps(); }  // W5: in step with the colony's clock
     if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
         checkpoints_.push_back(Checkpoint{time_.seconds, stateHash()});
     }
@@ -2016,6 +2078,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
         }
         out.caravans.push_back(v);
     }
+    writeOtherMaps(out.otherMaps);
     {
         const ShipParts parts = ship_->parts();
         ShipView& s = out.ship;
@@ -2391,6 +2454,17 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Trap* trap = reg.try_get<Trap>(entity)) {
             view.trapState = trap->sprung ? 2 : 1;
         }
+        if (const Artillery* gun = reg.try_get<Artillery>(entity)) {
+            view.turretPhase = static_cast<uint8_t>(gun->phase);
+            view.turretTarget = gun->target;
+            view.artilleryCrew = gun->crew;
+            view.artilleryManned = artillery_->manned(entity);
+            view.artilleryAim = gun->hasAim;
+            view.artilleryAimX = gun->aimX;
+            view.artilleryAimY = gun->aimY;
+            view.artilleryAimPawn = gun->aimPawn;
+            view.holdFire = gun->holdFire;
+        }
         out.things.push_back(view);
     }
     std::sort(out.things.begin(), out.things.end(),
@@ -2402,7 +2476,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
     for (const Squad& squad : raids_->state().squads) {
         out.squads.push_back(SquadView{squad.id, squad.side, static_cast<uint8_t>(squad.state),
                                        static_cast<int>(squad.members.size()), squad.started, squad.target,
-                                       static_cast<uint8_t>(squad.strategy), squad.hasBreach, squad.breach});
+                                       static_cast<uint8_t>(squad.strategy), squad.hasBreach, squad.breach,
+                                       static_cast<uint8_t>(squad.siege.stage), squad.siege.camp});
     }
 
     out.visits.clear();
@@ -2549,6 +2624,16 @@ void Sim::writeSnapshot(Snapshot& out) const {
     for (const auto [grenade, g] : reg.view<const Grenade>().each()) {
         out.projectiles.push_back(ProjectileView{grenade, g.def, g.x, g.y, g.z, g.vx, g.vy, g.vz, g.level, g.fuse});
     }
+    for (const auto [shell, s] : reg.view<const ArtilleryShell>().each()) {  // a mortar's: on its arc (docs/design/artillery.md)
+        float x = 0.0f;
+        float y = 0.0f;
+        float z = 0.0f;
+        float vx = 0.0f;
+        float vy = 0.0f;
+        float vz = 0.0f;
+        artilleryShellAt(s, map_, artillery_->numbers().apexShare, x, y, z, vx, vy, vz);
+        out.projectiles.push_back(ProjectileView{shell, s.def, x, y, z, vx, vy, vz, s.level});
+    }
     std::sort(out.projectiles.begin(), out.projectiles.end(),
               [](const ProjectileView& a, const ProjectileView& b) { return a.id < b.id; });
     {
@@ -2616,6 +2701,7 @@ uint64_t Sim::stateHash() const {
     quests_->hashState(h);
     ship_->hashState(h);
     caravans_->hashState(h);
+    hashOtherMaps(h);
     talents_->hashState(h);
     drugs_->hashState(h);
     pathfinder_.hashState(h);
@@ -2999,6 +3085,7 @@ uint64_t Sim::stateHash() const {
         melee_->hashThing(e, h);
         social_->hashThing(e, h);
         defense_->hashThing(e, h);
+        artillery_->hashThing(e, h);
         resonance_->hashThing(e, h);
         apparel_->hashThing(e, h);
         mentalBreaks_->hashThing(e, h);

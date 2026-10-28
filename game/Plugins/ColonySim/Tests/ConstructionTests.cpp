@@ -160,7 +160,10 @@ TEST_CASE("Construction: every building in the data can be planned with a stuff 
             continue;  // buildings the map is made with (ruin walls, geysers) are never planned
         }
         ++buildings;
-        const DefId stuff = defs.get(id).count("stuffCategories") > 0 ? steel : DefId{};
+        DefId stuff = defs.get(id).count("stuffCategories") > 0 ? steel : DefId{};
+        if (stuff.valid() && !sim.construction().stuffFits(id, stuff)) {
+            stuff = defs.idOf("Things", "Cloth");  // sandbags are fabric or leather
+        }
         CHECK_MESSAGE(sim.construction().buildable(id), defs.get(id).defName());
         CHECK_MESSAGE(sim.construction().stuffFits(id, stuff), defs.get(id).defName());
         CHECK_MESSAGE(!sim.construction().costOf(id, stuff).empty(), defs.get(id).defName());
