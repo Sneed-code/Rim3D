@@ -8,6 +8,7 @@
 #include "ColonySim/Map.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Plants.h"
+#include "ColonySim/Recreation.h"
 #include "ColonySim/Regions.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Sim.h"
@@ -372,6 +373,12 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         const int64_t now = sim.time().seconds;
         if (now % 60 != 0) {
             continue;
+        }
+        // The house is about building and hauling, not joy: with the wiki's recreation moods (-10 under
+        // 15%, -20 at nothing) a colonist with no games would break down on day two, so keep the need up.
+        for (const auto [pawn, joy] : sim.things().registry().view<Joy>().each()) {
+            (void)pawn;
+            joy.level = std::max(joy.level, 0.5f);
         }
         // Stuck: a pawn that has a job but nothing about it changes for a game hour.
         for (const auto [pawn, pos, worker, needs] : sim.things().registry().view<const Position, const Worker, const Needs>().each()) {

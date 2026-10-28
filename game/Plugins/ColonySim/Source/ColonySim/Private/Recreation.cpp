@@ -30,6 +30,23 @@ float Joy::toleranceOf(const std::string& kind) const {
     return 0.0f;
 }
 
+bool Joy::boredWith(const std::string& kind) const {
+    for (const JoyTolerance& t : tolerance) {
+        if (t.kind == kind) {
+            return t.bored;
+        }
+    }
+    return false;
+}
+
+int Joy::boredKinds() const {
+    int n = 0;
+    for (const JoyTolerance& t : tolerance) {
+        n += t.bored ? 1 : 0;
+    }
+    return n;
+}
+
 void Joy::addTolerance(const std::string& kind, float amount, float max) {
     auto it = std::lower_bound(tolerance.begin(), tolerance.end(), kind,
                                [](const JoyTolerance& t, const std::string& k) { return t.kind < k; });
@@ -46,7 +63,12 @@ RecreationRules RecreationRules::read(const DefDatabase& defs) {
         return r;
     }
     r.present = true;
-    r.joyFallPerDay = recFloat(*joy, "fallPerDay", r.joyFallPerDay);
+    r.fallHigh = recFloat(*joy, "fallPerHourHigh", r.fallHigh);
+    r.fallMid = recFloat(*joy, "fallPerHourMid", r.fallMid);
+    r.fallLow = recFloat(*joy, "fallPerHourLow", r.fallLow);
+    r.toleranceGainFraction = recFloat(*joy, "toleranceGainFraction", r.toleranceGainFraction);
+    r.boredAbove = recFloat(*joy, "boredAbove", r.boredAbove);
+    r.boredBelow = recFloat(*joy, "boredBelow", r.boredBelow);
     r.toleranceMinGainFactor = recFloat(*joy, "toleranceMinGainFactor", r.toleranceMinGainFactor);
     r.toleranceMax = recFloat(*joy, "toleranceMax", r.toleranceMax);
     if (joy->count("joyHours") >= 2) {
@@ -78,7 +100,6 @@ RecreationRules RecreationRules::read(const DefDatabase& defs) {
         const Def& def = defs.get(id);
         RecreationKind kind;
         kind.defName = def.defName();
-        kind.gainPerUse = recFloat(def, "toleranceGainPerUse", kind.gainPerUse);
         kind.decayPerDay = recFloat(def, "toleranceDecayPerDay", kind.decayPerDay);
         r.kinds.push_back(std::move(kind));
     }
@@ -106,7 +127,12 @@ RecreationRules RecreationRules::read(const DefDatabase& defs) {
         a.daytimeOnly = def.flag("daytimeOnly");
         a.walks = def.flag("walks");
         a.lies = def.flag("lies");
-        if (a.building.empty() && a.buildingFlag.empty() && !a.outdoors) {
+        a.nightOnly = def.flag("nightOnly");
+        a.onBuilding = def.flag("onBuilding");
+        a.openSky = def.flag("openSky");
+        a.chairs = def.flag("chairs");
+        a.reach = std::max(1, static_cast<int>(def.integer("reach", 1)));
+        if (a.building.empty() && a.buildingFlag.empty() && !a.outdoors && !a.chairs) {
             continue;  // needs a place
         }
         r.activities.push_back(std::move(a));
@@ -190,14 +216,22 @@ void RecreationSystem::step() {
         const bool asleep = worker != nullptr && jobIsLyingDown(worker->job);
         const bool playing = worker != nullptr && worker->job.type == JobType::Recreate && worker->job.step > 0;
 
-        // Joy falls while the pawn is awake; the activity's job raises it (Jobs.h) while it plays.
-        if (!asleep && !playing) {
-            joy.level = std::max(0.0f, joy.level - rules_.joyFallPerDay * kPerSecond);
+        // Joy falls while the pawn is awake, slower the emptier it is, not at all at 0; the
+        // activity's job raises it (Jobs.h) while it plays.
+        if (!asleep && !playing && joy.level > 0.0f) {
+            const float perHour = joy.level >= 0.30f ? rules_.fallHigh : joy.level >= 0.15f ? rules_.fallMid : rules_.fallLow;
+            joy.level = std::max(0.0f, joy.level - perHour * kPerSecondOfHour);
         }
         for (JoyTolerance& t : joy.tolerance) {
             const int index = rules_.kindIndex(t.kind);
             const float decay = index >= 0 ? rules_.kinds[static_cast<size_t>(index)].decayPerDay : 0.1f;
             t.amount = std::max(0.0f, t.amount - decay * kPerSecond);
+            // Bored of a kind above the high mark, until it has worn off below the low one.
+            if (t.amount > rules_.boredAbove) {
+                t.bored = true;
+            } else if (t.amount < rules_.boredBelow) {
+                t.bored = false;
+            }
         }
         joy.tolerance.erase(std::remove_if(joy.tolerance.begin(), joy.tolerance.end(),
                                            [](const JoyTolerance& t) { return t.amount <= 0.0f; }),

@@ -2036,6 +2036,9 @@ void saveJoyPart(Ar& ar, SaveJoy& j) {
         ar.text("kind", t.kind);
         ar.value("amount", t.amount);
         ar.require(t.amount >= 0.0f && t.amount <= 1.0e3f, "the save file has an impossible tolerance");
+        if (ar.sectionVersion() >= 2) {
+            ar.value("bored", t.bored);
+        }
     });
     ar.text("activity", j.activity);
 }
@@ -3138,7 +3141,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("power", 1, [&] {
         saveParts(ar, "power", e, &SaveEntity::power, [&](PowerPart& part) { savePowerPart(ar, part); });
     });
-    ar.section("recreation", 1, [&] {
+    ar.section("recreation", 2, [&] {
         saveParts(ar, "joy", e, &SaveEntity::joy, [&](SaveJoy& j) { saveJoyPart(ar, j); });
     });
     ar.section("research", 1, [&] { saveResearch(ar, d.research); });
@@ -3329,7 +3332,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("wealth", n.wealth);
         ar.value("points", n.points);
     });
-    ar.section("disasters", 1, [&] {
+    ar.section("disasters", 2, [&] {
         d.hasDisasters = true;
         DisasterState& s = d.disasters;
         ar.value("rngState", s.rngState);
@@ -3352,6 +3355,13 @@ void saveSections(Ar& ar, SaveData& d) {
             c.radius = static_cast<float>(radius);
             ar.value("nextStrike", c.nextStrike);
         });
+        if (ar.sectionVersion() >= 2) {  // blight that spreads
+            ar.list("blighted", s.blighted, [&](BlightedPlant& b) {
+                ar.value("x", b.cell.x);
+                ar.value("y", b.cell.y);
+                ar.value("dies", b.dies);
+            });
+        }
     });
     ar.section("fire", 1, [&] {
         ar.value("started", d.fire.started);
