@@ -11,6 +11,8 @@ Stage 2 C25 (colony-year scenario) wired up, not green: `simrun --scenario year`
 
 
 
+Stage 2 T1 traders and visitors: the narrator now fires `TraderCaravanArrival`, `VisitorGroup` and `OrbitalTraderArrival` (workers pick a non-hostile faction by chance and start a visit through C23's `startVisit`; letter with a jump-to cell). Tests in `TradeTests`. Sim only, no save change.
+
 Stage 2 T3 trouble events finished: the narrator can now fire the six disease outbreaks (colonists fall ill, 30% of them, plague 50%), chitinid infestations, remnant clusters and prison breaks (docs/design/disasters.md). Sim only, no save change.
 Stage 2 ship ending on screen done (the Unreal side of the spaceship ending): a **Ship** button in the panels' menu row once a ship part stands (the warm-up days left, green when it can launch), a ship window (parts against what a launch needs, Start reactor, the warm-up bar and waves, a colonist list for each cryptosleep casket, Launch greyed with the reason) and an ending screen naming who left, with Keep playing; log lines for the reactor, waves and launch. The snapshot's `ship` adds `reactor` and `aboard`, and `ShipCommand` has a dev action `FinishWarmUp` (`docs/design/panels.md` "Ship", smoke test `ship`).
 

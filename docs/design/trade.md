@@ -12,7 +12,7 @@ Other factions' people come to the colony in **visits**. A visit is one of three
 | `Orbital` | a trade ship: no pawns, only a stock | 16 hours (`orbitalStayHours`, RimWorld) | while it is here |
 
 `TradeSystem::startVisit(faction, kind, traderKind, edge, id, error)` starts one. **T1's incidents call it** (the incident defs
-`TraderCaravanArrival`, `VisitorGroup` and `OrbitalTraderArrival` already name the way); nothing starts a visit by itself yet.
+`TraderCaravanArrival`, `VisitorGroup` and `OrbitalTraderArrival` already name the way); the narrator's workers for them (in `Sim.cpp`) pick a faction at random that can and is not hostile and call it, so the storyteller now sends caravans, visitors and orbital traders by itself.
 `StartVisitCommand{faction, kind, traderKind, edge}` is the same for tests and dev. A faction must have `canVisit` (visitors) or
 `canTrade` (the others) and must not be hostile (`permanentEnemy`, or goodwill at -75 or less). The trader kind is the one asked for or
 one of the faction's `traders.caravan` / `traders.orbital` kinds by chance.
