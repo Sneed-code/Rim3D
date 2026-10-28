@@ -154,6 +154,7 @@ enum class EventType : uint8_t {
     OtherMapMade,          // a visited tile's map was made (`count` its cells per side)
     OtherMapEntered,       // the caravan `count` walked onto that map (`thing` none: its pawns are that map's things now)
     OtherMapLeft,          // a caravan set out from that map; it is this sim's caravan `count` now
+    SiegeChanged,          // a siege moved on (docs/design/sieges.md): `squad`, `cell` its camp, `count` its members, `message` "camp" (it got there and its shells dropped in), "shelling" (its mortars are up) or "assault: why" (losses, time, no mortars, out of shells)
 };
 
 // What stopped a projectile (ProjectileHit).

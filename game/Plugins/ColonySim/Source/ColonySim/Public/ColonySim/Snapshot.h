@@ -291,9 +291,11 @@ struct SquadView {
     int members = 0;       // still with it: on the map, downed ones included
     int started = 0;
     CellPos target;        // the cell it goes for
-    uint8_t strategy = 0;  // RaidStrategy (F12): 0 Assault, 1 Sappers, 2 DropPods, 3 Thieves, 4 Kidnappers
+    uint8_t strategy = 0;  // RaidStrategy (F12): 0 Assault, 1 Sappers, 2 DropPods, 3 Thieves, 4 Kidnappers, 5 Siege
     bool breaching = false;  // sappers are digging through a wall...
     CellPos breach;          // ...this one
+    uint8_t siegeStage = 0;  // a siege's SiegeStage (docs/design/sieges.md): 0 March, 1 Build, 2 Shell, 3 Assault
+    CellPos camp;            // and its camp's middle
 };
 
 // A thing in a trader's stock.
