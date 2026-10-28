@@ -963,6 +963,21 @@ struct FastTravelCommand {
 // Ends a night skip or a fast travel now. A fast travel then leaves the colonist where it is.
 struct CancelSkipCommand {};
 
+// Manned artillery (docs/design/artillery.md), one command with an `action`:
+// "Man": `pawn` takes the post at the mortar or rocket launcher `building` (a colonist is undrafted and walks there; the
+//   player's colonist must stand within reach). Fails for a pawn that isn't the colony's, can't fight or can't get there.
+// "StopManning": the crew leaves. "Aim": fire at the pawn `target`, else at the point (x, y); fails out of range, inside
+//   the minimum range, off the map or (a mortar) under a mountain's roof. "ClearAim": a mortar goes back to picking
+//   enemies itself. "HoldFire" / "FireAtWill": stop or let it fire.
+struct ArtilleryCommand {
+    std::string action;
+    Entity building = kNoEntity;
+    Entity pawn = kNoEntity;
+    Entity target = kNoEntity;
+    float x = 0.0f;
+    float y = 0.0f;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -993,7 +1008,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              TradeCommand, AdjustGoodwillCommand, GiftCommand, ClimbCommand, AttuneCommand,
                              LearnPowerCommand, CastPowerCommand, SetThermostatCommand, RepairGearCommand,
                              FitUpgradeCommand, CreateAreaCommand, PaintAreaCommand, DeleteAreaCommand,
-                             AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand, CaravanCommand, RerollColonistCommand>;
+                             AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand, CaravanCommand, RerollColonistCommand,
+                             ArtilleryCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

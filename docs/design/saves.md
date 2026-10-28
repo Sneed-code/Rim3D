@@ -132,6 +132,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `animals` | 1 | `SimSettings::wildAnimals`, the animal system's state (populated, percent, random stream, next herd id, over-density flag, counters) and the `animal` part of every animal ([animal-life.md](animal-life.md)) |
 | `husbandry` | 2 | animal zones (id and cells), counters, and the `care` part of every animal that has one: marks, zone, home, timers, training steps and wants, the path it waits on ([husbandry.md](husbandry.md)); version 2 (N2) adds the hunt mark, the collect flag and the hunted counter ([hunting.md](hunting.md)) |
 | `explosives` | 1 | `belt`, `thrower`, `grenade` (a thrown grenade in flight or waiting out its fuse; an entity with no `Thing`), `knockedDown` ([explosives.md](explosives.md)) |
+| `artillery` | 1 | `artillery` on mortars and rocketswarm launchers (crew, aim, hold fire, phase), `shell` (a mortar shell in flight; an entity with no `Thing`) ([artillery.md](artillery.md)) |
 | `temperature` | 1 | each enclosed room's temperature, by its anchor cell (E2) |
 | `thermostats` | 1 | each heater or cooler target temperature set by the player, by building |
 | `raids` | 1 | the raid state (factions met, squads, the alarm, threat and home points, the shelter mark), then the `defense` and `raider` parts ([raids.md](raids.md), F6) |

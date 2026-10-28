@@ -148,6 +148,9 @@ inline constexpr uint8_t kRefuelPickUpStep = 1;
 // bench, `cell` where the pawn stands, `bill` 0 for a repair or the upgrade part's def id + 1 for a fitting.
 inline constexpr uint8_t kGearPickUpStep = 1;
 
+// ManArtillery has two: go to the cell beside the gun (`site`), then man it there for as long as the order lasts.
+inline constexpr uint8_t kManArtilleryPostStep = 1;
+
 // Operate: the DoBill steps with the patient for the work building. `thing` is the part or medicine being fetched (none when
 // there is nothing to fetch), `site` the patient, `bill` the operation's id, `cell` where the doctor stands.
 inline constexpr uint8_t kOperatePickUpStep = 1;
@@ -276,6 +279,9 @@ public:
     // A player order: haul this item to the best stockpile now, ending the pawn's current job.
     // Refused for the pawn the player controls directly (PlayerControl).
     bool orderHaul(Entity pawn, Entity thing, std::string& error);
+    // A player order: walk beside this mortar or rocket launcher and man it (ArtilleryJobs.cpp, docs/design/artillery.md)
+    // until ordered off. Refused for a pawn the player controls, one that is drafted or fighting, or no way to the gun.
+    bool orderMan(Entity pawn, Entity building, std::string& error);
     // A player order: go and take this drug (an Ingest job; docs/design/drugs.md). Refused for a pawn the player controls.
     bool orderTakeDrug(Entity pawn, Entity thing, std::string& error);
     void setDrugs(DrugSystem* drugs) { drugs_ = drugs; }
@@ -697,6 +703,9 @@ private:
     // Standing by on duty (FieldCareJobs.cpp): ends when the pawn is off duty.
     bool failCheckStandBy(Entity pawn, Job& job, std::string& why);
     StepResult extinguishWork(Entity pawn, Job& job, std::string& why);
+    // Manning artillery (ArtilleryJobs.cpp).
+    bool failCheckMan(Entity pawn, Job& job, std::string& why);
+    StepResult manWork(Entity pawn, Job& job, std::string& why);
     // Rearming sprung traps (DefenseJobs.cpp).
     bool failCheckRearm(Entity pawn, Job& job, std::string& why);
     StepResult rearmWork(Entity pawn, Job& job, std::string& why);

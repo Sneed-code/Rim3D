@@ -1788,6 +1788,9 @@ void RaidSystem::callUp(Entity pawn, const std::vector<Entity>& spotted) {
     if (f != nullptr && !f->defending) {
         return;  // drafted: the player commands it
     }
+    if (const Worker* w = reg.try_get<Worker>(pawn); f == nullptr && w != nullptr && w->job.type == JobType::ManArtillery) {
+        return;  // a gun's crew stays at its post (docs/design/artillery.md)
+    }
     const DefensePlan* plan = reg.try_get<DefensePlan>(pawn);
     DefenseRole role = plan != nullptr ? plan->role : DefenseRole::Defender;
     if (role == DefenseRole::Medic || role == DefenseRole::Firefighter) {

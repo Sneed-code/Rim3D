@@ -208,6 +208,7 @@ enum class PawnAction : uint8_t {
     Operate,      // started an operation on `target`, a patient in bed (once per job; the work goes on until its JobEnded)
     Scan,         // started working a ground-penetrating scanner `target` (once per job; the work goes on until its JobEnded)
     Drill,        // started working a deep drill `target` (once per job; the work goes on until its JobEnded)
+    Man,          // took its post at `target`, a mortar or rocket launcher (once per ManArtillery job; it stays until its JobEnded)
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
