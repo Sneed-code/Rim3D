@@ -63,6 +63,7 @@ gives no work; the tasks with scanners so far:
 | Task | Work type | Scanner |
 | --- | --- | --- |
 | `Refuel` | Hauling (first) | finished buildings low on fuel, or ordered filled: a job to bring the nearest fuel stack ([fuel.md](fuel.md)) |
+| `LoadPods` | Hauling (second) | stacks named for transport pods being loaded: a `LoadPod` job carries one into the nearest pod of its group ([transport-pods.md](transport-pods.md)) |
 | `RepairWeapons`, `RepairApparel` | Smithing, Tailoring (after the bench bills) | gear marked for repair, or a gun with a part ordered, at a bench that repairs that kind ([repair.md](repair.md)) |
 | `HaulToStockpile` | Hauling | items outside storage, or in a stockpile worse than one that would take them |
 | `ConstructDeliverResources` | Construction | blueprints and frames that need materials ([construction.md](construction.md)) |

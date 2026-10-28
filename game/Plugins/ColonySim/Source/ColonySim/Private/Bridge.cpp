@@ -238,8 +238,13 @@ const char* commandName(const Command& command) {
             } else if constexpr (std::is_same_v<Type, CaravanCommand>) {
                 return "Caravan";
             } else {
-                static_assert(std::is_same_v<Type, RerollColonistCommand>, "name every command type");
-                return "RerollColonist";
+                // Nested, not one more else-if: MSVC stops at 128 nested blocks (C1061).
+                if constexpr (std::is_same_v<Type, PodCommand>) {
+                    return "Pod";
+                } else {
+                    static_assert(std::is_same_v<Type, RerollColonistCommand>, "name every command type");
+                    return "RerollColonist";
+                }
             }
         },
         command);
@@ -404,6 +409,13 @@ const char* eventTypeName(EventType type) {
         case EventType::OtherMapMade: return "OtherMapMade";
         case EventType::OtherMapEntered: return "OtherMapEntered";
         case EventType::OtherMapLeft: return "OtherMapLeft";
+        case EventType::PodsLoading: return "PodsLoading";
+        case EventType::PodLoaded: return "PodLoaded";
+        case EventType::PodPassengerDropped: return "PodPassengerDropped";
+        case EventType::PodsReady: return "PodsReady";
+        case EventType::PodsCancelled: return "PodsCancelled";
+        case EventType::PodsLaunched: return "PodsLaunched";
+        case EventType::PodsArrived: return "PodsArrived";
     }
     return "?";
 }

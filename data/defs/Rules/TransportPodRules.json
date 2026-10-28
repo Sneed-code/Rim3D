@@ -1,0 +1,15 @@
+[
+ {
+  "defName": "TransportPodRules",
+  "source": "RimWorld wiki (Transport pod, Pod launcher)",
+  "fuelPerTile": 2.25,
+  "minFuel": 1,
+  "ticksPerTile": 50,
+  "minFlightTicks": 250,
+  "maxRepaths": 5,
+  "verified": ["fuelPerTile"],
+  "unverified": ["minFuel"],
+  "ours": ["ticksPerTile", "minFlightTicks", "maxRepaths"],
+  "notes": "The wiki: each tile of distance takes 2.25 chemfuel from each pod's launcher, so a full launcher (150) reaches 66 tiles. RimWorld burns at least 1 chemfuel for any launch (recalled from its code). The wiki gives no flight speed, only 'very quick but not instant': 50 ticks a tile (66 tiles in about 1.3 game hours) is ours. Our world is a square grid: a tile's distance counts a diagonal step as one, as RimWorld's hexagons do."
+ }
+]
