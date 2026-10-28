@@ -23,12 +23,16 @@ The snapshot's `ThingView::markHunt` shows the mark.
   at a chance of `huntAvoidManhunterChance` (10%, ours) or more, which is every predator (bear, wolf, cougar: 20%) and tusker (boar, thrumbo: 50%).
   The mark stays on, so the player sees the colonists leave it; take it off or hunt it by hand with a draft.
 - The `Hunt` job is one long step. The hunter walks at the animal (a new path every `huntRepathSeconds`, 3 s, or when the animal
-  has moved three cells) until it is within **80% of the gun's range** (`huntRangeShare`, at least 3 m: ours) with a clear line of sight, then
-  stands still and shoots (`CombatSystem::shoot`, an aimed shot: the gun's warm-up and its spread by the hunter's Shooting skill).
+  has moved three cells) until it is within **80% of the gun's range** (`huntRangeShare`, at least 3 m: ours) **times the animal's size
+  against a man's** (the height of its aim point over a standing man's 1.15 m, to the power `huntSizeExponent` 1: ours) with a clear
+  line of sight, then stands still and shoots (`CombatSystem::shoot`, an aimed shot: the gun's warm-up and its spread by the hunter's Shooting skill).
   It holds still while aiming and firing a burst, and shoots again whenever the gun is ready. A runner is followed.
+  A hare (aim point 0.19 m) is shot from about 3.5 m with a revolver instead of 20 m: at 20 m it is a tenth of a man's target and
+  nearly every shot missed, so a hunt timed out and started again for game hours (the year run: 107 given up, 7 animals hunted).
+  Test `Hunting: a hunter with a revolver brings a hare down`: 7 or 8 hares of 8 in three hours (before: 2).
 - The job ends when the animal is dead: `Husbandry::finishHunt` takes the mark off, sets the corpse's `collect` flag, counts it
   (`stats.hunted`) and sends `AnimalHunted`. It fails (and the colonist keeps away from that animal for ten minutes) when the mark is
-  taken off, the gun is gone, no path is found, or **15 minutes (`huntMaxSeconds`, ours) pass without a kill**.
+  taken off, the gun is gone, no path is found, or **15 minutes (`huntMaxSeconds`, ours) pass without a hit** (each new wound on the animal restarts the clock, `Job::count` the wounds seen and `Job::progress` the seconds into the hunt of the last hit; before, a deer that took longer than 15 minutes was given up and the hunt began again).
 - **Hunted animals turn on the hunter** through N5, not through anything new here: every bullet that hurts an animal calls
   `AnimalSystem::hurt`, which makes tuskers and predators fight back and lets any hurt animal turn manhunter by its chance
   ([animal-fights.md](animal-fights.md)); the colony alarm then calls the colonists up as for any enemy.
@@ -50,9 +54,12 @@ The job `HaulCorpse` is the rescue job's steps (walk up, lift, carry: the corpse
 
 - The recipe `ButcherCorpse` (users: the butcher table; skill Cooking; giver `DoBillsButcher`, in the Cooking work type) has a
   `butcher` field; `Recipe::butcher` is set, and the bill giver makes a `Butcher` job instead of fetching item stacks.
-- **Which corpse:** the nearest to the table of the dead animals that `isCorpse`, that the bill's radius allows (0: anywhere), that
+- **Which corpse:** the nearest to the table of the dead animals that `isCorpse`, that the bill's radius and filter allow (0: anywhere), that
   nobody else holds, that the colonist hasn't just failed on and can reach. Any dead animal will do, not only hunted ones.
-  A dead person (`Human`, `race.meatDef` `Meat_Human`, `Leather_Human`) is cut up the same way, a full body's yield.
+  **People are left out by default** (RimWorld's default filter): a new butcher bill's `disallowed` list holds every Things def of
+  category `Pawn` with `race.intelligence` `Humanlike`. `SetBillOptions.disallowed` takes pawn defs (races) on butcher and cremation
+  bills, so the player lets people in with a list that leaves `Human` out. A dead person (`Human`, `race.meatDef` `Meat_Human`,
+  `Leather_Human`) is then cut up the same way, a full body's yield. Before, colonists butchered their own dead in the year run.
 - **People as meat and leather (moods, `Mood.cpp`):** items and stuffs of human origin carry `humanlike: true` (`Meat_Human`,
   `Leather_Human`). The butcher of a corpse whose race is `Humanlike` gets `ButcheredHumanlikeCorpse` (-15, 6 days). Eating
   raw human meat gives `AteHumanlikeMeat` (-20, 2 days); eating a meal cooked from it (`PawnAte.part` 1, read from the meal's

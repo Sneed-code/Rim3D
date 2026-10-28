@@ -23,6 +23,7 @@
     "repathSeconds": 600,
     "huntRangeShare": 0.8,
     "huntMinRange": 3,
+    "huntSizeExponent": 1.0,
     "huntMaxSeconds": 900,
     "huntRepathSeconds": 3,
     "huntAvoidManhunterChance": 0.1,
@@ -45,7 +46,7 @@
     "unverified": ["interactSeconds", "slaughterSeconds", "feedNutritionPerBodySize", "attemptIntervalSeconds", "decayDays",
                    "trainables", "tameXp", "trainXp", "slaughterXp", "butcherXp"],
     "ours": ["feedSeconds", "skillChanceBase", "skillChancePerLevel", "handReach", "holdRadius", "starveDays", "handFeedBelow",
-             "workMinFood", "homeRadius", "itemRadius", "feedXp", "repathSeconds", "dietFoods", "huntRangeShare", "huntMinRange",
+             "workMinFood", "homeRadius", "itemRadius", "feedXp", "repathSeconds", "dietFoods", "huntRangeShare", "huntMinRange", "huntSizeExponent",
              "huntMaxSeconds", "huntRepathSeconds", "huntAvoidManhunterChance"]
   }
 ]
