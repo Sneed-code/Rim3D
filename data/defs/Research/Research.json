@@ -38,7 +38,7 @@
   {"defName": "PenoxycyclineProduction", "label": "penoxycycline production", "techLevel": "Industrial", "baseCost": 500, "prerequisites": ["DrugProduction"], "benchTier": 1, "unlocks": {"Things": ["Penoxycyline"], "Recipes": ["MakePenoxycyline", "MakePenoxycylineBulk"]}},
   {"defName": "BiofuelRefining", "label": "biofuel refining", "techLevel": "Industrial", "baseCost": 700, "prerequisites": ["Electricity"], "benchTier": 1, "unlocks": {}, "unverified": ["unlocks"]},
   {"defName": "WatermillGenerator", "label": "watermill generator", "techLevel": "Industrial", "baseCost": 700, "prerequisites": ["Electricity"], "benchTier": 1, "unlocks": {}, "unverified": ["unlocks"]},
-  {"defName": "NutrientPaste", "label": "nutrient paste", "techLevel": "Industrial", "baseCost": 400, "prerequisites": ["Electricity"], "benchTier": 1, "unlocks": {}, "unverified": ["unlocks"]},
+  {"defName": "NutrientPaste", "label": "nutrient paste", "techLevel": "Industrial", "baseCost": 400, "prerequisites": ["Electricity"], "benchTier": 1, "unlocks": {"Things": ["NutrientPasteDispenser", "Hopper"]}, "unverified": []},
   {"defName": "Autodoor", "label": "autodoor", "techLevel": "Industrial", "baseCost": 600, "prerequisites": ["Electricity"], "benchTier": 1, "unlocks": {}, "unverified": ["unlocks"]},
   {"defName": "TubeTelevision", "label": "tube television", "techLevel": "Industrial", "baseCost": 1000, "prerequisites": ["Electricity", "ComplexFurniture"], "benchTier": 1, "unlocks": {"Things": ["TubeTelevision"]}, "unverified": []},
   {"defName": "PackagedSurvivalMeal", "label": "packaged survival meal", "techLevel": "Industrial", "baseCost": 500, "prerequisites": ["NutrientPaste"], "benchTier": 1, "unlocks": {"Recipes": ["CookMealSurvival"]}, "unverified": []},

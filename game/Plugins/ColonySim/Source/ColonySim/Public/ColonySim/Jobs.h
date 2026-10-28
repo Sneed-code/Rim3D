@@ -580,7 +580,15 @@ private:
     void interruptForNeeds(Entity pawn);
     ScheduleKind scheduleNow(Entity pawn) const;
     float sleepBelow(ScheduleKind slot) const;
-    bool findFood(Entity pawn, Job& out);
+    // `commit` false only asks whether there is food: a nutrient paste dispenser then makes no meal.
+    bool findFood(Entity pawn, Job& out, bool commit = true);
+    // Nutrient paste (NutrientPaste.cpp, docs/design/nutrient-paste.md): the raw food in the hoppers beside a dispenser
+    // (nutrition), and whether the dispenser could make a meal now (powered, with enough in its hoppers).
+    float pasteStock(Entity dispenser) const;
+    // The free cell beside the dispenser where `pawn` would stand: the nearest it can reach. False if there is none.
+    bool pasteSpot(Entity dispenser, Entity pawn, CellPos& cell) const;
+    // Takes one meal's raw food out of the hoppers and puts the meal on `cell`.
+    Entity dispensePaste(Entity dispenser, CellPos cell);
     // The chair, next to a table, that `pawn` would eat at when the food lies at `from`: the nearest
     // within NeedRules.eatSpotRadius that it can reach and nobody holds. kNoEntity if there is none.
     Entity findChair(Entity pawn, CellPos from, CellPos& cell) const;
@@ -797,6 +805,10 @@ private:
     std::vector<uint8_t> isMedical_;  // per def id: a bed with `building.medical`
     std::vector<uint8_t> isTable_;
     std::vector<uint8_t> isChair_;
+    std::vector<uint8_t> isHopper_;   // per def id: `building.hopper`
+    std::vector<uint8_t> pasteRaw_;   // per def id: raw food a dispenser takes (not hay, not human flesh)
+    std::vector<float> pasteCost_;    // per def id: a dispenser's `building.nutritionPerMeal`, else 0
+    std::vector<DefId> pasteMeal_;    // per def id: the meal a dispenser makes (`building.mealDef`)
     // WorkRules and SkillRules (GatherJobs.cpp), with RimWorld's numbers when the defs are missing.
     struct GatherRules {
         double miningSpeedBase = 0.04;
