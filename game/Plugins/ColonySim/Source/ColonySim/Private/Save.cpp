@@ -51,6 +51,7 @@
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Quests.h"
 #include "ColonySim/Ship.h"
+#include "ColonySim/Caravans.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Social.h"
 #include "ColonySim/Research.h"
@@ -554,6 +555,8 @@ struct SaveData {
     SaveDesignations designations;     // format 12 on
     ResearchState research;            // section "research"
     ShipState ship;                    // section "ship"
+    std::vector<Caravan> caravans;     // section "caravans" (W4)
+    int caravanNextId = 1;
     float moodWealth = 0.0f;           // section "expectations": the wealth the mood system measured, and when
     int64_t moodWealthAt = -1;
     TravelState travel;                // section "travel" (P5)
@@ -1198,6 +1201,12 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.value("y", c.y);
     } else if constexpr (std::is_same_v<Type, SkipNightCommand> || std::is_same_v<Type, CancelSkipCommand>) {
         // no fields
+    } else if constexpr (std::is_same_v<Type, CaravanCommand>) {
+        ar.text("action", c.action);
+        ar.value("caravan", c.caravan);
+        ar.value("tile", c.tile);
+        ar.list("pawns", c.pawns, [&](Entity& e) { ar.value(nullptr, e); });
+        ar.list("items", c.items, [&](Entity& e) { ar.value(nullptr, e); });
     } else {
         static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
     }
@@ -2609,6 +2618,32 @@ void saveShip(Ar& ar, ShipState& s) {
 }
 
 template <typename Ar>
+void saveCaravans(Ar& ar, SaveData& d) {
+    ar.value("nextId", d.caravanNextId);
+    ar.list("caravans", d.caravans, [&](Caravan& c) {
+        ar.value("id", c.id);
+        ar.value("state", c.state);
+        ar.require(static_cast<int>(c.state) <= static_cast<int>(CaravanState::Waiting), "the save file has a bad caravan state");
+        ar.list("members", c.members, [&](CaravanWalker& w) {
+            ar.value("pawn", w.pawn);
+            ar.value("walk", w.walk);
+            ar.value("repaths", w.repaths);
+            ar.value("pathSlot", w.path.slot);
+            ar.value("pathSerial", w.path.serial);
+        });
+        ar.list("items", c.items, [&](Entity& e) { ar.value(nullptr, e); });
+        ar.value("tile", c.tile);
+        ar.value("cameFrom", c.cameFrom);
+        ar.value("destination", c.destination);
+        ar.list("path", c.path, [&](int& t) { ar.value(nullptr, t); });
+        ar.value("progress", c.progress);
+        ar.value("cost", c.cost);
+        ar.group("exit", [&] { saveCell(ar, c.exit); });
+        ar.value("formedAt", c.formedAt);
+    });
+}
+
+template <typename Ar>
 void saveTravel(Ar& ar, TravelState& s) {
     ar.value("kind", s.kind);
     ar.require(static_cast<int>(s.kind) <= static_cast<int>(SkipKind::Travel), "the save file has a bad skip kind");
@@ -3416,6 +3451,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("startTile", d.world.startTile);
         ar.value("hash", d.worldHash);
     });
+    ar.section("caravans", 1, [&] { saveCaravans(ar, d); });
     ar.section("expectations", 1, [&] {
         ar.value("wealth", d.moodWealth);
         ar.value("at", d.moodWealthAt);
@@ -3973,6 +4009,8 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     }
     d.research = sim.research_->state();
     d.ship = sim.ship_->state();
+    d.caravans = sim.caravans_->caravans();
+    d.caravanNextId = sim.caravans_->nextId();
     d.moodWealth = sim.mood_->wealth();
     d.moodWealthAt = sim.mood_->wealthAt();
     d.travel = sim.travel_->state();
@@ -4878,6 +4916,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     }
     sim.mood_->restoreWealth(d.moodWealth, d.moodWealthAt);  // an older save measures it again at once
     if (!sim.travel_->restore(std::move(d.travel), error)) {
+        return false;
+    }
+    if (!sim.caravans_->restore(std::move(d.caravans), d.caravanNextId, error)) {
         return false;
     }
     sim.apparel_->restoreOutfits(std::move(d.outfits), d.nextOutfitId);
