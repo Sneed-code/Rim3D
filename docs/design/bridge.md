@@ -344,7 +344,7 @@ Code: `game/Source/Rim3D/SimSubsystem.h/.cpp` (`USimSubsystem`). Smoke test: `-T
   resumes at the earlier speed, 1 / 2 / 3 set the speed, `.` steps once while paused, F7 saves a
   replay to `game/Saved/Replays/replay-<time>-day<N>.json`. Keys are ignored while the console is
   open. Console: `Sim.Speed <0-3>`, `Sim.Spawn <Def> <x> <y> [count]`, `Sim.SaveReplay`,
-  `Sim.ShowTimings 0|1` (on by default), `Sim.DebugDraw 0|1` (coloured shapes at blended positions,
+  `Sim.ShowTimings 0|1` (off by default since L1), `Sim.DebugDraw 0|1` (coloured shapes at blended positions,
   until U4 and U5 draw the real things).
 - **On-screen timings** (top left): game time and speed, things on the map, events so far, the
   sim's cost per frame (average and worst over about a second, red above the 5 ms budget), steps per
