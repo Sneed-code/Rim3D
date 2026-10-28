@@ -406,6 +406,10 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
     isMedical_.assign(defs_.size(), 0);
     isTable_.assign(defs_.size(), 0);
     isChair_.assign(defs_.size(), 0);
+    isHopper_.assign(defs_.size(), 0);
+    pasteRaw_.assign(defs_.size(), 0);
+    pasteCost_.assign(defs_.size(), 0.0f);
+    pasteMeal_.assign(defs_.size(), DefId{});
     for (uint32_t i = 0; i < defs_.size(); ++i) {
         const Def& def = defs_.get(DefId{i});
         if (def.kind() != "Things") {
@@ -418,6 +422,16 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
         isMedical_[i] = def.flag("building.bed") && def.flag("building.medical") ? 1 : 0;
         isTable_[i] = def.flag("building.isTable") ? 1 : 0;
         isChair_[i] = def.flag("building.isSittable") ? 1 : 0;
+        isHopper_[i] = def.flag("building.hopper") ? 1 : 0;
+        if (def.has("building.nutritionPerMeal")) {
+            pasteCost_[i] = static_cast<float>(def.number("building.nutritionPerMeal"));
+            pasteMeal_[i] = defs_.idOf("Things", def.text("building.mealDef"));
+        }
+        const std::string foodType = def.text("ingestible.foodType");
+        pasteRaw_[i] = (foodType == "VegetableOrFruit" || foodType == "Meat" || foodType == "AnimalProduct") &&
+                               def.number("stats.nutrition") > 0.0 && !def.flag("humanlike")
+                           ? 1
+                           : 0;
         if (def.has("ingestible") && def.number("stats.nutrition") > 0.0) {
             // Food tiers, tastiest last (docs/design/needs.md). NeverForNutrition is not food.
             const std::string taste = def.text("ingestible.preferability");

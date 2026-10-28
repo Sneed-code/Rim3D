@@ -2,6 +2,8 @@
 
 Updated 2026-10-28.
 
+Stage 2 research unlocks, nutrient paste: the `NutrientPaste` project now unlocks the nutrient paste dispenser (125 steel + 3 components, 200 W, 3 x 4) and the hopper (15 steel); a hungry colonist takes a meal from a powered dispenser whose hoppers hold 0.3 nutrition of raw food (the meal is 0.9 nutrition, awful tier, -4 mood for a day, not for an Ascetic). Sim and data, no save change (`docs/design/nutrient-paste.md`, tests `NutrientPasteTests`). 16 empty projects remain in `BACKLOG.md`.
+
 Stage 2 research unlocks, first batch: the tube television, the flatscreen television, brewing beer and the packaged survival meal now need their own projects (before: Electricity, Microelectronics, nothing, nothing); the other empty projects in `BACKLOG.md` still wait for content. Data and one test only.
 
 Stage 2 talent tree grown (protagonist): 4 more talents (quick hands and gunslinger shorten reloads, fleet foot and sprinter raise walking speed) and combat XP (1 per shot, 2 per melee blow that lands); sim only, no save change (`docs/design/talents.md`).

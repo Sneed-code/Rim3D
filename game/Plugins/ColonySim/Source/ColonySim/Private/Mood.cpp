@@ -552,6 +552,9 @@ void MoodSystem::step(int64_t now, std::vector<Event>& events) {
             if (event.message == "ground" && moodIsMeal(preferability)) {
                 addMemory(*mood, "AteWithoutTable", now);
             }
+            if (event.def == defs_.idOf("Things", "MealNutrientPaste") && !hasTrait(event.thing, "Ascetic")) {
+                addMemory(*mood, "AteNutrientPasteMeal", now);
+            }
             if (preferability == "MealFine") {
                 addMemory(*mood, "AteFineMeal", now);
             }

@@ -1,0 +1,37 @@
+[
+  {
+    "defName": "NutrientPasteDispenser", "parent": "BuildingBase", "label": "nutrient paste dispenser",
+    "size": [3, 4], "passability": "Impassable", "fillPercent": 0.5, "designationCategory": "Production",
+    "costs": { "Steel": 125, "ComponentIndustrial": 3 },
+    "researchPrerequisite": "NutrientPaste",
+    "stats": { "maxHitPoints": 350, "workToBuild": 3168.0, "flammability": 0.5, "beauty": 0 },
+    "power": { "consumption": 200 },
+    "building": { "nutritionPerMeal": 0.3, "mealDef": "MealNutrientPaste" },
+    "visual": { "parts": [
+      { "shape": "box", "size": [0, 0, 1.0], "color": [0.55, 0.57, 0.6] },
+      { "shape": "box", "size": [-0.2, -0.2, 0.15], "at": [0, 0, 1.0], "color": [0.35, 0.37, 0.4] },
+      { "shape": "box", "size": [0.6, 0.05, 0.4], "at": [0, -1.85, 0.5], "color": [0.2, 0.45, 0.35] }
+    ] },
+    "unverified": ["fillPercent", "visual"],
+    "ours": ["visual", "building.mealDef"],
+    "note": "Wiki-checked 2026-10-28: 125 steel + 3 components, 2200 ticks, 350 HP, 3x4, 50% flammable, 200 W, 0.3 nutrition of raw food per meal. Hoppers on the sides (docs/design/nutrient-paste.md)."
+  },
+  {
+    "defName": "Hopper", "parent": "BuildingBase", "label": "hopper",
+    "size": [1, 1], "passability": "Standable", "fillPercent": 0.25, "designationCategory": "Production",
+    "costs": { "Steel": 15 },
+    "researchPrerequisite": "NutrientPaste",
+    "stats": { "maxHitPoints": 100, "workToBuild": 432.0, "flammability": 0.5, "beauty": 0 },
+    "building": { "hopper": true },
+    "visual": { "parts": [
+      { "shape": "box", "size": [0.9, 0.9, 0.12], "color": [0.5, 0.52, 0.55] },
+      { "shape": "box", "size": [0.9, 0.04, 0.3], "at": [0, -0.43, 0], "color": [0.5, 0.52, 0.55] },
+      { "shape": "box", "size": [0.9, 0.04, 0.3], "at": [0, 0.43, 0], "color": [0.5, 0.52, 0.55] },
+      { "shape": "box", "size": [0.04, 0.9, 0.3], "at": [-0.43, 0, 0], "color": [0.5, 0.52, 0.55] },
+      { "shape": "box", "size": [0.04, 0.9, 0.3], "at": [0.43, 0, 0], "color": [0.5, 0.52, 0.55] }
+    ] },
+    "unverified": ["fillPercent", "visual"],
+    "ours": ["visual", "building.hopper"],
+    "note": "Wiki-checked 2026-10-28: 15 steel, 300 ticks, 100 HP, 1x1, 50% flammable. A stockpile painted over hoppers (raw food only) fills them; it holds one stack a cell."
+  }
+]
