@@ -87,7 +87,7 @@ Panels (`Overseer.UI 0` hides them):
   point bar, and by category the pawn's speed and where it is heading, an item's stack, a
   building's footprint. A cell: terrain and height, walkable or door, the building on it and the
   items and pawns standing in it. Needs, mood, skills and health are in the colonist panel of U8 ([panels.md](panels.md)).
-- **Bottom right: key hints.**
+- **Bottom right: key hints**, folded behind F1 (since L1: a small "F1  keys" box until F1 opens the list; `UI.KeyHelp 1` keeps it open).
 
 ## Smoke test `overseer` (about 20 s)
 

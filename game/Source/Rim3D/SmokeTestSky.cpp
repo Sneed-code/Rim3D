@@ -488,7 +488,8 @@ void USmokeTestSubsystem::BuildSkyPhases()
 		{
 			Fail(TEXT("sky_storm: no lightning in the storm"));
 		}
-		if (S->GetState().Overcast < 0.8f || S->GetState().SunLux > 3.0f)
+		// A clear noon's sun is data/look.json's clearNoonLux; a storm lets through well under a third of it.
+		if (S->GetState().Overcast < 0.8f || S->GetState().SunLux > 0.3f * S->GetLook().SunClearNoonLux)
 		{
 			Fail(FString::Printf(TEXT("sky_storm: the storm sky is not dark (overcast %.2f, sun %.2f lux)"), S->GetState().Overcast, S->GetState().SunLux));
 		}
@@ -660,9 +661,15 @@ void USmokeTestSubsystem::BuildSkyPhases()
 		{
 			Fail(FString::Printf(TEXT("sky_night: no moon (%.1f degrees up, %.3f lux)"), K.MoonElevation, K.MoonLux));
 		}
-		if (K.SkyLightIntensity > 0.2f)
+		// Since L1 the sky light is the atmosphere's own (lit by the moon at night); what makes the night dark is the exposure,
+		// which follows the light only part of the way: the night must be held at least 8 stops brighter than noon (a lower EV)
+		// but stay dark on screen.
+		const float NightEV = K.ExposureEV;
+		const float NoonEV = S->ComputeState(*SimOf(), 12.0f, SkySmokeMidsummer).ExposureEV;
+		Notes.Add(FString::Printf(TEXT("sky_night: exposure EV %.2f at night, %.2f at a clear noon; %.2f lux on the ground"), NightEV, NoonEV, K.GroundLux));
+		if (NoonEV - NightEV < 8.0f)
 		{
-			Fail(FString::Printf(TEXT("sky_night: the night sky light is %.2f"), K.SkyLightIntensity));
+			Fail(FString::Printf(TEXT("sky_night: the exposure is EV %.2f at night and %.2f at noon"), NightEV, NoonEV));
 		}
 		if (State->MaxRainDrawn > 0 && S->GetRainDrawn() > 0)
 		{

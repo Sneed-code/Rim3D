@@ -23,6 +23,7 @@ param(
     [int]$Threads = 6,                    # cap for compiler jobs
     [int]$TimeoutSeconds = 300,           # the test fails itself after this long
     [string]$EngineDir = "C:\Program Files\Epic Games\UE_5.8",
+    [string]$LookLabel = "",              # look test only: a word added to the Saved\Look folder's name (before, after)
     [string[]]$ExtraArgs = @()           # more game arguments, e.g. "-ini:Engine:[SystemSettings]:Terrain.Textured=0" (a console variable from the first frame)
 )
 
@@ -127,6 +128,11 @@ foreach ($p in $r.phases) {
 foreach ($n in $r.notes) { Write-Host "note: $n" }
 foreach ($e in $r.errors) { Write-Host "ERROR: $e" }
 Write-Host "Screenshots: $(Join-Path $SmokeDir $Test)"
+
+# The look bench (L1): keep this run's shots under Saved\Look\<date> and lay them beside the last run's.
+if ($Test -eq "look") {
+    & (Join-Path $PSScriptRoot "look_sheet.ps1") -Shots (Join-Path $SmokeDir $Test) -LookDir (Join-Path (Split-Path -Parent $SmokeDir) "Look") -Label $LookLabel
+}
 
 if ($r.status -ne "pass" -or $missingShot) { exit 1 }
 exit 0

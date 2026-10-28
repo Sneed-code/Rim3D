@@ -558,9 +558,16 @@ void UProtagonistSubsystem::DrawHud(USimSubsystem& Bridge)
 	// Keys, bottom right.
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x - Margin, Viewport->Pos.y + Viewport->Size.y - Margin), ImGuiCond_Always, ImVec2(1.0f, 1.0f));
 	ImGui::SetNextWindowBgAlpha(0.6f);
-	if (ImGui::Begin("##DirectHints", nullptr, PanelFlags | ImGuiWindowFlags_NoInputs))
+	if (!USimSubsystem::IsKeyHelpShown())
 	{
-		ImGui::TextUnformatted("WASD walk   Ctrl slow   mouse look");
+		if (ImGui::Begin("##DirectHints", nullptr, PanelFlags | ImGuiWindowFlags_NoInputs))
+		{
+			ImGui::TextUnformatted("F1  keys");
+		}
+	}
+	else if (ImGui::Begin("##DirectHints", nullptr, PanelFlags | ImGuiWindowFlags_NoInputs))
+	{
+		ImGui::TextUnformatted("F1 hide   WASD walk   Ctrl slow   mouse look");
 		ImGui::TextUnformatted("V first / third person   wheel zoom");
 		ImGui::TextUnformatted("F hold: work / pick up   X put down   B build");
 		ImGui::TextUnformatted("T take over   Tab overseer view");
