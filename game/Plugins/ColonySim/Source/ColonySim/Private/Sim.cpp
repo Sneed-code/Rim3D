@@ -590,6 +590,48 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         f.text = "Remnant cluster: mechanoids are coming for the colony.";
         return true;
     });
+    // Traders and visitors (C23): trade caravans, orbital traders and visitor groups. The incident def names the way
+    // ("trader": "caravan" or "orbital", or "visitor"); a faction that can and is not hostile is picked by chance.
+    for (const char* name : {"TraderCaravanArrival", "OrbitalTraderArrival", "VisitorGroup"}) {
+        narrator_->setWorker(name, [this, name, seed = settings.seed](IncidentFiring& f) {
+            const Def* incident = defs_->find("Incidents", name);
+            const std::string way = incident != nullptr ? incident->text("trader") : std::string();
+            const VisitKind kind = way == "orbital" ? VisitKind::Orbital : way == "caravan" ? VisitKind::Caravan : VisitKind::Visitors;
+            std::vector<std::string> factions;
+            for (const DefId id : defs_->idsOfKind("Factions")) {
+                const Def& faction = defs_->get(id);
+                if ((kind == VisitKind::Visitors ? faction.flag("canVisit") : faction.flag("canTrade")) &&
+                    !trade_->hostile(faction.defName())) {
+                    factions.push_back(faction.defName());
+                }
+            }
+            Rng rng(splitMix64(seed ^ 0x7669736974ULL ^ static_cast<uint64_t>(time_.seconds)));
+            for (size_t i = factions.size(); i > 1; --i) {
+                std::swap(factions[i - 1], factions[rng.below(static_cast<uint32_t>(i))]);
+            }
+            std::string lastError = "no faction can send them";
+            for (const std::string& faction : factions) {
+                uint32_t visit = 0;
+                std::string error;
+                if (!trade_->startVisit(faction, kind, "", -1, visit, error)) {
+                    lastError = error;
+                    continue;
+                }
+                const Def* factionDef = defs_->find("Factions", faction);
+                const std::string label = factionDef != nullptr ? factionDef->label() : faction;
+                if (const Visit* v = trade_->find(visit)) {
+                    f.hasCell = true;
+                    f.cell = v->spot;
+                }
+                f.text = kind == VisitKind::Visitors  ? "Visitors from the " + label + " have arrived."
+                         : kind == VisitKind::Caravan ? "A trade caravan from the " + label + " has arrived."
+                                                      : "An orbital trader from the " + label + " is in range to trade.";
+                return true;
+            }
+            f.error = lastError;
+            return false;
+        });
+    }
     narrator_->setWorker("PrisonBreak", [this](IncidentFiring& f) {
         if (prisoners_->breakOut("prison break") == 0) {
             f.error = "no prisoner can walk out";
@@ -1653,6 +1695,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             error = "no caravan action '" + caravan->action + "' (Form, Move, Stop or Enter)";
         }
         if (!ok) {
+            commandFailed(id, error);
+        }
+    } else if (const auto* reroll = std::get_if<RerollColonistCommand>(&command)) {
+        if (!rerollColonist(reroll->slot, error)) {
             commandFailed(id, error);
         }
     } else if (const auto* ship = std::get_if<ShipCommand>(&command)) {
@@ -2857,6 +2903,7 @@ uint64_t Sim::stateHash() const {
             for (const JoyTolerance& t : joy->tolerance) {
                 h.add(t.kind.data(), t.kind.size());
                 h.add(t.amount);
+                h.add(static_cast<int>(t.bored));
             }
         }
         if (const Mood* mood = reg.try_get<Mood>(e)) {

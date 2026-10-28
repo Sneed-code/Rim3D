@@ -1,9 +1,11 @@
 #include "doctest.h"
 
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Combat.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Regions.h"
+#include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
@@ -289,4 +291,243 @@ TEST_CASE("Crashlanded: a scenario that does not exist is a setup error") {
     settings.scenario = "Nowhere";
     Sim sim(settings, colonistTestDefs());
     CHECK_FALSE(sim.setupErrors().empty());
+}
+
+// ---- Backgrounds: categories, forced and banned traits, age, gear, rerolls ----
+
+namespace {
+
+std::vector<Colonist> colonistBgMany(const DefDatabase& defs, const std::string& category, uint64_t first, int count) {
+    std::vector<Colonist> out;
+    for (int i = 0; i < count; ++i) {
+        Colonist c;
+        std::string error;
+        if (generateColonist(defs, first + static_cast<uint64_t>(i), false, c, error, category)) out.push_back(c);
+    }
+    return out;
+}
+
+bool colonistBgHas(const Colonist& c, const std::string& trait) {
+    return std::any_of(c.traits.begin(), c.traits.end(), [&](const TraitRecord& t) { return t.def == trait; });
+}
+
+}  // namespace
+
+TEST_CASE("colonists: raiders and settlers draw from their own backstories") {
+    const auto defs = colonistTestDefs();
+    std::set<std::string> settlerStories, raiderStories;
+    for (const Colonist& c : colonistBgMany(*defs, "Colony", 1000, 600)) {
+        settlerStories.insert(c.childhood);
+        settlerStories.insert(c.adulthood);
+    }
+    for (const Colonist& c : colonistBgMany(*defs, "Raider", 1000, 600)) {
+        raiderStories.insert(c.childhood);
+        raiderStories.insert(c.adulthood);
+    }
+    for (const std::string& name : settlerStories) {
+        const std::vector<std::string> cats = colonistTags(*defs->find("Backstories", name), "categories");
+        CHECK((cats.empty() || std::find(cats.begin(), cats.end(), "Colony") != cats.end()));
+    }
+    for (const std::string& name : raiderStories) {
+        const std::vector<std::string> cats = colonistTags(*defs->find("Backstories", name), "categories");
+        CHECK((cats.empty() || std::find(cats.begin(), cats.end(), "Raider") != cats.end()));
+    }
+    CHECK(settlerStories.count("Adult_Warlord") == 0);
+    CHECK(raiderStories.count("Adult_Warlord") == 1);
+    CHECK(raiderStories.count("Adult_Teacher") == 0);
+    CHECK(settlerStories.count("Adult_Teacher") == 1);
+    // Plenty of variety: the data has dozens of backstories in each slot.
+    CHECK(settlerStories.size() >= 50);
+    CHECK(raiderStories.size() >= 35);
+    // A category nobody fits still gets the backstories that fit all.
+    CHECK_FALSE(colonistBgMany(*defs, "Nobody", 1, 5).empty());
+}
+
+TEST_CASE("colonists: backstories force and forbid traits") {
+    const auto defs = colonistTestDefs();
+    int gladiators = 0, gladiatorBrawlers = 0, soldiers = 0, doctors = 0;
+    for (const Colonist& c : colonistBgMany(*defs, "Colony", 5000, 1500)) {
+        if (c.adulthood == "Adult_Soldier") {
+            ++soldiers;
+            CHECK_FALSE(colonistBgHas(c, "Wimp"));
+        }
+        if (c.adulthood == "Adult_Doctor") {
+            ++doctors;
+            CHECK_FALSE(colonistBgHas(c, "Psychopath"));
+            CHECK_FALSE(colonistBgHas(c, "Bloodlust"));
+            CHECK_FALSE(colonistBgHas(c, "Abrasive"));
+        }
+        if (c.adulthood == "Adult_Gladiator") {
+            ++gladiators;
+            gladiatorBrawlers += colonistBgHas(c, "Brawler") ? 1 : 0;
+        }
+        if (c.childhood == "Child_Pampered") CHECK_FALSE(colonistBgHas(c, "Tough"));
+    }
+    CHECK(soldiers > 10);
+    CHECK(doctors > 10);
+    CHECK(gladiators > 10);
+    // Forced at 50%, plus the ordinary chance of drawing Brawler.
+    CHECK(gladiatorBrawlers > gladiators / 3);
+    // A forced trait never breaks the trait rules: no conflicts, no repeats, at most three.
+    for (const Colonist& c : colonistBgMany(*defs, "Raider", 9000, 800)) {
+        std::set<std::string> names;
+        for (const TraitRecord& t : c.traits) CHECK(names.insert(t.def).second);
+        CHECK(c.traits.size() <= 3);
+        if (colonistBgHas(c, "Brawler")) CHECK_FALSE(colonistBgHas(c, "ShootingAccuracy"));
+        if (colonistBgHas(c, "Kind")) CHECK_FALSE(colonistBgHas(c, "Psychopath"));
+        if (c.adulthood == "Adult_Warlord" || c.adulthood == "Adult_Slaver") CHECK_FALSE(colonistBgHas(c, "Kind"));
+    }
+}
+
+TEST_CASE("colonists: skills come from the backstories and rise with age") {
+    const auto defs = colonistTestDefs();
+    double youngSum = 0, oldSum = 0;
+    int youngCount = 0, oldCount = 0;
+    int soldierShooting = 0, soldiers = 0, otherShooting = 0, others = 0;
+    for (const Colonist& c : colonistBgMany(*defs, "Colony", 20000, 2500)) {
+        double total = 0;
+        for (const SkillRecord& s : c.skills) total += s.level;
+        if (c.age <= 24) {
+            youngSum += total;
+            ++youngCount;
+        } else if (c.age >= 50) {
+            oldSum += total;
+            ++oldCount;
+        }
+        const int shooting = c.skill("Shooting")->level;
+        if (c.adulthood == "Adult_Soldier") {
+            soldierShooting += shooting;
+            ++soldiers;
+        } else if (c.adulthood != "Adult_Sniper" && c.adulthood != "Adult_Hunter") {
+            otherShooting += shooting;
+            ++others;
+        }
+    }
+    CHECK(youngCount > 50);
+    if (!(youngCount > 50)) return;
+    CHECK(oldCount > 50);
+    if (!(oldCount > 50)) return;
+    CHECK(oldSum / oldCount > youngSum / youngCount + 3.0);
+    CHECK(soldiers > 10);
+    if (!(soldiers > 10)) return;
+    CHECK(static_cast<double>(soldierShooting) / soldiers > static_cast<double>(otherShooting) / others + 3.0);
+}
+
+TEST_CASE("Crashlanded: the kind of colonist sets what they land wearing") {
+    const auto defs = colonistTestDefs();
+    int dressed = 0, nudists = 0;
+    for (uint64_t seed = 1; seed <= 8; ++seed) {
+        Sim sim(colonistStartSettings(seed), defs);
+        CHECK(sim.setupErrors().empty());
+        sim.things().registry().view<const Colonist>().each([&](const Entity pawn, const Colonist& c) {
+            const Gear* gear = sim.things().registry().try_get<Gear>(pawn);
+            const size_t worn = gear == nullptr ? 0 : gear->apparel.size();
+            if (colonistBgHas(c, "Nudist")) {
+                ++nudists;
+                CHECK(worn == 0);
+            } else {
+                ++dressed;
+                CHECK(worn == 2);
+                CHECK(gear->weapon == kNoEntity);
+            }
+        });
+    }
+    CHECK(dressed > 20);
+    CHECK(nudists > 0);
+}
+
+namespace {
+
+std::vector<Entity> colonistBgSlots(const Sim& sim) {
+    std::vector<Entity> out;
+    sim.things().registry().view<const Colonist>().each([&](const Entity pawn, const Colonist&) { out.push_back(pawn); });
+    std::sort(out.begin(), out.end(), [](Entity a, Entity b) { return entt::to_entity(a) < entt::to_entity(b); });
+    return out;
+}
+
+}  // namespace
+
+TEST_CASE("Crashlanded: a starting colonist can be rerolled before the game starts") {
+    const auto defs = colonistTestDefs();
+    Sim sim(colonistStartSettings(42), defs);
+    const std::vector<Entity> before = colonistBgSlots(sim);
+    CHECK(before.size() == 6);
+    if (!(before.size() == 6)) return;
+    std::vector<Colonist> old;
+    for (const Entity e : before) old.push_back(sim.things().registry().get<Colonist>(e));
+    const auto wornBy = [&](const std::vector<Entity>& pawns) {
+        size_t n = 0;
+        for (const Entity e : pawns) {
+            const Gear* gear = sim.things().registry().try_get<Gear>(e);
+            n += gear == nullptr ? 0 : gear->apparel.size();
+        }
+        return n;
+    };
+    const size_t thingsBefore = sim.things().count() - wornBy(before);
+    std::vector<CellPos> cellsBefore;
+    for (const Entity e : before) cellsBefore.push_back(cellOf(sim.things().registry().get<Position>(e)));
+
+    const uint64_t good = sim.submit(RerollColonistCommand{2});
+    const uint64_t protagonist = sim.submit(RerollColonistCommand{0});
+    const uint64_t outOfRange = sim.submit(RerollColonistCommand{6});
+    sim.step();
+    std::map<uint64_t, std::string> failed;
+    for (const Event& e : sim.events()) {
+        if (e.type == EventType::CommandFailed) failed[e.command] = e.message;
+    }
+    CHECK(failed.count(good) == 0);
+    CHECK(failed.count(protagonist) == 0);
+    CHECK(failed.count(outOfRange) == 1);
+
+    // Two new colonists in the same places; the others are as they were. No clothes are left lying about.
+    const std::vector<Entity> after = colonistBgSlots(sim);
+    CHECK(after.size() == 6);
+    if (!(after.size() == 6)) return;
+    CHECK(sim.things().count() - wornBy(after) == thingsBefore);
+    int changed = 0;
+    for (size_t i = 0; i < after.size(); ++i) {
+        const Colonist& c = sim.things().registry().get<Colonist>(after[i]);
+        const bool same = colonistSame(c, old[i]);
+        changed += same ? 0 : 1;
+        CHECK(sim.things().registry().all_of<Worker>(after[i]));
+        const Gear* gear = sim.things().registry().try_get<Gear>(after[i]);
+        CHECK((gear == nullptr ? 0u : gear->apparel.size()) == (colonistBgHas(c, "Nudist") ? 0u : 2u));
+    }
+    CHECK(changed >= 2);
+    int protagonists = 0;
+    for (const Entity e : after) protagonists += sim.things().registry().get<Colonist>(e).protagonist ? 1 : 0;
+    CHECK(protagonists == 1);
+    CHECK(sim.things().registry().get<Colonist>(after[0]).protagonist);  // slot 0 is still the protagonist
+    for (size_t i = 0; i < after.size(); ++i) {
+        if (i != 0 && i != 2) CHECK(after[i] == before[i]);  // the others were not touched
+    }
+
+    // Same seed and same rerolls give the same colonists; a save and a replay keep the command.
+    Sim twin(colonistStartSettings(42), defs);
+    twin.submit(RerollColonistCommand{2});
+    twin.submit(RerollColonistCommand{0});
+    twin.submit(RerollColonistCommand{6});
+    twin.step();
+    CHECK(twin.stateHash() == sim.stateHash());
+    const std::vector<uint8_t> bytes = saveSim(sim);
+    SaveLoadResult loaded = loadSim(bytes, defs);
+    CHECK(loaded.error.empty());
+    CHECK(loaded.sim != nullptr);
+    if (!(loaded.sim != nullptr)) return;
+    CHECK(loaded.sim->stateHash() == sim.stateHash());
+    const std::string json = writeReplay(recordReplay(sim));
+    Replay replay;
+    std::string error;
+    CHECK(readReplay(json, replay, error));
+    int rerolls = 0;
+    for (const LoggedCommand& logged : replay.commands) rerolls += std::holds_alternative<RerollColonistCommand>(logged.command) ? 1 : 0;
+    CHECK(rerolls == 3);
+
+    // Once the game is running it is too late.
+    sim.stepMany(5);
+    const uint64_t late = sim.submit(RerollColonistCommand{1});
+    sim.step();
+    bool lateFailed = false;
+    for (const Event& e : sim.events()) lateFailed = lateFailed || (e.type == EventType::CommandFailed && e.command == late);
+    CHECK(lateFailed);
 }

@@ -27,7 +27,10 @@ immunity arrives on day 4.2; in a bed (1.05) or a hospital bed (1.07) it wins, a
 Untended infection kills in 1.2 days, immunity only comes on day 1.55: it must be tended.
 
 **Stages** work like blood loss's: the stage at the current severity adds `capacityOffsets`, `capacityMax` caps (an infection
-or sleeping sickness in the last stage leaves 10% Consciousness) and `painOffset` to the pain. A stage with `visible: false`
+or sleeping sickness in the last stage leaves 10% Consciousness) and `painOffset` to the pain. As in RimWorld, the offsets of
+every stage on a capacity (blood loss, environment, diseases) are added up first and the lowest cap is taken last, so food
+poisoning's -0.1 on top of an extreme infection leaves 10% Consciousness, not 0 (capping stage by stage killed a colonist in a
+year run). A stage with `visible: false`
 isn't noticed yet (nothing tends or rests for it; no stage of the current data is hidden). Vomiting is not modelled.
 
 ## Tending

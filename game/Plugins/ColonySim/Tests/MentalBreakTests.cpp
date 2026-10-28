@@ -207,6 +207,23 @@ TEST_CASE("Mental breaks: a pawn waits a day after one break before the next") {
     }
 }
 
+TEST_CASE("Mental breaks: a pawn about to starve stops wandering and goes to eat") {
+    Sim sim = breakSim();
+    const Entity pawn = breakColonist(sim, CellPos{24, 24, 0});
+    sim.step();
+    BreakLog log;
+    BREAK_REQUIRE(breakStart(sim, pawn, "WanderSad"));
+    breakMood(sim, pawn).level = 5.0f;
+    breakRun(sim, log, 60);
+    CHECK(sim.mentalBreaks().active(pawn));
+    sim.things().registry().get<Needs>(pawn).food = 0.03f;
+    breakRun(sim, log, 5);
+    CHECK_FALSE(sim.mentalBreaks().active(pawn));
+    const Event* ended = log.first(EventType::PawnMentalBreakEnded);
+    BREAK_REQUIRE(ended != nullptr);
+    CHECK(ended->message == "too hungry");
+}
+
 TEST_CASE("Mental breaks: sad wander walks about, takes no jobs, and ends with catharsis") {
     Sim sim = breakSim();
     const Entity pawn = breakColonist(sim, CellPos{24, 24, 0});

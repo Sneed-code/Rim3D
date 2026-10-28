@@ -487,8 +487,12 @@ void MentalBreakSystem::tick(Entity pawn, MentalBreaker& b, int64_t now, Rng& rn
     const bool endsItself = b.state == BreakState::Binge || b.state == BreakState::InsultSpree || b.state == BreakState::LeaveColony;
     const Mood* mood = reg.try_get<Mood>(pawn);
     const bool calm = mood == nullptr || mood->level >= b.recoverLevel;
-    if (now >= b.hardEnd || (!endsItself && now >= b.endsAfter && calm)) {
-        finish(pawn, b, now, "recovered");
+    // A pawn about to starve stops hiding or wandering and goes to eat: otherwise a long minor break, with
+    // the hunger it adds to the bad mood, could starve it before the break is over.
+    const Needs* needs = reg.try_get<Needs>(pawn);
+    const bool starving = !endsItself && needs != nullptr && needs->food < 0.05f;
+    if (now >= b.hardEnd || starving || (!endsItself && now >= b.endsAfter && calm)) {
+        finish(pawn, b, now, starving ? "too hungry" : "recovered");
     }
 }
 

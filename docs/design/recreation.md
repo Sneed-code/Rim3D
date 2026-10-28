@@ -11,25 +11,48 @@ the first step a pawn with needs is seen, only when the data has a `JoyRules` de
 
 | Need | Falls | Rises | Mood (the D9 thoughts) |
 | --- | --- | --- | --- |
-| **Recreation** (`level`) | 0.8 a day while awake and not playing | while playing, by the activity's rate | under 0.1 bored stiff -8, under 0.3 bored -4, over 0.8 entertained +4 |
+| **Recreation** (`level`) | per hour awake and not playing: 2.5% from 30% up, 1.75% from 15%, 1% under 15%, nothing at 0 (wiki) | while playing, by the activity's rate | 0 starved -20, to 15% deprived -10, to 30% unfulfilled -5, to 70% none, to 85% satisfied +5, over 85% fully satisfied +10 (wiki) |
 | **Comfort** | 0.6 a day when no furniture is in use | towards the furniture's comfort, 0.5 an hour at most | under 0.2 uncomfortable -3, over 0.7 very comfortable +3 |
 | **Outdoors** | 0.5 a day indoors (sleeping too) | 3 a day outdoors | under 0.1 trapped indoors -8, under 0.3 cooped up -4, over 0.7 fresh air +2 |
 
-New colonists start at 0.6 recreation, 0.5 comfort, 0.6 outdoors. RimWorld's own rates are not on
-the wiki, so every rate above is ours (`unverified` in the defs); the thoughts' numbers are D9's.
+New colonists start at 0.6 recreation, 0.5 comfort, 0.6 outdoors. Recreation's numbers are the wiki's
+(page "Recreation"); comfort's and outdoors' rates are not on it, so they stay ours (`unverified`).
 
 ## Recreation
 
-`RecreationActivities` (D9): horseshoes, chess, billiards, a walk, watching the clouds, chatting at
-a table. Each has a **kind** (`RecreationKinds`: meditative, social, dexterity, cerebral), a joy rate
-an hour, a duration range and a place.
+`RecreationActivities` (D9, widened by the recreation-types task). Each has a **kind**
+(`RecreationKinds`), a joy rate an hour (the wiki's base 36%; the building's `joyGainFactor` is the
+wiki's recreation power), a duration range and a place.
+
+| Kind | Activities (building, gain factor) |
+| --- | --- |
+| Meditative (solitary relaxation) | walk, meditate (meditation spot), watch the clouds (day), gaze at the stars (night) |
+| Social | chat at a table, relax socially (any chair, beside the others) |
+| Dexterity | horseshoes (pin 1.0), billiards (table 1.3) |
+| Cerebral | chess (table 1.0), poker (table 1.3, 4 players) |
+| Television | watch television (tube 1.2, flatscreen 1.4, megascreen 1.6; needs power, seen from up to 3 cells) |
+| Telescope | look through the telescope (1.2; the telescope must stand under the open sky) |
+
+New buildings: `PokerTable` (50 stuff, 50 cloth, 25 wood, `ComplexFurniture`), `TubeTelevision`
+(80 steel, 4 components, 200 W, `Electricity`), `FlatscreenTelevision` (140 steel, 16 components,
+330 W, `Microelectronics`), `MegascreenTelevision` (450 W, not on the build menu: RimWorld gives it
+as a quest reward), `Telescope` (ours: buildable, 50 steel and a component, `Electricity`) and
+`MeditationSpot` (free). Costs and sizes are the wiki's; build work and hit points of the new
+television sets and the telescope are ours. Activity flags added: `nightOnly`, `onBuilding` (stand
+on the building's cell), `openSky`, `chairs` (sit in any chair; the first sitter's chair names the
+group, later ones sit within 5 m of the nearest mate and share its `thing`, so C20's table chat
+applies), `reach` (cells from the building a place may be).
 
 - **Tolerance.** Each pawn has a tolerance per kind, 0 to 1. A joy hour of an activity gives
-  `joyPerHour x max(0.1, 1 - tolerance of its kind) x the building's joyGainFactor`. Finishing an
-  activity (not being interrupted) adds the kind's `toleranceGainPerUse` (0.04 to 0.05); tolerance
-  wears off 0.1 a day. So a pawn who plays the same game every evening gets less from it and picks
-  another kind when one is there.
-- **Choosing** (`JobSystem::makeRecreationJob`): every activity the pawn can do now, the most joy an
+  `joyPerHour x max(0.1, 1 - tolerance of its kind) x the building's joyGainFactor`. Every second
+  of play adds two thirds of the joy gained to the kind's tolerance (wiki); it wears off 10% a day
+  (the wiki's moderate-wealth rate; the wealth steps of 7% to 18% are not used yet).
+- **Boredom (variety).** A kind above 50% tolerance is *boring* until it is under 30%
+  (`JoyTolerance::bored`, `Joy::boredWith`, saved). A pawn picks among kinds it is not bored of
+  first, and only when none can be done now goes back to a boring one. So a colony needs several
+  kinds of joy buildings: a pawn with only horseshoes plays them, gets less and less, then walks.
+
+- **Choosing** (`JobSystem::makeRecreationJob`): every activity of a kind the pawn is not bored of that it can do now, the most joy an
   hour wins, the nearest on a tie, then the first by name. Nothing is random.
 - **When.** In a **Joy hour** (the standard schedule has Joy from 19:00 to 21:59, three evening
   hours; `JoyRules.joyHours`, inclusive) a pawn that is not hungry or tired plays until its
@@ -84,13 +107,13 @@ or idles under the sky stays high; one asleep or idling in a bedroom drifts down
 
 ## Save
 
-Section `recreation` (version 1): per pawn with a `Joy`, its three needs, its tolerances by kind
+Section `recreation` (version 2: tolerance entries carry `bored`; version 1 loads with it off): per pawn with a `Joy`, its three needs, its tolerances by kind
 `defName`, and the activity of its recreation job by `defName`. Older saves have no such section
 and load without it; the needs are made fresh on the first step. Hashed in `Sim::stateHash`.
 
 ## Not yet
 
 - Weather for the clouds (E1), a bored pawn's mental breaks (C19),
-  joy from other sources (a drink, a meal that tastes good, art, meditation), reading, the
+  joy from other sources (a drink, a meal that tastes good, art), reading, music, the aurora's five times joy for skygazing, tolerance decay by colony wealth, the audience area and facing of a television, the
   recreation policy per pawn, rooms with joy buildings counting for impressiveness (C17), the
   "recreation power" of outdoor spots, an animation or pose for playing (U task).

@@ -900,6 +900,15 @@ struct AssignAreaCommand {
     uint32_t area = 0;
 };
 
+// Before the game starts (game second 0): throws away the starting colonist in slot `slot` (0 is the
+// first one made, the protagonist when the scenario has one) and makes another in the same place,
+// with new backstories, traits, skills and gear. The draw comes from the sim's main stream, so
+// the same seed and the same rerolls give the same colonists. Fails later in the game.
+struct RerollColonistCommand {
+    int slot = 0;
+};
+
+
 // Quests (task Q1, docs/design/quests.md). `action` is "offer" (a dev command and the narrator's hook: `kind` is a Quests defName, or
 // empty for one chosen by weight), "accept" or "decline" (`quest` is the quest's number). Fails if the action is not one of those, there
 // is no such open offer, or it can't be carried out (too many under way, nobody could reach the colony, no room for the goods).
@@ -984,7 +993,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              LearnPowerCommand, CastPowerCommand, SetThermostatCommand, RepairGearCommand,
                              FitUpgradeCommand, CreateAreaCommand, PaintAreaCommand, DeleteAreaCommand,
                              AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand, CaravanCommand,
-                             ArrestCommand>;
+                             ArrestCommand, RerollColonistCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

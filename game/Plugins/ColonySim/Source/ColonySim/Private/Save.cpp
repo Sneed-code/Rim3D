@@ -1183,6 +1183,8 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.text("action", c.action);
         ar.value("quest", c.quest);
         ar.text("kind", c.kind);
+    } else if constexpr (std::is_same_v<Type, RerollColonistCommand>) {
+        ar.value("slot", c.slot);
     } else if constexpr (std::is_same_v<Type, RepairGearCommand>) {
         ar.value("thing", c.thing);
         ar.value("repair", c.repair);
@@ -2021,6 +2023,9 @@ void saveJoyPart(Ar& ar, SaveJoy& j) {
         ar.text("kind", t.kind);
         ar.value("amount", t.amount);
         ar.require(t.amount >= 0.0f && t.amount <= 1.0e3f, "the save file has an impossible tolerance");
+        if (ar.sectionVersion() >= 2) {
+            ar.value("bored", t.bored);
+        }
     });
     ar.text("activity", j.activity);
 }
@@ -3123,7 +3128,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("power", 1, [&] {
         saveParts(ar, "power", e, &SaveEntity::power, [&](PowerPart& part) { savePowerPart(ar, part); });
     });
-    ar.section("recreation", 1, [&] {
+    ar.section("recreation", 2, [&] {
         saveParts(ar, "joy", e, &SaveEntity::joy, [&](SaveJoy& j) { saveJoyPart(ar, j); });
     });
     ar.section("research", 1, [&] { saveResearch(ar, d.research); });
@@ -4944,10 +4949,8 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.trade_->restore(std::move(d.trade), error)) {
         return false;
     }
-    for (Quest& quest : d.quests.quests) {
-        quest.people.erase(std::remove_if(quest.people.begin(), quest.people.end(), [&](Entity p) { return !reg.valid(p); }),
-                           quest.people.end());
-    }
+    // A quest keeps the ids of people who are gone (a butchered or burned body) as the running game does; dropping them here made a
+    // loaded game hash differently from the one it was saved from. The quest checks each one is alive before using it.
     sim.quests_->state() = std::move(d.quests);
     if (!sim.ship_->restore(std::move(d.ship), error)) {
         return false;

@@ -153,14 +153,38 @@ and the run crashed when a dead colonist was butchered. With the expectations mo
 Verbose mode now also prints each colonist's mood, its thoughts, its food, its job and where it stands four times a day.
 Winter food is what is left (`BACKLOG.md`).
 
-Frost no longer kills a single crop, and no seed is dead by day 51 any more (the first runs lost everyone), but the colony
-still does not last the year: see `BACKLOG.md`. The run is not in CTest: it takes about ten minutes.
+**Winter food (2026-10-28): the colony lasts the year.** What was really wrong: rice had potatoes' 5.8 grow days (RimWorld's
+is 3), so every crop took twice as long; harvested rice, cooked meals, the crash site's medicine and its components lay in an
+open-air stockpile and weathered away (rain wears a meal out in about a day); hunters with a revolver missed hares from 20 m and
+gave up a deer after 15 minutes to start again; butcher bills took human corpses; an extreme infection plus food poisoning put
+consciousness at 0 (the caps were applied stage by stage) and a cleaner retried an unreachable cell a million times on seed 7.
+Fixed in the sim (`starting-data.md`, `hunting.md`, `diseases.md`, `jobs.md`) and in the script, which now also:
+
+- builds a **storeroom** on day 1: wood walls round 10 x 8 cells at the nearest free spot, a door, and an Important stockpile
+  inside that takes only food, medicine and components (no corpses). Roofed, nothing in it weathers, and in winter the
+  unheated room freezes and keeps the rice;
+- lays out **four** rice fields on **day 2** instead of three on day 13 (sowing waits for frost-free weather on its own since the
+  frost fix), and starts hunting on day 13 (`kHuntDay`) as before, but with three animals marked at a time within 50 m of
+  the landing (was six within 80 m): hunters far out met a wolf pack and a manhunting deer alone (two dead on seed 7);
+- builds the greenhouse with **four** basins (six took more steel than the crash site has, and then none was finished);
+- prints stacks lost to rot or weather (`spoiled`), hunts given up by animal (`huntFailed`) and a colonist's illnesses at death;
+  verbose mode adds the shots each colonist fired to its injury lines and steel and components to the food line.
+
+| Seed | Colonists alive on day 60 | Lowest food | Mental breaks | Food on day 60 |
+| --- | --- | --- | --- | --- |
+| 1 | 6 of 6 | 0.00 (malnutrition 0.09) | 1 | rice 1,530, meat 150, meals 185 |
+| 7 | 6 of 6 | 0.12 | 0 | rice 1,688, meals 150 |
+| 42 | 6 of 6 | 0.06 | 1 | rice 1, meat 6, meals 165 |
+
+The lowest food values near 0 come from colonists in a mental break (sad wandering, hiding in a room) who don't eat; nobody starved.
+Rice the storeroom has no room for still weathers in the fields on seeds 1 and 7, where the four fields grow far more than
+six eat. Seed 42 ends with little rice left but 165 meals, so it is the closest; the greenhouse carries it. The run is not in CTest: it takes about eight minutes a seed.
 
 ## The greenhouse (year run)
 
 From day 15 the year run also builds a heated greenhouse on the nearest free 10 x 6 patch (outside the room and the
-field): wood walls and a door, a wood-fired generator, a heater, two standing lamps, six hydroponics basins joined by a
-conduit row, and a rice growing zone over the basins once all six stand. The script unlocks `Electricity` and
+field): wood walls and a door, a wood-fired generator, a heater, two standing lamps, four (six until 2026-10-28) hydroponics basins joined by a
+conduit row, and a rice growing zone over the basins once all of them stand. The script unlocks `Electricity` and
 `Hydroponics` at the start (a player would research them). While the year run goes on it keeps ten of the nearest trees
 marked for felling whenever the map holds under 400 wood, since the stove, the walls and the generator (63 wood a day)
 otherwise empty it. Verbose mode prints the greenhouse's temperature, wood on the map and the generator's fuel every

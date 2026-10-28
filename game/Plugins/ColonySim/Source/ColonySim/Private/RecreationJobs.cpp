@@ -4,6 +4,7 @@
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Power.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Rooms.h"
@@ -63,7 +64,14 @@ bool JobSystem::makeRecreationJob(Entity pawn, Job& out, float playUntil) {
     bool found = false;
     float bestGain = 0.0f;
     float bestDist = 0.0f;
+    bool bestPlaced = false;
+    // Kinds the pawn is bored of come last: only when nothing else can be done now.
+    for (int pass = 0; pass < 2 && !found; ++pass)
     for (const RecreationActivity& activity : recreation_.activities) {
+        if ((pass == 0) == (joy->boredWith(recreation_.kinds[static_cast<size_t>(activity.kind)].defName) ||
+                         joy->toleranceOf(recreation_.kinds[static_cast<size_t>(activity.kind)].defName) > recreation_.boredAbove)) {
+            continue;
+        }
         Job job;
         if (!recreationSpot(pawn, activity, job)) {
             continue;
@@ -74,7 +82,11 @@ bool JobSystem::makeRecreationJob(Entity pawn, Job& out, float playUntil) {
         }
         const float gain = recreation_.gainPerHour(activity, *joy) * factor;
         const float dist = recJobsDistSq(at, job.cell);
-        if (!found || gain > bestGain + 1e-6f || (std::fabs(gain - bestGain) <= 1e-6f && dist < bestDist)) {
+        // On equal joy a game at a building beats a stroll or stargazing (they cost no walk), then the nearest.
+        const bool placed = job.thing != kNoEntity;
+        const bool tie = std::fabs(gain - bestGain) <= 1e-6f;
+        if (!found || gain > bestGain + 1e-6f || (tie && ((placed && !bestPlaced) || (placed == bestPlaced && dist < bestDist)))) {
+            bestPlaced = placed;
             found = true;
             bestGain = gain;
             bestDist = dist;
@@ -153,10 +165,16 @@ bool JobSystem::recreationSpot(Entity pawn, const RecreationActivity& activity, 
             return false;
         }
     }
+    if (activity.nightOnly) {
+        const int hour = time_.hourOfDay();
+        if (hour >= recreation_.dayFromHour && hour < recreation_.dayToHour) {
+            return false;
+        }
+    }
     out = Job{};
     out.type = JobType::Recreate;
     out.activity = activity.def;
-    if (activity.building.empty() && activity.buildingFlag.empty()) {
+    if (activity.building.empty() && activity.buildingFlag.empty() && !activity.chairs) {
         if (!strollCell(pawn, out.cell, activity.walks)) {
             return false;
         }
@@ -166,7 +184,7 @@ bool JobSystem::recreationSpot(Entity pawn, const RecreationActivity& activity, 
 
     const float radiusSq = recreation_.spotRadius * recreation_.spotRadius;
     const DefId buildingDef = activity.building.empty() ? DefId{} : defs_.idOf("Things", activity.building);
-    if (activity.buildingFlag.empty() && !buildingDef.valid()) {
+    if (activity.buildingFlag.empty() && !activity.chairs && !buildingDef.valid()) {
         return false;
     }
     const std::string flagPath = activity.buildingFlag.empty() ? std::string() : "building." + activity.buildingFlag;
@@ -184,6 +202,59 @@ bool JobSystem::recreationSpot(Entity pawn, const RecreationActivity& activity, 
 
     bool found = false;
     float bestDist = 0.0f;
+    // Relaxing socially: any free chair, beside the others already doing it when there are some. The
+    // first sitter's chair names the group (`thing`), so they chat like players at a table.
+    if (activity.chairs) {
+        struct Mate {
+            CellPos cell;
+            Entity group;
+        };
+        std::vector<Mate> mates;
+        for (const auto [other, worker] : reg.view<const Worker>().each()) {
+            if (other != pawn && worker.job.type == JobType::Recreate && worker.job.activity == activity.def &&
+                worker.job.thing != kNoEntity && recreationUsers(worker.job.thing, pawn) < activity.usersMax) {
+                mates.push_back(Mate{worker.job.cell, worker.job.thing});
+            }
+        }
+        std::sort(mates.begin(), mates.end(), [](const Mate& a, const Mate& b) {
+            return a.cell.x != b.cell.x ? a.cell.x < b.cell.x : a.cell.y < b.cell.y;
+        });
+        for (const auto [chair, thing, footprint] : reg.view<const Thing, const Footprint>().each()) {
+            if (isChair_[thing.def.value] == 0 || !things_.spawned(chair)) {
+                continue;
+            }
+            const CellRect rect = footprint.rect();
+            const CellPos c{rect.minX, rect.minY, rect.level};
+            float score = recJobsDistSq(at, c);
+            Entity group = chair;
+            if (!mates.empty()) {
+                // Next to the nearest mate, not across the map: their distance first.
+                float nearest = 1e30f;
+                for (const Mate& m : mates) {
+                    const float dx = static_cast<float>(c.x - m.cell.x);
+                    const float dy = static_cast<float>(c.y - m.cell.y);
+                    if (dx * dx + dy * dy < nearest) {
+                        nearest = dx * dx + dy * dy;
+                        group = m.group;
+                    }
+                }
+                if (nearest > 25.0f) {
+                    continue;
+                }
+                score = nearest * 1000.0f + score;
+            }
+            if ((found && score >= bestDist) || !free(chair, c)) {
+                continue;
+            }
+            found = true;
+            bestDist = score;
+            out.thing = group;
+            out.chair = chair;
+            out.cell = c;
+        }
+        return found;
+    }
+
     // Chatting at a table: a chair next to any table.
     const bool atTable = flagPath == "building.isTable";
     if (atTable) {
@@ -227,13 +298,22 @@ bool JobSystem::recreationSpot(Entity pawn, const RecreationActivity& activity, 
         if (recreationUsers(building, pawn) >= usersMax) {
             continue;
         }
+        // A television needs power, a telescope the open sky.
+        if (defs_.get(thing.def).has("power.consumption") && power_ != nullptr && !power_->running(building)) {
+            continue;
+        }
         const CellRect rect = footprint.rect();
-        for (int y = rect.minY - 1; y <= rect.minY + rect.sizeY; ++y) {
-            for (int x = rect.minX - 1; x <= rect.minX + rect.sizeX; ++x) {
+        if (activity.openSky && !isOutdoorsCell(CellPos{rect.minX, rect.minY, rect.level})) {
+            continue;
+        }
+        const int reach = activity.reach;
+        for (int y = rect.minY - reach; y <= rect.minY + rect.sizeY - 1 + reach; ++y) {
+            for (int x = rect.minX - reach; x <= rect.minX + rect.sizeX - 1 + reach; ++x) {
                 const bool insideX = x >= rect.minX && x < rect.minX + rect.sizeX;
                 const bool insideY = y >= rect.minY && y < rect.minY + rect.sizeY;
-                if ((insideX && insideY) || (!insideX && !insideY)) {
-                    continue;  // the building itself, or a corner
+                if (activity.onBuilding ? !(insideX && insideY)
+                                        : ((insideX && insideY) || (reach == 1 && !insideX && !insideY))) {
+                    continue;  // not where the pawn goes: the building itself, or a corner beside a small one
                 }
                 const CellPos c{x, y, rect.level};
                 const float dist = recJobsDistSq(at, c);
@@ -289,11 +369,15 @@ JobSystem::StepResult JobSystem::play(Entity pawn, Job& job, std::string& why) {
     if (job.thing != kNoEntity) {
         factor = static_cast<float>(defs_.get(reg.get<Thing>(job.thing).def).number("building.joyGainFactor", 1.0));
     }
+    // Tolerance to the kind grows by two thirds of the joy gained (wiki "Recreation").
+    const float before = joy->level;
     joy->level = std::min(1.0f, joy->level + recreation_.gainPerHour(*activity, *joy) * factor / static_cast<float>(kSecondsPerHour));
+    if (joy->level > before) {
+        joy->addTolerance(recreation_.kinds[static_cast<size_t>(activity->kind)].defName,
+                          (joy->level - before) * recreation_.toleranceGainFraction, recreation_.toleranceMax);
+    }
 
     if (now() >= job.until || joy->level >= 1.0f) {
-        joy->addTolerance(recreation_.kinds[static_cast<size_t>(activity->kind)].defName,
-                          recreation_.kinds[static_cast<size_t>(activity->kind)].gainPerUse, recreation_.toleranceMax);
         return StepResult::Next;
     }
     if (activity->walks) {
