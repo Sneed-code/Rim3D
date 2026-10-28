@@ -7,6 +7,7 @@
 
 #include "OverseerSubsystem.h"
 #include "QuestPanelSubsystem.h"
+#include "ShipPanelSubsystem.h"
 #include "SimSubsystem.h"
 
 #include "ColonySim/Bills.h"
@@ -371,6 +372,22 @@ void UPanelsSubsystem::OnSimEvent(const colony::Event& Event)
 			}
 			break;
 		}
+		// The spaceship ending (docs/design/ship.md); the ship window is UShipPanelSubsystem.
+		case colony::EventType::ShipReactorStarted:
+			AddLog(FString::Printf(TEXT("The ship reactor is starting. It needs %.0f days, and raiders will come for it."), Event.amount), 1, Event.thing);
+			break;
+		case colony::EventType::ShipWave:
+			AddLog(FString::Printf(TEXT("Raiders are coming for the ship reactor (wave %.0f)."), Event.amount), 2, Event.thing);
+			break;
+		case colony::EventType::ShipReactorReady:
+			AddLog(TEXT("The ship reactor is active. Open Ship to launch."), 3, Event.thing);
+			break;
+		case colony::EventType::ShipReactorLost:
+			AddLog(TEXT("The ship reactor is lost. It must be started again."), 2);
+			break;
+		case colony::EventType::ShipLaunched:
+			AddLog(FString::Printf(TEXT("The ship has launched with %.0f aboard."), Event.amount), 3);
+			break;
 		default:
 			break;
 	}
@@ -604,6 +621,29 @@ void UPanelsSubsystem::DrawMenuAndColonistBar(USimSubsystem& Bridge, float Scale
 				Quests->SetOpen(!Quests->IsOpen());
 			}
 			if (bUnseen)
+			{
+				ImGui::PopStyleColor();
+			}
+		}
+		UShipPanelSubsystem* Ship = GetWorld()->GetSubsystem<UShipPanelSubsystem>();
+		if (Ship && Ship->HasShip())
+		{
+			// "Ship (12.5 days)" while the reactor warms up; green once it can launch.
+			ImGui::SameLine();
+			const colony::ShipView& ShipView = Bridge.GetCurrentSnapshot().ship;
+			const bool bReady = ShipView.canLaunch;
+			if (bReady)
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.25f, 0.6f, 0.3f, 1.0f));
+			}
+			const FString Label = ShipView.phase == 1
+				? FString::Printf(TEXT("Ship (%.1f days)"), static_cast<double>(ShipView.activationLeft) / colony::kSecondsPerDay)
+				: FString(TEXT("Ship"));
+			if (PButton(Label, Ship->IsOpen()))
+			{
+				Ship->SetOpen(!Ship->IsOpen());
+			}
+			if (bReady)
 			{
 				ImGui::PopStyleColor();
 			}

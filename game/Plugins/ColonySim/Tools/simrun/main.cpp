@@ -17,11 +17,14 @@
 //                                     exit 1 if a check fails, docs/design/colony-scenario.md)
 //   simrun --perf [--seed 42] [--size 1024] [--days 1] [--budget MS]   (the sim cost check, S9: 30 colonists, 300 tame animals, crops
 //                                     and rooms; a table of what each system costs per step, exit 1 over --budget; docs/design/sim-cost.md)
+//   simrun --scenario year [--seed 42] [--days 60] [--narrator NAME]   (C25: the colony year with the narrator; docs/design/colony-scenario.md)
 //   simrun --scenario house [--seed 42] [--days 3] [--png house.png] [--verbose]   (the two-storey house, M4: builds, sleeps and hauls
 //                                     across two levels, writes house-level0.png and house-level1.png; docs/design/house-scenario.md)
 //   simrun --world world.png [--seed 42] [--world-size 120x60] [--check]   (the world map: biomes, rivers, roads, settlements; docs/design/world-map.md)
 //   simrun --seed 42 --on-world [--world-tile N] [--world-size WxH] --start Crashlanded --days 1   (the game on a world, W2:
 //                                     the start tile's biome, climate and map seed; prints the tile; docs/design/world-map.md)
+//   simrun --seed 42 --on-world --start Crashlanded --caravan --days 8 --check   (a caravan, W4: two colonists take the
+//                                     survival meals to the nearest settlement and come home; docs/design/caravans.md)
 //   simrun --power [--days 3] [--verbose]   (the power check, E5: solar, batteries, lamps and a switch; docs/design/power.md)
 //   simrun --seed 42 --size 1024 --days 3 --animals [--animal-percent 300] --check   (wild animals, N1:
 //                                     herds by biome, a report of them, checks they stay on walkable ground)
@@ -43,6 +46,7 @@
 #include "RaidSoak.h"
 #include "ColonySim/Animals.h"
 #include "ColonySim/Breeding.h"
+#include "ColonySim/Caravans.h"
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Health.h"
@@ -117,6 +121,7 @@ struct Options {
     int worldHeight = 0;
     bool onWorld = false;  // --on-world: play on a world (SimSettings::world); --world-tile N picks its start tile
     int worldTile = -1;
+    bool caravan = false;  // --caravan: two colonists go to the nearest settlement and back (W4)
     bool check = false;  // exit 1 if a job or a path search failed
     bool weather = false;  // print a line a day of the weather (E1)
     int gather = 0;      // mark rock to mine and plants to harvest this many cells round the middle
@@ -185,6 +190,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else if (std::strcmp(arg, "--world-tile") == 0 && hasValue) {
             out.onWorld = true;
             out.worldTile = std::atoi(argv[++i]);
+        } else if (std::strcmp(arg, "--caravan") == 0) {
+            out.caravan = true;
         } else if (std::strcmp(arg, "--power") == 0) {
             out.power = true;
         } else if (std::strcmp(arg, "--verbose") == 0) {
@@ -250,7 +257,7 @@ bool parseOptions(int argc, char** argv, Options& out) {
             std::fprintf(stderr,
                          "usage: simrun [--seed N] [--size CELLS] [--days D] [--pawns N] [--items N] "
                          "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--scenario colony [--verbose]] [--power] [--raid POINTS [--raid-strategy NAME]] [--armed] [--narrator NAME [--difficulty NAME]] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
-                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house [--verbose]] [--power] [--perf [--budget MS]] [--world FILE [--world-size WxH]] [--on-world [--world-tile N]] [--raid POINTS [--raid-strategy NAME]] [--armed] [--medics] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
+                         "[--path-budget N] [--start SCENARIO] [--gather RADIUS] [--animals] [--animal-percent N] [--farm N] [--fire] [--scenario colony|house|year [--verbose]] [--power] [--perf [--budget MS]] [--world FILE [--world-size WxH]] [--on-world [--world-tile N] [--caravan]] [--raid POINTS [--raid-strategy NAME]] [--armed] [--medics] [--raid-soak SEEDS] [--check] [--weather] [--png FILE] [--regions FILE] [--sight FILE] [--light FILE [--hour H]] [--data DIR] "
                          "[--replay FILE] [--record FILE] [--load FILE] [--save FILE] [--save-json FILE] [--outdoor CELSIUS] [--roundtrip SECONDS]\n");
             return false;
         }
@@ -700,8 +707,8 @@ int main(int argc, char** argv) {
 
     // The colony scenario (C10) runs its own script on the Crashlanded start; 5 days unless --days says.
     if (!options.scenario.empty()) {
-        if ((options.scenario != "colony" && options.scenario != "house") || !defs) {
-            std::fprintf(stderr, "--scenario takes 'colony' or 'house' and needs the game's defs\n");
+        if ((options.scenario != "colony" && options.scenario != "house" && options.scenario != "year") || !defs) {
+            std::fprintf(stderr, "--scenario takes 'colony', 'house' or 'year' and needs the game's defs\n");
             return 2;
         }
         if (options.scenario == "house") {
@@ -710,6 +717,11 @@ int main(int argc, char** argv) {
                 pngBase.resize(pngBase.size() - 4);
             }
             return housescenario::run(options.seed, options.size, options.daysGiven ? options.days : 3.0, defs, options.verbose, pngBase);
+        }
+        if (options.scenario == "year") {
+            // C25: the year run with the narrator, 60 game days unless --days says otherwise.
+            return colonyscenario::run(options.seed, options.size, options.daysGiven ? options.days : 60.0, defs, options.verbose, true,
+                                       options.narrator.empty() ? "Orrin" : options.narrator);
         }
         return colonyscenario::run(options.seed, options.size, options.daysGiven ? options.days : 5.0, defs, options.verbose, options.year);
     }
@@ -921,10 +933,55 @@ int main(int argc, char** argv) {
     uint64_t fireBurntOut = 0;
     uint64_t pawnsCaught = 0;
     uint64_t fireLit = 0;
+    // --caravan: the trip's moments, game seconds (-1 not yet).
+    struct CaravanTrip {
+        int settlementTile = -1;
+        int64_t formed = -1, departed = -1, arrived = -1, home = -1;
+        int lost = 0;
+        int ate = 0;
+        double minFood = 1.0;
+        double minRest = 1.0;
+        std::string settlement;
+    } trip;
     int roundtripChecks = 0;
     int roundtripFails = 0;
     for (int64_t i = 0; i < steps; ++i) {
         feeder.submitDue(sim);
+        if (options.caravan && sim.time().seconds == 60 && sim.world() != nullptr) {
+            // Two colonists (not the protagonist) and the survival meals set out for the nearest settlement 4 or more tiles away.
+            const colony::World& world = *sim.world();
+            const int home = world.startTile();
+            int best = -1;
+            int bestDist = 1 << 30;
+            for (const colony::WorldSettlement& s : world.settlements()) {
+                int dx = std::abs(world.tileX(s.tile) - world.tileX(home));
+                dx = std::min(dx, world.width() - dx);
+                const int dist = std::max(dx, std::abs(world.tileY(s.tile) - world.tileY(home)));
+                if (dist >= 4 && dist < bestDist && !sim.caravans().findPath(home, s.tile, sim.time().season()).empty()) {
+                    bestDist = dist;
+                    best = s.tile;
+                }
+            }
+            trip.settlementTile = best;
+            colony::CaravanCommand form;
+            form.action = "Form";
+            form.tile = best;
+            for (const auto [e, c, pos] : sim.things().registry().view<const colony::Colonist, const colony::Position>().each()) {
+                (void)pos;
+                if (!c.protagonist && form.pawns.size() < 2) {
+                    form.pawns.push_back(e);
+                }
+            }
+            std::sort(form.pawns.begin(), form.pawns.end());
+            for (const auto [e, thing, pos] : sim.things().registry().view<const colony::Thing, const colony::Position>().each()) {
+                (void)pos;
+                if (sim.defs().get(thing.def).defName() == "MealSurvivalPack" && sim.things().registry().get<colony::StackCount>(e).count >= 20) {
+                    form.items.push_back(e);
+                }
+            }
+            std::sort(form.items.begin(), form.items.end());
+            sim.submit(form);
+        }
         if (options.fire && sim.time().seconds == 600) {
             // A fire in the grass 6 to 14 cells from the first colonist.
             colony::CellPos from{sim.map().width() / 2, sim.map().height() / 2, 0};
@@ -958,6 +1015,15 @@ int main(int argc, char** argv) {
         // game hour, since nobody farms in this run and they would starve first.
         if (!options.narrator.empty() && sim.time().seconds % 3600 == 0) {
             for (const auto [pawn, needs] : sim.things().registry().view<colony::Needs>().each()) {
+                needs.food = 1.0f;
+                needs.malnutrition = 0.0f;
+            }
+        }
+        // --caravan: nobody farms at home in this run, so the colonists left on the map are fed every hour (the
+        // caravan's own eat from what it carries).
+        if (options.caravan && sim.time().seconds % 3600 == 0) {
+            for (const auto [pawn, needs, pos] : sim.things().registry().view<colony::Needs, const colony::Position>().each()) {
+                (void)pos;
                 needs.food = 1.0f;
                 needs.malnutrition = 0.0f;
             }
@@ -1031,6 +1097,33 @@ int main(int argc, char** argv) {
             pawnsCaught += e.type == colony::EventType::PawnCaughtFire ? 1 : 0;
             fireLit += e.type == colony::EventType::FireStarted ? 1 : 0;
             picked += e.type == colony::EventType::PlantHarvested ? 1 : 0;
+            if (options.caravan) {
+                const int64_t t = sim.time().seconds;
+                switch (e.type) {
+                    case colony::EventType::CaravanFormed: trip.formed = t; break;
+                    case colony::EventType::CaravanDeparted: trip.departed = t; break;
+                    case colony::EventType::CaravanMemberLost:
+                        ++trip.lost;
+                        std::fprintf(stderr, "caravan member lost: %s\n", e.message.c_str());
+                        break;
+                    case colony::EventType::CaravanEntered: trip.home = t; break;
+                    case colony::EventType::CaravanArrived:
+                        if (static_cast<int>(e.amount) == trip.settlementTile && trip.arrived < 0) {
+                            trip.arrived = t;
+                            trip.settlement = e.message;
+                            colony::CaravanCommand back;
+                            back.action = "Move";
+                            back.caravan = e.count;
+                            back.tile = sim.world()->startTile();
+                            sim.submit(back);
+                        }
+                        break;
+                    case colony::EventType::PawnAte:
+                        trip.ate += e.count != 0 ? 1 : 0;
+                        break;
+                    default: break;
+                }
+            }
             if (e.type == colony::EventType::Letter) {
                 const double day = static_cast<double>(sim.time().seconds) / static_cast<double>(colony::kSecondsPerDay);
                 ++letters;
@@ -1416,6 +1509,32 @@ int main(int argc, char** argv) {
             }
             if (extraPerStep > 0.5) {
                 std::fprintf(stderr, "check failed: breeding costs %.3f ms a step\n", extraPerStep);
+                return 1;
+            }
+        }
+    }
+
+    // The caravan (W4, docs/design/caravans.md): to the nearest settlement and home again.
+    if (options.caravan) {
+        const auto days = [](int64_t a, int64_t b) {
+            return a < 0 || b < 0 ? -1.0 : static_cast<double>(b - a) / static_cast<double>(colony::kSecondsPerDay);
+        };
+        std::printf("{\"caravan\":{\"settlement\":\"%s\",\"tile\":%d,\"leaveHours\":%.2f,\"outDays\":%.2f,\"backDays\":%.2f,"
+                    "\"ateOnRoad\":%d,\"membersLost\":%d,\"home\":%s}}\n",
+                    trip.settlement.c_str(), trip.settlementTile, days(trip.formed, trip.departed) * 24.0,
+                    days(trip.departed, trip.arrived), days(trip.arrived, trip.home), trip.ate, trip.lost,
+                    trip.home >= 0 ? "true" : "false");
+        if (options.check) {
+            const char* failed = sim.world() == nullptr ? "no world (use --on-world)"
+                                 : trip.settlementTile < 0 ? "no settlement can be reached"
+                                 : trip.formed < 0          ? "the caravan was not formed"
+                                 : trip.departed < 0        ? "the caravan never left the map"
+                                 : trip.arrived < 0         ? "the caravan never reached the settlement"
+                                 : trip.home < 0            ? "the caravan never came home"
+                                 : trip.lost > 0            ? "a member left the caravan"
+                                                            : nullptr;
+            if (failed != nullptr) {
+                std::fprintf(stderr, "check failed: %s\n", failed);
                 return 1;
             }
         }

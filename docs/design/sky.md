@@ -14,21 +14,21 @@ fixed stream of their own, not the sim's.
 
 | What | From | How |
 | --- | --- | --- |
-| Sun | the sim's clock and the day of the year | a directional light that rises in the east at 06:00, is due south at noon and sets in the west at 18:00 (the sim's daylight curve in `Rules.json` ramps over 05:00 to 07:00 and 17:00 to 19:00). Its noon height follows the year: 68 degrees at midsummer (day 22.5), 28 at midwinter (day 52.5), 48 at the equinoxes. Its light is 10 lux at a clear noon (or the level's own sun's) times the daylight times the weather's `skyGlow` squared, so a storm is dark at noon |
-| Moon | the same | a second directional light across the sky from the sun, up at night, bluish, 1.2 lux at full moon (about an eighth of noon; a game's moonlight, not the real hundred-thousandth), waxing and waning over 30 days |
-| Sky, sunsets | the sun and the moon | the engine's sky atmosphere (blue day, red sunset, moon glow) lit by the two lights; a real-time sky light lights the ground from it. The sky light never goes below 0.1, so the night is dark but not black |
+| Sun | the sim's clock and the day of the year | a directional light that rises in the east at 06:00, is due south at noon and sets in the west at 18:00 (the sim's daylight curve in `Rules.json` ramps over 05:00 to 07:00 and 17:00 to 19:00). Its noon height follows the year: 68 degrees at midsummer (day 22.5), 28 at midwinter (day 52.5), 48 at the equinoxes. Its light is 110,000 lux at a clear noon (`data/look.json`, since L1: [look.md](look.md)), fading out as it sets, times the weather's `skyGlow` squared, so a storm is dark at noon |
+| Moon | the same | a second directional light across the sky from the sun, up at night, bluish, 0.5 lux at full moon (a bright real moon; the exposure keeps the night readable, [look.md](look.md)), waxing and waning over 30 days |
+| Sky, sunsets | the sun and the moon | the engine's sky atmosphere (blue day, red sunset, moon glow) lit by the two lights; a real-time sky light lights the ground from it (in real units, so 1.0 day and night) |
 | Clouds | the weather's `skyGlow` | the engine's volumetric clouds with its simple cloud material; the weather's overcast sets the material's `Cloud_GlobalCoverage` (-0.4 clear with a few wisps, about -0.03 in rain, 0.35 in a storm) |
-| Fog | the weather's `sightFactor` | exponential height fog: density `0.006 + 0.3 x (1 / sight - 1) + 0.02 x rainRate`, so fog (sight 0.5) is a mist you cannot see 50 m through and a clear day has a faint haze. The colour follows the daylight and goes whiter in snow |
+| Fog | the weather's `sightFactor` | exponential height fog: density `0.006 + 0.3 x (1 / sight - 1) + 0.02 x rainRate`, so fog (sight 0.5) is a mist you cannot see 50 m through and a clear day has a faint haze. The colour is the sky atmosphere's, with a grey or white veil as it clouds over or snows ([look.md](look.md)) |
 | Rain | `rainRate` | up to 7,000 thin streaks in a block of air 70 m wide round where the camera looks, falling at 13 m a second, leaning with the wind, with splashes where they hit the ground. `rainRate x 1.4` of the full count is drawn (rain 0.5 draws 70%, a storm all) |
 | Snow in the air | `snowRate` | up to 6,000 flakes that drift down at 1.6 m a second and sway with the wind (`snowRate / 1.2` of the full count) |
 | Under a roof | `weather().outdoors(cell)` | a drop or flake whose cell has a roof (thin or the mountain's thick one) is not drawn, so the rain stops at the eaves and over the mountain |
-| Lightning | `effects().lightning` (dry and rainy thunderstorms) | every 3 to 12 seconds a hard flash, a gap and a softer second flash (a white-blue directional light, 40 lux at its peak, 0.35 s). No sound yet |
+| Lightning | `effects().lightning` (dry and rainy thunderstorms) | every 3 to 12 seconds a hard flash, a gap and a softer second flash (a white-blue directional light, 30,000 lux at its peak, 0.35 s). No sound yet |
 | Wet ground | `rainRate` | the terrain material's `Wetness` goes up over about half a game hour of rain (to 0.45 plus the weather's `wetness`) and down over about four hours after it: darker (x0.55) and shinier (roughness x0.3) ground |
 | Snow on the ground | `weather().snowDepth(cell)` | see below |
 | Date and weather | the clock, `season()`, `outdoorTemperature()`, the weather def's label | "Spring 6, Year 1   12°C, rain" under the time in the overseer's top bar and in direct mode's time box (`USkySubsystem::DescribeDate` and `DescribeClimate`) |
 
 The level's own directional light, sky light and fog are put out while the sim's sky is in use, and put back when
-it is not (`Sky.Enable 0`, or no game running). A clear noon's sun takes the level's own sun's intensity if it has one.
+it is not (`Sky.Enable 0`, or no game running).
 
 ## Snow on the ground
 
@@ -48,7 +48,7 @@ mesh costs about 0.5 to 1 ms. Snow is on the ground only: not yet on plants, roc
 | --- | --- |
 | Sunrise 06:00, sunset 18:00 | the sim's `skyGlowByHour` curve |
 | Noon height 28 to 68 degrees over the year | ours (a latitude of about 50 degrees) |
-| Sun 10 lux, moon 1.2 lux, sky light 0.1 to 1, lightning 40 lux | ours, found by eye (the project uses the engine's default exposure) |
+| Sun, moon, sky light, lightning, exposure, fog colour and density, grade | `data/look.json` since L1 ([look.md](look.md)); real-world units |
 | Fog and cloud mappings, particle counts and speeds | ours, found by eye in the `sky` smoke test's screenshots |
 | Weather's `skyGlow`, `sightFactor`, `rainRate`, `snowRate`, `wetness`, `lightning` | E1's Weathers defs ([weather.md](weather.md)) |
 

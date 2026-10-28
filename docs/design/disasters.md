@@ -31,14 +31,25 @@ Kept in `DisasterSystem` (saved as section `disasters`, in the state hash), one 
 - **`ShortCircuit`** (RimWorld's "zzzt"): a random member of a random power net shorts out
   (`PowerGrid::shortCircuit`: the net's batteries empty, the conduit or building burns out), then a Burn blast of
   radius 1 + 0.1 times the square root of the energy released in Wd (up to 5 m) and fires round it.
-- **`Blight`**: a random sown crop plant in a growing zone is the centre; plants of that crop in growing zones
-  within a 10 to 20 m circle die with chance 0.7 (the centre always). Wild plants and the same crop outside
-  zones are left alone.
+- **`Blight`** (spreads over days): a random sown crop plant in a growing zone is the centre; plants of that crop
+  in growing zones within a 2 to 4 m circle catch it with chance 0.7 (the centre always). A blighted plant
+  (`DisasterSystem::blighted()`, saved) withers 24 to 72 hours after catching it (`PlantRemoved`, message
+  "blighted") and every hour passes the blight to each neighbouring plant of its crop with chance 0.03. Wild
+  plants and the same crop outside zones are left alone.
 - **`ManhunterPack`**: the incident's points (the colony's threat points times 1.4, the wiki's 40% more
   than a raid) buy wild animals of the biome: a kind is picked by commonality among those whose power
   (100 times body size, at least 20, ours) is within the points, and `points / power` of them (1 to 30)
   come in at a random edge as manhunters for 24 to 54 hours, the first set on a random colonist.
 - **`MadAnimal`**: one adult animal, wild or tame, within 60 m of a colonist turns manhunter for 2 to 4 hours.
+
+## Workers that call other systems
+
+Registered in `Sim.cpp` (they need the health, monster and prisoner systems): `Disease_Flu`, `_Plague`, `_Malaria`,
+`_SleepingSickness`, `_GutWorms`, `_MuscleParasites` give the incident's `hediff` to `max(1, round(colonists x
+maxVictimsFraction))` colonists through `HealthSystem::outbreak` (fraction 0.5 for plague, 0.3 for the rest, unverified;
+animals are not struck); `Infestation` and `RemnantCluster` call `MonsterSystem::infest` / `remnantCluster` with the
+incident's points (a map with no roofed place fails in words); `PrisonBreak` calls `PrisonerSystem::breakOut` and fails
+with no prisoner able to walk. Tests: the last two cases of `DisasterTests.cpp`.
 
 ## Numbers
 
@@ -51,9 +62,8 @@ animal power, the short circuit's blast, the mad animal's range and length, the 
 ## Not yet
 
 - Volcanic winter's halved wildlife; toxic fallout's permanent damage (dementia, cancer) at 40% buildup, the
-  rotting of animals that die of it and the sun lamp that protects plants under a roof; blight that spreads
-  and withers over days (here it kills at once); a solar flare that also stops turrets' targeting beyond the
+  rotting of animals that die of it and the sun lamp that protects plants under a roof; a solar flare that also stops turrets' targeting beyond the
   power cut (they are powered buildings, so they do stop); lightning on tall buildings; the extreme drone
   (a ship part's). Zzzt is the same event as `ShortCircuit`.
 - Unreal draws none of it yet (U20's letters; a dark sky for the flare and winter, bolts, a fallout haze).
-- Disease outbreaks, infestation and the prison break are other tasks (H2, F12, C22 hooks).
+

@@ -62,11 +62,18 @@ struct DisasterCondition {
     int64_t nextStrike = 0; // flashstorm: game second of the next bolt
 };
 
+// A crop plant with the blight: it spreads to the plants of its kind next to it and dies at `dies`.
+struct BlightedPlant {
+    CellPos cell;
+    int64_t dies = 0;  // game second
+};
+
 struct DisasterState {
     uint64_t rngState = 0;
     uint64_t rngIncrement = 0;
     std::vector<DisasterCondition> active;  // in the order they began
     uint32_t started = 0;                   // conditions begun so far
+    std::vector<BlightedPlant> blighted;    // in the order they caught it
 };
 
 class COLONY_API DisasterSystem {
@@ -86,6 +93,8 @@ public:
     // Conditions on now.
     const std::vector<DisasterCondition>& active() const { return state_.active; }
     bool isActive(DisasterKind kind) const;
+    // Plants with the blight now.
+    const std::vector<BlightedPlant>& blighted() const { return state_.blighted; }
     // Starts a condition now for `hours` game hours without the narrator (tests, dev tools). False if one of that kind is on.
     bool begin(DisasterKind kind, double hours);
 
@@ -101,6 +110,9 @@ private:
     void emit(int type, const DisasterCondition& c, const char* verb);
     void hourly();
     void toxicHour();
+    void blightHour();
+    bool blightPlant(CellPos cell, DefId crop);
+    bool isBlighted(CellPos cell) const;
     void strike(DisasterCondition& storm);
     std::vector<Entity> colonists() const;
     std::vector<CellPos> colonistCells() const;

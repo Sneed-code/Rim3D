@@ -272,6 +272,15 @@ bool ShipSystem::launch(std::string& error) {
     return true;
 }
 
+bool ShipSystem::finishWarmUp(std::string& error) {
+    if (state_.phase != ShipPhase::Activating) {
+        error = "the reactor is not warming up";
+        return false;
+    }
+    state_.startedAt = time_.seconds - static_cast<int64_t>(rules_.activationDays * static_cast<double>(kSecondsPerDay));
+    return true;
+}
+
 bool ShipSystem::sendWave() {
     if (rules_.waveFactions.empty()) {
         return false;

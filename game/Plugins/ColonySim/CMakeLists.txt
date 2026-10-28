@@ -75,6 +75,10 @@ add_test(NAME simrun_world_seed7 COMMAND simrun --seed 7 --world ${CMAKE_BINARY_
 # The game on a world (W2): the Crashlanded colonists land on the seed's suggested temperate forest tile and live a day.
 add_test(NAME simrun_on_world COMMAND simrun --seed 42 --size 128 --days 1 --on-world --start Crashlanded --check)
 
+# Caravans (W4, docs/design/caravans.md): two colonists take survival meals to the nearest settlement
+# 4 or more tiles away and come home, nobody lost.
+add_test(NAME simrun_caravan COMMAND simrun --seed 42 --size 128 --days 2 --on-world --start Crashlanded --caravan --check)
+
 # Temperature (E2, docs/design/temperature.md): the Crashlanded colonists live two days in 4 degrees weather
 # (just above the safe range their T-shirts and pants give them) and nobody falls ill or dies.
 add_test(NAME simrun_temperature COMMAND simrun --seed 42 --size 128 --days 2 --start Crashlanded --outdoor 4 --check)

@@ -1,0 +1,90 @@
+{
+  "_about": "How the world is lit and graded on screen (task L1, docs/design/look.md). Unreal side only: the sim never reads this. Light is in real-world units (lux); the camera's exposure is in EV100.",
+
+  "sun": {
+    "clearNoonLux": 110000,
+    "color": [1.0, 0.975, 0.94],
+    "fadeBelowDeg": -2.0,
+    "fadeAboveDeg": 3.0,
+    "contactShadowLength": 0.04,
+    "shadowDistanceCm": 30000,
+    "volumetricScattering": 1.0
+  },
+  "moon": {
+    "fullLux": 0.5,
+    "newMoonShare": 0.25,
+    "color": [0.62, 0.74, 1.0]
+  },
+  "skyLight": {
+    "day": 1.0,
+    "night": 1.0,
+    "overcast": 0.8
+  },
+  "lightningLux": 30000,
+
+  "exposure": {
+    "_about": "The camera is held near a target that follows the light: noonEV at a clear midsummer noon, and for every stop darker the scene is, the target drops `follow` stops (1 would make night as bright as day). The auto exposure may move `brighterEV` below and `darkerEV` above the target, for rooms and bright snow.",
+    "noonEV": 15.0,
+    "follow": 0.80,
+    "minEV": -1.5,
+    "maxEV": 16.0,
+    "brighterEV": 0.75,
+    "darkerEV": 0.25,
+    "speedUp": 2.0,
+    "speedDown": 1.5,
+    "skyShareOfSun": 0.16
+  },
+
+  "fog": {
+    "_about": "Height fog: the density follows the weather's sight factor (as before); its colour is the sky atmosphere's, with a grey (or snow-white) veil mixed in as the sky clouds over. Volumetric fog makes light shafts; morning and evening mist thickens it while the sun is low.",
+    "clearDensity": 0.006,
+    "sightDensity": 0.3,
+    "rainDensity": 0.02,
+    "maxDensity": 0.6,
+    "heightFalloff": 0.08,
+    "startDistanceCm": 500,
+    "overcastColor": [0.62, 0.64, 0.68],
+    "snowColor": [0.78, 0.80, 0.84],
+    "veilAlbedo": 0.35,
+    "volumetricAlbedo": [0.9, 0.9, 0.92],
+    "volumetricExtinction": 1.0,
+    "volumetricScatteringDistribution": 0.55,
+    "volumetricDistanceCm": 9000,
+    "lowSunMist": 0.03,
+    "lowSunMistFromDeg": -3.0,
+    "lowSunMistToDeg": 14.0
+  },
+
+  "film": {
+    "_about": "The engine's filmic tone curve, at its neutral defaults, then a small lift.",
+    "slope": 0.88,
+    "toe": 0.55,
+    "shoulder": 0.26,
+    "blackClip": 0.0,
+    "whiteClip": 0.04,
+    "bloom": 0.35,
+    "vignette": 0.2,
+    "ambientOcclusion": 0.55,
+    "ambientOcclusionRadiusCm": 120,
+    "localExposureHighlights": 0.85,
+    "localExposureShadows": 0.85
+  },
+
+  "seasons": {
+    "_about": "One colour grade per season, blended between the seasons' middle days (the sim's year is 60 days: spring 0 to 15, summer to 30, autumn to 45, winter to 60). white is the white balance in kelvin (6500 neutral; lower looks colder, higher warmer).",
+    "spring": { "white": 6500, "saturation": 1.04, "contrast": 1.02, "gain": [1.0, 1.0, 0.99] },
+    "summer": { "white": 6700, "saturation": 1.07, "contrast": 1.05, "gain": [1.01, 1.0, 0.97] },
+    "autumn": { "white": 6900, "saturation": 1.0, "contrast": 1.04, "gain": [1.03, 0.99, 0.94] },
+    "winter": { "white": 6350, "saturation": 0.9, "contrast": 1.0, "gain": [0.98, 0.99, 1.02] }
+  },
+
+  "quality": {
+    "_about": "Look.Quality 0 Low, 1 Medium, 2 High (default), 3 Epic. scalability is the engine's quality level for every group (Lumen global illumination and reflections need 2 or more); the rest are ours.",
+    "levels": [
+      { "name": "Low", "scalability": 0, "volumetricFog": false, "contactShadows": false, "clouds": false, "fogGridPixels": 16 },
+      { "name": "Medium", "scalability": 1, "volumetricFog": false, "contactShadows": true, "clouds": true, "fogGridPixels": 16 },
+      { "name": "High", "scalability": 2, "volumetricFog": true, "contactShadows": true, "clouds": true, "fogGridPixels": 12 },
+      { "name": "Epic", "scalability": 3, "volumetricFog": true, "contactShadows": true, "clouds": true, "fogGridPixels": 8 }
+    ]
+  }
+}

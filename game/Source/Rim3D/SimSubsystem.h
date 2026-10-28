@@ -141,6 +141,8 @@ public:
 
 	/** Folder the saves go in. */
 	static FString GetSaveDirectory();
+	/** Whether the HUDs show their list of keys (UI.KeyHelp, F1); folded by default. */
+	static bool IsKeyHelpShown();
 
 	/** Game seconds between autosaves; a day unless a test shortens it. 0 turns autosave off. */
 	void SetAutosaveInterval(int64 GameSeconds);

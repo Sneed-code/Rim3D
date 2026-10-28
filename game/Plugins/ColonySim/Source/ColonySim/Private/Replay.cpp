@@ -466,9 +466,23 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["x"] = static_cast<double>(c.x);
                 j["y"] = static_cast<double>(c.y);
+            } else if constexpr (std::is_same_v<Type, SkipNightCommand> || std::is_same_v<Type, CancelSkipCommand>) {
+                // no fields
             } else {
-                static_assert(std::is_same_v<Type, SkipNightCommand> || std::is_same_v<Type, CancelSkipCommand>,
-                              "write every command type");
+                static_assert(std::is_same_v<Type, CaravanCommand>, "write every command type");
+                j["action"] = c.action;
+                j["caravan"] = c.caravan;
+                j["tile"] = c.tile;
+                ReplayOrderedJson pawns = ReplayOrderedJson::array();
+                for (const Entity e : c.pawns) {
+                    pawns.push_back(entt::to_integral(e));
+                }
+                j["pawns"] = pawns;
+                ReplayOrderedJson items = ReplayOrderedJson::array();
+                for (const Entity e : c.items) {
+                    items.push_back(entt::to_integral(e));
+                }
+                j["items"] = items;
             }
         },
         logged.command);
@@ -535,6 +549,24 @@ public:
             return fail(where + "." + key + " must be text");
         }
         out = it->get<std::string>();
+        return true;
+    }
+
+    // A list of thing ids (absent: empty).
+    bool entities(const ReplayJson& obj, const char* key, std::vector<Entity>& out, const std::string& where) {
+        const auto it = obj.find(key);
+        if (it == obj.end()) {
+            return true;
+        }
+        if (!it->is_array()) {
+            return fail(where + "." + key + " must be a list of thing ids");
+        }
+        for (const ReplayJson& id : *it) {
+            if (!id.is_number_unsigned()) {
+                return fail(where + "." + key + " must be a list of thing ids");
+            }
+            out.push_back(static_cast<Entity>(id.get<uint32_t>()));
+        }
         return true;
     }
 
@@ -1663,6 +1695,14 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
     } else if (type == "Quest") {
         QuestCommand c;
         if (!r.text(j, "action", c.action, where) || !r.integer(j, "quest", c.quest, where) || !r.text(j, "kind", c.kind, where)) {
+            return false;
+        }
+        out.command = std::move(c);
+    } else if (type == "Caravan") {
+        CaravanCommand c;
+        if (!r.text(j, "action", c.action, where) || !r.integer(j, "caravan", c.caravan, where) ||
+            !r.integer(j, "tile", c.tile, where) || !r.entities(j, "pawns", c.pawns, where) ||
+            !r.entities(j, "items", c.items, where)) {
             return false;
         }
         out.command = std::move(c);

@@ -1,4 +1,5 @@
 #include "ColonySim/Sim.h"
+#include "ColonySim/Caravans.h"
 
 #include "ColonySim/Animals.h"
 #include "ColonySim/Breeding.h"
@@ -407,6 +408,12 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     quests_->setJoinMaker([this](CellPos cell, uint64_t seed) { return makeJoiner(cell, seed); });
     ship_ = std::make_unique<ShipSystem>(*things_, *raids_, *defs_, time_);
     ship_->setEventLog(&events_);
+    caravans_ = std::make_unique<CaravanSystem>(*things_, map_, pathfinder_, *health_, *needs_, *defs_, time_, world_.get());
+    caravans_->setEventLog(&events_);
+    caravans_->setJobs(jobs_.get());
+    caravans_->setSpoilage(spoilage_.get());
+    // A caravan's pawns sleep on the ground while it rests for the night.
+    needs_->setRestingElsewhere([this](Entity pawn) { return caravans_->resting(pawn); });
     mood_->addSituation("isPrisoner", [this](Entity pawn) { return prisoners_->isPrisoner(pawn) ? 0 : -1; });
     // Night owls like being up at night and not by day (docs/design/mood.md); only pawns that are awake count.
     const auto awakeAt = [this](Entity pawn, bool night) {
@@ -459,6 +466,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         defense_->onDestroy(thing);
         fire_->onDestroy(thing);
         mentalBreaks_->forget(thing);
+        caravans_->forget(thing);
     });
     fighters_->setWeather(weather_.get());
     melee_ = std::make_unique<MeleeSystem>(*things_, map_, *combat_, *health_, *defs_, time_,
@@ -535,6 +543,61 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     weather_->setConditions([this](int64_t seconds) { return nature_->temperatureOffset(seconds); },
                             [this]() { return nature_->skyFactor(); });
     lights_->setSkyFloor([this]() { return nature_->skyFloor(); });
+    // Trouble that other systems carry out (T3): diseases (H2), chitinid infestations and remnant clusters (monsters),
+    // and prison breaks (C22). The narrator picks them by their Incidents defs.
+    for (const char* name : {"Disease_Flu", "Disease_Plague", "Disease_Malaria", "Disease_SleepingSickness", "Disease_GutWorms",
+                             "Disease_MuscleParasites"}) {
+        narrator_->setWorker(name, [this, name, seed = settings.seed](IncidentFiring& f) {
+            const Def* incident = defs_->find("Incidents", name);
+            const DefId disease = health_->diseaseId(incident != nullptr ? incident->text("hediff") : std::string());
+            if (!disease.valid()) {
+                f.error = "the defs have no such disease";
+                return false;
+            }
+            std::vector<Entity> people;
+            for (const auto [pawn, colonist, pos] : things_->registry().view<const Colonist, const Position>().each()) {
+                if (fighters_->factionOf(pawn) == kPlayerFaction) {
+                    people.push_back(pawn);
+                }
+            }
+            const double fraction = incident->number("maxVictimsFraction", 0.3);
+            const int victims = std::max(1, static_cast<int>(std::lround(static_cast<double>(people.size()) * fraction)));
+            Rng rng(splitMix64(seed ^ 0x6469736561736ULL ^ static_cast<uint64_t>(time_.seconds)));
+            const std::vector<Entity> caught = health_->outbreak(disease, people, victims, rng);
+            if (caught.empty()) {
+                f.error = "nobody can catch it";
+                return false;
+            }
+            const Position& at = things_->registry().get<Position>(caught.front());
+            f.hasCell = true;
+            f.cell = cellOf(at);
+            f.text = std::string(incident->label()) + ": " + std::to_string(caught.size()) +
+                     (caught.size() == 1 ? " colonist has fallen ill." : " colonists have fallen ill.");
+            return true;
+        });
+    }
+    narrator_->setWorker("Infestation", [this](IncidentFiring& f) {
+        if (!monsters_->infest(f.points, f.error)) {
+            return false;
+        }
+        f.text = "Infestation: chitinids are tunnelling up from under the roofs.";
+        return true;
+    });
+    narrator_->setWorker("RemnantCluster", [this](IncidentFiring& f) {
+        if (!monsters_->remnantCluster(f.points, -1, f.error)) {
+            return false;
+        }
+        f.text = "Remnant cluster: mechanoids are coming for the colony.";
+        return true;
+    });
+    narrator_->setWorker("PrisonBreak", [this](IncidentFiring& f) {
+        if (prisoners_->breakOut("prison break") == 0) {
+            f.error = "no prisoner can walk out";
+            return false;
+        }
+        f.text = "Prison break: the prisoners are out of their cells and running.";
+        return true;
+    });
     social_ = std::make_unique<SocialSystem>(*things_, *rooms_, *health_, *melee_, *mood_, *jobs_, *defs_, time_,
                                              splitMix64(settings.seed ^ 0x736F6369616CULL));
     social_->setEventLog(&events_);
@@ -1575,6 +1638,23 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!mentalBreaks_->start(startBreak->pawn, startBreak->breakDef, rng_, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* caravan = std::get_if<CaravanCommand>(&command)) {
+        bool ok = false;
+        if (caravan->action == "Form") {
+            int formed = 0;
+            ok = caravans_->form(caravan->pawns, caravan->items, caravan->tile, formed, error);
+        } else if (caravan->action == "Move") {
+            ok = caravans_->move(caravan->caravan, caravan->tile, error);
+        } else if (caravan->action == "Stop") {
+            ok = caravans_->stop(caravan->caravan, error);
+        } else if (caravan->action == "Enter") {
+            ok = caravans_->enter(caravan->caravan, error);
+        } else {
+            error = "no caravan action '" + caravan->action + "' (Form, Move, Stop or Enter)";
+        }
+        if (!ok) {
+            commandFailed(id, error);
+        }
     } else if (const auto* ship = std::get_if<ShipCommand>(&command)) {
         bool ok = false;
         if (ship->action == "StartReactor") {
@@ -1583,8 +1663,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             ok = ship_->board(ship->thing, ship->pawn, error);
         } else if (ship->action == "Launch") {
             ok = ship_->launch(error);
+        } else if (ship->action == "FinishWarmUp") {
+            ok = ship_->finishWarmUp(error);
         } else {
-            error = "no ship action '" + ship->action + "' (StartReactor, Board or Launch)";
+            error = "no ship action '" + ship->action + "' (StartReactor, Board, Launch or FinishWarmUp)";
         }
         if (!ok) {
             commandFailed(id, error);
@@ -1684,6 +1766,8 @@ void Sim::stepOnce(bool keepEvents) {
     fieldCare_->invalidate();
     { SimLap lap(profile_, "jobs"); jobs_->fuel().step(); }
     { SimLap lap(profile_, "jobs"); jobs_->step(); }
+    // after the jobs, which leave caravan members alone; before movement walks them
+    { SimLap lap(profile_, "caravans"); caravans_->step(); }
     { SimLap lap(profile_, "raids"); raids_->step(); }
     { SimLap lap(profile_, "fieldCare"); fieldCare_->step(); }
     {
@@ -1864,6 +1948,28 @@ void Sim::writeSnapshot(Snapshot& out) const {
         view.current = research_->current() == project.defName;
         out.research.push_back(view);
     }
+    out.caravans.clear();
+    for (const Caravan& c : caravans_->caravans()) {
+        CaravanView v;
+        v.id = c.id;
+        v.state = static_cast<uint8_t>(c.state);
+        v.tile = c.tile;
+        v.nextTile = c.path.empty() ? -1 : c.path.front();
+        v.destination = c.destination;
+        v.progress = c.cost > 0.0 ? static_cast<float>(std::min(1.0, c.progress / c.cost)) : 0.0f;
+        v.pawns = static_cast<int>(c.members.size());
+        v.items = static_cast<int>(c.items.size());
+        v.massKg = static_cast<float>(caravans_->massOf(c));
+        v.capacityKg = static_cast<float>(caravans_->capacityOf(c));
+        const double speed = caravans_->speedFactor(c);
+        if (c.cost > 0.0 && speed > 0.0) {
+            const CaravanRules& rules = caravans_->rules();
+            const int restHours = (rules.restToHour - rules.restFromHour + 24) % 24;  // 22 to 6: 8
+            const double movingSeconds = static_cast<double>(24 - restHours) * static_cast<double>(kSecondsPerHour);
+            v.tilesPerDay = static_cast<float>(movingSeconds * speed / c.cost);
+        }
+        out.caravans.push_back(v);
+    }
     {
         const ShipParts parts = ship_->parts();
         ShipView& s = out.ship;
@@ -1881,6 +1987,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
         s.canLaunch = s.problem.empty();
         s.won = ship_->won();
         s.escaped = ship_->state().escaped;
+        s.reactor = ship_->state().phase == ShipPhase::Idle ? kNoEntity : ship_->state().reactor;
+        s.aboard.clear();
+        for (size_t i = 0; i < ship_->state().caskets.size(); ++i) {
+            s.aboard.emplace_back(ship_->state().caskets[i], ship_->state().riders[i]);
+        }
     }
     out.apparel.clear();
     out.fittedParts.clear();
@@ -2458,6 +2569,7 @@ uint64_t Sim::stateHash() const {
     trade_->hashState(h);
     quests_->hashState(h);
     ship_->hashState(h);
+    caravans_->hashState(h);
     talents_->hashState(h);
     drugs_->hashState(h);
     pathfinder_.hashState(h);

@@ -282,3 +282,31 @@ TEST_CASE("Ship: the state is saved, loads back the same and replays") {
     CHECK(checkReplay(parsed, again).matched());
     CHECK(again.stateHash() == recorded.stateHash());
 }
+
+TEST_CASE("Ship: the snapshot names the reactor and who rides where; the dev skip ends the warm-up") {
+    ShipYard yard;
+    Sim& sim = yard.sim;
+    CHECK(shipSnap(sim).ship.reactor == kNoEntity);
+    sim.submit(ShipCommand{"FinishWarmUp", kNoEntity, kNoEntity});
+    sim.step();
+    CHECK(yard.lastFailure() == "the reactor is not warming up");
+    sim.submit(ShipCommand{"StartReactor", yard.reactor, kNoEntity});
+    sim.submit(ShipCommand{"Board", yard.casket, yard.pawn});
+    sim.step();
+    Snapshot snap = shipSnap(sim);
+    CHECK(snap.ship.reactor == yard.reactor);
+    SHIP_REQUIRE(snap.ship.aboard.size() == 1);
+    CHECK(snap.ship.aboard[0].first == yard.casket);
+    CHECK(snap.ship.aboard[0].second == yard.pawn);
+    sim.submit(ShipCommand{"FinishWarmUp", kNoEntity, kNoEntity});
+    sim.step();
+    sim.step();
+    snap = shipSnap(sim);
+    CHECK(snap.ship.phase == static_cast<uint8_t>(ShipPhase::Ready));
+    CHECK(snap.ship.canLaunch);
+    sim.submit(ShipCommand{"Launch", kNoEntity, kNoEntity});
+    sim.step();
+    snap = shipSnap(sim);
+    CHECK(snap.ship.won);
+    CHECK(snap.ship.aboard.empty());
+}

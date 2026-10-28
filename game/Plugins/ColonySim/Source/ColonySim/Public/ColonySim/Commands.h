@@ -629,11 +629,24 @@ struct ContractDiseaseCommand {
 };
 
 // The spaceship ending (docs/design/ship.md). `action` is "StartReactor" (`thing` a finished ship reactor), "Board" (`pawn` rides
-// in the ship cryptosleep casket `thing`; no pawn empties the casket) or "Launch". Fails with the reason in plain words.
+// in the ship cryptosleep casket `thing`; no pawn empties the casket), "Launch" or the dev action "FinishWarmUp" (the warming reactor is active at
+// the next step). Fails with the reason in plain words.
 struct ShipCommand {
     std::string action;
     Entity thing = kNoEntity;
     Entity pawn = kNoEntity;
+};
+
+// Caravans (W4, docs/design/caravans.md). `action` is "Form" (the colonists `pawns` take the item stacks `items`
+// off the map and set out for `tile`; -1 keeps them on the start tile), "Move" (caravan `caravan` sets off for
+// `tile`), "Stop" or "Enter" (a caravan on the start tile comes back onto the map). Needs a world (SimSettings::world).
+// Fails with the reason in plain words.
+struct CaravanCommand {
+    std::string action;
+    int caravan = 0;
+    int tile = -1;
+    std::vector<Entity> pawns;
+    std::vector<Entity> items;
 };
 
 // Dev command: the weather becomes this Weathers def now (by defName, e.g. "Rain") and lasts `hours`
@@ -970,7 +983,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              TradeCommand, AdjustGoodwillCommand, GiftCommand, ClimbCommand, AttuneCommand,
                              LearnPowerCommand, CastPowerCommand, SetThermostatCommand, RepairGearCommand,
                              FitUpgradeCommand, CreateAreaCommand, PaintAreaCommand, DeleteAreaCommand,
-                             AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand,
+                             AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand, CaravanCommand,
                              ArrestCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was

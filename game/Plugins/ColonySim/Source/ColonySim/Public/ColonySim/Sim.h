@@ -76,6 +76,7 @@ class PrisonerSystem;
 class TradeSystem;
 class QuestSystem;
 class ShipSystem;
+class CaravanSystem;
 class Rooms;
 class TemperatureSystem;
 class SpoilageSystem;
@@ -395,6 +396,9 @@ public:
     // The spaceship ending: parts, reactor, siege waves, launch (docs/design/ship.md).
     ShipSystem& ship() { return *ship_; }
     const ShipSystem& ship() const { return *ship_; }
+    // Caravans on the world map (docs/design/caravans.md); they need a world.
+    CaravanSystem& caravans() { return *caravans_; }
+    const CaravanSystem& caravans() const { return *caravans_; }
     PrisonerSystem& prisoners() { return *prisoners_; }
     const PrisonerSystem& prisoners() const { return *prisoners_; }
     // Quests: offers, answers, rewards (docs/design/quests.md). The narrator offers them with `quests().offerRandom`.
@@ -538,6 +542,7 @@ private:
     std::unique_ptr<TradeSystem> trade_;         // after the raids
     std::unique_ptr<QuestSystem> quests_;        // after the raids
     std::unique_ptr<ShipSystem> ship_;           // after the raids
+    std::unique_ptr<CaravanSystem> caravans_;    // after the job system
     std::unique_ptr<Husbandry> husbandry_;  // after animals_ and the job system
     std::unique_ptr<Breeding> breeding_;    // after husbandry_
     std::unique_ptr<Fire> fire_;            // after the weather, temperature, rooms, floors, filth, plants and health

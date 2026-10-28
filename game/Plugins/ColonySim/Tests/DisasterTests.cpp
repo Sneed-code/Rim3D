@@ -319,12 +319,30 @@ TEST_CASE("Disasters: crop blight kills one crop's plants round a centre, only i
     const Event* letter = disasterFire(*sim, "Blight");
     DISASTER_REQUIRE(letter != nullptr);
     CHECK(letter->message.find("Crop blight") == 0);
-    int left = 0;
-    for (const CellPos& c : sim->farming().find(zone)->cells) {
-        left += sim->plants().has(c) && sim->plants().defAt(c) == rice ? 1 : 0;
+    // The blight starts in a small cluster and kills nothing yet.
+    const size_t first = sim->disasters().blighted().size();
+    CHECK(first >= 1);
+    for (const BlightedPlant& b : sim->disasters().blighted()) {
+        CHECK(sim->plants().has(b.cell));
+        CHECK(sim->plants().defAt(b.cell) == rice);
     }
-    CHECK(left < sown);
-    CHECK(left > 0);  // a 10 to 20 m circle on a 12 m field leaves some, and kills 70% of what it reaches
+    CHECK(sim->plants().has(wild));
+    // Over days it spreads to the neighbours and every blighted plant withers (within 72 hours of catching it).
+    size_t most = first;
+    int withered = 0;
+    disasterRun(*sim, 4 * 3600);
+    for (int h = 0; h < 6 * 24; ++h) {
+        for (int i = 0; i < 3600; ++i) {
+            sim->step();
+            for (const Event& e : sim->events()) {
+                withered += e.type == EventType::PlantRemoved && e.message == "blighted" ? 1 : 0;
+            }
+        }
+        most = std::max(most, sim->disasters().blighted().size());
+    }
+    CHECK(withered > 0);
+    CHECK(most > first);
+    CHECK(sim->disasters().blighted().empty());
     CHECK(sim->plants().has(wild));
     (void)grass;
 
@@ -407,4 +425,31 @@ TEST_CASE("Disasters: the same seed and commands give the same game") {
         return sim->stateHash();
     };
     CHECK(play() == play());
+}
+
+TEST_CASE("Disasters: a disease outbreak makes some colonists ill") {
+    auto sim = disasterSim();
+    sim->step();
+    const Event* letter = disasterFire(*sim, "Disease_Plague");
+    DISASTER_REQUIRE(letter != nullptr);
+    CHECK(disasterCommandFailures(*sim) == 0);
+    int sick = 0;
+    for (const Entity pawn : disasterColonists(*sim)) {
+        sick += sim->health().sick(pawn) ? 1 : 0;
+    }
+    CHECK(sick >= 1);
+    CHECK(sick <= static_cast<int>(disasterColonists(*sim).size()));
+}
+
+TEST_CASE("Disasters: a prison break needs prisoners, an infestation needs a roof") {
+    auto sim = disasterSim();
+    sim->step();
+    sim->submit(FireIncidentCommand{"PrisonBreak", 0.0f});
+    sim->step();
+    CHECK(disasterCommandFailures(*sim) == 1);
+    // A flat open map has no roofed place for brood mounds; the worker answers in words and nothing is half done.
+    sim->submit(FireIncidentCommand{"Infestation", 100.0f});
+    sim->step();
+    CHECK(sim->narrator().hasWorker("Infestation"));
+    CHECK(sim->narrator().hasWorker("RemnantCluster"));
 }
