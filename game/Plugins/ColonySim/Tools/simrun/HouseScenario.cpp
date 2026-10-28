@@ -138,6 +138,9 @@ bool houseWritePng(Sim& sim, const Snapshot& snapshot, CellPos origin, int level
                 case Terrain::Air: break;
                 case Terrain::UpperFloor: r = 205; g = 180; b = 130; break;
                 case Terrain::Water: r = 60; g = 100; b = 170; break;
+                case Terrain::ShallowWater: r = 90; g = 140; b = 195; break;
+                case Terrain::Marsh: r = 70; g = 110; b = 80; break;
+                case Terrain::Mud: r = 105; g = 85; b = 55; break;
                 case Terrain::Sand: r = 215; g = 200; b = 150; break;
                 case Terrain::Rock:
                 case Terrain::RoughStone: r = g = b = 120; break;

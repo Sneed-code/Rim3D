@@ -92,6 +92,8 @@ const PowerInfo& PowerGrid::info(DefId id) const {
         p.wind = def.flag("power.scalesWithWind");
         p.windBlockRadius = std::max(0, static_cast<int>(def.integer("windBlockRadius")));
         p.geyser = def.flag("power.needsGeyser");
+        p.dryRadius = std::max(0, static_cast<int>(def.integer("dries.radius")));
+        p.dryEvery = std::max(1, static_cast<int>(def.integer("dries.everySeconds")));
         p.fuelled = p.output > 0.0 && def.has("fuel");
         p.consumption = std::max(0.0, def.number("power.consumption"));
         p.battery = std::max(0.0, def.number("power.battery"));
@@ -321,6 +323,48 @@ void PowerGrid::step(const GameTime& time) {
         }
     }
     balance(time);
+    dry(time);
+}
+
+// A powered moisture pump turns the nearest still water cell within its reach into soil, one per
+// `dries.everySeconds`. Moving water is left alone (docs/design/power.md).
+void PowerGrid::dry(const GameTime& time) {
+    const entt::registry& reg = things_.registry();
+    for (const Member& m : members_) {
+        if (m.info->dryRadius <= 0 || time.seconds % m.info->dryEvery != 0 || m.cells.empty() ||
+            !reg.get<PowerPart>(m.entity).powered) {
+            continue;
+        }
+        double cx = 0.0;
+        double cy = 0.0;
+        for (const CellPos c : m.cells) {
+            cx += c.x;
+            cy += c.y;
+        }
+        cx = cx / static_cast<double>(m.cells.size());
+        cy = cy / static_cast<double>(m.cells.size());
+        const int r = m.info->dryRadius;
+        CellPos best{};
+        double bestD = 0.0;
+        bool found = false;
+        for (int y = static_cast<int>(cy) - r; y <= static_cast<int>(cy) + r; ++y) {
+            for (int x = static_cast<int>(cx) - r; x <= static_cast<int>(cx) + r; ++x) {
+                const CellPos c{x, y, 0};
+                if (!map_.onGround(c) || map_.terrain(c) != Terrain::Water || map_.flowing(c)) {
+                    continue;
+                }
+                const double d = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+                if (d <= static_cast<double>(r) * r && (!found || d < bestD)) {
+                    best = c;
+                    bestD = d;
+                    found = true;
+                }
+            }
+        }
+        if (found) {
+            map_.dryWater(best);
+        }
+    }
 }
 
 void PowerGrid::balance(const GameTime& time) {

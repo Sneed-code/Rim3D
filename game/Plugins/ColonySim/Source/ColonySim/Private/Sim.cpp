@@ -21,6 +21,7 @@
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Fire.h"
+#include "ColonySim/Traits.h"
 #include "ColonySim/Floors.h"
 #include "ColonySim/Fuel.h"
 #include "ColonySim/Raids.h"
@@ -54,6 +55,7 @@
 #include "ColonySim/Needs.h"
 #include "ColonySim/Genes.h"
 #include "ColonySim/Looks.h"
+#include "ColonySim/MapFeatures.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Plants.h"
@@ -70,6 +72,7 @@
 #include "ColonySim/Zones.h"
 #include "ColonySim/Disasters.h"
 #include "ColonySim/Narrator.h"
+#include "ColonySim/NatureEvents.h"
 #include "MovementSystem.h"
 #include "WoundViews.h"
 
@@ -152,6 +155,16 @@ std::optional<WorldSite> simStartSite(const World* world) {
     return world->siteFor(world->startTile());
 }
 
+// The map's size and seed, and how wet the biome makes it (`mapGen` in the Biomes def).
+MapSettings simMapSettings(const SimSettings& settings, uint64_t mapSeed, const std::string& biomeName, const DefDatabase& defs) {
+    MapSettings map{settings.mapSize, settings.mapSize, mapSeed, settings.flatMap};
+    if (const Def* biome = defs.find("Biomes", biomeName)) {
+        map.river = static_cast<float>(biome->number("mapGen.river", 1.0));
+        map.marsh = static_cast<float>(biome->number("mapGen.marsh", 1.0));
+    }
+    return map;
+}
+
 void simHashCell(StateHasher& h, CellPos c) {
     h.add(c.x);
     h.add(c.y);
@@ -186,6 +199,9 @@ Sim::Sim(const SimSettings& settings) : Sim(settings, nullptr) {}
 
 Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
     : Sim(settings, std::move(defs), EmptyStart{}) {
+    if (!settings_.flatMap) {
+        placeMapFeatures(map_, *things_, splitMix64(settings_.seed ^ 0x66656174ULL));
+    }
     placeStockpileAndThings();
     if (!settings_.scenario.empty()) {
         startScenario();
@@ -205,8 +221,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       site_(simStartSite(world_.get())),
       biome_(site_ && !site_->biome.empty() ? site_->biome : std::string("TemperateForest")),
       // On a world the start tile seeds the map, so the same world and tile always give the same map.
-      map_(MapSettings{settings.mapSize, settings.mapSize, site_ ? site_->mapSeed : splitMix64(settings.seed ^ 0x6D6170ULL),
-                       settings.flatMap}),
+      map_(simMapSettings(settings, site_ ? site_->mapSeed : splitMix64(settings.seed ^ 0x6D6170ULL), biome_, *defs_)),
       pathfinder_(map_),
       zones_(std::make_unique<Zones>(map_)),
       things_(std::make_unique<Things>(map_, defs_)),
@@ -275,6 +290,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     medicine_ = std::make_unique<MedicineSystem>(*things_, *defs_);
     surgery_ = std::make_unique<SurgerySystem>(*things_, *defs_, *health_, research_.get());
     talents_ = std::make_unique<TalentSystem>(*things_, *defs_);
+    traits_ = std::make_unique<TraitBook>(things_->registry(), *defs_);
+    health_->setTraits(traits_.get());
+    movement_->setTraits(traits_.get());
+    research_->setTraits(traits_.get());
     temperature_ = std::make_unique<TemperatureSystem>(map_, *things_, *rooms_, *health_, *defs_,
                                                        splitMix64(settings.seed ^ 0x74656D70ULL));
     temperature_->setOutdoor(outdoorTemperature());
@@ -332,6 +351,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setSurgery(surgery_.get());
     jobs_->setRoomStats(roomStats_.get());
     jobs_->setTalents(talents_.get());
+    jobs_->setTraits(traits_.get());
     jobs_->setFilth(filth_.get());
     jobs_->setApparel(apparel_.get());
     jobs_->setSpoilage(spoilage_.get());
@@ -362,6 +382,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
                                                         pathfinder_, *defs_, time_);
     combat_->setEventLog(&events_);
     combat_->setTalents(talents_.get());
+    combat_->setTraits(traits_.get());
     explosives_->setEventLog(&events_);
     fighters_->setEventLog(&events_);
     animals_ = std::make_unique<AnimalSystem>(*things_, map_, *plants_, *health_, *defs_, time_,
@@ -387,6 +408,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     monsters_ = std::make_unique<MonsterSystem>(*things_, map_, *combat_, *health_, *fighters_, *raids_, *animals_, *defs_, time_, rng_);
     prisoners_ = std::make_unique<PrisonerSystem>(*things_, map_, *combat_, *health_, *jobs_, *fighters_, *raids_, *defs_, time_, rng_);
     prisoners_->setEventLog(&events_);
+    prisoners_->setRooms(rooms_.get());
     trade_ = std::make_unique<TradeSystem>(*things_, map_, *combat_, *fighters_, *health_, *jobs_, *raids_, *defs_, time_, rng_, settings.seed);
     trade_->setEventLog(&events_);
     trade_->setTalents(talents_.get());
@@ -425,6 +447,33 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
             return 0;
         }
         return rooms_->roleAt(cellOf(things_->registry().get<Position>(bed))) == RoomRole::Bedroom ? -1 : 0;
+    });
+    // A brawler is unhappy with a gun in hand (docs/design/traits.md).
+    mood_->addSituation("wieldsRanged", [this](Entity pawn) {
+        const Gear* gear = things_->registry().try_get<Gear>(pawn);
+        return gear != nullptr && gear->weapon != kNoEntity && things_->registry().valid(gear->weapon) &&
+                       combat_->isGun(things_->registry().get<Thing>(gear->weapon).def)
+                   ? 0
+                   : -1;
+    });
+    // A pyromaniac enjoys fire: each burning cell within reach counts as two nearby fires, up to four.
+    mood_->addSituation("nearFire", [this](Entity pawn) {
+        const Position* at = things_->registry().try_get<Position>(pawn);
+        if (at == nullptr || fire_->count() == 0) {
+            return -1;
+        }
+        const CellPos here = cellOf(*at);
+        constexpr int kPyromaniacFireRadius = 8;
+        int units = 0;
+        for (int dy = -kPyromaniacFireRadius; dy <= kPyromaniacFireRadius && units < 4; ++dy) {
+            for (int dx = -kPyromaniacFireRadius; dx <= kPyromaniacFireRadius && units < 4; ++dx) {
+                const CellPos c{here.x + dx, here.y + dy, here.level};
+                if (dx * dx + dy * dy <= kPyromaniacFireRadius * kPyromaniacFireRadius && map_.inBounds(c) && fire_->burning(c)) {
+                    units += 2;
+                }
+            }
+        }
+        return units > 0 ? std::min(units, 4) - 1 : -1;
     });
     combat_->setBeforeDestroy([this](Entity thing) {
         jobs_->forget(thing);
@@ -510,6 +559,12 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         f.text = "Quest: " + (questDef != nullptr ? questDef->text("text") : std::string("someone has an offer for the colony."));
         return true;
     });
+    nature_ = std::make_unique<NatureEvents>(*narrator_, *raids_, *defs_, time_, map_, *things_, *plants_, *animals_, *husbandry_,
+                                             *health_, settings.seed);
+    nature_->setColonistMaker([this](CellPos cell, uint64_t seed) { return joinColonist(cell, seed); });
+    weather_->setConditions([this](int64_t seconds) { return nature_->temperatureOffset(seconds); },
+                            [this]() { return nature_->skyFactor(); });
+    lights_->setSkyFloor([this]() { return nature_->skyFloor(); });
     // Trouble that other systems carry out (T3): diseases (H2), chitinid infestations and remnant clusters (monsters),
     // and prison breaks (C22). The narrator picks them by their Incidents defs.
     for (const char* name : {"Disease_Flu", "Disease_Plague", "Disease_Malaria", "Disease_SleepingSickness", "Disease_GutWorms",
@@ -1110,6 +1165,11 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     } else if (const auto* prisonBed = std::get_if<SetPrisonBedCommand>(&command)) {
         std::string why;
         if (!prisoners_->setPrisonBed(prisonBed->bed, prisonBed->on, why)) {
+            commandFailed(id, why);
+        }
+    } else if (const auto* arrest = std::get_if<ArrestCommand>(&command)) {
+        std::string why;
+        if (!prisoners_->setArrest(arrest->pawn, arrest->on, why)) {
             commandFailed(id, why);
         }
     } else if (const auto* throwCommand = std::get_if<ThrowCommand>(&command)) {
@@ -2629,6 +2689,10 @@ void Sim::writeSnapshot(Snapshot& out) const {
         n.wealth = state.wealth;
         n.threatPoints = state.points;
         n.incidents = state.incidents;
+        n.conditions.clear();
+        for (const NatureCondition& c : nature_->active()) {
+            n.conditions.push_back(NarratorConditionView{defs_->idOf("Incidents", c.incident), c.startsAt, c.endsAt});
+        }
     }
     {
         TravelView& t = out.travel;
@@ -2703,6 +2767,7 @@ uint64_t Sim::stateHash() const {
     narrator_->hashState(h);
     disasters_->hashState(h);
     travel_->hashState(h);
+    nature_->hashState(h);
     crafting_->hashState(h);
     farming_->hashState(h);
 

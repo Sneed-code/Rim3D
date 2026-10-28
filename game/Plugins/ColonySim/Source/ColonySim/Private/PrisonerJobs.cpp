@@ -65,11 +65,11 @@ public:
             armed.push_back(&pos);
         }
         for (const auto [patient, health, pos] : reg.view<const Health, const Position>().each()) {
-            if (pos.level != at.level || !prisoners->capturable(patient)) {
+            if (pos.level != at.level || !prisoners->carryable(patient)) {
                 continue;
             }
             const bool danger = std::any_of(armed.begin(), armed.end(), [&](const Position* p) {
-                return p->level == pos.level && prisonDistSq(*p, pos) < safe * safe;
+                return p != &pos && p->level == pos.level && prisonDistSq(*p, pos) < safe * safe;
             });
             if (!danger) {
                 out.push_back(WorkCandidate{JobTarget{patient, CellPos{}}, prisonDistSq(at, pos), 0, 0, false, CellPos{}});
@@ -82,7 +82,7 @@ public:
         const Entity patient = candidate.target.thing;
         Entity bed = kNoEntity;
         CellPos cell;
-        if (prisoners == nullptr || !prisoners->capturable(patient) || !prisoners->findPrisonBed(patient, pawn, bed, cell)) {
+        if (prisoners == nullptr || !prisoners->carryable(patient) || !prisoners->findPrisonBed(patient, pawn, bed, cell)) {
             return false;
         }
         out = Job{};
@@ -261,7 +261,7 @@ bool JobSystem::failCheckPrisoner(Entity pawn, Job& job, std::string& why) {
         return false;
     }
     if (job.type == JobType::CapturePrisoner) {
-        if (!prisoners_->capturable(job.thing)) {
+        if (!prisoners_->carryable(job.thing)) {
             why = "it can't be captured now";
             return false;
         }

@@ -21,6 +21,7 @@ class JobSystem;
 class Map;
 class RaidSystem;
 class Rng;
+class Rooms;
 class TradeSystem;
 class StateHasher;
 class Things;
@@ -54,6 +55,12 @@ struct Prisoner {
     int64_t capturedAt = 0;    // game second
     int64_t nextChat = 0;      // game second from which a warden may talk to it again
     int64_t guiltyUntil = 0;   // it harmed the colony (it was captured in a raid) until this game second; an execution before is justified
+};
+
+// On a colonist or visitor the player has ordered arrested: a warden takes it to a prison bed. `by` is the warden carrying it, none until
+// it is lifted; a carried pawn thinks and moves no more.
+struct ArrestOrder {
+    Entity by = kNoEntity;
 };
 
 // On a bed building: only prisoners sleep in it, and downed enemies are carried to it.
@@ -98,6 +105,8 @@ public:
     void setEventLog(std::vector<Event>* events) { events_ = events; }
     // Executions cost goodwill with the prisoner's faction (TradeSystem::noteExecuted); without it they cost none.
     void setTrade(TradeSystem* trade) { trade_ = trade; }
+    // The rooms a prison cell must be closed by; without them every cell counts as closed.
+    void setRooms(Rooms* rooms) { rooms_ = rooms; }
 
     bool isPrisoner(Entity pawn) const;
     bool isPrisonBed(Entity bed) const;
@@ -109,16 +118,29 @@ public:
     // Whether wardens may capture this pawn now: a living, downed pawn of another side that is no animal (not wild, not a prisoner
     // already) on the map.
     bool capturable(Entity pawn) const;
+    // Whether the cell is in a fully enclosed room (walls and doors all round, a roof over every cell): the only place a prison
+    // bed takes a prisoner. A door counts as closed; it is not in any room.
+    bool cellEnclosed(CellPos cell) const;
+    // Whether the player's order to arrest `pawn` can be carried out: a living colonist of the player's side, or a visitor or
+    // trader of a faction, on the map; not an animal, a raider, a prisoner already, the protagonist or the one the player is walking.
+    bool arrestable(Entity pawn) const;
+    // `capturable`, or `arrestable` with an order: what a capture job may carry to a bed.
+    bool carryable(Entity pawn) const;
     // The prison bed slot a warden (`helper`) would put `pawn` in: free, reachable, the nearest to the pawn. False if there is none.
     bool findPrisonBed(Entity pawn, Entity helper, Entity& bed, CellPos& cell) const;
 
     // Commands. False, with a reason in plain words, when they can't be done.
     bool setMode(Entity pawn, PrisonerMode mode, std::string& error);
     bool setPrisonBed(Entity bed, bool on, std::string& error);
+    // Orders a colonist or a visitor arrested (or cancels the order).
+    bool setArrest(Entity pawn, bool on, std::string& error);
 
     // The end of a capture: `pawn` becomes the colony's prisoner in `bed` (the bed's slot is its own, its weapons are dropped, it stops
     // fighting and leaves its raid squad). `warden` is only for the event. Also a dev entry point for tests.
     bool imprison(Entity pawn, Entity bed, Entity warden, std::string& error);
+    // A warden has lifted `pawn` for an arrest: it stops what it is doing and goes where the warden goes. A visitor leaves its
+    // visit and its faction turns hostile (TradeSystem::noteArrested).
+    void seize(Entity pawn, Entity warden);
 
     // Whether a warden may start a talk with this prisoner now: it has a mode that wants one, its time has come, it is not
     // downed, it lies or stands somewhere a warden can walk to, and (Release) it can walk.
@@ -144,7 +166,8 @@ public:
     // its own side's fight, with no weapon, walking off the map; a PrisonBreak event). Returns how many.
     int breakOut(const char* why);
 
-    // Freed prisoners that reach the map edge leave it. Runs once a step, after the fighters.
+    // Freed prisoners that reach the map edge leave it, and an arrest whose warden dropped the job lets the pawn go. Runs once
+    // a step, after the fighters.
     void step();
 
     // A warden's inspired recruitment gives its next attempt a better chance (docs/design/inspirations.md).
@@ -157,6 +180,8 @@ private:
     int64_t now() const;
     float moodOf(Entity pawn) const;
     CellPos edgeGoal(Entity pawn) const;
+    // A seized visitor whose arrest was cancelled: no longer a visitor, it walks off the map.
+    void letGo(Entity pawn);
     void emit(EventType type, Entity thing, Entity target, float amount, const char* message) const;
 
     Things& things_;
@@ -173,6 +198,7 @@ private:
     PrisonerRules rules_;
     std::vector<Event>* events_ = nullptr;
     TradeSystem* trade_ = nullptr;
+    Rooms* rooms_ = nullptr;
 };
 
 }  // namespace colony

@@ -225,6 +225,7 @@ private:
     uint64_t itemChanges_ = 0;
 
     void indexItem(Entity thing, CellPos cell, bool add);
+    bool standsOnFlowingWater(Entity thing) const;  // def flag `building.onFlowingWater`: a watermill
     void placeFootprint(Entity thing, const CellRect& rect, const Footprint& footprint);
     void report(EventType type, Entity thing, CellPos cell = CellPos{});
 };

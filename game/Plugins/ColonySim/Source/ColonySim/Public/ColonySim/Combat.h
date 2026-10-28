@@ -21,6 +21,7 @@ class ApparelStats;
 class HealthSystem;
 class InspirationSystem;
 class TalentSystem;
+class TraitBook;
 class Map;
 class StateHasher;
 class Things;
@@ -255,6 +256,8 @@ public:
     void setTalents(const TalentSystem* talents) { talents_ = talents; }
     // A shooting frenzy narrows the spread and shortens the cooldown (docs/design/inspirations.md).
     void setInspirations(const InspirationSystem* inspirations) { inspirations_ = inspirations; }
+    // Careful shooters aim better and slower, trigger-happy ones the opposite (docs/design/traits.md).
+    void setTraits(const TraitBook* traits) { traits_ = traits; }
     // Called before combat destroys a thing (a building shot to pieces), so jobs can let go of it.
     void setBeforeDestroy(std::function<void(Entity)> hook) { beforeDestroy_ = std::move(hook); }
     // Called when a bullet or a melee blow hurt a pawn (`victim`, `attacker`): animals react (N5, docs/design/animal-fights.md).
@@ -445,6 +448,7 @@ private:
     std::unique_ptr<ApparelStats> apparelStats_;
     std::vector<Event>* events_ = nullptr;
     const Weather* weather_ = nullptr;
+    const TraitBook* traits_ = nullptr;
     const TalentSystem* talents_ = nullptr;
     const InspirationSystem* inspirations_ = nullptr;
     std::function<void(Entity)> beforeDestroy_;

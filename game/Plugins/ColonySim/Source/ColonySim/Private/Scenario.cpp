@@ -292,4 +292,42 @@ void Sim::startScenario() {
     dropStacks("scatteredThings", 200, true);
 }
 
+// A newcomer who joins the colony (T2's wanderer and crashed survivor): made like the scenario's
+// colonists, from `seed`, standing in `cell`, dressed as they are (nudists excepted). kNoEntity if
+// the scenario or the cell won't have one.
+Entity Sim::joinColonist(CellPos cell, uint64_t seed) {
+    const Def* scenario = defs_->find("Scenarios", settings_.scenario);
+    if (scenario == nullptr || !map_.walkable(cell)) {
+        return kNoEntity;
+    }
+    const DefId kind = defs_->idOf("Things", scenario->text("colonistKind", "Human"));
+    Colonist colonist;
+    std::string error;
+    if (!kind.valid() || !generateColonist(*defs_, seed, false, colonist, error)) {
+        return kNoEntity;
+    }
+    const Entity pawn = things_->spawn(kind, cell);
+    if (pawn == kNoEntity || !things_->registry().all_of<Mover>(pawn)) {
+        things_->destroy(pawn);
+        return kNoEntity;
+    }
+    jobs_->addWorker(pawn, colonist.disabledWorkTags);
+    giveLooks(pawn, seed, colonist.female, scenarioRollLineage(*scenario, seed, scenario->text("lineage", "Baseline")));
+    things_->registry().emplace<Colonist>(pawn, std::move(colonist));
+    const Colonist& made = things_->registry().get<Colonist>(pawn);
+    const bool nudist = std::any_of(made.traits.begin(), made.traits.end(),
+                                    [](const TraitRecord& trait) { return trait.def == "Nudist"; });
+    for (size_t i = 0; !nudist && i < scenario->count("colonistApparel"); ++i) {
+        const std::string base = "colonistApparel." + std::to_string(i);
+        const DefId piece = defs_->idOf("Things", scenario->text((base + ".thing").c_str()));
+        const DefId stuff = defs_->idOf("Things", scenario->text((base + ".stuff").c_str()));
+        std::string why;
+        const Entity item = piece.valid() ? apparel_->make(piece, stuff, -1, cell, &why) : kNoEntity;
+        if (item != kNoEntity && !apparel_->putOn(pawn, item, why)) {
+            things_->destroy(item);
+        }
+    }
+    return pawn;
+}
+
 }  // namespace colony

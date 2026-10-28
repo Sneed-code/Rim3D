@@ -48,6 +48,7 @@ class Areas;
 class Husbandry;
 class InspirationSystem;
 class MentalBreakSystem;
+class NatureEvents;
 class JobSystem;
 class Lights;
 class MeleeSystem;
@@ -63,6 +64,7 @@ class SocialSystem;
 class ResearchSystem;
 class ResonanceSystem;
 class TalentSystem;
+class TraitBook;
 class TravelSystem;
 class NeedsSystem;
 class RaidSystem;
@@ -403,6 +405,8 @@ public:
     MonsterSystem& monsters() { return *monsters_; }
 
     // The narrator, incidents and threat points (docs/design/narrator.md).
+    NatureEvents& nature() { return *nature_; }
+    const NatureEvents& nature() const { return *nature_; }
     NarratorSystem& narrator() { return *narrator_; }
     const NarratorSystem& narrator() const { return *narrator_; }
     // Loot tables: what raiders drop, cargo pods, ancient stashes (docs/design/loot.md).
@@ -520,6 +524,8 @@ private:
     std::string placeName(int tile) const;
     void pruneDesignations();
     void startScenario();
+    // A newcomer made like the scenario's colonists (Scenario.cpp); kNoEntity if it can't be placed.
+    Entity joinColonist(CellPos cell, uint64_t seed);
     // One colonist of the scenario at a cell (Scenario.cpp); kNoEntity and a setup error if it fails.
     Entity makeScenarioColonist(const Def& scenario, CellPos cell, uint64_t colonistSeed, bool protagonist);
     // RerollColonist: another starting colonist in the same place, before the first step.
@@ -566,6 +572,7 @@ private:
     std::unique_ptr<MedicineSystem> medicine_;
     std::unique_ptr<SurgerySystem> surgery_;
     std::unique_ptr<TalentSystem> talents_;
+    std::unique_ptr<TraitBook> traits_;
     std::unique_ptr<CombatSystem> combat_;
     std::unique_ptr<ExplosiveSystem> explosives_;  // after combat_ and health_
     std::unique_ptr<ApparelSystem> apparel_;  // after combat, which it uses
@@ -614,6 +621,7 @@ private:
     std::unique_ptr<NarratorSystem> narrator_;  // after raids_
     std::unique_ptr<LootSystem> loot_;          // after the narrator, whose cargo pod it carries out
     std::unique_ptr<DisasterSystem> disasters_;  // T3, after the narrator and everything it touches
+    std::unique_ptr<NatureEvents> nature_;      // after narrator_ (T2)
     std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
     std::unique_ptr<ResonanceSystem> resonance_;  // after the fighters and the job system it holds
     std::unique_ptr<TravelSystem> travel_;    // after nearly everything: it asks the others about threats

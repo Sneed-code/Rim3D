@@ -2,7 +2,7 @@
 
 Code: `Tools/simrun/ColonyScenario.{h,cpp}` (in `game/Plugins/ColonySim/`), run with
 `simrun --scenario colony [--seed N] [--size 512] [--days 5] [--verbose]`. CTest: `colony_scenario`
-(seed 42) and `colony_scenario_seed7`, about 6 seconds each; runs in CI on Linux and Windows.
+(seed 42) and `colony_scenario_seed8`, about 6 seconds each; runs in CI on Linux and Windows.
 Task C10.
 
 The one test that runs everything the colony does so far together, the way a player's first

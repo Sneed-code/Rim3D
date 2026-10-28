@@ -11,10 +11,12 @@
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Replay.h"
+#include "ColonySim/Rooms.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Trade.h"
 
 #include <doctest.h>
 
@@ -115,13 +117,32 @@ CellPos priCell(const Sim& sim, Entity pawn) { return cellOf(sim.things().regist
 
 bool priAnyFailed(const PriLog& log) { return log.type(EventType::CommandFailed) != nullptr; }
 
-// A colony with a prison bed, a warden and a downed enemy; the capture has not happened yet.
+// A walled cell round x 17..23, y 17..23 with a door at (20, 23): the inside is a closed room.
+void priCell7(Sim& sim, bool door = true) {
+    for (int y = 17; y <= 23; ++y) {
+        for (int x = 17; x <= 23; ++x) {
+            if (x == 17 || x == 23 || y == 17 || y == 23) {
+                if (x == 20 && y == 23) {
+                    if (door) {
+                        sim.things().spawn("Door", CellPos{x, y, 0});
+                    }
+                } else {
+                    sim.things().spawn("Wall", CellPos{x, y, 0});
+                }
+            }
+        }
+    }
+    sim.rooms().update();
+}
+
+// A colony with a prison bed in a closed cell, a warden and a downed enemy; the capture has not happened yet.
 struct PriCamp {
     Sim sim = priSim();
     Entity bed = kNoEntity;
     Entity warden = kNoEntity;
     Entity enemy = kNoEntity;
     PriCamp() {
+        priCell7(sim);
         bed = sim.things().spawn("Bed", CellPos{20, 20, 0});
         sim.submit(SetPrisonBedCommand{bed, true});
         sim.things().spawn("MealSurvivalPack", CellPos{14, 14, 0}, 30);
@@ -444,7 +465,7 @@ TEST_CASE("Prisoners: a released prisoner walks off the map; one who can't walk 
 TEST_CASE("Prisoners: breakOut frees every prisoner who can walk, for the prison break incident") {
     PriCamp camp;
     Sim& sim = camp.sim;
-    const Entity bed2 = sim.things().spawn("Bed", CellPos{24, 20, 0});
+    const Entity bed2 = sim.things().spawn("Bed", CellPos{22, 20, 0});
     sim.submit(SetPrisonBedCommand{bed2, true});
     const Entity second = priEnemy(sim, CellPos{32, 30, 0});
     PriLog log;
@@ -543,5 +564,230 @@ TEST_CASE("Prisoners: the commands are written into a replay and read back") {
     playReplay(parsed, again, replay.endStep);
     const ReplayCheck check = checkReplay(parsed, again);
     CHECK(check.matched());
+    CHECK(again.stateHash() == recorded.stateHash());
+}
+
+TEST_CASE("Prisoners: a prison cell must be fully enclosed") {
+    for (const int variant : {0, 1}) {  // 0: no walls at all, 1: walls with the door left out
+        Sim sim = priSim();
+        if (variant == 1) {
+            priCell7(sim, false);
+        }
+        const Entity bed = sim.things().spawn("Bed", CellPos{20, 20, 0});
+        sim.submit(SetPrisonBedCommand{bed, true});
+        priColonist(sim, CellPos{10, 10, 0});
+        const Entity enemy = priEnemy(sim, CellPos{30, 30, 0});
+        sim.step();
+        CHECK_FALSE(sim.prisoners().cellEnclosed(CellPos{20, 20, 0}));
+        PriLog log;
+        for (int i = 0; i < 1500; ++i) {
+            log.step(sim);
+        }
+        CHECK_FALSE(sim.prisoners().isPrisoner(enemy));
+    }
+    // Close the cell (a door in the gap) and the same bed takes the prisoner.
+    PriCamp camp;
+    CHECK(camp.sim.prisoners().cellEnclosed(CellPos{20, 20, 0}));
+    CHECK_FALSE(camp.sim.prisoners().cellEnclosed(CellPos{40, 40, 0}));
+    PriLog log;
+    CHECK(camp.capture(log));
+}
+
+TEST_CASE("Prisoners: a colonist is arrested, locked in the cell, and let out again") {
+    PriCamp camp;
+    Sim& sim = camp.sim;
+    const Entity colonist = priColonist(sim, CellPos{12, 12, 0}, false);  // no warden
+    PriLog log;
+    CHECK(sim.prisoners().arrestable(colonist));
+    sim.submit(ArrestCommand{colonist, true});
+    sim.submit(ArrestCommand{kNoEntity, true});  // fails
+    // The downed enemy is the warden's first job too; remove it from the picture.
+    sim.things().destroy(camp.enemy);
+    log.step(sim);
+    CHECK(log.count(EventType::CommandFailed) == 1);
+    PRI_REQUIRE(priRunUntil(sim, log, 4000, [&] { return sim.prisoners().isPrisoner(colonist); }));
+    const entt::registry& reg = sim.things().registry();
+    CHECK(priCell(sim, colonist) == CellPos{20, 20, 0});
+    CHECK(sim.fighters().factionOf(colonist) == kPlayerFaction);
+    CHECK_FALSE(reg.all_of<ArrestOrder>(colonist));
+    CHECK_FALSE(reg.all_of<WorkSettings>(colonist));
+    const Prisoner& prisoner = reg.get<Prisoner>(colonist);
+    CHECK(prisoner.mode == PrisonerMode::NoInteraction);
+    CHECK(prisoner.resistance == 0.0f);
+    CHECK(sim.jobs().bedOf(colonist) == camp.bed);
+    PRI_REQUIRE(log.type(EventType::PrisonerCaptured) != nullptr);
+    CHECK(log.type(EventType::PrisonerCaptured)->message == "arrested");
+    // It stays put, and its own people are not allowed to recruit it.
+    sim.submit(SetPrisonerModeCommand{colonist, "AttemptRecruit"});
+    log.step(sim);
+    CHECK(log.count(EventType::CommandFailed) == 2);
+    for (int i = 0; i < 3000; ++i) {
+        log.step(sim);
+    }
+    CHECK(priCell(sim, colonist) == CellPos{20, 20, 0});
+    CHECK(sim.prisoners().isPrisoner(colonist));
+    // The player lets it out: a warden talks, it goes back to work and stays on the map.
+    sim.submit(SetPrisonerModeCommand{colonist, "Release"});
+    PRI_REQUIRE(priRunUntil(sim, log, 6000, [&] { return !sim.prisoners().isPrisoner(colonist); }));
+    CHECK(log.type(EventType::PrisonerReleased) != nullptr);
+    CHECK(reg.all_of<WorkSettings>(colonist));
+    CHECK(sim.things().spawned(colonist));
+    CHECK_FALSE(reg.all_of<Fighter>(colonist));
+}
+
+TEST_CASE("Prisoners: an arrest can be cancelled; the protagonist, raiders and other sides can't be arrested") {
+    PriCamp camp;
+    Sim& sim = camp.sim;
+    sim.things().destroy(camp.enemy);
+    const Entity colonist = priColonist(sim, CellPos{12, 12, 0}, false);
+    PriLog log;
+    sim.submit(ArrestCommand{colonist, true});
+    log.step(sim);
+    CHECK(sim.things().registry().all_of<ArrestOrder>(colonist));
+    sim.submit(ArrestCommand{colonist, false});
+    log.step(sim);
+    CHECK_FALSE(sim.things().registry().all_of<ArrestOrder>(colonist));
+    for (int i = 0; i < 1500; ++i) {
+        log.step(sim);
+    }
+    CHECK_FALSE(sim.prisoners().isPrisoner(colonist));
+    CHECK(sim.prisoners().count() == 0);
+    // An enemy raider is captured only once it is down; a pawn of another side is never arrested.
+    const Entity raider = priEnemy(sim, CellPos{40, 40, 0}, false);
+    sim.things().registry().emplace<Raider>(raider);
+    CHECK_FALSE(sim.prisoners().arrestable(raider));
+    sim.submit(ArrestCommand{raider, true});
+    log.step(sim);
+    CHECK(log.count(EventType::CommandFailed) == 1);
+    const Entity stranger = priEnemy(sim, CellPos{44, 40, 0}, false);
+    CHECK_FALSE(sim.prisoners().arrestable(stranger));
+    sim.things().registry().emplace_or_replace<Colonist>(colonist).protagonist = true;
+    CHECK_FALSE(sim.prisoners().arrestable(colonist));
+}
+
+TEST_CASE("Prisoners: a visitor can be arrested; its faction turns hostile and the rest of its visit leaves") {
+    PriCamp camp;
+    Sim& sim = camp.sim;
+    sim.things().destroy(camp.enemy);
+    uint32_t id = 0;
+    std::string error;
+    PRI_REQUIRE(sim.trade().startVisit("FrayCompact", VisitKind::Visitors, "", -1, id, error));
+    PRI_REQUIRE(sim.trade().find(id) != nullptr);
+    const Entity visitor = sim.trade().find(id)->members.front();
+    const size_t members = sim.trade().find(id)->members.size();
+    CHECK(sim.prisoners().arrestable(visitor));
+    CHECK_FALSE(sim.trade().hostile("FrayCompact"));
+    PriLog log;
+    sim.submit(ArrestCommand{visitor, true});
+    PRI_REQUIRE(priRunUntil(sim, log, 8000, [&] { return sim.prisoners().isPrisoner(visitor); }));
+    const entt::registry& reg = sim.things().registry();
+    CHECK(priCell(sim, visitor) == CellPos{20, 20, 0});
+    CHECK_FALSE(reg.all_of<Visitor>(visitor));
+    CHECK(sim.trade().hostile("FrayCompact"));
+    CHECK(reg.get<Prisoner>(visitor).resistance > 0.0f);  // not one of ours: it can be talked round and recruited
+    CHECK(log.type(EventType::PrisonerCaptured)->message == "arrested");
+    const Visit* visit = sim.trade().find(id);
+    if (visit != nullptr) {
+        CHECK(visit->members.size() == members - 1);
+        CHECK(visit->phase == VisitPhase::Leaving);
+    }
+}
+
+TEST_CASE("Prisoners: a visitor let go after it was seized walks off the map") {
+    PriCamp camp;
+    Sim& sim = camp.sim;
+    sim.things().destroy(camp.enemy);
+    uint32_t id = 0;
+    std::string error;
+    PRI_REQUIRE(sim.trade().startVisit("FrayCompact", VisitKind::Visitors, "", -1, id, error));
+    const Entity visitor = sim.trade().find(id)->members.front();
+    PriLog log;
+    sim.submit(ArrestCommand{visitor, true});
+    PRI_REQUIRE(priRunUntil(sim, log, 8000, [&] {
+        const ArrestOrder* order = sim.things().registry().try_get<ArrestOrder>(visitor);
+        return order != nullptr && order->by == camp.warden;
+    }));
+    CHECK(sim.trade().hostile("FrayCompact"));
+    sim.submit(ArrestCommand{visitor, false});
+    log.step(sim);
+    const entt::registry& reg = sim.things().registry();
+    CHECK_FALSE(reg.all_of<ArrestOrder>(visitor));
+    CHECK_FALSE(reg.all_of<Visitor>(visitor));
+    PRI_REQUIRE(reg.all_of<Fighter>(visitor));
+    CHECK(reg.get<Fighter>(visitor).mode == FightMode::Flee);
+    PRI_REQUIRE(priRunUntil(sim, log, 6000, [&] { return !sim.things().spawned(visitor) || !reg.valid(visitor); }));
+    CHECK_FALSE(sim.prisoners().isPrisoner(visitor));
+}
+
+TEST_CASE("Prisoners: an arrested colonist can be executed, and an arrest in progress saves and loads") {
+    PriCamp camp;
+    Sim& sim = camp.sim;
+    sim.things().destroy(camp.enemy);
+    const Entity colonist = priColonist(sim, CellPos{12, 12, 0}, false);
+    PriLog log;
+    sim.submit(ArrestCommand{colonist, true});
+    // Stop while the colonist is being carried.
+    PRI_REQUIRE(priRunUntil(sim, log, 4000, [&] {
+        const ArrestOrder* order = sim.things().registry().try_get<ArrestOrder>(colonist);
+        return order != nullptr && order->by == camp.warden;
+    }));
+    const std::vector<uint8_t> bytes = saveSim(sim);
+    SaveLoadResult loaded = loadSim(bytes, priDefs());
+    if (!loaded.error.empty()) MESSAGE(loaded.error);
+    PRI_REQUIRE(loaded.error.empty());
+    PRI_REQUIRE(loaded.sim != nullptr);
+    Sim& copy = *loaded.sim;
+    CHECK(copy.stateHash() == sim.stateHash());
+    sim.stepMany(3000);
+    copy.stepMany(3000);
+    CHECK(copy.stateHash() == sim.stateHash());
+    PRI_REQUIRE(sim.prisoners().isPrisoner(colonist));
+    CHECK(copy.prisoners().isPrisoner(colonist));
+
+    // Execute mode works on one's own: an innocent prisoner, as main's executions have it.
+    sim.things().registry().emplace_or_replace<Colonist>(camp.warden);  // so the warden's mood hears of it
+    sim.submit(SetPrisonerModeCommand{colonist, "Execute"});
+    PRI_REQUIRE(priRunUntil(sim, log, 4000, [&] { return log.type(EventType::PrisonerExecuted) != nullptr; }));
+    CHECK(log.type(EventType::PrisonerExecuted)->message == "innocent");
+    CHECK(sim.things().registry().get<Health>(colonist).dead);
+    // The colony knows one of its own was put to death: "colonist executed", not the stranger's thought.
+    const Mood* mood = sim.things().registry().try_get<Mood>(camp.warden);
+    PRI_REQUIRE(mood != nullptr);
+    const auto remembers = [&](const char* thought) {
+        return std::any_of(mood->memories.begin(), mood->memories.end(), [&](const Memory& m) { return m.def == thought; });
+    };
+    CHECK(remembers("KnowColonistExecuted"));
+    CHECK_FALSE(remembers("KnowPrisonerExecuted"));
+}
+
+TEST_CASE("Prisoners: an arrest is written into a replay and read back") {
+    SimSettings settings;
+    settings.seed = 7;
+    settings.mapSize = 128;
+    settings.flatMap = true;
+    settings.scenario = "Crashlanded";
+    settings.checkpointEvery = 600;
+    Sim recorded(settings, priDefs());
+    Entity colonist = kNoEntity;
+    for (const auto [pawn, c] : recorded.things().registry().view<const Colonist>().each()) {
+        if (!c.protagonist) {
+            colonist = colonist == kNoEntity || pawn < colonist ? pawn : colonist;
+        }
+    }
+    PRI_REQUIRE(colonist != kNoEntity);
+    recorded.stepMany(5);
+    recorded.submit(ArrestCommand{colonist, true});
+    recorded.stepMany(5);
+    recorded.submit(ArrestCommand{colonist, false});
+    recorded.stepMany(600);
+    const Replay replay = recordReplay(recorded);
+    const std::string text = writeReplay(replay);
+    CHECK(text.find("\"Arrest\"") != std::string::npos);
+    Replay parsed;
+    std::string error;
+    PRI_REQUIRE(readReplay(text, parsed, error));
+    Sim again(parsed.settings, priDefs());
+    playReplay(parsed, again, replay.endStep);
+    CHECK(checkReplay(parsed, again).matched());
     CHECK(again.stateHash() == recorded.stateHash());
 }

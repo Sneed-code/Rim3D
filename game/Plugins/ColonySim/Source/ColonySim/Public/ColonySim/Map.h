@@ -20,8 +20,11 @@ class Rooms;
 // it is mined (docs/design/mining.md), and leaves RoughStone: walkable, nothing grows on it.
 // The last two are only ever on upper levels (docs/design/levels.md): Air where nothing has been
 // built, UpperFloor where an upper floor is laid and can be walked and built on.
+// `Water` is deep water (nobody crosses it). Shallow water, marsh and mud can be walked, slowly; the
+// `Terrain` defs of the same names carry their path costs (docs/design/mapgen.md).
 // New values go at the end.
-enum class Terrain : uint8_t { Water, Sand, Soil, Rock, RoughStone, Air, UpperFloor };
+enum class Terrain : uint8_t { Water, Sand, Soil, Rock, RoughStone, Air, UpperFloor, ShallowWater, Marsh, Mud };
+constexpr int kTerrainCount = 10;
 
 // How the building in a cell affects movement. A door can be walked through but is a region of
 // its own (docs/design/regions.md).
@@ -61,6 +64,9 @@ struct MapSettings {
     int height = 512;  // cells, 1 m each
     uint64_t seed = 0;
     bool flat = false;  // every cell soil at height 0, for tests
+    // How much river and how much marsh the biome gets, as multiples of the usual (0: none).
+    float river = 1.0f;
+    float marsh = 1.0f;
 };
 
 // The map grid: one flat array per layer, generated from a seed.
@@ -206,6 +212,23 @@ public:
     // Map generation (S8) places them from the seed; they are not saved, so whoever places them must do
     // it again the same way after a load.
     void setGeyser(CellPos c, bool present);
+    // Moving water (ground level): water cells of a river. A watermill is built on these and nowhere
+    // else, and a moisture pump leaves them alone. Like geysers, map generation (S8) places them and
+    // they are not saved.
+    void setFlowing(CellPos c, bool present);
+    bool flowing(CellPos c) const {
+        return c.level == 0 && inBounds(c) && !flowing_.empty() && flowing_[static_cast<size_t>(index(c))] != 0 &&
+               terrain(c) == Terrain::Water;
+    }
+    // Where a building can stand: walkable ground, or for a building made for moving water, moving water.
+    bool groundBuildable(CellPos c, bool onFlowingWater) const {
+        return onFlowingWater ? flowing(c) : groundWalkable(c);
+    }
+    // A moisture pump turns a water cell into soil. The cells it dried are kept (in order), because the
+    // terrain is made again from the seed on loading and `restoreDried` puts them back.
+    void dryWater(CellPos c);
+    const std::vector<uint32_t>& dried() const { return dried_; }
+    void restoreDried(const std::vector<uint32_t>& cells);
     bool geyser(CellPos c) const { return c.level == 0 && inBounds(c) && !geyser_.empty() && geyser_[static_cast<size_t>(index(c))] != 0; }
 
     // The roof over a cell. Thick over the rock the map was generated with (and over it for good,
@@ -273,6 +296,8 @@ private:
     Roof& roofSlot(CellPos c);
 
     void generate();
+    void carveRivers();
+    void addWetlands();
 
     int width_;
     int height_;
@@ -292,10 +317,14 @@ private:
     uint64_t buildingChanges_ = 0;
     uint64_t rockChanges_ = 0;
     std::vector<uint8_t> geyser_;  // 1 where a steam geyser vents
+    std::vector<uint8_t> flowing_;  // 1 where the water moves (a river)
+    std::vector<uint32_t> dried_;   // cells a moisture pump dried, in the order it did
     std::vector<int> hollow_;  // mined-out ground cells that still have the thick roof
     std::vector<LevelLink> levelLinks_;
     std::unique_ptr<Regions> regions_;
     std::unique_ptr<Cover> cover_;
+    float river_;
+    float marsh_;
 };
 
 }  // namespace colony

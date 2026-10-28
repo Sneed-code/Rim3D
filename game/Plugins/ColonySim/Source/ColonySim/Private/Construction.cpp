@@ -223,6 +223,7 @@ Entity Construction::placeBlueprint(DefId def, DefId stuff, CellPos cell, Rot4 r
     const int sizeX = upperFloor ? 1 : std::max(1, static_cast<int>(d.numberAt("size", 0, 1.0)));
     const int sizeY = upperFloor ? 1 : std::max(1, static_cast<int>(d.numberAt("size", 1, 1.0)));
     const CellRect rect = footprintRect(cell, sizeX, sizeY, rot);
+    const bool onWater = d.flag("building.onFlowingWater");
     if (d.has("building.climb") && rect.level + 1 >= Map::kLevels) {
         error = "there is no level above " + constructionCellText(cell) + " to climb to";
         return kNoEntity;
@@ -244,7 +245,7 @@ Entity Construction::placeBlueprint(DefId def, DefId stuff, CellPos cell, Rot4 r
                     error = why;
                     return kNoEntity;
                 }
-            } else if (!map_.inBounds(c) || !map_.groundWalkable(c)) {
+            } else if (!map_.inBounds(c) || !map_.groundBuildable(c, onWater)) {
                 error = "can't build on " + constructionCellText(c);
                 return kNoEntity;
             }
