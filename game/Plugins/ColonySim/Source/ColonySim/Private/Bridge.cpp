@@ -406,6 +406,7 @@ const char* eventTypeName(EventType type) {
         case EventType::OtherMapMade: return "OtherMapMade";
         case EventType::OtherMapEntered: return "OtherMapEntered";
         case EventType::OtherMapLeft: return "OtherMapLeft";
+        case EventType::SiegeChanged: return "SiegeChanged";
     }
     return "?";
 }

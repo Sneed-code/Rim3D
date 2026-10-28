@@ -137,6 +137,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `thermostats` | 1 | each heater or cooler target temperature set by the player, by building |
 | `raids` | 1 | the raid state (factions met, squads, the alarm, threat and home points, the shelter mark), then the `defense` and `raider` parts ([raids.md](raids.md), F6) |
 | `raids` | 2 | the raid state (factions met, squads, the alarm, threat and home points, the shelter mark), then the `defense` and `raider` parts ([raids.md](raids.md), F6) |
+| `raids` | 3 | as 2, and per squad its `siege`: stage, camp, end time, resupplies and the camp's builds ([sieges.md](sieges.md)) |
 | `melee` | 1 | `melee`: each pawn's swing, its defense against one, its block (F8, [melee.md](melee.md)) |
 | `social` | 1 | `social` (a colonist's opinion memories, stored bonds, next talk, mourned) and `fight` (a fight with fists in progress) per pawn (C20, [social.md](social.md)) |
 | `apparel` | 2 | `apparel`: the stuff and quality of an item, taint, a strip mark, a pawn's outfit and next look, and from version 2 its durability; the outfit policies ([apparel.md](apparel.md), [apparel-durability.md](apparel-durability.md)) |
@@ -346,6 +347,7 @@ Every section is version 1 at format 20. A task that changes a section adds a li
 - `raids` 2 (adaptation): AdaptDays, the next growth time and the colonists watched, after the alarm values; version 1 loads as 0 and an empty list.
 - `raids` 1 (F6): new section, see the table. Commands `StartRaid`, `SoundAlarm`, `SetDefenseRole`, `MarkShelter` by name.
 - `raids` 2 (F12): per squad `strategy`, `hasBreach`, `breach`, `breachFrom`; the raids waiting for their hour (`pending`); per raider `goalThing`, `loot`, `sparesDowned`; a `kidnapped` part on a colonist a raider carries ([raid-strategies.md](raid-strategies.md)). Version 1 files load with Assault squads and nothing waiting. Command `StartStrategyRaid` by name.
+- `raids` 3 (sieges): per squad a `siege` group after `breachFrom`: `stage`, `camp`, `endsAt`, `resupplies` and `builds` (def, stuff, origin, rotation, work left, done, the built building) ([sieges.md](sieges.md)). Older files load every squad with an empty siege. Strategy `Siege` (5) by name in `StartStrategyRaid`.
 - `fighters` 2 (F6): a fighter's `mode`, `defending`, `squad`, `hasGoal`, `goal`, `retreat` after `dodgeUntil`. Version 1 files load them as a plain fighter.
 - `fighters` 3 (F10): a fighter's `rescuing`, `lifted`, `rescueTo` after `retreat` ([field-care.md](field-care.md)). Older files load with nobody carried.
 - `breeding` 1 (N4): new section, see the table: the counters, per animal its `AnimalBreed` (pregnancy, litter, mating wait, milk, wool and egg timers, the female a male is walking to), per fertilized egg its `Hatching` time ([breeding.md](breeding.md)). The job check now accepts the animal jobs (it stopped at `StripPawn`, so a save made mid-taming would not load).

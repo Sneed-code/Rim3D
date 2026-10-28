@@ -357,6 +357,31 @@ bool ArtillerySystem::setHoldFire(Entity building, bool hold, std::string& error
 
 // ---- Crew ------------------------------------------------------------------------------------
 
+// A crew of another faction: a siege's raider, whom the raid system walks to the gun.
+bool ArtillerySystem::foreignCrew(Entity crew) const {
+    const Faction* f = things_.registry().try_get<Faction>(crew);
+    return f != nullptr && f->id != kPlayerFaction;
+}
+
+bool ArtillerySystem::setForeignCrew(Entity building, Entity pawn) {
+    std::string error;
+    if (!checkBuilding(building, error)) {
+        return false;
+    }
+    entt::registry& reg = things_.registry();
+    if (pawn != kNoEntity && (!reg.valid(pawn) || !reg.all_of<Position>(pawn) || !foreignCrew(pawn))) {
+        return false;
+    }
+    Artillery& a = reg.get<Artillery>(building);
+    a.crew = pawn;
+    if (pawn == kNoEntity && (a.phase == TurretPhase::Warming || a.phase == TurretPhase::Firing)) {
+        a.phase = TurretPhase::Idle;
+        a.stepsLeft = 0;
+        a.target = kNoEntity;
+    }
+    return true;
+}
+
 // The crew is at its post: the player's colonist within reach, or a colonist whose ManArtillery job stands it beside
 // the gun.
 bool ArtillerySystem::atPost(Entity building, const Artillery& a) const {
@@ -369,7 +394,7 @@ bool ArtillerySystem::atPost(Entity building, const Artillery& a) const {
     if (pp.level != bp.level) {
         return false;
     }
-    if (reg.all_of<PlayerControl>(a.crew)) {
+    if (reg.all_of<PlayerControl>(a.crew) || foreignCrew(a.crew)) {
         return artilleryDistanceToRect(pp.x, pp.y, reg.get<Footprint>(building).rect()) <= numbers_.reach;
     }
     const Worker* w = reg.try_get<Worker>(a.crew);
@@ -388,6 +413,9 @@ bool ArtillerySystem::crewGone(Entity building, const Artillery& a) const {
     }
     if (reg.all_of<PlayerControl>(a.crew)) {
         return !atPost(building, a);
+    }
+    if (foreignCrew(a.crew)) {
+        return false;  // the raid system says when a siege's crew leaves
     }
     const Worker* w = reg.try_get<Worker>(a.crew);
     return w == nullptr || w->job.type != JobType::ManArtillery || w->job.site != building;
@@ -436,10 +464,13 @@ bool ArtillerySystem::aimPoint(Entity building, Artillery& a, float& x, float& y
     return true;
 }
 
-// The nearest able enemy within its ranges, anywhere (no line of sight: the shells fly over), not under a mountain.
+// The nearest able enemy within its ranges, anywhere (no line of sight: the shells fly over), not under a mountain. A
+// siege's raider crew goes for the colony's pawns; the colony's for any other faction's.
 Entity ArtillerySystem::pickTarget(Entity building) const {
     const entt::registry& reg = things_.registry();
     const Position& pos = reg.get<Position>(building);
+    const Artillery* gun = reg.try_get<Artillery>(building);
+    const bool raiders = gun != nullptr && gun->crew != kNoEntity && reg.valid(gun->crew) && foreignCrew(gun->crew);
     Entity best = kNoEntity;
     float bestDistance = 0.0f;
     for (const auto [e, thing, p, posture] : reg.view<const Thing, const Position, const Posture>().each()) {
@@ -448,8 +479,9 @@ Entity ArtillerySystem::pickTarget(Entity building) const {
             continue;
         }
         const Faction* f = reg.try_get<Faction>(e);
-        if (f == nullptr || f->id == kPlayerFaction || health_.incapacitated(e) || reg.all_of<Animal>(e) ||
-            reg.all_of<Prisoner>(e) || reg.all_of<Visitor>(e)) {
+        const bool colonys = f != nullptr ? f->id == kPlayerFaction : reg.all_of<Colonist>(e);  // a colonist may have no Faction
+        if ((raiders ? !colonys : (f == nullptr || colonys)) || health_.incapacitated(e) ||
+            (!raiders && reg.all_of<Animal>(e)) || reg.all_of<Prisoner>(e) || reg.all_of<Visitor>(e)) {
             continue;
         }
         const float d = artilleryDistance(pos.x, pos.y, p.x, p.y);

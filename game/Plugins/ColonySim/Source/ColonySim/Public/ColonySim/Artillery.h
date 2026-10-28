@@ -134,6 +134,13 @@ public:
     // Whether its crew is at its post now.
     bool manned(Entity building) const;
 
+    // A siege (docs/design/sieges.md): `pawn`, a raider, is the crew; it mans the gun while it stands within reach (the
+    // raid system walks it there), and the gun then fires at the colony's pawns. kNoEntity takes the crew off. False if
+    // `building` isn't artillery or `pawn` is the colony's.
+    bool setForeignCrew(Entity building, Entity pawn);
+    // The pawn the gun would pick by itself now (the nearest able enemy of its crew within its ranges), or none.
+    Entity enemyInRange(Entity building) const { return pickTarget(building); }
+
     // One step: crews are checked, manned artillery aims and fires, shells fly and land.
     void step(Rng& rng);
 
@@ -161,6 +168,7 @@ private:
     uint64_t landed_ = 0;
 
     bool checkBuilding(Entity building, std::string& error) const;
+    bool foreignCrew(Entity crew) const;
     bool atPost(Entity building, const Artillery& a) const;
     bool crewGone(Entity building, const Artillery& a) const;
     bool coveredFromAbove(Entity building) const;
