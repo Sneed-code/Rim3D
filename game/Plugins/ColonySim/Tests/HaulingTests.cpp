@@ -91,7 +91,8 @@ TEST_CASE("Hauling: same seed gives the same game") {
 }
 
 TEST_CASE("Hauling: paths come through the queue and never go over the step budget") {
-    SimSettings settings{11, 192, 20, 150};
+    SimSettings settings{11, 192, 20, 150};  // 192 m is the smallest map with rivers, which this test's counts don't expect
+    settings.mapSize = 160;
     settings.pathBudget = 300;  // small, so searches spread over steps and pawns wait for paths
     Sim sim(settings, testDefs());
     sim.stepMany(kSecondsPerDay);

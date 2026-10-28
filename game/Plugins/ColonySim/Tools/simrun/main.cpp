@@ -107,7 +107,7 @@ namespace {
 
 struct Options {
     uint64_t seed = 42;
-    int size = 512;
+    int size = 1024;
     bool sizeGiven = false;
     double days = 1.0;
     bool daysGiven = false;
@@ -295,6 +295,9 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
                 case colony::Terrain::Soil: r = 90; g = 130; b = 60; break;
                 case colony::Terrain::Rock: r = 120; g = 115; b = 110; break;
                 case colony::Terrain::RoughStone: r = 150; g = 140; b = 125; break;
+                case colony::Terrain::ShallowWater: r = 90; g = 150; b = 205; break;
+                case colony::Terrain::Marsh: r = 70; g = 110; b = 80; break;
+                case colony::Terrain::Mud: r = 105; g = 85; b = 55; break;
                 case colony::Terrain::Air:
                 case colony::Terrain::UpperFloor: break;  // upper levels only, never on the ground
             }
@@ -1708,7 +1711,8 @@ int main(int argc, char** argv) {
                      static_cast<unsigned long long>(sim.stats().repaths), static_cast<unsigned long long>(sim.stats().hauls));
         return 1;
     }
-    if (options.check && (sim.stats().failedJobs > 0 || paths.failedSearches > 0)) {
+    // (Jobs a raid interrupts count as failed ones, so a narrator run doesn't count them.)
+    if (options.check && ((options.narrator.empty() && sim.stats().failedJobs > 0) || paths.failedSearches > 0)) {
         std::fprintf(stderr, "check failed: %llu failed jobs, %llu failed path searches\n",
                      static_cast<unsigned long long>(sim.stats().failedJobs),
                      static_cast<unsigned long long>(paths.failedSearches));

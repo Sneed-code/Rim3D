@@ -938,6 +938,10 @@ void JobSystem::step() {
             continue;
         }
         reg.get<Mover>(pawn).hold = false;
+        // It is being carried to a prison bed by a warden (an arrest): the warden's job moves it.
+        if (const ArrestOrder* arrest = reg.try_get<ArrestOrder>(pawn); arrest != nullptr && arrest->by != kNoEntity) {
+            continue;
+        }
         // The player walks this one (U9): no think, until control is let go. Its only job is a
         // hands-on one the player started (U10), done in place.
         if (reg.all_of<PlayerControl>(pawn)) {

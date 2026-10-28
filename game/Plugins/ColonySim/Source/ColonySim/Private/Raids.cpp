@@ -395,6 +395,37 @@ FactionId RaidSystem::factionId(const std::string& faction) {
     return static_cast<FactionId>(state_.factions.size() + 1);
 }
 
+bool RaidSystem::findEntry(int edge, CellPos& target, CellPos& entry, std::string& error) {
+    entt::registry& reg = things_.registry();
+    // What it goes for: the player's colonist nearest the middle of the map, else the middle.
+    const float mid = static_cast<float>(map_.width()) * 0.5f;
+    target = CellPos{map_.width() / 2, map_.height() / 2, 0};
+    bool hasTarget = false;
+    float bestD = 0.0f;
+    for (const auto [pawn, colonist, pos] : reg.view<const Colonist, const Position>().each()) {
+        if (fighters_.factionOf(pawn) != kPlayerFaction || health_.incapacitated(pawn)) {
+            continue;
+        }
+        const float d = raidDist(pos.x, pos.y, mid, static_cast<float>(map_.height()) * 0.5f);
+        const CellPos c = cellOf(pos);
+        if (!hasTarget || d < bestD || (d == bestD && (c.y < target.y || (c.y == target.y && c.x < target.x)))) {
+            target = c;
+            bestD = d;
+            hasTarget = true;
+        }
+    }
+    if (!hasTarget && !nearestFree(raidCentre(target.x), raidCentre(target.y), 0, target, 30, target)) {
+        error = "nowhere for a raid to go";
+        return false;
+    }
+    // Where it walks in: a cell near the chosen edge that can reach the target.
+    if (!pickEntry(edge, target, true, entry)) {
+        error = "no way in from that edge to the colony";
+        return false;
+    }
+    return true;
+}
+
 bool RaidSystem::startRaid(const std::string& faction, float points, int edge, std::string& error) {
     return startRaid(faction, points, edge, RaidStrategy::Assault, -1.0f, error);
 }

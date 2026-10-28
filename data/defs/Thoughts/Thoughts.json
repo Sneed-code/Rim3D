@@ -30,12 +30,12 @@
   },
   {
     "defName": "AteWithoutTable", "label": "ate without a table", "source": "RimWorld",
-    "moodOffset": -3, "durationDays": 0.6, "trigger": "AteWithoutTable",
+    "moodOffset": -3, "durationDays": 0.6, "trigger": "AteWithoutTable", "notTrait": "Ascetic",
     "unverified": ["moodOffset", "durationDays"]
   },
   {
     "defName": "AteRawFood", "label": "ate raw food", "source": "RimWorld",
-    "moodOffset": -7, "durationDays": 0.6, "trigger": "AteRawFood",
+    "moodOffset": -7, "durationDays": 0.6, "trigger": "AteRawFood", "notTrait": "Ascetic",
     "unverified": ["moodOffset", "durationDays"]
   },
   {
@@ -45,12 +45,12 @@
   },
   {
     "defName": "AteFineMeal", "label": "ate a fine meal", "source": "RimWorld",
-    "moodOffset": 5, "durationDays": 0.6, "trigger": "AteFineMeal",
+    "moodOffset": 5, "durationDays": 0.6, "trigger": "AteFineMeal", "notTrait": "Ascetic",
     "unverified": ["moodOffset", "durationDays"]
   },
   {
     "defName": "AteLavishMeal", "label": "ate a lavish meal", "source": "RimWorld",
-    "moodOffset": 12, "durationDays": 0.6, "trigger": "AteLavishMeal",
+    "moodOffset": 12, "durationDays": 0.6, "trigger": "AteLavishMeal", "notTrait": "Ascetic",
     "unverified": ["moodOffset", "durationDays"]
   },
   {

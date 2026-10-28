@@ -372,6 +372,10 @@ std::vector<ThoughtView> MoodSystem::thoughtList(Entity pawn, int64_t now, bool 
                 continue;
             }
             const Def* def = defs_.find("Thoughts", memory.def);
+            // A memory with `notTrait` is not felt by pawns with that trait (an ascetic's meals).
+            if (def != nullptr && def->text("notTrait").empty() == false && hasTrait(pawn, def->text("notTrait"))) {
+                continue;
+            }
             if (def != nullptr) {
                 out.push_back(ThoughtView{def->defName(), labels ? def->label() : std::string(), moodFloat(*def, "moodOffset", 0.0f), false, memory.expires});
             }
@@ -483,7 +487,12 @@ void MoodSystem::step(int64_t now, std::vector<Event>& events) {
         }
         if (event.type == EventType::PrisonerExecuted) {
             // The colony knows. Cold-hearted, bloodthirsty and cannibal colonists shrug (RimWorld wiki).
-            const char* trigger = event.message == "guilty" ? "KnowPrisonerExecutedGuilty" : "KnowPrisonerExecuted";
+            // One of the colony's own, arrested and executed, has its own thought (the same numbers in RimWorld).
+            const Faction* side = reg.valid(event.thing) ? reg.try_get<Faction>(event.thing) : nullptr;
+            const bool ours = reg.valid(event.thing) && (side == nullptr || side->id == kPlayerFaction);  // no Faction: the player's
+            const bool guilty = event.message == "guilty";
+            const char* trigger = ours ? (guilty ? "KnowColonistExecutedGuilty" : "KnowColonistExecuted")
+                                       : (guilty ? "KnowPrisonerExecutedGuilty" : "KnowPrisonerExecuted");
             for (const Entity other : pawns) {
                 if (moodIsColonist(reg, other) && !hasTrait(other, "Psychopath") && !hasTrait(other, "Bloodlust") &&
                     !hasTrait(other, "Cannibal")) {
