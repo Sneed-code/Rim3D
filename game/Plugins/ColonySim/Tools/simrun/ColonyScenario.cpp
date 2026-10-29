@@ -38,6 +38,7 @@
 #include "ColonySim/Trade.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -442,6 +443,30 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     {
         std::vector<Entity> crew = colonists;
         std::sort(crew.begin(), crew.end());
+        if (year) {
+            // The year run makes its best doctor the Medic: the one who tends the sick while the alarm is on (plague and a
+            // raid together left the plague untended on seed 1).
+            const auto medicine = [&](Entity pawn) {
+                const Colonist* colonist = sim.colonistOf(pawn);
+                for (size_t i = 0; colonist != nullptr && i < colonist->skills.size(); ++i) {
+                    if (colonist->skills[i].def == "Medicine") {
+                        return colonist->skills[i].disabled ? -1 : colonist->skills[i].level;
+                    }
+                }
+                return 0;
+            };
+            std::stable_sort(crew.begin(), crew.end(), [&](Entity a, Entity b) { return medicine(a) > medicine(b); });
+            if (verbose) {
+                for (const Entity pawn : crew) {
+                    std::string line;
+                    const Colonist* colonist = sim.colonistOf(pawn);
+                    for (size_t i = 0; colonist != nullptr && i < colonist->skills.size(); ++i) {
+                        line += " " + colonist->skills[i].def + " " + (colonist->skills[i].disabled ? std::string("-") : std::to_string(colonist->skills[i].level));
+                    }
+                    std::fprintf(stderr, "colonist %u:%s\n", static_cast<unsigned>(entt::to_integral(pawn)), line.c_str());
+                }
+            }
+        }
         for (size_t c = 0; c < crew.size() && c < 2; ++c) {
             const DefenseRole role = c == 0 ? DefenseRole::Medic : DefenseRole::Firefighter;
             sim.submit(SetDefenseRoleCommand{crew[c], static_cast<uint8_t>(role), false, CellPos{}});
@@ -601,6 +626,8 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     std::map<std::string, int> animalDeaths;  // deaths of anything that is not a colonist, by cause
     std::map<Entity, int> shotsBy;            // year run, verbose: shots each pawn fired
     std::map<Entity, Entity> shooterOf;       // verbose: who fired each projectile in flight
+    std::map<Entity, std::array<int, 8>> hitsBy;  // verbose: what each shooter's projectiles stopped on, by ProjectileHitKind
+    std::map<Entity, std::array<float, 3>> lastGroundHit;  // verbose: where each shooter's last shot into the ground stopped
     std::map<std::string, int> spoiled;
     std::map<std::string, int> huntFailures;  // year run: hunts given up, by the animal's def       // year run: stacks lost to rot or the weather, by def and how
     double worstStepMs = 0.0;
@@ -733,6 +760,12 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                         const auto it = shooterOf.find(e.thing);
                         const entt::registry& reg = sim.things().registry();
                         const Entity shooter = it != shooterOf.end() ? it->second : kNoEntity;
+                        if (shooter != kNoEntity) {
+                            ++hitsBy[shooter][std::min<size_t>(static_cast<size_t>(e.hit), 7)];
+                            if (e.hit == ProjectileHitKind::Ground) {
+                                lastGroundHit[shooter] = {e.x, e.y, e.z};
+                            }
+                        }
                         const Fighter* f = shooter != kNoEntity && reg.valid(shooter) ? reg.try_get<Fighter>(shooter) : nullptr;
                         if (f != nullptr && reg.all_of<Colonist>(shooter) && reg.valid(f->target) && reg.all_of<Animal>(f->target)) {
                             const Position& from = reg.get<Position>(shooter);
@@ -881,6 +914,45 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
             }
         }
 
+        if (verbose && year && now % 600 == 0 && sim.raids().state().alarm) {
+            // The fight, every ten game minutes while the alarm is on: each fighter, its side, place, mode, target and shots.
+            const entt::registry& reg = sim.things().registry();
+            std::string line;
+            char part[200];
+            for (const auto [pawn, f, pos] : reg.view<const Fighter, const Position>().each()) {
+                const Health* h = reg.try_get<Health>(pawn);
+                if (h != nullptr && h->dead) {
+                    continue;
+                }
+                const Position* tp = reg.valid(f.target) ? reg.try_get<Position>(f.target) : nullptr;
+                std::snprintf(part, sizeof(part), " [%u side %u at %.0f,%.0f mode %d%s%s target %u%s%s%s shots %d]",
+                              static_cast<unsigned>(entt::to_integral(pawn)), static_cast<unsigned>(sim.fighters().factionOf(pawn)), pos.x, pos.y,
+                              static_cast<int>(f.mode), f.defending ? " def" : "", f.drafted ? " drafted" : "", static_cast<unsigned>(entt::to_integral(f.target)),
+                              tp != nullptr ? (" " + std::to_string(static_cast<int>(std::hypot(tp->x - pos.x, tp->y - pos.y))) + " m").c_str() : "",
+                              f.canFire ? " can fire" : "", h != nullptr && h->downed ? " DOWN" : "", shotsBy[pawn]);
+                line += part;
+                const auto hit = hitsBy.find(pawn);
+                if (hit != hitsBy.end()) {
+                    // ground, rock, building, pawn, armor, gone
+                    const std::array<int, 8>& k = hit->second;
+                    std::snprintf(part, sizeof(part), " (stopped on ground %d rock %d building %d pawn %d armor %d gone %d)",
+                                  k[static_cast<size_t>(ProjectileHitKind::Ground)], k[static_cast<size_t>(ProjectileHitKind::Rock)],
+                                  k[static_cast<size_t>(ProjectileHitKind::Building)], k[static_cast<size_t>(ProjectileHitKind::Pawn)],
+                                  k[static_cast<size_t>(ProjectileHitKind::Armor)], k[static_cast<size_t>(ProjectileHitKind::Gone)]);
+                    line.insert(line.size() - 1, part);
+                }
+                const auto ground = lastGroundHit.find(pawn);
+                if (ground != lastGroundHit.end()) {
+                    const std::array<float, 3>& g = ground->second;
+                    std::snprintf(part, sizeof(part), " (z %.2f, target z %.2f, last into the ground at %.1f,%.1f,%.2f)",
+                                  static_cast<double>(sim.map().heightAt(pos.x, pos.y)),
+                                  tp != nullptr ? static_cast<double>(sim.map().heightAt(tp->x, tp->y)) : 0.0, static_cast<double>(g[0]),
+                                  static_cast<double>(g[1]), static_cast<double>(g[2]));
+                    line.insert(line.size() - 1, part);
+                }
+            }
+            std::fprintf(stderr, "  fight t=%lld:%s\n", static_cast<long long>(now), line.c_str());
+        }
         if (now % kSecondsPerHour == 0) {
             if (year && !fieldMade && sim.time().day() >= kFieldDay) {
                 // Sown at the start, the crops die in the early spring frosts: the field goes in with the warm weather.

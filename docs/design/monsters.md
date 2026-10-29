@@ -42,6 +42,11 @@ colony is worth now (the raid rule). The narrator's T3 incidents (`Infestation`,
 **Infestation.** One brood mound for every 500 points (1 to 4), on a roofed cell 20 to 60 m from the
 middle of the colony and at least 20 m from every colonist (open ground if nowhere is roofed); the points
 buy insects like raiders by combat power, who come out as manhunters after the nearest colonist.
+**The narrator's** incident (C25) is RimWorld's: the first mound comes up only **under overhead mountain** (a thick
+rock roof, `Roof::Thick`), a random such cell in that ring, and the incident fails ("no overhead mountain near the
+colony") when there is none. Before, it came up under the colony's own built roofs, or on open ground, and in the
+year run it wiped out all three colonies between days 34 and 45. The dev command (`StartThreatCommand`) still
+takes any roof or open ground.
 
 **Mounds** (`Hive` building, 130 hit points, RimWorld's): check every 30 game seconds; each mound's
 timings come from its entity id and the clock, so they need no saved state:

@@ -387,9 +387,11 @@ TEST_CASE("Medicine: a doctor tends a bleeding, downed colonist where it lies, t
     MED_REQUIRE(medRunUntil(sim, log, 200, [&] {
         return sim.things().registry().get<Worker>(patient).job.type != JobType::BedRest;
     }));
-    CHECK(log.find([&](const Event& e) {
-        return e.type == EventType::JobEnded && e.thing == patient && e.job == JobType::BedRest && e.message == "done";
-    }) != nullptr);
+    // Its last bed rest ends "done", unless it healed while up to eat (then hunger ended it, and it has no need to go back).
+    CHECK((log.find([&](const Event& e) {
+               return e.type == EventType::JobEnded && e.thing == patient && e.job == JobType::BedRest && e.message == "done";
+           }) != nullptr ||
+           !sim.health().needsRest(patient)));
     CHECK(medHealable(medReport(sim, patient)) == 0);
     CHECK(sim.things().registry().get<Health>(patient).rest == RestKind::Ground);
     CHECK_FALSE(std::any_of(log.events.begin(), log.events.end(), [](const Event& e) { return e.type == EventType::CommandFailed; }));

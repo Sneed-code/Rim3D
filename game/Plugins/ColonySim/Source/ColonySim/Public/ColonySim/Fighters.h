@@ -257,8 +257,9 @@ private:
     void chooseWeapon(Entity pawn, const Fighter& f);
     void see(Entity pawn, Fighter& f, const PawnInfo& self);
     Entity chooseTarget(Entity pawn, const Fighter& f, const PawnInfo& self) const;
-    bool fireOption(CellPos cell, const PawnInfo& target, float range, float tx, float ty, Candidate& c);
+    bool fireOption(Entity pawn, CellPos cell, const PawnInfo& target, float range, float tx, float ty, Candidate& c);
     bool seesFrom(CellPos cell, Stance stance, const PawnInfo& target);
+    bool shotClearsGround(Entity pawn, float x, float y, int level, Stance stance, const PawnInfo& target) const;
     void walkToSpot(Entity pawn, Fighter& f);
     void stepTo(Entity pawn, CellPos cell);
     void stop(Entity pawn, Fighter& f);

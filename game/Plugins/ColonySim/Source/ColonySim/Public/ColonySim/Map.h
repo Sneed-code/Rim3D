@@ -133,6 +133,8 @@ public:
     // that changes what can be walked or seen through. Does not touch the ground height. Ground
     // level only: upper floors are laid with setUpperFloor.
     void setTerrain(CellPos c, Terrain terrain);
+    // Sets a ground cell's height in metres (tests that need a hill; the map generator makes the real ones). Cover is told.
+    void setGroundHeight(CellPos c, float metres);
     // Height in metres at any point of a level, interpolated between the heights of the four grid
     // corners around it. The corner (x, y) is the point x metres by y metres, which is how the
     // terrain mesh is drawn, so pawns stand on the surface the player sees. Clamped to the map.

@@ -627,3 +627,51 @@ TEST_CASE("Fighters: a caravan guard standing by a colonist never swings at it; 
     CHECK(swingsAt(true) == 0);
     CHECK(swingsAt(false) > 0);
 }
+
+TEST_CASE("Fighters: over a low crest a fighter shoots from where its shots clear the ground") {
+    // Found by the year run (docs/design/colony-scenario.md): a colonist and a raider 14 m apart on a hillside shot
+    // into the crest between them for two hours. Crouched, the eyes see over the crest to the enemy's eyes, but the
+    // shot goes from the lower muzzle to the chest and into the ground.
+    auto sim = fightTestSim();
+    for (int x = 0; x < sim->map().width(); ++x) {
+        sim->editMap().setGroundHeight(CellPos{x, 45, 0}, 1.03f);
+    }
+    const Entity fighter = fightTestPawn(*sim, 40, 40, "Gun_BoltActionRifle");
+    const Entity enemy = fightTestPawn(*sim, 40, 72, "Gun_Revolver");  // out of its own range: it walks in
+    fightTestDraft(*sim, fighter);
+    fightTestHostile(*sim, enemy);
+    sim->step();
+    sim->submit(MoveOrderCommand{fighter, CellPos{40, 40, 0}});  // held 4.5 m behind the crest
+    std::vector<Entity> shotsInFlight;
+    int shots = 0;
+    int intoGround = 0;  // into the crest
+    int crouchedAim = 0;
+    int aimed = 0;
+    for (int i = 0; i < 1500; ++i) {
+        fightTestHeal(*sim, fighter);
+        fightTestHeal(*sim, enemy);
+        sim->step();
+        const Fighter& f = fightTestFighter(*sim, fighter);
+        if (f.canFire && f.target == enemy) {
+            ++aimed;
+            crouchedAim += f.fireStance == Stance::Crouching ? 1 : 0;
+        }
+        for (const Event& e : sim->events()) {
+            if (e.type == EventType::ShotFired && e.thing == fighter) {
+                ++shots;
+                shotsInFlight.push_back(e.target);
+            } else if (e.type == EventType::ProjectileHit) {
+                const auto it = std::find(shotsInFlight.begin(), shotsInFlight.end(), e.thing);
+                if (it != shotsInFlight.end()) {
+                    intoGround += e.hit == ProjectileHitKind::Ground && e.y < 47.0f ? 1 : 0;  // misses land by the enemy
+                    shotsInFlight.erase(it);
+                }
+            }
+        }
+    }
+    MESSAGE(aimed << " steps able to fire, " << crouchedAim << " of them crouched; " << shots << " shots, " << intoGround << " into the crest");
+    CHECK(aimed > 0);
+    CHECK(crouchedAim == 0);  // it stands to shoot: crouched, the muzzle is below the line over the crest
+    CHECK(shots >= 5);
+    CHECK(intoGround * 4 <= shots);
+}

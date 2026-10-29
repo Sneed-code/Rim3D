@@ -38,6 +38,7 @@ constexpr size_t kFightEffortPool = 3;  // times `refine` spots get their walk w
 // Weights of the nearest threats a spot is scored against: the nearest counts most.
 constexpr float kFightThreatWeights[] = {1.0f, 0.7f, 0.5f, 0.35f, 0.25f, 0.2f, 0.15f, 0.1f};
 constexpr int kFightMaxThreats = static_cast<int>(sizeof kFightThreatWeights / sizeof kFightThreatWeights[0]);
+constexpr float kFightShotClearance = 0.3f;  // metres below the chest the shot's line must still clear the ground (our number)
 constexpr float kFightFallBackCap = 40.0f;  // metres from the nearest enemy beyond which falling back gains nothing
 
 float fightDist(float ax, float ay, float bx, float by) {
@@ -551,10 +552,28 @@ bool FighterSystem::seesFrom(CellPos cell, Stance stance, const PawnInfo& target
     return map_.cover().lineOfSight(Viewpoint::at(cell, stance), Viewpoint{target.x, target.y, target.level, target.stance});
 }
 
+// The shot's own line clears the ground: from the muzzle to the target's chest, aimed kFightShotClearance low at
+// the target for the spread. The eyes see from higher up than the muzzle and to the target's eyes, so over a crest
+// between the two the eyes see and the shots go into the ground (the year run's fights on hillsides,
+// docs/design/colony-scenario.md). Buildings are left to cover: a target behind sandbags is shot at all the same.
+bool FighterSystem::shotClearsGround(Entity pawn, float x, float y, int level, Stance stance, const PawnInfo& target) const {
+    float muzzle = 0.0f;
+    float aim = 0.0f;
+    float targetMuzzle = 0.0f;
+    float targetAim = 0.0f;
+    combat_.shotHeights(pawn, stance, muzzle, aim);
+    combat_.shotHeights(target.pawn, target.stance, targetMuzzle, targetAim);
+    const TraceHit hit = combat_.trace(x, y, map_.heightAt(x, y) + muzzle, target.x, target.y,
+                                       map_.heightAt(target.x, target.y) + std::max(targetAim - kFightShotClearance, 0.1f), level,
+                                       pawn, CellPos{static_cast<int>(std::floor(x)), static_cast<int>(std::floor(y)), level}, false);
+    return hit.kind != ProjectileHitKind::Ground && hit.kind != ProjectileHitKind::Rock;
+}
+
 // How the fighter can shoot `target` (at its last known place tx, ty) from `cell`: crouched there,
 // standing up there (over low cover), or from the cell beside it on either side (leaning out
-// round a corner), crouched first. False if none of these sees it within range.
-bool FighterSystem::fireOption(CellPos cell, const PawnInfo& target, float range, float tx, float ty,
+// round a corner), crouched first. False if none of these sees it within range, or the shots from there
+// would go into the ground.
+bool FighterSystem::fireOption(Entity pawn, CellPos cell, const PawnInfo& target, float range, float tx, float ty,
                                Candidate& c) {
     if (range <= 0.0f) {
         return false;
@@ -590,7 +609,8 @@ bool FighterSystem::fireOption(CellPos cell, const PawnInfo& target, float range
             seen.x = tx;
             seen.y = ty;
             seen.stance = target.able ? Stance::Standing : target.stance;
-            if (seesFrom(options[i], stance, seen)) {
+            if (seesFrom(options[i], stance, seen) &&
+                shotClearsGround(pawn, fightCentre(options[i].x), fightCentre(options[i].y), options[i].level, stance, seen)) {
                 c.fireCell = options[i];
                 c.fireStance = stance;
                 c.canFire = true;
@@ -716,7 +736,7 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
         Candidate here;
         here.cell = at;
         here.fireCell = at;
-        if (fireOption(at, *targetInfo, range, tx, ty, here)) {
+        if (fireOption(pawn, at, *targetInfo, range, tx, ty, here)) {
             const bool moved = !f.hasSpot || f.spot != at;
             f.hasSpot = true;
             f.spot = at;
@@ -870,7 +890,7 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
             cand.score -= rules_.exposedWeight * exposed / threatWeight;
         }
         if (targetInfo != nullptr) {
-            if (fireOption(cand.cell, *targetInfo, range, tx, ty, cand)) {
+            if (fireOption(pawn, cand.cell, *targetInfo, range, tx, ty, cand)) {
                 cand.score -= (cand.fireStance == Stance::Standing ? rules_.standPenalty : 0.0f) +
                               (cand.fireCell != cand.cell ? rules_.stepOutPenalty : 0.0f);
             } else {
@@ -1134,7 +1154,11 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
         const bool sees = map_.cover().lineOfSight(Viewpoint{pos.x, pos.y, pos.level, f.fireStance},
                                                    Viewpoint{target->x, target->y, target->level,
                                                              target->able ? Stance::Standing : target->stance});
+        // As for sight: the target as it shows itself to shoot. Crouched behind the crest, the crest is its cover.
+        PawnInfo shown = *target;
+        shown.stance = target->able ? Stance::Standing : target->stance;
         if (sees && fightDist(pos.x, pos.y, target->x, target->y) <= weaponRange(pawn) &&
+            shotClearsGround(pawn, pos.x, pos.y, pos.level, f.fireStance, shown) &&
             combat_.shoot(pawn, f.target, 0.0f, 0.0f, 0.0f, false)) {
             return;
         }
