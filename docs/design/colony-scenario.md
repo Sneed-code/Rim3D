@@ -235,3 +235,31 @@ heatstroke downed them (`temperature.md`); an infestation kept the alarm on for 
 
 The runs are chaotic: a small change moves every later event, so a seed's story changes from run to run. Next: the
 script should play like a player (steel storeroom, a firebreak, everyone armed, keeping medicine), see `BACKLOG.md`.
+
+**Third pass (2026-10-29): the script plays like a player.** The year scenario's script now builds the storeroom of
+steel (walls and door; the beds stay wood), cuts every plant within 4 cells of the room, the storeroom and the
+greenhouse each morning at 06:00 as a firebreak (growing zones left alone), hands every unarmed colonist a loose gun or
+club each hour (best shots first: rifle, shotgun, revolver, club; a shotgun and two revolvers lie by the crash site),
+sows a 6 x 4 healroot patch with the fields when someone can grow it, keeps medicine back (`SetMedicalCare` Herbal,
+Best while anyone shows a disease), puts its two best doctors and two best cooks on priority 1 (the rest off cooking,
+doctoring at 4), and makes the best doctor the alarm's Medic and the next the Firefighter. Verbose runs also print a
+`fight t=` line every ten minutes of an alarm (each fighter's side, place, mode, target and distance, shots and what
+its shots stopped on), stuck pawns' next path cells and neighbours, and what colonists' shots at animals hit.
+Sim fixes found by it, each with a test: a walk whose next waypoint a new wall closes gives up after 10 steps instead
+of jostling for 388 minutes (`movement.md`); downed pawns and corpses no longer block walkers (three downed in a
+doorway held a doctor for 637 minutes); a mad animal of the colony's own is an enemy (`animal-fights.md`); the
+narrator's infestations come only from under overhead mountain, as RimWorld's do (`monsters.md`; they came up under
+built roofs and wiped out two colonies); fighters check that the shot's own line clears the ground (`fighters.md`:
+a colonist and a raider 14 m apart on a hillside fired about 200 shots in two hours, nearly all into the crest).
+
+| Seed | Alive on day 60 | What happened |
+| --- | --- | --- |
+| 1 | 0 | plague and two raids on day 24 (three dead), then raids, animals and infections days 44 to 57; a colonist held 90 minutes on `Ingest` behind a colonist lying down in a doorway (`LayDown`) |
+| 7 | 0 | nobody died before day 34 (the flashstorm of day 11 no longer burns the food); two raids on day 34, plague from day 41 and a raid on day 42; one colonist starved |
+| 42 | 1 | the colony passes every check; two raiders (121 points) killed five colonists on day 35 |
+
+Small raids are now the main killer: two shotgun raiders beat five or six armed colonists. The fight lines show
+colonists fighting alone (one at 13 m, the others 30 m off, out of range), a shotgun's shots still going into the
+ground about half the time on slopes, and the medic and others standing by. Next: a combat thread on why colonists
+lose these fights (`BACKLOG.md`).
+

@@ -85,6 +85,13 @@ be walkable, free of sight-blocking buildings and other fighters' spots, and rea
 step. Standing costs -0.5 and stepping out -1, so a fighter prefers the safest pose that still
 shoots. Shooting at a target that is crouched behind sandbags is allowed on purpose: the sandbags
 take the hits until it stands up to fire back, which is how firefights between two lines of cover go.
+Seeing is not enough on its own: the shot's own line, from the muzzle in that pose to the target's chest
+(`CombatSystem::shotHeights`) aimed 0.3 m low for the spread (`kFightShotClearance`, our number), has to clear the
+ground and rock (`CombatSystem::trace` without pawns; buildings stay cover). The eyes are higher than the muzzle and
+look at the target's eyes, so over a low crest a crouched fighter saw its enemy while every shot went into the crest:
+in the year run a colonist and a raider 14 m apart on a hillside fired about 200 shots at each other in two hours and
+nearly all of them hit the ground 4 to 5 m in front of the shooter. Now the fighter stands up to shoot over it, or
+picks another spot.
 
 **Going by the goal.** A fighter that advances and has a goal (a raider) but has no spot it can shoot from, and
 whose target is out of range from the best spot, doesn't settle where it is: scoring cells within 10 m can't see
@@ -117,8 +124,9 @@ Every step, for each fighter in id order (after the job system, before movement)
 4. Walking to the spot: a path from the pathfinder queue, then the walk, upright. A pawn held up for
    good asks for a new path, three times at most, then plans again.
 5. At the spot with a target it can shoot, a ready gun and its reaction time over (F5): step to the fire cell if that is the cell
-   beside (a one-cell straight step), take the fire stance, check it still sees the target and that
-   it is in range, and give the aimed `shoot` order (F2's warm-up, spread and burst follow).
+   beside (a one-cell straight step), take the fire stance, check it still sees the target, that
+   it is in range and that the shot's line clears the ground, and give the aimed `shoot` order (F2's warm-up, spread
+   and burst follow).
 6. Between shots: back to the spot if it stepped out (unless the gun is ready again within 20 steps,
    `stepBackBelow`), and crouch. A fighter that knows no enemy stands. With no shot to take it tops up
    its magazine (F5): below half with enemies about, any time it is not full when none are.
@@ -162,6 +170,8 @@ steps as cover.md says.
 
 - A drafted rifleman takes the sandbags 5 m away, crouches and pops up to shoot.
 - Behind a short wall a fighter holds the cell at its end and steps out past it to fire, then back.
+- Over a low crest 4.5 m in front (1.03 m high) a fighter stands up to shoot: crouched, 12 of 13 shots went into the
+  crest; standing, none do.
 - Target choice: the closest able enemy; the downed one only when nobody else is left; an attack order wins.
 - One raider against three colonists falls back (13 m in the test); one against one holds.
 - A move order takes a drafted pawn across the map and it holds within 2 m.
