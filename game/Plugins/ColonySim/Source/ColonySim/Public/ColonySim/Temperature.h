@@ -103,6 +103,10 @@ public:
     bool safeRange(Entity pawn, float& min, float& max) const;
     // Whether the pawn stands where hypothermia or heatstroke is building (outside its safe range).
     bool outsideSafeRange(Entity pawn);
+    // Whether the pawn's hypothermia or heatstroke has reached the serious stage (RimWorld's
+    // TemperatureInjuryStage.Serious, severity 0.35): it then drops whatever it does to find a safe spot.
+    bool seriousTemperatureInjury(Entity pawn) const;
+    static constexpr float kSeriousTemperatureInjury = 0.35f;
     float degreesBelowComfort(Entity pawn);
     float degreesAboveComfort(Entity pawn);
 

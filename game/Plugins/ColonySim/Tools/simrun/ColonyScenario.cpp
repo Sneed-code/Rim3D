@@ -18,11 +18,13 @@
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Plants.h"
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Regions.h"
@@ -33,6 +35,7 @@
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Trade.h"
 
 #include <algorithm>
 #include <cmath>
@@ -115,6 +118,15 @@ uint64_t floatBits(float f) {
 
 bool isTree(const Sim& sim, DefId def) { return def.valid() && sim.defs().get(def).flag("plant.isTree"); }
 
+// Dry ground to build or sow on: walkable, and not shallow water, marsh or mud (map generation 2).
+bool dryGround(const Sim& sim, CellPos c) {
+    if (!sim.map().inBounds(c) || !sim.map().groundWalkable(c)) {
+        return false;
+    }
+    const Terrain t = sim.map().terrain(c);
+    return t != Terrain::ShallowWater && t != Terrain::Marsh && t != Terrain::Mud;
+}
+
 // A bush that gives something when picked (not a tree).
 bool isBerryBush(const Sim& sim, DefId def) {
     return def.valid() && !isTree(sim, def) && sim.defs().get(def).integer("plant.harvestYield", 0) > 0;
@@ -152,7 +164,7 @@ bool findRoomSite(Sim& sim, CellPos landing, CellPos& out) {
             for (int y = origin.y - 1; y <= origin.y + kRoomHeight && ok; ++y) {
                 for (int x = origin.x - 1; x <= origin.x + kRoomWidth && ok; ++x) {
                     const CellPos c{x, y, 0};
-                    ok = sim.map().groundWalkable(c) && sim.map().buildingAt(c) == kNoEntity;
+                    ok = dryGround(sim, c) && sim.map().buildingAt(c) == kNoEntity;
                     trees += ok && isTree(sim, sim.plants().defAt(c)) ? 1 : 0;
                 }
             }
@@ -180,7 +192,7 @@ CellPos findFieldSite(const Sim& sim, CellPos landing, const CellRect& room, con
             for (int y = 0; y < 10 && ok; ++y) {
                 for (int x = 0; x < 14 && ok; ++x) {
                     const CellPos c{origin.x + x, origin.y + y, 0};
-                    ok = sim.map().groundWalkable(c) && sim.map().buildingAt(c) == kNoEntity && !room.contains(c) &&
+                    ok = dryGround(sim, c) && sim.map().buildingAt(c) == kNoEntity && !room.contains(c) &&
                          sim.map().terrain(c) == Terrain::Soil &&
                          std::none_of(taken.begin(), taken.end(), [&](const CellRect& t) { return t.contains(c); });
                     score += ok ? sim.plants().fertility(c) : 0.0f;
@@ -201,7 +213,7 @@ CellPos freeCellNear(const Sim& sim, CellPos centre) {
         for (int dy = -ring; dy <= ring; ++dy) {
             for (int dx = -ring; dx <= ring; ++dx) {
                 const CellPos c{centre.x + dx, centre.y + dy, 0};
-                if (std::max(std::abs(dx), std::abs(dy)) == ring && sim.map().inBounds(c) && sim.map().groundWalkable(c) &&
+                if (std::max(std::abs(dx), std::abs(dy)) == ring && dryGround(sim, c) &&
                     sim.map().buildingAt(c) == kNoEntity && sim.map().terrain(c) != Terrain::Rock) {
                     return c;
                 }
@@ -224,7 +236,7 @@ bool findGreenhouseSite(Sim& sim, CellPos landing, const CellRect& room, CellPos
             for (int y = origin.y - 1; y <= origin.y + height && ok; ++y) {
                 for (int x = origin.x - 1; x <= origin.x + width && ok; ++x) {
                     const CellPos c{x, y, 0};
-                    ok = sim.map().inBounds(c) && sim.map().groundWalkable(c) && sim.map().buildingAt(c) == kNoEntity &&
+                    ok = dryGround(sim, c) && sim.map().buildingAt(c) == kNoEntity &&
                          sim.farming().zoneAt(c) == kNoGrowingZone && sim.zones().stockpileAt(c) == nullptr &&
                          std::none_of(taken.begin(), taken.end(), [&](const CellRect& t) { return t.contains(c); }) &&
                          !(x >= room.minX - 2 && x < room.minX + room.sizeX + 2 && y >= room.minY - 2 && y < room.minY + room.sizeY + 2);
@@ -497,6 +509,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     // The run.
     std::map<Entity, Stuck> stuck;
     uint64_t died = 0;
+    uint64_t starvedOrFroze = 0;  // deaths C25 never allows, even with the storyteller on
     uint64_t ate = 0;
     uint64_t atTable = 0;
     uint64_t slept = 0;
@@ -570,12 +583,19 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         for (const Event& e : sim.events()) {
             switch (e.type) {
                 case EventType::PawnDied:
-                    if (sim.things().registry().valid(e.thing) && sim.things().registry().all_of<Colonist>(e.thing)) {
+                    // The colony's own people: not raiders, visitors, traders or quest guests (made as colonists too).
+                    if (sim.things().registry().valid(e.thing) && sim.things().registry().all_of<Colonist>(e.thing) &&
+                        !sim.things().registry().all_of<Visitor>(e.thing) && sim.fighters().factionOf(e.thing) == kPlayerFaction) {
                         ++died;
+                        starvedOrFroze += e.message == "starvation" || e.message == "hypothermia" ? 1 : 0;
                         std::fprintf(stderr, "day %lld: a colonist died: %s\n", static_cast<long long>(sim.time().day()), e.message.c_str());
                         printIllness(sim, e.thing, "    at death:");
                     } else {
-                        ++animalDeaths[e.message];
+                        const bool person = sim.things().registry().valid(e.thing) && sim.things().registry().all_of<Colonist>(e.thing);
+                        ++animalDeaths[person ? "outsider: " + e.message : e.message];
+                        if (verbose && person) {
+                            std::fprintf(stderr, "day %lld: an outsider died: %s\n", static_cast<long long>(sim.time().day()), e.message.c_str());
+                        }
                     }
                     break;
                 case EventType::PawnAte: ++ate; atTable += e.message == "table" ? 1 : 0; break;
@@ -605,11 +625,23 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                         }
                     }
                     break;
+                case EventType::MeleeSwing:
+                    if (verbose && sim.things().registry().valid(e.target) && sim.things().registry().all_of<Colonist>(e.target) &&
+                        sim.fighters().factionOf(e.target) == kPlayerFaction) {
+                        const entt::registry& reg = sim.things().registry();
+                        const Fighter* of = reg.try_get<Fighter>(e.thing);
+                        std::fprintf(stderr, "    swing at colonist %u by %u side %u%s%s%s mode %d target %u\n", static_cast<unsigned>(entt::to_integral(e.target)),
+                                     static_cast<unsigned>(entt::to_integral(e.thing)), static_cast<unsigned>(sim.fighters().factionOf(e.thing)),
+                                     reg.all_of<Visitor>(e.thing) ? " visitor" : "", reg.all_of<Prisoner>(e.thing) ? " prisoner" : "",
+                                     sim.mentalBreaks().active(e.thing) ? " mental-break" : "", of != nullptr ? static_cast<int>(of->mode) : -1,
+                                     of != nullptr ? static_cast<unsigned>(entt::to_integral(of->target)) : 0u);
+                    }
+                    break;
                 case EventType::PawnInjured:
                     if (verbose && sim.things().registry().valid(e.thing) && sim.things().registry().all_of<Colonist>(e.thing)) {
                         std::fprintf(stderr, "day %lld %02d:%02d: colonist %u hurt at %d,%d, part %d, %.1f damage (%s)\n", static_cast<long long>(sim.time().day()),
                                      sim.time().hourOfDay(), static_cast<int>((sim.time().seconds / 60) % 60), static_cast<unsigned>(entt::to_integral(e.thing)), e.cell.x,
-                                     e.cell.y, e.part, static_cast<double>(e.amount), e.message.c_str());
+                                     e.cell.y, e.part, static_cast<double>(e.amount), e.def.valid() ? sim.defs().get(e.def).defName().c_str() : e.message.c_str());
                         // What the colonist and the animals round it were doing, to see why nobody fought back.
                         const entt::registry& reg = sim.things().registry();
                         const Fighter* fighter = reg.try_get<Fighter>(e.thing);
@@ -618,6 +650,10 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                                      fighter != nullptr ? "yes" : "no",
                                      fighter != nullptr && fighter->defending ? " (defending)" : "",
                                      gear != nullptr && gear->weapon != kNoEntity ? "yes" : "no");
+                        if (const Worker* w = reg.try_get<Worker>(e.thing)) {
+                            std::fprintf(stderr, ", job %s%s%s%s", jobTypeName(w->job.type), sim.health().incapacitated(e.thing) ? ", down" : "",
+                                         sim.raids().state().suppressed ? ", alarm held off" : "", sim.raids().state().hasThreat ? ", threat known" : "");
+                        }
                         if (fighter != nullptr && gear != nullptr && gear->weapon != kNoEntity) {
                             const Thing& weaponThing = reg.get<Thing>(gear->weapon);
                             std::fprintf(stderr, " [%s mode %d target %u canFire %d falling %d walk %d stowed %zu known %zu]", defs->get(weaponThing.def).defName().c_str(),
@@ -632,12 +668,35 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                                              static_cast<double>(d));
                             }
                         }
+                        for (const auto [other, mover, pos] : reg.view<const Mover, const Position>().each()) {
+                            const float d = std::hypot(pos.x - at.x, pos.y - at.y);
+                            if (other != e.thing && !reg.all_of<Animal>(other) && d < 3.0f) {
+                                const Fighter* of = reg.try_get<Fighter>(other);
+                                std::fprintf(stderr, "; person %u side %u%s%s mode %d at %.1f m", static_cast<unsigned>(entt::to_integral(other)),
+                                             static_cast<unsigned>(sim.fighters().factionOf(other)), reg.all_of<Visitor>(other) ? " visitor" : "",
+                                             sim.mentalBreaks().active(other) ? " mental-break" : "", of != nullptr ? static_cast<int>(of->mode) : -1,
+                                             static_cast<double>(d));
+                            }
+                        }
                         std::fprintf(stderr, "\n");
+                    }
+                    break;
+                case EventType::PawnTended:
+                    if (verbose && sim.things().registry().valid(e.target) && sim.things().registry().all_of<Colonist>(e.target)) {
+                        std::fprintf(stderr, "    tended colonist %u: quality %.2f with %s%s\n", static_cast<unsigned>(entt::to_integral(e.target)),
+                                     static_cast<double>(e.amount), e.def.valid() ? sim.defs().get(e.def).defName().c_str() : "no medicine",
+                                     e.message.find("self") != std::string::npos ? " (self)" : "");
                     }
                     break;
                 case EventType::ShotFired: ++shotsBy[e.thing]; break;
                 case EventType::WeatherChanged: ++weatherChanges; break;
-                case EventType::Letter: ++letters; break;
+                case EventType::Letter:
+                    ++letters;
+                    if (verbose) {
+                        std::fprintf(stderr, "day %lld: letter %s (%.0f points): %s\n", static_cast<long long>(sim.time().day()),
+                                     e.def.valid() ? sim.defs().get(e.def).defName().c_str() : "?", static_cast<double>(e.amount), e.message.c_str());
+                    }
+                    break;
                 case EventType::PawnMentalBreak:
                     ++mentalBreaks;
                     std::fprintf(stderr, "day %lld: a colonist had a mental break: %s\n", static_cast<long long>(sim.time().day()), e.message.c_str());
@@ -1212,11 +1271,41 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         std::fprintf(stderr, "\n");
         ++failures;
     };
+    // With the storyteller on (C25) raids, fires, disease and mad animals may kill colonists and burn what they built,
+    // as in RimWorld: the year run then only has to keep the colony alive, fed, warm and unstuck. The checks that
+    // follow the script's plan (the building, the marks, the dirt, failed jobs) are reported, not failed.
+    const bool storyteller = !narrator.empty();
+    int notes = 0;
+    const auto planCheck = [&](const char* format, auto... args) {
+        if (!storyteller) {
+            fail(format, args...);
+            return;
+        }
+        std::fprintf(stderr, "note: ");
+        std::fprintf(stderr, format, args...);
+        std::fprintf(stderr, "\n");
+        ++notes;
+    };
     if (colonists.size() != 6) {
         fail("%zu colonists, expected 6", colonists.size());
     }
     if (died > 0) {
-        fail("%llu colonist(s) died", static_cast<unsigned long long>(died));
+        planCheck("%llu colonist(s) died", static_cast<unsigned long long>(died));
+    }
+    if (starvedOrFroze > 0) {
+        fail("%llu colonist(s) starved or froze to death", static_cast<unsigned long long>(starvedOrFroze));
+    }
+    size_t alive = 0;
+    for (const auto [pawn, colonist] : sim.things().registry().view<const Colonist>().each()) {
+        (void)colonist;
+        const Health* health = sim.things().registry().try_get<Health>(pawn);
+        alive += sim.fighters().factionOf(pawn) == kPlayerFaction && !sim.things().registry().all_of<Visitor>(pawn) &&
+                         (health == nullptr || !health->dead)
+                     ? 1
+                     : 0;
+    }
+    if (alive == 0) {
+        fail("%s", "the colony died out");
     }
     if (maxMalnutrition > 0.0f || minFood <= 0.0f) {
         fail("a colonist starved (lowest food %.3f, malnutrition up to %.3f)", static_cast<double>(minFood),
@@ -1227,19 +1316,19 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
              jobTypeName(worst->worstJob), worst->worstCell.x, worst->worstCell.y);
     }
     if (sim.designations().count() > 0) {
-        fail("%zu of %zu marks still not worked off", sim.designations().count(), markedRock + markedTrees + markedBushes);
+        planCheck("%zu of %zu marks still not worked off", sim.designations().count(), markedRock + markedTrees + markedBushes);
     }
     if (unfinished > 0 || builtBy["Wall"] != expectedWalls || builtBy["Door"] != expectedDoors || builtBy["Bed"] != kBeds ||
         builtBy["Table1x2"] != 1 || builtBy["Stool"] != 3 || builtBy["FueledStove"] != 1 || builtBy["HorseshoesPin"] != 1) {
-        fail("the building is not finished (walls %d/%d, doors %d/%d, beds %d/%d, table %d/1, stools %d/3, stove %d/1, pin %d/1, %d sites left)",
+        planCheck("the building is not finished (walls %d/%d, doors %d/%d, beds %d/%d, table %d/1, stools %d/3, stove %d/1, pin %d/1, %d sites left)",
              builtBy["Wall"], expectedWalls, builtBy["Door"], expectedDoors, builtBy["Bed"], kBeds, builtBy["Table1x2"], builtBy["Stool"],
              builtBy["FueledStove"], builtBy["HorseshoesPin"], unfinished);
     }
     if (bedroomsRoofed != 1) {
-        fail("no roofed room with %d beds, a table and a stove", kBeds);
+        planCheck("no roofed room with %d beds, a table and a stove", kBeds);
     }
     if (sleptInBed == 0) {
-        fail("nobody slept in a bed (%llu times asleep)", static_cast<unsigned long long>(slept));
+        planCheck("nobody slept in a bed (%llu times asleep)", static_cast<unsigned long long>(slept));
     }
     if (weatherChanges == 0) {
         fail("the weather never changed in %.1f days", days);
@@ -1249,10 +1338,10 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
              static_cast<unsigned long long>(ate));
     }
     if (clubsMade != 1) {
-        fail("the crafting spot made %llu clubs, not the 1 the bill asked for", static_cast<unsigned long long>(clubsMade));
+        planCheck("the crafting spot made %llu clubs, not the 1 the bill asked for", static_cast<unsigned long long>(clubsMade));
     }
     if (recreations == 0 || pinGames == 0) {
-        fail("colonists started %llu recreation jobs, %llu at the horseshoes pin", static_cast<unsigned long long>(recreations),
+        planCheck("colonists started %llu recreation jobs, %llu at the horseshoes pin", static_cast<unsigned long long>(recreations),
              static_cast<unsigned long long>(pinGames));
     }
     if (talks == 0) {
@@ -1269,24 +1358,27 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         }
     }
     if (year ? homeFilth > 60 : sim.filth().totalLayers() > 12) {
-        fail("%zu layers of filth lie about (cleaned %llu): nobody keeps up with the dirt", year ? homeFilth : sim.filth().totalLayers(),
+        planCheck("%zu layers of filth lie about (cleaned %llu): nobody keeps up with the dirt", year ? homeFilth : sim.filth().totalLayers(),
              static_cast<unsigned long long>(cleaned));
     }
     if (roomStat == nullptr) {
-        fail("%s", "the room has no stats");
+        planCheck("%s", "the room has no stats");
     }
     if (woodIn == 0) {
-        fail("%s", "nobody put wood into the stove");
+        planCheck("%s", "nobody put wood into the stove");
     }
     if (!(skillXpGained > 0.0)) {
-        fail("the work taught nobody anything (%.1f experience gained)", skillXpGained);
+        planCheck("the work taught nobody anything (%.1f experience gained)", skillXpGained);
     }
     if (year && days >= static_cast<double>(kGreenhouseDay) + 12.0 && !greenZoneMade) {
-        fail("%s", "the greenhouse basins were not all built 12 days after it was planned");
+        planCheck("%s", "the greenhouse basins were not all built 12 days after it was planned");
     }
     if (commandsFailed > 0 || sim.stats().failedJobs > 0) {
-        fail("%llu commands and %llu jobs failed", static_cast<unsigned long long>(commandsFailed),
+        planCheck("%llu commands and %llu jobs failed", static_cast<unsigned long long>(commandsFailed),
              static_cast<unsigned long long>(sim.stats().failedJobs));
+    }
+    if (notes > 0) {
+        std::fprintf(stderr, "%d note(s) above: the storyteller's events undid part of the plan; %zu colonists alive\n", notes, alive);
     }
     return failures > 0 ? 1 : 0;
 }

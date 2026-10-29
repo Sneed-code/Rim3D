@@ -69,7 +69,7 @@ struct COLONY_API FireNumbers {
     float catchPerTick = 0.01f;      // a pawn in a fire catches fire, times size and its flammability
     float pawnFlammability = 0.7f;
     float pawnDamagePerTick = 0.0333f;  // 2 heat damage per RimWorld second (60 ticks)
-    int pawnBurnTicks = 1800;
+    int pawnBurnTicks = 300;
     float rainOutPerTick = 0.002f;   // size lost per tick per point of rain rate, outdoors
     float snowBlocksAt = 10.0f;      // snow this deep (percent) stops fire outdoors
     float autoIgniteC = 235.0f;

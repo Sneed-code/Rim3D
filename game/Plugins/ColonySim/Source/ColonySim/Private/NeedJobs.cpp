@@ -4,6 +4,7 @@
 #include "ColonySim/Clock.h"
 #include "ColonySim/Drugs.h"
 #include "ColonySim/Events.h"
+#include "ColonySim/Fire.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Needs.h"
@@ -162,8 +163,11 @@ void JobSystem::interruptForNeeds(Entity pawn) {
         return;
     }
     // Out in the cold or heat: off to shelter. Looked at every half minute, not every second, as the search is wide.
-    if (!current.forced && (current.type == JobType::Wait || current.type == JobType::HaulToCell ||
-                            current.type == JobType::Recreate || jobIsGather(current.type)) &&
+    // With a serious hypothermia or heatstroke (RimWorld's JobGiver_SeekSafeTemperature) any job of its own is
+    // dropped, firefighting and sleep included: a colonist doesn't keep beating flames in a room at 400 degrees.
+    if (!current.forced && current.type != JobType::SeekShelter &&
+        (current.type == JobType::Wait || current.type == JobType::HaulToCell || current.type == JobType::Recreate ||
+         jobIsGather(current.type) || (temperature_ != nullptr && temperature_->seriousTemperatureInjury(pawn))) &&
         (now() + static_cast<int64_t>(entt::to_integral(pawn))) % kNeedJobsShelterCheckEvery == 0) {
         Job shelter;
         if (makeShelterJob(pawn, shelter)) {
@@ -600,6 +604,31 @@ bool JobSystem::findBed(Entity pawn, Entity& bed, CellPos& cell) {
     return true;
 }
 
+bool JobSystem::fireNear(CellPos cell, int radius, Entity pawn) const {
+    if (fire_ == nullptr) {
+        return false;
+    }
+    if (pawn != kNoEntity && things_.registry().all_of<Burning>(pawn)) {
+        return true;
+    }
+    // A room a fire has heated past what the pawn can stand counts as fire too.
+    float safeMin = 0.0f;
+    float safeMax = 0.0f;
+    if (pawn != kNoEntity && temperature_ != nullptr && temperature_->safeRange(pawn, safeMin, safeMax) &&
+        temperature_->temperatureAt(cell) > safeMax) {
+        return true;
+    }
+    for (int dy = -radius; dy <= radius; ++dy) {
+        for (int dx = -radius; dx <= radius; ++dx) {
+            const CellPos c{cell.x + dx, cell.y + dy, cell.level};
+            if (map_.inBounds(c) && fire_->burning(c)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 bool JobSystem::makeSleepJob(Entity pawn, Job& out) {
     Entity bed = kNoEntity;
     CellPos cell;
@@ -610,6 +639,11 @@ bool JobSystem::makeSleepJob(Entity pawn, Job& out) {
         out.cell = cell;
     } else {
         out.cell = cellOf(things_.registry().get<Position>(pawn));  // the ground, right here
+    }
+    // Nobody lies down beside a fire, or while alight: it does something else (fights the fire, gets away) first.
+    if (fireNear(out.cell, kFireBedRadius, pawn) || fireNear(cellOf(things_.registry().get<Position>(pawn)), kFireBedRadius)) {
+        out = Job{};
+        return false;
     }
     return true;
 }
@@ -635,6 +669,10 @@ JobSystem::StepResult JobSystem::lie(Entity pawn, Job& job, std::string&) {
         job.until = now() + 1;  // marks that the pawn has lain down
         pawnDid(pawn, PawnAction::LieDown, job.thing);
         return StepResult::Running;
+    }
+    // Fire beside the bed, or the sleeper alight: it wakes (RimWorld wakes a sleeper that is hurt).
+    if (now() % 15 == 0 && fireNear(job.cell, kFireBedRadius, pawn)) {
+        return StepResult::Next;
     }
     Needs& needs = reg.get<Needs>(pawn);
     if (needs.rest >= rules_.wakeAt) {

@@ -440,6 +440,10 @@ public:
     // Whether a powered vitals monitor (`building.vitalsMonitor`) stands in one of the 8 cells around the bed's footprint
     // (docs/design/vitals-monitor.md). One counts, more do not.
     bool bedMonitored(Entity bed) const;
+    // Fire within `radius` cells of `cell` (or, with `pawn`, the pawn itself alight or `cell` hotter than its safe
+    // range): nobody lies down there, and a sleeper there wakes up (C25: colonists burned in their beds in a flashstorm).
+    bool fireNear(CellPos cell, int radius, Entity pawn = kNoEntity) const;
+    static constexpr int kFireBedRadius = 2;  // fire this close to a bed keeps a pawn out of it and wakes one in it (ours)
     // A downed colonist on its own side, or a downed prisoner, that no bed holds and no fighter is fetching to cover (F10).
     bool needsRescue(Entity pawn) const;
     // The food a warden should carry to a hungry prisoner: the best the prisoner may eat, the nearest of that kind, with how

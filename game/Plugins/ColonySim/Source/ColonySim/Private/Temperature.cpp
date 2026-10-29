@@ -233,6 +233,11 @@ bool TemperatureSystem::outsideSafeRange(Entity pawn) {
     return ambient < min || ambient > max;
 }
 
+bool TemperatureSystem::seriousTemperatureInjury(Entity pawn) const {
+    return health_.environmentSeverity(pawn, hypothermia_) >= kSeriousTemperatureInjury ||
+           health_.environmentSeverity(pawn, heatstroke_) >= kSeriousTemperatureInjury;
+}
+
 float TemperatureSystem::degreesBelowComfort(Entity pawn) {
     float min = 0.0f;
     float max = 0.0f;

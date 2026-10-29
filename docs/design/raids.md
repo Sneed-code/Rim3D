@@ -94,6 +94,11 @@ or fleeing), and everyone it called up goes back to work. One the player sounded
 (`SoundAlarmCommand{true}`) stays on until the player stops it; stopping it while enemies are about
 keeps it from sounding again by itself until they are gone.
 
+**Hunger beats the alarm (C25).** A colonist whose food is under `alarmEatBelow` (NeedRules
+`food.ravenousBelow`, 0.125) is let off: the alarm stands it down (`RaidSystem::excusedToEat`), a Medic or Firefighter
+leaves its duty, and it goes to eat; once fed it is called up again at the next check. In the year run an infestation
+kept the alarm on for days and the colonists starved at their posts. RimWorld has no automatic alarm, so this is ours.
+
 **Drafting a called-up colonist** hands it to the player where it stands; undrafting it gives it back
 to the alarm at the next check while the alarm is on.
 

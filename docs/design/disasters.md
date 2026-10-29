@@ -22,7 +22,7 @@ Kept in `DisasterSystem` (saved as section `disasters`, in the state hash), one 
 | `SolarFlare` | 0.15 to 0.5 days | Every power net is dark: no generator makes power and no battery gives any (`PowerGrid::setBlackout`). Needs a net. |
 | `ToxicFallout` | 2.5 to 10.5 days | Every hour each plant under the open sky dies with chance 0.6; pawns outdoors gain `ToxicBuildup` at 0.4 a day (animals half, from the hediff's `outdoorsInFallout`); everyone else loses 0.1 a day. Colonists outside get the thought `ToxicFallout` (-5). Earliest day 60, cooldown 90. |
 | `VolcanicWinter` | 7.5 to 40 days | Outdoor temperature -7 degrees (also in the forecast colonists plan sowing by) and the sun's light down 30%, reached over 20 hours. Earliest day 60, cooldown 140. |
-| `Flashstorm` | 6 to 14 hours | A 21 m circle round a colonist. About every four minutes a bolt hits a random cell in it: a small Burn blast (30 damage, 2 m) and a fire. Event `LightningStrike`. |
+| `Flashstorm` | 6 to 14 hours | A 45 to 60 m circle round a random spot on the map (at least 8 cells from the edge), not aimed at the colony. Every 461 to 1,152 seconds (RimWorld's 320 to 800 ticks) a bolt hits a random unroofed cell in it: a small Burn blast (10 damage, RimWorld's Flame default, 1.9 m) and a fire. Event `LightningStrike`. Until C25 it was a 21 m circle on a colonist with a 30-damage bolt every four minutes, which burned colonists to death in every storm. |
 | `PsychicDrone` | 0.75 to 1.75 days | Colonists of one sex (the one that has colonists) get a thought of level low, medium or high: -12, -22 or -32. Cooldown 15 days. |
 | `PsychicSoothe` | 1.5 to 3 days | The same, +16. Never at the same time as a drone. |
 
@@ -56,8 +56,8 @@ with no prisoner able to walk. Tests: the last two cases of `DisasterTests.cpp`.
 All in `DisasterRules`, with the `unverified` and `ours` lists naming the guesses. From the wiki: the
 durations of the flare, fallout, winter and psychic waves, the winter's -7 degrees and 30% light, the
 fallout's 40% buildup a day, the soothe's +16 and the pack's extra 40% points and 24 to 54 hours. Recalled
-or ours: the flashstorm's size and rate, the drone's three levels, the blight's radius and kill chance, the
-animal power, the short circuit's blast, the mad animal's range and length, the incidents' `baseChance`.
+or ours: the flashstorm's numbers (recalled from RimWorld's code, unverified), the drone's three levels, the
+blight's radius and kill chance, the animal power, the short circuit's blast, the mad animal's range and length, the incidents' `baseChance`.
 
 ## Not yet
 

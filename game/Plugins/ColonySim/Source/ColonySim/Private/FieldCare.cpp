@@ -137,7 +137,7 @@ int FieldCare::dutyWorkType(Entity pawn) const {
     }
     const entt::registry& reg = things_.registry();
     if (!reg.valid(pawn) || !reg.all_of<Colonist, Position>(pawn) || reg.any_of<Fighter, PlayerControl>(pawn) ||
-        fighters_.factionOf(pawn) != kPlayerFaction || health_.incapacitated(pawn)) {
+        fighters_.factionOf(pawn) != kPlayerFaction || health_.incapacitated(pawn) || raids_.excusedToEat(pawn)) {
         return -1;
     }
     switch (raids_.roleOf(pawn)) {

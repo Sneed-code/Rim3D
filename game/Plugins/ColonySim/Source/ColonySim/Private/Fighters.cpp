@@ -1191,10 +1191,13 @@ bool FighterSystem::meleeAct(Entity pawn, Fighter& f) {
     if (info(f.target) != nullptr && melee_->inReach(pawn, f.target)) {
         victim = f.target;
     } else {
-        const PawnInfo* self = info(pawn);
+        // Any enemy in reach. Visitors, traders and prisoners are nobody's enemy and fight nobody (as in seeing,
+        // above): a passing caravan's guards don't knife the colonists they stand beside.
+        const entt::registry& reg = things_.registry();
+        const PawnInfo* self = reg.all_of<Visitor>(pawn) || reg.all_of<Prisoner>(pawn) ? nullptr : info(pawn);
         float best = 0.0f;
         for (const PawnInfo& p : pawns_) {
-            if (self == nullptr || p.faction == self->faction || !p.able || p.level != self->level ||
+            if (self == nullptr || p.animal || p.faction == self->faction || !p.able || p.level != self->level ||
                 !melee_->inReach(pawn, p.pawn)) {
                 continue;
             }

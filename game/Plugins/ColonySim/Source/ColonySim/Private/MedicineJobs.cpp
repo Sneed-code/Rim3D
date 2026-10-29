@@ -512,6 +512,10 @@ JobSystem::StepResult JobSystem::bedRest(Entity pawn, Job& job, std::string&) {
     if (!needsBedRest(pawn)) {
         return StepResult::Next;
     }
+    // Fire beside the bed, or the patient alight: it gets up (as a sleeper does, NeedJobs.cpp).
+    if (now() % 15 == 0 && fireNear(job.cell, kFireBedRadius, pawn)) {
+        return StepResult::Next;
+    }
     if (Health* health = reg.try_get<Health>(pawn)) {
         health->rest = isMedicalBed(job.thing) ? RestKind::HospitalBed : RestKind::Bed;
     }
