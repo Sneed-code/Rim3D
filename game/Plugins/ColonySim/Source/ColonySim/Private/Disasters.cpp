@@ -301,13 +301,15 @@ void DisasterSystem::step() {
 }
 
 void DisasterSystem::strike(DisasterCondition& storm) {
+    // A random cell in the circle under open sky: lightning never strikes a roofed cell (RimWorld wiki). If none is
+    // found in a few tries, this bolt falls outside the colony's notice.
     const float r = storm.radius;
-    CellPos cell = storm.centre;
+    CellPos cell{-1, -1, 0};
     for (int tries = 0; tries < 24; ++tries) {
         const int dx = static_cast<int>(rng_.below(static_cast<uint32_t>(2 * static_cast<int>(r) + 1))) - static_cast<int>(r);
         const int dy = static_cast<int>(rng_.below(static_cast<uint32_t>(2 * static_cast<int>(r) + 1))) - static_cast<int>(r);
         const CellPos c{storm.centre.x + dx, storm.centre.y + dy, 0};
-        if (static_cast<float>(dx * dx + dy * dy) <= r * r && map_.inBounds(c)) {
+        if (static_cast<float>(dx * dx + dy * dy) <= r * r && map_.inBounds(c) && map_.roof(c) == Roof::None) {
             cell = c;
             break;
         }

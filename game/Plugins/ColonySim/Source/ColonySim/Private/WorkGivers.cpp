@@ -868,8 +868,8 @@ public:
     }
 
     bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
-        if (!jobs.needsBedRest(pawn)) {
-            return false;
+        if (!jobs.needsBedRest(pawn) || jobs.fireNear(candidate.reach, JobSystem::kFireBedRadius, pawn)) {
+            return false;  // not beside a fire (as for sleep, NeedJobs.cpp)
         }
         out = Job{};
         out.type = JobType::BedRest;

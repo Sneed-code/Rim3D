@@ -18,11 +18,13 @@
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Plants.h"
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/Regions.h"
@@ -33,6 +35,7 @@
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Trade.h"
 
 #include <algorithm>
 #include <cmath>
@@ -579,12 +582,18 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         for (const Event& e : sim.events()) {
             switch (e.type) {
                 case EventType::PawnDied:
-                    if (sim.things().registry().valid(e.thing) && sim.things().registry().all_of<Colonist>(e.thing)) {
+                    // The colony's own people: not raiders, visitors, traders or quest guests (made as colonists too).
+                    if (sim.things().registry().valid(e.thing) && sim.things().registry().all_of<Colonist>(e.thing) &&
+                        !sim.things().registry().all_of<Visitor>(e.thing) && sim.fighters().factionOf(e.thing) == kPlayerFaction) {
                         ++died;
                         std::fprintf(stderr, "day %lld: a colonist died: %s\n", static_cast<long long>(sim.time().day()), e.message.c_str());
                         printIllness(sim, e.thing, "    at death:");
                     } else {
-                        ++animalDeaths[e.message];
+                        const bool person = sim.things().registry().valid(e.thing) && sim.things().registry().all_of<Colonist>(e.thing);
+                        ++animalDeaths[person ? "outsider: " + e.message : e.message];
+                        if (verbose && person) {
+                            std::fprintf(stderr, "day %lld: an outsider died: %s\n", static_cast<long long>(sim.time().day()), e.message.c_str());
+                        }
                     }
                     break;
                 case EventType::PawnAte: ++ate; atTable += e.message == "table" ? 1 : 0; break;
@@ -614,11 +623,23 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                         }
                     }
                     break;
+                case EventType::MeleeSwing:
+                    if (verbose && sim.things().registry().valid(e.target) && sim.things().registry().all_of<Colonist>(e.target) &&
+                        sim.fighters().factionOf(e.target) == kPlayerFaction) {
+                        const entt::registry& reg = sim.things().registry();
+                        const Fighter* of = reg.try_get<Fighter>(e.thing);
+                        std::fprintf(stderr, "    swing at colonist %u by %u side %u%s%s%s mode %d target %u\n", static_cast<unsigned>(entt::to_integral(e.target)),
+                                     static_cast<unsigned>(entt::to_integral(e.thing)), static_cast<unsigned>(sim.fighters().factionOf(e.thing)),
+                                     reg.all_of<Visitor>(e.thing) ? " visitor" : "", reg.all_of<Prisoner>(e.thing) ? " prisoner" : "",
+                                     sim.mentalBreaks().active(e.thing) ? " mental-break" : "", of != nullptr ? static_cast<int>(of->mode) : -1,
+                                     of != nullptr ? static_cast<unsigned>(entt::to_integral(of->target)) : 0u);
+                    }
+                    break;
                 case EventType::PawnInjured:
                     if (verbose && sim.things().registry().valid(e.thing) && sim.things().registry().all_of<Colonist>(e.thing)) {
                         std::fprintf(stderr, "day %lld %02d:%02d: colonist %u hurt at %d,%d, part %d, %.1f damage (%s)\n", static_cast<long long>(sim.time().day()),
                                      sim.time().hourOfDay(), static_cast<int>((sim.time().seconds / 60) % 60), static_cast<unsigned>(entt::to_integral(e.thing)), e.cell.x,
-                                     e.cell.y, e.part, static_cast<double>(e.amount), e.message.c_str());
+                                     e.cell.y, e.part, static_cast<double>(e.amount), e.def.valid() ? sim.defs().get(e.def).defName().c_str() : e.message.c_str());
                         // What the colonist and the animals round it were doing, to see why nobody fought back.
                         const entt::registry& reg = sim.things().registry();
                         const Fighter* fighter = reg.try_get<Fighter>(e.thing);
@@ -641,12 +662,28 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                                              static_cast<double>(d));
                             }
                         }
+                        for (const auto [other, mover, pos] : reg.view<const Mover, const Position>().each()) {
+                            const float d = std::hypot(pos.x - at.x, pos.y - at.y);
+                            if (other != e.thing && !reg.all_of<Animal>(other) && d < 3.0f) {
+                                const Fighter* of = reg.try_get<Fighter>(other);
+                                std::fprintf(stderr, "; person %u side %u%s%s mode %d at %.1f m", static_cast<unsigned>(entt::to_integral(other)),
+                                             static_cast<unsigned>(sim.fighters().factionOf(other)), reg.all_of<Visitor>(other) ? " visitor" : "",
+                                             sim.mentalBreaks().active(other) ? " mental-break" : "", of != nullptr ? static_cast<int>(of->mode) : -1,
+                                             static_cast<double>(d));
+                            }
+                        }
                         std::fprintf(stderr, "\n");
                     }
                     break;
                 case EventType::ShotFired: ++shotsBy[e.thing]; break;
                 case EventType::WeatherChanged: ++weatherChanges; break;
-                case EventType::Letter: ++letters; break;
+                case EventType::Letter:
+                    ++letters;
+                    if (verbose) {
+                        std::fprintf(stderr, "day %lld: letter %s (%.0f points): %s\n", static_cast<long long>(sim.time().day()),
+                                     e.def.valid() ? sim.defs().get(e.def).defName().c_str() : "?", static_cast<double>(e.amount), e.message.c_str());
+                    }
+                    break;
                 case EventType::PawnMentalBreak:
                     ++mentalBreaks;
                     std::fprintf(stderr, "day %lld: a colonist had a mental break: %s\n", static_cast<long long>(sim.time().day()), e.message.c_str());

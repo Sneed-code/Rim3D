@@ -4,6 +4,7 @@
 #include "ColonySim/Clock.h"
 #include "ColonySim/Drugs.h"
 #include "ColonySim/Events.h"
+#include "ColonySim/Fire.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Needs.h"
@@ -600,6 +601,24 @@ bool JobSystem::findBed(Entity pawn, Entity& bed, CellPos& cell) {
     return true;
 }
 
+bool JobSystem::fireNear(CellPos cell, int radius, Entity pawn) const {
+    if (fire_ == nullptr) {
+        return false;
+    }
+    if (pawn != kNoEntity && things_.registry().all_of<Burning>(pawn)) {
+        return true;
+    }
+    for (int dy = -radius; dy <= radius; ++dy) {
+        for (int dx = -radius; dx <= radius; ++dx) {
+            const CellPos c{cell.x + dx, cell.y + dy, cell.level};
+            if (map_.inBounds(c) && fire_->burning(c)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 bool JobSystem::makeSleepJob(Entity pawn, Job& out) {
     Entity bed = kNoEntity;
     CellPos cell;
@@ -610,6 +629,11 @@ bool JobSystem::makeSleepJob(Entity pawn, Job& out) {
         out.cell = cell;
     } else {
         out.cell = cellOf(things_.registry().get<Position>(pawn));  // the ground, right here
+    }
+    // Nobody lies down beside a fire, or while alight: it does something else (fights the fire, gets away) first.
+    if (fireNear(out.cell, kFireBedRadius, pawn) || fireNear(cellOf(things_.registry().get<Position>(pawn)), kFireBedRadius)) {
+        out = Job{};
+        return false;
     }
     return true;
 }
@@ -635,6 +659,10 @@ JobSystem::StepResult JobSystem::lie(Entity pawn, Job& job, std::string&) {
         job.until = now() + 1;  // marks that the pawn has lain down
         pawnDid(pawn, PawnAction::LieDown, job.thing);
         return StepResult::Running;
+    }
+    // Fire beside the bed, or the sleeper alight: it wakes (RimWorld wakes a sleeper that is hurt).
+    if (now() % 15 == 0 && fireNear(job.cell, kFireBedRadius, pawn)) {
+        return StepResult::Next;
     }
     Needs& needs = reg.get<Needs>(pawn);
     if (needs.rest >= rules_.wakeAt) {
