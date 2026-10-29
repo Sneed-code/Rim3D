@@ -200,7 +200,10 @@ alone does not yet keep the colony alive; only six basins feed few people.
 `simrun --scenario year [--seed N] [--size 512] [--days 60] [--narrator NAME]` is the year run (`--scenario colony --year`,
 above) with the narrator switched on (Orrin unless `--narrator` says otherwise) from the first step, so raids, disasters,
 diseases and the rest arrive on their own. The summary line `year` also prints the narrator's name and its `letters`.
-Its checks are the colony scenario's: six colonists alive, nobody starved (food never 0), nobody stuck for a game hour.
+Its checks are the plan row's (C25): nobody starves or freezes to death, food never 0, nobody stuck for a game hour, and
+the colony still has a colonist on the last day. Deaths from raids, fire, disease and animals, and the checks that follow
+the script's plan (the building, the marks, the dirt, failed jobs, experience), print as `note:` lines instead of failing,
+as the storyteller may undo them; the plain year run (`--scenario colony --year`) still fails on them.
 It runs nightly on seeds 1, 7 and 42 (`.github/workflows/nightly.yml`, job `colony-year`, allowed to fail until the
 colony lasts the year), about 15 minutes a seed. Not in CTest.
 
@@ -214,3 +217,21 @@ everyone dead by day 40 (22 letters). Seed 42: the room was finished but 5 died,
 The narrator's early letters (disease outbreaks, animals, raids) arrive before the colony has walls or guns, and the
 colony has no defence in the script. Next for the scenario: let the script build defences and give the narrator a
 threat-free first stretch (or a gentler difficulty) before the nightly run can say anything about food and cold.
+
+**Second pass (2026-10-29, Orrin, 512 m, 60 days).** Verbose runs now print every letter, every melee swing at a colonist
+(who swung, side, visitor, prisoner, mental break), each injury with the colonist's job and whether it is down, and each
+tend with its quality and medicine. What they found, and the fixes (each with tests): caravan guards knifed colonists
+(`trade.md`); colonists slept and lay sick in burning rooms (`fire.md`, "Beds and fire"); lightning came through roofs and
+flashstorms were a 21 m circle on a colonist with 30-damage bolts every 4 minutes (`disasters.md`, now RimWorld's
+numbers); a burning pawn burned for 43 minutes (`fire.md`, now 5 to 9); firefighters stayed in a 400 degree room until
+heatstroke downed them (`temperature.md`); an infestation kept the alarm on for days and colonists starved at their posts
+(`raids.md`); a radius saved as whole metres broke a save (the radius is now whole). Results after them:
+
+| Seed | Alive on day 60 | What happened |
+| --- | --- | --- |
+| 1 | 0 | a mad squirrel (and friendly fire at it) day 10, illness day 24, then animals, raids and infections days 36 to 52; one colonist stuck 637 minutes on `FeedPatient` |
+| 7 | 0 | a flashstorm wildfire burned the wooden storeroom and every meal on day 11; six starved on day 14, two froze on day 28 |
+| 42 | 0 | the room was finished; plague and infections from day 25, then animals and raids days 41 to 48 |
+
+The runs are chaotic: a small change moves every later event, so a seed's story changes from run to run. Next: the
+script should play like a player (steel storeroom, a firebreak, everyone armed, keeping medicine), see `BACKLOG.md`.
