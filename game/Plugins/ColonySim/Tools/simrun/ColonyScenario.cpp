@@ -648,6 +648,10 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                                      fighter != nullptr ? "yes" : "no",
                                      fighter != nullptr && fighter->defending ? " (defending)" : "",
                                      gear != nullptr && gear->weapon != kNoEntity ? "yes" : "no");
+                        if (const Worker* w = reg.try_get<Worker>(e.thing)) {
+                            std::fprintf(stderr, ", job %s%s%s%s", jobTypeName(w->job.type), sim.health().incapacitated(e.thing) ? ", down" : "",
+                                         sim.raids().state().suppressed ? ", alarm held off" : "", sim.raids().state().hasThreat ? ", threat known" : "");
+                        }
                         if (fighter != nullptr && gear != nullptr && gear->weapon != kNoEntity) {
                             const Thing& weaponThing = reg.get<Thing>(gear->weapon);
                             std::fprintf(stderr, " [%s mode %d target %u canFire %d falling %d walk %d stowed %zu known %zu]", defs->get(weaponThing.def).defName().c_str(),
@@ -673,6 +677,13 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                             }
                         }
                         std::fprintf(stderr, "\n");
+                    }
+                    break;
+                case EventType::PawnTended:
+                    if (verbose && sim.things().registry().valid(e.target) && sim.things().registry().all_of<Colonist>(e.target)) {
+                        std::fprintf(stderr, "    tended colonist %u: quality %.2f with %s%s\n", static_cast<unsigned>(entt::to_integral(e.target)),
+                                     static_cast<double>(e.amount), e.def.valid() ? sim.defs().get(e.def).defName().c_str() : "no medicine",
+                                     e.message.find("self") != std::string::npos ? " (self)" : "");
                     }
                     break;
                 case EventType::ShotFired: ++shotsBy[e.thing]; break;

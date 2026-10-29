@@ -260,8 +260,10 @@ TEST_CASE("Disasters: a flashstorm throws bolts inside its circle") {
             }
         }
     }
-    CHECK(strikes >= 40);  // one about every four minutes
-    CHECK(strikes <= 140);
+    CHECK(strikes >= 15);  // one every 461 to 1152 seconds (RimWorld's 320 to 800 ticks): about 27 in 6 hours
+    CHECK(strikes <= 45);
+    CHECK(storm.radius >= 45.0f);
+    CHECK(storm.radius <= 60.0f);
 }
 
 TEST_CASE("Disasters: a psychic drone drags down one sex, a soothe lifts it, and the two never overlap") {

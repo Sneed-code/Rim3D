@@ -17,7 +17,7 @@
     "catchPerTick": 0.01,
     "pawnFlammability": 0.7,
     "pawnDamagePerTick": 0.0333,
-    "pawnBurnTicks": 1800,
+    "pawnBurnTicks": 300,
     "rainOutPerTick": 0.002,
     "snowBlocksAt": 10,
     "autoIgniteC": 235,

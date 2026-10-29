@@ -60,10 +60,11 @@ struct DisasterSystem::Numbers {
     double winterGlowLoss = 0.3;
     double winterRampHours = 20.0;
     DisasterRange stormHours{6.0, 14.0};
-    double stormRadius = 21.0;
-    double stormStrikeSeconds = 240.0;
-    double stormDamage = 30.0;
-    double stormBlast = 2.0;
+    DisasterRange stormRadius{45.0, 60.0};
+    DisasterRange stormStrikeSeconds{461.0, 1152.0};
+    double stormDamage = 10.0;
+    double stormBlast = 1.9;
+    int stormEdge = 8;
     DisasterRange droneDays{0.75, 1.75};
     DisasterRange soothDays{1.5, 3.0};
     double blightKill = 0.7;
@@ -104,8 +105,9 @@ struct DisasterSystem::Numbers {
         winterGlowLoss = r->number("volcanicWinter.glowLoss", winterGlowLoss);
         winterRampHours = r->number("volcanicWinter.rampHours", winterRampHours);
         stormHours = disasterRangeOf(r, "flashstorm.durationHours", stormHours.lo, stormHours.hi);
-        stormRadius = r->number("flashstorm.radius", stormRadius);
-        stormStrikeSeconds = r->number("flashstorm.strikeSeconds", stormStrikeSeconds);
+        stormRadius = disasterRangeOf(r, "flashstorm.radius", stormRadius.lo, stormRadius.hi);
+        stormStrikeSeconds = disasterRangeOf(r, "flashstorm.strikeSeconds", stormStrikeSeconds.lo, stormStrikeSeconds.hi);
+        stormEdge = static_cast<int>(r->number("flashstorm.edge", stormEdge));
         stormDamage = r->number("flashstorm.damage", stormDamage);
         stormBlast = r->number("flashstorm.blastRadius", stormBlast);
         droneDays = disasterRangeOf(r, "psychicDrone.durationDays", droneDays.lo, droneDays.hi);
@@ -232,9 +234,11 @@ bool DisasterSystem::begin(DisasterKind kind, double hours) {
     c.startedAt = time_.seconds;
     c.endsAt = time_.seconds + static_cast<int64_t>(hours * static_cast<double>(kSecondsPerHour));
     if (kind == DisasterKind::Flashstorm) {
-        const std::vector<CellPos> cells = colonistCells();
-        c.centre = cells.empty() ? CellPos{map_.width() / 2, map_.height() / 2, 0} : cells[rng_.below(static_cast<uint32_t>(cells.size()))];
-        c.radius = static_cast<float>(numbers_->stormRadius);
+        // Anywhere on the map, as RimWorld's: not aimed at the colony.
+        const int edge = std::max(0, std::min({numbers_->stormEdge, map_.width() / 2 - 1, map_.height() / 2 - 1}));
+        c.centre = CellPos{edge + static_cast<int>(rng_.below(static_cast<uint32_t>(std::max(1, map_.width() - 2 * edge)))),
+                           edge + static_cast<int>(rng_.below(static_cast<uint32_t>(std::max(1, map_.height() - 2 * edge)))), 0};
+        c.radius = rng_.range(static_cast<float>(numbers_->stormRadius.lo), static_cast<float>(numbers_->stormRadius.hi));
         c.nextStrike = c.startedAt + 1;
     }
     if (kind == DisasterKind::PsychicDrone || kind == DisasterKind::PsychicSoothe) {
@@ -315,7 +319,7 @@ void DisasterSystem::strike(DisasterCondition& storm) {
         }
     }
     storm.nextStrike = time_.seconds + std::max<int64_t>(
-        1, static_cast<int64_t>(numbers_->stormStrikeSeconds * (0.5 + static_cast<double>(rng_.unit()))));
+        1, static_cast<int64_t>(rng_.range(static_cast<float>(numbers_->stormStrikeSeconds.lo), static_cast<float>(numbers_->stormStrikeSeconds.hi))));
     if (!map_.inBounds(cell)) {
         return;
     }
@@ -495,7 +499,7 @@ void DisasterSystem::registerWorkers() {
         const double hours = rng_.range(static_cast<float>(n.stormHours.lo), static_cast<float>(n.stormHours.hi));
         begin(DisasterKind::Flashstorm, hours);
         const DisasterCondition& storm = state_.active.back();
-        f.text = "Flashstorm: lightning strikes round the colony for " + disasterHours(hours) + ".";
+        f.text = "Flashstorm: lightning strikes part of the map for " + disasterHours(hours) + ".";
         f.hasCell = true;
         f.cell = storm.centre;
         return true;
