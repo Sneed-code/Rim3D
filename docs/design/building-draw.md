@@ -147,10 +147,53 @@ above its 2.2 m opening so the wall line has no gap under the roof.
 rather than hanging off the low one. Rotation is the sim's `Rot4` turned in 90 degree steps about the
 footprint's middle.
 
+## Stuff surfaces and joined walls (L4)
+
+Task L4 of the look pass ([art-stage.md](../plans/art-stage.md)). A building made of stuff now shows the stuff's own
+material, not just its colour, and walls join their neighbours.
+
+**Surfaces.** A stuff def names its surface in `visual.surface`; the nine surfaces are free CC0 ambientCG textures (2k
+colour, DirectX normal and roughness maps), listed in `assets/stuff_textures.json` with their tile size, tint, saturation,
+roughness and metalness:
+
+| Stuff | Surface | Texture |
+| --- | --- | --- |
+| Wood | wood | WoodSiding008 (weathered boards) |
+| Granite, limestone, sandstone, slate, marble blocks | granite, limestone, sandstone, slate, marble | Bricks089, Bricks083, Bricks100, Bricks066, Marble012 |
+| Steel | steel | MetalPlates013 (rusty plates) |
+| Plasteel, uranium | plasteel, uranium | MetalPlates004 (clean panels; uranium tinted green-grey) |
+
+The `SurfaceMaterials` commandlet makes `M_Surface` and one `MI_Surface_<surface>` per surface in
+`/Game/Rim3D/Generated/Surfaces/` (not in Git, `assets/manifest.json`). The material projects its textures along the
+world's three axes by the surface's normal, so the generated meshes need no UVs and walls side by side run on without a
+seam; brick courses and boards lie level on the sides. Its colour is the texture times the tint times the part's vertex
+colour, so a part's own shade still darkens it (a wall's base course). The meshes made from a def's parts get a second
+material slot for the parts made of stuff (`VisualMesh::MakeMesh`'s `StuffMaterial`); the other parts keep the vertex
+colour material. A stuff with no surface, or a surface not made on this machine, is drawn in its plain colour as before
+(with a warning in the log). Ghosts put the ghost material on every slot. Real meshes (A1) do not take the stuff yet (L7).
+
+**Joined walls.** A def with `visual.link` (`Wall`, `AncientWall`; `thickness` in metres, 0.5) is drawn as a post in the
+middle of its cell with an arm out to each side where there is another linked building, a door or natural rock: straight,
+corner, T, cross and end pieces all come from that one rule, so no piece meshes are needed. Each piece has a base course
+35 cm high and 4 cm wider on each side (shade 0.72) and an 8 cm cap 2.5 cm wider (shade 0.85). The neighbours are worked out
+from the snapshot on every refresh and folded into the chunk's signature, so a wall going up next door rebuilds the chunk.
+A linked building is never turned (its arms point at the map's neighbours). One mesh is made per def, stuff and neighbour set
+(at most 16 a stuff). The placement ghost of the architect menu still shows the whole cell. Door frames (lintel and jambs) are
+as deep as a wall now, 0.5 m.
+
+The look bench (`look` smoke test) builds its room of wood and a sample wall of every block, steel and plasteel west of
+it, and takes an extra shot, `walls`, of the sample at noon. Spawned buildings have no stuff, so the test sets each wall's
+`BuiltOf` itself.
+
+Cost: none worth measuring at the bench (the same instanced meshes, a few more triangles a wall); the bench's frame times
+did not move.
+
 ## Not here yet
 
-- Floors, wall connections (a wall is a box; neighbours just touch), damage and fire, minified furniture.
-- Real art beyond A1's placeholders; walls and steel are still boxes, and wall connections come with the real wall art.
+- Floors, damage and fire, minified furniture.
+- From L4: roofs seen from outside (the thin roof is only drawn from inside and is hidden in the overseer view), frames
+  that look like a part-built wall with scaffolding, columns and fences joining walls, bevelled edges.
+- Real art beyond A1's placeholders; steel and the other resources are still boxes (L8).
 - Stockpile zone markings (the cells' tint). The items show where a stockpile is for now.
 - Beds don't show who owns them; stoves don't show a flame; doors have no sound or frame animation.
 - Ghosts and frames are one blue and one height rule for every def.

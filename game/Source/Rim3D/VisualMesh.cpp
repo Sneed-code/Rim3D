@@ -11,6 +11,8 @@ namespace
 	{
 		FVector3f A, B, C;
 		FLinearColor Color;
+		/** 1 for a part drawn with the stuff's own material. */
+		int32 Slot = 0;
 	};
 
 	void VisAddTriangle(TArray<FVisTriangle>& Out, const FVector3f& A, FVector3f B, FVector3f C, const FVector3f& Outward, const FLinearColor& Color)
@@ -261,7 +263,8 @@ float VisualMesh::HeightOf(const TArray<FPart>& Parts)
 	return Top;
 }
 
-UStaticMesh* VisualMesh::MakeMesh(UObject* Outer, UMaterialInterface* Material, const TArray<FPart>& Parts, EPartSet Set, const FLinearColor* StuffColor, bool bBakeLight)
+UStaticMesh* VisualMesh::MakeMesh(UObject* Outer, UMaterialInterface* Material, const TArray<FPart>& Parts, EPartSet Set, const FLinearColor* StuffColor, bool bBakeLight,
+	UMaterialInterface* StuffMaterial)
 {
 	TArray<FVisTriangle> Triangles;
 	for (const FPart& Part : Parts)
@@ -272,12 +275,18 @@ UStaticMesh* VisualMesh::MakeMesh(UObject* Outer, UMaterialInterface* Material, 
 			continue;
 		}
 		FLinearColor Color = Part.Color;
-		if (Part.bStuff)
+		const bool bSurface = Part.bStuff && StuffMaterial;
+		if (Part.bStuff && !bSurface)
 		{
 			Color = (StuffColor ? *StuffColor : FLinearColor(0.35f, 0.35f, 0.35f)) * Part.Color;
 		}
 		Color.A = 1.0f;
+		const int32 First = Triangles.Num();
 		VisAddPart(Triangles, Part, Color);
+		for (int32 I = First; I < Triangles.Num(); ++I)
+		{
+			Triangles[I].Slot = bSurface ? 1 : 0;
+		}
 	}
 	if (Triangles.IsEmpty())
 	{
@@ -292,8 +301,24 @@ UStaticMesh* VisualMesh::MakeMesh(UObject* Outer, UMaterialInterface* Material, 
 	FMeshDescription Description;
 	FStaticMeshAttributes Attributes(Description);
 	Attributes.Register();
-	const FPolygonGroupID Group = Description.CreatePolygonGroup();
-	Attributes.GetPolygonGroupMaterialSlotNames()[Group] = TEXT("Visual");
+	bool bUsed[2] = {false, false};
+	for (const FVisTriangle& T : Triangles)
+	{
+		bUsed[T.Slot] = true;
+	}
+	// One polygon group per material slot used: the shared vertex colour one, then the stuff's surface.
+	FPolygonGroupID Groups[2];
+	TArray<FStaticMaterial> Slots;
+	for (int32 S = 0; S < 2; ++S)
+	{
+		if (bUsed[S])
+		{
+			const FName SlotName = S == 0 ? FName(TEXT("Visual")) : FName(TEXT("Stuff"));
+			Groups[S] = Description.CreatePolygonGroup();
+			Attributes.GetPolygonGroupMaterialSlotNames()[Groups[S]] = SlotName;
+			Slots.Add(FStaticMaterial(S == 0 ? Material : StuffMaterial, SlotName));
+		}
+	}
 	for (const FVisTriangle& T : Triangles)
 	{
 		const FVector3f Normal = FVector3f::CrossProduct(T.C - T.A, T.B - T.A).GetSafeNormal();
@@ -314,11 +339,11 @@ UStaticMesh* VisualMesh::MakeMesh(UObject* Outer, UMaterialInterface* Material, 
 			Attributes.GetVertexInstanceUVs().Set(Instance, 0, FVector2f(0.0f, 0.0f));
 			Corners.Add(Instance);
 		}
-		Description.CreateTriangle(Group, Corners);
+		Description.CreateTriangle(Groups[T.Slot], Corners);
 	}
 
 	UStaticMesh* Mesh = NewObject<UStaticMesh>(Outer, NAME_None, RF_Transient);
-	Mesh->GetStaticMaterials().Add(FStaticMaterial(Material, TEXT("Visual")));
+	Mesh->GetStaticMaterials().Append(Slots);
 	UStaticMesh::FBuildMeshDescriptionsParams Params;
 	Params.bBuildSimpleCollision = false;
 	Params.bFastBuild = true;

@@ -73,6 +73,15 @@
       "reinstall": "python tools/terrain_textures.py, then \"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" C:\\Dev\\Rim3D\\game\\Rim3D.uproject -run=TerrainMaterials -unattended -nosplash -AllowCommandletRendering"
     },
     {
+      "name": "Stuff textures (ambientCG)",
+      "source": "https://ambientcg.com, surfaces listed in assets/stuff_textures.json (WoodSiding008, Bricks089, Bricks083, Bricks100, Bricks066, Marble012, MetalPlates013, MetalPlates004), 2k JPG colour, DirectX normal and roughness maps downloaded by tools/stuff_textures.py",
+      "licence": "CC0 (public domain)",
+      "version": "as downloaded 2026-10-29",
+      "installedTo": "files in game/Content/ThirdParty/StuffTextures/ and the made textures and materials (M_Surface, MI_Surface_<surface>) in game/Content/Rim3D/Generated/Surfaces/ (neither in Git)",
+      "usedFor": "the wood, stone block and metal look of walls, doors and every building part made of stuff (L4, docs/design/building-draw.md); without them buildings are drawn in their stuff's plain colour",
+      "reinstall": "python tools/stuff_textures.py, then \"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" C:\\Dev\\Rim3D\\game\\Rim3D.uproject -run=SurfaceMaterials -unattended -nosplash -AllowCommandletRendering"
+    },
+    {
       "name": "Animal art (Quaternius Ultimate Animated Animals)",
       "source": "https://quaternius.com/packs/ultimateanimatedanimals.html (public Google Drive folder), FBX downloaded by tools/animal_art.py; models and def mapping in assets/animal_art.json",
       "licence": "CC0 (public domain)",

@@ -4,7 +4,7 @@
     "category": "Item", "stackLimit": 75
   },
   {
-    "defName": "Steel", "visual": {"color": [0.42, 0.46, 0.53], "pieces": 6, "layer": 0.1, "parts": [{"shape": "box", "size": [0.34, 0.17, 0.1], "color": [0.5, 0.54, 0.6]}]}, "parent": "ItemBase", "label": "steel", "unverified": ["stats.maxHitPoints"], "deep": {"lumpSize": [20, 40], "commonality": 4.0, "portion": 45},
+    "defName": "Steel", "visual": {"surface": "steel", "color": [0.42, 0.46, 0.53], "pieces": 6, "layer": 0.1, "parts": [{"shape": "box", "size": [0.34, 0.17, 0.1], "color": [0.5, 0.54, 0.6]}]}, "parent": "ItemBase", "label": "steel", "unverified": ["stats.maxHitPoints"], "deep": {"lumpSize": [20, 40], "commonality": 4.0, "portion": 45},
     "stats": { "maxHitPoints": 100, "marketValue": 1.9, "mass": 0.5, "beauty": -4 },
     "stuffProps": {
       "categories": ["Metallic"],
@@ -15,7 +15,7 @@
     }
   },
   {
-    "defName": "WoodLog", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_WoodLog.SM_WoodLog", "color": [0.6, 0.42, 0.26], "pieces": 6, "layer": 0.14, "parts": [{"shape": "cylinder", "radius": 0.07, "height": 0.55, "at": [0, 0, -0.205], "color": [0.55, 0.38, 0.22], "rot": [90, 0, 0]}]}, "parent": "ItemBase", "label": "wood",
+    "defName": "WoodLog", "visual": { "surface": "wood", "mesh": "/Game/Rim3D/Generated/Art/SM_WoodLog.SM_WoodLog", "color": [0.6, 0.42, 0.26], "pieces": 6, "layer": 0.14, "parts": [{"shape": "cylinder", "radius": 0.07, "height": 0.55, "at": [0, 0, -0.205], "color": [0.55, 0.38, 0.22], "rot": [90, 0, 0]}]}, "parent": "ItemBase", "label": "wood",
     "stats": { "maxHitPoints": 150, "marketValue": 1.2, "mass": 0.4, "beauty": -4, "flammability": 1.0, "deteriorationRate": 0.5 },
     "stuffProps": {
       "categories": ["Woody"],
