@@ -43,7 +43,8 @@ once drift (0.2 a day) or gifts bring it above -75.
 The pawns walk in from a map edge and gather at a spot near the colony's middle (the average position of its colonists), made like raiders
 (`generateColonist`, looks, the pawn kind's weapons and clothes) with the `Visitor{visit, role}` component and the faction's `Faction`
 id (`RaidSystem::factionId`). **They are nobody's enemy**: fighters (`PawnInfo::animal`), turrets, the alarm, wardens and the capture
-rule skip a pawn with `Visitor`, as they do for prisoners. They walk as fighters in the Flee mode (so they never shoot) with a goal the
+rule skip a pawn with `Visitor`, as they do for prisoners. Nor are they anyone's: a visitor or prisoner never picks a victim within arm's reach either (`FighterSystem::meleeAct`; C25
+found caravan guards knifing the colonists they stood beside). They walk as fighters in the Flee mode (so they never shoot) with a goal the
 trade system sets: the spot while they stay, a random cell within 9 m of it every 15 minutes for the `Visitor` role (the trader and guards
 stand), the nearest map edge when the time is up. Pawns at the edge are removed (`RaidSystem::leaveMap`, with their gear); any still on
 the map 6 hours after the order to leave are removed anyway. A visit ends when its pawns are all gone or dead, or at the ship's time.

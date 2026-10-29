@@ -139,7 +139,10 @@ RimWorld's `SeekSafeTemperature` does. `JobSystem::makeShelterJob` searches outw
 reachable walkable cell inside the pawn's comfortable range, else inside its safe range, and starts a
 `SeekShelter` job there: walk, then stand for 120 game seconds. It runs first in the needs think node (before food and
 sleep), and a pawn on a waiting, hauling, recreation or gathering job that isn't forced checks every 30 seconds and drops
-the job. Other work jobs run to their end and the pawn looks when the next think comes. With no such cell it does nothing
+the job. Other work jobs run to their end and the pawn looks when the next think comes, except that a pawn whose
+hypothermia or heatstroke has reached the serious stage (severity 0.35, RimWorld's `TemperatureInjuryStage.Serious`,
+`TemperatureSystem::seriousTemperatureInjury`) drops any job of its own, firefighting and sleep included (C25: colonists
+kept beating flames in a burning room until heatstroke downed them). With no such cell it does nothing
 (no endless searching). Numbers in `NeedJobs.cpp` (`kNeedJobsShelter...`) are ours. Test: `ColonistTraitNeedsTests.cpp`.
 
 ## Not yet

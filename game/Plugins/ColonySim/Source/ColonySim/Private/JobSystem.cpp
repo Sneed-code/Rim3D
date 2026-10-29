@@ -1497,7 +1497,19 @@ JobSystem::StepResult JobSystem::walkTo(Entity pawn, Job& job, CellPos goal, std
                 job.walk = 1;
                 return StepResult::Running;
             }
-            return mover.arrived() ? StepResult::Next : StepResult::Running;
+            if (!mover.arrived()) {
+                return StepResult::Running;
+            }
+            if (cellOf(reg.get<Position>(pawn)) != goal && job.repaths < maxRepaths_) {
+                // At the end of its path but not on the goal (pushed off it by another pawn on the way in): one more
+                // walk from here, so the next step doesn't fail for want of a cell (C25's moved landing found it).
+                ++job.repaths;
+                ++stats_.repaths;
+                job.path = pathfinder_.request(cellOf(reg.get<Position>(pawn)), goal);
+                job.walk = 1;
+                return StepResult::Running;
+            }
+            return StepResult::Next;
     }
 }
 

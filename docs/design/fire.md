@@ -83,8 +83,14 @@ walkable neighbour, preferring one that isn't alight, and its job ends ("it is o
 alight and within 1.5 m beats the flames out as it runs past. `panic` in `FireRules` turns it off.
 
 **Water.** A burning pawn that has water within `waterRunRadius` (12 cells, ours) runs for the nearest water cell (a greedy step each time
-it stops) and is put out when it is next to it. Not here yet: shallow water that can be waded, and the Heat armor of apparel
+it stops, through cells that aren't alight when there are any: a dash through burning grass kept pawns alight, C25) and
+is put out when it is next to it. Not here yet: shallow water that can be waded, and the Heat armor of apparel
 (devilstrand): `applyDamage` takes the hit as it is.
+
+**Beds and fire (C25).** Nobody lies down (sleep or bed rest) where `JobSystem::fireNear` says no: fire within
+`kFireBedRadius` (2) cells of the spot, the pawn itself alight, or the spot's room hotter than the pawn's safe range. A
+pawn lying there checks every 15 seconds and gets up. In the year run colonists slept on in rooms a flashstorm had set
+alight and burned in their beds.
 
 ## Firefighting
 
