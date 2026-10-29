@@ -527,3 +527,27 @@ TEST_CASE("Movement: a pawn carrying a downed pawn walks on, the carried one lyi
     CHECK(moveTestPos(sim, carrier).x > 34.0f);
     CHECK(steps < static_cast<int>(30.0f / kMoveTestSpeed) + 40);
 }
+
+TEST_CASE("Movement: downed pawns lying in a doorway are stepped over") {
+    // Year run, seed 1: three downed pawns lay in a doorway and a doctor walking through pushed at them for 637 game minutes.
+    Sim sim = moveTestSim(64);
+    moveTestWall(sim, 30, 20, 30, 29);
+    moveTestWall(sim, 30, 31, 30, 40);  // a one-cell gap at y 30
+    Health downed;
+    downed.movingFactor = 0.0f;
+    for (const float y : {30.3f, 30.5f, 30.7f}) {
+        const Entity lying = moveTestPawn(sim, 30, 30);
+        sim.things().registry().emplace_or_replace<Health>(lying, downed);
+        sim.things().registry().get<Position>(lying).y = y;
+    }
+    const Entity walker = moveTestPawn(sim, 25, 30);
+    moveTestWalk(sim, walker, {CellPos{30, 30, 0}, CellPos{35, 30, 0}});
+    int steps = 0;
+    while (!moveTestMover(sim, walker).arrived() && !moveTestMover(sim, walker).gaveUp && steps < 1000) {
+        sim.step();
+        ++steps;
+    }
+    CHECK_FALSE(moveTestMover(sim, walker).gaveUp);
+    CHECK(moveTestPos(sim, walker).x > 34.0f);
+    CHECK(steps < static_cast<int>(10.0f / kMoveTestSpeed) + 40);
+}

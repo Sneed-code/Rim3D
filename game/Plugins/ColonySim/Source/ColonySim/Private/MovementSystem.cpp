@@ -410,8 +410,10 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
                     if (n.dist2 > kMoveBucketSize * kMoveBucketSize) {
                         continue;
                     }
-                    if (n.dist2 < 1.0e-8f && o.vx == 0.0f && o.vy == 0.0f && reg.all_of<Health>(o.entity) && reg.get<Health>(o.entity).movingFactor <= 0.0f) {
-                        continue;  // the downed pawn or corpse a pawn carries lies exactly where it stands: not in its way
+                    if (o.vx == 0.0f && o.vy == 0.0f && reg.all_of<Health>(o.entity) && reg.get<Health>(o.entity).movingFactor <= 0.0f) {
+                        // A downed pawn or a corpse lies on the ground and is stepped over, as in RimWorld (and so is the one a
+                        // pawn carries, lying exactly where it stands). Three downed in a doorway held a doctor for 637 minutes.
+                        continue;
                     }
                     n.entity = o.entity;
                     n.vx = o.vx;
