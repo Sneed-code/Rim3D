@@ -163,8 +163,11 @@ void JobSystem::interruptForNeeds(Entity pawn) {
         return;
     }
     // Out in the cold or heat: off to shelter. Looked at every half minute, not every second, as the search is wide.
-    if (!current.forced && (current.type == JobType::Wait || current.type == JobType::HaulToCell ||
-                            current.type == JobType::Recreate || jobIsGather(current.type)) &&
+    // With a serious hypothermia or heatstroke (RimWorld's JobGiver_SeekSafeTemperature) any job of its own is
+    // dropped, firefighting and sleep included: a colonist doesn't keep beating flames in a room at 400 degrees.
+    if (!current.forced && current.type != JobType::SeekShelter &&
+        (current.type == JobType::Wait || current.type == JobType::HaulToCell || current.type == JobType::Recreate ||
+         jobIsGather(current.type) || (temperature_ != nullptr && temperature_->seriousTemperatureInjury(pawn))) &&
         (now() + static_cast<int64_t>(entt::to_integral(pawn))) % kNeedJobsShelterCheckEvery == 0) {
         Job shelter;
         if (makeShelterJob(pawn, shelter)) {
@@ -606,6 +609,13 @@ bool JobSystem::fireNear(CellPos cell, int radius, Entity pawn) const {
         return false;
     }
     if (pawn != kNoEntity && things_.registry().all_of<Burning>(pawn)) {
+        return true;
+    }
+    // A room a fire has heated past what the pawn can stand counts as fire too.
+    float safeMin = 0.0f;
+    float safeMax = 0.0f;
+    if (pawn != kNoEntity && temperature_ != nullptr && temperature_->safeRange(pawn, safeMin, safeMax) &&
+        temperature_->temperatureAt(cell) > safeMax) {
         return true;
     }
     for (int dy = -radius; dy <= radius; ++dy) {

@@ -266,6 +266,30 @@ TEST_CASE("Disasters: a flashstorm throws bolts inside its circle") {
     CHECK(storm.radius <= 60.0f);
 }
 
+TEST_CASE("Disasters: lightning never strikes a roofed cell") {
+    // C25: bolts came through the roof and set colonists' bedrooms alight.
+    const auto sim = disasterSim();
+    Map& map = const_cast<Map&>(sim->map());  // as RoofTests does: the test puts a roof over the west half
+    for (int y = 0; y < map.height(); ++y) {
+        for (int x = 0; x < map.width() / 2; ++x) {
+            map.setThickRoof(CellPos{x, y, 0}, true);
+        }
+    }
+    DISASTER_REQUIRE(sim->disasters().begin(DisasterKind::Flashstorm, 24.0));
+    int open = 0;
+    int roofed = 0;
+    for (int64_t i = 0; i < 24 * kSecondsPerHour; ++i) {
+        sim->step();
+        for (const Event& e : sim->events()) {
+            if (e.type == EventType::LightningStrike) {
+                (sim->map().roof(e.cell) == Roof::None ? open : roofed) += 1;
+            }
+        }
+    }
+    CHECK(roofed == 0);
+    CHECK(open >= 20);  // the bolts that would have hit the roof are lost or land in the open half
+}
+
 TEST_CASE("Disasters: a psychic drone drags down one sex, a soothe lifts it, and the two never overlap") {
     const auto sim = disasterSim();
     const std::vector<Entity> people = disasterColonists(*sim);

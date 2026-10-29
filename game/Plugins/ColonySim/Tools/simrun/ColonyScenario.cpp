@@ -509,6 +509,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     // The run.
     std::map<Entity, Stuck> stuck;
     uint64_t died = 0;
+    uint64_t starvedOrFroze = 0;  // deaths C25 never allows, even with the storyteller on
     uint64_t ate = 0;
     uint64_t atTable = 0;
     uint64_t slept = 0;
@@ -586,6 +587,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     if (sim.things().registry().valid(e.thing) && sim.things().registry().all_of<Colonist>(e.thing) &&
                         !sim.things().registry().all_of<Visitor>(e.thing) && sim.fighters().factionOf(e.thing) == kPlayerFaction) {
                         ++died;
+                        starvedOrFroze += e.message == "starvation" || e.message == "hypothermia" ? 1 : 0;
                         std::fprintf(stderr, "day %lld: a colonist died: %s\n", static_cast<long long>(sim.time().day()), e.message.c_str());
                         printIllness(sim, e.thing, "    at death:");
                     } else {
@@ -1269,11 +1271,41 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         std::fprintf(stderr, "\n");
         ++failures;
     };
+    // With the storyteller on (C25) raids, fires, disease and mad animals may kill colonists and burn what they built,
+    // as in RimWorld: the year run then only has to keep the colony alive, fed, warm and unstuck. The checks that
+    // follow the script's plan (the building, the marks, the dirt, failed jobs) are reported, not failed.
+    const bool storyteller = !narrator.empty();
+    int notes = 0;
+    const auto planCheck = [&](const char* format, auto... args) {
+        if (!storyteller) {
+            fail(format, args...);
+            return;
+        }
+        std::fprintf(stderr, "note: ");
+        std::fprintf(stderr, format, args...);
+        std::fprintf(stderr, "\n");
+        ++notes;
+    };
     if (colonists.size() != 6) {
         fail("%zu colonists, expected 6", colonists.size());
     }
     if (died > 0) {
-        fail("%llu colonist(s) died", static_cast<unsigned long long>(died));
+        planCheck("%llu colonist(s) died", static_cast<unsigned long long>(died));
+    }
+    if (starvedOrFroze > 0) {
+        fail("%llu colonist(s) starved or froze to death", static_cast<unsigned long long>(starvedOrFroze));
+    }
+    size_t alive = 0;
+    for (const auto [pawn, colonist] : sim.things().registry().view<const Colonist>().each()) {
+        (void)colonist;
+        const Health* health = sim.things().registry().try_get<Health>(pawn);
+        alive += sim.fighters().factionOf(pawn) == kPlayerFaction && !sim.things().registry().all_of<Visitor>(pawn) &&
+                         (health == nullptr || !health->dead)
+                     ? 1
+                     : 0;
+    }
+    if (alive == 0) {
+        fail("%s", "the colony died out");
     }
     if (maxMalnutrition > 0.0f || minFood <= 0.0f) {
         fail("a colonist starved (lowest food %.3f, malnutrition up to %.3f)", static_cast<double>(minFood),
@@ -1284,19 +1316,19 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
              jobTypeName(worst->worstJob), worst->worstCell.x, worst->worstCell.y);
     }
     if (sim.designations().count() > 0) {
-        fail("%zu of %zu marks still not worked off", sim.designations().count(), markedRock + markedTrees + markedBushes);
+        planCheck("%zu of %zu marks still not worked off", sim.designations().count(), markedRock + markedTrees + markedBushes);
     }
     if (unfinished > 0 || builtBy["Wall"] != expectedWalls || builtBy["Door"] != expectedDoors || builtBy["Bed"] != kBeds ||
         builtBy["Table1x2"] != 1 || builtBy["Stool"] != 3 || builtBy["FueledStove"] != 1 || builtBy["HorseshoesPin"] != 1) {
-        fail("the building is not finished (walls %d/%d, doors %d/%d, beds %d/%d, table %d/1, stools %d/3, stove %d/1, pin %d/1, %d sites left)",
+        planCheck("the building is not finished (walls %d/%d, doors %d/%d, beds %d/%d, table %d/1, stools %d/3, stove %d/1, pin %d/1, %d sites left)",
              builtBy["Wall"], expectedWalls, builtBy["Door"], expectedDoors, builtBy["Bed"], kBeds, builtBy["Table1x2"], builtBy["Stool"],
              builtBy["FueledStove"], builtBy["HorseshoesPin"], unfinished);
     }
     if (bedroomsRoofed != 1) {
-        fail("no roofed room with %d beds, a table and a stove", kBeds);
+        planCheck("no roofed room with %d beds, a table and a stove", kBeds);
     }
     if (sleptInBed == 0) {
-        fail("nobody slept in a bed (%llu times asleep)", static_cast<unsigned long long>(slept));
+        planCheck("nobody slept in a bed (%llu times asleep)", static_cast<unsigned long long>(slept));
     }
     if (weatherChanges == 0) {
         fail("the weather never changed in %.1f days", days);
@@ -1306,10 +1338,10 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
              static_cast<unsigned long long>(ate));
     }
     if (clubsMade != 1) {
-        fail("the crafting spot made %llu clubs, not the 1 the bill asked for", static_cast<unsigned long long>(clubsMade));
+        planCheck("the crafting spot made %llu clubs, not the 1 the bill asked for", static_cast<unsigned long long>(clubsMade));
     }
     if (recreations == 0 || pinGames == 0) {
-        fail("colonists started %llu recreation jobs, %llu at the horseshoes pin", static_cast<unsigned long long>(recreations),
+        planCheck("colonists started %llu recreation jobs, %llu at the horseshoes pin", static_cast<unsigned long long>(recreations),
              static_cast<unsigned long long>(pinGames));
     }
     if (talks == 0) {
@@ -1326,24 +1358,27 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         }
     }
     if (year ? homeFilth > 60 : sim.filth().totalLayers() > 12) {
-        fail("%zu layers of filth lie about (cleaned %llu): nobody keeps up with the dirt", year ? homeFilth : sim.filth().totalLayers(),
+        planCheck("%zu layers of filth lie about (cleaned %llu): nobody keeps up with the dirt", year ? homeFilth : sim.filth().totalLayers(),
              static_cast<unsigned long long>(cleaned));
     }
     if (roomStat == nullptr) {
-        fail("%s", "the room has no stats");
+        planCheck("%s", "the room has no stats");
     }
     if (woodIn == 0) {
-        fail("%s", "nobody put wood into the stove");
+        planCheck("%s", "nobody put wood into the stove");
     }
     if (!(skillXpGained > 0.0)) {
-        fail("the work taught nobody anything (%.1f experience gained)", skillXpGained);
+        planCheck("the work taught nobody anything (%.1f experience gained)", skillXpGained);
     }
     if (year && days >= static_cast<double>(kGreenhouseDay) + 12.0 && !greenZoneMade) {
-        fail("%s", "the greenhouse basins were not all built 12 days after it was planned");
+        planCheck("%s", "the greenhouse basins were not all built 12 days after it was planned");
     }
     if (commandsFailed > 0 || sim.stats().failedJobs > 0) {
-        fail("%llu commands and %llu jobs failed", static_cast<unsigned long long>(commandsFailed),
+        planCheck("%llu commands and %llu jobs failed", static_cast<unsigned long long>(commandsFailed),
              static_cast<unsigned long long>(sim.stats().failedJobs));
+    }
+    if (notes > 0) {
+        std::fprintf(stderr, "%d note(s) above: the storyteller's events undid part of the plan; %zu colonists alive\n", notes, alive);
     }
     return failures > 0 ? 1 : 0;
 }

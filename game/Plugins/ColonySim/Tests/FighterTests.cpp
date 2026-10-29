@@ -9,6 +9,7 @@
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Trade.h"
 
 #include <doctest.h>
 
@@ -596,4 +597,33 @@ TEST_CASE("Fighters: an advancing raider with no shot goes round a wall by its g
     }
     CHECK(furthestEast > 66.0f);  // past the wall
     MESSAGE("the raider got as far east as x = " << furthestEast);
+}
+
+TEST_CASE("Fighters: a caravan guard standing by a colonist never swings at it; a raider in its place does") {
+    // C25: a trader's guards are fighters of another faction, and stood next to colonists they knifed them.
+    const auto swingsAt = [](bool visitor) {
+        const auto sim = fightTestSim();
+        const Entity colonist = fightTestPawn(*sim, 40, 40);
+        const Entity guard = fightTestPawn(*sim, 41, 40);
+        sim->things().registry().get<Position>(guard).x = 41.2f;  // well inside arm's reach
+        fightTestHostile(*sim, guard);
+        if (visitor) {
+            sim->things().registry().emplace<Visitor>(guard, Visitor{1, VisitorRole::Guard});
+        }
+        fightTestDraft(*sim, colonist);
+        sim->step();
+        // As the trade system walks a visit's pawns: a fighter in the Flee mode, on its way to its spot.
+        sim->fighters().enlist(guard, "test: a guard on its caravan's business").mode = FightMode::Flee;
+        int swings = 0;
+        for (int i = 0; i < 120; ++i) {
+            fightTestHeal(*sim, colonist);
+            sim->step();
+            for (const Event& e : sim->events()) {
+                swings += e.type == EventType::MeleeSwing && e.thing == guard && e.target == colonist ? 1 : 0;
+            }
+        }
+        return swings;
+    };
+    CHECK(swingsAt(true) == 0);
+    CHECK(swingsAt(false) > 0);
 }

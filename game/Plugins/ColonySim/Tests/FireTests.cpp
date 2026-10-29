@@ -9,6 +9,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Needs.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Save.h"
@@ -108,21 +109,21 @@ struct FireFixture {
     }
     int grassLeft() { return static_cast<int>(sim.plants().count()); }
 
-    Entity colonist(CellPos cell) {
+    Entity colonist(CellPos cell, bool withNeeds = false) {
         const Entity pawn = sim.things().spawn("Human", cell);
         Colonist c;
         reg().emplace<Colonist>(pawn, c);
-        sim.jobs().addWorker(pawn, {}, false);
+        sim.jobs().addWorker(pawn, {}, withNeeds);
         sim.submit(SetWorkPriorityCommand{pawn, "Firefighter", 1});
         return pawn;
     }
 
-    // A ring of walls round x0..x1 by y0..y1.
-    void ring(int x0, int y0, int x1, int y1) {
+    // A ring of walls round x0..x1 by y0..y1, with a door at `door` if it is on the ring.
+    void ring(int x0, int y0, int x1, int y1, CellPos door = CellPos{-1, -1, 0}) {
         for (int y = y0; y <= y1; ++y) {
             for (int x = x0; x <= x1; ++x) {
                 if (x == x0 || x == x1 || y == y0 || y == y1) {
-                    sim.things().spawn("Wall", CellPos{x, y, 0});
+                    sim.things().spawn(CellPos{x, y, 0} == door ? "Door" : "Wall", CellPos{x, y, 0});
                 }
             }
         }
@@ -289,9 +290,9 @@ TEST_CASE("Fire: a pawn standing in a fire catches fire, is hurt and burns out")
     CHECK(view->onFire);
     f.run(20 * 60);
     CHECK(!f.reg().get<Health>(pawn).injuries.empty());
-    // It burns out by itself within the time the rules give (up to 1.25 times 1,800 ticks).
+    // It burns out by itself within the time the rules give (up to 1.25 times 300 ticks).
     CHECK(f.runUntil(2 * kSecondsPerHour, [&] { return !f.fire().pawnBurning(pawn); }));
-    CHECK(f.seenOf(EventType::PawnFireOut) == 1);
+    CHECK(f.seenOf(EventType::PawnFireOut) >= 1);  // standing in the burning grass it may catch again
 }
 
 TEST_CASE("Fire: a pawn that cannot burn does not catch fire") {
@@ -439,6 +440,7 @@ TEST_CASE("Fire: saves keep fires, burnt ground, the home area and burning pawns
     f.sim.submit(IgniteCommand{CellPos{}, 0.0f, pawn, false});
     f.run(40 * 60);
     FIRE_REQUIRE(f.fire().count() > 3);
+    f.fire().setPawnAlight(pawn, f.sim.time().seconds, true);  // a pawn burns for minutes: light it again to save it alight
     FIRE_REQUIRE(f.fire().pawnBurning(pawn));
 
     const std::vector<uint8_t> bytes = saveSim(*f.simPtr);
@@ -635,7 +637,15 @@ TEST_CASE("Fire: heat armor on a burning pawn turns flames aside and the clothes
     const int hpBefore = f.reg().get<HitPoints>(duster).current;
     CHECK(f.fire().setPawnAlight(bare, f.sim.time().seconds, true));
     CHECK(f.fire().setPawnAlight(clad, f.sim.time().seconds, true));
-    f.run(30 * 60);
+    // Both kept alight the whole half hour (a pawn puts itself out after minutes, at a random time).
+    for (int i = 0; i < 30 * 60; ++i) {
+        for (const Entity pawn : {bare, clad}) {
+            if (!f.fire().pawnBurning(pawn)) {
+                f.fire().setPawnAlight(pawn, f.sim.time().seconds, true);
+            }
+        }
+        f.run(1);
+    }
     const auto total = [&](Entity pawn) {
         float sum = 0.0f;
         for (const Injury& injury : f.reg().get<Health>(pawn).injuries) {
@@ -648,4 +658,69 @@ TEST_CASE("Fire: heat armor on a burning pawn turns flames aside and the clothes
     // Worn clothes wear their durability, not their hit points (docs/design/apparel-durability.md).
     CHECK(f.reg().get<HitPoints>(duster).current == hpBefore);
     CHECK(ApparelStats::condition(f.reg(), duster) < 1.0f);
+}
+
+TEST_CASE("Fire: a burning pawn puts itself out within minutes, not most of an hour") {
+    // RimWorld wiki: burning pawns run about for several seconds, then slowly put themselves out. 300 ticks of 1.44
+    // game seconds, times 0.75 to 1.25: 5.4 to 9 game minutes (C25: it was 1,800 ticks, which burned colonists to death).
+    FireFixture f;
+    const Entity pawn = f.sim.things().spawn("Human", CellPos{30, 30, 0});
+    FIRE_REQUIRE(f.fire().setPawnAlight(pawn, f.sim.time().seconds, true));
+    f.run(5 * 60);
+    CHECK(f.fire().pawnBurning(pawn));
+    CHECK(f.runUntil(5 * 60, [&] { return !f.fire().pawnBurning(pawn); }));
+    CHECK(f.reg().get<Health>(pawn).dead == false);
+}
+
+TEST_CASE("Fire: a tired colonist gets up when a fire starts beside it and won't lie down by one") {
+    FireFixture f;
+    const Entity pawn = f.colonist(CellPos{30, 30, 0}, true);
+    f.reg().get<Needs>(pawn).rest = 0.1f;  // game second 0 is midnight: a Sleep hour
+    FIRE_REQUIRE(f.runUntil(600, [&] { return jobIsLyingDown(f.reg().get<Worker>(pawn).job); }));
+    const CellPos bed = f.reg().get<Worker>(pawn).job.cell;
+    const CellPos beside{bed.x + 1, bed.y, 0};
+    f.grassPatch(beside.x, beside.y - 1, 3, 3);
+    f.fire().ignite(beside);
+    CHECK(f.runUntil(60, [&] { return !jobIsLyingDown(f.reg().get<Worker>(pawn).job); }));
+    // While the grass burns it lies down only well away from the flames.
+    bool lyingByFire = false;
+    for (int i = 0; i < 10 * 60; ++i) {
+        f.run(1);
+        const Job& job = f.reg().get<Worker>(pawn).job;
+        lyingByFire = lyingByFire || (jobIsLyingDown(job) && f.sim.jobs().fireNear(job.cell, JobSystem::kFireBedRadius));
+    }
+    CHECK(!lyingByFire);
+}
+
+TEST_CASE("Fire: a sleeper in a room a fire has made too hot gets up and walks out") {
+    FireFixture f;
+    f.ring(10, 10, 16, 16, CellPos{13, 10, 0});
+    const Room* room = f.sim.rooms().roomOf(CellPos{13, 13, 0});
+    FIRE_REQUIRE(room != nullptr);
+    const RoomId inside = room->id;
+    const Entity pawn = f.colonist(CellPos{13, 13, 0}, true);
+    f.reg().get<Needs>(pawn).rest = 0.1f;
+    FIRE_REQUIRE(f.runUntil(600, [&] { return jobIsLyingDown(f.reg().get<Worker>(pawn).job); }));
+    f.sim.temperature().restore({RoomTemperature{f.sim.rooms().roomOf(CellPos{13, 13, 0})->anchor, 90.0f}});
+    CHECK(f.runUntil(10 * 60, [&] {
+        const Room* at = f.sim.rooms().roomOf(cellOf(f.reg().get<Position>(pawn)));
+        return at == nullptr || at->id != inside;
+    }));
+}
+
+TEST_CASE("Fire: a serious heatstroke drops any job of the colonist's own to find a cooler spot") {
+    FireFixture f;
+    const Entity pawn = f.colonist(CellPos{30, 30, 0});
+    f.ring(36, 26, 42, 34, CellPos{36, 30, 0});
+    f.grassPatch(24, 24, 6, 6);
+    f.sim.submit(SetHomeAreaCommand{CellRect{20, 20, 35, 35, 0}, true});
+    f.fire().ignite(CellPos{26, 26, 0});
+    FIRE_REQUIRE(f.runUntil(120, [&] { return f.reg().get<Worker>(pawn).job.type == JobType::ExtinguishFire; }));
+    // A heatwave outside, a cool room to the east, and the colonist at the serious stage of heatstroke: it leaves the
+    // fire for the room.
+    f.sim.setOutdoorOverride(70.0f);
+    f.sim.temperature().restore({RoomTemperature{f.sim.rooms().roomOf(CellPos{39, 30, 0})->anchor, 22.0f}});
+    const DefId heatstroke = f.sim.defs().idOf("Hediffs", "Heatstroke");
+    f.sim.health().setEnvironmentSeverity(pawn, heatstroke, TemperatureSystem::kSeriousTemperatureInjury + 0.05f);
+    CHECK(f.runUntil(60, [&] { return f.reg().get<Worker>(pawn).job.type == JobType::SeekShelter; }));
 }

@@ -237,6 +237,9 @@ struct RaidRules {
     float weightKidnappers = 6.0f;
     float blockedBoost = 8.0f;
     float dropPodsMinPoints = 120.0f;  // smaller raids walk
+    // A colonist whose food falls under this (NeedRules food.ravenousBelow) leaves the alarm's call to eat, and comes
+    // back once fed (C25: an infestation kept the alarm on for days and colonists starved at their posts).
+    float alarmEatBelow = 0.125f;
     float dropMinDistance = 8.0f;      // pods land this far from the target...
     float dropMaxDistance = 24.0f;     // ...to this far
     float sapDamage = 4.0f;            // hit points a digging raider takes off its wall each second
@@ -344,6 +347,8 @@ public:
     // A Faction id for a Factions def: the same def always gets the same id.
     FactionId factionId(const std::string& faction);
     DefenseRole roleOf(Entity pawn) const;
+    // Too hungry to answer the alarm (`RaidRules::alarmEatBelow`): it is let off to eat.
+    bool excusedToEat(Entity pawn) const;
 
     const RaidState& state() const { return state_; }
     // After loading a save. False if it doesn't fit the defs.

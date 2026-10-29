@@ -846,9 +846,11 @@ bool Fire::panicStep(Entity pawn, int64_t now) {
             return false;
         }
         if (bestD <= radius * radius * 2) {
+            // Only through cells that aren't burning, if there are any: a dash for the river through burning grass
+            // keeps it alight (C25).
             CellPos step = here;
             int stepD = bestD;
-            for (const CellPos& c : open) {
+            for (const CellPos& c : cool.empty() ? open : cool) {
                 const int d = (c.x - water.x) * (c.x - water.x) + (c.y - water.y) * (c.y - water.y);
                 if (d < stepD) {
                     step = c;

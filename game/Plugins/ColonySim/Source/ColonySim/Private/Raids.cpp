@@ -158,6 +158,9 @@ void raidReadRules(const DefDatabase& defs, RaidRules& r) {
     r.adaptGrowthHours = std::max(0.1f, r.adaptGrowthHours);
     r.adaptMax = std::max(r.adaptMin, r.adaptMax);
     r.giveUpHoursMax = std::max(r.giveUpHoursMin, r.giveUpHoursMax);
+    if (const Def* needs = defs.find("Rules", "NeedRules")) {
+        r.alarmEatBelow = static_cast<float>(needs->number("food.ravenousBelow", r.alarmEatBelow));
+    }
 }
 
 float raidCentre(int v) {
@@ -1878,10 +1881,22 @@ void RaidSystem::thinkAlarm() {
         return;
     }
     for (const Entity pawn : ours) {
-        if (reg.all_of<Colonist>(pawn) && !reg.all_of<PlayerControl>(pawn)) {
-            callUp(pawn, spotted);
+        if (!reg.all_of<Colonist>(pawn) || reg.all_of<PlayerControl>(pawn)) {
+            continue;
         }
+        if (excusedToEat(pawn)) {
+            if (const Fighter* f = reg.try_get<Fighter>(pawn); f != nullptr && f->defending) {
+                fighters_.standDown(pawn);  // off to eat; called up again once fed
+            }
+            continue;
+        }
+        callUp(pawn, spotted);
     }
+}
+
+bool RaidSystem::excusedToEat(Entity pawn) const {
+    const Needs* needs = things_.registry().try_get<Needs>(pawn);
+    return needs != nullptr && needs->food < rules_.alarmEatBelow;
 }
 
 // What one colonist does while the alarm is on, by its role.

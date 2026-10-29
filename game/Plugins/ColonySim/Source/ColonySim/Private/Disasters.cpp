@@ -238,7 +238,10 @@ bool DisasterSystem::begin(DisasterKind kind, double hours) {
         const int edge = std::max(0, std::min({numbers_->stormEdge, map_.width() / 2 - 1, map_.height() / 2 - 1}));
         c.centre = CellPos{edge + static_cast<int>(rng_.below(static_cast<uint32_t>(std::max(1, map_.width() - 2 * edge)))),
                            edge + static_cast<int>(rng_.below(static_cast<uint32_t>(std::max(1, map_.height() - 2 * edge)))), 0};
-        c.radius = rng_.range(static_cast<float>(numbers_->stormRadius.lo), static_cast<float>(numbers_->stormRadius.hi));
+        // Whole metres, as RimWorld's IntRange (and as the save keeps it).
+        const int lo = static_cast<int>(numbers_->stormRadius.lo);
+        const int hi = std::max(lo, static_cast<int>(numbers_->stormRadius.hi));
+        c.radius = static_cast<float>(lo + static_cast<int>(rng_.below(static_cast<uint32_t>(hi - lo + 1))));
         c.nextStrike = c.startedAt + 1;
     }
     if (kind == DisasterKind::PsychicDrone || kind == DisasterKind::PsychicSoothe) {

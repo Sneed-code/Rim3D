@@ -5,6 +5,7 @@
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Needs.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Rooms.h"
@@ -592,4 +593,31 @@ TEST_CASE("Raids: adaptation does not climb above 0 in the first 30 days") {
         sim->stepMany(600);
     }
     CHECK(sim->raids().state().adaptDays == doctest::Approx(0.0f));
+}
+
+TEST_CASE("Raids: a colonist too hungry to stand at its post leaves the alarm to eat, and comes back fed") {
+    // C25: an infestation kept the alarm on for days and the colonists starved at their posts.
+    auto sim = raidTestSim(21, 160);
+    const std::vector<Entity> colonists = raidTestColonists(*sim);
+    RAID_REQUIRE(colonists.size() == 6);
+    for (const Entity c : colonists) {
+        raidTestArm(*sim, c);
+    }
+    sim->stepMany(5);
+    sim->submit(SoundAlarmCommand{true});
+    sim->stepMany(40);
+    entt::registry& reg = sim->things().registry();
+    const Entity hungry = colonists[0];
+    RAID_REQUIRE(reg.all_of<Fighter>(hungry));
+    reg.get<Needs>(hungry).food = 0.05f;  // ravenous: under NeedRules food.ravenousBelow (0.125)
+    CHECK(sim->raids().excusedToEat(hungry));
+    sim->stepMany(40);
+    CHECK_FALSE(reg.all_of<Fighter>(hungry));
+    for (size_t i = 1; i < colonists.size(); ++i) {
+        CHECK(reg.all_of<Fighter>(colonists[i]));  // the fed stay at their posts
+    }
+    reg.get<Needs>(hungry).food = 0.9f;
+    sim->stepMany(40);
+    CHECK(reg.all_of<Fighter>(hungry));
+    CHECK(reg.get<Fighter>(hungry).defending);
 }
