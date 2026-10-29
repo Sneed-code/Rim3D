@@ -77,6 +77,12 @@ For one pawn:
    pawns meeting in a one-cell corridor). Walls are never walked through. After 300 held-up steps in
    a row it gives up (above). Sliding sideways along a wall does not count as progress: two pawns
    pushing each other along a wall they could not pass once slid for 65 game hours (found by C10).
+   **A wall across the way** (C25): after 10 held-up steps the pawn looks at its next waypoint; if that cell can no
+   longer be walked, or the straight line to it crosses one that can't, it gives up at once. Two haulers walled off by
+   a storeroom going up round them pushed each other along its wall, each got a little way now and then, and neither
+   reached the 300 for 388 game minutes.
+   **Downed pawns and corpses** (still, with no Moving) are not steered round: walkers step over them, as in
+   RimWorld. Three downed in a doorway held a doctor for 637 game minutes.
 6. **Holding still.** The job system sets `Mover::hold` every step for a pawn at a job step it does
    standing still (building, deconstructing, mining, cutting, cooking, eating, sleeping). A held pawn
    stays exactly where it is, nobody pushes it, and others steer round it. Without it a pawn walking

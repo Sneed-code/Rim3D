@@ -42,7 +42,9 @@ public:
     MonsterSystem& operator=(const MonsterSystem&) = delete;
 
     // `points` 0: what the colony is worth now (the raid rule). False, with a reason, when it can't be done.
-    bool infest(float points, std::string& error);
+    // `underMountain` (the narrator's incident): only under a thick rock roof (RimWorld's overhead mountain), as
+    // RimWorld's infestations; otherwise (the dev command) any roof, or open ground if nowhere is roofed.
+    bool infest(float points, std::string& error, bool underMountain = false);
     bool remnantCluster(float points, int edge, std::string& error);
     // A single mound at `cell` (a dev tool and test hook).
     Entity spawnHive(CellPos cell);

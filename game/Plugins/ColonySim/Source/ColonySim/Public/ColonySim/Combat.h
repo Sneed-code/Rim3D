@@ -393,6 +393,8 @@ public:
     // The point other pawns aim at on this pawn (its chest), world metres. False if not a pawn
     // on the map.
     bool aimPoint(Entity pawn, float& x, float& y, float& z) const;
+    // Heights above the ground of the pawn's muzzle and of the point others aim at (its chest) in `stance`, metres.
+    void shotHeights(Entity pawn, Stance stance, float& muzzle, float& aim) const;
     // The pawn's hitboxes as they stand now; false if it has none (no Hitboxes def, dead).
     bool hitboxesOf(Entity pawn, std::vector<HitboxView>& out) const;
 

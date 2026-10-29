@@ -45,6 +45,8 @@ constexpr float kMoveSeparationSpeed = 0.5f;      // of the pawn's speed, pushin
 constexpr float kMoveHeldBackShare = 0.3f;        // under this share of the wanted speed counts as held back
 constexpr int kMoveGhostAfter = 45;               // steps held back before walking through the others
 constexpr int kMoveGhostSteps = 30;               // and for how many steps
+constexpr int kMoveWallCheckAfter = 10;           // steps held back before looking for a wall across the way
+constexpr float kMoveWallCheckRadius = 0.05f;     // metres: only a cell that can't be walked on counts, not a corner
 constexpr int kMoveCandidates = 17 + 9 + 2 + 1;   // turns at full speed, turns at half, two axis parts, standing still
 constexpr float kMoveDoorLookAhead = 8.0f;        // steps ahead the pawn the player walks asks a door to open
 
@@ -408,8 +410,10 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
                     if (n.dist2 > kMoveBucketSize * kMoveBucketSize) {
                         continue;
                     }
-                    if (n.dist2 < 1.0e-8f && o.vx == 0.0f && o.vy == 0.0f && reg.all_of<Health>(o.entity) && reg.get<Health>(o.entity).movingFactor <= 0.0f) {
-                        continue;  // the downed pawn or corpse a pawn carries lies exactly where it stands: not in its way
+                    if (o.vx == 0.0f && o.vy == 0.0f && reg.all_of<Health>(o.entity) && reg.get<Health>(o.entity).movingFactor <= 0.0f) {
+                        // A downed pawn or a corpse lies on the ground and is stepped over, as in RimWorld (and so is the one a
+                        // pawn carries, lying exactly where it stands). Three downed in a doorway held a doctor for 637 minutes.
+                        continue;
                     }
                     n.entity = o.entity;
                     n.vx = o.vx;
@@ -613,7 +617,16 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
                 mover.ghostSteps = kMoveGhostSteps;
                 mover.blockedSteps = 0;
             }
-            if (mover.heldSteps >= kMoveGiveUpAfter) {
+            // A wall built across the way since the path was made (a storeroom going up round a hauler): give up now. Two pawns
+            // pushing at it from one side gave each other enough way now and then that neither ever reached kMoveGiveUpAfter
+            // (seed 7 of the year run, 388 game minutes).
+            bool walledOff = false;
+            if (mover.blockedSteps == kMoveWallCheckAfter && !mover.arrived() && mover.path[mover.next].level == a.level) {
+                const CellPos wp = mover.path[mover.next];
+                walledOff = !map.walkable(wp) || !straightWalkIsClear(map, a.x, a.y, static_cast<float>(wp.x) + 0.5f,
+                                                                      static_cast<float>(wp.y) + 0.5f, kMoveWallCheckRadius, a.level);
+            }
+            if (mover.heldSteps >= kMoveGiveUpAfter || walledOff) {
                 mover.path.clear();
                 mover.next = 0;
                 mover.gaveUp = true;

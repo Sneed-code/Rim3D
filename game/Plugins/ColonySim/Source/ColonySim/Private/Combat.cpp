@@ -743,6 +743,18 @@ bool CombatSystem::aimPoint(Entity pawn, float& x, float& y, float& z) const {
     return true;
 }
 
+void CombatSystem::shotHeights(Entity pawn, Stance stance, float& muzzle, float& aim) const {
+    const entt::registry& reg = things_.registry();
+    const CombatModel::Kind* kind = reg.valid(pawn) && reg.all_of<Thing>(pawn) ? model_->kind(reg.get<Thing>(pawn).def) : nullptr;
+    if (kind == nullptr) {
+        muzzle = eyeHeight(stance) - 0.15f;  // as `fire` and `aimPoint` without hitboxes
+        aim = eyeHeight(stance) * 0.7f;
+        return;
+    }
+    muzzle = kind->poses[static_cast<int>(stance)].muzzle;
+    aim = kind->poses[static_cast<int>(stance)].aim[2];
+}
+
 bool CombatSystem::hitboxesOf(Entity pawn, std::vector<HitboxView>& out) const {
     out.clear();
     const entt::registry& reg = things_.registry();

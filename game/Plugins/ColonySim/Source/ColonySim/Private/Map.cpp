@@ -227,6 +227,14 @@ void Map::clearBuilding(CellPos c) {
     setBuilding(c, kNoEntity, Passage::Open, 0);
 }
 
+void Map::setGroundHeight(CellPos c, float metres) {
+    if (c.level != 0 || !inBounds(c)) {
+        return;
+    }
+    groundHeight_[static_cast<size_t>(index(c))] = metres;
+    cover_->markDirty(c);
+}
+
 void Map::setTerrain(CellPos c, Terrain terrain) {
     if (c.level != 0 || terrain == Terrain::Air || terrain == Terrain::UpperFloor) {
         return;  // upper floors are laid with setUpperFloor

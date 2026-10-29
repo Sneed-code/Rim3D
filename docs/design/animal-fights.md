@@ -17,6 +17,9 @@ Code: `ColonySim/Animals.h`, `Private/AnimalFights.cpp` (the `AnimalSystem`'s fi
   at whoever hurt it) or `Manhunter`. Anything but Calm is an **enemy to the fighter AI** and to the
   colony alarm: drafted colonists and called-up defenders shoot it and the alarm sounds. Calm animals
   are still nobody's enemy. `AnimalSystem::hostile`, and the snapshot's `animalTemper` and `animalMode`.
+  This holds for **the colony's own animals** too (C25): one gone mad counts as wild (`kWildFaction`) to the fighter
+  AI and the alarm, and is not one of the colony's watchers. Before, a tamed squirrel gone mad was "on the colony's
+  side": no alarm, and it bit a colonist in bed to death beside an armed friend (year run, seed 42).
 - **Combat tells the animals.** `CombatSystem::setHurtHook` is called when a bullet or a blow hurts a
   pawn; `AnimalSystem::hurt(victim, attacker)` answers it at once. After each step `Sim` gives the
   step's events to `AnimalSystem::scare`.

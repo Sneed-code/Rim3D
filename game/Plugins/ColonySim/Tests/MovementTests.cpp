@@ -470,6 +470,27 @@ TEST_CASE("Movement: pawns pushing each other sideways along a wall they can't p
     CHECK(moveTestMover(sim, b).gaveUp);
 }
 
+TEST_CASE("Movement: pawns whose way a new wall cuts give up at once, even pushing each other") {
+    // Two haulers walking into a storeroom were walled off by its own wall going up: they pushed each other along it, each
+    // got a little way now and then, and neither gave up for 388 game minutes (seed 7 of the year run).
+    Sim sim = moveTestSim(64);
+    const Entity a = moveTestPawn(sim, 30, 28);
+    const Entity b = moveTestPawn(sim, 31, 28);
+    moveTestWalk(sim, a, {CellPos{30, 29, 0}, CellPos{30, 31, 0}, CellPos{26, 31, 0}});
+    moveTestWalk(sim, b, {CellPos{31, 29, 0}, CellPos{31, 32, 0}});
+    sim.stepMany(5);
+    moveTestWall(sim, 25, 30, 35, 30);  // built across both ways
+    int steps = 0;
+    while ((!moveTestMover(sim, a).gaveUp || !moveTestMover(sim, b).gaveUp) && steps < 120) {
+        sim.step();
+        ++steps;
+    }
+    CHECK(moveTestMover(sim, a).gaveUp);
+    CHECK(moveTestMover(sim, b).gaveUp);
+    CHECK(moveTestPos(sim, a).y < 30.0f);
+    CHECK(moveTestPos(sim, b).y < 30.0f);
+}
+
 TEST_CASE("Movement: a pawn held in place (working) is not shoved by one walking up to its cell") {
     Sim sim = moveTestSim(64);
     const Entity worker = moveTestPawn(sim, 20, 30);
@@ -505,4 +526,28 @@ TEST_CASE("Movement: a pawn carrying a downed pawn walks on, the carried one lyi
     }
     CHECK(moveTestPos(sim, carrier).x > 34.0f);
     CHECK(steps < static_cast<int>(30.0f / kMoveTestSpeed) + 40);
+}
+
+TEST_CASE("Movement: downed pawns lying in a doorway are stepped over") {
+    // Year run, seed 1: three downed pawns lay in a doorway and a doctor walking through pushed at them for 637 game minutes.
+    Sim sim = moveTestSim(64);
+    moveTestWall(sim, 30, 20, 30, 29);
+    moveTestWall(sim, 30, 31, 30, 40);  // a one-cell gap at y 30
+    Health downed;
+    downed.movingFactor = 0.0f;
+    for (const float y : {30.3f, 30.5f, 30.7f}) {
+        const Entity lying = moveTestPawn(sim, 30, 30);
+        sim.things().registry().emplace_or_replace<Health>(lying, downed);
+        sim.things().registry().get<Position>(lying).y = y;
+    }
+    const Entity walker = moveTestPawn(sim, 25, 30);
+    moveTestWalk(sim, walker, {CellPos{30, 30, 0}, CellPos{35, 30, 0}});
+    int steps = 0;
+    while (!moveTestMover(sim, walker).arrived() && !moveTestMover(sim, walker).gaveUp && steps < 1000) {
+        sim.step();
+        ++steps;
+    }
+    CHECK_FALSE(moveTestMover(sim, walker).gaveUp);
+    CHECK(moveTestPos(sim, walker).x > 34.0f);
+    CHECK(steps < static_cast<int>(10.0f / kMoveTestSpeed) + 40);
 }
