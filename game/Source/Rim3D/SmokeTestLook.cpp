@@ -1,7 +1,7 @@
 // Smoke test `look` (task L1, the look bench): one fixed seed and the same shots every run, so each look task can show
 // sneed a before and after sheet (tools/look_sheet.ps1 copies the shots into Saved/Look/<date>/ and lays them beside the
 // last run's). The shots: the overseer high and low over the colony, a colonist close up, inside a lit room, dusk, a
-// rainy night, the HUD as the player first sees it, and a snowy day.
+// rainy night, the HUD as the player first sees it, a sample wall of every building stuff (L4), and a snowy day.
 #include "SmokeTest.h"
 
 #include "Components/DirectionalLightComponent.h"
@@ -24,6 +24,7 @@
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Commands.h"
+#include "ColonySim/Construction.h"
 #include "ColonySim/Fuel.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
@@ -42,6 +43,11 @@ namespace
 	// The room: 7 x 6 cells with its walls, a door in the south wall.
 	constexpr int32 LookRoomW = 7;
 	constexpr int32 LookRoomH = 6;
+	// The sample wall (L4): two cells of each building stuff in a north-south line four cells west of the room, turning west at its
+	// south end (its west side faces the noon sun).
+	constexpr int32 LookSampleX = -4;
+	constexpr int32 LookSampleY = -4;
+	const char* const LookSampleStuffs[] = {"BlocksGranite", "BlocksLimestone", "BlocksSandstone", "BlocksSlate", "BlocksMarble", "Steel", "Plasteel"};
 
 	struct FLookSmokeState
 	{
@@ -238,10 +244,10 @@ void USmokeTestSubsystem::BuildLookPhases()
 			return;
 		}
 		const auto At = [=](int32 DX, int32 DY) { return colony::CellPos{State->Room.x + DX, State->Room.y + DY, 0}; };
-		// No trees or bushes in the room.
-		for (int32 Y = -1; Y <= LookRoomH; ++Y)
+		// No trees or bushes in the room or on the sample wall's line.
+		for (int32 Y = LookSampleY - 1; Y <= LookSampleY + 2 * static_cast<int32>(UE_ARRAY_COUNT(LookSampleStuffs)); ++Y)
 		{
-			for (int32 X = -1; X <= LookRoomW; ++X)
+			for (int32 X = LookSampleX - 2; X <= LookRoomW; ++X)
 			{
 				if (SimOf()->plants().has(At(X, Y)))
 				{
@@ -261,6 +267,11 @@ void USmokeTestSubsystem::BuildLookPhases()
 			}
 		}
 		B->Submit(colony::SpawnThingCommand{"Door", At(LookRoomW / 2, 0), 1});
+		for (int32 Y = 0; Y < 2 * static_cast<int32>(UE_ARRAY_COUNT(LookSampleStuffs)); ++Y)
+		{
+			B->Submit(colony::SpawnThingCommand{"Wall", At(LookSampleX, LookSampleY + Y), 1});
+		}
+		B->Submit(colony::SpawnThingCommand{"Wall", At(LookSampleX - 1, LookSampleY), 1});
 		B->Submit(colony::SpawnThingCommand{"Bed", At(1, 3), 1, colony::Rot4::East});
 		B->Submit(colony::SpawnThingCommand{"EndTable", At(1, 1), 1});
 		B->Submit(colony::SpawnThingCommand{"Table1x2", At(4, 2), 1});
@@ -270,6 +281,32 @@ void USmokeTestSubsystem::BuildLookPhases()
 		// The sim's rooms put a thin roof over the closed room by themselves.
 		B->StepOnce();
 		colony::Sim* Sim = SimOf();
+		// Spawned buildings are made of nothing; give the room wood (the first house most colonies build) and the sample its stuffs.
+		const auto MakeOf = [Sim](colony::CellPos Cell, const char* Stuff)
+		{
+			const colony::Entity Wall = Sim->map().buildingAt(Cell);
+			if (Wall != colony::kNoEntity)
+			{
+				Sim->things().registry().emplace_or_replace<colony::BuiltOf>(Wall, colony::BuiltOf{Sim->defs().idOf("Things", Stuff)});
+			}
+			return Wall != colony::kNoEntity;
+		};
+		for (int32 Y = 0; Y < LookRoomH; ++Y)
+		{
+			for (int32 X = 0; X < LookRoomW; ++X)
+			{
+				if (X == 0 || Y == 0 || X == LookRoomW - 1 || Y == LookRoomH - 1)
+				{
+					MakeOf(At(X, Y), "WoodLog");
+				}
+			}
+		}
+		int32 SampleWalls = 0;
+		for (int32 Y = 0; Y < 2 * static_cast<int32>(UE_ARRAY_COUNT(LookSampleStuffs)); ++Y)
+		{
+			SampleWalls += MakeOf(At(LookSampleX, LookSampleY + Y), LookSampleStuffs[Y / 2]) ? 1 : 0;
+		}
+		SampleWalls += MakeOf(At(LookSampleX - 1, LookSampleY), LookSampleStuffs[0]) ? 1 : 0;
 		int32 Torches = 0;
 		for (const colony::CellPos Cell : {At(5, 1), At(1, 4)})
 		{
@@ -281,7 +318,8 @@ void USmokeTestSubsystem::BuildLookPhases()
 			}
 		}
 		State->bRoomBuilt = Sim->map().buildingAt(At(0, 0)) != colony::kNoEntity && Torches == 2;
-		Notes.Add(FString::Printf(TEXT("_prepare: home (%d, %d), room at (%d, %d), %d torches fuelled"), State->Home.x, State->Home.y, State->Room.x, State->Room.y, Torches));
+		Notes.Add(FString::Printf(TEXT("_prepare: home (%d, %d), room at (%d, %d), %d torches fuelled, %d sample walls"), State->Home.x, State->Home.y, State->Room.x, State->Room.y, Torches,
+			SampleWalls));
 		RunFor(10 * colony::kSecondsPerHour);
 		SetClock(12.0f, LookSmokeMidsummer);
 		Aim(State->Home, -8.0f, 0.0f, 0.0f);
@@ -484,7 +522,23 @@ void USmokeTestSubsystem::BuildLookPhases()
 	};
 	Phases.Add(MoveTemp(Hud));
 
-	// 8. A snowy day: a new game on the same seed snows hard through the cold night, then the overseer looks at it at eleven
+	// 8. The walls (L4): the sample wall of every building stuff, from the west at noon.
+	FPhase Walls;
+	Walls.Name = TEXT("walls");
+	Walls.WarmupSeconds = 4.0f;
+	Walls.MeasureSeconds = 2.0f;
+	Walls.Setup = [=, this]()
+	{
+		SetClock(12.0f, LookSmokeMidsummer);
+		const float MiddleY = static_cast<float>(State->Room.y + LookSampleY) + static_cast<float>(UE_ARRAY_COUNT(LookSampleStuffs));
+		const FVector To = CellWorld(static_cast<float>(State->Room.x + LookSampleX) + 0.5f, MiddleY, 120.0);
+		const FVector From = CellWorld(static_cast<float>(State->Room.x + LookSampleX) - 9.5f, MiddleY - 2.0f, 420.0);
+		ViewFrom(From, (To - From).Rotation());
+	};
+	Walls.Verify = [=]() { NoteShot(TEXT("walls")); };
+	Phases.Add(MoveTemp(Walls));
+
+	// 9. A snowy day: a new game on the same seed snows hard through the cold night, then the overseer looks at it at eleven
 	// on a midwinter morning. (The sim's first day is spring; the night is cold enough for the snow to lie.)
 	FPhase Snowy;
 	Snowy.Name = TEXT("snowy_day");

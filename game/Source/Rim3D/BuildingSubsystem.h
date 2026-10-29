@@ -104,6 +104,9 @@ private:
 		bool bRead = false;
 		bool bItem = false;
 		bool bDoor = false;
+		/** Joins the walls, doors and rock beside it (visual.link, L4): drawn as a post with an arm to each, `LinkThicknessCm` thick. */
+		bool bLink = false;
+		float LinkThicknessCm = 50.0f;
 		FVector2f FootprintCm = FVector2f(100.0f, 100.0f);
 		TArray<VisualMesh::FPart> Parts;
 		bool bHasSliding = false;
@@ -149,8 +152,13 @@ private:
 	void RebuildAll();
 	void ReadDefs(const colony::Sim& Sim);
 	const FDefLook* LookOfDef(colony::DefId Def) const;
-	/** The index in Looks of this def made of this stuff (invalid for none), made if it is new; -1 if the def has no picture. */
-	int32 GetLook(colony::DefId Def, colony::DefId Stuff);
+	/**
+	 * The index in Looks of this def made of this stuff (invalid for none), made if it is new; -1 if the def has no picture.
+	 * `Link` is a linked def's neighbours (1 north, 2 east, 4 south, 8 west); -1 draws its plain parts (the placement ghost).
+	 */
+	int32 GetLook(colony::DefId Def, colony::DefId Stuff, int32 Link = -1);
+	/** The surface material of a stuff (its visual.surface, made by the SurfaceMaterials commandlet); null for none. */
+	UMaterialInterface* SurfaceOf(colony::DefId Stuff);
 	void RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, const TArray<int32>& ThingIndexes, const colony::Snapshot& Snapshot);
 	/** Hides the chunks of the levels above the highest one shown (ULevelsSubsystem), and shows the rest. */
 	void ApplyCut(bool bForce);
@@ -171,6 +179,10 @@ private:
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMesh>> KeepMeshes;
 
+	/** The stuffs' surface materials by stuff def (null where a stuff has none or it is not made yet). */
+	UPROPERTY()
+	TMap<int32, TObjectPtr<UMaterialInterface>> Surfaces;
+
 	TArray<FChunk> Chunks;
 	TArray<FDefLook> DefLooks;
 	TMap<uint64, int32> LookIndex;
@@ -179,6 +191,8 @@ private:
 	/** Scratch space for one scan: the things of each chunk and the chunk's new signature. */
 	TArray<TArray<int32>> ScanLists;
 	TArray<uint64> ScanSignatures;
+	/** Each snapshot thing's link neighbours (GetLook), -1 for a thing that does not link. */
+	TArray<int8> ScanLinks;
 	int32 ChunksX = 0;
 	int32 ChunksY = 0;
 	int32 ShownTop = -1;

@@ -37,6 +37,7 @@
   "parent": "BlocksBase",
   "label": "granite blocks",
   "visual": {
+   "surface": "granite",
    "tint": [
     0.9,
     0.85,
@@ -63,6 +64,7 @@
   "parent": "BlocksBase",
   "label": "limestone blocks",
   "visual": {
+   "surface": "limestone",
    "tint": [
     1,
     1,
@@ -89,6 +91,7 @@
   "parent": "BlocksBase",
   "label": "sandstone blocks",
   "visual": {
+   "surface": "sandstone",
    "tint": [
     1,
     0.9,
@@ -115,6 +118,7 @@
   "parent": "BlocksBase",
   "label": "slate blocks",
   "visual": {
+   "surface": "slate",
    "tint": [
     0.6,
     0.65,
@@ -141,6 +145,7 @@
   "parent": "BlocksBase",
   "label": "marble blocks",
   "visual": {
+   "surface": "marble",
    "tint": [
     1,
     1,
