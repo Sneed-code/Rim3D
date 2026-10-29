@@ -600,10 +600,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         });
     }
     narrator_->setWorker("Infestation", [this](IncidentFiring& f) {
-        if (!monsters_->infest(f.points, f.error)) {
+        if (!monsters_->infest(f.points, f.error, true)) {  // RimWorld's: only under overhead mountain
             return false;
         }
-        f.text = "Infestation: chitinids are tunnelling up from under the roofs.";
+        f.text = "Infestation: chitinids are tunnelling up from under the mountain.";
         return true;
     });
     narrator_->setWorker("RemnantCluster", [this](IncidentFiring& f) {

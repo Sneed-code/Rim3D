@@ -41,6 +41,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <iterator>
 #include <map>
 #include <string>
 #include <utility>
@@ -68,10 +69,14 @@ constexpr int64_t kGreenhouseDay = 15;  // year run: the heated greenhouse is pl
 constexpr int kGreenWidth = 10;
 constexpr int kGreenHeight = 6;
 constexpr int kGreenBasins = 4;  // six took more steel than the crash site has, and then none got built
-// The storeroom (year run, day 1): wood walls round a 10 by 8 footprint with a door in the south wall, and a stockpile for food
+// The storeroom (year run, day 1): steel walls round a 10 by 8 footprint with a door in the south wall, and a stockpile for food
 // only over its inside (8 by 6). Under a roof rice and meals don't weather away (rain wears a meal out in the open in about a
 // day), and in winter the unheated room freezes and keeps them: the colony's winter larder.
 constexpr int64_t kShedDay = 1;
+constexpr int kFirebreak = 4;
+constexpr size_t kSpecialists = 2;  // year run: colonists who doctor, and who cook
+constexpr int kHealrootWidth = 6;  // year run: the healroot patch (herbal medicine), 6 by 4
+constexpr int kHealrootHeight = 4;  // year run: cells cleared of plants round the buildings
 constexpr int kShedWidth = 10;
 constexpr int kShedHeight = 8;
 
@@ -335,7 +340,9 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         plan("Wall", "Steel", kRoomWidth - 1, y);
     }
     for (int i = 0; i < kBeds; ++i) {
-        plan("Bed", "Steel", 1 + i, kRoomHeight - 3);  // 1 x 2: rows kRoomHeight-3 and kRoomHeight-2 hold the beds
+        // 1 x 2: rows kRoomHeight-3 and kRoomHeight-2 hold the beds. The year run makes them of wood: the steel goes into the
+        // storeroom's walls, which a wildfire must not burn.
+        plan("Bed", year ? "WoodLog" : "Steel", 1 + i, kRoomHeight - 3);
     }
     plan("Table1x2", "WoodLog", 3, 2);
     plan("Stool", "WoodLog", 2, 2);
@@ -441,36 +448,22 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         }
     }
 
-    if (year) {
-        // The player arms the best shot with the landing's rifle and revolver (colonists do not equip loose weapons
-        // themselves): it hunts for the colony and defends it, and the rest run for shelter when the alarm sounds.
-        std::vector<Entity> byShooting = colonists;
-        const auto shooting = [&](Entity pawn) {
-            const Colonist* colonist = sim.colonistOf(pawn);
-            for (size_t i = 0; colonist != nullptr && i < colonist->skills.size(); ++i) {
-                if (colonist->skills[i].def == "Shooting") {
-                    return colonist->skills[i].level;
-                }
-            }
-            return 0;
-        };
-        std::stable_sort(byShooting.begin(), byShooting.end(), [&](Entity a, Entity b) { return shooting(a) > shooting(b); });
-        // The best shot carries both (the rifle for range, the revolver when something is close).
-        const char* const guns[2] = {"Gun_BoltActionRifle", "Gun_Revolver"};
-        for (size_t g = 0; g < 2 && g < byShooting.size(); ++g) {
-            const DefId gun = defs->idOf("Things", guns[g]);
-            for (const auto [item, thing] : sim.things().registry().view<const Thing>().each()) {
-                if (thing.def == gun) {
-                    sim.submit(CarryWeaponCommand{byShooting[0], item});
-                    break;
-                }
+    // The year run arms everyone, as a player would: the best shot gets the rifle, the next the shotgun, the rest a revolver
+    // each (the landing's two guns and three the script leaves there), and the last the club once the crafting spot has made
+    // it. With one gun in the colony the others ran from every mad squirrel and wolf, and died once its owner fell.
+    // A colonist's level in a skill, -1 if it can't do that work (or is gone).
+    const auto skillOf = [&](Entity pawn, const char* skill) {
+        const Colonist* colonist = sim.things().registry().valid(pawn) ? sim.colonistOf(pawn) : nullptr;
+        for (size_t i = 0; colonist != nullptr && i < colonist->skills.size(); ++i) {
+            if (colonist->skills[i].def == skill) {
+                return colonist->skills[i].disabled ? -1 : colonist->skills[i].level;
             }
         }
-    }
-
+        return colonist != nullptr ? 0 : -1;
+    };
+    std::vector<Entity> byShooting = colonists;
     if (year) {
-        // Guns lying about the landing for the others to pick up: a shotgun and two revolvers. Colonists take a gun for each
-        // gun slot they have none for (JobSystem::findLooseWeapon).
+        std::stable_sort(byShooting.begin(), byShooting.end(), [&](Entity a, Entity b) { return skillOf(a, "Shooting") > skillOf(b, "Shooting"); });
         const char* const loose[] = {"Gun_PumpShotgun", "Gun_Revolver", "Gun_Revolver"};
         int n = 0;
         for (const char* def : loose) {
@@ -478,6 +471,40 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
             ++n;
         }
     }
+    // Hands one weapon to each colonist without one, best shots first: the guns lying about in order of `kGunOrder`, then
+    // melee weapons. Returns the weapons handed out.
+    const auto armColonists = [&]() {
+        static const char* const kGunOrder[] = {"Gun_BoltActionRifle", "Gun_PumpShotgun", "Gun_Revolver", "Melee_Club"};
+        const entt::registry& reg = sim.things().registry();
+        std::vector<std::pair<int, Entity>> loose;
+        for (const auto [item, thing] : reg.view<const Thing>().each()) {
+            if (thing.category != ThingCategory::Item || reg.all_of<EquippedBy>(item) || !sim.things().spawned(item)) {
+                continue;
+            }
+            const std::string& name = defs->get(thing.def).defName();
+            for (int k = 0; k < static_cast<int>(std::size(kGunOrder)); ++k) {
+                if (name == kGunOrder[k]) {
+                    loose.emplace_back(k, item);
+                }
+            }
+        }
+        std::sort(loose.begin(), loose.end());
+        size_t next = 0;
+        int handed = 0;
+        for (const Entity pawn : byShooting) {
+            if (next >= loose.size()) {
+                break;
+            }
+            const Health* health = reg.valid(pawn) ? reg.try_get<Health>(pawn) : nullptr;
+            const Gear* gear = reg.valid(pawn) ? reg.try_get<Gear>(pawn) : nullptr;
+            if (health == nullptr || health->dead || gear == nullptr || gear->weapon != kNoEntity || !gear->stowed.empty()) {
+                continue;
+            }
+            sim.submit(CarryWeaponCommand{pawn, loose[next++].second});
+            ++handed;
+        }
+        return handed;
+    };
 
     // Skills under level 10 do not decay: their total experience (levels counted in) shows that the
     // work taught something.
@@ -554,6 +581,11 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     int greenMostCrops = 0;  // most basins with a crop in them at once
     uint64_t greenCrops = 0;  // hours x crops standing in the basins
     uint64_t greenRipe = 0;   // hours x ripe crops in the basins
+    std::map<Entity, bool> bestCare;  // year run: whether each colonist's medical care is Best (ill) or Herbal (wounds only)
+    uint64_t firebreakMarks = 0;
+    CellRect healrootRect{0, 0, 0, 0, 0};  // year run: the healroot patch, if one was made      // year run: plants marked for the firebreak
+    uint64_t weaponsHanded = 0;
+    std::map<std::pair<Entity, std::string>, int> workSet;  // year run: the work priority the script last set, plus 1 (0: none yet)       // year run: weapons the script handed to colonists
     bool billAdded = false;
     bool butcherBillAdded = false;
     uint64_t butchered = 0;
@@ -568,6 +600,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
 
     std::map<std::string, int> animalDeaths;  // deaths of anything that is not a colonist, by cause
     std::map<Entity, int> shotsBy;            // year run, verbose: shots each pawn fired
+    std::map<Entity, Entity> shooterOf;       // verbose: who fired each projectile in flight
     std::map<std::string, int> spoiled;
     std::map<std::string, int> huntFailures;  // year run: hunts given up, by the animal's def       // year run: stacks lost to rot or the weather, by def and how
     double worstStepMs = 0.0;
@@ -688,7 +721,33 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                                      e.message.find("self") != std::string::npos ? " (self)" : "");
                     }
                     break;
-                case EventType::ShotFired: ++shotsBy[e.thing]; break;
+                case EventType::ShotFired:
+                    ++shotsBy[e.thing];
+                    if (verbose) {
+                        shooterOf[e.target] = e.thing;
+                    }
+                    break;
+                case EventType::ProjectileHit:
+                    if (verbose) {
+                        // Shots colonists fire at animals: what each one hit, to see where friendly fire comes from.
+                        const auto it = shooterOf.find(e.thing);
+                        const entt::registry& reg = sim.things().registry();
+                        const Entity shooter = it != shooterOf.end() ? it->second : kNoEntity;
+                        const Fighter* f = shooter != kNoEntity && reg.valid(shooter) ? reg.try_get<Fighter>(shooter) : nullptr;
+                        if (f != nullptr && reg.all_of<Colonist>(shooter) && reg.valid(f->target) && reg.all_of<Animal>(f->target)) {
+                            const Position& from = reg.get<Position>(shooter);
+                            const Position& to = reg.get<Position>(f->target);
+                            std::fprintf(stderr, "    shot by %u at animal %u (%.1f m): hit kind %d thing %u at %.2f,%.2f,%.2f%s\n",
+                                         static_cast<unsigned>(entt::to_integral(shooter)), static_cast<unsigned>(entt::to_integral(f->target)),
+                                         static_cast<double>(std::hypot(to.x - from.x, to.y - from.y)), static_cast<int>(e.hit),
+                                         static_cast<unsigned>(entt::to_integral(e.target)), static_cast<double>(e.x), static_cast<double>(e.y),
+                                         static_cast<double>(e.z), e.target == f->target ? " (the target)" : "");
+                        }
+                        if (it != shooterOf.end()) {
+                            shooterOf.erase(it);
+                        }
+                    }
+                    break;
                 case EventType::WeatherChanged: ++weatherChanges; break;
                 case EventType::Letter:
                     ++letters;
@@ -773,6 +832,29 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                         std::fprintf(stderr, "t=%lld colonist %u: %s step %d, no change for 30 game minutes at %.2f,%.2f (path %zu/%zu)\n",
                                      static_cast<long long>(now), static_cast<unsigned>(entt::to_integral(pawn)), jobTypeName(job.type),
                                      job.step, pos.x, pos.y, m.next, m.path.size());
+                        // Why: the walk left, the job's cells and who stands close.
+                        std::string why;
+                        char part[160];
+                        for (size_t k = m.next; k < m.path.size() && k < m.next + 6; ++k) {
+                            std::snprintf(part, sizeof(part), " %d,%d%s", m.path[k].x, m.path[k].y, sim.map().walkable(m.path[k]) ? "" : "(blocked)");
+                            why += part;
+                        }
+                        std::snprintf(part, sizeof(part), "; job cell %d,%d walk %d repaths %d; mover blocked %u held %u ghost %u gave up %d", job.cell.x,
+                                      job.cell.y, static_cast<int>(job.walk), static_cast<int>(job.repaths), m.blockedSteps, m.heldSteps, m.ghostSteps,
+                                      m.gaveUp ? 1 : 0);
+                        why += part;
+                        for (const auto [other, opos, omover] : sim.things().registry().view<const Position, const Mover>().each()) {
+                            if (other != pawn && std::hypot(opos.x - pos.x, opos.y - pos.y) < 2.0f) {
+                                const entt::registry& oreg = sim.things().registry();
+                                const Worker* ow = oreg.try_get<Worker>(other);
+                                std::snprintf(part, sizeof(part), "; pawn %u at %.2f,%.2f (%s%s%s%s)", static_cast<unsigned>(entt::to_integral(other)), opos.x,
+                                              opos.y, ow != nullptr ? jobTypeName(ow->job.type) : (oreg.all_of<Animal>(other) ? "animal" : "-"),
+                                              sim.health().incapacitated(other) ? ", down" : "", omover.hold ? ", held" : "",
+                                              omover.arrived() ? "" : ", walking");
+                                why += part;
+                            }
+                        }
+                        std::fprintf(stderr, "    path%s\n", why.c_str());
                     }
                 } else {
                     s.samples = 0;
@@ -815,6 +897,25 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     fields.push_back(CellRect{site.x, site.y, 14, 10, 0});
                     sim.submit(CreateGrowingZoneCommand{fields.back(), "Plant_Rice"});
                 }
+                // A healroot patch for herbal medicine, if anyone can sow it (Plants 8): what the wounds are tended with.
+                bool sower = false;
+                for (const Entity pawn : colonists) {
+                    const Colonist* colonist = sim.colonistOf(pawn);
+                    for (size_t k = 0; colonist != nullptr && k < colonist->skills.size(); ++k) {
+                        sower = sower || (colonist->skills[k].def == "Plants" &&
+                                          colonist->skills[k].level >= defs->get(defs->idOf("Things", "Plant_Healroot")).integer("plant.sowMinSkill", 0));
+                    }
+                }
+                CellPos herbs;
+                std::vector<CellRect> taken = fields;
+                taken.push_back(shedRing);
+                if (sower && findGreenhouseSite(sim, landing, roomRect, herbs, kHealrootWidth, kHealrootHeight, taken)) {
+                    sim.submit(CreateGrowingZoneCommand{CellRect{herbs.x, herbs.y, kHealrootWidth, kHealrootHeight, 0}, "Plant_Healroot"});
+                    healrootRect = CellRect{herbs.x, herbs.y, kHealrootWidth, kHealrootHeight, 0};
+                    if (verbose) {
+                        std::fprintf(stderr, "healroot at %d,%d\n", herbs.x, herbs.y);
+                    }
+                }
                 fieldMade = true;
             }
             if (year && !winterReady && sim.time().day() >= kWinterDay) {
@@ -838,7 +939,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 }
             }
             if (year && !shedPlanned && sim.time().day() >= kShedDay) {
-                // The winter larder: a roofed room of wood near the landing with a food stockpile inside.
+                // The winter larder: a roofed room of steel near the landing with a food stockpile inside.
                 shedPlanned = true;
                 CellPos shedOrigin;
                 if (!findGreenhouseSite(sim, landing, roomRect, shedOrigin, kShedWidth, kShedHeight)) {
@@ -849,8 +950,9 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     std::fprintf(stderr, "storeroom at %d,%d\n", shedOrigin.x, shedOrigin.y);
                 }
                 shedRect = CellRect{shedOrigin.x, shedOrigin.y, kShedWidth, kShedHeight, 0};
+                // Steel walls and a steel door: on seed 7 a flashstorm's grass fire burned the wooden one with every meal in it.
                 const auto shed = [&](const char* def, int x, int y) {
-                    shedPlans.push_back(Plan{defs->idOf("Things", def), def, "WoodLog", CellPos{shedOrigin.x + x, shedOrigin.y + y, 0}, Rot4::North});
+                    shedPlans.push_back(Plan{defs->idOf("Things", def), def, "Steel", CellPos{shedOrigin.x + x, shedOrigin.y + y, 0}, Rot4::North});
                 };
                 for (int x = 0; x < kShedWidth; ++x) {
                     shed(x == 1 ? "Door" : "Wall", x, 0);
@@ -920,7 +1022,11 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     sim.submit(PlaceBlueprintCommand{p.defName, p.stuff, p.cell, p.rot});
                 }
             }
-            if (year && now % (6 * kSecondsPerHour) == 0 && sim.designations().count() < 6) {
+            int treesMarked = 0;
+            for (const auto& [index, kind] : sim.designations().all()) {
+                treesMarked += kind == DesignationKind::CutPlant && isTree(sim, sim.plants().defAt(sim.map().cellAt(index))) ? 1 : 0;
+            }
+            if (year && now % (6 * kSecondsPerHour) == 0 && treesMarked < 6) {
                 // Wood runs out (stove, walls, the greenhouse's generator): keep a few of the nearest trees marked.
                 int wood = 0;
                 for (const auto [item, thing, stack] : sim.things().registry().view<const Thing, const StackCount>().each()) {
@@ -939,6 +1045,71 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     }
                     nearest(near);
                     mark(near, 10, DesignationKind::CutPlant);
+                }
+            }
+            if (year && now % kSecondsPerDay == 6 * kSecondsPerHour) {
+                // A firebreak, as a player clears one: every plant within kFirebreak cells of the room, the storeroom and the
+                // greenhouse is marked for cutting each morning (grass grows back), crops in a growing zone left alone. Fire
+                // reaches two cells (embers), and walls don't stop embers.
+                std::vector<CellRect> base{roomRect};
+                if (shedPlanned) {
+                    base.push_back(shedRect);
+                }
+                if (greenhousePlanned) {
+                    base.push_back(CellRect{greenOrigin.x, greenOrigin.y, kGreenWidth, kGreenHeight, 0});
+                }
+                for (const CellRect& r : base) {
+                    for (int y = r.minY - kFirebreak; y < r.minY + r.sizeY + kFirebreak; ++y) {
+                        for (int x = r.minX - kFirebreak; x < r.minX + r.sizeX + kFirebreak; ++x) {
+                            const CellPos c{x, y, 0};
+                            if (sim.map().inBounds(c) && sim.plants().has(c) && sim.farming().zoneAt(c) == kNoGrowingZone &&
+                                sim.designations().at(c) == DesignationKind::None) {
+                                sim.submit(DesignateCommand{CellRect{x, y, 1, 1, 0}, DesignationKind::CutPlant});
+                                ++firebreakMarks;
+                            }
+                        }
+                    }
+                }
+            }
+            if (year) {
+                // Medicine is kept for illness: a colonist is tended with the best there is while it has a disease (plague,
+                // flu, an infection...), and with herbal medicine or none for wounds alone. With Best for all, the crash
+                // site's 30 went on scratches, and plague was then tended by hand at quality 0.25 to 0.55.
+                for (const Entity pawn : colonists) {
+                    HealthReport report;
+                    if (!sim.things().registry().valid(pawn) || !sim.healthReport(pawn, report) || report.dead) {
+                        continue;
+                    }
+                    const bool ill = std::any_of(report.diseases.begin(), report.diseases.end(),
+                                                 [](const HealthReport::DiseaseLine& d) { return d.visible; });
+                    const auto it = bestCare.find(pawn);
+                    if (it == bestCare.end() || it->second != ill) {
+                        sim.submit(SetMedicalCareCommand{pawn, ill ? "Best" : "Herbal"});
+                        bestCare[pawn] = ill;
+                    }
+                }
+                weaponsHanded += static_cast<uint64_t>(armColonists());
+                // Doctoring and cooking for the two best at them, as a player sets the work tab: tends by a doctor of level 2
+                // were 0.14 to 0.4 and lost plague races, and poor cooks poison the food. Checked again every hour, so the next
+                // best take over when one dies.
+                for (const auto& [work, skill] : {std::pair<const char*, const char*>{"Doctor", "Medicine"}, {"Cooking", "Cooking"}}) {
+                    std::vector<Entity> able;
+                    for (const Entity pawn : colonists) {
+                        const Health* health = sim.things().registry().valid(pawn) ? sim.things().registry().try_get<Health>(pawn) : nullptr;
+                        if (health != nullptr && !health->dead && skillOf(pawn, skill) >= 0) {
+                            able.push_back(pawn);
+                        }
+                    }
+                    std::stable_sort(able.begin(), able.end(), [&](Entity a, Entity b) { return skillOf(a, skill) > skillOf(b, skill); });
+                    for (size_t k = 0; k < able.size(); ++k) {
+                        // The others still doctor last of all (rescue, feeding the downed), and never cook.
+                        const int priority = k < kSpecialists ? 1 : (std::strcmp(work, "Doctor") == 0 ? 4 : 0);
+                        int& last = workSet[{able[k], work}];
+                        if (last != priority + 1) {
+                            sim.submit(SetWorkPriorityCommand{able[k], work, priority});
+                            last = priority + 1;
+                        }
+                    }
                 }
             }
             if (greenhousePlanned && !greenZoneMade) {
@@ -1224,7 +1395,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 static_cast<unsigned long long>(sim.stateHash()));
 
     if (year) {
-        std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"warmthSeeks\":%llu,\"weaponsTaken\":%llu}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), static_cast<unsigned long long>(warmthSeeks), static_cast<unsigned long long>(weaponsTaken));
+        std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"warmthSeeks\":%llu,\"weaponsTaken\":%llu,\"weaponsHanded\":%llu,\"firebreakMarks\":%llu}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), static_cast<unsigned long long>(warmthSeeks), static_cast<unsigned long long>(weaponsTaken), static_cast<unsigned long long>(weaponsHanded), static_cast<unsigned long long>(firebreakMarks));
         std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"narrator\":\"%s\",\"letters\":%llu}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), narrator.c_str(), static_cast<unsigned long long>(letters));
         if (greenhousePlanned) {
             std::printf("{\"greenhouse\":{\"at\":\"%d,%d\",\"basins\":%d,\"generators\":%d,\"heaters\":%d,\"lamps\":%d,\"zoneMade\":%s,"

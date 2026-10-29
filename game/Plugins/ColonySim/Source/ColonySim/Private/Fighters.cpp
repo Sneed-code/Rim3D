@@ -378,6 +378,11 @@ void FighterSystem::step() {
         // A hunting, manhunting or avenging animal is an enemy (N5); a prisoner is nobody's target (C22).
         // Visitors and traders (C23) are nobody's target either.
         p.animal = (wildLife != nullptr && wildLife->temper == AnimalTemper::Calm) || reg.all_of<Prisoner>(e) || reg.all_of<Visitor>(e);
+        if (wildLife != nullptr && wildLife->temper != AnimalTemper::Calm) {
+            // A mad animal is nobody's friend: the colony's own squirrel gone mad bit a colonist in bed to death while the
+            // others, its side, never saw it as an enemy (seed 42 of the year run).
+            p.faction = kWildFaction;
+        }
         p.stance = p.able ? posture.stance : Stance::Prone;
         pawns_.push_back(p);
     }

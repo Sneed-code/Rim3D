@@ -470,6 +470,27 @@ TEST_CASE("Movement: pawns pushing each other sideways along a wall they can't p
     CHECK(moveTestMover(sim, b).gaveUp);
 }
 
+TEST_CASE("Movement: pawns whose way a new wall cuts give up at once, even pushing each other") {
+    // Two haulers walking into a storeroom were walled off by its own wall going up: they pushed each other along it, each
+    // got a little way now and then, and neither gave up for 388 game minutes (seed 7 of the year run).
+    Sim sim = moveTestSim(64);
+    const Entity a = moveTestPawn(sim, 30, 28);
+    const Entity b = moveTestPawn(sim, 31, 28);
+    moveTestWalk(sim, a, {CellPos{30, 29, 0}, CellPos{30, 31, 0}, CellPos{26, 31, 0}});
+    moveTestWalk(sim, b, {CellPos{31, 29, 0}, CellPos{31, 32, 0}});
+    sim.stepMany(5);
+    moveTestWall(sim, 25, 30, 35, 30);  // built across both ways
+    int steps = 0;
+    while ((!moveTestMover(sim, a).gaveUp || !moveTestMover(sim, b).gaveUp) && steps < 120) {
+        sim.step();
+        ++steps;
+    }
+    CHECK(moveTestMover(sim, a).gaveUp);
+    CHECK(moveTestMover(sim, b).gaveUp);
+    CHECK(moveTestPos(sim, a).y < 30.0f);
+    CHECK(moveTestPos(sim, b).y < 30.0f);
+}
+
 TEST_CASE("Movement: a pawn held in place (working) is not shoved by one walking up to its cell") {
     Sim sim = moveTestSim(64);
     const Entity worker = moveTestPawn(sim, 20, 30);

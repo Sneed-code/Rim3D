@@ -7,6 +7,8 @@
 #include "ColonySim/Events.h"
 #include "ColonySim/Farming.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Map.h"
+#include "ColonySim/Monsters.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Narrator.h"
 #include "ColonySim/Plants.h"
@@ -478,4 +480,45 @@ TEST_CASE("Disasters: a prison break needs prisoners, an infestation needs a roo
     sim->step();
     CHECK(sim->narrator().hasWorker("Infestation"));
     CHECK(sim->narrator().hasWorker("RemnantCluster"));
+}
+
+TEST_CASE("Disasters: the narrator's infestation comes only from under overhead mountain") {
+    // RimWorld's rule: brood mounds need a thick rock roof. The year run had them under the colony's own built roofs,
+    // and on open ground, and lost whole colonies to them by day 35.
+    auto sim = disasterSim();
+    sim->step();
+    sim->submit(FireIncidentCommand{"Infestation", 100.0f});
+    sim->step();
+    CHECK(disasterCommandFailures(*sim) == 1);  // no mountain anywhere
+    CHECK(sim->monsters().hiveCount() == 0);
+    // A patch of overhead mountain 30 m from the colonists: the mounds come up there.
+    const std::vector<Entity> colonists = disasterColonists(*sim);
+    CHECK_FALSE(colonists.empty());
+    if (colonists.empty()) {
+        return;
+    }
+    const Position& at = sim->things().registry().get<Position>(colonists[0]);
+    const int cx = static_cast<int>(at.x) + 30 < sim->map().width() - 6 ? static_cast<int>(at.x) + 30 : static_cast<int>(at.x) - 34;
+    const int cy = static_cast<int>(at.y);
+    for (int y = cy - 4; y <= cy + 4; ++y) {
+        for (int x = cx - 1; x <= cx + 5; ++x) {
+            if (y == cy - 4 || y == cy + 4 || x == cx - 1 || x == cx + 5) {
+                sim->things().spawn("Wall", CellPos{x, y, 0});  // holds the roof up (a mountain's rock would)
+            } else {
+                sim->editMap().setThickRoof(CellPos{x, y, 0}, true);
+            }
+        }
+    }
+    sim->step();
+    CHECK(sim->map().roof(CellPos{cx + 2, cy, 0}) == Roof::Thick);
+    sim->submit(FireIncidentCommand{"Infestation", 100.0f});
+    sim->step();
+    CHECK(disasterCommandFailures(*sim) == 0);
+    CHECK(sim->monsters().hiveCount() >= 1);
+    for (const auto [e, thing, pos] : sim->things().registry().view<const Thing, const Position>().each()) {
+        (void)e;
+        if (sim->defs().get(thing.def).defName() == "Hive") {
+            CHECK(sim->map().roof(cellOf(pos)) == Roof::Thick);
+        }
+    }
 }

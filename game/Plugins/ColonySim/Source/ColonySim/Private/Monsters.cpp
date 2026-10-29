@@ -310,7 +310,7 @@ Entity MonsterSystem::spawnHive(CellPos cell) {
     return s.things.spawn(s.hiveDef, cell);
 }
 
-bool MonsterSystem::infest(float points, std::string& error) {
+bool MonsterSystem::infest(float points, std::string& error, bool underMountain) {
     Impl& s = *impl_;
     if (!s.hiveDef.valid() || s.insectDefs.empty()) {
         error = "the defs have no brood mound or insects";
@@ -334,6 +334,34 @@ bool MonsterSystem::infest(float points, std::string& error) {
     const int hiveCount = std::clamp(1 + static_cast<int>(points / 500.0f), 1, 4);
     CellPos first;
     bool found = false;
+    if (underMountain) {
+        // Every cell under overhead mountain in the ring, then one of them at random.
+        std::vector<CellPos> spots;
+        const int reach = static_cast<int>(kMonsterMaxDistance) + 1;
+        for (int y = static_cast<int>(midY) - reach; y <= static_cast<int>(midY) + reach; ++y) {
+            for (int x = static_cast<int>(midX) - reach; x <= static_cast<int>(midX) + reach; ++x) {
+                const CellPos c{x, y, 0};
+                const float mx = static_cast<float>(x) + 0.5f - midX;
+                const float my = static_cast<float>(y) + 0.5f - midY;
+                const float fromMid2 = mx * mx + my * my;
+                if (fromMid2 < kMonsterMinDistance * kMonsterMinDistance || fromMid2 > kMonsterMaxDistance * kMonsterMaxDistance || !s.map.inBounds(c) || s.map.roof(c) != Roof::Thick ||
+                    !s.map.walkable(c) || s.map.obstacleDm(c) != 0 || s.map.isDoor(c)) {
+                    continue;
+                }
+                float d;
+                s.nearestOf(colony, static_cast<float>(c.x) + 0.5f, static_cast<float>(c.y) + 0.5f, d);
+                if (colony.empty() || d >= kMonsterMinDistance) {
+                    spots.push_back(c);
+                }
+            }
+        }
+        if (spots.empty()) {
+            error = "no overhead mountain near the colony";
+            return false;
+        }
+        first = spots[s.rng.below(static_cast<uint32_t>(spots.size()))];
+        found = true;
+    }
     for (int pass = 0; pass < 2 && !found; ++pass) {
         for (int tries = 0; tries < 600 && !found; ++tries) {
             const float angle = s.rng.unit() * 6.2831853f;

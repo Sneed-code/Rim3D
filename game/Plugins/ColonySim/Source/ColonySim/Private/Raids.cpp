@@ -1815,9 +1815,10 @@ void RaidSystem::thinkAlarm() {
     // Enemies on the map that still fight; routed ones running off don't count.
     std::vector<Entity> hostiles;
     for (const auto [pawn, faction, pos] : reg.view<const Faction, const Position>().each()) {
-        // Wild animals aren't enemies (Animals.h) until they hunt, fight back or go manhunter (N5).
+        // Wild animals aren't enemies (Animals.h) until they hunt, fight back or go manhunter (N5); nor are the colony's own
+        // animals, until one goes mad.
         const Animal* wild = reg.try_get<Animal>(pawn);
-        if (faction.id == kPlayerFaction || (wild != nullptr && wild->temper == AnimalTemper::Calm) || health_.incapacitated(pawn) ||
+        if ((faction.id == kPlayerFaction && wild == nullptr) || (wild != nullptr && wild->temper == AnimalTemper::Calm) || health_.incapacitated(pawn) ||
             reg.all_of<Prisoner>(pawn) || reg.all_of<Visitor>(pawn)) {
             continue;
         }
@@ -1840,7 +1841,8 @@ void RaidSystem::thinkAlarm() {
     // The colony's pawns, and which enemies one of them sees (or a fighter of theirs knows of).
     std::vector<Entity> ours;
     for (const auto [pawn, pos, mover] : reg.view<const Position, const Mover>().each()) {
-        if (fighters_.factionOf(pawn) == kPlayerFaction && !health_.incapacitated(pawn)) {
+        const Animal* animal = reg.try_get<Animal>(pawn);
+        if (fighters_.factionOf(pawn) == kPlayerFaction && !health_.incapacitated(pawn) && (animal == nullptr || animal->temper == AnimalTemper::Calm)) {
             ours.push_back(pawn);
         }
     }
