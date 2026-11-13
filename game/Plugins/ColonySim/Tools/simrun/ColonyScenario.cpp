@@ -1600,7 +1600,9 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
             }
         }
     }
-    if (year ? homeFilth > 60 : sim.filth().totalLayers() > 12) {
+    // Three days: 12 sat at the edge of the spread between runs (0 to 14 layers on seeds 1, 3, 5, 7 and 42 with and without
+    // level ground, 2026-11-13), so a change that only moved the timeline flipped it; 20 still catches nobody cleaning.
+    if (year ? homeFilth > 60 : sim.filth().totalLayers() > 20) {
         planCheck("%zu layers of filth lie about (cleaned %llu): nobody keeps up with the dirt", year ? homeFilth : sim.filth().totalLayers(),
              static_cast<unsigned long long>(cleaned));
     }

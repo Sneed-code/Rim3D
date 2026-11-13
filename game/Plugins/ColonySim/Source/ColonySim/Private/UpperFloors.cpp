@@ -61,6 +61,10 @@ bool UpperFloors::lay(CellPos c, std::string* why) {
     if (plants_ != nullptr) {
         plants_->remove(CellPos{c.x, c.y, 0});  // no light under a floor
     }
+    // The floor runs parallel to the ground under it, so that ground is levelled (docs/design/levelling.md).
+    if (map_.groundWalkable(CellPos{c.x, c.y, 0})) {
+        map_.levelGround(CellRect{c.x, c.y, 1, 1, 0});
+    }
     return true;
 }
 
