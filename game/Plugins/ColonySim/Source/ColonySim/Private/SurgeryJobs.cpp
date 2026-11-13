@@ -109,7 +109,10 @@ bool JobSystem::planOperation(Entity doctor, Entity patient, Job& out) {
         if (!picks.empty()) {
             out.thing = picks.front().item;
             out.count = picks.front().count;
-            out.picks.assign(picks.begin() + 1, picks.end());
+            // push_back, not assign: GCC 15 mis-flags the range copy as an array-bounds error.
+            for (std::size_t i = 1; i < picks.size(); ++i) {
+                out.picks.push_back(picks[i]);
+            }
         }
         return true;
     }
