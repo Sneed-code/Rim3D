@@ -600,6 +600,7 @@ namespace
 		// The presets, as moves from the average face; each lined up on its neck.
 		TArray<FFacesShape> Deltas;
 		TArray<bool> Female;
+		TArray<FString> PresetNames;
 		double NeckTop = TNumericLimits<double>::Max();
 		for (const FVector& P : Average[0])
 		{
@@ -646,6 +647,7 @@ namespace
 				}
 				Deltas.Add(MoveTemp(Shape));
 				Female.Add(FCString::Strcmp(Gender, TEXT("female")) == 0);
+				PresetNames.Add(Name->AsString());
 			}
 		}
 		if (Deltas.Num() < 4)
@@ -933,6 +935,46 @@ namespace
 				UE_LOG(LogPawnFaces, Display, TEXT("  face LOD %d morph %s: largest move %.2f cm"), Lod, *Morph.Key.ToString(), Largest);
 			}
 			UE_LOG(LogPawnFaces, Display, TEXT("  face LOD %d: %d vertices, farthest from the face model %.2f cm"), Lod, Description->Vertices().Num(), Farthest);
+			// Whole preset faces (after sneed's review: four sliders on Kellan's man's face read as nobody): one morph per
+			// Creator preset that takes Kellan's face to that preset's, everywhere the face weight reaches (not the scalp,
+			// ears or neck, which keep Kellan's so the hair and body still fit). PawnFacesPresetMorph names them.
+			{
+				TArray<FVector> Placed;
+				TArray<float> FaceWeight;
+				Placed.SetNum(AllAverage.Num());
+				FaceWeight.SetNum(AllAverage.Num());
+				for (int32 k = 0; k < AllAverage.Num(); ++k)
+				{
+					Placed[k] = AllAverage[k] * Scale + Offset;
+					FaceWeight[k] = static_cast<float>(Marks.Face(AllAverage[k]));
+				}
+				for (int32 p = 0; p < Deltas.Num(); ++p)
+				{
+					const FName Name = PawnFacesPresetMorph(Female[p], PresetNames[p]);
+					Attributes.UnregisterMorphTargetAttribute(Name);
+					Attributes.RegisterMorphTargetAttribute(Name, false);
+					TVertexAttributesRef<FVector3f> Moves = Attributes.GetVertexMorphPositionDelta(Name);
+					double Largest = 0.0;
+					for (const FVertexID V : Description->Vertices().GetElementIDs())
+					{
+						FVector Target = FVector::ZeroVector;
+						float Reach = 0.0f;
+						for (const TPair<int32, float>& W : Weights[V.GetValue()])
+						{
+							const int32 k = W.Key;
+							Target += (Placed[k] + FVector(Rows[p][k * 3], Rows[p][k * 3 + 1], Rows[p][k * 3 + 2]) * Scale) * W.Value;
+							Reach += FaceWeight[k] * W.Value;
+						}
+						const FVector D = (Target - FVector(Attributes.GetVertexPositions()[V])) * Reach;
+						Moves[V] = FVector3f(D);
+						Largest = FMath::Max(Largest, D.Size());
+					}
+					if (Lod == 0)
+					{
+						UE_LOG(LogPawnFaces, Display, TEXT("  face preset morph %s: largest move %.2f cm"), *Name.ToString(), Largest);
+					}
+				}
+			}
 			if (!BodyMoves.IsEmpty())
 			{
 				TArray<int32> Nearest;

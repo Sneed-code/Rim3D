@@ -21,6 +21,7 @@
 #include "MaterialEditingLibrary.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialExpressionConstant.h"
+#include "Materials/MaterialExpressionCustom.h"
 #include "Materials/MaterialExpressionComponentMask.h"
 #include "Materials/MaterialExpressionDivide.h"
 #include "Materials/MaterialExpressionMultiply.h"
@@ -53,7 +54,8 @@ namespace
 	const TCHAR* const LooksReferenceBody = TEXT("m_med_nrw");
 	// The engine's whole MetaHuman body (the Creator's template), all of it skin.
 	const TCHAR* const LooksFullBodyMesh = TEXT("/MetaHumanCharacter/Body/IdentityTemplate/SKM_Body.SKM_Body");
-	// The Creator's bare body skin (its light skin tone colour map, no underwear) and one of its body surface normal maps.
+	// The Creator's bare body skin (its light skin tone colour map, no underwear; patched into Kellan's where his has
+	// underwear) and one of its body surface normal maps.
 	const TCHAR* const LooksBareBodyColor = TEXT("/MetaHumanCharacter/Optional/BodyTextures/T_Skin_V1_Body_BC.T_Skin_V1_Body_BC");
 	const TCHAR* const LooksBareBodyNormal = TEXT("/MetaHumanCharacter/Optional/BodyTextures/SurfaceDetail/T_Chr0005_Body_N.T_Chr0005_Body_N");
 	// The whole body takes the face mesh's skin weights within this distance of it, and its points within the second.
@@ -246,8 +248,9 @@ namespace
 				{
 					continue;
 				}
-				const FVector Local = Target.BoneWorld[W.Key].InverseTransformPosition(TargetPositions[i]);
-				Moved += Reference.BoneWorld[W.Key].TransformPosition(Local) * W.Value;
+				// Each bone carries the point by its own move only, not its turn: the body types' joints are turned a
+				// little differently, and turning a breast or belly about a spine joint 15 cm away bent their shape.
+				Moved += (TargetPositions[i] - Target.BoneWorld[W.Key].GetLocation() + Reference.BoneWorld[W.Key].GetLocation()) * W.Value;
 				Total += W.Value;
 			}
 			Delta[i] = Total > 0.0f ? Moved / Total - RefPositions[i] : FVector::ZeroVector;
@@ -405,13 +408,23 @@ namespace
 		auto* Average = Cast<UMaterialExpressionVectorParameter>(LooksExpression(Material, UMaterialExpressionVectorParameter::StaticClass(), -900, 250));
 		Average->ParameterName = PawnLooksParamSourceAverage;
 		Average->DefaultValue = FLinearColor(0.5f, 0.35f, 0.28f);
-		auto* Ratio = LooksExpression(Material, UMaterialExpressionDivide::StaticClass(), -600, 100);
-		UMaterialEditingLibrary::ConnectMaterialExpressions(Skin, TEXT("RGB"), Ratio, TEXT("A"));
-		UMaterialEditingLibrary::ConnectMaterialExpressions(Average, TEXT("RGB"), Ratio, TEXT("B"));
-		auto* Tinted = LooksExpression(Material, UMaterialExpressionMultiply::StaticClass(), -350, -100);
-		UMaterialEditingLibrary::ConnectMaterialExpressions(Color, TEXT("RGB"), Tinted, TEXT("A"));
-		UMaterialEditingLibrary::ConnectMaterialExpressions(Ratio, TEXT(""), Tinted, TEXT("B"));
-		UMaterialEditingLibrary::ConnectMaterialProperty(Tinted, TEXT(""), MP_BaseColor);
+		// The texture's own colour against its average, mostly as lightness: taken channel by channel, a dark brown
+		// feature (nipples, lips) on a red-brown texture turned blue-grey on pale skin. Darker features lean warm.
+		auto* Tint = Cast<UMaterialExpressionCustom>(LooksExpression(Material, UMaterialExpressionCustom::StaticClass(), -450, 0));
+		Tint->OutputType = CMOT_Float3;
+		Tint->Description = TEXT("PawnSkinTint");
+		Tint->Code = TEXT("float3 r = Tex / max(Average, 0.0001);\n"
+			"float l = max(dot(r, float3(0.3, 0.59, 0.11)), 0.0001);\n"
+			"float3 w = float3(pow(l, 0.6), l, pow(l, 1.25));\n"
+			"return lerp(r, w, 0.7) * Skin;");
+		Tint->Inputs.SetNum(3);
+		Tint->Inputs[0].InputName = TEXT("Tex");
+		Tint->Inputs[1].InputName = TEXT("Average");
+		Tint->Inputs[2].InputName = TEXT("Skin");
+		Tint->Inputs[0].Input.Connect(0, Color);  // output 0 is RGB
+		Tint->Inputs[1].Input.Connect(0, Average);
+		Tint->Inputs[2].Input.Connect(0, Skin);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Tint, TEXT(""), MP_BaseColor);
 
 		auto* Normal = Cast<UMaterialExpressionTextureSampleParameter2D>(LooksExpression(Material, UMaterialExpressionTextureSampleParameter2D::StaticClass(), -900, 450));
 		Normal->ParameterName = PawnLooksParamNormal;
@@ -868,6 +881,96 @@ namespace
 		return Worst < 0.5;
 	}
 
+	// Kellan's body colour map with the underwear painted on it taken out: where it is grey (the briefs, the waistband)
+	// the Creator's bare skin map shows instead, at Kellan's skin tone, blended over a few texels. The rest (nipples,
+	// navel, hands, feet, the skin's detail) stays Kellan's.
+	UTexture2D* LooksMakeBareBodyColor(UTexture2D* Kellan)
+	{
+		UTexture2D* Bare = LoadObject<UTexture2D>(nullptr, LooksBareBodyColor);
+		FImage KellanImage, BareImage;
+		if (!Kellan || !Bare || !Kellan->Source.GetMipImage(KellanImage, 0) || !Bare->Source.GetMipImage(BareImage, 0))
+		{
+			return nullptr;
+		}
+		KellanImage.GammaSpace = Kellan->SRGB ? EGammaSpace::sRGB : EGammaSpace::Linear;
+		BareImage.GammaSpace = EGammaSpace::sRGB;  // stored as display values
+		FImage K, B;
+		KellanImage.CopyTo(K, ERawImageFormat::RGBA32F, EGammaSpace::Linear);
+		BareImage.ResizeTo(B, K.SizeX, K.SizeY, ERawImageFormat::RGBA32F, EGammaSpace::Linear);
+		const int32 W = K.SizeX, H = K.SizeY;
+		TArrayView64<FLinearColor> KP = K.AsRGBA32F();
+		const TArrayView64<FLinearColor> BP = B.AsRGBA32F();
+		// Grey (unsaturated, lit) texels are underwear.
+		TArray<float> Mask;
+		Mask.SetNumZeroed(W * H);
+		FLinearColor SkinSum(0, 0, 0, 0), BareSum(0, 0, 0, 0);
+		int64 SkinCount = 0;
+		for (int64 i = 0; i < W * H; ++i)
+		{
+			const FLinearColor& P = KP[i];
+			const float Max = FMath::Max3(P.R, P.G, P.B), Min = FMath::Min3(P.R, P.G, P.B);
+			const float Saturation = Max > 0.01f ? (Max - Min) / Max : 0.0f;
+			Mask[i] = Max > 0.03f ? 1.0f - FMath::SmoothStep(0.12f, 0.30f, Saturation) : 0.0f;
+			if (Mask[i] < 0.01f && Max > 0.03f && Max < 0.9f)
+			{
+				SkinSum += P;
+				BareSum += BP[i];
+				++SkinCount;
+			}
+		}
+		// Grow it by a few texels and soften the edge.
+		const auto Pass = [&](const TArray<float>& In, int32 Radius, bool bMax)
+		{
+			TArray<float> Out;
+			Out.SetNumZeroed(W * H);
+			for (int32 y = 0; y < H; ++y)
+			{
+				for (int32 x = 0; x < W; ++x)
+				{
+					float V = 0.0f;
+					int32 N = 0;
+					for (int32 dy = -Radius; dy <= Radius; ++dy)
+					{
+						for (int32 dx = -Radius; dx <= Radius; ++dx)
+						{
+							const int32 xx = FMath::Clamp(x + dx, 0, W - 1), yy = FMath::Clamp(y + dy, 0, H - 1);
+							const float S = In[yy * W + xx];
+							V = bMax ? FMath::Max(V, S) : V + S;
+							++N;
+						}
+					}
+					Out[y * W + x] = bMax ? V : V / N;
+				}
+			}
+			return Out;
+		};
+		Mask = Pass(Pass(Mask, 3, true), 3, false);
+		const FLinearColor Ratio = SkinCount ? FLinearColor(SkinSum.R / FMath::Max(BareSum.R, 1e-4f), SkinSum.G / FMath::Max(BareSum.G, 1e-4f), SkinSum.B / FMath::Max(BareSum.B, 1e-4f)) : FLinearColor::White;
+		int64 Replaced = 0;
+		for (int64 i = 0; i < W * H; ++i)
+		{
+			const FLinearColor Skin(BP[i].R * Ratio.R, BP[i].G * Ratio.G, BP[i].B * Ratio.B, 1.0f);
+			KP[i] = FMath::Lerp(KP[i], Skin, Mask[i]);
+			KP[i].A = 1.0f;
+			Replaced += Mask[i] > 0.5f ? 1 : 0;
+		}
+		UE_LOG(LogPawnLooks, Display, TEXT("Bare body colour map: %lld of %d texels were underwear and are skin now"), Replaced, W * H);
+		FImage Out;
+		K.CopyTo(Out, ERawImageFormat::BGRA8, EGammaSpace::sRGB);
+		const FString Name = TEXT("T_PawnBody_BaseColor");
+		UPackage* Package = CreatePackage(*(FString(PawnLooksFolder) / Name));
+		UTexture2D* Texture = NewObject<UTexture2D>(Package, *Name, RF_Public | RF_Standalone);
+		Texture->PreEditChange(nullptr);
+		Texture->Source.Init(Out);
+		Texture->SetModernSettingsForNewOrChangedTexture();
+		Texture->CompressionSettings = TC_Default;
+		Texture->LODGroup = TEXTUREGROUP_Character;
+		Texture->SRGB = true;
+		Texture->MipGenSettings = TMGS_FromTextureGroup;
+		Texture->PostEditChange();
+		return Texture;
+	}
+
 	// A copy of a plugin texture in our folder (the packaged game has no editor plugins), as colour or data.
 	UTexture2D* LooksCopyTexture(IAssetTools& Tools, const TCHAR* From, const TCHAR* Name, bool bColor)
 	{
@@ -1178,7 +1281,9 @@ namespace
 			// bare skin colour map and a skin normal map instead (copied in: the game can't read the plugin).
 			if (Instance && Original == BodySkin)
 			{
-				UTexture2D* Color = LooksCopyTexture(Tools, LooksBareBodyColor, TEXT("T_PawnBody_BaseColor"), true);
+				UTexture* KellanColor = nullptr;
+				Original->GetTextureParameterValue(FHashedMaterialParameterInfo(TEXT("BaseColor")), KellanColor);
+				UTexture2D* Color = LooksMakeBareBodyColor(Cast<UTexture2D>(KellanColor));
 				UTexture2D* Normal = LooksCopyTexture(Tools, LooksBareBodyNormal, TEXT("T_PawnBody_Normal"), false);
 				if (Color && Normal)
 				{

@@ -64,6 +64,9 @@ struct FSimPawnLooks
 	float BodyHair = 0.0f;
 	// The face skin (V2b) by its number among the gender's MI_FaceSkin_* instances; -1 picks one by the face sliders.
 	int32 FaceSkin = -1;
+	// A whole Creator preset face by its name (assets/pawn_faces.json presets, of the pawn's gender), instead of the
+	// four sliders on Kellan's face; empty: the sliders.
+	FString FacePreset;
 	TArray<FSimPawnMark> Tattoos;
 	TArray<FSimPawnMark> Scars;
 
@@ -72,7 +75,7 @@ struct FSimPawnLooks
 		return Height == Other.Height && Weight == Other.Weight && Stature == Other.Stature && bFemale == Other.bFemale && Skin == Other.Skin && Hair == Other.Hair
 			&& HornLength == Other.HornLength && HornRadius == Other.HornRadius && HornSpread == Other.HornSpread && HornColor == Other.HornColor
 			&& FaceShape == Other.FaceShape && Brow == Other.Brow && Nose == Other.Nose && Jaw == Other.Jaw && Eyes == Other.Eyes
-			&& HairStyle == Other.HairStyle && Beard == Other.Beard && BodyHair == Other.BodyHair && FaceSkin == Other.FaceSkin && Tattoos == Other.Tattoos && Scars == Other.Scars;
+			&& HairStyle == Other.HairStyle && Beard == Other.Beard && BodyHair == Other.BodyHair && FaceSkin == Other.FaceSkin && FacePreset == Other.FacePreset && Tattoos == Other.Tattoos && Scars == Other.Scars;
 	}
 
 	/** Whether the pawn has V1 face numbers (not an older save's pawn). */

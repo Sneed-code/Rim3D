@@ -88,6 +88,21 @@ namespace
 		}
 	}
 
+	// The women's face skins, in assets/pawn_faces.json "skins" order (Aoi has none).
+	int32 BodiesSmokeSkinOf(const FString& Preset)
+	{
+		const TCHAR* const Skins[] = {TEXT("Ada"), TEXT("Aera"), TEXT("Asha"), TEXT("Celeste"), TEXT("Etta"), TEXT("Grace"), TEXT("Jelena"), TEXT("Lani"),
+			TEXT("Sook-ja"), TEXT("Sunita"), TEXT("Tuya"), TEXT("Vivian"), TEXT("Zuri")};
+		for (int32 i = 0; i < UE_ARRAY_COUNT(Skins); ++i)
+		{
+			if (Preset == Skins[i])
+			{
+				return i;
+			}
+		}
+		return -1;
+	}
+
 	// Height for a stature: the gender's LooksRules range (heightFemale 0.88 to 0.97, heightMale 0.95 to 1.05).
 	float BodiesSmokeHeight(bool bFemale, float Stature)
 	{
@@ -134,6 +149,14 @@ void USmokeTestSubsystem::BuildBodiesPhases()
 			if ((Pawn->GetDefaultTop() && Pawn->GetDefaultTop()->IsVisible()) || (Pawn->GetDefaultTrousers() && Pawn->GetDefaultTrousers()->IsVisible()))
 			{
 				State->Error(TEXT("Kellan's own top or trousers are still drawn"));
+			}
+			if (const USkeletalMeshComponent* Face = Pawn->GetFaceMesh(); Face && !Pawn->GetLooks().FacePreset.IsEmpty())
+			{
+				const FName Preset = PawnFacesPresetMorph(Pawn->GetLooks().bFemale, Pawn->GetLooks().FacePreset);
+				if (!Face->GetSkeletalMeshAsset() || !Face->GetSkeletalMeshAsset()->FindMorphTarget(Preset) || !FMath::IsNearlyEqual(Face->GetMorphTarget(Preset), 1.0f))
+				{
+					State->Error(FString::Printf(TEXT("the face does not wear its preset %s (is the PawnFaces commandlet rerun?)"), *Preset.ToString()));
+				}
 			}
 			float Total = 0.0f;
 			for (const TPair<FName, float>& Morph : Pawn->GetLooks().MorphWeights())
@@ -355,7 +378,11 @@ void USmokeTestSubsystem::BuildBodiesPhases()
 			Looks.Tattoos.Reset();
 			Looks.Scars.Reset();
 			Looks.HornLength = 0.0f;
-			Looks.FaceSkin = 0;
+			// A whole Creator preset face and that preset's own face skin (assets/pawn_faces.json order).
+			FString Preset = TEXT("Jelena");
+			FParse::Value(FCommandLine::Get(), TEXT("BodiesPreset="), Preset);
+			Looks.FacePreset = Preset;
+			Looks.FaceSkin = BodiesSmokeSkinOf(Preset);
 			FParse::Value(FCommandLine::Get(), TEXT("BodiesFaceSkin="), Looks.FaceSkin);
 			Pawns->SetLooksOverride(State->Showcase, Looks);
 			State->Row.Add(State->Showcase);
@@ -515,12 +542,16 @@ void USmokeTestSubsystem::BuildBodiesPhases()
 	}
 
 	// 4. Her face in each of the women's face skins (to pick the one with freckles that suits her).
-	if (FParse::Param(FCommandLine::Get(), TEXT("BodiesAllFaceSkins")))
+	// 4. Her face as each of the women's Creator presets, with its own skin (-BodiesAllPresets), to pick the one that fits.
+	if (FParse::Param(FCommandLine::Get(), TEXT("BodiesAllPresets")))
 	{
-		for (int32 Skin = 0; Skin < 13; ++Skin)
+		const TCHAR* const Presets[] = {TEXT("Ada"), TEXT("Aera"), TEXT("Aoi"), TEXT("Asha"), TEXT("Celeste"), TEXT("Etta"), TEXT("Grace"), TEXT("Jelena"),
+			TEXT("Lani"), TEXT("Sook-ja"), TEXT("Sunita"), TEXT("Tuya"), TEXT("Vivian"), TEXT("Zuri")};
+		for (const TCHAR* Preset : Presets)
 		{
+			const FString PhaseName = FString::Printf(TEXT("bodies_preset_%s"), Preset);
 			FPhase Phase;
-			Phase.Name = FString::Printf(TEXT("bodies_showcase_skin_%02d"), Skin);
+			Phase.Name = PhaseName;
 			Phase.WarmupSeconds = 2.0f;
 			Phase.MeasureSeconds = 1.0f;
 			Phase.Setup = [=, this]()
@@ -530,7 +561,8 @@ void USmokeTestSubsystem::BuildBodiesPhases()
 					if (const ASimPawnActor* Pawn = Pawns->FindPawn(State->Showcase))
 					{
 						FSimPawnLooks Looks = Pawn->GetLooks();
-						Looks.FaceSkin = Skin;
+						Looks.FacePreset = Preset;
+						Looks.FaceSkin = BodiesSmokeSkinOf(Preset);
 						Pawns->SetLooksOverride(State->Showcase, Looks);
 					}
 				}
@@ -538,7 +570,7 @@ void USmokeTestSubsystem::BuildBodiesPhases()
 				State->Reset();
 			};
 			Phase.OnFrame = CheckFrame;
-			Phase.Verify = [=, this]() { VerifyFrames(*FString::Printf(TEXT("bodies_showcase_skin_%02d"), Skin)); };
+			Phase.Verify = [=, this]() { VerifyFrames(*PhaseName); };
 			Phases.Add(MoveTemp(Phase));
 		}
 	}

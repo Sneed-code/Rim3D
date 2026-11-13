@@ -480,9 +480,18 @@ void ASimPawnActor::ApplyFace(USimPawnSubsystem& Pawns)
 	{
 		return;  // a pawn from an older save keeps Kellan's face, eyes and grooms
 	}
+	if (!AppliedFacePreset.IsNone())
+	{
+		FaceMesh->SetMorphTarget(AppliedFacePreset, 0.0f);
+		AppliedFacePreset = NAME_None;
+	}
 	for (const TPair<FName, float>& Morph : Looks.FaceMorphWeights())
 	{
 		FaceMesh->SetMorphTarget(Morph.Key, Morph.Value);
+	}
+	if (!Looks.FacePreset.IsEmpty())
+	{
+		AppliedFacePreset = PawnFacesPresetMorph(Looks.bFemale, Looks.FacePreset);
 	}
 	if (UMaterialInterface* Eye = Cast<UMaterialInterface>(Pawns.GetFacesAsset(PawnFacesEyeInstanceName(Looks.Eyes))))
 	{

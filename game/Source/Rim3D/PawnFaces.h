@@ -21,6 +21,12 @@ inline const FName PawnFacesMorphBrow(TEXT("FaceBrow"));
 inline const FName PawnFacesMorphNose(TEXT("FaceNose"));
 inline const FName PawnFacesMorphJaw(TEXT("FaceJaw"));
 
+/** A whole Creator preset face as a morph on the shaped face (at weight 1 the face is that preset's), e.g. FacePreset_F_Jelena. */
+inline FName PawnFacesPresetMorph(bool bFemale, const FString& Preset)
+{
+	return FName(*FString::Printf(TEXT("FacePreset_%s_%s"), bFemale ? TEXT("F") : TEXT("M"), *Preset));
+}
+
 /** A groom copy for one of the sim's styles: Kind is Hair, Beard, Moustache or Brows (Brows_F0.., Brows_M0..). */
 inline FString PawnFacesGroomName(const FString& Kind, const FString& Style)
 {

@@ -199,6 +199,12 @@ TArray<TPair<FName, float>> FSimPawnLooks::MorphWeights() const
 
 TArray<TPair<FName, float>> FSimPawnLooks::FaceMorphWeights() const
 {
+	if (!FacePreset.IsEmpty())
+	{
+		// The preset is the whole face: no female shift, sliders at the average.
+		return {{PawnFacesMorphFemale, 0.0f}, {PawnFacesMorphShape, 0.0f}, {PawnFacesMorphBrow, 0.0f}, {PawnFacesMorphNose, 0.0f}, {PawnFacesMorphJaw, 0.0f},
+			{PawnFacesPresetMorph(bFemale, FacePreset), 1.0f}};
+	}
 	const auto Slider = [](float Value) { return FMath::Clamp(Value, 0.0f, 1.0f) * 2.0f - 1.0f; };
 	return {{PawnFacesMorphFemale, bFemale ? 1.0f : 0.0f}, {PawnFacesMorphShape, Slider(FaceShape)}, {PawnFacesMorphBrow, Slider(Brow)},
 		{PawnFacesMorphNose, Slider(Nose)}, {PawnFacesMorphJaw, Slider(Jaw)}};

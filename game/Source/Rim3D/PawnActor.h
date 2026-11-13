@@ -277,6 +277,7 @@ private:
 	bool bApparelApplied = false;
 	bool bBareLayerTried = false;
 	bool bFullBody = false;
+	FName AppliedFacePreset;
 	bool bHairHidden = false;
 	int32 ApparelRebuilds = 0;
 
