@@ -595,6 +595,7 @@ struct SaveData {
     // Section "roomstats" (C17): floors, filth, what pawns carry on their shoes, beauty needs.
     bool hasRoomStats = false;
     std::vector<uint32_t> driedCells;  // section "terrain": water cells a moisture pump dried, in order
+    Map::LevelState levelled;          // section "terrain" 2: ground levelled for structures (docs/design/levelling.md)
     std::vector<SaveFloor> floors;
     FilthState filth;
     RoomStatsState roomStats;
@@ -3321,7 +3322,15 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("talents", 1, [&] { saveTalents(ar, d); });
     ar.section("drugs", 2, [&] { saveDrugs(ar, d); });
     ar.section("roomstats", 1, [&] { saveRoomStatsSection(ar, d); });
-    ar.section("terrain", 1, [&] { ar.list("dried", d.driedCells, [&](uint32_t& cell) { ar.value(nullptr, cell); }); });
+    ar.section("terrain", 2, [&] {
+        ar.list("dried", d.driedCells, [&](uint32_t& cell) { ar.value(nullptr, cell); });
+        if (ar.sectionVersion() >= 2) {
+            ar.list("levelCells", d.levelled.cells, [&](uint32_t& cell) { ar.value(nullptr, cell); });
+            ar.list("levelBases", d.levelled.cellBaseCm, [&](int32_t& cm) { ar.value(nullptr, cm); });
+            ar.list("levelCorners", d.levelled.corners, [&](uint32_t& corner) { ar.value(nullptr, corner); });
+            ar.list("levelHeights", d.levelled.cornerCm, [&](int32_t& cm) { ar.value(nullptr, cm); });
+        }
+    });
     ar.section("animals", 2, [&] {
         ar.value("wildAnimals", d.wildAnimals);
         ar.value("populated", d.animals.populated);
@@ -5028,6 +5037,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         }
     }
     d.driedCells = sim.map_.dried();
+    d.levelled = sim.map_.levelState();
     d.hasRoomStats = true;
     for (const auto& [cell, def] : sim.floors_->all()) {
         d.floors.push_back(SaveFloor{static_cast<uint32_t>(cell), sim.defs_->get(def).defName()});
@@ -5501,6 +5511,10 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
     }
     sim.map_.restoreDried(d.driedCells);
+    if (!sim.map_.restoreLevelState(d.levelled)) {
+        error = "the save has levelled ground off the map";
+        return false;
+    }
     if (d.hasRoomStats) {
         std::vector<std::pair<int, DefId>> floors;
         for (const SaveFloor& f : d.floors) {
