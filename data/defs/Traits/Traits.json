@@ -142,6 +142,7 @@
   },
   {
     "defName": "Nudist", "parent": "TraitBase", "commonality": 0.7,
-    "degreeDatas": [{ "degree": 0, "label": "nudist", "moodNaked": 20, "moodClothed": -3 }]
+    "degreeDatas": [{ "degree": 0, "label": "nudist", "moodNaked": 20, "moodClothed": -3, "statOffsets": { "comfyTemperatureMin": -10 } }],
+    "ours": ["degreeDatas.0.statOffsets.comfyTemperatureMin: sneed's G2 playtest, nudists shrug off 10 C more cold (RimWorld's nudist has no temperature change)"]
   }
 ]

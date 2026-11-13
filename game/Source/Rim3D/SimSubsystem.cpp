@@ -740,6 +740,11 @@ bool USimSubsystem::HandleKey(const FKey& Key)
 	{
 		SetSpeed(3);
 	}
+	else if (Key == EKeys::F3)
+	{
+		// One key that steps through the speeds: 1x, 2x, 3x and round again (a paused game starts at 1x).
+		SetSpeed(Speed <= 0 || Speed >= MaxSpeed ? 1 : Speed + 1);
+	}
 	else if (Key == EKeys::Period)
 	{
 		if (Speed == 0)

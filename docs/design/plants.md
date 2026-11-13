@@ -33,7 +33,11 @@ For every cell with fertility above 0:
    `min(fertility, 1)`. Sand (0.1) is therefore sparse and rich soil is no denser than soil.
 2. Among the biome's `wildPlants`, those whose `fertilityMin` the cell meets are weighted by
    commonality. Trees' weight swings between 0.2 and 1.8 times in 48 m patches, so there are forests
-   and meadows (RimWorld's clumping is not copied).
+   and meadows (RimWorld's clumping is not copied). A biome with `forestPatches` (ours; the tropical
+   rainforest, after sneed's G2 playtest) has two kinds of ground instead: `openShare` of the map
+   (0.5) is open ground where trees weigh `openTrees` (0.08: a tree here and there among the bushes
+   and grass) and the rest is dense forest at `denseTrees` (1.6), in `cellMetres` (64 m) patches with
+   an edge about 6 m wide. The split is taken from the map's own noise, so the share is exact.
 3. Start growth: a third of the plants are fully grown and older, the rest are anywhere on the way up.
 
 All of it comes from `Rng` streams made from the map seed, apart from the sim's own stream, so

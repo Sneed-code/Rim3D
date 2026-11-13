@@ -438,7 +438,7 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 	}
 	else if (ImGui::Begin("##OverseerHints", nullptr, PanelFlags | ImGuiWindowFlags_NoInputs))
 	{
-		ImGui::TextUnformatted("F1 hide   WASD pan   Q/E turn   wheel zoom");
+		ImGui::TextUnformatted("F1 hide   F3 speed   WASD pan   Q/E turn   wheel zoom");
 		ImGui::TextUnformatted("middle-drag orbit   click select");
 		ImGui::TextUnformatted("F centre   Home reset   Esc deselect");
 		ImGui::TextUnformatted("Page Up / Page Down level above / below");

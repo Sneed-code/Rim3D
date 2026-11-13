@@ -209,6 +209,16 @@ stands; `touchCell` finds the walkable neighbour it works from (`WorkCandidate::
 the construction jobs, whose standing cell the scanner works out). `Job::progress` is the work
 towards the next pick hit or on the plant. Details and numbers: [mining.md](mining.md).
 
+## Work speed-ups (ours)
+
+After sneed's G2 playtest some long jobs go faster than RimWorld's, set by `data/tuning.json` `values`
+(1 if absent, so the def numbers stay RimWorld's): `work.treeFellingSpeed` 10 (felling a tree, wild or in a
+zone), `work.constructionSpeed` 2 (building and taking down), `work.miningSpeed` 2 (mining and deep drilling)
+and `work.craftingSpeed` 2 (work at a bench: crafting, cooking, smelting). Experience per second rises by the same
+factor, so a felled tree or a mined rock teaches as much as before. Other work (sowing, harvesting crops,
+hauling, doctoring, research) keeps RimWorld's speed. Every colonist works at these rates; the protagonist has
+the same base and only the talent tree's build speed on top (`docs/design/talents.md`).
+
 ## Not yet
 
 - Interrupting a job for something more urgent (C6 needs, F6 alarm) and the emergency nodes.

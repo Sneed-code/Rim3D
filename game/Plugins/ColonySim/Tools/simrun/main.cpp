@@ -853,6 +853,13 @@ int main(int argc, char** argv) {
         const int mid = sim.map().width() / 2;
         const colony::CellRect area{mid - options.gather, mid - options.gather, 2 * options.gather, 2 * options.gather, 0};
         sim.submit(colony::DesignateCommand{area, colony::DesignationKind::Mine});
+        // Leave a pillar every 6 cells, as a player would: a mountain mined out wholesale brings its roof down on the
+        // miners (with mining twice as fast since the G2 playtest, that happened inside the two days).
+        for (int y = area.minY; y < area.minY + area.sizeY; y += 6) {
+            for (int x = area.minX; x < area.minX + area.sizeX; x += 6) {
+                sim.submit(colony::CancelDesignationsCommand{colony::CellRect{x, y, 1, 1, 0}, colony::DesignationKind::Mine});
+            }
+        }
         sim.submit(colony::DesignateCommand{area, colony::DesignationKind::HarvestPlant});
     }
 

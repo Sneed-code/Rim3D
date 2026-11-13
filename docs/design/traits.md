@@ -24,6 +24,10 @@ Already done before: Gourmand, Quick sleeper, Night owl and Greedy ([needs.md](n
 (optimist, sanguine...), break thresholds (nervous, iron-willed, neurotic, too smart); Brawler and Nimble melee numbers;
 Kind and Abrasive opinions ([social.md](social.md)); Nudist and Cannibal moods.
 
+Ours (sneed's G2 playtest): a **Nudist** is comfortable 10 C colder (`statOffsets.comfyTemperatureMin` -10,
+`TraitStats::comfyMinOffset`, added to the comfort range with the clothes' insulation), so cold nights don't bother
+them; the hot end is unchanged. RimWorld's nudist has no temperature change.
+
 ## Not yet
 
 - Bloodlust's mood from kills and witnessed deaths: needs the killer in `PawnDied` events.

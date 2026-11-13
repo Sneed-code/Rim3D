@@ -567,7 +567,7 @@ void UProtagonistSubsystem::DrawHud(USimSubsystem& Bridge)
 	}
 	else if (ImGui::Begin("##DirectHints", nullptr, PanelFlags | ImGuiWindowFlags_NoInputs))
 	{
-		ImGui::TextUnformatted("F1 hide   WASD walk   Ctrl slow   mouse look");
+		ImGui::TextUnformatted("F1 hide   F3 speed   WASD walk   Ctrl slow   mouse look");
 		ImGui::TextUnformatted("V first / third person   wheel zoom");
 		ImGui::TextUnformatted("F hold: work / pick up   X put down   B build");
 		ImGui::TextUnformatted("T take over   Tab overseer view");

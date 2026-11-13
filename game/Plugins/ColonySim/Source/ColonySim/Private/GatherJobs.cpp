@@ -54,6 +54,10 @@ void JobSystem::loadGatherRules() {
     for (const double v : kGatherYield) {
         gather_.yieldByLevel.push_back(v);
     }
+    gather_.treeFellingSpeed = defs_.tuning("work.treeFellingSpeed");
+    gather_.constructionSpeed = defs_.tuning("work.constructionSpeed");
+    gather_.miningSpeed = defs_.tuning("work.miningSpeed");
+    gather_.craftingSpeed = defs_.tuning("work.craftingSpeed");
     if (const Def* rules = defs_.find("Rules", "WorkRules")) {
         gather_.miningSpeedBase = rules->number("mining.speedBase", gather_.miningSpeedBase);
         gather_.miningSpeedPerLevel = rules->number("mining.speedPerLevel", gather_.miningSpeedPerLevel);
@@ -117,7 +121,7 @@ double JobSystem::miningSpeed(Entity pawn) const {
     const double speed = gather_.miningSpeedBase + gather_.miningSpeedPerLevel * skillLevel(pawn, "Mining");
     const PawnGenes* genes = things_.registry().valid(pawn) ? things_.registry().try_get<PawnGenes>(pawn) : nullptr;
     return std::max(0.0, speed) * gatherManipulation(things_.registry(), pawn, manipulationIndex_) * workFactor(pawn) *
-           (genes != nullptr ? genes->effects.miningSpeed : 1.0);
+           (genes != nullptr ? genes->effects.miningSpeed : 1.0) * gather_.miningSpeed;
 }
 
 double JobSystem::plantWorkSpeed(Entity pawn) const {
@@ -345,7 +349,8 @@ JobSystem::StepResult JobSystem::mineRock(Entity pawn, Job& job, std::string& wh
         return StepResult::Failed;
     }
     job.progress += static_cast<float>(speed);
-    learnSkill(pawn, "Mining", gather_.miningXpPerSecond);
+    // A faster dig learns as much a rock as before.
+    learnSkill(pawn, "Mining", gather_.miningXpPerSecond * gather_.miningSpeed);
     if (static_cast<double>(job.progress) < gather_.hitSeconds) {
         return StepResult::Running;
     }
@@ -395,10 +400,12 @@ JobSystem::StepResult JobSystem::plantWork(Entity pawn, Job& job, std::string& w
         job.walk = 2;  // work steps don't walk: this marks that the animation event went out
         gatherEvent(pawn, harvest ? PawnAction::Harvest : PawnAction::Cut, job.cell);
     }
-    job.progress += static_cast<float>(speed);
-    learnSkill(pawn, "Plants", gather_.plantXpPerSecond);
     const DefId plant = plants_.defAt(job.cell);
     const Def& def = defs_.get(plant);
+    // Felling a tree goes faster than RimWorld's (tuning `work.treeFellingSpeed`); a felled tree teaches as much as before.
+    const double fellFactor = def.flag("plant.isTree") ? gather_.treeFellingSpeed : 1.0;
+    job.progress += static_cast<float>(speed * fellFactor);
+    learnSkill(pawn, "Plants", gather_.plantXpPerSecond * fellFactor);
     if (static_cast<double>(job.progress) < def.number("plant.harvestWork", 1.0)) {
         return StepResult::Running;
     }

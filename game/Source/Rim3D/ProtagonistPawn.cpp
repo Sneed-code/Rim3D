@@ -4,6 +4,7 @@
 #include "Components/InputComponent.h"
 #include "Components/SceneComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "HAL/IConsoleManager.h"
 #include "InputCoreTypes.h"
 
 #include "HandsOnSubsystem.h"
@@ -19,8 +20,11 @@
 
 namespace
 {
-	// Degrees per mouse count.
-	constexpr float ProtagonistMouseTurn = 0.12f;
+	// Degrees per unit of the mouse axis (the engine has already scaled each count by the input's 0.07), so the
+	// default turns about 0.05 degrees a count, a usual shooter feel. 0.12 was 0.008 a count and much too slow
+	// (sneed's G2 playtest).
+	TAutoConsoleVariable<float> GProtagonistMouseTurn(TEXT("Protagonist.MouseTurn"), 0.7f,
+		TEXT("How fast the mouse turns the view in direct control: degrees per unit of mouse axis (0.7 default, higher turns faster)."));
 	constexpr float ProtagonistMaxPitch = 80.0f;
 	// One wheel notch scales the third person distance by this much.
 	constexpr float ProtagonistZoomPerNotch = 0.85f;
@@ -150,7 +154,8 @@ void AProtagonistPawn::Tick(float DeltaTime)
 		PC->GetInputMouseDelta(MouseX, MouseY);
 		if (MouseX != 0.0f || MouseY != 0.0f)
 		{
-			Look(MouseX * ProtagonistMouseTurn, MouseY * ProtagonistMouseTurn);
+			const float Turn = FMath::Max(0.01f, GProtagonistMouseTurn.GetValueOnGameThread());
+			Look(MouseX * Turn, MouseY * Turn);
 		}
 	}
 	if (Thing != colony::kNoEntity)
