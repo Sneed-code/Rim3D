@@ -493,7 +493,8 @@ void ASimPawnActor::ApplyFace(USimPawnSubsystem& Pawns)
 	}
 	const float Sliders[] = {Looks.FaceShape, Looks.Brow, Looks.Nose, Looks.Jaw};
 	const int32 Choices = Skins + (Looks.bFemale ? 0 : 1);
-	const int32 SkinPick = Choices > 0 ? static_cast<int32>(FCrc::MemCrc32(Sliders, sizeof(Sliders)) % static_cast<uint32>(Choices)) : 0;
+	const int32 SkinPick = Looks.FaceSkin >= 0 && Looks.FaceSkin < Skins ? Looks.FaceSkin
+		: Choices > 0 ? static_cast<int32>(FCrc::MemCrc32(Sliders, sizeof(Sliders)) % static_cast<uint32>(Choices)) : 0;
 	UMaterialInterface* FaceSkin = SkinPick < Skins ? Cast<UMaterialInterface>(Pawns.GetFacesAsset(PawnFacesSkinName(Looks.bFemale, SkinPick))) : nullptr;
 	for (const TPair<int32, TObjectPtr<UMaterialInterface>>& Slot : FaceSkinSlots)
 	{
@@ -803,6 +804,16 @@ void ASimPawnActor::EnsureBareLayer(USimPawnSubsystem& Pawns)
 	{
 		return;
 	}
+	// The real body (character creator step 1): the MetaHuman's body is the engine's whole body, all skin, so it is
+	// what shows where nothing is worn. Kellan's own clothes go once the clothes assets are there to replace them.
+	const USkeletalMesh* BodyMesh = MetaHumanBody->GetSkeletalMeshAsset();
+	if (BodyMesh && BodyMesh->FindMorphTarget(PawnLooksFullBodyMarker) && Pawns.GetClothesAsset(PawnBareMeshes[0]))
+	{
+		bFullBody = true;
+		DefaultTop->SetVisibility(false);
+		DefaultTrousers->SetVisibility(false);
+		return;
+	}
 	USkinnedMeshComponent* Leader = DefaultTop->LeaderPoseComponent.IsValid() ? DefaultTop->LeaderPoseComponent.Get() : MetaHumanBody.Get();
 	for (const TCHAR* Path : PawnBareMeshes)
 	{
@@ -907,7 +918,7 @@ void ASimPawnActor::ApplyApparel(USimPawnSubsystem& Pawns, const FSimPawnApparel
 		return;  // a mannequin has no clothes to change
 	}
 	EnsureBareLayer(Pawns);
-	if (BareLayer.IsEmpty() || !DefaultTop || !DefaultTrousers)
+	if ((BareLayer.IsEmpty() && !bFullBody) || !DefaultTop || !DefaultTrousers)
 	{
 		return;  // no clothes assets, or no looks meshes to put away: Kellan's own clothes stay
 	}

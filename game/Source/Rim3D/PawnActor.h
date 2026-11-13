@@ -63,6 +63,8 @@ public:
 	const TArray<TObjectPtr<UStaticMeshComponent>>& GetHorns() const { return Horns; }
 	/** V2 (docs/design/looks.md): the MetaHuman's face with the face shape morphs, null without the PawnFaces assets. */
 	USkeletalMeshComponent* GetFaceMesh() const { return FaceMesh; }
+	/** The MetaHuman's body (with the whole body, all of its skin); null for a mannequin. */
+	USkeletalMeshComponent* GetSkinBody() const { return MetaHumanBody; }
 	/** The eye slots of the face (left, right). */
 	const TArray<int32>& GetEyeSlots() const { return EyeSlots; }
 	/** The groom a groom component (Hair, Eyebrows, Mustache, Beard, Eyelashes) draws now: the asset's name, empty for none. */
@@ -81,7 +83,9 @@ public:
 	/** The meshes of the worn pieces now (skinned garments and head props), and the item each belongs to. */
 	const TArray<TObjectPtr<UMeshComponent>>& GetWornMeshes() const { return WornMeshes; }
 	const TArray<uint32>& GetWornMeshItems() const { return WornMeshItems; }
-	/** The bare skin layer (torso and arms, legs); empty while the clothes assets are missing. */
+	/** Whether the MetaHuman wears the engine's whole body (all skin; no skin layer needed under the clothes). */
+	bool HasFullBody() const { return bFullBody; }
+	/** The bare skin layer (torso and arms, legs) of the older hands-and-feet body; empty with the whole body or without the clothes assets. */
 	const TArray<TObjectPtr<USkeletalMeshComponent>>& GetBareLayer() const { return BareLayer; }
 	const TArray<TObjectPtr<UMaterialInstanceDynamic>>& GetBareSkins() const { return BareSkins; }
 	const UStaticMeshComponent* GetHairCards() const { return HairCards; }
@@ -271,6 +275,7 @@ private:
 	uint64 ApparelKey = 0;
 	bool bApparelApplied = false;
 	bool bBareLayerTried = false;
+	bool bFullBody = false;
 	bool bHairHidden = false;
 	int32 ApparelRebuilds = 0;
 

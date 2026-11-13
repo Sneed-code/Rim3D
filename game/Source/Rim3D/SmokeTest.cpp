@@ -133,6 +133,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildFacesPhases();
 	}
+	else if (TestName == TEXT("bodies"))
+	{
+		BuildBodiesPhases();
+	}
 	else if (TestName == TEXT("world"))
 	{
 		BuildWorldPhases();

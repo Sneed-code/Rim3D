@@ -162,7 +162,17 @@ void USmokeTestSubsystem::BuildClothesPhases()
 				State->Error(TEXT("a pawn has no actor or is not a MetaHuman"));
 				continue;
 			}
-			if (Pawn->GetBareLayer().Num() != 2 || !Pawn->GetDefaultTop() || !Pawn->GetDefaultTrousers())
+			// With the real body (character creator step 1) the MetaHuman's own body is all skin and there is no skin layer.
+			if (Pawn->HasFullBody())
+			{
+				const USkeletalMeshComponent* Skin = Pawn->GetSkinBody();
+				if (!Pawn->GetBareLayer().IsEmpty() || !Skin || !Skin->IsVisible() || !Skin->GetSkeletalMeshAsset()
+					|| !Skin->GetSkeletalMeshAsset()->FindMorphTarget(PawnLooksFullBodyMarker))
+				{
+					State->Error(TEXT("a pawn with the whole body has a skin layer too, or its body is hidden or not the whole body"));
+				}
+			}
+			else if (Pawn->GetBareLayer().Num() != 2 || !Pawn->GetDefaultTop() || !Pawn->GetDefaultTrousers())
 			{
 				State->Error(FString::Printf(TEXT("a pawn has %d skin layers and top %d trousers %d, wanted 2 layers and Kellan's top and trousers found"),
 					Pawn->GetBareLayer().Num(), Pawn->GetDefaultTop() != nullptr, Pawn->GetDefaultTrousers() != nullptr));

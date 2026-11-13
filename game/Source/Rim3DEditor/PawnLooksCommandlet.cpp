@@ -34,6 +34,7 @@
 #include "Rendering/SkeletalMeshModel.h"
 #include "SkelMeshDNAUtils.h"
 #include "SkeletalMeshAttributes.h"
+#include "StaticMeshOperations.h"
 #include "StaticMeshAttributes.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
@@ -49,6 +50,11 @@ namespace
 	const TCHAR* const LooksSkinProfile = TEXT("/Game/MetaHumans/Common/Face/SubsurfaceProfiles/SSP_Head.SSP_Head");
 	// The body Kellan has; the other body types are measured against it.
 	const TCHAR* const LooksReferenceBody = TEXT("m_med_nrw");
+	// The engine's whole MetaHuman body (the Creator's template), all of it skin.
+	const TCHAR* const LooksFullBodyMesh = TEXT("/MetaHumanCharacter/Body/IdentityTemplate/SKM_Body.SKM_Body");
+	// The Creator's bare body skin (its light skin tone colour map, no underwear) and one of its body surface normal maps.
+	const TCHAR* const LooksBareBodyColor = TEXT("/MetaHumanCharacter/Optional/BodyTextures/T_Skin_V1_Body_BC.T_Skin_V1_Body_BC");
+	const TCHAR* const LooksBareBodyNormal = TEXT("/MetaHumanCharacter/Optional/BodyTextures/SurfaceDetail/T_Chr0005_Body_N.T_Chr0005_Body_N");
 	// Body morphs fade out over this distance from the neck seam, so the head (which keeps its
 	// shape) still meets the body.
 	constexpr double LooksSeamFadeCm = 7.0;
@@ -139,7 +145,8 @@ namespace
 	// ---- Body type files -----------------------------------------------------------------------
 
 	// One body type from its DNA file: the full-detail mesh (body and head together), its skin
-	// weights by bone name, and its joints as a skeleton in Unreal's terms.
+	// weights by bone name, and its joints as a skeleton in Unreal's terms. The lower details
+	// (the file's meshes 1 to 3) are kept too, for the whole body's lower LODs.
 	struct FLooksBody
 	{
 		FString Name;
@@ -147,6 +154,8 @@ namespace
 		TArray<TArray<TPair<int32, float>>> Skin;  // per vertex: bone index in Bones, weight
 		TArray<FName> Bones;
 		TArray<FTransform> BoneWorld;  // bind pose, component space, by Bones
+		TArray<TArray<FVector>> LodPositions;  // by DNA mesh (LOD); [0] is Positions
+		TArray<TArray<TArray<TPair<int32, float>>>> LodSkin;
 	};
 
 	// How a DNA joint's three angles become a rotation: as a rotator (pitch, yaw, roll) or as the
@@ -163,22 +172,31 @@ namespace
 			UE_LOG(LogPawnLooks, Error, TEXT("Could not read %s"), *LooksBodyDnaPath(Name));
 			return false;
 		}
-		const uint32 Count = Reader->GetVertexPositionCount(0);
-		Out.Positions.SetNum(Count);
-		Out.Skin.SetNum(Count);
-		for (uint32 i = 0; i < Count; ++i)
+		Out.LodPositions.SetNum(Reader->GetMeshCount());
+		Out.LodSkin.SetNum(Reader->GetMeshCount());
+		for (uint16 Mesh = 0; Mesh < Reader->GetMeshCount(); ++Mesh)
 		{
-			Out.Positions[i] = Reader->GetVertexPosition(0, i);
-		}
-		for (uint32 i = 0; i < Reader->GetSkinWeightsCount(0) && i < Count; ++i)
-		{
-			const TArrayView<const float> Weights = Reader->GetSkinWeightsValues(0, i);
-			const TArrayView<const uint16> Joints = Reader->GetSkinWeightsJointIndices(0, i);
-			for (int32 k = 0; k < Weights.Num() && k < Joints.Num(); ++k)
+			const uint32 Count = Reader->GetVertexPositionCount(Mesh);
+			TArray<FVector>& Positions = Out.LodPositions[Mesh];
+			TArray<TArray<TPair<int32, float>>>& Skin = Out.LodSkin[Mesh];
+			Positions.SetNum(Count);
+			Skin.SetNum(Count);
+			for (uint32 i = 0; i < Count; ++i)
 			{
-				Out.Skin[i].Add({Joints[k], Weights[k]});
+				Positions[i] = Reader->GetVertexPosition(Mesh, i);
+			}
+			for (uint32 i = 0; i < Reader->GetSkinWeightsCount(Mesh) && i < Count; ++i)
+			{
+				const TArrayView<const float> Weights = Reader->GetSkinWeightsValues(Mesh, i);
+				const TArrayView<const uint16> Joints = Reader->GetSkinWeightsJointIndices(Mesh, i);
+				for (int32 k = 0; k < Weights.Num() && k < Joints.Num(); ++k)
+				{
+					Skin[i].Add({Joints[k], Weights[k]});
+				}
 			}
 		}
+		Out.Positions = Out.LodPositions[0];
+		Out.Skin = Out.LodSkin[0];
 
 		// The joints in component space, each joint times its parent. The root's own rotation is
 		// left out: the vertices are already in Unreal's axes.
@@ -210,27 +228,45 @@ namespace
 	// target's vertices are taken off its own skeleton and put on the reference one by their skin
 	// weights, so a shorter body keeps its shape but not its height (heights come from scaling
 	// the whole pawn).
-	TArray<FVector> LooksShapeDelta(const FLooksBody& Reference, const FLooksBody& Target)
+	TArray<FVector> LooksShapeDelta(const FLooksBody& Reference, const FLooksBody& Target, int32 Mesh = 0)
 	{
+		const TArray<FVector>& RefPositions = Reference.LodPositions[Mesh];
+		const TArray<FVector>& TargetPositions = Target.LodPositions[Mesh];
+		const TArray<TArray<TPair<int32, float>>>& TargetSkin = Target.LodSkin[Mesh];
 		TArray<FVector> Delta;
-		Delta.SetNumZeroed(Reference.Positions.Num());
-		for (int32 i = 0; i < Reference.Positions.Num() && i < Target.Positions.Num(); ++i)
+		Delta.SetNumZeroed(RefPositions.Num());
+		for (int32 i = 0; i < RefPositions.Num() && i < TargetPositions.Num(); ++i)
 		{
 			FVector Moved = FVector::ZeroVector;
 			float Total = 0.0f;
-			for (const TPair<int32, float>& W : Target.Skin[i])
+			for (const TPair<int32, float>& W : TargetSkin[i])
 			{
 				if (!Target.BoneWorld.IsValidIndex(W.Key) || !Reference.BoneWorld.IsValidIndex(W.Key))
 				{
 					continue;
 				}
-				const FVector Local = Target.BoneWorld[W.Key].InverseTransformPosition(Target.Positions[i]);
+				const FVector Local = Target.BoneWorld[W.Key].InverseTransformPosition(TargetPositions[i]);
 				Moved += Reference.BoneWorld[W.Key].TransformPosition(Local) * W.Value;
 				Total += W.Value;
 			}
-			Delta[i] = Total > 0.0f ? Moved / Total - Reference.Positions[i] : FVector::ZeroVector;
+			Delta[i] = Total > 0.0f ? Moved / Total - RefPositions[i] : FVector::ZeroVector;
 		}
 		return Delta;
+	}
+
+	// Near the head (which keeps its shape, neck included) a body keeps its shape too, fading in over
+	// LooksSeamFadeCm, so the head still meets the collar and shoulders.
+	TArray<float> LooksSeamFade(const TArray<FVector>& Positions, const FLooksGrid& FaceGrid)
+	{
+		TArray<float> Fade;
+		Fade.SetNum(Positions.Num());
+		for (int32 i = 0; i < Positions.Num(); ++i)
+		{
+			double Distance = 0.0;
+			FaceGrid.Nearest(Positions[i], LooksSeamFadeCm + 1.0, Distance);
+			Fade[i] = FMath::SmoothStep(0.0f, 1.0f, static_cast<float>(FMath::Min(Distance, LooksSeamFadeCm) / LooksSeamFadeCm));
+		}
+		return Fade;
 	}
 
 	// ---- Assets --------------------------------------------------------------------------------
@@ -537,6 +573,265 @@ namespace
 		return Out;
 	}
 
+	// ---- The whole body ------------------------------------------------------------------------
+
+	// For each vertex of one LOD of the Creator's body template (its own DNA, body only), the
+	// vertex of a body type file's combined mesh (body and head) that is the same point of the
+	// body: the one with the same texture coordinates, the nearest if several share them (seams,
+	// and the head, whose layout may overlap the body's). The two are in different shapes, so
+	// position alone can't pair them.
+	TArray<int32> LooksMapByUV(IDNAReader& Own, uint16 OwnMesh, IDNAReader& Combined, uint16 CombinedMesh, const TArray<FVector>& CombinedPositions, int32& OutUnmatched)
+	{
+		const auto Key = [](const FTextureCoordinate& T) { return FIntPoint(FMath::RoundToInt32(T.U * 100000.0f), FMath::RoundToInt32(T.V * 100000.0f)); };
+		TMap<FIntPoint, TArray<int32>> ByUV;
+		for (uint32 l = 0; l < Combined.GetVertexLayoutCount(CombinedMesh); ++l)
+		{
+			const FVertexLayout L = Combined.GetVertexLayout(CombinedMesh, l);
+			ByUV.FindOrAdd(Key(Combined.GetVertexTextureCoordinate(CombinedMesh, L.TextureCoordinate))).AddUnique(L.Position);
+		}
+		const uint32 Count = Own.GetVertexPositionCount(OwnMesh);
+		TArray<TArray<int32>> Candidates;
+		Candidates.SetNum(Count);
+		TArray<TArray<FIntPoint>> OwnUV;
+		OwnUV.SetNum(Count);
+		for (uint32 l = 0; l < Own.GetVertexLayoutCount(OwnMesh); ++l)
+		{
+			const FVertexLayout L = Own.GetVertexLayout(OwnMesh, l);
+			if (OwnUV.IsValidIndex(L.Position))
+			{
+				OwnUV[L.Position].AddUnique(Key(Own.GetVertexTextureCoordinate(OwnMesh, L.TextureCoordinate)));
+			}
+			if (const TArray<int32>* Found = ByUV.Find(Key(Own.GetVertexTextureCoordinate(OwnMesh, L.TextureCoordinate))); Found && Candidates.IsValidIndex(L.Position))
+			{
+				for (const int32 C : *Found)
+				{
+					Candidates[L.Position].AddUnique(C);
+				}
+			}
+		}
+		FLooksGrid Grid;
+		Grid.Build(CombinedPositions, 2.0);
+		TArray<int32> Map;
+		Map.SetNum(Count);
+		OutUnmatched = 0;
+		for (uint32 i = 0; i < Count; ++i)
+		{
+			const FVector P = FVector(Own.GetVertexPosition(OwnMesh, i));
+			double Best = TNumericLimits<double>::Max();
+			Map[i] = INDEX_NONE;
+			for (const int32 C : Candidates[i])
+			{
+				const double D = FVector::DistSquared(P, CombinedPositions[C]);
+				if (D < Best)
+				{
+					Best = D;
+					Map[i] = C;
+				}
+			}
+			if (Map[i] == INDEX_NONE)
+			{
+				// Lower LODs don't always keep a vertex's exact texture coordinates: the nearest ones,
+				// then the nearest point among those that share them.
+				++OutUnmatched;
+				double BestUV = TNumericLimits<double>::Max();
+				for (const TPair<FIntPoint, TArray<int32>>& Entry : ByUV)
+				{
+					for (const FIntPoint& Mine : OwnUV[i])
+					{
+						const double D = FVector2D(Entry.Key - Mine).SizeSquared();
+						if (D < BestUV)
+						{
+							BestUV = D;
+							Best = TNumericLimits<double>::Max();
+						}
+						if (D <= BestUV)
+						{
+							for (const int32 C : Entry.Value)
+							{
+								const double DP = FVector::DistSquared(P, CombinedPositions[C]);
+								if (DP < Best)
+								{
+									Best = DP;
+									Map[i] = C;
+								}
+							}
+						}
+					}
+				}
+				if (Map[i] == INDEX_NONE)
+				{
+					double Distance = 0.0;
+					Map[i] = Grid.Nearest(P, 30.0, Distance);
+					Map[i] = Map[i] == INDEX_NONE ? 0 : Map[i];
+				}
+			}
+		}
+		return Map;
+	}
+
+	// `Copy` (of Kellan's body, his skeleton and skin material) becomes the engine's whole MetaHuman
+	// body, every LOD: the Creator template's topology and texture layout, in Kellan's body type's
+	// shape and skin weights, with each body type's morph made exactly from its own file.
+	bool LooksMakeFullBody(USkeletalMesh* Copy, const FLooksBody& Reference, const TMap<FName, TArray<TArray<FVector>>>& LodDeltas)
+	{
+		USkeletalMesh* Template = LoadObject<USkeletalMesh>(nullptr, LooksFullBodyMesh);
+		TSharedPtr<IDNAReader> Own = Template ? USkelMeshDNAUtils::GetDNAReader(Template) : nullptr;
+		TSharedPtr<IDNAReader> Combined = ReadDNAFromFile(LooksBodyDnaPath(LooksReferenceBody), EDNADataLayer::All, 0);
+		if (!Template || !Own || !Combined || Copy->GetMaterials().IsEmpty())
+		{
+			UE_LOG(LogPawnLooks, Error, TEXT("The MetaHuman Creator's body template (%s) or its DNA is missing"), LooksFullBodyMesh);
+			return false;
+		}
+		const TArray<FVector> KellanHands = LooksVertexPositions(*Copy->GetMeshDescription(0));
+		const FReferenceSkeleton& Skeleton = Copy->GetRefSkeleton();
+		TArray<int32> BoneOf;  // DNA joint -> Kellan's bone
+		for (const FName& Bone : Reference.Bones)
+		{
+			BoneOf.Add(Skeleton.FindBoneIndex(Bone));
+		}
+		const FName Slot = Copy->GetMaterials()[0].ImportedMaterialSlotName;
+		const int32 Lods = FMath::Min(FMath::Min(Template->GetLODNum(), Copy->GetLODNum()), FMath::Min(static_cast<int32>(Own->GetMeshCount()), Reference.LodPositions.Num()));
+		for (int32 Lod = 0; Lod < Lods; ++Lod)
+		{
+			if (!Template->HasMeshDescription(Lod))
+			{
+				UE_LOG(LogPawnLooks, Error, TEXT("The body template's LOD %d has no mesh description"), Lod);
+				return false;
+			}
+			FMeshDescription Description = *Template->GetMeshDescription(Lod);
+			if (Description.Vertices().Num() != static_cast<int32>(Own->GetVertexPositionCount(Lod)))
+			{
+				UE_LOG(LogPawnLooks, Error, TEXT("The body template's LOD %d has %d vertices, its DNA %d"), Lod, Description.Vertices().Num(), Own->GetVertexPositionCount(Lod));
+				return false;
+			}
+			int32 Unmatched = 0;
+			const TArray<int32> Map = LooksMapByUV(*Own, Lod, *Combined, Lod, Reference.LodPositions[Lod], Unmatched);
+			TSet<int32> Distinct(Map);
+			UE_LOG(LogPawnLooks, Display, TEXT("Whole body LOD %d: %d vertices, %d distinct in %s's file, %d paired by the nearest texture coordinates"), Lod, Map.Num(), Distinct.Num(),
+				LooksReferenceBody, Unmatched);
+
+			FSkeletalMeshAttributes Attributes(Description);
+			TVertexAttributesRef<FVector3f> Positions = Attributes.GetVertexPositions();
+			FSkinWeightsVertexAttributesRef Weights = Attributes.GetVertexSkinWeights();
+			int32 LostWeights = 0;
+			for (const FVertexID V : Description.Vertices().GetElementIDs())
+			{
+				const int32 Source = Map[V.GetValue()];
+				Positions[V] = FVector3f(Reference.LodPositions[Lod][Source]);
+				TArray<UE::AnimationCore::FBoneWeight> Bones;
+				float Total = 0.0f;
+				for (const TPair<int32, float>& W : Reference.LodSkin[Lod][Source])
+				{
+					if (BoneOf.IsValidIndex(W.Key) && BoneOf[W.Key] != INDEX_NONE && W.Value > 0.0f)
+					{
+						Total += W.Value;
+					}
+				}
+				for (const TPair<int32, float>& W : Reference.LodSkin[Lod][Source])
+				{
+					if (BoneOf.IsValidIndex(W.Key) && BoneOf[W.Key] != INDEX_NONE && W.Value > 0.0f)
+					{
+						Bones.Add(UE::AnimationCore::FBoneWeight(static_cast<FBoneIndexType>(BoneOf[W.Key]), W.Value / Total));
+					}
+				}
+				if (Bones.IsEmpty())
+				{
+					Bones.Add(UE::AnimationCore::FBoneWeight(static_cast<FBoneIndexType>(0), 1.0f));
+					++LostWeights;
+				}
+				Weights.Set(V, Bones);
+			}
+			if (LostWeights)
+			{
+				UE_LOG(LogPawnLooks, Warning, TEXT("  %d vertices had no skin weights on Kellan's bones (put on the root)"), LostWeights);
+			}
+
+			// The template's own bones, if it lists them, become Kellan's (same 342 bones, another order).
+			if (Attributes.HasBones())
+			{
+				if (Attributes.GetNumBones() != Skeleton.GetRawBoneNum())
+				{
+					UE_LOG(LogPawnLooks, Error, TEXT("The body template lists %d bones, Kellan has %d"), Attributes.GetNumBones(), Skeleton.GetRawBoneNum());
+					return false;
+				}
+				FSkeletalMeshAttributes::FBoneNameAttributesRef Names = Attributes.GetBoneNames();
+				FSkeletalMeshAttributes::FBoneParentIndexAttributesRef Parents = Attributes.GetBoneParentIndices();
+				FSkeletalMeshAttributes::FBonePoseAttributesRef Poses = Attributes.GetBonePoses();
+				for (int32 b = 0; b < Skeleton.GetRawBoneNum(); ++b)
+				{
+					Names.Set(FBoneID(b), Skeleton.GetRawRefBoneInfo()[b].Name);
+					Parents.Set(FBoneID(b), Skeleton.GetRawRefBoneInfo()[b].ParentIndex);
+					Poses.Set(FBoneID(b), Skeleton.GetRawRefBonePose()[b]);
+				}
+			}
+			for (const FPolygonGroupID Group : Description.PolygonGroups().GetElementIDs())
+			{
+				Attributes.GetPolygonGroupMaterialSlotNames()[Group] = Slot;
+			}
+
+			for (const TPair<FName, TArray<TArray<FVector>>>& Morph : LodDeltas)
+			{
+				if (!Morph.Value.IsValidIndex(Lod))
+				{
+					continue;
+				}
+				Attributes.RegisterMorphTargetAttribute(Morph.Key, false);
+				TVertexAttributesRef<FVector3f> Deltas = Attributes.GetVertexMorphPositionDelta(Morph.Key);
+				double Largest = 0.0;
+				for (const FVertexID V : Description.Vertices().GetElementIDs())
+				{
+					const FVector D = Morph.Value[Lod][Map[V.GetValue()]];
+					Deltas[V] = FVector3f(D);
+					Largest = FMath::Max(Largest, D.Size());
+				}
+				UE_LOG(LogPawnLooks, Display, TEXT("  morph %s: largest move %.2f cm"), *Morph.Key.ToString(), Largest);
+			}
+
+			// The template's normals are for its own shape.
+			FStaticMeshOperations::ComputeTriangleTangentsAndNormals(Description);
+			FStaticMeshOperations::ComputeTangentsAndNormals(Description, EComputeNTBsFlags::Normals | EComputeNTBsFlags::Tangents | EComputeNTBsFlags::WeightedNTBs);
+
+			Copy->CreateMeshDescription(Lod, MoveTemp(Description));
+			Copy->CommitMeshDescription(Lod);
+		}
+		Copy->PostEditChange();
+
+		// Kellan's hands and feet are part of this body: they should be exactly where they were.
+		FLooksGrid Grid;
+		Grid.Build(LooksVertexPositions(*Copy->GetMeshDescription(0)), 2.0);
+		double Worst = 0.0;
+		for (const FVector& P : KellanHands)
+		{
+			double Distance = 0.0;
+			Grid.Nearest(P, 20.0, Distance);
+			Worst = FMath::Max(Worst, Distance);
+		}
+		UE_LOG(LogPawnLooks, Display, TEXT("Whole body made (%d LODs); Kellan's hands and feet (%d vertices) are on it within %.4f cm"), Lods, KellanHands.Num(), Worst);
+		return Worst < 0.5;
+	}
+
+	// A copy of a plugin texture in our folder (the packaged game has no editor plugins), as colour or data.
+	UTexture2D* LooksCopyTexture(IAssetTools& Tools, const TCHAR* From, const TCHAR* Name, bool bColor)
+	{
+		UTexture2D* Source = LoadObject<UTexture2D>(nullptr, From);
+		UTexture2D* Copy = Source ? Cast<UTexture2D>(Tools.DuplicateAsset(Name, PawnLooksFolder, Source)) : nullptr;
+		if (!Copy)
+		{
+			UE_LOG(LogPawnLooks, Error, TEXT("Could not copy %s"), From);
+			return nullptr;
+		}
+		Copy->VirtualTextureStreaming = false;
+		if (bColor)
+		{
+			// Stored as display values (the Creator tints it with its own bias and gain).
+			Copy->SRGB = true;
+			Copy->CompressionSettings = TC_Default;
+		}
+		Copy->LODGroup = bColor ? TEXTUREGROUP_Character : TEXTUREGROUP_CharacterNormalMap;
+		Copy->PostEditChange();
+		return Copy;
+	}
+
 	int32 LooksGenerate(bool bProbe)
 	{
 		IAssetTools& Tools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
@@ -605,23 +900,23 @@ namespace
 		UE_LOG(LogPawnLooks, Display, TEXT("Kellan's body (%d vertices) against %s (%d): worst match %.4f cm"), BodyPositions.Num(), LooksReferenceBody,
 			Reference.Positions.Num(), WorstMatch);
 
-		// Near Kellan's head (which keeps its shape, neck included) the body keeps its shape too,
-		// fading in over LooksSeamFadeCm, so the head still meets the collar and shoulders.
 		FLooksGrid FaceGrid;
 		FaceGrid.Build(LooksVertexPositions(*Face->GetMeshDescription(0)), 2.0);
-		TArray<float> Fade;
-		Fade.SetNum(Reference.Positions.Num());
-		int32 Held = 0;
-		for (int32 i = 0; i < Reference.Positions.Num(); ++i)
+		TArray<TArray<float>> LodFade;
+		for (const TArray<FVector>& Positions : Reference.LodPositions)
 		{
-			double Distance = 0.0;
-			FaceGrid.Nearest(Reference.Positions[i], LooksSeamFadeCm + 1.0, Distance);
-			Fade[i] = FMath::SmoothStep(0.0f, 1.0f, static_cast<float>(FMath::Min(Distance, LooksSeamFadeCm) / LooksSeamFadeCm));
-			Held += Fade[i] < 1.0f ? 1 : 0;
+			LodFade.Add(LooksSeamFade(Positions, FaceGrid));
+		}
+		const TArray<float>& Fade = LodFade[0];
+		int32 Held = 0;
+		for (const float F : Fade)
+		{
+			Held += F < 1.0f ? 1 : 0;
 		}
 		UE_LOG(LogPawnLooks, Display, TEXT("%d of the body file's vertices are near the head and change less"), Held);
 
 		TMap<FName, TArray<FVector>> BodyDeltas;  // per vertex of the reference DNA body
+		TMap<FName, TArray<TArray<FVector>>> LodDeltas;  // the same per DNA mesh (LOD), for the whole body
 		for (const TPair<FName, FString>& Type : PawnLooksBodyTypes())
 		{
 			FLooksBody Target;
@@ -629,11 +924,17 @@ namespace
 			{
 				return 1;
 			}
-			TArray<FVector>& Delta = BodyDeltas.Add(Type.Key, LooksShapeDelta(Reference, Target));
-			for (int32 i = 0; i < Delta.Num(); ++i)
+			TArray<TArray<FVector>>& PerLod = LodDeltas.Add(Type.Key);
+			for (int32 Mesh = 0; Mesh < Reference.LodPositions.Num() && Mesh < Target.LodPositions.Num(); ++Mesh)
 			{
-				Delta[i] *= Fade[i];
+				TArray<FVector> Delta = LooksShapeDelta(Reference, Target, Mesh);
+				for (int32 i = 0; i < Delta.Num(); ++i)
+				{
+					Delta[i] *= LodFade[Mesh][i];
+				}
+				PerLod.Add(MoveTemp(Delta));
 			}
+			BodyDeltas.Add(Type.Key, PerLod[0]);
 		}
 		if (bProbe)
 		{
@@ -668,7 +969,20 @@ namespace
 				++Failures;
 				continue;
 			}
-			LooksAddMorphs(Copy, DnaGrid, BodyDeltas, Original == KellanBody ? 1 : LooksClothNeighbours);
+			if (Original == KellanBody)
+			{
+				// Kellan's body is only his hands and feet: his copy becomes the engine's whole body instead.
+				if (!LooksMakeFullBody(Copy, Reference, LodDeltas))
+				{
+					UE_LOG(LogPawnLooks, Error, TEXT("Could not make the whole body; the copy keeps Kellan's hands and feet"));
+					++Failures;
+					LooksAddMorphs(Copy, DnaGrid, BodyDeltas, 1);
+				}
+			}
+			else
+			{
+				LooksAddMorphs(Copy, DnaGrid, BodyDeltas, LooksClothNeighbours);
+			}
 			Failures += LooksSave(Copy) ? 0 : 1;
 		}
 
@@ -756,6 +1070,26 @@ namespace
 		for (UMaterialInterface* Original : SkinSlots)
 		{
 			UMaterialInstanceConstant* Instance = LooksMakeSkinInstance(Tools, Skin, Original);
+			// The whole body: Kellan's body texture has underwear painted on, so the body takes the Creator's own
+			// bare skin colour map and a skin normal map instead (copied in: the game can't read the plugin).
+			if (Instance && Original == BodySkin)
+			{
+				UTexture2D* Color = LooksCopyTexture(Tools, LooksBareBodyColor, TEXT("T_PawnBody_BaseColor"), true);
+				UTexture2D* Normal = LooksCopyTexture(Tools, LooksBareBodyNormal, TEXT("T_PawnBody_Normal"), false);
+				if (Color && Normal)
+				{
+					Instance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(PawnLooksParamBaseColor), Color);
+					Instance->SetVectorParameterValueEditorOnly(FMaterialParameterInfo(PawnLooksParamSourceAverage), LooksAverageColor(Color));
+					Instance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(PawnLooksParamNormal), Normal);
+					Instance->PostEditChange();
+					Failures += LooksSave(Color) && LooksSave(Normal) ? 0 : 1;
+				}
+				else
+				{
+					UE_LOG(LogPawnLooks, Error, TEXT("The Creator's bare body textures are missing; the body keeps Kellan's (with underwear)"));
+					++Failures;
+				}
+			}
 			Failures += Instance && LooksSave(Instance) ? 0 : 1;
 		}
 		UStaticMesh* Horn = LooksMakeHorn(Part);
