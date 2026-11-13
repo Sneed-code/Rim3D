@@ -1,6 +1,8 @@
 # Status
 
-Updated 2026-10-29.
+Updated 2026-11-13.
+
+Stage 2 C25 year scenario, fourth pass (not finished): colonists now win more small gunfights. An armed Medic or Firefighter shoots back at a raider aiming at it, colonists focus fire on one raider, a colonist with a club waits in cover until a gunman is close, raiders no longer shoot downed colonists while another colonist still stands, shots at a raider crouched behind a hill go over the crest instead of into it, and a colonist below a raider on a steep slope no longer holds its fire for good. Walkers step over a colonist asleep on the ground, and nobody sleeps in a doorway. Year run day 60: seeds 1, 7, 42 have 0, 0 and 4 alive (were 0, 0, 1); plague with weak doctors, infestations and fire sprees still kill (`docs/design/colony-scenario.md` "Fourth pass", `BACKLOG.md`).
 
 Stage 2 C25 year scenario, third pass (not finished): the year script plays like a player (steel storeroom, a firebreak cut every morning, every colonist armed with the loose guns, healroot and medicine kept for disease, best doctors and cooks on top priority, the best doctor as the alarm's Medic), and the runs found five sim bugs, each fixed with a test: walks through a newly built wall jostled for hours, downed pawns in a doorway blocked a doctor for 637 minutes, the colony's own animal gone mad was never an enemy, the narrator's infestations came up under built roofs (now only under overhead mountain, as in RimWorld), and fighters on a hillside fired hundreds of shots into the crest between them (they now check the shot clears the ground). Seed 42 now lasts the 60 days with one colonist alive; seeds 1 and 7 still die out, mostly to small raids that the colonists lose (`docs/design/colony-scenario.md` "Third pass", `BACKLOG.md`). Sim and simrun, no save change.
 

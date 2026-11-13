@@ -263,3 +263,28 @@ colonists fighting alone (one at 13 m, the others 30 m off, out of range), a sho
 ground about half the time on slopes, and the medic and others standing by. Next: a combat thread on why colonists
 lose these fights (`BACKLOG.md`).
 
+**Fourth pass (2026-11-13): small gunfights.** The verbose fight lines of the third pass's losses showed why five armed
+colonists lost to two shotgun raiders: the Medic and the Firefighter stood waiting, armed, 12 and 19 m from the raiders
+while they were shot dead (they fought only within 8 m); a colonist with a club charged the two shotguns from 10 m;
+each colonist shot its own nearest raider; the raiders shot downed colonists dead while others still fought out of
+their sight; shots at raiders crouched behind a crest went into the crest; and a colonist 6 m below a raider held its
+fire for ten minutes because the plan checked the shot from the middle of its cell and the trigger from where it stood.
+Fixes, each with a test: an on-duty Medic or Firefighter fights an enemy aiming at it from any distance (`field-care.md`);
+the downed are shot only once nobody of their side stands anywhere on the map; colonists focus fire; a defender with a
+club waits in cover until a gunman is within 6 m (`fighters.md`); an aimed shot whose line to the chest meets the ground
+goes higher, up to the shoulders and head (`aiming.md`); the trigger is checked from the middle of the cell. Also:
+walkers step over a pawn asleep on the ground, and nobody lies down to sleep in a doorway (`movement.md`). Results:
+
+| Seed | Alive on day 60 | What happened |
+| --- | --- | --- |
+| 1 | 0 | plague on day 22 with two raids on day 24 (four dead), then an infestation from day 44 |
+| 7 | 0 | two raids on day 34 (one dead), plague on day 41 (four dead on day 43), then raids |
+| 42 | 4 | a single raider breaching the wall killed one on day 35 (three in the run before the cell fix); plague took two on day 48 |
+
+In between, seed 7 had 6 of 6 alive on day 60 in one run; the runs stay chaotic. Plague is RimWorld's own numbers
+(severity +0.666 a day, immunity +0.5224, tending -0.3628 at quality 1) with doctors who tend at 0.33 to 0.40, so
+severity and immunity rise together and it is a coin toss; the seed 7 "starved" check was the last colonist lying downed
+with nobody left to feed it. What still kills: plague with weak doctors, two raids at once during an illness,
+infestations (the alarm sends the defenders at the hive), and a FireSpree break that burned the whole base on seed 1 in
+one run. Point-blank fights (a raider at 1 to 2 m after breaching a wall) look one-sided and are worth a test of their own.
+

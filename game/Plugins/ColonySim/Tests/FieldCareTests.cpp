@@ -365,3 +365,22 @@ TEST_CASE("Field care: a recorded raid with medics and firefighters replays to t
     CHECK(check.matched());
     CHECK(again.stateHash() == recorded.stateHash());
 }
+
+TEST_CASE("Field care: a medic shoots back at an enemy shooting at it from further off than 8 m") {
+    // Found by the year run (docs/design/colony-scenario.md): the Medic and the Firefighter stood waiting, armed, 12 and
+    // 19 m from two raiders who shot them dead.
+    const auto run = [](bool aimedAt) {
+        CareFixture f;
+        const Entity medic = f.colonist(CareFixture::kOpen);  // 23 m from the enemy, in its sight
+        f.sim.combat().equip(medic, f.sim.things().make(f.sim.defs().idOf("Things", "Gun_Revolver")));
+        f.sim.submit(SetDefenseRoleCommand{medic, static_cast<uint8_t>(DefenseRole::Medic), false, CellPos{}});
+        f.sim.submit(SoundAlarmCommand{true});
+        f.run(1);
+        if (aimedAt) {
+            f.reg().get<Fighter>(f.enemy).target = medic;
+        }
+        return f.runUntil(120, [&] { return f.reg().all_of<Fighter>(medic); });
+    };
+    CHECK_FALSE(run(false));
+    CHECK(run(true));
+}
