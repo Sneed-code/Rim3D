@@ -551,3 +551,23 @@ TEST_CASE("Movement: downed pawns lying in a doorway are stepped over") {
     CHECK(moveTestPos(sim, walker).x > 34.0f);
     CHECK(steps < static_cast<int>(10.0f / kMoveTestSpeed) + 40);
 }
+
+TEST_CASE("Movement: two pawns on the very same spot walking the same way part and both arrive") {
+    // Two colonists that come down the same stairs at once stand on the same point. They used to push each other the same way
+    // and drift off together for hours (house scenario seed 7); now they part and walk on.
+    Sim sim = moveTestSim(64);
+    const Entity a = moveTestPawn(sim, 20, 20);
+    const Entity b = moveTestPawn(sim, 20, 20);
+    for (const Entity p : {a, b}) {
+        Position& pos = sim.things().registry().get<Position>(p);
+        pos.x = 20.5f;
+        pos.y = 20.5f;
+    }
+    moveTestWalk(sim, a, {CellPos{10, 32, 0}});
+    moveTestWalk(sim, b, {CellPos{12, 32, 0}});
+    sim.stepMany(30);
+    CHECK(moveTestDistance(sim, a, b) > 0.1f);
+    sim.stepMany(900);
+    CHECK(moveTestMover(sim, a).arrived());
+    CHECK(moveTestMover(sim, b).arrived());
+}

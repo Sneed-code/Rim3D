@@ -450,11 +450,15 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
                     awayX = -n.px / dist;
                     awayY = -n.py / dist;
                 } else {
-                    // On top of each other: each goes its own way, the same way every time.
-                    const uint64_t h = splitMix64(static_cast<uint64_t>(entt::to_integral(a.entity)) * 0x9E3779B1ULL ^
-                                                  static_cast<uint64_t>(entt::to_integral(n.entity)));
-                    awayX = kMoveDirs[h & 15u][0];
-                    awayY = kMoveDirs[h & 15u][1];
+                    // On top of each other: the two go opposite ways, the same way every time. (Each used to pick its own
+                    // way; when the two ways were alike the pair drifted off together, still on top of each other, for hours:
+                    // two colonists that came down the same stairs at once, house scenario seed 7.)
+                    const uint64_t low = std::min(entt::to_integral(a.entity), entt::to_integral(n.entity));
+                    const uint64_t high = std::max(entt::to_integral(a.entity), entt::to_integral(n.entity));
+                    const uint64_t h = splitMix64(low * 0x9E3779B1ULL ^ high);
+                    const float sign = entt::to_integral(a.entity) == low ? 1.0f : -1.0f;
+                    awayX = sign * kMoveDirs[h & 15u][0];
+                    awayY = sign * kMoveDirs[h & 15u][1];
                 }
                 const float overlap = (reach - dist) / reach;
                 pushX += awayX * overlap;
