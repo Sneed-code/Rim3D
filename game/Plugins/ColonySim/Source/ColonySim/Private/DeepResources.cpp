@@ -185,7 +185,7 @@ DeepWork* DeepResources::workEntry(CellPos building, bool create) {
     if (!create) {
         return nullptr;
     }
-    work_.push_back(DeepWork{building, 0.0});
+    work_.push_back(DeepWork{building, 0.0, DefId{}});
     return &work_.back();
 }
 
@@ -199,7 +199,83 @@ double DeepResources::workAt(CellPos building) const {
 }
 
 void DeepResources::forgetWork(CellPos building) {
+    // A tuned scanner keeps its entry (and its tuning), with no work.
+    for (DeepWork& w : work_) {
+        if (w.at == building && w.tune.valid()) {
+            w.work = 0.0;
+            return;
+        }
+    }
     work_.erase(std::remove_if(work_.begin(), work_.end(), [&](const DeepWork& w) { return w.at == building; }), work_.end());
+}
+
+bool DeepResources::scanDue(CellPos building, double speed, double averageSeconds, double guaranteedSeconds) {
+    if (!(speed > 0.0)) {
+        return false;
+    }
+    DeepWork* w = workEntry(building, true);
+    w->work += speed;
+    const bool guaranteed = w->work >= guaranteedSeconds;
+    if (!guaranteed && !(static_cast<double>(rng_.unit()) < speed / averageSeconds)) {
+        return false;
+    }
+    forgetWork(building);
+    return true;
+}
+
+void DeepResources::setTune(CellPos building, DefId ore) {
+    DeepWork* w = workEntry(building, true);
+    w->tune = ore;
+}
+
+DefId DeepResources::tuneOf(CellPos building) const {
+    for (const DeepWork& w : work_) {
+        if (w.at == building) {
+            return w.tune;
+        }
+    }
+    return DefId{};
+}
+
+bool DeepResources::lumpSite(CellPos from, int minDist, int maxDist, int minCells, int maxCells, std::vector<CellPos>& out) {
+    out.clear();
+    if (minCells <= 0 || maxCells < minCells || maxDist < minDist) {
+        return false;
+    }
+    const int cells = minCells + static_cast<int>(rng_.below(static_cast<uint32_t>(maxCells - minCells + 1)));
+    constexpr double kTwoPi = 6.283185307179586;
+    for (int i = 0; i < kDeepFindTries; ++i) {
+        const double angle = static_cast<double>(rng_.unit()) * kTwoPi;
+        const int dist = minDist + static_cast<int>(rng_.below(static_cast<uint32_t>(maxDist - minDist + 1)));
+        const CellPos center{from.x + static_cast<int>(std::lround(std::cos(angle) * dist)),
+                             from.y + static_cast<int>(std::lround(std::sin(angle) * dist)), 0};
+        auto free = [&](CellPos c) { return buildable(c) && map_.buildingAt(c) == kNoEntity; };
+        if (!free(center)) {
+            continue;
+        }
+        std::vector<CellPos> frontier{center};
+        std::vector<int> seen{map_.index(center)};
+        while (static_cast<int>(out.size()) < cells && !frontier.empty()) {
+            const size_t pick = rng_.below(static_cast<uint32_t>(frontier.size()));
+            const CellPos c = frontier[pick];
+            frontier[pick] = frontier.back();
+            frontier.pop_back();
+            out.push_back(c);
+            for (int d = 0; d < 4; ++d) {
+                const CellPos n{c.x + kDeepDirX[d], c.y + kDeepDirY[d], 0};
+                if (!free(n)) {
+                    continue;
+                }
+                const int ni = map_.index(n);
+                if (std::find(seen.begin(), seen.end(), ni) == seen.end()) {
+                    seen.push_back(ni);
+                    frontier.push_back(n);
+                }
+            }
+        }
+        return !out.empty();
+    }
+    return false;
 }
 
 bool DeepResources::scanStep(CellPos building, double speed, DeepFind& out) {
@@ -301,6 +377,9 @@ void DeepResources::hashState(StateHasher& hasher) const {
     for (const DeepWork& w : work_) {
         hasher.add(static_cast<uint64_t>(static_cast<uint64_t>(map_.index(CellPos{w.at.x, w.at.y, 0})) + static_cast<uint64_t>(w.at.level) * 7919ULL));
         hasher.add(static_cast<float>(w.work));
+        if (w.tune.valid()) {
+            hasher.add(static_cast<uint64_t>(w.tune.value));
+        }
     }
 }
 

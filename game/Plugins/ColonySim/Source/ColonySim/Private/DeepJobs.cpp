@@ -24,6 +24,9 @@ DeepWorkKind JobSystem::deepKindOf(Entity building) const {
     if (kind == "scan") {
         return DeepWorkKind::Scan;
     }
+    if (kind == "longScan") {
+        return DeepWorkKind::LongScan;
+    }
     return kind == "drill" ? DeepWorkKind::Drill : DeepWorkKind::None;
 }
 
@@ -62,7 +65,7 @@ bool JobSystem::deepWorkable(Entity building, std::string& why) const {
         why = "the machine has no power";
         return false;
     }
-    if (kind == DeepWorkKind::Scan && !deepOpenSky(building)) {
+    if ((kind == DeepWorkKind::Scan || kind == DeepWorkKind::LongScan) && !deepOpenSky(building)) {
         why = "the scanner is under a roof";
         return false;
     }
@@ -85,6 +88,42 @@ bool JobSystem::failCheckDeepWork(Entity pawn, Job& job, std::string& why) {
     return true;
 }
 
+// A long-range mineral scanner's second: when a find is due, a lump of its tuned ore is put on the surface 6 to
+// 25 cells away (docs/design/mineral-scanner.md). The lump is mineable ore like any vein.
+JobSystem::StepResult JobSystem::longScanWork(Entity, Job& job, double speed) {
+    const Def& machine = defs_.get(things_.registry().get<Thing>(job.site).def);
+    const CellPos origin = things_.registry().get<Footprint>(job.site).origin;
+    if (!deep_->scanDue(origin, speed, machine.number("deepWork.averageSeconds", 345600.0),
+                        machine.number("deepWork.guaranteedSeconds", 691200.0))) {
+        return StepResult::Running;
+    }
+    DefId ore = deep_->tuneOf(origin);
+    if (!ore.valid()) {
+        ore = defs_.idOf("Things", machine.textAt("deepWork.ores", 0));
+    }
+    if (!ore.valid() || !mineables_.isOre(ore)) {
+        return StepResult::Next;
+    }
+    const int minCells = std::max(1, static_cast<int>(defs_.get(ore).numberAt("mineable.lumpSize", 0, 20.0)));
+    const int maxCells = std::max(minCells, static_cast<int>(defs_.get(ore).numberAt("mineable.lumpSize", 1, minCells)));
+    std::vector<CellPos> site;
+    if (!deep_->lumpSite(origin, static_cast<int>(machine.integer("deepWork.minDistance", 6)),
+                         static_cast<int>(machine.integer("deepWork.maxDistance", 25)), minCells, maxCells, site)) {
+        return StepResult::Next;  // no room: the scan is spent, as with a deep find that can't be placed
+    }
+    for (const CellPos& c : site) {
+        mineables_.place(c, ore);
+    }
+    Event event;
+    event.type = EventType::OreLumpFound;
+    event.thing = job.site;
+    event.def = ore;
+    event.cell = site.front();
+    event.count = static_cast<int>(site.size());
+    events_.push_back(std::move(event));
+    return StepResult::Next;
+}
+
 // One game second of work. The job ends (done) when a scanner finds a deposit or a drill finishes a portion.
 JobSystem::StepResult JobSystem::deepWork(Entity pawn, Job& job, std::string& why) {
     entt::registry& reg = things_.registry();
@@ -93,7 +132,8 @@ JobSystem::StepResult JobSystem::deepWork(Entity pawn, Job& job, std::string& wh
         return StepResult::Failed;
     }
     const CellPos origin = reg.get<Footprint>(job.site).origin;
-    const bool scan = deepKindOf(job.site) == DeepWorkKind::Scan;
+    const DeepWorkKind workKind = deepKindOf(job.site);
+    const bool scan = workKind == DeepWorkKind::Scan || workKind == DeepWorkKind::LongScan;
     if (job.walk == 0) {
         job.walk = 2;
         pawnDid(pawn, scan ? PawnAction::Scan : PawnAction::Drill, job.site);
@@ -103,6 +143,9 @@ JobSystem::StepResult JobSystem::deepWork(Entity pawn, Job& job, std::string& wh
         const double skill = std::max(0.0, deep_->scanSpeedBase() + deep_->scanSpeedPerLevel() * level);
         const double speed = skill * health_.capacityValue(pawn, "Consciousness") * workFactor(pawn);
         learnSkill(pawn, "Intellectual", deep_->scanXpPerSecond());
+        if (workKind == DeepWorkKind::LongScan) {
+            return longScanWork(pawn, job, speed);
+        }
         DeepFind find;
         if (!deep_->scanStep(origin, speed, find)) {
             return StepResult::Running;

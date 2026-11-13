@@ -248,8 +248,12 @@ const char* commandName(const Command& command) {
                 if constexpr (std::is_same_v<Type, PodCommand>) {
                     return "Pod";
                 } else {
-                    static_assert(std::is_same_v<Type, RerollColonistCommand>, "name every command type");
-                    return "RerollColonist";
+                    if constexpr (std::is_same_v<Type, ScannerCommand>) {
+                        return "Scanner";
+                    } else {
+                        static_assert(std::is_same_v<Type, RerollColonistCommand>, "name every command type");
+                        return "RerollColonist";
+                    }
                 }
             }
         },
@@ -371,6 +375,7 @@ const char* eventTypeName(EventType type) {
         case EventType::AnimalHunted: return "AnimalHunted";
         case EventType::AnimalButchered: return "AnimalButchered";
         case EventType::DeepDepositFound: return "DeepDepositFound";
+        case EventType::OreLumpFound: return "OreLumpFound";
         case EventType::DeepPortionDrilled: return "DeepPortionDrilled";
         case EventType::PawnMentalBreak: return "PawnMentalBreak";
         case EventType::PawnMentalBreakEnded: return "PawnMentalBreakEnded";

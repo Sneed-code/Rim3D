@@ -32,6 +32,32 @@ bool JobSystem::failCheckResearch(Entity pawn, Job& job, std::string& why) {
     return true;
 }
 
+bool JobSystem::benchLinkedTo(Entity bench, const std::string& facility) const {
+    const entt::registry& reg = things_.registry();
+    if (facility.empty() || !reg.valid(bench) || !reg.all_of<Footprint, Position>(bench)) {
+        return false;
+    }
+    const CellRect rect = reg.get<Footprint>(bench).rect();
+    const double bx = rect.minX + rect.sizeX * 0.5;
+    const double by = rect.minY + rect.sizeY * 0.5;
+    bool found = false;
+    reg.view<const Thing, const Footprint, const Position>().each([&](Entity other, const Thing& thing, const Footprint& footprint, const Position& pos) {
+        if (found || pos.level != reg.get<Position>(bench).level || reg.all_of<ConstructionSite>(other) || reg.all_of<MarkedForDeconstruct>(other)) {
+            return;
+        }
+        const Def& def = defs_.get(thing.def);
+        if (def.text("building.researchFacility") != facility || !buildingRuns(other)) {
+            return;
+        }
+        const CellRect r = footprint.rect();
+        const double dx = r.minX + r.sizeX * 0.5 - bx;
+        const double dy = r.minY + r.sizeY * 0.5 - by;
+        const double range = def.number("building.facilityRange", 8.0);
+        found = dx * dx + dy * dy <= range * range;
+    });
+    return found;
+}
+
 // One game second of work. The job ends (done, not failed) when there is nothing for this bench to do any
 // more: the project was finished, put down, or needs a better bench than this one.
 JobSystem::StepResult JobSystem::researchWork(Entity pawn, Job& job, std::string& why) {
@@ -44,11 +70,16 @@ JobSystem::StepResult JobSystem::researchWork(Entity pawn, Job& job, std::string
     if (bench == nullptr || !research_->benchCanWork(*bench)) {
         return StepResult::Next;
     }
+    const ResearchProject* project = research_->find(research_->current());
+    const bool linked = bench->multiAnalyzerBonus > 0.0 && benchLinkedTo(job.site, "MultiAnalyzer");
+    if (project != nullptr && !project->requiredFacility.empty() && !benchLinkedTo(job.site, project->requiredFacility)) {
+        return StepResult::Next;  // the analyzer lost power or was taken down: this bench can't carry the project now
+    }
     if (job.walk == 0) {
         job.walk = 2;
         pawnDid(pawn, PawnAction::Research, job.site);
     }
-    const double points = research_->speedAt(pawn, *bench) * health_.capacityValue(pawn, "Consciousness") * health_.workSpeedFactor(pawn);
+    const double points = research_->speedAt(pawn, *bench, linked ? bench->multiAnalyzerBonus : 0.0) * health_.capacityValue(pawn, "Consciousness") * health_.workSpeedFactor(pawn);
     return research_->addProgress(points, pawn, events_) ? StepResult::Next : StepResult::Running;
 }
 

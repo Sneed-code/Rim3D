@@ -212,7 +212,7 @@ class Mineables;
 class Pathfinder;
 class Plants;
 class PowerGrid;
-enum class DeepWorkKind : uint8_t { None, Scan, Drill };
+enum class DeepWorkKind : uint8_t { None, Scan, Drill, LongScan };
 class ResearchSystem;
 class InspirationSystem;
 class TalentSystem;
@@ -343,6 +343,9 @@ public:
     void setDeepResources(DeepResources* deep) { deep_ = deep; }
     DeepResources* deepResources() const { return deep_; }
     DeepWorkKind deepKindOf(Entity building) const;
+    // Whether a research bench is linked to a powered facility of this name (docs/design/multi-analyzer.md): a building with
+    // `building.researchFacility` == `facility` whose middle is within its `building.facilityRange` of the bench's middle.
+    bool benchLinkedTo(Entity bench, const std::string& facility) const;
     // Whether a scanner or drill can be worked now; `why` says what is wrong if not.
     bool deepWorkable(Entity building, std::string& why) const;
     // Taming, training and feeding animals (HusbandryJobs.cpp, docs/design/husbandry.md). Without it nobody handles animals.
@@ -644,6 +647,7 @@ private:
     double deepDrillRadius(Entity building) const;
     bool failCheckResearch(Entity pawn, Job& job, std::string& why);
     StepResult researchWork(Entity pawn, Job& job, std::string& why);
+    StepResult longScanWork(Entity pawn, Job& job, double speed);
 
     // Medicine jobs (MedicineJobs.cpp, docs/design/medicine.md). TendPatient: `thing` the patient, `site` the medicine
     // (the stack, then the carried part). Rescue: `thing` the downed patient, `chair` the bed and `cell` the bed's
