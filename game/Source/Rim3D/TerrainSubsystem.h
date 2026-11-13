@@ -161,6 +161,9 @@ private:
 	int32 ChunksX = 0;
 	int32 ChunksY = 0;
 	int32 BuiltGeneration = -1;
+	// How many of the map's levelled corners (docs/design/levelling.md) the mesh already shows.
+	int64 LevelledSeen = 0;
+	void ReadLevelledCorners(const colony::Map& Map);
 	const colony::Sim* BuiltSim = nullptr;
 	FVector BuiltOrigin = FVector::ZeroVector;
 	int32 ScanCursor = 0;

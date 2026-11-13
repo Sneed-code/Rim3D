@@ -110,6 +110,7 @@ private:
 	int32 ShownTop = -1;
 	bool bRoofsShown = false;
 	uint64 LastFloorChanges = ~0ULL;
+	uint64 LastLevelled = ~0ULL;  // the map's levelled corners seen: an upper floor follows the ground under it
 	uint64 LastRoofChanges = ~0ULL;
 	uint64 LastCollapses = ~0ULL;
 	uint64 LastLinks = ~0ULL;

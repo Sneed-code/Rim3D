@@ -622,6 +622,8 @@ void UBuildingSubsystem::Refresh()
 		}
 		uint64 H = BldCombine(static_cast<uint64>(static_cast<uint32>(View.id)), View.def.value);
 		H = BldCombine(H, static_cast<uint64>(FMath::RoundToInt32(View.x * 4.0f)) * 100003ULL + static_cast<uint64>(FMath::RoundToInt32(View.y * 4.0f)));
+		// Its height too: levelled ground (docs/design/levelling.md) moves what stands on it.
+		H = BldCombine(H, static_cast<uint64>(static_cast<int64>(FMath::RoundToInt32(View.z * 100.0f))));
 		if (View.category == colony::ThingCategory::Item)
 		{
 			H = BldCombine(H, static_cast<uint64>(BldPieces(Look->MaxPieces, Look->StackLimit, View.stackCount)));
