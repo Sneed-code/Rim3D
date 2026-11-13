@@ -300,12 +300,14 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     temperature_->setGround(groundTemperature());
     mood_->setTemperature(temperature_.get());
     // What a pawn wears widens its comfortable range (C15): cold insulation lowers the minimum, heat raises the maximum.
+    // A nudist's trait lowers the minimum too (ours, TraitStats::comfyMinOffset).
     temperature_->setComfortModifier([this](Entity pawn, float& min, float& max) {
         float cold = 0.0f;
         float heat = 0.0f;
         apparel_->insulation(pawn, cold, heat);
         min -= cold;
         max += heat;
+        min += traits_->of(pawn).comfyMinOffset;
     });
     // A heater or cooler that draws power pushes heat only while it has it (E5); a campfire has no power part.
     temperature_->setSourceRunning([this](Entity building) { return power_->running(building); });

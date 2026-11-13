@@ -42,6 +42,7 @@ const TraitStats& TraitBook::of(Entity pawn) const {
             stats.aimDelayFactor *= factor("aimingDelayFactor");
             stats.damageFactor *= factor("incomingDamageFactor");
             stats.painShockOffset += offset("painShockThreshold");
+            stats.comfyMinOffset += offset("comfyTemperatureMin");
             stats.skillLossFactor *= static_cast<float>(trait->number((base + ".skillLossFactor").c_str(), 1.0));
         }
     }

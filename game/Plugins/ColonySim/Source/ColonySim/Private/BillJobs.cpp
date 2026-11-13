@@ -162,11 +162,12 @@ JobSystem::StepResult JobSystem::billWork(Entity pawn, Job& job, std::string& wh
         }
     }
     job.progress += bills_->workSpeed(pawn, *recipe) * health_.capacityValue(pawn, "Manipulation") * workFactor(pawn) *
-                    benchFactor / std::max(stuffFactor, 0.01f);
+                    benchFactor / std::max(stuffFactor, 0.01f) * static_cast<float>(gather_.craftingSpeed);
     // The recipe's experience is what a run gives at 100% speed, so it comes in a steady stream
-    // while the pawn works, whatever its speed (a slow worker earns more from a run).
+    // while the pawn works, whatever its speed (a slow worker earns more from a run). The bench speed-up
+    // (tuning `work.craftingSpeed`) counts as 100%.
     if (recipe->work > 0.0f && !recipe->skill.empty()) {
-        learnSkill(pawn, recipe->skill.c_str(), static_cast<double>(recipe->skillXp) / static_cast<double>(recipe->work));
+        learnSkill(pawn, recipe->skill.c_str(), static_cast<double>(recipe->skillXp) / static_cast<double>(recipe->work) * gather_.craftingSpeed);
     }
     return job.progress < recipe->work ? StepResult::Running : StepResult::Next;
 }

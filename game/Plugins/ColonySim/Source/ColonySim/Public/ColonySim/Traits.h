@@ -22,6 +22,7 @@ struct COLONY_API TraitStats {
     float painShockOffset = 0.0f;    // added to the pain level that downs the pawn (Wimp)
     float learningFactor = 1.0f;     // times the experience learned: 1 + globalLearningFactor (learners)
     float skillLossFactor = 1.0f;    // times the experience lost a day by high skills (Great memory)
+    float comfyMinOffset = 0.0f;     // degrees C added to the coldest comfortable temperature (Nudist, ours)
 };
 
 // The TraitStats of colonists, worked out on first ask and kept (a colonist's traits don't change).

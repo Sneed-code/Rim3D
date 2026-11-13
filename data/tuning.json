@@ -1,3 +1,9 @@
 {
-  "defs": { "Projectiles": { "projectile.speed": 3.0 } }
+  "defs": { "Projectiles": { "projectile.speed": 3.0 } },
+  "values": {
+    "work.treeFellingSpeed": 10.0,
+    "work.constructionSpeed": 2.0,
+    "work.miningSpeed": 2.0,
+    "work.craftingSpeed": 2.0
+  }
 }

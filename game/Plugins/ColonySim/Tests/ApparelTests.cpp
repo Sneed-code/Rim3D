@@ -10,6 +10,7 @@
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Temperature.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
 
@@ -454,6 +455,16 @@ TEST_CASE("Apparel: thoughts about nakedness, nudists, tattered and dead men's c
     CHECK(apparelThought(bare, "Naked") == nullptr);
     APPAREL_REQUIRE(apparelThought(bare, "NudistNaked") != nullptr);
     CHECK(apparelThought(bare, "NudistNaked")->offset == doctest::Approx(20.0f));
+    // Ours (sneed's G2 playtest): a nudist is comfortable 10 C colder than anyone else with nothing on; the
+    // hot end is the same.
+    {
+        const Entity plain = apparelColonist(*sim, 32, 20);
+        float nudistMin = 0.0f, nudistMax = 0.0f, plainMin = 0.0f, plainMax = 0.0f;
+        APPAREL_REQUIRE(sim->temperature().comfortRange(nudist, nudistMin, nudistMax));
+        APPAREL_REQUIRE(sim->temperature().comfortRange(plain, plainMin, plainMax));
+        CHECK(nudistMin == doctest::Approx(plainMin - 10.0f));
+        CHECK(nudistMax == doctest::Approx(plainMax));
+    }
     apparelWear(*sim, nudist, "Apparel_CowboyHat");
     CHECK(apparelThought(apparelThoughts(*sim, nudist), "NudistNaked") != nullptr);
     CHECK(apparelThought(apparelThoughts(*sim, nudist), "NudistWearingClothes") == nullptr);

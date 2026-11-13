@@ -852,6 +852,12 @@ private:
         double growthYieldFloor = 0.5;
         int unskilledLevel = 8;
         std::vector<double> yieldByLevel;
+        // Our speed-ups from data/tuning.json `values` (sneed's G2 playtest, docs/design/jobs.md "Work speed-ups"):
+        // felling a tree, building and taking down, mining and bench work go this many times faster.
+        double treeFellingSpeed = 1.0;
+        double constructionSpeed = 1.0;
+        double miningSpeed = 1.0;
+        double craftingSpeed = 1.0;
     } gather_;
     SkillRules skillRules_;
     int manipulationIndex_ = -1;  // position of the Manipulation capacity in Health::capacities, or -1
