@@ -237,6 +237,13 @@ void USimSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
+	// -SimOriginX=<cm> moves the colony's map off the sample level the default map is made from (the playtest
+	// launcher, tools/play-rainforest.bat, uses 300000 like the smoke tests).
+	double OriginX = 0.0;
+	if (FParse::Value(FCommandLine::Get(), TEXT("SimOriginX="), OriginX))
+	{
+		WorldOrigin = FVector(OriginX, 0.0, 0.0);
+	}
 	StartSim(SimBridgeOptionsFromCommandLine());
 
 	if (FSlateApplication::IsInitialized())
