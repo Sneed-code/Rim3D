@@ -203,6 +203,7 @@ void ULevelsSubsystem::Teardown()
 	BuiltSim = nullptr;
 	BuiltGeneration = -1;
 	LastFloorChanges = ~0ULL;
+	LastLevelled = ~0ULL;
 	LastRoofChanges = ~0ULL;
 	LastCollapses = ~0ULL;
 	LastLinks = ~0ULL;
@@ -260,11 +261,12 @@ void ULevelsSubsystem::Refresh()
 	{
 		Links = LvlMix(Links ^ static_cast<uint64>(static_cast<uint32>(Link.building)));
 	}
-	if (Map.upperFloorChanges() == LastFloorChanges && Snapshot.roofChanges == LastRoofChanges && Snapshot.roofCollapses == LastCollapses && Links == LastLinks)
+	if (Map.upperFloorChanges() == LastFloorChanges && static_cast<uint64>(Map.levelledCorners().size()) == LastLevelled && Snapshot.roofChanges == LastRoofChanges && Snapshot.roofCollapses == LastCollapses && Links == LastLinks)
 	{
 		return;
 	}
 	LastFloorChanges = Map.upperFloorChanges();
+	LastLevelled = static_cast<uint64>(Map.levelledCorners().size());
 	LastRoofChanges = Snapshot.roofChanges;
 	LastCollapses = Snapshot.roofCollapses;
 	LastLinks = Links;
@@ -283,7 +285,16 @@ void ULevelsSubsystem::Refresh()
 	{
 		if (Map.inBounds(Cell))
 		{
-			Sign(Cell, 1);
+			// With the ground's height under its corners, so a floor over levelled ground is drawn again.
+			int64 Cm = 0;
+			for (int32 DY = 0; DY <= 1; ++DY)
+			{
+				for (int32 DX = 0; DX <= 1; ++DX)
+				{
+					Cm += FMath::RoundToInt32(Map.groundHeight(FMath::Min(Cell.x + DX, Map.width() - 1), FMath::Min(Cell.y + DY, Map.height() - 1)) * 100.0f);
+				}
+			}
+			Sign(Cell, 1 + (static_cast<uint64>(Cm) << 3));
 		}
 	}
 	TArray<uint8> Flags;
