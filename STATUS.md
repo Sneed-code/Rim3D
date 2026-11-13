@@ -1,6 +1,8 @@
 # Status
 
-Updated 2026-10-29.
+Updated 2026-11-13.
+
+Stage 1 G2 playtest build (2026-11-13): the biome focus is now the tropics (rainforest, swamp; the other biomes keep working). The new `CrashlandedRainforest` scenario is Crashlanded on a rainforest tile (world 42: tile 3956, large hills, about 21 C), and `tools\play-rainforest.bat` starts the packaged game on it with the overseer camera (`-SimWorld -SimScenario=CrashlandedRainforest -SimOriginX=300000 -Overseer`). Before this the packaged game opened on the animation sample level with no colony camera. New `-SimOriginX=<cm>` moves the map off the sample level, and the animal art table is now found next to `-SimData` (in the packaged game every animal was a husky). Steps and keys: `docs/setup/playtest.md`. Seen at the start (BACKLOG): capybara, rhino, monkey and elephant have no models (drawn as huskies), plants glow pale green at night, two colonists are both called Chip.
 
 Stage 2 C25 year scenario, third pass (not finished): the year script plays like a player (steel storeroom, a firebreak cut every morning, every colonist armed with the loose guns, healroot and medicine kept for disease, best doctors and cooks on top priority, the best doctor as the alarm's Medic), and the runs found five sim bugs, each fixed with a test: walks through a newly built wall jostled for hours, downed pawns in a doorway blocked a doctor for 637 minutes, the colony's own animal gone mad was never an enemy, the narrator's infestations came up under built roofs (now only under overhead mountain, as in RimWorld), and fighters on a hillside fired hundreds of shots into the crest between them (they now check the shot clears the ground). Seed 42 now lasts the 60 days with one colonist alive; seeds 1 and 7 still die out, mostly to small raids that the colonists lose (`docs/design/colony-scenario.md` "Third pass", `BACKLOG.md`). Sim and simrun, no save change.
 
