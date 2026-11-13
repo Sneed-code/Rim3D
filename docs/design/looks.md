@@ -231,6 +231,8 @@ Now the MetaHuman wears the engine's whole body, all skin, and the skin layer is
 - **Looks overrides.** `USimPawnSubsystem::SetLooksOverride` draws a pawn with given looks instead of the sim's (the
   smoke test's showcase; later the creator's preview). `FSimPawnLooks::FaceSkin` picks a face skin by number (-1: by the
   face sliders, as before).
+- **Extra eye colours.** `extraEyeColors` in `assets/pawn_faces.json` are eye colours the sim never rolls but a
+  showcase or the creator can pick (light green for the showcase); PawnFaces makes their `MI_PawnEye_<hex>` too.
 - **Not done.** Limb proportions (narrower shoulders, wider hips) are still the mannequin's skeleton; a woman's body
   type changes her shape but not her bone lengths. The plan's later steps (anatomy, more body shapes, the creator screen).
 
@@ -238,7 +240,7 @@ To make the assets again after pulling: the PawnLooks commandlet, then ClothesAr
 
 Smoke test `bodies` (about 45 s, 1080p, a morning sun from the pawns' right): four women and four men on the grid's
 corners and middle, bare, then in a T-shirt and trousers, and a showcase woman (very pale, petite and slim, long straight
-black hair, grey eyes, a freckled face skin) from the front, side and back and close up. Every frame it checks the whole
+black hair, light green eyes, a freckled face skin) from the front, side and back and close up. Every frame it checks the whole
 body is on, no skin layer, Kellan's clothes hidden, and the body's and garments' morphs equal `MorphWeights`.
 `-BodiesAllFaceSkins` adds her face in each of the 13 women's face skins; `-BodiesFaceSkin=<n>` picks hers,
 `-BodiesHour=<h>` the time of day. Measured (editor, 888x500, 100 pawns): `looks` crowd 18.6 ms game thread, 6.8 ms GPU;

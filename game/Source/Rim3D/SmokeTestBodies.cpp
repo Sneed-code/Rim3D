@@ -8,6 +8,7 @@
 #include "Engine/SkeletalMesh.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
+#include "Materials/MaterialInterface.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 
@@ -334,7 +335,7 @@ void USmokeTestSubsystem::BuildBodiesPhases()
 		}
 		if (State->Showcase != colony::kNoEntity)
 		{
-			// The showcase: very pale with light freckles, long straight black hair, light grey-green eyes, slim and petite.
+			// The showcase: very pale with light freckles, long straight black hair, light green eyes, slim and petite.
 			const colony::ThingView* View = Snapshot.find(State->Showcase);
 			FSimPawnLooks Looks = View && View->looks >= 0 ? USimPawnSubsystem::MakeLooks(Snapshot.looks[static_cast<size_t>(View->looks)], Defs) : FSimPawnLooks();
 			Looks.bFemale = true;
@@ -343,7 +344,7 @@ void USmokeTestSubsystem::BuildBodiesPhases()
 			Looks.Height = BodiesSmokeHeight(true, -1.0f);
 			Looks.Skin = FLinearColor(FColor(232, 205, 190));
 			Looks.Hair = FLinearColor(FColor(14, 12, 12));
-			Looks.Eyes = FColor(107, 115, 120);
+			Looks.Eyes = FColor(79, 133, 69);  // light green, assets/pawn_faces.json extraEyeColors
 			Looks.HairStyle = TEXT("Long");
 			Looks.Beard = TEXT("None");
 			Looks.FaceShape = 0.45f;
@@ -464,6 +465,53 @@ void USmokeTestSubsystem::BuildBodiesPhases()
 			Notes.Add(FString::Printf(TEXT("%s: face skin %s"), Shot.Name, Skin ? *Skin->GetName() : TEXT("none")));
 		};
 		Phases.Add(MoveTemp(Phase));
+	}
+
+	// 3b. Her eyes, close and lit from the camera, to show the iris colour.
+	{
+		FPhase Eyes;
+		Eyes.Name = TEXT("bodies_showcase_eyes");
+		Eyes.WarmupSeconds = 2.5f;
+		Eyes.MeasureSeconds = 1.0f;
+		Eyes.Setup = [=, this]()
+		{
+			State->Reset();
+			USimPawnSubsystem* Pawns = PawnsOf();
+			const ASimPawnActor* Pawn = Pawns ? Pawns->FindPawn(State->Showcase) : nullptr;
+			const USkeletalMeshComponent* Face = Pawn ? Pawn->GetFaceMesh() : nullptr;
+			if (!Face)
+			{
+				return;
+			}
+			// Between the eyes: a little in front of and above the head bone.
+			const FVector Forward = Pawn->GetActorForwardVector().GetSafeNormal2D();
+			const FVector Target = Face->GetSocketLocation(TEXT("head")) + FVector(0.0, 0.0, 4.0) + Forward * 8.0;
+			const FVector From = Target + Forward * 32.0 + FVector(0.0, 0.0, -2.0);
+			ViewFrom(From, (Target - From).Rotation());
+			Lamp(From + FVector(0.0, 0.0, -4.0), 40000.0f);
+		};
+		Eyes.OnFrame = CheckFrame;
+		Eyes.Verify = [=, this]()
+		{
+			VerifyFrames(TEXT("bodies_showcase_eyes"));
+			USimPawnSubsystem* Pawns = PawnsOf();
+			const ASimPawnActor* Pawn = Pawns ? Pawns->FindPawn(State->Showcase) : nullptr;
+			const USkeletalMeshComponent* Face = Pawn ? Pawn->GetFaceMesh() : nullptr;
+			FString EyeMaterials;
+			for (int32 Slot = 0; Face && Slot < Face->GetNumMaterials(); ++Slot)
+			{
+				if (const UMaterialInterface* M = Face->GetMaterial(Slot); M && M->GetName().StartsWith(TEXT("MI_PawnEye_")))
+				{
+					EyeMaterials += M->GetName() + TEXT(" ");
+				}
+			}
+			Notes.Add(FString::Printf(TEXT("bodies_showcase_eyes: %s"), EyeMaterials.IsEmpty() ? TEXT("no MI_PawnEye_ material") : *EyeMaterials));
+			if (Pawn && !EyeMaterials.Contains(PawnFacesEyeInstanceName(Pawn->GetLooks().Eyes)))
+			{
+				Fail(FString::Printf(TEXT("bodies_showcase_eyes: her eyes are not %s (is the PawnFaces commandlet rerun?)"), *PawnFacesEyeInstanceName(Pawn->GetLooks().Eyes)));
+			}
+		};
+		Phases.Add(MoveTemp(Eyes));
 	}
 
 	// 4. Her face in each of the women's face skins (to pick the one with freckles that suits her).

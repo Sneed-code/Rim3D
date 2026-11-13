@@ -998,6 +998,23 @@ namespace
 				}
 			}
 		}
+		// Eye colours the sim never rolls but a showcase or the character creator can pick (assets/pawn_faces.json "extraEyeColors").
+		FString FacesText;
+		TSharedPtr<FJsonObject> Faces;
+		const TArray<TSharedPtr<FJsonValue>>* Extra = nullptr;
+		if (FFileHelper::LoadFileToString(FacesText, *FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("../assets/pawn_faces.json")))
+			&& FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(FacesText), Faces) && Faces && Faces->TryGetArrayField(TEXT("extraEyeColors"), Extra))
+		{
+			for (const TSharedPtr<FJsonValue>& Entry : *Extra)
+			{
+				const TArray<TSharedPtr<FJsonValue>>& C = Entry->AsArray();
+				if (C.Num() >= 3)
+				{
+					Out.AddUnique(FColor(FMath::RoundToInt32(FMath::Clamp(C[0]->AsNumber(), 0.0, 1.0) * 255.0), FMath::RoundToInt32(FMath::Clamp(C[1]->AsNumber(), 0.0, 1.0) * 255.0),
+						FMath::RoundToInt32(FMath::Clamp(C[2]->AsNumber(), 0.0, 1.0) * 255.0)));
+				}
+			}
+		}
 		return Out;
 	}
 
