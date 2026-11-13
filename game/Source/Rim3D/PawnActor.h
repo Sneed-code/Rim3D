@@ -270,6 +270,7 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<USkeletalMeshComponent> DefaultTrousers;
+	TObjectPtr<USkeletalMeshComponent> DefaultShoes;
 
 	FSimPawnApparel Apparel;
 	uint64 ApparelKey = 0;

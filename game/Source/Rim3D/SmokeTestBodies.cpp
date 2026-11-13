@@ -206,7 +206,7 @@ void USmokeTestSubsystem::BuildBodiesPhases()
 		const FVector Target = B->SimToWorld(State->Middle.x + 0.5f, MidY, 0) + FVector(0.0, 0.0, Height);
 		const FVector From = Target + Facing * Distance + FVector(0.0, 0.0, 15.0);
 		ViewFrom(From, (Target - From).Rotation());
-		Lamp(From + FVector(0.0, 0.0, 120.0), 30000.0f);
+		Lamp(From + FVector(0.0, 0.0, 120.0), 120000.0f);
 	};
 	// Looks at the showcase from Yaw degrees around her (0 the front, 90 her left, 180 the back), Distance cm away, at Height cm over the ground.
 	const auto LookAtShowcase = [=, this](float Yaw, float Distance, float Height, float Intensity)
@@ -244,7 +244,9 @@ void USmokeTestSubsystem::BuildBodiesPhases()
 			return;
 		}
 		BodiesSmokeSet(TEXT("Pawns.MetaHumans"), 1.0f);
-		BodiesSmokeSet(TEXT("Sky.Hour"), 11.0f);
+		float Hour = 7.0f;
+		FParse::Value(FCommandLine::Get(), TEXT("BodiesHour="), Hour);
+		BodiesSmokeSet(TEXT("Sky.Hour"), Hour);
 		BodiesSmokeSet(TEXT("Sky.DayOfYear"), 22.5f);
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		{
@@ -337,17 +339,17 @@ void USmokeTestSubsystem::BuildBodiesPhases()
 			FSimPawnLooks Looks = View && View->looks >= 0 ? USimPawnSubsystem::MakeLooks(Snapshot.looks[static_cast<size_t>(View->looks)], Defs) : FSimPawnLooks();
 			Looks.bFemale = true;
 			Looks.Stature = -1.0f;
-			Looks.Weight = -0.75f;
+			Looks.Weight = -0.45f;
 			Looks.Height = BodiesSmokeHeight(true, -1.0f);
 			Looks.Skin = FLinearColor(FColor(232, 205, 190));
 			Looks.Hair = FLinearColor(FColor(14, 12, 12));
 			Looks.Eyes = FColor(107, 115, 120);
 			Looks.HairStyle = TEXT("Long");
 			Looks.Beard = TEXT("None");
-			Looks.FaceShape = 0.35f;
-			Looks.Brow = 0.2f;
-			Looks.Nose = 0.3f;
-			Looks.Jaw = 0.25f;
+			Looks.FaceShape = 0.45f;
+			Looks.Brow = 0.3f;
+			Looks.Nose = 0.45f;
+			Looks.Jaw = 0.35f;
 			Looks.BodyHair = 0.0f;
 			Looks.Tattoos.Reset();
 			Looks.Scars.Reset();
@@ -379,7 +381,7 @@ void USmokeTestSubsystem::BuildBodiesPhases()
 		{
 			Fail(FString::Printf(TEXT("%d test pawns, wanted %d"), State->Row.Num(), BodiesSmokeRowCount + 1));
 		}
-		LookAtRow(0, 3, 480.0f, 95.0f);
+		LookAtRow(0, 3, 340.0f, 90.0f);
 		State->Reset();
 	};
 	Bare.OnFrame = CheckFrame;
@@ -390,7 +392,7 @@ void USmokeTestSubsystem::BuildBodiesPhases()
 	BareMen.Name = TEXT("bodies_bare_men");
 	BareMen.WarmupSeconds = 2.0f;
 	BareMen.MeasureSeconds = 2.0f;
-	BareMen.Setup = [=, this]() { LookAtRow(4, 7, 520.0f, 100.0f); State->Reset(); };
+	BareMen.Setup = [=, this]() { LookAtRow(4, 7, 360.0f, 95.0f); State->Reset(); };
 	BareMen.OnFrame = CheckFrame;
 	BareMen.Verify = [=, this]() { VerifyFrames(TEXT("bodies_bare_men")); };
 	Phases.Add(MoveTemp(BareMen));
@@ -427,7 +429,7 @@ void USmokeTestSubsystem::BuildBodiesPhases()
 					B->StepOnce();
 				}
 			}
-			LookAtRow(bWomen ? 0 : 4, bWomen ? 3 : 7, bWomen ? 480.0f : 520.0f, bWomen ? 95.0f : 100.0f);
+			LookAtRow(bWomen ? 0 : 4, bWomen ? 3 : 7, bWomen ? 340.0f : 360.0f, bWomen ? 90.0f : 95.0f);
 			State->Reset();
 		};
 		Dressed.OnFrame = CheckFrame;
@@ -444,8 +446,8 @@ void USmokeTestSubsystem::BuildBodiesPhases()
 		float Height;
 		float Intensity;
 	};
-	for (const FShot& Shot : {FShot{TEXT("bodies_showcase_front"), 12.0f, 230.0f, 82.0f, 9000.0f}, FShot{TEXT("bodies_showcase_side"), 90.0f, 230.0f, 82.0f, 9000.0f},
-		FShot{TEXT("bodies_showcase_back"), 180.0f, 230.0f, 82.0f, 9000.0f}, FShot{TEXT("bodies_showcase_face"), 15.0f, 65.0f, -4.0f, 2500.0f}})
+	for (const FShot& Shot : {FShot{TEXT("bodies_showcase_front"), 12.0f, 230.0f, 82.0f, 160000.0f}, FShot{TEXT("bodies_showcase_side"), 90.0f, 230.0f, 82.0f, 160000.0f},
+		FShot{TEXT("bodies_showcase_back"), 180.0f, 230.0f, 82.0f, 160000.0f}, FShot{TEXT("bodies_showcase_face"), 15.0f, 65.0f, -4.0f, 25000.0f}})
 	{
 		FPhase Phase;
 		Phase.Name = Shot.Name;
@@ -484,7 +486,7 @@ void USmokeTestSubsystem::BuildBodiesPhases()
 						Pawns->SetLooksOverride(State->Showcase, Looks);
 					}
 				}
-				LookAtShowcase(15.0f, 65.0f, -4.0f, 2500.0f);
+				LookAtShowcase(15.0f, 65.0f, -4.0f, 25000.0f);
 				State->Reset();
 			};
 			Phase.OnFrame = CheckFrame;

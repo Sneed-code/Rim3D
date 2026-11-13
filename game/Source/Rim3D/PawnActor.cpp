@@ -377,6 +377,14 @@ void ASimPawnActor::ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& In
 			Mesh->SetMorphTarget(Morph.Key, Morph.Value);
 		}
 	}
+	// The shaped face's neck follows the body type too (the real body); a face without those morphs ignores them.
+	if (FaceMesh)
+	{
+		for (const TPair<FName, float>& Morph : Looks.MorphWeights())
+		{
+			FaceMesh->SetMorphTarget(Morph.Key, Morph.Value);
+		}
+	}
 	const FVector Skin(Looks.Skin.R, Looks.Skin.G, Looks.Skin.B);
 	for (USkeletalMeshComponent* Mesh : SkinMeshes)
 	{
@@ -799,6 +807,10 @@ void ASimPawnActor::EnsureBareLayer(USimPawnSubsystem& Pawns)
 		{
 			DefaultTrousers = Mesh;
 		}
+		else if (Name.Contains(TEXT("shoes")))
+		{
+			DefaultShoes = Mesh;
+		}
 	}
 	if (!DefaultTop || !DefaultTrousers)
 	{
@@ -964,6 +976,11 @@ void ASimPawnActor::ApplyApparel(USimPawnSubsystem& Pawns, const FSimPawnApparel
 		}
 	}
 	Apparel = Wanted;
+	// With the whole body, a pawn that wears nothing at all goes barefoot (the sim has no footwear: dressed pawns keep Kellan's shoes).
+	if (bFullBody && DefaultShoes)
+	{
+		DefaultShoes->SetVisibility(!Apparel.Pieces.IsEmpty());
+	}
 
 	// Colour and wear of every mesh, rebuilt or not.
 	for (const FSimWornPiece& Piece : Apparel.Pieces)

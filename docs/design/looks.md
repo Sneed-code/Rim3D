@@ -191,6 +191,59 @@ Two gaps V2 left. Code: the same files (`FacesMakeSkins`, `FacesMakeBareSkin` in
   growth). Measured (`faces`, 1080p, 100 pawns, about 80 of them with cards): 22.2 ms game thread and 9.9 ms GPU, against
   21.7 ms and 9.5 ms with `Pawns.HairCards 0`.
 
+## The real body (character creator step 1)
+
+Code: `Rim3DEditor/PawnLooksCommandlet.cpp` (`LooksMakeFullBody`, `LooksMapByUV`, `LooksSeamAverage`), `PawnSkinSeam.h`,
+`PawnFacesCommandlet.cpp` (the neck morphs, the face skin tones), `PawnLooks.h` (the body types, `PawnLooksBodyMorph`,
+`PawnLooksFullBodyMarker`), `PawnSubsystem.cpp` (`MorphWeights`, the stature in `MakeLooks`, looks overrides),
+`PawnActor.cpp` (`EnsureBareLayer`, shoes). Smoke test `bodies`. Nothing in the sim changed.
+
+Until now a bare pawn was U16's skin layer: a skin-coloured copy of Kellan's hoodie and trousers, so it looked padded.
+Now the MetaHuman wears the engine's whole body, all skin, and the skin layer is gone.
+
+- **The mesh.** The PawnLooks commandlet's copy of Kellan's body (`SK_Looks_m_med_nrw_body`, still his skeleton and his
+  skin slot) becomes the Creator's body template (`/MetaHumanCharacter/Body/IdentityTemplate/SKM_Body`, 30,455 vertices,
+  4 LODs) in Kellan's body type's shape and skin weights. The template is in another shape and its DNA is the body alone,
+  while the body type files hold body and head together in another order, so each template vertex is paired with the
+  body type file's vertex that has the same texture coordinates (the nearest if several do; LOD 2 and 3 pair 77 and 30
+  vertices by the nearest texture coordinates). Kellan's hands and feet land on it to 0.0000 cm. Normals are recomputed.
+- **The neck seam.** Kellan's face mesh carries the neck and the top of the chest. Within 4 cm of it the body takes the
+  face's skin weights (blending to its own), and within 0.6 cm its points, so no crack opens when they move. Each skin
+  texture's `SourceAverage` is measured on the texels at the seam (`PawnSkinSeam.h`: the body's, Kellan's face's and each
+  Creator face skin's), so face and body have the same colour there. A faint line can still show close up in hard light.
+- **18 body types.** All of the engine's fixed body types but Kellan's own are morphs on it, each LOD made exactly from
+  that LOD of its file (the shape without the proportions, as before): `Thin`, `Heavy`, `Short`, `ShortThin`,
+  `ShortHeavy`, `Tall`, `TallThin`, `TallHeavy`, and the same nine with `Female` in front. They no longer fade out near
+  the head: the shaped face (PawnFaces) gets the same 17 morphs on its neck, in full within 3 cm of the body and none past
+  11 cm, so a slim woman's neck is slim and the face itself is untouched. The clothes get them too, from the nearest body
+  points (no longer the files' heads), so a collar moves with the neck: rerun ClothesArt and PawnFaces after PawnLooks.
+- **Which body.** Each gender has a 3 x 3 grid: build (thin, normal, heavy) from the sim's `weight`, stature (short,
+  medium, tall) from where the sim's `height` falls in the gender's LooksRules range (`FSimPawnLooks::Stature`). The
+  four nearest corners are blended bilinearly (`MorphWeights`). Height itself still scales the whole pawn. So every
+  colonist's type, size and skin tone come from its seed like before; nothing new is rolled.
+- **Skin.** Kellan's body texture has underwear painted on. The body now takes the Creator's bare light skin colour map
+  (`T_Skin_V1_Body_BC`, copied in as `T_PawnBody_BaseColor`) and a body surface normal map (`T_Chr0005_Body_N`, as
+  `T_PawnBody_Normal`) on our skin material, tinted by the pawn's skin colour like the face and hands. No genitals
+  (a later step).
+- **In the game.** A body with the `FemaleTallHeavy` morph is the whole body: Kellan's top and trousers hide and no skin
+  layer is made; a pawn wearing nothing at all also loses Kellan's shoes (the sim has no footwear, so dressed pawns keep
+  them). Older generated assets still get the old skin layer. Tattoos, scars and body hair land on the body.
+- **Looks overrides.** `USimPawnSubsystem::SetLooksOverride` draws a pawn with given looks instead of the sim's (the
+  smoke test's showcase; later the creator's preview). `FSimPawnLooks::FaceSkin` picks a face skin by number (-1: by the
+  face sliders, as before).
+- **Not done.** Limb proportions (narrower shoulders, wider hips) are still the mannequin's skeleton; a woman's body
+  type changes her shape but not her bone lengths. The plan's later steps (anatomy, more body shapes, the creator screen).
+
+To make the assets again after pulling: the PawnLooks commandlet, then ClothesArt and PawnFaces.
+
+Smoke test `bodies` (about 45 s, 1080p, a morning sun from the pawns' right): four women and four men on the grid's
+corners and middle, bare, then in a T-shirt and trousers, and a showcase woman (very pale, petite and slim, long straight
+black hair, grey eyes, a freckled face skin) from the front, side and back and close up. Every frame it checks the whole
+body is on, no skin layer, Kellan's clothes hidden, and the body's and garments' morphs equal `MorphWeights`.
+`-BodiesAllFaceSkins` adds her face in each of the 13 women's face skins; `-BodiesFaceSkin=<n>` picks hers,
+`-BodiesHour=<h>` the time of day. Measured (editor, 888x500, 100 pawns): `looks` crowd 18.6 ms game thread, 6.8 ms GPU;
+`faces` crowd 17.8 ms and 8.2 ms (8.0 before); taken with another program holding most of the graphics card's memory.
+
 ## In Unreal
 
 `USimPawnSubsystem::MakeLooks` turns the snapshot's looks and the lineage def into an

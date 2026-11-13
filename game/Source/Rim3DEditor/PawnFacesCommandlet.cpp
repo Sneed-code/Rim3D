@@ -68,6 +68,7 @@
 
 #include "PawnFaces.h"
 #include "PawnLooks.h"
+#include "PawnSkinSeam.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPawnFaces, Log, All);
 
@@ -339,6 +340,10 @@ namespace
 	}
 
 	// ---- Points --------------------------------------------------------------------------------
+
+	// The face's neck takes the body type morphs in full within the first distance of the whole body, none past the second.
+	constexpr double FacesNeckFullCm = 3.0;
+	constexpr double FacesNeckFollowCm = 11.0;
 
 	struct FFacesGrid
 	{
@@ -769,6 +774,39 @@ namespace
 			UE_LOG(LogPawnFaces, Error, TEXT("Could not copy Kellan's face"));
 			return false;
 		}
+		// The neck follows the body type (the real body, character creator step 1): the whole body's 18 body type morphs
+		// (PawnLooks made them) go on the face's neck and the top of the chest too, in full where it meets the body and
+		// fading out up the neck, so a slim woman's neck is slim and the seam stays closed. The face itself is untouched.
+		TArray<FVector> BodyPoints;
+		TMap<FName, TArray<FVector>> BodyMoves;
+		if (const USkeletalMesh* Body = LoadObject<USkeletalMesh>(nullptr, *PawnLooksAssetPath(PawnLooksMorphMeshName(TEXT("m_med_nrw_body")))))
+		{
+			if (Body->HasMeshDescription(0) && Body->FindMorphTarget(PawnLooksFullBodyMarker))
+			{
+				const FMeshDescription& BodyMesh = *Body->GetMeshDescription(0);
+				FSkeletalMeshConstAttributes BodyAttributes(BodyMesh);
+				for (const FVertexID V : BodyMesh.Vertices().GetElementIDs())
+				{
+					BodyPoints.Add(FVector(BodyAttributes.GetVertexPositions()[V]));
+				}
+				for (const TPair<FName, FString>& Type : PawnLooksBodyTypes())
+				{
+					const TVertexAttributesConstRef<FVector3f> Moves = BodyAttributes.GetVertexMorphPositionDelta(Type.Key);
+					if (!Moves.IsValid())
+					{
+						continue;
+					}
+					TArray<FVector>& Out = BodyMoves.Add(Type.Key);
+					for (const FVertexID V : BodyMesh.Vertices().GetElementIDs())
+					{
+						Out.Add(FVector(Moves[V]));
+					}
+				}
+			}
+		}
+		FFacesGrid BodyGrid;
+		BodyGrid.Build(BodyPoints, 2.0);
+		UE_LOG(LogPawnFaces, Display, TEXT("Body type morphs for the neck: %d from the whole body"), BodyMoves.Num());
 		TArray<TArray<FVector>> KellanParts;
 		KellanParts.SetNum(FacesPartCount);
 		{
@@ -895,6 +933,32 @@ namespace
 				UE_LOG(LogPawnFaces, Display, TEXT("  face LOD %d morph %s: largest move %.2f cm"), Lod, *Morph.Key.ToString(), Largest);
 			}
 			UE_LOG(LogPawnFaces, Display, TEXT("  face LOD %d: %d vertices, farthest from the face model %.2f cm"), Lod, Description->Vertices().Num(), Farthest);
+			if (!BodyMoves.IsEmpty())
+			{
+				TArray<int32> Nearest;
+				TArray<float> Follow;
+				int32 Following = 0;
+				for (const FVertexID V : Description->Vertices().GetElementIDs())
+				{
+					TArray<TPair<int32, double>> OnBody;
+					BodyGrid.Nearest(FVector(Attributes.GetVertexPositions()[V]), 1, OnBody);
+					const double Distance = OnBody.Num() ? OnBody[0].Value : 999.0;
+					Nearest.Add(OnBody.Num() ? OnBody[0].Key : 0);
+					Follow.Add(1.0f - FMath::SmoothStep(static_cast<float>(FacesNeckFullCm), static_cast<float>(FacesNeckFollowCm), static_cast<float>(Distance)));
+					Following += Follow.Last() > 0.0f ? 1 : 0;
+				}
+				for (const TPair<FName, TArray<FVector>>& Morph : BodyMoves)
+				{
+					Attributes.UnregisterMorphTargetAttribute(Morph.Key);
+					Attributes.RegisterMorphTargetAttribute(Morph.Key, false);
+					TVertexAttributesRef<FVector3f> Moves = Attributes.GetVertexMorphPositionDelta(Morph.Key);
+					for (const FVertexID V : Description->Vertices().GetElementIDs())
+					{
+						Moves[V] = FVector3f(Morph.Value[Nearest[V.GetValue()]] * Follow[V.GetValue()]);
+					}
+				}
+				UE_LOG(LogPawnFaces, Display, TEXT("  face LOD %d: %d vertices follow the body type"), Lod, Following);
+			}
 			Face->CommitMeshDescription(Lod);
 		}
 		Face->PostEditChange();
@@ -1854,6 +1918,25 @@ namespace
 			Synthesizer.GetTextureSizeY(), Synthesizer.GetMaxHighFrequencyIndex(), *Template->GetName());
 		const FMetaHumanFaceTextureAttributeMap& Attributes = Synthesizer.GetFaceTextureAttributeMap();
 
+		// The face's texture points where it meets the whole body (PawnLooks made it).
+		TArray<FVector2f> SeamUVs;
+		{
+			const USkeletalMesh* KellanFace = LoadObject<USkeletalMesh>(nullptr, TEXT("/Game/MetaHumans/Kellan/Face/Kellan_FaceMesh.Kellan_FaceMesh"));
+			const FString BodyName = PawnLooksMorphMeshName(TEXT("m_med_nrw_body"));
+			const USkeletalMesh* Body = LoadObject<USkeletalMesh>(nullptr, *PawnLooksAssetPath(BodyName));
+			if (KellanFace && Body && KellanFace->HasMeshDescription(0) && Body->HasMeshDescription(0) && Body->FindMorphTarget(PawnLooksFullBodyMarker))
+			{
+				TArray<FVector> BodyPoints;
+				const FMeshDescription& BodyMesh = *Body->GetMeshDescription(0);
+				FSkeletalMeshConstAttributes BodyAttributes(BodyMesh);
+				for (const FVertexID V : BodyMesh.Vertices().GetElementIDs())
+				{
+					BodyPoints.Add(FVector(BodyAttributes.GetVertexPositions()[V]));
+				}
+				SeamUVs = PawnSeamUVs(*KellanFace->GetMeshDescription(0), BodyPoints, 3.0);
+			}
+			UE_LOG(LogPawnFaces, Display, TEXT("Face skin tones are measured at %s (%d texture points)"), SeamUVs.IsEmpty() ? TEXT("the whole face (no whole body)") : TEXT("the neck seam"), SeamUVs.Num());
+		}
 		const TSharedPtr<FJsonObject>* Skins = nullptr;
 		Config->TryGetObjectField(TEXT("skins"), Skins);
 		int32 Failures = 0;
@@ -1906,7 +1989,8 @@ namespace
 					++Failures;
 					continue;
 				}
-				const FLinearColor Average = FacesAverageColor(Color);
+				// The tone where the face meets the whole body (PawnSkinSeam.h), so no ring shows at the neck.
+				const FLinearColor Average = SeamUVs.IsEmpty() ? FacesAverageColor(Color) : PawnAverageAt(Color, SeamUVs, FacesAverageColor(Color));
 				Instance->CopyMaterialUniformParametersEditorOnly(Template, true);
 				Instance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(PawnLooksParamBaseColor), ColorTexture);
 				Instance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(PawnLooksParamNormal), NormalTexture);
