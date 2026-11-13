@@ -1668,6 +1668,9 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
                     const DefId before = floors_->at(cell);
                     if (floors_->set(cell, floor) && floors_->at(cell) != before) {
                         ++changed;
+                        if (floor.valid()) {
+                            map_.levelGround(CellRect{x, y, 1, 1, cell.level});  // a floor lies flat (docs/design/levelling.md)
+                        }
                     }
                 }
             }
@@ -2802,6 +2805,9 @@ uint64_t Sim::stateHash() const {
     fire_->hashState(h);
     temperature_->hashState(h);
     h.add(map_.upperFloorHash());
+    if (map_.anyLevelled()) {
+        h.add(map_.levelHash());  // only once something was levelled, so older hashes stay
+    }
     roofCollapse_->hashState(h);
     areas_->hashState(h);
     spoilage_->hashState(h);

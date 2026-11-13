@@ -225,6 +225,67 @@ void Rooms::rebuild() {
 
     roof();
     scanContents();
+    levelRooms();
+}
+
+// An enclosed, roofed room on the ground is levelled to the base its walls stand on (the base most of
+// them share), with the furniture that stands in it, so its floor is flat (docs/design/levelling.md).
+void Rooms::levelRooms() {
+    std::vector<CellPos> cells;
+    std::vector<float> bases;
+    for (const Room& room : rooms_) {
+        if (room.bounds.level != 0 || room.outdoors()) {
+            continue;
+        }
+        cells.clear();
+        bases.clear();
+        const RoomId id = room.id;
+        for (const CellPos& c : cellsOf(room)) {
+            cells.push_back(c);
+            for (const auto& n : kRoomsNeighbours) {
+                const CellPos side{c.x + n[0], c.y + n[1], 0};
+                if (!map_.inBounds(side)) {
+                    continue;
+                }
+                const Entity building = map_.buildingAt(side);
+                if (building == kNoEntity) {
+                    continue;
+                }
+                const RegionId region = map_.regions().regionAtNow(side);
+                const RoomId other = region != kNoRegion && region < roomOfRegion_.size() ? roomOfRegion_[region] : kNoRoom;
+                if (other == id) {
+                    continue;
+                }
+                if (holdsRoof_[things_.registry().get<Thing>(building).def.value] != 0 || other != kNoRoom) {
+                    if (map_.levelled(side)) {
+                        bases.push_back(map_.levelBase(side));
+                    }
+                } else {
+                    cells.push_back(side);  // furniture that blocks walking stands in no region but is in the room
+                }
+            }
+        }
+        if (bases.empty()) {
+            continue;  // walled by rock only: a cave keeps its ground
+        }
+        std::sort(bases.begin(), bases.end());
+        float base = bases[0];
+        size_t bestRun = 0;
+        for (size_t i = 0; i < bases.size();) {
+            size_t j = i;
+            while (j < bases.size() && bases[j] == bases[i]) {
+                ++j;
+            }
+            if (j - i > bestRun) {
+                bestRun = j - i;
+                base = bases[i];
+            }
+            i = j;
+        }
+        std::sort(cells.begin(), cells.end(), [](const CellPos& a, const CellPos& b) { return a.y != b.y ? a.y < b.y : a.x < b.x; });
+        cells.erase(std::unique(cells.begin(), cells.end(), [](const CellPos& a, const CellPos& b) { return a.x == b.x && a.y == b.y; }), cells.end());
+        map_.levelCells(cells, base);
+    }
 }
 
 bool Rooms::roofHolderAt(CellPos c) const {

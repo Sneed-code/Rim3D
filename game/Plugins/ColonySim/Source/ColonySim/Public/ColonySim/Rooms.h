@@ -136,6 +136,7 @@ private:
     void rebuild();
     void roof();
     void scanContents();
+    void levelRooms();
     bool roofHolderAt(CellPos c) const;
 
     Map& map_;

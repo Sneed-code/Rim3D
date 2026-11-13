@@ -25,7 +25,8 @@ concurrency:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to GCC 15 on 2026-11-13, whose new false -Warray-bounds warnings (SurgeryJobs.cpp) stop the build; local and CI builds use GCC 13.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Configure
@@ -84,7 +85,7 @@ jobs:
   # byte, so a save made on the PC loads in the cloud.
   replay-cross-platform:
     needs: [build-and-test, build-and-test-windows]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -105,7 +106,7 @@ jobs:
         run: cmp save-Linux/straight.save save-Windows/straight.save && echo "the saves are identical"
 
   data:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Check data files

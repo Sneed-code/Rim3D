@@ -260,6 +260,11 @@ Entity Construction::placeBlueprint(DefId def, DefId stuff, CellPos cell, Rot4 r
         }
     }
 
+    // The plan levels its ground at once, so the player sees where it will stand (docs/design/levelling.md).
+    if (!onWater && !upperFloor) {
+        map_.levelGround(rect);
+    }
+
     ConstructionSite site;
     site.stuff = stuff;
     site.origin = cell;

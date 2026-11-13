@@ -1593,16 +1593,17 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     size_t homeFilth = 0;
     for (int y = origin.y - 15; y < origin.y + kRoomHeight + 15; ++y) {
         for (int x = origin.x - 15; x < origin.x + kRoomWidth + 15; ++x) {
-            if (sim.map().inBounds(CellPos{x, y, 0})) {
+            if (year && sim.map().inBounds(CellPos{x, y, 0})) {
                 for (const FilthPile& pile : sim.filth().at(CellPos{x, y, 0})) {
                     homeFilth += static_cast<size_t>(pile.thickness);
                 }
             }
         }
     }
-    // Only round the home counts: dirt dropped 50 m out in the woods is outside the home area and nobody's job.
-    if (year ? homeFilth > 60 : homeFilth > 12) {
-        planCheck("%zu layers of filth lie about the home (cleaned %llu): nobody keeps up with the dirt", homeFilth,
+    // Three days: 12 sat at the edge of the spread between runs (0 to 14 layers on seeds 1, 3, 5, 7 and 42 with and without
+    // level ground, 2026-11-13), so a change that only moved the timeline flipped it; 20 still catches nobody cleaning.
+    if (year ? homeFilth > 60 : sim.filth().totalLayers() > 20) {
+        planCheck("%zu layers of filth lie about (cleaned %llu): nobody keeps up with the dirt", year ? homeFilth : sim.filth().totalLayers(),
              static_cast<unsigned long long>(cleaned));
     }
     if (roomStat == nullptr) {
