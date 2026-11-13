@@ -221,10 +221,18 @@ Now the MetaHuman wears the engine's whole body, all skin, and the skin layer is
   medium, tall) from where the sim's `height` falls in the gender's LooksRules range (`FSimPawnLooks::Stature`). The
   four nearest corners are blended bilinearly (`MorphWeights`). Height itself still scales the whole pawn. So every
   colonist's type, size and skin tone come from its seed like before; nothing new is rolled.
-- **Skin.** Kellan's body texture has underwear painted on. The body now takes the Creator's bare light skin colour map
-  (`T_Skin_V1_Body_BC`, copied in as `T_PawnBody_BaseColor`) and a body surface normal map (`T_Chr0005_Body_N`, as
-  `T_PawnBody_Normal`) on our skin material, tinted by the pawn's skin colour like the face and hands. No genitals
-  (a later step).
+- **Skin.** Kellan's body texture has underwear painted on. `T_PawnBody_BaseColor` is his texture with the grey
+  underwear texels (unsaturated, about 14% of it) replaced by the Creator's bare skin map (`T_Skin_V1_Body_BC`) at his
+  skin tone, so nipples, navel, hands and feet keep his detail; the normal map is the Creator's `T_Chr0005_Body_N`.
+  `M_PawnSkin` now takes the texture's detail mostly as lightness (70%), darker features leaning warm, so dark brown
+  nipples or lips no longer turn blue-grey on pale skin. No genitals (a later step).
+- **Chest shape.** A body type's shape is moved onto Kellan's skeleton by each bone's move only, not its turn: the
+  joints of the body types are turned a little differently, and turning a breast about a spine joint bent its shape.
+- **Whole preset faces.** After review (four sliders on Kellan's man's face read as nobody), PawnFaces also puts one
+  morph per Creator preset on the shaped face (`FacePreset_F_Jelena`...), which takes Kellan's face to that preset's
+  wherever the face weight reaches (the scalp, ears and neck stay, for the hair and the body). `FSimPawnLooks::FacePreset`
+  picks one; sim colonists still use the sliders for now. The showcase is Jelena with her own face skin;
+  `-BodiesAllPresets` shoots every woman's preset, `-BodiesPreset=<name>` picks hers.
 - **In the game.** A body with the `FemaleTallHeavy` morph is the whole body: Kellan's top and trousers hide and no skin
   layer is made; a pawn wearing nothing at all also loses Kellan's shoes (the sim has no footwear, so dressed pawns keep
   them). Older generated assets still get the old skin layer. Tattoos, scars and body hair land on the body.
