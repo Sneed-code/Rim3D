@@ -251,6 +251,9 @@ bool Things::spawnAt(Entity thing, CellPos cell, Rot4 rot) {
     footprint->origin = cell;
     footprint->rotation = rot;
     linkLevels(thing);
+    if (!onWater) {
+        map_.levelGround(rect);  // a building stands on level ground (docs/design/levelling.md); nothing upstairs
+    }
     registry_.emplace<Position>(thing, Position{static_cast<float>(rect.minX) + 0.5f * static_cast<float>(rect.sizeX),
                                                 static_cast<float>(rect.minY) + 0.5f * static_cast<float>(rect.sizeY),
                                                 rect.level});
