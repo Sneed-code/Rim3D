@@ -377,6 +377,14 @@ void ASimPawnActor::ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& In
 			Mesh->SetMorphTarget(Morph.Key, Morph.Value);
 		}
 	}
+	// The shaped face's neck follows the body type too (the real body); a face without those morphs ignores them.
+	if (FaceMesh)
+	{
+		for (const TPair<FName, float>& Morph : Looks.MorphWeights())
+		{
+			FaceMesh->SetMorphTarget(Morph.Key, Morph.Value);
+		}
+	}
 	const FVector Skin(Looks.Skin.R, Looks.Skin.G, Looks.Skin.B);
 	for (USkeletalMeshComponent* Mesh : SkinMeshes)
 	{
@@ -472,9 +480,18 @@ void ASimPawnActor::ApplyFace(USimPawnSubsystem& Pawns)
 	{
 		return;  // a pawn from an older save keeps Kellan's face, eyes and grooms
 	}
+	if (!AppliedFacePreset.IsNone())
+	{
+		FaceMesh->SetMorphTarget(AppliedFacePreset, 0.0f);
+		AppliedFacePreset = NAME_None;
+	}
 	for (const TPair<FName, float>& Morph : Looks.FaceMorphWeights())
 	{
 		FaceMesh->SetMorphTarget(Morph.Key, Morph.Value);
+	}
+	if (!Looks.FacePreset.IsEmpty())
+	{
+		AppliedFacePreset = PawnFacesPresetMorph(Looks.bFemale, Looks.FacePreset);
 	}
 	if (UMaterialInterface* Eye = Cast<UMaterialInterface>(Pawns.GetFacesAsset(PawnFacesEyeInstanceName(Looks.Eyes))))
 	{
@@ -493,7 +510,8 @@ void ASimPawnActor::ApplyFace(USimPawnSubsystem& Pawns)
 	}
 	const float Sliders[] = {Looks.FaceShape, Looks.Brow, Looks.Nose, Looks.Jaw};
 	const int32 Choices = Skins + (Looks.bFemale ? 0 : 1);
-	const int32 SkinPick = Choices > 0 ? static_cast<int32>(FCrc::MemCrc32(Sliders, sizeof(Sliders)) % static_cast<uint32>(Choices)) : 0;
+	const int32 SkinPick = Looks.FaceSkin >= 0 && Looks.FaceSkin < Skins ? Looks.FaceSkin
+		: Choices > 0 ? static_cast<int32>(FCrc::MemCrc32(Sliders, sizeof(Sliders)) % static_cast<uint32>(Choices)) : 0;
 	UMaterialInterface* FaceSkin = SkinPick < Skins ? Cast<UMaterialInterface>(Pawns.GetFacesAsset(PawnFacesSkinName(Looks.bFemale, SkinPick))) : nullptr;
 	for (const TPair<int32, TObjectPtr<UMaterialInterface>>& Slot : FaceSkinSlots)
 	{
@@ -798,9 +816,23 @@ void ASimPawnActor::EnsureBareLayer(USimPawnSubsystem& Pawns)
 		{
 			DefaultTrousers = Mesh;
 		}
+		else if (Name.Contains(TEXT("shoes")))
+		{
+			DefaultShoes = Mesh;
+		}
 	}
 	if (!DefaultTop || !DefaultTrousers)
 	{
+		return;
+	}
+	// The real body (character creator step 1): the MetaHuman's body is the engine's whole body, all skin, so it is
+	// what shows where nothing is worn. Kellan's own clothes go once the clothes assets are there to replace them.
+	const USkeletalMesh* BodyMesh = MetaHumanBody->GetSkeletalMeshAsset();
+	if (BodyMesh && BodyMesh->FindMorphTarget(PawnLooksFullBodyMarker) && Pawns.GetClothesAsset(PawnBareMeshes[0]))
+	{
+		bFullBody = true;
+		DefaultTop->SetVisibility(false);
+		DefaultTrousers->SetVisibility(false);
 		return;
 	}
 	USkinnedMeshComponent* Leader = DefaultTop->LeaderPoseComponent.IsValid() ? DefaultTop->LeaderPoseComponent.Get() : MetaHumanBody.Get();
@@ -907,7 +939,7 @@ void ASimPawnActor::ApplyApparel(USimPawnSubsystem& Pawns, const FSimPawnApparel
 		return;  // a mannequin has no clothes to change
 	}
 	EnsureBareLayer(Pawns);
-	if (BareLayer.IsEmpty() || !DefaultTop || !DefaultTrousers)
+	if ((BareLayer.IsEmpty() && !bFullBody) || !DefaultTop || !DefaultTrousers)
 	{
 		return;  // no clothes assets, or no looks meshes to put away: Kellan's own clothes stay
 	}
@@ -953,6 +985,11 @@ void ASimPawnActor::ApplyApparel(USimPawnSubsystem& Pawns, const FSimPawnApparel
 		}
 	}
 	Apparel = Wanted;
+	// With the whole body, a pawn that wears nothing at all goes barefoot (the sim has no footwear: dressed pawns keep Kellan's shoes).
+	if (bFullBody && DefaultShoes)
+	{
+		DefaultShoes->SetVisibility(!Apparel.Pieces.IsEmpty());
+	}
 
 	// Colour and wear of every mesh, rebuilt or not.
 	for (const FSimWornPiece& Piece : Apparel.Pieces)

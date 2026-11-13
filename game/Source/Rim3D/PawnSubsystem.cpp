@@ -170,18 +170,41 @@ namespace
 
 TArray<TPair<FName, float>> FSimPawnLooks::MorphWeights() const
 {
-	const float Thin = FMath::Max(0.0f, -Weight);
-	const float Heavy = FMath::Max(0.0f, Weight);
-	if (bFemale)
+	TArray<TPair<FName, float>> Out;
+	for (const TPair<FName, FString>& Type : PawnLooksBodyTypes())
 	{
-		return {{TEXT("Thin"), 0.0f}, {TEXT("Heavy"), 0.0f}, {TEXT("Female"), 1.0f - Thin - Heavy}, {TEXT("FemaleThin"), Thin},
-			{TEXT("FemaleHeavy"), Heavy}};
+		Out.Add({Type.Key, 0.0f});
 	}
-	return {{TEXT("Thin"), Thin}, {TEXT("Heavy"), Heavy}, {TEXT("Female"), 0.0f}, {TEXT("FemaleThin"), 0.0f}, {TEXT("FemaleHeavy"), 0.0f}};
+	// Build (thin, normal, heavy) and stature (short, medium, tall) pick a cell of the gender's grid; the medium normal
+	// corner of the male grid is Kellan's own body (no morph).
+	const float B = FMath::Clamp(FMath::Abs(Weight), 0.0f, 1.0f);
+	const float S = FMath::Clamp(FMath::Abs(Stature), 0.0f, 1.0f);
+	const int32 Build = Weight < 0.0f ? -1 : 1;
+	const int32 Tallness = Stature < 0.0f ? -1 : 1;
+	const TPair<FName, float> Corners[] = {
+		{PawnLooksBodyMorph(bFemale, 0, 0), (1.0f - S) * (1.0f - B)},
+		{PawnLooksBodyMorph(bFemale, 0, Build), (1.0f - S) * B},
+		{PawnLooksBodyMorph(bFemale, Tallness, 0), S * (1.0f - B)},
+		{PawnLooksBodyMorph(bFemale, Tallness, Build), S * B},
+	};
+	for (const TPair<FName, float>& Corner : Corners)
+	{
+		if (TPair<FName, float>* Found = Out.FindByPredicate([&](const TPair<FName, float>& M) { return M.Key == Corner.Key; }))
+		{
+			Found->Value += Corner.Value;
+		}
+	}
+	return Out;
 }
 
 TArray<TPair<FName, float>> FSimPawnLooks::FaceMorphWeights() const
 {
+	if (!FacePreset.IsEmpty())
+	{
+		// The preset is the whole face: no female shift, sliders at the average.
+		return {{PawnFacesMorphFemale, 0.0f}, {PawnFacesMorphShape, 0.0f}, {PawnFacesMorphBrow, 0.0f}, {PawnFacesMorphNose, 0.0f}, {PawnFacesMorphJaw, 0.0f},
+			{PawnFacesPresetMorph(bFemale, FacePreset), 1.0f}};
+	}
 	const auto Slider = [](float Value) { return FMath::Clamp(Value, 0.0f, 1.0f) * 2.0f - 1.0f; };
 	return {{PawnFacesMorphFemale, bFemale ? 1.0f : 0.0f}, {PawnFacesMorphShape, Slider(FaceShape)}, {PawnFacesMorphBrow, Slider(Brow)},
 		{PawnFacesMorphNose, Slider(Nose)}, {PawnFacesMorphJaw, Slider(Jaw)}};
@@ -193,6 +216,14 @@ FSimPawnLooks USimPawnSubsystem::MakeLooks(const colony::PawnLooksView& View, co
 	Looks.Height = FMath::Clamp(View.height, 0.5f, 1.5f);
 	Looks.Weight = FMath::Clamp(View.weight, -1.0f, 1.0f);
 	Looks.bFemale = View.female;
+	// Stature: where the height falls in the gender's range (LooksRules heightMale / heightFemale); hulks are a little taller.
+	{
+		const char* const Key = View.female ? "heightFemale" : "heightMale";
+		const colony::Def* Rules = Defs ? Defs->find("Rules", "LooksRules") : nullptr;
+		const float Low = Rules ? static_cast<float>(Rules->numberAt(Key, 0, View.female ? 0.88 : 0.95)) : (View.female ? 0.88f : 0.95f);
+		const float High = Rules ? static_cast<float>(Rules->numberAt(Key, 1, View.female ? 0.97 : 1.05)) : (View.female ? 0.97f : 1.05f);
+		Looks.Stature = High > Low ? FMath::Clamp((Looks.Height - (Low + High) * 0.5f) / ((High - Low) * 0.5f), -1.0f, 1.0f) : 0.0f;
+	}
 	Looks.Skin = PawnLinear(View.skin);
 	Looks.Hair = PawnLinear(View.hair);
 	Looks.FaceShape = View.faceShape;
@@ -423,6 +454,11 @@ UAnimSequence* USimPawnSubsystem::GetActionAnimation(colony::PawnAction Action) 
 	return CrouchPose;
 }
 
+void USimPawnSubsystem::SetLooksOverride(colony::Entity Thing, const FSimPawnLooks& Looks)
+{
+	LooksOverrides.Add(PawnKey(Thing), Looks);
+}
+
 ASimPawnActor* USimPawnSubsystem::FindPawn(colony::Entity Thing) const
 {
 	const TObjectPtr<ASimPawnActor>* Found = Pawns.Find(PawnKey(Thing));
@@ -516,7 +552,11 @@ void USimPawnSubsystem::Tick(float DeltaTime)
 		}
 		Pawn->UpdateFromSim(*Bridge, View, Before.find(View.id), DeltaTime, Bridge->GetSpeed());
 		Pawn->SetCutAway(View.level > TopLevel);
-		if (View.looks >= 0 && View.looks < static_cast<int32>(Now.looks.size()))
+		if (const FSimPawnLooks* Override = LooksOverrides.Find(PawnKey(View.id)))
+		{
+			Pawn->ApplyLooks(*this, *Override);
+		}
+		else if (View.looks >= 0 && View.looks < static_cast<int32>(Now.looks.size()))
 		{
 			Pawn->ApplyLooks(*this, MakeLooks(Now.looks[static_cast<size_t>(View.looks)], Defs));
 		}

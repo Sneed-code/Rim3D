@@ -9,6 +9,8 @@
     "female": ["Ada", "Aera", "Asha", "Celeste", "Etta", "Grace", "Jelena", "Lani", "Sook-ja", "Sunita", "Tuya", "Vivian", "Zuri"],
     "male": ["Bo", "Bruce", "Cameron", "Dominic", "Isaiah", "Jorge", "Kelvin", "Lorenzo", "Mateo", "Mikel", "Omari", "Orlando", "Trey", "Victor", "Walter"]
   },
+  "extraEyeColors": [[0.31, 0.52, 0.27]],
+  "extraEyeColorsComment": "Eye colours (sRGB) the sim never rolls (LooksRules eyeColors are the rolled ones) but a showcase or the character creator can pick: light green (the bodies smoke test's showcase woman). Each gets its MI_PawnEye_<hex> like the rolled ones.",
   "hairCardsLod": 3,
   "hairCardsComment": "V2b: far pawns draw their hair style's Creator hair cards at this card LOD (0 finest, 4 coarsest; the nearest at or under it), instead of strands.",
   "hair": {

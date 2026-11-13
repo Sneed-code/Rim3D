@@ -189,7 +189,17 @@ void USmokeTestSubsystem::BuildFacesPhases()
 				State->Error(TEXT("a pawn with hair has no hair cards component (are the PawnFaces assets made?)"));
 			}
 			// V2b: the skin under the clothes is the skin material in the pawn's own colour.
-			if (Pawn->GetBareSkins().Num() != Pawn->GetBareLayer().Num() || Pawn->GetBareSkins().IsEmpty())
+			if (Pawn->HasFullBody())
+			{
+				// The whole body is skin on our skin material, in the pawn's colour (custom primitive data).
+				const USkeletalMeshComponent* Skin = Pawn->GetSkinBody();
+				const TArray<float>& Data = Skin ? Skin->GetCustomPrimitiveData().Data : TArray<float>();
+				if (Data.Num() < 3 || !FMath::IsNearlyEqual(Data[0], Wanted.Skin.R, 1.0e-4f) || !FMath::IsNearlyEqual(Data[2], Wanted.Skin.B, 1.0e-4f))
+				{
+					State->Error(TEXT("the whole body is not the pawn's skin colour"));
+				}
+			}
+			else if (Pawn->GetBareSkins().Num() != Pawn->GetBareLayer().Num() || Pawn->GetBareSkins().IsEmpty())
 			{
 				State->Error(FString::Printf(TEXT("%d bare skin materials for %d bare layers"), Pawn->GetBareSkins().Num(), Pawn->GetBareLayer().Num()));
 			}

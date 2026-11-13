@@ -43,6 +43,7 @@ struct FSimPawnLooks
 {
 	float Height = 1.0f;  // scale of the whole body
 	float Weight = 0.0f;  // -1 thin to 1 heavy
+	float Stature = 0.0f;  // -1 short to 1 tall for the gender (from the height), picks short / medium / tall body types
 	bool bFemale = false;
 	FLinearColor Skin = FLinearColor(0.15f, 0.08f, 0.06f);
 	FLinearColor Hair = FLinearColor(0.02f, 0.015f, 0.01f);
@@ -61,21 +62,27 @@ struct FSimPawnLooks
 	FString Beard;
 	// V3: body hair (0 none to 1 thick) and the marks on the skin.
 	float BodyHair = 0.0f;
+	// The face skin (V2b) by its number among the gender's MI_FaceSkin_* instances; -1 picks one by the face sliders.
+	int32 FaceSkin = -1;
+	// A whole Creator preset face by its name (assets/pawn_faces.json presets, of the pawn's gender), instead of the
+	// four sliders on Kellan's face; empty: the sliders.
+	FString FacePreset;
 	TArray<FSimPawnMark> Tattoos;
 	TArray<FSimPawnMark> Scars;
 
 	bool operator==(const FSimPawnLooks& Other) const
 	{
-		return Height == Other.Height && Weight == Other.Weight && bFemale == Other.bFemale && Skin == Other.Skin && Hair == Other.Hair
+		return Height == Other.Height && Weight == Other.Weight && Stature == Other.Stature && bFemale == Other.bFemale && Skin == Other.Skin && Hair == Other.Hair
 			&& HornLength == Other.HornLength && HornRadius == Other.HornRadius && HornSpread == Other.HornSpread && HornColor == Other.HornColor
 			&& FaceShape == Other.FaceShape && Brow == Other.Brow && Nose == Other.Nose && Jaw == Other.Jaw && Eyes == Other.Eyes
-			&& HairStyle == Other.HairStyle && Beard == Other.Beard && BodyHair == Other.BodyHair && Tattoos == Other.Tattoos && Scars == Other.Scars;
+			&& HairStyle == Other.HairStyle && Beard == Other.Beard && BodyHair == Other.BodyHair && FaceSkin == Other.FaceSkin && FacePreset == Other.FacePreset && Tattoos == Other.Tattoos && Scars == Other.Scars;
 	}
 
 	/** Whether the pawn has V1 face numbers (not an older save's pawn). */
 	bool HasFace() const { return !HairStyle.IsEmpty(); }
 
-	/** The body shape morphs' weights (PawnLooks.h names) for this weight and gender. */
+	/** The body shape morphs' weights (PawnLooks.h names) for this gender, weight and stature: the four nearest of the
+	 * gender's 3 x 3 grid of MetaHuman body types, blended bilinearly; every morph is listed (unused ones at 0). */
 	TArray<TPair<FName, float>> MorphWeights() const;
 	/** The face shape morphs' weights (PawnFaces.h names). */
 	TArray<TPair<FName, float>> FaceMorphWeights() const;
@@ -162,6 +169,9 @@ public:
 	void RemoveAll();
 
 	ASimPawnActor* FindPawn(colony::Entity Thing) const;
+	/** Draws the pawn with these looks instead of the sim's (smoke tests' showcases; later the character creator's preview). */
+	void SetLooksOverride(colony::Entity Thing, const FSimPawnLooks& Looks);
+	void ClearLooksOverrides() { LooksOverrides.Reset(); }
 	/** Every pawn actor, by the sim entity's number (entt::to_integral). */
 	const TMap<uint32, TObjectPtr<ASimPawnActor>>& GetPawns() const { return Pawns; }
 	const FSimPawnDetailCounts& GetDetailCounts() const { return DetailCounts; }
@@ -207,6 +217,7 @@ private:
 
 	UPROPERTY()
 	TMap<uint32, TObjectPtr<ASimPawnActor>> Pawns;
+	TMap<uint32, FSimPawnLooks> LooksOverrides;
 
 	UPROPERTY()
 	TObjectPtr<USkeletalMesh> BodyMesh;
