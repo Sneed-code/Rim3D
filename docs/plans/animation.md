@@ -392,8 +392,8 @@ sneed picks from side-by-side pictures before anything is swapped.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | Z1 | **Shortlist**: search Fab, Sketchfab and Truebones for every tropical animal, a picture sheet of the best two per animal with licence and rig notes; sneed picks. | Cloud | Sonnet, high | 90 min | |
-| | Z2 | **Pipeline and the capybara**: `tools/animals/` (clean, rig, groom, export), the ungulate and rodent skeletons and retargeters, the capybara end to end, bench shots. | PC Blender and Unreal | Opus, high | 120 min | Z1 |
+| ✓ | Z1 | **Shortlist** _(done 2026-11-14: [animal-shortlist.md](animal-shortlist.md); sneed chose free models, upgraded by us)_: search Fab, Sketchfab and Truebones for every tropical animal, a picture sheet of the best two per animal with licence and rig notes; sneed picks. | Cloud | Sonnet, high | 90 min | |
+| | Z2 | **Pipeline and the capybara**: `tools/animals/` (clean, rig, groom, export), the ungulate and rodent skeletons and retargeters, the capybara end to end, bench shots. _(No free capybara found yet: if the Truebones zoo has none, prove the pipeline on the Animated3D monkey instead; see the shortlist.)_ | PC Blender and Unreal | Opus, high | 120 min | Z1 |
 | | Z3 | **Monkey** (primate skeleton, fur, hands). | PC | Sonnet, high | 120 min | Z2 |
 | | Z4 | **Elephant and rhinoceros** (pachyderm skeleton, trunk, skin). | PC | Opus, high | 120 min | Z2 |
 | | Z5 | **Wild boar, alpaca and blastbuck** (ungulate). | PC | Sonnet, high | 120 min | Z2 |
