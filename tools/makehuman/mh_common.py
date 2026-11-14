@@ -213,7 +213,7 @@ def lower_pubic_hair(obj, body, top_share=0.6, above_crotch=0.025, width=1.0, de
         return best
 
     # The crotch: the lowest body point near the middle line above the knees (between the legs there is none lower).
-    middle = [p.z for p in body_pts if abs(p.x - centre_x) < 0.012 and bottom - 0.25 < p.z < top]
+    middle = _perineum_heights(body_pts, centre_x, bottom - 0.25, top)
     drop = 0.0
     if middle:
         crotch = min(middle)
@@ -561,3 +561,152 @@ def add_tusks(rig, body, length=0.03, radius=0.006, color=(0.78, 0.72, 0.58), lo
         objs.append(obj)
     log("tusks", length, "m at the mouth, nose tip at z", round(nose.z, 3))
     return objs
+
+
+def _crotch(rig, pts):
+    cx = rig.data.bones["pelvis"].head_local.x
+    hip_z = rig.data.bones["thigh_l"].head_local.z if "thigh_l" in rig.data.bones else rig.data.bones["pelvis"].head_local.z
+    mid = _perineum_heights(pts, cx, hip_z - 0.3, hip_z)
+    return cx, (min(mid) if mid else None)
+
+
+def _vulva_weights(rig, pts, normals, radius_x=0.03, height=0.065):
+    """Weights (0..1) of the vulva on a female anatomy body: front-facing skin on the middle line from the crotch up."""
+    cx, crotch = _crotch(rig, pts)
+    out = {}
+    if crotch is None:
+        return out
+    for i, (p, n) in enumerate(zip(pts, normals)):
+        dx = abs(p.x - cx)
+        dz = p.z - crotch
+        if dx < radius_x and -0.005 < dz < height and n.y < -0.15:   # faces -Y (front) or down-front
+            w = (1.0 - dx / radius_x) ** 0.7 * min(1.0, (height - dz) / 0.02) * min(1.0, (dz + 0.005) / 0.01)
+            if w > 0.01:
+                out[i] = min(1.0, w)
+    return out
+
+
+def _male_genital_weights(rig, pts):
+    """The male genitals: what stands in front of the thighs at the crotch (as add_genital_bone finds them)."""
+    cx, crotch = _crotch(rig, pts)
+    out = {}
+    if crotch is None:
+        return out
+    def thigh_front(z):
+        ys = [p.y for p in pts if 0.07 < abs(p.x - cx) < 0.13 and abs(p.z - z) < 0.02]
+        return min(ys) if ys else None
+    fronts = {}
+    for i, p in enumerate(pts):
+        if abs(p.x - cx) < 0.065 and crotch - 0.13 < p.z < crotch + 0.07:
+            key = round(p.z, 2)
+            if key not in fronts:
+                fronts[key] = thigh_front(p.z)
+            front = fronts[key]
+            if front is not None and p.y < front - 0.004:
+                out[i] = min(1.0, (front - p.y) / 0.012)
+    return out
+
+
+def fuller_labia(rig, body, amount=0.004, log=print):
+    """The creator's genital size on a female anatomy body: the vulva pushed out along its normals by up to `amount`
+    metres (negative: slimmer), most at the middle line, fading to nothing at the edges."""
+    to_rig = rig.matrix_world.inverted() @ body.matrix_world
+    rot = to_rig.to_3x3()
+    pts = [to_rig @ v.co for v in body.data.vertices]
+    normals = [(rot @ v.normal).normalized() for v in body.data.vertices]
+    weights = _vulva_weights(rig, pts, normals)
+    scale = body.matrix_world.to_scale().x * (rig.matrix_world.to_scale().x or 1.0)
+    for i, w in weights.items():
+        v = body.data.vertices[i]
+        v.co = v.co + v.normal * (amount * w / max(scale, 1e-6))
+    body.data.update()
+    log("labia", amount, "m on", len(weights), "vertices")
+
+
+def make_pigment_mask(rig, body, out_path, female=True, size=1024, log=print):
+    """A mask (white where darker) of the areolae and the genitals in the skin's texture space, for the skin material's
+    pigment (the creator's slider): found from the shape for any body of the base."""
+    import numpy as np
+    to_rig = rig.matrix_world.inverted() @ body.matrix_world
+    rot = to_rig.to_3x3()
+    pts = [to_rig @ v.co for v in body.data.vertices]
+    normals = [(rot @ v.normal).normalized() for v in body.data.vertices]
+    weight = np.zeros(len(pts), dtype=np.float32)
+    # Areolae: around the frontmost skin point of each breast.
+    radius = 0.021 if female else 0.012
+    for bone in ("breast_l", "breast_r"):
+        b = rig.data.bones.get(bone)
+        if b is None:
+            continue
+        near = [i for i, p in enumerate(pts) if (p - b.head_local).length < 0.12 and abs(p.x - b.head_local.x) < 0.06]
+        if not near:
+            continue
+        tip = pts[min(near, key=lambda i: pts[i].y)]
+        for i in near:
+            d = (pts[i] - tip).length
+            if d < radius:
+                t = d / radius
+                weight[i] = max(weight[i], 1.0 if t < 0.7 else (1.0 - t) / 0.3)
+    genital = _vulva_weights(rig, pts, normals) if female else _male_genital_weights(rig, pts)
+    for i, w in genital.items():
+        weight[i] = max(weight[i], w)
+    # Into texture space: each triangle that touches the mask, filled by its corners' weights.
+    uv_layer = body.data.uv_layers.active
+    mask = np.zeros((size, size), dtype=np.float32)
+    filled = 0
+    for poly in body.data.polygons:
+        vids = list(poly.vertices)
+        if max(weight[v] for v in vids) <= 0.0:
+            continue
+        uvs = [uv_layer.data[li].uv for li in poly.loop_indices]
+        ws = [weight[v] for v in vids]
+        for k in range(1, len(vids) - 1):
+            tri = [(uvs[0], ws[0]), (uvs[k], ws[k]), (uvs[k + 1], ws[k + 1])]
+            (a, wa), (b, wb), (c, wc) = tri
+            xs = [a.x * size, b.x * size, c.x * size]
+            ys = [(1.0 - a.y) * size, (1.0 - b.y) * size, (1.0 - c.y) * size]
+            x0, x1 = max(int(min(xs)) - 1, 0), min(int(max(xs)) + 2, size)
+            y0, y1 = max(int(min(ys)) - 1, 0), min(int(max(ys)) + 2, size)
+            if x1 <= x0 or y1 <= y0 or x1 - x0 > size * 0.04 or y1 - y0 > size * 0.04:
+                continue  # empty, or a triangle stretched across the texture by a seam (it drew lines on other skin)
+            gx, gy = np.meshgrid(np.arange(x0, x1) + 0.5, np.arange(y0, y1) + 0.5)
+            den = (ys[1] - ys[2]) * (xs[0] - xs[2]) + (xs[2] - xs[1]) * (ys[0] - ys[2])
+            if abs(den) < 1e-9:
+                continue
+            l1 = ((ys[1] - ys[2]) * (gx - xs[2]) + (xs[2] - xs[1]) * (gy - ys[2])) / den
+            l2 = ((ys[2] - ys[0]) * (gx - xs[2]) + (xs[0] - xs[2]) * (gy - ys[2])) / den
+            l3 = 1.0 - l1 - l2
+            inside = (l1 >= -0.02) & (l2 >= -0.02) & (l3 >= -0.02)
+            value = l1 * wa + l2 * wb + l3 * wc
+            region = mask[y0:y1, x0:x1]
+            np.maximum(region, np.where(inside, value, 0.0), out=region)
+            filled += 1
+    # No blur: texels across an island edge belong to other skin (a blur drew a line along the hip). The corner
+    # weights already fade the edge.
+    img = bpy.data.images.new("pigment", size, size, alpha=False)
+    img.colorspace_settings.name = "Non-Color"
+    flipped = np.flipud(np.clip(mask, 0.0, 1.0))
+    rgba = np.stack([flipped, flipped, flipped, np.ones_like(flipped)], axis=-1).astype(np.float32)
+    img.pixels.foreach_set(rgba.ravel())
+    img.filepath_raw = out_path
+    img.file_format = "PNG"
+    img.save()
+    log("pigment mask", out_path, int((weight > 0).sum()), "vertices,", filled, "triangles")
+    return out_path
+
+
+def _perineum_heights(pts, cx, z_low, z_high):
+    """Heights of the skin on the body's middle line between z_low and z_high, leaving out anything that stands out in
+    front of the thighs (male genitals hang below the crotch): the lowest of them is the crotch, where the legs part."""
+    thighs = {}
+    for p in pts:
+        if 0.07 < abs(p.x - cx) < 0.13 and z_low < p.z < z_high:
+            key = round(p.z * 50.0)
+            thighs[key] = min(thighs.get(key, p.y), p.y)   # faces -Y: the front of the thighs at that height
+    out = []
+    for p in pts:
+        if abs(p.x - cx) < 0.012 and z_low < p.z < z_high:
+            front = thighs.get(round(p.z * 50.0))
+            if front is None or p.y >= front - 0.004:
+                out.append(p.z)
+    return out

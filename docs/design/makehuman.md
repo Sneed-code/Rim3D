@@ -123,6 +123,14 @@ The man's base has MakeHuman's male anatomy body; `add_genital_bone` (`"genital_
 shape (what stands in front of the thighs at the crotch) and gives them a soft bone weighted by how far a point hangs
 from the root, which the jiggle node swings loosely (stiffness 70, damping 3.5, up to 3.5 cm).
 
+**Genital size and pigment.** The creator's genital slider is the `GenitalLarge`/`GenitalSmall` morphs: on the man
+MakeHuman's own penis length, girth and testicle targets (kept to a natural range); on the woman `fuller_labia` pushes
+the vulva out (or in) along its normals. `make_pigment_mask` writes `pigment.png` (areolae and genitals, found from the
+shape, rasterised into the skin's texture space without blur and skipping seam-stretched triangles, which drew lines
+on other skin); `M_MH_SkinDetail` darkens and warms the skin there by the pawn's pigment (custom primitive data 3, the
+creator's "Areola and genital pigment" slider). It multiplies the skin colour, so it follows the skin tone. The crotch
+is found leaving out what stands in front of the thighs (`_perineum_heights`), so male pubic hair sits on the pubis.
+
 **Tail**: `FMakeHumanTailNode` swishes any `tail_01`... chain: a wave running down the tail, quicker and wider when moving,
 and a swing out against turns (no physics; AnimDynamics let it sag). `-CreatorDemo` (with `-CreatorRecord=<seconds>`)
 moves the sliders by itself for a clip.

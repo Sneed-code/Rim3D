@@ -42,7 +42,7 @@ def log(*a):
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from mh_common import (add_genital_bone, add_horns, add_morphs, add_soft_bones, add_tail, add_tusks, dump_vertices,  # noqa: E402
-                       lower_pubic_hair, make_skin_normal, prepare_for_unreal, write_materials)
+                       fuller_labia, lower_pubic_hair, make_pigment_mask, make_skin_normal, prepare_for_unreal, write_materials)
 
 try:
     for obj in list(bpy.data.objects):
@@ -171,6 +171,8 @@ try:
         add_soft_bones(rig, body, log=log)
     if cfg.get("genital_bone"):
         add_genital_bone(rig, body, log=log)
+    if cfg.get("labia"):
+        fuller_labia(rig, body, amount=cfg["labia"], log=log)  # the creator's genital size on a woman
     for o in [o for o in bpy.data.objects if o.type == "MESH" and "pubic" in o.name.lower()]:
         lower_pubic_hair(o, body, top_share=cfg.get("pubic_top_share", 0.6), above_crotch=cfg.get("pubic_above_crotch", 0.025),
                          width=cfg.get("pubic_width", 1.0), depth=cfg.get("pubic_depth", 0.0), log=log)
@@ -198,6 +200,12 @@ try:
         sys.exit(0)
     if cfg.get("morphs"):
         add_morphs([o for o in export if o != rig], cfg["morphs"], log=log)
+    # The areolae and genitals as a mask for the skin's pigment ("pigment_mask": "female" or "male").
+    pigment = None
+    if cfg.get("pigment_mask"):
+        os.makedirs(os.path.dirname(cfg["out"]), exist_ok=True)
+        pigment = make_pigment_mask(rig, body, os.path.join(os.path.dirname(cfg["out"]), "pigment.png"),
+                                    female=cfg["pigment_mask"] == "female", log=log)
     bpy.ops.object.select_all(action="DESELECT")
     for o in export:
         o.hide_set(False)
@@ -213,10 +221,12 @@ try:
     manifest = write_materials([o for o in export if o != rig], os.path.dirname(cfg["out"]), skin_meshes=skin_meshes,
                                tints=cfg.get("tints", {}), overrides=cfg["material_overrides"])
     skin_normal = os.path.join(os.path.dirname(cfg["out"]), "skin_normal.png")
-    if os.path.exists(skin_normal) and cfg.get("skin_normal", True):
+    if (os.path.exists(skin_normal) and cfg.get("skin_normal", True)) or pigment:
         for entry in manifest.values():
-            if entry.get("skin") and "normal" not in entry:
+            if entry.get("skin") and "normal" not in entry and os.path.exists(skin_normal) and cfg.get("skin_normal", True):
                 entry["normal"] = skin_normal
+            if entry.get("skin") and pigment:
+                entry["pigment"] = pigment
         with open(os.path.join(os.path.dirname(cfg["out"]), "materials.json"), "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=1)
     bpy.ops.export_scene.fbx(filepath=cfg["out"], use_selection=True, object_types={"ARMATURE", "MESH"},

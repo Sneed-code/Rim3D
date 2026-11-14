@@ -54,6 +54,8 @@ namespace
 		float Horns = 0.0f;
 		float Tusks = 0.0f;
 		float Tail = 0.0f;
+		float Genital = 0.0f;     // -1 smaller .. 1 larger (the man's genitals, the woman's labia)
+		float Pigment = 0.5f;     // 0 .. 1: how much darker the areolae and genitals are than the skin
 		int32 Pubic = 1;          // CreatorPubicNames
 		float PubicLow = 0.0f;
 		float Skin[3] = {0.91f, 0.80f, 0.75f};
@@ -97,7 +99,8 @@ namespace
 	void CreatorSetKind(FCreatorPerson& P, ECreatorKind Kind)
 	{
 		P.Kind = Kind;
-		P.Sex = P.Older = P.Breasts = 0.0f;
+		P.Sex = P.Older = P.Breasts = P.Genital = 0.0f;
+		P.Pigment = 0.5f;
 		P.ImpEars = P.ImpFace = P.OrcFace = P.Horns = P.Tusks = P.Tail = 0.0f;
 		P.Weight = P.bFemale ? -0.2f : 0.0f;
 		P.Muscle = 0.0f;
@@ -156,6 +159,9 @@ namespace
 		Set(TEXT("PubicTrimmed"), P.Pubic == 2 ? 1.0f : 0.0f);
 		Set(TEXT("PubicStrip"), P.Pubic == 3 ? 1.0f : 0.0f);
 		Set(TEXT("PubicLow"), P.Pubic == 0 ? 0.0f : P.PubicLow);
+		Set(TEXT("GenitalLarge"), P.Genital);
+		Set(TEXT("GenitalSmall"), -P.Genital);
+		Mesh->SetCustomPrimitiveDataFloat(3, P.Pigment);
 		Mesh->SetRelativeScale3D(FVector(P.Height));
 		// The panel's colour is as seen (sRGB); the skin material takes it linear, as FSimPawnLooks::Skin is.
 		const FLinearColor Skin = FLinearColor::FromSRGBColor(FLinearColor(P.Skin[0], P.Skin[1], P.Skin[2]).ToFColor(false));
@@ -294,6 +300,14 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		State->bWalk = FParse::Param(FCommandLine::Get(), TEXT("CreatorWalk"));
 		FParse::Value(FCommandLine::Get(), TEXT("CreatorYaw="), State->CameraYaw);
 		FParse::Value(FCommandLine::Get(), TEXT("CreatorDistance="), State->CameraDistance);
+		float Pigment = -1.0f;
+		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorPigment="), Pigment))
+		{
+			for (FCreatorPerson& Person : State->People)
+			{
+				Person.Pigment = Pigment;
+			}
+		}
 	};
 	Play.OnFrame = [=, this]()
 	{
@@ -482,6 +496,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 					{
 						ImGui::SliderFloat("Breasts", &P.Breasts, -1.0f, 1.0f, "%.2f");
 					}
+					ImGui::SliderFloat(P.bFemale ? "Labia" : "Genitals", &P.Genital, -1.0f, 1.0f, "%.2f");
 					if (ImGui::Button("Random body"))
 					{
 						FRandomStream R(FPlatformTime::Cycles());
@@ -499,6 +514,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 					ImGui::Combo("Pubic hair", &P.Pubic, CreatorPubicNames, 4);
 					ImGui::SliderFloat("Lower", &P.PubicLow, 0.0f, 1.0f, "%.2f");
 					ImGui::ColorEdit3("Skin", P.Skin);
+					ImGui::SliderFloat("Areola and genital pigment", &P.Pigment, 0.0f, 1.0f, "%.2f");
 					if (ImGui::Button("Random skin tone"))
 					{
 						const float Tone = FRandomStream(FPlatformTime::Cycles()).FRand();

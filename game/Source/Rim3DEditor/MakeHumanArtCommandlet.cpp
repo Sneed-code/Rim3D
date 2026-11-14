@@ -313,6 +313,34 @@ namespace
 		Blend->Inputs[1].Input.Connect(0, MicroSample);
 		Blend->Inputs[2].Input.Connect(0, Strength);
 		UMaterialEditingLibrary::ConnectMaterialProperty(Blend, TEXT(""), MP_Normal);
+
+		// Pigment: the areolae and genitals (PigmentMask, made by mh_export.py) darker and warmer than the rest, by the
+		// pawn's pigment (custom primitive data 3, 0 to 1; the creator's slider). It multiplies the skin's own colour, so
+		// it follows the skin tone: a darker skin's areolae are darker still.
+		if (UMaterialExpression* BaseColor = UMaterialEditingLibrary::GetMaterialPropertyInputNode(Material, MP_BaseColor))
+		{
+			auto* Mask = Cast<UMaterialExpressionTextureSampleParameter2D>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureSampleParameter2D::StaticClass(), -1000, -500));
+			Mask->ParameterName = TEXT("PigmentMask");
+			Mask->Texture = LoadObject<UTexture>(nullptr, TEXT("/Engine/EngineResources/Black.Black"));
+			Mask->SamplerType = UMaterialExpressionTextureBase::GetSamplerTypeForTexture(Mask->Texture);
+			auto* Amount = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -1000, -350));
+			Amount->ParameterName = TEXT("Pigment");
+			Amount->DefaultValue = 0.5f;
+			Amount->bUseCustomPrimitiveData = true;
+			Amount->PrimitiveDataIndex = 3;
+			auto* Pigment = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -300, -300));
+			Pigment->OutputType = CMOT_Float3;
+			Pigment->Description = TEXT("SkinPigment");
+			Pigment->Code = TEXT("float m = saturate(Mask * Amount * 1.4);\nreturn Base * lerp(float3(1, 1, 1), float3(0.5, 0.33, 0.28), m);");
+			Pigment->Inputs.SetNum(3);
+			Pigment->Inputs[0].InputName = TEXT("Base");
+			Pigment->Inputs[1].InputName = TEXT("Mask");
+			Pigment->Inputs[2].InputName = TEXT("Amount");
+			Pigment->Inputs[0].Input.Connect(0, BaseColor);
+			Pigment->Inputs[1].Input.Connect(0, Mask);
+			Pigment->Inputs[2].Input.Connect(0, Amount);
+			UMaterialEditingLibrary::ConnectMaterialProperty(Pigment, TEXT(""), MP_BaseColor);
+		}
 		Material->PostEditChange();
 		MhSave(Material);
 		UE_LOG(LogMakeHumanArt, Display, TEXT("skin material with micro detail: %s"), *Material->GetName());
@@ -595,6 +623,15 @@ namespace
 						UTexture2D* SkinNormal = Texture(NormalFile, false);
 						UTexture* NormalToUse = SkinNormal ? static_cast<UTexture*>(SkinNormal) : LoadObject<UTexture>(nullptr, TEXT("/Engine/EngineMaterials/FlatNormal.FlatNormal"));
 						SkinInstance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(PawnLooksParamNormal), NormalToUse);
+						// The areolae and genitals, darker and warmer by the pawn's pigment (custom primitive data 3).
+						FString PigmentFile;
+						if ((*Entry)->TryGetStringField(TEXT("pigment"), PigmentFile))
+						{
+							if (UTexture2D* Mask = Texture(PigmentFile, true))  // a colour texture, as the parameter's default
+							{
+								SkinInstance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(TEXT("PigmentMask")), Mask);
+							}
+						}
 						SkinInstance->PostEditChange();
 						Failures += MhSave(SkinInstance) ? 0 : 1;
 						Material.MaterialInterface = SkinInstance;

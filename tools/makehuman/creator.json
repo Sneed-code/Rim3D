@@ -77,7 +77,8 @@
         "tusks": {
           "length": 0.032,
           "radius": 0.0065
-        }
+        },
+        "pigment_mask": "female"
       },
       "morphs": {
         "Masculine": {
@@ -214,6 +215,12 @@
         },
         "PubicLow": {
           "pubic_above_crotch": -0.005
+        },
+        "GenitalLarge": {
+          "labia": 0.008
+        },
+        "GenitalSmall": {
+          "labia": -0.003
         }
       }
     },
@@ -287,7 +294,9 @@
         },
         "clothes": [
           "{mh_user}/clothes/natural_pubic_hair/natural_pubic_hair.mhclo"
-        ]
+        ],
+        "pigment_mask": "male",
+        "pubic_above_crotch": 0.05
       },
       "morphs": {
         "Feminine": {
@@ -413,7 +422,21 @@
           "pubic_top_share": 0.65
         },
         "PubicLow": {
-          "pubic_above_crotch": -0.005
+          "pubic_above_crotch": 0.025
+        },
+        "GenitalLarge": {
+          "targets": {
+            "penis-length-incr": 0.3,
+            "penis-circ-incr": 0.3,
+            "penis-testicles-incr": 0.3
+          }
+        },
+        "GenitalSmall": {
+          "targets": {
+            "penis-length-decr": 0.6,
+            "penis-circ-decr": 0.4,
+            "penis-testicles-decr": 0.4
+          }
         }
       }
     }
