@@ -20,7 +20,7 @@ Same two kinds as [mood.md](mood.md). New fields:
 Covered: temperature (E2), clothes and nudity (C15), beauty, space, impressiveness, cleanliness,
 barracks (C17), comfort, outdoors, recreation (C18), darkness (E3), pain, sickness, deaths and
 corpses, social memories and bond deaths (C20), catharsis (+40 for 2.5 days after a break, C19).
-Nudity is thoughts only, no sexual content.
+Nudity is thoughts only, nothing explicit.
 
 Since C20 the social memories and bond deaths are raised by the social system ([social.md](social.md)); `opinionOfMe` on traits and the extra `SocialRules` numbers are its.
 
@@ -45,7 +45,7 @@ job code uses. `MentalBreakRules` has the mean days between breaks per band and 
 `Interactions` (chitchat, deep talk, kind words, slight, insult, romance attempt, marriage proposal,
 breakup) give opinion changes (`recipientOpinion`), thoughts, and for the last three a `bond`.
 `Bonds`: friend and rival are *derived* from opinion (`opinionAtLeast` / `opinionAtMost`); lover,
-spouse and the ex bonds are stored. Romance and marriage are bonds only: no sex, no pregnancy.
+spouse and the ex bonds are stored. Partners sharing a bed have abstract, adults-only lovin (`GotSomeLovin`, `WantToSleepWithPartner`; [lovin.md](lovin.md)). No pregnancy.
 `SocialRules` has the opinion thresholds, how often pawns talk and the Social XP.
 
 `tools/check_defs.py` checks the new cross-references (activities to kinds and buildings,

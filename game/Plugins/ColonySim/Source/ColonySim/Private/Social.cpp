@@ -126,6 +126,22 @@ SocialRules SocialRules::read(const DefDatabase& defs) {
         const std::string key = std::string("orientation.") + kSocOrientationNames[i];
         r.orientationWeights[i] = std::max(0.0f, socFloat(*rules, key.c_str(), r.orientationWeights[i]));
     }
+    r.lovinThought = socTrigger(defs, rules->text("lovin.thought"));
+    r.lovinLabel = rules->text("lovin.label", r.lovinLabel);
+    r.lovinOpinion = socFloat(*rules, "lovin.opinion", r.lovinOpinion);
+    r.lovinOpinionDays = socFloat(*rules, "lovin.opinionDays", r.lovinOpinionDays);
+    r.lovinWindowMinutes = std::max(1.0f, socFloat(*rules, "lovin.windowMinutes", r.lovinWindowMinutes));
+    r.lovinMinMinutes = std::max(1.0f, socFloat(*rules, "lovin.minMinutes", r.lovinMinMinutes));
+    r.lovinMaxMinutes = std::max(r.lovinMinMinutes, socFloat(*rules, "lovin.maxMinutes", r.lovinMaxMinutes));
+    if (rules->count("lovin.intervalAges") > 0 && rules->count("lovin.intervalAges") == rules->count("lovin.intervalHours")) {
+        r.lovinIntervalHours.clear();
+        for (size_t i = 0; i < rules->count("lovin.intervalAges"); ++i) {
+            r.lovinIntervalHours.emplace_back(static_cast<float>(rules->numberAt("lovin.intervalAges", i)),
+                                              static_cast<float>(rules->numberAt("lovin.intervalHours", i)));
+        }
+    }
+    r.lovinIntervalSpread = std::max(0.0f, socFloat(*rules, "lovin.intervalSpread", r.lovinIntervalSpread));
+    r.lovinIntervalMin = std::max(0.01f, socFloat(*rules, "lovin.intervalMin", r.lovinIntervalMin));
     r.fightLabel = rules->text("fight.label", r.fightLabel);
     r.fightOffset = socFloat(*rules, "fight.offset", r.fightOffset);
     r.fightDays = socFloat(*rules, "fight.days", r.fightDays);
@@ -1001,6 +1017,7 @@ void SocialSystem::step(int64_t now) {
     }
 
     stepFights();
+    stepLovin(now, pawns);
 
     std::vector<Entity> talkers;
     for (const Entity pawn : pawns) {
@@ -1024,6 +1041,7 @@ void SocialSystem::hashThing(Entity e, StateHasher& h) const {
     const entt::registry& reg = things_.registry();
     if (const Social* social = reg.try_get<Social>(e)) {
         h.add(social->nextTalk);
+        h.add(social->nextLovin);
         h.add(social->mourned);
         h.add(static_cast<uint64_t>(social->memories.size()));
         for (const OpinionMemory& m : social->memories) {
@@ -1044,6 +1062,12 @@ void SocialSystem::hashThing(Entity e, StateHasher& h) const {
         h.add(fight->startedAt);
         h.add(fight->endsBy);
         h.add(fight->nextMove);
+    }
+    if (const Lovin* lovin = reg.try_get<Lovin>(e)) {
+        h.add(socId(lovin->partner));
+        h.add(lovin->startedAt);
+        h.add(lovin->until);
+        h.add(static_cast<int>(lovin->pose));
     }
 }
 

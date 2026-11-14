@@ -104,6 +104,12 @@ struct ThingView {
     // whether it is in a fight with fists.
     Entity partner = kNoEntity;
     bool socialFight = false;
+    // Having lovin (docs/design/lovin.md): the couple lies in its bed under the covers; Unreal shows a small hearts icon
+    // over them, nothing more.
+    // `lovinPose` is a LovinPose (0 side by side, 1 spooning, 2 embracing, cuddling under the covers; a kiss now and
+    // then is Unreal's to add). No nudity and no sex animation.
+    bool lovin = false;
+    int lovinPose = 0;
     // Recreation, comfort and outdoors needs (docs/design/recreation.md): 0 empty to 1 full, else -1.
     float joy = -1.0f;
     float comfort = -1.0f;
