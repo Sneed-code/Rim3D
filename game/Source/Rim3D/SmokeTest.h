@@ -24,7 +24,8 @@ namespace colony { class Map; }
  * (seeded pawn looks on MetaHumans: body shapes, skin colour, height, Emberkin horns), world (the ground,
  * rock, roofs and plants drawn from the sim, rebuilt when rock is mined or a tree felled), buildings
  * (blueprints, frames, finished buildings, doors that slide open, and items drawn from the sim), orders (the architect
- * menu, the marks overlay, draft, move and attack orders and the alarm, driven as the mouse does), panels (the work and
+ * menu, the marks overlay, draft, move and attack orders and the alarm, driven as the mouse does), orders_world (building from the overseer view with real
+ * Slate mouse and key events on the playtest's rainforest world start; smoke.ps1 adds its arguments), panels (the work and
  * schedule tabs, the colonist and bills panels and the message log, driven by their click handlers), fights (the
  * protagonist's gun, muzzle flashes, tracers, impacts, hit reactions, ragdolls, wound decals and the hitbox view),
  * handson (the controlled colonist mines, chops, picks up, delivers and builds by hand, and plans a building with the build ghost),
@@ -92,6 +93,7 @@ private:
 	void BuildWorldPhases();        // SmokeTestWorld.cpp
 	void BuildBuildingsPhases();    // SmokeTestBuildings.cpp
 	void BuildOrdersPhases();       // SmokeTestOrders.cpp
+	void BuildOrdersWorldPhases();  // SmokeTestOrdersWorld.cpp
 	void BuildPanelsPhases();       // SmokeTestPanels.cpp
 	void BuildTradePhases();        // SmokeTestTrade.cpp
 	void BuildQuestsPhases();       // SmokeTestQuests.cpp
