@@ -142,6 +142,17 @@ state hash and the save (format 12). The random choices of a hit (part, armor ro
 each projectile gets when it is fired, so they don't depend on the order things are visited in;
 triggers fire in id order from the sim's random stream.
 
+## Stagger (AN1)
+
+RimWorld's rule, from the wiki (`unverified` in `CombatRules`): a bullet whose `projectile.stoppingPower` (0.5 when a
+def gives none) is at least the body size of the pawn it hits staggers it, armor or not, before the damage. A
+staggered pawn walks at `stagger.moveSpeedFactor` (0.17, about a sixth) for `stagger.steps` (48: RimWorld's 95 ticks,
+halved like every tick count here); it can still shoot, swing and work, and a new stagger restarts the time. So a
+revolver, recurve bow or bolt-action rifle (1 or more) staggers a man and an autopistol (0.5) does not; small animals
+are staggered by everything. Body size is the animal's (with its life stage) or the def's `race.baseBodySize`.
+`Staggered` component (saved in section `combat` 3, hashed), event `PawnStaggered` (`thing`, `amount` the steps),
+snapshot `staggeredFor`. Tests `AnimationHookTests`.
+
 ## Explosions
 
 Grenades and blasts (F9) are in [explosives.md](explosives.md). They use this file's armor rule

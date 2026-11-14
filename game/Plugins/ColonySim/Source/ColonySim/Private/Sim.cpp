@@ -42,6 +42,7 @@
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Recreation.h"
+#include "ColonySim/Cover.h"
 #include "ColonySim/Social.h"
 #include "ColonySim/Medicine.h"
 #include "ColonySim/Surgery.h"
@@ -335,7 +336,15 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
     movement_->setSpeedFactor([this](Entity pawn) {
-        return jobs_->loadSpeedFactor(pawn) * static_cast<float>(talents_->statFactor(pawn, "moveSpeed"));
+        return jobs_->loadSpeedFactor(pawn) * static_cast<float>(talents_->statFactor(pawn, "moveSpeed")) *
+               combat_->staggerSpeedFactor(pawn);
+    });
+    combat_->setBodySize([this](Entity pawn) {
+        const float animal = animals_->bodySize(pawn);
+        if (animal > 0.0f) {
+            return animal;
+        }
+        return static_cast<float>(defs_->get(things_->registry().get<Thing>(pawn).def).number("race.baseBodySize", 1.0));
     });
     movement_->setDoorSpeed([this](Entity door) {
         const int factor = static_cast<int>(defs_->get(things_->registry().get<Thing>(door).def).integer("door.openSpeedFactor", 1));
@@ -2328,6 +2337,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Health* health = reg.try_get<Health>(entity)) {
             view.downed = health->downed;
             view.dead = health->dead;
+            view.pain = std::clamp(health->pain, 0.0f, 1.0f);
             view.bloodLoss = health->bloodLoss;
             view.bleedPerDay = health->bleedPerDay;
             view.firstWound = static_cast<uint32_t>(out.wounds.size());
@@ -2386,6 +2396,22 @@ void Sim::writeSnapshot(Snapshot& out) const {
         }
         if (const Worker* worker = reg.try_get<Worker>(entity)) {
             view.asleep = jobIsLyingDown(worker->job);
+            const Job& job = worker->job;
+            if (jobIsLyingDown(job)) {
+                view.posture = PawnPosture::Lie;
+                view.seat = job.thing;
+            } else if ((job.type == JobType::Ingest || job.type == JobType::Recreate) && job.chair != kNoEntity &&
+                       job.step + 1 == jobStepCount(job.type)) {
+                view.posture = PawnPosture::Sit;
+                view.seat = job.chair;
+            }
+        }
+        if (const Talking* talk = social_->talking(entity)) {
+            view.talkDef = talk->def;
+            view.talkWith = talk->with;
+            view.talkStarted = talk->started;
+            view.talkOk = talk->ok;
+            view.talkSecondsLeft = static_cast<int>(talk->until - time_.seconds);
         }
         if (const MentalBreaker* breaker = reg.try_get<MentalBreaker>(entity); breaker != nullptr && breaker->active) {
             view.mentalBreak = defs_->idOf("MentalBreaks", breaker->def);
@@ -2412,6 +2438,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.grenades = explosives_->count(entity);
             view.throwReadyIn = explosives_->throwReadyIn(entity);
             view.knockedDown = combat_->knockedDownFor(entity) > 0;
+            view.staggeredFor = combat_->staggeredFor(entity);
             if (const Stunned* stunned = reg.try_get<Stunned>(entity)) {
                 view.stunnedFor = stunned->stepsLeft;
             }
@@ -2549,6 +2576,36 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.meleeStepsLeft = melee->stepsLeft;
             view.meleeTarget = melee->phase == MeleePhase::Windup ? melee->target : kNoEntity;
             view.blocking = melee_->blocking(entity);
+            view.meleeTool = melee->tool;
+            view.meleeStrong = melee_->strongSwing(entity);
+        }
+        if (reg.all_of<Posture>(entity) && !view.dead) {
+            // AN1: a pawn down on the floor lies (in the bed under it, if any); cover toward its fight target; a low
+            // obstacle it walks over.
+            if (view.downed || view.knockedDown) {
+                view.posture = PawnPosture::Lie;
+                view.seat = view.downed ? jobs_->bedUnder(entity) : kNoEntity;
+            }
+            const CellPos here = cellOf(pos);
+            if (view.fightTarget != kNoEntity && reg.valid(view.fightTarget)) {
+                if (const Position* to = reg.try_get<Position>(view.fightTarget); to != nullptr && to->level == pos.level) {
+                    const float dx = to->x - pos.x;
+                    const float dy = to->y - pos.y;
+                    if (dx != 0.0f || dy != 0.0f) {
+                        const Dir8 dir = dir8Toward(dx, dy);
+                        const Dir8Step st = dir8Step(dir);
+                        const CellPos next{here.x + st.dx, here.y + st.dy, here.level};
+                        view.coverDir = static_cast<uint8_t>(dir);
+                        view.coverHeight = map_.inBounds(next) ? static_cast<float>(map_.obstacleDm(next)) * 0.1f : 0.0f;
+                    }
+                }
+            }
+            if ((view.vx != 0.0f || view.vy != 0.0f) && map_.inBounds(here)) {
+                const uint8_t dm = map_.obstacleDm(here);
+                if (dm > 0 && dm < kObstacleTallDm) {
+                    view.vaultHeight = static_cast<float>(dm) * 0.1f;
+                }
+            }
         }
         if (const Turret* turret = reg.try_get<Turret>(entity)) {
             view.turretPhase = static_cast<uint8_t>(turret->phase);

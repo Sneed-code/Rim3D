@@ -61,6 +61,16 @@ struct Social {
     bool mourned = false;      // dead, and the ones who cared have been told (once)
 };
 
+// On both pawns of the last interaction while it shows (AN1, docs/design/social.md "On screen"): what was said, to
+// or by whom, and the game second it stops showing. Unreal plays the talking face and gestures from it. Saved.
+struct Talking {
+    DefId def;                  // the Interactions def
+    Entity with = kNoEntity;    // the other one
+    int64_t until = 0;          // game second it stops showing
+    bool started = false;       // this pawn spoke (the initiator)
+    bool ok = true;             // it worked (a romance or proposal accepted)
+};
+
 // On both pawns of a fight that started from an insult: they fight with their fists, one job-free
 // pawn against the other, until someone is hurt enough, down, or time runs out. Every field is saved.
 struct SocialFight {
@@ -116,6 +126,7 @@ struct COLONY_API SocialRules {
     float defaultXp = 15.0f;             // Social experience when an interaction def has none
     // Ours.
     float minGapMinutes = 20.0f;         // after taking part in an interaction a pawn starts none for this long
+    float talkShowSeconds = 120.0f;      // how long an interaction shows on the two pawns (Talking), game seconds (ours)
     float tableChatMeanMinutes = 15.0f;  // between talks of a pawn playing or chatting beside another
     float compatibilityMax = 10.0f;      // two strangers' opinion of each other lies within +-this, from a hash of the pair
     int stackLimit = 3;                  // opinion memories of one kind a pawn holds about one other
@@ -186,6 +197,8 @@ public:
     // The pawn's spouse, else its lover, else none.
     Entity partner(Entity pawn) const;
     bool fighting(Entity pawn) const;
+    // The interaction showing on the pawn now (null when none: never had one, or its time is over).
+    const Talking* talking(Entity pawn) const;
     // The pawn's orientation: from a hash of the pawn and the world seed, so it never changes and needs no saving.
     Orientation orientationOf(Entity pawn) const;
     // Whether `pawn` could fall in love with `other` (their genders against `pawn`'s orientation). One-sided; a romance

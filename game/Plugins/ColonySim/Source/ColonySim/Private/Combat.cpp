@@ -54,6 +54,7 @@ struct CombatModel {
         float damage = 0.0f;
         float penetration = 0.0f;
         float speed = 0.0f;  // metres per step, tuning applied
+        float stoppingPower = 0.5f;  // staggers pawns of this body size or smaller (RimWorld's default 0.5)
         // A rocket or shell: the projectile def's `explosion` block, set off where it lands (R2).
         float blastRadius = 0.0f;
         float blastDamage = 0.0f;
@@ -118,6 +119,8 @@ struct CombatModel {
     float recoilRecovery = 0.002f;
     float recoilSkillReduction = 0.025f;
     int maxFlight = 120;
+    int staggerSteps = 48;           // CombatRules stagger.steps (RimWorld's 95 ticks)
+    float staggerSpeed = 0.17f;      // CombatRules stagger.moveSpeedFactor
     std::vector<std::string> layerOrder;
     // F9's blasts: ExplosiveRules, and per damage type the explosion block of its def.
     struct Blast {
@@ -274,6 +277,8 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
         recoilRecovery = combatNum(*rules, "recoilRecoveryPerSecond", recoilRecovery);
         recoilSkillReduction = combatNum(*rules, "recoilSkillReduction", recoilSkillReduction);
         maxFlight = static_cast<int>(rules->integer("maxFlightSeconds", maxFlight));
+        staggerSteps = std::max(0, static_cast<int>(rules->integer("stagger.steps", staggerSteps)));
+        staggerSpeed = std::clamp(static_cast<float>(rules->number("stagger.moveSpeedFactor", staggerSpeed)), 0.0f, 1.0f);
         for (size_t i = 0; i < rules->count("apparelLayersOuterFirst"); ++i) {
             layerOrder.push_back(rules->textAt("apparelLayersOuterFirst", i));
         }
@@ -362,6 +367,7 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
         b.damage = combatNum(def, "projectile.damageAmountBase", 0.0);
         b.penetration = combatNum(def, "projectile.armorPenetrationBase", 0.0);
         b.speed = combatNum(def, "projectile.speed", 0.0);
+        b.stoppingPower = static_cast<float>(def.number("projectile.stoppingPower", 0.5));
         b.valid = b.damageType.valid() && b.speed > 0.0f;
         if (def.has("explosion")) {
             b.blastRadius = combatNum(def, "explosion.radius", 0.0);
@@ -1538,6 +1544,11 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
                 emitHit(projectile, p, h, 0.0f);
                 break;
             }
+            // RimWorld's stagger: before the damage, armor or not, a bullet with the stopping power for the body.
+            if (reg.valid(hit.thing) && bullet.stoppingPower > 0.0f &&
+                (bodySize_ ? bodySize_(hit.thing) : 1.0f) <= bullet.stoppingPower + 0.001f) {
+                stagger(hit.thing);
+            }
             const PawnHitResult result = hitPawn(hit.thing, hit.part, bullet.damageType, bullet.damage * p.damageFactor, bullet.penetration * p.damageFactor, p.seed);
             h.part = result.part;
             if (result.deflected) {
@@ -1830,6 +1841,18 @@ void CombatSystem::step(Rng& rng) {
         reg.remove<KnockedDown>(pawn);
     }
 
+    // Staggered pawns walk at full speed again when their time is over (AN1).
+    scratch_.clear();
+    for (const Entity pawn : reg.view<Staggered>()) {
+        scratch_.push_back(pawn);
+    }
+    std::sort(scratch_.begin(), scratch_.end());
+    for (const Entity pawn : scratch_) {
+        if (--reg.get<Staggered>(pawn).stepsLeft <= 0) {
+            reg.remove<Staggered>(pawn);
+        }
+    }
+
     // Projectiles, in id order: one may knock down a wall another would have hit.
     scratch_.clear();
     for (const Entity shot : reg.view<Projectile>()) {
@@ -1860,6 +1883,34 @@ void CombatSystem::step(Rng& rng) {
         p.y = ny;
         p.z = nz;
         p.vz -= g;
+    }
+}
+
+int CombatSystem::staggeredFor(Entity pawn) const {
+    const Staggered* s = things_.registry().valid(pawn) ? things_.registry().try_get<Staggered>(pawn) : nullptr;
+    return s != nullptr ? s->stepsLeft : 0;
+}
+
+float CombatSystem::staggerSpeedFactor(Entity pawn) const {
+    return staggeredFor(pawn) > 0 ? model_->staggerSpeed : 1.0f;
+}
+
+void CombatSystem::stagger(Entity pawn) {
+    entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || model_->staggerSteps <= 0 || health_.incapacitated(pawn)) {
+        return;
+    }
+    reg.get_or_emplace<Staggered>(pawn).stepsLeft = model_->staggerSteps;
+    if (events_ != nullptr) {
+        Event e;
+        e.type = EventType::PawnStaggered;
+        e.thing = pawn;
+        e.amount = static_cast<float>(model_->staggerSteps);
+        if (const Position* pos = reg.try_get<Position>(pawn)) {
+            e.x = pos->x;
+            e.y = pos->y;
+        }
+        events_->push_back(std::move(e));
     }
 }
 
@@ -2541,7 +2592,8 @@ void CombatSystem::hashThing(Entity e, StateHasher& h) const {
     const entt::registry& reg = things_.registry();
     const bool has[] = {reg.all_of<Posture>(e), reg.all_of<Gear>(e), reg.all_of<EquippedBy>(e), reg.all_of<Shooter>(e),
                         reg.all_of<Projectile>(e), reg.all_of<Magazine>(e), reg.all_of<RecoilKick>(e),
-                        reg.all_of<DodgeRoll>(e), reg.all_of<KnockedDown>(e), reg.all_of<WeaponSwitch>(e)};
+                        reg.all_of<DodgeRoll>(e), reg.all_of<KnockedDown>(e), reg.all_of<WeaponSwitch>(e),
+                        reg.all_of<Staggered>(e)};
     uint64_t mask = 0;
     for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
         mask |= has[bit] ? (uint64_t{1} << bit) : 0;
@@ -2562,6 +2614,9 @@ void CombatSystem::hashThing(Entity e, StateHasher& h) const {
         for (const Entity a : g->stowed) {
             h.add(entt::to_integral(a));
         }
+    }
+    if (const Staggered* st = reg.try_get<Staggered>(e)) {
+        h.add(st->stepsLeft);
     }
     if (const WeaponSwitch* change = reg.try_get<WeaponSwitch>(e)) {
         h.add(entt::to_integral(change->to));

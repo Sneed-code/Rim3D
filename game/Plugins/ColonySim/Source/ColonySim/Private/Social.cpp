@@ -92,6 +92,7 @@ SocialRules SocialRules::read(const DefDatabase& defs) {
     r.opinionMax = socFloat(*rules, "opinionMax", r.opinionMax);
     r.defaultXp = socFloat(*rules, "socialSkillXpPerInteraction", r.defaultXp);
     r.minGapMinutes = socFloat(*rules, "minGapMinutes", r.minGapMinutes);
+    r.talkShowSeconds = std::max(0.0f, socFloat(*rules, "talkShowSeconds", r.talkShowSeconds));
     r.tableChatMeanMinutes = std::max(0.01f, socFloat(*rules, "tableChatMeanMinutes", r.tableChatMeanMinutes));
     r.compatibilityMax = socFloat(*rules, "compatibilityMax", r.compatibilityMax);
     r.stackLimit = std::max(1, static_cast<int>(rules->integer("stackLimit", r.stackLimit)));
@@ -338,6 +339,12 @@ Entity SocialSystem::partner(Entity pawn) const {
         }
     }
     return lover;
+}
+
+const Talking* SocialSystem::talking(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Talking* t = reg.valid(pawn) ? reg.try_get<Talking>(pawn) : nullptr;
+    return t != nullptr && time_.seconds < t->until ? t : nullptr;
 }
 
 bool SocialSystem::fighting(Entity pawn) const {
@@ -620,6 +627,12 @@ void SocialSystem::perform(Entity initiator, Entity recipient, const SocialInter
 
     learn(initiator, interaction.xp > 0.0f ? static_cast<double>(interaction.xp) : static_cast<double>(rules_.defaultXp));
     push(EventType::Interaction, initiator, recipient, name, ok ? 1 : 0, opinion(recipient, initiator));
+    {
+        const int64_t until = time_.seconds + static_cast<int64_t>(std::llround(static_cast<double>(rules_.talkShowSeconds)));
+        entt::registry& reg = things_.registry();
+        reg.emplace_or_replace<Talking>(initiator, Talking{interaction.def, recipient, until, true, ok});
+        reg.emplace_or_replace<Talking>(recipient, Talking{interaction.def, initiator, until, false, ok});
+    }
 
     // An insult can turn into a fight (not with a wimp, nor with a kind soul, nor if one is already in one).
     if (name == "Insult") {
@@ -964,6 +977,19 @@ void SocialSystem::step(int64_t now) {
     }
     entt::registry& reg = things_.registry();
 
+    // Interactions that have stopped showing come off (AN1).
+    {
+        std::vector<Entity> done;
+        for (const auto [pawn, talk] : reg.view<const Talking>().each()) {
+            if (now >= talk.until) {
+                done.push_back(pawn);
+            }
+        }
+        for (const Entity pawn : done) {
+            reg.remove<Talking>(pawn);
+        }
+    }
+
     // New colonists get a social life.
     std::vector<Entity> made;
     for (const Entity pawn : reg.view<Needs>()) {
@@ -1038,6 +1064,13 @@ void SocialSystem::hashThing(Entity e, StateHasher& h) const {
             h.add(socId(b.other));
             h.add(b.since);
         }
+    }
+    if (const Talking* talk = reg.try_get<Talking>(e)) {
+        h.add(talk->def.value);
+        h.add(socId(talk->with));
+        h.add(talk->until);
+        h.add(talk->started);
+        h.add(talk->ok);
     }
     if (const SocialFight* fight = reg.try_get<SocialFight>(e)) {
         h.add(socId(fight->opponent));

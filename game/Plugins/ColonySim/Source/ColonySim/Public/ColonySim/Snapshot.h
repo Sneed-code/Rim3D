@@ -33,6 +33,10 @@ struct PathPointView {
 };
 
 // One thing on the map. Things off the map (e.g. a carried item) are not in the snapshot.
+// How a pawn's body rests (AN1, docs/plans/animation.md "Sim hooks"): on its feet, sitting in a chair, or lying (in a
+// bed, on the ground to sleep, downed or knocked down).
+enum class PawnPosture : uint8_t { Stand, Sit, Lie };
+
 struct ThingView {
     Entity id = kNoEntity;
     DefId def;
@@ -263,6 +267,27 @@ struct ThingView {
     int castStepsLeft = 0;
     // Pawns in a mental break (docs/design/mental-breaks.md): its MentalBreaks def, invalid when not in one.
     DefId mentalBreak;
+    // What the animation needs (AN1, docs/plans/animation.md "Sim hooks"). Pawns: posture and the chair or bed it uses
+    // (none on the ground); pain, 0 to 1 (health's total); the interaction showing on it now (Interactions def, invalid
+    // for none; the other pawn; whether this one spoke; whether it worked; game seconds it still shows); steps left of a
+    // bullet stagger (0: not staggered); the tool of the current or last melee swing (an index into its weapon's or
+    // body's tools, as the MeleeSwing event's `message` names it) and whether it is a strong one; for a pawn with a fight
+    // target, the height in metres of what stands in the next cell toward it (0 open, 25.5 a wall) and that direction
+    // (a Dir8 number); and while walking over a low obstacle in its cell (sandbags, a fence), how tall it is (metres).
+    PawnPosture posture = PawnPosture::Stand;
+    Entity seat = kNoEntity;
+    float pain = 0.0f;
+    DefId talkDef;
+    Entity talkWith = kNoEntity;
+    bool talkStarted = false;
+    bool talkOk = true;
+    int talkSecondsLeft = 0;
+    int staggeredFor = 0;
+    uint8_t meleeTool = 0;
+    bool meleeStrong = false;
+    float coverHeight = 0.0f;
+    uint8_t coverDir = 0;
+    float vaultHeight = 0.0f;
 };
 
 // One piece of worn apparel (Unreal draws each layer on the pawn, torn by `hitPointShare`).

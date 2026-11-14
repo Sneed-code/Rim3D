@@ -147,6 +147,13 @@ struct KnockedDown {
     Stance before = Stance::Standing;
 };
 
+// On a pawn staggered by a bullet whose stopping power is at least its body size (RimWorld's rule,
+// AN1, docs/design/combat.md "Stagger"): it walks at CombatRules `stagger.moveSpeedFactor` until the
+// steps run out. It can still shoot, swing and work.
+struct Staggered {
+    int stepsLeft = 0;
+};
+
 // On a stunned pawn (resonance's Stun, X2, docs/design/resonance.md): it can't walk, shoot, throw,
 // swing, block, cast or work until the steps run out; its stance stays as it was. ResonanceSystem
 // counts it down.
@@ -262,6 +269,8 @@ public:
     void setBeforeDestroy(std::function<void(Entity)> hook) { beforeDestroy_ = std::move(hook); }
     // Called when a bullet or a melee blow hurt a pawn (`victim`, `attacker`): animals react (N5, docs/design/animal-fights.md).
     void setHurtHook(std::function<void(Entity, Entity)> hook) { hurtHook_ = std::move(hook); }
+    // A pawn's body size in RimWorld's units (a man is 1) for the stagger rule; unset: 1 for everyone.
+    void setBodySize(std::function<float(Entity)> size) { bodySize_ = std::move(size); }
     void noteHurt(Entity victim, Entity attacker) const {
         if (hurtHook_) {
             hurtHook_(victim, attacker);
@@ -410,6 +419,11 @@ public:
     bool damageBuilding(Entity building, int damage);
     // Steps left of a pawn's knock-down (0: not knocked down).
     int knockedDownFor(Entity pawn) const;
+    // Steps left of a bullet's stagger (0: not staggered), and the share of its walking speed it keeps now.
+    int staggeredFor(Entity pawn) const;
+    float staggerSpeedFactor(Entity pawn) const;
+    // Staggers the pawn for CombatRules `stagger.steps` (a fresh stagger restarts the time) and sends PawnStaggered.
+    void stagger(Entity pawn);
 
     // Hashes the combat components of one thing (Sim::stateHash calls it for every thing).
     void hashThing(Entity e, StateHasher& h) const;
@@ -455,6 +469,7 @@ private:
     const InspirationSystem* inspirations_ = nullptr;
     std::function<void(Entity)> beforeDestroy_;
     std::function<void(Entity, Entity)> hurtHook_;
+    std::function<float(Entity)> bodySize_;
     std::vector<Entity> scratch_;
 
     void emitHit(Entity projectile, const Projectile& p, const TraceHit& hit, float amount);
