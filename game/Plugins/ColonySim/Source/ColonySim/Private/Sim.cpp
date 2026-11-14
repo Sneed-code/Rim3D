@@ -509,6 +509,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     roofCollapse_->setEventLog(&events_);
     roofCollapse_->setInterruptHandler([this](Entity pawn, const std::string& why) { jobs_->interrupt(pawn, why); });
     construction_->setUpperFloors(upperFloors_.get());
+    construction_->setFloors(floors_.get());
     animals_->setMelee(melee_.get());
     defense_ = std::make_unique<DefenseSystem>(*things_, map_, *combat_, *health_, *power_, *defs_, time_);
     defense_->setEventLog(&events_);
@@ -1506,7 +1507,17 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     } else if (const auto* place = std::get_if<PlaceBlueprintCommand>(&command)) {
         const DefId def = defs_->idOf("Things", place->def);
         const DefId stuff = place->stuff.empty() ? DefId{} : defs_->idOf("Things", place->stuff);
-        if (!def.valid()) {
+        const DefId floor = def.valid() ? DefId{} : defs_->idOf("Terrain", place->def);
+        if (floor.valid() && floors_->isFloorDef(floor)) {
+            // A floor (docs/design/construction.md "Floors"): a plan colonists lay, one cell.
+            if (!place->stuff.empty() && !stuff.valid()) {
+                commandFailed(id, "no Things def '" + place->stuff + "'");
+            } else if (!research_->unlocked(defs_->get(floor), error)) {
+                commandFailed(id, error);
+            } else if (construction_->placeFloorPlan(floor, stuff, place->cell, error) == kNoEntity) {
+                commandFailed(id, error);
+            }
+        } else if (!def.valid()) {
             commandFailed(id, "no Things def '" + place->def + "'");
         } else if (!place->stuff.empty() && !stuff.valid()) {
             commandFailed(id, "no Things def '" + place->stuff + "'");
@@ -2302,6 +2313,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.sizeY = rect.sizeY;
             view.stage = site->stage;
             view.stuff = site->stuff;
+            view.floor = site->floor;
             view.buildProgress = site->workTotal > 0.0f ? std::min(1.0f, site->workDone / site->workTotal) : 0.0f;
             view.materialsHave = site->materialsHave();
             view.materialsNeeded = site->materialsNeeded();
@@ -3012,6 +3024,9 @@ uint64_t Sim::stateHash() const {
             }
             h.add(site->workTotal);
             h.add(site->workDone);
+            if (site->floor.valid()) {
+                h.add(site->floor.value);  // only floor plans, so other games hash as before
+            }
         }
         if (const BuiltOf* made = reg.try_get<BuiltOf>(e)) {
             h.add(made->stuff.value);
