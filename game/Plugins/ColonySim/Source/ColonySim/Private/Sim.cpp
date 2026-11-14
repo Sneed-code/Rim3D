@@ -674,6 +674,17 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     social_ = std::make_unique<SocialSystem>(*things_, *rooms_, *health_, *melee_, *mood_, *jobs_, *defs_, time_,
                                              splitMix64(settings.seed ^ 0x736F6369616CULL));
     social_->setEventLog(&events_);
+    jobs_->setPartnerOf([this](Entity pawn) { return social_->partner(pawn); });
+    // Partners who don't share a bed want to (RimWorld's "want to sleep with partner"; docs/design/lovin.md): a partner
+    // on the map whom the pawn thinks well of, and no bed of theirs in common.
+    mood_->addSituation("wantToSleepWithPartner", [this](Entity pawn) {
+        const Entity partner = social_->partner(pawn);
+        if (partner == kNoEntity || !things_->spawned(partner) || !things_->spawned(pawn) || social_->opinion(pawn, partner) <= 0.0f) {
+            return -1;
+        }
+        const Entity bed = jobs_->bedOf(pawn);
+        return bed != kNoEntity && bed == jobs_->bedOf(partner) ? -1 : 0;
+    });
     resonance_ = std::make_unique<ResonanceSystem>(*things_, map_, *health_, *jobs_, *fighters_, *defs_, time_,
                                                    splitMix64(settings.seed ^ 0x7265736F6EULL));
     resonance_->setEventLog(&events_);
@@ -2395,6 +2406,10 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (reg.all_of<Social>(entity)) {
             view.partner = social_->partner(entity);
             view.socialFight = social_->fighting(entity);
+            if (const Lovin* lovin = reg.try_get<Lovin>(entity)) {
+                view.lovin = true;
+                view.lovinPose = static_cast<int>(lovin->pose);
+            }
         }
         if (const BeautyNeed* beauty = roomStats_->beautyNeed(entity)) {
             view.beautyNeed = beauty->level;

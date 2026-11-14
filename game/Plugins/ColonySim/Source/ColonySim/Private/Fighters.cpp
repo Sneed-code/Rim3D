@@ -39,6 +39,8 @@ constexpr size_t kFightEffortPool = 3;  // times `refine` spots get their walk w
 constexpr float kFightThreatWeights[] = {1.0f, 0.7f, 0.5f, 0.35f, 0.25f, 0.2f, 0.15f, 0.1f};
 constexpr int kFightMaxThreats = static_cast<int>(sizeof kFightThreatWeights / sizeof kFightThreatWeights[0]);
 constexpr float kFightShotClearance = 0.3f;  // metres below the chest the shot's line must still clear the ground (our number)
+constexpr float kFightFriendSpread = 0.3f;   // metres to either side of the target's chest a shot may stray and still miss a friend (ours)
+constexpr float kFightFriendCorridor = 0.9f; // a friend this near the shot's line on the ground gets the exact check (ours)
 constexpr float kFightFallBackCap = 40.0f;  // metres from the nearest enemy beyond which falling back gains nothing
 
 float fightDist(float ax, float ay, float bx, float by) {
@@ -595,6 +597,59 @@ bool FighterSystem::shotClearsGround(Entity pawn, float x, float y, int level, S
     return hit.kind != ProjectileHitKind::Ground && hit.kind != ProjectileHitKind::Rock;
 }
 
+// A friend in the way (C25): the shot's line from the muzzle at (x, y) in `stance` to the target's chest, or a line
+// kFightFriendSpread to either side of it for the spread, meets a pawn of the shooter's side (or a pawn nobody fights:
+// a visitor, a prisoner, a calm animal) before the target. In the year run a colonist with a revolver shot at a chitinid
+// 2.6 m away through the colonist with a club fighting it, again and again, and downed it (seed 42, day 36).
+bool FighterSystem::friendInLine(Entity pawn, float x, float y, int level, Stance stance, const PawnInfo& target) const {
+    const FactionId side = factionOf(pawn);
+    const float dx = target.x - x;
+    const float dy = target.y - y;
+    const float len2 = dx * dx + dy * dy;
+    if (len2 <= 0.0f) {
+        return false;
+    }
+    bool near = false;  // the cheap test first: any friend near the line on the ground
+    for (const PawnInfo& p : pawns_) {
+        if (p.pawn == pawn || p.pawn == target.pawn || p.level != level || (p.faction != side && !p.animal)) {
+            continue;
+        }
+        const float s = std::clamp(((p.x - x) * dx + (p.y - y) * dy) / len2, 0.0f, 1.0f);
+        const float ex = x + dx * s - p.x;
+        const float ey = y + dy * s - p.y;
+        if (ex * ex + ey * ey <= kFightFriendCorridor * kFightFriendCorridor) {
+            near = true;
+            break;
+        }
+    }
+    if (!near) {
+        return false;
+    }
+    float muzzle = 0.0f;
+    float aim = 0.0f;
+    float targetMuzzle = 0.0f;
+    float targetAim = 0.0f;
+    combat_.shotHeights(pawn, stance, muzzle, aim);
+    combat_.shotHeights(target.pawn, target.stance, targetMuzzle, targetAim);
+    const float len = std::sqrt(len2);
+    const float sideX = -dy / len;
+    const float sideY = dx / len;
+    const float az = map_.heightAt(x, y) + muzzle;
+    const float bz = map_.heightAt(target.x, target.y) + targetAim;
+    const CellPos from{static_cast<int>(std::floor(x)), static_cast<int>(std::floor(y)), level};
+    for (const float off : {0.0f, kFightFriendSpread, -kFightFriendSpread}) {
+        const TraceHit hit = combat_.trace(x, y, az, target.x + sideX * off, target.y + sideY * off, bz, level, pawn, from, true);
+        if (hit.kind != ProjectileHitKind::Pawn || hit.thing == target.pawn) {
+            continue;
+        }
+        const PawnInfo* other = info(hit.thing);
+        if (other != nullptr && (other->faction == side || other->animal)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // How the fighter can shoot `target` (at its last known place tx, ty) from `cell`: crouched there,
 // standing up there (over low cover), or from the cell beside it on either side (leaning out
 // round a corner), crouched first. False if none of these sees it within range, or the shots from there
@@ -636,7 +691,8 @@ bool FighterSystem::fireOption(Entity pawn, CellPos cell, const PawnInfo& target
             seen.y = ty;
             seen.stance = target.able ? Stance::Standing : target.stance;
             if (seesFrom(options[i], stance, seen) &&
-                shotClearsGround(pawn, fightCentre(options[i].x), fightCentre(options[i].y), options[i].level, stance, seen)) {
+                shotClearsGround(pawn, fightCentre(options[i].x), fightCentre(options[i].y), options[i].level, stance, seen) &&
+                !friendInLine(pawn, fightCentre(options[i].x), fightCentre(options[i].y), options[i].level, stance, seen)) {
                 c.fireCell = options[i];
                 c.fireStance = stance;
                 c.canFire = true;
@@ -1193,6 +1249,7 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
         shown.stance = target->able ? Stance::Standing : target->stance;
         if (sees && fightDist(pos.x, pos.y, target->x, target->y) <= weaponRange(pawn) &&
             shotClearsGround(pawn, fightCentre(here.x), fightCentre(here.y), here.level, f.fireStance, shown) &&
+            !friendInLine(pawn, pos.x, pos.y, here.level, f.fireStance, *target) &&
             combat_.shoot(pawn, f.target, 0.0f, 0.0f, 0.0f, false)) {
             return;
         }

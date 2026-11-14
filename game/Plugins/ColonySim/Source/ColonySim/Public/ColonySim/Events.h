@@ -168,6 +168,8 @@ enum class EventType : uint8_t {
     CaravanRequestFailed,  // an asked-for caravan could not come: `message` "faction: why"
     // The long-range mineral scanner (docs/design/mineral-scanner.md).
     OreLumpFound,          // `thing` the scanner found a lump of ore on the surface: `def` the ore (a Mineable def), `cell` its middle, `count` its cells
+    // Lovin (docs/design/lovin.md): abstract, the couple lies in its bed a while.
+    Lovin,                 // `thing` and `target` the partners; `message` "started" (`amount` its seconds), "done" or "interrupted"
 };
 
 // What stopped a projectile (ProjectileHit).

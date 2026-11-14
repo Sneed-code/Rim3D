@@ -288,3 +288,23 @@ with nobody left to feed it. What still kills: plague with weak doctors, two rai
 infestations (the alarm sends the defenders at the hive), and a FireSpree break that burned the whole base on seed 1 in
 one run. Point-blank fights (a raider at 1 to 2 m after breaching a wall) look one-sided and are worth a test of their own.
 
+**Fifth pass (2026-11-14): close fights.** The point-blank losses were friendly fire. In a fresh seed 42 run a chitinid of
+the day 35 infestation got among the colonists: one with a club fought it hand to hand while one with a revolver, 1.7 m
+behind, shot at it 2.6 m away and hit the clubman again and again until it went down. Bullets are real pawns' hitboxes
+([combat.md](combat.md)), and nothing stopped a fighter from firing through a friend. Now a shot is planned and taken
+only when no friend stands in its line or 0.3 m to either side of the target ([fighters.md](fighters.md) "Friends in the
+line of fire"), so the gunman steps aside or holds its fire. A close-fight test (`Tests/CloseFightTests.cpp`) had the
+gunman hit its friend 2 to 4 times a fight before and never after, and three colonists beat a raider who comes through a
+gap in their wall 2 to 4 m away. Shots by colonists that hit a colonist they were not aimed at fell from 17 to 3 over the
+three runs (the 3 are strays at 22 to 50 m). Results:
+
+| Seed | Alive on day 60 (main before) | What happened |
+| --- | --- | --- |
+| 1 | 7 (0) | plague on day 22 passed with no death; one dead to a raid on day 24, one on day 44; joiners make 7 |
+| 7 | 0 (1) | an infection and malaria on days 34 and 35 with two raids (three dead), plague on day 41 finished it |
+| 42 | 4 (0) | malaria took two on day 48 |
+
+Main before this pass gave 0, 1 and 0 on the same day (the runs stay chaotic: plague and infestations on seed 42 that day,
+plague on seed 1). What still kills is disease when the medicine is gone: on seed 7 the plague was tended by hand at 0.15
+to 0.5, and a week of gut worms took 11 of seed 1's 30 crash-site medicine before the plague came. Next: the medicine plan.
+

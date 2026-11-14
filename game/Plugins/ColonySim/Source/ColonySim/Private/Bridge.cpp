@@ -376,6 +376,7 @@ const char* eventTypeName(EventType type) {
         case EventType::AnimalButchered: return "AnimalButchered";
         case EventType::DeepDepositFound: return "DeepDepositFound";
         case EventType::OreLumpFound: return "OreLumpFound";
+        case EventType::Lovin: return "Lovin";
         case EventType::DeepPortionDrilled: return "DeepPortionDrilled";
         case EventType::PawnMentalBreak: return "PawnMentalBreak";
         case EventType::PawnMentalBreakEnded: return "PawnMentalBreakEnded";
