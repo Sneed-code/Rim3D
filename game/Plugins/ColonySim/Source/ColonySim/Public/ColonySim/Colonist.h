@@ -59,4 +59,11 @@ struct Colonist {
 COLONY_API bool generateColonist(const DefDatabase& defs, uint64_t seed, bool protagonist, Colonist& out,
                                  std::string& error, const std::string& category = "Colony");
 
+// Redraws `colonist`'s nickname and first name (from the Names banks, by `seed`) until neither
+// matches anyone in `taken`, so a colony never has two Chips. Names that don't clash are kept, so
+// games without a clash are unchanged. Gives up after a fixed number of draws (more people than
+// names). Needs the same Names defs as generateColonist.
+COLONY_API void makeColonistNameUnique(const DefDatabase& defs, uint64_t seed, Colonist& colonist,
+                                       const std::vector<const Colonist*>& taken);
+
 }  // namespace colony

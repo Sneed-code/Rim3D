@@ -533,6 +533,8 @@ private:
     // Gives a new pawn its looks if it is humanlike (its def names no other intelligence).
     Entity makeJoiner(CellPos cell, uint64_t seed);
     void giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& lineage);
+    // Gives a new colonist a nickname and first name nobody on this map has (makeColonistNameUnique).
+    void makeNameUnique(Colonist& colonist, uint64_t seed) const;
     // Makes (again) the genes of a pawn that has looks, from its lineage.
     void giveGenes(Entity pawn);
 
