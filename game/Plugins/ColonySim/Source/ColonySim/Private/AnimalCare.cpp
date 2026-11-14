@@ -100,6 +100,23 @@ bool AnimalSystem::goTo(Entity animal, CellPos goal) {
     return walkOrPath(animal, a, *kind, *care, goal, AnimalMode::Wander);
 }
 
+bool AnimalSystem::walkBack(Entity animal, CellPos goal) {
+    entt::registry& reg = things_.registry();
+    const Kind* kind = kindOf(animal);
+    if (kind == nullptr || !reg.all_of<Mover, Position, Animal>(animal) || !map_.inBounds(goal)) {
+        return false;
+    }
+    Animal& a = reg.get<Animal>(animal);
+    if (!a.started || a.temper != AnimalTemper::Calm || (a.mode != AnimalMode::Idle && a.mode != AnimalMode::Wander)) {
+        return false;
+    }
+    if (!walkTo(animal, a, *kind, static_cast<float>(goal.x) + 0.5f, static_cast<float>(goal.y) + 0.5f, AnimalMode::Wander)) {
+        return false;
+    }
+    a.nextThink = std::max(a.nextThink, time_.seconds + 30);
+    return true;
+}
+
 bool AnimalSystem::mayWork(Entity animal) const {
     const entt::registry& reg = things_.registry();
     const Kind* kind = kindOf(animal);
