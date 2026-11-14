@@ -229,6 +229,7 @@ struct RaidRules {
     float lineMoves = 6.0f;        // the line moves when the threat has moved it this far
     int shelterSearch = 4000;      // cells searched for an indoor cell when no shelter is marked
     float shelterFlee = 25.0f;     // no indoor cell: this far from the threat instead
+    float shelterDanger = 20.0f;   // a shelter cell is at least this far from an enemy and a brood mound (ours)
     // F12 (all ours): which strategy a raid picks when the caller doesn't say, and how each one works.
     float weightAssault = 60.0f;
     float weightSappers = 12.0f;   // times blockedBoost when walls shut the colony off from every edge

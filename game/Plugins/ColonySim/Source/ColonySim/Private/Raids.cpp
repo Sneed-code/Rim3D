@@ -106,6 +106,7 @@ void raidReadRules(const DefDatabase& defs, RaidRules& r) {
     num("lineMoves", r.lineMoves);
     whole("shelterSearch", r.shelterSearch);
     num("shelterFlee", r.shelterFlee);
+    num("shelterDanger", r.shelterDanger);
     num("weightAssault", r.weightAssault);
     num("weightSappers", r.weightSappers);
     num("weightDropPods", r.weightDropPods);
@@ -2051,8 +2052,32 @@ CellPos RaidSystem::shelterCell(Entity pawn) {
             taken.push_back(f.goal);
         }
     }
+    // Danger: the enemies on the map and the brood mounds. An infestation comes up under overhead mountain, which counts
+    // as indoors, so the nearest roofed cell was often the hive's cave: in the year run unarmed colonists ran into it and
+    // were killed there (docs/design/colony-scenario.md "Seventh pass").
+    std::vector<std::pair<float, float>> danger;
+    for (const auto [other, faction, p] : reg.view<const Faction, const Position>().each()) {
+        const Animal* wild = reg.try_get<Animal>(other);
+        if ((faction.id == kPlayerFaction && wild == nullptr) || (wild != nullptr && wild->temper == AnimalTemper::Calm) ||
+            health_.incapacitated(other) || reg.all_of<Prisoner>(other) || reg.all_of<Visitor>(other)) {
+            continue;
+        }
+        danger.emplace_back(p.x, p.y);
+    }
+    for (const auto [b, thing, p] : reg.view<const Thing, const Position>().each()) {
+        if (thing.category == ThingCategory::Building && things_.defs().get(thing.def).defName() == "Hive") {
+            danger.emplace_back(p.x, p.y);
+        }
+    }
     const auto isFree = [&](CellPos c) {
-        return map_.walkable(c) && map_.obstacleDm(c) == 0 && !map_.isDoor(c) && std::find(taken.begin(), taken.end(), c) == taken.end();
+        if (!map_.walkable(c) || map_.obstacleDm(c) != 0 || map_.isDoor(c) || std::find(taken.begin(), taken.end(), c) != taken.end()) {
+            return false;
+        }
+        const float cx = static_cast<float>(c.x) + 0.5f;
+        const float cy = static_cast<float>(c.y) + 0.5f;
+        return std::none_of(danger.begin(), danger.end(), [&](const std::pair<float, float>& d) {
+            return raidDist(cx, cy, d.first, d.second) < rules_.shelterDanger;
+        });
     };
     Regions& regions = map_.regions();
     if (state_.hasShelter && rooms_.indoors(state_.shelter)) {
@@ -2079,9 +2104,23 @@ CellPos RaidSystem::shelterCell(Entity pawn) {
             }
         }
     }
-    if (state_.hasThreat) {
-        const float dx = pos.x - state_.threatX;
-        const float dy = pos.y - state_.threatY;
+    // No safe roofed cell: away from the nearest danger if one is close, else from the threat.
+    float awayX = state_.threatX;
+    float awayY = state_.threatY;
+    bool away = state_.hasThreat;
+    float nearest = rules_.shelterDanger;
+    for (const std::pair<float, float>& d : danger) {
+        const float dd = raidDist(pos.x, pos.y, d.first, d.second);
+        if (dd < nearest) {
+            nearest = dd;
+            awayX = d.first;
+            awayY = d.second;
+            away = true;
+        }
+    }
+    if (away) {
+        const float dx = pos.x - awayX;
+        const float dy = pos.y - awayY;
         const float d = std::sqrt(dx * dx + dy * dy);
         if (d > 0.0f) {
             CellPos out;
