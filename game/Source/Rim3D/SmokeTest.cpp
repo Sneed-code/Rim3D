@@ -137,6 +137,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildBodiesPhases();
 	}
+	else if (TestName == TEXT("compare"))
+	{
+		BuildComparePhases();
+	}
 	else if (TestName == TEXT("world"))
 	{
 		BuildWorldPhases();

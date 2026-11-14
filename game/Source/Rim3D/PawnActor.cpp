@@ -2,6 +2,8 @@
 
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimSequence.h"
+#include "Retargeter/IKRetargeter.h"
+#include "MakeHumanAnimInstance.h"
 #include "AnimationRuntime.h"
 #include "Components/DecalComponent.h"
 #include "Components/MeshComponent.h"
@@ -369,6 +371,10 @@ void ASimPawnActor::ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& In
 
 	// Height: the whole pawn, MetaHuman and horns included, scales with the mannequin.
 	Body->SetRelativeScale3D(FVector(Looks.Height));
+	if (Looks.MakeHuman != AppliedMakeHuman)
+	{
+		ApplyMakeHuman(Pawns);
+	}
 
 	for (USkeletalMeshComponent* Mesh : ShapedMeshes)
 	{
@@ -473,6 +479,51 @@ void ASimPawnActor::ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& In
 
 // ---------------------------------------------------------------------------
 // Faces, hair and marks (V2, V3; docs/design/looks.md).
+
+void ASimPawnActor::ApplyMakeHuman(USimPawnSubsystem& Pawns)
+{
+	AppliedMakeHuman = Looks.MakeHuman;
+	UIKRetargeter* Retargeter = nullptr;
+	USkeletalMesh* Mesh = Looks.MakeHuman.IsEmpty() ? nullptr : Pawns.GetMakeHumanMesh(Looks.MakeHuman, Retargeter);
+	if (!Mesh || !Retargeter)
+	{
+		if (!Looks.MakeHuman.IsEmpty())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("MakeHuman character %s is not imported (run the MakeHumanArt commandlet, docs/design/makehuman.md)"), *Looks.MakeHuman);
+		}
+		if (MakeHumanMesh)
+		{
+			MakeHumanMesh->DestroyComponent();
+			MakeHumanMesh = nullptr;
+		}
+		if (MetaHuman)
+		{
+			MetaHuman->SetActorHiddenInGame(false);
+		}
+		return;
+	}
+	if (!MakeHumanMesh)
+	{
+		// Attached to the hidden mannequin: the Game Animation Sample's generic retarget animation takes the pose of the mesh it is attached to.
+		MakeHumanMesh = NewObject<USkeletalMeshComponent>(this, TEXT("MakeHuman"));
+		MakeHumanMesh->SetupAttachment(Body);
+		MakeHumanMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		MakeHumanMesh->SetCanEverAffectNavigation(false);
+		MakeHumanMesh->bReceivesDecals = true;
+		MakeHumanMesh->RegisterComponent();
+	}
+	MakeHumanMesh->SetSkeletalMeshAsset(Mesh);
+	MakeHumanMesh->SetAnimInstanceClass(UMakeHumanAnimInstance::StaticClass());
+	if (UMakeHumanAnimInstance* Anim = Cast<UMakeHumanAnimInstance>(MakeHumanMesh->GetAnimInstance()))
+	{
+		Anim->SetRetargeter(Retargeter);
+	}
+	MakeHumanMesh->SetCustomPrimitiveDataVector3(PawnLooksSkinDataIndex, FVector(Looks.Skin.R, Looks.Skin.G, Looks.Skin.B));
+	if (MetaHuman)
+	{
+		MetaHuman->SetActorHiddenInGame(true);
+	}
+}
 
 void ASimPawnActor::ApplyFace(USimPawnSubsystem& Pawns)
 {

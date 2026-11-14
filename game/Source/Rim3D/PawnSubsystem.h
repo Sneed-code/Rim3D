@@ -67,6 +67,9 @@ struct FSimPawnLooks
 	// A whole Creator preset face by its name (assets/pawn_faces.json presets, of the pawn's gender), instead of the
 	// four sliders on Kellan's face; empty: the sliders.
 	FString FacePreset;
+	// A MakeHuman character (docs/design/makehuman.md) drawn instead of the MetaHuman, by its name in assets/makehuman.json;
+	// empty: the MetaHuman. Its own mesh has its height, so Height should be 1 for it.
+	FString MakeHuman;
 	TArray<FSimPawnMark> Tattoos;
 	TArray<FSimPawnMark> Scars;
 
@@ -75,7 +78,7 @@ struct FSimPawnLooks
 		return Height == Other.Height && Weight == Other.Weight && Stature == Other.Stature && bFemale == Other.bFemale && Skin == Other.Skin && Hair == Other.Hair
 			&& HornLength == Other.HornLength && HornRadius == Other.HornRadius && HornSpread == Other.HornSpread && HornColor == Other.HornColor
 			&& FaceShape == Other.FaceShape && Brow == Other.Brow && Nose == Other.Nose && Jaw == Other.Jaw && Eyes == Other.Eyes
-			&& HairStyle == Other.HairStyle && Beard == Other.Beard && BodyHair == Other.BodyHair && FaceSkin == Other.FaceSkin && FacePreset == Other.FacePreset && Tattoos == Other.Tattoos && Scars == Other.Scars;
+			&& HairStyle == Other.HairStyle && Beard == Other.Beard && BodyHair == Other.BodyHair && FaceSkin == Other.FaceSkin && FacePreset == Other.FacePreset && MakeHuman == Other.MakeHuman && Tattoos == Other.Tattoos && Scars == Other.Scars;
 	}
 
 	/** Whether the pawn has V1 face numbers (not an older save's pawn). */
@@ -199,6 +202,8 @@ public:
 	UStaticMesh* GetHornMesh();
 	/** Faces, grooms and marks from the PawnFaces commandlet (PawnFaces.h names); null if it hasn't been run or there is none. */
 	UObject* GetFacesAsset(const FString& Name);
+	/** A MakeHuman character's mesh and retargeter (MakeHumanArt.h names), from the generated or the local-only folder; null if not imported. */
+	USkeletalMesh* GetMakeHumanMesh(const FString& Name, class UIKRetargeter*& OutRetargeter);
 	/** The looks a pawn's sim looks and lineage add up to. */
 	static FSimPawnLooks MakeLooks(const colony::PawnLooksView& View, const colony::DefDatabase* Defs);
 	/** What a pawn wears, from the snapshot (U16), and a number that changes whenever any of it does (cheap: no allocation). */

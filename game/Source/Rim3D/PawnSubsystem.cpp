@@ -15,6 +15,8 @@
 #include "LevelsSubsystem.h"
 #include "PawnActor.h"
 #include "PawnFaces.h"
+#include "MakeHumanArt.h"
+#include "Retargeter/IKRetargeter.h"
 #include "PawnLooks.h"
 #include "SimSubsystem.h"
 #include "VisualMesh.h"
@@ -417,6 +419,20 @@ UStaticMesh* USimPawnSubsystem::GetHornMesh()
 		HornMesh = PawnLoadLooksAsset<UStaticMesh>(PawnLooksHornMesh);
 	}
 	return HornMesh;
+}
+
+USkeletalMesh* USimPawnSubsystem::GetMakeHumanMesh(const FString& Name, UIKRetargeter*& OutRetargeter)
+{
+	OutRetargeter = nullptr;
+	for (const TCHAR* Folder : {MakeHumanFolder, MakeHumanLocalFolder})
+	{
+		if (FPackageName::DoesPackageExist(FString(Folder) / MakeHumanMeshName(Name)))
+		{
+			OutRetargeter = LoadObject<UIKRetargeter>(nullptr, *MakeHumanAssetPath(Folder, MakeHumanRetargeterName(Name)));
+			return LoadObject<USkeletalMesh>(nullptr, *MakeHumanAssetPath(Folder, MakeHumanMeshName(Name)));
+		}
+	}
+	return nullptr;
 }
 
 UObject* USimPawnSubsystem::GetFacesAsset(const FString& Name)

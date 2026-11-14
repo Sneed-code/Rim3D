@@ -63,6 +63,8 @@ public:
 	const TArray<TObjectPtr<UStaticMeshComponent>>& GetHorns() const { return Horns; }
 	/** V2 (docs/design/looks.md): the MetaHuman's face with the face shape morphs, null without the PawnFaces assets. */
 	USkeletalMeshComponent* GetFaceMesh() const { return FaceMesh; }
+	/** The MakeHuman character's mesh while the looks ask for one (docs/design/makehuman.md); null otherwise. */
+	USkeletalMeshComponent* GetMakeHumanMesh() const { return MakeHumanMesh; }
 	/** The MetaHuman's body (with the whole body, all of its skin); null for a mannequin. */
 	USkeletalMeshComponent* GetSkinBody() const { return MetaHumanBody; }
 	/** The eye slots of the face (left, right). */
@@ -278,6 +280,10 @@ private:
 	bool bBareLayerTried = false;
 	bool bFullBody = false;
 	FName AppliedFacePreset;
+	// A MakeHuman character drawn instead of the MetaHuman (docs/design/makehuman.md): its mesh, retargeted from the hidden mannequin.
+	TObjectPtr<USkeletalMeshComponent> MakeHumanMesh;
+	FString AppliedMakeHuman;
+	void ApplyMakeHuman(USimPawnSubsystem& Pawns);
 	bool bHairHidden = false;
 	int32 ApparelRebuilds = 0;
 

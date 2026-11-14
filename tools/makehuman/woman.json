@@ -1,0 +1,10 @@
+{
+  "comment": "The example woman (the reference: very pale, petite and slim, long straight black hair, green eyes). {mh_user} and {mh_system} are MakeHuman's data folders (see mh_export.py).",
+  "out": "game/Saved/MakeHuman/Woman/Woman.fbx",
+  "macro": {"gender": 0.0, "age": 0.5, "muscle": 0.45, "weight": 0.38, "height": 0.42, "proportions": 0.65, "cupsize": 0.55, "firmness": 0.6,
+            "race": {"caucasian": 1.0, "asian": 0.0, "african": 0.0}},
+  "rig": "game_engine_with_breast",
+  "proxy": "{mh_user}/proxymeshes/adult_female_anatomy_body/adult_female_anatomy_body.proxy",
+  "skin": "{mh_user}/skins/natural_pale/natural_pale.mhmat",
+  "clothes": ["{mh_user}/clothes/natural_pubic_hair/natural_pubic_hair.mhclo"]
+}

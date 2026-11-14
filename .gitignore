@@ -39,3 +39,6 @@ __pycache__/
 
 # Python
 __pycache__/
+
+# Local-only comparison models (docs/design/makehuman.md): never committed
+assets/makehuman.local.json
