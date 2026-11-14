@@ -16,6 +16,8 @@ game/Content/Megascans/
 game/Content/MetaHumans/
 game/Content/Fab/
 game/Content/ThirdParty/
+# Raw downloads (Sketchfab zips, glb, sounds) before import; README.txt on the PC lists them
+assets/raw/
 # Made from the sample by commandlets (docs/design/looks.md)
 game/Content/Rim3D/Generated/
 # Epic's Game Animation Sample, copied in with its /Game paths unchanged (see assets/manifest.json)

@@ -112,8 +112,7 @@ Crocodile" (a 1.6 MB low-poly mesh). No free realistic frog or lizard with anima
 ### Free outside Fab (no library step; Z2 downloads these)
 
 - **Truebones free zoo** on [Gumroad](https://truebones.gumroad.com/p/free-truebones-zoo-over-75-animated-animals-with-textures-in-fbx-format):
-  over 75 animated animals in FBX. Its list was not readable from the cloud; Z2 checks it for a
-  capybara, parrot, frog and lizard.
+  over 75 animated animals in FBX. Its list was not readable from the cloud; **Not free** (sneed found it asks $146 AUD): dropped, not needed.
 - **[10 Animated Butterflies - FREE](https://www.cgtrader.com/free-3d-models?keywords=10%20animated%20butterflies)** on CGTrader.
 - **Sketchfab, CC BY** (credit the author in the game's credits): "African Elephant" by jimmyho905
   and other elephants (backups to Protofactor's).
@@ -122,7 +121,7 @@ Crocodile" (a 1.6 MB low-poly mesh). No free realistic frog or lizard with anima
 
 ### What is still missing
 
-- **Capybara**: found in round 2 (Rectus, Sketchfab).
+- **Capybara**: dropped (sneed, 2026-11-14: the Sketchfab one is not free; find other animals instead).
 - **Parrot, toucan**: found in round 2 (Sketchfab).
 - **Frog, lizard, gecko**: none free and animated; low priority (ambience only).
 
@@ -162,12 +161,7 @@ awful. sneed also added a [Velociraptor](https://www.fab.com/listings/2dd1fd61-8
 **Leopards.** Animated3D has about 20 big cats (leopards, leopard cats, black panthers, tigers and
 cubs), but with Fab's Free filter only the two **Leopard Hybrid** ones are free; the rest sell for
 about $49 each (Tiger_A3 shows $48.69). Free: [Leopard Hybrid_A1](https://www.fab.com/listings/d0e9ce8d-bdb9-412f-9740-6f528f56a2c1),
-[Leopard Hybrid_A2](https://www.fab.com/listings/3506d61b-1f96-4ca3-8fae-dea2ceee0ea5). Paid, for later:
-[Black Panther_A1](https://www.fab.com/listings/d4354341-0e78-47c0-bbf4-b4470b84e7cd), [Black Panther_A2](https://www.fab.com/listings/94e80547-52c1-4461-9454-ac74ad14763e),
-[LeopardCat_A1](https://www.fab.com/listings/1586af92-caef-4983-9d43-85ba7edbfd16), [LeopardCat_A2](https://www.fab.com/listings/bcf0ff11-bff3-4a16-999a-0ff78d50311a),
-[Leopard_Baby_A1](https://www.fab.com/listings/cca7d1aa-ca5d-4da8-a2f4-ac5f8ad88cc3), [Leopard_Baby_A2](https://www.fab.com/listings/27cb8bf5-ff91-4e12-b138-cf5b861e0db9),
-[Tiger_A1](https://www.fab.com/listings/ccb86729-7ab2-41a3-8b57-0b5a49aa6860), [Tiger_A4](https://www.fab.com/listings/10930d97-50ba-4f08-859b-5c17278a7430),
-[Tiger_A5](https://www.fab.com/listings/34c562c4-f41b-4cd9-a5d4-efe3a81d74f0), [Tiger_A6](https://www.fab.com/listings/88fcea28-cdf3-4149-80cb-6794570a75d7).
+[Leopard Hybrid_A2](https://www.fab.com/listings/3506d61b-1f96-4ca3-8fae-dea2ceee0ea5).
 
 **Best new source: Animal Animator on Sketchfab** ([all models](https://sketchfab.com/animalanimator/models)).
 Realistic, rigged and animated, and every one checked is **free, CC BY** (credit the author in the
@@ -180,8 +174,6 @@ game's credits). Sketchfab downloads need a free Sketchfab account; there is no 
   giraffe, a sphynx cat, a great white shark, an axolotl and more.
 
 **Other free Sketchfab finds:**
-- **Capybara** by Rectus ([link](https://sketchfab.com/3d-models/capybara-445b5a9c131d482fad76bf5b6c2f8271)): realistic, animated,
-  6,300 triangles, **CC BY-NC** (non-commercial: fine for this private game). This fills the capybara gap.
 - **Toucan Bird** by sevketkabatas ([link](https://sketchfab.com/3d-models/toucan-bird-eb77223ebfd946e69fb58ffe9ad32adf)): animated,
   19,000 triangles, CC BY.
 - **Love Birds Parrot** by Nyilonelycompany ([link](https://sketchfab.com/3d-models/love-birds-parrot-e31e1c72cff140158b99172285b40056)):
@@ -190,3 +182,29 @@ game's credits). Sketchfab downloads need a free Sketchfab account; there is no 
 
 Free Fab birds stay poor; the [Harpy Eagle](https://www.fab.com/listings/9f99d816-5913-4f37-b48a-dc05b79d8f0d) (CC BY, a
 rainforest eagle) has no rig information and may be AI-made, so it is a maybe.
+
+## Round 3 (sneed, 2026-11-14 evening)
+
+**Rules from sneed:** free only, and realistic only (no cartoon or zany styles). So the low-poly
+Zacxophone "Birds", the "Cartoon butterflies", stylized ants and the cute capybara are out, and the
+capybara is dropped as an animal for now. The Truebones zoo is not free and not needed.
+
+**Downloaded by sneed** and copied to `C:\Dev\Rim3D\assets\raw\sketchfab\` (not in Git; a
+`README.txt` there lists each model's author and licence): Animal Animator's hummingbird, dragonfly,
+monarch butterfly, chimpanzee, panda, hyena, horse, sphynx cat, shark, pliosaur, T. rex and axolotl;
+the toucan; the parrot; an "Ultimate Animal Pack" (one FBX, check in Z2); a robot; two space skyboxes;
+sound effects; and orc voice clips (`assets\raw\sound\OrcFemale\`). All the Animal Animator ones
+come with full texture sets (colour, normal, roughness; fur cards on the panda and hyena). Set aside,
+not used: a tylosaurus ripped from a commercial game.
+
+**Fab insects with no textures.** Fab's free insects are a mix: some ship their textures in a
+separate folder or inside the file (and some viewers don't show them), some have none at all. It is
+not a problem and needs no real compute: Z2 imports them and, where a model has no textures, gives
+it one of our own insect materials (chitin, hair, wing membrane), made once and reused for all bugs.
+
+**Giant insects (megaspider and friends).** Plan: the Goliath birdeater mesh (realistic) moved onto a
+working spider rig, by re-binding the mesh to the rig's bones in Blender (a script, minutes of
+compute); the walk, attack and death clips come from the rigged spiders (Spider animated character,
+Spiders with animations), and the legs plant on the ground with Unreal's Control Rig, so uneven
+ground and turning look right without hand animation. Flies and maggots on corpses are particle
+effects (Niagara), cheap and easy.
