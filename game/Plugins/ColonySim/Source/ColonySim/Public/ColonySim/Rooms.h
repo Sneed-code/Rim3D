@@ -7,6 +7,7 @@
 #include "ColonySim/Regions.h"
 
 #include <cstdint>
+#include <functional>
 #include <span>
 #include <utility>
 #include <vector>
@@ -132,12 +133,21 @@ public:
 
     uint64_t rebuilds() const { return rebuilds_; }
 
+    // Who a pawn's partner (spouse or lover) is, for the couple's-bedroom rule: a room whose beds all
+    // belong to one couple is their bedroom, not a barracks (RimWorld). Unset, every room with two beds
+    // or more is a barracks.
+    void setPartnerOf(std::function<Entity(Entity)> partnerOf) { partnerOf_ = std::move(partnerOf); }
+    // Looks for a change in who owns the beds or who is whose partner, and marks the roles for a fresh
+    // look at the next update if there was one. The sim calls it once a step, before update.
+    void noteBedOwners();
+
 private:
     void rebuild();
     void roof();
     void scanContents();
     void levelRooms();
     bool roofHolderAt(CellPos c) const;
+    bool roomsCoupleOwnsBeds(const std::vector<Entity>& beds) const;
 
     Map& map_;
     Things& things_;
@@ -149,6 +159,9 @@ private:
     uint64_t regionChanges_ = 0;
     uint64_t buildingChanges_ = 0;
     uint64_t rebuilds_ = 0;
+    std::function<Entity(Entity)> partnerOf_;
+    uint64_t ownerSignature_ = 0;
+    bool ownersChanged_ = false;
     uint64_t roofChanges_ = 0;
     std::vector<Room> rooms_;
     std::vector<RoomId> roomOfRegion_;  // by region id

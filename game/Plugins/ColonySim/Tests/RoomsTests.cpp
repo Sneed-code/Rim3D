@@ -1,8 +1,10 @@
+#include "ColonySim/Colonist.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Cover.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Doors.h"
 #include "ColonySim/Events.h"
+#include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Pathfinder.h"
@@ -11,6 +13,7 @@
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
+#include "ColonySim/Social.h"
 #include "ColonySim/Things.h"
 
 #include <doctest.h>
@@ -545,4 +548,44 @@ TEST_CASE("Rooms: waking up outside starts the slept outside thought, indoors do
     };
     CHECK_FALSE(sleptOutside(CellPos{13, 13, 0}));
     CHECK(sleptOutside(CellPos{5, 5, 0}));
+}
+
+TEST_CASE("Rooms: two beds a couple owns make their bedroom, not a barracks") {
+    Sim sim = roomsSim();
+    roomsRing(sim, 10, 10, 16, 16);
+    const Entity bedA = sim.things().spawn("Bed", CellPos{11, 11, 0});
+    const Entity bedB = sim.things().spawn("Bed", CellPos{13, 11, 0});
+    const auto role = [&] {
+        sim.step();
+        return roomsAt(sim, 13, 13)->role;
+    };
+    CHECK(role() == RoomRole::Barracks);  // nobody owns the beds yet
+    const Entity a = sim.things().spawn("Human", CellPos{12, 14, 0});
+    const Entity b = sim.things().spawn("Human", CellPos{13, 14, 0});
+    const Entity c = sim.things().spawn("Human", CellPos{14, 14, 0});
+    for (const Entity pawn : {a, b, c}) {
+        sim.jobs().addWorker(pawn);
+        sim.things().registry().emplace<Colonist>(pawn, Colonist{});
+    }
+    CHECK(role() == RoomRole::Barracks);
+    entt::registry& reg = sim.things().registry();
+    ROOMS_REQUIRE(reg.all_of<Social>(a) && reg.all_of<Social>(b));
+    sim.submit(AssignBedCommand{bedA, a});
+    sim.submit(AssignBedCommand{bedB, b});
+    CHECK(role() == RoomRole::Barracks);  // two strangers
+    reg.get<Social>(a).bonds.push_back(Bond{BondKind::Lover, b, 0});
+    reg.get<Social>(b).bonds.push_back(Bond{BondKind::Lover, a, 0});
+    CHECK(role() == RoomRole::Bedroom);  // the lovers' room
+    CHECK(roomsAt(sim, 13, 13)->beds == 2);
+    // A third bed, unowned or a stranger's, makes it shared again.
+    const Entity bedC = sim.things().spawn("Bed", CellPos{15, 11, 0});
+    CHECK(role() == RoomRole::Barracks);
+    sim.submit(AssignBedCommand{bedC, c});
+    CHECK(role() == RoomRole::Barracks);
+    sim.things().destroy(bedC);
+    CHECK(role() == RoomRole::Bedroom);
+    // They break up: a barracks again.
+    reg.get<Social>(a).bonds.clear();
+    reg.get<Social>(b).bonds.clear();
+    CHECK(role() == RoomRole::Barracks);
 }
