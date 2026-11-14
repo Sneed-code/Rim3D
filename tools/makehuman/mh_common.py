@@ -538,7 +538,7 @@ def add_tusks(rig, body, length=0.03, radius=0.006, color=(0.78, 0.72, 0.58), lo
     mat = _material("Tusk", color)
     objs = []
     for side in (1.0, -1.0):
-        want = Vector((hx + side * 0.021, nose.y + 0.02, nose.z - 0.05))
+        want = Vector((hx + side * 0.019, nose.y + 0.018, nose.z - 0.04))  # just under the mouth corners
         near = [p for p in face if abs(p.x - want.x) < 0.006 and abs(p.z - want.z) < 0.006]
         base = min(near, key=lambda p: p.y) if near else want   # the skin's front there
         base = base + Vector((0.0, 0.004, 0.0))                 # its root just inside the lip
@@ -782,7 +782,7 @@ def _pubic_layout(rig, body, female, count, seed, log=print):
         length = rnd.uniform(0.75, 1.25) * (0.6 if t[4] in ("scrotum", "labia") else 1.0)
         # For the creator's live sliders: a random number (density keeps the hairs under it) and how far out the hair
         # is (coverage keeps the hairs inside it: the edges and the top go first, the labia and scrotum early).
-        edge = 0.9 if t[4] in ("scrotum", "labia") else min(1.0, max(t[2], t[3] ** 1.3) * rnd.uniform(0.9, 1.05))
+        edge = 0.9 if t[4] in ("scrotum", "labia") else min(1.0, max(t[2], t[3]))  # no jitter: the patch shrinks neatly
         layout.append([list(t[0]), [1.0 - s1 - s2, s1, s2], t[2], t[3], length, rnd.uniform(0.0, 6.283), rnd.choice((-1, 1)), t[4],
                        rnd.random(), edge])
     log("pubic layout", len(layout), "hairs over", len(tris), "triangles")
@@ -886,3 +886,28 @@ def grow_pubic_hair(rig, body, female=True, layout_path=None, count=3000, style=
     _skin_to(obj, rig, {i: w for i, w in enumerate(weights)})
     log("pubic hair grown:", len(layout), "hairs,", style, "female" if female else "male")
     return obj
+
+
+def round_hair_ends(obj, rig, start_share=0.35, side_cut=0.45, log=print):
+    """Long scalp hair cut straight across at the back looks wrong: its lower part is drawn up more the further a strand
+    is from the middle, so the ends make a soft U, longest in the middle (as hair falls from a round head)."""
+    to_rig = rig.matrix_world.inverted() @ obj.matrix_world
+    back = to_rig.inverted()
+    pts = [to_rig @ v.co for v in obj.data.vertices]
+    if not pts:
+        return
+    zmin = min(p.z for p in pts)
+    zmax = max(p.z for p in pts)
+    zs = zmin + (zmax - zmin) * start_share
+    cx = rig.data.bones["head"].head_local.x if "head" in rig.data.bones else 0.0
+    low = [p for p in pts if p.z < zs]
+    width = max((abs(p.x - cx) for p in low), default=0.0)
+    if width <= 1e-4:
+        return
+    for v, p in zip(obj.data.vertices, pts):
+        if p.z < zs:
+            t = min(abs(p.x - cx) / width, 1.0)
+            p.z = zs - (zs - p.z) * (1.0 - side_cut * t ** 1.5)
+            v.co = back @ p
+    obj.data.update()
+    log("hair ends rounded on", obj.name, "below", round(zs, 3))

@@ -52,6 +52,8 @@ namespace
 		float ImpEars = 0.0f;
 		float ImpFace = 0.0f;
 		float OrcFace = 0.0f;
+		float OrcBody = 0.0f;
+		bool bShaved = false;     // pubic stubble only
 		float Horns = 0.0f;
 		float Tusks = 0.0f;
 		float Tail = 0.0f;
@@ -115,7 +117,7 @@ namespace
 		P.Kind = Kind;
 		P.Sex = P.Older = P.Breasts = P.Genital = 0.0f;
 		P.Pigment = 0.5f;
-		P.ImpEars = P.ImpFace = P.OrcFace = P.Horns = P.Tusks = P.Tail = 0.0f;
+		P.ImpEars = P.ImpFace = P.OrcFace = P.OrcBody = P.Horns = P.Tusks = P.Tail = 0.0f;
 		P.Weight = P.bFemale ? -0.2f : 0.0f;
 		P.Muscle = 0.0f;
 		P.Height = P.bFemale ? 0.94f : 1.02f;
@@ -142,7 +144,7 @@ namespace
 			P.Height = P.bFemale ? 1.0f : 1.08f;
 			P.Weight = 0.25f;
 			P.Muscle = 1.0f;
-			P.OrcFace = P.Tusks = 1.0f;
+			P.OrcFace = P.Tusks = P.OrcBody = 1.0f;
 			P.ImpEars = 0.45f;
 			CreatorSetSkin(P, 0.42f, 0.55f, 0.32f);
 		}
@@ -168,11 +170,13 @@ namespace
 		Set(TEXT("ImpEars"), P.ImpEars);
 		Set(TEXT("ImpFace"), P.ImpFace);
 		Set(TEXT("OrcFace"), P.OrcFace);
+		Set(TEXT("OrcBody"), P.OrcBody);
 		Set(TEXT("NoHorns"), 1.0f - P.Horns);
 		Set(TEXT("NoTusks"), 1.0f - P.Tusks);
 		Set(TEXT("NoTail"), 1.0f - P.Tail);
-		Set(TEXT("PubicShort"), (1.0f - P.PubicLength) / 0.65f);
-		Set(TEXT("PubicStraight"), 1.0f - P.PubicCurl);
+		Set(TEXT("PubicShort"), P.bShaved ? 0.0f : (1.0f - P.PubicLength) / 0.65f);
+		Set(TEXT("PubicStraight"), P.bShaved ? 0.0f : 1.0f - P.PubicCurl);
+		Set(TEXT("PubicStubble"), P.bShaved ? 1.0f : 0.0f);
 		Mesh->SetCustomPrimitiveDataFloat(4, P.Pubic == 0 ? 0.0f : P.PubicDensity);
 		Mesh->SetCustomPrimitiveDataFloat(5, P.PubicCoverage);
 		if (UMakeHumanAnimInstance* Anim = Cast<UMakeHumanAnimInstance>(Mesh->GetAnimInstance()))
@@ -351,6 +355,8 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		{
 			State->CameraYaw += Yaw;
 		}
+		FParse::Value(FCommandLine::Get(), TEXT("CreatorFocusZ="), State->FocusOffset.Z);
+		FParse::Value(FCommandLine::Get(), TEXT("CreatorPitch="), State->CameraPitch);
 		float Genital = 0.0f;
 		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorGenital="), Genital))
 		{
@@ -535,7 +541,11 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			PC->bShowMouseCursor = true;
 		}
 
-		// The panel.
+		// The panel (-CreatorNoPanel: none, for pictures).
+		if (FParse::Param(FCommandLine::Get(), TEXT("CreatorNoPanel")))
+		{
+			return;
+		}
 		const ImGui::FScopedContext ScopedContext;
 		if (!ScopedContext)
 		{
@@ -598,6 +608,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 					ImGui::SliderFloat("Pointed ears", &P.ImpEars, 0.0f, 1.0f, "%.2f");
 					ImGui::SliderFloat("Imp face", &P.ImpFace, 0.0f, 1.0f, "%.2f");
 					ImGui::SliderFloat("Orc face", &P.OrcFace, 0.0f, 1.0f, "%.2f");
+					ImGui::SliderFloat("Orc build", &P.OrcBody, 0.0f, 1.0f, "%.2f");
 					ImGui::SliderFloat("Horns", &P.Horns, 0.0f, 1.0f, "%.2f");
 					ImGui::SliderFloat("Tusks", &P.Tusks, 0.0f, 1.0f, "%.2f");
 					ImGui::SliderFloat("Tail", &P.Tail, 0.0f, 1.0f, "%.2f");
@@ -635,6 +646,8 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 					{
 						P.Pubic = bPubic ? 1 : 0;
 					}
+					ImGui::SameLine();
+					ImGui::Checkbox("Shaved (stubble)", &P.bShaved);
 					ImGui::SliderFloat("Coverage", &P.PubicCoverage, 0.3f, 1.0f, "%.2f");
 					ImGui::SliderFloat("Density", &P.PubicDensity, 0.0f, 1.0f, "%.2f");
 					ImGui::SliderFloat("Length (trimmed .. natural)", &P.PubicLength, 0.35f, 1.0f, "%.2f");

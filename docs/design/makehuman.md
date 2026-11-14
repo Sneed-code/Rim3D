@@ -133,7 +133,13 @@ Live controls: each hair carries a random number (texture U) and how far out it 
 hairs out by the pawn's density (custom primitive data 4: even thinning) and coverage (5: edges and the top go
 first), and the `PubicShort` and `PubicStraight` morphs trim and straighten them. The female top edge arches (highest
 on the middle line); the male trail is gone (body hair later). The creator's "Jiggle" box turns the soft-tissue
-springs off (`UMakeHumanAnimInstance::SetSoftTissueEnabled`), keeping breasts, buttocks and genitals still.
+springs off (`UMakeHumanAnimInstance::SetSoftTissueEnabled`), keeping breasts, buttocks and genitals still. "Shaved (stubble)" is the `PubicStubble` morph (hairs cut to
+a few millimetres, straight); coverage shrinks the patch evenly towards its middle and bottom (no per-hair jitter).
+
+`round_hair_ends` gives long scalp hair (MakeHuman's long01) a soft U at the back, longest in the middle, instead of
+a straight cut. The orcoid has an `OrcBody` morph (muscle and weight up, broad back, chest, neck and arms, from
+MakeHuman's own targets: no joints move) beside `OrcFace`, and tusks just under the mouth corners. Creator pictures:
+`-CreatorNoPanel`, `-CreatorFocusZ=`, `-CreatorPitch=`.
 
 The creator's view is free: middle mouse turns it, the wheel zooms, right mouse or WASD/QE move the point it looks at
 (not while the mouse is over the panel). The panel text is half as big again as the other panels.

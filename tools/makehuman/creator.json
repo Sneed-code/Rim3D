@@ -75,8 +75,8 @@
           "bones": 7
         },
         "tusks": {
-          "length": 0.032,
-          "radius": 0.0065
+          "length": 0.036,
+          "radius": 0.0075
         },
         "pigment_mask": "female",
         "pubic_grow": {
@@ -187,13 +187,13 @@
             "nose-scale-vert-decr": 0.5,
             "nose-point-width-incr": 0.8,
             "nose-curve-concave": 0.6,
-            "eyebrows-trans-forward": 1.0,
+            "eyebrows-trans-forward": 0.6,
             "eyebrows-angle-down": 0.5,
             "head-square": 1.0,
             "head-scale-horiz-incr": 0.4,
             "head-fat-incr": 0.5,
-            "l-eye-scale-decr": 0.5,
-            "r-eye-scale-decr": 0.5,
+            "l-eye-scale-decr": 0.15,
+            "r-eye-scale-decr": 0.15,
             "mouth-scale-horiz-incr": 0.6,
             "mouth-lowerlip-volume-incr": 0.6,
             "mouth-trans-forward": 0.4
@@ -224,6 +224,37 @@
             "count": 3000,
             "curl": 1.0,
             "trim": 0.35
+          }
+        },
+        "OrcBody": {
+          "macro": {
+            "muscle": 1.0,
+            "weight": 0.6
+          },
+          "targets": {
+            "torso-muscle-dorsi-incr": 1.0,
+            "torso-muscle-pectoral-incr": 0.8,
+            "torso-scale-horiz-incr": 0.45,
+            "torso-scale-depth-incr": 0.35,
+            "neck-scale-horiz-incr": 1.0,
+            "neck-scale-depth-incr": 0.8,
+            "measure-neck-circ-incr": 0.8,
+            "l-upperarm-muscle-incr": 1.0,
+            "r-upperarm-muscle-incr": 1.0,
+            "l-upperarm-shoulder-muscle-incr": 1.0,
+            "r-upperarm-shoulder-muscle-incr": 1.0,
+            "l-lowerarm-muscle-incr": 0.8,
+            "r-lowerarm-muscle-incr": 0.8,
+            "l-upperarm-scale-horiz-incr": 0.4,
+            "r-upperarm-scale-horiz-incr": 0.4
+          }
+        },
+        "PubicStubble": {
+          "pubic_grow": {
+            "female": true,
+            "count": 3000,
+            "curl": 0.0,
+            "trim": 0.07
           }
         }
       }
@@ -293,8 +324,8 @@
           "bones": 7
         },
         "tusks": {
-          "length": 0.032,
-          "radius": 0.0065
+          "length": 0.036,
+          "radius": 0.0075
         },
         "clothes": [
           "{mh_user}/clothes/natural_pubic_hair/natural_pubic_hair.mhclo"
@@ -399,13 +430,13 @@
             "nose-scale-vert-decr": 0.5,
             "nose-point-width-incr": 0.8,
             "nose-curve-concave": 0.6,
-            "eyebrows-trans-forward": 1.0,
+            "eyebrows-trans-forward": 0.6,
             "eyebrows-angle-down": 0.5,
             "head-square": 1.0,
             "head-scale-horiz-incr": 0.4,
             "head-fat-incr": 0.5,
-            "l-eye-scale-decr": 0.5,
-            "r-eye-scale-decr": 0.5,
+            "l-eye-scale-decr": 0.15,
+            "r-eye-scale-decr": 0.15,
             "mouth-scale-horiz-incr": 0.6,
             "mouth-lowerlip-volume-incr": 0.6,
             "mouth-trans-forward": 0.4
@@ -444,6 +475,37 @@
             "count": 3000,
             "curl": 1.0,
             "trim": 0.35
+          }
+        },
+        "OrcBody": {
+          "macro": {
+            "muscle": 1.0,
+            "weight": 0.6
+          },
+          "targets": {
+            "torso-muscle-dorsi-incr": 1.0,
+            "torso-muscle-pectoral-incr": 0.8,
+            "torso-scale-horiz-incr": 0.45,
+            "torso-scale-depth-incr": 0.35,
+            "neck-scale-horiz-incr": 1.0,
+            "neck-scale-depth-incr": 0.8,
+            "measure-neck-circ-incr": 0.8,
+            "l-upperarm-muscle-incr": 1.0,
+            "r-upperarm-muscle-incr": 1.0,
+            "l-upperarm-shoulder-muscle-incr": 1.0,
+            "r-upperarm-shoulder-muscle-incr": 1.0,
+            "l-lowerarm-muscle-incr": 0.8,
+            "r-lowerarm-muscle-incr": 0.8,
+            "l-upperarm-scale-horiz-incr": 0.4,
+            "r-upperarm-scale-horiz-incr": 0.4
+          }
+        },
+        "PubicStubble": {
+          "pubic_grow": {
+            "female": false,
+            "count": 3000,
+            "curl": 0.0,
+            "trim": 0.07
           }
         }
       }

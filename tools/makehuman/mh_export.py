@@ -41,7 +41,7 @@ def log(*a):
 
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from mh_common import (add_genital_bone, add_horns, add_morphs, add_soft_bones, add_tail, add_tusks, dump_vertices,  # noqa: E402
+from mh_common import (round_hair_ends, add_genital_bone, add_horns, add_morphs, add_soft_bones, add_tail, add_tusks, dump_vertices,  # noqa: E402
                        fuller_labia, grow_pubic_hair, lower_pubic_hair, make_pigment_mask, make_skin_normal, prepare_for_unreal,
                        write_materials)
 
@@ -177,6 +177,10 @@ try:
     for o in [o for o in bpy.data.objects if o.type == "MESH" and "pubic" in o.name.lower()]:
         lower_pubic_hair(o, body, top_share=cfg.get("pubic_top_share", 0.6), above_crotch=cfg.get("pubic_above_crotch", 0.025),
                          width=cfg.get("pubic_width", 1.0), depth=cfg.get("pubic_depth", 0.0), log=log)
+    # Long scalp hair: ends in a soft U instead of a straight cut ("round_hair_ends": false to keep it).
+    if cfg.get("round_hair_ends", True):
+        for o in [o for o in bpy.data.objects if o.type == "MESH" and "long0" in o.name.lower()]:
+            round_hair_ends(o, rig, log=log)
     # Pubic hair grown out of the skin ("pubic_grow": {"female", "count", "style", "length", "width"}) in place of
     # MakeHuman's flat pubic hair card; "pubic_layout" keeps the same hairs across the creator's variants.
     if cfg.get("pubic_grow"):
