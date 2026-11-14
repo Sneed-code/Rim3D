@@ -129,7 +129,11 @@ skin at its root (so they follow the genitals' jiggle). The area is found from t
 mons, an inverted triangle down to the top of the vulva with a few along the labia; on a man the pubis above the penis,
 a few on the scrotum and a thin trail up. The layout (triangle and barycentric per hair) is chosen once on the base
 (`mh_creator.py` runs a first pass) and reused by every variant, so morphs move the same hairs; the creator's
-Trimmed, Strip and None fold the hairs they drop under the skin. The old "Lower" option is gone for now.
+Live controls: each hair carries a random number (texture U) and how far out it grows (V); `M_MH_PubicHair` cuts
+hairs out by the pawn's density (custom primitive data 4: even thinning) and coverage (5: edges and the top go
+first), and the `PubicShort` and `PubicStraight` morphs trim and straighten them. The female top edge arches (highest
+on the middle line); the male trail is gone (body hair later). The creator's "Jiggle" box turns the soft-tissue
+springs off (`UMakeHumanAnimInstance::SetSoftTissueEnabled`), keeping breasts, buttocks and genitals still.
 
 The creator's view is free: middle mouse turns it, the wheel zooms, right mouse or WASD/QE move the point it looks at
 (not while the mouse is over the panel). The panel text is half as big again as the other panels.

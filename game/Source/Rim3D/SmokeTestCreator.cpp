@@ -5,6 +5,7 @@
 #include "SmokeTest.h"
 
 #include "Components/SkeletalMeshComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/App.h"
@@ -56,9 +57,17 @@ namespace
 		float Tail = 0.0f;
 		float Genital = 0.0f;     // -1 smaller .. 1 larger (the man's genitals, the woman's labia)
 		float Pigment = 0.5f;     // 0 .. 1: how much darker the areolae and genitals are than the skin
-		int32 Pubic = 1;          // CreatorPubicNames
+		int32 Pubic = 1;          // 0 none, else grown pubic hair with the four controls below
+		float PubicCoverage = 1.0f;
+		float PubicDensity = 1.0f;
+		float PubicLength = 1.0f;  // 1 natural .. 0.35 trimmed (PubicShort)
+		float PubicCurl = 1.0f;    // 1 curly .. 0 straighter (PubicStraight)
+		bool bJiggle = true;
 		float PubicLow = 0.0f;
 		float Skin[3] = {0.91f, 0.80f, 0.75f};
+		float Hair[3] = {0.10f, 0.08f, 0.07f};
+		bool bOwnPubicColour = false;  // else a little darker than the head hair, as is usual
+		float PubicHair[3] = {0.07f, 0.055f, 0.05f};
 
 		FString Label(int32 Index) const
 		{
@@ -113,10 +122,12 @@ namespace
 		if (P.bFemale)
 		{
 			CreatorSetSkin(P, 0.91f, 0.80f, 0.75f);
+			P.Hair[0] = 0.10f, P.Hair[1] = 0.08f, P.Hair[2] = 0.07f;  // black
 		}
 		else
 		{
 			CreatorSetSkin(P, 0.85f, 0.70f, 0.60f);
+			P.Hair[0] = 0.32f, P.Hair[1] = 0.22f, P.Hair[2] = 0.14f;  // brown
 		}
 		if (Kind == ECreatorKind::Imp)
 		{
@@ -160,13 +171,46 @@ namespace
 		Set(TEXT("NoHorns"), 1.0f - P.Horns);
 		Set(TEXT("NoTusks"), 1.0f - P.Tusks);
 		Set(TEXT("NoTail"), 1.0f - P.Tail);
-		Set(TEXT("PubicNone"), P.Pubic == 0 ? 1.0f : 0.0f);
-		Set(TEXT("PubicTrimmed"), P.Pubic == 2 ? 1.0f : 0.0f);
-		Set(TEXT("PubicStrip"), P.Pubic == 3 ? 1.0f : 0.0f);
+		Set(TEXT("PubicShort"), (1.0f - P.PubicLength) / 0.65f);
+		Set(TEXT("PubicStraight"), 1.0f - P.PubicCurl);
+		Mesh->SetCustomPrimitiveDataFloat(4, P.Pubic == 0 ? 0.0f : P.PubicDensity);
+		Mesh->SetCustomPrimitiveDataFloat(5, P.PubicCoverage);
+		if (UMakeHumanAnimInstance* Anim = Cast<UMakeHumanAnimInstance>(Mesh->GetAnimInstance()))
+		{
+			Anim->SetSoftTissueEnabled(P.bJiggle);
+		}
 		Set(TEXT("GenitalLarge"), P.Genital);
 		Set(TEXT("GenitalSmall"), -P.Genital);
 		Mesh->SetCustomPrimitiveDataFloat(3, P.Pigment);
 		Mesh->SetRelativeScale3D(FVector(P.Height));
+		// Hair colours: head hair and brows the picked colour (brows a touch darker), pubic hair a little darker than the head
+		// hair unless it has its own. The hair materials' Tint multiplies their texture.
+		const auto Linear = [](const float* C) { return FLinearColor::FromSRGBColor(FLinearColor(C[0], C[1], C[2]).ToFColor(false)); };
+		const float PubicDefault[3] = {P.Hair[0] * 0.72f, P.Hair[1] * 0.70f, P.Hair[2] * 0.70f};
+		const FLinearColor HairColour = Linear(P.Hair);
+		const FLinearColor PubicColour = Linear(P.bOwnPubicColour ? P.PubicHair : PubicDefault);
+		const TArray<FName> Slots = Mesh->GetMaterialSlotNames();
+		for (int32 i = 0; i < Slots.Num(); ++i)
+		{
+			const FString Slot = Slots[i].ToString();
+			const bool bPubic = Slot.Contains(TEXT("Pubic"));
+			const bool bBrow = Slot.Contains(TEXT("eyebrow"));
+			const bool bHead = !bPubic && !Slot.Contains(TEXT("lash")) && (Slot.Contains(TEXT("hair")) || Slot.Contains(TEXT("long0")) ||
+				Slot.Contains(TEXT("short0")) || Slot.Contains(TEXT("ponytail")) || Slot.Contains(TEXT("bob0")) || Slot.Contains(TEXT("braid")));
+			if (!bPubic && !bBrow && !bHead)
+			{
+				continue;
+			}
+			UMaterialInstanceDynamic* Dynamic = Cast<UMaterialInstanceDynamic>(Mesh->GetMaterial(i));
+			if (!Dynamic)
+			{
+				Dynamic = Mesh->CreateDynamicMaterialInstance(i);
+			}
+			if (Dynamic)
+			{
+				Dynamic->SetVectorParameterValue(TEXT("Tint"), bPubic ? PubicColour : (bBrow ? HairColour * 0.8f : HairColour));
+			}
+		}
 		// The panel's colour is as seen (sRGB); the skin material takes it linear, as FSimPawnLooks::Skin is.
 		const FLinearColor Skin = FLinearColor::FromSRGBColor(FLinearColor(P.Skin[0], P.Skin[1], P.Skin[2]).ToFColor(false));
 		Mesh->SetCustomPrimitiveDataVector3(PawnLooksSkinDataIndex, FVector(Skin.R, Skin.G, Skin.B));
@@ -570,6 +614,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 						ImGui::SliderFloat("Breasts", &P.Breasts, -1.0f, 1.0f, "%.2f");
 					}
 					ImGui::SliderFloat(P.bFemale ? "Labia" : "Genitals", &P.Genital, -1.0f, 1.0f, "%.2f");
+					ImGui::Checkbox("Jiggle (off: keep still)", &P.bJiggle);
 					if (ImGui::Button("Random body"))
 					{
 						FRandomStream R(FPlatformTime::Cycles());
@@ -584,7 +629,25 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				}
 				if (ImGui::BeginTabItem("Hair and skin"))
 				{
-					ImGui::Combo("Pubic hair", &P.Pubic, CreatorPubicNames, 4);
+					ImGui::ColorEdit3("Hair colour", P.Hair);
+					bool bPubic = P.Pubic != 0;
+					if (ImGui::Checkbox("Pubic hair", &bPubic))
+					{
+						P.Pubic = bPubic ? 1 : 0;
+					}
+					ImGui::SliderFloat("Coverage", &P.PubicCoverage, 0.3f, 1.0f, "%.2f");
+					ImGui::SliderFloat("Density", &P.PubicDensity, 0.0f, 1.0f, "%.2f");
+					ImGui::SliderFloat("Length (trimmed .. natural)", &P.PubicLength, 0.35f, 1.0f, "%.2f");
+					ImGui::SliderFloat("Straight .. curly", &P.PubicCurl, 0.0f, 1.0f, "%.2f");
+					ImGui::Checkbox("Own pubic hair colour", &P.bOwnPubicColour);
+					if (P.bOwnPubicColour)
+					{
+						ImGui::ColorEdit3("Pubic hair colour", P.PubicHair);
+					}
+					else
+					{
+						ImGui::TextUnformatted("(a little darker than the hair)");
+					}
 					ImGui::ColorEdit3("Skin", P.Skin);
 					ImGui::SliderFloat("Areola and genital pigment", &P.Pigment, 0.0f, 1.0f, "%.2f");
 					if (ImGui::Button("Random skin tone"))

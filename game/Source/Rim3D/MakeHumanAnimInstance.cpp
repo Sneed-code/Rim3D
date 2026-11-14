@@ -67,6 +67,14 @@ void FMakeHumanJiggleNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePose
 	const FTransform Component = Output.AnimInstanceProxy->GetComponentTransform();
 	const FBoneContainer& Bones = Output.Pose.GetPose().GetBoneContainer();
 	// Small steps keep the spring steady at low frame rates.
+	if (!bEnabled)
+	{
+		for (FBody& Body : Bodies)
+		{
+			Body.bStarted = false;  // starts again at rest when turned back on
+		}
+		return;
+	}
 	const float Step = FMath::Clamp(DeltaTime, 0.0f, 0.1f);
 	const int32 Steps = FMath::Max(1, FMath::CeilToInt32(Step / (1.0f / 120.0f)));
 	const float Dt = Step / Steps;
@@ -280,6 +288,11 @@ int32 UMakeHumanAnimInstance::GetPhysicsChains() const
 {
 	const FMakeHumanAnimProxy& Proxy = GetProxyOnGameThread<FMakeHumanAnimProxy>();
 	return Proxy.Dynamics.Num() + Proxy.Jiggle.Bodies.Num() + (Proxy.Tail.Bones.IsEmpty() ? 0 : 1);
+}
+
+void UMakeHumanAnimInstance::SetSoftTissueEnabled(bool bEnabled)
+{
+	GetProxyOnGameThread<FMakeHumanAnimProxy>().Jiggle.bEnabled = bEnabled;
 }
 
 float UMakeHumanAnimInstance::TakeLargestTailSwing()

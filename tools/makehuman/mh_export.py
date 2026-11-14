@@ -183,6 +183,7 @@ try:
         for o in [o for o in bpy.data.objects if o.type == "MESH" and "natural_pubic_hair" in o.name.lower()]:
             bpy.data.objects.remove(o, do_unlink=True)
         grow_pubic_hair(rig, body, layout_path=cfg.get("pubic_layout"), log=log, **cfg["pubic_grow"])
+        cfg["material_overrides"]["PubicHair"] = {"pubic": True}  # the creator's pubic hair material (density, coverage)
     # Non-human parts made for the body they go on: horns ({"length", "radius", "curl", "color"}) and a tail
     # ({"length", "radius", "bones"}).
     skin_meshes = [body]

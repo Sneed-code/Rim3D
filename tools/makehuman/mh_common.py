@@ -737,14 +737,16 @@ def _pubic_layout(rig, body, female, count, seed, log=print):
         dx = abs(p.x - cx)
         zone, u, v, density = None, 0.0, 0.0, 0.0
         if female:
-            z0, z1 = crotch + 0.022, crotch + 0.105
+            # The top edge arches: highest on the middle line, coming down to the sides (not cut straight across).
+            z0 = crotch + 0.022
+            z1 = crotch + 0.108 - 0.022 * (min(dx, 0.065) / 0.065) ** 2
             if z0 <= p.z <= z1 and n.y < -0.25:
                 v = (p.z - z0) / (z1 - z0)
                 half = 0.011 + 0.052 * v ** 0.75
                 if dx < half:
                     zone, u = "mons", dx / half
                     density = 1.0 if u < 0.7 else (1.0 - u) / 0.3
-                    density *= 1.0 if v < 0.85 else 0.4 + 0.6 * (1.0 - v) / 0.15
+                    density *= 1.0 if v < 0.75 else 0.25 + 0.75 * (1.0 - v) / 0.25
             elif crotch + 0.004 <= p.z < z0 and 0.006 < dx < 0.02 and n.y < -0.3:
                 zone, u, v = "labia", dx / 0.02, (p.z - crotch) / (z0 - crotch) * 0.1
                 density = 0.25
@@ -758,8 +760,6 @@ def _pubic_layout(rig, body, female, count, seed, log=print):
                     zone, u = "pubis", dx / half
                     density = 1.0 if u < 0.7 else (1.0 - u) / 0.3
                     density *= 1.0 if v < 0.8 else 0.35 + 0.65 * (1.0 - v) / 0.2
-            elif not touching and z1 < p.z < root_z + 0.17 and dx < 0.013 and n.y < -0.3:
-                zone, u, v, density = "trail", dx / 0.013, 1.0, 0.35 * (1.0 - (p.z - z1) / 0.085)
             elif touching and p.z < root_z - 0.045:
                 zone, u, v, density = "scrotum", 0.0, 0.0, 0.12
         if zone and density > 0.0:
@@ -779,14 +779,18 @@ def _pubic_layout(rig, body, female, count, seed, log=print):
         s1, s2 = rnd.random(), rnd.random()
         if s1 + s2 > 1.0:
             s1, s2 = 1.0 - s1, 1.0 - s2
-        length = rnd.uniform(0.75, 1.25) * (0.6 if t[4] in ("scrotum", "labia") else 1.0) * (0.7 if t[4] == "trail" else 1.0)
-        layout.append([list(t[0]), [1.0 - s1 - s2, s1, s2], t[2], t[3], length, rnd.uniform(0.0, 6.283), rnd.choice((-1, 1)), t[4]])
+        length = rnd.uniform(0.75, 1.25) * (0.6 if t[4] in ("scrotum", "labia") else 1.0)
+        # For the creator's live sliders: a random number (density keeps the hairs under it) and how far out the hair
+        # is (coverage keeps the hairs inside it: the edges and the top go first, the labia and scrotum early).
+        edge = 0.9 if t[4] in ("scrotum", "labia") else min(1.0, max(t[2], t[3] ** 1.3) * rnd.uniform(0.9, 1.05))
+        layout.append([list(t[0]), [1.0 - s1 - s2, s1, s2], t[2], t[3], length, rnd.uniform(0.0, 6.283), rnd.choice((-1, 1)), t[4],
+                       rnd.random(), edge])
     log("pubic layout", len(layout), "hairs over", len(tris), "triangles")
     return layout
 
 
 def grow_pubic_hair(rig, body, female=True, layout_path=None, count=3000, style="natural", length=0.018, width=0.0006,
-                    color=(0.03, 0.025, 0.022), seed=7, log=print):
+                    color=(0.03, 0.025, 0.022), seed=7, curl=1.0, trim=1.0, log=print):
     """Pubic hair as hairs growing out of the skin, for any body: each a thin tapered curly ribbon rooted on the skin,
     lying down and in towards the middle line as they grow, weighted like the skin at its root (so it moves with the
     body, the genitals' jiggle included). The female shape is the mons, an inverted triangle down to the top of the
@@ -814,7 +818,9 @@ def grow_pubic_hair(rig, body, female=True, layout_path=None, count=3000, style=
     groups = {g.index: g.name for g in body.vertex_groups if g.name in deform}
     segments = 5
     verts, faces, weights = [], [], []
-    for tri, bary, u, v, factor, phase, spin, zone in layout:
+    hair_uv = []
+    for tri, bary, u, v, factor, phase, spin, zone, rand, edge in layout:
+        hair_uv.append((rand, edge))
         keep = True
         shrink = 1.0
         if style == "none":
@@ -832,7 +838,7 @@ def grow_pubic_hair(rig, body, female=True, layout_path=None, count=3000, style=
         side = Vector(((cx - root.x), 0.0, 0.0))
         side = side - n * side.dot(n)
         tangent = (tangent.normalized() * 0.8 + (side.normalized() * 0.35 if side.length > 1e-5 else Vector())).normalized()
-        L = length * factor * shrink * (0.85 if not female else 1.0) * (1.25 if (not female and zone == "pubis") else 1.0)
+        L = length * factor * shrink * trim * (0.85 if not female else 1.0) * (1.25 if (not female and zone == "pubis") else 1.0)
         if not keep:
             L = 0.0004
             root = root - n * 0.004   # folded away under the skin
@@ -841,8 +847,7 @@ def grow_pubic_hair(rig, body, female=True, layout_path=None, count=3000, style=
         d = (n * 0.55 + tangent * 0.45).normalized()
         step = L / segments
         for k in range(segments):
-            curl = Quaternion(d.cross(n).normalized() if d.cross(n).length > 1e-6 else Vector((1, 0, 0)), 0.0)
-            twist = Quaternion(n, spin * (0.9 + 0.5 * math.sin(phase + k * 1.7)))
+            twist = Quaternion(n, spin * (0.9 + 0.5 * math.sin(phase + k * 1.7)) * curl)   # curl 0: straight
             d = (twist @ d)
             d = (d * 0.6 + tangent * 0.4 - n * 0.08 * k).normalized()   # bends down onto the skin
             pts_h.append(pts_h[-1] + d * step)
@@ -870,9 +875,10 @@ def grow_pubic_hair(rig, body, female=True, layout_path=None, count=3000, style=
     mesh.from_pydata([tuple(p) for p in verts], [], faces)
     mesh.update()
     uv = mesh.uv_layers.new(name="UVMap")
+    per_hair = (segments + 1) * 2
     for poly in mesh.polygons:
         for li in poly.loop_indices:
-            uv.data[li].uv = (0.5, 0.5)
+            uv.data[li].uv = hair_uv[mesh.loops[li].vertex_index // per_hair]   # the material's density and coverage
     obj = bpy.data.objects.new("PubicHair", mesh)
     bpy.context.scene.collection.objects.link(obj)
     # In the rig's space, like the other generated parts.

@@ -33,6 +33,7 @@ struct FMakeHumanJiggleNode : public FAnimNode_SkeletalControlBase
 	TArray<FBody> Bodies;
 	float DeltaTime = 0.0f;
 	float LargestOffset = 0.0f;  // cm, since the last read (tests)
+	bool bEnabled = true;        // off: the soft parts stay as animated (the creator's "keep still")
 
 	virtual void UpdateInternal(const FAnimationUpdateContext& Context) override;
 	virtual void EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms) override;
@@ -108,6 +109,8 @@ public:
 	float TakeLargestJiggle();
 	/** The largest tail swing at the tip (degrees) since the last call, for the tests; 0 without a tail. */
 	float TakeLargestTailSwing();
+	/** Soft-tissue jiggle on or off (on by default). Off, breasts, buttocks and genitals stay as animated. */
+	void SetSoftTissueEnabled(bool bEnabled);
 
 protected:
 	virtual FAnimInstanceProxy* CreateAnimInstanceProxy() override;

@@ -349,6 +349,64 @@ namespace
 
 	// Plain lit and masked materials for models that bring their own textures (local comparison models): colour,
 	// normal and (masked) opacity maps, roughness a value; the skin variant is subsurface skin.
+	// The grown pubic hair (mh_common.grow_pubic_hair): one colour (Tint, the creator's hair colour), two-sided, and cut
+	// out hair by hair by the pawn's pubic density and coverage (custom primitive data 4 and 5, 0 to 1): each hair carries
+	// a random number in its texture U (kept while under the density) and how far out it grows in V (kept while inside
+	// the coverage), so thinning is even and coverage shrinks from the edges and the top.
+	UMaterial* MhPubicMaterial(IAssetTools& Tools)
+	{
+		const FString Name = TEXT("M_MH_PubicHair");
+		const FString Path = MakeHumanAssetPath(MakeHumanFolder, Name);
+		if (UMaterial* Existing = FindObject<UMaterial>(nullptr, *Path))
+		{
+			return Existing;
+		}
+		UMaterial* Material = Cast<UMaterial>(Tools.CreateAsset(Name, MakeHumanFolder, UMaterial::StaticClass(), NewObject<UMaterialFactoryNew>()));
+		if (!Material)
+		{
+			return nullptr;
+		}
+		bool bRecompile = false;
+		UMaterialEditingLibrary::SetMaterialUsage(Material, MATUSAGE_SkeletalMesh, bRecompile);
+		UMaterialEditingLibrary::SetMaterialUsage(Material, MATUSAGE_MorphTargets, bRecompile);
+		Material->BlendMode = BLEND_Masked;
+		Material->TwoSided = true;
+		auto* Tint = Cast<UMaterialExpressionVectorParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionVectorParameter::StaticClass(), -600, -300));
+		Tint->ParameterName = TEXT("Tint");
+		Tint->DefaultValue = FLinearColor(0.03f, 0.025f, 0.022f);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Tint, TEXT("RGB"), MP_BaseColor);
+		auto* Rough = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -600, -150));
+		Rough->ParameterName = TEXT("Roughness");
+		Rough->DefaultValue = 0.6f;
+		UMaterialEditingLibrary::ConnectMaterialProperty(Rough, TEXT(""), MP_Roughness);
+		auto* Coord = Cast<UMaterialExpressionTextureCoordinate>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureCoordinate::StaticClass(), -900, 100));
+		auto* Density = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -900, 200));
+		Density->ParameterName = TEXT("PubicDensity");
+		Density->DefaultValue = 1.0f;
+		Density->bUseCustomPrimitiveData = true;
+		Density->PrimitiveDataIndex = 4;
+		auto* Coverage = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -900, 300));
+		Coverage->ParameterName = TEXT("PubicCoverage");
+		Coverage->DefaultValue = 1.0f;
+		Coverage->bUseCustomPrimitiveData = true;
+		Coverage->PrimitiveDataIndex = 5;
+		auto* Cut = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -500, 150));
+		Cut->OutputType = CMOT_Float1;
+		Cut->Description = TEXT("PubicCut");
+		Cut->Code = TEXT("return (UV.x < Density && UV.y <= Coverage) ? 1.0 : 0.0;");
+		Cut->Inputs.SetNum(3);
+		Cut->Inputs[0].InputName = TEXT("UV");
+		Cut->Inputs[1].InputName = TEXT("Density");
+		Cut->Inputs[2].InputName = TEXT("Coverage");
+		Cut->Inputs[0].Input.Connect(0, Coord);
+		Cut->Inputs[1].Input.Connect(0, Density);
+		Cut->Inputs[2].Input.Connect(0, Coverage);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Cut, TEXT(""), MP_OpacityMask);
+		Material->PostEditChange();
+		MhSave(Material);
+		return Material;
+	}
+
 	UMaterial* MhBaseMaterial(IAssetTools& Tools, const FString& Name, bool bMasked, bool bSkin, bool bAlphaFromColor = false)
 	{
 		const FString Path = MakeHumanAssetPath(MakeHumanFolder, Name);
@@ -640,7 +698,9 @@ namespace
 					}
 				}
 				const bool bMasked = !Opacity.IsEmpty() || bAlpha;
-				UMaterial* Base = MhBaseMaterial(Tools, !bMasked ? (bSkin ? TEXT("M_MH_Skin") : TEXT("M_MH_Lit")) : (Opacity.IsEmpty() ? TEXT("M_MH_MaskedA") : TEXT("M_MH_Masked")),
+				bool bPubic = false;
+				(*Entry)->TryGetBoolField(TEXT("pubic"), bPubic);
+				UMaterial* Base = bPubic ? MhPubicMaterial(Tools) : MhBaseMaterial(Tools, !bMasked ? (bSkin ? TEXT("M_MH_Skin") : TEXT("M_MH_Lit")) : (Opacity.IsEmpty() ? TEXT("M_MH_MaskedA") : TEXT("M_MH_Masked")),
 					bMasked, bSkin, Opacity.IsEmpty() && bAlpha);
 				auto* Factory = NewObject<UMaterialInstanceConstantFactoryNew>();
 				Factory->InitialParent = Base;

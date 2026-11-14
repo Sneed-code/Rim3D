@@ -82,7 +82,7 @@
         "pubic_grow": {
           "female": true,
           "count": 3000,
-          "style": "natural"
+          "curl": 1.0
         }
       },
       "morphs": {
@@ -205,32 +205,26 @@
             "radius": 0.001
           }
         },
-        "PubicNone": {
-          "pubic_grow": {
-            "female": true,
-            "count": 3000,
-            "style": "none"
-          }
-        },
-        "PubicTrimmed": {
-          "pubic_grow": {
-            "female": true,
-            "count": 3000,
-            "style": "trimmed"
-          }
-        },
-        "PubicStrip": {
-          "pubic_grow": {
-            "female": true,
-            "count": 3000,
-            "style": "strip"
-          }
-        },
         "GenitalLarge": {
           "labia": 0.008
         },
         "GenitalSmall": {
           "labia": -0.003
+        },
+        "PubicStraight": {
+          "pubic_grow": {
+            "female": true,
+            "count": 3000,
+            "curl": 0.12
+          }
+        },
+        "PubicShort": {
+          "pubic_grow": {
+            "female": true,
+            "count": 3000,
+            "curl": 1.0,
+            "trim": 0.35
+          }
         }
       }
     },
@@ -310,7 +304,7 @@
         "pubic_grow": {
           "female": false,
           "count": 3000,
-          "style": "natural"
+          "curl": 1.0
         }
       },
       "morphs": {
@@ -423,27 +417,6 @@
             "radius": 0.001
           }
         },
-        "PubicNone": {
-          "pubic_grow": {
-            "female": false,
-            "count": 3000,
-            "style": "none"
-          }
-        },
-        "PubicTrimmed": {
-          "pubic_grow": {
-            "female": false,
-            "count": 3000,
-            "style": "trimmed"
-          }
-        },
-        "PubicStrip": {
-          "pubic_grow": {
-            "female": false,
-            "count": 3000,
-            "style": "strip"
-          }
-        },
         "GenitalLarge": {
           "targets": {
             "penis-length-incr": 0.3,
@@ -456,6 +429,21 @@
             "penis-length-decr": 0.6,
             "penis-circ-decr": 0.4,
             "penis-testicles-decr": 0.4
+          }
+        },
+        "PubicStraight": {
+          "pubic_grow": {
+            "female": false,
+            "count": 3000,
+            "curl": 0.12
+          }
+        },
+        "PubicShort": {
+          "pubic_grow": {
+            "female": false,
+            "count": 3000,
+            "curl": 1.0,
+            "trim": 0.35
           }
         }
       }
