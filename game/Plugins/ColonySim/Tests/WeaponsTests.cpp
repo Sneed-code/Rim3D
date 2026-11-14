@@ -277,7 +277,7 @@ TEST_CASE("Weapons: everything carried is dropped, stripped or lost with the paw
     CHECK(guns == 2);
 }
 
-TEST_CASE("Weapons: weapons on the body add to the load, slow the walk and cut what the hands can haul") {
+TEST_CASE("Weapons: weapons on the body add to the load and cut what the hands can haul") {
     auto sim = weapSim();
     const Entity light = weapArmed(*sim, 30.5f, 30.5f, {"Gun_BoltActionRifle"});
     const Entity heavy = weapArmed(*sim, 34.5f, 30.5f, {"Gun_BoltActionRifle", "Gun_Revolver", "Melee_BreachAxe"});
@@ -286,8 +286,11 @@ TEST_CASE("Weapons: weapons on the body add to the load, slow the walk and cut w
     const double mass = sim->jobs().bodyWeaponMass(heavy);
     CHECK(mass == doctest::Approx(1.4 + 2.5));
     CHECK(sim->jobs().loadSpeedFactor(light) == doctest::Approx(1.0f));
+    // Everything carried is in the load; a few kg of weapons stay inside the free fifth of the 50 kg (CarryRules
+    // `freeFraction`), so they don't slow the walk yet (docs/design/inventory.md).
+    CHECK(sim->jobs().loadMass(heavy) - sim->jobs().loadMass(light) == doctest::Approx(1.4 + 2.5));
     const float factor = sim->jobs().loadSpeedFactor(heavy);
-    CHECK(factor < 1.0f);
+    CHECK(factor <= 1.0f);
     CHECK(factor > 0.7f);
     CHECK(sim->jobs().carryLimit(heavy, steel) <= sim->jobs().carryLimit(light, steel));
     CHECK(sim->jobs().carryLimit(heavy, steel) >= 1);

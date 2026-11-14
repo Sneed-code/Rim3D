@@ -519,6 +519,7 @@ private:
     // Transport pods (PodArrivals.cpp): PodCommand, and landing the flights that came down this step.
     void applyPodCommand(const PodCommand& command, uint64_t id);
     void applyScannerCommand(const ScannerCommand& command, uint64_t id);
+    void applyInventoryCommand(const InventoryCommand& command, uint64_t id);  // Inventory.cpp
     bool launchPods(const PodCommand& command, std::string& error);
     void landPods();
     void landFlight(PodFlight& flight);

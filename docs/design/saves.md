@@ -145,6 +145,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `levels` | 1 | the upper floors, by level then row; put back before the buildings on them (M1) |
 | `medicine` | 2 | `medical`: the medical care setting of each pawn that has one (H1, [medicine.md](medicine.md)); version 2: `operations`, the operations planned on a patient (H3, [surgery.md](surgery.md)) |
 | `weapons` | 1 | `stowed` (the weapons a pawn carries on its body besides the one in its hands) and `switch` (a weapon switch under way) ([weapons.md](weapons.md)) |
+| `inventory` | 1 | `bag`: the items in each pawn's bag (`Gear::inventory`, [inventory.md](inventory.md)); older saves load with empty bags |
 | `weather` | 1 | the current and previous weather by `defName`, when it began and ends, its random stream, the snow depth of each cell with snow ([weather.md](weather.md)) |
 | `narrator` | 1 | the narrator and difficulty by `defName`, its random stream, the threat cycle's start and planned threats, when each incident last happened, the count, the last wealth and points ([narrator.md](narrator.md), T1) |
 | `breeding` | 1 | the counters, then `breed` (an animal's pregnancy, mating wait, milk, wool and egg timers, the female a male is courting) and `hatching` (a fertilized egg's hatch time) ([breeding.md](breeding.md), N4) |

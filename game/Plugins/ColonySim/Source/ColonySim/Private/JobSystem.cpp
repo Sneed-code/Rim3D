@@ -26,6 +26,7 @@
 #include "ColonySim/Sim.h"
 #include "ColonySim/Talents.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Traits.h"
 #include "ColonySim/TransportPods.h"
 
 #include <algorithm>
@@ -484,6 +485,7 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
     defaultPriority_ = static_cast<uint8_t>(std::clamp(
         static_cast<int>(rules ? rules->integer("defaultWorkPriority", kDefaultPriority) : kDefaultPriority), 1, kMaxPriority));
     loadGatherRules();
+    loadCarryRules();
 }
 
 JobSystem::~JobSystem() = default;
@@ -767,15 +769,104 @@ int JobSystem::stackLimit(DefId def) const {
     return def.valid() && def.value < stackLimits_.size() ? stackLimits_[def.value] : 1;
 }
 
+// CarryRules (docs/design/inventory.md). The `lighter` entries name which items a skill makes lighter:
+// "mined" is what a mineable drops or a deep drill brings up, "grown" what a plant is harvested for, "all" everything.
+void JobSystem::loadCarryRules() {
+    const Def* rules = defs_.find("Rules", "CarryRules");
+    if (rules == nullptr) {
+        return;
+    }
+    carry_.present = true;
+    carry_.protagonistFactor = std::max(0.0, rules->number("protagonistFactor", carry_.protagonistFactor));
+    carry_.freeFraction = std::clamp(rules->number("freeFraction", carry_.freeFraction), 0.0, 0.95);
+    carry_.overloadSlowdown = std::max(0.0, rules->number("overloadSlowdown", carry_.overloadSlowdown));
+    carry_.overloadMinFactor = std::clamp(rules->number("overloadMinFactor", carry_.overloadMinFactor), 0.01, 1.0);
+    carry_.minFactor = std::clamp(rules->number("minFactor", carry_.minFactor), 0.01, 1.0);
+    for (const std::string& trait : rules->keys("traitKg")) {
+        carry_.traitKg.emplace_back(trait, rules->number(("traitKg." + trait).c_str(), 0.0));
+    }
+    std::vector<uint8_t> mined(defs_.size(), 0);
+    std::vector<uint8_t> grown(defs_.size(), 0);
+    for (uint32_t i = 0; i < defs_.size(); ++i) {
+        const Def& def = defs_.get(DefId{i});
+        if (def.kind() != "Things") {
+            continue;
+        }
+        const auto mark = [&](std::vector<uint8_t>& set, const std::string& name) {
+            const DefId item = name.empty() ? DefId{} : defs_.idOf("Things", name);
+            if (item.valid() && item.value < set.size()) {
+                set[item.value] = 1;
+            }
+        };
+        mark(mined, def.text("mineable.dropDef"));
+        mark(grown, def.text("plant.harvestedThingDef"));
+        if (def.has("deep")) {
+            mined[i] = 1;
+        }
+    }
+    for (const std::string& skill : rules->keys("lighter")) {
+        CarryRules::Lighter lighter;
+        lighter.skill = skill;
+        const std::string base = "lighter." + skill + ".";
+        lighter.perLevel = std::clamp(rules->number((base + "perLevel").c_str(), 0.0), 0.0, 1.0);
+        lighter.maxLevel = static_cast<int>(rules->integer((base + "maxLevel").c_str(), 20));
+        const std::string items = rules->text((base + "items").c_str(), "all");
+        if (items == "mined") {
+            lighter.applies = mined;
+        } else if (items == "grown") {
+            lighter.applies = grown;
+        }
+        carry_.lighter.push_back(std::move(lighter));
+    }
+}
+
 double JobSystem::carryCapacity(Entity pawn) const {
-    const Thing* thing = things_.registry().try_get<Thing>(pawn);
-    const double capacity =
+    const entt::registry& reg = things_.registry();
+    const Thing* thing = reg.valid(pawn) ? reg.try_get<Thing>(pawn) : nullptr;
+    double capacity =
         thing ? defs_.get(thing->def).number("stats.carryingCapacity", kJobsCarryingCapacity) : kJobsCarryingCapacity;
+    if (carry_.present && thing != nullptr) {
+        const Colonist* colonist = reg.try_get<Colonist>(pawn);
+        if (colonist != nullptr && colonist->protagonist) {
+            capacity *= carry_.protagonistFactor;
+        }
+        if (traits_ != nullptr) {
+            for (const auto& [trait, kg] : carry_.traitKg) {
+                capacity += traits_->has(pawn, trait.c_str()) ? kg : 0.0;
+            }
+        }
+    }
     return talents_ != nullptr ? capacity * talents_->statFactor(pawn, "carryCapacity") : capacity;
 }
 
 double JobSystem::massOf(DefId def) const {
     return def.valid() && def.value < masses_.size() ? masses_[def.value] : 1.0;
+}
+
+double JobSystem::lighterFactor(Entity pawn, DefId def) const {
+    if (carry_.lighter.empty() || !things_.registry().valid(pawn) || !things_.registry().all_of<Colonist>(pawn)) {
+        return 1.0;
+    }
+    double factor = 1.0;
+    for (const CarryRules::Lighter& lighter : carry_.lighter) {
+        if (!lighter.applies.empty() && (!def.valid() || def.value >= lighter.applies.size() || lighter.applies[def.value] == 0)) {
+            continue;
+        }
+        const int level = std::clamp(skillLevel(pawn, lighter.skill.c_str()), 0, std::max(0, lighter.maxLevel));
+        factor *= std::max(0.0, 1.0 - lighter.perLevel * level);
+    }
+    return std::max(carry_.minFactor, factor);
+}
+
+double JobSystem::massFor(Entity pawn, DefId def) const { return massOf(def) * lighterFactor(pawn, def); }
+
+double JobSystem::itemMassFor(Entity pawn, Entity item) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(item) || !reg.all_of<Thing>(item)) {
+        return 0.0;
+    }
+    const StackCount* stack = reg.try_get<StackCount>(item);
+    return massFor(pawn, reg.get<Thing>(item).def) * (stack != nullptr ? stack->count : 1);
 }
 
 // The mass of the weapons a pawn carries on its body besides the one in its hands (P1). They take
@@ -786,31 +877,66 @@ double JobSystem::bodyWeaponMass(Entity pawn) const {
     double mass = 0.0;
     if (gear != nullptr) {
         for (const Entity item : gear->stowed) {
-            mass += reg.valid(item) && reg.all_of<Thing>(item) ? massOf(reg.get<Thing>(item).def) : 0.0;
+            mass += reg.valid(item) && reg.all_of<Thing>(item) ? massFor(pawn, reg.get<Thing>(item).def) : 0.0;
         }
     }
     return mass;
 }
 
-// The mass of the pawn's hands: its capacity less the weapons on its body decides how many fit, whole stacks or not.
+double JobSystem::gearMass(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    double mass = bodyWeaponMass(pawn);
+    const Gear* gear = reg.valid(pawn) ? reg.try_get<Gear>(pawn) : nullptr;
+    if (gear == nullptr) {
+        return mass;
+    }
+    for (const Entity item : gear->inventory) {
+        mass += itemMassFor(pawn, item);
+    }
+    if (carry_.present) {
+        mass += gear->weapon != kNoEntity ? itemMassFor(pawn, gear->weapon) : 0.0;
+        for (const Entity item : gear->apparel) {
+            mass += itemMassFor(pawn, item);
+        }
+    }
+    return mass;
+}
+
+double JobSystem::loadMass(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    double mass = gearMass(pawn);
+    const Carrying* carrying = reg.valid(pawn) ? reg.try_get<Carrying>(pawn) : nullptr;
+    if (carrying != nullptr) {
+        mass += itemMassFor(pawn, carrying->thing);
+    }
+    return mass;
+}
+
+// What the pawn's hands can take: its capacity less everything else it carries decides how many fit, whole stacks or not.
 int JobSystem::carryLimit(Entity pawn, DefId def) const {
-    const double mass = std::max(massOf(def), 1e-6);
-    const double room = std::max(carryCapacity(pawn) - bodyWeaponMass(pawn), 0.0);
+    const double mass = std::max(massFor(pawn, def), 1e-6);
+    const double room = std::max(carryCapacity(pawn) - gearMass(pawn), 0.0);
     return std::max(1, static_cast<int>(std::floor(room / mass + 1e-9)));
 }
 
 float JobSystem::loadSpeedFactor(Entity pawn) const {
-    const entt::registry& reg = things_.registry();
-    double mass = bodyWeaponMass(pawn);
-    const Carrying* carrying = reg.try_get<Carrying>(pawn);
-    if (carrying != nullptr && reg.valid(carrying->thing) && reg.all_of<StackCount, Thing>(carrying->thing)) {
-        mass += reg.get<StackCount>(carrying->thing).count * massOf(reg.get<Thing>(carrying->thing).def);
-    }
+    const double mass = loadMass(pawn);
     if (mass <= 0.0) {
         return 1.0f;
     }
-    const double fraction = std::clamp(mass / std::max(carryCapacity(pawn), 1e-6), 0.0, 1.0);
-    return static_cast<float>(1.0 - carrySlowdown_ * fraction);
+    const double fraction = mass / std::max(carryCapacity(pawn), 1e-6);
+    if (fraction <= carry_.freeFraction) {
+        return 1.0f;
+    }
+    if (fraction <= 1.0) {
+        return static_cast<float>(1.0 - carrySlowdown_ * (fraction - carry_.freeFraction) / (1.0 - carry_.freeFraction));
+    }
+    if (!carry_.present) {
+        return static_cast<float>(1.0 - carrySlowdown_);  // RimWorld's hauling never goes past a full load
+    }
+    // Overloaded (a wound, a lost trait): slower still, but never stuck.
+    return static_cast<float>(
+        std::max(carry_.overloadMinFactor, 1.0 - carrySlowdown_ - carry_.overloadSlowdown * (fraction - 1.0)));
 }
 
 // Stacks of the same def lying right beside the pawn that would be hauled to the same zone anyway
@@ -1358,8 +1484,24 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return walkTo(pawn, job, cellOf(things_.registry().get<Position>(job.thing)), why);
         case JobStepKind::PickUp:
             return pickUp(pawn, job, why);
-        case JobStepKind::CarryToCell:
-            return walkTo(pawn, job, job.cell, why);
+        case JobStepKind::CarryToCell: {
+            const StepResult walked = walkTo(pawn, job, job.cell, why);
+            if (walked == StepResult::Failed && job.type == JobType::DeliverResources && job.repaths < maxRepaths_) {
+                // The cell beside the plan may have been walled in since the job began: try another side.
+                const entt::registry& reg = things_.registry();
+                const ConstructionSite* site = reg.valid(job.site) ? reg.try_get<ConstructionSite>(job.site) : nullptr;
+                CellPos stand;
+                if (site != nullptr && construction_.workCell(site->rect(), cellOf(reg.get<Position>(pawn)), stand) &&
+                    !(stand == job.cell)) {
+                    job.cell = stand;
+                    job.walk = 0;
+                    ++job.repaths;
+                    why.clear();
+                    return StepResult::Running;
+                }
+            }
+            return walked;
+        }
         case JobStepKind::Place:
             return place(pawn, job, why);
         case JobStepKind::WalkToSpot:

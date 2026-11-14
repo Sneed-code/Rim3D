@@ -252,6 +252,12 @@ struct ThingView {
     bool markedForStrip = false;
     uint32_t firstApparel = 0;
     uint32_t apparelCount = 0;
+    // Inventory and carry weight (docs/design/inventory.md). Pawns: what they carry in kg (worn, weapons, bag,
+    // hauled stack) and what they can carry, and their bag: `inventoryCount` items from Snapshot::inventory[firstInventory].
+    float loadKg = 0.0f;
+    float capacityKg = 0.0f;
+    uint32_t firstInventory = 0;
+    uint32_t inventoryCount = 0;
     int quality = -1;
     bool tainted = false;
     // Repair and upgrades (docs/design/repair.md). Apparel and weapons on the map: whether a colonist is to repair them.
@@ -281,6 +287,14 @@ struct ApparelView {
     float hitPointShare = 1.0f;  // 0 to 1
     float durability = 1.0f;     // 0 to 1, capped by hitPointShare; 0 is tattered (docs/design/apparel-durability.md)
     bool tainted = false;
+};
+
+// One item in a pawn's bag (docs/design/inventory.md).
+struct InventoryItemView {
+    Entity item = kNoEntity;
+    DefId def;
+    int count = 1;
+    float massKg = 0.0f;  // the whole stack, as heavy as it is for this pawn (its skills make some things lighter)
 };
 
 // An outfit policy by the id the commands use.
@@ -710,6 +724,7 @@ struct Snapshot {
     std::vector<GoodwillView> goodwill;    // every faction's goodwill with the colony
     std::vector<QuestView> quests;         // offered, active and recently finished quests, by id
     std::vector<ApparelView> apparel;      // worn apparel, see ThingView
+    std::vector<InventoryItemView> inventory;  // pawns' bags, see ThingView
     std::vector<DefId> fittedParts;        // upgrade parts fitted to guns, see ThingView
     std::vector<OutfitView> outfits;       // the outfit policies, by id
     WeatherView weather;

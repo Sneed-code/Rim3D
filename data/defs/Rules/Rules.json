@@ -211,6 +211,21 @@
     "ours": ["mining.rockTypesPerMap", "mining.orePerTenThousandRockCells", "unskilledSkillLevel", "plants.skillCurve"]
   },
   {
+    "defName": "CarryRules", "source": "Rim3D (sneed 2026-11-14), docs/design/inventory.md",
+    "protagonistFactor": 2.0,
+    "traitKg": { "Tough": 15, "Brawler": 10 },
+    "lighter": {
+      "Mining": { "perLevel": 0.025, "items": "mined" },
+      "Plants": { "perLevel": 0.025, "items": "grown" },
+      "Melee": { "perLevel": 0.01, "items": "all" }
+    },
+    "minFactor": 0.3,
+    "freeFraction": 0.2,
+    "overloadSlowdown": 1.0,
+    "overloadMinFactor": 0.2,
+    "ours": ["protagonistFactor", "traitKg", "lighter", "minFactor", "freeFraction", "overloadSlowdown", "overloadMinFactor"]
+  },
+  {
     "defName": "LooksRules", "source": "Rim3D",
     "comment": "How pawns look; only the drawing reads it (docs/design/looks.md).",
     "bodyTypeWeights": { "Thin": 25, "Average": 55, "Fat": 12, "Hulk": 8 },
