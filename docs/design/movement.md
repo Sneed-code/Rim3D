@@ -82,7 +82,9 @@ For one pawn:
    a storeroom going up round them pushed each other along its wall, each got a little way now and then, and neither
    reached the 300 for 388 game minutes.
    **Downed pawns and corpses** (still, with no Moving) are not steered round: walkers step over them, as in
-   RimWorld. Three downed in a doorway held a doctor for 637 game minutes.
+   RimWorld. Three downed in a doorway held a doctor for 637 game minutes. So are pawns lying down to sleep
+   (`jobIsLyingDown`): one asleep in a doorway held a colonist on its way to eat for 90 minutes. A pawn that
+   sleeps on the ground in a doorway lies down in the free cell beside it instead (`makeSleepJob`).
 6. **Holding still.** The job system sets `Mover::hold` every step for a pawn at a job step it does
    standing still (building, deconstructing, mining, cutting, cooking, eating, sleeping). A held pawn
    stays exactly where it is, nobody pushes it, and others steer round it. Without it a pawn walking

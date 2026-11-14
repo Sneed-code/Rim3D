@@ -54,6 +54,20 @@ The game design doc's rule: **the closest real threat; the downed only when noth
 An attack order wins. Otherwise, among the known enemies: able before downed, seen this step before
 only remembered, then the nearest by where it was last seen.
 
+"Nothing else left" means nobody of the downed one's side still standing anywhere on the map, seen or not
+(C25): raiders used to finish a downed colonist while another fought on out of their sight, so every colonist
+downed in the year run's small raids died. RimWorld's raiders never shoot the downed; ours do once the whole
+side is down.
+
+**Focus fire** (colonists only, C25): an able enemy within the colonist's gun range counts `focusMetres`
+(8 m, ours) nearer for each friend already shooting it, itself included (so two colonists on two raiders
+don't swap every plan). Three colonists facing two raiders all shoot the same one, as a player would order.
+
+**A defender with a club waits** (C25): a fighter the alarm called up (`defending`) that would charge in
+melee doesn't run at an enemy with a gun until it is within `ambushRange` (6 m, ours); until then it
+scores cover like a gunman with no range to get into. A drafted pawn or an attack order still charges. In the
+year run a colonist with a club ran 10 m across open ground at two shotgun raiders and was shot on the way.
+
 ## Where to stand
 
 The plan scores every cell within 10 m (`searchRadius`) that the pawn can reach, stand on and isn't
@@ -126,7 +140,9 @@ Every step, for each fighter in id order (after the job system, before movement)
 5. At the spot with a target it can shoot, a ready gun and its reaction time over (F5): step to the fire cell if that is the cell
    beside (a one-cell straight step), take the fire stance, check it still sees the target, that
    it is in range and that the shot's line clears the ground, and give the aimed `shoot` order (F2's warm-up, spread
-   and burst follow).
+   and burst follow). Sight and the ground are checked from the middle of the cell, as the plan checked them: from
+   where the pawn happened to stand in its cell a steep slope hid what the middle saw, plan and check disagreed for
+   good, and a colonist 6 m below a raider held its fire for ten minutes with a shot planned every plan (C25).
 6. Between shots: back to the spot if it stepped out (unless the gun is ready again within 20 steps,
    `stepBackBelow`), and crouch. A fighter that knows no enemy stands. With no shot to take it tops up
    its magazine (F5): below half with enemies about, any time it is not full when none are.
@@ -173,6 +189,9 @@ steps as cover.md says.
 - Over a low crest 4.5 m in front (1.03 m high) a fighter stands up to shoot: crouched, 12 of 13 shots went into the
   crest; standing, none do.
 - Target choice: the closest able enemy; the downed one only when nobody else is left; an attack order wins.
+- A raider spares a downed colonist while another colonist stands, even one over 60 m off it can't see.
+- Three colonists against two raiders all shoot the same one (focus fire).
+- A defending colonist with a club stays over 6 m from a shotgun raider; drafted, it charges.
 - One raider against three colonists falls back (13 m in the test); one against one holds.
 - A move order takes a drafted pawn across the map and it holds within 2 m.
 - Three against three among sandbags and walls: saving and loading mid-fight changes nothing, and

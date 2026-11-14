@@ -377,6 +377,7 @@ TEST_CASE("Fighters: a firefight is the same after a save and load, and stays in
     int downed = 0;
     int shots = 0;
     int pawnHits = 0;
+    int coverHits = 0;
     const auto start = std::chrono::steady_clock::now();
     for (int i = 0; i < 1800; ++i) {
         straight->step();
@@ -394,6 +395,7 @@ TEST_CASE("Fighters: a firefight is the same after a save and load, and stays in
         for (const Event& e : s.events()) {
             shots += e.type == EventType::ShotFired ? 1 : 0;
             pawnHits += e.type == EventType::ProjectileHit && e.hit == ProjectileHitKind::Pawn ? 1 : 0;
+            coverHits += e.type == EventType::ProjectileHit && e.hit == ProjectileHitKind::Building ? 1 : 0;
         }
         for (const Entity p : pawns) {
             if (s.health().incapacitated(p)) {
@@ -432,7 +434,10 @@ TEST_CASE("Fighters: a firefight is the same after a save and load, and stays in
     CHECK(inPlace > 0);
     CHECK(inOpen * 10 < inPlace);  // under 10% of the waiting in the open, with cover within 10 m
     CHECK(shots >= 50);  // they fight: nobody waits for the other to show himself
-    CHECK(pawnHits >= 1);
+    // Their shots reach the other side: a pawn, or the sandbags it hides behind. Pawn hits alone are luck in one game
+    // minute behind cover (0 to 3 of about 150 shots; with focus fire all three colonists shoot one crouched raider).
+    CHECK(pawnHits + coverHits >= 10);
+    MESSAGE("cover took " << coverHits << " shots");
     MESSAGE("waiting in place " << inPlace << " pawn-steps, " << inOpen << " of them in the open; " << shots
                                 << " shots, " << pawnHits << " hit a pawn; " << downed << " of 6 down after 1800 steps; " << straight->fighters().plans() << " plans, "
                                 << straight->fighters().sightChecks() << " sight checks; " << ms / 3600.0
@@ -674,4 +679,88 @@ TEST_CASE("Fighters: over a low crest a fighter shoots from where its shots clea
     CHECK(crouchedAim == 0);  // it stands to shoot: crouched, the muzzle is below the line over the crest
     CHECK(shots >= 5);
     CHECK(intoGround * 4 <= shots);
+}
+
+TEST_CASE("Fighters: a raider spares a downed colonist while another colonist stands anywhere on the map") {
+    // Found by the year run (docs/design/colony-scenario.md): raiders shot downed colonists dead while others fought on
+    // out of their sight. The downed are a target only when nobody of their side is left standing.
+    auto sim = fightTestSim();
+    const Entity raider = fightTestPawn(*sim, 40, 40, "Gun_Revolver");
+    const Entity downed = fightTestPawn(*sim, 40, 50);
+    const Entity standing = fightTestPawn(*sim, 90, 90);  // over 60 m off: the raider can't see it
+    fightTestHostile(*sim, raider);
+    sim->step();
+    for (int i = 0; i < 200 && !sim->health().incapacitated(downed); ++i) {
+        sim->submit(DamagePawnCommand{downed, "Blunt", 4.0f, -1});
+        sim->step();
+    }
+    FIGHT_REQUIRE(sim->health().incapacitated(downed));
+    FIGHT_REQUIRE(!sim->things().registry().get<Health>(downed).dead);
+    sim->stepMany(20);  // a plan after it went down
+    bool aimedAtDowned = false;
+    for (int i = 0; i < 120; ++i) {
+        sim->step();
+        aimedAtDowned = aimedAtDowned || fightTestFighter(*sim, raider).target == downed;
+    }
+    CHECK_FALSE(aimedAtDowned);
+    sim->submit(DestroyThingCommand{standing});
+    sim->stepMany(40);
+    CHECK(fightTestFighter(*sim, raider).target == downed);
+}
+
+TEST_CASE("Fighters: colonists focus their fire on one raider") {
+    // A player drafts the colonists and points them all at one raider; the year run's colonists each shot their own
+    // nearest, and two raiders beat five (docs/design/colony-scenario.md).
+    auto sim = fightTestSim();
+    const Entity west = fightTestPawn(*sim, 34, 40, "Gun_Revolver");
+    const Entity middle = fightTestPawn(*sim, 40, 40, "Gun_Revolver");
+    const Entity east = fightTestPawn(*sim, 46, 40, "Gun_Revolver");
+    const Entity raiderWest = fightTestPawn(*sim, 30, 55, "Gun_Revolver");
+    const Entity raiderEast = fightTestPawn(*sim, 50, 55, "Gun_Revolver");
+    for (const Entity c : {west, middle, east}) {
+        fightTestDraft(*sim, c);
+    }
+    fightTestHostile(*sim, raiderWest);
+    fightTestHostile(*sim, raiderEast);
+    sim->step();
+    for (int i = 0; i < 40; ++i) {
+        for (const Entity e : {west, middle, east, raiderWest, raiderEast}) {
+            fightTestHeal(*sim, e);
+        }
+        sim->step();
+    }
+    const Entity target = fightTestFighter(*sim, west).target;
+    CHECK((target == raiderWest || target == raiderEast));
+    CHECK(fightTestFighter(*sim, middle).target == target);
+    CHECK(fightTestFighter(*sim, east).target == target);  // its own nearest is the other one
+}
+
+TEST_CASE("Fighters: a defender with a club waits in cover for a gunman to come close, then charges") {
+    // Found by the year run (docs/design/colony-scenario.md): a colonist with a club ran 10 m across open ground at two
+    // shotgun raiders and was shot down on the way.
+    const auto run = [](bool defending) {
+        auto sim = fightTestSim();
+        const Entity colonist = fightTestPawn(*sim, 40, 40, "Melee_Club");
+        const Entity raider = fightTestPawn(*sim, 40, 52, "Gun_PumpShotgun");
+        fightTestDraft(*sim, colonist);
+        fightTestHostile(*sim, raider);
+        sim->step();
+        sim->things().registry().get<Fighter>(colonist).defending = defending;  // as the alarm calls it up
+        float closest = 100.0f;
+        for (int i = 0; i < 150; ++i) {
+            fightTestHeal(*sim, colonist);
+            fightTestHeal(*sim, raider);
+            sim->things().registry().emplace_or_replace<Stunned>(raider, Stunned{5});  // the raider holds still
+            sim->step();
+            const Position& c = sim->things().registry().get<Position>(colonist);
+            const Position& r = sim->things().registry().get<Position>(raider);
+            closest = std::min(closest, std::hypot(c.x - r.x, c.y - r.y));
+        }
+        return closest;
+    };
+    const float charging = run(false);
+    const float waiting = run(true);
+    MESSAGE("drafted: came within " << charging << " m of the raider; defending: within " << waiting << " m");
+    CHECK(charging < 3.0f);
+    CHECK(waiting > 6.0f);
 }

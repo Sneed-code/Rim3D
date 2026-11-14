@@ -4,6 +4,7 @@
 #include "ColonySim/Combat.h"
 #include "ColonySim/Genes.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Jobs.h"
 #include "ColonySim/Lights.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Movement.h"
@@ -413,6 +414,13 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
                     if (o.vx == 0.0f && o.vy == 0.0f && reg.all_of<Health>(o.entity) && reg.get<Health>(o.entity).movingFactor <= 0.0f) {
                         // A downed pawn or a corpse lies on the ground and is stepped over, as in RimWorld (and so is the one a
                         // pawn carries, lying exactly where it stands). Three downed in a doorway held a doctor for 637 minutes.
+                        continue;
+                    }
+                    if (const Worker* lying = reg.try_get<Worker>(o.entity); o.vx == 0.0f && o.vy == 0.0f && lying != nullptr && jobIsLyingDown(lying->job) &&
+                        lying->job.thing == kNoEntity) {
+                        // So is one asleep on the ground (not in a bed: stepping over pawns in beds too stopped a warden recruiting
+                        // a prisoner in its bed in PrisonerTests, not looked into): one lying down in a doorway held a colonist on its way to eat for 90 minutes in the
+                        // year run (docs/design/colony-scenario.md).
                         continue;
                     }
                     n.entity = o.entity;
