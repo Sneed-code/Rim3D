@@ -213,7 +213,7 @@ TEST_CASE("Animation hooks: posture says sitting in a chair, lying in bed and ly
     job = Job{};
     job.type = JobType::Ingest;
     job.chair = chair;
-    job.step = jobStepCount(JobType::Ingest) - 1;
+    job.step = static_cast<uint8_t>(jobStepCount(JobType::Ingest) - 1);
     Snapshot snap;
     sim->writeSnapshot(snap);
     CHECK(animView(snap, pawn)->posture == PawnPosture::Sit);
