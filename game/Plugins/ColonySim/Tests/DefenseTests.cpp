@@ -204,6 +204,48 @@ TEST_CASE("Defense: a turret with no power, out of range or behind a wall does n
     }
 }
 
+TEST_CASE("Defense: a raider with a gun shoots at a turret and wears it down; one without a gun leaves it be") {
+    {
+        auto sim = defnSim();
+        // No power: the turret can't shoot back, so the raider lives to show what it does.
+        const Entity turret = sim->things().spawn("Turret_Mini", CellPos{15, 10, 0});
+        DEFN_REQUIRE(turret != kNoEntity);
+        const int full = sim->things().registry().get<HitPoints>(turret).current;
+        const Entity raider = defnHostile(*sim, 27, 10);
+        sim->combat().equip(raider, sim->things().make(sim->defs().idOf("Things", "Gun_Revolver")));
+        bool targeted = false;
+        int shots = 0;
+        for (int i = 0; i < 3000; ++i) {
+            sim->step();
+            if (!sim->things().registry().valid(turret) || sim->things().registry().get<HitPoints>(turret).current < full / 2) {
+                break;
+            }
+            const Fighter* f = sim->things().registry().try_get<Fighter>(raider);
+            targeted = targeted || (f != nullptr && f->target == turret);
+            for (const Event& e : sim->events()) {
+                shots += e.type == EventType::ShotFired && e.thing == raider ? 1 : 0;
+            }
+        }
+        CHECK(targeted);
+        CHECK(shots > 0);
+        const bool gone = !sim->things().registry().valid(turret);
+        CHECK((gone || sim->things().registry().get<HitPoints>(turret).current < full / 2));
+    }
+    {
+        auto sim = defnSim();
+        const Entity turret = sim->things().spawn("Turret_Mini", CellPos{15, 10, 0});
+        const Entity raider = defnHostile(*sim, 22, 10);  // bare hands: it can't hurt a turret
+        bool targeted = false;
+        for (int i = 0; i < 600; ++i) {
+            sim->step();
+            const Fighter* f = sim->things().registry().try_get<Fighter>(raider);
+            targeted = targeted || (f != nullptr && f->target == turret);
+        }
+        CHECK_FALSE(targeted);
+        CHECK(sim->things().registry().get<HitPoints>(turret).current == 100);
+    }
+}
+
 TEST_CASE("Defense: a switched-off turret stops mid-burst and starts again when switched on") {
     auto sim = defnSim();
     const Entity turret = defnPoweredTurret(*sim);

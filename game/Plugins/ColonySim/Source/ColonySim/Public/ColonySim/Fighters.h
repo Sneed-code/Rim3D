@@ -230,6 +230,7 @@ private:
         bool able = false;    // not downed
         bool fighter = false;
         bool animal = false;  // wild animals are nobody's enemy unless ordered or provoked (animal-life.md, N5)
+        bool turret = false;  // the colony's turret: an enemy to shoot at, never charged or carried off (fighters.md)
         Stance stance = Stance::Standing;  // as it stands now (prone when downed)
     };
     struct Candidate {
@@ -262,6 +263,9 @@ private:
     bool fireOption(Entity pawn, CellPos cell, const PawnInfo& target, float range, float tx, float ty, Candidate& c);
     bool seesFrom(CellPos cell, Stance stance, const PawnInfo& target);
     bool shotClearsGround(Entity pawn, float x, float y, int level, Stance stance, const PawnInfo& target) const;
+    bool fireAt(Entity pawn, const PawnInfo& target);
+    // Whether the fighter takes on turrets: only one with a gun that isn't set on melee.
+    bool shootsTurrets(Entity pawn) const;
     void walkToSpot(Entity pawn, Fighter& f);
     void stepTo(Entity pawn, CellPos cell);
     void stop(Entity pawn, Fighter& f);

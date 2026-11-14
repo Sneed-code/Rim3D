@@ -3,6 +3,7 @@
 #include "ColonySim/Animals.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
+#include "ColonySim/Construction.h"
 #include "ColonySim/Defense.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Explosives.h"
@@ -389,6 +390,25 @@ void FighterSystem::step() {
         p.stance = p.able ? posture.stance : Stance::Prone;
         pawns_.push_back(p);
     }
+    // The colony's turrets stand among the enemies a raider sees and shoots at, as in RimWorld; a bullet
+    // that hits one takes its hit points, and at none it is destroyed (docs/design/fighters.md "Turrets").
+    for (const auto [e, turret, thing, pos] : reg.view<const Turret, const Thing, const Position>().each()) {
+        (void)turret;
+        const HitPoints* hp = reg.try_get<HitPoints>(e);
+        if (!things_.spawned(e) || reg.all_of<ConstructionSite>(e) || (hp != nullptr && hp->current <= 0)) {
+            continue;
+        }
+        PawnInfo p;
+        p.pawn = e;
+        p.faction = kPlayerFaction;
+        p.x = pos.x;
+        p.y = pos.y;
+        p.level = pos.level;
+        p.able = true;
+        p.turret = true;
+        p.stance = Stance::Crouching;  // about a metre tall
+        pawns_.push_back(p);
+    }
     std::sort(pawns_.begin(), pawns_.end(), [](const PawnInfo& a, const PawnInfo& b) { return a.pawn < b.pawn; });
 
     incoming_.clear();
@@ -496,8 +516,9 @@ void FighterSystem::see(Entity pawn, Fighter& f, const PawnInfo& self) {
     const float range2 = sightRange * sightRange;
     const Viewpoint eye{self.x, self.y, self.level, Stance::Standing};
     size_t next = 0;  // walks f.known alongside pawns_, both in id order
+    const bool turrets = shootsTurrets(pawn);
     for (const PawnInfo& p : pawns_) {
-        if (p.faction == self.faction || p.animal || p.level != self.level) {
+        if (p.faction == self.faction || p.animal || p.level != self.level || (p.turret && !turrets)) {
             continue;
         }
         const float dx = p.x - self.x;
@@ -546,9 +567,11 @@ Entity FighterSystem::chooseTarget(Entity pawn, const Fighter& f, const PawnInfo
         }
         return n;
     };
+    // A turret is shot at, never charged: only a fighter with a gun that isn't set on melee takes one on.
+    const bool turrets = shootsTurrets(pawn);
     for (const KnownEnemy& k : f.known) {
         const PawnInfo* p = info(k.pawn);
-        if (p == nullptr) {
+        if (p == nullptr || (p->turret && !turrets)) {
             continue;
         }
         // Kidnappers (F12) carry the downed off instead of shooting them, and nobody shoots a colonist being carried off.
@@ -688,9 +711,10 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
     Threat threats[kFightMaxThreats];
     int threatCount = 0;
     int enemiesNear = 0;
+    const bool turrets = shootsTurrets(pawn);  // one that can't take a turret on keeps to its fight as before
     for (const KnownEnemy& k : f.known) {
         const PawnInfo* p = info(k.pawn);
-        if (p == nullptr || !p->able || k.level != self.level) {
+        if (p == nullptr || !p->able || k.level != self.level || (p->turret && !turrets)) {
             continue;
         }
         const Threat t{k.x, k.y, fightDist(k.x, k.y, self.x, self.y), k.pawn};
@@ -1193,7 +1217,7 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
         shown.stance = target->able ? Stance::Standing : target->stance;
         if (sees && fightDist(pos.x, pos.y, target->x, target->y) <= weaponRange(pawn) &&
             shotClearsGround(pawn, fightCentre(here.x), fightCentre(here.y), here.level, f.fireStance, shown) &&
-            combat_.shoot(pawn, f.target, 0.0f, 0.0f, 0.0f, false)) {
+            fireAt(pawn, *target)) {
             return;
         }
         f.nextPlan = std::min(f.nextPlan, now() + 1);  // the shot isn't there any more: think again
@@ -1209,6 +1233,21 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
     if (phase == ShotPhase::Ready) {
         tacticalReload(pawn, f, canShoot);
     }
+}
+
+bool FighterSystem::shootsTurrets(Entity pawn) const {
+    return weaponRange(pawn) > 0.0f && (melee_ == nullptr || !melee_->charges(pawn));
+}
+
+// Fires an aimed shot at the target: a pawn by its own aim point, a turret at its middle.
+bool FighterSystem::fireAt(Entity pawn, const PawnInfo& target) {
+    if (!target.turret) {
+        return combat_.shoot(pawn, target.pawn, 0.0f, 0.0f, 0.0f, false);
+    }
+    float muzzle = 0.0f;
+    float aim = 0.0f;
+    combat_.shotHeights(target.pawn, target.stance, muzzle, aim);
+    return combat_.shoot(pawn, kNoEntity, target.x, target.y, map_.heightAt(target.x, target.y) + aim, false);
 }
 
 // A charge (F8): the spot is the cell the target was last seen in, walked to by the usual path. Once
@@ -1570,7 +1609,7 @@ bool FighterSystem::considerThrow(Entity pawn, const Fighter& f) {
     std::vector<Spot> spots;
     for (const KnownEnemy& k : f.known) {
         const PawnInfo* p = info(k.pawn);
-        if (p == nullptr || !p->able || p->animal || p->level != self->level || now() - k.seenAt > rules_.throwMemory) {
+        if (p == nullptr || !p->able || p->animal || p->turret || p->level != self->level || now() - k.seenAt > rules_.throwMemory) {
             continue;
         }
         const float distance = fightDist(self->x, self->y, p->x, p->y);
