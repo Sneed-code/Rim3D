@@ -56,6 +56,7 @@ void JobSystem::loadGatherRules() {
         gather_.yieldByLevel.push_back(v);
     }
     gather_.treeFellingSpeed = defs_.tuning("work.treeFellingSpeed");
+    gather_.plantSpeed = defs_.tuning("work.plantSpeed");
     gather_.constructionSpeed = defs_.tuning("work.constructionSpeed");
     gather_.miningSpeed = defs_.tuning("work.miningSpeed");
     gather_.craftingSpeed = defs_.tuning("work.craftingSpeed");
@@ -68,6 +69,16 @@ void JobSystem::loadGatherRules() {
         gather_.plantSpeedBase = rules->number("plants.speedBase", gather_.plantSpeedBase);
         gather_.plantSpeedPerLevel = rules->number("plants.speedPerLevel", gather_.plantSpeedPerLevel);
         gather_.plantXpPerSecond = rules->number("plants.xpPerSecond", gather_.plantXpPerSecond);
+        if (rules->has("plants.skillCurve.highLevel")) {
+            gather_.plantCurveLow = static_cast<int>(rules->integer("plants.skillCurve.lowLevel", gather_.plantCurveLow));
+            gather_.plantCurveHigh = static_cast<int>(rules->integer("plants.skillCurve.highLevel", 20));
+            gather_.plantCurveNormal = static_cast<int>(rules->integer("plants.skillCurve.normalLevel", gather_.plantCurveNormal));
+            gather_.plantCurveLowFraction =
+                std::clamp(rules->number("plants.skillCurve.lowFraction", gather_.plantCurveLowFraction), 0.01, 1.0);
+            if (gather_.plantCurveHigh <= gather_.plantCurveLow) {
+                gather_.plantCurveHigh = 0;  // a broken curve: RimWorld's line
+            }
+        }
         gather_.constructionXpPerSecond = rules->number("construction.xpPerSecond", gather_.constructionXpPerSecond);
         gather_.growthYieldFloor = rules->number("growthYieldFloor", gather_.growthYieldFloor);
         gather_.unskilledLevel = static_cast<int>(rules->integer("unskilledSkillLevel", gather_.unskilledLevel));
@@ -126,12 +137,29 @@ double JobSystem::miningSpeed(Entity pawn) const {
 }
 
 double JobSystem::plantWorkSpeed(Entity pawn) const {
-    const double speed = gather_.plantSpeedBase + gather_.plantSpeedPerLevel * skillLevel(pawn, "Plants");
+    const int level = skillLevel(pawn, "Plants");
+    double speed = gather_.plantSpeedBase + gather_.plantSpeedPerLevel * level;
+    if (gather_.plantCurveHigh > 0) {
+        // Our curve (sneed): a straight line from `lowFraction` at the low level to 1 at the high level,
+        // capped there, never below a quarter of the top; then scaled so the normal level keeps RimWorld's speed.
+        const auto along = [this](int at) {
+            const double t = static_cast<double>(std::min(at, gather_.plantCurveHigh) - gather_.plantCurveLow) /
+                             static_cast<double>(gather_.plantCurveHigh - gather_.plantCurveLow);
+            return std::max(0.25 * gather_.plantCurveLowFraction,
+                            gather_.plantCurveLowFraction + (1.0 - gather_.plantCurveLowFraction) * t);
+        };
+        const double normal = gather_.plantSpeedBase + gather_.plantSpeedPerLevel * gather_.plantCurveNormal;
+        speed = normal * along(level) / along(gather_.plantCurveNormal);
+    }
     const double manip = gatherManipulation(things_.registry(), pawn, manipulationIndex_);
     const PawnGenes* genes = things_.registry().valid(pawn) ? things_.registry().try_get<PawnGenes>(pawn) : nullptr;
     return manip > 0.0 ? std::max(kGatherMinPlantSpeed, speed * manip) * workFactor(pawn) *
                              (genes != nullptr ? genes->effects.plantWorkSpeed : 1.0)
                        : 0.0;
+}
+
+double JobSystem::plantWorkFactor(DefId plant) const {
+    return plant.valid() && defs_.get(plant).flag("plant.isTree") ? gather_.treeFellingSpeed : gather_.plantSpeed;
 }
 
 // Experience, as RimWorld's Learn (Skills.cpp has the maths: passion, the daily cap, levels).
@@ -437,8 +465,9 @@ JobSystem::StepResult JobSystem::plantWork(Entity pawn, Job& job, std::string& w
     }
     const DefId plant = plants_.defAt(job.cell);
     const Def& def = defs_.get(plant);
-    // Felling a tree goes faster than RimWorld's (tuning `work.treeFellingSpeed`); a felled tree teaches as much as before.
-    const double fellFactor = def.flag("plant.isTree") ? gather_.treeFellingSpeed : 1.0;
+    // Plant work goes faster than RimWorld's (tuning `work.treeFellingSpeed` for a tree, `work.plantSpeed`
+    // for the rest); a plant teaches as much as before.
+    const double fellFactor = plantWorkFactor(plant);
     job.progress += static_cast<float>(speed * fellFactor);
     learnSkill(pawn, "Plants", gather_.plantXpPerSecond * fellFactor);
     if (static_cast<double>(job.progress) < def.number("plant.harvestWork", 1.0)) {
@@ -491,8 +520,9 @@ JobSystem::StepResult JobSystem::sowWork(Entity pawn, Job& job, std::string& why
         job.walk = 2;
         gatherEvent(pawn, PawnAction::Harvest, job.cell);
     }
-    job.progress += static_cast<float>(speed);
-    learnSkill(pawn, "Plants", gather_.plantXpPerSecond);
+    const double sowFactor = gather_.plantSpeed;  // sowing is plant work, a sapling too (not the felling speed-up)
+    job.progress += static_cast<float>(speed * sowFactor);
+    learnSkill(pawn, "Plants", gather_.plantXpPerSecond * sowFactor);
     if (static_cast<double>(job.progress) < def.number("plant.sowWork", 1.0)) {
         return StepResult::Running;
     }
