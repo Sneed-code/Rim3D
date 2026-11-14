@@ -8,6 +8,7 @@
 #include "ColonySim/Bills.h"
 #include "ColonySim/Crafting.h"
 #include "ColonySim/Construction.h"
+#include "ColonySim/Floors.h"
 #include "ColonySim/Defense.h"
 #include "ColonySim/DeepResources.h"
 #include "ColonySim/Designations.h"
@@ -312,6 +313,39 @@ public:
     bool makeJob(JobSystem&, Entity, const WorkCandidate& candidate, Job& out) override {
         out = Job{};
         out.type = JobType::Mine;
+        out.cell = candidate.target.cell;
+        return true;
+    }
+};
+
+// Taking up floors marked for it (RimWorld's WorkGiver_RemoveFloor, in the Construction work type).
+class RemoveFloorGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "RemoveFloor"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        const Floors* floors = jobs.construction().floors();
+        if (!jobs.canUseHands(pawn) || floors == nullptr) {
+            return;
+        }
+        const Position& at = jobs.things().registry().get<Position>(pawn);
+        for (const auto& [index, kind] : jobs.designations().all()) {
+            if (kind != DesignationKind::RemoveFloor) {
+                continue;
+            }
+            const CellPos cell = jobs.map().cellAt(index);
+            if (cell.level != at.level || !floors->at(cell).valid()) {
+                continue;
+            }
+            const float dx = static_cast<float>(cell.x) + 0.5f - at.x;
+            const float dy = static_cast<float>(cell.y) + 0.5f - at.y;
+            out.push_back(WorkCandidate{JobTarget{kNoEntity, cell}, dx * dx + dy * dy, 0, 0, false, CellPos{}});
+        }
+    }
+
+    bool makeJob(JobSystem&, Entity, const WorkCandidate& candidate, Job& out) override {
+        out = Job{};
+        out.type = JobType::RemoveFloor;
         out.cell = candidate.target.cell;
         return true;
     }
@@ -1254,6 +1288,7 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<ConstructFinishGiver>());
     givers.push_back(std::make_unique<ConstructArtGiver>());
     givers.push_back(std::make_unique<DeconstructGiver>());
+    givers.push_back(std::make_unique<RemoveFloorGiver>());
     givers.push_back(std::make_unique<MineGiver>());
     givers.push_back(std::make_unique<CutOrHarvestPlantsGiver>());
     givers.push_back(std::make_unique<HarvestCropsGiver>());

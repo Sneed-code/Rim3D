@@ -72,6 +72,7 @@ struct ConstructionNumbers {
     double skillSpeedBase = 0.3;       // construction speed = base + perLevel x Construction skill
     double skillSpeedPerLevel = 0.0875;
     int defaultSkillLevel = 8;         // for a worker with no skills (a test pawn)
+    double removeFloorWork = 288.0;    // game seconds at speed 1 to take a floor up (RimWorld's 200 ticks)
 };
 
 class COLONY_API Construction {
@@ -114,6 +115,12 @@ public:
     int maxHitPoints(DefId def, DefId stuff) const;  // 0 if the def has none
 
     // ---- Placing, cancelling, finishing -----------------------------------------------------
+    // Why a blueprint of `def` made of `stuff` can't go at `cell` facing `rot`, in plain words; empty if
+    // it can. The same rule placeBlueprint keeps (research is the caller's: Sim checks it). The build
+    // menu's ghosts ask this too (BuildPlanner, docs/design/build-menu.md).
+    std::string whyNotBlueprint(DefId def, DefId stuff, CellPos cell, Rot4 rot) const;
+    // The same for a floor plan (placeFloorPlan's rule).
+    std::string whyNotFloorPlan(DefId floor, DefId stuff, CellPos cell) const;
     // A blueprint of `def` made of `stuff`, its footprint starting at `cell` facing `rot`. Every
     // cell must be on the map, walkable ground, free of buildings and of other sites. Returns
     // kNoEntity, with `error` in plain words, if it can't be placed.
@@ -140,6 +147,11 @@ public:
     // is built (full hit points) and the plants under it are gone. Returns the building, or kNoEntity if it can't stand there any
     // more (the materials are given back).
     Entity complete(Entity frame);
+    // Takes the floor on a ground cell up (RimWorld's remove-floor order) and puts back
+    // `deconstructRefundFactor` of its fixed `costs`, rounded at random, beside the cell. A floor made of a
+    // stuff gives none of the stuff back: the floor layer doesn't keep what it was made of. False if the
+    // cell has no floor.
+    bool removeFloor(CellPos cell);
     // Takes a finished building down and puts back `deconstructRefundFactor` of its materials,
     // rounded at random. False if it isn't a building.
     bool deconstruct(Entity building);

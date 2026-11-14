@@ -122,7 +122,7 @@ struct Carrying {
 
 // True for the jobs that work on a designated cell (rock or plant) and hold that cell.
 inline bool jobIsGather(JobType type) {
-    return type == JobType::Mine || type == JobType::CutPlant || type == JobType::HarvestPlant;
+    return type == JobType::Mine || type == JobType::CutPlant || type == JobType::HarvestPlant || type == JobType::RemoveFloor;
 }
 
 // True for the jobs done to an animal (docs/design/husbandry.md): `site` is the animal.
@@ -724,6 +724,7 @@ private:
     bool failCheckGather(Entity pawn, Job& job, std::string& why);
     StepResult goToTouch(Entity pawn, Job& job, std::string& why);
     StepResult mineRock(Entity pawn, Job& job, std::string& why);
+    StepResult removeFloorWork(Entity pawn, Job& job, std::string& why);
     StepResult plantWork(Entity pawn, Job& job, std::string& why);
     StepResult sowWork(Entity pawn, Job& job, std::string& why);
     void learnSkill(Entity pawn, const char* skill, double xp);

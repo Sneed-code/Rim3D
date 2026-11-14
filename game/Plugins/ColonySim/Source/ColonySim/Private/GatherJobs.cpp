@@ -8,6 +8,7 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Farming.h"
+#include "ColonySim/Floors.h"
 #include "ColonySim/Genes.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
@@ -200,6 +201,7 @@ std::string JobSystem::activeSkill(Entity pawn) const {
         case JobType::BuildFrame:
             return reg.valid(job.thing) && construction_.isArt(reg.get<Thing>(job.thing).def) ? "Artistic" : "Construction";
         case JobType::Deconstruct:
+        case JobType::RemoveFloor:
             return "Construction";
         case JobType::DoBill: {
             const Bill* bill = bills_->find(job.site, job.bill);
@@ -318,6 +320,16 @@ bool JobSystem::failCheckGather(Entity pawn, Job& job, std::string& why) {
                 return false;
             }
             return true;
+        case JobType::RemoveFloor:
+            if (designations_.at(job.cell) != DesignationKind::RemoveFloor) {
+                why = "the order was cancelled";
+                return false;
+            }
+            if (construction_.floors() == nullptr || !construction_.floors()->at(job.cell).valid()) {
+                why = "the floor is gone";
+                return false;
+            }
+            return true;
         case JobType::CutPlant:
             if (designations_.at(job.cell) != DesignationKind::CutPlant) {
                 why = "the order was cancelled";
@@ -407,6 +419,29 @@ JobSystem::StepResult JobSystem::mineRock(Entity pawn, Job& job, std::string& wh
         const double amount = static_cast<double>(drop.count) * yieldFactor(skillLevel(pawn, "Mining"));
         dropItems(drop.def, std::max(1, static_cast<int>(std::floor(amount + 0.5))), job.cell);
     }
+    return StepResult::Next;
+}
+
+// RimWorld's remove-floor toil (JobDriver_RemoveFloor): 200 ticks of work at construction speed, then the
+// floor is gone and part of what it cost lies beside the cell (Construction::removeFloor).
+JobSystem::StepResult JobSystem::removeFloorWork(Entity pawn, Job& job, std::string& why) {
+    if (job.walk == 0) {
+        job.walk = 2;  // work steps don't walk: this marks that the animation event went out
+        gatherEvent(pawn, PawnAction::Build, job.cell);
+    }
+    job.progress += constructionSpeed(pawn) * static_cast<float>(construction_.numbers().buildWorkPerSecond);
+    learnSkill(pawn, "Construction", gather_.constructionXpPerSecond * gather_.constructionSpeed);
+    if (static_cast<double>(job.progress) < construction_.numbers().removeFloorWork) {
+        return StepResult::Running;
+    }
+    if (!construction_.removeFloor(job.cell)) {
+        why = "the floor is gone";
+        return StepResult::Failed;
+    }
+    designations_.set(job.cell, DesignationKind::None);
+    Event changed;
+    changed.type = EventType::DesignationsChanged;
+    events_.push_back(std::move(changed));
     return StepResult::Next;
 }
 

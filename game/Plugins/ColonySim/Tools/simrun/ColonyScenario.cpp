@@ -606,7 +606,10 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     int greenMostCrops = 0;  // most basins with a crop in them at once
     uint64_t greenCrops = 0;  // hours x crops standing in the basins
     uint64_t greenRipe = 0;   // hours x ripe crops in the basins
-    std::map<Entity, bool> bestCare;  // year run: whether each colonist's medical care is Best (ill) or Herbal (wounds only)
+    std::map<Entity, int> careSet;  // year run: each colonist's medical care as last set (0 herbal, 1 by hand, 2 best)
+    std::map<uint32_t, int> tradeDone;  // year run: per trader visit, 1 once the rice is sold, 2 once medicine is bought
+    int medicineBought = 0;             // year run: medicine bought from traders
+    int riceSold = 0;
     uint64_t firebreakMarks = 0;
     CellRect healrootRect{0, 0, 0, 0, 0};  // year run: the healroot patch, if one was made      // year run: plants marked for the firebreak
     uint64_t weaponsHanded = 0;
@@ -1144,20 +1147,96 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 }
             }
             if (year) {
-                // Medicine is kept for illness: a colonist is tended with the best there is while it has a disease (plague,
-                // flu, an infection...), and with herbal medicine or none for wounds alone. With Best for all, the crash
-                // site's 30 went on scratches, and plague was then tended by hand at quality 0.25 to 0.55.
+                // Medicine is kept for the diseases that kill: a colonist is tended with the best there is while it has
+                // plague, malaria, flu or an infection, by hand for the ones that don't kill (gut worms, muscle parasites,
+                // sleeping sickness, food poisoning), and with herbal medicine or none for wounds alone. With Best for all,
+                // the crash site's 30 went on scratches, and plague was then tended by hand at quality 0.25 to 0.55; with
+                // Best for any disease, a week of gut worms took 11 of them before the plague came (seed 1, C25 sixth pass).
                 for (const Entity pawn : colonists) {
                     HealthReport report;
                     if (!sim.things().registry().valid(pawn) || !sim.healthReport(pawn, report) || report.dead) {
                         continue;
                     }
-                    const bool ill = std::any_of(report.diseases.begin(), report.diseases.end(),
-                                                 [](const HealthReport::DiseaseLine& d) { return d.visible; });
-                    const auto it = bestCare.find(pawn);
-                    if (it == bestCare.end() || it->second != ill) {
-                        sim.submit(SetMedicalCareCommand{pawn, ill ? "Best" : "Herbal"});
-                        bestCare[pawn] = ill;
+                    int care = 0;
+                    for (const HealthReport::DiseaseLine& d : report.diseases) {
+                        if (!d.visible) {
+                            continue;
+                        }
+                        const bool kills = d.name == "plague" || d.name == "malaria" || d.name == "flu" || d.name.rfind("infection", 0) == 0;
+                        care = std::max(care, kills ? 2 : 1);
+                    }
+                    int& last = careSet[pawn];
+                    if (last != care + 1) {
+                        sim.submit(SetMedicalCareCommand{pawn, care == 2 ? "Best" : care == 1 ? "NoMedicine" : "Herbal"});
+                        last = care + 1;
+                    }
+                }
+                // Trade for medicine (C25 sixth pass): a trader on the map buys the colony's spare rice (all but 600, a
+                // month of meals' worth of the year run's rice cooking), and with the silver the colony buys every
+                // medicine the trader has. The crash site's 30 run out by the second month, and plague in the second
+                // month was then tended by hand at quality 0.15 to 0.5 and lost (seeds 1 and 7).
+                {
+                    Entity negotiator = kNoEntity;
+                    for (const Entity pawn : colonists) {
+                        const entt::registry& reg = sim.things().registry();
+                        if (reg.valid(pawn) && reg.all_of<Worker>(pawn) && !sim.health().incapacitated(pawn) &&
+                            !reg.get<Health>(pawn).dead && !sim.mentalBreaks().active(pawn)) {
+                            negotiator = pawn;
+                            break;
+                        }
+                    }
+                    for (const Visit& visit : sim.trade().state().visits) {
+                        if (negotiator == kNoEntity || visit.kind != VisitKind::Caravan || visit.phase != VisitPhase::Staying ||
+                            visit.trader == kNoEntity) {
+                            continue;
+                        }
+                        int& done = tradeDone[visit.id];
+                        const float improvement = sim.trade().priceImprovement(negotiator);
+                        if (done == 0) {
+                            done = 1;
+                            const DefId rice = defs->idOf("Things", "RawRice");
+                            const int spare = sim.trade().colonyHas("RawRice") - 600;
+                            if (rice.valid() && spare > 0 && sim.trade().accepts(visit, defs->get(rice))) {
+                                const float each = sim.trade().unitPrice(defs->get(rice), false, improvement);
+                                const int count = each > 0.0f ? std::min(spare, static_cast<int>(static_cast<float>(visit.silver) / each)) : 0;
+                                if (count > 0) {
+                                    sim.submit(TradeCommand{visit.id, negotiator, {}, {TradeLine{"RawRice", count}}, -1});
+                                    riceSold += count;
+                                    if (verbose) {
+                                        std::fprintf(stderr, "    trade: sell %d rice to the %s trader\n", count, visit.faction.c_str());
+                                    }
+                                }
+                            }
+                            continue;  // the medicine next hour, with the silver this brings
+                        }
+                        if (done == 1) {
+                            done = 2;
+                            int silver = sim.trade().silverOnMap();
+                            std::vector<TradeLine> buy;
+                            for (const char* name : {"MedicineIndustrial", "MedicineHerbal", "MedicineLumen"}) {
+                                const DefId id = defs->idOf("Things", name);
+                                for (const TradeLine& line : visit.stock) {
+                                    if (!id.valid() || line.thing != name || line.count <= 0) {
+                                        continue;
+                                    }
+                                    const float each = sim.trade().unitPrice(defs->get(id), true, improvement);
+                                    const int count = each > 0.0f ? std::min(line.count, static_cast<int>(static_cast<float>(silver) / each)) : 0;
+                                    if (count > 0) {
+                                        buy.push_back(TradeLine{name, count});
+                                        silver -= static_cast<int>(std::ceil(each * static_cast<float>(count)));
+                                        medicineBought += count;
+                                    }
+                                }
+                            }
+                            if (!buy.empty()) {
+                                sim.submit(TradeCommand{visit.id, negotiator, buy, {}, -1});
+                                if (verbose) {
+                                    for (const TradeLine& line : buy) {
+                                        std::fprintf(stderr, "    trade: buy %d %s from the %s trader\n", line.count, line.thing.c_str(), visit.faction.c_str());
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 weaponsHanded += static_cast<uint64_t>(armColonists());
@@ -1333,16 +1412,21 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 int meals = 0;
                 int steel = 0;
                 int components = 0;
+                int medicine = 0;
+                int herbal = 0;
                 for (const auto [item, thing, stack] : sim.things().registry().view<const Thing, const StackCount>().each()) {
                     const std::string& name = defs->get(thing.def).defName();
+                    medicine += name == "MedicineIndustrial" || name == "MedicineLumen" ? stack.count : 0;
+                    herbal += name == "MedicineHerbal" ? stack.count : 0;
                     steel += name == "Steel" ? stack.count : 0;
                     components += name == "ComponentIndustrial" ? stack.count : 0;
                     rice += name == "RawRice" ? stack.count : 0;
                     meat += name.rfind("Meat", 0) == 0 ? stack.count : 0;
                     meals += name.rfind("Meal", 0) == 0 ? stack.count : 0;
                 }
-                std::fprintf(stderr, "    food: rice %d, meat %d, meals %d; crops ripe %zu; hunted %llu; steel %d, components %d\n", rice, meat, meals,
-                             ripeCrops(sim), static_cast<unsigned long long>(sim.husbandry().stats().hunted), steel, components);
+                std::fprintf(stderr, "    food: rice %d, meat %d, meals %d; crops ripe %zu; hunted %llu; steel %d, components %d; medicine %d, herbal %d (bought %d, rice sold %d)\n",
+                             rice, meat, meals, ripeCrops(sim), static_cast<unsigned long long>(sim.husbandry().stats().hunted), steel, components,
+                             medicine, herbal, medicineBought, riceSold);
             }
             if (verbose && year && now % (6 * kSecondsPerHour) == 3 * kSecondsPerHour) {
                 // Each colonist's mood, what makes it and what it is doing, four times a day.

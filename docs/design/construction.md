@@ -155,7 +155,7 @@ others. All of it is in `Sim::stateHash`. Saves of formats 6 and 7 still load.
   failures, and builders gain Construction XP as they work ([skills.md](skills.md)).
 - Repair, replacing a building with a better stuff, minifying and moving furniture. Roofs and rooms are not
   built: they follow from the walls ([rooms.md](rooms.md)).
-- Removing a floor (RimWorld's remove-floor order), floors on upper levels, and the architect's floor tool in Unreal. Walls over water, terrain affordances; blueprint rules like "doors only between walls".
+- Floors on upper levels, and the architect's floor tool in Unreal. (Removing a floor and the shared placement rules are in [build-menu.md](build-menu.md).) Walls over water, terrain affordances; blueprint rules like "doors only between walls".
 - Materials come from any free stack on the map, as RimWorld's do; forbidden items, "build from
   stockpile only" and small-volume stuffs (x10 counts) are not here.
 - Frames and blueprints have no hit points and can't burn or be shot.

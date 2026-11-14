@@ -59,6 +59,14 @@ only remembered, then the nearest by where it was last seen.
 downed in the year run's small raids died. RimWorld's raiders never shoot the downed; ours do once the whole
 side is down.
 
+**Turrets** (2026-11-14): the colony's turrets (anything with a `Turret` part, built and with hit points
+left) are among the enemies a raider sees, remembers and shoots, as in RimWorld: a turret counts as an able
+enemy about a metre tall (crouching height) and is picked by the same rule, nearest first. A raider aims at
+its middle (an aimed shot at a point, `FighterSystem::fireAt`), and a bullet that hits it takes its hit
+points; at none it is destroyed (and a mini-turret blows up, [defense.md](defense.md)). Only a fighter with a
+gun that doesn't charge in melee takes a turret on: a raider with a club or bare hands leaves it be, and
+nobody throws a grenade at one. Colonists never target their own.
+
 **Focus fire** (colonists only, C25): an able enemy within the colonist's gun range counts `focusMetres`
 (8 m, ours) nearer for each friend already shooting it, itself included (so two colonists on two raiders
 don't swap every plan). Three colonists facing two raiders all shoot the same one, as a player would order.
