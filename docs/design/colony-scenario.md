@@ -308,3 +308,21 @@ Main before this pass gave 0, 1 and 0 on the same day (the runs stay chaotic: pl
 plague on seed 1). What still kills is disease when the medicine is gone: on seed 7 the plague was tended by hand at 0.15
 to 0.5, and a week of gut worms took 11 of seed 1's 30 crash-site medicine before the plague came. Next: the medicine plan.
 
+**Sixth pass (2026-11-14): a medicine plan.** The year script now plays medicine as a player does. Care by disease: Best
+(industrial medicine first) only for the diseases that kill (plague, malaria, flu, an infection), by hand for the ones
+that don't (gut worms, muscle parasites, sleeping sickness, food poisoning), herbal or none for wounds. Trade: when a
+trade caravan is on the map, the colony sells it the rice beyond 600 and then buys every medicine the trader has with its
+silver. The 6-hourly food line now shows the medicine and herbal medicine on the map, what was bought and the rice sold.
+Each seed bought 30 to 33 medicine from three caravans (the crash site's silver paid for it; no rice was spare when they
+came). Results:
+
+| Seed | Alive on day 60 (fifth pass) | What happened |
+| --- | --- | --- |
+| 1 | 0 (7) | plague on day 22 met two raids on day 24 (four dead, blood loss); malaria and infections took three on day 46, with the medicine all used; the last two froze |
+| 7 | 6 (0) | the day 41 plague was tended with bought medicine and nobody died of it |
+| 42 | 0 (4) | a short circuit on day 54 set the base on fire and burned every meal and all the rice; all seven starved on day 57 |
+
+The runs are chaotic (seed 1 and seed 42 swapped places with the fifth pass), so one run per seed says little; what the
+logs show is that the plague with medicine in hand is no longer a coin toss (seed 7), and that the colonies now die of
+raids during an illness, malaria late in the year once the bought medicine is gone, and fire. Next: infestations.
+
