@@ -58,6 +58,12 @@ def main():
         work = tempfile.mkdtemp(prefix="mh_creator_" + base["name"] + "_")
         cfg = copy.deepcopy(base["config"])
         cfg["out"] = f"game/Saved/MakeHuman/{base['name']}/{base['name']}.fbx"
+        # Grown pubic hair: one layout, chosen on the base, so every variant has the same hairs (a first pass makes it).
+        if cfg.get("pubic_grow"):
+            cfg["pubic_layout"] = os.path.join(work, "pubic_layout.json")
+            first = dict(cfg, dump_vertices=os.path.join(work, "_layout.npz"), skin_normal=False)
+            first["out"] = os.path.join(work, "_layout", "_layout.fbx")
+            run(first, work, "_layout")
         morphs = {}
         for name, change in base["morphs"].items():
             variant = merge(cfg, change)

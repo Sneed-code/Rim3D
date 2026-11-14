@@ -710,3 +710,173 @@ def _perineum_heights(pts, cx, z_low, z_high):
             if front is None or p.y >= front - 0.004:
                 out.append(p.z)
     return out
+
+
+def _pubic_layout(rig, body, female, count, seed, log=print):
+    """Where each pubic hair grows, chosen on this body: [triangle (3 vertex ids), barycentric weights, lateral u (0 at
+    the middle line, 1 at the edge), height v (0 at the bottom, 1 at the top), length factor, curl, zone]. Kept as
+    vertex ids and weights, so the same hairs follow any morph of the body (the creator's variants)."""
+    import random
+    rnd = random.Random(seed)
+    to_rig = rig.matrix_world.inverted() @ body.matrix_world
+    rot = to_rig.to_3x3()
+    pts = [to_rig @ v.co for v in body.data.vertices]
+    normals = [(rot @ v.normal).normalized() for v in body.data.vertices]
+    cx, crotch = _crotch(rig, pts)
+    if crotch is None:
+        return []
+    genital = set() if female else set(_male_genital_weights(rig, pts).keys())
+    root_z = max((pts[i].z for i in genital), default=crotch + 0.06)
+    tris = []
+    mesh = body.data
+    mesh.calc_loop_triangles()
+    for lt in mesh.loop_triangles:
+        a, b, c = lt.vertices
+        p = (pts[a] + pts[b] + pts[c]) / 3.0
+        n = (normals[a] + normals[b] + normals[c]).normalized()
+        dx = abs(p.x - cx)
+        zone, u, v, density = None, 0.0, 0.0, 0.0
+        if female:
+            z0, z1 = crotch + 0.022, crotch + 0.105
+            if z0 <= p.z <= z1 and n.y < -0.25:
+                v = (p.z - z0) / (z1 - z0)
+                half = 0.011 + 0.052 * v ** 0.75
+                if dx < half:
+                    zone, u = "mons", dx / half
+                    density = 1.0 if u < 0.7 else (1.0 - u) / 0.3
+                    density *= 1.0 if v < 0.85 else 0.4 + 0.6 * (1.0 - v) / 0.15
+            elif crotch + 0.004 <= p.z < z0 and 0.006 < dx < 0.02 and n.y < -0.3:
+                zone, u, v = "labia", dx / 0.02, (p.z - crotch) / (z0 - crotch) * 0.1
+                density = 0.25
+        else:
+            touching = a in genital or b in genital or c in genital
+            z0, z1 = root_z - 0.012, root_z + 0.085
+            if not touching and z0 <= p.z <= z1 and n.y < -0.25:
+                v = (p.z - z0) / (z1 - z0)
+                half = 0.042 + 0.03 * v
+                if dx < half:
+                    zone, u = "pubis", dx / half
+                    density = 1.0 if u < 0.7 else (1.0 - u) / 0.3
+                    density *= 1.0 if v < 0.8 else 0.35 + 0.65 * (1.0 - v) / 0.2
+            elif not touching and z1 < p.z < root_z + 0.17 and dx < 0.013 and n.y < -0.3:
+                zone, u, v, density = "trail", dx / 0.013, 1.0, 0.35 * (1.0 - (p.z - z1) / 0.085)
+            elif touching and p.z < root_z - 0.045:
+                zone, u, v, density = "scrotum", 0.0, 0.0, 0.12
+        if zone and density > 0.0:
+            area = ((pts[b] - pts[a]).cross(pts[c] - pts[a])).length * 0.5
+            tris.append((lt.vertices[:], area * density, u, v, zone))
+    if not tris:
+        log("no pubic area found")
+        return []
+    total = sum(t[1] for t in tris)
+    layout = []
+    for _ in range(count):
+        r = rnd.random() * total
+        for t in tris:
+            r -= t[1]
+            if r <= 0.0:
+                break
+        s1, s2 = rnd.random(), rnd.random()
+        if s1 + s2 > 1.0:
+            s1, s2 = 1.0 - s1, 1.0 - s2
+        length = rnd.uniform(0.75, 1.25) * (0.6 if t[4] in ("scrotum", "labia") else 1.0) * (0.7 if t[4] == "trail" else 1.0)
+        layout.append([list(t[0]), [1.0 - s1 - s2, s1, s2], t[2], t[3], length, rnd.uniform(0.0, 6.283), rnd.choice((-1, 1)), t[4]])
+    log("pubic layout", len(layout), "hairs over", len(tris), "triangles")
+    return layout
+
+
+def grow_pubic_hair(rig, body, female=True, layout_path=None, count=3000, style="natural", length=0.018, width=0.0006,
+                    color=(0.03, 0.025, 0.022), seed=7, log=print):
+    """Pubic hair as hairs growing out of the skin, for any body: each a thin tapered curly ribbon rooted on the skin,
+    lying down and in towards the middle line as they grow, weighted like the skin at its root (so it moves with the
+    body, the genitals' jiggle included). The female shape is the mons, an inverted triangle down to the top of the
+    vulva and a little along the labia; the male shape is over the pubis above the penis with a little on the scrotum
+    and a thin trail up. The layout is saved to layout_path and reused if it is there (the creator's variants), so the
+    same hairs follow every morph. style: natural, trimmed, strip or none (the other styles fold hairs away into the
+    skin, so every variant has the same hairs)."""
+    import json as _json
+    import math
+    from mathutils import Vector, Quaternion
+    layout = None
+    if layout_path and os.path.exists(layout_path):
+        layout = _json.load(open(layout_path, encoding="utf-8"))
+    if layout is None:
+        layout = _pubic_layout(rig, body, female, count, seed, log=log)
+        if layout_path:
+            with open(layout_path, "w", encoding="utf-8") as f:
+                _json.dump(layout, f)
+    to_rig = rig.matrix_world.inverted() @ body.matrix_world
+    rot = to_rig.to_3x3()
+    pts = [to_rig @ v.co for v in body.data.vertices]
+    normals = [(rot @ v.normal).normalized() for v in body.data.vertices]
+    cx = rig.data.bones["pelvis"].head_local.x
+    deform = {b.name for b in rig.data.bones if b.use_deform}
+    groups = {g.index: g.name for g in body.vertex_groups if g.name in deform}
+    segments = 5
+    verts, faces, weights = [], [], []
+    for tri, bary, u, v, factor, phase, spin, zone in layout:
+        keep = True
+        shrink = 1.0
+        if style == "none":
+            keep = False
+        elif style == "trimmed":
+            keep = zone in ("mons", "pubis") and v < 0.65 and u < 0.75
+            shrink = 0.45
+        elif style == "strip":
+            keep = zone in ("mons", "pubis") and u < 0.24
+            shrink = 0.7
+        root = pts[tri[0]] * bary[0] + pts[tri[1]] * bary[1] + pts[tri[2]] * bary[2]
+        n = (normals[tri[0]] * bary[0] + normals[tri[1]] * bary[1] + normals[tri[2]] * bary[2]).normalized()
+        down = Vector((0.0, 0.0, -1.0))
+        tangent = (down - n * down.dot(n))
+        side = Vector(((cx - root.x), 0.0, 0.0))
+        side = side - n * side.dot(n)
+        tangent = (tangent.normalized() * 0.8 + (side.normalized() * 0.35 if side.length > 1e-5 else Vector())).normalized()
+        L = length * factor * shrink * (0.85 if not female else 1.0) * (1.25 if (not female and zone == "pubis") else 1.0)
+        if not keep:
+            L = 0.0004
+            root = root - n * 0.004   # folded away under the skin
+        # The curve: out of the skin, then lying down along it, curling from side to side.
+        pts_h = [root - n * 0.0005]
+        d = (n * 0.55 + tangent * 0.45).normalized()
+        step = L / segments
+        for k in range(segments):
+            curl = Quaternion(d.cross(n).normalized() if d.cross(n).length > 1e-6 else Vector((1, 0, 0)), 0.0)
+            twist = Quaternion(n, spin * (0.9 + 0.5 * math.sin(phase + k * 1.7)))
+            d = (twist @ d)
+            d = (d * 0.6 + tangent * 0.4 - n * 0.08 * k).normalized()   # bends down onto the skin
+            pts_h.append(pts_h[-1] + d * step)
+        base = len(verts)
+        for k, p in enumerate(pts_h):
+            t = k / segments
+            dirk = (pts_h[min(k + 1, segments)] - pts_h[max(k - 1, 0)]).normalized()
+            across = dirk.cross(n)
+            across = across.normalized() if across.length > 1e-6 else Vector((1, 0, 0))
+            w = width * (1.0 - 0.8 * t)
+            verts.append(p - across * w * 0.5)
+            verts.append(p + across * w * 0.5)
+        for k in range(segments):
+            i0 = base + k * 2
+            faces.append((i0, i0 + 1, i0 + 3, i0 + 2))
+        # Weighted like the skin under its root.
+        wsum = {}
+        for vid, bw in zip(tri, bary):
+            for g in body.data.vertices[vid].groups:
+                name = groups.get(g.group)
+                if name:
+                    wsum[name] = wsum.get(name, 0.0) + g.weight * bw
+        weights.extend([wsum] * ((segments + 1) * 2))
+    mesh = bpy.data.meshes.new("PubicHair")
+    mesh.from_pydata([tuple(p) for p in verts], [], faces)
+    mesh.update()
+    uv = mesh.uv_layers.new(name="UVMap")
+    for poly in mesh.polygons:
+        for li in poly.loop_indices:
+            uv.data[li].uv = (0.5, 0.5)
+    obj = bpy.data.objects.new("PubicHair", mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    # In the rig's space, like the other generated parts.
+    obj.data.materials.append(_material("PubicHair", color))
+    _skin_to(obj, rig, {i: w for i, w in enumerate(weights)})
+    log("pubic hair grown:", len(layout), "hairs,", style, "female" if female else "male")
+    return obj

@@ -123,6 +123,17 @@ The man's base has MakeHuman's male anatomy body; `add_genital_bone` (`"genital_
 shape (what stands in front of the thighs at the crotch) and gives them a soft bone weighted by how far a point hangs
 from the root, which the jiggle node swings loosely (stiffness 70, damping 3.5, up to 3.5 cm).
 
+**Grown pubic hair** (`grow_pubic_hair`, config `"pubic_grow"`) replaces MakeHuman's flat pubic hair card: about 3000
+thin tapered curly ribbons rooted on the skin, growing out and lying down towards the middle line, each weighted like the
+skin at its root (so they follow the genitals' jiggle). The area is found from the shape for any body: on a woman the
+mons, an inverted triangle down to the top of the vulva with a few along the labia; on a man the pubis above the penis,
+a few on the scrotum and a thin trail up. The layout (triangle and barycentric per hair) is chosen once on the base
+(`mh_creator.py` runs a first pass) and reused by every variant, so morphs move the same hairs; the creator's
+Trimmed, Strip and None fold the hairs they drop under the skin. The old "Lower" option is gone for now.
+
+The creator's view is free: middle mouse turns it, the wheel zooms, right mouse or WASD/QE move the point it looks at
+(not while the mouse is over the panel). The panel text is half as big again as the other panels.
+
 **Genital size and pigment.** The creator's genital slider is the `GenitalLarge`/`GenitalSmall` morphs: on the man
 MakeHuman's own penis length, girth and testicle targets (kept to a natural range); on the woman `fuller_labia` pushes
 the vulva out (or in) along its normals. `make_pigment_mask` writes `pigment.png` (areolae and genitals, found from the

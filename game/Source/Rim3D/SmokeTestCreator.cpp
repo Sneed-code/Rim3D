@@ -70,14 +70,19 @@ namespace
 	{
 		TArray<FCreatorPerson> People;
 		int32 Selected = 0;
-		float CameraYaw = 0.0f;   // degrees round the selected one, 0 in front
+		float CameraYaw = 180.0f; // the free view: looking along this yaw (180: from +X, in front of them) ...
+		float CameraPitch = -8.0f; // ... and pitch, round a point by the picked one moved by FocusOffset
+		FVector FocusOffset = FVector::ZeroVector;
+		FVector2D LastMouse = FVector2D::ZeroVector;
+		bool bHadMouse = false;
+		bool bUiWantsMouse = false;
+		bool bUiWantsKeys = false;
 		bool bFaced = false;
 		float DemoTime = -1.0f;   // -CreatorDemo: seconds into the self-running demo
 		int32 Recorded = 0;
 		int32 PanelFrames = 0;
 		int32 BaseSwitches = 0;
 		float CameraDistance = 420.0f;
-		float CameraHeight = 120.0f;
 		bool bWalk = false;
 		float LegTime = 99.0f;
 		int32 Leg = 0;
@@ -158,7 +163,6 @@ namespace
 		Set(TEXT("PubicNone"), P.Pubic == 0 ? 1.0f : 0.0f);
 		Set(TEXT("PubicTrimmed"), P.Pubic == 2 ? 1.0f : 0.0f);
 		Set(TEXT("PubicStrip"), P.Pubic == 3 ? 1.0f : 0.0f);
-		Set(TEXT("PubicLow"), P.Pubic == 0 ? 0.0f : P.PubicLow);
 		Set(TEXT("GenitalLarge"), P.Genital);
 		Set(TEXT("GenitalSmall"), -P.Genital);
 		Mesh->SetCustomPrimitiveDataFloat(3, P.Pigment);
@@ -298,7 +302,27 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		// For pictures: -CreatorSelect=<0-2>, -CreatorWalk, -CreatorYaw=<degrees>, -CreatorDistance=<cm>.
 		FParse::Value(FCommandLine::Get(), TEXT("CreatorSelect="), State->Selected);
 		State->bWalk = FParse::Param(FCommandLine::Get(), TEXT("CreatorWalk"));
-		FParse::Value(FCommandLine::Get(), TEXT("CreatorYaw="), State->CameraYaw);
+		float Yaw = 0.0f;
+		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorYaw="), Yaw))
+		{
+			State->CameraYaw += Yaw;
+		}
+		float Genital = 0.0f;
+		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorGenital="), Genital))
+		{
+			for (FCreatorPerson& Person : State->People)
+			{
+				Person.Genital = Genital;
+			}
+		}
+		int32 Pubic = -1;
+		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorPubic="), Pubic))
+		{
+			for (FCreatorPerson& Person : State->People)
+			{
+				Person.Pubic = Pubic;
+			}
+		}
 		FParse::Value(FCommandLine::Get(), TEXT("CreatorDistance="), State->CameraDistance);
 		float Pigment = -1.0f;
 		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorPigment="), Pigment))
@@ -360,7 +384,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			// Body sliders on the woman, then her gender and kind changed: man, imp, orcoid, back to a woman orcoid; then all walk.
 			State->Selected = T < 21.0f ? 0 : (T < 25.0f ? FMath::Min(2, State->People.Num() - 1) : FMath::Min(3, State->People.Num() - 1));
 			State->CameraDistance = T < 21.0f ? 260.0f : 380.0f;
-			State->CameraYaw = T < 21.0f ? 0.0f : 75.0f;
+			State->CameraYaw = T < 21.0f ? 180.0f : 255.0f;
 			if (T < 9.0f)
 			{
 				W.Weight = -0.2f + Wave(0.0f, 3.0f);
@@ -405,15 +429,62 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				}
 			}
 		}
-		// The camera round the selected one.
+		// The free view round the picked one: middle mouse turns it, the wheel moves closer or further, right mouse drags the
+		// point it looks at (as do WASD, Q and E), not while the mouse or keys are on the panel.
+		APlayerController* ViewPC = GetWorld()->GetFirstPlayerController();
+		const float Dt = GetWorld()->GetDeltaSeconds();
+		if (ViewPC)
+		{
+			float MouseX = 0.0f;
+			float MouseY = 0.0f;
+			const bool bMouse = ViewPC->GetMousePosition(MouseX, MouseY);
+			const FVector2D Mouse(MouseX, MouseY);
+			const FVector2D Delta = bMouse && State->bHadMouse ? Mouse - State->LastMouse : FVector2D::ZeroVector;
+			State->LastMouse = Mouse;
+			State->bHadMouse = bMouse;
+			const FRotator Look(0.0, State->CameraYaw, 0.0);
+			if (!State->bUiWantsMouse)
+			{
+				if (ViewPC->IsInputKeyDown(EKeys::MiddleMouseButton))
+				{
+					State->CameraYaw += Delta.X * 0.3f;
+					State->CameraPitch = FMath::Clamp(State->CameraPitch - Delta.Y * 0.3f, -85.0f, 85.0f);
+				}
+				if (ViewPC->IsInputKeyDown(EKeys::RightMouseButton))
+				{
+					const FVector Right = FRotationMatrix(Look).GetUnitAxis(EAxis::Y);
+					State->FocusOffset += (-Right * Delta.X + FVector::UpVector * Delta.Y) * State->CameraDistance * 0.0015;
+				}
+				if (ViewPC->WasInputKeyJustPressed(EKeys::MouseScrollUp))
+				{
+					State->CameraDistance *= 0.87f;
+				}
+				if (ViewPC->WasInputKeyJustPressed(EKeys::MouseScrollDown))
+				{
+					State->CameraDistance /= 0.87f;
+				}
+				State->CameraDistance = FMath::Clamp(State->CameraDistance, 40.0f, 2500.0f);
+			}
+			if (!State->bUiWantsKeys)
+			{
+				const FVector Forward = Look.Vector();
+				const FVector Right = FRotationMatrix(Look).GetUnitAxis(EAxis::Y);
+				FVector Move = FVector::ZeroVector;
+				Move += ViewPC->IsInputKeyDown(EKeys::W) ? Forward : FVector::ZeroVector;
+				Move -= ViewPC->IsInputKeyDown(EKeys::S) ? Forward : FVector::ZeroVector;
+				Move += ViewPC->IsInputKeyDown(EKeys::D) ? Right : FVector::ZeroVector;
+				Move -= ViewPC->IsInputKeyDown(EKeys::A) ? Right : FVector::ZeroVector;
+				Move += ViewPC->IsInputKeyDown(EKeys::E) ? FVector::UpVector : FVector::ZeroVector;
+				Move -= ViewPC->IsInputKeyDown(EKeys::Q) ? FVector::UpVector : FVector::ZeroVector;
+				State->FocusOffset += Move * FMath::Max(150.0f, State->CameraDistance) * Dt;
+			}
+		}
 		FCreatorPerson& Sel = State->People[FMath::Clamp(State->Selected, 0, State->People.Num() - 1)];
 		if (const ASimPawnActor* Pawn = Pawns->FindPawn(Sel.Thing))
 		{
-			const FVector Target = Pawn->GetActorLocation() + FVector(0.0, 0.0, 100.0 * Sel.Height);
-			// From +X (in front of them as they stand), turned round by the slider.
-			const FRotator Around(0.0, State->CameraYaw, 0.0);
-			const FVector From = Pawn->GetActorLocation() + Around.Vector() * State->CameraDistance + FVector(0.0, 0.0, State->CameraHeight);
-			ViewFrom(From, (Target - From).Rotation());
+			const FVector Focus = Pawn->GetActorLocation() + FVector(0.0, 0.0, 100.0 * Sel.Height) + State->FocusOffset;
+			const FRotator View(State->CameraPitch, State->CameraYaw, 0.0);
+			ViewFrom(Focus - View.Vector() * State->CameraDistance, View);
 		}
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		{
@@ -428,7 +499,9 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		}
 		const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 		const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
-		ImGui::GetStyle().FontScaleMain = 1.2f * Scale;
+		ImGui::GetStyle().FontScaleMain = 1.8f * Scale;  // half as big again as the other panels (sneed)
+		State->bUiWantsMouse = ImGui::GetIO().WantCaptureMouse;
+		State->bUiWantsKeys = ImGui::GetIO().WantCaptureKeyboard;
 		ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + 16.0f * Scale, Viewport->Pos.y + 16.0f * Scale), ImGuiCond_Once);
 		ImGui::SetNextWindowBgAlpha(0.8f);
 		if (ImGui::Begin("Character creator", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
@@ -512,7 +585,6 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				if (ImGui::BeginTabItem("Hair and skin"))
 				{
 					ImGui::Combo("Pubic hair", &P.Pubic, CreatorPubicNames, 4);
-					ImGui::SliderFloat("Lower", &P.PubicLow, 0.0f, 1.0f, "%.2f");
 					ImGui::ColorEdit3("Skin", P.Skin);
 					ImGui::SliderFloat("Areola and genital pigment", &P.Pigment, 0.0f, 1.0f, "%.2f");
 					if (ImGui::Button("Random skin tone"))
@@ -526,9 +598,14 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			}
 			ImGui::Separator();
 			ImGui::Checkbox("Walk back and forth", &State->bWalk);
-			ImGui::SliderFloat("View round", &State->CameraYaw, -180.0f, 180.0f, "%.0f");
-			ImGui::SliderFloat("View distance", &State->CameraDistance, 120.0f, 700.0f, "%.0f");
-			ImGui::SliderFloat("View height", &State->CameraHeight, 0.0f, 250.0f, "%.0f");
+			ImGui::TextUnformatted("View: middle mouse turn, wheel zoom, right mouse or WASD/QE move");
+			if (ImGui::Button("Reset view"))
+			{
+				State->CameraYaw = 180.0f;
+				State->CameraPitch = -8.0f;
+				State->CameraDistance = 420.0f;
+				State->FocusOffset = FVector::ZeroVector;
+			}
 		}
 		ImGui::End();
 		++State->PanelFrames;
