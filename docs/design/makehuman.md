@@ -169,10 +169,15 @@ mannequin's.
 `assets/makehuman.local.json`, which is not in Git, and import into `/Game/ThirdParty/Local`, which is not in Git
 either. They are never committed or shipped.
 
-## Not done
+## Not done (next, as of 2026-11-14)
 
-- Hair, eyes, eyebrows, eyelashes and teeth for the MakeHuman woman: MPFB needs MakeHuman's system asset pack (the
-  MakeHuman install has them only pre-compiled).
-- The live creator: every macro and detail target as a morph on one base mesh per sex, the macro blend in game, the
-  skeleton's joints moved per character, clothes fitted once with the same morphs, anatomy and hair as parts.
-- Wiring MakeHuman characters into the sim's looks (only overrides use them), clothes on them, LODs.
+- Scalp hair styles in the creator: put several MPFB hairs (long01, bob02, short02, ponytail01, braid01, afro01) in each
+  base and show one with `ShowMaterialSection`; bald.
+- Tattoos and markings (a UV-space layer in the skin material) and generated jewellery (piercings, rings, collars,
+  shackles, chains), as planned with sneed.
+- Every test pawn from the creator's seed or randomizer (sneed's rule); MakeHuman characters in the sim's looks,
+  clothes with the same morphs (and the soft-bone weights copied), LODs.
+- Jagged, square shadows on bodies (look at virtual shadow map resolution, hair cards casting shadows, contact
+  shadows); hardware ray tracing is off in the project (Lumen traces in software); DLSS (NVIDIA's plugin) not set up.
+- Pubic hair styles beyond natural/trimmed/stubble; body hair; a lower placement option.
+- Foot sliding is better but motion matching still picks odd clips at times (`-ShowcaseFeet`, `-CompareRecord`).
