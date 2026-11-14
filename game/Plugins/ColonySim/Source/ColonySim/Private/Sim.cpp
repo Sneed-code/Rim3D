@@ -1006,6 +1006,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         applyScannerCommand(*scanner, id);
         return;
     }
+    if (const auto* bag = std::get_if<InventoryCommand>(&command)) {
+        applyInventoryCommand(*bag, id);
+        return;
+    }
     // The comms console, before the long chain below (MSVC's limit on nested else-ifs).
     if (const auto* comms = std::get_if<CommsCommand>(&command)) {
         if (comms->action != "RequestCaravan") {
@@ -2228,6 +2232,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
         }
     }
     out.apparel.clear();
+    out.inventory.clear();
     out.fittedParts.clear();
     out.outfits.clear();
     for (const OutfitPolicy& outfit : apparel_->outfits()) {
@@ -2483,6 +2488,21 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 out.apparel.push_back(worn);
             }
             view.apparelCount = static_cast<uint32_t>(out.apparel.size()) - view.firstApparel;
+            view.firstInventory = static_cast<uint32_t>(out.inventory.size());
+            for (const Entity item : gear->inventory) {
+                InventoryItemView bagged;
+                bagged.item = item;
+                bagged.def = reg.get<Thing>(item).def;
+                const StackCount* stack = reg.try_get<StackCount>(item);
+                bagged.count = stack != nullptr ? stack->count : 1;
+                bagged.massKg = static_cast<float>(jobs_->itemMassFor(entity, item));
+                out.inventory.push_back(bagged);
+            }
+            view.inventoryCount = static_cast<uint32_t>(out.inventory.size()) - view.firstInventory;
+        }
+        if (view.category == ThingCategory::Pawn) {
+            view.loadKg = static_cast<float>(jobs_->loadMass(entity));
+            view.capacityKg = static_cast<float>(jobs_->carryCapacity(entity));
         }
         if (view.category == ThingCategory::Pawn) {
             view.outfit = apparel_->outfitOf(entity);

@@ -1,5 +1,12 @@
 {
-  "defs": { "Projectiles": { "projectile.speed": 3.0 } },
+  "defs": {
+    "Projectiles": {
+      "projectile.speed": 3.0
+    },
+    "Things": {
+      "stats.carryingCapacity": 0.6666667
+    }
+  },
   "values": {
     "work.treeFellingSpeed": 10.0,
     "work.plantSpeed": 7.5,

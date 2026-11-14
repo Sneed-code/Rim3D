@@ -142,6 +142,8 @@ TEST_CASE("Talents: ranks change the stats the systems ask for") {
     const DefId steel = sim.defs().idOf("Things", "Silver");
     TAL_REQUIRE(steel.valid());
     const int carry = sim.jobs().carryLimit(hero, steel);
+    const int otherCarry = sim.jobs().carryLimit(other, steel);
+    const double heroCapacity = sim.jobs().carryCapacity(hero);  // the protagonist's own, twice a colonist's
     CHECK(sim.talents().statFactor(hero, "buildSpeed") == doctest::Approx(1.0));
 
     sim.submit(AddTalentXpCommand{hero, 100000});
@@ -157,10 +159,10 @@ TEST_CASE("Talents: ranks change the stats the systems ask for") {
     CHECK(sim.talents().statFactor(hero, "tradePrice") == doctest::Approx(0.96));
     CHECK(sim.jobs().constructionSpeed(hero) == doctest::Approx(sim.jobs().constructionSpeed(other) * 1.2f));
     CHECK(sim.jobs().carryLimit(hero, steel) > carry);
-    CHECK(sim.jobs().carryCapacity(hero) == doctest::Approx(sim.jobs().carryCapacity(other) * 1.2));
+    CHECK(sim.jobs().carryCapacity(hero) == doctest::Approx(heroCapacity * 1.2));
     // Everyone else is unchanged.
     CHECK(sim.talents().statFactor(other, "buildSpeed") == doctest::Approx(1.0));
-    CHECK(sim.jobs().carryLimit(other, steel) == carry);
+    CHECK(sim.jobs().carryLimit(other, steel) == otherCarry);
 }
 
 TEST_CASE("Talents: finished jobs give the protagonist XP, other pawns none") {

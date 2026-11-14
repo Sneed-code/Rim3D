@@ -2169,6 +2169,7 @@ void CombatSystem::drop(Entity pawn, Entity item) {
         }
         gear->apparel.erase(std::remove(gear->apparel.begin(), gear->apparel.end(), item), gear->apparel.end());
         gear->stowed.erase(std::remove(gear->stowed.begin(), gear->stowed.end(), item), gear->stowed.end());
+        gear->inventory.erase(std::remove(gear->inventory.begin(), gear->inventory.end(), item), gear->inventory.end());
     }
     if (WeaponSwitch* change = reg.try_get<WeaponSwitch>(pawn); change != nullptr && change->stepsLeft > 0) {
         // Dropping the weapon switched to, or the one in the hands, ends the switch: nothing is left to swap.
@@ -2193,7 +2194,8 @@ bool CombatSystem::unequip(Entity pawn, Entity item) {
     const Gear* gear = reg.valid(pawn) ? reg.try_get<Gear>(pawn) : nullptr;
     if (gear == nullptr || !reg.valid(item) ||
         (gear->weapon != item && std::find(gear->apparel.begin(), gear->apparel.end(), item) == gear->apparel.end() &&
-         std::find(gear->stowed.begin(), gear->stowed.end(), item) == gear->stowed.end())) {
+         std::find(gear->stowed.begin(), gear->stowed.end(), item) == gear->stowed.end() &&
+         std::find(gear->inventory.begin(), gear->inventory.end(), item) == gear->inventory.end())) {
         return false;
     }
     drop(pawn, item);
@@ -2265,6 +2267,7 @@ void CombatSystem::dropGear(Entity pawn) {
     }
     std::vector<Entity> items = gear->apparel;
     items.insert(items.begin(), gear->stowed.begin(), gear->stowed.end());
+    items.insert(items.end(), gear->inventory.begin(), gear->inventory.end());
     if (gear->weapon != kNoEntity) {
         items.insert(items.begin(), gear->weapon);
     }
