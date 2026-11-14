@@ -5016,6 +5016,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         d.zones.push_back(std::move(z));
     }
     for (const auto& [pawn, s] : sim.drugs_->states()) {
+        if (!sim.things_->exists(pawn)) {
+            continue;  // a pawn that is gone: the load would forget it anyway
+        }
         SaveDrugPawn saved;
         saved.pawn = pawn;
         saved.policy = s.policy;
