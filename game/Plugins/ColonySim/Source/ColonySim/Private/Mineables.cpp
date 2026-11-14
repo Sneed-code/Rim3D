@@ -234,6 +234,9 @@ void Mineables::generate(const DefDatabase& defs) {
     std::vector<int> frontier;
     for (const size_t k : oreKinds) {
         const Kind& ore = kinds_[k];
+        if (!(ore.commonality > 0.0)) {
+            continue;  // made only by the long-range mineral scanner: no random draw, so old maps stay the same
+        }
         const double expected = static_cast<double>(rockCells.size()) / 10000.0 * orePer10k * ore.commonality;
         int lumps = static_cast<int>(expected);
         if (static_cast<double>(rng.next()) / 4294967296.0 < expected - static_cast<double>(lumps)) {

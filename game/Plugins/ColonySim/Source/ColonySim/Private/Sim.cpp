@@ -990,6 +990,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         applyPodCommand(*pod, id);
         return;
     }
+    if (const auto* scanner = std::get_if<ScannerCommand>(&command)) {
+        applyScannerCommand(*scanner, id);
+        return;
+    }
     // The comms console, before the long chain below (MSVC's limit on nested else-ifs).
     if (const auto* comms = std::get_if<CommsCommand>(&command)) {
         if (comms->action != "RequestCaravan") {
@@ -3202,6 +3206,25 @@ void Sim::stepMany(int64_t steps) {
     for (int64_t i = 0; i < steps; ++i) {
         step();
     }
+}
+
+void Sim::applyScannerCommand(const ScannerCommand& command, uint64_t id) {
+    const Entity building = command.building;
+    if (!things_->spawned(building) || jobs_->deepKindOf(building) != DeepWorkKind::LongScan) {
+        commandFailed(id, "that is not a long-range mineral scanner");
+        return;
+    }
+    const Def& def = defs_->get(things_->registry().get<Thing>(building).def);
+    bool allowed = false;
+    for (size_t i = 0; i < def.count("deepWork.ores"); ++i) {
+        allowed = allowed || def.textAt("deepWork.ores", i) == command.ore;
+    }
+    const DefId ore = defs_->idOf("Things", command.ore);
+    if (!allowed || !ore.valid()) {
+        commandFailed(id, "the scanner can't be tuned to '" + command.ore + "'");
+        return;
+    }
+    deepResources_->setTune(things_->registry().get<Footprint>(building).origin, ore);
 }
 
 }  // namespace colony

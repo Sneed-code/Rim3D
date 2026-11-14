@@ -25,5 +25,17 @@
   {
     "defName": "Ore_Components", "parent": "OreBase", "label": "compacted machinery",
     "mineable": { "hitPoints": 2000, "dropDef": "ComponentIndustrial", "dropCount": 2, "lumpSize": [3, 6] }
-  }
+  },
+  { "defName": "Ore_Plasteel", "parent": "OreBase", "label": "plasteel ore",
+    "mineable": { "hitPoints": 3000, "dropDef": "Plasteel", "lumpSize": [8, 14], "commonality": 0 },
+    "unverified": ["mineable.hitPoints", "mineable.lumpSize"], "note": "Only the long-range mineral scanner makes it (commonality 0: never in the rock at map creation)." },
+  { "defName": "Ore_Gold", "parent": "OreBase", "label": "gold ore",
+    "mineable": { "hitPoints": 3000, "dropDef": "Gold", "lumpSize": [8, 12], "commonality": 0 },
+    "unverified": ["mineable.hitPoints"], "note": "Lump of 8 to 12 cells x 40 gold = the wiki's 320 to 480 a scanner lump. Scanner only." },
+  { "defName": "Ore_Uranium", "parent": "OreBase", "label": "uranium ore",
+    "mineable": { "hitPoints": 3000, "dropDef": "Uranium", "lumpSize": [8, 14], "commonality": 0 },
+    "unverified": ["mineable.hitPoints", "mineable.lumpSize"], "note": "Scanner only." },
+  { "defName": "Ore_Jade", "parent": "OreBase", "label": "jade ore",
+    "mineable": { "hitPoints": 2500, "dropDef": "Jade", "lumpSize": [8, 14], "commonality": 0 },
+    "unverified": ["mineable.hitPoints", "mineable.lumpSize"], "note": "Scanner only." }
 ]

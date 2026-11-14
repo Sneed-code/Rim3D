@@ -91,7 +91,7 @@ int deepItemCount(Sim& sim, const char* def) {
 // Puts a machine's work near the end of a cycle (or of the guaranteed scan time), so a test need not run days.
 void deepPreload(Sim& sim, CellPos building, double work) {
     DeepResourcesSaved s = sim.deepResources().saved();
-    s.work.push_back(DeepWork{building, work});
+    s.work.push_back(DeepWork{building, work, DefId{}});
     CHECK(sim.deepResources().restore(s));
 }
 

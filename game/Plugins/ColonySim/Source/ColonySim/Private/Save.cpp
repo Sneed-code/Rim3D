@@ -509,6 +509,7 @@ struct SaveDeep {
     std::vector<uint32_t> units;
     std::vector<CellPos> workAt;
     std::vector<double> work;
+    std::vector<std::string> tune;  // v2: a long-range scanner's ore per machine, "" for none
     uint64_t rngState = 0;
     uint64_t rngIncrement = 1;
     uint64_t found = 0;
@@ -1289,7 +1290,7 @@ void saveTradeLine(Ar& ar, TradeLine& l) {
 template <typename Type>
 inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitCommand> || std::is_same_v<Type, TradeCommand> ||
                                             std::is_same_v<Type, AdjustGoodwillCommand> || std::is_same_v<Type, GiftCommand> ||
-                                            std::is_same_v<Type, CommsCommand>;
+                                            std::is_same_v<Type, CommsCommand> || std::is_same_v<Type, ScannerCommand>;
 
 // The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
 template <typename Ar, typename Type>
@@ -1318,6 +1319,9 @@ void saveTradeCommand(Ar& ar, Type& c) {
         auto* goodwill = &c;
         ar.text("faction", goodwill->faction);
         ar.value("delta", goodwill->delta);
+    } else if constexpr (std::is_same_v<Type, ScannerCommand>) {
+        ar.value("building", c.building);
+        ar.text("ore", c.ore);
     } else {
         static_assert(std::is_same_v<Type, GiftCommand>, "save every trade command here");
         auto* gift = &c;
@@ -3606,7 +3610,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.value("area", p.second);
         });
     });
-    ar.section("deep", 1, [&] {
+    ar.section("deep", 2, [&] {
         ar.list("defs", d.deep.defs, [&](std::string& s) { ar.text(nullptr, s); });
         ar.list("cells", d.deep.cells, [&](uint32_t& v) { ar.value(nullptr, v); });
         ar.list("defIndex", d.deep.defIndex, [&](uint32_t& v) { ar.value(nullptr, v); });
@@ -3616,6 +3620,10 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.list("workAt", d.deep.workAt, [&](CellPos& c) { saveCell(ar, c); });
         ar.list("work", d.deep.work, [&](double& v) { ar.value(nullptr, v); });
         ar.require(d.deep.workAt.size() == d.deep.work.size(), "the save file's machine work lists don't match");
+        if (ar.sectionVersion() >= 2) {
+            ar.list("tune", d.deep.tune, [&](std::string& s) { ar.text(nullptr, s); });
+            ar.require(d.deep.tune.size() == d.deep.work.size(), "the save file's scanner tuning list doesn't match");
+        }
         ar.value("rngState", d.deep.rngState);
         ar.value("rngIncrement", d.deep.rngIncrement);
         ar.value("found", d.deep.found);
@@ -5069,6 +5077,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         for (const DeepWork& w : deep.work) {
             d.deep.workAt.push_back(w.at);
             d.deep.work.push_back(w.work);
+            d.deep.tune.push_back(w.tune.valid() ? sim.defs_->get(w.tune).defName() : std::string());
         }
         d.deep.rngState = deep.rngState;
         d.deep.rngIncrement = deep.rngIncrement;
@@ -5555,7 +5564,11 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                                           static_cast<uint16_t>(d.deep.units[i])});
         }
         for (size_t i = 0; i < d.deep.work.size(); ++i) {
-            deep.work.push_back(DeepWork{d.deep.workAt[i], d.deep.work[i]});
+            DeepWork w{d.deep.workAt[i], d.deep.work[i], DefId{}};
+            if (i < d.deep.tune.size() && !d.deep.tune[i].empty()) {
+                w.tune = sim.defs_->idOf("Things", d.deep.tune[i]);
+            }
+            deep.work.push_back(w);
         }
         deep.rngState = d.deep.rngState;
         deep.rngIncrement = d.deep.rngIncrement;
