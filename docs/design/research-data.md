@@ -46,4 +46,4 @@ wiki's ticks x 1.44.
 
 The research system that reads all this is [research.md](research.md) (C21).
 
-The tree was completed against the wiki's research page. Projects that need Microelectronics (directly or through a prerequisite) are `benchTier` 2; those that need the Multi-analyzer project also carry `requiredFacility`. Projects whose unlocks are not in the game yet have an empty `unlocks` (listed in `BACKLOG.md`); guns, flak armor, the simple helmet, breach axe, IED and turrets are linked to their projects.
+The tree was completed against the wiki's research page. Projects that need Microelectronics (directly or through a prerequisite) are `benchTier` 2; those that need the Multi-analyzer project also carry `requiredFacility`. Every project now unlocks something (since 2026-11-13); guns, flak armor, the simple helmet, breach axe, IED and turrets are linked to their projects.

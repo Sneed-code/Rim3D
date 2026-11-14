@@ -518,6 +518,7 @@ private:
     void writeOtherMaps(std::vector<OtherMapView>& out) const;
     // Transport pods (PodArrivals.cpp): PodCommand, and landing the flights that came down this step.
     void applyPodCommand(const PodCommand& command, uint64_t id);
+    void applyScannerCommand(const ScannerCommand& command, uint64_t id);
     bool launchPods(const PodCommand& command, std::string& error);
     void landPods();
     void landFlight(PodFlight& flight);
