@@ -105,11 +105,12 @@ for a clip (`tools\smoke.ps1 -Test showcase -Resolution 1280x720 -ExtraArgs @("-
 
 ## Character creator (first version)
 
-`tools\play-creator.bat` (smoke test `creator`) opens a woman, a man and an imp in a row with the graphics up and a
-panel of sliders (top left) that change the picked one live: height (mesh scale), masculine or feminine, older, thin to
-heavy, soft to muscular, breasts (woman's base), pointed ears, imp face, horns, tail, skin colour; buttons for the
-regular and imp presets and a random person; "walk back and forth" and the view sliders. The imp is the man's base with
-the inhuman sliders up and red skin. Adults only: there is no younger slider.
+`tools\play-creator.bat` (smoke test `creator`) opens four colonists in a row (a baseline woman and man, a woman imp,
+a man orcoid) with the graphics up and a panel (top left) that changes the picked one live, in tabs: **Gender** (woman
+or man: which base, chosen apart from the kind; more masculine or feminine), **Kind** (Baseline, Imp, Orcoid presets,
+then pointed ears, imp face, orc face, horns, tusks, tail), **Body** (height as mesh scale, older, thin to heavy, soft
+to muscular, breasts on the woman, random), **Hair and skin** (pubic hair none, natural, trimmed or strip, and lower;
+skin colour). "Walk back and forth" and the view sliders sit under the tabs. Adults only: there is no younger slider.
 
 The bases (`CreatorFemale`, `CreatorMale`) come from `python tools/makehuman/mh_creator.py`, which reads
 `tools/makehuman/creator.json`: each base is a normal MakeHuman character (with horns and a tail) exported with a morph

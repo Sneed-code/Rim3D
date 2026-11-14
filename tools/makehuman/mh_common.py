@@ -180,7 +180,7 @@ def add_soft_bones(rig, body, log=print):
         log("buttock bone", "butt_" + side, "weights", count, "vertices")
 
 
-def lower_pubic_hair(obj, body, top_share=0.6, above_crotch=0.025, log=print):
+def lower_pubic_hair(obj, body, top_share=0.6, above_crotch=0.025, width=1.0, depth=0.0, log=print):
     """MakeHuman's pubic hair sits too high on these bodies (it reaches up the belly and stops well above where the legs
     meet): squeezed down towards its lowest point (its top edge comes down to top_share of its height), narrowed a
     little at the top, moved down so its lowest point is above_crotch (m) over the crotch (the lowest point of the body
@@ -224,9 +224,10 @@ def lower_pubic_hair(obj, body, top_share=0.6, above_crotch=0.025, log=print):
         old_skin = skin_y(x, z)
         t = (z - bottom) / max(top - bottom, 1e-6)
         nz = bottom + (z - bottom) * top_share - drop
-        nx = centre_x + (x - centre_x) * (1.0 - 0.15 * t)
+        nx = centre_x + (x - centre_x) * (1.0 - 0.15 * t) * width
         new_skin = skin_y(nx, nz)
         ny = y if old_skin is None or new_skin is None else new_skin + (y - old_skin)
+        ny += depth  # pushed in behind the skin (+Y is into the body): the creator's "none"
         v.co = (nx, ny, nz)
     obj.data.update()
     log("pubic hair lowered: top", round(top - bottom, 3), "->", round((top - bottom) * top_share, 3), "above its lowest point")
@@ -518,3 +519,45 @@ def add_morphs(meshes, morphs, log=print):
             key.data.foreach_set("co", data[o.name])
             made += 1
         log("morph", name, "on", made, "meshes")
+
+
+def add_tusks(rig, body, length=0.03, radius=0.006, color=(0.78, 0.72, 0.58), log=print):
+    """Two lower tusks out of the jaw at the corners of the mouth, curving up and out, for any MakeHuman face (found
+    from the skin: the nose tip is the face's frontmost point, the mouth a little under it), weighted to the head."""
+    from mathutils import Vector
+    head = rig.data.bones.get("head")
+    if head is None:
+        return []
+    to_rig = rig.matrix_world.inverted() @ body.matrix_world
+    hx, hz = head.head_local.x, head.head_local.z
+    face = [to_rig @ v.co for v in body.data.vertices]
+    face = [p for p in face if hz - 0.02 < p.z < hz + 0.2 and abs(p.x - hx) < 0.09]
+    if not face:
+        return []
+    nose = min(face, key=lambda p: p.y)          # faces -Y
+    mat = _material("Tusk", color)
+    objs = []
+    for side in (1.0, -1.0):
+        want = Vector((hx + side * 0.021, nose.y + 0.02, nose.z - 0.05))
+        near = [p for p in face if abs(p.x - want.x) < 0.006 and abs(p.z - want.z) < 0.006]
+        base = min(near, key=lambda p: p.y) if near else want   # the skin's front there
+        base = base + Vector((0.0, 0.004, 0.0))                 # its root just inside the lip
+        up, out, fwd = Vector((0, 0, 1)), Vector((side, 0, 0)), Vector((0, -1, 0))
+        rings = 8
+        centres = [base + (up * 0.85 + fwd * 0.35) * length * (i / (rings - 1)) + out * length * 0.25 * (i / (rings - 1)) ** 2
+                   for i in range(rings)]
+        radii = [max(radius * (1.0 - i / (rings - 1)) ** 0.7, 0.0008) for i in range(rings)]
+        frames = []
+        for i in range(rings):
+            d = (centres[min(i + 1, rings - 1)] - centres[max(i - 1, 0)]).normalized()
+            a = d.cross(Vector((1, 0, 0)))
+            if a.length < 0.1:
+                a = d.cross(Vector((0, 1, 0)))
+            a.normalize()
+            frames.append((a, d.cross(a).normalized()))
+        obj = _tube("Tusk_" + ("l" if side > 0 else "r"), centres, radii, frames, segments=10)
+        obj.data.materials.append(mat)
+        _skin_to(obj, rig, {i: {"head": 1.0} for i in range(len(obj.data.vertices))})
+        objs.append(obj)
+    log("tusks", length, "m at the mouth, nose tip at z", round(nose.z, 3))
+    return objs

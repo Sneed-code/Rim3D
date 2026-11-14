@@ -41,7 +41,7 @@ def log(*a):
 
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from mh_common import (add_genital_bone, add_horns, add_morphs, add_soft_bones, add_tail, dump_vertices,  # noqa: E402
+from mh_common import (add_genital_bone, add_horns, add_morphs, add_soft_bones, add_tail, add_tusks, dump_vertices,  # noqa: E402
                        lower_pubic_hair, make_skin_normal, prepare_for_unreal, write_materials)
 
 try:
@@ -172,12 +172,15 @@ try:
     if cfg.get("genital_bone"):
         add_genital_bone(rig, body, log=log)
     for o in [o for o in bpy.data.objects if o.type == "MESH" and "pubic" in o.name.lower()]:
-        lower_pubic_hair(o, body, top_share=cfg.get("pubic_top_share", 0.6), above_crotch=cfg.get("pubic_above_crotch", 0.025), log=log)
+        lower_pubic_hair(o, body, top_share=cfg.get("pubic_top_share", 0.6), above_crotch=cfg.get("pubic_above_crotch", 0.025),
+                         width=cfg.get("pubic_width", 1.0), depth=cfg.get("pubic_depth", 0.0), log=log)
     # Non-human parts made for the body they go on: horns ({"length", "radius", "curl", "color"}) and a tail
     # ({"length", "radius", "bones"}).
     skin_meshes = [body]
     if cfg.get("horns"):
         add_horns(rig, body, log=log, **cfg["horns"])
+    if cfg.get("tusks"):
+        add_tusks(rig, body, log=log, **cfg["tusks"])
     if cfg.get("tail"):
         tail = add_tail(rig, body, log=log, **cfg["tail"])
         if tail:

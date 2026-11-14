@@ -1,7 +1,7 @@
-// Not a check: `creator` (tools/play-creator.bat) is the first live character creator (docs/design/makehuman.md,
-// "Character creator"): three colonists on the MakeHuman creator bases (a woman, a man and an imp made from the man's
-// base), standing in a row with the graphics up, and a panel of sliders that change the selected one as you drag (morph
-// targets on its mesh, its height and skin colour). They can walk back and forth to show the jiggle and the tail.
+// Not a check: `creator` (tools/play-creator.bat) is the live character creator (docs/design/makehuman.md, "Character
+// creator"): colonists on the MakeHuman creator bases standing in a row with the graphics up, and a panel that changes
+// the picked one as you drag: gender (which base), kind (baseline, imp, orcoid), body sliders, pubic hair and skin
+// (morph targets on its mesh, its height and skin colour). They can walk back and forth to show the jiggle and the tail.
 #include "SmokeTest.h"
 
 #include "Components/SkeletalMeshComponent.h"
@@ -31,13 +31,17 @@
 
 namespace
 {
-	/** One character in the creator: which base, its slider values, and its colonist. */
+	enum class ECreatorKind : int32 { Baseline, Imp, Orcoid };
+	const char* const CreatorKindNames[] = {"Baseline", "Imp", "Orcoid"};
+	const char* const CreatorPubicNames[] = {"None", "Natural", "Trimmed", "Strip"};
+
+	/** One character in the creator: its gender (which base), kind, slider values, and its colonist. */
 	struct FCreatorPerson
 	{
-		FString Label;
-		FString Base;             // CreatorFemale or CreatorMale
-		bool bFemale = true;
 		colony::Entity Thing = colony::kNoEntity;
+		FSimPawnLooks Looks;      // what the colonist is drawn with (its base)
+		bool bFemale = true;
+		ECreatorKind Kind = ECreatorKind::Baseline;
 		float Height = 1.0f;      // scale of the mesh
 		float Sex = 0.0f;         // 0 .. 1 towards the other sex (Masculine on the woman's base, Feminine on the man's)
 		float Older = 0.0f;
@@ -46,9 +50,18 @@ namespace
 		float Breasts = 0.0f;     // -1 small .. 1 large (woman's base)
 		float ImpEars = 0.0f;
 		float ImpFace = 0.0f;
+		float OrcFace = 0.0f;
 		float Horns = 0.0f;
+		float Tusks = 0.0f;
 		float Tail = 0.0f;
+		int32 Pubic = 1;          // CreatorPubicNames
+		float PubicLow = 0.0f;
 		float Skin[3] = {0.91f, 0.80f, 0.75f};
+
+		FString Label(int32 Index) const
+		{
+			return FString::Printf(TEXT("%d %s %s"), Index + 1, bFemale ? TEXT("woman") : TEXT("man"), UTF8_TO_TCHAR(CreatorKindNames[static_cast<int32>(Kind)]));
+		}
 	};
 
 	struct FCreatorState
@@ -60,6 +73,7 @@ namespace
 		float DemoTime = -1.0f;   // -CreatorDemo: seconds into the self-running demo
 		int32 Recorded = 0;
 		int32 PanelFrames = 0;
+		int32 BaseSwitches = 0;
 		float CameraDistance = 420.0f;
 		float CameraHeight = 120.0f;
 		bool bWalk = false;
@@ -72,46 +86,56 @@ namespace
 
 	const FVector CreatorOrigin(-1695000.0, 4800.0, 0.0);
 
-	void CreatorRegular(FCreatorPerson& P)
+	void CreatorSetSkin(FCreatorPerson& P, float R, float G, float B)
 	{
-		const bool bFemale = P.bFemale;
-		P = FCreatorPerson{P.Label, P.Base, bFemale, P.Thing};
-		if (!bFemale)
+		P.Skin[0] = R;
+		P.Skin[1] = G;
+		P.Skin[2] = B;
+	}
+
+	/** A kind's look on top of the person's gender: the inhuman parts, a build and a skin colour. Body sliders reset. */
+	void CreatorSetKind(FCreatorPerson& P, ECreatorKind Kind)
+	{
+		P.Kind = Kind;
+		P.Sex = P.Older = P.Breasts = 0.0f;
+		P.ImpEars = P.ImpFace = P.OrcFace = P.Horns = P.Tusks = P.Tail = 0.0f;
+		P.Weight = P.bFemale ? -0.2f : 0.0f;
+		P.Muscle = 0.0f;
+		P.Height = P.bFemale ? 0.94f : 1.02f;
+		if (P.bFemale)
 		{
-			P.Skin[0] = 0.85f;
-			P.Skin[1] = 0.70f;
-			P.Skin[2] = 0.60f;
-			P.Height = 1.02f;
+			CreatorSetSkin(P, 0.91f, 0.80f, 0.75f);
 		}
 		else
 		{
-			P.Height = 0.94f;
-			P.Weight = -0.2f;
+			CreatorSetSkin(P, 0.85f, 0.70f, 0.60f);
 		}
-	}
-
-	void CreatorImp(FCreatorPerson& P)
-	{
-		CreatorRegular(P);
-		P.Height = 0.82f;
-		P.Weight = -0.6f;
-		P.Muscle = 0.6f;
-		P.ImpEars = 1.0f;
-		P.ImpFace = 1.0f;
-		P.Horns = 1.0f;
-		P.Tail = 1.0f;
-		P.Skin[0] = 0.72f;
-		P.Skin[1] = 0.17f;
-		P.Skin[2] = 0.12f;
+		if (Kind == ECreatorKind::Imp)
+		{
+			P.Height = P.bFemale ? 0.80f : 0.84f;
+			P.Weight = -0.6f;
+			P.Muscle = 0.6f;
+			P.ImpEars = P.ImpFace = P.Horns = P.Tail = 1.0f;
+			CreatorSetSkin(P, 0.72f, 0.17f, 0.12f);
+		}
+		else if (Kind == ECreatorKind::Orcoid)
+		{
+			P.Height = P.bFemale ? 1.0f : 1.08f;
+			P.Weight = 0.25f;
+			P.Muscle = 1.0f;
+			P.OrcFace = P.Tusks = 1.0f;
+			P.ImpEars = 0.45f;
+			CreatorSetSkin(P, 0.42f, 0.55f, 0.32f);
+		}
 	}
 
 	/** Puts a person's sliders on its mesh: morphs, height, skin colour. */
 	void CreatorApply(const FCreatorPerson& P, ASimPawnActor& Pawn)
 	{
 		USkeletalMeshComponent* Mesh = Pawn.GetMakeHumanMesh();
-		if (!Mesh)
+		if (!Mesh || Pawn.GetLooks().MakeHuman != P.Looks.MakeHuman)
 		{
-			return;
+			return;  // its new base is not on yet
 		}
 		const auto Set = [Mesh](const TCHAR* Name, float Value) { Mesh->SetMorphTarget(Name, FMath::Clamp(Value, 0.0f, 1.0f), false); };
 		Set(P.bFemale ? TEXT("Masculine") : TEXT("Feminine"), P.Sex);
@@ -120,19 +144,31 @@ namespace
 		Set(TEXT("Thin"), -P.Weight);
 		Set(TEXT("Muscular"), P.Muscle);
 		Set(TEXT("Soft"), -P.Muscle);
-		if (P.bFemale)
-		{
-			Set(TEXT("BreastsLarge"), P.Breasts);
-			Set(TEXT("BreastsSmall"), -P.Breasts);
-		}
+		Set(TEXT("BreastsLarge"), P.bFemale ? P.Breasts : 0.0f);
+		Set(TEXT("BreastsSmall"), P.bFemale ? -P.Breasts : 0.0f);
 		Set(TEXT("ImpEars"), P.ImpEars);
 		Set(TEXT("ImpFace"), P.ImpFace);
+		Set(TEXT("OrcFace"), P.OrcFace);
 		Set(TEXT("NoHorns"), 1.0f - P.Horns);
+		Set(TEXT("NoTusks"), 1.0f - P.Tusks);
 		Set(TEXT("NoTail"), 1.0f - P.Tail);
+		Set(TEXT("PubicNone"), P.Pubic == 0 ? 1.0f : 0.0f);
+		Set(TEXT("PubicTrimmed"), P.Pubic == 2 ? 1.0f : 0.0f);
+		Set(TEXT("PubicStrip"), P.Pubic == 3 ? 1.0f : 0.0f);
+		Set(TEXT("PubicLow"), P.Pubic == 0 ? 0.0f : P.PubicLow);
 		Mesh->SetRelativeScale3D(FVector(P.Height));
 		// The panel's colour is as seen (sRGB); the skin material takes it linear, as FSimPawnLooks::Skin is.
 		const FLinearColor Skin = FLinearColor::FromSRGBColor(FLinearColor(P.Skin[0], P.Skin[1], P.Skin[2]).ToFColor(false));
 		Mesh->SetCustomPrimitiveDataVector3(PawnLooksSkinDataIndex, FVector(Skin.R, Skin.G, Skin.B));
+	}
+
+	/** Gender: the person's base (the woman's or the man's); its kind and sliders stay. */
+	void CreatorSetGender(FCreatorPerson& P, bool bFemale, USimPawnSubsystem& Pawns)
+	{
+		P.bFemale = bFemale;
+		P.Looks.bFemale = bFemale;
+		P.Looks.MakeHuman = bFemale ? TEXT("CreatorFemale") : TEXT("CreatorMale");
+		Pawns.SetLooksOverride(P.Thing, P.Looks);
 	}
 }
 
@@ -223,8 +259,8 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			Fail(TEXT("the Crashlanded start has no colonists"));
 			return;
 		}
-		// A regular woman, a regular man and an imp made from the man's base.
-		const int32 Count = FMath::Min(3, Colonists.Num());
+		// A baseline woman and man, a woman imp and a man orcoid (gender and kind are chosen apart).
+		const int32 Count = FMath::Min(4, Colonists.Num());
 		const colony::DefDatabase* Defs = B->GetDefs().get();
 		for (int32 i = 0; i < Colonists.Num(); ++i)
 		{
@@ -234,25 +270,14 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				continue;
 			}
 			FCreatorPerson Person;
-			Person.Label = i == 0 ? TEXT("Woman") : (i == 1 ? TEXT("Man") : TEXT("Imp"));
-			Person.bFemale = i == 0;
-			Person.Base = Person.bFemale ? TEXT("CreatorFemale") : TEXT("CreatorMale");
 			Person.Thing = Colonists[i]->id;
-			if (i == 2)
-			{
-				CreatorImp(Person);
-			}
-			else
-			{
-				CreatorRegular(Person);
-			}
+			Person.bFemale = i == 0 || i == 2;
+			CreatorSetKind(Person, i < 2 ? ECreatorKind::Baseline : (i == 2 ? ECreatorKind::Imp : ECreatorKind::Orcoid));
+			Person.Looks = Colonists[i]->looks >= 0 ? USimPawnSubsystem::MakeLooks(Snapshot.looks[static_cast<size_t>(Colonists[i]->looks)], Defs) : FSimPawnLooks();
+			Person.Looks.Height = 1.0f;
+			Person.Looks.Skin = FLinearColor(Person.Skin[0], Person.Skin[1], Person.Skin[2]);
+			CreatorSetGender(Person, Person.bFemale, *Pawns);
 			State->People.Add(Person);
-			FSimPawnLooks Looks = Colonists[i]->looks >= 0 ? USimPawnSubsystem::MakeLooks(Snapshot.looks[static_cast<size_t>(Colonists[i]->looks)], Defs) : FSimPawnLooks();
-			Looks.bFemale = Person.bFemale;
-			Looks.Height = 1.0f;
-			Looks.Skin = FLinearColor(Person.Skin[0], Person.Skin[1], Person.Skin[2]);
-			Looks.MakeHuman = Person.Base;
-			Pawns->SetLooksOverride(Person.Thing, Looks);
 			for (const colony::Entity Item : Sim->apparel().worn(Person.Thing))
 			{
 				std::string Error;
@@ -260,7 +285,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				B->Submit(colony::DestroyThingCommand{Item});
 			}
 			B->Submit(colony::DraftCommand{Person.Thing, true});
-			B->Submit(colony::MoveOrderCommand{Person.Thing, colony::CellPos{Middle.x - 1, Middle.y + 6 - 2 + i * 2, 0}});
+			B->Submit(colony::MoveOrderCommand{Person.Thing, colony::CellPos{Middle.x - 1, Middle.y + 6 - 3 + i * 2, 0}});
 		}
 		B->StepOnce();
 		B->SetSpeed(1);
@@ -285,7 +310,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			State->bFaced = true;
 			for (int32 i = 0; i < State->People.Num(); ++i)
 			{
-				B->Submit(colony::MoveOrderCommand{State->People[i].Thing, colony::CellPos{State->Middle.x, State->Middle.y + 6 - 2 + i * 2, 0}});
+				B->Submit(colony::MoveOrderCommand{State->People[i].Thing, colony::CellPos{State->Middle.x, State->Middle.y + 6 - 3 + i * 2, 0}});
 			}
 		}
 		// Walking: back and forth along X, side by side, so the jiggle and the tail show.
@@ -295,13 +320,13 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			const int32 X = State->Leg % 2 == 0 ? -8 : 2;
 			for (int32 i = 0; i < State->People.Num(); ++i)
 			{
-				B->Submit(colony::MoveOrderCommand{State->People[i].Thing, colony::CellPos{State->Middle.x + X, State->Middle.y + 6 - 2 + i * 2, 0}});
+				B->Submit(colony::MoveOrderCommand{State->People[i].Thing, colony::CellPos{State->Middle.x + X, State->Middle.y + 6 - 3 + i * 2, 0}});
 			}
 			++State->Leg;
 		}
 		// -CreatorDemo: the sliders move by themselves on the woman (body, then into an imp), then they all walk; with
 		// -CreatorRecord=<seconds> every frame is saved at a fixed 30 a second (creator/rec_0000.png ...).
-		if (FParse::Param(FCommandLine::Get(), TEXT("CreatorDemo")) && PhaseTime > 4.5f && State->People.Num() >= 3)
+		if (FParse::Param(FCommandLine::Get(), TEXT("CreatorDemo")) && PhaseTime > 4.5f && State->People.Num() >= 2)
 		{
 			float RecordSeconds = 0.0f;
 			FParse::Value(FCommandLine::Get(), TEXT("CreatorRecord="), RecordSeconds);
@@ -318,20 +343,30 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			const float T = State->DemoTime;
 			FCreatorPerson& W = State->People[0];
 			const auto Wave = [T](float From, float To) { return T < From || T > To ? 0.0f : FMath::Sin(PI * 2.0f * (T - From) / (To - From)); };
-			const auto Ramp = [T](float From, float To) { return FMath::Clamp((T - From) / (To - From), 0.0f, 1.0f); };
-			State->Selected = T < 17.0f ? 0 : (T < 22.0f ? 2 : 1);
-			State->CameraDistance = T < 17.0f ? 260.0f : 380.0f;
-			State->CameraYaw = T < 17.0f ? 0.0f : 75.0f;
-			W.Weight = -0.2f + Wave(0.0f, 3.0f);
-			W.Muscle = Wave(3.0f, 6.0f);
-			W.Breasts = Wave(6.0f, 9.0f);
-			W.Older = FMath::Max(0.0f, Wave(9.0f, 12.0f));
-			const float Imp = Ramp(12.0f, 15.0f);
-			W.ImpEars = W.ImpFace = W.Horns = W.Tail = Imp;
-			W.Skin[0] = FMath::Lerp(0.91f, 0.72f, Imp);
-			W.Skin[1] = FMath::Lerp(0.80f, 0.17f, Imp);
-			W.Skin[2] = FMath::Lerp(0.75f, 0.12f, Imp);
-			if (T > 16.0f && !State->bWalk)
+			// Body sliders on the woman, then her gender and kind changed: man, imp, orcoid, back to a woman orcoid; then all walk.
+			State->Selected = T < 21.0f ? 0 : (T < 25.0f ? FMath::Min(2, State->People.Num() - 1) : FMath::Min(3, State->People.Num() - 1));
+			State->CameraDistance = T < 21.0f ? 260.0f : 380.0f;
+			State->CameraYaw = T < 21.0f ? 0.0f : 75.0f;
+			if (T < 9.0f)
+			{
+				W.Weight = -0.2f + Wave(0.0f, 3.0f);
+				W.Muscle = Wave(3.0f, 6.0f);
+				W.Breasts = Wave(6.0f, 9.0f);
+			}
+			const int32 Step = T < 11.0f ? 0 : (T < 13.0f ? 1 : (T < 15.0f ? 2 : (T < 17.0f ? 3 : (T < 19.0f ? 4 : 5))));
+			static const bool StepFemale[] = {true, false, false, false, true, true};
+			static const ECreatorKind StepKind[] = {ECreatorKind::Baseline, ECreatorKind::Baseline, ECreatorKind::Imp, ECreatorKind::Orcoid,
+				ECreatorKind::Orcoid, ECreatorKind::Orcoid};
+			if (W.bFemale != StepFemale[Step])
+			{
+				CreatorSetGender(W, StepFemale[Step], *Pawns);
+				CreatorSetKind(W, StepKind[Step]);
+			}
+			if (W.Kind != StepKind[Step])
+			{
+				CreatorSetKind(W, StepKind[Step]);
+			}
+			if (T > 20.0f && !State->bWalk)
 			{
 				State->bWalk = true;
 				State->LegTime = 99.0f;
@@ -390,55 +425,88 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				{
 					ImGui::SameLine();
 				}
-				if (ImGui::RadioButton(TCHAR_TO_UTF8(*State->People[i].Label), State->Selected == i))
+				if (ImGui::RadioButton(TCHAR_TO_UTF8(*FString::Printf(TEXT("%d##person"), i + 1)), State->Selected == i))
 				{
 					State->Selected = i;
 				}
 			}
-			ImGui::Separator();
 			FCreatorPerson& P = State->People[FMath::Clamp(State->Selected, 0, State->People.Num() - 1)];
-			ImGui::Text("Base: %s", P.bFemale ? "woman" : "man");
-			ImGui::SliderFloat("Height", &P.Height, 0.75f, 1.15f, "%.2f");
-			ImGui::SliderFloat(P.bFemale ? "Masculine" : "Feminine", &P.Sex, 0.0f, 1.0f, "%.2f");
-			ImGui::SliderFloat("Older", &P.Older, 0.0f, 1.0f, "%.2f");
-			ImGui::SliderFloat("Thin / heavy", &P.Weight, -1.0f, 1.0f, "%.2f");
-			ImGui::SliderFloat("Soft / muscular", &P.Muscle, -1.0f, 1.0f, "%.2f");
-			if (P.bFemale)
-			{
-				ImGui::SliderFloat("Breasts", &P.Breasts, -1.0f, 1.0f, "%.2f");
-			}
-			ImGui::Separator();
-			ImGui::TextUnformatted("Inhuman");
-			ImGui::SliderFloat("Pointed ears", &P.ImpEars, 0.0f, 1.0f, "%.2f");
-			ImGui::SliderFloat("Imp face", &P.ImpFace, 0.0f, 1.0f, "%.2f");
-			ImGui::SliderFloat("Horns", &P.Horns, 0.0f, 1.0f, "%.2f");
-			ImGui::SliderFloat("Tail", &P.Tail, 0.0f, 1.0f, "%.2f");
-			ImGui::ColorEdit3("Skin", P.Skin);
-			ImGui::Separator();
-			if (ImGui::Button("Regular"))
-			{
-				CreatorRegular(P);
-			}
 			ImGui::SameLine();
-			if (ImGui::Button("Imp"))
+			ImGui::TextUnformatted(TCHAR_TO_UTF8(*P.Label(State->Selected)));
+			if (ImGui::BeginTabBar("##creator"))
 			{
-				CreatorImp(P);
-			}
-			ImGui::SameLine();
-			if (ImGui::Button("Random"))
-			{
-				FRandomStream R(FPlatformTime::Cycles());
-				CreatorRegular(P);
-				P.Height = R.FRandRange(0.85f, 1.1f);
-				P.Sex = R.FRandRange(0.0f, 0.35f);
-				P.Older = R.FRand() < 0.3f ? R.FRandRange(0.2f, 1.0f) : 0.0f;
-				P.Weight = R.FRandRange(-0.8f, 0.8f);
-				P.Muscle = R.FRandRange(-0.6f, 0.8f);
-				P.Breasts = R.FRandRange(-0.8f, 0.8f);
-				const float Tone = R.FRand();
-				P.Skin[0] = FMath::Lerp(0.95f, 0.36f, Tone);
-				P.Skin[1] = FMath::Lerp(0.84f, 0.22f, Tone);
-				P.Skin[2] = FMath::Lerp(0.78f, 0.15f, Tone);
+				if (ImGui::BeginTabItem("Gender"))
+				{
+					if (ImGui::RadioButton("Woman", P.bFemale) && !P.bFemale)
+					{
+						CreatorSetGender(P, true, *Pawns);
+						++State->BaseSwitches;
+					}
+					ImGui::SameLine();
+					if (ImGui::RadioButton("Man", !P.bFemale) && P.bFemale)
+					{
+						CreatorSetGender(P, false, *Pawns);
+						++State->BaseSwitches;
+					}
+					ImGui::SliderFloat(P.bFemale ? "More masculine" : "More feminine", &P.Sex, 0.0f, 1.0f, "%.2f");
+					ImGui::EndTabItem();
+				}
+				if (ImGui::BeginTabItem("Kind"))
+				{
+					for (int32 k = 0; k < 3; ++k)
+					{
+						if (k > 0)
+						{
+							ImGui::SameLine();
+						}
+						if (ImGui::RadioButton(CreatorKindNames[k], static_cast<int32>(P.Kind) == k))
+						{
+							CreatorSetKind(P, static_cast<ECreatorKind>(k));
+						}
+					}
+					ImGui::SliderFloat("Pointed ears", &P.ImpEars, 0.0f, 1.0f, "%.2f");
+					ImGui::SliderFloat("Imp face", &P.ImpFace, 0.0f, 1.0f, "%.2f");
+					ImGui::SliderFloat("Orc face", &P.OrcFace, 0.0f, 1.0f, "%.2f");
+					ImGui::SliderFloat("Horns", &P.Horns, 0.0f, 1.0f, "%.2f");
+					ImGui::SliderFloat("Tusks", &P.Tusks, 0.0f, 1.0f, "%.2f");
+					ImGui::SliderFloat("Tail", &P.Tail, 0.0f, 1.0f, "%.2f");
+					ImGui::EndTabItem();
+				}
+				if (ImGui::BeginTabItem("Body"))
+				{
+					ImGui::SliderFloat("Height", &P.Height, 0.75f, 1.15f, "%.2f");
+					ImGui::SliderFloat("Older", &P.Older, 0.0f, 1.0f, "%.2f");
+					ImGui::SliderFloat("Thin / heavy", &P.Weight, -1.0f, 1.0f, "%.2f");
+					ImGui::SliderFloat("Soft / muscular", &P.Muscle, -1.0f, 1.0f, "%.2f");
+					if (P.bFemale)
+					{
+						ImGui::SliderFloat("Breasts", &P.Breasts, -1.0f, 1.0f, "%.2f");
+					}
+					if (ImGui::Button("Random body"))
+					{
+						FRandomStream R(FPlatformTime::Cycles());
+						P.Height = R.FRandRange(0.85f, 1.1f);
+						P.Sex = R.FRandRange(0.0f, 0.3f);
+						P.Older = R.FRand() < 0.3f ? R.FRandRange(0.2f, 1.0f) : 0.0f;
+						P.Weight = R.FRandRange(-0.8f, 0.8f);
+						P.Muscle = R.FRandRange(-0.6f, 0.8f);
+						P.Breasts = R.FRandRange(-0.8f, 0.8f);
+					}
+					ImGui::EndTabItem();
+				}
+				if (ImGui::BeginTabItem("Hair and skin"))
+				{
+					ImGui::Combo("Pubic hair", &P.Pubic, CreatorPubicNames, 4);
+					ImGui::SliderFloat("Lower", &P.PubicLow, 0.0f, 1.0f, "%.2f");
+					ImGui::ColorEdit3("Skin", P.Skin);
+					if (ImGui::Button("Random skin tone"))
+					{
+						const float Tone = FRandomStream(FPlatformTime::Cycles()).FRand();
+						CreatorSetSkin(P, FMath::Lerp(0.95f, 0.36f, Tone), FMath::Lerp(0.84f, 0.22f, Tone), FMath::Lerp(0.78f, 0.15f, Tone));
+					}
+					ImGui::EndTabItem();
+				}
+				ImGui::EndTabBar();
 			}
 			ImGui::Separator();
 			ImGui::Checkbox("Walk back and forth", &State->bWalk);
@@ -453,6 +521,10 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 	{
 		Notes.Add(FString::Printf(TEXT("creator: %d people, panel drawn %d frames, tail swung up to %.0f degrees, soft tissue up to %.1f cm"), State->People.Num(),
 			State->PanelFrames, State->LargestTailSwing, State->LargestJiggle));
+		for (int32 i = 0; i < State->People.Num(); ++i)
+		{
+			Notes.Add(FString::Printf(TEXT("creator: %s"), *State->People[i].Label(i)));
+		}
 	};
 	Phases.Add(MoveTemp(Play));
 }
