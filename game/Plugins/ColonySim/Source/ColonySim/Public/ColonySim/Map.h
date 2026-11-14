@@ -5,6 +5,7 @@
 #include "ColonySim/Grid.h"
 
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -231,6 +232,36 @@ public:
     void dryWater(CellPos c);
     const std::vector<uint32_t>& dried() const { return dried_; }
     void restoreDried(const std::vector<uint32_t>& cells);
+    // Level ground for structures (docs/design/levelling.md). A building or floor on the ground digs out
+    // or fills its footprint to one height, its "base": the lowest corner under it rounded to
+    // kLevelStepM, or the base of a structure beside it when that is within kLevelJoinM, so joined
+    // walls share one base and their tops line up. An enclosed, roofed room is levelled to its walls'
+    // base. A corner that a cell with another base also touches is left alone (it ramps between the two).
+    static constexpr float kLevelStepM = 0.25f;
+    static constexpr float kLevelJoinM = 1.0f;
+    bool levelled(CellPos c) const {
+        return c.level == 0 && inBounds(c) && !levelBase_.empty() && !std::isnan(levelBase_[static_cast<size_t>(index(c))]);
+    }
+    bool anyLevelled() const { return !levelBase_.empty(); }
+    // The base a levelled ground cell was dug to; NaN if it was never levelled.
+    float levelBase(CellPos c) const;
+    // Levels a footprint on the ground (nothing above it) and returns its base, NaN off the ground.
+    float levelGround(CellRect rect);
+    // Levels the given ground cells to `base`.
+    void levelCells(const std::vector<CellPos>& cells, float base);
+    // Every corner the levelling moved, in order (a corner can come more than once): Unreal redraws
+    // the ground around the ones it has not seen yet.
+    const std::vector<uint32_t>& levelledCorners() const { return levelLog_; }
+    // For saves: the levelled cells with their bases, and the moved corners with their heights, both in cm.
+    struct LevelState {
+        std::vector<uint32_t> cells;
+        std::vector<int32_t> cellBaseCm;
+        std::vector<uint32_t> corners;
+        std::vector<int32_t> cornerCm;
+    };
+    LevelState levelState() const;
+    bool restoreLevelState(const LevelState& state);
+    uint64_t levelHash() const;
     bool geyser(CellPos c) const { return c.level == 0 && inBounds(c) && !geyser_.empty() && geyser_[static_cast<size_t>(index(c))] != 0; }
 
     // The roof over a cell. Thick over the rock the map was generated with (and over it for good,
@@ -321,6 +352,10 @@ private:
     std::vector<uint8_t> geyser_;  // 1 where a steam geyser vents
     std::vector<uint8_t> flowing_;  // 1 where the water moves (a river)
     std::vector<uint32_t> dried_;   // cells a moisture pump dried, in the order it did
+    std::vector<float> levelBase_;     // per ground cell, NaN where nothing levelled it; empty until first used
+    std::vector<uint8_t> levelMoved_;  // 1 where the levelling moved a corner
+    std::vector<uint32_t> levelLog_;   // corners moved, in order
+    void setLevelCorner(int corner, float metres);
     std::vector<int> hollow_;  // mined-out ground cells that still have the thick roof
     std::vector<LevelLink> levelLinks_;
     std::unique_ptr<Regions> regions_;

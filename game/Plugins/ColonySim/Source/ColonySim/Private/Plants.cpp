@@ -116,7 +116,15 @@ Plants::Plants(const Map& map, const DefDatabase& defs, uint64_t seed, const std
     }
 
     if (biomeDef != nullptr && !kinds_.empty()) {
-        generate(seed, biomeDef->number("plantDensity", 0.0));
+        ForestPatches patches;
+        if (biomeDef->has("forestPatches")) {
+            patches.set = true;
+            patches.openShare = std::clamp(biomeDef->number("forestPatches.openShare", patches.openShare), 0.0, 1.0);
+            patches.openTrees = biomeDef->number("forestPatches.openTrees", patches.openTrees);
+            patches.denseTrees = biomeDef->number("forestPatches.denseTrees", patches.denseTrees);
+            patches.cellMetres = static_cast<float>(std::max(1.0, biomeDef->number("forestPatches.cellMetres", patches.cellMetres)));
+        }
+        generate(seed, biomeDef->number("plantDensity", 0.0), patches);
     }
 }
 
@@ -248,9 +256,30 @@ void Plants::growHourSlice(int hourOfDay, int slice, int slices) {
     }
 }
 
-void Plants::generate(uint64_t seed, double density) {
+void Plants::generate(uint64_t seed, double density, const ForestPatches& patches) {
     Rng rng(splitMix64(seed ^ 0x706C616E74ULL), 7);
     const uint64_t forestSeed = splitMix64(seed ^ 0x666F72657374ULL);
+    // Forest patches: the noise value below which ground is open, taken from this map's own noise so the
+    // open share is what the biome asks for.
+    float openBelow = 0.0f;
+    if (patches.set) {
+        std::vector<float> noise;
+        noise.reserve(fertility_.size());
+        for (int y = 0; y < map_.height(); ++y) {
+            for (int x = 0; x < map_.width(); ++x) {
+                noise.push_back(plantsNoise(forestSeed, x, y, patches.cellMetres));
+            }
+        }
+        if (patches.openShare <= 0.0) {
+            openBelow = -1.0f;
+        } else if (patches.openShare >= 1.0) {
+            openBelow = 2.0f;
+        } else if (!noise.empty()) {
+            const auto nth = noise.begin() + static_cast<std::ptrdiff_t>(patches.openShare * static_cast<double>(noise.size() - 1));
+            std::nth_element(noise.begin(), nth, noise.end());
+            openBelow = *nth;
+        }
+    }
     std::vector<double> weight(kinds_.size());
     for (int y = 0; y < map_.height(); ++y) {
         for (int x = 0; x < map_.width(); ++x) {
@@ -266,8 +295,17 @@ void Plants::generate(uint64_t seed, double density) {
                 continue;
             }
             // Trees come in forests and meadows: the share of trees swings between 0.2 and 1.8
-            // times the biome's.
-            const double forest = 0.2 + 1.6 * static_cast<double>(plantsNoise(forestSeed, x, y, kPlantsForestCell));
+            // times the biome's. A biome with `forestPatches` has open ground (few trees, the bushes and
+            // grass stay) and dense forest instead, with a 6 m edge between them.
+            double forest = 0.0;
+            if (patches.set) {
+                const float n = plantsNoise(forestSeed, x, y, patches.cellMetres);
+                const float edge = 6.0f / patches.cellMetres * 0.25f;  // noise change across about 6 m
+                const float t = std::clamp((n - openBelow) / (2.0f * edge) + 0.5f, 0.0f, 1.0f);
+                forest = patches.openTrees + (patches.denseTrees - patches.openTrees) * static_cast<double>(t);
+            } else {
+                forest = 0.2 + 1.6 * static_cast<double>(plantsNoise(forestSeed, x, y, kPlantsForestCell));
+            }
             double total = 0.0;
             for (size_t k = 0; k < kinds_.size(); ++k) {
                 const Kind& kind = kinds_[k];

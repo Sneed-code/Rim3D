@@ -79,7 +79,7 @@ as smoothly as the body.
 | Tab (overseer view) | take control of the selected colonist, else the protagonist |
 | Tab (direct mode) | back to the overseer view, centred on the colonist, which is selected |
 | W A S D | walk, relative to where the camera looks; Ctrl for a slow walk |
-| mouse | look (yaw and pitch, up to 80 degrees) |
+| mouse | look (yaw and pitch, up to 80 degrees); `Protagonist.MouseTurn` (0.7 default, about 0.05 degrees a mouse count) sets how fast |
 | wheel | third person distance |
 | V | first and third person |
 | T | take over the colonist under the crosshair (within 25 m) |

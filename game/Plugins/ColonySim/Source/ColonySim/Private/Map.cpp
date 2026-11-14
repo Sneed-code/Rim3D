@@ -155,6 +155,181 @@ void Map::restoreDried(const std::vector<uint32_t>& cells) {
     }
 }
 
+float Map::levelBase(CellPos c) const {
+    return levelled(c) ? levelBase_[static_cast<size_t>(index(c))] : std::nanf("");
+}
+
+void Map::setLevelCorner(int corner, float metres) {
+    const size_t i = static_cast<size_t>(corner);
+    if (groundHeight_[i] == metres) {
+        return;
+    }
+    if (levelMoved_.empty()) {
+        levelMoved_.assign(groundHeight_.size(), 0);
+    }
+    groundHeight_[i] = metres;
+    levelMoved_[i] = 1;
+    levelLog_.push_back(static_cast<uint32_t>(corner));
+    // A corner is shared by the four cells round it; cover and sight look at all of them.
+    const CellPos c = cellAt(corner);
+    for (int dy = -1; dy <= 0; ++dy) {
+        for (int dx = -1; dx <= 0; ++dx) {
+            const CellPos n{c.x + dx, c.y + dy, 0};
+            if (inBounds(n)) {
+                cover_->markDirty(n);
+            }
+        }
+    }
+}
+
+void Map::levelCells(const std::vector<CellPos>& cells, float base) {
+    if (levelBase_.empty()) {
+        levelBase_.assign(groundHeight_.size(), std::nanf(""));
+    }
+    for (const CellPos& c : cells) {
+        if (onGround(c)) {
+            levelBase_[static_cast<size_t>(index(c))] = base;
+        }
+    }
+    for (const CellPos& c : cells) {
+        if (!onGround(c)) {
+            continue;
+        }
+        // Cell (x, y) spans corners x to x + 1 and y to y + 1; the last row and column of corners are the map's edge.
+        for (int cy = c.y; cy <= std::min(c.y + 1, height_ - 1); ++cy) {
+            for (int cx = c.x; cx <= std::min(c.x + 1, width_ - 1); ++cx) {
+                bool shared = false;
+                for (int ny = cy - 1; ny <= cy && !shared; ++ny) {
+                    for (int nx = cx - 1; nx <= cx; ++nx) {
+                        const CellPos n{nx, ny, 0};
+                        if (inBounds(n)) {
+                            const float other = levelBase_[static_cast<size_t>(index(n))];
+                            if (!std::isnan(other) && other != base) {
+                                shared = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (!shared) {
+                    setLevelCorner(index(CellPos{cx, cy, 0}), base);
+                }
+            }
+        }
+    }
+}
+
+float Map::levelGround(CellRect rect) {
+    if (rect.level != 0) {
+        return std::nanf("");
+    }
+    float natural = 1.0e9f;
+    std::vector<CellPos> cells;
+    for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
+        for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
+            const CellPos c{x, y, 0};
+            if (!inBounds(c)) {
+                continue;
+            }
+            cells.push_back(c);
+            for (int cy = y; cy <= std::min(y + 1, height_ - 1); ++cy) {
+                for (int cx = x; cx <= std::min(x + 1, width_ - 1); ++cx) {
+                    natural = std::min(natural, groundHeight_[static_cast<size_t>(cy * width_ + cx)]);
+                }
+            }
+        }
+    }
+    if (cells.empty()) {
+        return std::nanf("");
+    }
+    // The fixed steps: every structure stands at a whole number of kLevelStepM.
+    const float snapped = std::round(natural / kLevelStepM) * kLevelStepM;
+    float base = snapped;
+    float bestDiff = kLevelJoinM + 1.0f;
+    for (int y = rect.minY - 1; y <= rect.minY + rect.sizeY; ++y) {
+        for (int x = rect.minX - 1; x <= rect.minX + rect.sizeX; ++x) {
+            const float other = levelBase(CellPos{x, y, 0});
+            if (std::isnan(other)) {
+                continue;
+            }
+            const float diff = std::fabs(other - snapped);
+            if (diff <= kLevelJoinM && (diff < bestDiff || (diff == bestDiff && other < base))) {
+                base = other;
+                bestDiff = diff;
+            }
+        }
+    }
+    levelCells(cells, base);
+    return base;
+}
+
+Map::LevelState Map::levelState() const {
+    LevelState state;
+    for (size_t i = 0; i < levelBase_.size(); ++i) {
+        if (!std::isnan(levelBase_[i])) {
+            state.cells.push_back(static_cast<uint32_t>(i));
+            state.cellBaseCm.push_back(static_cast<int32_t>(std::lround(levelBase_[i] * 100.0f)));
+        }
+    }
+    for (size_t i = 0; i < levelMoved_.size(); ++i) {
+        if (levelMoved_[i] != 0) {
+            state.corners.push_back(static_cast<uint32_t>(i));
+            state.cornerCm.push_back(static_cast<int32_t>(std::lround(groundHeight_[i] * 100.0f)));
+        }
+    }
+    return state;
+}
+
+bool Map::restoreLevelState(const LevelState& state) {
+    const size_t n = groundHeight_.size();
+    if (state.cells.size() != state.cellBaseCm.size() || state.corners.size() != state.cornerCm.size()) {
+        return false;
+    }
+    levelBase_.clear();
+    levelMoved_.clear();
+    levelLog_.clear();
+    if (!state.cells.empty()) {
+        levelBase_.assign(n, std::nanf(""));
+    }
+    for (size_t k = 0; k < state.cells.size(); ++k) {
+        if (state.cells[k] >= n) {
+            return false;
+        }
+        levelBase_[state.cells[k]] = static_cast<float>(state.cellBaseCm[k]) / 100.0f;
+    }
+    std::vector<uint8_t> moved(state.corners.empty() ? 0 : n, 0);
+    for (size_t k = 0; k < state.corners.size(); ++k) {
+        if (state.corners[k] >= n) {
+            return false;
+        }
+        setLevelCorner(static_cast<int>(state.corners[k]), static_cast<float>(state.cornerCm[k]) / 100.0f);
+        moved[state.corners[k]] = 1;  // also when the height was already right
+    }
+    levelMoved_ = std::move(moved);
+    return true;
+}
+
+uint64_t Map::levelHash() const {
+    uint64_t hash = 0xCBF29CE484222325ULL;
+    const auto mix = [&hash](uint64_t value) {
+        hash ^= value;
+        hash *= 0x100000001B3ULL;
+    };
+    for (size_t i = 0; i < levelBase_.size(); ++i) {
+        if (!std::isnan(levelBase_[i])) {
+            mix(i);
+            mix(static_cast<uint64_t>(std::lround(levelBase_[i] * 100.0f)));
+        }
+    }
+    for (size_t i = 0; i < levelMoved_.size(); ++i) {
+        if (levelMoved_[i] != 0) {
+            mix(i);
+            mix(static_cast<uint64_t>(std::lround(groundHeight_[i] * 100.0f)));
+        }
+    }
+    return hash;
+}
+
 void Map::setBuilding(CellPos c, Entity building, Passage passage, uint8_t obstacleDm) {
     ++buildingChanges_;
     if (c.level != 0) {

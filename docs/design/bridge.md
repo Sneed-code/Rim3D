@@ -341,7 +341,8 @@ Code: `game/Source/Rim3D/SimSubsystem.h/.cpp` (`USimSubsystem`). Smoke test: `-T
 - **Commands.** `Submit(command)` queues one for the start of the next step. Nothing happens
   while paused until the next step (the period key steps once).
 - **Keys** (a Slate input pre-processor, so no player controller is needed): Space pauses and
-  resumes at the earlier speed, 1 / 2 / 3 set the speed, `.` steps once while paused, F7 saves a
+  resumes at the earlier speed, 1 / 2 / 3 set the speed, F3 steps through them (1x, 2x, 3x, round again; from a pause
+  it starts at 1x), `.` steps once while paused, F7 saves a
   replay to `game/Saved/Replays/replay-<time>-day<N>.json`. Keys are ignored while the console is
   open. Console: `Sim.Speed <0-3>`, `Sim.Spawn <Def> <x> <y> [count]`, `Sim.SaveReplay`,
   `Sim.ShowTimings 0|1` (off by default since L1), `Sim.DebugDraw 0|1` (coloured shapes at blended positions,
