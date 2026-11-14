@@ -557,8 +557,35 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		State->bUiWantsMouse = ImGui::GetIO().WantCaptureMouse;
 		State->bUiWantsKeys = ImGui::GetIO().WantCaptureKeyboard;
 		ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + 16.0f * Scale, Viewport->Pos.y + 16.0f * Scale), ImGuiCond_Once);
-		ImGui::SetNextWindowBgAlpha(0.8f);
-		if (ImGui::Begin("Character creator", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
+		ImGui::SetNextWindowBgAlpha(0.88f);
+		// A look of its own: warm dark panel, rounded corners, copper accents (popped after End).
+		const ImVec4 Copper(0.86f, 0.52f, 0.30f, 1.0f);
+		const ImVec4 CopperDim(0.55f, 0.32f, 0.18f, 1.0f);
+		const ImVec4 Panel(0.09f, 0.08f, 0.08f, 1.0f);
+		const ImVec4 Field(0.20f, 0.16f, 0.14f, 1.0f);
+		const ImVec4 FieldHover(0.30f, 0.23f, 0.19f, 1.0f);
+		const ImGuiStyleVar Vars[] = {ImGuiStyleVar_WindowRounding, ImGuiStyleVar_FrameRounding, ImGuiStyleVar_GrabRounding, ImGuiStyleVar_TabRounding};
+		for (const ImGuiStyleVar Var : Vars)
+		{
+			ImGui::PushStyleVar(Var, 7.0f * Scale);
+		}
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f * Scale, 12.0f * Scale));
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * Scale, 5.0f * Scale));
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(9.0f * Scale, 7.0f * Scale));
+		ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, 14.0f * Scale);
+		const TPair<ImGuiCol, ImVec4> Colours[] = {
+			{ImGuiCol_WindowBg, Panel}, {ImGuiCol_TitleBg, CopperDim}, {ImGuiCol_TitleBgActive, CopperDim}, {ImGuiCol_TitleBgCollapsed, CopperDim},
+			{ImGuiCol_FrameBg, Field}, {ImGuiCol_FrameBgHovered, FieldHover}, {ImGuiCol_FrameBgActive, FieldHover},
+			{ImGuiCol_SliderGrab, Copper}, {ImGuiCol_SliderGrabActive, ImVec4(1.0f, 0.68f, 0.45f, 1.0f)}, {ImGuiCol_CheckMark, Copper},
+			{ImGuiCol_Button, Field}, {ImGuiCol_ButtonHovered, CopperDim}, {ImGuiCol_ButtonActive, Copper},
+			{ImGuiCol_Tab, Field}, {ImGuiCol_TabHovered, CopperDim}, {ImGuiCol_TabSelected, CopperDim}, {ImGuiCol_TabSelectedOverline, Copper},
+			{ImGuiCol_Header, Field}, {ImGuiCol_HeaderHovered, FieldHover}, {ImGuiCol_Separator, CopperDim}, {ImGuiCol_Border, CopperDim},
+			{ImGuiCol_Text, ImVec4(0.95f, 0.91f, 0.86f, 1.0f)}, {ImGuiCol_TextDisabled, ImVec4(0.62f, 0.56f, 0.50f, 1.0f)}};
+		for (const TPair<ImGuiCol, ImVec4>& Colour : Colours)
+		{
+			ImGui::PushStyleColor(Colour.Key, Colour.Value);
+		}
+		if (ImGui::Begin("CHARACTER CREATOR", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
 		{
 			for (int32 i = 0; i < State->People.Num(); ++i)
 			{
@@ -605,6 +632,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 							CreatorSetKind(P, static_cast<ECreatorKind>(k));
 						}
 					}
+					ImGui::SeparatorText("Features");
 					ImGui::SliderFloat("Pointed ears", &P.ImpEars, 0.0f, 1.0f, "%.2f");
 					ImGui::SliderFloat("Imp face", &P.ImpFace, 0.0f, 1.0f, "%.2f");
 					ImGui::SliderFloat("Orc face", &P.OrcFace, 0.0f, 1.0f, "%.2f");
@@ -640,7 +668,9 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				}
 				if (ImGui::BeginTabItem("Hair and skin"))
 				{
+					ImGui::SeparatorText("Hair");
 					ImGui::ColorEdit3("Hair colour", P.Hair);
+					ImGui::SeparatorText("Pubic hair");
 					bool bPubic = P.Pubic != 0;
 					if (ImGui::Checkbox("Pubic hair", &bPubic))
 					{
@@ -661,6 +691,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 					{
 						ImGui::TextUnformatted("(a little darker than the hair)");
 					}
+					ImGui::SeparatorText("Skin");
 					ImGui::ColorEdit3("Skin", P.Skin);
 					ImGui::SliderFloat("Areola and genital pigment", &P.Pigment, 0.0f, 1.0f, "%.2f");
 					if (ImGui::Button("Random skin tone"))
@@ -674,7 +705,8 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			}
 			ImGui::Separator();
 			ImGui::Checkbox("Walk back and forth", &State->bWalk);
-			ImGui::TextUnformatted("View: middle mouse turn, wheel zoom, right mouse or WASD/QE move");
+			ImGui::SeparatorText("View");
+			ImGui::TextDisabled("middle mouse turn, wheel zoom, right mouse or WASD/QE move");
 			if (ImGui::Button("Reset view"))
 			{
 				State->CameraYaw = 180.0f;
@@ -684,6 +716,8 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			}
 		}
 		ImGui::End();
+		ImGui::PopStyleColor(UE_ARRAY_COUNT(Colours));
+		ImGui::PopStyleVar(UE_ARRAY_COUNT(Vars) + 4);
 		++State->PanelFrames;
 	};
 	Play.Verify = [=, this]()

@@ -738,15 +738,17 @@ def _pubic_layout(rig, body, female, count, seed, log=print):
         zone, u, v, density = None, 0.0, 0.0, 0.0
         if female:
             # The top edge arches: highest on the middle line, coming down to the sides (not cut straight across).
+            # A rounded inverted triangle: the top arches and its corners are rounded off, and the hairs thin out over
+            # the outer part so the outline is soft, not a jagged cut.
             z0 = crotch + 0.022
-            z1 = crotch + 0.108 - 0.022 * (min(dx, 0.065) / 0.065) ** 2
+            z1 = crotch + 0.104 - 0.03 * (min(dx, 0.05) / 0.05) ** 2
             if z0 <= p.z <= z1 and n.y < -0.25:
                 v = (p.z - z0) / (z1 - z0)
-                half = 0.011 + 0.052 * v ** 0.75
+                half = 0.011 + 0.039 * v ** 0.7 * (1.0 - 0.25 * max(0.0, v - 0.8) / 0.2)
                 if dx < half:
                     zone, u = "mons", dx / half
-                    density = 1.0 if u < 0.7 else (1.0 - u) / 0.3
-                    density *= 1.0 if v < 0.75 else 0.25 + 0.75 * (1.0 - v) / 0.25
+                    density = 1.0 if u < 0.55 else max(0.0, 1.0 - (u - 0.55) / 0.45) ** 1.5
+                    density *= 1.0 if v < 0.7 else max(0.0, 1.0 - (v - 0.7) / 0.3) ** 1.2
             elif crotch + 0.004 <= p.z < z0 and 0.006 < dx < 0.02 and n.y < -0.3:
                 zone, u, v = "labia", dx / 0.02, (p.z - crotch) / (z0 - crotch) * 0.1
                 density = 0.25
@@ -837,8 +839,11 @@ def grow_pubic_hair(rig, body, female=True, layout_path=None, count=3000, style=
         tangent = (down - n * down.dot(n))
         side = Vector(((cx - root.x), 0.0, 0.0))
         side = side - n * side.dot(n)
-        tangent = (tangent.normalized() * 0.8 + (side.normalized() * 0.35 if side.length > 1e-5 else Vector())).normalized()
+        # Lying down and in towards the middle, the more so at the edges (the outline stays tidy).
+        inward = 0.35 + 0.45 * u
+        tangent = (tangent.normalized() * 0.8 + (side.normalized() * inward if side.length > 1e-5 else Vector())).normalized()
         L = length * factor * shrink * trim * (0.85 if not female else 1.0) * (1.25 if (not female and zone == "pubis") else 1.0)
+        L *= 1.0 - 0.55 * max(u, v) ** 4   # shorter towards the outline
         if not keep:
             L = 0.0004
             root = root - n * 0.004   # folded away under the skin
