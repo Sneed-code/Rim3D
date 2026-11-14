@@ -820,6 +820,7 @@ Entity Sim::makeJoiner(CellPos cell, uint64_t seed) {
     if (!generateColonist(*defs_, seed, false, colonist, error)) {
         return kNoEntity;
     }
+    makeNameUnique(colonist, seed);
     const Entity pawn = things_->spawn("Human", cell);
     if (pawn == kNoEntity || !things_->registry().all_of<Mover>(pawn)) {
         things_->destroy(pawn);
@@ -829,6 +830,15 @@ Entity Sim::makeJoiner(CellPos cell, uint64_t seed) {
     giveLooks(pawn, seed, colonist.female, "Baseline");
     things_->registry().emplace<Colonist>(pawn, std::move(colonist));
     return pawn;
+}
+
+void Sim::makeNameUnique(Colonist& colonist, uint64_t seed) const {
+    std::vector<const Colonist*> taken;
+    const entt::registry& reg = things_->registry();
+    for (const auto [entity, other] : reg.view<const Colonist>().each()) {
+        taken.push_back(&other);
+    }
+    makeColonistNameUnique(*defs_, seed, colonist, taken);
 }
 
 void Sim::giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& lineage) {
