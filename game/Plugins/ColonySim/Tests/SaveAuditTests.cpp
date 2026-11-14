@@ -87,6 +87,9 @@ void auditSession(Sim& sim, int64_t from, int64_t to) {
             }
             sim.submit(PlaceBlueprintCommand{"FueledStove", "", auditAt(sim, 5, 5), Rot4::North});
             sim.submit(PlaceBlueprintCommand{"Bed", "Steel", auditAt(sim, 3, 5), Rot4::North});
+            // A double bed and a couple, for lovin (docs/design/lovin.md).
+            sim.submit(UnlockResearchCommand{"ComplexFurniture"});
+            sim.submit(PlaceBlueprintCommand{"DoubleBed", "Steel", auditAt(sim, -3, -4), Rot4::North});
             sim.submit(PlaceBlueprintCommand{"CraftingSpot", "", auditAt(sim, 6, 5), Rot4::North});
             sim.submit(PlaceFloorCommand{CellRect{auditAt(sim, 3, 4).x, auditAt(sim, 3, 4).y, 4, 3, 0}, "WoodFloor"});
             sim.submit(SpawnThingCommand{"Steel", auditAt(sim, -3, 2), 120});
@@ -101,6 +104,9 @@ void auditSession(Sim& sim, int64_t from, int64_t to) {
                 sim.submit(SetWorkPriorityCommand{people[1], "Cooking", 1});
                 sim.submit(SetOutfitCommand{people[1], 2});
                 sim.submit(SetMedicalCareCommand{people[0], "Best"});
+                if (people.size() > 2) {
+                    sim.submit(InteractCommand{people[1], people[2], "RomanceAttempt", 1});
+                }
             }
         }
         if (t == 700) {

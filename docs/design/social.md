@@ -10,7 +10,7 @@ Colonists talk. A talk is an **interaction** (chitchat, deep talk, kind words, a
 romantic gesture, a marriage proposal, a breakup). Each changes what the listener thinks of the talker (an
 **opinion**), may leave a mood thought, and gives the talker Social experience. **Friends** and **rivals**
 follow from opinions; **lovers**, **spouses** and their **exes** are stored **bonds**. Romance and marriage
-are bonds only: no sex, no pregnancy, no children. An insult can start a **fight with fists**.
+are stored bonds; partners sharing a double bed have abstract, adults-only lovin ([lovin.md](lovin.md)). No pregnancy, no children. An insult can start a **fight with fists**.
 
 A pawn takes part if it has needs, is not an animal and is on the player's side. It gets a `Social`
 component the first step it exists (`nextTalk`, `memories`, `bonds`, `mourned`).
