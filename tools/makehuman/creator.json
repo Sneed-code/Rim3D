@@ -1,0 +1,301 @@
+{
+  "comment": "The character creator's base bodies (tools/makehuman/mh_creator.py, docs/design/makehuman.md). Each morph is a variant build of its base with these settings changed. Adults only: there is no younger morph.",
+  "bases": [
+    {
+      "name": "CreatorFemale",
+      "config": {
+        "macro": {
+          "gender": 0.0,
+          "age": 0.5,
+          "muscle": 0.45,
+          "weight": 0.38,
+          "height": 0.42,
+          "proportions": 0.65,
+          "cupsize": 0.55,
+          "firmness": 0.6,
+          "race": {
+            "caucasian": 1.0,
+            "asian": 0.0,
+            "african": 0.0
+          }
+        },
+        "rig": "game_engine_with_breast",
+        "proxy": "{mh_user}/proxymeshes/adult_female_anatomy_body/adult_female_anatomy_body.proxy",
+        "skin": "{mh_user}/skins/natural_pale/natural_pale.mhmat",
+        "clothes": [
+          "{mh_user}/clothes/natural_pubic_hair/natural_pubic_hair.mhclo"
+        ],
+        "parts": {
+          "Hair": "{mpfb}/hair/long01/long01.mhclo",
+          "Eyebrows": "{mpfb}/eyebrows/eyebrow001/eyebrow001.mhclo",
+          "Eyelashes": "{mpfb}/eyelashes/eyelashes01/eyelashes01.mhclo",
+          "Eyes": "{mpfb}/eyes/high-poly/high-poly.mhclo",
+          "Teeth": "{mpfb}/teeth/teeth_base/teeth_base.mhclo"
+        },
+        "material_overrides": {
+          "high-poly": {
+            "color": "{mpfb}/eyes/materials/green_eye.png"
+          }
+        },
+        "tints": {
+          "long01": [
+            0.035,
+            0.03,
+            0.03
+          ],
+          "eyebrow": [
+            0.25,
+            0.2,
+            0.18
+          ],
+          "pubic": [
+            0.035,
+            0.028,
+            0.026
+          ],
+          "horn": [
+            0.06,
+            0.045,
+            0.04
+          ]
+        },
+        "horns": {
+          "length": 0.14,
+          "radius": 0.019,
+          "curl": 1.0
+        },
+        "tail": {
+          "length": 0.8,
+          "radius": 0.028,
+          "bones": 7
+        }
+      },
+      "morphs": {
+        "Masculine": {
+          "macro": {
+            "gender": 0.5
+          }
+        },
+        "BreastsLarge": {
+          "macro": {
+            "cupsize": 1.0
+          }
+        },
+        "BreastsSmall": {
+          "macro": {
+            "cupsize": 0.0
+          }
+        },
+        "Older": {
+          "macro": {
+            "age": 0.9
+          }
+        },
+        "Heavy": {
+          "macro": {
+            "weight": 1.0
+          }
+        },
+        "Thin": {
+          "macro": {
+            "weight": 0.0
+          }
+        },
+        "Muscular": {
+          "macro": {
+            "muscle": 1.0
+          }
+        },
+        "Soft": {
+          "macro": {
+            "muscle": 0.0
+          }
+        },
+        "ImpEars": {
+          "targets": {
+            "l-ear-shape-pointed": 1.0,
+            "r-ear-shape-pointed": 1.0,
+            "l-ear-scale-incr": 1.0,
+            "r-ear-scale-incr": 1.0,
+            "l-ear-scale-vert-incr": 1.0,
+            "r-ear-scale-vert-incr": 1.0,
+            "l-ear-rot-backward": 0.7,
+            "r-ear-rot-backward": 0.7,
+            "l-ear-wing-incr": 1.0,
+            "r-ear-wing-incr": 1.0,
+            "l-ear-trans-up": 0.5,
+            "r-ear-trans-up": 0.5
+          }
+        },
+        "ImpFace": {
+          "targets": {
+            "head-triangular": 0.8,
+            "head-scale-vert-incr": 0.3,
+            "chin-triangle": 0.8,
+            "chin-prominent-incr": 0.5,
+            "nose-point-down": 0.7,
+            "nose-hump-incr": 0.6,
+            "nose-scale-vert-incr": 0.4,
+            "nose-flaring-incr": 0.5,
+            "l-eye-corner1-up": 0.8,
+            "r-eye-corner1-up": 0.8,
+            "l-eye-corner2-up": 0.6,
+            "r-eye-corner2-up": 0.6,
+            "eyebrows-angle-down": 0.8,
+            "eyebrows-trans-forward": 0.6
+          }
+        },
+        "NoHorns": {
+          "horns": {
+            "length": 0.002,
+            "radius": 0.002,
+            "curl": 1.0
+          }
+        },
+        "NoTail": {
+          "tail": {
+            "length": 0.004,
+            "radius": 0.002,
+            "bones": 7
+          }
+        }
+      }
+    },
+    {
+      "name": "CreatorMale",
+      "config": {
+        "macro": {
+          "gender": 1.0,
+          "age": 0.5,
+          "muscle": 0.55,
+          "weight": 0.45,
+          "height": 0.5,
+          "proportions": 0.55,
+          "race": {
+            "caucasian": 1.0,
+            "asian": 0.0,
+            "african": 0.0
+          }
+        },
+        "rig": "game_engine_with_breast",
+        "proxy": "{mh_user}/proxymeshes/adult_male_anatomy_body/adult_male_anatomy_body.proxy",
+        "skin": "{mpfb}/skins/young_caucasian_male/young_caucasian_male.mhmat",
+        "parts": {
+          "Hair": "{mpfb}/hair/short02/short02.mhclo",
+          "Eyebrows": "{mpfb}/eyebrows/eyebrow002/eyebrow002.mhclo",
+          "Eyelashes": "{mpfb}/eyelashes/eyelashes01/eyelashes01.mhclo",
+          "Eyes": "{mpfb}/eyes/high-poly/high-poly.mhclo",
+          "Teeth": "{mpfb}/teeth/teeth_base/teeth_base.mhclo"
+        },
+        "tints": {
+          "short02": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "eyebrow": [
+            0.1,
+            0.08,
+            0.06
+          ],
+          "horn": [
+            0.06,
+            0.045,
+            0.04
+          ]
+        },
+        "genital_bone": true,
+        "horns": {
+          "length": 0.14,
+          "radius": 0.019,
+          "curl": 1.0
+        },
+        "tail": {
+          "length": 0.8,
+          "radius": 0.028,
+          "bones": 7
+        }
+      },
+      "morphs": {
+        "Feminine": {
+          "macro": {
+            "gender": 0.5
+          }
+        },
+        "Older": {
+          "macro": {
+            "age": 0.9
+          }
+        },
+        "Heavy": {
+          "macro": {
+            "weight": 1.0
+          }
+        },
+        "Thin": {
+          "macro": {
+            "weight": 0.0
+          }
+        },
+        "Muscular": {
+          "macro": {
+            "muscle": 1.0
+          }
+        },
+        "Soft": {
+          "macro": {
+            "muscle": 0.0
+          }
+        },
+        "ImpEars": {
+          "targets": {
+            "l-ear-shape-pointed": 1.0,
+            "r-ear-shape-pointed": 1.0,
+            "l-ear-scale-incr": 1.0,
+            "r-ear-scale-incr": 1.0,
+            "l-ear-scale-vert-incr": 1.0,
+            "r-ear-scale-vert-incr": 1.0,
+            "l-ear-rot-backward": 0.7,
+            "r-ear-rot-backward": 0.7,
+            "l-ear-wing-incr": 1.0,
+            "r-ear-wing-incr": 1.0,
+            "l-ear-trans-up": 0.5,
+            "r-ear-trans-up": 0.5
+          }
+        },
+        "ImpFace": {
+          "targets": {
+            "head-triangular": 0.8,
+            "head-scale-vert-incr": 0.3,
+            "chin-triangle": 0.8,
+            "chin-prominent-incr": 0.5,
+            "nose-point-down": 0.7,
+            "nose-hump-incr": 0.6,
+            "nose-scale-vert-incr": 0.4,
+            "nose-flaring-incr": 0.5,
+            "l-eye-corner1-up": 0.8,
+            "r-eye-corner1-up": 0.8,
+            "l-eye-corner2-up": 0.6,
+            "r-eye-corner2-up": 0.6,
+            "eyebrows-angle-down": 0.8,
+            "eyebrows-trans-forward": 0.6
+          }
+        },
+        "NoHorns": {
+          "horns": {
+            "length": 0.002,
+            "radius": 0.002,
+            "curl": 1.0
+          }
+        },
+        "NoTail": {
+          "tail": {
+            "length": 0.004,
+            "radius": 0.002,
+            "bones": 7
+          }
+        }
+      }
+    }
+  ]
+}

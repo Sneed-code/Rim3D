@@ -14,6 +14,16 @@
       "name": "Imp",
       "fbx": "game/Saved/MakeHuman/Imp/Imp.fbx",
       "comment": "The non-human test (tools/makehuman/imp.json): pointed ears, horns and a tail on the same pipeline; red skin comes from the pawn's skin colour."
+    },
+    {
+      "name": "CreatorFemale",
+      "fbx": "game/Saved/MakeHuman/CreatorFemale/CreatorFemale.fbx",
+      "comment": "A character creator base with a morph per slider (tools/makehuman/mh_creator.py, creator.json)."
+    },
+    {
+      "name": "CreatorMale",
+      "fbx": "game/Saved/MakeHuman/CreatorMale/CreatorMale.fbx",
+      "comment": "A character creator base with a morph per slider (tools/makehuman/mh_creator.py, creator.json)."
     }
   ]
 }

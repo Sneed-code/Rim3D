@@ -41,8 +41,8 @@ def log(*a):
 
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from mh_common import (add_horns, add_soft_bones, add_tail, lower_pubic_hair, make_skin_normal, prepare_for_unreal,  # noqa: E402
-                       write_materials)
+from mh_common import (add_genital_bone, add_horns, add_morphs, add_soft_bones, add_tail, dump_vertices,  # noqa: E402
+                       lower_pubic_hair, make_skin_normal, prepare_for_unreal, write_materials)
 
 try:
     for obj in list(bpy.data.objects):
@@ -169,6 +169,8 @@ try:
     # Soft tissue bones for jiggle (buttocks; the skeleton has the breast bones) and natural pubic hair.
     if cfg.get("soft_bones", True):
         add_soft_bones(rig, body, log=log)
+    if cfg.get("genital_bone"):
+        add_genital_bone(rig, body, log=log)
     for o in [o for o in bpy.data.objects if o.type == "MESH" and "pubic" in o.name.lower()]:
         lower_pubic_hair(o, body, top_share=cfg.get("pubic_top_share", 0.6), above_crotch=cfg.get("pubic_above_crotch", 0.025), log=log)
     # Non-human parts made for the body they go on: horns ({"length", "radius", "curl", "color"}) and a tail
@@ -186,6 +188,13 @@ try:
 
     # With a body proxy the basemesh itself is not exported.
     export = [rig] + [o for o in bpy.data.objects if o.type == "MESH" and (o != basemesh or proxy is None)]
+    # The character creator (tools/makehuman/mh_creator.py): a variant build only writes its vertices; the base build
+    # takes them as morphs.
+    if cfg.get("dump_vertices"):
+        dump_vertices([o for o in export if o != rig], cfg["dump_vertices"], log=log)
+        sys.exit(0)
+    if cfg.get("morphs"):
+        add_morphs([o for o in export if o != rig], cfg["morphs"], log=log)
     bpy.ops.object.select_all(action="DESELECT")
     for o in export:
         o.hide_set(False)

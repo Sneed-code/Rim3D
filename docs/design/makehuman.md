@@ -103,6 +103,29 @@ velocity (smooth every frame) instead of the sim's uneven steps. `-CompareRecord
 and sprint speeds and jumps; with `-ShowcaseRecord=<seconds>` every frame of that long is saved at a fixed 30 per second
 for a clip (`tools\smoke.ps1 -Test showcase -Resolution 1280x720 -ExtraArgs @("-ShowcaseMinutes=0.45","-ShowcaseDemo","-ShowcaseRecord=22")`).
 
+## Character creator (first version)
+
+`tools\play-creator.bat` (smoke test `creator`) opens a woman, a man and an imp in a row with the graphics up and a
+panel of sliders (top left) that change the picked one live: height (mesh scale), masculine or feminine, older, thin to
+heavy, soft to muscular, breasts (woman's base), pointed ears, imp face, horns, tail, skin colour; buttons for the
+regular and imp presets and a random person; "walk back and forth" and the view sliders. The imp is the man's base with
+the inhuman sliders up and red skin. Adults only: there is no younger slider.
+
+The bases (`CreatorFemale`, `CreatorMale`) come from `python tools/makehuman/mh_creator.py`, which reads
+`tools/makehuman/creator.json`: each base is a normal MakeHuman character (with horns and a tail) exported with a morph
+target per slider, each morph being the difference to a build with one setting changed (`mh_export.py`
+`"dump_vertices"` and `"morphs"`; the horns and tail morphs shrink them away into the skull and back). About 4 seconds a
+build, a minute a base. The skeleton is fitted to the base, so sliders that would move joints a lot (proportions, leg
+length) are left out; height scales the whole mesh.
+
+The man's base has MakeHuman's male anatomy body; `add_genital_bone` (`"genital_bone"`) finds the genitals from the
+shape (what stands in front of the thighs at the crotch) and gives them a soft bone weighted by how far a point hangs
+from the root, which the jiggle node swings loosely (stiffness 70, damping 3.5, up to 3.5 cm).
+
+**Tail**: `FMakeHumanTailNode` swishes any `tail_01`... chain: a wave running down the tail, quicker and wider when moving,
+and a swing out against turns (no physics; AnimDynamics let it sag). `-CreatorDemo` (with `-CreatorRecord=<seconds>`)
+moves the sliders by itself for a clip.
+
 ## Smoke test `compare`
 
 Three pawns side by side on a cleared flat map in the morning sun: the MakeHuman example woman, a local-only

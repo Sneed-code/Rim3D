@@ -41,6 +41,30 @@ struct FMakeHumanJiggleNode : public FAnimNode_SkeletalControlBase
 };
 
 /**
+ * A tail's motion (the tail_01 ... chain): an idle swish from side to side, quicker and wider when moving, and a swing
+ * the other way when the body turns, bent a little more at each bone towards the tip. No physics: a tail is muscle.
+ */
+USTRUCT()
+struct FMakeHumanTailNode : public FAnimNode_SkeletalControlBase
+{
+	GENERATED_BODY()
+
+	TArray<FBoneReference> Bones;
+	float DeltaTime = 0.0f;
+	float Time = 0.0f;
+	float TurnSwing = 0.0f;          // degrees, smoothed
+	float Speed = 0.0f;              // cm/s, smoothed
+	FTransform LastComponent;
+	bool bStarted = false;
+	float LargestAngle = 0.0f;       // degrees at the tip since the last read (tests)
+
+	virtual void UpdateInternal(const FAnimationUpdateContext& Context) override;
+	virtual void EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms) override;
+	virtual bool IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones) override;
+	virtual void InitializeBoneReferences(const FBoneContainer& RequiredBones) override;
+};
+
+/**
  * The pose of the mesh this one is attached to (the pawn's hidden mannequin), retargeted; then, where the skeleton
  * has them, soft-body jiggle on the breast bones and a swinging chain on a ponytail's bones (AnimDynamics).
  */
@@ -55,6 +79,7 @@ struct FMakeHumanAnimProxy : public FAnimInstanceProxy
 	FAnimNode_RetargetPoseFromMesh Retarget;
 	FAnimNode_ConvertLocalToComponentSpace ToComponent;
 	FMakeHumanJiggleNode Jiggle;
+	FMakeHumanTailNode Tail;
 	TArray<TSharedPtr<FAnimNode_AnimDynamics>> Dynamics;
 	FAnimNode_ConvertComponentToLocalSpace ToLocal;
 	bool bPhysics = false;
@@ -81,6 +106,8 @@ public:
 	int32 GetPhysicsChains() const;
 	/** The largest jiggle offset (cm) since the last call, for the tests. */
 	float TakeLargestJiggle();
+	/** The largest tail swing at the tip (degrees) since the last call, for the tests; 0 without a tail. */
+	float TakeLargestTailSwing();
 
 protected:
 	virtual FAnimInstanceProxy* CreateAnimInstanceProxy() override;

@@ -20,7 +20,10 @@ def prepare_for_unreal(rig, meshes):
         if o.data.name in done:
             continue
         done.add(o.data.name)
-        o.data.transform(scale @ worlds[o.name])
+        if o.type == "MESH":
+            o.data.transform(scale @ worlds[o.name], shape_keys=True)  # morphs (the creator's sliders) too
+        else:
+            o.data.transform(scale @ worlds[o.name])
     for o in objs:
         if o != rig:
             o.matrix_parent_inverse = Matrix.Identity(4)
@@ -429,3 +432,89 @@ def add_tail(rig, body, length=0.75, radius=0.03, bones=7, log=print):
     _skin_to(obj, rig, weights)
     log("tail", length, "m,", bones, "bones")
     return obj
+
+
+def add_genital_bone(rig, body, log=print):
+    """A soft bone for the male genitals of an anatomy body (jiggle), found from the shape for any body: the parts in
+    front of the thighs just above and below the crotch on the middle line; the bone sits at their root under the pubic
+    bone, parented to the pelvis, weighted more the further a point hangs from the root."""
+    from mathutils import Vector
+    if "genital" in rig.data.bones or "pelvis" not in rig.data.bones:
+        return
+    to_rig = rig.matrix_world.inverted() @ body.matrix_world
+    pts = [to_rig @ v.co for v in body.data.vertices]
+    cx = rig.data.bones["pelvis"].head_local.x
+    hip_z = rig.data.bones["thigh_l"].head_local.z if "thigh_l" in rig.data.bones else rig.data.bones["pelvis"].head_local.z
+    mid = [p.z for p in pts if abs(p.x - cx) < 0.012 and hip_z - 0.3 < p.z < hip_z]
+    if not mid:
+        log("no crotch found: no genital bone")
+        return
+    crotch = min(mid)
+    # The front of the thighs at each height, to tell what stands out in front of them.
+    def thigh_front(z):
+        ys = [p.y for p in pts if 0.07 < abs(p.x - cx) < 0.13 and abs(p.z - z) < 0.02]
+        return min(ys) if ys else None   # MakeHuman faces -Y
+    region = []
+    for i, p in enumerate(pts):
+        if abs(p.x - cx) < 0.065 and crotch - 0.13 < p.z < crotch + 0.07:
+            front = thigh_front(p.z)
+            if front is not None and p.y < front - 0.008:
+                region.append(i)
+    if len(region) < 20:
+        log("no genitals found (", len(region), "points): no genital bone")
+        return
+    top = max(pts[i].z for i in region)
+    back = max(pts[i].y for i in region)
+    root = Vector((cx, back - 0.01, top - 0.015))
+    if bpy.context.object and bpy.context.object.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
+    bpy.ops.object.select_all(action="DESELECT")
+    rig.select_set(True)
+    bpy.context.view_layer.objects.active = rig
+    bpy.ops.object.mode_set(mode="EDIT")
+    eb = rig.data.edit_bones.new("genital")
+    eb.head, eb.tail = root, root + Vector((0.0, -0.03, -0.05))
+    eb.parent = rig.data.edit_bones["pelvis"]
+    eb.use_deform = True
+    bpy.ops.object.mode_set(mode="OBJECT")
+    groups = [g for g in body.vertex_groups if g.name in {b.name for b in rig.data.bones if b.use_deform}]
+    group = body.vertex_groups.new(name="genital")
+    for i in region:
+        w = min(1.0, (pts[i] - root).length / 0.07) * 0.95
+        if w <= 0.02:
+            continue
+        for g in body.data.vertices[i].groups:
+            if body.vertex_groups[g.group] in groups:
+                g.weight *= (1.0 - w)
+        group.add([i], w, "REPLACE")
+    log("genital bone weights", len(region), "vertices, root", round(top - crotch, 3), "m over the crotch")
+
+
+def dump_vertices(meshes, path, log=print):
+    """Every mesh's vertex positions (object space) by name, for the creator's morphs (mh_export.py "morphs")."""
+    import numpy as np
+    data = {}
+    for o in meshes:
+        co = np.empty(len(o.data.vertices) * 3, dtype=np.float32)
+        o.data.vertices.foreach_get("co", co)
+        data[o.name] = co
+    np.savez(path, **data)
+    log("vertices of", len(data), "meshes to", path)
+
+
+def add_morphs(meshes, morphs, log=print):
+    """Shape keys from other builds of the same character (dump_vertices files): {"Heavy": "heavy.npz", ...}. A mesh
+    whose vertex count differs (a part that changed) gets no key."""
+    import numpy as np
+    for name, path in morphs.items():
+        data = np.load(path)
+        made = 0
+        for o in meshes:
+            if o.name not in data.files or len(data[o.name]) != len(o.data.vertices) * 3:
+                continue
+            if not o.data.shape_keys:
+                o.shape_key_add(name="Basis", from_mix=False)
+            key = o.shape_key_add(name=name, from_mix=False)
+            key.data.foreach_set("co", data[o.name])
+            made += 1
+        log("morph", name, "on", made, "meshes")
