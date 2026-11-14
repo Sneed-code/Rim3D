@@ -7,6 +7,8 @@
 #include "InputCoreTypes.h"
 
 #include "HandsOnSubsystem.h"
+#include "PawnActor.h"
+#include "PawnSubsystem.h"
 #include "ProtagonistSubsystem.h"
 #include "ShooterFeelSubsystem.h"
 #include "SimSubsystem.h"
@@ -87,6 +89,19 @@ void AProtagonistPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 	PlayerInputComponent->BindKey(EKeys::T, IE_Pressed, this, &AProtagonistPawn::OnTakeOverPressed);
 	PlayerInputComponent->BindKey(EKeys::MouseScrollUp, IE_Pressed, this, &AProtagonistPawn::OnZoomIn);
 	PlayerInputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed, this, &AProtagonistPawn::OnZoomOut);
+	PlayerInputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &AProtagonistPawn::OnJumpPressed);
+}
+
+bool AProtagonistPawn::Jump()
+{
+	const USimSubsystem* Bridge = GetBridge();
+	const USimPawnSubsystem* Pawns = GetWorld() ? GetWorld()->GetSubsystem<USimPawnSubsystem>() : nullptr;
+	ASimPawnActor* Actor = Pawns && Thing != colony::kNoEntity ? Pawns->FindPawn(Thing) : nullptr;
+	if (!Actor || !Bridge || Bridge->GetSpeed() == 0 || bClimbing)
+	{
+		return false;
+	}
+	return Actor->StartJump();
 }
 
 void AProtagonistPawn::OnSwitchModePressed()
@@ -119,12 +134,13 @@ void AProtagonistPawn::Begin(colony::Entity InThing, const FVector2D& SimPositio
 	SnapCamera();
 }
 
-void AProtagonistPawn::SetScriptedInput(double Right, double Forward, bool bWalk)
+void AProtagonistPawn::SetScriptedInput(double Right, double Forward, bool bWalk, bool bSprint)
 {
 	bScripted = true;
 	ScriptRight = Right;
 	ScriptForward = Forward;
 	bScriptWalk = bWalk;
+	bScriptSprint = bSprint;
 }
 
 void AProtagonistPawn::Tick(float DeltaTime)
@@ -134,17 +150,21 @@ void AProtagonistPawn::Tick(float DeltaTime)
 	double Right = 0.0;
 	double Forward = 0.0;
 	bool bWalk = false;
+	bSprinting = false;
 	if (bScripted)
 	{
 		Right = ScriptRight;
 		Forward = ScriptForward;
 		bWalk = bScriptWalk;
+		bSprinting = bScriptSprint && !bWalk;
 	}
 	else if (APlayerController* PC = GetPlayerController())
 	{
 		Right = (PC->IsInputKeyDown(EKeys::D) ? 1.0 : 0.0) - (PC->IsInputKeyDown(EKeys::A) ? 1.0 : 0.0);
 		Forward = (PC->IsInputKeyDown(EKeys::W) ? 1.0 : 0.0) - (PC->IsInputKeyDown(EKeys::S) ? 1.0 : 0.0);
 		bWalk = PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl);
+		// Shift sprints (not while walking slowly or aiming).
+		bSprinting = !bWalk && !bAimHeld && (PC->IsInputKeyDown(EKeys::LeftShift) || PC->IsInputKeyDown(EKeys::RightShift));
 		float MouseX = 0.0f;
 		float MouseY = 0.0f;
 		PC->GetInputMouseDelta(MouseX, MouseY);
@@ -225,7 +245,8 @@ void AProtagonistPawn::Move(double Right, double Forward, bool bWalk, float Delt
 		// Ground and slope slow the walk the way they slow every pawn (the sim's own numbers).
 		const float Factor = colony::walkSpeedFactor(Map, static_cast<float>(Position.X), static_cast<float>(Position.Y),
 			static_cast<float>(Wanted.X), static_cast<float>(Wanted.Y));
-		Target = Wanted * (bWalk ? kWalkSpeed : CruiseSpeed) * Factor;
+		const float Speed = bWalk ? kWalkSpeed : (bSprinting ? FMath::Max(CruiseSpeed * kSprintFactor, kMinSprintSpeed) : CruiseSpeed);
+		Target = Wanted * Speed * Factor;
 	}
 	Velocity = FMath::Vector2DInterpTo(Velocity, Target, DeltaTime, ProtagonistAcceleration);
 	if (Velocity.SizeSquared() < 1.0e-6f)

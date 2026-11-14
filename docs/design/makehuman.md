@@ -40,12 +40,26 @@ ours). Its mesh has its own height, so `Height` is 1 for it. For now only a look
 
 ## Jiggle and hair
 
-`UMakeHumanAnimInstance` runs, after the retarget, one AnimDynamics soft body on each breast bone (MPFB's
-`game_engine_with_breast` skeleton: it lags behind the body's motion within about 1.5 cm and 8 degrees and springs back)
-and a swinging chain on a ponytail's bones (MakeHuman's ponytail sub-rig, joined into the main skeleton under the head
-by `mh_export.py`; enable Blender's Rigify add-on, which MPFB needs to read older sub-rigs). Simulated in world space,
-so walking and turning move them. `Pawns.MakeHumanPhysics 0` turns it off (read when a character's animation starts).
-Hair without bones (the long01 style) stays still. There are no butt bones in this skeleton yet.
+`UMakeHumanAnimInstance` runs, after the retarget, our own soft-tissue node (`FMakeHumanJiggleNode`) and a swinging
+AnimDynamics chain on a ponytail's bones (MakeHuman's ponytail sub-rig, joined into the main skeleton under the head by
+`mh_export.py`; enable Blender's Rigify add-on, which MPFB needs to read older sub-rigs). `Pawns.MakeHumanPhysics 0`
+turns both off (read when a character's animation starts). Hair without bones (the long01 style) stays still.
+
+Soft tissue: each soft bone's point follows where the animation puts it through a damped spring in world space (120 Hz
+steps), so it lags behind steps, starts, stops, turns and landings and bounces back, within a limit: the breast bones
+(MPFB's `game_engine_with_breast` skeleton; stiffness 160, damping 6, up to 4 cm) and buttock bones (130, 6.5, up to
+3 cm). The buttock bones are made by `mh_export.py` for any MakeHuman body, with no hand work (`add_soft_bones` in
+`mh_common.py`): one per side 6 cm inside the fullest point of the buttock behind the hip joint, parented to the pelvis,
+weighted onto the skin within 11 cm (back of the body only) with the other bones' weights scaled down to make room. The
+test `compare` notes how far the soft tissue lagged (about 2 to 3 cm walking and jumping).
+
+The graph is linked before the engine's `FAnimInstanceProxy::Initialize`, which takes the custom root node there and
+keeps it: linking it afterwards silently left every physics node out (why the first AnimDynamics jiggle never showed).
+
+**Pubic hair** (MakeHuman's `natural_pubic_hair`) sits too high on these bodies, stopping well above where the legs
+meet: `lower_pubic_hair` squeezes it to 60% of its height, narrows its top, and moves it down so its lowest point is
+2.5 cm over the crotch (the lowest body point on its middle line), laid back onto the skin (`pubic_top_share`,
+`pubic_above_crotch` in a character's config).
 
 sneed's Petite Natural Pale Adult is rebuilt from his MakeHuman save (`tools/makehuman/petite_pale.json`, `"mhm"`) with
 this skeleton rather than exported from his finished .blend (`blend_export.py`, Mixamo skeleton, no breast bones).
@@ -57,6 +71,16 @@ nothing): the Crashlanded start on a cleared flat map, its first two colonists d
 direct control) and the long-haired example woman (drafted, standing), the rest removed, graphics turned up (epic
 scalability, full resolution, TSR, Lumen GI and reflections, virtual shadows, contact shadows). `-ShowcasePlayer=` and
 `-ShowcaseNpc=` pick other characters. Hardware ray tracing is off in the project (Lumen traces in software).
+
+Controls in direct control (for every colonist, not only here): WASD, mouse to look, Ctrl walk, **Shift sprint** (1.5 times
+the colonist's cruise speed, at least 6.5 m/s, with the sample's sprint animations, which only it reaches), **Space jump**
+(`ASimPawnActor::StartJump`: a 45 cm arc over 0.62 s of game time with the sample's take-off by speed, fall loop and
+landing; only the picture, the sim keeps the colonist on the ground), Left Alt dodge roll (it was Left Shift), **F2
+pause** (Space still pauses in the overseer view), V view, Tab overseer.
+
+`-ShowcaseDemo` drives her by itself (run away from the view, sprint across it and towards it, jumping) and notes the run
+and sprint speeds and jumps; with `-ShowcaseRecord=<seconds>` every frame of that long is saved at a fixed 30 per second
+for a clip (`tools\smoke.ps1 -Test showcase -Resolution 1280x720 -ExtraArgs @("-ShowcaseMinutes=0.45","-ShowcaseDemo","-ShowcaseRecord=22")`).
 
 ## Smoke test `compare`
 

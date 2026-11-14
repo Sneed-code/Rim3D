@@ -50,7 +50,8 @@ namespace
 	// Placeholder for picking up and putting down until there are real action animations: a short crouch.
 	const TCHAR* const PawnCrouchPath = TEXT("/Game/Characters/UEFN_Mannequin/Animations/Idle/M_Neutral_Crouch_Idle_Loop.M_Neutral_Crouch_Idle_Loop");
 
-	// The sample's standing locomotion databases (its crouch, jump and traversal ones are left out).
+	// The sample's standing locomotion databases (its crouch, jump and traversal ones are left out). The sprint ones only
+	// match the player's body sprinting (Shift): every other pawn moves at its cruise speed or slower.
 	const TCHAR* const PawnDatabaseNames[] = {
 		TEXT("PSD_Dense_Stand_Idles"),
 		TEXT("PSD_Dense_Stand_TurnInPlace"),
@@ -62,6 +63,10 @@ namespace
 		TEXT("PSD_Dense_Stand_Run_Starts"),
 		TEXT("PSD_Dense_Stand_Run_Stops"),
 		TEXT("PSD_Dense_Stand_Run_Pivots"),
+		TEXT("PSD_Dense_Stand_Sprint_Loops"),
+		TEXT("PSD_Dense_Stand_Sprint_Starts"),
+		TEXT("PSD_Dense_Stand_Sprint_Stops"),
+		TEXT("PSD_Dense_Stand_Sprint_Pivots"),
 	};
 	const TCHAR* const PawnDatabaseFolder = TEXT("/Game/Characters/UEFN_Mannequin/Animations/MotionMatchingData/Databases/Dense/");
 

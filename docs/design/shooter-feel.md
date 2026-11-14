@@ -108,7 +108,7 @@ be stretched to fit the sim's timing and played as a montage over the motion-mat
 
 ### Done on screen (U21)
 
-The roll key (Left Shift), the camera kick from the snapshot, shake, blur, the aim-hold camera blend, the roll's somersault, grenade and
+The roll key (Left Alt; it was Left Shift, which sprints now), the camera kick from the snapshot, shake, blur, the aim-hold camera blend, the roll's somersault, grenade and
 blast effects with debris, and the settings: see [shooter-feel-draw.md](shooter-feel-draw.md).
 
 ### Not done (later)

@@ -1,6 +1,7 @@
 @echo off
 rem The MakeHuman showcase (docs/design/makehuman.md): the compare scene for play with the graphics turned up.
-rem You control the ponytail woman (WASD, mouse to look, Ctrl walk, Space jump, F2 pause, V view, Tab overseer);
+rem You control the ponytail woman (WASD, mouse to look, Ctrl walk, Shift sprint, Space jump, Left Alt roll, F2 pause,
+rem V view, Tab overseer);
 rem the long-haired woman stands as an NPC. Needs the editor build (tools\smoke.ps1 -Test load -BuildOnly) and the
 rem MakeHuman assets (MakeHumanArt commandlet). Extra arguments are passed on, e.g. -ResX=2560 -ResY=1440.
 set "REPO=%~dp0.."

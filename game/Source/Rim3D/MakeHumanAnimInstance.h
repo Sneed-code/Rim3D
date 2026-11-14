@@ -12,6 +12,35 @@
 class UIKRetargeter;
 
 /**
+ * Soft tissue (breasts, buttocks): each listed bone's point follows where the animation puts it through a damped
+ * spring in world space, so it lags behind starts, stops, steps and turns and bounces back, within MaxOffset.
+ */
+USTRUCT()
+struct FMakeHumanJiggleNode : public FAnimNode_SkeletalControlBase
+{
+	GENERATED_BODY()
+
+	struct FBody
+	{
+		FBoneReference Bone;
+		float Stiffness = 160.0f;  // 1/s^2
+		float Damping = 7.0f;      // 1/s
+		float MaxOffset = 2.5f;    // cm
+		FVector Position = FVector::ZeroVector;  // world, simulated
+		FVector Velocity = FVector::ZeroVector;
+		bool bStarted = false;
+	};
+	TArray<FBody> Bodies;
+	float DeltaTime = 0.0f;
+	float LargestOffset = 0.0f;  // cm, since the last read (tests)
+
+	virtual void UpdateInternal(const FAnimationUpdateContext& Context) override;
+	virtual void EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms) override;
+	virtual bool IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones) override;
+	virtual void InitializeBoneReferences(const FBoneContainer& RequiredBones) override;
+};
+
+/**
  * The pose of the mesh this one is attached to (the pawn's hidden mannequin), retargeted; then, where the skeleton
  * has them, soft-body jiggle on the breast bones and a swinging chain on a ponytail's bones (AnimDynamics).
  */
@@ -25,6 +54,7 @@ struct FMakeHumanAnimProxy : public FAnimInstanceProxy
 
 	FAnimNode_RetargetPoseFromMesh Retarget;
 	FAnimNode_ConvertLocalToComponentSpace ToComponent;
+	FMakeHumanJiggleNode Jiggle;
 	TArray<TSharedPtr<FAnimNode_AnimDynamics>> Dynamics;
 	FAnimNode_ConvertComponentToLocalSpace ToLocal;
 	bool bPhysics = false;
@@ -47,8 +77,10 @@ class UMakeHumanAnimInstance : public UAnimInstance
 public:
 	void SetRetargeter(UIKRetargeter* InRetargeter);
 	UIKRetargeter* GetRetargeter() const { return Retargeter; }
-	/** How many soft bodies run (breasts and hair chains), for the tests. */
+	/** How many soft bodies run (jiggle bones and hair chains), for the tests. */
 	int32 GetPhysicsChains() const;
+	/** The largest jiggle offset (cm) since the last call, for the tests. */
+	float TakeLargestJiggle();
 
 protected:
 	virtual FAnimInstanceProxy* CreateAnimInstanceProxy() override;

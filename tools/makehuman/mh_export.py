@@ -41,7 +41,7 @@ def log(*a):
 
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from mh_common import prepare_for_unreal, write_materials  # noqa: E402
+from mh_common import add_soft_bones, lower_pubic_hair, prepare_for_unreal, write_materials  # noqa: E402
 
 try:
     for obj in list(bpy.data.objects):
@@ -133,6 +133,7 @@ try:
 
     # Bake the macro shape into the meshes, drop helper geometry and subdivision.
     ExportService.bake_modifiers_remove_helpers(basemesh, bake_masks=True, bake_subdiv=False, remove_helpers=True, also_proxy=True)
+
     for obj in [o for o in bpy.data.objects if o.type == "MESH"]:
         if obj.data.shape_keys:
             # Mix the shape keys into the mesh: the export is one fixed character.
@@ -146,6 +147,13 @@ try:
         for m in list(obj.modifiers):
             if m.type not in ("ARMATURE",):
                 obj.modifiers.remove(m)
+
+    body = proxy if proxy else basemesh
+    # Soft tissue bones for jiggle (buttocks; the skeleton has the breast bones) and natural pubic hair.
+    if cfg.get("soft_bones", True):
+        add_soft_bones(rig, body, log=log)
+    for o in [o for o in bpy.data.objects if o.type == "MESH" and "pubic" in o.name.lower()]:
+        lower_pubic_hair(o, body, top_share=cfg.get("pubic_top_share", 0.6), above_crotch=cfg.get("pubic_above_crotch", 0.025), log=log)
 
     # With a body proxy the basemesh itself is not exported.
     export = [rig] + [o for o in bpy.data.objects if o.type == "MESH" and (o != basemesh or proxy is None)]

@@ -14,6 +14,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
+#include "ProtagonistSubsystem.h"
 
 #include "ColonySim/Map.h"
 #include "ColonySim/Replay.h"
@@ -731,9 +732,18 @@ bool USimSubsystem::IsKeyHelpShown()
 
 bool USimSubsystem::HandleKey(const FKey& Key)
 {
-	if (Key == EKeys::SpaceBar)
+	// F2 pauses everywhere; Space pauses in the overseer view, but in direct control it is the body's jump (ProtagonistPawn).
+	if (Key == EKeys::F2)
 	{
 		TogglePause();
+	}
+	else if (Key == EKeys::SpaceBar)
+	{
+		const UProtagonistSubsystem* Protagonist = GetWorld() ? GetWorld()->GetSubsystem<UProtagonistSubsystem>() : nullptr;
+		if (!Protagonist || !Protagonist->IsDirectMode())
+		{
+			TogglePause();
+		}
 	}
 	else if (Key == EKeys::One || Key == EKeys::NumPadOne)
 	{

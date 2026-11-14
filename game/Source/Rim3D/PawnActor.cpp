@@ -238,6 +238,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		Vy = Now.y - Before->y;
 	}
 	const FVector Velocity(Vx * colony::kStepsPerRealSecondAt1x * 100.0f, Vy * colony::kStepsPerRealSecondAt1x * 100.0f, 0.0f);
+	GroundSpeed = Velocity.Size2D();
 
 	if (Velocity.Size2D() > PawnTurnSpeed)
 	{
@@ -357,6 +358,98 @@ void ASimPawnActor::PlayAction(colony::PawnAction Action)
 	{
 		ActionEndSeconds = PawnActionBlendIn + PawnActionHold;
 		++ActionsPlayed;
+	}
+}
+
+namespace
+{
+	const TCHAR* const PawnJumpFolder = TEXT("/Game/Characters/UEFN_Mannequin/Animations/Jump/");
+
+	UAnimSequence* PawnJumpAnimation(const FString& Name)
+	{
+		return LoadObject<UAnimSequence>(nullptr, *(FString(PawnJumpFolder) + Name + TEXT(".") + Name));
+	}
+
+	/** The sample's gait names by ground speed (cm/s). */
+	const TCHAR* PawnJumpGait(float Speed)
+	{
+		return Speed < 60.0f ? TEXT("Stand") : (Speed < 260.0f ? TEXT("Walk") : (Speed < 520.0f ? TEXT("Run") : TEXT("Sprint")));
+	}
+}
+
+bool ASimPawnActor::StartJump()
+{
+	USimPawnAnimInstance* Anim = GetAnim();
+	if (IsJumping() || bRagdoll || StanceHeight < 0.9f || RollProgress > 0.0f || !Anim)
+	{
+		return false;
+	}
+	JumpAge = 0.0f;
+	JumpSpeed = GroundSpeed;
+	bJumpFalling = false;
+	JumpStartLength = 0.0f;
+	if (UAnimSequence* Start = PawnJumpAnimation(FString::Printf(TEXT("M_Neutral_Jump_F_Start_%s_Lfoot"), PawnJumpGait(JumpSpeed))))
+	{
+		if (Anim->PlaySlotAnimationAsDynamicMontage(Start, FAnimSlotGroup::DefaultSlotName, 0.08f, 0.15f))
+		{
+			JumpStartLength = Start->GetPlayLength();
+		}
+	}
+	ActionEndSeconds = 0.0;
+	++JumpsPlayed;
+	return true;
+}
+
+float ASimPawnActor::GetJumpHeight() const
+{
+	if (!IsJumping())
+	{
+		return 0.0f;
+	}
+	// A thrown body: up at the speed that reaches kJumpHeight halfway through, back down by kJumpSeconds.
+	const float T = FMath::Clamp(JumpAge / kJumpSeconds, 0.0f, 1.0f);
+	return 4.0f * kJumpHeight * T * (1.0f - T);
+}
+
+void ASimPawnActor::AdvanceJump(float GameDelta)
+{
+	if (!IsJumping())
+	{
+		return;
+	}
+	USimPawnAnimInstance* Anim = GetAnim();
+	JumpAge += GameDelta;
+	const float Left = kJumpSeconds - JumpAge;
+	// The take-off animation runs out before the ground comes: the fall loop holds the body in the air.
+	if (Anim && !bJumpFalling && JumpAge > JumpStartLength - 0.15f && Left > 0.2f)
+	{
+		bJumpFalling = true;
+		if (UAnimSequence* Fall = PawnJumpAnimation(TEXT("M_Neutral_Jump_Loop_Fall")))
+		{
+			Anim->PlaySlotAnimationAsDynamicMontage(Fall, FAnimSlotGroup::DefaultSlotName, 0.15f, 0.1f, 1.0f, 100);
+		}
+	}
+	if (Left <= 0.0f)
+	{
+		JumpAge = -1.0f;
+		if (!Anim)
+		{
+			return;
+		}
+		// The landing for how fast it is going now; the walk or run takes over again soon after.
+		const float Speed = GroundSpeed;
+		const TCHAR* Gait = PawnJumpGait(Speed);
+		if (UAnimSequence* Land = PawnJumpAnimation(FString::Printf(TEXT("M_Neutral_Jump_F_Land_%s_Light_Lfoot"), Gait)))
+		{
+			if (Anim->PlaySlotAnimationAsDynamicMontage(Land, FAnimSlotGroup::DefaultSlotName, 0.05f, 0.25f))
+			{
+				ActionEndSeconds = Speed < 60.0f ? 0.6 : 0.35;
+			}
+		}
+		else
+		{
+			Anim->StopSlotAnimation(0.2f, FAnimSlotGroup::DefaultSlotName);
+		}
 	}
 }
 
@@ -1142,7 +1235,9 @@ void ASimPawnActor::ApplyBodyPose(float GameDelta, bool bBlocking)
 	const bool bReacting = ReactionAge < kHitReactionSeconds;
 	const bool bMelee = Swing.IsActive() || BlockBlend > 0.0f || DodgeAge < kDodgeSeconds;
 	const bool bRolling = RollProgress > 0.0f;
-	if (!bReacting && !bMelee && !bRolling)
+	AdvanceJump(GameDelta);
+	const float JumpHeight = GetJumpHeight();
+	if (!bReacting && !bMelee && !bRolling && JumpHeight <= 0.0f)
 	{
 		if (bBodyPosed)
 		{
@@ -1194,6 +1289,7 @@ void ASimPawnActor::ApplyBodyPose(float GameDelta, bool bBlocking)
 		const FVector World = FVector(0.0, 0.0, PivotZ) - RollWorld.RotateVector(FVector(0.0, 0.0, PivotZ)) - FVector(0.0, 0.0, Duck);
 		Offset += RootQuat.Inverse().RotateVector(World);
 	}
+	Offset.Z += JumpHeight;
 	Body->SetRelativeLocationAndRotation(Offset, RootQuat.Inverse() * RollWorld * LeanWorld * RootQuat * MeleeLocal * PawnBodyRelativeRotation.Quaternion());
 }
 

@@ -9,11 +9,15 @@
 #include "Animation/AnimInstance.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
+#include "Misc/App.h"
 #include "Misc/CommandLine.h"
+#include "Misc/Paths.h"
+#include "UnrealClient.h"
 #include "Misc/Parse.h"
 
 #include "MakeHumanAnimInstance.h"
 #include "PawnActor.h"
+#include "ProtagonistPawn.h"
 #include "ProtagonistSubsystem.h"
 #include "Retargeter/IKRetargeter.h"
 #include "PawnSubsystem.h"
@@ -41,6 +45,13 @@ namespace
 		TWeakObjectPtr<APointLight> Light;
 		int32 Leg = 0;
 		float LegTime = 0.0f;
+		// Jiggle measured while walking: per pawn, the soft tissue's largest lag behind the animation (cm).
+		TArray<FVector> RestOffset;
+		TArray<float> Jiggle;
+		// The second half of the walk they jump every so often (seconds since the last), and the highest a body got (cm).
+		float JumpTime = 0.0f;
+		float HighestJump = 0.0f;
+		int32 JumpsStarted = 0;
 		int32 Errors = 0;
 		FString FirstError;
 		int64 Frames = 0;
@@ -420,9 +431,51 @@ void USmokeTestSubsystem::BuildComparePhases()
 				++State->Leg;
 			}
 			LookAtRow(520.0f, 100.0f, 250.0f);
+			USimPawnSubsystem* Pawns = PawnsOf();
+			// Jumping (Space for the player's body) in the second half: the arc, the jump animations and the landing's bounce.
+			State->JumpTime += GetWorld()->GetDeltaSeconds();
+			for (int32 i = 0; Pawns && i < State->Row.Num(); ++i)
+			{
+				if (ASimPawnActor* Pawn = Pawns->FindPawn(State->Row[i]))
+				{
+					if (Shot >= CompareSmokeWalkShots / 2 && State->JumpTime > 1.3f && Pawn->StartJump())
+					{
+						++State->JumpsStarted;
+					}
+					State->HighestJump = FMath::Max(State->HighestJump, Pawn->GetJumpHeight());
+				}
+			}
+			if (State->JumpTime > 1.3f)
+			{
+				State->JumpTime = 0.0f;
+			}
+			// How far the soft tissue lags behind the animation as they walk (0 means no jiggle at all).
+			State->RestOffset.SetNum(State->Row.Num());
+			State->Jiggle.SetNum(State->Row.Num());
+			for (int32 i = 0; Pawns && i < State->Row.Num(); ++i)
+			{
+				const ASimPawnActor* Pawn = Pawns->FindPawn(State->Row[i]);
+				const USkeletalMeshComponent* Mesh = Pawn ? Pawn->GetMakeHumanMesh() : nullptr;
+				if (UMakeHumanAnimInstance* Anim = Mesh ? Cast<UMakeHumanAnimInstance>(Mesh->GetAnimInstance()) : nullptr)
+				{
+					State->Jiggle[i] = FMath::Max(State->Jiggle[i], Anim->TakeLargestJiggle());
+				}
+			}
 		};
 		Walk.Verify = [=, this]()
 		{
+			if (Shot == CompareSmokeWalkShots - 1)
+			{
+				for (int32 i = 0; i < State->Jiggle.Num(); ++i)
+				{
+					Notes.Add(FString::Printf(TEXT("compare_walk: %s soft tissue lagged up to %.2f cm behind the animation"), *State->Labels[i], State->Jiggle[i]));
+				}
+				Notes.Add(FString::Printf(TEXT("compare_walk: %d jumps, the highest body %.0f cm off the ground"), State->JumpsStarted, State->HighestJump));
+				if (State->JumpsStarted == 0 || State->HighestJump < 0.5f * ASimPawnActor::kJumpHeight)
+				{
+					Fail(TEXT("compare_walk: the pawns did not jump"));
+				}
+			}
 			if (State->Errors > 0)
 			{
 				Fail(FString::Printf(TEXT("compare_walk: %d problems; the first: %s"), State->Errors, *State->FirstError));
@@ -449,12 +502,28 @@ void USmokeTestSubsystem::BuildComparePhases()
 
 // Not a check: `showcase` (tools/play-showcase.bat) opens the compare scene for play, with the graphics turned up.
 // sneed's ponytail woman is the player's (direct control: WASD, mouse, F2 pause); the long-haired example woman stands
-// drafted as an NPC. It runs until the window is closed or -ShowcaseMinutes (default 240) pass.
+// drafted as an NPC. It runs until the window is closed or -ShowcaseMinutes (default 240) pass. -ShowcaseDemo drives her by
+// itself (run away from the view, sprint across it and towards it with jumps; for a clip and for checking sprint and jump)
+// and notes how fast and how often; -ShowcaseRecord=<seconds> with it saves every frame of that long at a fixed 30 per second
+// (showcase/rec_0000.png ...: `ffmpeg -framerate 30 -i rec_%04d.png -pix_fmt yuv420p clip.mp4`).
 void USmokeTestSubsystem::BuildShowcasePhases()
 {
 	const auto Bridge = [this]() { return GetWorld()->GetSubsystem<USimSubsystem>(); };
 	const auto PawnsOf = [this]() { return GetWorld()->GetSubsystem<USimPawnSubsystem>(); };
 	const TSharedRef<colony::Entity> Player = MakeShared<colony::Entity>(colony::kNoEntity);
+	struct FDemo
+	{
+		colony::Entity Body = colony::kNoEntity;
+		float Time = 0.0f;
+		float FastestRun = 0.0f;
+		float FastestSprint = 0.0f;
+		int32 Jumps = 0;
+		int32 Recorded = 0;
+	};
+	const TSharedRef<FDemo> Demo = MakeShared<FDemo>();
+	const bool bDemo = FParse::Param(FCommandLine::Get(), TEXT("ShowcaseDemo"));
+	float RecordSeconds = 0.0f;
+	FParse::Value(FCommandLine::Get(), TEXT("ShowcaseRecord="), RecordSeconds);
 
 	FPhase Play;
 	Play.Name = TEXT("showcase");
@@ -577,9 +646,86 @@ void USmokeTestSubsystem::BuildShowcasePhases()
 			if (Protagonist->EnterDirectMode(*Player))
 			{
 				Notes.Add(TEXT("showcase: you control the ponytail woman"));
+				Demo->Body = *Player;
 				*Player = colony::kNoEntity;
 			}
 		}
 	};
+	if (bDemo)
+	{
+		Play.OnFrame = [=, this, Take = Play.OnFrame]()
+		{
+			Take();
+			UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+			AProtagonistPawn* Body = Protagonist ? Protagonist->GetBody() : nullptr;
+			USimPawnSubsystem* Pawns = PawnsOf();
+			ASimPawnActor* Actor = Pawns && Demo->Body != colony::kNoEntity ? Pawns->FindPawn(Demo->Body) : nullptr;
+			if (!Body || !Actor)
+			{
+				return;
+			}
+			// Each 11 seconds: 2.5 running away from the view; 4 sprinting across it (seen from the side) and 3.5 towards it
+			// (from the front), jumping every 1.3; 1 standing. The view follows behind and does not turn, so she goes across
+			// and back.
+			const float Dt = GetWorld()->GetDeltaSeconds();
+			if (Demo->Time == 0.0f)
+			{
+				Body->Zoom(3.0f);  // closer than the default view, to see her move
+				if (RecordSeconds > 0.0f)
+				{
+					FApp::SetUseFixedTimeStep(true);
+					FApp::SetFixedDeltaTime(1.0 / 30.0);
+				}
+			}
+			Demo->Time += Dt;
+			const float T = FMath::Fmod(Demo->Time, 11.0f);
+			const float Side = FMath::Fmod(Demo->Time, 22.0f) < 11.0f ? 1.0f : -1.0f;
+			const auto Sprinting = [&](float From)
+			{
+				Demo->FastestSprint = FMath::Max(Demo->FastestSprint, Actor->GetGroundSpeed());
+				if (FMath::Fmod(T - From, 1.3f) < Dt && T - From > 0.6f && Body->Jump())
+				{
+					++Demo->Jumps;
+				}
+			};
+			if (T < 2.5f)
+			{
+				Body->SetScriptedInput(0.0, 1.0, false, false);
+				if (T > 1.5f)
+				{
+					Demo->FastestRun = FMath::Max(Demo->FastestRun, Actor->GetGroundSpeed());
+				}
+			}
+			else if (T < 6.5f)
+			{
+				Body->SetScriptedInput(Side, 0.0, false, true);
+				Sprinting(2.5f);
+			}
+			else if (T < 10.0f)
+			{
+				Body->SetScriptedInput(0.0, -1.0, false, true);
+				Sprinting(6.5f);
+			}
+			else
+			{
+				Body->SetScriptedInput(0.0, 0.0, false, false);
+			}
+			if (RecordSeconds > 0.0f && Demo->Recorded < FMath::RoundToInt32(RecordSeconds * 30.0f))
+			{
+				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/showcase") / FString::Printf(TEXT("rec_%04d.png"), Demo->Recorded++), false, false);
+			}
+		};
+		Play.Verify = [=, this]()
+		{
+			const double Run = Demo->FastestRun / 100.0;
+			const double Sprint = Demo->FastestSprint / 100.0;
+			const int32 Jumps = Demo->Jumps;
+			Notes.Add(FString::Printf(TEXT("showcase demo: running %.1f m/s, sprinting %.1f m/s, %d jumps"), Run, Sprint, Jumps));
+			if (Demo->Jumps == 0 || Demo->FastestSprint < Demo->FastestRun * 1.25f)
+			{
+				Fail(TEXT("showcase demo: no jump, or the sprint was not faster than the run"));
+			}
+		};
+	}
 	Phases.Add(MoveTemp(Play));
 }

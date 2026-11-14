@@ -10,39 +10,6 @@ namespace
 	TAutoConsoleVariable<int32> GMakeHumanPhysics(TEXT("Pawns.MakeHumanPhysics"), 1,
 		TEXT("1 runs jiggle (breast bones) and hair sway (ponytail bones) on MakeHuman characters; read when a character's animation starts."), ECVF_Default);
 
-	// A soft body on one bone: it lags behind the body's motion and springs back.
-	TSharedPtr<FAnimNode_AnimDynamics> MakeJiggle(FName Bone)
-	{
-		TSharedPtr<FAnimNode_AnimDynamics> Node = MakeShared<FAnimNode_AnimDynamics>();
-		Node->BoundBone.BoneName = Bone;
-		Node->bChain = false;
-		Node->SimulationSpace = AnimPhysSimSpaceType::World;
-		Node->GravityScale = 0.25f;
-		Node->bLinearSpring = true;
-		Node->LinearSpringConstant = 650.0f;
-		Node->bAngularSpring = true;
-		Node->AngularSpringConstant = 900.0f;
-		Node->bOverrideLinearDamping = true;
-		Node->LinearDampingOverride = 0.65f;
-		Node->bOverrideAngularDamping = true;
-		Node->AngularDampingOverride = 0.6f;
-		Node->PhysicsBodyDefinitions.SetNum(1);
-		FAnimPhysBodyDefinition& Body = Node->PhysicsBodyDefinitions[0];
-		Body.BoundBone.BoneName = Bone;
-		Body.BoxExtents = FVector(6.0f, 6.0f, 6.0f);
-		Body.LocalJointOffset = FVector::ZeroVector;
-		FAnimPhysConstraintSetup& C = Body.ConstraintSetup;
-		C.LinearXLimitType = AnimPhysLinearConstraintType::Limited;
-		C.LinearYLimitType = AnimPhysLinearConstraintType::Limited;
-		C.LinearZLimitType = AnimPhysLinearConstraintType::Limited;
-		C.LinearAxesMin = FVector(-1.2f, -1.2f, -1.6f);
-		C.LinearAxesMax = FVector(1.2f, 1.2f, 1.0f);
-		C.AngularConstraintType = AnimPhysAngularConstraintType::Angular;
-		C.AngularLimitsMin = FVector(-8.0f, -8.0f, -8.0f);
-		C.AngularLimitsMax = FVector(8.0f, 8.0f, 8.0f);
-		return Node;
-	}
-
 	// A swinging chain (hair): each bone a body hanging from the last, limited to a cone.
 	TSharedPtr<FAnimNode_AnimDynamics> MakeChain(FName First, FName Last, const FReferenceSkeleton& Ref)
 	{
@@ -67,9 +34,81 @@ namespace
 	}
 }
 
+void FMakeHumanJiggleNode::UpdateInternal(const FAnimationUpdateContext& Context)
+{
+	FAnimNode_SkeletalControlBase::UpdateInternal(Context);
+	DeltaTime = Context.GetDeltaTime();
+}
+
+bool FMakeHumanJiggleNode::IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones)
+{
+	for (const FBody& Body : Bodies)
+	{
+		if (Body.Bone.IsValidToEvaluate(RequiredBones))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void FMakeHumanJiggleNode::InitializeBoneReferences(const FBoneContainer& RequiredBones)
+{
+	for (FBody& Body : Bodies)
+	{
+		Body.Bone.Initialize(RequiredBones);
+	}
+}
+
+void FMakeHumanJiggleNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms)
+{
+	const FTransform Component = Output.AnimInstanceProxy->GetComponentTransform();
+	const FBoneContainer& Bones = Output.Pose.GetPose().GetBoneContainer();
+	// Small steps keep the spring steady at low frame rates.
+	const float Step = FMath::Clamp(DeltaTime, 0.0f, 0.1f);
+	const int32 Steps = FMath::Max(1, FMath::CeilToInt32(Step / (1.0f / 120.0f)));
+	const float Dt = Step / Steps;
+	TArray<FBoneTransform> Out;
+	for (FBody& Body : Bodies)
+	{
+		if (!Body.Bone.IsValidToEvaluate(Bones))
+		{
+			continue;
+		}
+		const FCompactPoseBoneIndex Index = Body.Bone.GetCompactPoseIndex(Bones);
+		FTransform Pose = Output.Pose.GetComponentSpaceTransform(Index);
+		const FVector Goal = Component.TransformPosition(Pose.GetLocation());
+		if (!Body.bStarted || FVector::DistSquared(Goal, Body.Position) > 50.0 * 50.0)
+		{
+			Body.Position = Goal;  // first frame, or a teleport
+			Body.Velocity = FVector::ZeroVector;
+			Body.bStarted = true;
+		}
+		for (int32 i = 0; i < Steps; ++i)
+		{
+			const FVector Accel = (Goal - Body.Position) * Body.Stiffness - Body.Velocity * Body.Damping;
+			Body.Velocity += Accel * Dt;
+			Body.Position += Body.Velocity * Dt;
+		}
+		FVector Offset = Body.Position - Goal;
+		if (Offset.Size() > Body.MaxOffset)
+		{
+			Offset = Offset.GetSafeNormal() * Body.MaxOffset;
+			Body.Position = Goal + Offset;
+			Body.Velocity *= 0.5f;
+		}
+		LargestOffset = FMath::Max(LargestOffset, static_cast<float>(Offset.Size()));
+		Pose.SetLocation(Component.InverseTransformPosition(Goal + Offset));
+		Out.Add(FBoneTransform(Index, Pose));
+	}
+	Out.Sort(FCompareBoneTransformIndex());
+	OutBoneTransforms.Append(Out);
+}
+
 void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 {
-	FAnimInstanceProxy::Initialize(Instance);
+	// The graph is linked up first: the engine's Initialize takes the root node (GetCustomRootNode) there and keeps it, so
+	// linking afterwards left the jiggle and hair nodes out of the graph.
 	Retarget.RetargetFrom = ERetargetSourceMode::ParentSkeletalMeshComponent;
 	Dynamics.Reset();
 	const USkeletalMeshComponent* Mesh = Instance ? Instance->GetSkelMeshComponent() : nullptr;
@@ -77,11 +116,18 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 	if (Asset && GMakeHumanPhysics.GetValueOnGameThread() != 0)
 	{
 		const FReferenceSkeleton& Ref = Asset->GetRefSkeleton();
-		for (const TCHAR* Breast : {TEXT("breast_l"), TEXT("breast_r")})
+		// Soft tissue: breasts (MPFB's breast bones) and buttocks (the bones mh_export.py adds), a little softer below.
+		Jiggle.Bodies.Reset();
+		for (const TCHAR* Bone : {TEXT("breast_l"), TEXT("breast_r"), TEXT("butt_l"), TEXT("butt_r")})
 		{
-			if (Ref.FindBoneIndex(Breast) != INDEX_NONE)
+			if (Ref.FindBoneIndex(Bone) != INDEX_NONE)
 			{
-				Dynamics.Add(MakeJiggle(Breast));
+				FMakeHumanJiggleNode::FBody& Body = Jiggle.Bodies.AddDefaulted_GetRef();
+				Body.Bone.BoneName = Bone;
+				const bool bButt = FString(Bone).StartsWith(TEXT("butt"));
+				Body.Stiffness = bButt ? 130.0f : 160.0f;
+				Body.Damping = bButt ? 6.5f : 6.0f;
+				Body.MaxOffset = bButt ? 3.0f : 4.0f;
 			}
 		}
 		// MakeHuman's ponytail sub-rig: ponytail, ponytail1 ... ponytail4 under the head.
@@ -95,11 +141,16 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 			Dynamics.Add(MakeChain(TEXT("ponytail1"), Last, Ref));
 		}
 	}
-	bPhysics = !Dynamics.IsEmpty();
+	bPhysics = !Dynamics.IsEmpty() || !Jiggle.Bodies.IsEmpty();
 	if (bPhysics)
 	{
 		ToComponent.LocalPose.SetLinkNode(&Retarget);
 		FAnimNode_Base* Previous = &ToComponent;
+		if (!Jiggle.Bodies.IsEmpty())
+		{
+			Jiggle.ComponentPose.SetLinkNode(Previous);
+			Previous = &Jiggle;
+		}
 		for (const TSharedPtr<FAnimNode_AnimDynamics>& Node : Dynamics)
 		{
 			Node->ComponentPose.SetLinkNode(Previous);
@@ -107,6 +158,7 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 		}
 		ToLocal.ComponentPose.SetLinkNode(Previous);
 	}
+	FAnimInstanceProxy::Initialize(Instance);
 }
 
 void FMakeHumanAnimProxy::PreUpdate(UAnimInstance* Instance, float DeltaSeconds)
@@ -131,7 +183,16 @@ void UMakeHumanAnimInstance::SetRetargeter(UIKRetargeter* InRetargeter)
 
 int32 UMakeHumanAnimInstance::GetPhysicsChains() const
 {
-	return GetProxyOnGameThread<FMakeHumanAnimProxy>().Dynamics.Num();
+	const FMakeHumanAnimProxy& Proxy = GetProxyOnGameThread<FMakeHumanAnimProxy>();
+	return Proxy.Dynamics.Num() + Proxy.Jiggle.Bodies.Num();
+}
+
+float UMakeHumanAnimInstance::TakeLargestJiggle()
+{
+	FMakeHumanAnimProxy& Proxy = GetProxyOnGameThread<FMakeHumanAnimProxy>();
+	const float Largest = Proxy.Jiggle.LargestOffset;
+	Proxy.Jiggle.LargestOffset = 0.0f;
+	return Largest;
 }
 
 FAnimInstanceProxy* UMakeHumanAnimInstance::CreateAnimInstanceProxy()

@@ -52,6 +52,19 @@ public:
 	/** Plays the short animation for what the pawn did (picked up, put down). */
 	void PlayAction(colony::PawnAction Action);
 
+	/** A jump (the player's body, Space): the body goes up and down in an arc over kJumpSeconds of game time while the Game
+	 *  Animation Sample's jump plays (take-off by speed, the fall loop, the landing). Only the picture: the sim keeps the
+	 *  pawn on the ground. False if it is already in the air, lying or ragdolled. */
+	bool StartJump();
+	bool IsJumping() const { return JumpAge >= 0.0f; }
+	/** How high the body is off the ground now, cm. */
+	float GetJumpHeight() const;
+	int32 GetJumpsPlayed() const { return JumpsPlayed; }
+	/** How fast the pawn moves over the ground now (the sim's, blended), cm per second at 1x. */
+	float GetGroundSpeed() const { return GroundSpeed; }
+	static constexpr float kJumpHeight = 45.0f;
+	static constexpr float kJumpSeconds = 0.62f;
+
 	/** Gives the pawn its seeded looks (docs/design/looks.md): height, and with the MetaHuman its body
 	 *  shape, skin and hair colour; horns for lineages that have them. Does nothing if they are unchanged. */
 	void ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& InLooks);
@@ -290,6 +303,7 @@ private:
 	void SpawnRagdollFloor();
 	/** The hit reaction's lean and the melee pose, applied to the body together. */
 	void ApplyBodyPose(float GameDelta, bool bBlocking);
+	void AdvanceJump(float GameDelta);
 	/** The swing or block, plus the dodge: what the body and the weapon do now. */
 	FMeleePose ComputeMeleePose() const;
 
@@ -316,6 +330,13 @@ private:
 	/** Real seconds the sim has disagreed with the swing on screen (a swing the sim called off). */
 	float SwingMismatch = 0.0f;
 	bool bBodyPosed = false;
+	/** Game seconds into the jump, or below nought when not jumping; how fast it was going when it jumped (cm/s). */
+	float JumpAge = -1.0f;
+	float JumpSpeed = 0.0f;
+	float JumpStartLength = 0.0f;
+	bool bJumpFalling = false;
+	int32 JumpsPlayed = 0;
+	float GroundSpeed = 0.0f;
 	float RollProgress = 0.0f;
 	float RollAngle = 0.0f;
 	FVector RollDirection = FVector::ForwardVector;

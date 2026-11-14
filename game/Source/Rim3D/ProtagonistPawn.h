@@ -73,7 +73,7 @@ public:
 	float GetMotionBlurAmount() const;
 
 	/** Test input: used instead of the keyboard until ClearScriptedInput. */
-	void SetScriptedInput(double Right, double Forward, bool bWalk);
+	void SetScriptedInput(double Right, double Forward, bool bWalk, bool bSprint = false);
 	void ClearScriptedInput() { bScripted = false; }
 
 	/** Where the body wants to be, sim metres: what is sent to the sim each step. */
@@ -106,6 +106,12 @@ public:
 	static constexpr float kMaxArm = 800.0f;
 	/** Slow walking pace, metres per second. */
 	static constexpr float kWalkSpeed = 1.5f;
+	/** Sprinting (Shift held): this much faster than the colonist's cruise speed, and at least kMinSprintSpeed m/s. */
+	static constexpr float kSprintFactor = 1.5f;
+	static constexpr float kMinSprintSpeed = 6.5f;
+	bool IsSprinting() const { return bSprinting; }
+	/** Space: the body jumps (an arc and the jump animations on the pawn actor; the sim keeps it on the ground). */
+	bool Jump();
 
 private:
 	void OnSwitchModePressed();
@@ -113,6 +119,7 @@ private:
 	void OnTakeOverPressed();
 	void OnZoomIn() { Zoom(1.0f); }
 	void OnZoomOut() { Zoom(-1.0f); }
+	void OnJumpPressed() { Jump(); }
 
 	USimSubsystem* GetBridge() const;
 	APlayerController* GetPlayerController() const;
@@ -122,6 +129,7 @@ private:
 	TObjectPtr<UCameraComponent> Camera;
 
 	colony::Entity Thing = colony::kNoEntity;
+	bool bSprinting = false;
 	FVector2D Position = FVector2D::ZeroVector;  // sim metres
 	int32 Level = 0;
 	bool bClimbing = false;
@@ -144,4 +152,5 @@ private:
 	double ScriptRight = 0.0;
 	double ScriptForward = 0.0;
 	bool bScriptWalk = false;
+	bool bScriptSprint = false;
 };
