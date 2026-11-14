@@ -554,14 +554,24 @@ void MonsterSystem::step(const std::vector<Event>& events, size_t from) {
                 s.health.incapacitated(e)) {
                 continue;
             }
-            if (animal.temper != AnimalTemper::Calm && (animal.mode == AnimalMode::Chase || animal.mode == AnimalMode::Fight)) {
-                if (!hives.empty() && animal.temper == AnimalTemper::Manhunter && animal.enemy != kNoEntity && reg.valid(animal.enemy) &&
-                    reg.all_of<Position>(animal.enemy)) {
-                    const Position& q = reg.get<Position>(animal.enemy);
-                    if (moundDist(q.x, q.y) > kMonsterLeash) {
-                        animal.temperUntil = s.time.seconds;  // it calms down at its next think and stays home
-                    }
+            if (!hives.empty() && animal.temper == AnimalTemper::Manhunter) {
+                // After a colonist: on it while it stays within the leash of a mound; with no colonist that near, it calms
+                // down at its next think and goes home.
+                bool near = false;
+                for (const Entity c : colony) {
+                    const Position& q = reg.get<Position>(c);
+                    near = near || moundDist(q.x, q.y) <= kMonsterLeash;
                 }
+                if (animal.enemy != kNoEntity && reg.valid(animal.enemy) && reg.all_of<Position>(animal.enemy)) {
+                    const Position& q = reg.get<Position>(animal.enemy);
+                    near = near && moundDist(q.x, q.y) <= kMonsterLeash;
+                }
+                if (!near) {
+                    animal.temperUntil = s.time.seconds;
+                }
+                continue;
+            }
+            if (animal.temper != AnimalTemper::Calm && (animal.mode == AnimalMode::Chase || animal.mode == AnimalMode::Fight)) {
                 continue;
             }
             const Position& pos = reg.get<Position>(e);
