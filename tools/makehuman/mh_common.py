@@ -61,8 +61,19 @@ def write_materials(meshes, out_dir, skin_meshes=(), tints=None, overrides=None)
     material, tinted by the pawn's skin colour). The MakeHumanArt commandlet reads it."""
     manifest = {}
     tints = tints or {}
+    # A skin mesh whose material sits elsewhere (MPFB can leave a proxy without its own slot) gets one to name.
+    for obj in skin_meshes:
+        if not obj.material_slots or not any(slot.material for slot in obj.material_slots):
+            skin = bpy.data.materials.new("Skin")
+            if obj.material_slots:
+                for slot in obj.material_slots:
+                    slot.link = "OBJECT"
+                    slot.material = skin
+            else:
+                obj.data.materials.append(skin)
+            print("[mh_common] gave", obj.name, "a skin material")
     for obj in meshes:
-        for index, mat in enumerate(obj.data.materials):
+        for index, mat in enumerate([slot.material for slot in obj.material_slots]):
             if not mat:
                 continue
             if mat.name in [m["blender"] for m in manifest.values()]:

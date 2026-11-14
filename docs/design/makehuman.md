@@ -38,6 +38,26 @@ attached to the hidden mannequin, animated by `UMakeHumanAnimInstance` (one `Ret
 character's retargeter; the sample's generic retarget animation picked retargeters from its own list and ignored
 ours). Its mesh has its own height, so `Height` is 1 for it. For now only a looks override sets it (smoke tests).
 
+## Jiggle and hair
+
+`UMakeHumanAnimInstance` runs, after the retarget, one AnimDynamics soft body on each breast bone (MPFB's
+`game_engine_with_breast` skeleton: it lags behind the body's motion within about 1.5 cm and 8 degrees and springs back)
+and a swinging chain on a ponytail's bones (MakeHuman's ponytail sub-rig, joined into the main skeleton under the head
+by `mh_export.py`; enable Blender's Rigify add-on, which MPFB needs to read older sub-rigs). Simulated in world space,
+so walking and turning move them. `Pawns.MakeHumanPhysics 0` turns it off (read when a character's animation starts).
+Hair without bones (the long01 style) stays still. There are no butt bones in this skeleton yet.
+
+sneed's Petite Natural Pale Adult is rebuilt from his MakeHuman save (`tools/makehuman/petite_pale.json`, `"mhm"`) with
+this skeleton rather than exported from his finished .blend (`blend_export.py`, Mixamo skeleton, no breast bones).
+
+## Showcase (play)
+
+`tools\play-showcase.bat` starts the editor build on the compare scene for play (smoke test `showcase`, which checks
+nothing): the Crashlanded start on a cleared flat map, its first two colonists drawn as the ponytail woman (the player's:
+direct control) and the long-haired example woman (drafted, standing), the rest removed, graphics turned up (epic
+scalability, full resolution, TSR, Lumen GI and reflections, virtual shadows, contact shadows). `-ShowcasePlayer=` and
+`-ShowcaseNpc=` pick other characters. Hardware ray tracing is off in the project (Lumen traces in software).
+
 ## Smoke test `compare`
 
 Three pawns side by side on a cleared flat map in the morning sun: the MakeHuman example woman, a local-only

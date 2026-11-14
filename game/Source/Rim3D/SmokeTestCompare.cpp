@@ -14,6 +14,7 @@
 
 #include "MakeHumanAnimInstance.h"
 #include "PawnActor.h"
+#include "ProtagonistSubsystem.h"
 #include "Retargeter/IKRetargeter.h"
 #include "PawnSubsystem.h"
 #include "SimSubsystem.h"
@@ -305,6 +306,7 @@ void USmokeTestSubsystem::BuildComparePhases()
 			}
 			const UMakeHumanAnimInstance* Anim = Cast<UMakeHumanAnimInstance>(Mesh->GetAnimInstance());
 			const FString Retargeter = Anim && Anim->GetRetargeter() ? Anim->GetRetargeter()->GetName() : TEXT("none");
+			Notes.Add(FString::Printf(TEXT("  %s: %d soft bodies (jiggle, hair)"), *State->Labels[i], Anim ? Anim->GetPhysicsChains() : 0));
 			const USkeletalMeshComponent* Source = Pawn->GetBody();
 			const auto Dir = [](const USkeletalMeshComponent* M, const TCHAR* A, const TCHAR* B)
 			{
@@ -443,4 +445,141 @@ void USmokeTestSubsystem::BuildComparePhases()
 		CompareSmokeSet(TEXT("Sky.DayOfYear"), -1.0f);
 	};
 	Phases.Add(MoveTemp(Done));
+}
+
+// Not a check: `showcase` (tools/play-showcase.bat) opens the compare scene for play, with the graphics turned up.
+// sneed's ponytail woman is the player's (direct control: WASD, mouse, F2 pause); the long-haired example woman stands
+// drafted as an NPC. It runs until the window is closed or -ShowcaseMinutes (default 240) pass.
+void USmokeTestSubsystem::BuildShowcasePhases()
+{
+	const auto Bridge = [this]() { return GetWorld()->GetSubsystem<USimSubsystem>(); };
+	const auto PawnsOf = [this]() { return GetWorld()->GetSubsystem<USimPawnSubsystem>(); };
+	const TSharedRef<colony::Entity> Player = MakeShared<colony::Entity>(colony::kNoEntity);
+
+	FPhase Play;
+	Play.Name = TEXT("showcase");
+	Play.WarmupSeconds = 8.0f;  // control is taken during the warm-up, so the phase's screenshot is the player's view
+	float Minutes = 240.0f;
+	FParse::Value(FCommandLine::Get(), TEXT("ShowcaseMinutes="), Minutes);
+	Play.MeasureSeconds = Minutes * 60.0f;
+	Play.Setup = [=, this]()
+	{
+		USimSubsystem* B = Bridge();
+		USimPawnSubsystem* Pawns = PawnsOf();
+		if (!B || !Pawns)
+		{
+			Fail(TEXT("USimSubsystem or USimPawnSubsystem did not start"));
+			return;
+		}
+		// Graphics up: epic scalability, full resolution, temporal super resolution, Lumen everything, virtual shadows.
+		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+		{
+			for (const TCHAR* Command : {TEXT("sg.ShadowQuality 4"), TEXT("sg.GlobalIlluminationQuality 4"), TEXT("sg.ReflectionQuality 4"),
+				TEXT("sg.PostProcessQuality 4"), TEXT("sg.TextureQuality 4"), TEXT("sg.EffectsQuality 4"), TEXT("sg.FoliageQuality 4"),
+				TEXT("sg.ShadingQuality 4"), TEXT("sg.ViewDistanceQuality 4"), TEXT("sg.AntiAliasingQuality 4"), TEXT("r.ScreenPercentage 100"),
+				TEXT("r.AntiAliasingMethod 4"), TEXT("r.DynamicGlobalIlluminationMethod 1"), TEXT("r.ReflectionMethod 1"),
+				TEXT("r.Lumen.Reflections.HierarchicalScreenTraces 1"), TEXT("r.Shadow.Virtual.Enable 1"), TEXT("r.SSS.Quality 1"),
+				TEXT("r.ContactShadows 1"), TEXT("Pawns.FullDetail 20")})
+			{
+				PC->ConsoleCommand(Command);
+			}
+		}
+		for (const TPair<const TCHAR*, float>& Var : {TPair<const TCHAR*, float>(TEXT("Pawns.MetaHumans"), 1.0f), TPair<const TCHAR*, float>(TEXT("Sky.Hour"), 9.5f),
+			TPair<const TCHAR*, float>(TEXT("Sky.DayOfYear"), 22.5f)})
+		{
+			if (IConsoleVariable* Found = IConsoleManager::Get().FindConsoleVariable(Var.Key))
+			{
+				Found->Set(Var.Value, ECVF_SetByCode);
+			}
+		}
+		FSimStartOptions Options;
+		Options.Seed = 42;
+		Options.MapSize = 96;
+		Options.bFlatMap = true;
+		// The Crashlanded start: direct control takes colonists only. Two of them become the women; the rest go.
+		Options.Scenario = TEXT("Crashlanded");
+		B->SetWorldOrigin(CompareSmokeOrigin);
+		if (!B->StartSim(Options))
+		{
+			Fail(TEXT("The game's data did not load"));
+			return;
+		}
+		B->SetSpeed(0);
+		B->StepOnce();
+		const colony::CellPos Middle = B->GetSim()->stockpileCell().value_or(colony::CellPos{48, 48, 0});
+		for (const colony::ThingView& View : B->GetCurrentSnapshot().things)
+		{
+			if (View.category != colony::ThingCategory::Pawn && FMath::Abs(View.x - Middle.x) < 24.0f && FMath::Abs(View.y - Middle.y) < 24.0f)
+			{
+				B->Submit(colony::DestroyThingCommand{View.id});
+			}
+		}
+		colony::Sim* Sim = const_cast<colony::Sim*>(B->GetSim());
+		for (int32 x = -24; x <= 24; ++x)
+		{
+			for (int32 y = -24; y <= 24; ++y)
+			{
+				Sim->plants().remove(colony::CellPos{Middle.x + x, Middle.y + y, 0});
+			}
+		}
+		B->StepOnce();
+		const colony::Snapshot& Snapshot = B->GetCurrentSnapshot();
+		TArray<const colony::ThingView*> Two;
+		for (const colony::ThingView& View : Snapshot.things)
+		{
+			if (View.category == colony::ThingCategory::Pawn && View.lifeStage < 0)
+			{
+				Two.Add(&View);
+			}
+		}
+		Two.Sort([](const colony::ThingView& A, const colony::ThingView& Bv) { return A.id < Bv.id; });
+		if (Two.Num() < 2)
+		{
+			Fail(TEXT("the Crashlanded start has fewer than two colonists"));
+			return;
+		}
+		for (int32 i = 2; i < Two.Num(); ++i)
+		{
+			B->Submit(colony::DestroyThingCommand{Two[i]->id});
+		}
+		const colony::DefDatabase* Defs = B->GetDefs().get();
+		for (int32 i = 0; i < 2; ++i)
+		{
+			FSimPawnLooks Looks = Two[i]->looks >= 0 ? USimPawnSubsystem::MakeLooks(Snapshot.looks[static_cast<size_t>(Two[i]->looks)], Defs) : FSimPawnLooks();
+			Looks.bFemale = true;
+			Looks.Height = 1.0f;
+			Looks.Skin = FLinearColor(FColor(232, 205, 190));
+			Looks.MakeHuman = i == 0 ? TEXT("PetitePale") : TEXT("Woman");
+			FParse::Value(FCommandLine::Get(), i == 0 ? TEXT("ShowcasePlayer=") : TEXT("ShowcaseNpc="), Looks.MakeHuman);
+			Pawns->SetLooksOverride(Two[i]->id, Looks);
+			const std::vector<colony::Entity> Worn = Sim->apparel().worn(Two[i]->id);
+			for (const colony::Entity Item : Worn)
+			{
+				std::string Error;
+				Sim->apparel().takeOff(Two[i]->id, Item, Error);
+				B->Submit(colony::DestroyThingCommand{Item});
+			}
+		}
+		*Player = Two[0]->id;
+		B->Submit(colony::DraftCommand{Two[1]->id, true});
+		B->StepOnce();
+		B->SetSpeed(1);
+	};
+	Play.OnFrame = [=, this]()
+	{
+		// Take her over once her actor is there (direct control needs the pawn drawn).
+		if (*Player == colony::kNoEntity || PhaseTime < 1.0f)
+		{
+			return;
+		}
+		if (UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>())
+		{
+			if (Protagonist->EnterDirectMode(*Player))
+			{
+				Notes.Add(TEXT("showcase: you control the ponytail woman"));
+				*Player = colony::kNoEntity;
+			}
+		}
+	};
+	Phases.Add(MoveTemp(Play));
 }

@@ -110,6 +110,7 @@ private:
 	void BuildFacesPhases();        // SmokeTestFaces.cpp
 	void BuildBodiesPhases();       // SmokeTestBodies.cpp
 	void BuildComparePhases();      // SmokeTestCompare.cpp
+	void BuildShowcasePhases();     // SmokeTestCompare.cpp (play, not a check)
 	void BuildSoundPhases();        // SmokeTestSound.cpp
 	void BuildLookPhases();         // SmokeTestLook.cpp
 	void StartPhase(int32 Index);
