@@ -447,7 +447,8 @@ struct SaveEntity {
     std::optional<Melee> melee;             // section "melee" (F8)
     std::optional<Social> social;           // section "social" (C20)
     std::optional<SocialFight> socialFight; // section "social" (C20)
-    std::optional<SaveTalking> talking;     // section "social" 2 (AN1)
+    std::optional<Lovin> lovin;             // section "social" 2 (docs/design/lovin.md)
+    std::optional<SaveTalking> talking;     // section "social" 3 (AN1)
     std::optional<Staggered> staggered;     // section "combat" 3 (AN1)
     std::optional<SaveApparel> apparel;     // section "apparel" (format 20 on)
     std::optional<RecoilKick> kick;         // section "feel"
@@ -1508,13 +1509,13 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 auto* designate = &c;
                 ar.group("area", [&] { saveRect(ar, designate->area); });
                 ar.value("kind", designate->kind);
-                ar.require(designate->kind >= DesignationKind::Mine && designate->kind <= DesignationKind::HarvestPlant,
+                ar.require(designate->kind >= DesignationKind::Mine && designate->kind <= DesignationKind::RemoveFloor,
                        "the save file has a bad designation kind");
             } else if constexpr (std::is_same_v<Type, CancelDesignationsCommand>) {
                 auto* cancelMarks = &c;
                 ar.group("area", [&] { saveRect(ar, cancelMarks->area); });
                 ar.value("kind", cancelMarks->kind);
-                ar.require(cancelMarks->kind <= DesignationKind::HarvestPlant, "the save file has a bad designation kind");
+                ar.require(cancelMarks->kind <= DesignationKind::RemoveFloor, "the save file has a bad designation kind");
             } else if constexpr (std::is_same_v<Type, DraftCommand>) {
                 auto* draft = &c;
                 ar.value("pawn", draft->pawn);
@@ -2468,8 +2469,11 @@ void saveMeleePart(Ar& ar, Melee& m) {
 }
 
 template <typename Ar>
-void saveSocialPart(Ar& ar, Social& social) {
+void saveSocialPart(Ar& ar, Social& social, bool withLovin) {
     ar.value("nextTalk", social.nextTalk);
+    if (withLovin) {  // social section 2: lovin
+        ar.value("nextLovin", social.nextLovin);
+    }
     ar.value("mourned", social.mourned);
     ar.list("memories", social.memories, [&](OpinionMemory& m) {
         ar.value("other", m.other);
@@ -2507,6 +2511,15 @@ void saveSocialFightPart(Ar& ar, SocialFight& f) {
     ar.value("startedAt", f.startedAt);
     ar.value("endsBy", f.endsBy);
     ar.value("nextMove", f.nextMove);
+}
+
+template <typename Ar>
+void saveLovinPart(Ar& ar, Lovin& l) {
+    ar.value("partner", l.partner);
+    ar.value("startedAt", l.startedAt);
+    ar.value("until", l.until);
+    ar.value("pose", l.pose);
+    ar.require(l.pose <= LovinPose::Embracing, "the save file has a bad lovin pose");
 }
 
 template <typename Ar>
@@ -3469,10 +3482,13 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("melee", 1, [&] {
         saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
     });
-    ar.section("social", 2, [&] {
-        saveParts(ar, "social", e, &SaveEntity::social, [&](Social& social) { saveSocialPart(ar, social); });
+    ar.section("social", 3, [&] {
+        saveParts(ar, "social", e, &SaveEntity::social, [&](Social& social) { saveSocialPart(ar, social, ar.sectionVersion() >= 2); });
         saveParts(ar, "fight", e, &SaveEntity::socialFight, [&](SocialFight& f) { saveSocialFightPart(ar, f); });
-        if (ar.sectionVersion() >= 2) {  // AN1
+        if (ar.sectionVersion() >= 2) {
+            saveParts(ar, "lovin", e, &SaveEntity::lovin, [&](Lovin& l) { saveLovinPart(ar, l); });
+        }
+        if (ar.sectionVersion() >= 3) {  // AN1
             saveParts(ar, "talking", e, &SaveEntity::talking, [&](SaveTalking& t) { saveTalkingPart(ar, t); });
         }
     });
@@ -3726,7 +3742,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "away", e, &SaveEntity::away, [&](AwayPawn& a) {
             ar.value("tile", a.tile);
             ar.value("there", a.there);
-            ar.group("social", [&] { saveSocialPart(ar, a.social); });
+            ar.group("social", [&] { saveSocialPart(ar, a.social, false); });  // maps 1: no lovin pause (it starts again at 0)
         });
     });
     ar.section("comms", 1, [&] {  // the comms console's caravan requests (docs/design/comms-console.md)
@@ -4185,6 +4201,9 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
     }
     if (const SocialFight* fight = reg.try_get<SocialFight>(e)) {
         out.socialFight = *fight;
+    }
+    if (const Lovin* lovin = reg.try_get<Lovin>(e)) {
+        out.lovin = *lovin;
     }
     if (const Projectile* p = reg.try_get<Projectile>(e)) {
         out.projectile = SaveProjectile{sim.defs_->get(p->def).defName(), sim.defs_->get(p->weapon).defName(), *p};
@@ -4749,6 +4768,9 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
     if (e.socialFight) {
         reg.emplace<SocialFight>(entity, *e.socialFight);
     }
+    if (e.lovin) {
+        reg.emplace<Lovin>(entity, *e.lovin);
+    }
     if (e.turret) {
         reg.emplace<Turret>(entity, *e.turret);
     } else if (e.footprint && e.thing && sim.defs_->get(reg.get<Thing>(entity).def).has("turret")) {
@@ -4907,6 +4929,7 @@ bool SimSaveAccess::moveThings(Sim& from, const std::vector<Entity>& roots, Sim&
         }
         e.playerControlled = false;
         e.socialFight.reset();
+        e.lovin.reset();
         if (!restoreEntity(to, e, error)) {
             return false;
         }
@@ -5040,6 +5063,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         d.zones.push_back(std::move(z));
     }
     for (const auto& [pawn, s] : sim.drugs_->states()) {
+        if (!sim.things_->exists(pawn)) {
+            continue;  // a pawn that is gone: the load would forget it anyway
+        }
         SaveDrugPawn saved;
         saved.pawn = pawn;
         saved.policy = s.policy;
@@ -5397,7 +5423,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         std::vector<std::pair<int, DesignationKind>> marks;
         for (size_t i = 0; i < d.designations.cells.size(); ++i) {
-            if (d.designations.kinds[i] > static_cast<uint8_t>(DesignationKind::HarvestPlant)) {
+            if (d.designations.kinds[i] > static_cast<uint8_t>(DesignationKind::RemoveFloor)) {
                 error = "the save has a bad designation";
                 return false;
             }

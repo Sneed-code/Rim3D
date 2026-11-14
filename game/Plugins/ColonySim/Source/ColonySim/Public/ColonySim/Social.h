@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace colony {
@@ -26,8 +27,9 @@ class Things;
 // deep talk, kind words, a slight or an insult, a romantic gesture, a proposal, a breakup); each one
 // changes how the other pawn thinks of it (an *opinion*, a number from -100 to 100 kept as memories
 // that fade), may leave a mood thought, and gives the talker Social experience. Friends and rivals are
-// worked out from opinions; lovers and spouses (and their exes) are bonds that are stored. Romance and
-// marriage are bonds only: no sex, no pregnancy. An insult can start a fight with fists that ends
+// worked out from opinions; lovers and spouses (and their exes) are bonds that are stored. Partners who
+// share a bed now and then have lovin (abstract: they lie in bed together a while; adults only), which
+// lifts mood and opinion. No pregnancy. An insult can start a fight with fists that ends
 // when someone is hurt.
 //
 // Unreal does not include this header: it reads the snapshot's `partner` and `socialFight`, the
@@ -58,6 +60,7 @@ struct Social {
     std::vector<OpinionMemory> memories;
     std::vector<Bond> bonds;
     int64_t nextTalk = 0;      // game second from which it may start an interaction (a pause after any)
+    int64_t nextLovin = 0;     // game second from which it may have lovin again (docs/design/lovin.md)
     bool mourned = false;      // dead, and the ones who cared have been told (once)
 };
 
@@ -78,6 +81,18 @@ struct SocialFight {
     int64_t startedAt = 0;
     int64_t endsBy = 0;
     int64_t nextMove = 0;      // game second to walk towards the opponent again
+};
+
+// On both partners while they have lovin (docs/design/lovin.md): abstract and off-screen in all but name, the two
+// simply lie in their shared bed until `until`. Adults only. Every field is saved.
+// `pose` is how Unreal lays them under the covers (LovinPose); it is cosmetic.
+enum class LovinPose : uint8_t { SideBySide, Spooning, Embracing };
+COLONY_API const char* lovinPoseName(LovinPose pose);
+struct Lovin {
+    Entity partner = kNoEntity;
+    int64_t startedAt = 0;
+    int64_t until = 0;
+    LovinPose pose = LovinPose::SideBySide;
 };
 
 // A line of the reasons for an opinion, for the colonist panel.
@@ -166,6 +181,20 @@ struct COLONY_API SocialRules {
     // gets this thought on top of the loss.
     float witnessRadius = 12.0f;
     std::string witnessThought;
+    // Lovin (docs/design/lovin.md). Partners lying in the same bed, the later of them down for at most `lovinWindowMinutes`
+    // (the first is still awake), both adults and both past their `nextLovin`, have lovin for `lovinMinutes` (a share of
+    // an hour, RimWorld's 0.1 to 1.1 hours, recalled). Afterwards each gets the mood thought and the opinion memory about
+    // the other, and waits a while by its age before the next (RimWorld's interval curve, recalled, with a spread).
+    std::string lovinThought;            // mood thought trigger; empty for none
+    std::string lovinLabel = "lovin'";
+    float lovinOpinion = 10.0f;
+    float lovinOpinionDays = 1.0f;
+    float lovinWindowMinutes = 30.0f;
+    float lovinMinMinutes = 6.0f;
+    float lovinMaxMinutes = 66.0f;
+    std::vector<std::pair<float, float>> lovinIntervalHours{{16.0f, 1.5f}, {22.0f, 1.5f}, {30.0f, 4.0f}, {50.0f, 12.0f}, {75.0f, 36.0f}};
+    float lovinIntervalSpread = 0.3f;    // hours, the standard deviation around the curve
+    float lovinIntervalMin = 0.5f;       // hours
     float fightOffset = -20.0f;          // each one's opinion of the other afterwards...
     float fightDays = 30.0f;             // ...for this long
     std::vector<SocialInteraction> interactions;
@@ -197,6 +226,10 @@ public:
     // The pawn's spouse, else its lover, else none.
     Entity partner(Entity pawn) const;
     bool fighting(Entity pawn) const;
+    // Whether the pawn is having lovin now (docs/design/lovin.md).
+    bool inLovin(Entity pawn) const;
+    // The hours `pawn` waits after lovin before the next, before the spread: RimWorld's curve over its age.
+    float lovinIntervalHours(Entity pawn) const;
     // The interaction showing on the pawn now (null when none: never had one, or its time is over).
     const Talking* talking(Entity pawn) const;
     // The pawn's orientation: from a hash of the pawn and the world seed, so it never changes and needs no saving.
@@ -237,6 +270,7 @@ public:
         uint64_t cheats = 0;          // romances begun by somebody who already had a partner
         uint64_t weddingGuests = 0;   // thoughts of a wedding party given to the others
         uint64_t partyGuests = 0;     // colonists sent to a wedding party spot (the couple too)
+        uint64_t lovins = 0;          // lovin finished (one per couple)
     };
     const Stats& stats() const { return stats_; }
     Stats& stats() { return stats_; }
@@ -271,6 +305,10 @@ private:
     void startFight(Entity a, Entity b);
     void endFight(Entity a, Entity b, const char* why);
     void stepFights();
+    void stepLovin(int64_t now, const std::vector<Entity>& pawns);
+    bool lovinReady(Entity pawn, int64_t now) const;
+    Entity lovinBed(Entity pawn, int64_t& layDownAt) const;
+    void endLovin(Entity a, Entity b, bool done);
     void mourn(Entity dead);
     void roll(Entity pawn, const std::vector<Entity>& pawns);
     double unit(Entity pawn, uint64_t salt) const;

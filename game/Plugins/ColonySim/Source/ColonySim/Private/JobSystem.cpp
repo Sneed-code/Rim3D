@@ -97,7 +97,8 @@ enum class JobStepKind : uint8_t {
     PartyWork,      // stand at the party spot until it ends, gaining joy (PartyJobs.cpp)
     WarmWait,       // stay put in a warm room until the cold has let go (NeedJobs.cpp)
     ManWork,        // stand beside the gun while it is manned (ArtilleryJobs.cpp)
-    LoadPodWork     // put the carried stack into the pod (PodJobs.cpp)
+    LoadPodWork,    // put the carried stack into the pod (PodJobs.cpp)
+    RemoveFloorWork  // take the floor on the job's cell up (GatherJobs.cpp)
 };
 
 constexpr JobStepKind kJobsWaitSteps[] = {JobStepKind::Wait};
@@ -111,6 +112,7 @@ constexpr JobStepKind kJobsLayDownSteps[] = {JobStepKind::WalkToSpot, JobStepKin
 constexpr JobStepKind kJobsShelterSteps[] = {JobStepKind::GotoCell, JobStepKind::Wait};
 constexpr JobStepKind kJobsMineSteps[] = {JobStepKind::GotoTouch, JobStepKind::MineWork};
 constexpr JobStepKind kJobsPlantSteps[] = {JobStepKind::GotoTouch, JobStepKind::PlantWork};
+constexpr JobStepKind kJobsRemoveFloorSteps[] = {JobStepKind::GotoTouch, JobStepKind::RemoveFloorWork};
 constexpr JobStepKind kJobsCleanSteps[] = {JobStepKind::GotoCell, JobStepKind::CleanWork};
 constexpr uint8_t kJobsHaulPickUpStep = 1;
 constexpr uint8_t kJobsHaulCarryStep = 2;
@@ -200,6 +202,7 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::BuildFrame: return {kJobsBuildSteps, static_cast<int>(std::size(kJobsBuildSteps))};
         case JobType::Deconstruct: return {kJobsDeconstructSteps, static_cast<int>(std::size(kJobsDeconstructSteps))};
         case JobType::Mine: return {kJobsMineSteps, static_cast<int>(std::size(kJobsMineSteps))};
+        case JobType::RemoveFloor: return {kJobsRemoveFloorSteps, static_cast<int>(std::size(kJobsRemoveFloorSteps))};
         case JobType::CutPlant:
         case JobType::SowCrop:
         case JobType::HarvestPlant: return {kJobsPlantSteps, static_cast<int>(std::size(kJobsPlantSteps))};
@@ -252,6 +255,7 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::BuildWork:
         case JobStepKind::DeconstructWork:
         case JobStepKind::MineWork:
+        case JobStepKind::RemoveFloorWork:
         case JobStepKind::PlantWork:
         case JobStepKind::BillWork:
         case JobStepKind::ResearchWork:
@@ -317,6 +321,7 @@ const char* jobTypeName(JobType type) {
         case JobType::BuildFrame: return "BuildFrame";
         case JobType::Deconstruct: return "Deconstruct";
         case JobType::Mine: return "Mine";
+        case JobType::RemoveFloor: return "RemoveFloor";
         case JobType::CutPlant: return "CutPlant";
         case JobType::HarvestPlant: return "HarvestPlant";
         case JobType::DoBill: return "DoBill";
@@ -587,6 +592,7 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
         case JobType::Mine:
         case JobType::CutPlant:
         case JobType::HarvestPlant:
+        case JobType::RemoveFloor:
         case JobType::SowCrop:
         case JobType::CleanFilth:
             out[0] = keyOf(JobTarget{kNoEntity, job.cell});
@@ -1375,6 +1381,8 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return goToTouch(pawn, job, why);
         case JobStepKind::MineWork:
             return mineRock(pawn, job, why);
+        case JobStepKind::RemoveFloorWork:
+            return removeFloorWork(pawn, job, why);
         case JobStepKind::PlantWork:
             return plantWork(pawn, job, why);
         case JobStepKind::DepositIngredient:

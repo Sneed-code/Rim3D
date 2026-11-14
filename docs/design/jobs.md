@@ -213,11 +213,23 @@ towards the next pick hit or on the plant. Details and numbers: [mining.md](mini
 
 After sneed's G2 playtest some long jobs go faster than RimWorld's, set by `data/tuning.json` `values`
 (1 if absent, so the def numbers stay RimWorld's): `work.treeFellingSpeed` 10 (felling a tree, wild or in a
-zone), `work.constructionSpeed` 2 (building and taking down), `work.miningSpeed` 2 (mining and deep drilling)
+zone), `work.plantSpeed` 7.5 (all other plant work: cutting grass and bushes, harvesting crops and berries,
+sowing), `work.constructionSpeed` 2 (building and taking down), `work.miningSpeed` 2 (mining and deep drilling)
 and `work.craftingSpeed` 2 (work at a bench: crafting, cooking, smelting). Experience per second rises by the same
-factor, so a felled tree or a mined rock teaches as much as before. Other work (sowing, harvesting crops,
-hauling, doctoring, research) keeps RimWorld's speed. Every colonist works at these rates; the protagonist has
-the same base and only the talent tree's build speed on top (`docs/design/talents.md`).
+factor, so a felled tree, a cut plant or a mined rock teaches as much as before. Other work (hauling, doctoring,
+research) keeps RimWorld's speed. Every colonist works at these rates; the protagonist has the same base and only
+the talent tree's build speed on top (`docs/design/talents.md`).
+
+### Plant skill curve (ours, sneed 2026-11-14)
+
+RimWorld's plant work speed is a straight line, 0.08 + 0.115 per Plants level (8% at 0, 100% at 8, 238% at 20),
+so a level 1 farmer works at a twelfth of a level 20 one. sneed wanted plant work never to be a chore: WorkRules
+`plants.skillCurve` makes level 1 work at a third of level 20 (`lowFraction` 0.3333 at `lowLevel` 1), rising evenly
+to all of it at `highLevel` 20 and no higher (genes past 20 add nothing), never under a quarter of it (level 0), and
+scaled so level 8 (`normalLevel`) keeps RimWorld's 100%. With the 7.5 speed-up on top, a level 8 colonist cuts and
+harvests 7.5 times as fast as in RimWorld, level 1 about 4.3 times and level 20 about 13 times. The harvest yield
+by level is RimWorld's (`yieldByLevel`: 60% at 0, 100% at 8, 113% at 20), so a better farmer also brings in more.
+Without the curve (test defs) the straight line holds.
 
 ## Not yet
 

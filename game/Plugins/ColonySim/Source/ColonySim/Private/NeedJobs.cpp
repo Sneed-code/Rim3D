@@ -11,6 +11,7 @@
 #include "ColonySim/Power.h"
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Rooms.h"
+#include "ColonySim/Social.h"
 #include "ColonySim/Spoilage.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Things.h"
@@ -215,6 +216,7 @@ bool needJobsYieldsToCold(JobType type) {
         case JobType::Mine:
         case JobType::CutPlant:
         case JobType::HarvestPlant:
+        case JobType::RemoveFloor:
         case JobType::SowCrop:
         case JobType::DeliverResources:
         case JobType::BuildFrame:
@@ -549,7 +551,8 @@ bool JobSystem::bedSlotCell(Entity bed, Entity pawn, CellPos& out) const {
 }
 
 // The pawn's own bed, or else the nearest free one, which then becomes its own (RimWorld's
-// colonists claim a bed by sleeping in it). False: sleep on the ground.
+// colonists claim a bed by sleeping in it). A pawn whose partner's bed has a slot free moves in with it, and
+// colonists who are not partners don't share a bed (docs/design/lovin.md). False: sleep on the ground.
 bool JobSystem::findBed(Entity pawn, Entity& bed, CellPos& cell) {
     entt::registry& reg = things_.registry();
     const Position& at = reg.get<Position>(pawn);
@@ -559,7 +562,42 @@ bool JobSystem::findBed(Entity pawn, Entity& bed, CellPos& cell) {
                !avoiding(pawn, JobTarget{candidate, CellPos{}}) && canReach(pawnCell, c);
     };
 
+    const auto slotsOf = [&](Entity candidate) {
+        return std::max(1, static_cast<int>(defs_.get(reg.get<Thing>(candidate).def).integer("building.sleepingSlots", 1)));
+    };
+    const Entity partner = partnerOf_ ? partnerOf_(pawn) : kNoEntity;
+    // Two colonists with a social life share a bed only if they are partners (RimWorld's rule); pawns without one
+    // (no social rules) share as before.
+    const auto sharable = [&](const Bed& owners) {
+        if (!reg.all_of<Social>(pawn)) {
+            return true;
+        }
+        return std::all_of(owners.owners.begin(), owners.owners.end(),
+                           [&](Entity o) { return o == pawn || o == partner || !reg.valid(o) || !reg.all_of<Social>(o); });
+    };
+
     const Entity owned = bedOf(pawn);
+    // A partner's bed with a slot free (a double bed): the pawn moves into it, giving up its own.
+    if (partner != kNoEntity && things_.spawned(partner)) {
+        const Entity theirs = bedOf(partner);
+        if (theirs != kNoEntity && theirs != owned && things_.spawned(theirs) && isMedical_[reg.get<Thing>(theirs).def.value] == 0 &&
+            reg.all_of<PrisonBed>(theirs) == reg.all_of<Prisoner>(pawn)) {
+            Bed& shared = reg.get<Bed>(theirs);
+            const CellRect rect = reg.get<Footprint>(theirs).rect();
+            const int index = static_cast<int>(shared.owners.size());
+            const CellPos c{rect.minX + index % rect.sizeX, rect.minY + index / rect.sizeX, rect.level};
+            if (index < slotsOf(theirs) && index < rect.sizeX * rect.sizeY && sharable(shared) && usable(theirs, c)) {
+                if (owned != kNoEntity) {
+                    auto& mine = reg.get<Bed>(owned).owners;
+                    mine.erase(std::remove(mine.begin(), mine.end(), pawn), mine.end());
+                }
+                shared.owners.push_back(pawn);
+                bed = theirs;
+                cell = c;
+                return true;
+            }
+        }
+    }
     if (owned != kNoEntity) {
         CellPos c;
         if (bedSlotCell(owned, pawn, c) && usable(owned, c)) {
@@ -575,7 +613,8 @@ bool JobSystem::findBed(Entity pawn, Entity& bed, CellPos& cell) {
     for (const auto [candidate, thing, owners, footprint] : reg.view<const Thing, const Bed, const Footprint>().each()) {
         const int slots = std::max(1, static_cast<int>(defs_.get(thing.def).integer("building.sleepingSlots", 1)));
         // A medical bed is for patients: nobody claims one to sleep in (RimWorld's rule).
-        if (static_cast<int>(owners.owners.size()) >= slots || !things_.spawned(candidate) || isMedical_[thing.def.value] != 0) {
+        if (static_cast<int>(owners.owners.size()) >= slots || !things_.spawned(candidate) || isMedical_[thing.def.value] != 0 ||
+            !sharable(owners)) {
             continue;
         }
         // Prison beds are for prisoners and nobody else.
@@ -685,6 +724,10 @@ JobSystem::StepResult JobSystem::lie(Entity pawn, Job& job, std::string&) {
     // Fire beside the bed, or the sleeper alight: it wakes (RimWorld wakes a sleeper that is hurt).
     if (now() % 15 == 0 && fireNear(job.cell, kFireBedRadius, pawn)) {
         return StepResult::Next;
+    }
+    // During lovin the pawn stays in bed with its partner whatever its rest (docs/design/lovin.md).
+    if (reg.all_of<Lovin>(pawn)) {
+        return StepResult::Running;
     }
     Needs& needs = reg.get<Needs>(pawn);
     if (needs.rest >= rules_.wakeAt) {

@@ -139,7 +139,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `raids` | 2 | the raid state (factions met, squads, the alarm, threat and home points, the shelter mark), then the `defense` and `raider` parts ([raids.md](raids.md), F6) |
 | `raids` | 3 | as 2, and per squad its `siege`: stage, camp, end time, resupplies and the camp's builds ([sieges.md](sieges.md)) |
 | `melee` | 1 | `melee`: each pawn's swing, its defense against one, its block (F8, [melee.md](melee.md)) |
-| `social` | 2 | `social` (a colonist's opinion memories, stored bonds, next talk, mourned) and `fight` (a fight with fists in progress) per pawn (C20, [social.md](social.md)); from 2 `talking` (the interaction showing, AN1) |
+| `social` | 3 | `social` (a colonist's opinion memories, stored bonds, next talk, mourned) and `fight` (a fight with fists in progress) per pawn (C20, [social.md](social.md)); from 2 `lovin` (lovin in progress, [lovin.md](lovin.md)); from 3 `talking` (the interaction showing, AN1) |
 | `apparel` | 2 | `apparel`: the stuff and quality of an item, taint, a strip mark, a pawn's outfit and next look, and from version 2 its durability; the outfit policies ([apparel.md](apparel.md), [apparel-durability.md](apparel-durability.md)) |
 | `feel` | 1 | `kick` (the player's gun kick and its spray) and `roll` (a dodge roll's phase, steps, direction, wait) ([shooter-feel.md](shooter-feel.md)) |
 | `levels` | 1 | the upper floors, by level then row; put back before the buildings on them (M1) |

@@ -122,7 +122,7 @@ struct Carrying {
 
 // True for the jobs that work on a designated cell (rock or plant) and hold that cell.
 inline bool jobIsGather(JobType type) {
-    return type == JobType::Mine || type == JobType::CutPlant || type == JobType::HarvestPlant;
+    return type == JobType::Mine || type == JobType::CutPlant || type == JobType::HarvestPlant || type == JobType::RemoveFloor;
 }
 
 // True for the jobs done to an animal (docs/design/husbandry.md): `site` is the animal.
@@ -333,6 +333,9 @@ public:
     bool assignBed(Entity bed, Entity pawn, std::string& error);
     // The bed a pawn owns, or kNoEntity.
     Entity bedOf(Entity pawn) const;
+    // Who a pawn's partner is (its spouse, else its lover; the social system answers): a pawn joins its partner's bed
+    // when there is a free slot in it, and two colonists who are not partners never share a bed (docs/design/lovin.md).
+    void setPartnerOf(std::function<Entity(Entity)> partnerOf) { partnerOf_ = std::move(partnerOf); }
     const NeedRules& needRules() const { return rules_; }
     // Whether a cell is indoors decides where a pawn can stroll or watch the clouds (Recreation); without rooms
     // everywhere is outdoors.
@@ -512,7 +515,11 @@ public:
     // How fast `pawn` mines (1 is 100%): 4% plus 12% per Mining level, times its Manipulation.
     double miningSpeed(Entity pawn) const;
     // How fast it cuts and picks: 8% plus 11.5% per Plants level, times Manipulation, at least 10%.
+    // Plant work per second before the tuning's speed-ups (plantWorkFactor): Plants skill by the
+    // skill curve, Manipulation, light, health, traits, genes.
     double plantWorkSpeed(Entity pawn) const;
+    // The tuning's speed-up for work on this plant def: `work.treeFellingSpeed` for a tree, else `work.plantSpeed`.
+    double plantWorkFactor(DefId plant) const;
     // A skill level of a pawn: from its Colonist record, `unskilledLevel` for a pawn with none.
     int skillLevel(Entity pawn, const char* skill) const;
     // Experience in a skill, scaled by the pawn's passion for it (the social system's, C20).
@@ -703,6 +710,7 @@ private:
     bool failCheckGather(Entity pawn, Job& job, std::string& why);
     StepResult goToTouch(Entity pawn, Job& job, std::string& why);
     StepResult mineRock(Entity pawn, Job& job, std::string& why);
+    StepResult removeFloorWork(Entity pawn, Job& job, std::string& why);
     StepResult plantWork(Entity pawn, Job& job, std::string& why);
     StepResult sowWork(Entity pawn, Job& job, std::string& why);
     void learnSkill(Entity pawn, const char* skill, double xp);
@@ -815,6 +823,7 @@ private:
     CombatSystem* combat_ = nullptr;
     std::function<bool(Entity)> animalGate_;
     std::function<bool(Entity)> pauseGate_;
+    std::function<Entity(Entity)> partnerOf_;
     InspirationSystem* inspirations_ = nullptr;
     const TraitBook* traits_ = nullptr;
     const TalentSystem* talents_ = nullptr;  // build speed and carrying capacity (docs/design/talents.md)
@@ -852,6 +861,14 @@ private:
         double plantSpeedBase = 0.08;
         double plantSpeedPerLevel = 0.115;
         double plantXpPerSecond = 0.059028;
+        // Our skill curve for plant work (WorkRules `plants.skillCurve`, sneed 2026-11-14): when set, speed is
+        // `lowFraction` of the level-`highLevel` speed at `lowLevel`, rising evenly to all of it at `highLevel`,
+        // scaled so a level-`normalLevel` pawn works at RimWorld's speed for that level. Off (RimWorld's straight
+        // line) when `plantCurveHigh` is 0.
+        int plantCurveLow = 1;
+        int plantCurveHigh = 0;
+        int plantCurveNormal = 8;
+        double plantCurveLowFraction = 1.0 / 3.0;
         double constructionXpPerSecond = 0.173611;
         double growthYieldFloor = 0.5;
         int unskilledLevel = 8;
@@ -859,6 +876,7 @@ private:
         // Our speed-ups from data/tuning.json `values` (sneed's G2 playtest, docs/design/jobs.md "Work speed-ups"):
         // felling a tree, building and taking down, mining and bench work go this many times faster.
         double treeFellingSpeed = 1.0;
+        double plantSpeed = 1.0;  // all other plant work: cutting, harvesting, sowing
         double constructionSpeed = 1.0;
         double miningSpeed = 1.0;
         double craftingSpeed = 1.0;
