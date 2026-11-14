@@ -2232,6 +2232,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Mover* mover = reg.try_get<Mover>(entity)) {
             view.vx = mover->vx;
             view.vy = mover->vy;
+            view.pace = mover->pace;
             // On stairs or a ladder the pawn is drawn the share `climb` of the way from where it
             // stands to the cell at the other end (docs/design/levels.md).
             if (mover->climbing(pos.level)) {

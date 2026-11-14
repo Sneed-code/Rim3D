@@ -72,12 +72,12 @@ def write_materials(meshes, out_dir, skin_meshes=(), tints=None, overrides=None)
             else:
                 obj.data.materials.append(skin)
             print("[mh_common] gave", obj.name, "a skin material")
+    done = set()
     for obj in meshes:
         for index, mat in enumerate([slot.material for slot in obj.material_slots]):
-            if not mat:
-                continue
-            if mat.name in [m["blender"] for m in manifest.values()]:
-                continue
+            if not mat or mat.as_pointer() in done:
+                continue  # a material shared by several meshes is listed once
+            done.add(mat.as_pointer())
             slug = re.sub(r"[^A-Za-z0-9]+", "_", mat.name).strip("_")[:40] or "Material"
             name = f"MH{len(manifest):02d}_{slug}"
             entry = {"blender": mat.name}
@@ -227,3 +227,205 @@ def lower_pubic_hair(obj, body, top_share=0.6, above_crotch=0.025, log=print):
         v.co = (nx, ny, nz)
     obj.data.update()
     log("pubic hair lowered: top", round(top - bottom, 3), "->", round((top - bottom) * top_share, 3), "above its lowest point")
+
+
+def make_skin_normal(color_path, out_path, strength=2.5, radius=12, log=print):
+    """A normal map for a skin that has none (MakeHuman's skins are colour only): the colour map's fine detail (pores,
+    creases, nipples, veins) as height, darker being deeper, high-passed against a blur of `radius` texels so the broad
+    shading of the paint does not turn into bumps."""
+    import numpy as np
+    img = bpy.data.images.load(color_path, check_existing=False)
+    w, h = img.size
+    px = np.empty(w * h * 4, dtype=np.float32)
+    img.pixels.foreach_get(px)
+    px = px.reshape(h, w, 4)
+    lum = px[:, :, 0] * 0.3 + px[:, :, 1] * 0.59 + px[:, :, 2] * 0.11
+
+    def box(a, r):
+        # A separable box blur by running sums, edges clamped; three passes are close to a Gaussian.
+        for axis in (0, 1):
+            pad = [(0, 0), (0, 0)]
+            pad[axis] = (r + 1, r)
+            c = np.cumsum(np.pad(a, pad, mode="edge"), axis=axis)
+            hi = np.take(c, np.arange(2 * r + 1, c.shape[axis]), axis=axis)
+            lo = np.take(c, np.arange(0, c.shape[axis] - 2 * r - 1), axis=axis)
+            a = (hi - lo) / (2 * r + 1)
+        return a
+
+    blur = lum
+    for _ in range(3):
+        blur = box(blur, radius)
+    height = (lum - blur) / np.maximum(blur, 0.05)  # relative, so pale and dark skins get the same depth
+    height = box(height, 1)                          # a touch of smoothing against compression noise
+    dx = (np.roll(height, -1, axis=1) - np.roll(height, 1, axis=1)) * 0.5 * strength
+    dy = (np.roll(height, -1, axis=0) - np.roll(height, 1, axis=0)) * 0.5 * strength
+    n = np.stack([-dx, -dy, np.ones_like(dx)], axis=-1)
+    n /= np.linalg.norm(n, axis=-1, keepdims=True)
+    out = np.concatenate([n * 0.5 + 0.5, np.ones((h, w, 1), dtype=np.float32)], axis=-1).astype(np.float32)
+    normal = bpy.data.images.new("skin_normal", w, h, alpha=False, float_buffer=False)
+    normal.colorspace_settings.name = "Non-Color"
+    normal.pixels.foreach_set(out.ravel())
+    normal.filepath_raw = out_path
+    normal.file_format = "PNG"
+    normal.save()
+    log("skin normal map", out_path, w, "x", h)
+    return out_path
+
+
+def _tube(name, centres, radii, frames, segments=12, uv_rect=(0.0, 0.0, 1.0, 1.0)):
+    """A closed tapered tube along `centres` (rig space); `frames` gives each ring's two side axes."""
+    import math
+    verts, faces = [], []
+    for c, r, (a, b) in zip(centres, radii, frames):
+        for s in range(segments):
+            ang = 2.0 * math.pi * s / segments
+            verts.append(c + (a * math.cos(ang) + b * math.sin(ang)) * r)
+    n = len(centres)
+    for i in range(n - 1):
+        for s in range(segments):
+            p0 = i * segments + s
+            p1 = i * segments + (s + 1) % segments
+            faces.append((p0, p1, p1 + segments, p0 + segments))
+    tip = len(verts)
+    verts.append(centres[-1] + (centres[-1] - centres[-2]).normalized() * radii[-1] * 0.5)
+    for s in range(segments):
+        faces.append(((n - 1) * segments + s, (n - 1) * segments + (s + 1) % segments, tip))
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata([tuple(v) for v in verts], [], faces)
+    mesh.update()
+    uv = mesh.uv_layers.new(name="UVMap")
+    u0, v0, u1, v1 = uv_rect
+    for poly in mesh.polygons:
+        poly.use_smooth = True
+        for li in poly.loop_indices:
+            vi = mesh.loops[li].vertex_index
+            ring = min(vi // segments, n - 1)
+            seg = vi % segments if vi < tip else 0
+            uv.data[li].uv = (u0 + (u1 - u0) * seg / segments, v0 + (v1 - v0) * ring / max(n - 1, 1))
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    return obj
+
+
+def _skin_to(obj, rig, weights_per_vertex):
+    """Parents a mesh to the rig with an armature modifier and the given {vertex: {bone: weight}}."""
+    obj.parent = rig
+    mod = obj.modifiers.new("Armature", "ARMATURE")
+    mod.object = rig
+    groups = {}
+    for vi, bw in weights_per_vertex.items():
+        for bone, w in bw.items():
+            if bone not in groups:
+                groups[bone] = obj.vertex_groups.new(name=bone)
+            groups[bone].add([vi], w, "REPLACE")
+
+
+def _material(name, color):
+    mat = bpy.data.materials.new(name)
+    mat.diffuse_color = (color[0], color[1], color[2], 1.0)
+    return mat
+
+
+def add_horns(rig, body, length=0.11, radius=0.017, curl=1.0, color=(0.05, 0.04, 0.035), log=print):
+    """Two horns out of the top of the forehead, sweeping up, back and out, for any MakeHuman head (placed from the
+    skin, not by hand): tapered tubes weighted wholly to the head bone. Returns the horn objects."""
+    from mathutils import Vector
+    to_rig = rig.matrix_world.inverted() @ body.matrix_world
+    head = rig.data.bones.get("head")
+    if head is None:
+        log("no head bone: no horns")
+        return []
+    hx, hz = head.head_local.x, head.head_local.z
+    pts = [to_rig @ v.co for v in body.data.vertices]
+    skull = [p for p in pts if p.z > hz + 0.02 and abs(p.x - hx) < 0.12]
+    if not skull:
+        return []
+    top = max(p.z for p in skull)
+    front = min(p.y for p in skull if p.z > top - 0.06)   # faces -Y
+    mat = _material("Horn", color)
+    objs = []
+    for side in (1.0, -1.0):
+        # The root: on the skull, a little in front of the crown and to the side.
+        want = Vector((hx + side * 0.032, front + 0.035, top - 0.025))
+        base = min(skull, key=lambda p: (p - want).length)
+        normal = (base - Vector((hx, base.y + 0.03, top - 0.07))).normalized()
+        up, back, out = Vector((0, 0, 1)), Vector((0, 1, 0)), Vector((side, 0, 0))
+        rings = 12
+        centres, radii = [], []
+        for i in range(rings):
+            t = i / (rings - 1)
+            centres.append(base - normal * 0.012 + (normal * 0.6 + up * 0.4) * length * t + back * length * 0.75 * curl * t * t
+                           + out * length * 0.25 * t)
+            radii.append(max(radius * (1.0 - t) ** 0.85, 0.0015))
+        frames = []
+        for i in range(rings):
+            d = (centres[min(i + 1, rings - 1)] - centres[max(i - 1, 0)]).normalized()
+            a = d.cross(Vector((1, 0, 0)))
+            if a.length < 0.1:
+                a = d.cross(Vector((0, 1, 0)))
+            a.normalize()
+            frames.append((a, d.cross(a).normalized()))
+        obj = _tube("Horn_" + ("l" if side > 0 else "r"), centres, radii, frames)
+        obj.data.materials.append(mat)
+        _skin_to(obj, rig, {i: {"head": 1.0} for i in range(len(obj.data.vertices))})
+        objs.append(obj)
+    log("horns", length, "m on the skull at z", round(top, 3))
+    return objs
+
+
+def add_tail(rig, body, length=0.75, radius=0.03, bones=7, log=print):
+    """A tail from the base of the spine for any MakeHuman body: a chain of bones tail_01... under the pelvis (the game
+    swings it like hair) and a tapered tube skinned along them, out and down from the lower back and up at the tip.
+    Returns the tail object (its material is skin)."""
+    from mathutils import Vector
+    to_rig = rig.matrix_world.inverted() @ body.matrix_world
+    pelvis = rig.data.bones.get("pelvis")
+    if pelvis is None or "tail_01" in rig.data.bones:
+        return None
+    pz = pelvis.head_local.z
+    pts = [to_rig @ v.co for v in body.data.vertices]
+    back = [p for p in pts if abs(p.x - pelvis.head_local.x) < 0.02 and pz - 0.02 < p.z < pz + 0.08]
+    if not back:
+        return None
+    root = max(back, key=lambda p: p.y) + Vector((0.0, -0.02, 0.0))   # just under the skin of the lower back
+    n = 24
+    path = [root + Vector((0.0, 0.85 * t, -0.55 * t + 0.6 * t ** 3)) * length for t in [i / (n - 1) for i in range(n)]]
+    if bpy.context.object and bpy.context.object.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
+    bpy.ops.object.select_all(action="DESELECT")
+    rig.select_set(True)
+    bpy.context.view_layer.objects.active = rig
+    bpy.ops.object.mode_set(mode="EDIT")
+    parent = rig.data.edit_bones["pelvis"]
+    joints = [path[round(i * (n - 1) / bones)] for i in range(bones + 1)]
+    names = []
+    for i in range(bones):
+        eb = rig.data.edit_bones.new("tail_%02d" % (i + 1))
+        eb.head, eb.tail = joints[i], joints[i + 1]
+        eb.parent = parent
+        eb.use_connect = i > 0
+        eb.use_deform = True
+        parent = eb
+        names.append(eb.name)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    radii = [max(radius * (1.0 - 0.85 * i / (n - 1)), 0.004) for i in range(n)]
+    frames = []
+    for i in range(n):
+        d = (path[min(i + 1, n - 1)] - path[max(i - 1, 0)]).normalized()
+        a = Vector((1, 0, 0))
+        frames.append((a, d.cross(a).normalized()))
+    obj = _tube("Tail", path, radii, frames, uv_rect=(0.30, 0.50, 0.36, 0.60))
+    segs = 12
+    weights = {}
+    for vi in range(len(obj.data.vertices)):
+        ring = min(vi // segs, n - 1)
+        f = ring / (n - 1) * bones                     # how far along the bones, 0 .. bones
+        k = min(int(f), bones - 1)
+        frac = f - k
+        w = {names[k]: 1.0 - 0.5 * frac}
+        if k + 1 < bones:
+            w[names[k + 1]] = 0.5 * frac
+        weights[vi] = w
+    _skin_to(obj, rig, weights)
+    log("tail", length, "m,", bones, "bones")
+    return obj

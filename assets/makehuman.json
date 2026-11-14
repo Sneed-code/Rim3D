@@ -9,6 +9,11 @@
       "name": "PetitePale",
       "fbx": "game/Saved/MakeHuman/PetitePale/PetitePale.fbx",
       "comment": "sneed's own Petite Natural Pale Adult (MPFB, Mixamo rig, purple ponytail), exported from his .blend with tools/makehuman/blend_export.py"
+    },
+    {
+      "name": "Imp",
+      "fbx": "game/Saved/MakeHuman/Imp/Imp.fbx",
+      "comment": "The non-human test (tools/makehuman/imp.json): pointed ears, horns and a tail on the same pipeline; red skin comes from the pawn's skin colour."
     }
   ]
 }

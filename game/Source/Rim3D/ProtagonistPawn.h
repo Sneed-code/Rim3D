@@ -110,6 +110,8 @@ public:
 	static constexpr float kSprintFactor = 1.5f;
 	static constexpr float kMinSprintSpeed = 6.5f;
 	bool IsSprinting() const { return bSprinting; }
+	/** The speed the keys ask for now (walk, run or sprint, slowed by the ground), metres per second; 0 with none held. */
+	float GetTargetSpeed() const { return TargetSpeed; }
 	/** Space: the body jumps (an arc and the jump animations on the pawn actor; the sim keeps it on the ground). */
 	bool Jump();
 
@@ -130,6 +132,7 @@ private:
 
 	colony::Entity Thing = colony::kNoEntity;
 	bool bSprinting = false;
+	float TargetSpeed = 0.0f;
 	FVector2D Position = FVector2D::ZeroVector;  // sim metres
 	int32 Level = 0;
 	bool bClimbing = false;

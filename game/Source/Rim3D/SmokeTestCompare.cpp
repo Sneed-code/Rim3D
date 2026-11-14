@@ -37,6 +37,68 @@ namespace
 	const FVector CompareSmokeOrigin(-1700000.0, 0.0, 0.0);
 	constexpr int32 CompareSmokeWalkShots = 24;
 
+	/** Foot sliding: how fast a planted foot (the lower of the two, within 3 cm of the lowest it has been) moves over the
+	 *  ground, on average, cm per second. 0 is a foot that stays put while it carries the body. */
+	struct FFootSlide
+	{
+		FVector Last[2];
+		float LowestZ[2] = {1.0e9f, 1.0e9f};
+		bool bHave = false;
+		double Slid = 0.0;
+		double Planted = 0.0;
+		FVector LastGround = FVector::ZeroVector;
+		double Moved = 0.0;
+		double Time = 0.0;
+
+		void Update(const USkeletalMeshComponent* Mesh, const FVector& Ground, float Dt)
+		{
+			static const FName Feet[2] = {TEXT("foot_l"), TEXT("foot_r")};
+			if (!Mesh || Mesh->GetBoneIndex(Feet[0]) == INDEX_NONE || Mesh->GetBoneIndex(Feet[1]) == INDEX_NONE || Dt <= 0.0f)
+			{
+				return;
+			}
+			FVector Now[2];
+			for (int32 i = 0; i < 2; ++i)
+			{
+				Now[i] = Mesh->GetBoneLocation(Feet[i]);
+				LowestZ[i] = FMath::Min(LowestZ[i], static_cast<float>(Now[i].Z - Ground.Z));
+			}
+			if (bHave)
+			{
+				Moved += FVector::Dist2D(Ground, LastGround);
+				Time += Dt;
+				const int32 Low = (Now[0].Z - Ground.Z - LowestZ[0]) < (Now[1].Z - Ground.Z - LowestZ[1]) ? 0 : 1;
+				if (Now[Low].Z - Ground.Z < LowestZ[Low] + 3.0f && FVector::Dist2D(Now[Low], Last[Low]) < 50.0)
+				{
+					Slid += FVector::Dist2D(Now[Low], Last[Low]);
+					Planted += Dt;
+				}
+			}
+			Last[0] = Now[0];
+			Last[1] = Now[1];
+			LastGround = Ground;
+			bHave = true;
+		}
+		float Speed() const { return Planted > 0.0 ? static_cast<float>(Slid / Planted) : 0.0f; }
+		float BodySpeed() const { return Time > 0.0 ? static_cast<float>(Moved / Time) : 0.0f; }
+		FString Animations;
+		FString LastName;
+		void Note(const ASimPawnActor* Pawn)
+		{
+			const USimPawnAnimInstance* Anim = Pawn ? Pawn->GetAnim() : nullptr;
+			if (Anim)
+			{
+				const FSimPawnAnimStats& Stats = Anim->GetStats();
+				const FString Name = Stats.PlayingAsset.ToString().Replace(TEXT("M_Neutral_"), TEXT(""));
+				if (Name != LastName && Animations.Len() < 900)
+				{
+					Animations += FString::Printf(TEXT(" %s(%s, search %d jump %d)"), *Name, *Stats.Database.ToString().Replace(TEXT("PSD_Dense_Stand_"), TEXT("")), Stats.Searches, Stats.Jumps);
+					LastName = Name;
+				}
+			}
+		}
+	};
+
 	struct FCompareSmokeState
 	{
 		TArray<colony::Entity> Row;  // MakeHuman woman, local model, MetaHuman woman
@@ -49,9 +111,13 @@ namespace
 		TArray<FVector> RestOffset;
 		TArray<float> Jiggle;
 		// The second half of the walk they jump every so often (seconds since the last), and the highest a body got (cm).
+		int32 Recorded = 0;
 		float JumpTime = 0.0f;
 		float HighestJump = 0.0f;
 		int32 JumpsStarted = 0;
+		// Foot sliding while walking (first half, before the jumps): each pawn's drawn mesh and its mannequin.
+		TArray<FFootSlide> Slide;
+		TArray<FFootSlide> MannequinSlide;
 		int32 Errors = 0;
 		FString FirstError;
 		int64 Frames = 0;
@@ -64,6 +130,29 @@ namespace
 			}
 		}
 	};
+
+	/** The test skin colour for a MakeHuman character: the imp red, everyone else pale. */
+	FLinearColor CompareSmokeSkin(const FString& Character)
+	{
+		return Character == TEXT("Imp") ? FLinearColor(FColor(150, 40, 32)) : FLinearColor(FColor(232, 205, 190));
+	}
+
+	/** Graphics up: epic scalability, full resolution, temporal super resolution, Lumen everything at finer detail,
+	 *  virtual shadows, contact shadows, full-resolution skin scattering. */
+	void CompareSmokeGraphicsUp(APlayerController* PC)
+	{
+		for (const TCHAR* Command : {TEXT("sg.ShadowQuality 4"), TEXT("sg.GlobalIlluminationQuality 4"), TEXT("sg.ReflectionQuality 4"),
+			TEXT("sg.PostProcessQuality 4"), TEXT("sg.TextureQuality 4"), TEXT("sg.EffectsQuality 4"), TEXT("sg.FoliageQuality 4"),
+			TEXT("sg.ShadingQuality 4"), TEXT("sg.ViewDistanceQuality 4"), TEXT("sg.AntiAliasingQuality 4"), TEXT("r.ScreenPercentage 100"),
+			TEXT("r.AntiAliasingMethod 4"), TEXT("r.DynamicGlobalIlluminationMethod 1"), TEXT("r.ReflectionMethod 1"),
+			TEXT("r.Lumen.Reflections.HierarchicalScreenTraces 1"), TEXT("r.Lumen.ScreenProbeGather.DownsampleFactor 8"),
+			TEXT("r.Lumen.Reflections.DownsampleFactor 1"), TEXT("r.Lumen.TraceMeshSDFs 1"), TEXT("r.Shadow.Virtual.Enable 1"),
+			TEXT("r.Shadow.Virtual.SMRT.RayCountDirectional 16"), TEXT("r.SSS.Quality 1"), TEXT("r.SSS.HalfRes 0"), TEXT("r.SSS.Checkerboard 0"),
+			TEXT("r.ContactShadows 1"), TEXT("Pawns.FullDetail 20")})
+		{
+			PC->ConsoleCommand(Command);
+		}
+	}
 
 	void CompareSmokeSet(const TCHAR* Name, float Value)
 	{
@@ -187,6 +276,10 @@ void USmokeTestSubsystem::BuildComparePhases()
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		{
 			PC->ConsoleCommand(TEXT("r.SetRes 1920x1080w"));
+			if (FParse::Param(FCommandLine::Get(), TEXT("CompareGraphicsUp")))
+			{
+				CompareSmokeGraphicsUp(PC);
+			}
 		}
 		FSimStartOptions Options;
 		Options.Seed = 42;
@@ -259,6 +352,7 @@ void USmokeTestSubsystem::BuildComparePhases()
 				FString Second = TEXT("PetitePale");
 				FParse::Value(FCommandLine::Get(), TEXT("CompareSecond="), Second);
 				Looks.MakeHuman = Second;
+				Looks.Skin = CompareSmokeSkin(Second);
 				Looks.Height = 1.0f;
 				Label = Second;
 			}
@@ -432,6 +526,23 @@ void USmokeTestSubsystem::BuildComparePhases()
 			}
 			LookAtRow(520.0f, 100.0f, 250.0f);
 			USimPawnSubsystem* Pawns = PawnsOf();
+			// -CompareRecord: every frame of the first half at a fixed 30 per second, from beside the second pawn's legs (for
+			// checking the feet stay put on the ground: compare/rec_0000.png ...).
+			if (FParse::Param(FCommandLine::Get(), TEXT("CompareRecord")) && Shot < CompareSmokeWalkShots / 2 && Pawns && State->Row.Num() > 1)
+			{
+				if (!FApp::UseFixedTimeStep())
+				{
+					FApp::SetUseFixedTimeStep(true);
+					FApp::SetFixedDeltaTime(1.0 / 30.0);
+				}
+				if (const ASimPawnActor* Pawn = Pawns->FindPawn(State->Row[1]))
+				{
+					const FVector Feet = Pawn->GetActorLocation() + FVector(0.0, 0.0, 45.0);
+					const FVector From = Feet + FVector(0.0, -330.0, 15.0);
+					ViewFrom(From, (Feet - From).Rotation());
+				}
+				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/compare") / FString::Printf(TEXT("rec_%04d.png"), State->Recorded++), false, false);
+			}
 			// Jumping (Space for the player's body) in the second half: the arc, the jump animations and the landing's bounce.
 			State->JumpTime += GetWorld()->GetDeltaSeconds();
 			for (int32 i = 0; Pawns && i < State->Row.Num(); ++i)
@@ -448,6 +559,18 @@ void USmokeTestSubsystem::BuildComparePhases()
 			if (State->JumpTime > 1.3f)
 			{
 				State->JumpTime = 0.0f;
+			}
+			State->Slide.SetNum(State->Row.Num());
+			State->MannequinSlide.SetNum(State->Row.Num());
+			for (int32 i = 0; Pawns && Shot < CompareSmokeWalkShots / 2 && i < State->Row.Num(); ++i)
+			{
+				if (const ASimPawnActor* Pawn = Pawns->FindPawn(State->Row[i]))
+				{
+					const float Dt = GetWorld()->GetDeltaSeconds();
+					State->Slide[i].Update(Pawn->GetMakeHumanMesh() ? Pawn->GetMakeHumanMesh() : Pawn->GetBody(), Pawn->GetActorLocation(), Dt);
+					State->MannequinSlide[i].Update(Pawn->GetBody(), Pawn->GetActorLocation(), Dt);
+					State->MannequinSlide[i].Note(Pawn);
+				}
 			}
 			// How far the soft tissue lags behind the animation as they walk (0 means no jiggle at all).
 			State->RestOffset.SetNum(State->Row.Num());
@@ -471,6 +594,14 @@ void USmokeTestSubsystem::BuildComparePhases()
 					Notes.Add(FString::Printf(TEXT("compare_walk: %s soft tissue lagged up to %.2f cm behind the animation"), *State->Labels[i], State->Jiggle[i]));
 				}
 				Notes.Add(FString::Printf(TEXT("compare_walk: %d jumps, the highest body %.0f cm off the ground"), State->JumpsStarted, State->HighestJump));
+				for (int32 i = 0; i < State->Slide.Num(); ++i)
+				{
+					const double Slid = State->Slide[i].Speed();
+					const double MannequinSlid = State->MannequinSlide[i].Speed();
+					const double Body = State->Slide[i].BodySpeed();
+					Notes.Add(FString::Printf(TEXT("compare_walk: %s planted foot slid %.0f cm/s (its mannequin %.0f cm/s) walking at %.0f cm/s:%s"), *State->Labels[i], Slid, MannequinSlid,
+						Body, *State->MannequinSlide[i].Animations));
+				}
 				if (State->JumpsStarted == 0 || State->HighestJump < 0.5f * ASimPawnActor::kJumpHeight)
 				{
 					Fail(TEXT("compare_walk: the pawns did not jump"));
@@ -519,6 +650,8 @@ void USmokeTestSubsystem::BuildShowcasePhases()
 		float FastestSprint = 0.0f;
 		int32 Jumps = 0;
 		int32 Recorded = 0;
+		FFootSlide RunSlide;
+		FFootSlide RunMannequinSlide;
 	};
 	const TSharedRef<FDemo> Demo = MakeShared<FDemo>();
 	const bool bDemo = FParse::Param(FCommandLine::Get(), TEXT("ShowcaseDemo"));
@@ -543,15 +676,7 @@ void USmokeTestSubsystem::BuildShowcasePhases()
 		// Graphics up: epic scalability, full resolution, temporal super resolution, Lumen everything, virtual shadows.
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		{
-			for (const TCHAR* Command : {TEXT("sg.ShadowQuality 4"), TEXT("sg.GlobalIlluminationQuality 4"), TEXT("sg.ReflectionQuality 4"),
-				TEXT("sg.PostProcessQuality 4"), TEXT("sg.TextureQuality 4"), TEXT("sg.EffectsQuality 4"), TEXT("sg.FoliageQuality 4"),
-				TEXT("sg.ShadingQuality 4"), TEXT("sg.ViewDistanceQuality 4"), TEXT("sg.AntiAliasingQuality 4"), TEXT("r.ScreenPercentage 100"),
-				TEXT("r.AntiAliasingMethod 4"), TEXT("r.DynamicGlobalIlluminationMethod 1"), TEXT("r.ReflectionMethod 1"),
-				TEXT("r.Lumen.Reflections.HierarchicalScreenTraces 1"), TEXT("r.Shadow.Virtual.Enable 1"), TEXT("r.SSS.Quality 1"),
-				TEXT("r.ContactShadows 1"), TEXT("Pawns.FullDetail 20")})
-			{
-				PC->ConsoleCommand(Command);
-			}
+			CompareSmokeGraphicsUp(PC);
 		}
 		for (const TPair<const TCHAR*, float>& Var : {TPair<const TCHAR*, float>(TEXT("Pawns.MetaHumans"), 1.0f), TPair<const TCHAR*, float>(TEXT("Sky.Hour"), 9.5f),
 			TPair<const TCHAR*, float>(TEXT("Sky.DayOfYear"), 22.5f)})
@@ -620,6 +745,7 @@ void USmokeTestSubsystem::BuildShowcasePhases()
 			Looks.Skin = FLinearColor(FColor(232, 205, 190));
 			Looks.MakeHuman = i == 0 ? TEXT("PetitePale") : TEXT("Woman");
 			FParse::Value(FCommandLine::Get(), i == 0 ? TEXT("ShowcasePlayer=") : TEXT("ShowcaseNpc="), Looks.MakeHuman);
+			Looks.Skin = CompareSmokeSkin(Looks.MakeHuman);
 			Pawns->SetLooksOverride(Two[i]->id, Looks);
 			const std::vector<colony::Entity> Worn = Sim->apparel().worn(Two[i]->id);
 			for (const colony::Entity Item : Worn)
@@ -694,6 +820,14 @@ void USmokeTestSubsystem::BuildShowcasePhases()
 				if (T > 1.5f)
 				{
 					Demo->FastestRun = FMath::Max(Demo->FastestRun, Actor->GetGroundSpeed());
+					Demo->RunSlide.Update(Actor->GetMakeHumanMesh(), Actor->GetActorLocation(), Dt);
+					Demo->RunMannequinSlide.Update(Actor->GetBody(), Actor->GetActorLocation(), Dt);
+					Demo->RunMannequinSlide.Note(Actor);
+				}
+				else
+				{
+					Demo->RunSlide.bHave = false;
+					Demo->RunMannequinSlide.bHave = false;
 				}
 			}
 			else if (T < 6.5f)
@@ -710,6 +844,14 @@ void USmokeTestSubsystem::BuildShowcasePhases()
 			{
 				Body->SetScriptedInput(0.0, 0.0, false, false);
 			}
+			// -ShowcaseFeet: a camera low beside her legs, square to the way she goes (for checking the feet stay put).
+			if (FParse::Param(FCommandLine::Get(), TEXT("ShowcaseFeet")))
+			{
+				const FVector Dir = Actor->GetActorForwardVector().GetSafeNormal2D();
+				const FVector Feet = Actor->GetActorLocation() + FVector(0.0, 0.0, 40.0);
+				const FVector From = Feet + FVector::CrossProduct(FVector::UpVector, Dir) * 320.0 + FVector(0.0, 0.0, 10.0);
+				ViewFrom(From, (Feet - From).Rotation());
+			}
 			if (RecordSeconds > 0.0f && Demo->Recorded < FMath::RoundToInt32(RecordSeconds * 30.0f))
 			{
 				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/showcase") / FString::Printf(TEXT("rec_%04d.png"), Demo->Recorded++), false, false);
@@ -721,6 +863,11 @@ void USmokeTestSubsystem::BuildShowcasePhases()
 			const double Sprint = Demo->FastestSprint / 100.0;
 			const int32 Jumps = Demo->Jumps;
 			Notes.Add(FString::Printf(TEXT("showcase demo: running %.1f m/s, sprinting %.1f m/s, %d jumps"), Run, Sprint, Jumps));
+			const double Slid = Demo->RunSlide.Speed();
+			const double MannequinSlid = Demo->RunMannequinSlide.Speed();
+			const double BodySpeed = Demo->RunSlide.BodySpeed();
+			Notes.Add(FString::Printf(TEXT("showcase demo: running at %.0f cm/s, her planted foot slid %.0f cm/s (the mannequin's %.0f cm/s):%s"), BodySpeed, Slid, MannequinSlid,
+				*Demo->RunMannequinSlide.Animations));
 			if (Demo->Jumps == 0 || Demo->FastestSprint < Demo->FastestRun * 1.25f)
 			{
 				Fail(TEXT("showcase demo: no jump, or the sprint was not faster than the run"));

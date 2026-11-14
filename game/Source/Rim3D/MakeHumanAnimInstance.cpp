@@ -10,17 +10,21 @@ namespace
 	TAutoConsoleVariable<int32> GMakeHumanPhysics(TEXT("Pawns.MakeHumanPhysics"), 1,
 		TEXT("1 runs jiggle (breast bones) and hair sway (ponytail bones) on MakeHuman characters; read when a character's animation starts."), ECVF_Default);
 
+	TAutoConsoleVariable<int32> GMakeHumanTailPhysics(TEXT("Pawns.MakeHumanTailPhysics"), 0,
+		TEXT("1 swings tails (tail_01 ... bones) with AnimDynamics (off: it sagged and kinked, a tail needs a rotational spring of its own); 0 leaves them as modelled."), ECVF_Default);
+
 	// A swinging chain (hair): each bone a body hanging from the last, limited to a cone.
-	TSharedPtr<FAnimNode_AnimDynamics> MakeChain(FName First, FName Last, const FReferenceSkeleton& Ref)
+	TSharedPtr<FAnimNode_AnimDynamics> MakeChain(FName First, FName Last, const FReferenceSkeleton& Ref, float Gravity = 1.0f, float Spring = 120.0f,
+		float Cone = 25.0f)
 	{
 		TSharedPtr<FAnimNode_AnimDynamics> Node = MakeShared<FAnimNode_AnimDynamics>();
 		Node->bChain = true;
 		Node->BoundBone.BoneName = First;
 		Node->ChainEnd.BoneName = Last;
 		Node->SimulationSpace = AnimPhysSimSpaceType::World;
-		Node->GravityScale = 1.0f;
+		Node->GravityScale = Gravity;
 		Node->bAngularSpring = true;
-		Node->AngularSpringConstant = 120.0f;
+		Node->AngularSpringConstant = Spring;
 		Node->bOverrideAngularDamping = true;
 		Node->AngularDampingOverride = 0.5f;
 		Node->UpdateChainPhysicsBodyDefinitions(Ref);
@@ -28,7 +32,7 @@ namespace
 		{
 			Body.BoxExtents = FVector(3.0f, 3.0f, 6.0f);
 			Body.ConstraintSetup.AngularConstraintType = AnimPhysAngularConstraintType::Cone;
-			Body.ConstraintSetup.ConeAngle = 25.0f;
+			Body.ConstraintSetup.ConeAngle = Cone;
 		}
 		return Node;
 	}
@@ -125,9 +129,10 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 				FMakeHumanJiggleNode::FBody& Body = Jiggle.Bodies.AddDefaulted_GetRef();
 				Body.Bone.BoneName = Bone;
 				const bool bButt = FString(Bone).StartsWith(TEXT("butt"));
-				Body.Stiffness = bButt ? 130.0f : 160.0f;
-				Body.Damping = bButt ? 6.5f : 6.0f;
-				Body.MaxOffset = bButt ? 3.0f : 4.0f;
+				// Butt: softer and bouncier (about 1.7 Hz, a quarter of critical damping), so walking shows it too.
+				Body.Stiffness = bButt ? 110.0f : 150.0f;
+				Body.Damping = bButt ? 5.0f : 5.5f;
+				Body.MaxOffset = bButt ? 4.0f : 4.0f;
 			}
 		}
 		// MakeHuman's ponytail sub-rig: ponytail, ponytail1 ... ponytail4 under the head.
@@ -139,6 +144,17 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 				Last = FName(*FString::Printf(TEXT("ponytail%d"), i));
 			}
 			Dynamics.Add(MakeChain(TEXT("ponytail1"), Last, Ref));
+		}
+		// A tail (mh_export.py's add_tail: tail_01 ... under the pelvis) swings the same way.
+		if (Ref.FindBoneIndex(TEXT("tail_01")) != INDEX_NONE && GMakeHumanTailPhysics.GetValueOnGameThread() != 0)
+		{
+			FName Last = TEXT("tail_01");
+			for (int32 i = 2; i < 30 && Ref.FindBoneIndex(FName(*FString::Printf(TEXT("tail_%02d"), i))) != INDEX_NONE; ++i)
+			{
+				Last = FName(*FString::Printf(TEXT("tail_%02d"), i));
+			}
+			// Held up by its own muscle: little gravity, a stiff spring back to its pose, a narrower swing.
+			Dynamics.Add(MakeChain(TEXT("tail_01"), Last, Ref, 0.15f, 900.0f, 18.0f));
 		}
 	}
 	bPhysics = !Dynamics.IsEmpty() || !Jiggle.Bodies.IsEmpty();

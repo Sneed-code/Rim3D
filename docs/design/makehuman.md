@@ -56,6 +56,20 @@ test `compare` notes how far the soft tissue lagged (about 2 to 3 cm walking and
 The graph is linked before the engine's `FAnimInstanceProxy::Initialize`, which takes the custom root node there and
 keeps it: linking it afterwards silently left every physics node out (why the first AnimDynamics jiggle never showed).
 
+**Skin detail.** MakeHuman's skins are colour only. `mh_export.py` makes a normal map from the colour map's fine detail
+(`make_skin_normal`: high-passed lightness as height, darker deeper; `skin_normal_strength`, default 6) and lists it as
+the skin's normal; the MakeHumanArt commandlet puts MakeHuman skins on `M_MH_SkinDetail`, a copy of `M_PawnSkin` with the
+MetaHumans' skin micro-normal tiled over that (`MicroTiling` 70, `MicroStrength` 0.4), so pores show close up.
+
+**Non-human parts, made for the body they go on** (`mh_common.py`, no hand modelling): `"targets"` in a config sets
+MakeHuman's own detail sliders by name (1258 of them: pointed ears, face shape...); `"horns"` (`add_horns`: tapered
+horns out of the top of the forehead, found from the skin, weighted to the head) and `"tail"` (`add_tail`: a chain of
+`tail_01`... bones under the pelvis and a tube skinned along it, in the body's own skin). Without a `"proxy"` the plain
+MakeHuman body is used. `tools/makehuman/imp.json` is the test: a short wiry imp with pointed ears, horns, a tail and
+yellow eyes; its red is the pawn's skin colour, like any colonist's (the tests use red for `Imp`). Tail physics
+(`Pawns.MakeHumanTailPhysics`) is off: AnimDynamics let it sag and kink, so it stays as modelled until it has a
+rotational spring of its own.
+
 **Pubic hair** (MakeHuman's `natural_pubic_hair`) sits too high on these bodies, stopping well above where the legs
 meet: `lower_pubic_hair` squeezes it to 60% of its height, narrows its top, and moves it down so its lowest point is
 2.5 cm over the crotch (the lowest body point on its middle line), laid back onto the skin (`pubic_top_share`,
@@ -77,6 +91,13 @@ the colonist's cruise speed, at least 6.5 m/s, with the sample's sprint animatio
 (`ASimPawnActor::StartJump`: a 45 cm arc over 0.62 s of game time with the sample's take-off by speed, fall loop and
 landing; only the picture, the sim keeps the colonist on the ground), Left Alt dodge roll (it was Left Shift), **F2
 pause** (Space still pauses in the overseer view), V view, Tab overseer.
+
+**Feet.** Every pawn's motion matching predicted it would speed up to its def's cruise speed, which pawns often never
+reach (drafted, hurt, slow ground), and the player's colonist (no route) was predicted to stop: moving pawns played
+walk-to-run starts and standing turns while the feet glided. The sim now reports each pawn's real pace
+(`Mover::pace`, `ThingView::pace`), the prediction aims for that pace once the pawn holds its speed, keeps a routeless
+moving pawn going, and smooths the velocity; the player's colonist is drawn at the player's body's own position and
+velocity (smooth every frame) instead of the sim's uneven steps. `-CompareRecord` and `-ShowcaseFeet` film the feet.
 
 `-ShowcaseDemo` drives her by itself (run away from the view, sprint across it and towards it, jumping) and notes the run
 and sprint speeds and jumps; with `-ShowcaseRecord=<seconds>` every frame of that long is saved at a fixed 30 per second

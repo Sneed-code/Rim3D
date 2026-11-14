@@ -231,6 +231,7 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
             base = std::max(0.0f, mover.metresPerStep + geneSpeed + traitSpeed) * (health != nullptr ? health->movingFactor : 1.0f) *
                    lightFactor * weatherFactor * (speedFactor_ ? speedFactor_(a.entity) : 1.0f);
             stays = base <= 0.0f;
+            mover.pace = base;
         }
         if (stays) {
             a.newVx = 0.0f;

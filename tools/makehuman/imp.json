@@ -1,0 +1,75 @@
+{
+  "comment": "An imp: the test of how far the same MakeHuman pipeline goes from human. A short wiry adult made with the same macro sliders, MakeHuman's own detail targets for the pointed ears, sharp face and eyes, horns and a tail made by mh_common.py for the body they go on (no hand modelling), yellow eyes, no body proxy (smooth body). The red skin is the pawn's skin colour in the game, like any colonist's.",
+  "out": "game/Saved/MakeHuman/Imp/Imp.fbx",
+  "macro": {
+    "gender": 0.8,
+    "age": 0.5,
+    "muscle": 0.7,
+    "weight": 0.15,
+    "height": 0.05,
+    "proportions": 0.2,
+    "race": {
+      "caucasian": 0.6,
+      "asian": 0.2,
+      "african": 0.2
+    }
+  },
+  "targets": {
+    "l-ear-shape-pointed": 1.0,
+    "r-ear-shape-pointed": 1.0,
+    "l-ear-scale-incr": 1.0,
+    "r-ear-scale-incr": 1.0,
+    "l-ear-scale-vert-incr": 1.0,
+    "r-ear-scale-vert-incr": 1.0,
+    "l-ear-rot-backward": 0.7,
+    "r-ear-rot-backward": 0.7,
+    "l-ear-wing-incr": 1.0,
+    "r-ear-wing-incr": 1.0,
+    "l-ear-trans-up": 0.5,
+    "r-ear-trans-up": 0.5,
+    "head-triangular": 0.8,
+    "head-scale-vert-incr": 0.3,
+    "chin-triangle": 0.8,
+    "chin-prominent-incr": 0.5,
+    "nose-point-down": 0.7,
+    "nose-hump-incr": 0.6,
+    "nose-scale-vert-incr": 0.4,
+    "nose-flaring-incr": 0.5,
+    "l-eye-corner1-up": 0.8,
+    "r-eye-corner1-up": 0.8,
+    "l-eye-corner2-up": 0.6,
+    "r-eye-corner2-up": 0.6,
+    "eyebrows-angle-down": 0.8,
+    "eyebrows-trans-forward": 0.6
+  },
+  "rig": "game_engine_with_breast",
+  "skin": "{mpfb}/skins/young_caucasian_male/young_caucasian_male.mhmat",
+  "parts": {
+    "Eyelashes": "{mpfb}/eyelashes/eyelashes01/eyelashes01.mhclo",
+    "Eyes": "{mpfb}/eyes/high-poly/high-poly.mhclo",
+    "Teeth": "{mpfb}/teeth/teeth_base/teeth_base.mhclo"
+  },
+  "horns": {
+    "length": 0.14,
+    "radius": 0.019,
+    "curl": 1.0
+  },
+  "tail": {
+    "length": 0.8,
+    "radius": 0.028,
+    "bones": 7
+  },
+  "tints": {
+    "high-poly": [
+      1.0,
+      0.72,
+      0.08
+    ],
+    "horn": [
+      0.06,
+      0.045,
+      0.04
+    ]
+  },
+  "soft_bones": false
+}

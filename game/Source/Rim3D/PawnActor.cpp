@@ -25,6 +25,8 @@
 #include "PawnFaces.h"
 #include "PawnLooks.h"
 #include "PawnSubsystem.h"
+#include "ProtagonistPawn.h"
+#include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
 
 #include "ColonySim/Clock.h"
@@ -237,7 +239,24 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		Vx = Now.x - Before->x;
 		Vy = Now.y - Before->y;
 	}
-	const FVector Velocity(Vx * colony::kStepsPerRealSecondAt1x * 100.0f, Vy * colony::kStepsPerRealSecondAt1x * 100.0f, 0.0f);
+	FVector Velocity(Vx * colony::kStepsPerRealSecondAt1x * 100.0f, Vy * colony::kStepsPerRealSecondAt1x * 100.0f, 0.0f);
+	// The pace its animation aims for: the sim's own for this pawn now (drafted, hurt, in the dark ...), else its def's.
+	float Pace = Now.pace > 0.0f ? Now.pace * colony::kStepsPerRealSecondAt1x * 100.0f : CruiseSpeed;
+	// The player's colonist: the sim moves it by the steps the keys send, which come unevenly (two or three frames a step),
+	// so it would jerk and its animation would see a stuttering speed. It is drawn where the player's body is (moved
+	// every frame, at most a metre from the sim's: ProtagonistPawn reconciles) at its smooth velocity.
+	if (const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+		Protagonist && Protagonist->IsDirectMode() && Protagonist->GetControlled() == Thing && Now.rollPhase == 0 && Now.climb <= 0.0f)
+	{
+		if (const AProtagonistPawn* Player = Protagonist->GetBody(); Player && Player->GetSimLevel() == Now.level && !Player->IsClimbing())
+		{
+			const FVector Local = Bridge.SimToWorld(static_cast<float>(Player->GetSimPosition().X), static_cast<float>(Player->GetSimPosition().Y), Now.level);
+			Location.X = Local.X;
+			Location.Y = Local.Y;
+			Velocity = FVector(Player->GetLocalVelocity().X * 100.0, Player->GetLocalVelocity().Y * 100.0, 0.0);
+			Pace = Player->GetTargetSpeed() > 0.1f ? Player->GetTargetSpeed() * 100.0f : CruiseSpeed;
+		}
+	}
 	GroundSpeed = Velocity.Size2D();
 
 	if (Velocity.Size2D() > PawnTurnSpeed)
@@ -304,7 +323,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		In.Location = Location;
 		In.Yaw = Yaw;
 		In.Velocity = Velocity;
-		In.CruiseSpeed = CruiseSpeed;
+		In.CruiseSpeed = Pace;
 		In.Detail = Detail;
 		In.bTeleported = bTeleported;
 		In.Route.Reset();

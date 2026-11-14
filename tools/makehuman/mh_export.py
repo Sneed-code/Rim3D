@@ -41,7 +41,8 @@ def log(*a):
 
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from mh_common import add_soft_bones, lower_pubic_hair, prepare_for_unreal, write_materials  # noqa: E402
+from mh_common import (add_horns, add_soft_bones, add_tail, lower_pubic_hair, make_skin_normal, prepare_for_unreal,  # noqa: E402
+                       write_materials)
 
 try:
     for obj in list(bpy.data.objects):
@@ -70,6 +71,16 @@ try:
                 macro[k] = v
         basemesh = HumanService.create_human(macro_detail_dict=macro, scale=0.1)
         log("basemesh", basemesh.name, len(basemesh.data.vertices))
+        # Detail targets (MakeHuman's modelling sliders by name, e.g. "l-ear-shape-pointed"), before the skeleton is
+        # fitted to the shape.
+        for name, weight in cfg.get("targets", {}).items():
+            path = TargetService.target_full_path(name)
+            if path:
+                TargetService.load_target(basemesh, path, weight=weight, name=name)
+            else:
+                log("no such target", name)
+        if cfg.get("targets"):
+            log("targets", len(cfg["targets"]))
 
         rig = HumanService.add_builtin_rig(basemesh, cfg.get("rig", "game_engine_with_breast"))
         log("rig", rig.name, len(rig.data.bones))
@@ -94,6 +105,12 @@ try:
                 os.makedirs(os.path.dirname(cfg["out"]), exist_ok=True)
                 shutil.copyfile(tex, os.path.join(os.path.dirname(cfg["out"]), "skin.png"))
                 log("skin texture", tex)
+                break
+        # MakeHuman skins are colour only: a normal map from the colour map's fine detail (pores, creases).
+        skin_png = os.path.join(os.path.dirname(cfg["out"]), "skin.png")
+        if cfg.get("skin_normal", True) and os.path.exists(skin_png):
+            make_skin_normal(skin_png, os.path.join(os.path.dirname(cfg["out"]), "skin_normal.png"),
+                             strength=cfg.get("skin_normal_strength", 6.0), log=log)
 
     for kind, path in cfg["parts"].items():
         part = HumanService.add_mhclo_asset(path, basemesh, asset_type=kind, subdiv_levels=0, material_type="GAMEENGINE")
@@ -154,6 +171,18 @@ try:
         add_soft_bones(rig, body, log=log)
     for o in [o for o in bpy.data.objects if o.type == "MESH" and "pubic" in o.name.lower()]:
         lower_pubic_hair(o, body, top_share=cfg.get("pubic_top_share", 0.6), above_crotch=cfg.get("pubic_above_crotch", 0.025), log=log)
+    # Non-human parts made for the body they go on: horns ({"length", "radius", "curl", "color"}) and a tail
+    # ({"length", "radius", "bones"}).
+    skin_meshes = [body]
+    if cfg.get("horns"):
+        add_horns(rig, body, log=log, **cfg["horns"])
+    if cfg.get("tail"):
+        tail = add_tail(rig, body, log=log, **cfg["tail"])
+        if tail:
+            skin_meshes.append(tail)
+            body_mat = next((s.material for s in body.material_slots if s.material), None)
+            if body_mat:
+                tail.data.materials.append(body_mat)  # the body's own skin
 
     # With a body proxy the basemesh itself is not exported.
     export = [rig] + [o for o in bpy.data.objects if o.type == "MESH" and (o != basemesh or proxy is None)]
@@ -169,8 +198,15 @@ try:
         o.select_set(True)
     log("exporting", [o.name for o in export])
     os.makedirs(os.path.dirname(cfg["out"]), exist_ok=True)
-    write_materials([o for o in export if o != rig], os.path.dirname(cfg["out"]), skin_meshes=[proxy] if proxy else [],
-                    tints=cfg.get("tints", {}), overrides=cfg["material_overrides"])
+    manifest = write_materials([o for o in export if o != rig], os.path.dirname(cfg["out"]), skin_meshes=skin_meshes,
+                               tints=cfg.get("tints", {}), overrides=cfg["material_overrides"])
+    skin_normal = os.path.join(os.path.dirname(cfg["out"]), "skin_normal.png")
+    if os.path.exists(skin_normal) and cfg.get("skin_normal", True):
+        for entry in manifest.values():
+            if entry.get("skin") and "normal" not in entry:
+                entry["normal"] = skin_normal
+        with open(os.path.join(os.path.dirname(cfg["out"]), "materials.json"), "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=1)
     bpy.ops.export_scene.fbx(filepath=cfg["out"], use_selection=True, object_types={"ARMATURE", "MESH"},
                              apply_scale_options="FBX_SCALE_NONE", add_leaf_bones=False, bake_anim=False,
                              mesh_smooth_type="FACE", use_armature_deform_only=True, path_mode="COPY", embed_textures=False,

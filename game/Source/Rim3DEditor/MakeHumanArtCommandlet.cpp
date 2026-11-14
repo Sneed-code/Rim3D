@@ -26,7 +26,9 @@
 #include "Factories/MaterialFactoryNew.h"
 #include "MaterialEditingLibrary.h"
 #include "Materials/Material.h"
+#include "Materials/MaterialExpressionCustom.h"
 #include "Materials/MaterialExpressionMultiply.h"
+#include "Materials/MaterialExpressionTextureCoordinate.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
 #include "Materials/MaterialExpressionTextureSampleParameter2D.h"
@@ -262,6 +264,61 @@ namespace
 		return Out;
 	}
 
+	// Our skin material (M_PawnSkin) with the MetaHumans' skin micro-normal tiled over the skin's own normal: pores and
+	// fine lines at any distance, which MakeHuman's painted skins lack (MicroTiling, MicroStrength).
+	UMaterialInterface* MhSkinDetailMaterial(IAssetTools& Tools, UMaterialInterface* SkinBase)
+	{
+		const FString Name = TEXT("M_MH_SkinDetail");
+		const FString Path = MakeHumanAssetPath(MakeHumanFolder, Name);
+		if (UMaterial* Existing = FindObject<UMaterial>(nullptr, *Path))
+		{
+			return Existing;
+		}
+		UMaterial* Source = Cast<UMaterial>(SkinBase);
+		UTexture* Micro = LoadObject<UTexture>(nullptr, TEXT("/Game/MetaHumans/Common/Face/Textures/T_SkinMicroNormal001.T_SkinMicroNormal001"));
+		if (!Source || !Micro)
+		{
+			return SkinBase;
+		}
+		UMaterial* Material = Cast<UMaterial>(Tools.DuplicateAsset(Name, MakeHumanFolder, Source));
+		UMaterialExpression* BaseNormal = Material ? UMaterialEditingLibrary::GetMaterialPropertyInputNode(Material, MP_Normal) : nullptr;
+		if (!BaseNormal)
+		{
+			return SkinBase;
+		}
+		auto* Coord = Cast<UMaterialExpressionTextureCoordinate>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureCoordinate::StaticClass(), -1400, 650));
+		auto* Tiling = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -1400, 750));
+		Tiling->ParameterName = TEXT("MicroTiling");
+		Tiling->DefaultValue = 70.0f;
+		auto* Tiled = Cast<UMaterialExpressionMultiply>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionMultiply::StaticClass(), -1200, 700));
+		Tiled->A.Connect(0, Coord);
+		Tiled->B.Connect(0, Tiling);
+		auto* MicroSample = Cast<UMaterialExpressionTextureSampleParameter2D>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureSampleParameter2D::StaticClass(), -1000, 700));
+		MicroSample->ParameterName = TEXT("MicroNormal");
+		MicroSample->Texture = Micro;
+		MicroSample->SamplerType = UMaterialExpressionTextureBase::GetSamplerTypeForTexture(Micro);
+		MicroSample->Coordinates.Connect(0, Tiled);
+		auto* Strength = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -1000, 900));
+		Strength->ParameterName = TEXT("MicroStrength");
+		Strength->DefaultValue = 0.4f;
+		auto* Blend = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -600, 600));
+		Blend->OutputType = CMOT_Float3;
+		Blend->Description = TEXT("SkinMicroNormal");
+		Blend->Code = TEXT("float3 m = lerp(float3(0, 0, 1), Micro, Strength);\nreturn normalize(float3(Base.xy + m.xy, Base.z * m.z));");
+		Blend->Inputs.SetNum(3);
+		Blend->Inputs[0].InputName = TEXT("Base");
+		Blend->Inputs[1].InputName = TEXT("Micro");
+		Blend->Inputs[2].InputName = TEXT("Strength");
+		Blend->Inputs[0].Input.Connect(0, BaseNormal);
+		Blend->Inputs[1].Input.Connect(0, MicroSample);
+		Blend->Inputs[2].Input.Connect(0, Strength);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Blend, TEXT(""), MP_Normal);
+		Material->PostEditChange();
+		MhSave(Material);
+		UE_LOG(LogMakeHumanArt, Display, TEXT("skin material with micro detail: %s"), *Material->GetName());
+		return Material;
+	}
+
 	// Plain lit and masked materials for models that bring their own textures (local comparison models): colour,
 	// normal and (masked) opacity maps, roughness a value; the skin variant is subsurface skin.
 	UMaterial* MhBaseMaterial(IAssetTools& Tools, const FString& Name, bool bMasked, bool bSkin, bool bAlphaFromColor = false)
@@ -458,7 +515,7 @@ namespace
 		UE_LOG(LogMakeHumanArt, Display, TEXT("%s: %d bones, %d LODs, %d material slots, %d morphs"), *Mesh->GetName(), Mesh->GetRefSkeleton().GetNum(),
 			Mesh->GetLODNum(), Mesh->GetMaterials().Num(), Mesh->GetMorphTargets().Num());
 
-		UMaterialInterface* SkinBase = LoadObject<UMaterialInterface>(nullptr, *PawnLooksAssetPath(PawnLooksSkinMaterial));
+		UMaterialInterface* SkinBase = MhSkinDetailMaterial(Tools, LoadObject<UMaterialInterface>(nullptr, *PawnLooksAssetPath(PawnLooksSkinMaterial)));
 		{
 			FString Bones;
 			for (int32 b = 0; b < Mesh->GetRefSkeleton().GetNum(); ++b)

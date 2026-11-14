@@ -248,6 +248,7 @@ void AProtagonistPawn::Move(double Right, double Forward, bool bWalk, float Delt
 		const float Speed = bWalk ? kWalkSpeed : (bSprinting ? FMath::Max(CruiseSpeed * kSprintFactor, kMinSprintSpeed) : CruiseSpeed);
 		Target = Wanted * Speed * Factor;
 	}
+	TargetSpeed = static_cast<float>(Target.Size());
 	Velocity = FMath::Vector2DInterpTo(Velocity, Target, DeltaTime, ProtagonistAcceleration);
 	if (Velocity.SizeSquared() < 1.0e-6f)
 	{
