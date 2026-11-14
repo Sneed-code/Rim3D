@@ -1501,13 +1501,13 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 auto* designate = &c;
                 ar.group("area", [&] { saveRect(ar, designate->area); });
                 ar.value("kind", designate->kind);
-                ar.require(designate->kind >= DesignationKind::Mine && designate->kind <= DesignationKind::HarvestPlant,
+                ar.require(designate->kind >= DesignationKind::Mine && designate->kind <= DesignationKind::RemoveFloor,
                        "the save file has a bad designation kind");
             } else if constexpr (std::is_same_v<Type, CancelDesignationsCommand>) {
                 auto* cancelMarks = &c;
                 ar.group("area", [&] { saveRect(ar, cancelMarks->area); });
                 ar.value("kind", cancelMarks->kind);
-                ar.require(cancelMarks->kind <= DesignationKind::HarvestPlant, "the save file has a bad designation kind");
+                ar.require(cancelMarks->kind <= DesignationKind::RemoveFloor, "the save file has a bad designation kind");
             } else if constexpr (std::is_same_v<Type, DraftCommand>) {
                 auto* draft = &c;
                 ar.value("pawn", draft->pawn);
@@ -5373,7 +5373,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         std::vector<std::pair<int, DesignationKind>> marks;
         for (size_t i = 0; i < d.designations.cells.size(); ++i) {
-            if (d.designations.kinds[i] > static_cast<uint8_t>(DesignationKind::HarvestPlant)) {
+            if (d.designations.kinds[i] > static_cast<uint8_t>(DesignationKind::RemoveFloor)) {
                 error = "the save has a bad designation";
                 return false;
             }

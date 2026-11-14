@@ -16,6 +16,8 @@
 #include "ColonySim/Map.h"
 #include "ColonySim/Sim.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogOverseerInput, Log, All);
+
 namespace
 {
 	constexpr float OverseerDefaultDistance = 4500.0f;
@@ -230,14 +232,18 @@ void AOverseerPawn::OnSelectPressed()
 {
 	float MouseX = 0.0f;
 	float MouseY = 0.0f;
-	if (const APlayerController* PC = GetPlayerController(); PC && PC->GetMousePosition(MouseX, MouseY))
+	const APlayerController* PC = GetPlayerController();
+	if (!PC || !PC->GetMousePosition(MouseX, MouseY))
 	{
-		// A tool of the architect menu in hand takes the click; else it selects.
-		UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>();
-		if (!Orders || !Orders->HandleLeftPressed(FVector2D(MouseX, MouseY)))
-		{
-			SelectAtScreenPosition(FVector2D(MouseX, MouseY));
-		}
+		UE_LOG(LogOverseerInput, Warning, TEXT("Left press: %s"), PC ? TEXT("the viewport has no mouse position") : TEXT("no player controller"));
+		return;
+	}
+	// A tool of the architect menu in hand takes the click; else it selects.
+	UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>();
+	UE_LOG(LogOverseerInput, Log, TEXT("Left press at (%.0f, %.0f)"), MouseX, MouseY);
+	if (!Orders || !Orders->HandleLeftPressed(FVector2D(MouseX, MouseY)))
+	{
+		SelectAtScreenPosition(FVector2D(MouseX, MouseY));
 	}
 }
 
@@ -245,12 +251,15 @@ void AOverseerPawn::OnSelectReleased()
 {
 	float MouseX = 0.0f;
 	float MouseY = 0.0f;
-	if (const APlayerController* PC = GetPlayerController(); PC && PC->GetMousePosition(MouseX, MouseY))
+	const APlayerController* PC = GetPlayerController();
+	if (!PC || !PC->GetMousePosition(MouseX, MouseY))
 	{
-		if (UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>())
-		{
-			Orders->HandleLeftReleased(FVector2D(MouseX, MouseY));
-		}
+		UE_LOG(LogOverseerInput, Warning, TEXT("Left release: %s"), PC ? TEXT("the viewport has no mouse position") : TEXT("no player controller"));
+		return;
+	}
+	if (UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>())
+	{
+		Orders->HandleLeftReleased(FVector2D(MouseX, MouseY));
 	}
 }
 

@@ -13,8 +13,8 @@
     "passability": "Impassable", "fillPercent": 1.0, "designationCategory": "Structure",
     "costStuffCount": 5,
     "stats": { "maxHitPoints": 300, "workToBuild": 194.4, "flammability": 1.0 },
-    "building": { "holdsRoof": true },
-    "ours": ["building.holdsRoof"]
+    "building": { "holdsRoof": true, "dragShape": "Outline" },
+    "ours": ["building.holdsRoof", "building.dragShape"]
   },
   {
     "defName": "AncientWall", "visual": {"link": {"thickness": 0.5}, "parts": [{"shape": "box", "size": [0, 0, 2.2], "color": [0.42, 0.4, 0.37]}]}, "parent": "BuildingBase", "label": "ancient wall",
