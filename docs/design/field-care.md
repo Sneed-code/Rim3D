@@ -47,7 +47,9 @@ stands with no home.
 Every `thinkEvery` (15) game seconds `FieldCare::step` looks at each colonist on duty:
 
 - An enemy within `selfDefenseRadius` (8 m) that it can see makes it **fight**, as a Keep working colonist does
-  (`enlist`, `defending`, held to 10 m of where it stood), until the alarm stops.
+  (`enlist`, `defending`, held to 10 m of where it stood), until the alarm stops. So does an enemy it can see that is
+  aiming at it (its fighter's target) from any distance (C25): in the year run the Medic and the Firefighter stood
+  waiting, armed, 12 and 19 m from two raiders who shot them both dead.
 - A duty job whose target came under fire **before it got there** is dropped ("under fire", counted in `givenUp`):
   TendPatient before the tending starts, Rescue before the lift, ExtinguishFire at any time. A rescue already
   carrying its patient goes on. A StandBy whose place came into sight moves if there is a better place.

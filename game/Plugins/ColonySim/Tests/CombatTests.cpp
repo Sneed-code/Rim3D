@@ -1,3 +1,4 @@
+#include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
@@ -410,4 +411,42 @@ TEST_CASE("Combat: a firefight downs someone, and saving mid-flight changes noth
     CHECK(downedAt > 0);
     MESSAGE("someone went down after " << downedAt << " steps");
     CHECK(saved->stateHash() == straight->stateHash());
+}
+
+TEST_CASE("Combat: an aimed shot at a pawn crouched behind a crest goes at its head, not into the crest") {
+    // Found by the year run (docs/design/colony-scenario.md): on hillsides half the colonists' shots and more went into
+    // the ground in front of them. A raider crouched behind a crest shows its head; the shot at its chest hit the crest.
+    auto sim = combatTestSim();
+    for (int x = 0; x < sim->map().width(); ++x) {
+        sim->editMap().setGroundHeight(CellPos{x, 41, 0}, 0.9f);
+    }
+    const Entity shooter = combatTestPawn(*sim, 30, 30, "Gun_BoltActionRifle");
+    Colonist marksman;
+    marksman.skills.push_back(SkillRecord{"Shooting", 20});
+    sim->things().registry().emplace<Colonist>(shooter, marksman);
+    const Entity target = combatTestPawn(*sim, 30, 42);
+    sim->combat().setStance(target, Stance::Crouching);
+    int shots = 0;
+    int intoCrest = 0;
+    int pawnHits = 0;
+    for (int i = 0; i < 40; ++i) {
+        combatTestHeal(*sim, target);
+        sim->combat().setStance(target, Stance::Crouching);
+        sim->submit(ShootCommand{shooter, target, 0.0f, 0.0f, 0.0f, false});
+        for (int s = 0; s < 120; ++s) {
+            sim->step();
+            for (const Event& e : sim->events()) {
+                if (e.type == EventType::ShotFired && e.thing == shooter) {
+                    ++shots;
+                } else if (e.type == EventType::ProjectileHit) {
+                    intoCrest += (e.hit == ProjectileHitKind::Ground || e.hit == ProjectileHitKind::Rock) && e.y < 42.0f ? 1 : 0;
+                    pawnHits += e.hit == ProjectileHitKind::Pawn ? 1 : 0;
+                }
+            }
+        }
+    }
+    MESSAGE(shots << " shots, " << intoCrest << " into the crest, " << pawnHits << " hit the pawn");
+    CHECK(shots >= 20);
+    CHECK(intoCrest * 3 <= shots);
+    CHECK(pawnHits > 0);
 }

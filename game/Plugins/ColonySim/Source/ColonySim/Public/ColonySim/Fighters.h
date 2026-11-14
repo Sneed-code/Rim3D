@@ -152,6 +152,8 @@ struct FighterRules {
     // F7 soak (docs/design/raid-soak.md): the walk to a spot counts what it costs this pawn, up a slope or hurt.
     float walkStayBonus = 3.0f;       // on top of stayBonus while walking to the spot: a pawn on its way doesn't change its mind for a small gain
     float rangeMargin = 1.0f;         // a spot has to be this far inside the gun's range to count as one it can shoot from
+    float focusMetres = 8.0f;         // colonists: each friend already shooting an enemy makes it count this much nearer (focus fire)
+    float ambushRange = 6.0f;         // a defending melee fighter waits in cover until a gunman is this close, then charges
     float minWalkShare = 0.25f;       // a hurt pawn's walk costs at most this many times more (its Moving capacity, but never under this)
 };
 

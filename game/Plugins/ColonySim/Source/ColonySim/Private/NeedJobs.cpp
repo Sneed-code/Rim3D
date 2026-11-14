@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace colony {
 
@@ -639,6 +640,17 @@ bool JobSystem::makeSleepJob(Entity pawn, Job& out) {
         out.cell = cell;
     } else {
         out.cell = cellOf(things_.registry().get<Position>(pawn));  // the ground, right here
+        // Not in a doorway, where it would hold the door open and stand in everyone's way (the year run, colony-scenario.md):
+        // the first free cell beside it.
+        if (map_.isDoor(out.cell)) {
+            for (const auto& [dx, dy] : {std::pair{1, 0}, std::pair{-1, 0}, std::pair{0, 1}, std::pair{0, -1}}) {
+                const CellPos c{out.cell.x + dx, out.cell.y + dy, out.cell.level};
+                if (map_.inBounds(c) && map_.walkable(c) && map_.obstacleDm(c) == 0 && !map_.isDoor(c)) {
+                    out.cell = c;
+                    break;
+                }
+            }
+        }
     }
     // Nobody lies down beside a fire, or while alight: it does something else (fights the fire, gets away) first.
     if (fireNear(out.cell, kFireBedRadius, pawn) || fireNear(cellOf(things_.registry().get<Position>(pawn)), kFireBedRadius)) {

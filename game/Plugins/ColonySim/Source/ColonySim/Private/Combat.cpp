@@ -179,6 +179,9 @@ struct CombatModel {
 
 namespace {
 
+constexpr float kCombatAimRaiseStep = 0.1f;  // metres the aim goes up at a time over a crest (ours)
+constexpr float kCombatAimTopMargin = 0.15f;  // the highest aim over a crest: this far under the top of the body (ours)
+
 constexpr const char* kCombatThingsKind = "Things";
 constexpr const char* kCombatStanceNames[3] = {"Standing", "Crouching", "Prone"};
 
@@ -1205,6 +1208,31 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
             const float lead = combatBySkill(model_->lead, skill) +
                                (2.0f * rng.unit() - 1.0f) * combatBySkill(model_->leadError, skill);
             leadPoint(pawn, s.target, lead, fx, fy, fz);
+        }
+    }
+    // Aim at what shows (C25): a pawn crouched behind a crest shows only its shoulders and head over it, and a shot at
+    // its chest went into the crest. In the year run's fights on hillsides half the colonists' shots and more hit the
+    // ground in front of them. If the line to the chest meets ground or rock, the aim goes up a hand at a time, at most to
+    // just under the top of the body, until the line clears.
+    if (s.target != kNoEntity && !s.player && reg.all_of<Position, Posture>(s.target)) {
+        float muzzle = 0.0f;
+        float chest = 0.0f;
+        shotHeights(pawn, combatStanceOf(reg, pawn), muzzle, chest);
+        const float mz = map_.heightAt(pos.x, pos.y) + muzzle;
+        const CellPos from{static_cast<int>(std::floor(pos.x)), static_cast<int>(std::floor(pos.y)), pos.level};
+        const auto blocked = [&](float z) {
+            const TraceHit hit = trace(pos.x, pos.y, mz, fx, fy, z, pos.level, pawn, from, false);
+            return hit.kind == ProjectileHitKind::Ground || hit.kind == ProjectileHitKind::Rock;
+        };
+        const Position& tp = reg.get<Position>(s.target);
+        const float top = map_.heightAt(tp.x, tp.y) + bodyHeight(combatStanceOf(reg, s.target)) - kCombatAimTopMargin;
+        if (blocked(fz)) {
+            for (float z = fz + kCombatAimRaiseStep; z <= top; z += kCombatAimRaiseStep) {
+                if (!blocked(z)) {
+                    fz = z;
+                    break;
+                }
+            }
         }
     }
     // The player's gun kick (P2): this shot goes where the shots before it have lifted the aim, then
