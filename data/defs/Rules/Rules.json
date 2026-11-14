@@ -139,9 +139,12 @@
     "skillSpeedBase": 0.3,
     "skillSpeedPerLevel": 0.0875,
     "defaultSkillLevel": 8,
+    "removeFloorWork": 288,
+    "architectCategories": ["Structure", "Production", "Furniture", "Power", "Security", "Misc", "Floors", "Joy", "Ship", "Temperature"],
+    "architectLabels": {"Joy": "Recreation"},
     "unverified": ["buildWorkPerSecond", "deconstructWorkPerSecond", "deconstructWorkMin", "deconstructWorkMax",
-                   "deconstructRefundFactor", "skillSpeedBase", "skillSpeedPerLevel"],
-    "ours": ["defaultSkillLevel"]
+                   "deconstructRefundFactor", "skillSpeedBase", "skillSpeedPerLevel", "removeFloorWork"],
+    "ours": ["defaultSkillLevel", "architectCategories", "architectLabels"]
   },
   {
     "defName": "DoorRules", "source": "RimWorld wiki",
