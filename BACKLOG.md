@@ -28,7 +28,7 @@ Ideas parked for later. Newest first. Move an item into a stage plan when it's p
 - Show animal names in the animals tab (U19): the sim has `SetAnimalName` and `ThingView::animalName`.
 - Trained tricks (Obedience following drafted colonists and Rescue done): "come when called" with a command, a master per animal, and a use for the Release trick (the release command works without it).
 - Lead a tamed animal home by rope. (The "tame all nearby" button: the sim has `MarkAnimalsInArea`; the button is U19.)
-- Floor-building job and architect tool (floors are placed by `PlaceFloor` command only; found in C17, no plan task covers it). Needs a Construction-style job: pick floor, mark area, colonists lay it.
+- Floor tool in Unreal (the architect's Floors menu sending one `PlaceBlueprint` per cell of a dragged area, drawing `FloorPlan` sites with `ThingView::floor`); a remove-floor order. The sim's floor plans and job are done (2026-11-14, `construction.md` "Floors").
 - Cleaning outdoors needs the home area (C17 cleans indoors only); vomit, ash and animal filth have no sources yet (E4 fire, animals).
 - Colonists that seek a safe temperature (go indoors or toward a heater when outside their safe range, like RimWorld's `SeekSafeTemperature`): E2 only makes them sick (`docs/design/temperature.md` "Not yet"). Needed before the year scenario C25 can say nobody freezes; fits H-tasks or C25 itself.
 

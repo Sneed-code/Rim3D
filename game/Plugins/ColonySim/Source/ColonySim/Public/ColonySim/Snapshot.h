@@ -77,6 +77,7 @@ struct ThingView {
     // buildings made of something also have `stuff`.
     ConstructionStage stage = ConstructionStage::Built;
     DefId stuff;
+    DefId floor;  // a floor plan (Thing def FloorPlan): the Terrain floor def it lays
     float buildProgress = 0.0f;
     int materialsHave = 0;
     int materialsNeeded = 0;

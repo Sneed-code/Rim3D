@@ -21,8 +21,8 @@ class StateHasher;
 // and cleanliness in place of the bare ground's, and is the reason dirt can be dropped: pawns pick
 // dirt up on bare ground and drop it on floors.
 //
-// Floors are not things. Laying them is the PlaceFloorCommand for now (instant); a work job comes
-// with the architect's floor tool.
+// Floors are not things. Colonists lay them from floor plans (Construction::placeFloorPlan,
+// docs/design/construction.md "Floors"); PlaceFloorCommand lays them at once (dev).
 class COLONY_API Floors {
 public:
     Floors(const Map& map, const DefDatabase& defs);
