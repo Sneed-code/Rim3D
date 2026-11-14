@@ -87,6 +87,7 @@ Entity Sim::makeScenarioColonist(const Def& scenario, CellPos cell, uint64_t col
         setupErrors_.push_back(who + error);
         return kNoEntity;
     }
+    makeNameUnique(colonist, colonistSeed);
     const Entity pawn = things_->spawn(kind, cell);
     if (pawn == kNoEntity || !things_->registry().all_of<Mover>(pawn)) {
         things_->destroy(pawn);
@@ -306,6 +307,7 @@ Entity Sim::joinColonist(CellPos cell, uint64_t seed) {
     if (!kind.valid() || !generateColonist(*defs_, seed, false, colonist, error)) {
         return kNoEntity;
     }
+    makeNameUnique(colonist, seed);
     const Entity pawn = things_->spawn(kind, cell);
     if (pawn == kNoEntity || !things_->registry().all_of<Mover>(pawn)) {
         things_->destroy(pawn);

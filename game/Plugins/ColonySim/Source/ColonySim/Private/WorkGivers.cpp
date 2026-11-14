@@ -660,6 +660,11 @@ public:
                     !jobs.buildingRuns(bench)) {
                     return;
                 }
+                // A project that needs a facility (the multi-analyzer) can only be worked at a bench linked to one.
+                const ResearchProject* project = research->find(research->current());
+                if (project != nullptr && !project->requiredFacility.empty() && !jobs.benchLinkedTo(bench, project->requiredFacility)) {
+                    return;
+                }
                 CellPos stand;
                 if (!jobs.construction().workCell(footprint.rect(), cellOf(at), stand)) {
                     return;
@@ -696,7 +701,7 @@ public:
         reg.view<const Thing, const Footprint, const Position>().each(
             [&](Entity machine, const Thing&, const Footprint& footprint, const Position& pos) {
                 std::string why;
-                if (pos.level != at.level || jobs.deepKindOf(machine) != kind_ || !jobs.deepWorkable(machine, why)) {
+                if (pos.level != at.level || !(jobs.deepKindOf(machine) == kind_ || (kind_ == DeepWorkKind::Scan && jobs.deepKindOf(machine) == DeepWorkKind::LongScan)) || !jobs.deepWorkable(machine, why)) {
                     return;
                 }
                 CellPos stand;

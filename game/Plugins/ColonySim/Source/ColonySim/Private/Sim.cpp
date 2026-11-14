@@ -820,6 +820,7 @@ Entity Sim::makeJoiner(CellPos cell, uint64_t seed) {
     if (!generateColonist(*defs_, seed, false, colonist, error)) {
         return kNoEntity;
     }
+    makeNameUnique(colonist, seed);
     const Entity pawn = things_->spawn("Human", cell);
     if (pawn == kNoEntity || !things_->registry().all_of<Mover>(pawn)) {
         things_->destroy(pawn);
@@ -829,6 +830,15 @@ Entity Sim::makeJoiner(CellPos cell, uint64_t seed) {
     giveLooks(pawn, seed, colonist.female, "Baseline");
     things_->registry().emplace<Colonist>(pawn, std::move(colonist));
     return pawn;
+}
+
+void Sim::makeNameUnique(Colonist& colonist, uint64_t seed) const {
+    std::vector<const Colonist*> taken;
+    const entt::registry& reg = things_->registry();
+    for (const auto [entity, other] : reg.view<const Colonist>().each()) {
+        taken.push_back(&other);
+    }
+    makeColonistNameUnique(*defs_, seed, colonist, taken);
 }
 
 void Sim::giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& lineage) {
@@ -978,6 +988,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     // Apart from the chain below: MSVC stops at 128 nested else-ifs (C1061).
     if (const auto* pod = std::get_if<PodCommand>(&command)) {
         applyPodCommand(*pod, id);
+        return;
+    }
+    if (const auto* scanner = std::get_if<ScannerCommand>(&command)) {
+        applyScannerCommand(*scanner, id);
         return;
     }
     // The comms console, before the long chain below (MSVC's limit on nested else-ifs).
@@ -3192,6 +3206,25 @@ void Sim::stepMany(int64_t steps) {
     for (int64_t i = 0; i < steps; ++i) {
         step();
     }
+}
+
+void Sim::applyScannerCommand(const ScannerCommand& command, uint64_t id) {
+    const Entity building = command.building;
+    if (!things_->spawned(building) || jobs_->deepKindOf(building) != DeepWorkKind::LongScan) {
+        commandFailed(id, "that is not a long-range mineral scanner");
+        return;
+    }
+    const Def& def = defs_->get(things_->registry().get<Thing>(building).def);
+    bool allowed = false;
+    for (size_t i = 0; i < def.count("deepWork.ores"); ++i) {
+        allowed = allowed || def.textAt("deepWork.ores", i) == command.ore;
+    }
+    const DefId ore = defs_->idOf("Things", command.ore);
+    if (!allowed || !ore.valid()) {
+        commandFailed(id, "the scanner can't be tuned to '" + command.ore + "'");
+        return;
+    }
+    deepResources_->setTune(things_->registry().get<Footprint>(building).origin, ore);
 }
 
 }  // namespace colony

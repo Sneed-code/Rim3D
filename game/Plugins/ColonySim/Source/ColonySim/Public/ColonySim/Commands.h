@@ -664,6 +664,14 @@ struct CaravanCommand {
 // - "Launch": `group` flies to `tile` (-1: this map) and does `arrival` there: "Land" at cell (x, y) (x -1: the
 //   middle) on the colony's map or another map a caravan has been to, "Caravan" (the passengers form a caravan on
 //   the tile), or "Gift" (no passengers: the goods go to the tile's settlement for goodwill).
+// Tunes a long-range mineral scanner (docs/design/mineral-scanner.md) to one ore: its later finds are lumps of that ore.
+// `ore` is a Mineable defName from the scanner's def (Ore_Steel, Ore_Plasteel, ...). Fails for a building that is
+// not a long-range scanner or an ore it cannot be tuned to.
+struct ScannerCommand {
+    Entity building = kNoEntity;
+    std::string ore;
+};
+
 struct PodCommand {
     std::string action;
     int group = 0;
@@ -1045,7 +1053,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              LearnPowerCommand, CastPowerCommand, SetThermostatCommand, RepairGearCommand,
                              FitUpgradeCommand, CreateAreaCommand, PaintAreaCommand, DeleteAreaCommand,
                              AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand, CaravanCommand, RerollColonistCommand,
-                             ArtilleryCommand, ArrestCommand, PodCommand, CommsCommand>;
+                             ArtilleryCommand, ArrestCommand, PodCommand, CommsCommand, ScannerCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

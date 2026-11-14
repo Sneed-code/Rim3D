@@ -1,0 +1,187 @@
+[
+ {
+  "defName": "MultiAnalyzer",
+  "parent": "BuildingBase",
+  "label": "multi-analyzer",
+  "size": [
+   2,
+   2
+  ],
+  "designationCategory": "Production",
+  "researchPrerequisite": "MultiAnalyzer",
+  "fillPercent": 0.5,
+  "costs": {
+   "Steel": 40,
+   "Plasteel": 50,
+   "Gold": 20,
+   "ComponentIndustrial": 8
+  },
+  "stats": {
+   "maxHitPoints": 200,
+   "workToBuild": 14400.0,
+   "flammability": 1.0,
+   "beauty": -4,
+   "mass": 60
+  },
+  "power": {
+   "consumption": 200
+  },
+  "building": {
+   "researchFacility": "MultiAnalyzer",
+   "facilityRange": 8
+  },
+  "visual": {
+   "parts": [
+    {
+     "shape": "box",
+     "size": [
+      1.9,
+      1.9,
+      0.5
+     ],
+     "color": [
+      0.5,
+      0.52,
+      0.56
+     ]
+    },
+    {
+     "shape": "cylinder",
+     "radius": 0.5,
+     "height": 0.5,
+     "at": [
+      0,
+      0,
+      0.5
+     ],
+     "color": [
+      0.2,
+      0.45,
+      0.6
+     ]
+    },
+    {
+     "shape": "sphere",
+     "radius": 0.25,
+     "height": 0.4,
+     "at": [
+      0,
+      0,
+      1.0
+     ],
+     "color": [
+      0.85,
+      0.9,
+      0.95
+     ]
+    }
+   ]
+  },
+  "unverified": [
+   "fillPercent",
+   "stats.beauty"
+  ],
+  "ours": [
+   "visual",
+   "building.researchFacility",
+   "building.facilityRange"
+  ],
+  "note": "Wiki-checked 2026-11-13: cost, 2x2, 200 W, 10000 ticks, 200 HP, flammability 100%, mass 60 kg. Links to every powered hi-tech research bench whose middle is within 8 cells of its own: +0.1 research speed, and projects that need it (requiredFacility) can only be worked at a linked bench. Several analyzers do not stack. Wiki's Construction skill 8 requirement is not modelled."
+ },
+ {
+  "defName": "LongRangeMineralScanner",
+  "parent": "BuildingBase",
+  "label": "long-range mineral scanner",
+  "size": [
+   3,
+   3
+  ],
+  "designationCategory": "Production",
+  "researchPrerequisite": "LongRangeMineralScanner",
+  "fillPercent": 0.4,
+  "costs": {
+   "Steel": 200,
+   "ComponentIndustrial": 6
+  },
+  "stats": {
+   "maxHitPoints": 250,
+   "workToBuild": 14400.0,
+   "flammability": 0.5,
+   "beauty": -8
+  },
+  "power": {
+   "consumption": 700
+  },
+  "deepWork": {
+   "kind": "longScan",
+   "averageSeconds": 345600.0,
+   "guaranteedSeconds": 691200.0,
+   "minDistance": 6,
+   "maxDistance": 25,
+   "ores": [
+    "Ore_Steel",
+    "Ore_Plasteel",
+    "Ore_Components",
+    "Ore_Silver",
+    "Ore_Gold",
+    "Ore_Uranium",
+    "Ore_Jade"
+   ]
+  },
+  "visual": {
+   "parts": [
+    {
+     "shape": "box",
+     "size": [
+      2.8,
+      2.8,
+      0.3
+     ],
+     "color": [
+      0.5,
+      0.52,
+      0.56
+     ]
+    },
+    {
+     "shape": "cylinder",
+     "radius": 0.3,
+     "height": 1.4,
+     "at": [
+      0,
+      0,
+      0.3
+     ],
+     "color": [
+      0.35,
+      0.36,
+      0.4
+     ]
+    },
+    {
+     "shape": "cylinder",
+     "radius": 1.1,
+     "height": 0.12,
+     "at": [
+      0,
+      0,
+      1.7
+     ],
+     "color": [
+      0.75,
+      0.78,
+      0.82
+     ]
+    }
+   ]
+  },
+  "unverified": [
+   "fillPercent"
+  ],
+  "ours": [
+   "visual",
+   "deepWork"
+  ],
+  "note": "Wiki-checked 2026-11-13: 200 steel + 6 components (+2 advanced components, left out: we have none), 3x3, 700 W, 10000 ticks, 250 HP, beauty -8, 50% flammable, no work under a roof. A find is due on average every 4 days of work (240,000 ticks) and always by 8 (480,000), scaled by the researcher's speed. RimWorld makes a quest for a lump on the world map; ours puts a mineable lump of the tuned ore on the colony's map, 6 to 25 cells away (docs/design/mineral-scanner.md)."
+ }
+]

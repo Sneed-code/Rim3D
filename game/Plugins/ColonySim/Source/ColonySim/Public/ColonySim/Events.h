@@ -166,6 +166,8 @@ enum class EventType : uint8_t {
     // The comms console (docs/design/comms-console.md).
     CaravanRequested,      // `thing` asked the faction `message` for a trade caravan over the comms console; it comes in `amount` days
     CaravanRequestFailed,  // an asked-for caravan could not come: `message` "faction: why"
+    // The long-range mineral scanner (docs/design/mineral-scanner.md).
+    OreLumpFound,          // `thing` the scanner found a lump of ore on the surface: `def` the ore (a Mineable def), `cell` its middle, `count` its cells
 };
 
 // What stopped a projectile (ProjectileHit).

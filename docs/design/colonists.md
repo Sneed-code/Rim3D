@@ -20,7 +20,10 @@ saves as it is (save format 4). `protagonist` marks the one colonist who gets 2x
 
 1. **Gender, names, age.** Gender is a coin flip. Names are drawn from the male or female first
    names, last names and nicknames. Age is drawn from `ageGenerationCurve` between
-   `adultAgeMin` (18) and the curve's end.
+   `adultAgeMin` (18) and the curve's end. A colonist who joins a map (the scenario's settlers,
+   wanderers, quest joiners) then goes through `makeColonistNameUnique`: a nickname or first name
+   someone on the map already has is redrawn from the colonist's seed, so no colony has two Chips
+   (the G2 playtest had). Names that don't clash are kept, so games without a clash are unchanged.
 2. **Backstories.** One childhood and one adulthood, uniformly, from the ones that fit the
    `category` asked for ("Colony" for settlers, "Raider" for pirates; a backstory without a
    `categories` list fits all). There are 28 childhoods and 44 adulthoods, all our own writing

@@ -520,8 +520,13 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                     j["x"] = c.x;
                     j["y"] = c.y;
                 } else {
-                    static_assert(std::is_same_v<Type, RerollColonistCommand>, "write every command type");
-                    j["slot"] = c.slot;
+                    if constexpr (std::is_same_v<Type, ScannerCommand>) {
+                        j["building"] = entt::to_integral(c.building);
+                        j["ore"] = c.ore;
+                    } else {
+                        static_assert(std::is_same_v<Type, RerollColonistCommand>, "write every command type");
+                        j["slot"] = c.slot;
+                    }
                 }
             }
         },
@@ -1789,6 +1794,16 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         out.command = std::move(c);
     } else {
         // Nested, not one more else-if: MSVC stops at 128 nested blocks (C1061).
+        if (type == "Scanner") {
+            ScannerCommand c;
+            uint32_t building = entt::to_integral(kNoEntity);
+            if (!r.integer(j, "building", building, where) || !r.text(j, "ore", c.ore, where)) {
+                return false;
+            }
+            c.building = static_cast<Entity>(building);
+            out.command = std::move(c);
+            return true;
+        }
         if (type != "Pod") {
             return r.fail(where + ".type: unknown command '" + type + "'");
         }
