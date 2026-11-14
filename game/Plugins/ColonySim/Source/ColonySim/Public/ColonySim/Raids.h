@@ -348,7 +348,8 @@ public:
     // A Faction id for a Factions def: the same def always gets the same id.
     FactionId factionId(const std::string& faction);
     DefenseRole roleOf(Entity pawn) const;
-    // Too hungry to answer the alarm (`RaidRules::alarmEatBelow`): it is let off to eat.
+    // Too hungry to answer the alarm (`RaidRules::alarmEatBelow`): it is let off to eat, unless an enemy that can see it is
+    // within `keepWorkingRadius`.
     bool excusedToEat(Entity pawn) const;
 
     const RaidState& state() const { return state_; }
@@ -402,6 +403,8 @@ private:
     void callUp(Entity pawn, const std::vector<Entity>& spotted);
     CellPos defensePoint(Entity pawn, const DefensePlan* plan);
     CellPos shelterCell(Entity pawn);
+    // Where the shelter rules see danger: able enemies (not calm animals, prisoners, visitors or the downed) and brood mounds.
+    std::vector<std::pair<float, float>> shelterDangers() const;
     CellPos exitCell(Entity pawn, const Squad& squad);
     bool nearestFree(float x, float y, int level, CellPos from, int radius, CellPos& out);
     float strength(Entity pawn) const;

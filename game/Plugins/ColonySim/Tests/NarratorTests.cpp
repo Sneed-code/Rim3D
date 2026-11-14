@@ -155,6 +155,25 @@ TEST_CASE("Narrator: off until one is picked, then Orrin's big threats come on h
     CHECK(run.narrator.state().incidents == raids.size());
 }
 
+TEST_CASE("Narrator: Orrin's big threats are always at least 1.9 days apart") {
+    // RimWorld's minSpacingDays: two threats of one cycle never land on the colony together.
+    NarratorTestRun run({"RaidEnemy"});
+    std::string error;
+    NARRATOR_REQUIRE(run.narrator.setNarrator("Orrin", "", error));
+    run.run(400.0);
+    const std::vector<double> raids = run.daysOf("RaidEnemy");
+    NARRATOR_REQUIRE(raids.size() >= 40);
+    const double check = static_cast<double>(run.narrator.rules().checkSeconds) / static_cast<double>(kSecondsPerDay);
+    double closest = 1e9;
+    int pairs = 0;  // cycles that brought two
+    for (size_t i = 1; i < raids.size(); ++i) {
+        closest = std::min(closest, raids[i] - raids[i - 1]);
+        pairs += raids[i] - raids[i - 1] < 4.6 ? 1 : 0;
+    }
+    CHECK(closest >= 1.9 - check - 1e-6);
+    CHECK(pairs >= 5);  // still one or two a cycle
+}
+
 TEST_CASE("Narrator: from the start, Orrin's first raid comes on day 11 and Maren's on day 13") {
     NarratorTestRun orrin({"RaidEnemy"});
     std::string error;

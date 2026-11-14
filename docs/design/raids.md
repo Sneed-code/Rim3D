@@ -80,7 +80,7 @@ While the alarm is on, every colonist that isn't drafted or controlled by the pl
 | Role | What it does |
 | --- | --- |
 | **Defender** | Its job ends and it becomes a fighter (`defending`). With a **defense spot** it holds that spot, choosing cover within 3 m. Without one it goes to **the line**: a point 15 m (`defenseLine`, at most half way) from home toward the threat, pulled back home until it is 20 m from every brood mound, choosing cover within 10 m of it; the line moves when the threat has moved it over 6 m. **Once it knows of an enemy it leaves the line** and fights like any fighter (cover, range, falling back), so an enemy out of range of the line can't shoot it from afar; with no enemy known again it goes back to the line. |
-| **Shelter** | Goes to the shelter room (`MarkShelterCommand`) and stays there, each in its own cell; with no shelter marked, the nearest roofed cell; with none, 25 m away from the threat (or from the nearest danger). Never a cell within 20 m of an enemy or a brood mound (`shelterDanger`, ours): overhead mountain counts as indoors and infestations come up under it. It never shoots. |
+| **Shelter** | Goes to the shelter room (`MarkShelterCommand`) and stays there, each in its own cell; with no shelter marked, the nearest roofed cell; with none, 25 m away from the threat (or from the nearest danger). Never a cell within 20 m of an enemy or a brood mound (`shelterDanger`, ours): overhead mountain counts as indoors and infestations come up under it. It never shoots. **It keeps moving while chased:** at each alarm check, an enemy fighter aiming at it, or one within `shelterDanger` that can see it, makes it pick a new place: a safe roofed cell if there is one, else 25 m straight away from that enemy (in the year run raiders walked through the base to unarmed colonists waiting in the open and shot them where they stood). |
 | **Keep working** | Works on, until a spotted enemy comes within 20 m (`keepWorkingRadius`); then it defends itself where it is, until the alarm stops. |
 | **Medic**, **Firefighter** | F10, [field-care.md](field-care.md): only Doctor or Firefighter work, on targets out of the enemies' sight, else waiting behind the line; fights only when an enemy comes within 8 m. |
 
@@ -98,6 +98,8 @@ keeps it from sounding again by itself until they are gone.
 `food.ravenousBelow`, 0.125) is let off: the alarm stands it down (`RaidSystem::excusedToEat`), a Medic or Firefighter
 leaves its duty, and it goes to eat; once fed it is called up again at the next check. In the year run an infestation
 kept the alarm on for days and the colonists starved at their posts. RimWorld has no automatic alarm, so this is ours.
+Not while an enemy that can see it stands within `keepWorkingRadius` (20 m): then it fights on hungry (the eighth year
+pass found colonists eating while a raider shot them from 1 to 6 m).
 
 **Drafting a called-up colonist** hands it to the player where it stands; undrafting it gives it back
 to the alarm at the next check while the alarm is on.

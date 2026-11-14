@@ -20,6 +20,7 @@
 #include "ColonySim/Things.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cmath>
 #include <set>
 #include <utility>
@@ -1900,8 +1901,33 @@ void RaidSystem::thinkAlarm() {
 }
 
 bool RaidSystem::excusedToEat(Entity pawn) const {
-    const Needs* needs = things_.registry().try_get<Needs>(pawn);
-    return needs != nullptr && needs->food < rules_.alarmEatBelow;
+    const entt::registry& reg = things_.registry();
+    const Needs* needs = reg.try_get<Needs>(pawn);
+    if (needs == nullptr || !(needs->food < rules_.alarmEatBelow)) {
+        return false;
+    }
+    // Not with an enemy close by that can see it (keepWorkingRadius, the distance a Keep working colonist stops at): in
+    // the year run colonists let off to eat sat over their meals while a raider shot them from 1 to 6 m (colony-scenario.md
+    // "Eighth pass"). RimWorld's colonists answer a close enemy whatever job they are on.
+    const Position* at = reg.try_get<Position>(pawn);
+    if (at == nullptr) {
+        return true;
+    }
+    for (const auto [other, faction, p] : reg.view<const Faction, const Position>().each()) {
+        const Animal* wild = reg.try_get<Animal>(other);
+        if ((faction.id == kPlayerFaction && wild == nullptr) || (wild != nullptr && wild->temper == AnimalTemper::Calm) ||
+            p.level != at->level || health_.incapacitated(other) || reg.all_of<Prisoner>(other) || reg.all_of<Visitor>(other)) {
+            continue;
+        }
+        if (const Fighter* theirs = reg.try_get<Fighter>(other); theirs != nullptr && theirs->mode == FightMode::Flee) {
+            continue;
+        }
+        if (raidDist(p.x, p.y, at->x, at->y) <= rules_.keepWorkingRadius &&
+            map_.cover().lineOfSight(Viewpoint{p.x, p.y, p.level, Stance::Standing}, Viewpoint{at->x, at->y, at->level, Stance::Standing})) {
+            return false;
+        }
+    }
+    return true;
 }
 
 // What one colonist does while the alarm is on, by its role.
@@ -1948,6 +1974,54 @@ void RaidSystem::callUp(Entity pawn, const std::vector<Entity>& spotted) {
     }
     if (role == DefenseRole::Shelter) {
         if (f != nullptr && f->mode == FightMode::Shelter) {
+            // It keeps its shelter while no enemy is shooting at it and none within shelterDanger can see it. In the year run
+            // raiders walked through the base to an unarmed colonist waiting in the open where it had first fled, and shot it
+            // there (colony-scenario.md "Eighth pass"): now it moves on, as a fleeing RimWorld colonist keeps fleeing: to a
+            // safe roofed cell if there is one, else straight away from the enemy after it.
+            bool chased = false;
+            float fromX = 0.0f;
+            float fromY = 0.0f;
+            float nearest = 0.0f;
+            for (const auto [other, faction, p] : reg.view<const Faction, const Position>().each()) {
+                if (faction.id == kPlayerFaction || health_.incapacitated(other) || reg.all_of<Prisoner>(other) ||
+                    reg.all_of<Visitor>(other) || p.level != pos.level) {
+                    continue;
+                }
+                const Fighter* theirs = reg.try_get<Fighter>(other);
+                const float d = raidDist(pos.x, pos.y, p.x, p.y);
+                const bool aims = theirs != nullptr && theirs->target == pawn && theirs->mode == FightMode::Fight;
+                if (!aims && (d >= rules_.shelterDanger || theirs == nullptr || theirs->mode != FightMode::Fight)) {
+                    continue;
+                }
+                if (!aims && !map_.cover().lineOfSight(Viewpoint{p.x, p.y, p.level, Stance::Standing},
+                                                       Viewpoint{pos.x, pos.y, pos.level, Stance::Standing})) {
+                    continue;
+                }
+                if (!chased || d < nearest) {
+                    chased = true;
+                    nearest = d;
+                    fromX = p.x;
+                    fromY = p.y;
+                }
+            }
+            if (chased) {
+                CellPos goal = shelterCell(pawn);
+                if (!rooms_.indoors(goal)) {
+                    const float dx = pos.x - fromX;
+                    const float dy = pos.y - fromY;
+                    const float d = std::sqrt(dx * dx + dy * dy);
+                    CellPos out;
+                    if (d > 0.0f && nearestFree(pos.x + dx / d * rules_.shelterFlee, pos.y + dy / d * rules_.shelterFlee, pos.level,
+                                                cellOf(pos), 8, out)) {
+                        goal = out;
+                    }
+                }
+                if (!f->hasGoal || goal != f->goal) {
+                    f->hasGoal = true;
+                    f->goal = goal;
+                    fighters_.replan(pawn);
+                }
+            }
             return;
         }
         const CellPos goal = shelterCell(pawn);
@@ -2063,21 +2137,11 @@ CellPos RaidSystem::defensePoint(Entity pawn, const DefensePlan* plan) {
     return nearestFree(px, py, pos.level, here, 8, out) ? out : here;
 }
 
-// A cell in the marked shelter room no other sheltering colonist goes to, else the nearest
-// indoor cell, else a cell away from the threat.
-CellPos RaidSystem::shelterCell(Entity pawn) {
-    entt::registry& reg = things_.registry();
-    const Position& pos = reg.get<Position>(pawn);
-    const CellPos here = cellOf(pos);
-    std::vector<CellPos> taken;
-    for (const auto [other, f] : reg.view<const Fighter>().each()) {
-        if (other != pawn && f.mode == FightMode::Shelter && f.hasGoal) {
-            taken.push_back(f.goal);
-        }
-    }
-    // Danger: the enemies on the map and the brood mounds. An infestation comes up under overhead mountain, which counts
-    // as indoors, so the nearest roofed cell was often the hive's cave: in the year run unarmed colonists ran into it and
-    // were killed there (docs/design/colony-scenario.md "Seventh pass").
+// Danger: the enemies on the map and the brood mounds. An infestation comes up under overhead mountain, which counts
+// as indoors, so the nearest roofed cell was often the hive's cave: in the year run unarmed colonists ran into it and
+// were killed there (docs/design/colony-scenario.md "Seventh pass").
+std::vector<std::pair<float, float>> RaidSystem::shelterDangers() const {
+    const entt::registry& reg = things_.registry();
     std::vector<std::pair<float, float>> danger;
     for (const auto [other, faction, p] : reg.view<const Faction, const Position>().each()) {
         const Animal* wild = reg.try_get<Animal>(other);
@@ -2092,6 +2156,22 @@ CellPos RaidSystem::shelterCell(Entity pawn) {
             danger.emplace_back(p.x, p.y);
         }
     }
+    return danger;
+}
+
+// A cell in the marked shelter room no other sheltering colonist goes to, else the nearest
+// indoor cell, else a cell away from the threat.
+CellPos RaidSystem::shelterCell(Entity pawn) {
+    entt::registry& reg = things_.registry();
+    const Position& pos = reg.get<Position>(pawn);
+    const CellPos here = cellOf(pos);
+    std::vector<CellPos> taken;
+    for (const auto [other, f] : reg.view<const Fighter>().each()) {
+        if (other != pawn && f.mode == FightMode::Shelter && f.hasGoal) {
+            taken.push_back(f.goal);
+        }
+    }
+    const std::vector<std::pair<float, float>> danger = shelterDangers();
     const auto isFree = [&](CellPos c) {
         if (!map_.walkable(c) || map_.obstacleDm(c) != 0 || map_.isDoor(c) || std::find(taken.begin(), taken.end(), c) != taken.end()) {
             return false;

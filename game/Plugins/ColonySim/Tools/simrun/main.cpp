@@ -17,7 +17,7 @@
 //                                     exit 1 if a check fails, docs/design/colony-scenario.md)
 //   simrun --perf [--seed 42] [--size 1024] [--days 1] [--budget MS]   (the sim cost check, S9: 30 colonists, 300 tame animals, crops
 //                                     and rooms; a table of what each system costs per step, exit 1 over --budget; docs/design/sim-cost.md)
-//   simrun --scenario year [--seed 42] [--days 60] [--narrator NAME]   (C25: the colony year with the narrator; docs/design/colony-scenario.md)
+//   simrun --scenario year [--seed 42] [--days 60] [--narrator NAME] [--start CrashlandedRainforest]   (C25: the colony year with the narrator; docs/design/colony-scenario.md)
 //   simrun --scenario house [--seed 42] [--days 3] [--png house.png] [--verbose]   (the two-storey house, M4: builds, sleeps and hauls
 //                                     across two levels, writes house-level0.png and house-level1.png; docs/design/house-scenario.md)
 //   simrun --world world.png [--seed 42] [--world-size 120x60] [--check]   (the world map: biomes, rivers, roads, settlements; docs/design/world-map.md)
@@ -735,7 +735,7 @@ int main(int argc, char** argv) {
         if (options.scenario == "year") {
             // C25: the year run with the narrator, 60 game days unless --days says otherwise.
             return colonyscenario::run(options.seed, options.size, options.daysGiven ? options.days : 60.0, defs, options.verbose, true,
-                                       options.narrator.empty() ? "Orrin" : options.narrator);
+                                       options.narrator.empty() ? "Orrin" : options.narrator, options.start);
         }
         return colonyscenario::run(options.seed, options.size, options.daysGiven ? options.days : 5.0, defs, options.verbose, options.year);
     }

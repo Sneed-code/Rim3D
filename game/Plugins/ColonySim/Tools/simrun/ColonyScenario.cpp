@@ -75,6 +75,7 @@ constexpr int kGreenBasins = 4;  // six took more steel than the crash site has,
 // day), and in winter the unheated room freezes and keeps them: the colony's winter larder.
 constexpr int64_t kShedDay = 1;
 constexpr int kFirebreak = 4;
+constexpr int kBuildingGap = 3;  // year run: the storeroom and the greenhouse keep this many cells clear of other buildings
 constexpr size_t kSpecialists = 2;  // year run: colonists who doctor, and who cook
 constexpr int kHealrootWidth = 6;  // year run: the healroot patch (herbal medicine), 6 by 4
 constexpr int kHealrootHeight = 4;  // year run: cells cleared of plants round the buildings
@@ -242,11 +243,18 @@ bool findGreenhouseSite(Sim& sim, CellPos landing, const CellRect& room, CellPos
             for (int y = origin.y - 1; y <= origin.y + height && ok; ++y) {
                 for (int x = origin.x - 1; x <= origin.x + width && ok; ++x) {
                     const CellPos c{x, y, 0};
-                    ok = dryGround(sim, c) && sim.map().buildingAt(c) == kNoEntity &&
-                         sim.farming().zoneAt(c) == kNoGrowingZone && sim.zones().stockpileAt(c) == nullptr &&
-                         std::none_of(taken.begin(), taken.end(), [&](const CellRect& t) { return t.contains(c); }) &&
-                         !(x >= room.minX - 2 && x < room.minX + room.sizeX + 2 && y >= room.minY - 2 && y < room.minY + room.sizeY + 2);
+                    ok = dryGround(sim, c) && sim.farming().zoneAt(c) == kNoGrowingZone && sim.zones().stockpileAt(c) == nullptr;
                     trees += ok && isTree(sim, sim.plants().defAt(c)) ? 1 : 0;  // cleared when the walls go up, at a cost
+                }
+            }
+            // A firebreak: no other building within kBuildingGap cells. Embers reach two cells and steel walls burn (40% of
+            // wood), so on seed 42 a greenhouse fire one cell from the storeroom took every meal and all the rice with it.
+            for (int y = origin.y - kBuildingGap; y < origin.y + height + kBuildingGap && ok; ++y) {
+                for (int x = origin.x - kBuildingGap; x < origin.x + width + kBuildingGap && ok; ++x) {
+                    const CellPos c{x, y, 0};
+                    ok = (!sim.map().inBounds(c) || sim.map().buildingAt(c) == kNoEntity) &&
+                         std::none_of(taken.begin(), taken.end(), [&](const CellRect& t) { return t.contains(c); }) &&
+                         !room.contains(c);
                 }
             }
             const float score = distSq(origin, landing) + 400.0f * static_cast<float>(trees);
@@ -296,9 +304,13 @@ void printIllness(const Sim& sim, Entity pawn, const char* prefix) {
 
 }  // namespace
 
-int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDatabase> defs, bool verbose, bool year, const std::string& narrator) {
+int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDatabase> defs, bool verbose, bool year, const std::string& narrator,
+        const std::string& start) {
     SimSettings settings{seed, mapSize, 0, 0};
-    settings.scenario = "Crashlanded";
+    settings.scenario = start.empty() ? "Crashlanded" : start;
+    // A start with a biome of its own (the tropical CrashlandedRainforest) lands on a world tile of that biome.
+    const Def* startDef = defs->find("Scenarios", settings.scenario);
+    settings.world.enabled = startDef != nullptr && startDef->text("biome", "TemperateForest") != "TemperateForest";
     settings.wildAnimals = year ? 100 : 0;
     Sim sim(settings, defs);
     if (!sim.setupErrors().empty()) {
@@ -319,7 +331,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     }
 
     if (verbose) {
-        std::fprintf(stderr, "landing %d,%d  room origin %d,%d\n", landing.x, landing.y, origin.x, origin.y);
+        std::fprintf(stderr, "landing %d,%d  room origin %d,%d  biome %s\n", landing.x, landing.y, origin.x, origin.y, sim.biome().c_str());
     }
 
     // The plans: wall ring with the door in the south wall, then the furniture inside.

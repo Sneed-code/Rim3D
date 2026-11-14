@@ -78,7 +78,7 @@ struct COLONY_API FireNumbers {
     float blastIgniteChance = 0.6f;  // a flame blast lights each flammable cell and pawn in its radius with this chance
     float heatPerSecond = 14.0f;     // RimWorld heat units a fire of size 1 pushes into its room each second
     float heatMaxC = 500.0f;
-    float beatPerTick = 0.00167f;    // size a colonist beats out per tick at speed 1
+    float beatPerTick = 0.00485f;    // size a colonist beats out per tick at speed 1 (RimWorld: 0.32 a beat, a beat every 66 ticks)
     int floorBurnPasses = 10;        // passes a fire must burn on a flammable floor to destroy it
     float burntFadeDays = 6.0f;
     int autoHomeRadius = 5;
@@ -216,6 +216,8 @@ private:
     bool foamAt(CellPos c) const;
     void burnThings(CellPos c, FireCell& fire, float damage, Rng& rng);
     void spreadFrom(CellPos c, const FireCell& fire, int64_t now, int index, std::vector<int>& ignitions, Rng& rng);
+    // True when a wall, closed door or rock between `from` and the cell (dx, dy) two away stops a spark (RimWorld's line of sight).
+    bool emberBlocked(CellPos from, int dx, int dy) const;
     void catchPawns(int64_t now);
     void stampHome(CellPos centre, int radius);
     void markBurnt(int index, int64_t now);
