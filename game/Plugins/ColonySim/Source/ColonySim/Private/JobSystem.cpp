@@ -7,6 +7,7 @@
 #include "ColonySim/Combat.h"
 #include "ColonySim/Apparel.h"
 #include "ColonySim/Construction.h"
+#include "ColonySim/Floors.h"
 #include "ColonySim/Crafting.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/FieldCare.h"
@@ -1645,6 +1646,18 @@ JobSystem::StepResult JobSystem::buildWork(Entity pawn, Job& job, std::string& w
     learnSkill(pawn, skillName, gather_.constructionXpPerSecond * gather_.constructionSpeed);
     if (site.workDone < site.workTotal) {
         return StepResult::Running;
+    }
+    if (site.floor.valid()) {
+        // A floor plan: the frame becomes the floor on its cell (docs/design/construction.md "Floors").
+        const CellPos cell = site.origin;
+        const DefId floor = site.floor;
+        release(pawn, job);
+        construction_.complete(job.thing);
+        if (construction_.floors() == nullptr || construction_.floors()->at(cell) != floor) {
+            why = "the floor can't be laid there any more";
+            return StepResult::Failed;
+        }
+        return StepResult::Next;
     }
     if (construction_.isUpperFloor(reg.get<Thing>(job.thing).def)) {
         // An upper floor: the frame becomes the floor (docs/design/levels.md).

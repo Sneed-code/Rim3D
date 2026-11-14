@@ -122,6 +122,25 @@ free (a building appeared there by command) the materials are given back and the
 (`sim.plants().remove`, [plants.md](plants.md)). A blueprint or a frame leaves them alone, and
 trees don't stop a plan yet (they don't block pawns either until C3).
 
+## Floors
+
+Floors (`data/defs/Terrain/Floors.json`: wood floor, stone tiles, flagstone...) are laid by colonists
+as in RimWorld. `PlaceBlueprintCommand` with a **Terrain floor** defName (and a stuff for floors with
+`stuffCategories`, such as stone tiles of granite blocks) makes a **floor plan** on that one cell
+(`Construction::placeFloorPlan`; Unreal sends one per cell of a dragged area). It is a site like any
+other, its Thing def is `FloorPlan` (Things), and `ConstructionSite::floor` names the floor it lays.
+It costs the floor's `costs` and `costStuffCount`, its work is the floor's `workToBuild` (times the
+stuff's work factor), and it needs the floor's research (`researchPrerequisite`). It can't go where
+that floor already lies, under a wall or another impassable building, or on another plan; it levels
+its cell at once, as a floor lies flat ([levelling.md](levelling.md)).
+
+The same Construction jobs deliver to it and build it. A floor plan blocks nothing, and a builder may
+**stand on it** (its own cell, or any floor plan's cell next to another plan), since a big floor's
+middle cells have no free side. When the work is done the plan goes and the floor is laid
+(`Floors::set`); if it can't be any more the materials drop. The snapshot's `ThingView::floor` names
+the floor a plan lays. `PlaceFloorCommand` still lays floors at once, as a dev command. Save section
+`construction` 2 adds the plan's `floor` by `defName`.
+
 ## Saves and hashes
 
 Save format 10. A plan is a thing with an optional `site` (stage, stuff, origin, rotation, size,
@@ -136,7 +155,7 @@ others. All of it is in `Sim::stateHash`. Saves of formats 6 and 7 still load.
   failures, and builders gain Construction XP as they work ([skills.md](skills.md)).
 - Repair, replacing a building with a better stuff, minifying and moving furniture. Roofs and rooms are not
   built: they follow from the walls ([rooms.md](rooms.md)).
-- Walls over water, terrain affordances and floors; blueprint rules like "doors only between walls".
+- Removing a floor (RimWorld's remove-floor order), floors on upper levels, and the architect's floor tool in Unreal. Walls over water, terrain affordances; blueprint rules like "doors only between walls".
 - Materials come from any free stack on the map, as RimWorld's do; forbidden items, "build from
   stockpile only" and small-volume stuffs (x10 counts) are not here.
 - Frames and blueprints have no hit points and can't burn or be shot.
