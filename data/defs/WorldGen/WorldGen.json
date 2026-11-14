@@ -10,7 +10,7 @@
     "temperature": {"equator": 31, "poleDrop": 44, "lapsePerKm": 6.5, "noiseSwing": 3, "waterModeration": 0.9},
     "rainfall": {"base": 80, "scale": 2600, "equatorBand": 0.55, "equatorWidth": 0.12, "midLatitudeBand": 0.35, "midLatitude": 0.65, "midLatitudeWidth": 0.15, "coastBonus": 250, "coastRadius": 3, "coldDryFactor": 0.3, "noiseCells": 5},
     "hilliness": {"quantiles": [0.52, 0.76, 0.9, 0.99], "elevationWeight": 0.6, "ruggednessWeight": 0.6},
-    "swampiness": {"threshold": 0.56, "noiseCells": 6},
+    "swampiness": {"threshold": 0.56, "minRuleShare": 0.3, "noiseCells": 6},
     "rivers": {"sizeUnit": 0.25, "creek": 1, "river": 3, "largeRiver": 8, "hugeRiver": 20, "rainfallPerFlow": 1500, "lakeSinkAtLeast": 1},
     "settlements": {"per100Land": 3, "minSpacing": 3, "roadsPerSettlement": 2, "roadCostLimit": 400, "permanentEnemyWeight": 0.5, "minTemperature": -10, "roadStoneUses": 2, "roadAsphaltUses": 4},
     "startTile": {"maxHilliness": "Mountainous"},

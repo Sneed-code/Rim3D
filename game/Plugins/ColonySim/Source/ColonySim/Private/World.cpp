@@ -320,12 +320,41 @@ struct WorldBuilder {
         const std::vector<WorldRule> sea = worldReadRules(cfg, "waterRules");
         const float swampLimit = num("swampiness.threshold", 0.62f);
         const int swampCells = static_cast<int>(num("swampiness.noiseCells", 6));
+        std::vector<float> swampNoise(w.tiles_.size(), 0.0f);
+        for (int y = 0; y < H; ++y) {
+            for (int x = 0; x < W; ++x) {
+                swampNoise[static_cast<size_t>(w.index(x, y))] = worldFbm(salt(4), u(x), v(y), swampCells, 3, H, W);
+            }
+        }
+        // Each swampy rule's own limit: the wet places a swamp needs are thin bands, so a world
+        // whose swamp noise missed them had no swamps at all (seed 42). With `minRuleShare`, at
+        // least that share of the land tiles fitting a swampy rule's temperature and rainfall are
+        // swampy for it; a world that already had more keeps the plain threshold.
+        const float minShare = num("swampiness.minRuleShare", 0.0f);
+        std::vector<float> ruleLimit(land.size(), swampLimit);
+        for (size_t k = 0; k < land.size() && minShare > 0.0f; ++k) {
+            if (land[k].swampy != 1) {
+                continue;
+            }
+            std::vector<float> fits;
+            for (size_t i = 0; i < w.tiles_.size(); ++i) {
+                const WorldTile& t = w.tiles_[i];
+                if (!t.water && worldRuleMatches(land[k], t.temperature, t.rainfall, true)) {
+                    fits.push_back(swampNoise[i]);
+                }
+            }
+            if (!fits.empty()) {
+                ruleLimit[k] = std::min(swampLimit, worldQuantile(fits, 1.0f - minShare));
+            }
+        }
         for (int y = 0; y < H; ++y) {
             for (int x = 0; x < W; ++x) {
                 WorldTile& t = w.tiles_[static_cast<size_t>(w.index(x, y))];
-                const bool swampy = worldFbm(salt(4), u(x), v(y), swampCells, 3, H, W) > swampLimit;
+                const float noise = swampNoise[static_cast<size_t>(w.index(x, y))];
                 const std::vector<WorldRule>& rules = t.water ? sea : land;
-                for (const WorldRule& r : rules) {
+                for (size_t k = 0; k < rules.size(); ++k) {
+                    const WorldRule& r = rules[k];
+                    const bool swampy = noise > (t.water ? swampLimit : ruleLimit[k]);
                     if (worldRuleMatches(r, t.temperature, t.rainfall, swampy)) {
                         t.biome = static_cast<uint8_t>(paletteIndex(r.biome));
                         break;
