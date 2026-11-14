@@ -40,7 +40,9 @@ Ideas parked for later. Newest first. Move an item into a stage plan when it's p
 - Protagonist needs sleep or not (open question in `docs/game-design.md`).
 - Elevators for multi-storey buildings (after stairs and ladders).
 - Carry on as another colonist after the protagonist dies (currently game over).
-- Children and sexual content: out of scope for now; sneed may revisit.
+- Children: dropped (sneed, 2026-11-14: too hard with growing up over the game's slow time). Lovin is in, abstract and adults only (decision 0008).
+- Lovin on screen (PC task, Unreal): a small hearts icon over a pawn with `ThingView::lovin`, the couple lying under the covers in the pose `lovinPose` (side by side, spooning, embracing) and a kiss now and then; no nudity, no sex animation. Log line for the `Lovin` event. A double-bed mesh (it draws from its parts now).
+- A room whose two single beds belong to one couple should count as a bedroom, not barracks (RimWorld's rule; ours goes by bed count).
 - A "rearm all" button and a rearm animation for the trap (U19 panels, Unreal side; the sim job `RearmTrap` is done).
 - The other turrets (sentry, autocannon) and trap kinds (found in F11); raiders shooting back at turrets is done (2026-11-14, `fighters.md` "Turrets"), melee raiders and grenades still leave turrets alone.
 - Rearm job for sprung spike traps (a Construction-style colonist job; F11 has only `RearmTrapCommand`) and a "rearm all" button (U19 panels).

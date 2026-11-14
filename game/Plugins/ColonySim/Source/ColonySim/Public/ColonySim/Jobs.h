@@ -333,6 +333,9 @@ public:
     bool assignBed(Entity bed, Entity pawn, std::string& error);
     // The bed a pawn owns, or kNoEntity.
     Entity bedOf(Entity pawn) const;
+    // Who a pawn's partner is (its spouse, else its lover; the social system answers): a pawn joins its partner's bed
+    // when there is a free slot in it, and two colonists who are not partners never share a bed (docs/design/lovin.md).
+    void setPartnerOf(std::function<Entity(Entity)> partnerOf) { partnerOf_ = std::move(partnerOf); }
     const NeedRules& needRules() const { return rules_; }
     // Whether a cell is indoors decides where a pawn can stroll or watch the clouds (Recreation); without rooms
     // everywhere is outdoors.
@@ -815,6 +818,7 @@ private:
     CombatSystem* combat_ = nullptr;
     std::function<bool(Entity)> animalGate_;
     std::function<bool(Entity)> pauseGate_;
+    std::function<Entity(Entity)> partnerOf_;
     InspirationSystem* inspirations_ = nullptr;
     const TraitBook* traits_ = nullptr;
     const TalentSystem* talents_ = nullptr;  // build speed and carrying capacity (docs/design/talents.md)
