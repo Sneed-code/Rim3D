@@ -1,6 +1,7 @@
 #include "ColonySim/Construction.h"
 
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Floors.h"
 #include "ColonySim/Genes.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Plants.h"
@@ -207,6 +208,71 @@ void Construction::indexSite(Entity site, bool add) {
 
 bool Construction::isUpperFloor(DefId def) const {
     return def.valid() && def.value < defs_.size() && defs_.get(def).flag("building.upperFloor");
+}
+
+bool Construction::isFloorPlan(Entity site) const {
+    const entt::registry& reg = things_.registry();
+    const ConstructionSite* s = reg.valid(site) ? reg.try_get<ConstructionSite>(site) : nullptr;
+    return s != nullptr && s->floor.valid();
+}
+
+Entity Construction::placeFloorPlan(DefId floor, DefId stuff, CellPos cell, std::string& error) {
+    const DefId planDef = defs_.idOf("Things", "FloorPlan");
+    if (floors_ == nullptr || !planDef.valid() || !floors_->isFloorDef(floor)) {
+        error = "that isn't a floor that can be laid";
+        return kNoEntity;
+    }
+    const Def& d = defs_.get(floor);
+    if (!stuffFits(floor, stuff)) {
+        error = d.count("stuffCategories") == 0 ? "that floor is not made of anything" : "that floor can't be made of that";
+        return kNoEntity;
+    }
+    if (!map_.inBounds(cell) || cell.level != 0 || !map_.groundBuildable(cell, false)) {
+        error = "can't lay a floor on " + constructionCellText(cell);
+        return kNoEntity;
+    }
+    if (floors_->at(cell) == floor) {
+        error = "that floor is laid at " + constructionCellText(cell) + " already";
+        return kNoEntity;
+    }
+    if (const Entity building = map_.buildingAt(cell);
+        building != kNoEntity && defs_.get(things_.registry().get<Thing>(building).def).text("passability") == "Impassable") {
+        error = "there is a building at " + constructionCellText(cell);
+        return kNoEntity;
+    }
+    if (siteAt(cell) != kNoEntity) {
+        error = "something is already planned at " + constructionCellText(cell);
+        return kNoEntity;
+    }
+    map_.levelGround(CellRect{cell.x, cell.y, 1, 1, cell.level});  // a floor lies flat (docs/design/levelling.md)
+
+    ConstructionSite site;
+    site.stuff = stuff;
+    site.origin = cell;
+    site.floor = floor;
+    for (const Cost& cost : costOf(floor, stuff)) {
+        site.materials.push_back(MaterialCount{cost.item, cost.count, 0});
+    }
+    double work = d.number("workToBuild", 1.0);
+    if (stuff.valid()) {
+        work *= defs_.get(stuff).number("stuffProps.statFactors.workToBuild", 1.0);
+    }
+    site.workTotal = static_cast<float>(work);
+
+    entt::registry& reg = things_.registry();
+    const Entity e = reg.create();
+    reg.emplace<Thing>(e, Thing{planDef, ThingCategory::Building});
+    reg.emplace<Position>(e, constructionRectCentre(site.rect()));
+    reg.emplace<ConstructionSite>(e, std::move(site));
+    indexSite(e, true);
+
+    Event event;
+    event.type = EventType::ThingSpawned;
+    event.thing = e;
+    event.def = planDef;
+    event.cell = cell;
+    events_.push_back(std::move(event));
+    return e;
 }
 
 Entity Construction::placeBlueprint(DefId def, DefId stuff, CellPos cell, Rot4 rot, std::string& error) {
@@ -443,6 +509,19 @@ Entity Construction::complete(Entity frame) {
     const DefId def = reg.get<Thing>(frame).def;
     const Def& d = defs_.get(def);
     const CellRect rect = site.rect();
+    if (site.floor.valid()) {
+        // A floor plan becomes the floor on its cell (the plan itself is no building).
+        indexSite(frame, false);
+        things_.destroy(frame);
+        if (floors_ == nullptr || !floors_->set(site.origin, site.floor)) {
+            for (const MaterialCount& m : site.materials) {
+                dropNear(m.item, m.have, rect);
+            }
+        } else {
+            map_.levelGround(rect);
+        }
+        return kNoEntity;
+    }
     if (isUpperFloor(def)) {
         // The frame becomes the floor itself, not a building on it.
         indexSite(frame, false);
@@ -573,8 +652,10 @@ bool Construction::workCell(const CellRect& rect, CellPos from, CellPos& out) co
     float best = 0.0f;
     const auto considerOn = [&](int x, int y, int level) {
         const CellPos c{x, y, level};
-        // Not on a planned building's cells: it may be finished while the pawn stands there.
-        if (!map_.walkable(c) || siteAt(c) != kNoEntity || !map_.regions().canReach(from, c)) {
+        // Not on a planned building's cells: it may be finished while the pawn stands there. A
+        // floor plan's cells are fine: a finished floor is walked on.
+        const Entity there = siteAt(c);
+        if (!map_.walkable(c) || (there != kNoEntity && !isFloorPlan(there)) || !map_.regions().canReach(from, c)) {
             return;
         }
         const float dx = static_cast<float>(x - from.x);
@@ -587,6 +668,13 @@ bool Construction::workCell(const CellRect& rect, CellPos from, CellPos& out) co
         }
     };
     const auto consider = [&](int x, int y) { considerOn(x, y, rect.level); };
+    // A floor plan is laid standing on it, as in RimWorld (a big floor's middle has no free side).
+    if (rect.sizeX == 1 && rect.sizeY == 1) {
+        const CellPos self{rect.minX, rect.minY, rect.level};
+        if (map_.inBounds(self) && isFloorPlan(siteAt(self))) {
+            consider(self.x, self.y);
+        }
+    }
     for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
         consider(rect.minX - 1, y);
         consider(rect.minX + rect.sizeX, y);

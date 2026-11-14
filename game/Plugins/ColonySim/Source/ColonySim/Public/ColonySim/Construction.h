@@ -16,6 +16,7 @@ namespace colony {
 class Map;
 class Plants;
 class Rng;
+class Floors;
 class Things;
 class UpperFloors;
 
@@ -43,6 +44,7 @@ struct ConstructionSite {
     int sizeX = 1;  // as placed facing North
     int sizeY = 1;
     std::vector<MaterialCount> materials;
+    DefId floor;  // a floor plan: the Terrain floor def it lays (its Thing def is FloorPlan); invalid for a building
     float workTotal = 0.0f;  // game seconds of work at speed 1 (the def's `workToBuild` with the stuff's factor)
     float workDone = 0.0f;
 
@@ -88,6 +90,12 @@ public:
     // is laid (UpperFloors::lay) instead of a building spawned. Without this, none can be planned.
     void setUpperFloors(UpperFloors* floors) { upperFloors_ = floors; }
     bool isUpperFloor(DefId def) const;
+    // Ground floors (docs/design/construction.md "Floors"): a floor plan is a site of the FloorPlan
+    // def that lays a Terrain floor def when built. Without this, none can be planned.
+    void setFloors(Floors* floors) { floors_ = floors; }
+    const Floors* floors() const { return floors_; }
+    // True for a site that lays a ground floor.
+    bool isFloorPlan(Entity site) const;
     // Art (`building.art`, docs/design/art.md): sculptures. An artist builds them (Artistic skill, the Art
     // work type), the work follows the stuff's `workToMake` factor, and the finished piece has a quality.
     bool isArt(DefId def) const;
@@ -110,6 +118,12 @@ public:
     // cell must be on the map, walkable ground, free of buildings and of other sites. Returns
     // kNoEntity, with `error` in plain words, if it can't be placed.
     Entity placeBlueprint(DefId def, DefId stuff, CellPos cell, Rot4 rot, std::string& error);
+    // A plan to lay the Terrain floor `floor` (made of `stuff` if it takes one) on one ground cell:
+    // the floor's `costs` and `costStuffCount`, its `workToBuild`. The cell must be on the map,
+    // ground a floor can lie on, without that floor already, without a building that blocks
+    // movement and without another plan. Pawns may stand on floor plans to work. Returns
+    // kNoEntity, with `error` in plain words, if it can't be placed.
+    Entity placeFloorPlan(DefId floor, DefId stuff, CellPos cell, std::string& error);
     // A blueprint or a frame is taken away and everything delivered to it is put back on the
     // ground; a building marked for deconstruction is unmarked. False, with `error`, if `thing`
     // is none of these.
@@ -135,7 +149,8 @@ public:
     Entity siteAt(CellPos cell) const;
     // Work the job at a site or building needs: total game seconds at speed 1.
     float deconstructWork(Entity building) const;
-    // A walkable cell beside the rect (sharing a side, never a corner) that `from` can reach,
+    // A walkable cell beside the rect (sharing a side, never a corner) that `from` can reach (for a
+    // floor plan also the cell itself; cells under other floor plans may be stood on),
     // nearest to `from`; false if there is none. Where a pawn stands to build or take down. A rect
     // over open air on an upper level (an upper floor) can also be worked from the level below,
     // under it or beside that.
@@ -163,6 +178,7 @@ private:
     std::vector<Event>& events_;
     ConstructionNumbers numbers_;
     UpperFloors* upperFloors_ = nullptr;
+    Floors* floors_ = nullptr;
     std::unordered_map<uint64_t, Entity> siteAt_;  // by packed cell; looked up only, never iterated
 };
 

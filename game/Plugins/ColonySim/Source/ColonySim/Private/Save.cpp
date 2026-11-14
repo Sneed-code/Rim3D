@@ -311,6 +311,7 @@ struct SaveSite {
     std::vector<SaveMaterial> materials;
     float workTotal = 0.0f;
     float workDone = 0.0f;
+    std::string floor;  // a floor plan's Terrain floor defName, empty for a building ("construction" 2)
 };
 
 struct SaveMark {};  // a building marked for deconstruction
@@ -2070,6 +2071,9 @@ void saveSitePart(Ar& ar, SaveSite& s) {
     ar.value("workDone", s.workDone);
     ar.require(s.workTotal >= 0.0f && s.workTotal < 1.0e9f && s.workDone >= 0.0f && s.workDone < 1.0e9f,
                "the save file has impossible building work");
+    if (ar.sectionVersion() >= 2) {  // floor plans
+        ar.text("floor", s.floor);
+    }
 
 }
 
@@ -3261,7 +3265,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("bills", 3, [&] {
         saveParts(ar, "bills", e, &SaveEntity::bills, [&](SaveBillList& list) { saveBillsPart(ar, list); });
     });
-    ar.section("construction", 1, [&] {
+    ar.section("construction", 2, [&] {
         saveParts(ar, "site", e, &SaveEntity::site, [&](SaveSite& s) { saveSitePart(ar, s); });
         saveParts(ar, "builtOf", e, &SaveEntity::builtOf, [&](std::string& stuff) { ar.text("stuff", stuff); });
         saveParts(ar, "marked", e, &SaveEntity::marked, [&](SaveMark&) {});
@@ -3935,6 +3939,7 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
         }
         s.workTotal = site->workTotal;
         s.workDone = site->workDone;
+        s.floor = site->floor.valid() ? sim.defs_->get(site->floor).defName() : std::string();
         out.site = std::move(s);
     }
     if (const BuiltOf* made = reg.try_get<BuiltOf>(e)) {
@@ -4293,6 +4298,13 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
         }
         site.workTotal = e.site->workTotal;
         site.workDone = e.site->workDone;
+        if (!e.site->floor.empty()) {
+            site.floor = sim.defs_->idOf("Terrain", e.site->floor);
+            if (!site.floor.valid()) {
+                error = "the save has a floor plan for '" + e.site->floor + "', which the data files no longer have";
+                return false;
+            }
+        }
         if (!e.thing || !e.position || e.thing->category != ThingCategory::Building) {
             error = "the save has a building plan that isn't a building on the map";
             return false;

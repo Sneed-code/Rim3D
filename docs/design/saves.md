@@ -114,7 +114,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | `crafting` | 1 | the quality random stream and `storeIn` marks on products bound for a stockpile ([crafting.md](crafting.md)) |
 | `repair` | 1 | per item the repair mark, the upgrade part ordered fitted and the parts fitted, by defName; `WeaponMods` is made again on load ([repair.md](repair.md)) |
 | `fuel` | 1 | `fuel` on buildings that burn it ([fuel.md](fuel.md)); a building with a fuel part and none saved loads full |
-| `construction` | 1 | `site`, `builtOf`, `marked` |
+| `construction` | 2 | `site` (2: `floor`, the Terrain floor a floor plan lays), `builtOf`, `marked` |
 | `mood` | 1 | `mood` |
 | `combat` | 1 | `posture`, `gear`, `equippedBy`, `shooter`, `projectile`, `magazine` |
 | `doors` | 1 | `door` |
