@@ -2,8 +2,8 @@
 
 Written 2026-11-14 from sneed's list. It details and replaces the art stage's real-animation tasks
 **V11 to V14** and the realistic-animals task **L9** (`art-stage.md`); those rows now point here.
-Everything in it is adult and non-explicit: lovin is a fade-out under the covers, showering is
-hidden by steam and frosted glass, nothing sexual is ever animated.
+Everything in it is adult and non-explicit: lovin is a couple lying under the covers in a cuddling
+pose with a hearts icon (no nudity, no sex positions), showering is hidden by steam and frosted glass.
 
 ## Where we start
 
@@ -171,8 +171,8 @@ The mapping is data: each `Interactions` def gets `visual.emotion` (`Insult` →
 | Chat, deep talk, social gestures | interactions | Mixamo talking set |
 | Recreation: horseshoes throw, chess at a table, billiards cue, cloud watching lying down | `Recreate` job by kind | Mixamo where it exists, Cascadeur for the cue |
 | **Showering** (rare, a mood booster as recreation): step in, a wash loop (hair, arms, shoulders), step out | the new shower job (sim hook) | Cascadeur or sneed's mocap; the stall's frosted glass and steam hide the body below the shoulders |
-| **Lovin** (partners in a shared double bed) | the lovin job (thread "Add lovin for couples" builds the sim side) | no animation: both lie under the blanket in the sleep pose, the camera stays away, a short fade and hearts; nothing explicit |
-| Cuddle idle (partners lying in one bed) | both in the same double bed | the lie pose, mirrored and closer |
+| **Lovin** (partners in a shared double bed; the game runs in real time, so there is no fade or cut) | the lovin job (thread "Add lovin for couples" owns the sim side) | both stay clothed under the blanket in one of three poses: **side by side, spooning or embracing** (picked by the lovin job or a hash of the couple), with a slow breathing and stroking loop, an occasional kiss, and a hearts icon over the bed; **no nudity and no sex-position animations**. Source: Mixamo or Cascadeur lying poses, paired so the two bodies line up |
+| Kiss (standing or lying) and hug | partners greeting, a romance attempt that succeeds, lovin | Mixamo or Cascadeur, paired clip with head IK so lips and arms meet on any two body heights |
 
 ### Work and tools
 
@@ -291,7 +291,7 @@ Order: hooks and the frame first, then what shows most on screen.
 | | AN3 | **Animation frame**: `URim3DPawnAnimInstance`, the script-built anim graph with the seven layers, grips and sockets in data (`visual.grip`, `visual.anim`), hand and foot IK, look-at; the procedural melee poses keep working on top. | PC Unreal | Opus, high | 120 min | creator merged |
 | | AN4 | **Clip library**: download Lyra, Paragon and the Mixamo list (sneed signs in to Mixamo once; Claude downloads in the browser), retarget everything to the MPFB skeleton by commandlet, log it all in `assets/manifest.json`. | PC Unreal | Sonnet, high | 120 min | AN3 |
 | | AN5 | **Faces**: bake MakeHuman expressions into morphs in the export script; emotion blending, blinks, gaze, talking mouth; the emotion table in data. | PC Blender and Unreal | Opus, high | 120 min | creator merged |
-| | AN6 | **Daily life**: sit, lie, sleep, eat (standing and sitting), drink, chat, recreation, shower, the lovin bed scene (fade and hearts), cuddle idle. | PC Unreal | Sonnet, high | 120 min | AN1, AN2, AN4, AN5 |
+| | AN6 | **Daily life**: sit, lie, sleep, eat (standing and sitting), drink, chat, recreation, shower, lovin's three bed poses with hearts, kisses and hugs. | PC Unreal | Sonnet, high | 120 min | AN1, AN2, AN4, AN5 |
 | | AN7 | **Work and tools** (was V14): every work job above with the tool in the hand, hits on the sim's events. | PC Unreal | Sonnet, high | 120 min | AN4 |
 | | AN8 | **Guns and throwables**: hold, aim offsets, fire, reloads by type, equip, crouch and prone fire, cover lean, grenade and pila throws. | PC Unreal | Sonnet, high | 120 min | AN4 |
 | | AN9 | **Bows**: nock, draw blend, hold, loose and recoil, the string on the hand. | PC Unreal | Sonnet, high | 90 min | AN8 |
