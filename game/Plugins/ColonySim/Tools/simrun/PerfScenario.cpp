@@ -56,7 +56,9 @@ int run(uint64_t seed, int mapSize, double days, double budgetMs, std::shared_pt
         const auto before = Clock::now();
         sim.step();
         stepMs[static_cast<size_t>(i)] = static_cast<float>(ms(before, Clock::now()));
-        if (stepMs[static_cast<size_t>(i)] > worstMs) {
+        // Step 0 hands every colonist its first job at once (docs/design/perf-check.md): it is reported on
+        // its own as firstStepMs and left out of the worst step, p99 and max.
+        if (i > 0 && stepMs[static_cast<size_t>(i)] > worstMs) {
             // Which system took the time in the dearest step so far.
             worstMs = stepMs[static_cast<size_t>(i)];
             worstStep = i;
@@ -86,7 +88,8 @@ int run(uint64_t seed, int mapSize, double days, double budgetMs, std::shared_pt
         total += v;
     }
     const double avg = steps > 0 ? total / static_cast<double>(steps) : 0.0;
-    std::vector<float> sorted = stepMs;
+    const double firstStepMs = stepMs.empty() ? 0.0 : static_cast<double>(stepMs[0]);
+    std::vector<float> sorted(stepMs.size() > 1 ? stepMs.begin() + 1 : stepMs.end(), stepMs.end());
     std::sort(sorted.begin(), sorted.end());
     const auto percentile = [&sorted](double p) {
         return sorted.empty() ? 0.0 : static_cast<double>(sorted[static_cast<size_t>(p * static_cast<double>(sorted.size() - 1))]);
@@ -109,9 +112,9 @@ int run(uint64_t seed, int mapSize, double days, double budgetMs, std::shared_pt
 
     std::printf("{\"perf\":{\"seed\":%llu,\"size\":%d,\"days\":%.2f,\"colonists\":%d,\"tameAnimals\":%d,\"wildAnimals\":%d,"
                 "\"things\":%zu,\"mapGenMs\":%.1f,\"runMs\":%.1f,\"avgStepMs\":%.4f,\"p99StepMs\":%.3f,\"maxStepMs\":%.3f,"
-                "\"msPerFrameAt3x\":%.3f,\"worstStep\":%lld,\"worstSystem\":\"%s\",\"commandsFailed\":%llu,\"stateHash\":\"%016llx\",\"systems\":{",
+                "\"firstStepMs\":%.3f,\"msPerFrameAt3x\":%.3f,\"worstStep\":%lld,\"worstSystem\":\"%s\",\"commandsFailed\":%llu,\"stateHash\":\"%016llx\",\"systems\":{",
                 static_cast<unsigned long long>(seed), mapSize, days, colonists, penned, wild, sim.things().count(),
-                ms(start, generated), runMs, avg, percentile(0.99), percentile(1.0), msPerFrameAt3x,
+                ms(start, generated), runMs, avg, percentile(0.99), percentile(1.0), firstStepMs, msPerFrameAt3x,
                 static_cast<long long>(worstStep), worstSystem, static_cast<unsigned long long>(commandsFailed),
                 static_cast<unsigned long long>(sim.stateHash()));
     for (size_t i = 0; i < rows.size(); ++i) {
