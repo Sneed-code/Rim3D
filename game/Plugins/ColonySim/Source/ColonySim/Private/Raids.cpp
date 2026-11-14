@@ -2033,9 +2033,30 @@ CellPos RaidSystem::defensePoint(Entity pawn, const DefensePlan* plan) {
     const float dx = state_.threatX - state_.homeX;
     const float dy = state_.threatY - state_.homeY;
     const float d = std::sqrt(dx * dx + dy * dy);
-    const float along = std::min(rules_.defenseLine, d * 0.5f);
-    const float px = d > 0.0f ? state_.homeX + dx / d * along : state_.homeX;
-    const float py = d > 0.0f ? state_.homeY + dy / d * along : state_.homeY;
+    // Not into a brood mound's reach: insects guard their mounds (monsters.md), and defenders sent toward an infestation
+    // woke every insect of it, the alarm stayed on, and more were sent (the year run, colony-scenario.md "Seventh pass").
+    std::vector<std::pair<float, float>> mounds;
+    for (const auto [b, thing, p] : things_.registry().view<const Thing, const Position>().each()) {
+        if (thing.category == ThingCategory::Building && things_.defs().get(thing.def).defName() == "Hive") {
+            mounds.emplace_back(p.x, p.y);
+        }
+    }
+    float along = std::min(rules_.defenseLine, d * 0.5f);
+    float px = state_.homeX;
+    float py = state_.homeY;
+    for (; along > 0.0f; along -= 1.0f) {
+        px = d > 0.0f ? state_.homeX + dx / d * along : state_.homeX;
+        py = d > 0.0f ? state_.homeY + dy / d * along : state_.homeY;
+        if (std::none_of(mounds.begin(), mounds.end(), [&](const std::pair<float, float>& m) {
+                return raidDist(px, py, m.first, m.second) < rules_.shelterDanger;
+            })) {
+            break;
+        }
+    }
+    if (along <= 0.0f) {
+        px = state_.homeX;
+        py = state_.homeY;
+    }
     CellPos out;
     return nearestFree(px, py, pos.level, here, 8, out) ? out : here;
 }
