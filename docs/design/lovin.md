@@ -71,5 +71,4 @@ another map loses its `Lovin`, and an away pawn's pause is not kept (`maps` 1). 
 ## Not yet
 
 - RimWorld's health and opinion factors on how often (we use age only).
-- A room with two single beds owned by one couple counts as barracks, not a bedroom.
 - Pregnancy and children: not in the game.

@@ -1022,6 +1022,17 @@ struct CommsCommand {
     Entity negotiator = kNoEntity;
 };
 
+// A pawn's bag (docs/design/inventory.md). "Take": `item`, lying within 2 cells of the pawn, goes into its bag, all
+// of the stack or `count` of it (0 for all), as much as fits under its carry capacity. "Drop": `count` (0 for all) of
+// `item`, which is in its bag, goes on the ground where it stands. "DropAll": its bag is emptied there. Fails with the
+// reason in plain words (no body, dead, downed, too far, too heavy, not in the bag).
+struct InventoryCommand {
+    Entity pawn = kNoEntity;
+    std::string action;
+    Entity item = kNoEntity;
+    int count = 0;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -1053,7 +1064,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              LearnPowerCommand, CastPowerCommand, SetThermostatCommand, RepairGearCommand,
                              FitUpgradeCommand, CreateAreaCommand, PaintAreaCommand, DeleteAreaCommand,
                              AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand, CaravanCommand, RerollColonistCommand,
-                             ArtilleryCommand, ArrestCommand, PodCommand, CommsCommand, ScannerCommand>;
+                             ArtilleryCommand, ArrestCommand, PodCommand, CommsCommand, ScannerCommand,
+                             InventoryCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.
