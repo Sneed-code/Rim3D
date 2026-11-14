@@ -170,6 +170,7 @@ enum class EventType : uint8_t {
     OreLumpFound,          // `thing` the scanner found a lump of ore on the surface: `def` the ore (a Mineable def), `cell` its middle, `count` its cells
     // Lovin (docs/design/lovin.md): abstract, the couple lies in its bed a while.
     Lovin,                 // `thing` and `target` the partners; `message` "started" (`amount` its seconds), "done" or "interrupted"
+    PawnStaggered,         // a bullet staggered `thing` (AN1, docs/design/combat.md "Stagger"): it walks slowly for `amount` steps; (x, y) where
 };
 
 // What stopped a projectile (ProjectileHit).

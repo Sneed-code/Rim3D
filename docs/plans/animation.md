@@ -275,10 +275,20 @@ where it has them; ours, marked `ours` in the defs, where it does not.
 | Posture | `Snapshot` posture (stand, sit, lie, sleep) and the seat or bed it uses; sitting already happens at tables and recreation, only the field is missing | none |
 | Emotion signals | the interaction kind and partner in the snapshot while it runs; pain stage; mood band (most exist; the task fills gaps) | none |
 | Bullet stagger | RimWorld's rule: a bullet whose stopping power is at least the target's body size staggers it (slowed for a short time) | RimWorld's (`stoppingPower` is already in the defs, unused) |
-| Knockdown | a blast (and heavy blows, later) can knock a pawn down for a few seconds: no moving or shooting, then a get-up | ours (RimWorld has none) |
+| Knockdown | already in (F9, `explosives.md`): a blast throws a pawn down for a few seconds, snapshot `knockedDown`, event `PawnKnockedDown`; heavy blows may join later | ours (RimWorld has none) |
 | Light and strong blows | each melee swing says light or strong, from the weapon's verbs | RimWorld's verbs |
 | Shower | a shower building and a rare recreation kind that also gives a short mood thought | ours (vanilla RimWorld has no shower) |
 | Cover and vault flags | the snapshot says when a pawn is in cover and which way, and when its path steps over a low obstacle | none |
+
+### AN1 in the snapshot (done)
+
+Per pawn (`ThingView`): `posture` (Stand, Sit, Lie) and `seat` (the chair or bed); `pain` (0 to 1); `talkDef`,
+`talkWith`, `talkStarted`, `talkOk`, `talkSecondsLeft` (the interaction showing, `social.md`); `staggeredFor`
+(`combat.md` "Stagger", event `PawnStaggered`); `meleeTool` and `meleeStrong` (`melee.md` "Strong swings"; the
+MeleeSwing event's `count` is 1 when strong); `coverHeight` and `coverDir` (what stands in the next cell toward the
+fight target); `vaultHeight` (a low obstacle in the cell a walking pawn is in). Already there before AN1: `stance`,
+`asleep`, `knockedDown`, `downed`, `mood`, `moodBand`, `mentalBreak`, `blocking`, `rollPhase`, `reloading`, `kickUp`,
+`kickSide`, `rescuing`, `carriedDef`. Tests `AnimationHookTests`.
 
 ## Tasks
 
@@ -286,7 +296,7 @@ Order: hooks and the frame first, then what shows most on screen.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | AN1 | **Sim hooks**: posture, emotion signals, bullet stagger, knockdown, light and strong blows, cover and vault flags (the table above). | Cloud | Sonnet, high | 120 min | |
+| ✓ | AN1 | **Sim hooks** _(done 2026-11-14)_: posture, emotion signals, bullet stagger, light and strong blows, cover and vault flags (the table above; snapshot fields listed under "AN1 in the snapshot"). | Cloud | Sonnet, high | 120 min | |
 | | AN2 | **Shower** building and recreation (sim and data). | Cloud | Sonnet, medium | 60 min | |
 | | AN3 | **Animation frame**: `URim3DPawnAnimInstance`, the script-built anim graph with the seven layers, grips and sockets in data (`visual.grip`, `visual.anim`), hand and foot IK, look-at; the procedural melee poses keep working on top. | PC Unreal | Opus, high | 120 min | creator merged |
 | | AN4 | **Clip library**: download Lyra, Paragon and the Mixamo list (sneed signs in to Mixamo once; Claude downloads in the browser), retarget everything to the MPFB skeleton by commandlet, log it all in `assets/manifest.json`. | PC Unreal | Sonnet, high | 120 min | AN3 |
@@ -382,8 +392,8 @@ sneed picks from side-by-side pictures before anything is swapped.
 
 | ✓ | ID | Task | Where | Model | Time | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| | Z1 | **Shortlist**: search Fab, Sketchfab and Truebones for every tropical animal, a picture sheet of the best two per animal with licence and rig notes; sneed picks. | Cloud | Sonnet, high | 90 min | |
-| | Z2 | **Pipeline and the capybara**: `tools/animals/` (clean, rig, groom, export), the ungulate and rodent skeletons and retargeters, the capybara end to end, bench shots. | PC Blender and Unreal | Opus, high | 120 min | Z1 |
+| ✓ | Z1 | **Shortlist** _(done 2026-11-14: [animal-shortlist.md](animal-shortlist.md); sneed chose free models, upgraded by us)_: search Fab, Sketchfab and Truebones for every tropical animal, a picture sheet of the best two per animal with licence and rig notes; sneed picks. | Cloud | Sonnet, high | 90 min | |
+| | Z2 | **Pipeline and the capybara**: `tools/animals/` (clean, rig, groom, export), the ungulate and rodent skeletons and retargeters, the capybara end to end, bench shots. _(Capybara dropped by sneed (no free one): prove the pipeline on the chimpanzee or the Animated3D monkey instead.)_ | PC Blender and Unreal | Opus, high | 120 min | Z1 |
 | | Z3 | **Monkey** (primate skeleton, fur, hands). | PC | Sonnet, high | 120 min | Z2 |
 | | Z4 | **Elephant and rhinoceros** (pachyderm skeleton, trunk, skin). | PC | Opus, high | 120 min | Z2 |
 | | Z5 | **Wild boar, alpaca and blastbuck** (ungulate). | PC | Sonnet, high | 120 min | Z2 |

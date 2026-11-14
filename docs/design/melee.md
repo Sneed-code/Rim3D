@@ -143,6 +143,13 @@ Hooks in `FighterSystem` (`setMelee`):
 U22 draws it ([melee-draw.md](melee-draw.md)): a swing animation stretched over the wind-up so the blow lands on the `MeleeHit`
 step, a hit-stop and flinch on "hit", the raised weapon while `blocking`, the sidestep on `Dodge`.
 
+## Strong swings (AN1)
+
+For the animation only: a swing is **strong** when its tool's power is at least `strongPowerShare` (1.15, ours) of
+the mean power of the tools it chose from, such as a longsword's blade (19.4) against its handle (12). Fists and the
+head are never strong (8.2, 8.2 and 5). The MeleeSwing event's `count` is 1 for a strong swing; the snapshot has
+`meleeTool` (the tool's index) and `meleeStrong`. Unreal adds its own light and heavy variety for fists.
+
 ## Not done yet
 
 - Melee skill XP, stuff and quality multipliers on damage, weapons wearing down.

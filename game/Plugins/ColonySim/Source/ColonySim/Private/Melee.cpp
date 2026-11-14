@@ -107,6 +107,7 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     whole("blockRecoverySteps", r.blockRecoverySteps);
     whole("playerBlockSteps", r.playerBlockSteps);
     whole("dodgeHoldSteps", r.dodgeHoldSteps);
+    num("strongPowerShare", r.strongPowerShare);
     r.minWindup = std::max(1, r.minWindup);
     r.commitSteps = std::max(0, r.commitSteps);
 }
@@ -193,6 +194,29 @@ const MeleeSystem::ToolSet* MeleeSystem::toolsOf(Entity pawn, bool& weapon, bool
         return &tools_[def.value];
     }
     return nullptr;
+}
+
+bool MeleeSystem::strongSwing(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Melee* m = reg.valid(pawn) ? reg.try_get<Melee>(pawn) : nullptr;
+    if (m == nullptr) {
+        return false;
+    }
+    const Tool* tool = toolOf(pawn, *m);
+    if (tool == nullptr) {
+        return false;
+    }
+    bool weapon = false;
+    const ToolSet* set = toolsOf(pawn, weapon, !m->weaponTool);
+    if (set == nullptr || set->tools.size() < 2) {
+        return false;
+    }
+    float sum = 0.0f;
+    for (const Tool& t : set->tools) {
+        sum += t.power;
+    }
+    const float mean = sum / static_cast<float>(set->tools.size());
+    return mean > 0.0f && tool->power >= rules_.strongPowerShare * mean;
 }
 
 const MeleeSystem::Tool* MeleeSystem::toolOf(Entity pawn, const Melee& m) const {
@@ -414,6 +438,7 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
         e.def = weapon ? reg.get<Thing>(reg.get<Gear>(pawn).weapon).def : reg.get<Thing>(pawn).def;
         e.amount = static_cast<float>(windup);
         e.message = tool.label;
+        e.count = strongSwing(pawn) ? 1 : 0;
         e.cell = cellOf(reg.get<Position>(pawn));
         events_->push_back(std::move(e));
     }
