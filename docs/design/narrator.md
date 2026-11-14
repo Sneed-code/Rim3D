@@ -27,7 +27,10 @@ if it is ever set). At each check:
    threats, then `offDays` of calm. At the start of a cycle the narrator picks `incidentsPerCycle`
    moments at random within the "on" days. The first cycle starts on `firstThreatDay` (Orrin day 11,
    Maren day 13), or when the narrator is picked if that is later. Orrin's 4.6 + 6.0 days give one or
-   two big threats every 10.6 days; Maren's 8 + 8, one every 16.
+   two big threats every 10.6 days; Maren's 8 + 8, one every 16. Two threats of one cycle are always at least
+   `minSpacingDays` apart (Orrin's 1.9, RimWorld's Cassandra): the moments are drawn in the "on" days less the gaps,
+   sorted, and pushed apart by one gap each. Until 2026-11-14 the spacing was in the data but not read, and the year
+   run's seed 7 met two raids minutes apart that killed six colonists.
 2. **By chance**, per category: each category the narrator has a `mtbDays` for (mean days between)
    rolls once: it happens with chance (check length / mean days), RimWorld's own MTB roll. Jinx rolls
    big threats this way too; Orrin and Maren leave them to the cycle. Diseases are rolled with the
@@ -110,7 +113,7 @@ the narrator off. It is all in `Sim::stateHash`.
 
 ## Not yet
 
-RimWorld's spacing rules between big threats beyond the cycle; Peaceful turning big
+RimWorld's spacing rules between big threats beyond the cycle's `minSpacingDays`; Peaceful turning big
 threats off (the data has only its 0.1 threat scale); the difficulty's `infestationRate` (for T3's
 infestation); goodwill-hostile factions (C23); letters kept in a list after loading (the events are
 the letters for now). The chances, days and cooldowns are D10's recalled numbers: tune them with

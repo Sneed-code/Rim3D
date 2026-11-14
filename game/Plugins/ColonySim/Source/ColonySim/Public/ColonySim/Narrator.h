@@ -179,6 +179,7 @@ private:
         int perCycleMin = 1;
         int perCycleMax = 1;
         float firstThreatDay = 0.0f;
+        float minSpacingDays = 0.0f;  // big threats of one cycle at least this far apart
         float mtbDays[kIncidentCategoryCount] = {0, 0, 0, 0, 0, 0};  // 0: never by chance
         float pointsFactor = 1.0f;
         bool randomPoints = false;

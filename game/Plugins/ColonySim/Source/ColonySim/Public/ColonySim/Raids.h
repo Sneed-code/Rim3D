@@ -402,6 +402,8 @@ private:
     void callUp(Entity pawn, const std::vector<Entity>& spotted);
     CellPos defensePoint(Entity pawn, const DefensePlan* plan);
     CellPos shelterCell(Entity pawn);
+    // Where the shelter rules see danger: able enemies (not calm animals, prisoners, visitors or the downed) and brood mounds.
+    std::vector<std::pair<float, float>> shelterDangers() const;
     CellPos exitCell(Entity pawn, const Squad& squad);
     bool nearestFree(float x, float y, int level, CellPos from, int radius, CellPos& out);
     float strength(Entity pawn) const;

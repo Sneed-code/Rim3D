@@ -2,6 +2,7 @@
 #include "ColonySim/Apparel.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Commands.h"
+#include "ColonySim/Construction.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Filth.h"
@@ -226,6 +227,49 @@ TEST_CASE("Fire: it spreads over grass and burns the patch") {
     CHECK(f.fire().started() > 100);
 }
 
+TEST_CASE("Fire: sparks don't jump a stone wall, but do jump open ground") {
+    // RimWorld's sparks need a clear line (Fire.TrySpread): logs burning against a granite wall can't light the logs
+    // stacked on the other side, two cells away, while the same pair with nothing between them catches. (A steel wall
+    // burns, at 40% of wood's flammability, so a fire can still eat through one.)
+    FireFixture f(64);
+    f.ring(20, 20, 30, 30);
+    for (int y = 20; y <= 30; ++y) {
+        for (int x = 20; x <= 30; ++x) {
+            const Entity wall = f.sim.map().buildingAt(CellPos{x, y, 0});
+            if (wall != kNoEntity) {
+                f.reg().emplace_or_replace<BuiltOf>(wall, BuiltOf{f.sim.defs().idOf("Things", "BlocksGranite")});
+            }
+        }
+    }
+    FIRE_REQUIRE(f.fire().flammabilityAt(CellPos{20, 25, 0}) == 0.0f);
+    std::vector<Entity> inside;
+    std::vector<Entity> across;
+    for (int y = 22; y <= 28; ++y) {
+        f.sim.things().spawn("WoodLog", CellPos{19, y, 0}, 75);   // against the wall, outside
+        inside.push_back(f.sim.things().spawn("WoodLog", CellPos{21, y, 0}, 75));
+        f.sim.things().spawn("WoodLog", CellPos{40, y, 0}, 75);   // the same, two cells apart in the open
+        across.push_back(f.sim.things().spawn("WoodLog", CellPos{42, y, 0}, 75));
+    }
+    for (int y = 22; y <= 28; ++y) {
+        const bool lit = f.fire().ignite(CellPos{19, y, 0}) && f.fire().ignite(CellPos{40, y, 0});
+        FIRE_REQUIRE(lit);
+    }
+    bool insideCaught = false;
+    bool acrossCaught = false;
+    f.runUntil(12 * kSecondsPerHour, [&] {
+        for (int y = 22; y <= 28; ++y) {
+            insideCaught = insideCaught || f.fire().burning(CellPos{21, y, 0});
+            acrossCaught = acrossCaught || f.fire().burning(CellPos{42, y, 0});
+        }
+        return f.fire().count() == 0;
+    });
+    CHECK_FALSE(insideCaught);
+    CHECK(acrossCaught);
+    for (const Entity e : inside) {
+        CHECK(f.sim.things().exists(e));
+    }
+}
+
 TEST_CASE("Fire: a table burns down to ash") {
     FireFixture f;
     const Entity table = f.sim.things().spawn("Table1x2", CellPos{30, 30, 0});
@@ -324,6 +368,21 @@ TEST_CASE("Fire: a colonist with the Firefighter work type beats out a fire in t
     CHECK(f.sim.plants().has(CellPos{12, 12, 0}));  // put out before it ate the grass
     // The one outside the home area was left alone.
     CHECK(f.fire().burning(CellPos{45, 45, 0}));
+}
+
+TEST_CASE("Fire: one colonist beats a full-size fire out in minutes, at RimWorld's beat") {
+    // RimWorld's beat takes 0.32 off the fire every 66 ticks: a fire of the largest size (1.75) is out in about six
+    // beats, under ten game minutes, so a firefighter keeps ahead of a burning room instead of losing it cell by cell.
+    FireFixture f;
+    f.sim.submit(SetHomeAreaCommand{CellRect{8, 8, 30, 30, 0}, true});
+    f.sim.step();
+    const Entity table = f.sim.things().spawn("Table1x2", CellPos{20, 20, 0});
+    FIRE_REQUIRE(table != kNoEntity);
+    const CellPos c = cellOf(f.reg().get<Position>(table));
+    FIRE_REQUIRE(f.fire().ignite(c, 1.75f));
+    f.colonist(CellPos{c.x + 2, c.y, 0});
+    CHECK(f.runUntil(12 * 60, [&] { return !f.fire().burning(c); }));
+    CHECK(f.seenOf(EventType::FireOut, "beaten") >= 1);
 }
 
 TEST_CASE("Fire: a colonist puts out a burning friend wherever they are") {

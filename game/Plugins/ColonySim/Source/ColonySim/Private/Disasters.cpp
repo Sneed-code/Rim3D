@@ -558,24 +558,26 @@ void DisasterSystem::registerWorkers() {
     });
 
     narrator_.setWorker("ShortCircuit", [this, &n](IncidentFiring& f) {
-        // A random net that has something to power or a generator, then a random member of it.
-        std::vector<uint32_t> nets;
+        // RimWorld's culprit (`ShortCircuitUtility.GetShortCircuitablePowerConduits`): a random power conduit, on a net
+        // with an active power source (a generator making power or a battery holding some). Lamps, stoves, coolers and
+        // the rest never short out, so a storeroom without conduits in it does not start burning by itself.
+        std::vector<Entity> conduits;
         for (const PowerNetView& view : power_.nets()) {
-            if (view.generators + view.consumers + view.batteries > 0) {
-                nets.push_back(view.id);
+            if (!(view.generation > 0.0) && !(view.stored > 0.0)) {
+                continue;
+            }
+            for (const Entity member : power_.membersOf(view.id)) {
+                const PowerInfo& info = power_.info(things_.registry().get<Thing>(member).def);
+                if (info.transmitter && !info.switchable) {
+                    conduits.push_back(member);
+                }
             }
         }
-        if (nets.empty()) {
-            f.error = "no power net to short out";
+        if (conduits.empty()) {
+            f.error = "no live power conduit to short out";
             return false;
         }
-        const uint32_t id = nets[rng_.below(static_cast<uint32_t>(nets.size()))];
-        const std::vector<Entity> members = power_.membersOf(id);
-        if (members.empty()) {
-            f.error = "no power net to short out";
-            return false;
-        }
-        const Entity at = members[rng_.below(static_cast<uint32_t>(members.size()))];
+        const Entity at = conduits[rng_.below(static_cast<uint32_t>(conduits.size()))];
         const Position pos = things_.registry().get<Position>(at);
         double released = 0.0;
         if (!power_.shortCircuit(at, released, f.error)) {

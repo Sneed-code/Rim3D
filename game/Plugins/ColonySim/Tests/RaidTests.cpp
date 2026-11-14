@@ -307,6 +307,53 @@ TEST_CASE("Raids: Shelter never goes into a room with a brood mound in it") {
     CHECK_FALSE(inTheMoundsRoom);
 }
 
+TEST_CASE("Raids: a sheltering colonist moves on when an enemy comes close and can see it") {
+    // The year run (docs/design/colony-scenario.md "Eighth pass"): with no roofed cell to run to, unarmed colonists waited
+    // in the open where they first fled, and a raider walked up and shot them there. Now a shelterer an enemy can see
+    // within shelterDanger picks a new place.
+    auto sim = raidTestSim(31, 128);
+    const std::vector<Entity> colonists = raidTestColonists(*sim);
+    RAID_REQUIRE(colonists.size() == 6);
+    const entt::registry& reg = sim->things().registry();
+    for (const Entity c : colonists) {
+        sim->submit(SetDefenseRoleCommand{c, static_cast<uint8_t>(DefenseRole::Shelter), false, CellPos{}});
+    }
+    sim->submit(StartRaidCommand{"Pirate", 100.0f, 3});
+    sim->step();
+    const std::vector<Entity> raiders = raidTestRaiders(*sim);
+    RAID_REQUIRE(!raiders.empty());
+    // The first time the raider aims at a sheltering colonist, that colonist picks a new place within a few alarm checks.
+    bool aimed = false;
+    bool movedOn = false;
+    CellPos firstGoal;
+    Entity watched = kNoEntity;
+    int64_t aimedAt = 0;
+    for (int64_t i = 0; i < 12 * kSecondsPerHour && !movedOn; ++i) {
+        sim->step();
+        if (!reg.valid(raiders[0]) || !reg.all_of<Fighter>(raiders[0])) {
+            break;
+        }
+        if (!aimed) {
+            const Entity target = reg.get<Fighter>(raiders[0]).target;
+            const Fighter* theirs = target != kNoEntity && reg.valid(target) ? reg.try_get<Fighter>(target) : nullptr;
+            if (theirs != nullptr && theirs->mode == FightMode::Shelter && theirs->hasGoal && !sim->health().incapacitated(target)) {
+                aimed = true;
+                watched = target;
+                firstGoal = theirs->goal;
+                aimedAt = i;
+            }
+        } else {
+            const Fighter* f = reg.valid(watched) ? reg.try_get<Fighter>(watched) : nullptr;
+            movedOn = f != nullptr && f->goal != firstGoal;
+            if (i - aimedAt > 60) {
+                break;
+            }
+        }
+    }
+    RAID_REQUIRE(aimed);
+    CHECK(movedOn);
+}
+
 TEST_CASE("Raids: Shelter goes to the marked room, Keep working works until enemies come close") {
     auto sim = raidTestSim(31, 128);
     const std::vector<Entity> colonists = raidTestColonists(*sim);
