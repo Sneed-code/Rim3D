@@ -113,7 +113,7 @@ sexual, adults only, our own names (`naming.md`).
 | | L6 | **Trees, bushes and rocks.** One real mesh per tree species (oak, poplar, pine, willow, teak, palm, cecropia) and bush, from Electric Dreams or Poly Haven, Nanite where it helps, wind, a felled log and a stump left after chopping, dead trees grey; rock chunks become real rock meshes (several shapes by hash); boulders and outcrops scattered along rock edges so mountains don't look like stacked boxes. | PC Unreal | Sonnet, high | 120 min | L2 |
 | | L7 | **Full materials on furniture and items.** `M_ArtLit` gets normal and roughness maps (and Poly Haven 2k); wooden furniture takes the stuff's wood or metal look; the still-shape buildings (conduit, power switch, solar panel, wind turbine, vent, passive cooler, horseshoes pin) get models; stoves and lamps glow, beds show bedding. | PC Unreal | Sonnet, high | 90 min | L1 |
 | | L8 | **Weapons and resources.** Guns and melee weapons from Fab's free Epic weapon packs (held in hand by pawns and lying on the ground); steel ingots, components, silver coins, medicine kits, cloth, leather, chunks; piles that grow with the stack size; icons rendered from the meshes for the UI later. | PC Unreal | Sonnet, high | 120 min | L7, sneed's Fab clicks |
-| | L9 | **Realistic animals.** Try free realistic animal packs on Fab first; where none fits, keep Quaternius' animations but give the meshes realistic fur materials and proportions. sneed judges from the bench before anything is swapped. | PC Unreal | Sonnet, high | 120 min | L1 |
+| | L9 | **Realistic animals.** _(replaced by [animation.md](animation.md) "Tropical animals", tasks Z1 to Z7)_ Try free realistic animal packs on Fab first; where none fits, keep Quaternius' animations but give the meshes realistic fur materials and proportions. sneed judges from the bench before anything is swapped. | PC Unreal | Sonnet, high | 120 min | L1 |
 | | L10 | **Look check.** The G3 scene and the look bench in a packaged build at each `Look.Quality`; tune cut-offs; sneed plays 30 minutes and says what still looks wrong; notes go to `BACKLOG.md` and this plan. | PC Unreal | Sonnet, medium | 60 min | L1 to L9 |
 
 Then the rest of the art stage as planned: V15 (Niagara fire), V11 and V12 (real animation; they can
@@ -165,6 +165,9 @@ else. No sexual animations, poses or interactions are planned anywhere.
 | | V10 | **Destructible clothes.** Clothes shred where they were hit (cut and bullet holes grow from the hit point instead of random tears), loose cloth pieces fall away as physics when a piece is destroyed, burning clothes char and flame. | PC Unreal | Sonnet, high | 90 min | V7, U16 |
 
 ### Real animation (V11 to V14)
+
+**Replaced by [animation.md](animation.md) (2026-11-14):** tasks AN1 to AN15 there detail these four on the
+MakeHuman (MPFB) skeleton the character creator uses; the rows below are kept for history.
 
 Free routes in order: the Game Animation Sample's own library, Epic's free animation packs on
 Fab, CC0 packs (Quaternius' universal animation library, Kenney), then Mixamo (sign-in) if
