@@ -1,6 +1,7 @@
 #include "MakeHumanArtCommandlet.h"
 
 #include "AnimationRuntime.h"
+#include "BoneContainer.h"
 #include "AssetImportTask.h"
 #include "AssetToolsModule.h"
 #include "Animation/AnimBlueprint.h"
@@ -25,7 +26,9 @@
 #include "Factories/MaterialFactoryNew.h"
 #include "MaterialEditingLibrary.h"
 #include "Materials/Material.h"
+#include "Materials/MaterialExpressionMultiply.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
+#include "Materials/MaterialExpressionVectorParameter.h"
 #include "Materials/MaterialExpressionTextureSampleParameter2D.h"
 #include "Materials/MaterialInstanceConstant.h"
 #include "Dom/JsonObject.h"
@@ -39,6 +42,7 @@
 #include "RetargetEditor/IKRetargeterController.h"
 #include "Rig/IKRigDefinition.h"
 #include "RigEditor/IKRigController.h"
+#include "RigEditor/IKRigDefinitionFactory.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "UObject/UnrealType.h"
@@ -260,7 +264,7 @@ namespace
 
 	// Plain lit and masked materials for models that bring their own textures (local comparison models): colour,
 	// normal and (masked) opacity maps, roughness a value; the skin variant is subsurface skin.
-	UMaterial* MhBaseMaterial(IAssetTools& Tools, const FString& Name, bool bMasked, bool bSkin)
+	UMaterial* MhBaseMaterial(IAssetTools& Tools, const FString& Name, bool bMasked, bool bSkin, bool bAlphaFromColor = false)
 	{
 		const FString Path = MakeHumanAssetPath(MakeHumanFolder, Name);
 		if (UMaterial* Existing = FindObject<UMaterial>(nullptr, *Path))
@@ -297,7 +301,17 @@ namespace
 		auto* Color = Cast<UMaterialExpressionTextureSampleParameter2D>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureSampleParameter2D::StaticClass(), -600, -200));
 		Color->ParameterName = TEXT("BaseColor");
 		Color->Texture = White;
-		UMaterialEditingLibrary::ConnectMaterialProperty(Color, TEXT("RGB"), MP_BaseColor);
+		auto* Tint = Cast<UMaterialExpressionVectorParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionVectorParameter::StaticClass(), -600, -400));
+		Tint->ParameterName = TEXT("Tint");
+		Tint->DefaultValue = FLinearColor::White;
+		auto* Tinted = UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionMultiply::StaticClass(), -300, -250);
+		UMaterialEditingLibrary::ConnectMaterialExpressions(Color, TEXT("RGB"), Tinted, TEXT("A"));
+		UMaterialEditingLibrary::ConnectMaterialExpressions(Tint, TEXT("RGB"), Tinted, TEXT("B"));
+		UMaterialEditingLibrary::ConnectMaterialProperty(Tinted, TEXT(""), MP_BaseColor);
+		if (bMasked && bAlphaFromColor)
+		{
+			UMaterialEditingLibrary::ConnectMaterialProperty(Color, TEXT("A"), MP_OpacityMask);
+		}
 		auto* Normal = Cast<UMaterialExpressionTextureSampleParameter2D>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureSampleParameter2D::StaticClass(), -600, 100));
 		Normal->ParameterName = TEXT("Normal");
 		Normal->Texture = Flat;
@@ -307,7 +321,7 @@ namespace
 		Rough->ParameterName = TEXT("Roughness");
 		Rough->DefaultValue = bSkin ? 0.55f : 0.75f;
 		UMaterialEditingLibrary::ConnectMaterialProperty(Rough, TEXT(""), MP_Roughness);
-		if (bMasked)
+		if (bMasked && !bAlphaFromColor)
 		{
 			auto* Opacity = Cast<UMaterialExpressionTextureSampleParameter2D>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureSampleParameter2D::StaticClass(), -600, 400));
 			Opacity->ParameterName = TEXT("Opacity");
@@ -444,7 +458,7 @@ namespace
 		UE_LOG(LogMakeHumanArt, Display, TEXT("%s: %d bones, %d LODs, %d material slots, %d morphs"), *Mesh->GetName(), Mesh->GetRefSkeleton().GetNum(),
 			Mesh->GetLODNum(), Mesh->GetMaterials().Num(), Mesh->GetMorphTargets().Num());
 
-		if (Files.bLocalOnly)
+		UMaterialInterface* SkinBase = LoadObject<UMaterialInterface>(nullptr, *PawnLooksAssetPath(PawnLooksSkinMaterial));
 		{
 			FString Bones;
 			for (int32 b = 0; b < Mesh->GetRefSkeleton().GetNum(); ++b)
@@ -456,9 +470,21 @@ namespace
 		// A model that brings its own textures: one material instance per slot, from the "materials" map
 		// (slot name -> {"color", "normal", "opacity", "skin"}; texture files relative to "textures").
 		const TSharedPtr<FJsonObject>* MaterialMap = nullptr;
-		if (Config && Config->TryGetObjectField(TEXT("materials"), MaterialMap))
+		TSharedPtr<FJsonObject> Manifest;
 		{
-			const FString TextureDir = Config->GetStringField(TEXT("textures"));
+			FString Text;
+			if (FFileHelper::LoadFileToString(Text, *(FPaths::GetPath(Files.Fbx) / TEXT("materials.json"))) && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Manifest) && Manifest)
+			{
+				MaterialMap = &Manifest;
+			}
+		}
+		if (MaterialMap || (Config && Config->TryGetObjectField(TEXT("materials"), MaterialMap)))
+		{
+			FString TextureDir;
+			if (Config)
+			{
+				Config->TryGetStringField(TEXT("textures"), TextureDir);
+			}
 			TMap<FString, UTexture2D*> Imported;
 			const auto Texture = [&](const FString& File, bool bColor) -> UTexture2D*
 			{
@@ -471,7 +497,7 @@ namespace
 					return *Found;
 				}
 				const FString Name = TEXT("T_") + Files.Name + TEXT("_") + FPaths::GetBaseFilename(File).Replace(TEXT(" "), TEXT("_")).Replace(TEXT("."), TEXT("_"));
-				UTexture2D* T = MhImportTexture(TextureDir / File, Folder, Name, bColor);
+				UTexture2D* T = MhImportTexture(FPaths::IsRelative(File) && !TextureDir.IsEmpty() ? TextureDir / File : File, Folder, Name, bColor);
 				if (T)
 				{
 					MhSave(T);
@@ -493,7 +519,35 @@ namespace
 				(*Entry)->TryGetStringField(TEXT("opacity"), Opacity);
 				bool bSkin = false;
 				(*Entry)->TryGetBoolField(TEXT("skin"), bSkin);
-				UMaterial* Base = MhBaseMaterial(Tools, Opacity.IsEmpty() ? (bSkin ? TEXT("M_MH_Skin") : TEXT("M_MH_Lit")) : TEXT("M_MH_Masked"), !Opacity.IsEmpty(), bSkin);
+				bool bAlpha = false;
+				(*Entry)->TryGetBoolField(TEXT("alpha"), bAlpha);
+				FString ColorFile, NormalFile;
+				(*Entry)->TryGetStringField(TEXT("color"), ColorFile);
+				(*Entry)->TryGetStringField(TEXT("normal"), NormalFile);
+				if (bSkin && SkinBase)
+				{
+					// Skin: our skin material, so the pawn's skin colour drives it like the MetaHumans'.
+					UTexture2D* SkinColor = Texture(ColorFile.IsEmpty() ? Files.SkinTexture : ColorFile, true);
+					auto* SkinFactory = NewObject<UMaterialInstanceConstantFactoryNew>();
+					SkinFactory->InitialParent = SkinBase;
+					auto* SkinInstance = Cast<UMaterialInstanceConstant>(Tools.CreateAsset(MakeHumanSkinName(Files.Name), Folder, UMaterialInstanceConstant::StaticClass(), SkinFactory));
+					if (SkinInstance && SkinColor)
+					{
+						SkinInstance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(PawnLooksParamBaseColor), SkinColor);
+						SkinInstance->SetVectorParameterValueEditorOnly(FMaterialParameterInfo(PawnLooksParamSourceAverage), MhAverage(SkinColor));
+						UTexture2D* SkinNormal = Texture(NormalFile, false);
+						UTexture* NormalToUse = SkinNormal ? static_cast<UTexture*>(SkinNormal) : LoadObject<UTexture>(nullptr, TEXT("/Engine/EngineMaterials/FlatNormal.FlatNormal"));
+						SkinInstance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(PawnLooksParamNormal), NormalToUse);
+						SkinInstance->PostEditChange();
+						Failures += MhSave(SkinInstance) ? 0 : 1;
+						Material.MaterialInterface = SkinInstance;
+						UE_LOG(LogMakeHumanArt, Display, TEXT("  slot %d %s: skin %s"), Slot, *Key, *SkinInstance->GetName());
+						continue;
+					}
+				}
+				const bool bMasked = !Opacity.IsEmpty() || bAlpha;
+				UMaterial* Base = MhBaseMaterial(Tools, !bMasked ? (bSkin ? TEXT("M_MH_Skin") : TEXT("M_MH_Lit")) : (Opacity.IsEmpty() ? TEXT("M_MH_MaskedA") : TEXT("M_MH_Masked")),
+					bMasked, bSkin, Opacity.IsEmpty() && bAlpha);
 				auto* Factory = NewObject<UMaterialInstanceConstantFactoryNew>();
 				Factory->InitialParent = Base;
 				auto* Instance = Cast<UMaterialInstanceConstant>(Tools.CreateAsset(FString::Printf(TEXT("MI_%s_%d"), *Files.Name, Slot), Folder, UMaterialInstanceConstant::StaticClass(), Factory));
@@ -502,9 +556,12 @@ namespace
 					++Failures;
 					continue;
 				}
-				FString ColorFile, NormalFile;
-				(*Entry)->TryGetStringField(TEXT("color"), ColorFile);
-				(*Entry)->TryGetStringField(TEXT("normal"), NormalFile);
+				const TArray<TSharedPtr<FJsonValue>>* TintValues = nullptr;
+				if ((*Entry)->TryGetArrayField(TEXT("tint"), TintValues) && TintValues->Num() >= 3)
+				{
+					Instance->SetVectorParameterValueEditorOnly(FMaterialParameterInfo(TEXT("Tint")),
+						FLinearColor((*TintValues)[0]->AsNumber(), (*TintValues)[1]->AsNumber(), (*TintValues)[2]->AsNumber()));
+				}
 				if (UTexture2D* T = Texture(ColorFile, true))
 				{
 					Instance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(TEXT("BaseColor")), T);
@@ -529,7 +586,6 @@ namespace
 		}
 
 		// Skin on our skin material (the pawn's skin colour drives it, as on the MetaHumans).
-		UMaterialInterface* SkinBase = LoadObject<UMaterialInterface>(nullptr, *PawnLooksAssetPath(PawnLooksSkinMaterial));
 		UTexture2D* Color = Files.SkinTexture.IsEmpty() ? nullptr : MhImportTexture(Files.SkinTexture, Folder, TEXT("T_") + Files.Name + TEXT("_Skin"), true);
 		UTexture* FlatNormal = LoadObject<UTexture>(nullptr, TEXT("/Engine/EngineMaterials/FlatNormal.FlatNormal"));
 		if (Color)
@@ -585,38 +641,83 @@ namespace
 		// The IK rig and the retargeter, copies of the UE4 mannequin's.
 		UIKRigDefinition* TemplateRig = LoadObject<UIKRigDefinition>(nullptr, MhTemplateRig);
 		UIKRetargeter* TemplateRetargeter = LoadObject<UIKRetargeter>(nullptr, MhTemplateRetargeter);
-		UIKRigDefinition* Rig = TemplateRig ? Cast<UIKRigDefinition>(Tools.DuplicateAsset(MakeHumanRigName(Files.Name), Folder, TemplateRig)) : nullptr;
+		// Which bones make each retarget chain: the UE4 mannequin's names (MPFB's game engine skeleton), a Mixamo
+		// skeleton's (built in), or a config's own ("chains": {"LeftArm": ["start", "end"], ...}, "retargetRoot").
+		FString RetargetRoot = TEXT("pelvis");
+		const TSharedPtr<FJsonObject>* Chains = nullptr;
+		TSharedPtr<FJsonObject> MixamoChains;
+		{
+			// A Mixamo skeleton (MPFB's mixamo rig, or Mixamo's own): its bone names, with ":" or "_" after "mixamorig".
+			const FReferenceSkeleton& Ref = Mesh->GetRefSkeleton();
+			// (Unreal's FBX import drops the "mixamorig:" namespace.)
+			FString Prefix;
+			bool bMixamo = false;
+			for (const TCHAR* Try : {TEXT("mixamorig:"), TEXT("mixamorig_"), TEXT("mixamorig"), TEXT("")})
+			{
+				if (Ref.FindBoneIndex(FName(*(FString(Try) + TEXT("Hips")))) != INDEX_NONE && Ref.FindBoneIndex(FName(*(FString(Try) + TEXT("LeftUpLeg")))) != INDEX_NONE)
+				{
+					Prefix = Try;
+					bMixamo = true;
+					break;
+				}
+			}
+			if (bMixamo && !(Config && Config->HasField(TEXT("chains"))))
+			{
+				const auto B = [&](const TCHAR* Name) { return MakeShared<FJsonValueString>(Prefix + Name); };
+				const auto Pair = [&](const TCHAR* A, const TCHAR* Bn) { return TArray<TSharedPtr<FJsonValue>>{B(A), B(Bn)}; };
+				MixamoChains = MakeShared<FJsonObject>();
+				const FString Top = Ref.GetBoneName(0).ToString();
+				MixamoChains->SetArrayField(TEXT("root"), TArray<TSharedPtr<FJsonValue>>{MakeShared<FJsonValueString>(Top), MakeShared<FJsonValueString>(Top)});
+				MixamoChains->SetArrayField(TEXT("Spine"), Pair(TEXT("Spine"), TEXT("Spine2")));
+				MixamoChains->SetArrayField(TEXT("Neck"), Pair(TEXT("Neck"), TEXT("Neck")));
+				MixamoChains->SetArrayField(TEXT("head"), Pair(TEXT("Head"), TEXT("Head")));
+				for (const TCHAR* Side : {TEXT("Left"), TEXT("Right")})
+				{
+					const FString S(Side);
+					MixamoChains->SetArrayField(S + TEXT("Clavicle"), Pair(*(S + TEXT("Shoulder")), *(S + TEXT("Shoulder"))));
+					MixamoChains->SetArrayField(S + TEXT("Arm"), Pair(*(S + TEXT("Arm")), *(S + TEXT("Hand"))));
+					MixamoChains->SetArrayField(S + TEXT("Leg"), Pair(*(S + TEXT("UpLeg")), *(S + TEXT("Foot"))));
+					MixamoChains->SetArrayField(S + TEXT("Toe"), Pair(*(S + TEXT("ToeBase")), *(S + TEXT("ToeBase"))));
+					for (const TCHAR* Finger : {TEXT("Thumb"), TEXT("Index"), TEXT("Middle"), TEXT("Ring"), TEXT("Pinky")})
+					{
+						MixamoChains->SetArrayField(S + Finger, Pair(*(S + TEXT("Hand") + Finger + TEXT("1")), *(S + TEXT("Hand") + Finger + TEXT("3"))));
+					}
+				}
+				Chains = &MixamoChains;
+				RetargetRoot = Prefix + TEXT("Hips");
+				UE_LOG(LogMakeHumanArt, Display, TEXT("  Mixamo skeleton (%s): built-in chains"), *Prefix);
+			}
+		}
+		if (!Chains && Config && Config->TryGetObjectField(TEXT("chains"), Chains))
+		{
+			Config->TryGetStringField(TEXT("retargetRoot"), RetargetRoot);
+		}
+		UIKRigDefinition* Rig = nullptr;
+		if (Chains)
+		{
+			// Another skeleton: a fresh IK rig with the template's chain names (so the retargeter maps them), FK only.
+			Rig = Cast<UIKRigDefinition>(Tools.CreateAsset(MakeHumanRigName(Files.Name), Folder, UIKRigDefinition::StaticClass(), NewObject<UIKRigDefinitionFactory>()));
+		}
+		else if (TemplateRig)
+		{
+			Rig = Cast<UIKRigDefinition>(Tools.DuplicateAsset(MakeHumanRigName(Files.Name), Folder, TemplateRig));
+		}
 		UIKRetargeter* Retargeter = TemplateRetargeter ? Cast<UIKRetargeter>(Tools.DuplicateAsset(MakeHumanRetargeterName(Files.Name), Folder, TemplateRetargeter)) : nullptr;
 		if (!Rig || !Retargeter)
 		{
-			UE_LOG(LogMakeHumanArt, Error, TEXT("Could not copy the UE4 mannequin's IK rig and retargeter"));
+			UE_LOG(LogMakeHumanArt, Error, TEXT("Could not make the IK rig or copy the UE4 mannequin's retargeter"));
 			return Failures + 1;
 		}
 		UIKRigController* RigController = UIKRigController::GetController(Rig);
 		RigController->SetSkeletalMesh(Mesh);
-		// MPFB names the root "Root"; the chains keep the mannequin's names. Other skeletons give their own bones
-		// per chain ("chains": {"LeftArm": ["start", "end"], ...}, "retargetRoot"); chains they don't list go.
-		FString RetargetRoot = TEXT("pelvis");
-		const TSharedPtr<FJsonObject>* Chains = nullptr;
-		if (Config && Config->TryGetObjectField(TEXT("chains"), Chains))
+		if (Chains && TemplateRig)
 		{
-			Config->TryGetStringField(TEXT("retargetRoot"), RetargetRoot);
-			TArray<FName> Existing;
-			for (const FBoneChain& Chain : Rig->GetRetargetChains())
-			{
-				Existing.Add(Chain.ChainName);
-			}
-			for (const FName& Chain : Existing)
+			for (const FBoneChain& Chain : TemplateRig->GetRetargetChains())
 			{
 				const TArray<TSharedPtr<FJsonValue>>* Bones = nullptr;
-				if ((*Chains)->TryGetArrayField(Chain.ToString(), Bones) && Bones->Num() == 2)
+				if ((*Chains)->TryGetArrayField(Chain.ChainName.ToString(), Bones) && Bones->Num() == 2)
 				{
-					RigController->SetRetargetChainStartBone(Chain, FName(*(*Bones)[0]->AsString()));
-					RigController->SetRetargetChainEndBone(Chain, FName(*(*Bones)[1]->AsString()));
-				}
-				else
-				{
-					RigController->RemoveRetargetChain(Chain);
+					RigController->AddRetargetChain(Chain.ChainName, FName(*(*Bones)[0]->AsString()), FName(*(*Bones)[1]->AsString()), NAME_None);
 				}
 			}
 		}
@@ -644,6 +745,20 @@ namespace
 			{
 				RetargetController->SetRetargetOpEnabled(Op, false);
 				UE_LOG(LogMakeHumanArt, Display, TEXT("  op %d %s off"), Op, *Type);
+			}
+		}
+		// The pelvis op names the target's pelvis bone: the retarget root of this skeleton.
+		for (int32 Op = 0; Op < RetargetController->GetNumRetargetOps(); ++Op)
+		{
+			FInstancedStruct* Struct = RetargetController->GetRetargetOpStructAtIndex(Op);
+			FStructProperty* SettingsProperty = Struct && Struct->GetScriptStruct() ? FindFProperty<FStructProperty>(Struct->GetScriptStruct(), TEXT("Settings")) : nullptr;
+			FStructProperty* PelvisProperty = SettingsProperty ? FindFProperty<FStructProperty>(SettingsProperty->Struct, TEXT("TargetPelvisBone")) : nullptr;
+			if (PelvisProperty && PelvisProperty->Struct == FBoneReference::StaticStruct())
+			{
+				void* Settings = SettingsProperty->ContainerPtrToValuePtr<void>(Struct->GetMutableMemory());
+				FBoneReference* Pelvis = PelvisProperty->ContainerPtrToValuePtr<FBoneReference>(Settings);
+				Pelvis->BoneName = FName(*RetargetRoot);
+				UE_LOG(LogMakeHumanArt, Display, TEXT("  op %d: target pelvis %s"), Op, *Pelvis->BoneName.ToString());
 			}
 		}
 		RetargetController->AutoMapChains(EAutoMapChainType::Exact, true);

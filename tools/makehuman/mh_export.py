@@ -20,6 +20,8 @@ if not os.path.isabs(cfg["out"]):
 places = {
     "mh_user": os.environ.get("MH_USER_DATA", os.path.expanduser("~/OneDrive/Documents/makehuman/v1py3/data")),
     "mh_system": os.environ.get("MH_SYSTEM_DATA", os.path.join(os.environ.get("LOCALAPPDATA", ""), "makehuman-community", "makehuman", "data")),
+    # MPFB's own asset folder (hair, eyes, eyebrows, eyelashes, teeth, skins, clothes).
+    "mpfb": os.environ.get("MPFB_DATA", os.path.join(os.environ.get("APPDATA", ""), "Blender Foundation", "Blender", "5.2", "extensions", ".user", "user_default", "mpfb", "data")),
 }
 def place(path):
     return path.format(**places) if isinstance(path, str) else path
@@ -27,32 +29,17 @@ for key in ("proxy", "skin"):
     if cfg.get(key):
         cfg[key] = place(cfg[key])
 cfg["clothes"] = [place(c) for c in cfg.get("clothes", [])]
+# Body parts: {"Hair": "...mhclo", "Eyebrows": ..., "Eyelashes": ..., "Eyes": ..., "Teeth": ...}; materials overrides
+# by object or material name ({"eyes": {"color": "...png"}}) and colour tints ({"hair": [r, g, b]}).
+cfg["parts"] = {k: place(v) for k, v in cfg.get("parts", {}).items()}
+cfg["material_overrides"] = {k: {kk: place(vv) for kk, vv in v.items()} for k, v in cfg.get("material_overrides", {}).items()}
 
 def log(*a):
     print("[mh_export]", *a, flush=True)
 
 
-def prepare_for_unreal(rig, meshes):
-    """Unreal wants centimetres and an unscaled, unrotated root: every object's world transform and a scale of 100 are
-    baked into its data (bones and vertices alike), and the objects are left at the identity."""
-    import bpy
-    from mathutils import Matrix
-    bpy.context.scene.unit_settings.system = "METRIC"
-    bpy.context.scene.unit_settings.scale_length = 0.01
-    scale = Matrix.Scale(100.0, 4)
-    objs = [rig] + [m for m in meshes if m != rig]
-    worlds = {o.name: o.matrix_world.copy() for o in objs}
-    done = set()
-    for o in objs:
-        if o.data.name in done:
-            continue
-        done.add(o.data.name)
-        o.data.transform(scale @ worlds[o.name])
-    for o in objs:
-        if o != rig:
-            o.matrix_parent_inverse = Matrix.Identity(4)
-        o.matrix_basis = Matrix.Identity(4)
-    bpy.context.view_layer.update()
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from mh_common import prepare_for_unreal, write_materials  # noqa: E402
 
 try:
     for obj in list(bpy.data.objects):
@@ -88,6 +75,10 @@ try:
                 shutil.copyfile(tex, os.path.join(os.path.dirname(cfg["out"]), "skin.png"))
                 log("skin texture", tex)
 
+    for kind, path in cfg["parts"].items():
+        part = HumanService.add_mhclo_asset(path, basemesh, asset_type=kind, subdiv_levels=0, material_type="GAMEENGINE")
+        log("part", kind, part.name, len(part.data.vertices))
+
     for path in cfg.get("clothes", []):
         c = HumanService.add_mhclo_asset(path, basemesh, asset_type="Clothes", subdiv_levels=0, material_type="GAMEENGINE")
         log("clothes", c.name, len(c.data.vertices))
@@ -122,6 +113,8 @@ try:
         o.select_set(True)
     log("exporting", [o.name for o in export])
     os.makedirs(os.path.dirname(cfg["out"]), exist_ok=True)
+    write_materials([o for o in export if o != rig], os.path.dirname(cfg["out"]), skin_meshes=[proxy] if proxy else [],
+                    tints=cfg.get("tints", {}), overrides=cfg["material_overrides"])
     bpy.ops.export_scene.fbx(filepath=cfg["out"], use_selection=True, object_types={"ARMATURE", "MESH"},
                              apply_scale_options="FBX_SCALE_NONE", add_leaf_bones=False, bake_anim=False,
                              mesh_smooth_type="FACE", use_armature_deform_only=True, path_mode="COPY", embed_textures=False,

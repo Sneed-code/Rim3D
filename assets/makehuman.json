@@ -1,6 +1,14 @@
 {
   "comment": "MakeHuman (MPFB) characters (docs/design/makehuman.md). tools/makehuman/mh_export.py writes each FBX under game/Saved/MakeHuman (not in Git); the MakeHumanArt commandlet imports them. Paths are relative to the repo unless absolute. localOnly models go to /Game/ThirdParty/Local and are never committed or shipped.",
   "characters": [
-    {"name": "Woman", "fbx": "game/Saved/MakeHuman/Woman/Woman.fbx"}
+    {
+      "name": "Woman",
+      "fbx": "game/Saved/MakeHuman/Woman/Woman.fbx"
+    },
+    {
+      "name": "PetitePale",
+      "fbx": "game/Saved/MakeHuman/PetitePale/PetitePale.fbx",
+      "comment": "sneed's own Petite Natural Pale Adult (MPFB, Mixamo rig, purple ponytail), exported from his .blend with tools/makehuman/blend_export.py"
+    }
   ]
 }

@@ -1,5 +1,5 @@
 // Smoke test `compare` (MakeHuman characters, docs/design/makehuman.md): a MakeHuman (MPFB) woman, a local-only
-// comparison model and the MetaHuman showcase woman side by side, standing and then walking, in the game, offscreen.
+// MakeHuman character (sneed's own) and the MetaHuman showcase woman side by side, standing and then walking, in the game, offscreen.
 #include "SmokeTest.h"
 
 #include "Components/PointLightComponent.h"
@@ -243,11 +243,12 @@ void USmokeTestSubsystem::BuildComparePhases()
 			}
 			else if (i == 1)
 			{
-				FString Local = TEXT("Shadowheart");
-				FParse::Value(FCommandLine::Get(), TEXT("CompareLocal="), Local);
-				Looks.MakeHuman = Local;
+				// sneed's own MakeHuman character (or another, -CompareSecond=<name>).
+				FString Second = TEXT("PetitePale");
+				FParse::Value(FCommandLine::Get(), TEXT("CompareSecond="), Second);
+				Looks.MakeHuman = Second;
 				Looks.Height = 1.0f;
-				Label = Local + TEXT(" (local comparison model)");
+				Label = Second;
 			}
 			else
 			{
