@@ -326,3 +326,22 @@ The runs are chaotic (seed 1 and seed 42 swapped places with the fifth pass), so
 logs show is that the plague with medicine in hand is no longer a coin toss (seed 7), and that the colonies now die of
 raids during an illness, malaria late in the year once the bought medicine is gone, and fire. Next: infestations.
 
+**Seventh pass (2026-11-14): infestations.** Insects hunted every colonist within 60 m of them, so an infestation under
+the mountain behind the base went after the whole colony at once. Three sim fixes, each with a test: insects now guard
+their mounds (they go for a colonist within 18 m of a mound and calm down and go home once nobody is within 30 m,
+[monsters.md](monsters.md)); unarmed colonists sheltering from the alarm no longer run into the hive's cave (overhead
+mountain counts as indoors, and the nearest roofed cell was often the hive's; the shelter cell now keeps 20 m from
+enemies and mounds, [raids.md](raids.md)); and the alarm's defenders no longer walk toward the hive, which woke the rest
+of it and kept the alarm on. Results:
+
+| Seed | Alive on day 60 (sixth pass) | What happened |
+| --- | --- | --- |
+| 1 | 0 (0) | the day 44 infestation still killed two who were working near where it came up (a revolver against three insects on a hillside, two of three shots into the ground); illness and raids took the rest by day 54 |
+| 7 | 0 (6) | a two-raid day 34 killed six (no infestation in this run) |
+| 42 | 4 (0) | malaria and heatstroke took three; no fire this time |
+
+The year run stays chaotic; the infestation changes show in the fight lines (no colonist sheltering in a hive's cave, no
+defenders sent at a hive), not yet in the totals. What still kills: two raids at once, raids during an illness, and
+colonists who work near a new hive before anyone knows it is there (a "keep away from the hive" area or turrets would
+help; `BACKLOG.md`).
+

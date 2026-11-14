@@ -53,6 +53,8 @@ struct Gear {
     // Weapons carried on the body but not in the hands (P1): at most one per slot, counting the one in
     // the hands, so at most two here. They add to the load the pawn carries.
     std::vector<Entity> stowed;
+    // The pawn's bag (docs/design/inventory.md): items off the map it carries, owned by it (EquippedBy).
+    std::vector<Entity> inventory;
 };
 
 // On a pawn switching weapons (P1): the weapon in `to` (a stowed one) comes to the hands when the steps run out,

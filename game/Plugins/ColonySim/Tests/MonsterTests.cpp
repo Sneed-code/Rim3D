@@ -14,6 +14,7 @@
 #include <doctest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -166,18 +167,49 @@ TEST_CASE("Monsters: an infestation grows mounds and sends insects after the col
     const size_t insects = monsterCount(*sim, "Megascarab") + monsterCount(*sim, "Spelopede") + monsterCount(*sim, "Megaspider");
     CHECK(insects >= 3);
     sim->step();
-    bool hostile = false;
-    for (const auto [e, animal, thing] : sim->things().registry().view<const Animal, const Thing>().each()) {
-        (void)thing;
-        hostile = hostile || animal.temper == AnimalTemper::Manhunter;
-        (void)e;
-    }
-    CHECK(hostile);
     // No jelly yet; a day and a half later every mound has made some, and the nest has bred.
     CHECK(monsterJelly(*sim) == 0);
     const size_t hives = sim->monsters().hiveCount();
     sim->stepMany(kSecondsPerDay * 3 / 2);
     CHECK(monsterJelly(*sim) >= 20 * static_cast<int>(hives));
+}
+
+TEST_CASE("Monsters: insects guard their mound: they go for a colonist who comes near it and leave one far off alone") {
+    // RimWorld's insects defend their hive; ours hunted every colonist within 60 m, and the year run's infestations killed
+    // colonies that never went near the mound (docs/design/colony-scenario.md "Sixth pass").
+    auto sim = monsterSim(11, 128, false);
+    const Entity hive = sim->monsters().spawnHive(CellPos{60, 60, 0});
+    const Entity insect = sim->things().spawn("Megaspider", CellPos{72, 60, 0});  // 12 m from its mound
+    const Entity colonist = sim->things().spawn("Human", CellPos{110, 110, 0});
+    MONSTER_REQUIRE(hive != kNoEntity);
+    MONSTER_REQUIRE(insect != kNoEntity);
+    MONSTER_REQUIRE(colonist != kNoEntity);
+    (void)sim->things().registry().get_or_emplace<Colonist>(colonist);
+    entt::registry& reg = sim->things().registry();
+    const auto hold = [&](float x, float y, int seconds) {
+        for (int i = 0; i < seconds; ++i) {
+            Position& p = reg.get<Position>(colonist);
+            p.x = x;
+            p.y = y;
+            reg.emplace_or_replace<Stunned>(colonist, Stunned{5});
+            reg.replace<Health>(colonist, Health{});
+            sim->health().refresh(colonist);
+            sim->step();
+        }
+    };
+    const auto fromMound = [&]() {
+        const Position& p = reg.get<Position>(insect);
+        return std::hypot(p.x - 60.5f, p.y - 60.5f);
+    };
+    hold(110.5f, 110.5f, 900);  // 70 m off
+    CHECK(reg.get<Animal>(insect).temper == AnimalTemper::Calm);
+    CHECK_FALSE(sim->animals().hostile(insect));
+    CHECK(fromMound() < 11.0f);  // it walked home
+    hold(70.5f, 60.5f, 120);     // 10 m from the mound
+    CHECK(reg.get<Animal>(insect).temper == AnimalTemper::Manhunter);
+    hold(110.5f, 110.5f, 900);   // gone again, far off
+    CHECK(reg.get<Animal>(insect).temper == AnimalTemper::Calm);
+    CHECK(fromMound() < 11.0f);
 }
 
 TEST_CASE("Monsters: a destroyed mound leaves 30 jelly, and a mound takes no more than 40 around it") {

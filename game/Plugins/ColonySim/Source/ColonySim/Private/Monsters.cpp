@@ -21,7 +21,10 @@ namespace colony {
 namespace {
 
 constexpr int kMonsterCheckEvery = 30;     // game seconds between looks at the mounds and insects
-constexpr float kMonsterWakeRange = 60.0f; // insects hunt a colonist this close to them
+constexpr float kMonsterWakeRange = 60.0f; // insects with no mound left hunt a colonist this close to them
+constexpr float kMonsterDefendRange = 18.0f;  // insects go for a colonist this close to a mound (ours)
+constexpr float kMonsterLeash = 30.0f;        // and give up a colonist once it is this far from every mound (ours)
+constexpr float kMonsterHomeRange = 8.0f;     // a calm insect further than this from every mound walks back (ours)
 constexpr float kMonsterMinDistance = 20.0f;  // an infestation starts this far from every colonist, at least
 constexpr float kMonsterMaxDistance = 60.0f;  // ... and (if it can) no further than this from the colony's middle
 
@@ -199,9 +202,12 @@ struct MonsterSystem::Impl {
             return kNoEntity;
         }
         if (!colony.empty()) {
+            // Only a colonist near the mound it comes out of: insects guard their mounds (RimWorld's hive defence).
             float d;
-            const Entity target = nearestOf(colony, static_cast<float>(at.x) + 0.5f, static_cast<float>(at.y) + 0.5f, d);
-            animals.enrage(insect, AnimalTemper::Manhunter, target);
+            const Entity target = nearestOf(colony, static_cast<float>(near.x) + 0.5f, static_cast<float>(near.y) + 0.5f, d);
+            if (target != kNoEntity && d <= kMonsterDefendRange) {
+                animals.enrage(insect, AnimalTemper::Manhunter, target);
+            }
         }
         return insect;
     }
@@ -529,21 +535,70 @@ void MonsterSystem::step(const std::vector<Event>& events, size_t from) {
             }
         }
     }
-    // Insects keep hunting while a colonist is within wake range of them.
+    // Insects guard their mounds, as RimWorld's do (LordJob_DefendAndExpandHive): they go for a colonist who comes within
+    // kMonsterDefendRange of a mound and give it up once it is kMonsterLeash from every mound. Before, they hunted every
+    // colonist within 60 m of them, and the infestations of the year run killed whole colonies that never went near the
+    // hive (docs/design/colony-scenario.md "Sixth pass"). With no mound left they hunt within 60 m of themselves.
     if (!colony.empty()) {
-        for (const auto [e, animal, thing] : reg.view<const Animal, const Thing>().each()) {
+        entt::registry& wreg = s.things.registry();
+        const auto moundDist = [&](float x, float y) {
+            float best = 1e9f;
+            for (const Entity hive : hives) {
+                const Position& hp = reg.get<Position>(hive);
+                best = std::min(best, monsterDist(x, y, hp.x, hp.y));
+            }
+            return best;
+        };
+        for (const auto [e, animal, thing] : wreg.view<Animal, const Thing>().each()) {
             if (std::find(s.insectDefs.begin(), s.insectDefs.end(), thing.def) == s.insectDefs.end() || !s.things.spawned(e) ||
                 s.health.incapacitated(e)) {
+                continue;
+            }
+            if (!hives.empty() && animal.temper == AnimalTemper::Manhunter) {
+                // After a colonist: on it while it stays within the leash of a mound; with no colonist that near, it calms
+                // down at its next think and goes home.
+                bool near = false;
+                for (const Entity c : colony) {
+                    const Position& q = reg.get<Position>(c);
+                    near = near || moundDist(q.x, q.y) <= kMonsterLeash;
+                }
+                if (animal.enemy != kNoEntity && reg.valid(animal.enemy) && reg.all_of<Position>(animal.enemy)) {
+                    const Position& q = reg.get<Position>(animal.enemy);
+                    near = near && moundDist(q.x, q.y) <= kMonsterLeash;
+                }
+                if (!near) {
+                    animal.temperUntil = s.time.seconds;
+                }
                 continue;
             }
             if (animal.temper != AnimalTemper::Calm && (animal.mode == AnimalMode::Chase || animal.mode == AnimalMode::Fight)) {
                 continue;
             }
             const Position& pos = reg.get<Position>(e);
+            animal.staysUntil = s.time.seconds + kSecondsPerDay;  // a mound's insect never walks off the map
             float d;
             const Entity target = s.nearestOf(colony, pos.x, pos.y, d);
-            if (target != kNoEntity && d <= kMonsterWakeRange) {
+            if (target == kNoEntity) {
+                continue;
+            }
+            const Position& tp = reg.get<Position>(target);
+            if (hives.empty() ? d <= kMonsterWakeRange : moundDist(tp.x, tp.y) <= kMonsterDefendRange) {
                 s.animals.enrage(e, AnimalTemper::Manhunter, target);
+            } else if (!hives.empty() && animal.temper == AnimalTemper::Calm && moundDist(pos.x, pos.y) > kMonsterHomeRange) {
+                Entity home = hives.front();
+                float best = 1e9f;
+                for (const Entity hive : hives) {
+                    const Position& hp = reg.get<Position>(hive);
+                    const float hd = monsterDist(pos.x, pos.y, hp.x, hp.y);
+                    if (hd < best) {
+                        best = hd;
+                        home = hive;
+                    }
+                }
+                CellPos spot;
+                if (s.freeCellNear(cellOf(reg.get<Position>(home)), 3, spot)) {
+                    s.animals.walkBack(e, spot);
+                }
             }
         }
     }

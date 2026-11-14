@@ -457,6 +457,7 @@ struct SaveEntity {
     std::optional<SaveOperations> operations;  // section "medicine" (H3, version 2 on)
     std::optional<std::vector<Entity>> stowed;  // section "weapons" (P1): Gear::stowed
     std::optional<WeaponSwitch> weaponSwitch;   // section "weapons"
+    std::optional<std::vector<Entity>> inventory;  // section "inventory": Gear::inventory (docs/design/inventory.md)
     std::optional<Turret> turret;           // section "defense" (F11)
     std::optional<Artillery> artillery;     // section "artillery" (mortars, rocketswarm launchers)
     std::optional<SaveShell> shell;
@@ -1300,7 +1301,8 @@ void saveTradeLine(Ar& ar, TradeLine& l) {
 template <typename Type>
 inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitCommand> || std::is_same_v<Type, TradeCommand> ||
                                             std::is_same_v<Type, AdjustGoodwillCommand> || std::is_same_v<Type, GiftCommand> ||
-                                            std::is_same_v<Type, CommsCommand> || std::is_same_v<Type, ScannerCommand>;
+                                            std::is_same_v<Type, CommsCommand> || std::is_same_v<Type, ScannerCommand> ||
+                                            std::is_same_v<Type, InventoryCommand>;
 
 // The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
 template <typename Ar, typename Type>
@@ -1332,6 +1334,11 @@ void saveTradeCommand(Ar& ar, Type& c) {
     } else if constexpr (std::is_same_v<Type, ScannerCommand>) {
         ar.value("building", c.building);
         ar.text("ore", c.ore);
+    } else if constexpr (std::is_same_v<Type, InventoryCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("action", c.action);
+        ar.value("item", c.item);
+        ar.value("count", c.count);
     } else {
         static_assert(std::is_same_v<Type, GiftCommand>, "save every trade command here");
         auto* gift = &c;
@@ -3501,6 +3508,9 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "stowed", e, &SaveEntity::stowed, [&](std::vector<Entity>& items) { saveStowedPart(ar, items); });
         saveParts(ar, "switch", e, &SaveEntity::weaponSwitch, [&](WeaponSwitch& w) { saveWeaponSwitchPart(ar, w); });
     });
+    ar.section("inventory", 1, [&] {
+        saveParts(ar, "bag", e, &SaveEntity::inventory, [&](std::vector<Entity>& items) { saveStowedPart(ar, items); });
+    });
     ar.section("feel", 1, [&] {
         saveParts(ar, "kick", e, &SaveEntity::kick, [&](RecoilKick& k) { saveKickPart(ar, k); });
         saveParts(ar, "roll", e, &SaveEntity::roll, [&](DodgeRoll& r) { saveRollPart(ar, r); });
@@ -4124,6 +4134,9 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
     if (const Gear* gear = reg.try_get<Gear>(e); gear != nullptr && !gear->stowed.empty()) {
         out.stowed = gear->stowed;
     }
+    if (const Gear* gear = reg.try_get<Gear>(e); gear != nullptr && !gear->inventory.empty()) {
+        out.inventory = gear->inventory;
+    }
     if (const WeaponSwitch* change = reg.try_get<WeaponSwitch>(e)) {
         out.weaponSwitch = *change;
     }
@@ -4672,6 +4685,13 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
             return false;
         }
         reg.get<Gear>(entity).stowed = *e.stowed;
+    }
+    if (e.inventory) {
+        if (!reg.all_of<Gear>(entity)) {
+            error = "the save has a bag on a pawn without gear";
+            return false;
+        }
+        reg.get<Gear>(entity).inventory = *e.inventory;
     }
     if (e.weaponSwitch) {
         reg.emplace<WeaponSwitch>(entity, *e.weaponSwitch);
@@ -5301,6 +5321,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                 gearExists = gearExists && a != kNoEntity && reg.valid(a);
             }
             for (const Entity a : gear.stowed) {
+                gearExists = gearExists && a != kNoEntity && reg.valid(a);
+            }
+            for (const Entity a : gear.inventory) {
                 gearExists = gearExists && a != kNoEntity && reg.valid(a);
             }
         }

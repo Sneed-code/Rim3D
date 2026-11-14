@@ -6,6 +6,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Monsters.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Rooms.h"
@@ -268,6 +269,42 @@ TEST_CASE("Raids: raiders head for the colony, the alarm sounds and the colony f
             CHECK_FALSE(reg.all_of<Fighter>(c));
         }
     }
+}
+
+TEST_CASE("Raids: Shelter never goes into a room with a brood mound in it") {
+    // The year run (docs/design/colony-scenario.md "Seventh pass"): an infestation comes up under overhead mountain, which
+    // counts as indoors, and unarmed colonists running for the nearest roofed cell ran into the hive's cave.
+    auto sim = raidTestSim(31, 128);
+    const std::vector<Entity> colonists = raidTestColonists(*sim);
+    RAID_REQUIRE(colonists.size() == 6);
+    const entt::registry& reg = sim->things().registry();
+    const Position home = reg.get<Position>(colonists[0]);
+    const int x0 = static_cast<int>(home.x) + 10;
+    const int y0 = static_cast<int>(home.y) - 3;
+    for (int y = y0; y <= y0 + 6; ++y) {
+        for (int x = x0; x <= x0 + 6; ++x) {
+            if (x == x0 || y == y0 || x == x0 + 6 || y == y0 + 6) {
+                sim->things().spawn(x == x0 && y == y0 + 3 ? "Door" : "Wall", CellPos{x, y, 0});
+            }
+        }
+    }
+    sim->step();
+    const CellPos inside{x0 + 3, y0 + 3, 0};
+    RAID_REQUIRE(sim->rooms().indoors(inside));
+    const Entity hive = sim->monsters().spawnHive(CellPos{x0 + 5, y0 + 5, 0});
+    RAID_REQUIRE(hive != kNoEntity);
+    sim->submit(MarkShelterCommand{inside, false});
+    sim->submit(SetDefenseRoleCommand{colonists[1], static_cast<uint8_t>(DefenseRole::Shelter), false, CellPos{}});
+    sim->submit(SoundAlarmCommand{true});
+    sim->stepMany(400);
+    RAID_REQUIRE(reg.all_of<Fighter>(colonists[1]));
+    CHECK(reg.get<Fighter>(colonists[1]).mode == FightMode::Shelter);
+    const Position& at = reg.get<Position>(colonists[1]);
+    const Position& mound = reg.get<Position>(hive);
+    MESSAGE("the sheltering colonist is " << std::hypot(at.x - mound.x, at.y - mound.y) << " m from the mound");
+    CHECK(std::hypot(at.x - mound.x, at.y - mound.y) >= 19.0f);
+    const bool inTheMoundsRoom = sim->rooms().indoors(cellOf(at)) && sim->rooms().roomOf(cellOf(at)) == sim->rooms().roomOf(inside);
+    CHECK_FALSE(inTheMoundsRoom);
 }
 
 TEST_CASE("Raids: Shelter goes to the marked room, Keep working works until enemies come close") {

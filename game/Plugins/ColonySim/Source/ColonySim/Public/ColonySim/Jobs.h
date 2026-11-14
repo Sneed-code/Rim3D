@@ -542,9 +542,23 @@ public:
     // How many of an item def a pawn can carry at once: its `carryingCapacity` (RimWorld's 75 kg when
     // the pawn def has none) over the def's `stats.mass`, at least 1. It may be more than one stack.
     int carryLimit(Entity pawn, DefId def) const;
+    // What the pawn can carry in kg (docs/design/inventory.md): its def's `carryingCapacity`, times CarryRules
+    // `protagonistFactor` for the protagonist, plus CarryRules `traitKg` for its traits, times the talents' pack mule.
     double carryCapacity(Entity pawn) const;
     double massOf(DefId def) const;
-    // 1 with empty hands, down to 1 - `carrySlowdown` at a full load: what the pawn's walking speed is multiplied by.
+    // What one of `def` weighs for this pawn: `stats.mass` times the CarryRules `lighter` factors of its skills
+    // (a miner carries mined stone lighter, a farmer crops, a fighter everything).
+    double massFor(Entity pawn, DefId def) const;
+    double lighterFactor(Entity pawn, DefId def) const;
+    // What one item entity (a whole stack) weighs for this pawn.
+    double itemMassFor(Entity pawn, Entity item) const;
+    // Everything the pawn carries but a hauled stack: the weapons on its body (P1), the bag and, with CarryRules,
+    // the weapon in its hands and the apparel it wears.
+    double gearMass(Entity pawn) const;
+    // gearMass plus the hauled stack.
+    double loadMass(Entity pawn) const;
+    // What the pawn's walking speed is multiplied by for its load: 1 up to CarryRules `freeFraction` of its capacity
+    // (0 without CarryRules), down to 1 - `carrySlowdown` at a full load, and further down past it (overloaded).
     float loadSpeedFactor(Entity pawn) const;
     // The mass of the weapons the pawn carries on its body (P1); it counts in the load.
     double bodyWeaponMass(Entity pawn) const;
@@ -837,6 +851,24 @@ private:
     std::vector<int> stackLimits_;    // per def id
     std::vector<double> masses_;      // per def id, `stats.mass` (1 if it has none)
     double carrySlowdown_ = 0.25;
+    // CarryRules (docs/design/inventory.md); without the def, RimWorld's hauling load as before.
+    struct CarryRules {
+        bool present = false;
+        double protagonistFactor = 1.0;
+        double freeFraction = 0.0;
+        double overloadSlowdown = 1.0;
+        double overloadMinFactor = 0.2;
+        double minFactor = 0.3;
+        std::vector<std::pair<std::string, double>> traitKg;
+        struct Lighter {
+            std::string skill;
+            double perLevel = 0.0;
+            int maxLevel = 20;
+            std::vector<uint8_t> applies;  // per Things def id; empty: every item
+        };
+        std::vector<Lighter> lighter;
+    } carry_;
+    void loadCarryRules();
     // Per def id, from the Things defs (NeedJobs.cpp): food tiers (-1 not food), nutrition and how
     // long a sitting takes; the kinds of building.
     std::vector<int8_t> foodTier_;
