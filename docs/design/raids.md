@@ -98,6 +98,8 @@ keeps it from sounding again by itself until they are gone.
 `food.ravenousBelow`, 0.125) is let off: the alarm stands it down (`RaidSystem::excusedToEat`), a Medic or Firefighter
 leaves its duty, and it goes to eat; once fed it is called up again at the next check. In the year run an infestation
 kept the alarm on for days and the colonists starved at their posts. RimWorld has no automatic alarm, so this is ours.
+Not while an enemy that can see it stands within `keepWorkingRadius` (20 m): then it fights on hungry (the eighth year
+pass found colonists eating while a raider shot them from 1 to 6 m).
 
 **Drafting a called-up colonist** hands it to the player where it stands; undrafting it gives it back
 to the alarm at the next check while the alarm is on.

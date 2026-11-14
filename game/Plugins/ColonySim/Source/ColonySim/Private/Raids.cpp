@@ -1899,8 +1899,33 @@ void RaidSystem::thinkAlarm() {
 }
 
 bool RaidSystem::excusedToEat(Entity pawn) const {
-    const Needs* needs = things_.registry().try_get<Needs>(pawn);
-    return needs != nullptr && needs->food < rules_.alarmEatBelow;
+    const entt::registry& reg = things_.registry();
+    const Needs* needs = reg.try_get<Needs>(pawn);
+    if (needs == nullptr || !(needs->food < rules_.alarmEatBelow)) {
+        return false;
+    }
+    // Not with an enemy close by that can see it (keepWorkingRadius, the distance a Keep working colonist stops at): in
+    // the year run colonists let off to eat sat over their meals while a raider shot them from 1 to 6 m (colony-scenario.md
+    // "Eighth pass"). RimWorld's colonists answer a close enemy whatever job they are on.
+    const Position* at = reg.try_get<Position>(pawn);
+    if (at == nullptr) {
+        return true;
+    }
+    for (const auto [other, faction, p] : reg.view<const Faction, const Position>().each()) {
+        const Animal* wild = reg.try_get<Animal>(other);
+        if ((faction.id == kPlayerFaction && wild == nullptr) || (wild != nullptr && wild->temper == AnimalTemper::Calm) ||
+            p.level != at->level || health_.incapacitated(other) || reg.all_of<Prisoner>(other) || reg.all_of<Visitor>(other)) {
+            continue;
+        }
+        if (const Fighter* theirs = reg.try_get<Fighter>(other); theirs != nullptr && theirs->mode == FightMode::Flee) {
+            continue;
+        }
+        if (raidDist(p.x, p.y, at->x, at->y) <= rules_.keepWorkingRadius &&
+            map_.cover().lineOfSight(Viewpoint{p.x, p.y, p.level, Stance::Standing}, Viewpoint{at->x, at->y, at->level, Stance::Standing})) {
+            return false;
+        }
+    }
+    return true;
 }
 
 // What one colonist does while the alarm is on, by its role.

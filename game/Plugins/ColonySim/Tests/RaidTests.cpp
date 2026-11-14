@@ -704,4 +704,20 @@ TEST_CASE("Raids: a colonist too hungry to stand at its post leaves the alarm to
     sim->stepMany(40);
     CHECK(reg.all_of<Fighter>(hungry));
     CHECK(reg.get<Fighter>(hungry).defending);
+
+    // But not with an enemy close by: the year run's hungry colonists ate while a raider shot them from a few metres.
+    sim->submit(StartRaidCommand{"Pirate", 100.0f, 3});
+    sim->step();
+    const std::vector<Entity> raiders = raidTestRaiders(*sim);
+    RAID_REQUIRE(!raiders.empty());
+    // Put the raider 6 m from the hungry colonist (a question about where pawns stand; no step runs).
+    const Position& a = reg.get<Position>(hungry);
+    Position& r = reg.get<Position>(raiders[0]);
+    const Position away = r;
+    r.x = a.x + 6.0f;
+    r.y = a.y;
+    reg.get<Needs>(hungry).food = 0.05f;
+    CHECK_FALSE(sim->raids().excusedToEat(hungry));
+    r = away;  // far off again: let off to eat
+    CHECK(sim->raids().excusedToEat(hungry));
 }

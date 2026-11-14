@@ -345,3 +345,38 @@ defenders sent at a hive), not yet in the totals. What still kills: two raids at
 colonists who work near a new hive before anyone knows it is there (a "keep away from the hive" area or turrets would
 help; `BACKLOG.md`).
 
+
+**Eighth pass (2026-11-14): raids and food fires.** The seventh pass's open killers were two raids at once, raids during an
+illness and a fire that burned all the food. What the logs showed, and the fixes (each with a test):
+
+- **Two raids minutes apart.** Orrin's threat cycle drew its one or two big threats anywhere in the 4.6 "on" days; the
+  data's `minSpacingDays` (1.9, Cassandra's) was never read. Now the threats of a cycle are always 1.9 days apart
+  ([narrator.md](narrator.md)).
+- **Food fires.** A short circuit could hit any powered building (RimWorld's culprit is always a power conduit on a live
+  net, [disasters.md](disasters.md)); embers went through walls (RimWorld's sparks need a clear line, now a wall, a
+  closed door or rock stops them, [fire.md](fire.md)); and firefighters beat a fire at a third of RimWorld's rate
+  (0.00167 a tick, ours, now RimWorld's 0.32 a beat every 66 ticks), so on seed 42 a greenhouse fire outgrew them, ate
+  through the steel storeroom one cell away (steel burns at 40% of wood's flammability, as in RimWorld) and took every
+  meal, the rice, the medicine and the components. The year script now also keeps the storeroom and the greenhouse
+  3 cells clear of other buildings (`kBuildingGap`, a firebreak).
+- **Unarmed colonists shot where they hid.** With no safe roofed cell they ran 25 m and waited in the open, and a raider
+  walked up and shot them there. A shelterer that an enemy is aiming at, or that one within 20 m can see, now moves on
+  ([raids.md](raids.md)).
+- **Eating next to a raider.** "Hunger beats the alarm" let ravenous colonists sit over their meals while a raider shot
+  them from 1 to 6 m. Not while an enemy that can see them is within 20 m now ([raids.md](raids.md)).
+
+`--scenario year --start CrashlandedRainforest` now plays the year on a tropical rainforest tile (a world is made for it;
+the verbose header prints the biome).
+
+| Seed | Seventh pass | After the first three fixes | After all six | What happened in the last run |
+| --- | --- | --- | --- | --- |
+| 1 | 0 | 1 | 1 (2 in the run before the hunger fix) | a sapper and a lone tribal on days 11 and 13 (three dead hand to hand and point-blank), plague and a raid on day 23, illness on day 50 |
+| 7 | 0 | 0 | 7 (6) | one dead to a lone tribal with a spear on day 15, one on day 34; nothing else |
+| 42 | 4 | 0 (food burned on day 34) | 0 (0) | an infestation on day 44, malaria on 45 and a raid on 46 took five; the last starved downed |
+| 42, rainforest | - | - | 1 (1) | the same day 44 to 48 wave (the narrator's draws follow the seed) |
+
+No food fire on any seed in the last two rounds (seed 42's day 34 short circuit burned out a greenhouse conduit only).
+What still kills: one or two raiders who reach the colonists at point-blank range (a club or spear duel, a sapper inside
+the room, a shotgun at 1 m: "a vital part destroyed" from one hit), long gunfights where most shots go into a crest
+(a rifle colonist fired 64 shots at a raider crouched behind a rise 23 m away, 55 into the ground), downed colonists
+bleeding out during a long fight, and an infestation, malaria and a raid in three days.

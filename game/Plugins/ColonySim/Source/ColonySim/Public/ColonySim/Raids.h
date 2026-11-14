@@ -348,7 +348,8 @@ public:
     // A Faction id for a Factions def: the same def always gets the same id.
     FactionId factionId(const std::string& faction);
     DefenseRole roleOf(Entity pawn) const;
-    // Too hungry to answer the alarm (`RaidRules::alarmEatBelow`): it is let off to eat.
+    // Too hungry to answer the alarm (`RaidRules::alarmEatBelow`): it is let off to eat, unless an enemy that can see it is
+    // within `keepWorkingRadius`.
     bool excusedToEat(Entity pawn) const;
 
     const RaidState& state() const { return state_; }
