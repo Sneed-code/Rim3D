@@ -122,9 +122,8 @@ Crocodile" (a 1.6 MB low-poly mesh). No free realistic frog or lizard with anima
 
 ### What is still missing
 
-- **Capybara**: still only the cute free one. Plan: our own build on a free rodent or pig base,
-  unless the Truebones zoo has one.
-- **Parrot, toucan**: our own feathers on the crow's rig.
+- **Capybara**: found in round 2 (Rectus, Sketchfab).
+- **Parrot, toucan**: found in round 2 (Sketchfab).
 - **Frog, lizard, gecko**: none free and animated; low priority (ambience only).
 
 ## What sneed does
@@ -150,3 +149,44 @@ Library** (all free; already done for the African pack). In order of how much we
 
 Nothing else is needed from sneed for Z2: the PC thread downloads each pack from the library into
 the project when it starts.
+
+## Round 2 (sneed's feedback, 2026-11-14)
+
+sneed kept one cobra ([base model](https://www.fab.com/listings/fa501201-17e7-49c2-a36a-a3b55834cfc7)); the others looked
+awful. sneed also added a [Velociraptor](https://www.fab.com/listings/2dd1fd61-8052-4815-9f47-c471fff67a4d), the
+[Tribal Mutant Bug1 Rig](https://www.fab.com/listings/54526751-62b0-4a00-b2cd-ab0d0e91c273) (bug men), a
+[Game ready crow](https://www.fab.com/listings/21cd62fa-246d-41e6-a94f-55b8a8d962c7), Pomba (a pigeon), the
+[Doomsday Pickup Truck](https://www.fab.com/listings/d89201ed-5de8-437c-9b91-3af2d913421a) and the
+[Vehicle Variety Pack](https://www.fab.com/listings/dc1ada50-2523-44b1-b0e2-a72d14076fb4).
+
+**Leopards.** Animated3D has about 20 big cats (leopards, leopard cats, black panthers, tigers and
+cubs), but with Fab's Free filter only the two **Leopard Hybrid** ones are free; the rest sell for
+about $49 each (Tiger_A3 shows $48.69). Free: [Leopard Hybrid_A1](https://www.fab.com/listings/d0e9ce8d-bdb9-412f-9740-6f528f56a2c1),
+[Leopard Hybrid_A2](https://www.fab.com/listings/3506d61b-1f96-4ca3-8fae-dea2ceee0ea5). Paid, for later:
+[Black Panther_A1](https://www.fab.com/listings/d4354341-0e78-47c0-bbf4-b4470b84e7cd), [Black Panther_A2](https://www.fab.com/listings/94e80547-52c1-4461-9454-ac74ad14763e),
+[LeopardCat_A1](https://www.fab.com/listings/1586af92-caef-4983-9d43-85ba7edbfd16), [LeopardCat_A2](https://www.fab.com/listings/bcf0ff11-bff3-4a16-999a-0ff78d50311a),
+[Leopard_Baby_A1](https://www.fab.com/listings/cca7d1aa-ca5d-4da8-a2f4-ac5f8ad88cc3), [Leopard_Baby_A2](https://www.fab.com/listings/27cb8bf5-ff91-4e12-b138-cf5b861e0db9),
+[Tiger_A1](https://www.fab.com/listings/ccb86729-7ab2-41a3-8b57-0b5a49aa6860), [Tiger_A4](https://www.fab.com/listings/10930d97-50ba-4f08-859b-5c17278a7430),
+[Tiger_A5](https://www.fab.com/listings/34c562c4-f41b-4cd9-a5d4-efe3a81d74f0), [Tiger_A6](https://www.fab.com/listings/88fcea28-cdf3-4149-80cb-6794570a75d7).
+
+**Best new source: Animal Animator on Sketchfab** ([all models](https://sketchfab.com/animalanimator/models)).
+Realistic, rigged and animated, and every one checked is **free, CC BY** (credit the author in the
+game's credits). Sketchfab downloads need a free Sketchfab account; there is no library button.
+- [Hummingbird, 6 animations](https://sketchfab.com/3d-models/hummingbird-rigged-6-animations-open-bill-d9b448ac1025485e843d54bebf35390a), a real tropical bird
+- [Darter Dragonfly, real-time flight](https://sketchfab.com/3d-models/darter-dragonfly-38-hz-real-time-flight-rigged-6e1af4c0f7e943cd8f85e3085f26fd71)
+- [Monarch Butterfly, animated](https://sketchfab.com/3d-models/monarch-butterfly-danaus-plexippus-animated-9682aebc9f93491b9cf1d0b2f021a87f)
+- [Male Chimpanzee](https://sketchfab.com/3d-models/male-chimpanzee-hairless-rigged-animated-c53e8ca04bb54d5e8649d95b437e2ca3) (hairless: we add the fur)
+- also on that page, not yet opened: an African elephant bull, a spotted hyena, a giant panda, a
+  giraffe, a sphynx cat, a great white shark, an axolotl and more.
+
+**Other free Sketchfab finds:**
+- **Capybara** by Rectus ([link](https://sketchfab.com/3d-models/capybara-445b5a9c131d482fad76bf5b6c2f8271)): realistic, animated,
+  6,300 triangles, **CC BY-NC** (non-commercial: fine for this private game). This fills the capybara gap.
+- **Toucan Bird** by sevketkabatas ([link](https://sketchfab.com/3d-models/toucan-bird-eb77223ebfd946e69fb58ffe9ad32adf)): animated,
+  19,000 triangles, CC BY.
+- **Love Birds Parrot** by Nyilonelycompany ([link](https://sketchfab.com/3d-models/love-birds-parrot-e31e1c72cff140158b99172285b40056)):
+  animated, 14,400 triangles, CC BY-NC. Same realistic artist as the paid capybara and Asian animals.
+- Skip "Cotw Capybara" and similar: those are ripped from another game.
+
+Free Fab birds stay poor; the [Harpy Eagle](https://www.fab.com/listings/9f99d816-5913-4f37-b48a-dc05b79d8f0d) (CC BY, a
+rainforest eagle) has no rig information and may be AI-made, so it is a maybe.
