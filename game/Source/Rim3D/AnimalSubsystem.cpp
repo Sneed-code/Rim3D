@@ -66,7 +66,15 @@ void USimAnimalSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 void USimAnimalSubsystem::LoadArtTable()
 {
 	bArtTried = true;
-	const FString File = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), TEXT("../assets/animal_art.json")));
+	// assets/ sits beside the sim's data folder, so a packaged game started with -SimData=<repo>\data finds it too.
+	const USimSubsystem* Bridge = GetWorld() ? GetWorld()->GetSubsystem<USimSubsystem>() : nullptr;
+	const FString Repo = Bridge && !Bridge->GetDataRoot().IsEmpty() ? Bridge->GetDataRoot() / TEXT("..") : FPaths::ProjectDir() / TEXT("..");
+	FString File = FPaths::ConvertRelativePathToFull(Repo / TEXT("assets/animal_art.json"));
+	FPaths::CollapseRelativeDirectories(File);
+	if (!FPaths::FileExists(File))
+	{
+		File = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("../assets/animal_art.json"));  // tests on fixture defs
+	}
 	FString Text;
 	TSharedPtr<FJsonObject> Root;
 	if (!FFileHelper::LoadFileToString(Text, *File) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root.IsValid())

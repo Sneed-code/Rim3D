@@ -35,9 +35,8 @@ using namespace colony;
 namespace {
 
 // Small defs so the work is quick: rock of 160 hit points is two picks, a tree needs 200 work.
-std::shared_ptr<const DefDatabase> miningTestDefs() {
-    static const std::shared_ptr<const DefDatabase> defs = [] {
-        const std::vector<DefSource> sources = {
+std::vector<DefSource> miningTestSources() {
+        return {
             {"Things", "test.json", R"([
         {"defName": "Human", "category": "Pawn", "stats": {"moveSpeed": 0.15333}},
         {"defName": "Steel", "category": "Item", "stackLimit": 75},
@@ -68,9 +67,24 @@ std::shared_ptr<const DefDatabase> miningTestDefs() {
         "xpToNextLevel": [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000,
                           12000, 14000, 16000, 18000, 20000, 22000, 24000, 26000, 28000, 30000, 32000],
         "passionLearnFactor": {"None": 0.35, "Minor": 1.0, "Major": 1.5}}])"}};
+}
+
+std::shared_ptr<const DefDatabase> miningTestDefs() {
+    static const std::shared_ptr<const DefDatabase> defs = [] {
         auto db = std::make_shared<DefDatabase>();
         std::vector<std::string> errors;
-        DefDatabase::build(sources, "", *db, errors);
+        DefDatabase::build(miningTestSources(), "", *db, errors);
+        return db;
+    }();
+    return defs;
+}
+
+// The same defs with the work speed-ups of data/tuning.json's `values`.
+std::shared_ptr<const DefDatabase> miningTunedDefs() {
+    static const std::shared_ptr<const DefDatabase> defs = [] {
+        auto db = std::make_shared<DefDatabase>();
+        std::vector<std::string> errors;
+        DefDatabase::build(miningTestSources(), R"({"values": {"work.treeFellingSpeed": 10, "work.miningSpeed": 2}})", *db, errors);
         return db;
     }();
     return defs;
@@ -478,6 +492,48 @@ TEST_CASE("Chopping: felling a grown tree gives wood by growth and skill, a sapl
     MINING_REQUIRE(miningRunUntil(two, log2, 6000, [&] { return !two.plants().has(CellPos{12, 8, 0}) && !two.plants().has(CellPos{12, 10, 0}); }));
     // 46 x 0.5 x 0.6 = 13.8 -> 14, and 46 x 1.0 x 0.6 = 27.6 -> 28.
     CHECK(miningItemCount(two, "WoodLog") == 42);
+}
+
+TEST_CASE("Chopping and mining: the tuning's work speed-ups fell a tree 10 times and dig rock 2 times faster") {
+    // How long the work itself takes, from the first blow to the plant or rock going.
+    const auto workSeconds = [](std::shared_ptr<const DefDatabase> defs, bool tree) {
+        Sim sim(SimSettings{5, 32, 0, 0, true}, defs);
+        const CellPos target{12, 8, 0};
+        if (tree) {
+            sim.plants().place(target, miningDef(sim, "Plant_TreeOak"), 1.0f);
+        } else {
+            miningPlaceRock(sim, target);
+        }
+        miningPawn(sim, CellPos{9, 8, 0});
+        sim.submit(DesignateCommand{CellRect{12, 8, 1, 1, 0}, tree ? DesignationKind::CutPlant : DesignationKind::Mine});
+        int64_t started = -1;
+        for (int i = 0; i < 2000; ++i) {
+            sim.step();
+            for (const Event& e : sim.events()) {
+                if (started < 0 && e.type == EventType::PawnAction && (e.action == PawnAction::Cut || e.action == PawnAction::Mine)) {
+                    started = sim.time().seconds;
+                }
+            }
+            if (tree ? !sim.plants().has(target) : !sim.mineables().has(target)) {
+                return started < 0 ? int64_t{-1} : sim.time().seconds - started;
+            }
+        }
+        return int64_t{-1};
+    };
+    const int64_t treePlain = workSeconds(miningTestDefs(), true);
+    const int64_t treeFast = workSeconds(miningTunedDefs(), true);
+    CAPTURE(treePlain);
+    CAPTURE(treeFast);
+    CHECK(treePlain >= 195);  // 200 work at 100% speed
+    CHECK(treeFast >= 18);
+    CHECK(treeFast <= 22);
+    const int64_t rockPlain = workSeconds(miningTestDefs(), false);
+    const int64_t rockFast = workSeconds(miningTunedDefs(), false);
+    CAPTURE(rockPlain);
+    CAPTURE(rockFast);
+    MINING_REQUIRE(rockPlain > 0);
+    MINING_REQUIRE(rockFast > 0);
+    CHECK(static_cast<double>(rockFast) == doctest::Approx(static_cast<double>(rockPlain) / 2.0).epsilon(0.05));
 }
 
 TEST_CASE("Harvesting: a berry bush is picked and grows back, a tree harvested comes down") {

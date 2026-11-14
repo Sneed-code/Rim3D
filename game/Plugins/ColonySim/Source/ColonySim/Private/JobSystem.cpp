@@ -1600,7 +1600,8 @@ JobSystem::StepResult JobSystem::place(Entity pawn, Job& job, std::string& why) 
 
 float JobSystem::constructionSpeed(Entity pawn, const char* skillName) const {
     const float talent = talents_ != nullptr ? static_cast<float>(talents_->statFactor(pawn, "buildSpeed")) : 1.0f;
-    return construction_.skillSpeed(pawn, skillName) * health_.capacityValue(pawn, "Manipulation") * workFactor(pawn) * talent;
+    return construction_.skillSpeed(pawn, skillName) * health_.capacityValue(pawn, "Manipulation") * workFactor(pawn) * talent *
+           static_cast<float>(gather_.constructionSpeed);
 }
 
 JobSystem::StepResult JobSystem::deliver(Entity pawn, Job& job, std::string& why) {
@@ -1641,7 +1642,7 @@ JobSystem::StepResult JobSystem::buildWork(Entity pawn, Job& job, std::string& w
     const bool art = construction_.isArt(reg.get<Thing>(job.thing).def);
     const char* skillName = art ? "Artistic" : "Construction";
     site.workDone += constructionSpeed(pawn, skillName) * static_cast<float>(construction_.numbers().buildWorkPerSecond);
-    learnSkill(pawn, skillName, gather_.constructionXpPerSecond);
+    learnSkill(pawn, skillName, gather_.constructionXpPerSecond * gather_.constructionSpeed);
     if (site.workDone < site.workTotal) {
         return StepResult::Running;
     }
@@ -1683,7 +1684,7 @@ JobSystem::StepResult JobSystem::deconstructWork(Entity pawn, Job& job, std::str
         pawnDid(pawn, PawnAction::Deconstruct, job.thing);
     }
     job.progress += constructionSpeed(pawn) * static_cast<float>(construction_.numbers().deconstructWorkPerSecond);
-    learnSkill(pawn, "Construction", gather_.constructionXpPerSecond);
+    learnSkill(pawn, "Construction", gather_.constructionXpPerSecond * gather_.constructionSpeed);
     if (job.progress < construction_.deconstructWork(job.thing)) {
         return StepResult::Running;
     }

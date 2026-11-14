@@ -488,6 +488,35 @@ void UTerrainSubsystem::MarkCellDirty(colony::CellPos Cell)
 	}
 }
 
+void UTerrainSubsystem::ReadLevelledCorners(const colony::Map& Map)
+{
+	// Ground the sim dug flat or filled under a structure: a corner is shared by the four cells round it, and the plants on them
+	// stand at the new height too.
+	const std::vector<uint32>& Corners = Map.levelledCorners();
+	const int64 Count = static_cast<int64>(Corners.size());
+	if (Count < LevelledSeen)
+	{
+		LevelledSeen = 0;
+	}
+	for (int64 K = LevelledSeen; K < Count; ++K)
+	{
+		const colony::CellPos Corner = Map.cellAt(static_cast<int>(Corners[static_cast<size_t>(K)]));
+		for (int32 DY = -1; DY <= 0; ++DY)
+		{
+			for (int32 DX = -1; DX <= 0; ++DX)
+			{
+				const colony::CellPos Cell{Corner.x + DX, Corner.y + DY, 0};
+				if (Map.inBounds(Cell))
+				{
+					MarkCellDirty(Cell);
+					MarkPlantDirty(Cell);
+				}
+			}
+		}
+	}
+	LevelledSeen = Count;
+}
+
 void UTerrainSubsystem::MarkPlantDirty(colony::CellPos Cell)
 {
 	int32 CX, CY;
@@ -895,6 +924,7 @@ void UTerrainSubsystem::RebuildAll()
 	const colony::Map& Map = Core.map();
 	BuiltSim = &Core;
 	BuiltGeneration = Sim->GetSimGeneration();
+	LevelledSeen = static_cast<int64>(Map.levelledCorners().size());
 	BuiltOrigin = Sim->GetWorldOrigin();
 	ChunksX = TerrChunksFor(Map.width());
 	ChunksY = TerrChunksFor(Map.height());
@@ -1006,6 +1036,7 @@ void UTerrainSubsystem::Tick(float DeltaTime)
 		TerrainActor->SetActorLocation(BuiltOrigin);
 	}
 
+	ReadLevelledCorners(Sim->GetSim()->map());
 	bool bRoofChanged = false;
 	ReadThinRoof(bRoofChanged);
 	UpdateRoofVisibility(false);
