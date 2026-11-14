@@ -669,19 +669,19 @@ bool replayReadPriority(ReplayReader& r, const ReplayJson& j, const std::string&
 }
 
 
-// "kind": "Mine", "CutPlant" or "HarvestPlant"; "None" (cancelling only) means every kind.
+// "kind": "Mine", "CutPlant", "HarvestPlant" or "RemoveFloor"; "None" (cancelling only) means every kind.
 bool replayReadDesignation(ReplayReader& r, const ReplayJson& j, const std::string& where, DesignationKind& out) {
     std::string name = designationKindName(out);
     if (!r.text(j, "kind", name, where)) {
         return false;
     }
-    for (const DesignationKind k : {DesignationKind::None, DesignationKind::Mine, DesignationKind::CutPlant, DesignationKind::HarvestPlant}) {
+    for (const DesignationKind k : {DesignationKind::None, DesignationKind::Mine, DesignationKind::CutPlant, DesignationKind::HarvestPlant, DesignationKind::RemoveFloor}) {
         if (name == designationKindName(k)) {
             out = k;
             return true;
         }
     }
-    return r.fail(where + ".kind must be None, Mine, CutPlant or HarvestPlant");
+    return r.fail(where + ".kind must be None, Mine, CutPlant, HarvestPlant or RemoveFloor");
 }
 
 // "mode": "Count" (the default), "UntilHave" or "Forever"
@@ -959,7 +959,7 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         if (c.kind == DesignationKind::None) {
-            return r.fail(where + ".kind must be Mine, CutPlant or HarvestPlant");
+            return r.fail(where + ".kind must be Mine, CutPlant, HarvestPlant or RemoveFloor");
         }
         out.command = c;
     } else if (type == "CancelDesignations") {

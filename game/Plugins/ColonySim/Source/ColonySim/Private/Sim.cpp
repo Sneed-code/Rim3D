@@ -1572,7 +1572,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         const CellRect& area = designate->area;
         int marked = 0;
         if (kind == DesignationKind::None) {
-            commandFailed(id, "Designate needs Mine, CutPlant or HarvestPlant (CancelDesignations takes marks off)");
+            commandFailed(id, "Designate needs Mine, CutPlant, HarvestPlant or RemoveFloor (CancelDesignations takes marks off)");
             return;
         }
         for (int y = std::max(0, area.minY); y < std::min(map_.height(), area.minY + area.sizeY); ++y) {
@@ -1584,6 +1584,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
                 bool suits = false;
                 if (kind == DesignationKind::Mine) {
                     suits = mineables_->has(c);
+                } else if (kind == DesignationKind::RemoveFloor) {
+                    suits = floors_->at(c).valid();
                 } else if (plants_->has(c)) {
                     suits = kind == DesignationKind::CutPlant || defs_->get(plants_->defAt(c)).has("plant.harvestedThingDef");
                 }
@@ -1594,9 +1596,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             }
         }
         if (marked == 0) {
-            commandFailed(id, kind == DesignationKind::Mine ? "there is no rock to mine there"
-                                                            : (kind == DesignationKind::CutPlant ? "there is no plant to cut there"
-                                                                                                 : "there is nothing to harvest there"));
+            commandFailed(id, kind == DesignationKind::Mine          ? "there is no rock to mine there"
+                              : kind == DesignationKind::RemoveFloor ? "there is no floor to take up there"
+                              : kind == DesignationKind::CutPlant    ? "there is no plant to cut there"
+                                                                     : "there is nothing to harvest there");
         } else {
             Event changed;
             changed.type = EventType::DesignationsChanged;

@@ -139,9 +139,12 @@
     "skillSpeedBase": 0.3,
     "skillSpeedPerLevel": 0.0875,
     "defaultSkillLevel": 8,
+    "removeFloorWork": 288,
+    "architectCategories": ["Structure", "Production", "Furniture", "Power", "Security", "Misc", "Floors", "Joy", "Ship", "Temperature"],
+    "architectLabels": {"Joy": "Recreation"},
     "unverified": ["buildWorkPerSecond", "deconstructWorkPerSecond", "deconstructWorkMin", "deconstructWorkMax",
-                   "deconstructRefundFactor", "skillSpeedBase", "skillSpeedPerLevel"],
-    "ours": ["defaultSkillLevel"]
+                   "deconstructRefundFactor", "skillSpeedBase", "skillSpeedPerLevel", "removeFloorWork"],
+    "ours": ["defaultSkillLevel", "architectCategories", "architectLabels"]
   },
   {
     "defName": "DoorRules", "source": "RimWorld wiki",
@@ -196,7 +199,8 @@
     },
     "plants": {
       "speedBase": 0.08, "speedPerLevel": 0.115,
-      "xpPerSecond": 0.059028
+      "xpPerSecond": 0.059028,
+      "skillCurve": { "lowLevel": 1, "lowFraction": 0.3333, "highLevel": 20, "normalLevel": 8 }
     },
     "construction": { "xpPerSecond": 0.173611 },
     "yieldByLevel": [0.6, 0.7, 0.8, 0.85, 0.9, 0.925, 0.95, 0.975, 1.0, 1.01, 1.02,
@@ -204,7 +208,7 @@
     "growthYieldFloor": 0.5,
     "unskilledSkillLevel": 8,
     "unverified": ["mining.hitDamage", "mining.hitSeconds", "mining.xpPerSecond", "plants.xpPerSecond", "construction.xpPerSecond", "yieldByLevel", "growthYieldFloor"],
-    "ours": ["mining.rockTypesPerMap", "mining.orePerTenThousandRockCells", "unskilledSkillLevel"]
+    "ours": ["mining.rockTypesPerMap", "mining.orePerTenThousandRockCells", "unskilledSkillLevel", "plants.skillCurve"]
   },
   {
     "defName": "LooksRules", "source": "Rim3D",

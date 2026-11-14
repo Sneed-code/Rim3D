@@ -88,6 +88,7 @@ Construction::Construction(Map& map, Things& things, Plants& plants, const DefDa
         numbers_.skillSpeedBase = rules->number("skillSpeedBase", numbers_.skillSpeedBase);
         numbers_.skillSpeedPerLevel = rules->number("skillSpeedPerLevel", numbers_.skillSpeedPerLevel);
         numbers_.defaultSkillLevel = static_cast<int>(rules->integer("defaultSkillLevel", numbers_.defaultSkillLevel));
+        numbers_.removeFloorWork = rules->number("removeFloorWork", numbers_.removeFloorWork);
     }
 }
 
@@ -216,34 +217,38 @@ bool Construction::isFloorPlan(Entity site) const {
     return s != nullptr && s->floor.valid();
 }
 
-Entity Construction::placeFloorPlan(DefId floor, DefId stuff, CellPos cell, std::string& error) {
+std::string Construction::whyNotFloorPlan(DefId floor, DefId stuff, CellPos cell) const {
     const DefId planDef = defs_.idOf("Things", "FloorPlan");
     if (floors_ == nullptr || !planDef.valid() || !floors_->isFloorDef(floor)) {
-        error = "that isn't a floor that can be laid";
-        return kNoEntity;
+        return "that isn't a floor that can be laid";
     }
     const Def& d = defs_.get(floor);
     if (!stuffFits(floor, stuff)) {
-        error = d.count("stuffCategories") == 0 ? "that floor is not made of anything" : "that floor can't be made of that";
-        return kNoEntity;
+        return d.count("stuffCategories") == 0 ? "that floor is not made of anything" : "that floor can't be made of that";
     }
     if (!map_.inBounds(cell) || cell.level != 0 || !map_.groundBuildable(cell, false)) {
-        error = "can't lay a floor on " + constructionCellText(cell);
-        return kNoEntity;
+        return "can't lay a floor on " + constructionCellText(cell);
     }
     if (floors_->at(cell) == floor) {
-        error = "that floor is laid at " + constructionCellText(cell) + " already";
-        return kNoEntity;
+        return "that floor is laid at " + constructionCellText(cell) + " already";
     }
     if (const Entity building = map_.buildingAt(cell);
         building != kNoEntity && defs_.get(things_.registry().get<Thing>(building).def).text("passability") == "Impassable") {
-        error = "there is a building at " + constructionCellText(cell);
-        return kNoEntity;
+        return "there is a building at " + constructionCellText(cell);
     }
     if (siteAt(cell) != kNoEntity) {
-        error = "something is already planned at " + constructionCellText(cell);
+        return "something is already planned at " + constructionCellText(cell);
+    }
+    return {};
+}
+
+Entity Construction::placeFloorPlan(DefId floor, DefId stuff, CellPos cell, std::string& error) {
+    error = whyNotFloorPlan(floor, stuff, cell);
+    if (!error.empty()) {
         return kNoEntity;
     }
+    const DefId planDef = defs_.idOf("Things", "FloorPlan");
+    const Def& d = defs_.get(floor);
     map_.levelGround(CellRect{cell.x, cell.y, 1, 1, cell.level});  // a floor lies flat (docs/design/levelling.md)
 
     ConstructionSite site;
@@ -275,15 +280,13 @@ Entity Construction::placeFloorPlan(DefId floor, DefId stuff, CellPos cell, std:
     return e;
 }
 
-Entity Construction::placeBlueprint(DefId def, DefId stuff, CellPos cell, Rot4 rot, std::string& error) {
+std::string Construction::whyNotBlueprint(DefId def, DefId stuff, CellPos cell, Rot4 rot) const {
     if (!buildable(def)) {
-        error = "that can't be built";
-        return kNoEntity;
+        return "that can't be built";
     }
     const Def& d = defs_.get(def);
     if (!stuffFits(def, stuff)) {
-        error = d.count("stuffCategories") == 0 ? "that is not made of anything" : "it can't be made of that";
-        return kNoEntity;
+        return d.count("stuffCategories") == 0 ? "that is not made of anything" : "it can't be made of that";
     }
     const bool upperFloor = isUpperFloor(def);
     const int sizeX = upperFloor ? 1 : std::max(1, static_cast<int>(d.numberAt("size", 0, 1.0)));
@@ -291,8 +294,7 @@ Entity Construction::placeBlueprint(DefId def, DefId stuff, CellPos cell, Rot4 r
     const CellRect rect = footprintRect(cell, sizeX, sizeY, rot);
     const bool onWater = d.flag("building.onFlowingWater");
     if (d.has("building.climb") && rect.level + 1 >= Map::kLevels) {
-        error = "there is no level above " + constructionCellText(cell) + " to climb to";
-        return kNoEntity;
+        return "there is no level above " + constructionCellText(cell) + " to climb to";
     }
     for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
         for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
@@ -300,31 +302,39 @@ Entity Construction::placeBlueprint(DefId def, DefId stuff, CellPos cell, Rot4 r
             if (upperFloor) {
                 // An upper floor goes on open air, where it would be held up (docs/design/levels.md).
                 if (upperFloors_ == nullptr || !map_.inBounds(c) || c.level < 1) {
-                    error = "an upper floor goes on a level above the ground";
-                    return kNoEntity;
+                    return "an upper floor goes on a level above the ground";
                 }
                 if (map_.upperFloor(c)) {
-                    error = "there is a floor at " + constructionCellText(c) + " already";
-                    return kNoEntity;
+                    return "there is a floor at " + constructionCellText(c) + " already";
                 }
                 if (const std::string why = upperFloors_->whyNotLay(c); !why.empty()) {
-                    error = why;
-                    return kNoEntity;
+                    return why;
                 }
             } else if (!map_.inBounds(c) || !map_.groundBuildable(c, onWater)) {
-                error = "can't build on " + constructionCellText(c);
-                return kNoEntity;
+                return "can't build on " + constructionCellText(c);
             }
             if (map_.buildingAt(c) != kNoEntity) {
-                error = "there is a building at " + constructionCellText(c);
-                return kNoEntity;
+                return "there is a building at " + constructionCellText(c);
             }
             if (siteAt(c) != kNoEntity) {
-                error = "something is already planned at " + constructionCellText(c);
-                return kNoEntity;
+                return "something is already planned at " + constructionCellText(c);
             }
         }
     }
+    return {};
+}
+
+Entity Construction::placeBlueprint(DefId def, DefId stuff, CellPos cell, Rot4 rot, std::string& error) {
+    error = whyNotBlueprint(def, stuff, cell, rot);
+    if (!error.empty()) {
+        return kNoEntity;
+    }
+    const Def& d = defs_.get(def);
+    const bool upperFloor = isUpperFloor(def);
+    const int sizeX = upperFloor ? 1 : std::max(1, static_cast<int>(d.numberAt("size", 0, 1.0)));
+    const int sizeY = upperFloor ? 1 : std::max(1, static_cast<int>(d.numberAt("size", 1, 1.0)));
+    const CellRect rect = footprintRect(cell, sizeX, sizeY, rot);
+    const bool onWater = d.flag("building.onFlowingWater");
 
     // The plan levels its ground at once, so the player sees where it will stand (docs/design/levelling.md).
     if (!onWater && !upperFloor) {
@@ -572,6 +582,28 @@ float Construction::deconstructWork(Entity building) const {
     const BuiltOf* made = reg.try_get<BuiltOf>(building);
     const double work = workToBuild(def, made ? made->stuff : DefId{});
     return static_cast<float>(std::clamp(work, numbers_.deconstructWorkMin, numbers_.deconstructWorkMax));
+}
+
+bool Construction::removeFloor(CellPos cell) {
+    const DefId floor = floors_ != nullptr ? floors_->at(cell) : DefId{};
+    if (!floor.valid()) {
+        return false;
+    }
+    std::vector<Cost> refund;
+    for (const Cost& cost : costOf(floor, DefId{})) {
+        const double exact = static_cast<double>(cost.count) * numbers_.deconstructRefundFactor;
+        int count = static_cast<int>(std::floor(exact));
+        const double fraction = exact - static_cast<double>(count);
+        if (fraction > 0.0 && static_cast<double>(rng_.unit()) < fraction) {
+            ++count;
+        }
+        refund.push_back(Cost{cost.item, count});
+    }
+    floors_->set(cell, DefId{});
+    for (const Cost& cost : refund) {
+        dropNear(cost.item, cost.count, CellRect{cell.x, cell.y, 1, 1, cell.level});
+    }
+    return true;
 }
 
 bool Construction::deconstruct(Entity building) {

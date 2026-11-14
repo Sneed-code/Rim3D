@@ -30,6 +30,8 @@ Buttons for **Orders**, **Zones** and one for each architect category the defs n
 | Zones | Remove zone | `RemoveZoneCellsCommand` |
 | a building category | one button for each building def with a `designationCategory` and `stats.workToBuild` | see below |
 
+**Clicks go to the tool before ImGui** (sneed's playtest, 2026-11-14): the ImGui plugin keeps every mouse press while it thinks it wants the mouse, and can stay stuck that way after a missed release, so with a tool in hand a press over the world is taken first unless an ImGui panel or open dropdown is under the cursor (`Orders.ClickFirst 0`: the old way). A click that hits no ground says *Click on the ground*; every press and release is logged (`LogOrders`). Smoke test `orders_world` covers it with real Slate events on the rainforest world start.
+
 Click a tool to pick it, click it again, press Esc or right click to put it down. With a tool in hand the left
 button does the tool's job instead of selecting. The bar also shows what the last order did ("Planned 6 x Wall").
 

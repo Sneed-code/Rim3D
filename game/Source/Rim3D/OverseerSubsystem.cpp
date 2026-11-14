@@ -345,7 +345,15 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 	// Inspect panel, bottom left: what is selected.
 	if (Selection.IsValid())
 	{
-		ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Margin, Viewport->Pos.y + Viewport->Size.y - Margin), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+		// Above the architect bar where the two would overlap (its Structure and Wall buttons were under this panel on small screens).
+		float Bottom = Viewport->Pos.y + Viewport->Size.y - Margin;
+		FBox2D Bar;
+		if (const UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>(); Orders && Orders->GetBarRect(Bar) &&
+			Bar.Min.X < Viewport->Pos.x + Margin + 560.0f * Scale)
+		{
+			Bottom = FMath::Min(Bottom, static_cast<float>(Bar.Min.Y) - Margin * 0.5f);
+		}
+		ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Margin, Bottom), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
 		ImGui::SetNextWindowSizeConstraints(ImVec2(300.0f * Scale, 0.0f), ImVec2(560.0f * Scale, FLT_MAX));
 		if (ImGui::Begin("##OverseerInspect", nullptr, PanelFlags))
 		{
