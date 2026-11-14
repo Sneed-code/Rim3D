@@ -207,6 +207,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
         startScenario();
     }
     animals_->populate(settings_.wildAnimals);  // after the colonists, so no herd starts on top of them
+    rooms_->noteBedOwners();
     rooms_->update();
     power_->update();
     lights_->update();
@@ -675,6 +676,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
                                              splitMix64(settings.seed ^ 0x736F6369616CULL));
     social_->setEventLog(&events_);
     jobs_->setPartnerOf([this](Entity pawn) { return social_->partner(pawn); });
+    rooms_->setPartnerOf([this](Entity pawn) { return social_->partner(pawn); });
     // Partners who don't share a bed want to (RimWorld's "want to sleep with partner"; docs/design/lovin.md): a partner
     // on the map whom the pawn thinks well of, and no bed of theirs in common.
     mood_->addSituation("wantToSleepWithPartner", [this](Entity pawn) {
@@ -2018,7 +2020,7 @@ void Sim::stepOnce(bool keepEvents) {
     { SimLap lap(profile_, "apparel"); apparel_->step(time_.seconds, rng_, events_); }
     { SimLap lap(profile_, "loot"); loot_->step(events_, 0, raids_->state(), time_.seconds); }  // raiders killed this step drop their packs
     { SimLap lap(profile_, "pathfinder"); pathfinder_.update(settings_.pathBudget); }  // paths asked for this step are ready next step at the earliest
-    { SimLap lap(profile_, "rooms"); rooms_->update(); }
+    { SimLap lap(profile_, "rooms"); rooms_->noteBedOwners(); rooms_->update(); }
     { SimLap lap(profile_, "roofCollapse"); roofCollapse_->step(rng_); }  // roofs and floors that lost their holders fall
     { SimLap lap(profile_, "power"); power_->step(time_); }
     { SimLap lap(profile_, "lights"); lights_->update(); }
