@@ -93,15 +93,20 @@ int32 UTreeArtCommandlet::Main(const FString& Params)
 		}
 		if (Meshes.Num() > 1)
 		{
-			UE_LOG(LogTreeArt, Warning, TEXT("%s: %d meshes (not joined); the first is used"), *Id, Meshes.Num());
+			// A set of separate pieces (the rock sets): each stays its own mesh, named <id>_<piece>.
+			UE_LOG(LogTreeArt, Display, TEXT("%s: %d separate meshes"), *Id, Meshes.Num());
 		}
 		UStaticMesh* Mesh = Meshes[0];
 		// Nanite draws every leaf; foliage keeps its area as it simplifies so far crowns do not thin out.
-		Mesh->NaniteSettings.bEnabled = true;
-		Mesh->NaniteSettings.ShapePreservation = ENaniteShapePreservation::PreserveArea;
-		Mesh->PostEditChange();
-		// The import saved the mesh, its materials and textures; save the mesh again with Nanite on.
-		const bool bSaved = TreeSave(Mesh);
+		bool bSaved = true;
+		for (UStaticMesh* Each : Meshes)
+		{
+			Each->NaniteSettings.bEnabled = true;
+			Each->NaniteSettings.ShapePreservation = ENaniteShapePreservation::PreserveArea;
+			Each->PostEditChange();
+			// The import saved the mesh, its materials and textures; save the mesh again with Nanite on.
+			bSaved = TreeSave(Each) && bSaved;
+		}
 		const FBox Box = Mesh->GetBoundingBox();
 		UE_LOG(LogTreeArt, Display, TEXT("%s: %s, %d materials, %.1f x %.1f x %.1f m%s"), *Id, *Mesh->GetPathName(), Mesh->GetStaticMaterials().Num(),
 			Box.GetSize().X / 100.0, Box.GetSize().Y / 100.0, Box.GetSize().Z / 100.0, bSaved ? TEXT("") : TEXT(" (NOT all saved)"));

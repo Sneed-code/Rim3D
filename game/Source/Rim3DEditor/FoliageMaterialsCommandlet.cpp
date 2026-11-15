@@ -309,6 +309,17 @@ int32 UFoliageMaterialsCommandlet::Main(const FString& Params)
 			continue;
 		}
 		UStaticMesh* Mesh = Cast<UStaticMesh>(Asset.GetAsset());
+		// Only trees (a slot with leaves or branch cards); rocks keep the materials they came with.
+		bool bTree = false;
+		for (int32 Slot = 0; Mesh && Slot < Mesh->GetStaticMaterials().Num(); ++Slot)
+		{
+			const FString SlotMaterial = Mesh->GetMaterial(Slot) ? Mesh->GetMaterial(Slot)->GetName() : FString();
+			bTree |= SlotMaterial.Contains(TEXT("leaves")) || SlotMaterial.Contains(TEXT("leaf")) || SlotMaterial.Contains(TEXT("branch"));
+		}
+		if (!bTree)
+		{
+			continue;
+		}
 		for (int32 Slot = 0; Mesh && Slot < Mesh->GetStaticMaterials().Num(); ++Slot)
 		{
 			UMaterialInterface* Original = Mesh->GetMaterial(Slot);

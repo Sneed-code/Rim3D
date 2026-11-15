@@ -138,6 +138,13 @@ commandlet imports each whole (one mesh, Nanite on with foliage keeping its area
 `M_FoliageTex` (the plant master for ordinary, non-virtual textures): leaves and branch cards masked, bark solid, all of a
 tree swaying alike. The glTF import's own materials drew the leaves black.
 
+**Rocks (L6)**: open soil, sand or rough stone beside rock gets a boulder or mossy stone now and then (`data/look.json`
+`"rockScatter"`: chance per cell, more with more rock neighbours; each scaled to `size` metres across; Poly Haven's
+mossy rock sets and boulder, imported by `TreeArt`, which keeps a set's pieces as separate meshes). Like the ground cover
+they are cosmetic, rebuilt with the chunk, and never on built cells. The terrain material puts moss (the soil layer) on
+the flat tops of rock blocks (`assets/terrain_textures.json` `slope.rockMoss`), so cliffs are green on top and bare on
+the sides.
+
 **Wind**: the Megascans foliage materials sway by world position offset. `visual.windDistance` (metres) is how far
 out a kind keeps moving (`SetWorldPositionOffsetDisableDistance`); past it the leaves hold still and cost nothing.
 `Terrain.WindDistance` scales every kind's distance (0 turns plant wind off), read when the terrain is built.

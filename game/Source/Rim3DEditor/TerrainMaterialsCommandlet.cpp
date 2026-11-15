@@ -48,6 +48,8 @@ namespace
 		"float grass = saturate(1.0 - sand - rock - gravel - water);\n"
 		"float steep = (1.0 - smoothstep(SlopeFull, SlopeFrom, n.z)) * (1.0 - water);\n"
 		"grass *= 1.0 - steep; sand *= 1.0 - steep; gravel *= 1.0 - steep; rock = rock * (1.0 - steep) + steep;\n"
+		// Moss and plants take the flat tops of rock (the tropics' cliffs are green on top); the sides stay bare.
+		"float mossTop = rock * smoothstep(0.82, 0.97, n.z) * RockMoss; grass += mossTop; rock -= mossTop;\n"
 		"float2 bq = P.xy / 140.0; float2 bi = floor(bq); float2 bf = frac(bq); bf = bf * bf * (3.0 - 2.0 * bf);\n"
 		"float4 b00 = frac(sin(float4(dot(bi, float2(127.1, 311.7)), dot(bi, float2(269.5, 183.3)), dot(bi, float2(419.2, 371.9)), dot(bi, float2(91.7, 233.1)))) * 43758.5453);\n"
 		"float4 b10 = frac(sin(float4(dot(bi + float2(1, 0), float2(127.1, 311.7)), dot(bi + float2(1, 0), float2(269.5, 183.3)), dot(bi + float2(1, 0), float2(419.2, 371.9)), dot(bi + float2(1, 0), float2(91.7, 233.1)))) * 43758.5453);\n"
@@ -273,6 +275,9 @@ namespace
 		double Ripple = 0.35;
 		Water->TryGetNumberField(TEXT("ripple"), Ripple);
 		TerrInput(NormalNode, TEXT("WaterRipple"), TerrScalar(Material, TEXT("WaterRipple"), Ripple, 2200));
+		double RockMoss = 0.0;
+		Slope->TryGetNumberField(TEXT("rockMoss"), RockMoss);
+		BothGet(TEXT("RockMoss"), RockMoss, 440);
 		BothGet(TEXT("SlopeFrom"), Slope->GetNumberField(TEXT("rockFrom")), 500);
 		BothGet(TEXT("SlopeFull"), Slope->GetNumberField(TEXT("rockFull")), 560);
 		int32 Y = 620;
