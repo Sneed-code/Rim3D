@@ -249,7 +249,10 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 			}
 			// Simulated in component space: in world space a clip's first frame or a jump of the pawn flung the chains up
 			// into a sheet, and in the head's space gravity pointed along the head bone's axis (the hair stood out sideways).
-			TSharedPtr<FAnimNode_AnimDynamics> Chain = MakeChain(First, Last, Ref, 1.0f, 260.0f, 14.0f);
+			// Chains 4 and 5 hang at the sides in front of the shoulders (add_hair_bones' azimuths): stiffer and in a narrow
+			// cone, or a lock swings across the chest.
+			const bool bSide = c >= 4;
+			TSharedPtr<FAnimNode_AnimDynamics> Chain = MakeChain(First, Last, Ref, 1.0f, bSide ? 450.0f : 260.0f, bSide ? 6.0f : 14.0f);
 			Chain->SimulationSpace = AnimPhysSimSpaceType::Component;
 			Dynamics.Add(Chain);
 		}
