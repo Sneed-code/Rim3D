@@ -521,7 +521,7 @@ def add_morphs(meshes, morphs, log=print):
         log("morph", name, "on", made, "meshes")
 
 
-def add_tusks(rig, body, length=0.03, radius=0.006, color=(0.78, 0.72, 0.58), log=print):
+def add_tusks(rig, body, length=0.03, radius=0.006, color=(0.78, 0.72, 0.58), inset=0.004, log=print):
     """Two lower tusks out of the jaw at the corners of the mouth, curving up and out, for any MakeHuman face (found
     from the skin: the nose tip is the face's frontmost point, the mouth a little under it), weighted to the head."""
     from mathutils import Vector
@@ -541,7 +541,7 @@ def add_tusks(rig, body, length=0.03, radius=0.006, color=(0.78, 0.72, 0.58), lo
         want = Vector((hx + side * 0.019, nose.y + 0.018, nose.z - 0.04))  # just under the mouth corners
         near = [p for p in face if abs(p.x - want.x) < 0.006 and abs(p.z - want.z) < 0.006]
         base = min(near, key=lambda p: p.y) if near else want   # the skin's front there
-        base = base + Vector((0.0, 0.004, 0.0))                 # its root just inside the lip
+        base = base + Vector((0.0, inset, 0.0))                 # its root just inside the lip (deep inside when hidden)
         up, out, fwd = Vector((0, 0, 1)), Vector((side, 0, 0)), Vector((0, -1, 0))
         rings = 8
         centres = [base + (up * 0.85 + fwd * 0.35) * length * (i / (rings - 1)) + out * length * 0.25 * (i / (rings - 1)) ** 2
@@ -916,3 +916,143 @@ def round_hair_ends(obj, rig, start_share=0.35, side_cut=0.45, log=print):
             v.co = back @ p
     obj.data.update()
     log("hair ends rounded on", obj.name, "below", round(zs, 3))
+
+
+def make_wrinkle_map(body, morphs, groups, out_path, size=2048, spacing=0.016, log=print):
+    """Wrinkles for the face units, found from how each unit squeezes the skin, for any body: for each group of units
+    (forehead, brow furrow, smile, nose; {"name": [morph names]}), where the skin shrinks in that unit, creases run
+    across the squeeze, `spacing` metres apart, deeper the more it shrinks. Written as heights in RGBA (one group a
+    channel) in the skin's texture space; the skin material turns them into a normal by how far each group's units
+    are on (the creator's face)."""
+    import numpy as np
+    mesh = body.data
+    nv = len(mesh.vertices)
+    base = np.empty(nv * 3, dtype=np.float32)
+    mesh.vertices.foreach_get("co", base)
+    base = base.reshape(-1, 3)
+    scale = body.matrix_world.to_scale().x
+    edges = np.empty(len(mesh.edges) * 2, dtype=np.int64)
+    mesh.edges.foreach_get("vertices", edges)
+    edges = edges.reshape(-1, 2)
+    # One UV per vertex (its first loop): good enough away from seams, and the face has few.
+    uv_layer = mesh.uv_layers.active
+    loop_uv = np.empty(len(mesh.loops) * 2, dtype=np.float32)
+    uv_layer.data.foreach_get("uv", loop_uv)
+    loop_uv = loop_uv.reshape(-1, 2)
+    loop_vert = np.empty(len(mesh.loops), dtype=np.int64)
+    mesh.loops.foreach_get("vertex_index", loop_vert)
+    vuv = np.zeros((nv, 2), dtype=np.float32)
+    vuv[loop_vert[::-1]] = loop_uv[::-1]
+    channels = []
+    for name, units in groups.items():
+        # The squeeze tensor per vertex: sum over its edges of shrink * d d^T (d the edge's UV direction), and the
+        # UV-per-metre scale of its edges.
+        tensor = np.zeros((nv, 3), dtype=np.float64)   # xx, xy, yy
+        amount = np.zeros(nv)
+        count = np.zeros(nv)
+        uvscale = np.zeros(nv)
+        for unit in units:
+            path = morphs.get(unit)
+            if not path:
+                continue
+            data = np.load(path)
+            if body.name not in data.files:
+                continue
+            moved = data[body.name].reshape(-1, 3)
+            a, b = edges[:, 0], edges[:, 1]
+            old = np.linalg.norm(base[a] - base[b], axis=1) + 1e-9
+            new = np.linalg.norm(moved[a] - moved[b], axis=1)
+            shrink = np.clip(1.0 - new / old, 0.0, None)
+            d = vuv[b] - vuv[a]
+            dl = np.linalg.norm(d, axis=1) + 1e-9
+            d = d / dl[:, None]
+            parts = np.stack([d[:, 0] * d[:, 0], d[:, 0] * d[:, 1], d[:, 1] * d[:, 1]], axis=1) * shrink[:, None]
+            for idx in (a, b):
+                np.add.at(tensor, idx, parts)
+                np.add.at(amount, idx, shrink)
+                np.add.at(count, idx, 1.0)
+                np.add.at(uvscale, idx, dl / (old * scale))
+        count = np.maximum(count, 1.0)
+        amount /= count
+        uvscale /= count
+        tensor /= count[:, None]
+        # Smoothed over the surface (neighbour averaging): the squeeze direction is noisy edge by edge, and creases
+        # need it to flow smoothly or they swirl like fingerprints.
+        a_, b_ = edges[:, 0], edges[:, 1]
+        degree = np.zeros(nv)
+        np.add.at(degree, a_, 1.0)
+        np.add.at(degree, b_, 1.0)
+        degree = np.maximum(degree, 1.0)
+        for _ in range(40):
+            for field in (tensor, amount, uvscale):
+                acc = np.zeros_like(field)
+                np.add.at(acc, a_, field[b_])
+                np.add.at(acc, b_, field[a_])
+                acc /= degree[:, None] if field.ndim == 2 else degree
+                field[...] = 0.5 * field + 0.5 * acc
+        # Each group at full depth where it squeezes most (the units squeeze by different amounts).
+        live = amount[amount > 1e-4]
+        peak = float(np.percentile(live, 98)) if live.size else 1.0
+        amount = np.clip(amount / max(peak, 1e-6), 0.0, 1.0)
+        channels.append((name, tensor, amount, uvscale))
+    # Rasterise every face triangle where some group squeezes.
+    out = np.zeros((size, size, 4), dtype=np.float32)
+    mesh.calc_loop_triangles()
+    tris = np.empty(len(mesh.loop_triangles) * 3, dtype=np.int64)
+    mesh.loop_triangles.foreach_get("loops", tris)
+    tris = tris.reshape(-1, 3)
+    for ci, (name, tensor, amount, uvscale) in enumerate(channels):
+        live = amount > 0.05
+        # One crease direction per side of the face (the group's mean squeeze there): straight parallel creases, not
+        # the rings a direction that turns from place to place gives.
+        mid = float(np.median(vuv[live, 0])) if live.any() else 0.5
+        side_angle = {}
+        for side in (0, 1):
+            sel = live & ((vuv[:, 0] >= mid) if side else (vuv[:, 0] < mid))
+            Tm = (tensor[sel] * amount[sel, None]).sum(axis=0) if sel.any() else np.array([1.0, 0.0, 0.0])
+            side_angle[side] = 0.5 * np.arctan2(2.0 * Tm[1], Tm[0] - Tm[2])
+        period_px = max(spacing * float(np.median(uvscale[live])) * size, 3.0) if live.any() else 6.0  # one crease spacing for the group
+        drawn = 0
+        for t in tris:
+            vs = loop_vert[t]
+            if not live[vs].any():
+                continue
+            uvs = loop_uv[t] * size
+            xs, ys = uvs[:, 0], (1.0 - loop_uv[t][:, 1]) * size
+            x0, x1 = int(max(xs.min() - 1, 0)), int(min(xs.max() + 2, size))
+            y0, y1 = int(max(ys.min() - 1, 0)), int(min(ys.max() + 2, size))
+            if x1 <= x0 or y1 <= y0 or x1 - x0 > size * 0.05 or y1 - y0 > size * 0.05:
+                continue
+            gx, gy = np.meshgrid(np.arange(x0, x1) + 0.5, np.arange(y0, y1) + 0.5)
+            den = (ys[1] - ys[2]) * (xs[0] - xs[2]) + (xs[2] - xs[1]) * (ys[0] - ys[2])
+            if abs(den) < 1e-9:
+                continue
+            l1 = ((ys[1] - ys[2]) * (gx - xs[2]) + (xs[2] - xs[1]) * (gy - ys[2])) / den
+            l2 = ((ys[2] - ys[0]) * (gx - xs[2]) + (xs[0] - xs[2]) * (gy - ys[2])) / den
+            l3 = 1.0 - l1 - l2
+            inside = (l1 >= -0.01) & (l2 >= -0.01) & (l3 >= -0.01)
+            if not inside.any():
+                continue
+            w = np.stack([l1, l2, l3], axis=-1)
+            T = w @ tensor[vs]                     # xx, xy, yy per texel
+            A = w @ amount[vs]
+            S = w @ uvscale[vs]
+            # The side's squeeze direction (in texture space; v points down the image) and the creases across it, a
+            # little wavy.
+            angle = side_angle[1 if loop_uv[t][:, 0].mean() >= mid else 0]
+            dx, dy = np.cos(angle), -np.sin(angle)
+            period = period_px
+            phase = (gx * dx + gy * dy) / period + 0.35 * np.sin((gx * dy - gy * dx) / (period * 7.0))  # gently wavy
+            crease = 1.0 - np.abs(np.sin(np.pi * phase)) ** 0.5   # narrow creases
+            h = np.clip(A, 0.0, 1.0) ** 1.6 * crease
+            region = out[y0:y1, x0:x1, ci]
+            np.maximum(region, np.where(inside, h, 0.0), out=region)
+            drawn += 1
+        log("wrinkles", name, "on", drawn, "triangles")
+    img = bpy.data.images.new("wrinkles", size, size, alpha=True)
+    img.colorspace_settings.name = "Non-Color"
+    img.pixels.foreach_set(np.flipud(out).astype(np.float32).ravel())
+    img.filepath_raw = out_path
+    img.file_format = "PNG"
+    img.save()
+    return out_path

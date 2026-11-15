@@ -55,7 +55,14 @@ def main():
         if only and base["name"] not in only:
             continue
         print("base", base["name"])
-        work = tempfile.mkdtemp(prefix="mh_creator_" + base["name"] + "_")
+        # MH_CREATOR_REUSE=1: the newest earlier work folder's variant builds are kept (only the base is built again),
+        # for trying out base-only steps such as the wrinkles.
+        reuse = None
+        if os.environ.get("MH_CREATOR_REUSE"):
+            earlier = sorted((os.path.join(tempfile.gettempdir(), d) for d in os.listdir(tempfile.gettempdir()) if d.startswith("mh_creator_" + base["name"] + "_")),
+                             key=os.path.getmtime)
+            reuse = earlier[-1] if earlier else None
+        work = reuse or tempfile.mkdtemp(prefix="mh_creator_" + base["name"] + "_")
         cfg = copy.deepcopy(base["config"])
         cfg["out"] = f"game/Saved/MakeHuman/{base['name']}/{base['name']}.fbx"
         # Grown pubic hair: one layout, chosen on the base, so every variant has the same hairs (a first pass makes it).
@@ -63,14 +70,16 @@ def main():
             cfg["pubic_layout"] = os.path.join(work, "pubic_layout.json")
             first = dict(cfg, dump_vertices=os.path.join(work, "_layout.npz"), skin_normal=False)
             first["out"] = os.path.join(work, "_layout", "_layout.fbx")
-            run(first, work, "_layout")
+            if not (reuse and os.path.exists(cfg["pubic_layout"])):
+                run(first, work, "_layout")
         morphs = {}
         for name, change in base["morphs"].items():
             variant = merge(cfg, change)
             variant["out"] = os.path.join(work, name, name + ".fbx")   # its skin copies stay out of the way
             variant["dump_vertices"] = os.path.join(work, name + ".npz")
             variant["skin_normal"] = False
-            run(variant, work, name)
+            if not (reuse and os.path.exists(variant["dump_vertices"])):
+                run(variant, work, name)
             morphs[name] = variant["dump_vertices"]
         cfg["morphs"] = morphs
         run(cfg, work, base["name"])

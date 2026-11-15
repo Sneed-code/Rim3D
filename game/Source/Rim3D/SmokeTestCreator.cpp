@@ -56,7 +56,7 @@ namespace
 		{"Surprised", {{9, 1.00f}, {13, 1.00f}, {1, 0.80f}, {4, 0.80f}, {20, 0.60f}}},
 		{"Afraid", {{8, 0.80f}, {12, 0.80f}, {9, 0.40f}, {13, 0.40f}, {1, 0.80f}, {4, 0.80f}, {25, 0.50f}, {20, 0.25f}, {27, 0.60f}}},
 		{"Disgusted", {{31, 0.90f}, {33, 0.90f}, {26, 0.60f}, {6, 0.40f}, {10, 0.40f}, {2, 0.30f}, {5, 0.30f}}},
-		{"In pain", {{0, 0.60f}, {3, 0.60f}, {8, 0.60f}, {12, 0.60f}, {6, 0.40f}, {10, 0.40f}, {25, 0.70f}, {20, 0.20f}, {27, 0.50f}, {31, 0.40f}, {33, 0.40f}}},
+		{"In pain", {{0, 0.85f}, {3, 0.85f}, {8, 0.9f}, {12, 0.9f}, {6, 0.7f}, {10, 0.7f}, {25, 1.0f}, {20, 0.3f}, {27, 0.8f}, {31, 0.7f}, {33, 0.7f}, {28, 0.5f}}},
 		{"Pout", {{24, 0.80f}, {23, 0.60f}}},
 		{"Asleep", {{0, 1.00f}, {3, 1.00f}, {20, 0.05f}}},
 	};
@@ -281,6 +281,25 @@ namespace
 		{
 			Set(*(FString(TEXT("Face_")) + CreatorUnits[u]), Face[u]);
 		}
+		// Wrinkles by how far each group's units are on: forehead (brows up), brow furrow (brows down), smile (mouth
+		// corners, squint), nose (scrunch). The skin material reads them as custom primitive data 8 to 11.
+		const auto U = [&Face](const TCHAR* Name)
+		{
+			for (int32 u = 0; u < CreatorUnitCount; ++u)
+			{
+				if (FCString::Strcmp(CreatorUnits[u], Name) == 0)
+				{
+					return FMath::Clamp(Face[u], 0.0f, 1.0f);
+				}
+			}
+			return 0.0f;
+		};
+		const float Forehead = FMath::Max3(FMath::Max(U(TEXT("EyebrowsLeftUp")), U(TEXT("EyebrowsRightUp"))),
+			FMath::Max(U(TEXT("EyebrowsLeftInnerUp")), U(TEXT("EyebrowsRightInnerUp"))), FMath::Max(U(TEXT("EyebrowsLeftExternUp")), U(TEXT("EyebrowsRightExternUp"))));
+		const float Furrow = FMath::Max3(U(TEXT("EyebrowsLeftDown")), U(TEXT("EyebrowsRightDown")), U(TEXT("NoseCompression")));
+		const float Smile = FMath::Max3(U(TEXT("MouthCornerPuller")), 0.7f * FMath::Max(U(TEXT("EyeLeftSlit")), U(TEXT("EyeRightSlit"))), U(TEXT("MouthUpwardRetraction")));
+		const float Nose = FMath::Max3(U(TEXT("NoseLeftElevation")), U(TEXT("NoseRightElevation")), U(TEXT("NoseDepression")));
+		Mesh->SetCustomPrimitiveDataVector4(8, FVector4(Forehead, Furrow, Smile, Nose));
 		Mesh->SetRelativeScale3D(FVector(P.Height));
 		// Hair colours: head hair and brows the picked colour (brows a touch darker), pubic hair a little darker than the head
 		// hair unless it has its own. The hair materials' Tint multiplies their texture.
@@ -400,7 +419,10 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				PC->ConsoleCommand(Command);
 			}
 		}
-		for (const TPair<const TCHAR*, float>& Var : {TPair<const TCHAR*, float>(TEXT("Pawns.MetaHumans"), 1.0f), TPair<const TCHAR*, float>(TEXT("Sky.Hour"), 9.0f),
+		// The time of day: the morning sun lights them from the front, where the view starts (-CreatorHour= to change).
+		float Hour = 7.5f;
+		FParse::Value(FCommandLine::Get(), TEXT("CreatorHour="), Hour);
+		for (const TPair<const TCHAR*, float>& Var : {TPair<const TCHAR*, float>(TEXT("Pawns.MetaHumans"), 1.0f), TPair<const TCHAR*, float>(TEXT("Sky.Hour"), Hour),
 			TPair<const TCHAR*, float>(TEXT("Sky.DayOfYear"), 22.5f)})
 		{
 			if (IConsoleVariable* Found = IConsoleManager::Get().FindConsoleVariable(Var.Key))

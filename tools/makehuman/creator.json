@@ -83,6 +83,32 @@
           "female": true,
           "count": 3000,
           "curl": 1.0
+        },
+        "wrinkles": {
+          "Forehead": [
+            "Face_EyebrowsLeftUp",
+            "Face_EyebrowsRightUp",
+            "Face_EyebrowsLeftExternUp",
+            "Face_EyebrowsRightExternUp",
+            "Face_EyebrowsLeftInnerUp",
+            "Face_EyebrowsRightInnerUp"
+          ],
+          "Furrow": [
+            "Face_EyebrowsLeftDown",
+            "Face_EyebrowsRightDown",
+            "Face_NoseCompression"
+          ],
+          "Smile": [
+            "Face_MouthCornerPuller",
+            "Face_EyeLeftSlit",
+            "Face_EyeRightSlit",
+            "Face_MouthUpwardRetraction"
+          ],
+          "Nose": [
+            "Face_NoseLeftElevation",
+            "Face_NoseRightElevation",
+            "Face_NoseDepression"
+          ]
         }
       },
       "morphs": {
@@ -202,7 +228,8 @@
         "NoTusks": {
           "tusks": {
             "length": 0.002,
-            "radius": 0.001
+            "radius": 0.001,
+            "inset": 0.03
           }
         },
         "GenitalLarge": {
@@ -506,6 +533,32 @@
           "female": false,
           "count": 3000,
           "curl": 1.0
+        },
+        "wrinkles": {
+          "Forehead": [
+            "Face_EyebrowsLeftUp",
+            "Face_EyebrowsRightUp",
+            "Face_EyebrowsLeftExternUp",
+            "Face_EyebrowsRightExternUp",
+            "Face_EyebrowsLeftInnerUp",
+            "Face_EyebrowsRightInnerUp"
+          ],
+          "Furrow": [
+            "Face_EyebrowsLeftDown",
+            "Face_EyebrowsRightDown",
+            "Face_NoseCompression"
+          ],
+          "Smile": [
+            "Face_MouthCornerPuller",
+            "Face_EyeLeftSlit",
+            "Face_EyeRightSlit",
+            "Face_MouthUpwardRetraction"
+          ],
+          "Nose": [
+            "Face_NoseLeftElevation",
+            "Face_NoseRightElevation",
+            "Face_NoseDepression"
+          ]
         }
       },
       "morphs": {
@@ -615,7 +668,8 @@
         "NoTusks": {
           "tusks": {
             "length": 0.002,
-            "radius": 0.001
+            "radius": 0.001,
+            "inset": 0.03
           }
         },
         "GenitalLarge": {

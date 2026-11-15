@@ -26,6 +26,8 @@
 #include "Factories/MaterialFactoryNew.h"
 #include "MaterialEditingLibrary.h"
 #include "Materials/Material.h"
+#include "Materials/MaterialExpressionBumpOffset.h"
+#include "Materials/MaterialExpressionTextureObjectParameter.h"
 #include "Materials/MaterialExpressionCustom.h"
 #include "Materials/MaterialExpressionMultiply.h"
 #include "Materials/MaterialExpressionTextureCoordinate.h"
@@ -317,6 +319,50 @@ namespace
 		Blend->Inputs[2].Input.Connect(0, Strength);
 		UMaterialEditingLibrary::ConnectMaterialProperty(Blend, TEXT(""), MP_Normal);
 
+		// Wrinkles (mh_common.make_wrinkle_map): four groups of creases as heights in RGBA (forehead, brow furrow, smile,
+		// nose), each by how far its face units are on (custom primitive data 8 to 11, set by the creator), turned into a
+		// normal over the skin's.
+		{
+			auto* WrinkleMap = Cast<UMaterialExpressionTextureObjectParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureObjectParameter::StaticClass(), -1000, 1500));
+			WrinkleMap->ParameterName = TEXT("WrinkleMap");
+			WrinkleMap->Texture = LoadObject<UTexture>(nullptr, TEXT("/Engine/EngineResources/Black.Black"));
+			WrinkleMap->SamplerType = UMaterialExpressionTextureBase::GetSamplerTypeForTexture(WrinkleMap->Texture);
+			auto* Weights = Cast<UMaterialExpressionVectorParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionVectorParameter::StaticClass(), -1000, 1700));
+			Weights->ParameterName = TEXT("WrinkleWeights");
+			Weights->DefaultValue = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+			Weights->bUseCustomPrimitiveData = true;
+			Weights->PrimitiveDataIndex = 8;
+			auto* WrinkleStrength = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -1000, 1850));
+			WrinkleStrength->ParameterName = TEXT("WrinkleStrength");
+			WrinkleStrength->DefaultValue = 6.0f;
+			auto* WrinkleUV = Cast<UMaterialExpressionTextureCoordinate>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureCoordinate::StaticClass(), -1000, 1950));
+			auto* Wrinkle = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -400, 1500));
+			Wrinkle->OutputType = CMOT_Float3;
+			Wrinkle->Description = TEXT("SkinWrinkles");
+			Wrinkle->Code = TEXT("float4 w = Weights;\n"
+				"if (dot(w, 1) <= 0.001) return Base;\n"
+				"float2 px = float2(1.0 / 2048.0, 1.0 / 2048.0);\n"
+				"float4 c = Texture2DSample(Tex, TexSampler, UV);\n"
+				"float4 sx = Texture2DSample(Tex, TexSampler, UV + float2(px.x, 0));\n"
+				"float4 sy = Texture2DSample(Tex, TexSampler, UV + float2(0, px.y));\n"
+				"c.rgb = pow(c.rgb, 0.4545); sx.rgb = pow(sx.rgb, 0.4545); sy.rgb = pow(sy.rgb, 0.4545);\n"
+				"float h = dot(c, w), hx = dot(sx, w), hy = dot(sy, w);\n"
+				"float3 n = normalize(float3((hx - h) * Strength, (hy - h) * Strength, 1.0));\n"
+				"return normalize(float3(Base.xy + n.xy, Base.z * n.z));");
+			Wrinkle->Inputs.SetNum(5);
+			Wrinkle->Inputs[0].InputName = TEXT("Base");
+			Wrinkle->Inputs[1].InputName = TEXT("Tex");
+			Wrinkle->Inputs[2].InputName = TEXT("UV");
+			Wrinkle->Inputs[3].InputName = TEXT("Weights");
+			Wrinkle->Inputs[4].InputName = TEXT("Strength");
+			Wrinkle->Inputs[0].Input.Connect(0, Blend);
+			Wrinkle->Inputs[1].Input.Connect(0, WrinkleMap);
+			Wrinkle->Inputs[2].Input.Connect(0, WrinkleUV);
+			Wrinkle->Inputs[3].Input.Connect(5, Weights);  // output 5 is RGBA (0 is RGB)
+			Wrinkle->Inputs[4].Input.Connect(0, WrinkleStrength);
+			UMaterialEditingLibrary::ConnectMaterialProperty(Wrinkle, TEXT(""), MP_Normal);
+		}
+
 		// Roughness map (the 4K skin's): mid-grey keeps the material's Roughness, lighter rougher, darker smoother, by
 		// RoughnessMapAmount (0 on the 2K skin, which has no map).
 		if (UMaterialExpression* RoughnessValue = UMaterialEditingLibrary::GetMaterialPropertyInputNode(Material, MP_Roughness))
@@ -430,6 +476,102 @@ namespace
 		Cut->Inputs[1].Input.Connect(0, Density);
 		Cut->Inputs[2].Input.Connect(0, Coverage);
 		UMaterialEditingLibrary::ConnectMaterialProperty(Cut, TEXT(""), MP_OpacityMask);
+		Material->PostEditChange();
+		MhSave(Material);
+		return Material;
+	}
+
+	// Eyes (MakeHuman's eyeballs: both eyes on one texture, the iris round the middle of each half): glossy and wet, the
+	// iris set back behind the cornea (parallax, so it shifts as the eye turns to the light and the view), a dark ring at
+	// its edge (the limbus), cut out where the texture is clear (the cornea's own area).
+	UMaterial* MhEyeMaterial(IAssetTools& Tools)
+	{
+		const FString Name = TEXT("M_MH_Eye");
+		const FString Path = MakeHumanAssetPath(MakeHumanFolder, Name);
+		if (UMaterial* Existing = FindObject<UMaterial>(nullptr, *Path))
+		{
+			return Existing;
+		}
+		UMaterial* Material = Cast<UMaterial>(Tools.CreateAsset(Name, MakeHumanFolder, UMaterial::StaticClass(), NewObject<UMaterialFactoryNew>()));
+		if (!Material)
+		{
+			return nullptr;
+		}
+		bool bRecompile = false;
+		UMaterialEditingLibrary::SetMaterialUsage(Material, MATUSAGE_SkeletalMesh, bRecompile);
+		UMaterialEditingLibrary::SetMaterialUsage(Material, MATUSAGE_MorphTargets, bRecompile);
+		Material->BlendMode = BLEND_Masked;
+		const auto Make = [Material](UClass* Class, int32 X, int32 Y) { return UMaterialEditingLibrary::CreateMaterialExpression(Material, Class, X, Y); };
+		auto* Coord = Cast<UMaterialExpressionTextureCoordinate>(Make(UMaterialExpressionTextureCoordinate::StaticClass(), -1400, 0));
+		// Where the iris is: x its mask (1 inside), y the limbal ring.
+		auto* Iris = Cast<UMaterialExpressionCustom>(Make(UMaterialExpressionCustom::StaticClass(), -1150, 0));
+		Iris->OutputType = CMOT_Float2;
+		Iris->Description = TEXT("EyeIris");
+		Iris->Code = TEXT("float2 c = UV.x < 0.5 ? float2(0.293, 0.713) : float2(0.707, 0.297);\n"
+			"float d = distance(UV, c);\n"
+			"float m = 1.0 - smoothstep(0.104, 0.118, d);\n"
+			"float ring = exp(-pow((d - 0.111) / 0.011, 2.0));\n"
+			"return float2(m, ring);");
+		Iris->Inputs.SetNum(1);
+		Iris->Inputs[0].InputName = TEXT("UV");
+		Iris->Inputs[0].Input.Connect(0, Coord);
+		// The iris lower than the cornea: the sclera at 1, the iris at 0.
+		auto* Depth = Cast<UMaterialExpressionCustom>(Make(UMaterialExpressionCustom::StaticClass(), -900, 150));
+		Depth->OutputType = CMOT_Float1;
+		Depth->Description = TEXT("EyeDepth");
+		Depth->Code = TEXT("return 1.0 - Iris.x;");
+		Depth->Inputs.SetNum(1);
+		Depth->Inputs[0].InputName = TEXT("Iris");
+		Depth->Inputs[0].Input.Connect(0, Iris);
+		auto* Bump = Cast<UMaterialExpressionBumpOffset>(Make(UMaterialExpressionBumpOffset::StaticClass(), -700, 100));
+		Bump->Coordinate.Connect(0, Coord);
+		Bump->Height.Connect(0, Depth);
+		Bump->HeightRatio = 0.035f;
+		Bump->ReferencePlane = 1.0f;
+		auto* EyeUV = Cast<UMaterialExpressionCustom>(Make(UMaterialExpressionCustom::StaticClass(), -500, 0));
+		EyeUV->OutputType = CMOT_Float2;
+		EyeUV->Description = TEXT("EyeUV");
+		EyeUV->Code = TEXT("return lerp(UV, Bumped, Iris.x);");
+		EyeUV->Inputs.SetNum(3);
+		EyeUV->Inputs[0].InputName = TEXT("UV");
+		EyeUV->Inputs[1].InputName = TEXT("Bumped");
+		EyeUV->Inputs[2].InputName = TEXT("Iris");
+		EyeUV->Inputs[0].Input.Connect(0, Coord);
+		EyeUV->Inputs[1].Input.Connect(0, Bump);
+		EyeUV->Inputs[2].Input.Connect(0, Iris);
+		auto* Color = Cast<UMaterialExpressionTextureSampleParameter2D>(Make(UMaterialExpressionTextureSampleParameter2D::StaticClass(), -300, -100));
+		Color->ParameterName = TEXT("BaseColor");
+		Color->Texture = LoadObject<UTexture>(nullptr, TEXT("/Engine/EngineResources/WhiteSquareTexture.WhiteSquareTexture"));
+		Color->Coordinates.Connect(0, EyeUV);
+		auto* Tint = Cast<UMaterialExpressionVectorParameter>(Make(UMaterialExpressionVectorParameter::StaticClass(), -300, -300));
+		Tint->ParameterName = TEXT("Tint");
+		Tint->DefaultValue = FLinearColor::White;
+		auto* Shade = Cast<UMaterialExpressionCustom>(Make(UMaterialExpressionCustom::StaticClass(), -50, -150));
+		Shade->OutputType = CMOT_Float3;
+		Shade->Description = TEXT("EyeColour");
+		Shade->Code = TEXT("return Tex * Tint * (1.0 - 0.4 * Iris.y);");
+		Shade->Inputs.SetNum(3);
+		Shade->Inputs[0].InputName = TEXT("Tex");
+		Shade->Inputs[1].InputName = TEXT("Tint");
+		Shade->Inputs[2].InputName = TEXT("Iris");
+		Shade->Inputs[0].Input.Connect(0, Color);
+		Shade->Inputs[1].Input.Connect(0, Tint);
+		Shade->Inputs[2].Input.Connect(0, Iris);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Shade, TEXT(""), MP_BaseColor);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Color, TEXT("A"), MP_OpacityMask);
+		// Wet: very smooth (sharp highlights, the sky and the sun's catchlight), the iris smoother still.
+		auto* Rough = Cast<UMaterialExpressionCustom>(Make(UMaterialExpressionCustom::StaticClass(), -50, 100));
+		Rough->OutputType = CMOT_Float1;
+		Rough->Description = TEXT("EyeRoughness");
+		Rough->Code = TEXT("return lerp(0.16, 0.06, Iris.x);");
+		Rough->Inputs.SetNum(1);
+		Rough->Inputs[0].InputName = TEXT("Iris");
+		Rough->Inputs[0].Input.Connect(0, Iris);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Rough, TEXT(""), MP_Roughness);
+		auto* Specular = Cast<UMaterialExpressionScalarParameter>(Make(UMaterialExpressionScalarParameter::StaticClass(), -50, 250));
+		Specular->ParameterName = TEXT("Specular");
+		Specular->DefaultValue = 0.7f;
+		UMaterialEditingLibrary::ConnectMaterialProperty(Specular, TEXT(""), MP_Specular);
 		Material->PostEditChange();
 		MhSave(Material);
 		return Material;
@@ -923,6 +1065,12 @@ namespace
 						UTexture* NormalToUse = SkinNormal ? static_cast<UTexture*>(SkinNormal) : LoadObject<UTexture>(nullptr, TEXT("/Engine/EngineMaterials/FlatNormal.FlatNormal"));
 						SkinInstance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(PawnLooksParamNormal), NormalToUse);
 						// The areolae and genitals, darker and warmer by the pawn's pigment (custom primitive data 3).
+						FString WrinkleFile;
+						UTexture2D* WrinkleTexture = nullptr;
+						if ((*Entry)->TryGetStringField(TEXT("wrinkles"), WrinkleFile) && (WrinkleTexture = Texture(WrinkleFile, true)) != nullptr)
+						{
+							SkinInstance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(TEXT("WrinkleMap")), WrinkleTexture);
+						}
 						FString PigmentFile;
 						if ((*Entry)->TryGetStringField(TEXT("pigment"), PigmentFile))
 						{
@@ -962,6 +1110,10 @@ namespace
 									Skin4K->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(TEXT("RoughnessMap")), Rough4K);
 									Skin4K->SetScalarParameterValueEditorOnly(FMaterialParameterInfo(TEXT("RoughnessMapAmount")), 0.35f);
 								}
+								if (WrinkleTexture)
+								{
+									Skin4K->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(TEXT("WrinkleMap")), WrinkleTexture);
+								}
 								FMaterialParameterInfo PigmentInfo(TEXT("PigmentMask"));
 								UTexture* PigmentTexture = nullptr;
 								if (SkinInstance->GetTextureParameterValue(PigmentInfo, PigmentTexture) && PigmentTexture)
@@ -980,7 +1132,8 @@ namespace
 				const bool bMasked = !Opacity.IsEmpty() || bAlpha;
 				bool bPubic = false;
 				(*Entry)->TryGetBoolField(TEXT("pubic"), bPubic);
-				UMaterial* Base = bPubic ? MhPubicMaterial(Tools) : MhBaseMaterial(Tools, !bMasked ? (bSkin ? TEXT("M_MH_Skin") : TEXT("M_MH_Lit")) : (Opacity.IsEmpty() ? TEXT("M_MH_MaskedA") : TEXT("M_MH_Masked")),
+				const bool bEye = Key.Contains(TEXT("high_poly")) || Key.Contains(TEXT("low_poly"));
+				UMaterial* Base = bPubic ? MhPubicMaterial(Tools) : bEye ? MhEyeMaterial(Tools) : MhBaseMaterial(Tools, !bMasked ? (bSkin ? TEXT("M_MH_Skin") : TEXT("M_MH_Lit")) : (Opacity.IsEmpty() ? TEXT("M_MH_MaskedA") : TEXT("M_MH_Masked")),
 					bMasked, bSkin, Opacity.IsEmpty() && bAlpha);
 				auto* Factory = NewObject<UMaterialInstanceConstantFactoryNew>();
 				Factory->InitialParent = Base;

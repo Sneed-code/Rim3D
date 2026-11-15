@@ -47,7 +47,7 @@ Image.fromarray((colour * 255.0 + 0.5).astype(np.uint8)).save(os.path.join(args.
 lum = colour[..., 0] * 0.3 + colour[..., 1] * 0.59 + colour[..., 2] * 0.11
 lum_img = Image.fromarray((lum * 255).astype(np.uint8))
 blur = np.asarray(lum_img.filter(ImageFilter.GaussianBlur(20))).astype(np.float32) / 255.0
-height = (lum - blur) / np.maximum(blur, 0.05) * 6.0 - pores * 1.6 * k + blurred_noise(1.5) * 0.3 * k
+height = (lum - blur) / np.maximum(blur, 0.05) * 4.0 - pores * 0.9 * k + blurred_noise(1.5) * 0.15 * k
 dx = (np.roll(height, -1, axis=1) - np.roll(height, 1, axis=1)) * 0.5
 dy = (np.roll(height, -1, axis=0) - np.roll(height, 1, axis=0)) * 0.5
 n = np.stack([-dx, dy, np.ones_like(dx)], axis=-1)

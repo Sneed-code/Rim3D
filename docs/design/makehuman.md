@@ -187,6 +187,16 @@ follow. The creator's Face tab has expressions made of them (smile, grin, frown,
 disgusted, in pain, pout, asleep) with a strength, the 34 units for fine tuning, an automatic blink and talking.
 `-CreatorFace=<name>` for pictures.
 
+## Eyes and wrinkles (work in progress)
+
+`M_MH_Eye` (MakeHumanArt, for the eye slots): glossy wet surface, the iris set back behind the cornea by parallax
+(`BumpOffset`), a darker limbal ring. Wrinkles: `make_wrinkle_map` (config `"wrinkles"`: groups of face-unit morphs)
+writes `wrinkles.png` (forehead, brow furrow, smile, nose in RGBA) from how each group squeezes the skin, creases
+across the group's mean squeeze direction on each side of the face; `M_MH_SkinDetail` adds them to the normal by
+custom primitive data 8 to 11, which the creator sets from the face. Not yet checked close up in game: the crease
+layout needs a look and probably tuning (`spacing`, `WrinkleStrength`). The creator lights faces with the 7:30 morning
+sun (`-CreatorHour=`). `MH_CREATOR_REUSE=1` rebuilds only the bases, keeping the variant builds.
+
 ## Animation clips
 
 Clips are listed in `assets/animations.json` (name, FBX, loop). Markerless mocap (FlowHMR) stands metres from the origin
